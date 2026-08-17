@@ -62,6 +62,8 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",

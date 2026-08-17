@@ -1,4 +1,4 @@
-import { Disposable } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { type Disposable } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 
 import { injectionTokens } from './plugins/index.js'
 

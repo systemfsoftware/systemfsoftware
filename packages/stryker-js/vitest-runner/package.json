@@ -50,11 +50,13 @@
     "vitest": ">=2.0.0"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@types/semver": "7.7.1",
-    "ajv": "~8.18.0",
+    "effect": "catalog:",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typed-inject": "~5.0.0",
@@ -67,5 +69,8 @@
       "./stryker-setup": "./dist/stryker-setup.mjs",
       "./package.json": "./package.json"
     }
+  },
+  "inlinedDependencies": {
+    "effect": "4.0.0-rc.108"
   }
 }

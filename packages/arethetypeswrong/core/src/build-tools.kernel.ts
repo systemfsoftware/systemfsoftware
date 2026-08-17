@@ -1,10 +1,6 @@
 import { type BuildTool, BuildToolSchema } from './analysis.schema.js'
 
-export const allBuildTools: readonly BuildTool[] = BuildToolSchema.literals
-
-const KNOWN_BUILD_TOOLS: Record<string, true> = Object.fromEntries(
-  allBuildTools.map((tool) => [tool, true]),
-)
+export const allBuildTools: readonly BuildTool[] = [...BuildToolSchema.literals]
 
 export const getBuildTools = (packageJson: {
   devDependencies?: Record<string, string>
@@ -14,9 +10,9 @@ export const getBuildTools = (packageJson: {
   }
   const result: Partial<Record<BuildTool, string>> = {}
   for (const dep of Object.keys(packageJson.devDependencies)) {
-    if (KNOWN_BUILD_TOOLS[dep] === true) {
-      result[dep as BuildTool] = packageJson.devDependencies[dep]
-    }
+    const tool = allBuildTools.find((candidate) => candidate === dep)
+    if (tool === undefined) continue
+    result[tool] = packageJson.devDependencies[dep]
   }
   return result
 }

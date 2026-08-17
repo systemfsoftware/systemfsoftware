@@ -1,7 +1,7 @@
-import { Disposable } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { type Disposable } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import net from 'net'
 import { promisify } from 'util'
-import { LoggingServerAddress, LoggingSink } from '../logging/index.js'
+import { type LoggingServerAddress, type LoggingSink } from '../logging/index.js'
 import { injectionTokens } from '../plugins/index.js'
 import { LogLevel } from './log-level.js'
 import { LoggingEvent } from './logging-event.js'
@@ -50,7 +50,7 @@ export class LoggingClient implements LoggingSink, Disposable {
 
   async dispose(): Promise<void> {
     if (this.#socket) {
-      await promisify(this.#socket.end).bind(this.#socket)()
+      await promisify(this.#socket.end.bind(this.#socket))()
     }
   }
 }

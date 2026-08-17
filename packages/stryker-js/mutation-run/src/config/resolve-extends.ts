@@ -4,8 +4,11 @@ import path from 'path'
 import { pathToFileURL } from 'url'
 
 import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import * as S from 'effect/Schema'
 
 import { ConfigError } from '../errors.js'
+
+import { ConfigDocumentSchema, ImportedModuleSchema } from './config-document.schema.js'
 
 export async function readConfigFile(configFile: string): Promise<PartialStrykerOptions> {
   const ext = path.extname(configFile).toLowerCase()
@@ -33,28 +36,28 @@ export async function readConfigFile(configFile: string): Promise<PartialStryker
         `Invalid config file "${configFile}". Config must be a JSON object`,
       )
     }
-    return parsed as PartialStrykerOptions
+    return S.decodeUnknownSync(ConfigDocumentSchema)(parsed)
   }
   // Dynamic import: the module specifier is the runtime-resolved config path,
   // not a literal known at author time, so static import cannot apply.
-  let imported: { default?: unknown }
+  let importedModule: unknown
   try {
-    imported = (await import(
+    importedModule = await import(
       pathToFileURL(path.resolve(configFile)).toString()
-    )) as { default?: unknown }
+    )
   } catch (err) {
     throw new ConfigError(
       `Invalid config file "${configFile}". Error during import`,
       err,
     )
   }
-  const exported = imported.default
+  const exported = S.decodeUnknownSync(ImportedModuleSchema)(importedModule).default
   if (exported === undefined || exported === null || typeof exported !== 'object') {
     throw new ConfigError(
       `Invalid config file "${configFile}". Default export of config file must be an object!`,
     )
   }
-  return { ...(exported as PartialStrykerOptions) }
+  return S.decodeUnknownSync(ConfigDocumentSchema)(exported)
 }
 
 /**
@@ -71,16 +74,16 @@ export function mergeConfigs(
   parent: PartialStrykerOptions,
   child: PartialStrykerOptions,
 ): PartialStrykerOptions {
-  const out: Record<string, unknown> = { ...(parent as Record<string, unknown>) }
+  const out: Record<string, unknown> = { ...parent }
   for (const [key, value] of Object.entries(child)) {
     if (value === null) {
       delete out[key]
       continue
     }
-    const parentValue = (parent as Record<string, unknown>)[key]
+    const parentValue = parent[key]
     if (key === 'plugins') {
-      const parentPlugins = Array.isArray(parentValue) ? parentValue : []
-      const childPlugins = Array.isArray(value) ? value : []
+      const parentPlugins: readonly unknown[] = Array.isArray(parentValue) ? parentValue : []
+      const childPlugins: readonly unknown[] = Array.isArray(value) ? value : []
       const merged = [...parentPlugins, ...childPlugins]
       out[key] = merged.filter(
         (descriptor, index) => typeof descriptor !== 'string' || !merged.slice(0, index).includes(descriptor),
@@ -94,10 +97,13 @@ export function mergeConfigs(
       typeof value === 'object' &&
       !Array.isArray(value)
     out[key] = bothObjects
-      ? { ...(parentValue as Record<string, unknown>), ...(value as Record<string, unknown>) }
+      ? {
+        ...S.decodeUnknownSync(ConfigDocumentSchema)(parentValue),
+        ...S.decodeUnknownSync(ConfigDocumentSchema)(value),
+      }
       : value
   }
-  return out as PartialStrykerOptions
+  return out
 }
 
 /**
@@ -157,11 +163,11 @@ export async function resolveExtendsChain(
   }
   visited.add(absolute)
 
-  const raw = (await readConfigFile(absolute)) as Record<string, unknown>
+  const raw = await readConfigFile(absolute)
   const extendValue = raw['extends']
   if (extendValue === undefined || extendValue === null) {
     const { extends: _ignored, ...rest } = raw
-    return rest as PartialStrykerOptions
+    return rest
   }
   if (typeof extendValue !== 'string') {
     throw new ConfigError(
@@ -174,12 +180,13 @@ export async function resolveExtendsChain(
     parentPath = resolveExtendsTarget(extendValue, path.dirname(absolute))
   } catch (err) {
     if (err instanceof ConfigError) throw err
+    const reason = err instanceof Error ? `. ${err.message}` : ''
     throw new ConfigError(
-      `Cannot resolve extends target "${extendValue}" from "${configFile}". ${(err as Error).message}`,
+      `Cannot resolve extends target "${extendValue}" from "${configFile}"${reason}`,
       err,
     )
   }
   const parentResolved = await resolveExtendsChain(parentPath, visited)
   const { extends: _ignored, ...selfRest } = raw
-  return mergeConfigs(parentResolved, selfRest as PartialStrykerOptions)
+  return mergeConfigs(parentResolved, selfRest)
 }

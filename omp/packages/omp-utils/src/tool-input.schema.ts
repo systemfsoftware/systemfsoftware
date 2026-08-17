@@ -27,3 +27,19 @@ export const ClaudeEdits = S.Array(
 /** Derived recognisers, declared beside the shapes they decide. */
 export const isOmpEditArray = S.is(OmpEdits)
 export const isClaudeEditArray = S.is(ClaudeEdits)
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
+  // branch is statically dead in the build and never enters the published module graph.
+  const { refutes } = await import('@systemfsoftware/effect-schema-law')
+  const { FastCheck: fc } = await import('effect/testing')
+
+  refutes(OmpEdits, {
+    OmpEditsEmpty: fc.constant([]),
+    OmpEditsBareEntry: fc.constant([{}]),
+  })
+
+  refutes(ClaudeEdits, {
+    ClaudeEditsBareEntry: fc.constant([{}]),
+  })
+}

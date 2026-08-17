@@ -1,17 +1,17 @@
-import { MutantResult, schema, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type MutantResult, schema, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import {
-  DryRunCompletedEvent,
-  MutationTestingPlanReadyEvent,
-  Reporter,
+  type DryRunCompletedEvent,
+  type MutationTestingPlanReadyEvent,
+  type Reporter,
 } from '@systemfsoftware/stryker-js-plugin-api/report'
-import { MutationTestMetricsResult } from 'mutation-testing-metrics'
+import { type MutationTestMetricsResult } from 'mutation-testing-metrics'
 import { tokens } from 'typed-inject'
 
 import { injectionTokens, PluginCreator } from '../plugins/index.js'
 
-import { StrictReporter } from './strict-reporter.js'
+import { type StrictReporter } from './strict-reporter.js'
 
 export class BroadcastReporter implements StrictReporter {
   public static readonly inject = tokens(
@@ -88,7 +88,7 @@ export class BroadcastReporter implements StrictReporter {
 
   private broadcast<TMethod extends keyof Reporter>(
     methodName: TMethod,
-    ...eventArgs: Parameters<Required<Reporter>[TMethod]>
+    call: (reporter: Reporter) => Promise<void> | void,
   ): Promise<void[]> {
     return Promise.all(
       Object.entries(this.reporters).map(async ([reporterName, reporter]) => {
@@ -98,43 +98,40 @@ export class BroadcastReporter implements StrictReporter {
         ) {
           return
         }
-        if (reporter[methodName]) {
-          try {
-            await (
-              reporter[methodName] as (
-                ...args: Parameters<Required<Reporter>[TMethod]>
-              ) => Promise<void> | void
-            )(...eventArgs)
-          } catch (error) {
-            this.handleError(error, methodName, reporterName)
-          }
+        try {
+          await call(reporter)
+        } catch (error) {
+          this.handleError(error, methodName, reporterName)
         }
       }),
     )
   }
 
   public onDryRunCompleted(event: DryRunCompletedEvent): void {
-    void this.broadcast('onDryRunCompleted', event)
+    void this.broadcast('onDryRunCompleted', (reporter) => reporter.onDryRunCompleted?.(event))
   }
   public onMutationTestingPlanReady(
     event: MutationTestingPlanReadyEvent,
   ): void {
-    void this.broadcast('onMutationTestingPlanReady', event)
+    void this.broadcast('onMutationTestingPlanReady', (reporter) => reporter.onMutationTestingPlanReady?.(event))
   }
 
   public onMutantTested(result: MutantResult): void {
-    void this.broadcast('onMutantTested', result)
+    void this.broadcast('onMutantTested', (reporter) => reporter.onMutantTested?.(result))
   }
 
   public onMutationTestReportReady(
     report: schema.MutationTestResult,
     metrics: MutationTestMetricsResult,
   ): void {
-    void this.broadcast('onMutationTestReportReady', report, metrics)
+    void this.broadcast(
+      'onMutationTestReportReady',
+      (reporter) => reporter.onMutationTestReportReady?.(report, metrics),
+    )
   }
 
   public async wrapUp(): Promise<void> {
-    await this.broadcast('wrapUp')
+    await this.broadcast('wrapUp', (reporter) => reporter.wrapUp?.())
   }
 
   private handleError(

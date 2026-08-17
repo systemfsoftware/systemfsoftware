@@ -1,6 +1,6 @@
 import { Project } from '../project/project.js'
 
-import { FilePreprocessor } from './file-preprocessor.js'
+import { type FilePreprocessor } from './file-preprocessor.js'
 
 export class MultiPreprocessor implements FilePreprocessor {
   constructor(private readonly preprocessors: FilePreprocessor[]) {}

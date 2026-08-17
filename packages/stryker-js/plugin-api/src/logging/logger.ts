@@ -6,10 +6,10 @@ export interface Logger {
   isErrorEnabled(): boolean
   isFatalEnabled(): boolean
 
-  trace(message: string, ...args: any[]): void
-  debug(message: string, ...args: any[]): void
-  info(message: string, ...args: any[]): void
-  warn(message: string, ...args: any[]): void
-  error(message: string, ...args: any[]): void
-  fatal(message: string, ...args: any[]): void
+  trace(message: string, ...args: readonly unknown[]): void
+  debug(message: string, ...args: readonly unknown[]): void
+  info(message: string, ...args: readonly unknown[]): void
+  warn(message: string, ...args: readonly unknown[]): void
+  error(message: string, ...args: readonly unknown[]): void
+  fatal(message: string, ...args: readonly unknown[]): void
 }

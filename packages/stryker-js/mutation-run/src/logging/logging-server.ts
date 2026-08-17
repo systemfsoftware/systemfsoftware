@@ -1,10 +1,12 @@
-import { Disposable } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { type Disposable } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Schema as S } from 'effect'
 import net from 'node:net'
 import { promisify } from 'node:util'
 import { injectionTokens } from '../plugins/index.js'
 import { LogLevel } from './log-level.js'
-import { LoggingEvent, SerializedLoggingEvent } from './logging-event.js'
-import { LoggingSink } from './logging-sink.js'
+import { LoggingEvent } from './logging-event.js'
+import { SerializedLoggingEventSchema } from './logging-event.schema.js'
+import { type LoggingSink } from './logging-sink.js'
 
 export interface LoggingServerAddress {
   port: number
@@ -24,9 +26,12 @@ export class LoggingServer implements Disposable {
         dataSoFar += data
         let index
         while ((index = dataSoFar.indexOf(DELIMITER)) !== -1) {
-          const logEvent: SerializedLoggingEvent = JSON.parse(
+          const serialized: unknown = JSON.parse(
             dataSoFar.substring(0, index),
           )
+          const logEvent = S.decodeUnknownSync(
+            SerializedLoggingEventSchema,
+          )(serialized)
           dataSoFar = dataSoFar.substring(index + DELIMITER.length)
           this.loggingSink.log(LoggingEvent.deserialize(logEvent))
         }
@@ -42,15 +47,21 @@ export class LoggingServer implements Disposable {
     })
   }
 
-  public listen() {
-    return new Promise<LoggingServerAddress>((res) => {
-      this.#server.listen(() => {
-        res({ port: (this.#server.address() as net.AddressInfo).port })
-      })
+  public listen(): Promise<LoggingServerAddress> {
+    const { promise, resolve } = Promise.withResolvers<LoggingServerAddress>()
+    this.#server.listen(() => {
+      const address = this.#server.address()
+      if (address === null || typeof address === 'string') {
+        throw new Error(
+          `Address of the logging server is not an AddressInfo: ${typeof address}`,
+        )
+      }
+      resolve({ port: address.port })
     })
+    return promise
   }
 
   public async dispose() {
-    await promisify(this.#server.close).bind(this.#server)()
+    await promisify(this.#server.close.bind(this.#server))()
   }
 }

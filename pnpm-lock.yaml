@@ -20,7 +20,7 @@ catalogs:
       specifier: ^4.0.0-rc.108
       version: 4.0.0-rc.109
     '@effect/vitest':
-      specifier: ^4.0.0-rc.108
+      specifier: 4.0.0-rc.108
       version: 4.0.0-rc.108
     '@microsoft/api-extractor':
       specifier: ^7.58.7
@@ -71,7 +71,7 @@ catalogs:
       specifier: ^4
       version: 4.1.9
     effect:
-      specifier: ^4.0.0-rc.108
+      specifier: 4.0.0-rc.108
       version: 4.0.0-rc.108
     oxc-parser:
       specifier: ^0.140.0
@@ -174,6 +174,15 @@ importers:
       '@systemfsoftware/stryker-js-cli':
         specifier: workspace:^
         version: link:packages/stryker-js/cli
+      '@systemfsoftware/stryker-js-mutation-run':
+        specifier: workspace:^
+        version: link:packages/stryker-js/mutation-run
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: workspace:^
+        version: link:packages/stryker-js/typescript-checker
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: workspace:^
+        version: link:packages/stryker-js/vitest-runner
       concurrently:
         specifier: ^9.2.1
         version: 9.2.3
@@ -226,6 +235,12 @@ importers:
       '@systemfsoftware/effect-memfs':
         specifier: workspace:^
         version: link:../../../packages/effect-memfs
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../../packages/effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../../packages/effect-schema-vite
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../packages/oxlint-config
@@ -268,6 +283,12 @@ importers:
       '@systemfsoftware/effect-memfs':
         specifier: workspace:^
         version: link:../../../packages/effect-memfs
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../../packages/effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../../packages/effect-schema-vite
       '@systemfsoftware/omp-utils':
         specifier: workspace:^
         version: link:../../packages/omp-utils
@@ -320,6 +341,12 @@ importers:
       '@systemfsoftware/effect-memfs':
         specifier: workspace:^
         version: link:../../../packages/effect-memfs
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../../packages/effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../../packages/effect-schema-vite
       '@systemfsoftware/omp-utils':
         specifier: workspace:^
         version: link:../../packages/omp-utils
@@ -329,15 +356,6 @@ importers:
       '@systemfsoftware/oxlint-plugin-cell-vocabulary':
         specifier: workspace:^
         version: link:../../../packages/oxlint-plugins/cell-vocabulary
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../../packages/stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../../packages/stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../../packages/stryker-js/vitest-runner
       '@systemfsoftware/stryker-plugins':
         specifier: workspace:^
         version: link:../../../packages/stryker-plugins
@@ -390,18 +408,18 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../effect-gherkin-spec
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../effect-schema-vite
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../oxlint-config
       '@systemfsoftware/oxlint-plugin-effect-dmmf':
         specifier: workspace:^
         version: link:../../oxlint-plugins/effect-dmmf
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -463,6 +481,12 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../effect-schema-vite
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../oxlint-config
@@ -755,15 +779,6 @@ importers:
       '@systemfsoftware/oxlint-plugin-cell-vocabulary':
         specifier: workspace:^
         version: link:../oxlint-plugins/cell-vocabulary
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../stryker-js/vitest-runner
       '@systemfsoftware/stryker-plugins':
         specifier: workspace:^
         version: link:../stryker-plugins
@@ -1070,15 +1085,6 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../stryker-js/vitest-runner
       '@systemfsoftware/stryker-plugins':
         specifier: workspace:^
         version: link:../stryker-plugins
@@ -1168,15 +1174,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -1223,15 +1220,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -1321,15 +1309,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -1376,15 +1355,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -1431,15 +1401,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -1486,15 +1447,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -1565,15 +1517,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -1620,15 +1563,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../../stryker-js/mutation-run
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../../stryker-js/vitest-runner
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -1723,6 +1657,12 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../effect-schema-vite
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config
@@ -1808,6 +1748,12 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../effect-gherkin-spec
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../effect-schema-vite
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../oxlint-config
@@ -1987,6 +1933,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../effect-gherkin-spec
       '@systemfsoftware/stryker-js-vitest-runner':
         specifier: workspace:^
         version: link:../vitest-runner
@@ -2029,6 +1978,9 @@ importers:
 
   packages/stryker-js/plugin-api:
     dependencies:
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.108
       mutation-testing-metrics:
         specifier: 3.7.3
         version: 3.7.3
@@ -2048,9 +2000,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
-      json-schema-to-typescript:
-        specifier: 15.0.4
-        version: 15.0.4
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -2085,6 +2034,9 @@ importers:
       '@std/jsonc':
         specifier: 'catalog:'
         version: '@jsr/std__jsonc@1.0.2'
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../effect-gherkin-spec
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -2103,6 +2055,9 @@ importers:
       tsdown:
         specifier: 'catalog:'
         version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      typed-inject:
+        specifier: ~5.0.0
+        version: 5.0.0
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
@@ -2122,6 +2077,12 @@ importers:
         specifier: catalog:stryker
         version: 2.8.1
     devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../effect-gherkin-spec
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../tsconfig
@@ -2134,9 +2095,9 @@ importers:
       '@types/semver':
         specifier: 7.7.1
         version: 7.7.1
-      ajv:
-        specifier: ~8.18.0
-        version: 8.18.0
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.108
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
@@ -2186,18 +2147,9 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config
-      '@systemfsoftware/stryker-js-mutation-run':
-        specifier: workspace:^
-        version: link:../stryker-js/mutation-run
       '@systemfsoftware/stryker-js-plugin-api':
         specifier: workspace:^
         version: link:../stryker-js/plugin-api
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../stryker-js/vitest-runner
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../tsconfig
@@ -2252,10 +2204,6 @@ packages:
 
   '@andrewbranch/untar.js@1.0.3':
     resolution: {integrity: sha512-Jh15/qVmrLGhkKJBdXlK1+9tY4lZruYjsgkDFj08ZmDiWVBLJcqkok7Z0/R0In+i1rScBpJlSvrTS2Lm41Pbnw==}
-
-  '@apidevtools/json-schema-ref-parser@11.9.3':
-    resolution: {integrity: sha512-60vepv88RwcJtSHrD6MjIL6Ta3SOYbgfnkHb+ppAVK+o9mXprRtulx7VlRl3lN3bbvysAfCS7WMVfhUYemB0IQ==}
-    engines: {node: '>= 16'}
 
   '@ark/schema@0.56.2':
     resolution: {integrity: sha512-Qx4D2JFbBWpntiHZaTv7bGG4H/M2rigiknezKg/WVyDSaLdE4YCcWAOoFB7pjjDqHbbV2OqRfntm1nnXvwMexg==}
@@ -3058,9 +3006,6 @@ packages:
 
   '@js-sdsl/ordered-map@4.4.2':
     resolution: {integrity: sha512-iUKgm52T8HOE/makSxjqoWhe95ZJA1/G1sYsGev2JDKUSS14KAgg1LHb+Ba+IPow0xflbnSkOsZcO08C7w1gYw==}
-
-  '@jsdevtools/ono@7.1.3':
-    resolution: {integrity: sha512-4JQNk+3mVzK3xh2rqd6RB4J46qUR19azEHBneZyTZM+c456qOrbbM/5xcR8huNCCcbVt7+UmizG6GuUvPvKUYg==}
 
   '@jsonjoy.com/base64@1.1.2':
     resolution: {integrity: sha512-q6XAnWQDIMA3+FTiOYajoYqySkO+JSat0ytXGSuRdq9uXE7o92gzuQwQM14xaCRlBLGq3v5miDGC4vkVTn54xA==}
@@ -6023,17 +5968,9 @@ packages:
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
     hasBin: true
 
-  is-extglob@2.1.1:
-    resolution: {integrity: sha512-SbKbANkN603Vi4jEZv49LeVJMn4yGwsbzZworEoyEiutsN3nJYdbO36zfhGJ6QEDpOZIFkDtnq5JRxmvl3jsoQ==}
-    engines: {node: '>=0.10.0'}
-
   is-fullwidth-code-point@3.0.0:
     resolution: {integrity: sha512-zymm5+u+sCsSWyD9qNaejV3DFvhCKclKdizYaJUuHA83RLjb7nSuGnddCHGv0hk+KY7BMAlsWeK4Ueg6EV6XQg==}
     engines: {node: '>=8'}
-
-  is-glob@4.0.3:
-    resolution: {integrity: sha512-xelSayHH36ZgE7ZWhli7pW34hNbNl8Ojv5KVmkJD4hBdD3th8Tfk9vYasLM+mXWOZhFkgZfxhLSnrwRr4elSSg==}
-    engines: {node: '>=0.10.0'}
 
   is-inside-container@1.0.0:
     resolution: {integrity: sha512-KIYLCCJghfHZxqjYBE7rEy0OBuTd5xCHS7tHVgvCLkx7StIoaxwNW3hCALgEUjFfeRk+MG/Qxmp/vtETEF3tRA==}
@@ -6136,11 +6073,6 @@ packages:
 
   json-parse-even-better-errors@2.3.1:
     resolution: {integrity: sha512-xyFwyhro/JEof6Ghe2iz2NcXoj2sloNsWr/XsERDK/oiPCfaNhl5ONfp+jQdAZRQQ0IJWNzH9zIZF7li91kh2w==}
-
-  json-schema-to-typescript@15.0.4:
-    resolution: {integrity: sha512-Su9oK8DR4xCmDsLlyvadkXzX6+GGXJpbhwoLtOGArAG61dvbW4YQmSEno2y66ahpIdmLMg6YUf/QHLgiwvkrHQ==}
-    engines: {node: '>=16.0.0'}
-    hasBin: true
 
   json-schema-traverse@1.0.0:
     resolution: {integrity: sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==}
@@ -7754,12 +7686,6 @@ snapshots:
 
   '@andrewbranch/untar.js@1.0.3': {}
 
-  '@apidevtools/json-schema-ref-parser@11.9.3':
-    dependencies:
-      '@jsdevtools/ono': 7.1.3
-      '@types/json-schema': 7.0.15
-      js-yaml: 4.2.0
-
   '@ark/schema@0.56.2':
     dependencies:
       '@ark/util': 0.56.2
@@ -8576,8 +8502,6 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.5.5
 
   '@js-sdsl/ordered-map@4.4.2': {}
-
-  '@jsdevtools/ono@7.1.3': {}
 
   '@jsonjoy.com/base64@1.1.2(tslib@2.8.1)':
     dependencies:
@@ -11252,13 +11176,7 @@ snapshots:
 
   is-docker@3.0.0: {}
 
-  is-extglob@2.1.1: {}
-
   is-fullwidth-code-point@3.0.0: {}
-
-  is-glob@4.0.3:
-    dependencies:
-      is-extglob: 2.1.1
 
   is-inside-container@1.0.0:
     dependencies:
@@ -11354,18 +11272,6 @@ snapshots:
   jsesc@3.1.0: {}
 
   json-parse-even-better-errors@2.3.1: {}
-
-  json-schema-to-typescript@15.0.4:
-    dependencies:
-      '@apidevtools/json-schema-ref-parser': 11.9.3
-      '@types/json-schema': 7.0.15
-      '@types/lodash': 4.17.24
-      is-glob: 4.0.3
-      js-yaml: 4.2.0
-      lodash: 4.18.1
-      minimist: 1.2.8
-      prettier: 3.9.6
-      tinyglobby: 0.2.17
 
   json-schema-traverse@1.0.0: {}
 
@@ -11969,7 +11875,8 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  prettier@3.9.6: {}
+  prettier@3.9.6:
+    optional: true
 
   pretty-format@27.5.1:
     dependencies:

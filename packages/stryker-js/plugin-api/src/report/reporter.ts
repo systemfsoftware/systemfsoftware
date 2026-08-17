@@ -41,7 +41,7 @@ export interface Reporter {
    * Called when stryker wants to quit
    * Gives a reporter the ability to finish up any async tasks
    * Stryker will not close until the promise is either resolved or rejected.
-   * @return a promise which will resolve when the reporter is done reporting
+   * @returns a promise which will resolve when the reporter is done reporting
    */
   wrapUp?(): Promise<void> | void
 }

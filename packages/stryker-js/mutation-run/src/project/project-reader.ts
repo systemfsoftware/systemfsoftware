@@ -1,25 +1,27 @@
 import path from 'path'
 import { isDeepStrictEqual } from 'util'
 
-import { ERROR_CODES, I, isErrnoException, notEmpty } from '@stryker-mutator/util'
+import { ERROR_CODES, type I, isErrnoException, notEmpty } from '@stryker-mutator/util'
 import {
-  FileDescription,
-  FileDescriptions,
-  Location,
-  Position,
-  StrykerOptions,
+  type FileDescription,
+  type FileDescriptions,
+  type Location,
+  type Position,
+  type StrykerOptions,
 } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import * as S from 'effect/Schema'
 import { Minimatch } from 'minimatch'
 import type { MutationTestResult } from 'mutation-testing-report-schema/api'
 
-import { OpenEndLocation } from 'mutation-testing-report-schema'
+import { type OpenEndLocation } from 'mutation-testing-report-schema'
 
 import { defaultOptions, FileMatcher } from '../config/index.js'
 import { injectionTokens } from '../plugins/index.js'
 
 import { FileSystem } from './file-system.js'
+import { IncrementalReportSchema } from './incremental-report.schema.js'
 import { Project } from './project.js'
 
 const ALWAYS_IGNORE = Object.freeze([
@@ -193,8 +195,10 @@ export class ProjectReader {
           pattern,
         )
         for (const [fileName, description] of files) {
+          const current = mutateInputFileMap.get(fileName)
+          if (current === undefined) continue
           const intersected = this.intersectFileDescriptions(
-            mutateInputFileMap.get(fileName)!,
+            current,
             description,
           )
           seen.set(
@@ -296,14 +300,14 @@ export class ProjectReader {
         endLine,
         endColumn = Number.MAX_SAFE_INTEGER.toString(),
       ] = mutationRangeMatch
-      mutatePattern = newPattern
+      mutatePattern = newPattern ?? mutatePattern
       mutate = [
         {
           start: {
-            line: parseInt(startLine) - 1,
+            line: parseInt(startLine ?? '1') - 1,
             column: parseInt(startColumn),
           },
-          end: { line: parseInt(endLine) - 1, column: parseInt(endColumn) },
+          end: { line: parseInt(endLine ?? '1') - 1, column: parseInt(endColumn) },
         },
       ]
     }
@@ -403,13 +407,15 @@ export class ProjectReader {
       return
     }
     try {
-      // TODO: Validate against the schema or stryker version?
+      // The report is data from disk, so it is decoded through the schema for
+      // the parts this reader reshapes; every other key is kept verbatim.
       const contents = await this.fs.readFile(this.incrementalFile, 'utf-8')
-      const result: MutationTestResult = JSON.parse(contents)
+      const result: unknown = JSON.parse(contents)
+      const decoded = S.decodeUnknownSync(IncrementalReportSchema)(result)
       return {
-        ...result,
+        ...decoded,
         files: Object.fromEntries(
-          Object.entries(result.files).map(([fileName, file]) => [
+          Object.entries(decoded.files).map(([fileName, file]) => [
             fileName,
             {
               ...file,
@@ -420,20 +426,28 @@ export class ProjectReader {
             },
           ]),
         ),
-        testFiles: result.testFiles &&
-          Object.fromEntries(
-            Object.entries(result.testFiles).map(([fileName, file]) => [
-              fileName,
-              {
-                ...file,
-                tests: file.tests.map((test) => ({
-                  ...test,
-                  location: test.location &&
-                    reportOpenEndLocationToStrykerLocation(test.location),
-                })),
-              },
-            ]),
-          ),
+        ...(decoded.testFiles
+          ? {
+            testFiles: Object.fromEntries(
+              Object.entries(decoded.testFiles).map(([fileName, file]) => [
+                fileName,
+                {
+                  ...file,
+                  tests: file.tests.map((test) => ({
+                    ...test,
+                    ...(test.location
+                      ? {
+                        location: reportOpenEndLocationToStrykerLocation(
+                          test.location,
+                        ),
+                      }
+                      : {}),
+                  })),
+                },
+              ]),
+            ),
+          }
+          : {}),
       }
     } catch (err: unknown) {
       if (
@@ -458,7 +472,7 @@ function reportOpenEndLocationToStrykerLocation({
 }: OpenEndLocation): OpenEndLocation {
   return {
     start: reportPositionToStrykerPosition(start),
-    end: end && reportPositionToStrykerPosition(end),
+    ...(end ? { end: reportPositionToStrykerPosition(end) } : {}),
   }
 }
 

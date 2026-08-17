@@ -1,9 +1,9 @@
 import {
-  DryRunOptions,
-  DryRunResult,
-  MutantRunOptions,
-  MutantRunResult,
-  TestRunnerCapabilities,
+  type DryRunOptions,
+  type DryRunResult,
+  type MutantRunOptions,
+  type MutantRunResult,
+  type TestRunnerCapabilities,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
 import { TestRunnerDecorator } from './test-runner-decorator.js'

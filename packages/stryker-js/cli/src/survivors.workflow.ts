@@ -54,3 +54,45 @@ export const admitSurvivorsRun = Workflow.make(
       Match.exhaustive,
     ),
 )
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
+  // branch is statically dead in the build and never enters the published module graph.
+  const { refutes } = await import('@systemfsoftware/effect-schema-law')
+  const { FastCheck: fc } = await import('effect/testing')
+
+  const survivorWith = (
+    start: { line: number | null; column: number | null },
+    end: { line: number | null; column: number | null },
+  ): unknown => ({
+    _tag: 'Admitted',
+    survivors: [
+      {
+        id: 'A',
+        fileName: 'file.ts',
+        mutatorName: 'mutator',
+        replacement: 'replacement',
+        location: { start, end },
+      },
+    ],
+  })
+
+  /**
+   * `S.Finite` is one shared v4 node, so every location point weakens together
+   * and the harness keeps a single obligation. Measured 2026-08-17: the stored
+   * weakened arm accepts a non-finite number at `start.column` (the first
+   * reaching path) but not at `start.line` — so the witness sits there. One
+   * generator per schema discharges the shared obligation.
+   */
+  refutes(Admitted, {
+    AdmittedLocationNonFinite: fc.constant(
+      survivorWith({ line: 1, column: Number.POSITIVE_INFINITY }, { line: 1, column: 0 }),
+    ),
+  })
+
+  refutes(SurvivorsAdmission, {
+    SurvivorsAdmissionLocationNonFinite: fc.constant(
+      survivorWith({ line: 1, column: Number.POSITIVE_INFINITY }, { line: 1, column: 0 }),
+    ),
+  })
+}

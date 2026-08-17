@@ -1,5 +1,5 @@
 import { notEmpty } from '@stryker-mutator/util'
-import { TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { type TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import {
   BehaviorSubject,
   filter,
@@ -13,7 +13,7 @@ import {
   tap,
   zip,
 } from 'rxjs'
-import { Disposable, tokens } from 'typed-inject'
+import { type Disposable, tokens } from 'typed-inject'
 
 import { CheckerFacade } from '../checker/index.js'
 import { injectionTokens } from '../plugins/index.js'
@@ -90,6 +90,18 @@ class WorkItem<TResource extends Resource, TIn, TOut> {
 }
 
 /**
+ * The parts of a {@link WorkItem} the pool touches while it sits in the todo
+ * queue, before a resource picks it up. The input/output types are only
+ * meaningful at the schedule site, so the queue stores this structural view.
+ */
+interface QueuedWorkItem<TResource extends Resource> {
+  readonly result$: Observable<unknown>
+  execute(resource: TResource): Promise<void>
+  reject(error: unknown): void
+  complete(): void
+}
+
+/**
  * Represents a pool of resources. Use `schedule` to schedule work to be executed on the resources.
  * The pool will automatically recycle the resources, but will make sure only one task is executed
  * on one resource at any one time. Creates as many resources as the concurrency tokens allow.
@@ -110,7 +122,7 @@ export class Pool<TResource extends Resource> implements Disposable {
   private readonly createdResources: TResource[] = []
   // The queued work items. This is a replay subject, so scheduled work items can easily be rejected after it was picked up
   private readonly todoSubject = new ReplaySubject<
-    WorkItem<TResource, any, any>
+    QueuedWorkItem<TResource>
   >()
 
   constructor(factory: () => TResource, concurrencyToken$: Observable<number>) {

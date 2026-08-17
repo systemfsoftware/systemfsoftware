@@ -1,10 +1,10 @@
 import os from 'os'
 
-import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { Observable, range, ReplaySubject } from 'rxjs'
-import { Disposable, tokens } from 'typed-inject'
+import { type Disposable, tokens } from 'typed-inject'
 
 export class ConcurrencyTokenProvider implements Disposable {
   private readonly concurrencyCheckers: number
@@ -56,7 +56,7 @@ export class ConcurrencyTokenProvider implements Disposable {
   ): number {
     if (typeof concurrencyOption === 'string') {
       const percentageMatch = concurrencyOption.match(/^(100|[1-9]?[0-9])%$/)
-      if (percentageMatch) {
+      if (percentageMatch && percentageMatch[1] !== undefined) {
         const percentage = parseInt(percentageMatch[1], 10)
         const computed = Math.max(
           1,

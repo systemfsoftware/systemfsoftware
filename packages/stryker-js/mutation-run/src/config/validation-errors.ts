@@ -1,5 +1,6 @@
-import { ErrorObject } from 'ajv'
+import { type ErrorObject } from 'ajv'
 
+import * as S from 'effect/Schema'
 import groupby from 'lodash.groupby'
 
 /**
@@ -127,13 +128,14 @@ function mergeTypeErrorsByPath(typeErrors: ErrorObject[]): ErrorObject[] {
   return Object.values(typeErrorsByPath).map(mergeTypeErrors)
 
   function mergeTypeErrors(errors: ErrorObject[]): ErrorObject {
-    const params = {
-      type: errors.map((error) => error.params.type).join(','),
+    const first = errors[0]
+    if (first === undefined) {
+      throw new Error('mergeTypeErrors called with an empty group')
     }
-    return {
-      ...errors[0],
-      params,
+    first.params = {
+      type: errors.map((error) => String(error.params['type'])).join(','),
     }
+    return first
   }
 }
 
@@ -146,26 +148,28 @@ function describeError(error: ErrorObject): string {
 
   switch (error.keyword) {
     case 'type': {
-      const expectedTypeDescription = error.params.type.split(',').join(' or ')
+      const expectedTypeDescription = String(error.params['type']).split(',').join(' or ')
       return `${errorPrefix} has the wrong type. It should be a ${expectedTypeDescription}, but was a ${
         jsonSchemaType(error.data)
       }.`
     }
-    case 'enum':
+    case 'enum': {
+      const allowedValues = S.decodeUnknownSync(S.Array(S.Unknown))(error.params['allowedValues'])
       return `${errorPrefix} should be one of the allowed values (${
         new Intl.ListFormat('en', { type: 'disjunction' }).format(
-          (error.params.allowedValues as unknown[]).map(stringify),
+          allowedValues.map(stringify),
         )
       }), but was ${
         stringify(
           error.data,
         )
       }.`
+    }
     case 'minimum':
     case 'maximum':
-      return `${errorPrefix} ${error.message}, was ${String(error.data)}.`
+      return `${errorPrefix} ${error.message ?? ''}, was ${String(error.data)}.`
     default:
-      return `${errorPrefix} ${error.message!.replace(/'/g, '"')}`
+      return `${errorPrefix} ${(error.message ?? '').replace(/'/g, '"')}`
   }
 }
 

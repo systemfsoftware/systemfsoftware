@@ -1,15 +1,16 @@
 import path from 'path'
 
-import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Schema as S } from 'effect'
 import { Result } from 'effect'
 
 import { Project } from '../project/project.js'
 
-import { FilePreprocessor } from './file-preprocessor.js'
+import { type FilePreprocessor } from './file-preprocessor.js'
 import { parseTsConfig } from './parse-config-helper.js'
-import type { TSConfig } from './parse-config-helper.js'
+import { ExtendsArraySchema, type TSConfig } from './parse-config.schema.js'
 import { resolveProjectReferencePath } from './resolve-reference-helper.js'
 
 export type { TSConfig } from './parse-config-helper.js'
@@ -103,7 +104,7 @@ export class TSConfigPreprocessor implements FilePreprocessor {
         extend,
         tsconfigFileName,
       )
-    } else if (Array.isArray(extend)) {
+    } else if (S.is(ExtendsArraySchema)(extend)) {
       const rewritten: string[] = []
       for (const entry of extend) {
         rewritten.push(

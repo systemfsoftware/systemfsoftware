@@ -1,28 +1,11 @@
+import type { Abortable } from 'events'
 import fs from 'fs'
+import type { Dirent, MakeDirectoryOptions, Mode, ObjectEncodingOptions, PathLike } from 'fs'
 
-import { Task } from '@stryker-mutator/util'
 import { mergeMap, Subject } from 'rxjs'
-import { Disposable } from 'typed-inject'
+import { type Disposable } from 'typed-inject'
 
 const MAX_CONCURRENT_FILE_IO = 256
-
-class FileSystemAction<TOut> {
-  public readonly task = new Task<TOut>()
-
-  /**
-   * @param work The task, where a resource and input is presented
-   */
-  constructor(private readonly work: () => Promise<TOut>) {}
-
-  public async execute() {
-    try {
-      const output = await this.work()
-      this.task.resolve(output)
-    } catch (err) {
-      this.task.reject(err)
-    }
-  }
-}
 
 /**
  * A wrapper around nodejs's 'fs' core module, for dependency injection purposes.
@@ -30,11 +13,16 @@ class FileSystemAction<TOut> {
  * Also has build-in buffering support with a concurrency limit (like "graceful-fs").
  */
 export class FileSystem implements Disposable {
-  private readonly todoSubject = new Subject<FileSystemAction<any>>()
+  /**
+   * The buffered work queue: each pending call is a zero-argument thunk that
+   * performs the real `fs.promises` call. `mergeMap` with the concurrency
+   * limit is the "graceful-fs" hat.
+   */
+  private readonly todoSubject = new Subject<() => Promise<unknown>>()
   private readonly subscription = this.todoSubject
     .pipe(
-      mergeMap(async (action) => {
-        await action.execute()
+      mergeMap(async (work) => {
+        await work()
       }, MAX_CONCURRENT_FILE_IO),
     )
     .subscribe()
@@ -43,19 +31,79 @@ export class FileSystem implements Disposable {
     this.subscription.unsubscribe()
   }
 
-  public readonly readFile = this.forward('readFile')
-  public readonly copyFile = this.forward('copyFile')
-  public readonly writeFile = this.forward('writeFile')
-  public readonly mkdir = this.forward('mkdir')
-  public readonly readdir = this.forward('readdir')
+  /**
+   * The forwarded `fs.promises` surface this package uses. Every call is
+   * buffered through `todoSubject` with the `MAX_CONCURRENT_FILE_IO`
+   * concurrency limit.
+   */
+  public readFile(
+    path: PathLike,
+    options: ({ encoding: BufferEncoding } & Abortable) | BufferEncoding,
+  ): Promise<string>
+  public readFile(
+    path: PathLike,
+    options?: (ObjectEncodingOptions & Abortable) | BufferEncoding | null,
+  ): Promise<string | Buffer>
+  public readFile(
+    path: PathLike,
+    options?: (ObjectEncodingOptions & Abortable) | BufferEncoding | null,
+  ): Promise<string | Buffer> {
+    return this.queue(() => fs.promises.readFile(path, options))
+  }
 
-  private forward<TMethod extends keyof Omit<typeof fs.promises, 'constants'>>(
-    method: TMethod,
-  ): (typeof fs.promises)[TMethod] {
-    return (...args: any[]) => {
-      const action = new FileSystemAction(() => (fs.promises[method] as any)(...args))
-      this.todoSubject.next(action)
-      return action.task.promise as any
-    }
+  public copyFile(src: PathLike, dest: PathLike, mode?: number): Promise<void> {
+    return this.queue(() => fs.promises.copyFile(src, dest, mode))
+  }
+
+  public writeFile(
+    path: PathLike,
+    data: string | Uint8Array,
+    options?: (ObjectEncodingOptions & Abortable) | BufferEncoding | null,
+  ): Promise<void> {
+    return this.queue(() => fs.promises.writeFile(path, data, options))
+  }
+
+  public mkdir(
+    path: PathLike,
+    options?: Mode | MakeDirectoryOptions | null,
+  ): Promise<string | undefined> {
+    return this.queue(() => fs.promises.mkdir(path, options))
+  }
+
+  public readdir(
+    path: PathLike,
+    options: ObjectEncodingOptions & {
+      withFileTypes: true
+      recursive?: boolean
+    },
+  ): Promise<Dirent[]>
+  public readdir(
+    path: PathLike,
+    options?:
+      | (ObjectEncodingOptions & {
+        withFileTypes?: boolean
+        recursive?: boolean
+      })
+      | BufferEncoding
+      | null,
+  ): Promise<string[] | Dirent[]>
+  public readdir(
+    path: PathLike,
+    options?: ObjectEncodingOptions | BufferEncoding | null,
+  ): Promise<string[] | Dirent[]> {
+    return this.queue(() => fs.promises.readdir(path, options))
+  }
+
+  /** Buffer one fs call behind the concurrency limit and await its outcome. */
+  private queue<TOut>(work: () => Promise<TOut>): Promise<TOut> {
+    return new Promise<TOut>((resolve, reject) => {
+      this.todoSubject.next(async () => {
+        try {
+          resolve(await work())
+        } catch (err) {
+          reject(err)
+        }
+      })
+    })
   }
 }

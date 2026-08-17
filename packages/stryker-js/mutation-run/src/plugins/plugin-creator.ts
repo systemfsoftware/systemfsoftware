@@ -1,18 +1,18 @@
 import {
-  ClassPlugin,
+  type ClassPlugin,
   commonTokens,
-  FactoryPlugin,
-  InjectionToken,
-  Injector,
-  Plugin,
-  PluginContext,
-  PluginInterfaces,
+  type FactoryPlugin,
+  type InjectionToken,
+  type Injector,
+  type Plugin,
+  type PluginContext,
+  type PluginInterfaces,
   PluginKind,
-  Plugins,
+  type Plugins,
   tokens,
-  ValuePlugin,
+  type ValuePlugin,
 } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { InjectableClass, InjectableFunction } from 'typed-inject'
+import { type InjectableClass, type InjectableFunction } from 'typed-inject'
 
 import { ConfigError } from '../errors.js'
 import { injectionTokens } from './index.js'
@@ -34,19 +34,11 @@ export class PluginCreator {
     const plugin = this.findPlugin(kind, name)
     if (isFactoryPlugin(plugin)) {
       return this.injector.injectFunction(
-        plugin.factory as InjectableFunction<
-          PluginContext,
-          PluginInterfaces[TPlugin],
-          InjectionToken<PluginContext>[]
-        >,
+        plugin.factory,
       )
     } else if (isClassPlugin(plugin)) {
       return this.injector.injectClass(
-        plugin.injectableClass as InjectableClass<
-          PluginContext,
-          PluginInterfaces[TPlugin],
-          InjectionToken<PluginContext>[]
-        >,
+        plugin.injectableClass,
       )
     } else if (isValuePlugin(plugin)) {
       return plugin.value
@@ -65,8 +57,8 @@ export class PluginCreator {
       const pluginFound = plugins.find(
         (plugin) => plugin.name.toLowerCase() === name.toLowerCase(),
       )
-      if (pluginFound) {
-        return pluginFound as Plugins[T]
+      if (pluginFound && isPluginOfKind(pluginFound, kind)) {
+        return pluginFound
       } else {
         // A missing plugin is a configuration problem: ConfigError keeps it on the config-error exit class (R2).
         throw new ConfigError(
@@ -83,24 +75,25 @@ export class PluginCreator {
   }
 }
 
-function isFactoryPlugin(
+function isPluginOfKind<T extends keyof Plugins>(
   plugin: Plugin<PluginKind>,
-): plugin is FactoryPlugin<PluginKind, InjectionToken<PluginContext>[]> {
-  return Boolean(
-    (plugin as FactoryPlugin<PluginKind, InjectionToken<PluginContext>[]>)
-      .factory,
-  )
+  kind: T,
+): plugin is Plugins[T] {
+  return plugin.kind === kind
 }
-function isClassPlugin(
-  plugin: Plugin<PluginKind>,
-): plugin is ClassPlugin<PluginKind, InjectionToken<PluginContext>[]> {
-  return Boolean(
-    (plugin as ClassPlugin<PluginKind, InjectionToken<PluginContext>[]>)
-      .injectableClass,
-  )
+
+function isFactoryPlugin<TPluginKind extends PluginKind>(
+  plugin: Plugin<TPluginKind>,
+): plugin is FactoryPlugin<TPluginKind, InjectionToken<PluginContext>[]> {
+  return 'factory' in plugin
 }
-function isValuePlugin(
-  plugin: Plugin<PluginKind>,
-): plugin is ValuePlugin<PluginKind> {
-  return Boolean((plugin as ValuePlugin<PluginKind>).value)
+function isClassPlugin<TPluginKind extends PluginKind>(
+  plugin: Plugin<TPluginKind>,
+): plugin is ClassPlugin<TPluginKind, InjectionToken<PluginContext>[]> {
+  return 'injectableClass' in plugin
+}
+function isValuePlugin<TPluginKind extends PluginKind>(
+  plugin: Plugin<TPluginKind>,
+): plugin is ValuePlugin<TPluginKind> {
+  return 'value' in plugin
 }

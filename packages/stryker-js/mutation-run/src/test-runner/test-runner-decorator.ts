@@ -1,10 +1,10 @@
 import {
-  DryRunOptions,
-  DryRunResult,
-  MutantRunOptions,
-  MutantRunResult,
-  TestRunner,
-  TestRunnerCapabilities,
+  type DryRunOptions,
+  type DryRunResult,
+  type MutantRunOptions,
+  type MutantRunResult,
+  type TestRunner,
+  type TestRunnerCapabilities,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
 import { ResourceDecorator } from '../worker-pool/index.js'

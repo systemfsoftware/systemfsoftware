@@ -4,7 +4,7 @@
  */
 export class Timer {
   private readonly start: Date
-  private readonly markers: Record<string, Date | undefined> = Object.create(null)
+  private readonly markers = new Map<string, Date>()
 
   constructor(private readonly now = () => new Date()) {
     this.start = this.now()
@@ -25,7 +25,7 @@ export class Timer {
   }
 
   public elapsedMs(sinceMarker?: string): number {
-    const marker = sinceMarker && this.markers[sinceMarker]
+    const marker = sinceMarker && this.markers.get(sinceMarker)
     if (marker) {
       return this.now().getTime() - marker.getTime()
     } else {
@@ -34,7 +34,7 @@ export class Timer {
   }
 
   public mark(name: string): void {
-    this.markers[name] = this.now()
+    this.markers.set(name, this.now())
   }
 
   private static humanReadableElapsedSeconds(elapsedSeconds: number) {

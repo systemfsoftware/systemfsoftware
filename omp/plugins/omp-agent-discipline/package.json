@@ -34,6 +34,8 @@
     "@oh-my-pi/pi-coding-agent": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/omp-utils": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",

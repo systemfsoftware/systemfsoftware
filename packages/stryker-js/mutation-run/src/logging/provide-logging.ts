@@ -1,13 +1,13 @@
-import { Logger, LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type Logger, type LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, Scope } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { Injector } from 'typed-inject'
+import { type Injector } from 'typed-inject'
 import { injectionTokens } from '../plugins/index.js'
 import { LogLevel } from './log-level.js'
 import { LoggerImpl } from './logger-impl.js'
 import { LoggingBackend } from './logging-backend.js'
 import { LoggingClient } from './logging-client.js'
-import { LoggingServer, LoggingServerAddress } from './logging-server.js'
-import { LoggingSink } from './logging-sink.js'
+import { LoggingServer, type LoggingServerAddress } from './logging-server.js'
+import { type LoggingSink } from './logging-sink.js'
 
 function getLoggerFactory(loggingSink: LoggingSink) {
   return (categoryName?: string): Logger => new LoggerImpl(categoryName ?? 'UNKNOWN', loggingSink)

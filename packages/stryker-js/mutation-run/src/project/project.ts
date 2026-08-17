@@ -1,7 +1,7 @@
-import { I, normalizeWhitespaces, propertyPath } from '@stryker-mutator/util'
-import { FileDescriptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
-import { MutationTestResult } from 'mutation-testing-report-schema'
+import { type I, normalizeWhitespaces, propertyPath } from '@stryker-mutator/util'
+import { type FileDescriptions, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type MutationTestResult } from 'mutation-testing-report-schema'
 
 import { FileSystem } from './file-system.js'
 import { ProjectFile } from './project-file.js'

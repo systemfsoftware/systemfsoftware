@@ -1,4 +1,10 @@
-import { CoverageAnalysis, Mutant } from '../core/index.js'
+import type { Mutant, StrykerOptions } from '../core/index.js'
+
+/**
+ * `coverageAnalysis` strategy, derived from the option set's literal union so
+ * it cannot drift from the schema.
+ */
+export type CoverageAnalysis = StrykerOptions['coverageAnalysis']
 
 export interface RunOptions {
   /**

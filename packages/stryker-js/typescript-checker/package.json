@@ -35,12 +35,14 @@
   },
   "devDependencies": {
     "@std/jsonc": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@types/semver": "^7.5.8",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
+    "typed-inject": "~5.0.0",
     "vitest": "catalog:"
   },
   "inlinedDependencies": {

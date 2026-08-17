@@ -1,8 +1,8 @@
 import { notEmpty } from '@stryker-mutator/util'
-import { CoverageData } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type CoverageData } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { CompleteDryRunResult, TestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { type CompleteDryRunResult, type TestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
 import { injectionTokens } from '../plugins/index.js'
 
@@ -41,7 +41,8 @@ export class TestCoverage {
   }
 
   public hasStaticCoverage(mutantId: string): boolean {
-    return !!(this.#staticCoverage && this.#staticCoverage[mutantId] > 0)
+    const coverage = this.#staticCoverage?.[mutantId]
+    return coverage !== undefined && coverage > 0
   }
 
   public addTest(testResult: TestResult): void {

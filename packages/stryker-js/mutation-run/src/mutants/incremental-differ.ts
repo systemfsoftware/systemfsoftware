@@ -1,22 +1,22 @@
 import path from 'path'
 
-import { I, normalizeFileName, normalizeLineEndings, notEmpty } from '@stryker-mutator/util'
+import { type I, normalizeFileName, normalizeLineEndings, notEmpty } from '@stryker-mutator/util'
 import {
-  FileDescriptions,
-  Location,
-  Mutant,
-  MutateDescription,
-  Position,
+  type FileDescriptions,
+  type Location,
+  type Mutant,
+  type MutateDescription,
+  type Position,
   schema,
-  StrykerOptions,
+  type StrykerOptions,
 } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { TestResult, TestStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { type TestResult, TestStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { diff_match_patch as DiffMatchPatch } from 'diff-match-patch'
-import { TestDefinition } from 'mutation-testing-report-schema'
+import { type TestDefinition } from 'mutation-testing-report-schema'
 
-import { DiffChange, DiffStatisticsCollector } from './diff-statistics-collector.js'
+import { type DiffChange, DiffStatisticsCollector } from './diff-statistics-collector.js'
 import { TestCoverage } from './test-coverage.js'
 
 /**
@@ -45,8 +45,7 @@ const diffMatchPatch = new DiffMatchPatch()
  *     attributed to no test, so no test change can ever invalidate one; reusing
  *     a non-killed verdict for one would freeze it permanently.
  *
- * It uses google's "diff-match-patch" project to calculate the new locations for tests and mutants, see link.
- * @link https://github.com/google/diff-match-patch
+ * It uses google's "diff-match-patch" project to calculate the new locations for tests and mutants, see https://github.com/google/diff-match-patch.
  */
 export class IncrementalDiffer {
   public mutantStatisticsCollector: DiffStatisticsCollector | undefined
@@ -142,8 +141,8 @@ export class IncrementalDiffer {
         const test: TestResult = {
           status: TestStatus.Success,
           id: testKey,
-          name,
-          startPosition: location?.start,
+          name: name,
+          ...(location?.start === undefined ? {} : { startPosition: location.start }),
           timeSpentMs: 0,
           fileName: path.resolve(relativeFileName),
         }
@@ -180,9 +179,9 @@ export class IncrementalDiffer {
             const { status, statusReason, testsCompleted } = oldMutant
             return {
               ...mutant,
-              status,
-              statusReason,
-              testsCompleted,
+              ...(status === undefined ? {} : { status }),
+              ...(statusReason === undefined ? {} : { statusReason }),
+              ...(testsCompleted === undefined ? {} : { testsCompleted }),
               coveredBy: [...(coveringTests ?? [])].map(({ id }) => id),
               killedBy: testKeysToId(killedByTestKeys),
             }
@@ -715,12 +714,13 @@ function closeLocations(testFile: schema.TestFile): LocatedTest[] {
       ) {
         currentPositionIndex++
       }
-      if (startPositions[currentPositionIndex]) {
+      const nextPosition = startPositions[currentPositionIndex]
+      if (nextPosition) {
         locatedTests.push({
           ...test,
           location: {
             start: test.location.start,
-            end: startPositions[currentPositionIndex],
+            end: nextPosition,
           },
         })
         openEndedTestSet.delete(test)

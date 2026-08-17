@@ -37,6 +37,8 @@
   },
   "devDependencies": {
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-entrypoint": "workspace:^",

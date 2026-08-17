@@ -2,10 +2,11 @@ import fs from 'fs'
 import path from 'path'
 import { pathToFileURL } from 'url'
 
-import { deepMerge, I, isErrnoException } from '@stryker-mutator/util'
-import { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { deepMerge, type I, isErrnoException } from '@stryker-mutator/util'
+import { type PartialStrykerOptions, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import * as S from 'effect/Schema'
 
 import { ConfigError } from '../errors.js'
 import { injectionTokens } from '../plugins/index.js'
@@ -74,7 +75,7 @@ export class ConfigReader {
   private async loadOptionsFromConfigFile(
     cliOptions: PartialStrykerOptions,
   ): Promise<PartialStrykerOptions> {
-    const configFile = await this.findConfigFile(cliOptions.configFile)
+    const configFile = await this.findConfigFile(cliOptions['configFile'])
     if (!configFile) {
       this.log.info(
         'No config file specified. Running with command line arguments.',
@@ -116,7 +117,8 @@ export class ConfigReader {
   ): Promise<PartialStrykerOptions> {
     const fileContent = await fs.promises.readFile(configFile, 'utf-8')
     try {
-      return JSON.parse(fileContent)
+      const parsed: unknown = JSON.parse(fileContent)
+      return S.decodeUnknownSync(S.Record(S.String, S.Unknown))(parsed)
     } catch (err) {
       throw new ConfigReaderError(
         'File contains invalid JSON',
@@ -154,7 +156,7 @@ export class ConfigReader {
         )
       }
 
-      return { ...maybeOptions } as PartialStrykerOptions
+      return { ...maybeOptions }
     } else {
       this.log.fatal(
         `Invalid config file. It is missing a default export. ${describeNamedExports()}\n${CONFIG_SYNTAX_HELP}`,

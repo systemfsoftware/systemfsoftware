@@ -1,21 +1,26 @@
 import path from 'path'
 
-import { I, normalizeFileName, normalizeWhitespaces, type requireResolve } from '@stryker-mutator/util'
-import { CheckResult, CheckStatus, PassedCheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
+import { type I, normalizeFileName, normalizeWhitespaces, type requireResolve } from '@stryker-mutator/util'
+import { type CheckResult, CheckStatus, type PassedCheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
 import {
-  Location,
-  MutantResult,
-  MutantStatus,
-  MutantTestCoverage,
-  Position,
+  type Location,
+  type MutantResult,
+  type MutantStatus,
+  type MutantTestCoverage,
+  type Position,
   schema,
-  StrykerOptions,
+  type StrykerOptions,
 } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
-import { MutantRunResult, MutantRunStatus, TestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
-import { calculateMutationTestMetrics, MutationTestMetricsResult } from 'mutation-testing-metrics'
+import { type Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
+import {
+  type MutantRunResult,
+  MutantRunStatus,
+  type TestResult,
+} from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import * as S from 'effect/Schema'
+import { calculateMutationTestMetrics, type MutationTestMetricsResult } from 'mutation-testing-metrics'
 
 import { ExitClass, setPendingExitClass } from '../exit-classification.js'
 import { TestCoverage } from '../mutants/index.js'
@@ -147,7 +152,7 @@ export class MutationTestReportHelper {
         return this.reportOne({
           ...mutant,
           status: 'Timeout',
-          statusReason: result.reason,
+          ...(result.reason === undefined ? {} : { statusReason: result.reason }),
           location,
         })
       case MutantRunStatus.Survived:
@@ -215,7 +220,7 @@ export class MutationTestReportHelper {
   private determineTestContribution(report: schema.MutationTestResult) {
     const verdict = judgeTestContribution(
       report,
-      this.options.requireTestContribution,
+      this.options['requireTestContribution'],
       this.options.disableBail,
     )
     if (verdict === undefined) {
@@ -242,7 +247,9 @@ export class MutationTestReportHelper {
     if (typeof breaking === 'number') {
       if (mutationScore < breaking) {
         this.log.error(
-          `Final mutation score ${formattedScore} under breaking threshold ${breaking}, setting exit code to 1 (failure).`,
+          `Final mutation score ${formattedScore} under breaking threshold ${
+            String(breaking)
+          }, setting exit code to 1 (failure).`,
         )
         this.log.info(
           '(improve mutation score or set `thresholds.break = null` to prevent this error in the future)',
@@ -250,7 +257,7 @@ export class MutationTestReportHelper {
         setPendingExitClass(ExitClass.VerdictFail)
       } else {
         this.log.info(
-          `Final mutation score of ${formattedScore} is greater than or equal to break threshold ${breaking}`,
+          `Final mutation score of ${formattedScore} is greater than or equal to break threshold ${String(breaking)}`,
         )
       }
     } else {
@@ -303,8 +310,15 @@ export class MutationTestReportHelper {
 
     return results.reduce<schema.FileResultDictionary>((acc, mutantResult) => {
       const reportFileName = normalizeReportFileName(mutantResult.fileName)
-      const fileResult = acc[reportFileName] ??
-        (acc[reportFileName] = fileResultsByName.get(mutantResult.fileName)!)
+      let fileResult = acc[reportFileName]
+      if (fileResult === undefined) {
+        const prepared = fileResultsByName.get(mutantResult.fileName)
+        if (prepared === undefined) {
+          throw new Error(`No file result prepared for ${mutantResult.fileName}`)
+        }
+        acc[reportFileName] = prepared
+        fileResult = prepared
+      }
       fileResult.mutants.push(this.toMutantResult(mutantResult, remapTestIds))
       return acc
     }, {})
@@ -336,8 +350,15 @@ export class MutationTestReportHelper {
     ].reduce<schema.TestFileDefinitionDictionary>((acc, testResult) => {
       const test = this.toTestDefinition(testResult, remapTestId)
       const reportFileName = normalizeReportFileName(testResult.fileName)
-      const testFile = acc[reportFileName] ??
-        (acc[reportFileName] = testFilesByName.get(reportFileName)!)
+      let testFile = acc[reportFileName]
+      if (testFile === undefined) {
+        const prepared = testFilesByName.get(reportFileName)
+        if (prepared === undefined) {
+          throw new Error(`No test file prepared for ${reportFileName}`)
+        }
+        acc[reportFileName] = prepared
+        testFile = prepared
+      }
       testFile.tests.push(test)
       return acc
     }, {})
@@ -386,9 +407,9 @@ export class MutationTestReportHelper {
     return {
       id: remapTestId(test.id),
       name: test.name,
-      location: test.startPosition
-        ? { start: toSchemaPosition(test.startPosition) }
-        : undefined,
+      ...(test.startPosition === undefined
+        ? {}
+        : { location: { start: toSchemaPosition(test.startPosition) } }),
     }
   }
 
@@ -411,25 +432,25 @@ export class MutationTestReportHelper {
     remapTestIds: (ids: string[] | undefined) => string[] | undefined,
   ): schema.MutantResult {
     const { fileName, location, killedBy, coveredBy, ...apiMutant } = mutantResult
+    const remappedKilledBy = remapTestIds(killedBy)
+    const remappedCoveredBy = remapTestIds(coveredBy)
     return {
       ...apiMutant,
-      killedBy: remapTestIds(killedBy),
-      coveredBy: remapTestIds(coveredBy),
+      ...(remappedKilledBy === undefined ? {} : { killedBy: remappedKilledBy }),
+      ...(remappedCoveredBy === undefined ? {} : { coveredBy: remappedCoveredBy }),
       location,
     }
   }
 
   private discoverDependencies(): schema.Dependencies {
-    const discover = (specifier: string) => {
+    const discover = (specifier: string): readonly [string, string] | undefined => {
       try {
-        return [
-          specifier,
-          (
-            this.requireFromCwd(`${specifier}/package.json`) as {
-              version: string
-            }
-          ).version,
-        ]
+        const packageRecord = S.decodeUnknownSync(S.Record(S.String, S.Unknown))(
+          this.requireFromCwd(`${specifier}/package.json`),
+        )
+        const version = packageRecord['version']
+        const versionText = typeof version === 'string' ? version : JSON.stringify(version) ?? ''
+        return [specifier, versionText]
       } catch {
         // package does not exist...
         return undefined

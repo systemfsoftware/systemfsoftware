@@ -4,22 +4,23 @@ import { fileURLToPath } from 'url'
 import { errorToString } from '@stryker-mutator/util'
 import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import type { Injector, SandboxPluginContext } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Schema as S } from 'effect'
 import { createInjector } from 'typed-inject'
 
 import { injectionTokens, PluginCreator } from '../plugins/index.js'
 import { PluginLoader } from '../plugins/plugin-loader.js'
 
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { minPriority } from '../logging/priority.js'
 import { provideLogging, provideLoggingClient } from '../logging/provide-logging.js'
 import {
-  CallMessage,
-  InitMessage,
-  ParentMessage,
+  type CallMessage,
+  type InitMessage,
+  type ParentMessage,
   ParentMessageKind,
-  WorkerMessage,
   WorkerMessageKind,
 } from './message-protocol.js'
+import { CallableSubjectMemberSchema, SubjectClassSchema, WorkerMessageSchema } from './message-protocol.schema.js'
 import { deserialize, serialize } from './string-utils.js'
 export interface ChildProcessContext extends SandboxPluginContext {
   [injectionTokens.pluginCreator]: PluginCreator
@@ -29,12 +30,9 @@ export class ChildProcessProxyWorker {
   private log?: Logger
   private injector
 
-  public realSubject: any
+  public realSubject: Record<string, unknown> | undefined
 
   constructor(private readonly injectorFactory: typeof createInjector) {
-    // Make sure to bind the methods in order to ensure the `this` pointer
-    this.handleMessage = this.handleMessage.bind(this)
-
     // Start listening before sending the spawned message
     process.on('message', this.handleMessage)
     this.send({ kind: ParentMessageKind.Ready })
@@ -47,8 +45,8 @@ export class ChildProcessProxyWorker {
       process.send(str)
     }
   }
-  private handleMessage(serializedMessage: unknown) {
-    const message = deserialize<WorkerMessage>(String(serializedMessage))
+  private readonly handleMessage = (serializedMessage: unknown) => {
+    const message = deserialize(String(serializedMessage), WorkerMessageSchema)
     switch (message.kind) {
       case WorkerMessageKind.Init:
         // eslint-disable-next-line @typescript-eslint/no-floating-promises -- No handle needed, handleInit has try catch
@@ -97,15 +95,19 @@ export class ChildProcessProxyWorker {
         .provideValue(commonTokens.sandboxDirectory, workingDir)
         .provideClass(injectionTokens.pluginCreator, PluginCreator)
 
-      const childModule = await import(message.modulePath)
-      const RealSubjectClass = childModule[message.namedExport]
+      const childModule: unknown = await import(message.modulePath)
+      const moduleExports = S.decodeUnknownSync(
+        S.Record(S.String, S.Unknown),
+      )(childModule)
+      const RealSubjectClass = S.decodeUnknownSync(SubjectClassSchema)(
+        moduleExports[message.namedExport],
+      )
       if (process.cwd() !== workingDir) {
         this.log.debug(
           `Changing current working directory for this process to ${workingDir}`,
         )
         process.chdir(workingDir)
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       this.realSubject = injector.injectClass(RealSubjectClass)
       this.send({ kind: ParentMessageKind.Initialized })
     } catch (err) {
@@ -135,15 +137,18 @@ export class ChildProcessProxyWorker {
 
   private doCall(
     message: CallMessage,
-  ):
-    | PromiseLike<Record<string, unknown>>
-    | Record<string, unknown>
-    | undefined
-  {
-    if (typeof this.realSubject[message.methodName] === 'function') {
-      return this.realSubject[message.methodName](...message.args)
+  ): unknown {
+    const realSubject = this.realSubject
+    if (realSubject === undefined) {
+      throw new Error(
+        'Cannot call methods on the real subject before the child process is initialized.',
+      )
+    }
+    const subjectMember = realSubject[message.methodName]
+    if (S.is(CallableSubjectMemberSchema)(subjectMember)) {
+      return subjectMember(...message.args)
     } else {
-      return this.realSubject[message.methodName]
+      return subjectMember
     }
   }
 

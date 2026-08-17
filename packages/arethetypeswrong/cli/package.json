@@ -39,10 +39,10 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-dmmf": "workspace:^",
-    "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
-    "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",

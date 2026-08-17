@@ -1,11 +1,11 @@
-import { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 
 import { ChildProcessCrashedError } from '../worker-pool/child-process-crashed-error.js'
 import { ResourceDecorator } from '../worker-pool/index.js'
 import { OutOfMemoryError } from '../worker-pool/out-of-memory-error.js'
 
-import { CheckerResource } from './checker-resource.js'
+import { type CheckerResource } from './checker-resource.js'
 
 export class CheckerRetryDecorator extends ResourceDecorator<CheckerResource> implements CheckerResource {
   constructor(

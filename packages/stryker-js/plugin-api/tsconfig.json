@@ -24,8 +24,7 @@
     ]
   },
   "include": [
-    "src",
-    "src-generated"
+    "src"
   ],
   "exclude": [
     "node_modules",

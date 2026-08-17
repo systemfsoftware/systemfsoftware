@@ -3,8 +3,10 @@ import { createRequire } from 'module'
 import path from 'path'
 
 import { parse } from '@std/jsonc'
-import { Data, Result, Schema as S } from 'effect'
+import { Result, Schema as S } from 'effect'
 import semver from 'semver'
+
+import { type TsConfig, TsConfigParseError, TsConfigSchema } from './tsconfig-helpers.schema.js'
 
 // Override some compiler options that have to do with code quality. When mutating, we're not interested in the resulting code quality
 // See https://github.com/stryker-mutator/stryker-js/issues/391 for more info
@@ -35,9 +37,11 @@ let cachedTSVersion: string | undefined
 export function getTSVersion(): string {
   if (cachedTSVersion === undefined) {
     const require = createRequire(import.meta.url)
-    const pkg = JSON.parse(
-      readFileSync(require.resolve('typescript/package.json'), 'utf-8'),
-    ) as { version: string }
+    const pkg = S.decodeUnknownSync(S.Struct({ version: S.String }))(
+      JSON.parse(
+        readFileSync(require.resolve('typescript/package.json'), 'utf-8'),
+      ),
+    )
     cachedTSVersion = pkg.version
   }
   return cachedTSVersion
@@ -50,24 +54,6 @@ export function guardTSVersion(version = getTSVersion()): void {
     )
   }
 }
-
-/**
- * Error returned when a tsconfig file fails to parse or does not match the shape this package consumes.
- */
-export class TsConfigParseError extends Data.TaggedError('TsConfigParseError')<{
-  readonly file: string
-  readonly reason: string
-}> {}
-
-const JsonRecord = S.Record(S.String, S.Unknown)
-const TsConfigSchema = S.StructWithRest(
-  S.Struct({
-    references: S.optional(S.Array(S.StructWithRest(S.Struct({ path: S.String }), [JsonRecord]))),
-    compilerOptions: S.optional(JsonRecord),
-  }),
-  [JsonRecord],
-)
-type TsConfig = S.Schema.Type<typeof TsConfigSchema>
 
 /**
  * Parses the raw text of a tsconfig file into a typed config, rejecting shapes this package cannot consume.
@@ -92,7 +78,11 @@ export function parseTsConfig(fileName: string, jsonText: string): Result.Result
     return Result.fail(
       new TsConfigParseError({
         file: fileName,
-        reason: error instanceof Error ? error.message : String(error),
+        reason: error instanceof Error
+          ? error.message
+          : typeof error === 'string'
+          ? error
+          : JSON.stringify(error) ?? 'a non-Error value was thrown',
       }),
     )
   }

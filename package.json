@@ -38,6 +38,9 @@
     "@effect/tsgo": "^0.36.0",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/stryker-js-cli": "workspace:^",
+    "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
+    "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
+    "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
     "concurrently": "^9.2.1",
     "estree-walker": "^3",
     "husky": "^9.1.7",
@@ -47,9 +50,9 @@
     "oxc-parser": "catalog:",
     "oxlint": "catalog:oxlint",
     "oxlint-tsgolint": "catalog:oxlint",
+    "tstyche-typescript": "npm:typescript@6.0.3",
     "turbo": "^2.10.5",
-    "typescript": "catalog:",
-    "tstyche-typescript": "npm:typescript@6.0.3"
+    "typescript": "catalog:"
   },
   "packageManager": "pnpm@11.21.0"
 }

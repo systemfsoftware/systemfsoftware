@@ -1,11 +1,11 @@
-import { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import fs from 'fs'
-import { Disposable } from 'typed-inject'
+import { type Disposable } from 'typed-inject'
 import { promisify } from 'util'
 import { injectionTokens } from '../plugins/index.js'
 import { LogLevel } from './log-level.js'
 import { LoggingEvent } from './logging-event.js'
-import { LoggingSink } from './logging-sink.js'
+import { type LoggingSink } from './logging-sink.js'
 import { logLevelPriority, minPriority } from './priority.js'
 
 const LOG_FILE_NAME = 'stryker.log'
@@ -85,7 +85,7 @@ export class LoggingBackend implements LoggingSink, Disposable {
 
   async dispose() {
     if (this.#_fileStream) {
-      await promisify(this.#_fileStream.end).bind(this.#_fileStream)()
+      await promisify(this.#_fileStream.end.bind(this.#_fileStream))()
     }
   }
 }

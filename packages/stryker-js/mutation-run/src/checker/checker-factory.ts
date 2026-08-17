@@ -1,12 +1,12 @@
-import { FileDescriptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type FileDescriptions, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 
 import { IdGenerator } from '../worker-pool/id-generator.js'
 
 import { injectionTokens } from '../plugins/index.js'
 
-import { LoggingServerAddress } from '../logging/index.js'
+import { type LoggingServerAddress } from '../logging/index.js'
 import { CheckerChildProcessProxy } from './checker-child-process-proxy.js'
 import { CheckerFacade } from './checker-facade.js'
 import { CheckerRetryDecorator } from './checker-retry-decorator.js'

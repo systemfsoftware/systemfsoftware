@@ -2,27 +2,30 @@ import { exec } from 'child_process'
 import os from 'os'
 
 import { errorToString, testFilesProvided } from '@stryker-mutator/util'
+import { INSTRUMENTER_CONSTANTS, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import {
-  CommandRunnerOptions,
-  INSTRUMENTER_CONSTANTS,
-  StrykerOptions,
-} from '@systemfsoftware/stryker-js-plugin-api/core'
-import {
-  CompleteDryRunResult,
-  DryRunOptions,
-  DryRunResult,
+  type CompleteDryRunResult,
+  type DryRunOptions,
+  type DryRunResult,
   DryRunStatus,
-  ErrorDryRunResult,
-  MutantRunOptions,
-  MutantRunResult,
-  TestRunner,
-  TestRunnerCapabilities,
+  type ErrorDryRunResult,
+  type MutantRunOptions,
+  type MutantRunResult,
+  type TestRunner,
+  type TestRunnerCapabilities,
   TestStatus,
   toMutantRunResult,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
 import { Timer } from '../timer.js'
 import { kill } from '../worker-pool/kill.js'
+
+/**
+ * The command runner's focused option view: the `commandRunner` member of the
+ * option set. Derived instead of imported because the plugin-api core surface
+ * exports the option set as a whole, not this leaf schema.
+ */
+type CommandRunnerOptions = StrykerOptions['commandRunner']
 
 /**
  * A test runner that uses a (bash or cmd) command to execute the tests.
@@ -102,6 +105,16 @@ export class CommandTestRunner implements TestRunner {
         cwd: this.workingDir,
         env,
       })
+      if (childProcess.stdout === null || childProcess.stderr === null) {
+        // `exec` always creates pipes unless stdio opts out; a null stream
+        // means the command cannot be observed, so fail loudly instead of
+        // dereferencing it.
+        throw new Error(
+          `Expected stdout and stderr streams for "${this.settings.command}", but one of them is null.`,
+        )
+      }
+      const stdout = childProcess.stdout
+      const stderr = childProcess.stderr
       childProcess.on('error', (error) => {
         kill(childProcess.pid)
           .then(() => handleResolve(errorResult(error)))
@@ -111,11 +124,11 @@ export class CommandTestRunner implements TestRunner {
         const result = completeResult(code, timerInstance)
         handleResolve(result)
       })
-      childProcess.stdout!.on('data', (chunk) => {
-        output.push(chunk as Buffer)
+      stdout.on('data', (chunk: Buffer) => {
+        output.push(chunk)
       })
-      childProcess.stderr!.on('data', (chunk) => {
-        output.push(chunk as Buffer)
+      stderr.on('data', (chunk: Buffer) => {
+        output.push(chunk)
       })
 
       this.timeoutHandler = async () => {
@@ -130,8 +143,8 @@ export class CommandTestRunner implements TestRunner {
       }
 
       function removeAllListeners() {
-        childProcess.stderr!.removeAllListeners()
-        childProcess.stdout!.removeAllListeners()
+        stderr.removeAllListeners()
+        stdout.removeAllListeners()
         childProcess.removeAllListeners()
       }
 

@@ -12,7 +12,6 @@
   "type": "module",
   "scripts": {
     "clean": "rimraf dist",
-    "generate": "node tasks/generate-stryker-core.mjs",
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
@@ -30,6 +29,7 @@
     "stryker"
   ],
   "dependencies": {
+    "effect": "catalog:",
     "mutation-testing-metrics": "3.7.3",
     "mutation-testing-report-schema": "3.7.3",
     "tslib": "catalog:stryker",
@@ -38,7 +38,6 @@
   "devDependencies": {
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
-    "json-schema-to-typescript": "15.0.4",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:"

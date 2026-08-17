@@ -1,7 +1,7 @@
 import type { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 export interface TypescriptCheckerPluginOptions {
-  typescriptChecker: {
+  typescriptChecker?: {
     prioritizePerformanceOverAccuracy?: boolean
   }
 }
