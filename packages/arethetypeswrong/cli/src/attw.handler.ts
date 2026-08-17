@@ -57,24 +57,27 @@ export const attwCommand = Command.make(
     fileOrDirectory: Argument.optional(Argument.string('file-directory-or-package-spec')),
     pack: Flag.boolean('pack').pipe(
       Flag.withAlias('P'),
+      Flag.withDefault(false),
       Flag.withDescription(
         'Run `npm pack` in the specified directory and delete the resulting .tgz file afterwards',
       ),
     ),
     fromNpm: Flag.boolean('from-npm').pipe(
       Flag.withAlias('p'),
+      Flag.withDefault(false),
       Flag.withDescription('Read from the npm registry instead of a local file'),
     ),
     definitelyTyped: definitelyTypedOptions(),
     format: formatOptions(),
     quiet: Flag.boolean('quiet').pipe(
       Flag.withAlias('q'),
+      Flag.withDefault(false),
       Flag.withDescription("Don't print anything to STDOUT (overrides all other options)"),
     ),
     entrypoints: Flag.optional(Flag.atLeast<string>(1)(Flag.string('entrypoints'))),
     includeEntrypoints: Flag.optional(Flag.atLeast<string>(1)(Flag.string('include-entrypoints'))),
     excludeEntrypoints: Flag.optional(Flag.atLeast<string>(1)(Flag.string('exclude-entrypoints'))),
-    entrypointsLegacy: Flag.boolean('entrypoints-legacy'),
+    entrypointsLegacy: Flag.boolean('entrypoints-legacy').pipe(Flag.withDefault(false)),
     ignoreRules: ignoreRulesOptions(),
     profile: profileOptions(),
     summary: Flag.boolean('summary').pipe(Flag.withDefault(true)),
