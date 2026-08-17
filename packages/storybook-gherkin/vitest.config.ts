@@ -1,5 +1,4 @@
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin'
-import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
 import { playwright } from '@vitest/browser-playwright'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -13,7 +12,6 @@ export default defineConfig({
       {
         extends: true,
         plugins: [
-          inlineSchemaTests(),
           storybookTest({
             configDir: path.join(dirname, '.storybook'),
             storybookScript: 'pnpm storybook -- --ci',

@@ -1660,12 +1660,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../effect-schema-vite
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-config
