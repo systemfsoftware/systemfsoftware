@@ -39,4 +39,14 @@ export class ProtocolRoundTripSubject {
   halve() {
     return this.base / 2
   }
+
+  /**
+   * Returns nothing, like the real subjects' `init` and `dispose`. A void
+   * method's reply carries no result member at all, which is the shape a
+   * hand-written `JSON.stringify` encode step drops while the decoder still
+   * demands it.
+   */
+  touch() {
+    this.touched = true
+  }
 }

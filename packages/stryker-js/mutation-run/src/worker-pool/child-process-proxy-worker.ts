@@ -3,7 +3,7 @@ import path from 'path'
 import { errorToString } from '@stryker-mutator/util'
 import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import type { Injector, SandboxPluginContext } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { Schema as S } from 'effect'
+import { Exit, Schema as S } from 'effect'
 import { createInjector } from 'typed-inject'
 
 import { injectionTokens, PluginCreator } from '../plugins/index.js'
@@ -19,8 +19,37 @@ import {
   ParentMessageKind,
   WorkerMessageKind,
 } from './message-protocol.js'
-import { CallableSubjectMemberSchema, SubjectClassSchema, WorkerMessageSchema } from './message-protocol.schema.js'
-import { deserialize, serialize } from './string-utils.js'
+import { ParentMessageSchema, WorkerMessageSchema } from './message-protocol.schema.js'
+import { ProtocolEncodeError, SubjectModuleError } from './subject-module.schema.js'
+
+/**
+ * This half's two directions, built once from the declared schemas. Three
+ * properties matter and each is load-bearing:
+ *
+ * - The JSON boundary belongs to the schema. A hand-written `JSON.stringify`
+ *   step is not schema-aware, so it drops a member the decoder then demands and
+ *   the two halves of one format disagree.
+ * - They return an `Exit`, never throwing. A decode failure on a process
+ *   boundary is an expected outcome, so it is a value this code must answer for
+ *   rather than an exception that leaves the type unmarked.
+ * - They take `unknown`, so the envelope codec performs the only narrowing this
+ *   half needs. A separate `S.Json` check on the payload would guard the same
+ *   bytes twice: `args` and `result` are declared `S.Json`, so these already
+ *   reject anything the wire cannot carry.
+ */
+const decodeWorkerMessage = S.decodeUnknownExit(S.fromJsonString(WorkerMessageSchema))
+const encodeParentMessage = S.encodeUnknownExit(S.fromJsonString(ParentMessageSchema))
+
+/**
+ * The two runtime narrowings this worker cannot derive statically, because both
+ * subjects arrive from a path decided at runtime. They are type guards rather
+ * than schemas on purpose: a `Schema.declare` whose predicate only asks
+ * `typeof x === 'function'` states far more than it decides, and it cannot be
+ * generated, round-tripped or held to any law - the schema law suite refuses it.
+ */
+const isCallableMember = (input: unknown): input is (...args: unknown[]) => unknown => typeof input === 'function'
+
+const isSubjectClass = (input: unknown): input is new() => Record<string, unknown> => typeof input === 'function'
 export interface ChildProcessContext extends SandboxPluginContext {
   [injectionTokens.pluginCreator]: PluginCreator
 }
@@ -38,14 +67,25 @@ export class ChildProcessProxyWorker {
     this.injector = this.injectorFactory()
   }
 
-  private send(value: ParentMessage) {
+  private send(value: unknown) {
+    const encoded = encodeParentMessage(value)
+    if (Exit.isFailure(encoded)) {
+      throw new ProtocolEncodeError({ reason: String(encoded.cause) })
+    }
     if (process.send) {
-      const str = serialize(value)
-      process.send(str)
+      process.send(encoded.value)
     }
   }
   private readonly handleMessage = (serializedMessage: unknown) => {
-    const message = deserialize(String(serializedMessage), WorkerMessageSchema)
+    const decoded = decodeWorkerMessage(serializedMessage)
+    if (Exit.isFailure(decoded)) {
+      // A payload this half cannot read is the parent's bug, and there is no
+      // correlation id to answer on - report it and keep the child alive so the
+      // parent's own timeout, not a silent exit, is what surfaces.
+      this.send({ error: String(decoded.cause), kind: ParentMessageKind.InitError })
+      return
+    }
+    const message = decoded.value
     switch (message.kind) {
       case WorkerMessageKind.Init:
         // eslint-disable-next-line @typescript-eslint/no-floating-promises -- No handle needed, handleInit has try catch
@@ -98,9 +138,14 @@ export class ChildProcessProxyWorker {
       const moduleExports = S.decodeUnknownSync(
         S.Record(S.String, S.Unknown),
       )(childModule)
-      const RealSubjectClass = S.decodeUnknownSync(SubjectClassSchema)(
-        moduleExports[message.namedExport],
-      )
+      const namedExport = moduleExports[message.namedExport]
+      if (!isSubjectClass(namedExport)) {
+        throw new SubjectModuleError({
+          modulePath: message.modulePath,
+          namedExport: message.namedExport,
+        })
+      }
+      const RealSubjectClass = namedExport
       if (process.cwd() !== workingDir) {
         this.log.debug(
           `Changing current working directory for this process to ${workingDir}`,
@@ -123,7 +168,11 @@ export class ChildProcessProxyWorker {
       this.send({
         correlationId: message.correlationId,
         kind: ParentMessageKind.CallResult,
-        result,
+        // A void method yields `undefined`, which JSON cannot carry - `null` is
+        // how the wire says "no value". Nothing checks the value here: `result`
+        // is declared `S.Json`, so the envelope encoder is what rejects a
+        // subject return the wire cannot carry, and it rejects it once.
+        result: result ?? null,
       })
     } catch (err) {
       this.send({
@@ -144,7 +193,7 @@ export class ChildProcessProxyWorker {
       )
     }
     const subjectMember = realSubject[message.methodName]
-    if (S.is(CallableSubjectMemberSchema)(subjectMember)) {
+    if (isCallableMember(subjectMember)) {
       // `Reflect.apply`, never `subjectMember(...args)`: reading the member out
       // of the subject and calling the local binding drops the receiver, so the
       // subject's own method runs with `this === undefined` and fails on its

@@ -25,6 +25,3 @@ export const OptionDocument = S.StructWithRest(
   }),
   [S.Record(S.String, S.Unknown)],
 )
-
-/** Decodes a raw JSON string into the option document shape. */
-export const decodeOptionDocument = S.decodeUnknownSync(S.fromJsonString(OptionDocument))

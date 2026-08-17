@@ -18,11 +18,9 @@ import {
   suffixesToRequire,
   toothlessTestFiles,
 } from '../src/test-contribution.js'
-import {
-  decodeOptionDocument,
-  OptionDocument,
-  RequireTestContributionEntry,
-} from './__fixtures__/option-document.schema.js'
+import { OptionDocument, RequireTestContributionEntry } from './__fixtures__/option-document.schema.js'
+
+const decodeOptionDocument = S.decodeUnknownSync(S.fromJsonString(OptionDocument))
 
 const Feature = makeFeature({ it, layer })
 

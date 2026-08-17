@@ -2,6 +2,7 @@ import childProcess from 'child_process'
 import os from 'os'
 import { fileURLToPath, URL } from 'url'
 
+import * as Exit from 'effect/Exit'
 import * as S from 'effect/Schema'
 
 import { ExpirableTask, isErrnoException, StrykerError, Task } from '@stryker-mutator/util'
@@ -16,10 +17,22 @@ import { type ChildProcessContext } from './child-process-proxy-worker.js'
 import { IdGenerator } from './id-generator.js'
 import { kill } from './kill.js'
 import { type InitMessage, ParentMessageKind, type WorkerMessage, WorkerMessageKind } from './message-protocol.js'
-import { ParentMessageSchema } from './message-protocol.schema.js'
+import { ParentMessageSchema, WorkerMessageSchema } from './message-protocol.schema.js'
 import { OutOfMemoryError } from './out-of-memory-error.js'
 import { StringBuilder } from './string-builder.js'
-import { deserialize, padLeft, serialize } from './string-utils.js'
+import { padLeft } from './string-utils.js'
+import { ProtocolEncodeError } from './subject-module.schema.js'
+
+/**
+ * This half's two directions, built once from the declared schemas. They take
+ * `unknown` and return an `Exit`, which is what makes them the *only* codec this
+ * half needs: the envelope performs the narrowing, so a separate `S.Json` check
+ * on `args` would guard the same bytes twice, and a decode failure on a process
+ * boundary is an expected outcome this code answers for rather than an exception
+ * that leaves the type unmarked.
+ */
+const encodeWorkerMessage = S.encodeUnknownExit(S.fromJsonString(WorkerMessageSchema))
+const decodeParentMessage = S.decodeUnknownExit(S.fromJsonString(ParentMessageSchema))
 
 export type Promisified<T> = {
   [K in keyof T]: T[K] extends (...args: infer TS) => infer R ? (...args: TS) => Promise<Awaited<R>>
@@ -129,8 +142,12 @@ export class ChildProcessProxy<T> implements Disposable {
     )
   }
 
-  private send(message: WorkerMessage) {
-    this.worker.send(serialize(message))
+  private send(message: unknown) {
+    const encoded = encodeWorkerMessage(message)
+    if (Exit.isFailure(encoded)) {
+      throw new ProtocolEncodeError({ reason: String(encoded.cause) })
+    }
+    this.worker.send(encoded.value)
   }
 
   private initProxy(): Promisified<T> {
@@ -170,6 +187,10 @@ export class ChildProcessProxy<T> implements Disposable {
         this.initTask.promise
           .then(() => {
             this.send({
+              // Nothing narrows `args` here: they are declared `S.Json`, so the
+              // envelope encoder is the one thing that rejects an argument the
+              // wire cannot carry, and it does so on this side with the value
+              // still in hand.
               args,
               correlationId,
               kind: WorkerMessageKind.Call,
@@ -185,8 +206,15 @@ export class ChildProcessProxy<T> implements Disposable {
   }
 
   private listenForMessages() {
-    this.worker.on('message', (serializedMessage: string) => {
-      const message = deserialize(serializedMessage, ParentMessageSchema)
+    this.worker.on('message', (serializedMessage: unknown) => {
+      const decoded = decodeParentMessage(serializedMessage)
+      if (Exit.isFailure(decoded)) {
+        // A reply this half cannot read is unattributable to any one call, so it
+        // is a crash of the whole child rather than one task's rejection.
+        this.fatalError = new ChildProcessCrashedError(this.worker.pid, String(decoded.cause))
+        return
+      }
+      const message = decoded.value
       switch (message.kind) {
         case ParentMessageKind.Ready:
           // Workaround, because of a race condition more prominent in native ESM node modules

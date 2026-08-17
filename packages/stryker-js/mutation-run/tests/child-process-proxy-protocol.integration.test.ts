@@ -40,10 +40,17 @@ import { Effect } from 'effect'
 import * as S from 'effect/Schema'
 import { expect } from 'vitest'
 
+import type { Json } from 'effect/Schema'
 import type { CallMessage, InitMessage, ParentMessage } from '../src/worker-pool/message-protocol.js'
 import { ParentMessageKind, WorkerMessageKind } from '../src/worker-pool/message-protocol.js'
-import { ParentMessageSchema } from '../src/worker-pool/message-protocol.schema.js'
-import { deserialize, serialize } from '../src/worker-pool/string-utils.js'
+import { ParentMessageSchema, WorkerMessageSchema } from '../src/worker-pool/message-protocol.schema.js'
+
+/**
+ * The gate drives the wire through the very codecs the two halves build, so a
+ * format disagreement fails here rather than only inside a forked child.
+ */
+const encodeWorkerMessage = S.encodeSync(S.fromJsonString(WorkerMessageSchema))
+const decodeParentMessage = S.decodeSync(S.fromJsonString(ParentMessageSchema))
 
 const Feature = makeFeature({ it, layer })
 
@@ -76,16 +83,19 @@ const FIXTURE_MODULE_URL = new URL(
  * The Calls this gate dispatches once the subject is initialized. `add` and
  * `describe` are receiver-dependent (constructor state / a second method on
  * `this`), so a dropped receiver cannot produce the expected answers; `stamp`
- * is a plain data member, exercising `doCall`'s raw pass-through branch.
+ * is a plain data member, exercising `doCall`'s raw pass-through branch; and
+ * `touch` returns nothing, which is the reply shape whose result member cannot
+ * exist on the wire at all.
  */
 const CALLS: ReadonlyArray<{
   readonly correlationId: number
   readonly methodName: string
-  readonly args: unknown[]
+  readonly args: Json[]
 }> = [
   { correlationId: 0, methodName: 'add', args: [2] },
   { correlationId: 1, methodName: 'describe', args: [] },
   { correlationId: 2, methodName: 'stamp', args: [] },
+  { correlationId: 3, methodName: 'touch', args: [] },
 ]
 
 const collectMjsFiles = async (dir: string): Promise<readonly string[]> => {
@@ -301,7 +311,7 @@ const runProtocolRoundTrip = async (): Promise<ProtocolVerdict> => {
       }
     }
     child.on('message', (raw: unknown) => {
-      const message = deserialize(String(raw), ParentMessageSchema)
+      const message = decodeParentMessage(String(raw))
       const waiterIndex = waiters.findIndex((waiter) => waiter.matches(message))
       if (waiterIndex !== -1) {
         const [waiter] = waiters.splice(waiterIndex, 1)
@@ -374,7 +384,7 @@ const runProtocolRoundTrip = async (): Promise<ProtocolVerdict> => {
       namedExport: FIXTURE_NAMED_EXPORT,
       modulePath: FIXTURE_MODULE_URL,
     }
-    child.send(serialize(initMessage))
+    child.send(serializeMessage(initMessage))
 
     const initReply = await waitFor(
       'the Initialized handshake',
@@ -454,8 +464,8 @@ const runProtocolRoundTrip = async (): Promise<ProtocolVerdict> => {
   }
 }
 
-/** Serializes a worker message exactly like the parent does before send. */
-const serializeMessage = (message: InitMessage | CallMessage): string => serialize(message)
+/** Encodes a worker message with the very codec the parent sends through. */
+const serializeMessage = (message: InitMessage | CallMessage): string => encodeWorkerMessage(message)
 
 const verdictDiagnostic = (verdict: Exclude<ProtocolVerdict, { kind: 'completed' }>): string => {
   const lines = [
@@ -518,6 +528,11 @@ Feature('The child-process proxy protocol')
             { correlationId: 0, methodName: 'add', result: 42 },
             { correlationId: 1, methodName: 'describe', result: 'from-constructor:20' },
             { correlationId: 2, methodName: 'stamp', result: 'from-constructor' },
+            // A void method: `null` is how JSON says "no value". An absent key
+            // cannot say it - the encoder would omit the member and the decoder
+            // could not tell absence from a present `undefined`, which is the
+            // round-trip law's own counterexample.
+            { correlationId: 3, methodName: 'touch', result: null },
           ])
         }),
       ),

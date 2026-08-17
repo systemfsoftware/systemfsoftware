@@ -16,7 +16,9 @@ import {
   resolveExtendsTarget,
 } from '../src/config/resolve-extends.js'
 import { ConfigError } from '../src/errors.js'
-import { decodeOptionDocument, OptionDocument } from './__fixtures__/option-document.schema.js'
+import { OptionDocument } from './__fixtures__/option-document.schema.js'
+
+const decodeOptionDocument = S.decodeUnknownSync(S.fromJsonString(OptionDocument))
 
 const Feature = makeFeature({ it, layer })
 
