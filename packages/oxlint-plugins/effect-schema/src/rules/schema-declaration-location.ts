@@ -12,7 +12,7 @@ import {
 
 export type MessageIds = 'schemaOutsideSchemaFile'
 
-const basenameOf = (filename: string): string => {
+export const basenameOf = (filename: string): string => {
   const segments = filename.split('/')
   return segments[segments.length - 1] ?? filename
 }
@@ -23,7 +23,10 @@ const basenameOf = (filename: string): string => {
  * `Schema.TaggedError<E>()('E', {...})` superclass both resolve to the
  * defining `Schema.<member>`.
  */
-const schemaMemberOf = (node: ESTree.Node | null, locals: ReadonlySet<string>): ESTree.MemberExpression | null => {
+export const schemaMemberOf = (
+  node: ESTree.Node | null,
+  locals: ReadonlySet<string>,
+): ESTree.MemberExpression | null => {
   if (node === null) return null
   if (node.type === 'MemberExpression') {
     if (node.object.type === 'Identifier' && locals.has(node.object.name)) return node
@@ -38,28 +41,43 @@ const schemaMemberOf = (node: ESTree.Node | null, locals: ReadonlySet<string>): 
  * decoder, an encoder, an arbitrary, or a JSON-schema document. A const
  * initialized to one of these is a *use* of a schema, not a declaration, so
  * it is out of scope for the placement rule.
+ *
+ * The codec entries are the complete `export const decode*` / `encode*` surface
+ * of `repos/effect/packages/effect/src/Schema.ts` — 29 exports — minus the three
+ * that return a schema rather than consume one: `decodeTo`, `encodeTo` and
+ * `encodeKeys` are transformations, so a const bound to one IS a declaration.
+ * An incomplete list here is a false positive, not a miss: this rule reported a
+ * legitimate `S.encodeUnknownExit` codec as a misplaced declaration while
+ * `encodeUnknownExit` was absent, so the list is derived from the vendored
+ * source and never extended by hand from memory.
  */
-const SCHEMA_USE_MEMBERS: Record<string, true> = {
-  decodeUnknownResult: true,
-  decodeUnknownSync: true,
-  decodeUnknownExit: true,
-  decodeUnknownEffect: true,
-  decodeUnknownOption: true,
-  decodeUnknownEither: true,
-  decodeUnknownPromise: true,
+export const SCHEMA_USE_MEMBERS: Record<string, true> = {
+  decode: true,
+  decodeEffect: true,
+  decodeExit: true,
+  decodeOption: true,
+  decodePromise: true,
   decodeResult: true,
   decodeSync: true,
-  decodeExit: true,
-  decodeEffect: true,
-  decodeOption: true,
-  decodeEither: true,
-  decodePromise: true,
-  encodeUnknown: true,
-  encodeUnknownSync: true,
-  encodeUnknownEffect: true,
+  decodeUnknownEffect: true,
+  decodeUnknownExit: true,
+  decodeUnknownOption: true,
+  decodeUnknownPromise: true,
+  decodeUnknownResult: true,
+  decodeUnknownSync: true,
   encode: true,
-  encodeSync: true,
   encodeEffect: true,
+  encodeExit: true,
+  encodeOption: true,
+  encodePromise: true,
+  encodeResult: true,
+  encodeSync: true,
+  encodeUnknownEffect: true,
+  encodeUnknownExit: true,
+  encodeUnknownOption: true,
+  encodeUnknownPromise: true,
+  encodeUnknownResult: true,
+  encodeUnknownSync: true,
   toArbitrary: true,
   toJsonSchemaDocument: true,
   // `S.is(X)` returns a type guard over X, not a schema. A const bound to one is a *use*
@@ -75,7 +93,7 @@ const SCHEMA_USE_MEMBERS: Record<string, true> = {
  * True when `node` is a schema *declaration*: its defining `Schema.<member>`
  * is a schema-producing combinator, not a use combinator.
  */
-const isSchemaDeclaration = (node: ESTree.Node | null, locals: ReadonlySet<string>): boolean => {
+export const isSchemaDeclaration = (node: ESTree.Node | null, locals: ReadonlySet<string>): boolean => {
   const member = schemaMemberOf(node, locals)
   if (member === null) return false
   if (member.property.type !== 'Identifier') return false
