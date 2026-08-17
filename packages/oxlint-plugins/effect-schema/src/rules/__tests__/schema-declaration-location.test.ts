@@ -89,5 +89,21 @@ export class E extends Schema.TaggedError<E>()('E', { message: Schema.String }) 
       filename: '/repo/pkg/src/foo.bar.workflow.ts',
       errors: [error('E')],
     },
+    {
+      // The spelling the old predicate could not see: a namespace import of the
+      // submodule. It read as valid under a reader that only knew `{ Schema } from 'effect'`.
+      name: 'Should_Report_When_NamespaceImportedSchemaLivesInAKernelFile',
+      code: `import * as Schema from 'effect/Schema'
+export const U = Schema.Union([Schema.String, Schema.Number])`,
+      filename: '/repo/pkg/src/result.kernel.ts',
+      errors: [error('U')],
+    },
+    {
+      name: 'Should_Report_When_AliasedNamespaceSchemaClassLivesInAKernelFile',
+      code: `import * as S_ from 'effect/Schema'
+export class E extends S_.TaggedError<E>()('E', { message: S_.String }) {}`,
+      filename: '/repo/pkg/src/result.kernel.ts',
+      errors: [error('E')],
+    },
   ],
 })

@@ -99,5 +99,13 @@ ruleTester.run('make-file-location', makeFileLocation, {
       filename: '/repo/pkg/src/run.executor.ts',
       errors: [outsideError('run.executor.ts'), outsideError('run.executor.ts')],
     },
+    {
+      // The defining package imports `Workflow` relatively, so a resolver keyed only on the
+      // package specifier reported nothing in the one package that authors the primitive.
+      name: 'Should_Report_When_TheDefiningPackageImportsWorkflowRelatively',
+      code: `import * as Workflow from './Workflow.js'\nexport const decide = Workflow.make((input: number) => input)`,
+      filename: '/repo/packages/effect-cell-types/src/Cell.ts',
+      errors: [outsideError('Cell.ts')],
+    },
   ],
 })

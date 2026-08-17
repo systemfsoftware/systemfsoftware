@@ -280,21 +280,42 @@ function typeRefContainsSchema(t: TSType | null | undefined): boolean {
  * schema it names, so generating round-trip laws for it hands `encodeUnknownEffect` a
  * predicate and the generated suite dies at import with `Cannot read properties of
  * undefined (reading 'encoding')`. Measured 2026-08-17 on `S.is` in `stryker-plugins`.
+ *
+ * Enumerated, never prefix-matched: `Schema.decodeTo` starts with `decode` and *does*
+ * produce a schema, so a `/^decode/` test would silently drop a real codec's laws.
  */
 const SCHEMA_USE_MEMBERS: Record<string, true> = {
+  decodeUnknownResult: true,
+  decodeUnknownSync: true,
+  decodeUnknownExit: true,
+  decodeUnknownEffect: true,
+  decodeUnknownOption: true,
+  decodeUnknownEither: true,
+  decodeUnknownPromise: true,
+  decodeResult: true,
+  decodeSync: true,
+  decodeExit: true,
+  decodeEffect: true,
+  decodeOption: true,
+  decodeEither: true,
+  decodePromise: true,
+  encodeUnknown: true,
+  encodeUnknownSync: true,
+  encodeUnknownEffect: true,
+  encode: true,
+  encodeSync: true,
+  encodeEffect: true,
+  toArbitrary: true,
+  toJsonSchemaDocument: true,
   is: true,
   isSchema: true,
   isSchemaError: true,
   isSchemaAST: true,
-  toArbitrary: true,
-  toJsonSchemaDocument: true,
 }
 
 /** True when the member call produces a non-schema value, e.g. `S.is(X)` or `S.encodeSync(X)`. */
 function isSchemaUseCall(callee: MemberExpression): boolean {
-  if (callee.property.type !== 'Identifier') return false
-  const name = callee.property.name
-  return SCHEMA_USE_MEMBERS[name] === true || /^(?:decode|encode)/.test(name)
+  return callee.property.type === 'Identifier' && SCHEMA_USE_MEMBERS[callee.property.name] === true
 }
 
 function initRefersToSchema(expr: Expression | null | undefined): boolean {

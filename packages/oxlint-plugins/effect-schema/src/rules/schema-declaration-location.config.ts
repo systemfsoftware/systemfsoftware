@@ -1,3 +1,6 @@
+/** The submodule a namespace import binds the schema vocabulary from. */
+export const SCHEMA_MODULE_SOURCE = 'effect/Schema' as const
+
 export const SCHEMA_FILE_SUFFIX = '.schema.ts' as const
 
 /** A workflow file: one stem segment with no periods, then `.workflow.ts`. */

@@ -6,6 +6,7 @@ import {
   FIX,
   meta,
   SCHEMA_FILE_SUFFIX,
+  SCHEMA_MODULE_SOURCE,
   WORKFLOW_FILE_BASENAME,
 } from './schema-declaration-location.config.js'
 
@@ -92,13 +93,29 @@ export const schemaDeclarationLocation = defineRule({
   create(context: Context) {
     const basename = basenameOf(context.filename)
     if (basename.endsWith(SCHEMA_FILE_SUFFIX) || WORKFLOW_FILE_BASENAME.test(basename)) return {}
-    const locals = new Set<string>()
     return {
       Program(node: ESTree.Program) {
+        const report = (id: ESTree.Node, name: string): void =>
+          context.report({
+            node: id,
+            messageId: 'schemaOutsideSchemaFile',
+            data: { name, expected: EXPECTED, actual: ACTUAL, fix: FIX },
+          })
+        // Two passes, because an `import` may legally follow a declaration that depends on
+        // it: every local alias of `Schema` must be known before any declaration is judged.
+        //
+        // Both spellings the repo writes bind a schema local, and a predicate that reads one
+        // of them silently admits the other (REPO-A4): `import { Schema as S } from 'effect'`
+        // and `import * as S from 'effect/Schema'`.
+        const locals = new Set<string>()
         for (const statement of node.body) {
-          if (statement.type !== 'ImportDeclaration' || statement.source.value !== 'effect') continue
+          if (statement.type !== 'ImportDeclaration') continue
+          const source = statement.source.value
+          if (source !== 'effect' && source !== SCHEMA_MODULE_SOURCE) continue
           for (const specifier of statement.specifiers) {
-            if (
+            if (specifier.type === 'ImportNamespaceSpecifier' && source === SCHEMA_MODULE_SOURCE) {
+              locals.add(specifier.local.name)
+            } else if (
               specifier.type === 'ImportSpecifier' &&
               specifier.imported.type === 'Identifier' &&
               specifier.imported.name === 'Schema'
@@ -114,21 +131,11 @@ export const schemaDeclarationLocation = defineRule({
           }
           if (decl === null) continue
           if (decl.type === 'ClassDeclaration') {
-            if (decl.id !== null && isSchemaDeclaration(decl.superClass, locals)) {
-              context.report({
-                node: decl.id,
-                messageId: 'schemaOutsideSchemaFile',
-                data: { name: decl.id.name, expected: EXPECTED, actual: ACTUAL, fix: FIX },
-              })
-            }
+            if (decl.id !== null && isSchemaDeclaration(decl.superClass, locals)) report(decl.id, decl.id.name)
           } else if (decl.type === 'VariableDeclaration') {
             for (const declarator of decl.declarations) {
               if (declarator.id.type === 'Identifier' && isSchemaDeclaration(declarator.init, locals)) {
-                context.report({
-                  node: declarator.id,
-                  messageId: 'schemaOutsideSchemaFile',
-                  data: { name: declarator.id.name, expected: EXPECTED, actual: ACTUAL, fix: FIX },
-                })
+                report(declarator.id, declarator.id.name)
               }
             }
           }

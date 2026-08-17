@@ -125,10 +125,24 @@ const variableOfReference = (
   return null
 }
 
+/**
+ * The package that defines `Workflow` imports it relatively, so a resolver keyed only on the
+ * package specifier is blind inside that package — the one place the primitive is authored.
+ * Measured 2026-08-17: `canonical-decide.workflow.ts` names `Workflow.make` and every
+ * make-boundary rule reported nothing there, so its green was unearned.
+ */
+const RELATIVE_WORKFLOW_MODULE = /(?:^|\/)Workflow\.js$/
+
+const isWorkflowModuleSpecifier = (source: unknown): boolean =>
+  source === WORKFLOW_SOURCE ||
+  (typeof source === 'string' && source.startsWith('.') && RELATIVE_WORKFLOW_MODULE.test(source))
+
 const isWorkflowImportDef = (def: DefinitionLike): boolean => {
   if (def.type !== 'ImportBinding') return false
   const declaration = def.parent
-  if (declaration === null || !isImportDeclaration(declaration) || declaration.source.value !== WORKFLOW_SOURCE) {
+  if (
+    declaration === null || !isImportDeclaration(declaration) || !isWorkflowModuleSpecifier(declaration.source.value)
+  ) {
     return false
   }
   const specifier = def.node
