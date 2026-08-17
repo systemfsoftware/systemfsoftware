@@ -1,5 +1,4 @@
 import path from 'path'
-import { fileURLToPath } from 'url'
 
 import { errorToString } from '@stryker-mutator/util'
 import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
@@ -195,11 +194,3 @@ export class ChildProcessProxyWorker {
     })
   }
 }
-
-// Prevent side effects for merely importing the file
-// Only actually start the child worker when it is requested
-// Stryker disable all
-if (fileURLToPath(import.meta.url) === process.argv[1]) {
-  new ChildProcessProxyWorker(createInjector)
-}
-// Stryker restore all

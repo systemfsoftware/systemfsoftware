@@ -60,7 +60,7 @@ export class ChildProcessProxy<T> implements Disposable {
     const workerId = idGenerator.next().toString()
     this.worker = childProcess.fork(
       fileURLToPath(
-        new URL('./child-process-proxy-worker.mjs', import.meta.url),
+        new URL('./child-process-proxy-worker-main.mjs', import.meta.url),
       ),
       {
         silent: true,
