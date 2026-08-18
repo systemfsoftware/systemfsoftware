@@ -1,6 +1,5 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context } from '@oxlint/plugins'
-import { collectMakeBoundaries } from './MakeBoundary.js'
 import {
   meta,
   OUTSIDE_ACTUAL,
@@ -11,6 +10,7 @@ import {
   SECOND_FIX,
   WORKFLOW_FILE_BASENAME,
 } from './make-file-location.config.js'
+import { collectMakeBoundaries } from './MakeBoundary.js'
 
 export type MessageIds = 'makeOutsideWorkflowFile' | 'secondMakeInFile'
 

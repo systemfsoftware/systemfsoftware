@@ -152,7 +152,7 @@ export const inSourceTestTargetsPrivate = defineRule({
         // that calls it references an import binding rather than a private name.
         // Importing the harness at all is the evidence; a source file has no other
         // reason to reach for it.
-        if (isSchemaLawSource(node.source)) for (const guard of guards) guard.hit = true
+        if (isSchemaLawSource(node.source)) { for (const guard of guards) guard.hit = true }
       },
       'Program:exit'() {
         for (const guard of guards) {

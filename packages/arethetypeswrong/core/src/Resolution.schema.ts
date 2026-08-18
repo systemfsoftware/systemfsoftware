@@ -1,10 +1,6 @@
 import { Schema } from 'effect'
 
-import {
-  EntrypointResolutionAnalysisSchema,
-  ModuleKindSchema,
-  ResolutionKindSchema,
-} from './Problem.schema.js'
+import { EntrypointResolutionAnalysisSchema, ModuleKindSchema, ResolutionKindSchema } from './Problem.schema.js'
 
 export const ProgramInfoSchema = Schema.Struct({
   moduleKinds: Schema.optional(Schema.Record(Schema.String, ModuleKindSchema)),

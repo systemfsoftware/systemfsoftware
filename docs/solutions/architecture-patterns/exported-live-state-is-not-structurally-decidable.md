@@ -5,7 +5,7 @@
 A package must not hand a consumer live coordination state. Give a caller the `Map` behind
 `withLock`, and they coordinate through it directly; the interior is then frozen, because
 swapping it or adding backpressure breaks them silently. The rule is sound. The claim that a
-mechanical predicate can *decide* it is what fails, and this document records four predicates
+mechanical predicate can _decide_ it is what fails, and this document records four predicates
 built against it, the measurement that killed each, and the one that survives with a narrowed
 claim.
 
@@ -15,8 +15,8 @@ then withdrawn.
 
 ## Failure Mode 1 — A Syntactic Predicate Decides Spelling, Not Type
 
-A predicate over source text or emitted declarations matches a *spelling*. The question is about
-a *type*. The set of spellings denoting one type is unbounded, so each fix buys one spelling and
+A predicate over source text or emitted declarations matches a _spelling_. The question is about
+a _type_. The set of spellings denoting one type is unbounded, so each fix buys one spelling and
 the next adversarial pass finds another.
 
 Measured: nineteen confirmed evasions across four adversarial rounds against one text-scanning
@@ -46,8 +46,8 @@ unbounded and whose message is therefore false.
 
 ## Failure Mode 2 — Absence Of Findings Is Not Evidence Of Checking
 
-A gate keyed on "no diagnostics attributable to me" treats two states as one: *the checker ran
-and found nothing*, and *the checker never ran*.
+A gate keyed on "no diagnostics attributable to me" treats two states as one: _the checker ran
+and found nothing_, and _the checker never ran_.
 
 Measured: a type-level gate invoked the compiler with a project configuration containing an
 option removed in the current compiler version. The compiler emitted one configuration
@@ -60,14 +60,14 @@ The implication only holds conjoined with evidence the decision procedure execut
 
 **Invariant — Positive Liveness Evidence.** A gate must establish that its decision procedure
 ran before interpreting an empty finding set as a pass. Two mechanisms discharge this, and both
-are cheap: classify a configuration-level or infrastructure-level diagnostic as *did not run*
-rather than *clean*; and carry a self-test that plants a violation and requires a finding, so a
+are cheap: classify a configuration-level or infrastructure-level diagnostic as _did not run_
+rather than _clean_; and carry a self-test that plants a violation and requires a finding, so a
 run that cannot fail is itself a failure. This is the same defect class as a check keyed on a
 value its own author supplied — the gate certifies its own liveness rather than measuring it.
 
 ## Failure Mode 3 — Fail-Open At The Unresolved Boundary
 
-A predicate that resolves a binding to its origin must decide what an *unresolvable* binding
+A predicate that resolves a binding to its origin must decide what an _unresolvable_ binding
 means. Treating unresolvable as "not a violation" makes every shape outside the resolver's
 envelope a smuggling route, and the routes are cheap to find.
 
@@ -80,7 +80,7 @@ non-identifier computed member key, and a value reached through a module-local c
 **Invariant — Unresolved Is A Finding, Not A Pass.** Where a predicate's claim is that a
 construct appears only in sanctioned locations, an initializer whose origin the resolver cannot
 determine must report, naming irresolution as the reason. The narrow exception is a value that is
-*genuinely* opaque — one crossing a module boundary the predicate does not read, or arriving as a
+_genuinely_ opaque — one crossing a module boundary the predicate does not read, or arriving as a
 parameter — where the predicate truly cannot decide and its message must say so. A depth cap that
 passes on overflow is the same defect wearing a constant.
 
@@ -102,7 +102,7 @@ builtin collections and nothing else in that library.
 
 ### Candidate B — Writable Data Properties
 
-Writability *is* decidable, despite assignability ignoring `readonly` on properties, so
+Writability _is_ decidable, despite assignability ignoring `readonly` on properties, so
 `Readonly<T> extends T` settles nothing. The identical-type-parameter comparison decides it:
 
 ```
@@ -116,7 +116,7 @@ completion slots, a subscription reference's `value`, a queue's four inherited m
 `state`, and the fiber containers' `state`.
 
 It cannot ship, for a reason no refinement removes. A writable optional slot on a component type
-— a React function component's `displayName` — is *structurally identical* to a mutable cell's
+— a React function component's `displayName` — is _structurally identical_ to a mutable cell's
 `current`. Both are one writable slot on an interface. Measured consequences:
 
 - Unbounded, it reported every `Effect<A, E, R>` in the tree, because the effect type's iterator
@@ -128,7 +128,7 @@ It cannot ship, for a reason no refinement removes. A writable optional slot on 
 
 $$\text{writable slot} \;\not\Rightarrow\; \text{coordination state}$$
 
-The distinction between a mutable cell and a mutable record is *intent*, which is not in the type.
+The distinction between a mutable cell and a mutable record is _intent_, which is not in the type.
 
 ### Candidate C — Library Brands, At The Type Level
 
@@ -136,11 +136,11 @@ Key on the unique-symbol type identifier each primitive declares, from inside th
 
 **Not available to a type-level predicate.** Exactly one `unique symbol` type identifier exists in
 the entire vendored library, on an unrelated HTTP header type. Every coordination primitive brands
-with an *unexported* string-literal constant, so a conditional type has no importable nominal
+with an _unexported_ string-literal constant, so a conditional type has no importable nominal
 handle to compare against. Three types carry no brand at all, and there is no shared umbrella
 brand — each module declares its own.
 
-This is a limit of the *type level*, not of nominal identity as such. See the Compile-Time
+This is a limit of the _type level_, not of nominal identity as such. See the Compile-Time
 Analyser section below, where identity is recovered from outside the type system and verified.
 
 ### Candidate D — Reaching A Mutable Builtin Collection
@@ -165,7 +165,7 @@ Two mechanics matter for any type-level reachability walk, and both were found b
 rather than reasoning.
 
 **Contravariance is not optional.** A parameter is the consumer's value already, so it is not a
-handout — but a *function-typed* parameter is one the package **calls**, so that function's own
+handout — but a _function-typed_ parameter is one the package **calls**, so that function's own
 parameters flip back to outgoing. `(use: (ref: Ref<A>) => void) => void` hands out a `Ref`. A walk
 must alternate polarity through function types, and must stop at a primitive reached in an
 incoming position: continuing into the consumer's own collection finds its iteration callback
@@ -183,7 +183,7 @@ Three mechanical traps, each of which silently produced a wrong verdict:
    own parameter list read as live state.
 
 **The harness is part of the predicate.** Resolving each package to its TypeScript sources means
-those sources compile under the *gate's* configuration rather than their own, surfacing library
+those sources compile under the _gate's_ configuration rather than their own, surfacing library
 and target mismatches the gate has no opinion about — and, where a package failed to type at all,
 yielding `any` and thus a finding. Resolving to built declarations instead makes the verdict
 depend on an artifact that can be stale, freezing a package's verdict while its sources change.
@@ -235,7 +235,7 @@ const LIVE = ['Map', 'Set', 'Ref', 'Queue']   # every future primitive is a hole
 
 Every failure above shares one cause at a higher level: each predicate was confined to a domain
 narrower than its claim. A text predicate cannot see types. A type-level predicate can see
-structure but not *identity*, and cannot see modifiers, because assignability discards them.
+structure but not _identity_, and cannot see modifiers, because assignability discards them.
 
 A predicate driving the compiler's own type checker from outside the type system has both. This
 was verified against the toolchain in use, not assumed, and the results below are measured.
@@ -244,7 +244,7 @@ was verified against the toolchain in use, not assumed, and the results below ar
 symbol, and read the declaration paths behind it. Measured on a subject declaring a decoy type
 deliberately named the same as the builtin: the builtin resolved to four declarations, all in
 standard library files; the decoy resolved to one, in the subject file. A type alias over the
-builtin resolved to *the same four library declarations* while still printing as the alias name.
+builtin resolved to _the same four library declarations_ while still printing as the alias name.
 The read-only view resolved to library files too, and is separated from the mutable one by symbol
 name. So a spelling, a rename, a namespace qualifier, an alias chain and a cast are all one type
 with one identity, and a consumer's same-named type is not confusable with it. This is the
@@ -262,7 +262,7 @@ modifiers rather than a single call — and per Candidate B, mutability is the w
 Second, a method is distinguished from a data property by asking whether its type has call
 signatures, which works and is worth stating because the modifier-based approach silently does not.
 
-**Invariant — Decide Identity Where Identity Lives.** A claim about which *type* a value has is
+**Invariant — Decide Identity Where Identity Lives.** A claim about which _type_ a value has is
 settled by the compiler's symbol table, never by the value's spelling and never by its structure.
 Structure answers "what shape is this", which is a different question, and substituting one for the
 other is what produced both an unbounded false-negative set and an unbounded false-positive set in

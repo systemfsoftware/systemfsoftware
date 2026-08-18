@@ -1,5 +1,5 @@
-import type { ModuleKind } from './Problem.schema.js'
 import { CommonJSModuleKind, ESNextModuleKind } from './ModuleKind.js'
+import type { ModuleKind } from './Problem.schema.js'
 import type { FalseCJSProblem, FalseESMProblem } from './Problem.schema.js'
 
 export interface ModuleKindDisagreementInput {

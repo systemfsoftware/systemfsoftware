@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { resolveImportOrigin, type ImportOrigin } from './ImportOrigin.js'
+import { type ImportOrigin, resolveImportOrigin } from './ImportOrigin.js'
 import {
   ACTUAL,
   EXPECTED,
@@ -212,7 +212,11 @@ const combineBranchVerdicts = (verdicts: readonly SchemaVerdict[]): SchemaVerdic
  * copy `{ ...Schema }` is a schema-producing handle, not plain data. The
  * member access that later reports happens on the vocabulary label.
  */
-const containerOfVerdict = (values: readonly (ESTree.Node | null)[], getScope: GetScope, depth: number): SchemaVerdict => {
+const containerOfVerdict = (
+  values: readonly (ESTree.Node | null)[],
+  getScope: GetScope,
+  depth: number,
+): SchemaVerdict => {
   let holdsSchema = false
   for (const value of values) {
     const verdict = classify(value, getScope, depth + 1)
@@ -288,7 +292,10 @@ const schemaBaseVerdictOf = (member: ESTree.Node, getScope: GetScope): SchemaVer
 const isScopeLike = (value: unknown): value is ScopeLike =>
   typeof value === 'object' && value !== null && 'references' in value && 'upper' in value
 
-const bindingOfIdentifier = (identifier: ESTree.Node, getScope: GetScope): { readonly defs: readonly DefinitionLike[] } | null => {
+const bindingOfIdentifier = (
+  identifier: ESTree.Node,
+  getScope: GetScope,
+): { readonly defs: readonly DefinitionLike[] } | null => {
   const scopeValue: unknown = getScope(identifier)
   let scope: ScopeLike | null = isScopeLike(scopeValue) ? scopeValue : null
   while (scope !== null) {
@@ -331,7 +338,9 @@ const localCaleeVerdict = (callee: ESTree.Node, getScope: GetScope, depth: numbe
   const initNode = declarator.init
   if (initNode === null) return 'opaque'
   const init = unwrap(initNode)
-  if (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression') return functionBodyVerdict(init, getScope, depth + 1)
+  if (init.type === 'ArrowFunctionExpression' || init.type === 'FunctionExpression') {
+    return functionBodyVerdict(init, getScope, depth + 1)
+  }
   if (init.type === 'Identifier') return classify(init, getScope, depth + 1)
   return 'opaque'
 }
@@ -346,7 +355,9 @@ const isObjectAssignCall = (node: ESTree.Node): boolean =>
 
 const classifyCall = (node: ESTree.CallExpression, getScope: GetScope, depth: number): SchemaVerdict => {
   const callee = unwrap(node.callee)
-  if (callee.type === 'ArrowFunctionExpression' || callee.type === 'FunctionExpression') return functionBodyVerdict(callee, getScope, depth + 1)
+  if (callee.type === 'ArrowFunctionExpression' || callee.type === 'FunctionExpression') {
+    return functionBodyVerdict(callee, getScope, depth + 1)
+  }
   const member = schemaMemberOf(node, getScope)
   if (member !== null) {
     const memberName = schemaMemberNameOf(member, getScope)
@@ -551,7 +562,9 @@ const classify = (node: ESTree.Node | null, getScope: GetScope, depth: number = 
   node = unwrap(node)
   switch (node.type) {
     case 'ConditionalExpression':
-      return combineBranchVerdicts([node.consequent, node.alternate].map((branch) => classify(branch, getScope, depth + 1)))
+      return combineBranchVerdicts(
+        [node.consequent, node.alternate].map((branch) => classify(branch, getScope, depth + 1)),
+      )
     case 'LogicalExpression':
       return combineBranchVerdicts([node.left, node.right].map((branch) => classify(branch, getScope, depth + 1)))
     case 'ObjectExpression':
@@ -562,7 +575,9 @@ const classify = (node: ESTree.Node | null, getScope: GetScope, depth: number = 
       )
     case 'ArrayExpression':
       return containerOfVerdict(
-        node.elements.map((element) => (element !== null && element.type === 'SpreadElement' ? element.argument : element)),
+        node.elements.map((
+          element,
+        ) => (element !== null && element.type === 'SpreadElement' ? element.argument : element)),
         getScope,
         depth,
       )
@@ -609,8 +624,11 @@ export const SCHEMA_PREDICATE_MEMBERS: Record<string, true> = {
 
 const fieldNameOf = (element: ESTree.PropertyDefinition, className: string | null): string => {
   const key = element.key
-  const keyName =
-    key.type === 'Identifier' ? key.name : key.type === 'Literal' && typeof key.value === 'string' ? key.value : null
+  const keyName = key.type === 'Identifier'
+    ? key.name
+    : key.type === 'Literal' && typeof key.value === 'string'
+    ? key.value
+    : null
   if (className !== null && keyName !== null) return `${className}.${keyName}`
   return className ?? keyName ?? 'class field'
 }
@@ -642,7 +660,8 @@ const boundNamesOf = (pattern: ESTree.Node): readonly { readonly node: ESTree.No
 const patternDefaultsOf = (
   pattern: ESTree.Node,
 ): { readonly bound: { readonly node: ESTree.Node; readonly name: string }; readonly value: ESTree.Node }[] => {
-  const out: { readonly bound: { readonly node: ESTree.Node; readonly name: string }; readonly value: ESTree.Node }[] = []
+  const out: { readonly bound: { readonly node: ESTree.Node; readonly name: string }; readonly value: ESTree.Node }[] =
+    []
   const collect = (node: ESTree.Node): void => {
     if (node.type === 'ObjectPattern') {
       for (const property of node.properties) {
@@ -702,10 +721,9 @@ export const schemaDeclarationLocation = defineRule({
           context.report({
             node: id,
             messageId,
-            data:
-              messageId === 'unresolvedSchemaChain'
-                ? { name, expected: UNRESOLVED_EXPECTED, actual: UNRESOLVED_ACTUAL, fix: UNRESOLVED_FIX }
-                : { name, expected: EXPECTED, actual: ACTUAL, fix: FIX },
+            data: messageId === 'unresolvedSchemaChain'
+              ? { name, expected: UNRESOLVED_EXPECTED, actual: UNRESOLVED_ACTUAL, fix: UNRESOLVED_FIX }
+              : { name, expected: EXPECTED, actual: ACTUAL, fix: FIX },
           })
 
         const verdictReport = (id: ESTree.Node, name: string, verdict: SchemaVerdict): void => {
@@ -726,7 +744,8 @@ export const schemaDeclarationLocation = defineRule({
           node.property.name === 'vitest'
 
         const isUndefinedSentinel = (node: ESTree.Node): boolean =>
-          (node.type === 'UnaryExpression' && node.operator === 'void' && node.argument.type === 'Literal' && node.argument.value === 0) ||
+          (node.type === 'UnaryExpression' && node.operator === 'void' && node.argument.type === 'Literal' &&
+            node.argument.value === 0) ||
           (node.type === 'Literal' && node.value === null) ||
           (node.type === 'Identifier' && node.name === 'undefined')
 
@@ -745,10 +764,16 @@ export const schemaDeclarationLocation = defineRule({
 
         const reportClassDeclaration = (declaration: ESTree.Node): void => {
           if (declaration.type !== 'ClassDeclaration') return
-          if (declaration.id !== null) verdictReport(declaration.id, declaration.id.name, classify(declaration.superClass, getScope))
+          if (declaration.id !== null) {
+            verdictReport(declaration.id, declaration.id.name, classify(declaration.superClass, getScope))
+          }
           for (const element of declaration.body.body) {
             if (element.type !== 'PropertyDefinition' || element.value === null || element.value === undefined) continue
-            verdictReport(element, fieldNameOf(element, declaration.id?.name ?? null), classify(element.value, getScope))
+            verdictReport(
+              element,
+              fieldNameOf(element, declaration.id?.name ?? null),
+              classify(element.value, getScope),
+            )
           }
         }
 
@@ -769,7 +794,10 @@ export const schemaDeclarationLocation = defineRule({
           if (statement.type === 'ExportNamedDeclaration' || statement.type === 'ExportDefaultDeclaration') {
             declaration = statement.declaration
           }
-          if (declaration !== null && declaration.type !== 'ImportDeclaration' && declaration.type !== 'FunctionDeclaration') {
+          if (
+            declaration !== null && declaration.type !== 'ImportDeclaration' &&
+            declaration.type !== 'FunctionDeclaration'
+          ) {
             if (declaration.type === 'ClassDeclaration') reportClassDeclaration(declaration)
             else if (declaration.type === 'VariableDeclaration') reportVariableDeclaration(declaration)
             else if (
@@ -778,7 +806,11 @@ export const schemaDeclarationLocation = defineRule({
               declaration.expression.operator === '=' &&
               declaration.expression.left.type === 'Identifier'
             ) {
-              verdictReport(declaration.expression.left, declaration.expression.left.name, classify(declaration.expression.right, getScope))
+              verdictReport(
+                declaration.expression.left,
+                declaration.expression.left.name,
+                classify(declaration.expression.right, getScope),
+              )
             } else if (statement.type === 'ExportDefaultDeclaration') {
               verdictReport(declaration, 'default', classify(declaration, getScope))
             }
@@ -811,8 +843,8 @@ export const schemaDeclarationLocation = defineRule({
               break
             case 'TryStatement':
               for (const nested of statement.block.body) visit(nested)
-              if (statement.handler !== null) for (const nested of statement.handler.body.body) visit(nested)
-              if (statement.finalizer !== null) for (const nested of statement.finalizer.body) visit(nested)
+              if (statement.handler !== null) { for (const nested of statement.handler.body.body) visit(nested) }
+              if (statement.finalizer !== null) { for (const nested of statement.finalizer.body) visit(nested) }
               break
             case 'SwitchStatement':
               for (const switchCase of statement.cases) {

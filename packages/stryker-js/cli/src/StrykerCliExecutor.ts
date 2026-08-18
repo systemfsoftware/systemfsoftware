@@ -36,23 +36,23 @@ import type { HelpRendered } from '@systemfsoftware/stryker-js-mutation-run/run-
 import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 import { buildVerdictEnvelope } from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
 
-import { machineConsoleLayer, readCapturedConsole } from './OutputModeConsoleState.js'
-import type { OutputModeProbe } from './OutputModeAdapter.js'
 import { isColorEnabled, isProgressEnabled } from './OutputMode.js'
+import type { OutputModeProbe } from './OutputModeAdapter.js'
+import { machineConsoleLayer, readCapturedConsole } from './OutputModeConsoleState.js'
 import type { RunEventStream, RunEventStreamPort } from './RunEventStreamAdapter.js'
 import { STREAM_SCHEMA_VERSION } from './StreamProtocol.js'
-import { SURVIVORS_REJECT_EXIT_CLASS } from './SurvivorsExit.js'
 import {
-  DEFAULT_SURVIVORS_PRIOR_REPORT,
-  type AdmitSurvivorsRunInput,
   admitSurvivorsRun,
+  type AdmitSurvivorsRunInput,
+  DEFAULT_SURVIVORS_PRIOR_REPORT,
   type HashContent,
   type ResolveAbsolutePath,
   sourceContentHash,
+  survivorMutateSpans,
   type SurvivorsAdmission,
   SurvivorsRejection,
-  survivorMutateSpans,
 } from './Survivors.workflow.js'
+import { SURVIVORS_REJECT_EXIT_CLASS } from './SurvivorsExit.js'
 
 /**
  * The mutation-testing entry the CLI calls once options are parsed. Injectable
@@ -219,7 +219,7 @@ const survivorsAdmissionDescription = (
         sourceContentHashes,
         hashContent,
         resolveAbsolutePath,
-      }),
+      })
     ),
     Cell.decide<AdmissionPhases>(admitSurvivorsRun),
     Cell.encode<AdmissionPhases>((outcome) => outcome),
@@ -235,7 +235,10 @@ const survivorsAdmissionDescription = (
         return Result.match(outcome, {
           onSuccess: (decision) =>
             Match.value(decision).pipe(
-              Match.tag('NoSurvivors', () => Effect.sync(() => emitEmptySurvivorsVerdict(stream, mode, resolvedOptions))),
+              Match.tag(
+                'NoSurvivors',
+                () => Effect.sync(() => emitEmptySurvivorsVerdict(stream, mode, resolvedOptions)),
+              ),
               Match.tag('Admitted', (admitted) => {
                 const restricted: SurvivorsRunOptions = {
                   ...resolvedOptions,
@@ -252,7 +255,7 @@ const survivorsAdmissionDescription = (
             ),
           onFailure: (rejection) => Effect.fail(rejection),
         })
-      }),
+      })
     ),
   )
 

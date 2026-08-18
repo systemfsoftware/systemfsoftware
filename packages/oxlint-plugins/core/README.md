@@ -48,7 +48,7 @@ class Store extends Context.Service<Store, StoreShape>()('app/Store', {
 
 `Effect.Service` is reported wherever it appears — the Effect module exports no `Service` in v4, and `Context` exports `Key`, `Service` and `Reference` but no `Tag`.
 
-Whether a service *should* carry `make` is not linted, and deliberately so. A `Context.Service` with no `make` is a **port**, and a port's own file routinely holds exactly one layer — a stub or a noop — while the real implementations live elsewhere. No rule reading one file can separate that stub from a canonical construction, so a check that fired on "one layer beside a service" would tell a port to promote its stub. Put the construction on the class when the module owns it; that call is a review matter.
+Whether a service _should_ carry `make` is not linted, and deliberately so. A `Context.Service` with no `make` is a **port**, and a port's own file routinely holds exactly one layer — a stub or a noop — while the real implementations live elsewhere. No rule reading one file can separate that stub from a canonical construction, so a check that fired on "one layer beside a service" would tell a port to promote its stub. Put the construction on the class when the module owns it; that call is a review matter.
 
 For a full setup with every rule enabled at the recommended severity, extend the shared base config:
 

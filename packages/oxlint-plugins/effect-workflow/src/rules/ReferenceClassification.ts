@@ -222,8 +222,7 @@ const variableOf = (identifier: IdentifierLike, getScope: (node: ESTree.Node) =>
   return found === undefined ? null : found.resolved
 }
 
-const isWithinFunction = (node: ESTree.Node, fn: MakeBodyKind): boolean =>
-  node.start >= fn.start && node.end <= fn.end
+const isWithinFunction = (node: ESTree.Node, fn: MakeBodyKind): boolean => node.start >= fn.start && node.end <= fn.end
 
 /**
  * A module-scope `const` record (an object-literal initializer) carrying at
@@ -281,8 +280,8 @@ const memberNameOf = (node: ESTree.Node): string | null => {
   return property.type === 'Identifier' && !node.computed
     ? property.name
     : property.type === 'Literal' && typeof property.value === 'string'
-      ? property.value
-      : null
+    ? property.value
+    : null
 }
 
 const memberChainRoot = (node: ESTree.Node): ESTree.Node => {
@@ -462,7 +461,11 @@ const MUTATING_METHODS: Readonly<Record<string, true>> = {
  * decision-body local. Those are the only containers a write can illegally
  * reach from inside the decision.
  */
-const isModuleConstContainer = (root: ESTree.Node, fn: MakeBodyKind, getScope: (node: ESTree.Node) => unknown): boolean => {
+const isModuleConstContainer = (
+  root: ESTree.Node,
+  fn: MakeBodyKind,
+  getScope: (node: ESTree.Node) => unknown,
+): boolean => {
   if (root.type !== 'Identifier') return false
   const variable = variableOf(root, getScope)
   if (variable === null) return false
@@ -511,7 +514,10 @@ const collectOperations = (fn: MakeBodyKind, context: Context, reports: Referenc
         reports.push({ identifier: callee, name: 'a runtime import', verdict: { kind: 'runtimeImport' } })
       } else if (callee.type === 'MemberExpression') {
         const name = memberNameOf(callee)
-        if (name !== null && MUTATING_METHODS[name] === true && isModuleConstContainer(memberChainRoot(callee), fn, getScope)) {
+        if (
+          name !== null && MUTATING_METHODS[name] === true &&
+          isModuleConstContainer(memberChainRoot(callee), fn, getScope)
+        ) {
           const chain = memberChainText(callee)
           if (chain !== null) reportModuleMutation(reports, callee, chain, true)
         }

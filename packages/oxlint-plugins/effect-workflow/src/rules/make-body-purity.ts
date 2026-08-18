@@ -20,11 +20,11 @@ import {
   RUNTIME_IMPORT_FIX,
   UNRESOLVABLE_ACTUAL,
   UNRESOLVABLE_FIX,
-  UNSEALED_IMPORT_ACTUAL,
-  UNSEALED_IMPORT_FIX,
   UNRESOLVABLE_MAKE_ARGUMENT_ACTUAL,
   UNRESOLVABLE_MAKE_ARGUMENT_EXPECTED,
   UNRESOLVABLE_MAKE_ARGUMENT_FIX,
+  UNSEALED_IMPORT_ACTUAL,
+  UNSEALED_IMPORT_FIX,
 } from './make-body-purity.config.js'
 import { collectMakeBoundaries, type MakeBodyKind, type MakeBoundary } from './MakeBoundary.js'
 import { classifyBodyReferences, isFailingVerdict, type ReferenceVerdict } from './ReferenceClassification.js'

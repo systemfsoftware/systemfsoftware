@@ -1,9 +1,9 @@
 import { untar } from '@andrewbranch/untar.js'
 import { Option, Schema } from 'effect'
-import { FlateErrorCode, Gunzip, type FlateError } from 'fflate'
+import { type FlateError, FlateErrorCode, Gunzip } from 'fflate'
 import { major, maxSatisfying, minor, valid, validRange } from 'semver'
 import ts from 'typescript'
-import { NpmRegistryDocSchema, TarballPackageJsonSchema, type NpmRegistryDoc } from './NpmRegistry.schema.js'
+import { type NpmRegistryDoc, NpmRegistryDocSchema, TarballPackageJsonSchema } from './NpmRegistry.schema.js'
 import { type ParsedPackageSpec, parsePackageSpec } from './Utils.js'
 
 export class Package {

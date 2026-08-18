@@ -50,8 +50,7 @@ for (const option of ResolutionOptionSchema.literals) {
 // `Object.hasOwn`, never `in`: `in` walks the prototype chain, so `'toString' in
 // record` is true and every Object.prototype member would read as a resolution
 // kind. A property over arbitrary strings caught exactly that.
-export const isResolutionKind = (value: string): value is ResolutionKind =>
-  Object.hasOwn(resolutionKindRecord, value)
+export const isResolutionKind = (value: string): value is ResolutionKind => Object.hasOwn(resolutionKindRecord, value)
 
 export const isResolutionOption = (value: string): value is ResolutionOption =>
   Object.hasOwn(resolutionOptionRecord, value)

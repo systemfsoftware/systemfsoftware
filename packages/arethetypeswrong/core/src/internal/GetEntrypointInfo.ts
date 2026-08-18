@@ -109,7 +109,9 @@ function getProxyDirectories(rootDir: string, fs: Package) {
           // Name unrelated to the root package, this is a vendored package
           const vendorDir = file.slice(0, file.lastIndexOf('/'))
           vendorDirectories.add(vendorDir)
-        } else if (Object.getOwnPropertyDescriptor(packageJson, 'main') !== undefined && !isInsideVendorDirectory(file)) {
+        } else if (
+          Object.getOwnPropertyDescriptor(packageJson, 'main') !== undefined && !isInsideVendorDirectory(file)
+        ) {
           // No name or name starting with root package name, this is intended to be an entrypoint
           const proxyDir = '.' + file.slice(rootDir.length, file.lastIndexOf('/'))
           proxyDirectories.push(proxyDir)
@@ -141,7 +143,9 @@ export function getEntrypointInfo(
   const exportsObject: unknown = Object.getOwnPropertyDescriptor(packageJson, 'exports')?.value
   let entrypoints = getEntrypoints(fs, exportsObject, options)
   if (fs.typesPackage) {
-    const typesPackageJson: unknown = JSON.parse(fs.readFile(`/node_modules/${fs.typesPackage.packageName}/package.json`))
+    const typesPackageJson: unknown = JSON.parse(
+      fs.readFile(`/node_modules/${fs.typesPackage.packageName}/package.json`),
+    )
     const typesExportsObject: unknown = Object.getOwnPropertyDescriptor(typesPackageJson, 'exports')?.value
     const typesEntrypoints = getEntrypoints(fs, typesExportsObject, options)
     entrypoints = unique([...entrypoints, ...typesEntrypoints])

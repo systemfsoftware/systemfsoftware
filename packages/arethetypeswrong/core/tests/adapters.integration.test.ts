@@ -14,10 +14,12 @@ Feature('The adapter stubs stand in for their live services').body(({ scenario }
   scenario(
     'the tarball adapter stub serves its recorded fixture through the layer contract',
     Gherkin.Do.pipe(
-      Given('a stub layer with one recorded tarball file')('layer', () =>
-        Effect.sync(() =>
-          TarballAdapterStub([{ path: '/node_modules/stub-package/readme.md', content: new Uint8Array([1, 2, 3]) }]),
-        ),
+      Given('a stub layer with one recorded tarball file')(
+        'layer',
+        () =>
+          Effect.sync(() =>
+            TarballAdapterStub([{ path: '/node_modules/stub-package/readme.md', content: new Uint8Array([1, 2, 3]) }])
+          ),
       ),
       When('the layer is queried through the TarballAdapter service')('extracted', ({ layer }) =>
         Effect.provide(
@@ -26,15 +28,14 @@ Feature('The adapter stubs stand in for their live services').body(({ scenario }
             return yield* service.extract(new Uint8Array())
           }),
           layer,
-        ),
-      ),
+        )),
       Then('the stub returns the recorded files unaltered')(({ extracted }) =>
         Effect.sync(() => {
           expect(extracted.packageName).toBe('stub-package')
           expect(extracted.files).toEqual([
             { path: '/node_modules/stub-package/readme.md', content: new Uint8Array([1, 2, 3]) },
           ])
-        }),
+        })
       ),
     ),
   )
@@ -42,13 +43,15 @@ Feature('The adapter stubs stand in for their live services').body(({ scenario }
   scenario(
     'the package store adapter stub serves its recorded tarball through the layer contract',
     Gherkin.Do.pipe(
-      Given('a stub layer with a recorded package ref and tarball')('layer', () =>
-        Effect.sync(() =>
-          PackageStoreAdapterStub(
-            { packageName: 'x', packageVersion: '1.0.0', tarballUrl: 'https://registry.example/x.tgz' },
-            new Uint8Array([1]),
+      Given('a stub layer with a recorded package ref and tarball')(
+        'layer',
+        () =>
+          Effect.sync(() =>
+            PackageStoreAdapterStub(
+              { packageName: 'x', packageVersion: '1.0.0', tarballUrl: 'https://registry.example/x.tgz' },
+              new Uint8Array([1]),
+            )
           ),
-        ),
       ),
       When('the layer is queried through the PackageStoreAdapter service')('stored', ({ layer }) =>
         Effect.provide(
@@ -57,12 +60,11 @@ Feature('The adapter stubs stand in for their live services').body(({ scenario }
             return yield* service.fetchTarball('https://registry.example/x.tgz')
           }),
           layer,
-        ),
-      ),
+        )),
       Then('the stub serves the recorded bytes')(({ stored }) =>
         Effect.sync(() => {
           expect(stored).toEqual(new Uint8Array([1]))
-        }),
+        })
       ),
     ),
   )
@@ -78,13 +80,12 @@ Feature('The adapter stubs stand in for their live services').body(({ scenario }
             return yield* service.resolve('x', '.', 'bundler')
           }),
           layer,
-        ),
-      ),
+        )),
       Then('the stub reports an empty resolution')(({ resolution }) =>
         Effect.sync(() => {
           expect(resolution.fileName).toBeUndefined()
           expect(resolution.trace).toEqual([])
-        }),
+        })
       ),
     ),
   )
@@ -100,12 +101,11 @@ Feature('The adapter stubs stand in for their live services').body(({ scenario }
             return yield* service.createHosts()
           }),
           layer,
-        ),
-      ),
+        )),
       Then('the stub yields an empty host map')(({ hosts }) =>
         Effect.sync(() => {
           expect(hosts.size).toBe(0)
-        }),
+        })
       ),
     ),
   )
@@ -121,12 +121,11 @@ Feature('The adapter stubs stand in for their live services').body(({ scenario }
             return yield* service.parseCjsExports('const answer = 42')
           }),
           layer,
-        ),
-      ),
+        )),
       Then('the stub reports no exports')(({ exports }) =>
         Effect.sync(() => {
           expect(exports).toEqual([])
-        }),
+        })
       ),
     ),
   )

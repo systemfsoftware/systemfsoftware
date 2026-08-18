@@ -4,7 +4,6 @@ import * as Result from 'effect/Result'
 import { expect } from 'vitest'
 
 import { checkPackage, createPackageFromTarballData } from '../src/index.js'
-import { SnapshotRecordSchema } from './__fixtures__/Snapshot.schema.js'
 import {
   fileExists,
   listDirectory,
@@ -14,6 +13,7 @@ import {
   readTextFile,
   writeTextFile,
 } from './__fixtures__/fixture-io.mjs'
+import { SnapshotRecordSchema } from './__fixtures__/Snapshot.schema.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -43,57 +43,61 @@ const fixtures = listDirectory(fixturesDir).filter(
     (testFilter === '' || fixture.toLowerCase().includes(testFilter)),
 )
 
-Feature('The analysis of a published package reproduces its recorded outcome', { timeout: 60_000 }).body(({ scenario }) => {
-  for (const fixture of fixtures) {
-    const typesFixture = typesPackages[fixture]
+Feature('The analysis of a published package reproduces its recorded outcome', { timeout: 60_000 }).body(
+  ({ scenario }) => {
+    for (const fixture of fixtures) {
+      const typesFixture = typesPackages[fixture]
+      scenario(
+        `the analysis of ${fixture} reproduces its recorded snapshot`,
+        Gherkin.Do.pipe(
+          Given('the fixture tarball, and its @types companion when recorded')('loaded', () =>
+            Effect.sync(() => ({
+              tarball: readBytes(urlOf(fixturesDir, fixture)),
+              typesTarball: typesFixture === undefined ? undefined : readBytes(urlOf(fixturesDir, typesFixture)),
+            }))),
+          When('the package is analysed with the recorded types companion')(
+            'analysis',
+            ({ loaded }) =>
+              Effect.tryPromise(() => {
+                const pkg = createPackageFromTarballData(loaded.tarball)
+                const merged = loaded.typesTarball === undefined
+                  ? pkg
+                  : pkg.mergedWithTypes(createPackageFromTarballData(loaded.typesTarball))
+                return checkPackage(merged)
+              }),
+          ),
+          Then('the recorded snapshot still matches the canonical analysis')(({ analysis }) =>
+            Effect.sync(() => {
+              const snapshotURL = urlOf(snapshotsDir, `${fixture}.json`)
+              if (updateSnapshots !== '' || !fileExists(snapshotURL)) {
+                writeTextFile(snapshotURL, JSON.stringify(analysis, null, 2) + '\n')
+                return
+              }
+              const recorded = Schema.decodeUnknownSync(SnapshotRecordSchema)(parseJson(readTextFile(snapshotURL)))
+              expect(recorded).toEqual(analysis)
+            })
+          ),
+        ),
+      )
+    }
+
     scenario(
-      `the analysis of ${fixture} reproduces its recorded snapshot`,
+      `the malformed ${rejectedFixture} fixture is rejected by the analysis`,
       Gherkin.Do.pipe(
-        Given('the fixture tarball, and its @types companion when recorded')('loaded', () =>
-          Effect.sync(() => ({
-            tarball: readBytes(urlOf(fixturesDir, fixture)),
-            typesTarball: typesFixture === undefined ? undefined : readBytes(urlOf(fixturesDir, typesFixture)),
-          })),
+        Given(`the ${rejectedFixture} fixture`)(
+          'tarball',
+          () => Effect.sync(() => readBytes(urlOf(fixturesDir, rejectedFixture))),
         ),
-        When('the package is analysed with the recorded types companion')('analysis', ({ loaded }) =>
-          Effect.tryPromise(() => {
-            const pkg = createPackageFromTarballData(loaded.tarball)
-            const merged =
-              loaded.typesTarball === undefined
-                ? pkg
-                : pkg.mergedWithTypes(createPackageFromTarballData(loaded.typesTarball))
-            return checkPackage(merged)
-          }),
+        When('the fixture is analysed')(
+          'outcome',
+          ({ tarball }) => Effect.result(Effect.tryPromise(() => checkPackage(createPackageFromTarballData(tarball)))),
         ),
-        Then('the recorded snapshot still matches the canonical analysis')(({ analysis }) =>
+        Then('the analysis fails')(({ outcome }) =>
           Effect.sync(() => {
-            const snapshotURL = urlOf(snapshotsDir, `${fixture}.json`)
-            if (updateSnapshots !== '' || !fileExists(snapshotURL)) {
-              writeTextFile(snapshotURL, JSON.stringify(analysis, null, 2) + '\n')
-              return
-            }
-            const recorded = Schema.decodeUnknownSync(SnapshotRecordSchema)(parseJson(readTextFile(snapshotURL)))
-            expect(recorded).toEqual(analysis)
-          }),
+            expect(outcome).toEqual(Result.fail(expect.anything()))
+          })
         ),
       ),
     )
-  }
-
-  scenario(
-    `the malformed ${rejectedFixture} fixture is rejected by the analysis`,
-    Gherkin.Do.pipe(
-      Given(`the ${rejectedFixture} fixture`)('tarball', () =>
-        Effect.sync(() => readBytes(urlOf(fixturesDir, rejectedFixture))),
-      ),
-      When('the fixture is analysed')('outcome', ({ tarball }) =>
-        Effect.result(Effect.tryPromise(() => checkPackage(createPackageFromTarballData(tarball)))),
-      ),
-      Then('the analysis fails')(({ outcome }) =>
-        Effect.sync(() => {
-          expect(outcome).toEqual(Result.fail(expect.anything()))
-        }),
-      ),
-    ),
-  )
-})
+  },
+)

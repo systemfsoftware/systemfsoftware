@@ -6,12 +6,12 @@ import type { PlatformError } from 'effect/PlatformError'
 import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { drainAsyncHookContext } from '../AsyncHookOutput.js'
 import type { HookResult } from '../HookDispatcher.schema.js'
-import type { CommandHook, HookSettings } from '../HookSettings.schema.js'
 import { parseHookOutput } from '../HookOutput.js'
+import type { CommandHook, HookSettings } from '../HookSettings.schema.js'
 import {
   type HookDecision,
-  type SubmitHookVerdictError,
   InterpretHookCommand,
+  type SubmitHookVerdictError,
   submitVerdict,
 } from '../HookVerdict.workflow.js'
 import { isHostBound } from '../PromptDestination.js'

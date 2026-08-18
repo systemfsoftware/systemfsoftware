@@ -767,7 +767,12 @@ Workflow.make((path: string) => {
 const state = { count: 0 }
 Workflow.make((x: number) => { state.count += x; return state.count })`,
       errors: [
-        referenceError('moduleMutationReference', 'a mutation of state.count', MODULE_MUTATION_ACTUAL, MODULE_MUTATION_FIX),
+        referenceError(
+          'moduleMutationReference',
+          'a mutation of state.count',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
       ],
     },
     {
@@ -777,7 +782,12 @@ Workflow.make((x: number) => { state.count += x; return state.count })`,
 const state = { count: 0 }
 Workflow.make((x: number) => { state.count++; return state.count })`,
       errors: [
-        referenceError('moduleMutationReference', 'a mutation of state.count', MODULE_MUTATION_ACTUAL, MODULE_MUTATION_FIX),
+        referenceError(
+          'moduleMutationReference',
+          'a mutation of state.count',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
       ],
     },
     {
@@ -787,7 +797,12 @@ Workflow.make((x: number) => { state.count++; return state.count })`,
 const state = { items: [] as readonly number[] }
 Workflow.make((x: number) => { state.items.push(x); return x })`,
       errors: [
-        referenceError('moduleMutationReference', 'a mutating method call (state.items.push)', MODULE_MUTATION_ACTUAL, MODULE_MUTATION_FIX),
+        referenceError(
+          'moduleMutationReference',
+          'a mutating method call (state.items.push)',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
       ],
     },
     {
@@ -797,7 +812,12 @@ Workflow.make((x: number) => { state.items.push(x); return x })`,
 const seen = new Map<string, number>()
 Workflow.make((x: number) => { seen.set('x', x); return x })`,
       errors: [
-        referenceError('moduleMutationReference', 'a mutating method call (seen.set)', MODULE_MUTATION_ACTUAL, MODULE_MUTATION_FIX),
+        referenceError(
+          'moduleMutationReference',
+          'a mutating method call (seen.set)',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
       ],
     },
     {
@@ -807,7 +827,12 @@ Workflow.make((x: number) => { seen.set('x', x); return x })`,
 const seen = new Set<number>()
 Workflow.make((x: number) => { seen.add(x); return x })`,
       errors: [
-        referenceError('moduleMutationReference', 'a mutating method call (seen.add)', MODULE_MUTATION_ACTUAL, MODULE_MUTATION_FIX),
+        referenceError(
+          'moduleMutationReference',
+          'a mutating method call (seen.add)',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
       ],
     },
     {
@@ -817,7 +842,12 @@ Workflow.make((x: number) => { seen.add(x); return x })`,
 const state = { count: 1 }
 Workflow.make((x: number) => { delete state.count; return x })`,
       errors: [
-        referenceError('moduleMutationReference', 'a mutation of state.count', MODULE_MUTATION_ACTUAL, MODULE_MUTATION_FIX),
+        referenceError(
+          'moduleMutationReference',
+          'a mutation of state.count',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
       ],
     },
     {

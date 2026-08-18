@@ -2,9 +2,9 @@
 import { it, layer, makeFeature, StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { readFile } from 'node:fs/promises'
+import { expect } from 'vitest'
 import { CheckPackage, CheckPackageLive } from '../src/CheckPackageExecutor.ts'
 import { PackageStoreAdapterStub } from '../src/PackageStoreAdapter.ts'
-import { expect } from 'vitest'
 
 /**
  * CheckPackage executor — live layer wiring.
@@ -35,8 +35,7 @@ Feature('CheckPackage executor — analysis through the live layer').body(({ sce
     Effect.gen(function*() {
       const tarball = new Uint8Array(
         yield* Effect.tryPromise({
-          try: async () =>
-            await readFile(new URL('./__fixtures__/fixtures/semver@7.6.3.tgz', import.meta.url)),
+          try: async () => await readFile(new URL('./__fixtures__/fixtures/semver@7.6.3.tgz', import.meta.url)),
           catch: () => new StepError({ keyword: 'scenario', text: 'readFile failed', cause: void 0 }),
         }),
       )

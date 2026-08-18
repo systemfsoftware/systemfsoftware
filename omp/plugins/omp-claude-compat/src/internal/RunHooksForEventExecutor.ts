@@ -5,13 +5,13 @@ import type { PlatformError } from 'effect/PlatformError'
 import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { Blocked, Continue } from '../HookDispatcher.schema.js'
 import type { HookOutcome, HookResult } from '../HookDispatcher.schema.js'
-import { analyzeSettings } from '../HookSettings.js'
 import { parseHookOutput } from '../HookOutput.js'
+import { analyzeSettings } from '../HookSettings.js'
 import type { CommandHook, HookEntry } from '../HookSettings.schema.js'
 import {
   type HookDecision,
-  type SubmitHookVerdictError,
   InterpretHookCommand,
+  type SubmitHookVerdictError,
   submitVerdict,
   Warning,
 } from '../HookVerdict.workflow.js'

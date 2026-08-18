@@ -1,9 +1,6 @@
 import { Schema } from 'effect'
 
-import {
-  IncludedTypesSchema,
-  TypesPackageSchema,
-} from '../../src/Analysis.schema.js'
+import { IncludedTypesSchema, TypesPackageSchema } from '../../src/Analysis.schema.js'
 import { ProblemSchema, ResolutionOptionSchema } from '../../src/Problem.schema.js'
 import { EntrypointInfoSchema } from '../../src/Resolution.schema.js'
 

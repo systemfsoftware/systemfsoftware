@@ -134,40 +134,40 @@ export const interpretHookResult = (
   command: InterpretHookCommand,
 ): Result.Result<HookDecision, HookVerdictError> =>
   Match.value(exitKindOf(command.result.code, command.result.stdout)).pipe(
-      Match.when(
-        'ExitBlock',
-        () => Result.succeed(new Block({ reason: blockReason(command.result.stderr, command.event) })),
-      ),
-      Match.when('ExitNoDecision', () => Result.succeed(new Allow({}))),
-      Match.when('ExitDecisionJson', () =>
-        Option.match(command.parsed, {
-          onNone: () => Result.fail(new HookVerdictError({ raw: command.result.stdout })),
-          onSome: (parsed) =>
-            Match.value(parsedVerdict(parsed.hookSpecificOutput?.permissionDecision, parsed.decision)).pipe(
-              Match.when('block', () =>
-                Result.succeed(
-                  new Block({
-                    reason: parsedBlockReason(
-                      parsed.hookSpecificOutput?.permissionDecision,
-                      parsed.hookSpecificOutput?.permissionDecisionReason,
-                      parsed.reason,
-                      command.event,
-                    ),
-                  }),
-                )),
-              Match.when('allow', () =>
-                Result.succeed(new Allow({ updatedInput: parsed.hookSpecificOutput?.updatedInput }))),
-              Match.exhaustive,
-            ),
-        })),
-      Match.when('ExitOther', () =>
-        Match.value(stderrVerdict(command.result.stderr)).pipe(
-          Match.when('warning', () => Result.succeed(new Warning({ message: spokenStderr(command.result.stderr) }))),
-          Match.when('allow', () => Result.succeed(new Allow({}))),
-          Match.exhaustive,
-        )),
-      Match.exhaustive,
-    )
+    Match.when(
+      'ExitBlock',
+      () => Result.succeed(new Block({ reason: blockReason(command.result.stderr, command.event) })),
+    ),
+    Match.when('ExitNoDecision', () => Result.succeed(new Allow({}))),
+    Match.when('ExitDecisionJson', () =>
+      Option.match(command.parsed, {
+        onNone: () => Result.fail(new HookVerdictError({ raw: command.result.stdout })),
+        onSome: (parsed) =>
+          Match.value(parsedVerdict(parsed.hookSpecificOutput?.permissionDecision, parsed.decision)).pipe(
+            Match.when('block', () =>
+              Result.succeed(
+                new Block({
+                  reason: parsedBlockReason(
+                    parsed.hookSpecificOutput?.permissionDecision,
+                    parsed.hookSpecificOutput?.permissionDecisionReason,
+                    parsed.reason,
+                    command.event,
+                  ),
+                }),
+              )),
+            Match.when('allow', () =>
+              Result.succeed(new Allow({ updatedInput: parsed.hookSpecificOutput?.updatedInput }))),
+            Match.exhaustive,
+          ),
+      })),
+    Match.when('ExitOther', () =>
+      Match.value(stderrVerdict(command.result.stderr)).pipe(
+        Match.when('warning', () => Result.succeed(new Warning({ message: spokenStderr(command.result.stderr) }))),
+        Match.when('allow', () => Result.succeed(new Allow({}))),
+        Match.exhaustive,
+      )),
+    Match.exhaustive,
+  )
 
 /** The submit chain's command: the verdict command plus the raw's code and stdout. */
 export interface SubmitVerdictDecoded {

@@ -1,5 +1,5 @@
 import type { Context, ESTree } from '@oxlint/plugins'
-import { originMemberSequence, resolveImportOrigin, type ImportOrigin } from './ImportOrigin.js'
+import { type ImportOrigin, originMemberSequence, resolveImportOrigin } from './ImportOrigin.js'
 
 /**
  * The module whose `Workflow` value owns the `make` boundary. Mirrors the

@@ -1,8 +1,8 @@
 import { describe, it } from '@effect/vitest'
 import { Exit, Option, Result } from 'effect'
 import { FastCheck as fc } from 'effect/testing'
-import type { ParsedHookOutput } from '../HookOutput.schema.js'
 import { parseHookOutput } from '../HookOutput.js'
+import type { ParsedHookOutput } from '../HookOutput.schema.js'
 import { InterpretHookCommand, interpretHookResult, submitVerdict } from '../HookVerdict.workflow.js'
 
 /**

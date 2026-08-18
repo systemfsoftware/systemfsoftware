@@ -1,9 +1,9 @@
 import ts from 'typescript'
-import { type CompilerHostWrapper } from '../MultiCompilerHost.js'
+import type { Problem } from '../../Types.js'
 import { getResolutionOption } from '../../Utils.js'
 import { defineCheck } from '../DefineCheck.js'
 import { type Export, getProbableExports } from '../GetProbableExports.js'
-import type { Problem } from '../../Types.js'
+import { type CompilerHostWrapper } from '../MultiCompilerHost.js'
 
 const bindOptions: ts.CompilerOptions = {
   target: ts.ScriptTarget.Latest,
@@ -197,8 +197,7 @@ function getImplChecker(input: DisagreementAnalysis, memo: AnalysisMemo): ts.Typ
 
 function getImplHasDefault(input: DisagreementAnalysis, memo: AnalysisMemo): boolean {
   if (memo.implHasDefault === undefined) {
-    memo.implHasDefault =
-      input.implementationExports.has(ts.InternalSymbolName.Default) === true ||
+    memo.implHasDefault = input.implementationExports.has(ts.InternalSymbolName.Default) === true ||
       getImplProbableExports(input, memo).some((s) => s.name === 'default') ||
       (!!input.implementationExports.size &&
         getImplChecker(input, memo)
@@ -236,8 +235,7 @@ function getTypesChecker(input: DisagreementAnalysis, memo: AnalysisMemo): ts.Ty
 
 function getTypesDefaultSymbol(input: DisagreementAnalysis, memo: AnalysisMemo): ts.Symbol | undefined {
   if (memo.typesDefaultSymbol === undefined) {
-    memo.typesDefaultSymbol =
-      input.typesExports.get(ts.InternalSymbolName.Default) ??
+    memo.typesDefaultSymbol = input.typesExports.get(ts.InternalSymbolName.Default) ??
       getTypesChecker(input, memo)
         .getExportsAndPropertiesOfModule(input.typesSourceFile.symbol)
         .find((s) => s.escapedName === 'default')

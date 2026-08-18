@@ -9,8 +9,8 @@ import { createHash } from 'node:crypto'
 import { isDeepStrictEqual } from 'node:util'
 
 import {
-  type AdmitSurvivorsRunInput,
   admitSurvivorsRun,
+  type AdmitSurvivorsRunInput,
   extractSurvivors,
   type HashContent,
   sourceContentHash,

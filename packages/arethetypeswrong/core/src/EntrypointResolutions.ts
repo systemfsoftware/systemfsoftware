@@ -1,10 +1,6 @@
 import { resolvedThroughFallback } from './Fallback.js'
-import {
-  type EntrypointResolutionAnalysis,
-  type ModuleKind,
-  type Problem,
-} from './Problem.schema.js'
 import { ESNextModuleKind } from './ModuleKind.js'
+import { type EntrypointResolutionAnalysis, type ModuleKind, type Problem } from './Problem.schema.js'
 
 export interface EntrypointResolutionsInput {
   readonly subpath: string

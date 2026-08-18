@@ -308,8 +308,8 @@ const resolveIdentifierOrigin = (
   const declarator = isVariableDeclarator(def.node)
     ? def.node
     : def.parent !== null && isVariableDeclarator(def.parent)
-      ? def.parent
-      : null
+    ? def.parent
+    : null
   if (declarator === null) return null
   const declaration = declarator.parent
   // No `kind` gate here: `const S = Schema`, `let S = Schema` and
