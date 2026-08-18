@@ -20,6 +20,7 @@
     "build": "rimraf dist && tsdown",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
+    "attw": "attw --pack .",
     "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
@@ -32,6 +33,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",

@@ -41,5 +41,11 @@
   },
   "publishConfig": {
     "provenance": true
+  },
+  "scripts": {
+    "attw": "attw --pack ."
+  },
+  "devDependencies": {
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw"
   }
 }
