@@ -62,15 +62,22 @@ const tarballEntries = (tarball) => run('tar', ['-tzf', tarball]).split('\n').fi
  */
 const publishedEntries = (manifest) => {
   const entries = []
-  for (const [subpath, value] of Object.entries(manifest.exports ?? {})) {
-    if (subpath === './package.json') continue
+  // Every string in the exports tree, not just `default` and `types`. A custom
+  // condition is a resolvable target for whoever enables it, so reading only the
+  // two common keys let `effect-memfs` publish a `@systemfsoftware/source`
+  // condition pointing at `./src/index.ts` that the tarball does not contain —
+  // invisible under plain Node, fatal for a consumer whose tsconfig sets it.
+  const collect = (value) => {
     if (typeof value === 'string') {
       entries.push(value)
-      continue
+      return
     }
-    if (typeof value !== 'object' || value === null) continue
-    const candidate = value.default ?? value.types
-    if (typeof candidate === 'string') entries.push(candidate)
+    if (typeof value !== 'object' || value === null) return
+    for (const nested of Object.values(value)) collect(nested)
+  }
+  for (const [subpath, value] of Object.entries(manifest.exports ?? {})) {
+    if (subpath === './package.json') continue
+    collect(value)
   }
   return entries
 }
