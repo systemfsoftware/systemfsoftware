@@ -1,17 +1,22 @@
 import type { InputEventResult } from '@oh-my-pi/pi-coding-agent'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { sessionIds } from '@systemfsoftware/omp-utils'
-import { Context, Effect, Match, Option, pipe, Result, type Scope } from 'effect'
+import { Context, Effect, Exit, Match, Option, pipe, Result, type Scope } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { drainAsyncHookContext } from '../AsyncHookOutput.js'
-import type { HookDecision, HookResult } from '../HookDispatcher.schema.js'
+import type { HookResult } from '../HookDispatcher.schema.js'
 import type { CommandHook, HookSettings } from '../HookSettings.schema.js'
-import { InterpretHookCommand } from '../HookVerdict.workflow.js'
+import { parseHookOutput } from '../HookOutput.js'
+import {
+  type HookDecision,
+  type SubmitHookVerdictError,
+  InterpretHookCommand,
+  submitVerdict,
+} from '../HookVerdict.workflow.js'
 import { isHostBound } from '../PromptDestination.js'
 import type { HookPrompt, HookSession } from './HookSession.js'
 import { runHookScript, type RunHookScriptExecutorDeps } from './RunHookScriptExecutor.js'
-import { type SubmitHookVerdictError, submitVerdictAdapter } from './SubmitVerdictAdapter.workflow.js'
 
 export class RunUserPromptSubmitHooksExecutorDeps extends Context.Service<
   RunUserPromptSubmitHooksExecutorDeps,
@@ -67,22 +72,29 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
   /**
    * The prompt-submission verdict chain, as a description applied per hook
    * iteration. The read is the hook script run; `decode` wraps the raw result
-   * for the workflow and carries the raw's code and stdout forward, because
-   * the write still needs them; `interpretHookResult` is the decision, with
-   * both channels carrying that forward context; `encode` folds the decision
-   * into the block reason; `write` blocks with a notify, skips failed hooks,
-   * or accumulates the trimmed stdout.
+   * for the workflow, hoists the stdout parse, and carries the raw's code and
+   * stdout forward, because the write still needs them; `submitVerdict` is the
+   * decision, with both channels carrying that forward context; `encode` folds
+   * the decision into the block reason; `write` blocks with a notify, skips
+   * failed hooks, or accumulates the trimmed stdout.
    */
   const submitDescription = pipe(
     Cell.read<SubmitPhases>(({ hook, input }) => runHookScript(hook, input, cwd, 'UserPromptSubmit')),
     Cell.decode<SubmitPhases>((raw) =>
       Result.succeed({
-        cmd: new InterpretHookCommand({ result: raw, event: 'UserPromptSubmit' }),
+        cmd: new InterpretHookCommand({
+          result: raw,
+          event: 'UserPromptSubmit',
+          parsed: Exit.match(parseHookOutput(raw.stdout), {
+            onFailure: () => Option.none(),
+            onSuccess: Option.some,
+          }),
+        }),
         code: raw.code,
         stdout: raw.stdout,
       })
     ),
-    Cell.decide<SubmitPhases>(submitVerdictAdapter),
+    Cell.decide<SubmitPhases>(submitVerdict),
     Cell.encode<SubmitPhases>((outcome) =>
       Result.match(outcome, {
         onFailure: ({ code, stdout }) => ({ blockReason: undefined, code, stdout }),

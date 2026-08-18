@@ -1,13 +1,20 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { matchesMatcher, matchesPermissionRule } from '@systemfsoftware/omp-utils'
-import { Context, Effect, Match, Option, pipe, Result, Schema as S, type Scope } from 'effect'
+import { Context, Effect, Exit, Match, Option, pipe, Result, Schema as S, type Scope } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
-import { Blocked, Continue, Warning } from '../HookDispatcher.schema.js'
-import type { HookDecision, HookOutcome, HookResult } from '../HookDispatcher.schema.js'
+import { Blocked, Continue } from '../HookDispatcher.schema.js'
+import type { HookOutcome, HookResult } from '../HookDispatcher.schema.js'
 import { analyzeSettings } from '../HookSettings.js'
+import { parseHookOutput } from '../HookOutput.js'
 import type { CommandHook, HookEntry } from '../HookSettings.schema.js'
-import { type HookVerdictError, InterpretHookCommand, interpretHookResult } from '../HookVerdict.workflow.js'
+import {
+  type HookDecision,
+  type SubmitHookVerdictError,
+  InterpretHookCommand,
+  submitVerdict,
+  Warning,
+} from '../HookVerdict.workflow.js'
 import type { HooksForEventResult } from './HookFeedback.js'
 import { asToolInput, EMPTY_TOOL_INPUT } from './HookPayload.js'
 import type { HookSession } from './HookSession.js'
@@ -32,9 +39,9 @@ const AGGREGATE_CEILING_MS = 26_000
 interface HookVerdictPhases extends Cell.Phases {
   readonly command: { readonly hook: CommandHook; readonly input: Record<string, unknown> }
   readonly raw: HookResult
-  readonly decoded: InterpretHookCommand
-  readonly decision: HookDecision
-  readonly decisionError: HookVerdictError
+  readonly decoded: { readonly cmd: InterpretHookCommand; readonly code: number; readonly stdout: string }
+  readonly decision: { readonly verdict: HookDecision; readonly code: number; readonly stdout: string }
+  readonly decisionError: SubmitHookVerdictError
   readonly output: HookOutcome
   readonly response: Option.Option<HooksForEventResult>
   readonly decodeError: never
@@ -60,24 +67,37 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
 
   /**
    * The verdict chain, as a description applied per hook iteration. The read
-   * is the hook script run; `decode` wraps the raw result for the workflow;
-   * `interpretHookResult` is the decision; `encode` folds the decision's two
-   * channels into the outcome the site acts on; `write` sequences the loop —
-   * a block returns the terminal result, a continue accumulates state. The
-   * write's `currentInput` and `warning` are the same mutable loop state the
-   * shell updated, so each iteration's command carries the input the previous
-   * write produced.
+   * is the hook script run; `decode` wraps the raw result for the workflow and
+   * threads the raw's code and stdout forward; `submitVerdict` is the decision;
+   * `encode` folds the decision's two channels into the outcome the site acts
+   * on; `write` sequences the loop — a block returns the terminal result, a
+   * continue accumulates state. The write's `currentInput` and `warning` are
+   * the same mutable loop state the shell updated, so each iteration's command
+   * carries the input the previous write produced.
    */
   const hookVerdictDescription = pipe(
     Cell.read<HookVerdictPhases>(({ hook, input }) => runHookScript(hook, input, cwd, event)),
-    Cell.decode<HookVerdictPhases>((raw) => Result.succeed(new InterpretHookCommand({ result: raw, event }))),
-    Cell.decide<HookVerdictPhases>(interpretHookResult),
+    Cell.decode<HookVerdictPhases>((raw) =>
+      Result.succeed({
+        cmd: new InterpretHookCommand({
+          result: raw,
+          event,
+          parsed: Exit.match(parseHookOutput(raw.stdout), {
+            onFailure: () => Option.none(),
+            onSuccess: Option.some,
+          }),
+        }),
+        code: raw.code,
+        stdout: raw.stdout,
+      })
+    ),
+    Cell.decide<HookVerdictPhases>(submitVerdict),
     Cell.encode<HookVerdictPhases>((outcome) =>
       Match.value(
         Result.match(outcome, {
-          onFailure: (err) =>
-            new Warning({ message: `Hook exited 0 but produced invalid JSON: ${err.raw.slice(0, 200)}` }),
-          onSuccess: (d) => d,
+          onFailure: ({ error }) =>
+            new Warning({ message: `Hook exited 0 but produced invalid JSON: ${error.raw.slice(0, 200)}` }),
+          onSuccess: ({ verdict }) => verdict,
         }),
       ).pipe(
         Match.tag('Block', (d) => new Blocked({ reason: d.reason })),

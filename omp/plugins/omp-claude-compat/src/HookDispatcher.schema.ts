@@ -1,19 +1,14 @@
 import { Schema as S } from 'effect'
 
+/**
+ * The hook run's raw wire: what the child process returned and what the run
+ * outcome claims. The verdict a run produces (`Block`/`Allow`/`Warning`,
+ * `HookDecision`) belongs to the verdict decision and lives beside it in
+ * `HookVerdict.workflow.ts` — the reader imports the workflow.
+ */
+
 export const HookResult = S.Struct({ code: S.Number, stdout: S.String, stderr: S.String })
 export type HookResult = S.Schema.Type<typeof HookResult>
-
-export class Block extends S.TaggedClass<Block>()('Block', { reason: S.String }) {}
-
-export class Allow extends S.TaggedClass<Allow>()(
-  'Allow',
-  { updatedInput: S.optional(S.Record(S.String, S.Unknown)) },
-) {}
-
-export class Warning extends S.TaggedClass<Warning>()('Warning', { message: S.String }) {}
-
-export const HookDecision = S.Union([Block, Allow, Warning])
-export type HookDecision = S.Schema.Type<typeof HookDecision>
 
 export class Blocked extends S.TaggedClass<Blocked>()('Blocked', { reason: S.String }) {}
 

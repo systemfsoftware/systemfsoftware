@@ -1,7 +1,19 @@
 import { describe, it } from '@effect/vitest'
-import { Result } from 'effect'
+import { Exit, Option, Result } from 'effect'
 import { FastCheck as fc } from 'effect/testing'
-import { InterpretHookCommand, interpretHookResult } from '../HookVerdict.workflow.js'
+import type { ParsedHookOutput } from '../HookOutput.schema.js'
+import { parseHookOutput } from '../HookOutput.js'
+import { InterpretHookCommand, interpretHookResult, submitVerdict } from '../HookVerdict.workflow.js'
+
+/**
+ * The decode exactly as the shell supplies it: `None` when the stdout never
+ * decoded to a decision object. Mirrors the `decode` phase of the hook chain.
+ */
+const parsedOf = (stdout: string): Option.Option<ParsedHookOutput> =>
+  Exit.match(parseHookOutput(stdout), {
+    onFailure: () => Option.none(),
+    onSuccess: Option.some,
+  })
 
 const event = fc.constantFrom('PreToolUse', 'PostToolUse', 'SessionStart', 'UserPromptSubmit', 'SessionEnd')
 
@@ -36,7 +48,7 @@ describe('interpretHookResult (PBT)', () => {
     [blankStdout, event],
     ([stdout, ev]) => {
       const verdict = interpretHookResult(
-        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
+        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev, parsed: parsedOf(stdout) }),
       )
       return Result.isSuccess(verdict) && verdict.success._tag === 'Allow'
     },
@@ -47,7 +59,7 @@ describe('interpretHookResult (PBT)', () => {
     [plainStdout, event],
     ([stdout, ev]) => {
       const verdict = interpretHookResult(
-        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
+        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev, parsed: parsedOf(stdout) }),
       )
       return Result.isSuccess(verdict) && verdict.success._tag === 'Allow'
     },
@@ -58,7 +70,7 @@ describe('interpretHookResult (PBT)', () => {
     [malformedJson, event],
     ([stdout, ev]) => {
       const verdict = interpretHookResult(
-        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
+        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev, parsed: parsedOf(stdout) }),
       )
       return Result.isFailure(verdict) && verdict.failure.raw === stdout
     },
@@ -69,7 +81,7 @@ describe('interpretHookResult (PBT)', () => {
     [stderrText, event],
     ([stderr, ev]) => {
       const verdict = interpretHookResult(
-        new InterpretHookCommand({ result: { code: 2, stdout: '', stderr }, event: ev }),
+        new InterpretHookCommand({ result: { code: 2, stdout: '', stderr }, event: ev, parsed: parsedOf('') }),
       )
       return Result.isSuccess(verdict) && verdict.success._tag === 'Block' && verdict.success.reason === stderr.trim()
     },
@@ -80,7 +92,11 @@ describe('interpretHookResult (PBT)', () => {
     [fc.oneof(blankStdout, plainStdout, malformedJson), event],
     ([stdout, ev]) => {
       const verdict = interpretHookResult(
-        new InterpretHookCommand({ result: { code: 2, stdout, stderr: 'denied' }, event: ev }),
+        new InterpretHookCommand({
+          result: { code: 2, stdout, stderr: 'denied' },
+          event: ev,
+          parsed: parsedOf(stdout),
+        }),
       )
       return Result.isSuccess(verdict) && verdict.success._tag === 'Block' && verdict.success.reason === 'denied'
     },
@@ -94,7 +110,7 @@ describe('interpretHookResult (PBT)', () => {
         hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: reason },
       })
       const verdict = interpretHookResult(
-        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
+        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev, parsed: parsedOf(stdout) }),
       )
       return Result.isSuccess(verdict) && verdict.success._tag === 'Block' && verdict.success.reason === reason
     },
@@ -104,7 +120,9 @@ describe('interpretHookResult (PBT)', () => {
     '∀code_NonStandardExitWithStderr_→Warning',
     [nonStandardExit, stderrText, event],
     ([code, stderr, ev]) => {
-      const verdict = interpretHookResult(new InterpretHookCommand({ result: { code, stdout: '', stderr }, event: ev }))
+      const verdict = interpretHookResult(
+        new InterpretHookCommand({ result: { code, stdout: '', stderr }, event: ev, parsed: parsedOf('') }),
+      )
       return Result.isSuccess(verdict) && verdict.success._tag === 'Warning' &&
         verdict.success.message === stderr.trim()
     },
@@ -114,7 +132,9 @@ describe('interpretHookResult (PBT)', () => {
     '∀code_NonStandardExitWithoutStderr_→Allow',
     [nonStandardExit, blankStdout, event],
     ([code, stderr, ev]) => {
-      const verdict = interpretHookResult(new InterpretHookCommand({ result: { code, stdout: '', stderr }, event: ev }))
+      const verdict = interpretHookResult(
+        new InterpretHookCommand({ result: { code, stdout: '', stderr }, event: ev, parsed: parsedOf('') }),
+      )
       return Result.isSuccess(verdict) && verdict.success._tag === 'Allow'
     },
   )
@@ -125,7 +145,7 @@ describe('interpretHookResult (PBT)', () => {
     ([value, ev]) => {
       const stdout = JSON.stringify({ hookSpecificOutput: { updatedInput: { tool_input: { content: value } } } })
       const verdict = interpretHookResult(
-        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
+        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev, parsed: parsedOf(stdout) }),
       )
       return Result.isSuccess(verdict) &&
         verdict.success._tag === 'Allow' &&
@@ -138,7 +158,9 @@ describe('interpretHookResult (PBT)', () => {
     [nonStandardExit, stderrText, event],
     ([code, value, ev]) => {
       const stdout = JSON.stringify({ hookSpecificOutput: { updatedInput: { tool_input: { content: value } } } })
-      const verdict = interpretHookResult(new InterpretHookCommand({ result: { code, stdout, stderr: '' }, event: ev }))
+      const verdict = interpretHookResult(
+        new InterpretHookCommand({ result: { code, stdout, stderr: '' }, event: ev, parsed: parsedOf(stdout) }),
+      )
       return Result.isSuccess(verdict) && verdict.success._tag === 'Allow' && verdict.success.updatedInput === undefined
     },
   )
@@ -151,7 +173,7 @@ describe('interpretHookResult (PBT)', () => {
         hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: value, updatedInput: { a: '1' } },
       })
       const verdict = interpretHookResult(
-        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
+        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev, parsed: parsedOf(stdout) }),
       )
       return Result.isSuccess(verdict) && verdict.success._tag === 'Block'
     },
@@ -165,7 +187,7 @@ describe('interpretHookResult (PBT)', () => {
         hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: reason },
       })
       const verdict = interpretHookResult(
-        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev }),
+        new InterpretHookCommand({ result: { code: 0, stdout, stderr: '' }, event: ev, parsed: parsedOf(stdout) }),
       )
       return Result.isSuccess(verdict) && verdict.success._tag === 'Block' && verdict.success.reason === reason
     },
@@ -179,6 +201,7 @@ describe('interpretHookResult (PBT)', () => {
         new InterpretHookCommand({
           result: { code: 0, stdout: JSON.stringify({ decision: 'block', reason }), stderr: '' },
           event: ev,
+          parsed: parsedOf(JSON.stringify({ decision: 'block', reason })),
         }),
       )
       return Result.isSuccess(verdict) && verdict.success._tag === 'Block' && verdict.success.reason === reason
@@ -197,6 +220,7 @@ describe('interpretHookResult (PBT)', () => {
             stderr: '',
           },
           event: ev,
+          parsed: parsedOf(JSON.stringify({ hookSpecificOutput: { permissionDecision: 'deny' } })),
         }),
       )
       return Result.isSuccess(verdict) &&
@@ -213,11 +237,56 @@ describe('interpretHookResult (PBT)', () => {
         new InterpretHookCommand({
           result: { code: 0, stdout: JSON.stringify({ decision: 'block' }), stderr: '' },
           event: ev,
+          parsed: parsedOf(JSON.stringify({ decision: 'block' })),
         }),
       )
       return Result.isSuccess(verdict) &&
         verdict.success._tag === 'Block' &&
         verdict.success.reason === `Blocked by ${ev} hook`
+    },
+  )
+})
+
+describe('submitVerdict (PBT)', () => {
+  /**
+   * The merged make's contract with the write: the raw's code and stdout ride
+   * the success channel of the verdict so the write can still act on them.
+   */
+  it.prop(
+    '∀cs_SubmitVerdict_≡Context',
+    [fc.integer(), fc.string()],
+    ([code, stdout]) => {
+      const cmd = new InterpretHookCommand({
+        result: { code: 0, stdout: '', stderr: '' },
+        event: 'UserPromptSubmit',
+        parsed: parsedOf(''),
+      })
+      const result = submitVerdict({ cmd, code, stdout })
+      return Result.isSuccess(result) &&
+        result.success.code === code &&
+        result.success.stdout === stdout
+    },
+  )
+
+  /**
+   * The same guarantee on the failure channel: a malformed decision reaches the
+   * write as the verdict error plus the raw's code and stdout, so the write can
+   * feature-skip without losing the raw.
+   */
+  it.prop(
+    '∀cs_MalformedDecide_→FailureCarriesContext',
+    [fc.integer(), fc.string()],
+    ([code, stdout]) => {
+      const cmd = new InterpretHookCommand({
+        result: { code: 0, stdout: '{', stderr: '' },
+        event: 'UserPromptSubmit',
+        parsed: parsedOf('{'),
+      })
+      const result = submitVerdict({ cmd, code, stdout })
+      return Result.isFailure(result) &&
+        result.failure.error.raw === '{' &&
+        result.failure.code === code &&
+        result.failure.stdout === stdout
     },
   )
 })

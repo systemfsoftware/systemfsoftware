@@ -1,6 +1,6 @@
 import { Schema } from 'effect'
 import { MAX_CHILDREN_CEILING } from '../SupervisorDynamic.js'
-import { failedIndexAddressesAChild } from './RestartDecision.js'
+import { failedIndexAddressesAChild } from './RestartDecision.workflow.js'
 
 export const RestartStrategy = Schema.Literals(['one_for_one', 'one_for_all', 'rest_for_one'])
 export type RestartStrategy = typeof RestartStrategy.Type

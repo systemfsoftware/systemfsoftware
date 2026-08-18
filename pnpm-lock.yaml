@@ -499,6 +499,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../effect-gherkin-spec
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../../effect-schema-law
