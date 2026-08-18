@@ -1,6 +1,5 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { SCHEMA_MODULE_SOURCE } from './schema-declaration-location.config.js'
 import {
   basenameOf,
   isSchemaDeclaration,
@@ -71,31 +70,18 @@ export const schemaFileExportsSchemasOnly = defineRule({
   create(context: Context) {
     const basename = basenameOf(context.filename)
     if (!basename.endsWith(SCHEMA_FILE_SUFFIX)) return {}
+    const getScope = context.sourceCode.getScope
     return {
       Program(node: ESTree.Program) {
-        // Pass 1 — every local spelling of the Schema vocabulary, plus the local names
-        // that arrived through an import. Two passes are needed because an `import` may
-        // legally follow the statements that use it (same discipline as the sibling).
-        const locals = new Set<string>()
+        // Pass 1 — the local names that arrived through an import, so an
+        // `export { x }` of an imported binding reads as the re-export it is.
         const importedBindings = new Set<string>()
         for (const statement of node.body) {
           if (statement.type !== 'ImportDeclaration') continue
-          const source = statement.source.value
-          const isSchemaVocabulary = source === 'effect' || source === SCHEMA_MODULE_SOURCE
           for (const specifier of statement.specifiers) {
             if (specifier.type === 'ImportNamespaceSpecifier') {
-              // Only a namespace import of the Schema submodule binds the vocabulary;
-              // `import * as X from 'effect'` binds the whole library surface.
-              if (source === SCHEMA_MODULE_SOURCE) locals.add(specifier.local.name)
               importedBindings.add(specifier.local.name)
             } else if (specifier.type === 'ImportSpecifier') {
-              if (
-                isSchemaVocabulary &&
-                specifier.imported.type === 'Identifier' &&
-                specifier.imported.name === 'Schema'
-              ) {
-                locals.add(specifier.local.name)
-              }
               importedBindings.add(specifier.local.name)
             } else if (specifier.type === 'ImportDefaultSpecifier') {
               importedBindings.add(specifier.local.name)
@@ -113,7 +99,7 @@ export const schemaFileExportsSchemasOnly = defineRule({
               if (declaration.id !== null) {
                 bindings.set(
                   declaration.id.name,
-                  isSchemaDeclaration(declaration.superClass, locals) ? 'schema' : 'value',
+                  isSchemaDeclaration(declaration.superClass, getScope) ? 'schema' : 'value',
                 )
               }
               break
@@ -128,7 +114,7 @@ export const schemaFileExportsSchemasOnly = defineRule({
                   // classifying the binding and reporting a legitimate alias of it.
                   bindings.set(
                     declarator.id.name,
-                    isSchemaDeclaration(declarator.init, locals) ||
+                    isSchemaDeclaration(declarator.init, getScope) ||
                       annotationNamesSchema(declarator.id.typeAnnotation)
                       ? 'schema'
                       : 'value',
@@ -165,10 +151,11 @@ export const schemaFileExportsSchemasOnly = defineRule({
           if (init !== null && init.type === 'Identifier' && bindings.get(init.name) === 'schema') {
             return 'schema'
           }
-          if (isSchemaDeclaration(init, locals)) return 'schema'
-          const member = schemaMemberOf(init, locals)
+          if (isSchemaDeclaration(init, getScope)) return 'schema'
+          const member = schemaMemberOf(init, getScope)
           if (
             member !== null &&
+            member.type === 'MemberExpression' &&
             member.property.type === 'Identifier' &&
             SCHEMA_USE_MEMBERS[member.property.name] === true
           ) {
@@ -218,7 +205,7 @@ export const schemaFileExportsSchemasOnly = defineRule({
         const judgeDeclaration = (declaration: ESTree.Node, nameFallback: string): void => {
           switch (declaration.type) {
             case 'ClassDeclaration': {
-              if (!isSchemaDeclaration(declaration.superClass, locals)) {
+              if (!isSchemaDeclaration(declaration.superClass, getScope)) {
                 reportExport(declaration.id ?? declaration, 'other', declaration.id?.name ?? nameFallback)
               }
               break
