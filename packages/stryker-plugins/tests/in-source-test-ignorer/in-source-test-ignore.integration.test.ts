@@ -8,7 +8,7 @@ import {
   isInSourceTestGuard,
 } from '../../src/in-source-test-ignorer/index.js'
 
-import { binaryOf, guardOf, identifier, importMetaMember, metaOf } from '../__fixtures__/in-source-test-ast.fixtures.js'
+import { binaryOf, guardOf, identifier, importMetaMember, metaOf } from '../__fixtures__/InSourceTestAst.fixtures.js'
 
 const Feature = makeFeature({ it, layer })
 

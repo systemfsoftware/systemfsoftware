@@ -20,7 +20,7 @@ import {
   memberOf,
   namedProperty,
   objectOf,
-} from '../__fixtures__/effect-schema-ast.fixtures.js'
+} from '../__fixtures__/EffectSchemaAst.fixtures.js'
 
 const Feature = makeFeature({ it, layer })
 

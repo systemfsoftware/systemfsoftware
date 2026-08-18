@@ -11,7 +11,7 @@ import {
   strykerPlugins,
 } from '../../src/workflow-make-ignorer/index.js'
 
-import { taggedCall } from '../__fixtures__/effect-schema-ast.fixtures.js'
+import { taggedCall } from '../__fixtures__/EffectSchemaAst.fixtures.js'
 import {
   callOf,
   constBindingOf,
@@ -25,7 +25,7 @@ import {
   workflowMakeCallOf,
   workflowNamedImport,
   workflowNamespaceImport,
-} from '../__fixtures__/workflow-make-ast.fixtures.js'
+} from '../__fixtures__/WorkflowMakeAst.fixtures.js'
 
 const Feature = makeFeature({ it, layer })
 

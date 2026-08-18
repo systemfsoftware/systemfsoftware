@@ -1,3 +1,3 @@
-export * from './check-result.js'
-export * from './check-status.js'
-export * from './checker.js'
+export * from './Checker.js'
+export * from './CheckResult.js'
+export * from './CheckStatus.js'

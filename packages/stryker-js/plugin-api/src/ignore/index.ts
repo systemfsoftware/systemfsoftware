@@ -1,1 +1,1 @@
-export * from './ignorer.js'
+export * from './Ignorer.js'

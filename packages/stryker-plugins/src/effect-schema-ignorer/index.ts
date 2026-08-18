@@ -10,7 +10,7 @@ import {
   SYMBOL_DESCRIPTION_IGNORED,
   TAGGED_FIELDS_IGNORED,
   TAGGED_TAG_IGNORED,
-} from './schema-declaration-ignore.kernel.js'
+} from './SchemaDeclarationIgnore.js'
 
 interface IgnorerPath {
   readonly node: unknown
