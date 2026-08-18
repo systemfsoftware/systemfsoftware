@@ -34,27 +34,6 @@ export const SCHEMA_SUFFIX = '.schema.test.ts' as const
  */
 export const WORKFLOW_TEST_BASENAME = /^[^.]+\.workflow\.property\.test\.ts$/
 
-/**
- * The impure half of the sandwich, named by its role. The role rides in the
- * module name (`RunHookScriptExecutor.ts`), never a dotted suffix: only
- * `.schema.ts`, `.workflow.ts` and the test suffixes are dotted, so a shell
- * announces itself the way `AgentExecutor.ts` does. Matched against the stem's
- * tail, so `WithLeaderLockExecutor` is a shell and `LeaderLock` is not.
- */
-export const SHELL_CELL_SUFFIXES: readonly string[] = [
-  'Executor',
-  'Handler',
-  'Adapter',
-  'Store',
-  'Middleware',
-]
-
-export const SHELL_ENTRY_BASENAMES: ReadonlySet<string> = new Set([
-  'main',
-  'mod',
-  'index',
-])
-
 export const DOUBLE_BASENAME_PATTERN: RegExp = /(?:^|[^a-z])(?:fake|stub|mock|noop)(?:[^a-z]|$)/
 
 export const GHERKIN_PACKAGE = '@systemfsoftware/effect-gherkin-spec' as const

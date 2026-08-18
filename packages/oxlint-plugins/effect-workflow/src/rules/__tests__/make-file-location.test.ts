@@ -65,6 +65,11 @@ ruleTester.run('make-file-location', makeFileLocation, {
       code: `${IMPORT}\nexport const decide = Workflow.make((input: number) => input)`,
       filename: '/repo/pkg/tests/__fixtures__/f.workflow.ts',
     },
+    {
+      name: 'Should_Pass_When_AnAliasedMakeConstructsOnceInAWorkflowFile',
+      code: `${IMPORT}\nconst W = Workflow\nexport const decide = W.make((input: number) => input)`,
+      filename: '/repo/pkg/src/decide.workflow.ts',
+    },
   ],
   invalid: [
     {
@@ -106,6 +111,34 @@ ruleTester.run('make-file-location', makeFileLocation, {
       code: `import * as Workflow from './Workflow.js'\nexport const decide = Workflow.make((input: number) => input)`,
       filename: '/repo/packages/effect-cell-types/src/Cell.ts',
       errors: [outsideError('Cell.ts')],
+    },
+    {
+      // An alias of the workflow import is the same construction: the location rule
+      // previously pattern-matched the callee object to the import binding itself,
+      // so `const W = Workflow; W.make(...)` walked past in any filename.
+      name: 'Should_Report_When_AnAliasedConstructionLivesInAnExecutor',
+      code: `${IMPORT}\nconst W = Workflow\nexport const adapter = W.make((input: number) => input)`,
+      filename: '/repo/pkg/src/run.executor.ts',
+      errors: [outsideError('run.executor.ts')],
+    },
+    {
+      name: 'Should_Report_When_AComputedConstructionLivesInAnExecutor',
+      code: `${IMPORT}\nexport const adapter = Workflow['make']((input: number) => input)`,
+      filename: '/repo/pkg/src/run.executor.ts',
+      errors: [outsideError('run.executor.ts')],
+    },
+    {
+      name: 'Should_Report_When_ADestructuredConstructionLivesInAnExecutor',
+      code: `${IMPORT}\nconst { make } = Workflow\nexport const adapter = make((input: number) => input)`,
+      filename: '/repo/pkg/src/run.executor.ts',
+      errors: [outsideError('run.executor.ts')],
+    },
+    {
+      name: 'Should_Report_When_AWorkflowFileConstructsTwiceThroughAliases',
+      code:
+        `${IMPORT}\nconst W = Workflow\nexport const a = W.make((input: number) => input)\nexport const b = Workflow['make']((input: number) => input)`,
+      filename: '/repo/pkg/src/decide.workflow.ts',
+      errors: [secondError('decide.workflow.ts')],
     },
   ],
 })

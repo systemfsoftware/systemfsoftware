@@ -1,8 +1,8 @@
 import {
-  NO_SHELL_IMPORT_ACTUAL,
-  NO_SHELL_IMPORT_EXPECTED,
-  NO_SHELL_IMPORT_FIX,
-  NO_SHELL_IMPORT_NAME,
+  NO_SUBJECT_IMPORT_ACTUAL,
+  NO_SUBJECT_IMPORT_EXPECTED,
+  NO_SUBJECT_IMPORT_FIX,
+  NO_SUBJECT_IMPORT_NAME,
 } from '../behaviour-exercises-use-case.config.js'
 import { behaviourExercisesUseCase } from '../behaviour-exercises-use-case.js'
 import { createRuleTester } from './_tester.js'
@@ -16,204 +16,180 @@ import { makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 const Feature = makeFeature({ it, layer })
 `
 
+const errors = [
+  {
+    messageId: 'noSubjectImport',
+    data: {
+      name: NO_SUBJECT_IMPORT_NAME,
+      expected: NO_SUBJECT_IMPORT_EXPECTED,
+      actual: NO_SUBJECT_IMPORT_ACTUAL,
+      fix: NO_SUBJECT_IMPORT_FIX,
+    },
+  },
+]
+
 ruleTester.run('behaviour-exercises-use-case', behaviourExercisesUseCase, {
   valid: [
     {
-      name: 'Should_Allow_IntegrationTest_When_ItImportsAnExecutor',
+      // The reached module's role is not the rule's business - any package
+      // module satisfies it, whatever the file is called.
+      name: 'Should_Allow_IntegrationTest_When_ItImportsAPackageModule',
       code: `${FEATURE_IMPORTS}
 import { hookDispatcher } from '../src/HookDispatcherExecutor.js'
 
 Feature('x', () => {})
 `,
-      filename: '/repo/pkg/__tests__/hook.integration.test.ts',
+      filename: '/repo/pkg/tests/hook.integration.test.ts',
     },
     {
-      name: 'Should_Allow_IntegrationTest_When_ItImportsAHandler',
+      name: 'Should_Allow_IntegrationTest_When_ItImportsAPlainlyNamedCell',
       code: `${FEATURE_IMPORTS}
-import { renderPrompt } from '../src/RenderHandler.js'
+import { decide } from '../src/RestartDecision.js'
 
 Feature('x', () => {})
 `,
-      filename: '/repo/pkg/__tests__/render.integration.test.ts',
+      filename: '/repo/pkg/tests/restart.integration.test.ts',
     },
     {
-      name: 'Should_Allow_IntegrationTest_When_ItImportsAnAdapter',
+      name: 'Should_Allow_IntegrationTest_When_ItImportsThePackageEntry',
       code: `${FEATURE_IMPORTS}
-import { fsLayer } from '../src/FsAdapter.js'
+import { poll } from '../src/mod.js'
 
 Feature('x', () => {})
 `,
-      filename: '/repo/pkg/__tests__/fs.integration.test.ts',
+      filename: '/repo/pkg/tests/poll.integration.test.ts',
     },
     {
-      name: 'Should_Allow_IntegrationTest_When_ItImportsAStore',
+      name: 'Should_Allow_IntegrationTest_When_ItImportsANonFoundationPackage',
       code: `${FEATURE_IMPORTS}
-import { openKv } from '../src/ConfigStore.js'
+import { NodeFileSystem } from '@effect/platform-node'
 
 Feature('x', () => {})
 `,
-      filename: '/repo/pkg/__tests__/store.integration.test.ts',
+      filename: '/repo/pkg/tests/fs.integration.test.ts',
     },
     {
-      name: 'Should_Allow_IntegrationTest_When_ItImportsAMiddleware',
+      // A dynamic import is a reach into the package just like a static one.
+      name: 'Should_Allow_IntegrationTest_When_TheOnlyRouteToThePackageIsADynamicImport',
       code: `${FEATURE_IMPORTS}
-import { rateLimit } from '../src/RateLimitMiddleware.js'
+Feature('x', async () => {
+  await import('../src/hookDispatcher.js')
+})
+`,
+      filename: '/repo/pkg/tests/hook.integration.test.ts',
+    },
+    {
+      // A side-effect import executes the module it names, so it genuinely
+      // reaches the package - whatever the package's top level does counts.
+      name: 'Should_Allow_IntegrationTest_When_TheOnlySubjectReachIsASideEffectImport',
+      code: `${FEATURE_IMPORTS}
+import '../src/mod.js'
 
 Feature('x', () => {})
 `,
-      filename: '/repo/pkg/__tests__/rate.integration.test.ts',
+      filename: '/repo/pkg/tests/poll.integration.test.ts',
     },
     {
-      name: 'Should_Allow_IntegrationTest_When_ItImportsAHandler',
+      // An empty specifier list is the same side-effect import, spelled with
+      // braces: the module still executes.
+      name: 'Should_Allow_IntegrationTest_When_TheOnlySubjectReachIsAnEmptyNamedImport',
       code: `${FEATURE_IMPORTS}
-import { renderPrompt } from '../src/RenderHandler.tsx'
+import {} from '../src/mod.js'
 
 Feature('x', () => {})
 `,
-      filename: '/repo/pkg/__tests__/render.integration.test.ts',
+      filename: '/repo/pkg/tests/poll.integration.test.ts',
     },
     {
-      name: 'Should_Allow_IntegrationTest_When_ItImportsThePackageMain',
+      // Deliberately unclosable: module existence is not observable from one
+      // file (OX-TS2), so a relative import whose path names nothing on disk is
+      // indistinguishable from a real side-effect import and satisfies the rule
+      // the same way. The report copy says what the rule can and cannot see.
+      name: 'Should_Allow_IntegrationTest_When_TheOnlySubjectImportMayNameANonexistentModule',
       code: `${FEATURE_IMPORTS}
-import { program } from '../src/main.ts'
+import './ZzDoesNotExist.js'
 
 Feature('x', () => {})
 `,
-      filename: '/repo/pkg/__tests__/entry.integration.test.ts',
+      filename: '/repo/pkg/tests/nothing.integration.test.ts',
     },
     {
-      name: 'Should_Allow_IntegrationTest_When_ItImportsThePackageIndex',
-      code: `${FEATURE_IMPORTS}
-import { mod } from '../src/index.js'
-
-Feature('x', () => {})
-`,
-      filename: '/repo/pkg/__tests__/entry.integration.test.ts',
-    },
-    {
-      name: 'Should_Allow_IntegrationTest_When_ItImportsABarePackageOtherThanFoundations',
-      code: `${FEATURE_IMPORTS}
-import { createServer } from 'node:http'
-
-Feature('x', () => {})
-`,
-      filename: '/repo/pkg/__tests__/server.integration.test.ts',
-    },
-    {
-      name: 'Should_Allow_IntegrationTest_When_ShellTokenInNonFinalPathSegment',
-      code: `${FEATURE_IMPORTS}
-import { util } from '../src/port/FooExecutor.js'
-
-Feature('x', () => {})
-`,
-      filename: '/repo/pkg/__tests__/port.integration.test.ts',
-    },
-    {
-      name: 'Should_Allow_IntegrationTest_When_BareNonFoundationPackageImported',
-      code: `${FEATURE_IMPORTS}
-import { get } from 'lodash'
-
-Feature('x', () => {})
-`,
-    },
-    {
-      name: 'Should_Allow_UnitTest_When_NotABehaviourTest',
+      // Only *.integration.test.ts carries the obligation.
+      name: 'Should_Ignore_APropertyTest_When_ItImportsOnlyEffect',
       code: `
-import { it } from 'vitest'
-it('plain', () => {})
+import { Effect } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 `,
-      filename: '/repo/pkg/tests/foo.test.ts',
+      filename: '/repo/pkg/src/__tests__/x.workflow.property.test.ts',
     },
   ],
   invalid: [
     {
-      name: 'Should_Report_IntegrationTest_When_ItOnlyImportsGherkinAndEffect',
+      name: 'Should_ReportViolation_When_EveryImportIsScaffolding',
       code: `${FEATURE_IMPORTS}
+import { expect } from 'vitest'
 import { Effect } from 'effect'
 
 Feature('x', () => {})
 `,
-      filename: '/repo/pkg/__tests__/noop.integration.test.ts',
-      errors: [{
-        messageId: 'noShellImport',
-        data: {
-          name: NO_SHELL_IMPORT_NAME,
-          expected: NO_SHELL_IMPORT_EXPECTED,
-          actual: NO_SHELL_IMPORT_ACTUAL,
-          fix: NO_SHELL_IMPORT_FIX,
-        },
-      }],
+      filename: '/repo/pkg/tests/nothing.integration.test.ts',
+      errors,
     },
     {
-      name: 'Should_Report_IntegrationTest_When_ItOnlyImportsVitestAndEffectVitest',
+      // An effect subpath is the same dependency: admitting it would let a file
+      // satisfy the rule by importing an arbitrary and asserting on it.
+      name: 'Should_ReportViolation_When_TheOnlyNonRunnerImportIsAnEffectSubpath',
       code: `${FEATURE_IMPORTS}
-import { expect } from 'vitest'
-import { it as itVitest } from '@effect/vitest'
+import { FastCheck as fc } from 'effect/testing'
+import { Schema } from 'effect/Schema'
 
 Feature('x', () => {})
 `,
-      filename: '/repo/pkg/__tests__/noop.integration.test.ts',
-      errors: [{
-        messageId: 'noShellImport',
-        data: {
-          name: NO_SHELL_IMPORT_NAME,
-          expected: NO_SHELL_IMPORT_EXPECTED,
-          actual: NO_SHELL_IMPORT_ACTUAL,
-          fix: NO_SHELL_IMPORT_FIX,
-        },
-      }],
+      filename: '/repo/pkg/tests/arbitrary.integration.test.ts',
+      errors,
     },
     {
-      name: 'Should_Report_IntegrationTest_When_BareFoundationPackageImported',
-      code: `${FEATURE_IMPORTS}
-import { expect } from 'vitest'
-
-Feature('x', () => {})
-`,
-      filename: '/repo/pkg/__tests__/noop.integration.test.ts',
-      errors: [{
-        messageId: 'noShellImport',
-        data: {
-          name: NO_SHELL_IMPORT_NAME,
-          expected: NO_SHELL_IMPORT_EXPECTED,
-          actual: NO_SHELL_IMPORT_ACTUAL,
-          fix: NO_SHELL_IMPORT_FIX,
-        },
-      }],
-    },
-    {
-      name: 'Should_Report_IntegrationTest_When_ItHasNoImportsAtAll',
+      name: 'Should_ReportViolation_When_TheFileImportsNothingAtAll',
       code: `
-const x = 1
+const Feature = () => {}
+Feature('x', () => {})
 `,
-      filename: '/repo/pkg/__tests__/noop.integration.test.ts',
-      errors: [{
-        messageId: 'noShellImport',
-        data: {
-          name: NO_SHELL_IMPORT_NAME,
-          expected: NO_SHELL_IMPORT_EXPECTED,
-          actual: NO_SHELL_IMPORT_ACTUAL,
-          fix: NO_SHELL_IMPORT_FIX,
-        },
-      }],
+      filename: '/repo/pkg/tests/empty.integration.test.ts',
+      errors,
     },
     {
-      name: 'Should_Report_IntegrationTest_When_RelativeImportIsNotAShell',
+      // `import type` is erased at runtime: it reaches the package's type
+      // surface, never its code, so it cannot satisfy the reach obligation.
+      name: 'Should_ReportViolation_When_TheOnlyNonRunnerImportIsTypeOnly',
       code: `${FEATURE_IMPORTS}
-import { helper } from '../src/util.js'
+import type { X } from '../src/Thing.js'
 
 Feature('x', () => {})
 `,
-      filename: '/repo/pkg/__tests__/util.integration.test.ts',
-      errors: [{
-        messageId: 'noShellImport',
-        data: {
-          name: NO_SHELL_IMPORT_NAME,
-          expected: NO_SHELL_IMPORT_EXPECTED,
-          actual: NO_SHELL_IMPORT_ACTUAL,
-          fix: NO_SHELL_IMPORT_FIX,
-        },
-      }],
+      filename: '/repo/pkg/tests/nothing.integration.test.ts',
+      errors,
+    },
+    {
+      // A Node builtin is part of the environment, not of the package.
+      name: 'Should_ReportViolation_When_TheOnlyNonRunnerImportIsANodeBuiltin',
+      code: `${FEATURE_IMPORTS}
+import { ok } from 'node:assert'
+
+Feature('x', () => {})
+`,
+      filename: '/repo/pkg/tests/nothing.integration.test.ts',
+      errors,
+    },
+    {
+      // Importing the file itself executes the test, not the package.
+      name: 'Should_ReportViolation_When_TheOnlyNonRunnerImportIsTheFileItself',
+      code: `${FEATURE_IMPORTS}
+import './self.integration.test.js'
+
+Feature('x', () => {})
+`,
+      filename: '/repo/pkg/tests/self.integration.test.ts',
+      errors,
     },
   ],
 })

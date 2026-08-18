@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context } from '@oxlint/plugins'
-import { collectMakeBoundaries } from './make-boundary.kernel.js'
+import { collectMakeBoundaries } from './MakeBoundary.js'
 import {
   meta,
   OUTSIDE_ACTUAL,

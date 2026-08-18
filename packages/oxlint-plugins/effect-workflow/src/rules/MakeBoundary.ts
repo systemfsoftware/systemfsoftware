@@ -1,4 +1,5 @@
 import type { Context, ESTree } from '@oxlint/plugins'
+import { originMemberSequence, resolveImportOrigin, type ImportOrigin } from './ImportOrigin.js'
 
 /**
  * The module whose `Workflow` value owns the `make` boundary. Mirrors the
@@ -51,6 +52,7 @@ type MemberExpressionNode = ESTree.Node & {
   readonly type: 'MemberExpression'
   readonly object: ESTree.Node
   readonly property: ESTree.Node
+  readonly computed: boolean
 }
 
 const isNode = (value: unknown): value is ESTree.Node => typeof value === 'object' && value !== null && 'type' in value
@@ -77,8 +79,6 @@ const isVariableDeclarator = (node: ESTree.Node): node is ESTree.VariableDeclara
 
 const isVariableDeclaration = (node: ESTree.Node): node is ESTree.VariableDeclaration =>
   node.type === 'VariableDeclaration'
-
-const isImportDeclaration = (node: ESTree.Node): node is ESTree.ImportDeclaration => node.type === 'ImportDeclaration'
 
 const walk = (
   root: unknown,
@@ -133,24 +133,25 @@ const variableOfReference = (
  */
 const RELATIVE_WORKFLOW_MODULE = /(?:^|\/)Workflow\.js$/
 
-const isWorkflowModuleSpecifier = (source: unknown): boolean =>
-  source === WORKFLOW_SOURCE ||
-  (typeof source === 'string' && source.startsWith('.') && RELATIVE_WORKFLOW_MODULE.test(source))
+const isWorkflowModuleSpecifier = (source: string): boolean =>
+  source === WORKFLOW_SOURCE || (source.startsWith('.') && RELATIVE_WORKFLOW_MODULE.test(source))
 
-const isWorkflowImportDef = (def: DefinitionLike): boolean => {
-  if (def.type !== 'ImportBinding') return false
-  const declaration = def.parent
-  if (
-    declaration === null || !isImportDeclaration(declaration) || !isWorkflowModuleSpecifier(declaration.source.value)
-  ) {
-    return false
-  }
-  const specifier = def.node
-  if (specifier.type === 'ImportSpecifier') {
-    const imported = specifier.imported
-    return imported.type === 'Identifier' && imported.name === WORKFLOW_IMPORT_NAME
-  }
-  return specifier.type === 'ImportNamespaceSpecifier'
+/**
+ * Whether a callee origin denotes a `Workflow.make` construction: the origin
+ * must reach the workflow module and its member sequence must end in `make`.
+ * Two seed shapes count — the sequence starts with the `Workflow` binding
+ * (`Workflow.make`, `const W = Workflow; W.make(...)`, a computed
+ * `Workflow['make']`, a chain of aliases, a member path taken off the value)
+ * or the sequence is exactly the `make` member (a namespace import's member,
+ * a destructured `const { make } = Workflow`, a `const m = Workflow.make`
+ * alias, or a direct `import { make }`). A `make` reached through any other
+ * binding of the same module is not the workflow construction.
+ */
+const isMakeBoundaryOrigin = (origin: ImportOrigin): boolean => {
+  if (!isWorkflowModuleSpecifier(origin.source)) return false
+  const sequence = originMemberSequence(origin)
+  if (sequence[sequence.length - 1] !== MAKE_MEMBER_NAME) return false
+  return sequence[0] === MAKE_MEMBER_NAME || sequence[0] === WORKFLOW_IMPORT_NAME
 }
 
 /**
@@ -182,23 +183,33 @@ const followIdentifier = (
 }
 
 /**
- * Every `Workflow.make(...)` call in the file whose callee object resolves to
- * the module-bound `Workflow` binding — shadow-correct: a local rebinding of
- * the name is not the boundary. The body is the argument function when it is
- * inline or a same-file reference; otherwise `resolvedBody` is `null`.
+ * Every `Workflow.make(...)` call in the file — shadow-correct: a local
+ * rebinding of the name is not the boundary, and an alias that resolves back
+ * to the workflow import is. The callee is judged by its import origin, never
+ * its spelling, so computed members, aliases, destructuring and
+ * bind/apply/call indirections all count. The body is the argument function
+ * when it is inline or a same-file reference; otherwise `resolvedBody` is
+ * `null`.
  */
 export const collectMakeBoundaries = (context: Context): readonly MakeBoundary[] => {
   const boundaries: MakeBoundary[] = []
   const visitorKeys = context.sourceCode.visitorKeys
   walk(context.sourceCode.ast, visitorKeys, (node) => {
-    if (!isCallExpression(node) || !isMemberExpression(node.callee)) return
+    if (!isCallExpression(node)) return
+    const origin = resolveImportOrigin(node.callee, context.sourceCode.getScope)
+    if (origin === null || !isMakeBoundaryOrigin(origin)) return
+    // The construction is the call that INVOKES the make function. A
+    // `make.bind(...)` call is a partial application - its arguments are the
+    // this-bound target, not the decision body; the construction is the later
+    // call of the bound value. `make.call(...)` / `make.apply(...)` invoke
+    // make directly but carry the construction argument one slot later.
     const callee = node.callee
-    if (!isIdentifier(callee.object) || !isIdentifier(callee.property)) return
-    if (callee.property.name !== MAKE_MEMBER_NAME) return
-    const variable = variableOfReference(callee.object, context.sourceCode.getScope)
-    const finalDef = variable === null ? undefined : variable.defs[variable.defs.length - 1]
-    if (finalDef === undefined || !isWorkflowImportDef(finalDef)) return
-    const argument = node.arguments[0]
+    let argument: ESTree.Node | undefined = node.arguments[0]
+    if (isMemberExpression(callee) && !callee.computed && callee.property.type === 'Identifier') {
+      const memberName = callee.property.name
+      if (memberName === 'bind') return
+      if (memberName === 'call' || memberName === 'apply') argument = node.arguments[1]
+    }
     let resolvedBody: MakeBodyKind | null = null
     if (argument !== undefined) {
       if (isArrowFunction(argument) || isFunctionLike(argument)) {
