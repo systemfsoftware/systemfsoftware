@@ -248,6 +248,18 @@
       "outputs": [],
       "cache": true
     },
+    "//#check:umbrella-completeness": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/guards/check-umbrella-completeness.mjs",
+        "$TURBO_ROOT$/packages/**/package.json",
+        "$TURBO_ROOT$/omp/**/package.json",
+        "$TURBO_ROOT$/pnpm-workspace.yaml",
+        "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
+        "!$TURBO_ROOT$/packages/**/sandbox-*/**"
+      ],
+      "outputs": [],
+      "cache": true
+    },
     "//#check:project-references": {
       "inputs": [
         "$TURBO_ROOT$/scripts/guards/check-project-references.mjs",
