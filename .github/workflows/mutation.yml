@@ -61,8 +61,23 @@ jobs:
       package_count: ${{ steps.discover.outputs.package_count }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Changed paths
+        id: changed
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          if [ -z "$base" ] || [[ "$base" =~ ^0+$ ]]; then
+            echo 'changed=[]' >> "$GITHUB_OUTPUT"
+          else
+            git diff --name-only "$base" HEAD \
+              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.stringify(s.split("\n").filter(Boolean))))' \
+              | sed 's/^/changed=/' >> "$GITHUB_OUTPUT"
+          fi
       - id: discover
-        run: node scripts/tools/discover-mutation-targets.mjs --github
+        env:
+          MUTATION_CHANGED_PATHS: ${{ steps.changed.outputs.changed }}
+        run: node scripts/tools/discover-mutation-targets.mjs --github --changed
 
   mutation:
     needs: discover

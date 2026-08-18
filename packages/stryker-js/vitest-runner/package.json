@@ -10,6 +10,9 @@
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "Vitest test-runner plugin for Stryker",
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "@systemfsoftware/source": "./src/index.ts",
@@ -25,6 +28,7 @@
     "clean": "rimraf dist",
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
+    "attw": "attw --pack .",
     "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
@@ -51,6 +55,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",

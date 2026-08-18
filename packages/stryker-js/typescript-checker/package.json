@@ -10,6 +10,10 @@
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "TypeScript checker plugin for Stryker — TS7 native",
   "type": "module",
+  "files": [
+    "dist",
+    "schema"
+  ],
   "exports": {
     ".": {
       "@systemfsoftware/source": "./src/index.ts",
@@ -21,6 +25,7 @@
     "clean": "rimraf dist",
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
+    "attw": "attw --pack .",
     "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
@@ -35,6 +40,7 @@
   },
   "devDependencies": {
     "@std/jsonc": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",

@@ -80,7 +80,20 @@ function assertNoNestedTargets(targets) {
   }
 }
 
-export function discoverMutationTargets(root) {
+/**
+ * The mutation matrix.
+ *
+ * `changedPaths` scopes it to the PR's own footprint:
+ * - `null` (no `--changed` flag) — every candidate, the pre-filter behaviour.
+ * - `[]` — every candidate (a push with no base to diff, e.g. the first
+ *   commit or a dispatch, is treated as "everything may have changed").
+ * - non-empty — only candidates touched by a non-document file. A changed
+ *   path selects the candidate it falls under (`packages/a/src/x.ts` selects
+ *   `packages/a`), and a markdown path selects nothing: docs edits re-run the
+ *   lint/typecheck/test slices through turbo's own inputs, never a mutation
+ *   matrix whose score is a function of `src/` alone.
+ */
+export function discoverMutationTargets(root, changedPaths = null) {
   const lockfile = path.join(root, 'pnpm-lock.yaml')
   if (!fs.existsSync(lockfile)) {
     throw new Error(`No pnpm-lock.yaml at ${root}, so the workspace projects cannot be read.`)
@@ -89,7 +102,10 @@ export function discoverMutationTargets(root) {
     .filter((project) => fs.existsSync(path.join(root, project, STRYKER_CONFIG)))
     .sort()
   assertNoNestedTargets(targets)
-  return targets
+  if (changedPaths === null || changedPaths.length === 0) return targets
+  const touched = (project) =>
+    changedPaths.some((p) => (p === project || p.startsWith(`${project}/`)) && !p.endsWith('.md'))
+  return targets.filter(touched)
 }
 
 // -- selftest --
@@ -220,6 +236,32 @@ function selftest() {
     expectThrows(() => discoverMutationTargets(root), 'No pnpm-lock.yaml at')
   })
 
+  const twoPackages = lockOf(['packages/a', 'packages/b'])
+
+  record('a changed source path keeps only its own package', () => {
+    const root = build('changed-src', twoPackages, ['packages/a', 'packages/b'])
+    expect(
+      discoverMutationTargets(root, ['packages/a/src/kernel.ts']),
+      ['packages/a'],
+      'targets',
+    )
+  })
+
+  record('a changed markdown path keeps nothing', () => {
+    const root = build('changed-doc', twoPackages, ['packages/a', 'packages/b'])
+    expect(discoverMutationTargets(root, ['packages/a/README.md']), [], 'targets')
+  })
+
+  record('a root-level change keeps nothing', () => {
+    const root = build('changed-root', twoPackages, ['packages/a', 'packages/b'])
+    expect(discoverMutationTargets(root, ['turbo.json']), [], 'targets')
+  })
+
+  record('an empty changed list keeps everything', () => {
+    const root = build('changed-empty', twoPackages, ['packages/a', 'packages/b'])
+    expect(discoverMutationTargets(root, []), ['packages/a', 'packages/b'], 'targets')
+  })
+
   fs.rmSync(scratch, { recursive: true, force: true })
 
   for (const line of cases) console.log(line)
@@ -235,7 +277,20 @@ function selftest() {
 if (process.argv.includes('--selftest')) {
   process.exitCode = selftest()
 } else {
-  const targets = discoverMutationTargets(process.cwd())
+  let changedPaths = null
+  if (process.argv.includes('--changed')) {
+    const raw = process.env.MUTATION_CHANGED_PATHS
+    if (raw === undefined) {
+      throw new Error(
+        '--changed needs MUTATION_CHANGED_PATHS (a JSON array of repo-relative changed paths) to be set.',
+      )
+    }
+    changedPaths = JSON.parse(raw)
+    if (!Array.isArray(changedPaths)) {
+      throw new Error(`MUTATION_CHANGED_PATHS must be a JSON array, got: ${raw}`)
+    }
+  }
+  const targets = discoverMutationTargets(process.cwd(), changedPaths)
   const json = JSON.stringify(targets)
   if (process.argv.includes('--github')) {
     const out = process.env.GITHUB_OUTPUT

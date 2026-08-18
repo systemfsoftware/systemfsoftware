@@ -190,4 +190,32 @@ Feature('Analyzing published packages with the installed binary')
         }),
       ),
     )
+
+    scenario(
+      'a .attw.json in the working directory waives the problem it names',
+      Gherkin.Do.pipe(
+        Given('klona 2.0.6 analyzed with no config file present')('before', () =>
+          Effect.gen(function*() {
+            const container = yield* Container
+            yield* container.sh(`rm -f ${fixtureDir('klona@2.0.6')}/.attw.json`)
+            return yield* container.run([fixture('klona@2.0.6')], { cwd: fixtureDir('klona@2.0.6') })
+          })),
+        When('a .attw.json waiving that rule is written beside it')('after', () =>
+          Effect.gen(function*() {
+            const container = yield* Container
+            yield* container.sh(
+              `printf '%s' '{"ignoreRules":["false-cjs"]}' > ${fixtureDir('klona@2.0.6')}/.attw.json`,
+            )
+            return yield* container.run([fixture('klona@2.0.6')], { cwd: fixtureDir('klona@2.0.6') })
+          })),
+        Then('the waiver is applied, so the same package now passes')((s) => {
+          // Red before, green after, on one package: the file is the only change.
+          // A run that ignores the file passes this scenario's first half and
+          // fails its second, which is exactly how the regression presented.
+          expect(s.before.exitCode).not.toBe(0)
+          expect(s.before.stdout).toMatch(/FalseCJS/)
+          expect(s.after.exitCode).toBe(0)
+        }),
+      ),
+    )
   })

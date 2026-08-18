@@ -36,7 +36,8 @@
         "tsconfig.*.json",
         "$TURBO_ROOT$/packages/tsconfig/*.json",
         "$TURBO_ROOT$/packages/tsconfig/bundler/**",
-        "$TURBO_ROOT$/packages/tsconfig/tsc/**"
+        "$TURBO_ROOT$/packages/tsconfig/tsc/**",
+        "!**/*.md"
       ],
       "outputs": [],
       "dependsOn": [
@@ -51,7 +52,11 @@
         "vitest.config.*",
         "src/**/*.test.ts",
         "src/**/*.spec.ts",
-        "$TURBO_ROOT$/packages/vitest-config/lib/**"
+        "$TURBO_ROOT$/packages/vitest-config/lib/**",
+        "!**/README.md",
+        "!**/AGENTS.md",
+        "!**/CHANGELOG.md",
+        "!**/etc/*.api.md"
       ],
       "outputLogs": "errors-only",
       "dependsOn": [
@@ -96,7 +101,8 @@
         "tsconfig.*.json",
         "$TURBO_ROOT$/packages/tsconfig/*.json",
         "$TURBO_ROOT$/packages/tsconfig/bundler/**",
-        "$TURBO_ROOT$/packages/tsconfig/tsc/**"
+        "$TURBO_ROOT$/packages/tsconfig/tsc/**",
+        "!**/*.md"
       ],
       "outputLogs": "errors-only",
       "dependsOn": [
@@ -115,7 +121,8 @@
         "stryker.config.json",
         "vitest.config.ts",
         "vitest.setup.ts",
-        "reports/stryker-incremental.json"
+        "reports/stryker-incremental.json",
+        "!**/*.md"
       ],
       "outputs": [
         "reports/mutation-report.html",
@@ -138,7 +145,8 @@
         "$TURBO_ROOT$/packages/oxlint-config/package.json",
         "$TURBO_ROOT$/packages/tsconfig/*.json",
         "$TURBO_ROOT$/packages/tsconfig/bundler/**",
-        "$TURBO_ROOT$/packages/tsconfig/tsc/**"
+        "$TURBO_ROOT$/packages/tsconfig/tsc/**",
+        "!**/*.md"
       ],
       "outputs": [],
       "dependsOn": [
@@ -160,7 +168,8 @@
         "tsconfig.*.json",
         "$TURBO_ROOT$/packages/tsconfig/*.json",
         "$TURBO_ROOT$/packages/tsconfig/bundler/**",
-        "$TURBO_ROOT$/packages/tsconfig/tsc/**"
+        "$TURBO_ROOT$/packages/tsconfig/tsc/**",
+        "!**/*.md"
       ],
       "outputs": [],
       "env": [
@@ -244,6 +253,18 @@
         "$TURBO_ROOT$/scripts/guards/check-workflow-test-adjacency.mjs",
         "$TURBO_ROOT$/packages/**/src/**/*.workflow.ts",
         "$TURBO_ROOT$/omp/**/src/**/*.workflow.ts"
+      ],
+      "outputs": [],
+      "cache": true
+    },
+    "//#check:umbrella-completeness": {
+      "inputs": [
+        "$TURBO_ROOT$/scripts/guards/check-umbrella-completeness.mjs",
+        "$TURBO_ROOT$/packages/**/package.json",
+        "$TURBO_ROOT$/omp/**/package.json",
+        "$TURBO_ROOT$/pnpm-workspace.yaml",
+        "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
+        "!$TURBO_ROOT$/packages/**/sandbox-*/**"
       ],
       "outputs": [],
       "cache": true

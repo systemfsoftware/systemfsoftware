@@ -10,6 +10,10 @@
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "A source-code fork of @stryker-mutator/core",
   "type": "module",
+  "files": [
+    "dist",
+    "schema"
+  ],
   "publishConfig": {
     "access": "public",
     "exports": {
