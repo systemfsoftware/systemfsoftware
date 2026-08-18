@@ -36,6 +36,20 @@ pnpm oxlint
 
 A class that does not extend one of the sanctioned Effect v4 constructor expressions (`Context.Service`, `Schema.Class`, `Data.TaggedClass`, the Rpc factories, ...) is reported and rejected. No legacy class — and no bare class — survives to review.
 
+A service declaration carries the effect that builds it:
+
+```ts
+class Store extends Context.Service<Store, StoreShape>()('app/Store', {
+  make: Effect.gen(function*() {/* … */}),
+}) {
+  static readonly layer = Layer.effect(this, this.make)
+}
+```
+
+`Effect.Service` is reported wherever it appears — the Effect module exports no `Service` in v4, and `Context` exports `Key`, `Service` and `Reference` but no `Tag`.
+
+Whether a service *should* carry `make` is not linted, and deliberately so. A `Context.Service` with no `make` is a **port**, and a port's own file routinely holds exactly one layer — a stub or a noop — while the real implementations live elsewhere. No rule reading one file can separate that stub from a canonical construction, so a check that fired on "one layer beside a service" would tell a port to promote its stub. Put the construction on the class when the module owns it; that call is a review matter.
+
 For a full setup with every rule enabled at the recommended severity, extend the shared base config:
 
 ```ts

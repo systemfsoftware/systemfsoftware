@@ -1,7 +1,15 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 
-import { CONTEXT_NAMESPACE, EFFECT_CONTEXT_MODULE, GENERIC_TAG, meta } from './no-context-generic-tag.config.js'
+import {
+  ACTUAL,
+  CONTEXT_NAMESPACE,
+  EFFECT_CONTEXT_MODULE,
+  EXPECTED,
+  FIX,
+  GENERIC_TAG,
+  meta,
+} from './no-context-generic-tag.config.js'
 
 export const noContextGenericTag = defineRule({
   meta,
@@ -14,9 +22,9 @@ export const noContextGenericTag = defineRule({
         messageId: 'banned',
         data: {
           name: 'Context.GenericTag',
-          expected: 'Context.Tag',
-          actual: 'Context.GenericTag',
-          fix: 'Replace with Context.Tag from effect',
+          expected: EXPECTED,
+          actual: ACTUAL,
+          fix: FIX,
         },
       })
     }

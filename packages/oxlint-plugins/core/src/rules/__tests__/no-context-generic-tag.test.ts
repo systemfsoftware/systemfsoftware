@@ -1,5 +1,6 @@
 import { RuleTester } from 'oxlint/plugins-dev'
 import * as vitest from 'vitest'
+import { ACTUAL, EXPECTED, FIX } from '../no-context-generic-tag.config.js'
 import { noContextGenericTag } from '../no-context-generic-tag.js'
 
 RuleTester.it = vitest.it
@@ -147,9 +148,9 @@ ruleTester.run('no-context-generic-tag', noContextGenericTag, {
         messageId: 'banned',
         data: {
           name: 'Context.GenericTag',
-          expected: 'Context.Tag',
-          actual: 'Context.GenericTag',
-          fix: 'Replace with Context.Tag from effect',
+          expected: EXPECTED,
+          actual: ACTUAL,
+          fix: FIX,
         },
       }],
     },

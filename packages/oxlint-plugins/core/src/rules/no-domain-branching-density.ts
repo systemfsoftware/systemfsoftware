@@ -2,7 +2,7 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Schema as S } from 'effect'
 
-import { boundariesContaining, collectMakeBoundaries, type MakeBoundary } from './make-boundary.kernel.js'
+import { boundariesContaining, collectMakeBoundaries, type MakeBoundary } from './MakeBoundary.js'
 import { isTestFile, meta, Options } from './no-domain-branching-density.config.js'
 
 export type MessageIds = 'maxComplexity'
