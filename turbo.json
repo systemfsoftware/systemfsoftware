@@ -36,7 +36,8 @@
         "tsconfig.*.json",
         "$TURBO_ROOT$/packages/tsconfig/*.json",
         "$TURBO_ROOT$/packages/tsconfig/bundler/**",
-        "$TURBO_ROOT$/packages/tsconfig/tsc/**"
+        "$TURBO_ROOT$/packages/tsconfig/tsc/**",
+        "!**/*.md"
       ],
       "outputs": [],
       "dependsOn": [
@@ -96,7 +97,8 @@
         "tsconfig.*.json",
         "$TURBO_ROOT$/packages/tsconfig/*.json",
         "$TURBO_ROOT$/packages/tsconfig/bundler/**",
-        "$TURBO_ROOT$/packages/tsconfig/tsc/**"
+        "$TURBO_ROOT$/packages/tsconfig/tsc/**",
+        "!**/*.md"
       ],
       "outputLogs": "errors-only",
       "dependsOn": [
@@ -138,7 +140,8 @@
         "$TURBO_ROOT$/packages/oxlint-config/package.json",
         "$TURBO_ROOT$/packages/tsconfig/*.json",
         "$TURBO_ROOT$/packages/tsconfig/bundler/**",
-        "$TURBO_ROOT$/packages/tsconfig/tsc/**"
+        "$TURBO_ROOT$/packages/tsconfig/tsc/**",
+        "!**/*.md"
       ],
       "outputs": [],
       "dependsOn": [
@@ -160,7 +163,8 @@
         "tsconfig.*.json",
         "$TURBO_ROOT$/packages/tsconfig/*.json",
         "$TURBO_ROOT$/packages/tsconfig/bundler/**",
-        "$TURBO_ROOT$/packages/tsconfig/tsc/**"
+        "$TURBO_ROOT$/packages/tsconfig/tsc/**",
+        "!**/*.md"
       ],
       "outputs": [],
       "env": [
