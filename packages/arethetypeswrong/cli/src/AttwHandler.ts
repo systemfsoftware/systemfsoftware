@@ -1,6 +1,7 @@
 import * as Config from 'effect/Config'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
+import * as Schema from 'effect/Schema'
 import * as Argument from 'effect/unstable/cli/Argument'
 import * as Command from 'effect/unstable/cli/Command'
 import * as Flag from 'effect/unstable/cli/Flag'
@@ -20,9 +21,18 @@ const profileOptions = (): Flag.Flag<typeof CliProfile[number]> =>
     Flag.withDefault('strict' as typeof CliProfile[number]),
   )
 
+/**
+ * The only flag a `.attw.json` is ever written for. Without the fallback config
+ * the file's `ignoreRules` reaches nothing: the config layer is present, but a
+ * flag that never consults a `Config` cannot see it, so a project's ignore list
+ * was read, parsed, and then discarded — the build went red on exactly the
+ * problems the file existed to waive.
+ */
 const ignoreRulesOptions = (): Flag.Flag<Option.Option<readonly string[]>> =>
   Flag.optional(
-    Flag.atLeast<string>(1)(Flag.string('ignore-rules').pipe(Flag.withAlias('ignore-rule'))),
+    Flag.atLeast<string>(1)(Flag.string('ignore-rules').pipe(Flag.withAlias('ignore-rule'))).pipe(
+      Flag.withFallbackConfig(Config.schema(Config.Array(Schema.String), 'ignoreRules')),
+    ),
   )
 
 /**

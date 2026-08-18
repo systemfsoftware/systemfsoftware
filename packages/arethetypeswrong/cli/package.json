@@ -24,6 +24,7 @@
     "prepare": "tsdown",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
+    "attw": "node ./dist/main.mjs --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "test": "vitest run",
     "test:run": "vitest run --coverage",
