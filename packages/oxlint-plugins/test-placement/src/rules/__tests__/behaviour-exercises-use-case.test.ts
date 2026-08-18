@@ -31,6 +31,18 @@ const errors = [
 ruleTester.run('behaviour-exercises-use-case', behaviourExercisesUseCase, {
   valid: [
     {
+      // stryker-js/mutation-run — the forked-worker gate. The defect it exists to
+      // catch lives ONLY in the emitted module layout, so importing `src/` could not
+      // observe it; forking the built entry reaches the package through the artifact
+      // its consumers run.
+      name: 'Should_Pass_When_ABehaviourTestForksTheBuiltEntry',
+      code: `import childProcess from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+const DIST_DIR = fileURLToPath(new URL('../dist/', import.meta.url))
+void childProcess.fork(DIST_DIR)`,
+      filename: '/repo/pkg/tests/worker-bootstrap.integration.test.ts',
+    },
+    {
       // The reached module's role is not the rule's business - any package
       // module satisfies it, whatever the file is called.
       name: 'Should_Allow_IntegrationTest_When_ItImportsAPackageModule',

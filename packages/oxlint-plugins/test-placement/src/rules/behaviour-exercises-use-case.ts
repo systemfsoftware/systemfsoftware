@@ -68,6 +68,12 @@ const hasRuntimeSpecifier = (statement: ESTree.ImportDeclaration): boolean => {
 }
 
 /**
+ * A path segment naming the package's build output. Keyed on the emitted directory
+ * rather than a filename, so a renamed entry is followed automatically.
+ */
+const DIST_SEGMENT = /(?:^|\/)dist\//
+
+/**
  * Reports a behaviour file that reaches no package code at all.
  *
  * This deliberately stops short of the convention it serves. The convention is
@@ -106,6 +112,16 @@ export const behaviourExercisesUseCase = defineRule({
           return
         }
         if (!isFoundationImport(node.source.value)) reached = true
+      },
+      Literal(node: ESTree.StringLiteral) {
+        // The package's own emitted output. Some defects exist ONLY in the built
+        // module layout - a bundler hoisting a worker's self-detecting entry guard
+        // into a shared chunk, so the forked child constructs nothing and exits 0 -
+        // and a test that imported `src/` could not observe them by construction.
+        // Forking or loading `dist/` reaches the package through the artifact its
+        // consumers actually run, which is the strongest reach there is, so it
+        // satisfies the rule the way a source import does.
+        if (typeof node.value === 'string' && DIST_SEGMENT.test(node.value)) reached = true
       },
       'Program:exit'(node: ESTree.Program) {
         if (!isBehaviourTest(basenameOf(context.filename))) return

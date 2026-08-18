@@ -24,8 +24,6 @@ const _default: {
         'no-new-promise-in-effect': Rule;
         'no-new-worker-with-wasm-import': Rule;
         'no-direct-tag-access': Rule;
-        'no-effect-service': Rule;
-        'no-escaping-module-state': Rule;
         'no-either-tag-assertions': Rule;
         'no-domain-branching-density': Rule;
         'no-native-map-in-effect': Rule;
