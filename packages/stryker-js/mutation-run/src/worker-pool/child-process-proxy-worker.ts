@@ -1,26 +1,55 @@
 import path from 'path'
-import { fileURLToPath } from 'url'
 
 import { errorToString } from '@stryker-mutator/util'
 import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import type { Injector, SandboxPluginContext } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Exit, Schema as S } from 'effect'
 import { createInjector } from 'typed-inject'
 
 import { injectionTokens, PluginCreator } from '../plugins/index.js'
 import { PluginLoader } from '../plugins/plugin-loader.js'
 
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { minPriority } from '../logging/priority.js'
 import { provideLogging, provideLoggingClient } from '../logging/provide-logging.js'
 import {
-  CallMessage,
-  InitMessage,
-  ParentMessage,
+  type CallMessage,
+  type InitMessage,
+  type ParentMessage,
   ParentMessageKind,
-  WorkerMessage,
   WorkerMessageKind,
 } from './message-protocol.js'
-import { deserialize, serialize } from './string-utils.js'
+import { ParentMessageSchema, WorkerMessageSchema } from './message-protocol.schema.js'
+import { ProtocolEncodeError, SubjectModuleError } from './subject-module.schema.js'
+
+/**
+ * This half's two directions, built once from the declared schemas. Three
+ * properties matter and each is load-bearing:
+ *
+ * - The JSON boundary belongs to the schema. A hand-written `JSON.stringify`
+ *   step is not schema-aware, so it drops a member the decoder then demands and
+ *   the two halves of one format disagree.
+ * - They return an `Exit`, never throwing. A decode failure on a process
+ *   boundary is an expected outcome, so it is a value this code must answer for
+ *   rather than an exception that leaves the type unmarked.
+ * - They take `unknown`, so the envelope codec performs the only narrowing this
+ *   half needs. A separate `S.Json` check on the payload would guard the same
+ *   bytes twice: `args` and `result` are declared `S.Json`, so these already
+ *   reject anything the wire cannot carry.
+ */
+const decodeWorkerMessage = S.decodeUnknownExit(S.fromJsonString(WorkerMessageSchema))
+const encodeParentMessage = S.encodeUnknownExit(S.fromJsonString(ParentMessageSchema))
+
+/**
+ * The two runtime narrowings this worker cannot derive statically, because both
+ * subjects arrive from a path decided at runtime. They are type guards rather
+ * than schemas on purpose: a `Schema.declare` whose predicate only asks
+ * `typeof x === 'function'` states far more than it decides, and it cannot be
+ * generated, round-tripped or held to any law - the schema law suite refuses it.
+ */
+const isCallableMember = (input: unknown): input is (...args: unknown[]) => unknown => typeof input === 'function'
+
+const isSubjectClass = (input: unknown): input is new() => Record<string, unknown> => typeof input === 'function'
 export interface ChildProcessContext extends SandboxPluginContext {
   [injectionTokens.pluginCreator]: PluginCreator
 }
@@ -29,26 +58,34 @@ export class ChildProcessProxyWorker {
   private log?: Logger
   private injector
 
-  public realSubject: any
+  public realSubject: Record<string, unknown> | undefined
 
   constructor(private readonly injectorFactory: typeof createInjector) {
-    // Make sure to bind the methods in order to ensure the `this` pointer
-    this.handleMessage = this.handleMessage.bind(this)
-
     // Start listening before sending the spawned message
     process.on('message', this.handleMessage)
     this.send({ kind: ParentMessageKind.Ready })
     this.injector = this.injectorFactory()
   }
 
-  private send(value: ParentMessage) {
+  private send(value: unknown) {
+    const encoded = encodeParentMessage(value)
+    if (Exit.isFailure(encoded)) {
+      throw new ProtocolEncodeError({ reason: String(encoded.cause) })
+    }
     if (process.send) {
-      const str = serialize(value)
-      process.send(str)
+      process.send(encoded.value)
     }
   }
-  private handleMessage(serializedMessage: unknown) {
-    const message = deserialize<WorkerMessage>(String(serializedMessage))
+  private readonly handleMessage = (serializedMessage: unknown) => {
+    const decoded = decodeWorkerMessage(serializedMessage)
+    if (Exit.isFailure(decoded)) {
+      // A payload this half cannot read is the parent's bug, and there is no
+      // correlation id to answer on - report it and keep the child alive so the
+      // parent's own timeout, not a silent exit, is what surfaces.
+      this.send({ error: String(decoded.cause), kind: ParentMessageKind.InitError })
+      return
+    }
+    const message = decoded.value
     switch (message.kind) {
       case WorkerMessageKind.Init:
         // eslint-disable-next-line @typescript-eslint/no-floating-promises -- No handle needed, handleInit has try catch
@@ -97,15 +134,24 @@ export class ChildProcessProxyWorker {
         .provideValue(commonTokens.sandboxDirectory, workingDir)
         .provideClass(injectionTokens.pluginCreator, PluginCreator)
 
-      const childModule = await import(message.modulePath)
-      const RealSubjectClass = childModule[message.namedExport]
+      const childModule: unknown = await import(message.modulePath)
+      const moduleExports = S.decodeUnknownSync(
+        S.Record(S.String, S.Unknown),
+      )(childModule)
+      const namedExport = moduleExports[message.namedExport]
+      if (!isSubjectClass(namedExport)) {
+        throw new SubjectModuleError({
+          modulePath: message.modulePath,
+          namedExport: message.namedExport,
+        })
+      }
+      const RealSubjectClass = namedExport
       if (process.cwd() !== workingDir) {
         this.log.debug(
           `Changing current working directory for this process to ${workingDir}`,
         )
         process.chdir(workingDir)
       }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       this.realSubject = injector.injectClass(RealSubjectClass)
       this.send({ kind: ParentMessageKind.Initialized })
     } catch (err) {
@@ -122,7 +168,11 @@ export class ChildProcessProxyWorker {
       this.send({
         correlationId: message.correlationId,
         kind: ParentMessageKind.CallResult,
-        result,
+        // A void method yields `undefined`, which JSON cannot carry - `null` is
+        // how the wire says "no value". Nothing checks the value here: `result`
+        // is declared `S.Json`, so the envelope encoder is what rejects a
+        // subject return the wire cannot carry, and it rejects it once.
+        result: result ?? null,
       })
     } catch (err) {
       this.send({
@@ -135,15 +185,23 @@ export class ChildProcessProxyWorker {
 
   private doCall(
     message: CallMessage,
-  ):
-    | PromiseLike<Record<string, unknown>>
-    | Record<string, unknown>
-    | undefined
-  {
-    if (typeof this.realSubject[message.methodName] === 'function') {
-      return this.realSubject[message.methodName](...message.args)
+  ): unknown {
+    const realSubject = this.realSubject
+    if (realSubject === undefined) {
+      throw new Error(
+        'Cannot call methods on the real subject before the child process is initialized.',
+      )
+    }
+    const subjectMember = realSubject[message.methodName]
+    if (isCallableMember(subjectMember)) {
+      // `Reflect.apply`, never `subjectMember(...args)`: reading the member out
+      // of the subject and calling the local binding drops the receiver, so the
+      // subject's own method runs with `this === undefined` and fails on its
+      // first field access. The subject is a class instance whose methods are
+      // all receiver-dependent.
+      return Reflect.apply(subjectMember, realSubject, message.args)
     } else {
-      return this.realSubject[message.methodName]
+      return subjectMember
     }
   }
 
@@ -190,11 +248,3 @@ export class ChildProcessProxyWorker {
     })
   }
 }
-
-// Prevent side effects for merely importing the file
-// Only actually start the child worker when it is requested
-// Stryker disable all
-if (fileURLToPath(import.meta.url) === process.argv[1]) {
-  new ChildProcessProxyWorker(createInjector)
-}
-// Stryker restore all

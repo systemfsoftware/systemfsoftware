@@ -10,7 +10,7 @@
   "include": [
     "src",
     "test",
-    "__tests__"
+    "tests"
   ],
   "references": [
     {

@@ -1,6 +1,6 @@
-import { MutantResult, PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type MutantResult, type PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { createInjector, Injector } from 'typed-inject'
+import { createInjector, type Injector } from 'typed-inject'
 
 import { ConfigError, retrieveCause } from './errors.js'
 import { LoggingBackend, provideLogging, provideLoggingBackend } from './logging/index.js'
@@ -12,8 +12,8 @@ import {
   MutantInstrumenterExecutor,
   MutationTestExecutor,
   PrepareExecutor,
-  PrepareExecutorArgs,
-  PrepareExecutorContext,
+  type PrepareExecutorArgs,
+  type PrepareExecutorContext,
 } from './run-stages/index.js'
 
 type MutationRunContext = PrepareExecutorContext & {
@@ -50,7 +50,7 @@ export interface StrykerHostOptions {
  */
 export class Stryker {
   /**
-   * @constructor
+   * @class
    * @param cliOptions The cli options.
    * @param hostOptions What the host resolved for this run, see {@link StrykerHostOptions}.
    * @param injectorFactory The injector factory, for testing purposes only
@@ -151,10 +151,14 @@ export class Stryker {
 
         return mutantResults
       } catch (error) {
-        if (
-          mutantInstrumenterInjector.resolve(commonTokens.options)
-            .cleanTempDir !== 'always'
-        ) {
+        // `cleanTempDir` is `'always' | boolean` in the option domain; the
+        // plugin-api schema's decoded type currently collapses the string
+        // literal, so the "not 'always'" test is expressed against the
+        // boolean members of the domain instead of a literal comparison.
+        const cleanTempDir = mutantInstrumenterInjector.resolve(
+          commonTokens.options,
+        ).cleanTempDir
+        if (cleanTempDir === false || cleanTempDir === true) {
           const log = mutationRunInjector.resolve(commonTokens.getLogger)(
             Stryker.name,
           )

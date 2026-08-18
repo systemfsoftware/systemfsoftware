@@ -15,7 +15,7 @@
     "exports": {
       ".": "./dist/index.mjs",
       "./checker-worker": "./dist/checker-worker.mjs",
-      "./child-process-proxy-worker": "./dist/child-process-proxy-worker.mjs",
+      "./child-process-proxy-worker-main": "./dist/child-process-proxy-worker-main.mjs",
       "./child-process-test-runner-worker": "./dist/child-process-test-runner-worker.mjs",
       "./config/base": "./dist/config/base.mjs",
       "./config/config-resolution": "./dist/config/config-resolution.mjs",
@@ -41,9 +41,9 @@
       "@systemfsoftware/source": "./src/checker/checker-worker.ts",
       "default": "./dist/checker-worker.mjs"
     },
-    "./child-process-proxy-worker": {
-      "@systemfsoftware/source": "./src/worker-pool/child-process-proxy-worker.ts",
-      "default": "./dist/child-process-proxy-worker.mjs"
+    "./child-process-proxy-worker-main": {
+      "@systemfsoftware/source": "./src/worker-pool/child-process-proxy-worker-main.ts",
+      "default": "./dist/child-process-proxy-worker-main.mjs"
     },
     "./child-process-test-runner-worker": {
       "@systemfsoftware/source": "./src/test-runner/child-process-test-runner-worker.ts",
@@ -115,7 +115,6 @@
     "@stryker-mutator/instrumenter": "catalog:stryker",
     "@stryker-mutator/util": "catalog:stryker",
     "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
-    "ajv": "~8.18.0",
     "diff-match-patch": "1.0.5",
     "execa": "~9.6.0",
     "lodash.groupby": "~4.6.0",
@@ -138,6 +137,8 @@
     "@microsoft/api-extractor": "catalog:",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
@@ -148,6 +149,7 @@
     "@types/semver": "7.7.1",
     "effect": "catalog:",
     "glob": "13.0.6",
+    "oxlint": "catalog:oxlint",
     "tsdown": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
@@ -157,7 +159,6 @@
   },
   "license": "Apache-2.0",
   "inlinedDependencies": {
-    "@jsr/std__jsonc": "1.0.2",
-    "@types/json-schema": "7.0.15"
+    "@jsr/std__jsonc": "1.0.2"
   }
 }

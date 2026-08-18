@@ -1,6 +1,6 @@
 import { declareValuePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { ancestorsOf, type IgnorerPath } from '../ancestor-path.kernel.js'
-import { decideWorkflowMakeBoundaryIgnore, NOT_INSIDE_WORKFLOW_MAKE } from './make-boundary-ignore.kernel.js'
+import { ancestorsOf, type IgnorerPath } from '../AncestorPath.js'
+import { decideWorkflowMakeBoundaryIgnore, NOT_INSIDE_WORKFLOW_MAKE } from './MakeBoundaryIgnore.js'
 
 export const strykerPlugins = [
   declareValuePlugin(PluginKind.Ignore, 'workflow-make-boundary', {

@@ -1,10 +1,10 @@
-import cjsOnlyExportsDefault from './cjsOnlyExportsDefault.js'
-import entrypointResolutions from './entrypointResolutions.js'
-import exportDefaultDisagreement from './exportDefaultDisagreement.js'
-import internalResolutionError from './internalResolutionError.js'
-import moduleKindDisagreement from './moduleKindDisagreement.js'
-import namedExports from './namedExports.js'
-import unexpectedModuleSyntax from './unexpectedModuleSyntax.js'
+import cjsOnlyExportsDefault from './CjsOnlyExportsDefault.js'
+import entrypointResolutions from './EntrypointResolutions.js'
+import exportDefaultDisagreement from './ExportDefaultDisagreement.js'
+import internalResolutionError from './InternalResolutionError.js'
+import moduleKindDisagreement from './ModuleKindDisagreement.js'
+import namedExports from './NamedExports.js'
+import unexpectedModuleSyntax from './UnexpectedModuleSyntax.js'
 
 export default [
   entrypointResolutions,

@@ -74,7 +74,7 @@ export const RegistryContext = React.createContext<AtomRegistry.Registry>(AtomRe
  */
 export const RegistryProvider = (options: {
   readonly children?: React.ReactNode | undefined
-  readonly initialValues?: Iterable<readonly [Atom.Atom<any>, any]> | undefined
+  readonly initialValues?: Iterable<readonly [Atom.Atom<unknown>, unknown]> | undefined
   readonly scheduleTask?: ((f: () => void) => () => void) | undefined
   readonly timeoutResolution?: number | undefined
   readonly defaultIdleTTL?: number | undefined
@@ -94,11 +94,20 @@ export const RegistryProvider = (options: {
     }
   }
   React.useEffect(() => {
-    if (ref.current?.timeout !== undefined) {
-      clearTimeout(ref.current.timeout)
+    const current = ref.current
+    if (current?.timeout !== undefined) {
+      clearTimeout(current.timeout)
     }
     return () => {
-      ref.current!.timeout = setTimeout(() => {
+      if (ref.current === null) {
+        return
+      }
+      // React lifecycle timing, not Effect timing: the dispose is deferred so a
+      // remount - StrictMode's double invoke, or fast refresh - reclaims the same
+      // registry instead of losing it. There is no fiber here to carry an
+      // `Effect.sleep` and none to interrupt it on the remount that cancels this.
+      // @effect-diagnostics-next-line globalTimers:off
+      ref.current.timeout = setTimeout(() => {
         ref.current?.registry.dispose()
         ref.current = null
       }, 500)

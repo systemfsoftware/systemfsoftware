@@ -64,7 +64,7 @@ export class TypescriptChecker implements Checker {
     options: StrykerOptions,
     private readonly tsCompiler: TypescriptCompiler,
   ) {
-    this.options = options as TypescriptCheckerOptionsWithStrykerOptions
+    this.options = options
   }
 
   public async init(): Promise<void> {
@@ -83,7 +83,8 @@ export class TypescriptChecker implements Checker {
     )
 
     // Check if this is the group with unrelated files and return check status passed if so
-    if (!this.tsCompiler.nodes.get(toPosixFileName(mutants[0]!.fileName))) {
+    const firstMutant = mutants[0]
+    if (!firstMutant || !this.tsCompiler.nodes.get(toPosixFileName(firstMutant.fileName))) {
       return result
     }
 
@@ -133,7 +134,10 @@ export class TypescriptChecker implements Checker {
 
     // If there is only a single mutant the error has to originate from the single mutant
     if (errors.length && mutants.length === 1) {
-      errorsMap[mutants[0]!.id] = errors
+      const onlyMutant = mutants[0]
+      if (onlyMutant !== undefined) {
+        errorsMap[onlyMutant.id] = errors
+      }
       return errorsMap
     }
 
@@ -167,11 +171,14 @@ export class TypescriptChecker implements Checker {
         }
       } else if (mutantsRelatedToError.length === 1) {
         // There is only one mutant related to the typescript error so we can add it to the errorsRelatedToMutant
-        const mutantId = mutantsRelatedToError[0]!.id
-        if (errorsMap[mutantId]) {
-          errorsMap[mutantId]!.push(error)
-        } else {
-          errorsMap[mutantId] = [error]
+        const onlyRelatedMutant = mutantsRelatedToError[0]
+        if (onlyRelatedMutant !== undefined) {
+          const mutantId = onlyRelatedMutant.id
+          if (errorsMap[mutantId]) {
+            errorsMap[mutantId].push(error)
+          } else {
+            errorsMap[mutantId] = [error]
+          }
         }
       } else {
         // If there are more than one mutants related to the error we should check them individually

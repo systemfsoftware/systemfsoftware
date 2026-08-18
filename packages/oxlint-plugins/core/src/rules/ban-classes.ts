@@ -1,93 +1,179 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { Schema as S } from 'effect'
 
-import { ContextVariants, ImportVariants, meta, Options, TagVariants } from './ban-classes.config.js'
+import {
+  ANONYMOUS_CLASS,
+  EXPECTED,
+  FIX,
+  meta,
+  SANCTIONED_BASES,
+  SANCTIONED_MODULE,
+  SIBLING_RULE_TERRITORY,
+  TEST_OR_FIXTURE_PATH,
+} from './ban-classes.config.js'
+
+export type Options = []
+
+export type MessageIds = 'banned'
+
+/**
+ * A class is judged by the expression it extends, never by its name — a name
+ * whitelist is an author-supplied token and certifies nothing. The rule reports
+ * any class whose `superClass` is absent or does not resolve to one of the
+ * sanctioned Effect v4 constructor expressions in `SANCTIONED_BASES`.
+ *
+ * One honest caveat: the warrant for reporting a bare, superclass-less class is
+ * local policy, not "Effect forbids it". Effect v4's own source is full of
+ * bare classes (SchemaAST internals, scheduler and pubsub implementations,
+ * `BrandError`, `ConfigError`) where the class is a deliberate implementation
+ * detail. Reporting one in OUR packages is a decision this codebase makes
+ * because Effect v4 itself gives a class-sanctioning expression for the
+ * capability, data-model, error-model, and rpc cases — not because the class
+ * keyword is intrinsically evil.
+ */
+const isTestPath = (filename: string): boolean => TEST_OR_FIXTURE_PATH.test(filename)
+
+const canonicalModule = (source: string): string =>
+  source === 'effect' || source.startsWith('effect/') ? SANCTIONED_MODULE : source
 
 export const banClasses = defineRule({
   meta,
   create(context: Context) {
-    const isTaggedErrorPattern = (node: ESTree.MemberExpression): boolean =>
-      node.object.type === 'Identifier' &&
-      node.property.type === 'Identifier' &&
-      TagVariants.has(node.property.name) &&
-      ImportVariants.has(node.object.name)
+    if (isTestPath(context.filename)) return {}
 
-    const isContextPattern = (node: ESTree.MemberExpression): boolean =>
-      node.object.type === 'Identifier' &&
-      node.object.name === 'Context' &&
-      node.property.type === 'Identifier' &&
-      ContextVariants.has(node.property.name)
+    const namedBindings = new Map<string, { readonly module: string; readonly namespace: string }>()
+    const namespaceImports = new Set<string>()
+    const shadowedLocals = new Set<string>()
 
-    const isRpcGroupMake = (node: ESTree.MemberExpression): boolean =>
-      node.object.type === 'Identifier' &&
-      node.object.name === 'RpcGroup' &&
-      node.property.type === 'Identifier' &&
-      node.property.name === 'make'
-
-    const hasTypeArguments = (node: ESTree.Node): boolean => 'typeArguments' in node && node.typeArguments != null
-
-    const parsed = S.decodeUnknownSync(S.Array(Options))(context.options)
-    const first = parsed[0]
-    const whitelist = new Set(first ? first.whitelist : undefined)
-
-    const getClassName = (node: ESTree.Class): string => {
-      if (node.id && 'name' in node.id) return node.id.name
-      const parent = node.parent
-      if (parent && parent.type === 'VariableDeclarator' && parent.id && parent.id.type === 'Identifier') {
-        return parent.id.name
+    const markShadowed = (name: string): void => {
+      if (namedBindings.has(name) || namespaceImports.has(name)) {
+        shadowedLocals.add(name)
       }
-      return 'Anonymous class'
     }
 
-    const isAllowedEffectPattern = (node: ESTree.Class): boolean => {
-      const { superClass } = node
-      if (!superClass || superClass.type !== 'CallExpression') return false
-
-      const callee = superClass.callee
-
-      if (callee.type === 'MemberExpression') {
-        if (isTaggedErrorPattern(callee)) return true
-        if (isContextPattern(callee)) return true
-        if (isRpcGroupMake(callee)) return true
-      }
-
-      if (callee.type === 'CallExpression') {
-        const innerCallee = callee.callee
-        if (innerCallee.type === 'MemberExpression') {
-          if (isTaggedErrorPattern(innerCallee) && (hasTypeArguments(callee) || hasTypeArguments(superClass))) {
-            return true
-          }
-          if (
-            isContextPattern(innerCallee) &&
-            (hasTypeArguments(callee) || hasTypeArguments(superClass) || hasTypeArguments(innerCallee))
-          ) {
-            return true
-          }
+    /**
+     * Resolve an `extends` expression to its rooted, import-resolved dotted
+     * path (e.g. `effect/Schema.Class`), or `null` when it does not bottom out
+     * in a resolved effect namespace member. Unwraps every call layer (so the
+     * double-call `Context.Service<Self>()('Tag')`, the single-call
+     * `Context.Reference<Shape>('key', { defaultValue })`, the type-argument
+     * wrapper `Data.Class<Props>`, and the bare member `Pipeable.Class` all
+     * land on the same root MemberExpression) and ignores computed access.
+     */
+    const resolveBasePath = (superClass: ESTree.Expression): string | null => {
+      let node: ESTree.Expression = superClass
+      for (;;) {
+        if (node.type === 'CallExpression') {
+          node = node.callee
+          continue
         }
+        if (node.type === 'TSInstantiationExpression') {
+          node = node.expression
+          continue
+        }
+        break
       }
 
-      return false
+      const segments: Array<string> = []
+      while (node.type === 'MemberExpression') {
+        if (node.computed || node.property.type !== 'Identifier') return null
+        segments.unshift(node.property.name)
+        node = node.object
+      }
+      if (node.type !== 'Identifier') return null
+
+      const localName = node.name
+      if (shadowedLocals.has(localName)) return null
+
+      const binding = namedBindings.get(localName)
+      if (binding !== undefined) {
+        return segments.length > 0 ? `${binding.module}/${binding.namespace}.${segments.join('.')}` : null
+      }
+
+      if (namespaceImports.has(localName)) {
+        return segments.length > 0 ? `${SANCTIONED_MODULE}/${segments.join('.')}` : null
+      }
+
+      return null
+    }
+
+    const report = (node: ESTree.Class, className: string, basePath: string | null): void => {
+      context.report({
+        node,
+        messageId: 'banned',
+        data: {
+          name: `class ${className}`,
+          expected: EXPECTED,
+          actual: basePath === null
+            ? 'a class whose superclass is not a sanctioned Effect v4 constructor'
+            : `a class extending ${basePath}`,
+          fix: FIX,
+        },
+      })
+    }
+
+    const checkClass = (node: ESTree.Class): void => {
+      const className = node.id === null ? ANONYMOUS_CLASS : node.id.name
+
+      if (node.superClass === null) {
+        report(node, className, null)
+        return
+      }
+
+      const basePath = resolveBasePath(node.superClass)
+      if (basePath === null) {
+        report(node, className, null)
+        return
+      }
+
+      if (SANCTIONED_BASES.has(basePath)) return
+      if (SIBLING_RULE_TERRITORY.has(basePath)) return
+
+      report(node, className, basePath)
     }
 
     return {
-      'ClassDeclaration, ClassExpression'(node: ESTree.Class) {
-        if (isAllowedEffectPattern(node)) return
-        const name = getClassName(node)
-        if (whitelist.has(name)) return
+      ImportDeclaration(node: ESTree.ImportDeclaration) {
+        const module = canonicalModule(node.source.value)
+        for (const spec of node.specifiers) {
+          if (spec.type === 'ImportSpecifier' && spec.imported.type === 'Identifier') {
+            namedBindings.set(spec.local.name, { module, namespace: spec.imported.name })
+          } else if (spec.type === 'ImportNamespaceSpecifier') {
+            if (module === SANCTIONED_MODULE) {
+              namespaceImports.add(spec.local.name)
+            }
+          } else {
+            markShadowed(spec.local.name)
+          }
+        }
+      },
 
-        context.report({
-          node,
-          messageId: 'noClasses',
-          data: {
-            name,
-            expected:
-              'S.TaggedError, Schema.TaggedError, Data.TaggedError, Data.Error, Context.Tag, Context.Reference, RpcGroup.make, Effect.Service, S.Class, or S.TaggedClass pattern',
-            actual: `class ${name}`,
-            fix:
-              'Use S.TaggedError or Data.TaggedError for errors, Context.Tag/Context.Reference for context, RpcGroup.make for RPC groups, Effect.Service for services, S.Class/S.TaggedClass for data classes. Add to whitelist if exception needed',
-          },
-        })
+      VariableDeclaration(node: ESTree.VariableDeclaration) {
+        for (const decl of node.declarations) {
+          if (decl.id.type === 'Identifier') {
+            markShadowed(decl.id.name)
+          }
+        }
+      },
+
+      FunctionDeclaration(node: ESTree.Function) {
+        if (node.id !== null) {
+          markShadowed(node.id.name)
+        }
+      },
+
+      ClassDeclaration(node: ESTree.Class) {
+        if (node.id !== null) {
+          markShadowed(node.id.name)
+        }
+        checkClass(node)
+      },
+
+      ClassExpression(node: ESTree.Class) {
+        if (node.id !== null) {
+          markShadowed(node.id.name)
+        }
+        checkClass(node)
       },
     }
   },

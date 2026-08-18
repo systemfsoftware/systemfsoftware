@@ -15,31 +15,5 @@ export default defineConfig({
 
   rules: {
     ...cellVocabulary.configs.recommended.rules,
-    // ── v4 migration: Context.Service replaces Context.Tag (class syntax
-    // `extends Context.Service<Self, Shape>()(id)`); the shared ban-classes
-    // rule only knows the v3 Context.Tag/Context.Reference variants. Every
-    // name here is a context service key, not a domain class.
-    '@systemfsoftware/oxlint-plugin/ban-classes': [
-      'error',
-      {
-        whitelist: [
-          'AsyncHookContextState',
-          'CollectSettingsGapsExecutorDeps',
-          'LoadSettingsExecutorDeps',
-          'RunHookScriptExecutorDeps',
-          'RunHooksForEventExecutorDeps',
-          'RunLifecycleHooksExecutorDeps',
-          'RunPostToolUseFailureHooksExecutorDeps',
-          'RunPostToolUseHooksExecutorDeps',
-          'RunPreCompactHooksExecutorDeps',
-          'RunPreToolUseHooksExecutorDeps',
-          'RunSessionStartHooksExecutorDeps',
-          'RunSessionSwitchHooksExecutorDeps',
-          'RunToolResultHooksExecutorDeps',
-          'RunUserPromptSubmitHooksExecutorDeps',
-          'SuperviseForkExecutorDeps',
-        ],
-      },
-    ],
   },
 })

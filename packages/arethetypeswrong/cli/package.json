@@ -24,6 +24,7 @@
     "prepare": "tsdown",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "test": "vitest run",
     "test:run": "vitest run --coverage",
     "test:contract": "vitest run --config vitest.contract.config.ts",
@@ -38,20 +39,21 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-dmmf": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "testcontainers": "catalog:",
     "tsdown": "catalog:",
     "vite-tsconfig-paths": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
-    "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
-    "@systemfsoftware/stryker-js-vitest-runner": "workspace:^"
+    "vitest": "catalog:"
   },
   "engines": {
     "node": ">=24"

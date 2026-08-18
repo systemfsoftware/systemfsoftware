@@ -3,7 +3,7 @@ import { defineConfig } from 'tsdown'
 export default defineConfig({
   entry: [
     'src/main.ts',
-    'src/attw.handler.ts',
+    'src/AttwHandler.ts',
   ],
   format: 'esm',
   clean: true,

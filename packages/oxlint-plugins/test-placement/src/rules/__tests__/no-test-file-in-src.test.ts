@@ -64,26 +64,6 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       filename: '/repo/pkg/src/order/spec/confirm-order.workflow.property.test.ts',
       options: [{ sanctionedDirs: ['spec'] }],
     },
-    {
-      name: 'Should_StaySilent_When_CellCarriesColocatedCharacterizationTest',
-      code: '',
-      filename: '/repo/pkg/src/order/__tests__/confirm-order.workflow.test.ts',
-    },
-    {
-      name: 'Should_StaySilent_When_KernelCarriesColocatedCharacterizationTest',
-      code: '',
-      filename: '/repo/pkg/src/__tests__/backoff.kernel.test.ts',
-    },
-    {
-      name: 'Should_StaySilent_When_ColocatedTestCarriesMtsExtension',
-      code: '',
-      filename: '/repo/pkg/src/order/__tests__/confirm-order.workflow.test.mts',
-    },
-    {
-      name: 'Should_StaySilent_When_OnlyTheTerminalTestSuffixIsStripped',
-      code: '',
-      filename: '/repo/pkg/src/order/__tests__/confirm-order.spec.ts.workflow.test.ts',
-    },
   ],
   invalid: [
     {
@@ -141,36 +121,28 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       errors: propertyLocation('confirm-order.workflow.property.test.ts'),
     },
     {
-      name: 'Should_NameDefaultDir_When_OptionOmitted',
+      name: 'Should_Report_When_WorkflowCarriesColocatedCharacterizationTest',
       code: '',
-      filename: '/repo/pkg/src/order/place-order.workflow.property.test.ts',
-      errors: [{
-        messageId: 'propertyTestOutsideTestsDir',
-        data: {
-          name: 'place-order.workflow.property.test.ts',
-          expected:
-            'src/**/__tests__/<name> — a property test one directory down from the cell it covers, never beside it',
-          actual: 'a property test beside its source under src/, outside any __tests__ directory',
-          fix:
-            'move the file down one directory into __tests__: src/<path>/<name> -> src/<path>/__tests__/<name>. The suffix is already sanctioned; only the directory is wrong. Relative imports shift one level: ./<cell>.js -> ../<cell>.js',
-        },
-      }],
+      filename: '/repo/pkg/src/order/__tests__/confirm-order.workflow.test.ts',
+      errors: unsanctioned('confirm-order.workflow.test.ts'),
     },
     {
-      name: 'Should_NameConfiguredDir_When_OptionSet',
+      name: 'Should_Report_When_KernelCarriesColocatedCharacterizationTest',
       code: '',
-      filename: '/repo/pkg/src/order/place-order.workflow.property.test.ts',
-      options: [{ sanctionedDirs: ['spec'] }],
-      errors: [{
-        messageId: 'propertyTestOutsideTestsDir',
-        data: {
-          name: 'place-order.workflow.property.test.ts',
-          expected: 'src/**/spec/<name> — a property test one directory down from the cell it covers, never beside it',
-          actual: 'a property test beside its source under src/, outside any spec directory',
-          fix:
-            'move the file down one directory into spec: src/<path>/<name> -> src/<path>/spec/<name>. The suffix is already sanctioned; only the directory is wrong. Relative imports shift one level: ./<cell>.js -> ../<cell>.js',
-        },
-      }],
+      filename: '/repo/pkg/src/__tests__/backoff.kernel.test.ts',
+      errors: unsanctioned('backoff.kernel.test.ts'),
+    },
+    {
+      name: 'Should_Report_When_ColocatedTestCarriesMtsExtension',
+      code: '',
+      filename: '/repo/pkg/src/order/__tests__/confirm-order.workflow.test.mts',
+      errors: unsanctioned('confirm-order.workflow.test.mts'),
+    },
+    {
+      name: 'Should_Report_When_WorkflowPropertyTestStemCarriesExtraPeriod',
+      code: '',
+      filename: '/repo/pkg/src/order/__tests__/a.b.workflow.property.test.ts',
+      errors: propertyLocation('a.b.workflow.property.test.ts'),
     },
     {
       name: 'Should_Report_When_ConfiguredDirReplacesTheDefault',

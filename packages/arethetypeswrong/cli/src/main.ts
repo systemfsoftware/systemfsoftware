@@ -9,12 +9,12 @@ import { Effect, Layer } from 'effect'
 import { layer as cliConfigLayerFactory } from 'effect/unstable/cli/CliConfig'
 import * as Command from 'effect/unstable/cli/Command'
 
-import { AttwConfigFileLayer } from './attw-config.schema.js'
-import { attwCommand } from './attw.handler.js'
-import { CliFilesystem as Filesystem, FilesystemLive } from './filesystem.adapter.js'
-import { PackRunnerLive } from './pack-runner.adapter.js'
-import { Stdin, StdinLive } from './stdin.adapter.js'
-import { Terminal, TerminalLive } from './terminal.adapter.js'
+import { AttwConfigFileLayer } from './AttwConfigExecutor.js'
+import { attwCommand } from './AttwHandler.js'
+import { FilesystemLive } from './FilesystemAdapter.js'
+import { PackRunnerLive } from './PackRunnerAdapter.js'
+import { StdinLive } from './StdinAdapter.js'
+import { TerminalLive } from './TerminalAdapter.js'
 
 const cliConfigLayer = Layer.provideMerge(cliConfigLayerFactory(), AttwConfigFileLayer)
 

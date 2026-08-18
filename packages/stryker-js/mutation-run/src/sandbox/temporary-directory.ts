@@ -1,10 +1,10 @@
 import fs from 'fs'
 import path from 'path'
 
-import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { Disposable } from 'typed-inject'
+import { type Disposable } from 'typed-inject'
 
 export class TemporaryDirectory implements Disposable {
   #temporaryDirectory?: string

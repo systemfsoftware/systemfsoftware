@@ -1,14 +1,14 @@
-import { createInstrumenter, InstrumentResult } from '@stryker-mutator/instrumenter'
-import { I } from '@stryker-mutator/util'
-import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { createInstrumenter, type InstrumenterOptions, type InstrumentResult } from '@stryker-mutator/instrumenter'
+import { type I } from '@stryker-mutator/util'
+import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import {
   commonTokens,
-  Injector,
-  PluginContext,
+  type Injector,
+  type PluginContext,
   PluginKind,
   tokens,
 } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
+import { type Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
 import type { execaCommand } from 'execa'
 
 import { createCheckerFactory } from '../checker/index.js'
@@ -24,7 +24,7 @@ import { UnexpectedExitHandler } from '../unexpected-exit-handler.js'
 import { IdGenerator } from '../worker-pool/id-generator.js'
 import { ConcurrencyTokenProvider, createCheckerPool } from '../worker-pool/index.js'
 
-import { DryRunContext } from './3-dry-run-executor.js'
+import { type DryRunContext } from './3-dry-run-executor.js'
 
 export interface MutantInstrumenterContext extends PluginContext {
   [commonTokens.options]: StrykerOptions
@@ -64,9 +64,19 @@ export class MutantInstrumenterExecutor {
 
     // Instrument files in-memory
     const ignorers = this.options.ignorers.map((name) => this.pluginCreator.create(PluginKind.Ignore, name))
+    // `mutator` decodes to readonly arrays; the instrumenter takes mutable
+    // ones, so the plugin descriptors are copied into fresh arrays here.
+    const instrumenterOptions: InstrumenterOptions = {
+      ignorers,
+      ...this.options.mutator,
+      plugins: this.options.mutator.plugins === null
+        ? null
+        : [...this.options.mutator.plugins],
+      excludedMutations: [...this.options.mutator.excludedMutations],
+    }
     const instrumentResult = await instrumenter.instrument(
       await this.readFilesToMutate(),
-      { ignorers, ...this.options.mutator },
+      instrumenterOptions,
     )
 
     // Preprocess the project
@@ -111,7 +121,13 @@ export class MutantInstrumenterExecutor {
 
   private writeInstrumentedFiles(instrumentResult: InstrumentResult): void {
     for (const { name, content } of Object.values(instrumentResult.files)) {
-      this.project.files.get(name)!.setContent(content)
+      const file = this.project.files.get(name)
+      if (file === undefined) {
+        throw new Error(
+          `Instrumented file "${name}" is missing from the project's file map.`,
+        )
+      }
+      file.setContent(content)
     }
   }
 }

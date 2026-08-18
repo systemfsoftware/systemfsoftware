@@ -1,11 +1,11 @@
 import { StrykerError } from '@stryker-mutator/util'
-import { Checker, CheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
-import { Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Checker, type CheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
+import { type Mutant, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { commonTokens, PluginKind, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 
 import { injectionTokens, PluginCreator } from '../plugins/index.js'
 
-import { CheckerResource } from './checker-resource.js'
+import { type CheckerResource } from './checker-resource.js'
 
 export class CheckerWorker implements CheckerResource {
   private readonly innerCheckers: Map<string, Checker>

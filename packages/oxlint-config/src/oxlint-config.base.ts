@@ -55,7 +55,6 @@ export default defineConfig({
     'typescript/no-unsafe-return': 'error',
     'typescript/no-unsafe-type-assertion': 'error',
 
-    '@systemfsoftware/oxlint-plugin/ban-classes': ['error', { whitelist: ['WsCtor'] }],
     '@systemfsoftware/oxlint-plugin/ban-error-string': 'error',
     '@systemfsoftware/oxlint-plugin/no-context-generic-tag': 'error',
     '@systemfsoftware/oxlint-plugin/no-date-now-in-effect': 'error',

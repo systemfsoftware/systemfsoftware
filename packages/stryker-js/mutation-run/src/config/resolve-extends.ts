@@ -4,8 +4,14 @@ import path from 'path'
 import { pathToFileURL } from 'url'
 
 import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Match } from 'effect'
+import * as S from 'effect/Schema'
 
 import { ConfigError } from '../errors.js'
+
+import { ConfigDocumentSchema, ImportedModuleSchema } from './config-document.schema.js'
+import type { ExtendsStepState } from './extends-step.js'
+import { decideExtendsStep, initialExtendsStepState } from './extends-step.js'
 
 export async function readConfigFile(configFile: string): Promise<PartialStrykerOptions> {
   const ext = path.extname(configFile).toLowerCase()
@@ -33,153 +39,108 @@ export async function readConfigFile(configFile: string): Promise<PartialStryker
         `Invalid config file "${configFile}". Config must be a JSON object`,
       )
     }
-    return parsed as PartialStrykerOptions
+    return S.decodeUnknownSync(ConfigDocumentSchema)(parsed)
   }
   // Dynamic import: the module specifier is the runtime-resolved config path,
   // not a literal known at author time, so static import cannot apply.
-  let imported: { default?: unknown }
+  let importedModule: unknown
   try {
-    imported = (await import(
+    importedModule = await import(
       pathToFileURL(path.resolve(configFile)).toString()
-    )) as { default?: unknown }
+    )
   } catch (err) {
     throw new ConfigError(
       `Invalid config file "${configFile}". Error during import`,
       err,
     )
   }
-  const exported = imported.default
+  const exported = S.decodeUnknownSync(ImportedModuleSchema)(importedModule).default
   if (exported === undefined || exported === null || typeof exported !== 'object') {
     throw new ConfigError(
       `Invalid config file "${configFile}". Default export of config file must be an object!`,
     )
   }
-  return { ...(exported as PartialStrykerOptions) }
+  return S.decodeUnknownSync(ConfigDocumentSchema)(exported)
 }
 
 /**
- * Merge a child config over a parent's resolved options.
- * R2: scalars replace wholesale; objects merge one level deep.
- * R3: a child key set to `null` deletes the inherited key.
- * R4: the `plugins` array is the one exception to wholesale array replacement — the
- * parent's plugin loaders stay inherited and the child's descriptors are appended,
- * with the first occurrence of a descriptor winning. A package under-specifies
- * `plugins` on purpose: the base preset carries the checker and ignorer loader
- * modules, and a sandwich package adds only what it names locally (KTD1).
+ * The resolve act, split out of the deleted `resolveExtendsTarget`. Its
+ * relative-path branch became the decision's `read` request; only this branch
+ * survives, converting a bare specifier to an absolute path through node's
+ * require resolver from the declaring config's directory — never the process
+ * working directory (R10). The error message is the pre-split one, verbatim.
  */
-export function mergeConfigs(
-  parent: PartialStrykerOptions,
-  child: PartialStrykerOptions,
-): PartialStrykerOptions {
-  const out: Record<string, unknown> = { ...(parent as Record<string, unknown>) }
-  for (const [key, value] of Object.entries(child)) {
-    if (value === null) {
-      delete out[key]
-      continue
-    }
-    const parentValue = (parent as Record<string, unknown>)[key]
-    if (key === 'plugins') {
-      const parentPlugins = Array.isArray(parentValue) ? parentValue : []
-      const childPlugins = Array.isArray(value) ? value : []
-      const merged = [...parentPlugins, ...childPlugins]
-      out[key] = merged.filter(
-        (descriptor, index) => typeof descriptor !== 'string' || !merged.slice(0, index).includes(descriptor),
-      )
-      continue
-    }
-    const bothObjects = parentValue !== null &&
-      parentValue !== undefined &&
-      typeof parentValue === 'object' &&
-      !Array.isArray(parentValue) &&
-      typeof value === 'object' &&
-      !Array.isArray(value)
-    out[key] = bothObjects
-      ? { ...(parentValue as Record<string, unknown>), ...(value as Record<string, unknown>) }
-      : value
-  }
-  return out as PartialStrykerOptions
-}
-
-/**
- * A bare package specifier (`pkg`, `@scope/pkg`, `@scope/pkg/sub`) versus a
- * filesystem path. Everything not starting with `./`, `../`, `/` or `\` is
- * treated as a specifier and routed through the Node resolver, so it honours
- * `package.json#exports` the way `@systemfsoftware/tsconfig` does for
- * `tsconfig.json`.
- */
-function isModuleSpecifier(value: string): boolean {
-  return !(value.startsWith('./') || value.startsWith('../') ||
-    value.startsWith('/') || value.startsWith('\\'))
-}
-
-/**
- * Resolve an `extends` value to an absolute path, relative to `configDir` —
- * the directory of the config that declared it, never the process working
- * directory. That is what lets a published package's config inherit a preset
- * from its own dependencies regardless of where the run was started.
- */
-export function resolveExtendsTarget(
-  extendValue: string,
-  configDir: string,
-): string {
-  if (!isModuleSpecifier(extendValue)) {
-    return path.resolve(configDir, extendValue)
-  }
+function resolveExtendsSpecifier(specifier: string, configDir: string): string {
   const requireFrom = createRequire(path.join(configDir, 'noop.js'))
   try {
-    return requireFrom.resolve(extendValue)
+    return requireFrom.resolve(specifier)
   } catch (err) {
     throw new ConfigError(
-      `Cannot resolve extends target "${extendValue}" from "${configDir}"`,
+      `Cannot resolve extends target "${specifier}" from "${configDir}"`,
       err,
     )
   }
 }
 
 /**
- * Resolve an `extends` chain starting at `configFile`. Returns `configFile`'s
- * own options with its parent chain merged underneath, with the child's keys
- * taking precedence over inherited keys per the R2/R3 merge rules.
+ * Interpret the `extends` decision at the shell boundary (R9, KTD2).
  *
- * When `configFile` declares no `extends`, the file's content is returned
- * unchanged (apart from stripping the absent `extends` key).
- *
- * Cycle detection mirrors `TSConfigPreprocessor.touched` (a Set of absolute
- * paths); on re-entry we throw `ConfigError` naming the offending file (R5).
+ * Drives `decideExtendsStep` in a plain async loop. The entry document is
+ * already read by the caller; each returned request names the act the shell
+ * performs — read this absolute path, or resolve this specifier from the
+ * declaring directory — and the document the act yields is fed back together
+ * with the state the request carried. The shell holds no decision of its own:
+ * it only dispatches on the request it received and maps a refusal to the
+ * `ConfigError` the pre-split chain surfaced, byte for byte.
  */
-export async function resolveExtendsChain(
+export async function resolveExtends(
   configFile: string,
-  visited: Set<string> = new Set<string>(),
+  document: PartialStrykerOptions,
 ): Promise<PartialStrykerOptions> {
   const absolute = path.resolve(configFile)
-  if (visited.has(absolute)) {
-    throw new ConfigError(`Config inheritance cycle detected at "${configFile}"`)
-  }
-  visited.add(absolute)
-
-  const raw = (await readConfigFile(absolute)) as Record<string, unknown>
-  const extendValue = raw['extends']
-  if (extendValue === undefined || extendValue === null) {
-    const { extends: _ignored, ...rest } = raw
-    return rest as PartialStrykerOptions
-  }
-  if (typeof extendValue !== 'string') {
-    throw new ConfigError(
-      `Invalid config file "${configFile}". "extends" must be a string`,
+  let state: ExtendsStepState = initialExtendsStepState
+  let file = absolute
+  let currentDocument = document
+  for (;;) {
+    const outcome = await Match.value(decideExtendsStep(state, currentDocument, file)).pipe(
+      Match.tag('done', (value) => ({ kind: 'done' as const, options: value.options })),
+      Match.tag('read', (value) =>
+        readConfigFile(value.path).then((nextDocument) => ({
+          kind: 'next' as const,
+          state: value.state,
+          file: value.path,
+          document: nextDocument,
+        }))),
+      Match.tag('resolve', (value) => {
+        let resolvedPath: string
+        try {
+          resolvedPath = resolveExtendsSpecifier(value.specifier, value.directory)
+        } catch (err) {
+          if (err instanceof ConfigError) throw err
+          const reason = err instanceof Error ? `. ${err.message}` : ''
+          throw new ConfigError(
+            `Cannot resolve extends target "${value.specifier}" from "${file}"${reason}`,
+            err,
+          )
+        }
+        return readConfigFile(resolvedPath).then((nextDocument) => ({
+          kind: 'next' as const,
+          state: value.state,
+          file: resolvedPath,
+          document: nextDocument,
+        }))
+      }),
+      Match.tag('refused', (value) => {
+        const message = value.reason === 'cycle'
+          ? `Config inheritance cycle detected at "${value.file}"`
+          : `Invalid config file "${value.file}". "extends" must be a string`
+        throw new ConfigError(message)
+      }),
+      Match.exhaustive,
     )
+    if (outcome.kind === 'done') return outcome.options
+    state = outcome.state
+    file = outcome.file
+    currentDocument = outcome.document
   }
-
-  let parentPath: string
-  try {
-    parentPath = resolveExtendsTarget(extendValue, path.dirname(absolute))
-  } catch (err) {
-    if (err instanceof ConfigError) throw err
-    throw new ConfigError(
-      `Cannot resolve extends target "${extendValue}" from "${configFile}". ${(err as Error).message}`,
-      err,
-    )
-  }
-  const parentResolved = await resolveExtendsChain(parentPath, visited)
-  const { extends: _ignored, ...selfRest } = raw
-  return mergeConfigs(parentResolved, selfRest as PartialStrykerOptions)
 }

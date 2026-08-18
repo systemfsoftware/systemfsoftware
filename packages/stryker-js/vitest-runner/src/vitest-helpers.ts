@@ -21,9 +21,14 @@ function convertTaskStateToTestStatus(
     case 'skip':
     case 'todo':
       return TestStatus.Skipped
-    default: // taskState is undefined | "run" | "only". This should not happen
+    // States only observable while a run is in flight. Results are read after
+    // the run finished, so a leftover in-flight state is a failure.
+    case undefined:
+    case 'queued':
+    case 'run':
+    case 'only':
+      return TestStatus.Failed
   }
-  return TestStatus.Failed
 }
 
 export function convertTestToTestResult(test: RunnerTestCase, projectRoot: string): TestResult {

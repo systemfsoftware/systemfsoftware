@@ -62,9 +62,6 @@
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",
-    "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
-    "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
-    "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
     "@systemfsoftware/stryker-plugins": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
@@ -72,6 +69,7 @@
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "vitest": "catalog:"

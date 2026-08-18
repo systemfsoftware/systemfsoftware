@@ -37,6 +37,8 @@
   },
   "devDependencies": {
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-entrypoint": "workspace:^",
@@ -46,6 +48,7 @@
     "@types/node": "catalog:",
     "@types/semver": "7.7.1",
     "@vitest/coverage-v8": "catalog:",
+    "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "testcontainers": "catalog:",
     "tsdown": "catalog:",

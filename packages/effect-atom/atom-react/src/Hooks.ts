@@ -11,52 +11,21 @@
 import * as Atom from '@systemfsoftware/effect-atom/Atom'
 import type * as AtomRef from '@systemfsoftware/effect-atom/AtomRef'
 import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
-import type * as AsyncResult from '@systemfsoftware/effect-atom/Result'
+import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as React from 'react'
 import { RegistryContext } from './RegistryContext.js'
 
-interface AtomStore<A> {
-  readonly subscribe: (f: () => void) => () => void
-  readonly snapshot: () => A
-  readonly getServerSnapshot: () => A
-}
-
-const storeRegistry = new WeakMap<AtomRegistry.Registry, WeakMap<Atom.Atom<any>, AtomStore<any>>>()
-
-function makeStore<A>(registry: AtomRegistry.Registry, atom: Atom.Atom<A>): AtomStore<A> {
-  let stores = storeRegistry.get(registry)
-  if (stores === undefined) {
-    stores = new WeakMap()
-    storeRegistry.set(registry, stores)
-  }
-  const store = stores.get(atom)
-  if (store !== undefined) {
-    return store
-  }
-  const newStore: AtomStore<A> = {
-    subscribe(f) {
-      return registry.subscribe(atom, f)
-    },
-    snapshot() {
-      return registry.get(atom)
-    },
-    getServerSnapshot() {
-      return Atom.getServerValue(atom, registry)
-    },
-  }
-  stores.set(atom, newStore)
-  return newStore
-}
-
 function useStore<A>(registry: AtomRegistry.Registry, atom: Atom.Atom<A>): A {
-  const store = makeStore(registry, atom)
-
-  return React.useSyncExternalStore(store.subscribe, store.snapshot, store.getServerSnapshot)
+  const subscribe = React.useMemo(
+    () => (onStoreChange: () => void) => registry.subscribe(atom, () => onStoreChange()),
+    [registry, atom],
+  )
+  return React.useSyncExternalStore(subscribe, () => registry.get(atom), () => Atom.getServerValue(atom, registry))
 }
 
-const initialValuesSet = new WeakMap<AtomRegistry.Registry, WeakSet<Atom.Atom<any>>>()
+const initialValuesSet = new WeakMap<AtomRegistry.Registry, WeakSet<Atom.Atom<unknown>>>()
 
 /**
  * Seeds initial atom values in the current React atom registry.
@@ -74,7 +43,7 @@ const initialValuesSet = new WeakMap<AtomRegistry.Registry, WeakSet<Atom.Atom<an
  * @category hooks
  * @since 4.0.0
  */
-export const useAtomInitialValues = (initialValues: Iterable<readonly [Atom.Atom<any>, any]>): void => {
+export const useAtomInitialValues = (initialValues: Iterable<readonly [Atom.Atom<unknown>, unknown]>): void => {
   const registry = React.useContext(RegistryContext)
   let set = initialValuesSet.get(registry)
   if (set === undefined) {
@@ -125,39 +94,6 @@ function mountAtom<A>(registry: AtomRegistry.Registry, atom: Atom.Atom<A>): void
   React.useEffect(() => registry.mount(atom), [atom, registry])
 }
 
-type SetAtomResult<R, W> =
-  | ((value: W) => Effect.Effect<unknown, unknown>)
-  | ((value: W | ((value: R) => W)) => void)
-
-function setAtom<R, W, Mode extends 'value' | 'effect' = 'value'>(
-  registry: AtomRegistry.Registry,
-  atom: Atom.Writable<R, W>,
-  options?: {
-    readonly mode?: ([R] extends [AsyncResult.Result<any, any>] ? Mode : 'value') | undefined
-  },
-): Mode extends 'effect' ? [R] extends [AsyncResult.Result<infer A, infer E>] ? (value: W) => Effect.Effect<A, E>
-  : (value: W | ((value: R) => W)) => void
-  : (value: W | ((value: R) => W)) => void
-function setAtom<R, W, Mode extends 'value' | 'effect' = 'value'>(
-  registry: AtomRegistry.Registry,
-  atom: Atom.Writable<R, W>,
-  options?: {
-    readonly mode?: ([R] extends [AsyncResult.Result<any, any>] ? Mode : 'value') | undefined
-  },
-): SetAtomResult<R, W> {
-  if (options?.mode === 'effect') {
-    return React.useCallback((value: W) => {
-      registry.set(atom, value)
-      return AtomRegistry.getResult(registry, atom as Atom.Atom<AsyncResult.Result<any, any>>, {
-        suspendOnWaiting: true,
-      })
-    }, [registry, atom])
-  }
-  return React.useCallback((value: W | ((value: R) => W)) => {
-    registry.set(atom, typeof value === 'function' ? (value as (value: R) => W)(registry.get(atom)) : value)
-  }, [registry, atom])
-}
-
 /**
  * Mounts an atom in the current React registry for the lifetime of the
  * component.
@@ -192,31 +128,74 @@ export const useAtomMount = <A>(atom: Atom.Atom<A>): void => {
  * Use when a React component needs to update a writable atom without rendering
  * from that atom's value.
  *
- * The hook mounts the atom and returns a setter. In value mode the setter
- * accepts a write value or updater function; for `AsyncResult` atoms, `effect`
- * mode returns a lazy `Effect` that resolves to the settled success value.
+ * The hook mounts the atom and returns a setter that writes a complete value.
+ * For updates computed from the current value use `useAtomUpdate`.
  *
  * @see {@link useAtom} for reading and updating the same writable atom
+ * @see {@link useAtomSetResult} for a setter that resolves once the write settles
+ * @see {@link useAtomUpdate} for a setter that applies an updater function
  *
  * @category hooks
  * @since 4.0.0
  */
-export const useAtomSet = <
-  R,
-  W,
-  Mode extends 'value' | 'effect' = 'value',
->(
-  atom: Atom.Writable<R, W>,
-  options?: {
-    readonly mode?: ([R] extends [AsyncResult.Result<any, any>] ? Mode : 'value') | undefined
-  },
-): Mode extends 'effect' ? [R] extends [AsyncResult.Result<infer A, infer E>] ? (value: W) => Effect.Effect<A, E>
-  : (value: W | ((value: R) => W)) => void
-  : (value: W | ((value: R) => W)) => void =>
-{
+export const useAtomSet = <R, W>(atom: Atom.Writable<R, W>): (value: W) => void => {
   const registry = React.useContext(RegistryContext)
   mountAtom(registry, atom)
-  return setAtom(registry, atom, options)
+  return React.useCallback((value: W) => {
+    registry.set(atom, value)
+  }, [registry, atom])
+}
+
+/**
+ * Mounts a writable `AsyncResult` atom and returns a setter whose returned
+ * effect resolves to the settled success value.
+ *
+ * **When to use**
+ *
+ * Use when a component writes to an `AsyncResult` atom and needs to know when
+ * the write has been applied, so a save button can show a confirming state or
+ * report a failure.
+ *
+ * The hook mounts the atom and returns a setter that writes a new value and
+ * returns the effect of the atom leaving its initial state, failing with the
+ * write result's cause when the write fails.
+ *
+ * @see {@link useAtomSet} for writing without waiting for settlement
+ *
+ * @category hooks
+ * @since 4.0.0
+ */
+export const useAtomSetResult = <A, E, W>(
+  atom: Atom.Writable<AsyncResult.Result<A, E>, W>,
+): (value: W) => Effect.Effect<A, E> => {
+  const registry = React.useContext(RegistryContext)
+  mountAtom(registry, atom)
+  return React.useCallback((value: W) => {
+    registry.set(atom, value)
+    return AtomRegistry.getResult(registry, atom, { suspendOnWaiting: true })
+  }, [registry, atom])
+}
+
+/**
+ * Mounts a writable atom and returns an updater that applies a function to the
+ * current value.
+ *
+ * **When to use**
+ *
+ * Use when a component needs to update a writable atom from its current value,
+ * such as incrementing a counter, without subscribing to the atom.
+ *
+ * @see {@link useAtomSet} for writing a complete value
+ *
+ * @category hooks
+ * @since 4.0.0
+ */
+export const useAtomUpdate = <R, W>(atom: Atom.Writable<R, W>): (f: (previous: R) => W) => void => {
+  const registry = React.useContext(RegistryContext)
+  mountAtom(registry, atom)
+  return React.useCallback((f: (previous: R) => W) => {
+    registry.update(atom, f)
+  }, [registry, atom])
 }
 
 /**
@@ -261,32 +240,24 @@ export const useAtomRefresh = <A>(atom: Atom.Atom<A>): () => void => {
  * @category hooks
  * @since 4.0.0
  */
-export const useAtom = <R, W, const Mode extends 'value' | 'effect' = 'value'>(
+export const useAtom = <R, W>(
   atom: Atom.Writable<R, W>,
-  options?: {
-    readonly mode?: ([R] extends [AsyncResult.Result<any, any>] ? Mode : 'value') | undefined
-  },
-): readonly [
-  value: R,
-  write: Mode extends 'effect' ? [R] extends [AsyncResult.Result<infer A, infer E>] ? (value: W) => Effect.Effect<A, E>
-    : (value: W | ((value: R) => W)) => void
-    : (value: W | ((value: R) => W)) => void,
-] => {
+): readonly [value: R, write: (value: W) => void] => {
   const registry = React.useContext(RegistryContext)
   return [
     useStore(registry, atom),
-    setAtom(registry, atom, options),
-  ] as const
+    React.useCallback((value: W) => registry.set(atom, value), [registry, atom]),
+  ]
 }
 
 const atomPromiseMap = {
   suspendOnWaiting: new WeakMap<
     AtomRegistry.Registry,
-    WeakMap<Atom.Atom<any>, Promise<void>>
+    WeakMap<Atom.Atom<unknown>, Promise<void>>
   >(),
   default: new WeakMap<
     AtomRegistry.Registry,
-    WeakMap<Atom.Atom<any>, Promise<void>>
+    WeakMap<Atom.Atom<unknown>, Promise<void>>
   >(),
 }
 
@@ -294,28 +265,27 @@ function atomToPromise<A, E>(
   registry: AtomRegistry.Registry,
   atom: Atom.Atom<AsyncResult.Result<A, E>>,
   suspendOnWaiting: boolean,
-) {
+): Promise<void> {
   const registries = suspendOnWaiting ? atomPromiseMap.suspendOnWaiting : atomPromiseMap.default
   let map = registries.get(registry)
   if (map === undefined) {
     map = new WeakMap()
     registries.set(registry, map)
   }
-  let promise = map.get(atom)
-  if (promise !== undefined) {
-    return promise
+  const cached = map.get(atom)
+  if (cached !== undefined) {
+    return cached
   }
-  promise = new Promise<void>((resolve) => {
-    let settled = false
-    const dispose = registry.subscribe(atom, (result) => {
-      if (settled || result._tag === 'Initial' || (suspendOnWaiting && result.waiting)) {
-        return
-      }
-      settled = true
-      setTimeout(dispose, 1000)
-      resolve()
-      map.delete(atom)
-    })
+  const { promise, resolve } = Promise.withResolvers<void>()
+  let settled = false
+  const dispose = registry.subscribe(atom, (result) => {
+    if (settled || AsyncResult.isInitial(result) || (suspendOnWaiting && result.waiting)) {
+      return
+    }
+    settled = true
+    dispose()
+    resolve()
+    map.delete(atom)
   })
   map.set(atom, promise)
   return promise
@@ -325,9 +295,9 @@ function atomResultOrSuspend<A, E>(
   registry: AtomRegistry.Registry,
   atom: Atom.Atom<AsyncResult.Result<A, E>>,
   suspendOnWaiting: boolean,
-) {
+): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> {
   const value = useStore(registry, atom)
-  if (value._tag === 'Initial' || (suspendOnWaiting && value.waiting)) {
+  if (AsyncResult.isInitial(value) || (suspendOnWaiting && value.waiting)) {
     throw atomToPromise(registry, atom, suspendOnWaiting)
   }
   return value
@@ -357,19 +327,22 @@ function atomResultOrSuspend<A, E>(
  * @category hooks
  * @since 4.0.0
  */
-export const useAtomSuspense = <A, E, const IncludeFailure extends boolean = false>(
+export const useAtomSuspense = <A, E>(
   atom: Atom.Atom<AsyncResult.Result<A, E>>,
   options?: {
     readonly suspendOnWaiting?: boolean | undefined
-    readonly includeFailure?: IncludeFailure | undefined
+    readonly includeFailure?: boolean | undefined
   },
-): AsyncResult.Success<A, E> | (IncludeFailure extends true ? AsyncResult.Failure<A, E> : never) => {
+): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> => {
   const registry = React.useContext(RegistryContext)
   const result = atomResultOrSuspend(registry, atom, options?.suspendOnWaiting ?? false)
-  if (result._tag === 'Failure' && !options?.includeFailure) {
+  if (AsyncResult.isFailure(result)) {
+    if (options?.includeFailure) {
+      return result
+    }
     throw Cause.squash(result.cause)
   }
-  return result as AsyncResult.Success<A, E> | (IncludeFailure extends true ? AsyncResult.Failure<A, E> : never)
+  return result
 }
 
 /**

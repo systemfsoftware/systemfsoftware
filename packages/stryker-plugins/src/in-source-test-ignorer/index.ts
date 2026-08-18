@@ -1,10 +1,6 @@
 import { declareValuePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { ancestorsOf, type IgnorerPath } from '../ancestor-path.kernel.js'
-import {
-  decideInSourceTestIgnore,
-  IN_SOURCE_TEST_IGNORED,
-  isInSourceTestGuard,
-} from './in-source-test-ignore.kernel.js'
+import { ancestorsOf, type IgnorerPath } from '../AncestorPath.js'
+import { decideInSourceTestIgnore, IN_SOURCE_TEST_IGNORED, isInSourceTestGuard } from './InSourceTestIgnore.js'
 
 export const strykerPlugins = [
   declareValuePlugin(PluginKind.Ignore, 'in-source-vitest-block', {

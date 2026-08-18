@@ -1,5 +1,4 @@
-import type { MutantCoverage } from '@systemfsoftware/stryker-js-plugin-api/core'
-import type { MutantActivation } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import type { InstrumenterContext, MutantCoverage } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { afterAll, afterEach, beforeAll, beforeEach, inject, RunnerTestCase, RunnerTestSuite } from 'vitest'
 
 // This file is copied to the sandbox dir, don't import anything local!
@@ -9,7 +8,17 @@ const globalNamespace = inject('globalNamespace')
 const mutantActivation = inject('mutantActivation')
 const mode = inject('mode')
 
-const ns = globalThis[globalNamespace] || (globalThis[globalNamespace] = {})
+const ns: InstrumenterContext = globalThis[globalNamespace] ?? (globalThis[globalNamespace] = {})
+
+/**
+ * The subset of the vitest suite the report hooks write to. The hook's real
+ * `TaskMeta` type is keyed from an ambient module augmentation that oxlint's
+ * checker cannot resolve, so the write path is typed structurally instead.
+ */
+interface SuiteWithTaskMeta {
+  meta: { hitCount?: number; mutantCoverage?: MutantCoverage }
+}
+
 ns.hitLimit = inject('hitLimit')
 const isGreaterThanVitest4Point1 = inject('isGreaterThanVitest4Point1')
 
@@ -29,12 +38,11 @@ if (mode === 'mutant') {
   if (isGreaterThanVitest4Point1) {
     // Vitest's hooks API requires this empty destructure to allow access to suite.meta
     // eslint-disable-next-line no-empty-pattern
-    afterAll(({}, suite) => {
+    afterAll(({}, suite: SuiteWithTaskMeta) => {
       suite.meta.hitCount = ns.hitCount
     })
   } else {
-    // @ts-expect-error This was changed in Vitest v4.1
-    afterAll(({ meta }) => {
+    afterAll(({ meta }: { meta: { hitCount?: number } }) => {
       meta.hitCount = ns.hitCount
     })
   }
@@ -52,12 +60,11 @@ if (mode === 'mutant') {
   if (isGreaterThanVitest4Point1) {
     // Vitest's hooks API requires this empty destructure to allow access to suite.meta
     // eslint-disable-next-line no-empty-pattern
-    afterAll(({}, suite) => {
+    afterAll(({}, suite: SuiteWithTaskMeta) => {
       suite.meta.mutantCoverage = ns.mutantCoverage
     })
   } else {
-    // @ts-expect-error This was changed in Vitest v4.1
-    afterAll(({ meta }) => {
+    afterAll(({ meta }: { meta: { mutantCoverage?: MutantCoverage } }) => {
       meta.mutantCoverage = ns.mutantCoverage
     })
   }
@@ -84,18 +91,3 @@ function toRawTestId(test: RunnerTestCase): string {
   return `${test.file?.filepath ?? 'unknown.js'}#${collectTestName(test)}`
 }
 // Stryker restore all
-
-declare module 'vitest' {
-  interface ProvidedContext {
-    globalNamespace: '__stryker__' | '__stryker2__'
-    hitLimit: number | undefined
-    mutantActivation: MutantActivation
-    activeMutant: string | undefined
-    mode: 'mutant' | 'dry-run'
-    isGreaterThanVitest4Point1: boolean
-  }
-  interface TaskMeta {
-    hitCount: number | undefined
-    mutantCoverage: MutantCoverage | undefined
-  }
-}

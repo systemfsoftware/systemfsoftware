@@ -11,7 +11,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'browser',
-          include: ['./test/**/*.test.{ts,tsx}', '!./test/ssr.test.tsx'],
+          include: ['./tests/**/*.integration.test.ts', '!./tests/ssr.integration.test.ts'],
           setupFiles: ['./vitest-setup.ts'],
           browser: {
             enabled: true,
@@ -25,7 +25,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'node',
-          include: ['./test/ssr.test.tsx'],
+          include: ['./tests/ssr.integration.test.ts'],
           environment: 'node',
         },
       },
@@ -42,7 +42,7 @@ export default defineConfig({
     alias: {
       '@systemfsoftware/effect-atom/test': path.join(import.meta.dirname, '../atom/test'),
       '@systemfsoftware/effect-atom': path.join(import.meta.dirname, '../atom/src'),
-      '@systemfsoftware/effect-atom-react/test': path.join(import.meta.dirname, 'test'),
+      '@systemfsoftware/effect-atom-react/tests': path.join(import.meta.dirname, 'tests'),
       '@systemfsoftware/effect-atom-react': path.join(import.meta.dirname, 'src'),
       '@systemfsoftware/effect-gherkin-spec': path.join(import.meta.dirname, '../../effect-gherkin-spec/src/mod.ts'),
     },

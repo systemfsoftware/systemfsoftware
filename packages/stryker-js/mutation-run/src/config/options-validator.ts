@@ -1,14 +1,15 @@
 import os from 'os'
 import path from 'path'
 
-import { deepFreeze, findUnserializables, Immutable, noopLogger } from '@stryker-mutator/util'
-import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { deepFreeze, findUnserializables, type Immutable, noopLogger } from '@stryker-mutator/util'
+import { type StrykerOptions, StrykerOptionsSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import ajvModule, { ValidateFunction } from 'ajv'
 import type { JSONSchema7 } from 'json-schema'
 import { Minimatch } from 'minimatch'
 
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
 import { ConfigError } from '../errors.js'
 import { injectionTokens } from '../plugins/index.js'
 import { IGNORE_PATTERN_CHARACTER, MUTATION_RANGE_REGEX } from '../project/index.js'
@@ -20,31 +21,43 @@ import { optionsPath } from './options-path.js'
 import { REMOVED_OPTIONS } from './removed-surface.js'
 import { describeErrors } from './validation-errors.js'
 
-const Ajv = ajvModule.default
+/**
+ * The validation document. Its `properties` map names every option the core and
+ * the loaded plugins declare, which is what an unknown-option warning is keyed
+ * on. It is read as DATA only: validation itself runs on `StrykerOptionsSchema`,
+ * the same declaration the defaults come from.
+ */
+type ValidationSchemaDocument = {
+  readonly properties?: unknown
+  readonly [key: string]: unknown
+}
 
-const ajv = new Ajv({
-  useDefaults: true,
-  allErrors: true,
-  jsPropertySyntax: true,
-  verbose: true,
-  logger: false,
-  strict: false,
-})
+/**
+ * Options are decoded by the schema that declares them. This replaced an ajv
+ * instance run with `useDefaults`, which filled defaults from the *derived* JSON
+ * Schema document and silently injected nothing wherever a `default` annotation
+ * did not survive that derivation: `timeoutFactor`, `timeoutMS` and
+ * `dryRunTimeoutMinutes` all arrived `undefined`, so
+ * `dryRunTimeoutMinutes * 1000 * 60` was `NaN`, every dry run was given a 1 ms
+ * budget, and each one reported "Initial test run timed out". Decoding through
+ * the declaration cannot drift from it, and the open struct keeps the
+ * plugin-contributed options a document-driven validator would have rejected.
+ *
+ * `errors: 'all'` keeps the previous behaviour of reporting every offending
+ * option in one pass rather than stopping at the first.
+ */
+const decodeOptions = S.decodeUnknownResult(StrykerOptionsSchema, { errors: 'all' })
 
 export class OptionsValidator {
-  private readonly validateFn: ValidateFunction
-
   public static readonly inject = tokens(
     injectionTokens.validationSchema,
     commonTokens.logger,
   )
 
   constructor(
-    private readonly schema: JSONSchema7,
+    private readonly schema: ValidationSchemaDocument,
     private readonly log: Logger,
-  ) {
-    this.validateFn = ajv.compile(schema)
-  }
+  ) {}
 
   /**
    * Validates the provided options, throwing an error if something is wrong.
@@ -83,7 +96,7 @@ export class OptionsValidator {
         errors.push(`Config option "${key}" is no longer supported. ${REMOVED_OPTIONS[key]}`)
       }
     }
-    const reporters = rawOptions.reporters
+    const reporters = rawOptions['reporters']
     if (Array.isArray(reporters)) {
       for (const name of reporters) {
         if (typeof name === 'string' && Object.hasOwn(REMOVED_OPTIONS, name)) {
@@ -98,103 +111,145 @@ export class OptionsValidator {
   }
 
   private removeDeprecatedOptions(rawOptions: Record<string, unknown>) {
-    if (typeof rawOptions.mutator === 'string') {
-      this.log.warn(
-        'DEPRECATED. Use of "mutator" as string is no longer needed. You can remove it from your configuration. Stryker now supports mutating of JavaScript and friend files out of the box.',
-      )
-      delete rawOptions.mutator
-    }
-    // @ts-expect-error mutator.name
-    if (typeof rawOptions.mutator === 'object' && rawOptions.mutator.name) {
-      this.log.warn(
-        'DEPRECATED. Use of "mutator.name" is no longer needed. You can remove "mutator.name" from your configuration. Stryker now supports mutating of JavaScript and friend files out of the box.',
-      )
-      // @ts-expect-error mutator.name
-      delete rawOptions.mutator.name
-    }
-    if (Object.keys(rawOptions).includes('testFramework')) {
-      this.log.warn(
-        'DEPRECATED. Use of "testFramework" is no longer needed. You can remove it from your configuration. Your test runner plugin now handles its own test framework integration.',
-      )
-      delete rawOptions.testFramework
-    }
-    if (Array.isArray(rawOptions.transpilers)) {
-      const example = rawOptions.transpilers.includes('babel')
-        ? 'babel src --out-dir lib'
-        : rawOptions.transpilers.includes('typescript')
-        ? 'tsc -b'
-        : rawOptions.transpilers.includes('webpack')
-        ? 'webpack --config webpack.config.js'
-        : 'npm run build'
-      this.log.warn(
-        `DEPRECATED. Support for "transpilers" is removed. You can now configure your own "${
-          optionsPath('buildCommand')
-        }". For example, ${example}.`,
-      )
-      delete rawOptions.transpilers
-    }
-    if (Array.isArray(rawOptions.files)) {
-      const ignorePatternsName = optionsPath('ignorePatterns')
-      const isString = (uncertain: unknown): uncertain is string => typeof uncertain === 'string'
-      const files = rawOptions.files.filter(isString)
-      const newIgnorePatterns: string[] = [
-        '**',
-        ...files.map((filePattern) =>
-          filePattern.startsWith(IGNORE_PATTERN_CHARACTER)
-            ? filePattern.substr(1)
-            : `${IGNORE_PATTERN_CHARACTER}${filePattern}`
-        ),
-      ]
-      delete rawOptions.files
-      this.log.warn(
-        `DEPRECATED. Use of "files" is deprecated, please use "${ignorePatternsName}" instead (or remove "files" altogether will probably work as well). For now, rewriting them as ${
-          JSON.stringify(
-            newIgnorePatterns,
-          )
-        }. See https://stryker-mutator.io/docs/stryker-js/configuration/#ignorepatterns-string`,
-      )
-      const existingIgnorePatterns = Array.isArray(
-          rawOptions[ignorePatternsName],
-        )
-        ? (rawOptions[ignorePatternsName] as unknown[])
-        : []
-      rawOptions[ignorePatternsName] = [
-        ...newIgnorePatterns,
-        ...existingIgnorePatterns,
-      ]
-    }
-    // @ts-expect-error jest.enableBail
-    if (rawOptions.jest?.enableBail !== undefined) {
-      this.log.warn(
-        'DEPRECATED. Use of "jest.enableBail" is deprecated, please use "disableBail" instead. See https://stryker-mutator.io/docs/stryker-js/configuration#disablebail-boolean',
-      )
-      // @ts-expect-error jest.enableBail
-      rawOptions.disableBail = !rawOptions.jest?.enableBail
-      // @ts-expect-error jest.enableBail
-      delete rawOptions.jest.enableBail
-    }
+    this.removeStringMutator(rawOptions)
+    this.removeMutatorName(rawOptions)
+    this.removeTestFramework(rawOptions)
+    this.removeTranspilers(rawOptions)
+    this.rewriteFiles(rawOptions)
+    this.removeJestEnableBail(rawOptions)
+    this.removeHtmlReporterBaseDir(rawOptions)
+    this.migrateMaxConcurrentTestRunners(rawOptions)
+  }
 
-    // @ts-expect-error htmlReporter.baseDir
-    if (rawOptions.htmlReporter?.baseDir) {
-      this.log.warn(
-        `DEPRECATED. Use of "htmlReporter.baseDir" is deprecated, please use "${
-          optionsPath(
-            'htmlReporter',
-            'fileName',
-          )
-        }" instead. See https://stryker-mutator.io/docs/stryker-js/configuration/#reporters-string`,
-      )
-      // @ts-expect-error htmlReporter.baseDir
-      if (!rawOptions.htmlReporter.fileName) {
-        // @ts-expect-error htmlReporter.fileName
-        rawOptions.htmlReporter.fileName = path.join(
-          // @ts-expect-error htmlReporter.baseDir
-          String(rawOptions.htmlReporter.baseDir),
-          'index.html',
+  private static recordOf(value: object): Record<string, unknown> {
+    return S.decodeUnknownSync(S.Record(S.String, S.Unknown))(value)
+  }
+
+  private removeStringMutator(rawOptions: Record<string, unknown>) {
+    const mutator = rawOptions['mutator']
+    if (typeof mutator !== 'string') return
+    this.log.warn(
+      'DEPRECATED. Use of "mutator" as string is no longer needed. You can remove it from your configuration. Stryker now supports mutating of JavaScript and friend files out of the box.',
+    )
+    delete rawOptions['mutator']
+  }
+
+  private removeMutatorName(rawOptions: Record<string, unknown>) {
+    const mutator = rawOptions['mutator']
+    if (typeof mutator !== 'object' || mutator === null) return
+    const mutatorRecord = OptionsValidator.recordOf(mutator)
+    if (!mutatorRecord['name']) return
+    this.log.warn(
+      'DEPRECATED. Use of "mutator.name" is no longer needed. You can remove "mutator.name" from your configuration. Stryker now supports mutating of JavaScript and friend files out of the box.',
+    )
+    delete mutatorRecord['name']
+    rawOptions['mutator'] = mutatorRecord
+  }
+
+  private removeTestFramework(rawOptions: Record<string, unknown>) {
+    if (!Object.keys(rawOptions).includes('testFramework')) return
+    this.log.warn(
+      'DEPRECATED. Use of "testFramework" is no longer needed. You can remove it from your configuration. Your test runner plugin now handles its own test framework integration.',
+    )
+    delete rawOptions['testFramework']
+  }
+
+  private removeTranspilers(rawOptions: Record<string, unknown>) {
+    const transpilers = rawOptions['transpilers']
+    if (!Array.isArray(transpilers)) return
+    const example = transpilers.includes('babel')
+      ? 'babel src --out-dir lib'
+      : transpilers.includes('typescript')
+      ? 'tsc -b'
+      : transpilers.includes('webpack')
+      ? 'webpack --config webpack.config.js'
+      : 'npm run build'
+    this.log.warn(
+      `DEPRECATED. Support for "transpilers" is removed. You can now configure your own "${
+        optionsPath('buildCommand')
+      }". For example, ${example}.`,
+    )
+    delete rawOptions['transpilers']
+  }
+
+  private rewriteFiles(rawOptions: Record<string, unknown>) {
+    const files = rawOptions['files']
+    if (!Array.isArray(files)) return
+    const ignorePatternsName = optionsPath('ignorePatterns')
+    const isString = (uncertain: unknown): uncertain is string => typeof uncertain === 'string'
+    const filePatterns = files.filter(isString)
+    const newIgnorePatterns: string[] = [
+      '**',
+      ...filePatterns.map((filePattern) =>
+        filePattern.startsWith(IGNORE_PATTERN_CHARACTER)
+          ? filePattern.substr(1)
+          : `${IGNORE_PATTERN_CHARACTER}${filePattern}`
+      ),
+    ]
+    delete rawOptions['files']
+    this.log.warn(
+      `DEPRECATED. Use of "files" is deprecated, please use "${ignorePatternsName}" instead (or remove "files" altogether will probably work as well). For now, rewriting them as ${
+        JSON.stringify(
+          newIgnorePatterns,
         )
-      }
-      // @ts-expect-error htmlReporter.baseDir
-      delete rawOptions.htmlReporter.baseDir
+      }. See https://stryker-mutator.io/docs/stryker-js/configuration/#ignorepatterns-string`,
+    )
+    const existingIgnorePatterns: unknown[] = Array.isArray(
+        rawOptions[ignorePatternsName],
+      )
+      ? rawOptions[ignorePatternsName]
+      : []
+    rawOptions[ignorePatternsName] = [
+      ...newIgnorePatterns,
+      ...existingIgnorePatterns,
+    ]
+  }
+
+  private removeJestEnableBail(rawOptions: Record<string, unknown>) {
+    const jestOptions = rawOptions['jest']
+    if (typeof jestOptions !== 'object' || jestOptions === null) return
+    const jestRecord = OptionsValidator.recordOf(jestOptions)
+    const enableBail = jestRecord['enableBail']
+    if (enableBail === undefined) return
+    this.log.warn(
+      'DEPRECATED. Use of "jest.enableBail" is deprecated, please use "disableBail" instead. See https://stryker-mutator.io/docs/stryker-js/configuration#disablebail-boolean',
+    )
+    rawOptions['disableBail'] = !enableBail
+    delete jestRecord['enableBail']
+    rawOptions['jest'] = jestRecord
+  }
+
+  private removeHtmlReporterBaseDir(rawOptions: Record<string, unknown>) {
+    const htmlReporter = rawOptions['htmlReporter']
+    if (typeof htmlReporter !== 'object' || htmlReporter === null) return
+    const reporter = OptionsValidator.recordOf(htmlReporter)
+    const baseDir = reporter['baseDir']
+    if (!baseDir) return
+    this.log.warn(
+      `DEPRECATED. Use of "htmlReporter.baseDir" is deprecated, please use "${
+        optionsPath(
+          'htmlReporter',
+          'fileName',
+        )
+      }" instead. See https://stryker-mutator.io/docs/stryker-js/configuration/#reporters-string`,
+    )
+    const baseDirText = typeof baseDir === 'string' ? baseDir : JSON.stringify(baseDir) ?? ''
+    if (!reporter['fileName']) {
+      reporter['fileName'] = path.join(baseDirText, 'index.html')
+    }
+    delete reporter['baseDir']
+    rawOptions['htmlReporter'] = reporter
+  }
+
+  private migrateMaxConcurrentTestRunners(rawOptions: Record<string, unknown>) {
+    const maxConcurrent = rawOptions['maxConcurrentTestRunners']
+    if (typeof maxConcurrent !== 'number' || maxConcurrent === Number.MAX_SAFE_INTEGER) return
+    this.log.warn(
+      'DEPRECATED. Use of "maxConcurrentTestRunners" is deprecated. Please use "concurrency" instead.',
+    )
+    const concurrency = rawOptions['concurrency']
+    if (!concurrency && maxConcurrent < os.availableParallelism() - 1) {
+      rawOptions['concurrency'] = maxConcurrent
     }
   }
 
@@ -204,17 +259,6 @@ export class OptionsValidator {
       additionalErrors.push(
         'Config option "thresholds.high" should be higher than "thresholds.low".',
       )
-    }
-    if (options.maxConcurrentTestRunners !== Number.MAX_SAFE_INTEGER) {
-      this.log.warn(
-        'DEPRECATED. Use of "maxConcurrentTestRunners" is deprecated. Please use "concurrency" instead.',
-      )
-      if (
-        !options.concurrency &&
-        options.maxConcurrentTestRunners < os.availableParallelism() - 1
-      ) {
-        options.concurrency = options.maxConcurrentTestRunners
-      }
     }
     if (CommandTestRunner.is(options.testRunner)) {
       if (options.testRunnerNodeArgs.length) {
@@ -249,8 +293,8 @@ export class OptionsValidator {
             endLine,
             _endColumn,
           ] = match
-          const start = parseInt(startLine, 10)
-          const end = parseInt(endLine, 10)
+          const start = parseInt(startLine ?? '', 10)
+          const end = parseInt(endLine ?? '', 10)
           if (start < 1) {
             additionalErrors.push(
               `Config option "mutate[${index}]" is invalid. Mutation range "${mutationRange}" is invalid, line ${start} does not exist (lines start at 1).`,
@@ -269,12 +313,21 @@ export class OptionsValidator {
     this.throwErrorIfNeeded(additionalErrors)
   }
 
-  private schemaValidate(options: unknown): asserts options is StrykerOptions {
-    if (!this.validateFn(options)) {
-      const describedErrors = describeErrors(this.validateFn.errors!)
+  /**
+   * Decodes the options against their declaration, then writes the result back
+   * onto the caller's object: the previous engine filled defaults in place and
+   * every caller reads them off the object it passed, so the fill has to land
+   * there rather than in a copy.
+   */
+  private schemaValidate(options: Record<string, unknown>): asserts options is StrykerOptions {
+    const decoded = decodeOptions(options)
+    if (Result.isFailure(decoded)) {
+      const describedErrors = describeErrors(decoded.failure)
       describedErrors.forEach((error) => this.log.error(error))
       this.throwErrorIfNeeded(describedErrors)
+      return
     }
+    Object.assign(options, decoded.success)
   }
 
   private throwErrorIfNeeded(errors: string[]) {
@@ -295,7 +348,8 @@ export class OptionsValidator {
     const OPTIONS_ADDED_BY_STRYKER = ['set', 'configFile', '$schema']
 
     if (isWarningEnabled('unknownOptions', options.warnings)) {
-      const schemaKeys = Object.keys(this.schema.properties!)
+      const schemaProperties = OptionsValidator.recordOf(this.schema['properties'] ?? {})
+      const schemaKeys = Object.keys(schemaProperties)
       const excessPropertyNames = Object.keys(options)
         .filter((key) => !key.endsWith('_comment'))
         .filter((key) => !OPTIONS_ADDED_BY_STRYKER.includes(key))
@@ -341,14 +395,14 @@ export class OptionsValidator {
   }
 }
 
+/**
+ * The defaults are the declaration decoded against an empty object: every field
+ * that declares a default supplies it, and the result is the complete option
+ * set. It no longer routes through the validator, which used to be the only way
+ * to obtain them and produced an object missing three numeric defaults.
+ */
 export function createDefaultOptions(): StrykerOptions {
-  const options: Record<string, unknown> = {}
-  const validator: OptionsValidator = new OptionsValidator(
-    forkCoreSchema,
-    noopLogger,
-  )
-  validator.validate(options)
-  return options
+  return Result.getOrThrow(decodeOptions({}))
 }
 
 export const defaultOptions: Immutable<StrykerOptions> = deepFreeze(

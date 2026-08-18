@@ -25,9 +25,14 @@ export class ScriptFile {
 
   private getOffset(pos: Position): number {
     const lines = this.originalContent.split('\n')
+    const lineCount = Math.min(pos.line, lines.length)
     let offset = 0
-    for (let i = 0; i < pos.line && i < lines.length; i++) {
-      offset += lines[i]!.length + 1 // +1 for the newline character
+    for (let i = 0; i < lineCount; i++) {
+      const line = lines[i]
+      if (line === undefined) {
+        break
+      }
+      offset += line.length + 1 // +1 for the newline character
     }
     offset += pos.column
     return offset

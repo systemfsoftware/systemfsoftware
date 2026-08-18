@@ -10,7 +10,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Test files outside src/ must live under a __tests__/ directory; free-standing test files have no sanctioned home.',
+      'Test files outside src/ must live under a tests/ directory; free-standing test files have no sanctioned home.',
   },
   schema: [],
   messages: {

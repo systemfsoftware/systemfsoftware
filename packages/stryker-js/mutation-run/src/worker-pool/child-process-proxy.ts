@@ -2,29 +2,40 @@ import childProcess from 'child_process'
 import os from 'os'
 import { fileURLToPath, URL } from 'url'
 
+import * as Exit from 'effect/Exit'
+import * as S from 'effect/Schema'
+
 import { ExpirableTask, isErrnoException, StrykerError, Task } from '@stryker-mutator/util'
-import { FileDescriptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Disposable, InjectableClass, InjectionToken } from 'typed-inject'
+import { type FileDescriptions, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Disposable, type InjectableClass, type InjectionToken } from 'typed-inject'
 
-import { LoggingServerAddress } from '../logging/index.js'
+import { type LoggingServerAddress } from '../logging/index.js'
 
-import { Logger, LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type Logger, type LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { ChildProcessCrashedError } from './child-process-crashed-error.js'
-import { ChildProcessContext } from './child-process-proxy-worker.js'
+import { type ChildProcessContext } from './child-process-proxy-worker.js'
 import { IdGenerator } from './id-generator.js'
 import { kill } from './kill.js'
-import { InitMessage, ParentMessage, ParentMessageKind, WorkerMessage, WorkerMessageKind } from './message-protocol.js'
+import { type InitMessage, ParentMessageKind, type WorkerMessage, WorkerMessageKind } from './message-protocol.js'
+import { ParentMessageSchema, WorkerMessageSchema } from './message-protocol.schema.js'
 import { OutOfMemoryError } from './out-of-memory-error.js'
 import { StringBuilder } from './string-builder.js'
-import { deserialize, padLeft, serialize } from './string-utils.js'
+import { padLeft } from './string-utils.js'
+import { ProtocolEncodeError } from './subject-module.schema.js'
 
-type Func<TS extends any[], R> = (...args: TS) => R
-
-type PromisifiedFunc<TS extends any[], R> = (...args: TS) => Promise<R>
+/**
+ * This half's two directions, built once from the declared schemas. They take
+ * `unknown` and return an `Exit`, which is what makes them the *only* codec this
+ * half needs: the envelope performs the narrowing, so a separate `S.Json` check
+ * on `args` would guard the same bytes twice, and a decode failure on a process
+ * boundary is an expected outcome this code answers for rather than an exception
+ * that leaves the type unmarked.
+ */
+const encodeWorkerMessage = S.encodeUnknownExit(S.fromJsonString(WorkerMessageSchema))
+const decodeParentMessage = S.decodeUnknownExit(S.fromJsonString(ParentMessageSchema))
 
 export type Promisified<T> = {
-  [K in keyof T]: T[K] extends PromisifiedFunc<any, any> ? T[K]
-    : T[K] extends Func<infer TS, infer R> ? PromisifiedFunc<TS, R>
+  [K in keyof T]: T[K] extends (...args: infer TS) => infer R ? (...args: TS) => Promise<Awaited<R>>
     : () => Promise<T[K]>
 }
 
@@ -36,10 +47,10 @@ export class ChildProcessProxy<T> implements Disposable {
   public readonly proxy: Promisified<T>
 
   private readonly worker: childProcess.ChildProcess
-  private readonly initTask: Task
+  private readonly initTask: Task<unknown>
   private disposeTask: ExpirableTask | undefined
   private fatalError: StrykerError | undefined
-  private readonly workerTasks = new Map<number, Task>()
+  private readonly workerTasks = new Map<number, Task<unknown>>()
   private workerTaskCounter = 0
   private readonly log
   private readonly stdoutBuilder = new StringBuilder()
@@ -62,7 +73,7 @@ export class ChildProcessProxy<T> implements Disposable {
     const workerId = idGenerator.next().toString()
     this.worker = childProcess.fork(
       fileURLToPath(
-        new URL('./child-process-proxy-worker.mjs', import.meta.url),
+        new URL('./child-process-proxy-worker-main.mjs', import.meta.url),
       ),
       {
         silent: true,
@@ -113,7 +124,7 @@ export class ChildProcessProxy<T> implements Disposable {
     pluginModulePaths: readonly string[],
     workingDirectory: string,
     injectableClass: InjectableClass<ChildProcessContext, R, Tokens>,
-    execArgv: string[],
+    execArgv: readonly string[],
     getLogger: LoggerFactoryMethod,
     idGenerator: IdGenerator,
   ): ChildProcessProxy<R> {
@@ -126,40 +137,60 @@ export class ChildProcessProxy<T> implements Disposable {
       pluginModulePaths,
       workingDirectory,
       getLogger(ChildProcessProxy.name),
-      execArgv,
+      [...execArgv],
       idGenerator,
     )
   }
 
-  private send(message: WorkerMessage) {
-    this.worker.send(serialize(message))
+  private send(message: unknown) {
+    const encoded = encodeWorkerMessage(message)
+    if (Exit.isFailure(encoded)) {
+      throw new ProtocolEncodeError({ reason: String(encoded.cause) })
+    }
+    this.worker.send(encoded.value)
   }
 
   private initProxy(): Promisified<T> {
     // This proxy is a genuine javascript `Proxy` class
     // More info: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy
-    return new Proxy({} as Promisified<T>, {
-      get: (_, propertyKey) => {
-        if (typeof propertyKey === 'string') {
-          return this.forward(propertyKey)
-        } else {
-          return undefined
-        }
-      },
-    })
+    // The facade is declared through an Effect Schema: the runtime check only
+    // asserts object-likeness (the same trust boundary `VitestNodeModuleSchema`
+    // uses for a dynamically imported module), and every member is one of
+    // this.forward's closures.
+    return S.decodeUnknownSync(
+      S.declare(
+        (input: unknown): input is Promisified<T> =>
+          input !== null && typeof input === 'object' && !Array.isArray(input),
+        { description: 'The runtime promisified facade of a child-process worker' },
+      ),
+    )(
+      new Proxy({}, {
+        get: (_, propertyKey) => {
+          if (typeof propertyKey === 'string') {
+            return this.forward(propertyKey)
+          } else {
+            return undefined
+          }
+        },
+      }),
+    )
   }
 
   private forward(methodName: string) {
-    return async (...args: any[]) => {
+    return async (...args: unknown[]) => {
       if (this.fatalError) {
         return Promise.reject(this.fatalError)
       } else {
-        const workerTask = new Task<void>()
+        const workerTask = new Task<unknown>()
         const correlationId = this.workerTaskCounter++
         this.workerTasks.set(correlationId, workerTask)
         this.initTask.promise
           .then(() => {
             this.send({
+              // Nothing narrows `args` here: they are declared `S.Json`, so the
+              // envelope encoder is the one thing that rejects an argument the
+              // wire cannot carry, and it does so on this side with the value
+              // still in hand.
               args,
               correlationId,
               kind: WorkerMessageKind.Call,
@@ -175,8 +206,15 @@ export class ChildProcessProxy<T> implements Disposable {
   }
 
   private listenForMessages() {
-    this.worker.on('message', (serializedMessage: string) => {
-      const message = deserialize<ParentMessage>(serializedMessage)
+    this.worker.on('message', (serializedMessage: unknown) => {
+      const decoded = decodeParentMessage(serializedMessage)
+      if (Exit.isFailure(decoded)) {
+        // A reply this half cannot read is unattributable to any one call, so it
+        // is a crash of the whole child rather than one task's rejection.
+        this.fatalError = new ChildProcessCrashedError(this.worker.pid, String(decoded.cause))
+        return
+      }
+      const message = decoded.value
       switch (message.kind) {
         case ParentMessageKind.Ready:
           // Workaround, because of a race condition more prominent in native ESM node modules
@@ -187,17 +225,22 @@ export class ChildProcessProxy<T> implements Disposable {
         case ParentMessageKind.Initialized:
           this.initTask.resolve(undefined)
           break
-        case ParentMessageKind.CallResult:
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-          this.workerTasks.get(message.correlationId)!.resolve(message.result)
-          this.workerTasks.delete(message.correlationId)
+        case ParentMessageKind.CallResult: {
+          const task = this.workerTasks.get(message.correlationId)
+          if (task !== undefined) {
+            task.resolve(message.result)
+            this.workerTasks.delete(message.correlationId)
+          }
           break
-        case ParentMessageKind.CallRejection:
-          this.workerTasks
-            .get(message.correlationId)!
-            .reject(new StrykerError(message.error))
-          this.workerTasks.delete(message.correlationId)
+        }
+        case ParentMessageKind.CallRejection: {
+          const task = this.workerTasks.get(message.correlationId)
+          if (task !== undefined) {
+            task.reject(new StrykerError(message.error))
+            this.workerTasks.delete(message.correlationId)
+          }
           break
+        }
         case ParentMessageKind.DisposeCompleted:
           if (this.disposeTask) {
             this.disposeTask.resolve(undefined)

@@ -1,9 +1,9 @@
 import { Duration, Effect } from 'effect'
 import type { Scope, Stream } from 'effect'
-export * from './backoff.kernel.js'
-export * from './brands.kernel.js'
-export * from './daemon-health.schema.js'
-export * from './daemon-metrics.kernel.js'
+export * from './Backoff.js'
+export * from './Brands.js'
+export * from './DaemonHealth.schema.js'
+export * from './DaemonMetrics.js'
 export {
   BoundedIntensity,
   ChildPolicyConfig,
@@ -13,14 +13,14 @@ export {
   MaxChildren,
   TickPolicyConfig,
   UnboundedIntensity,
-} from './daemon-policy.schema.js'
-export * from './daemon-reporter.adapter.js'
-export * from './daemon-spec.schema.js'
-import type { DaemonHealth, SupervisorHealth } from './daemon-health.schema.js'
-import { MaxChildren } from './daemon-policy.schema.js'
-import type { ChildPolicyConfig, TickPolicyConfig } from './daemon-policy.schema.js'
-import { poll as pollKernel } from './daemon-poll.kernel.js'
-import { DaemonReporter } from './daemon-reporter.adapter.js'
+} from './DaemonPolicy.schema.js'
+export * from './DaemonReporterAdapter.js'
+export * from './DaemonSpec.schema.js'
+import type { DaemonHealth, SupervisorHealth } from './DaemonHealth.schema.js'
+import { MaxChildren } from './DaemonPolicy.schema.js'
+import type { ChildPolicyConfig, TickPolicyConfig } from './DaemonPolicy.schema.js'
+import { poll as pollKernel } from './DaemonPoll.js'
+import { DaemonReporter } from './DaemonReporterAdapter.js'
 import type {
   Child,
   CommonOpts,
@@ -33,11 +33,11 @@ import type {
   SupervisorOpts,
   TickPolicyHooks,
   Worker,
-} from './daemon-spec.schema.js'
-import { stream as streamKernel } from './daemon-stream.kernel.js'
-import { subscription as subscriptionKernel } from './daemon-subscription.kernel.js'
-import { LeaderLock } from './leader-lock.adapter.js'
-import { isModeNone } from './leader-lock.kernel.js'
+} from './DaemonSpec.schema.js'
+import { stream as streamKernel } from './DaemonStream.js'
+import { subscription as subscriptionKernel } from './DaemonSubscription.js'
+import { isModeNone } from './LeaderLock.js'
+import { LeaderLock } from './LeaderLockAdapter.js'
 export const poll = <A, E, R, L extends LockConfig>(opts: PollOpts<A, E, R, L>): Worker<E, R, L> =>
   pollKernel<
     Effect.Effect<A, E, R>,
@@ -93,13 +93,13 @@ export const Daemon = {
   stream,
   subscription,
 } as const
-export * from './leader-lock.adapter.js'
-export * from './leader-lock.schema.js'
-export { LockPrimitiveError } from './lock-primitive.schema.js'
-import { worker as workerImpl } from './daemon-worker.executor.js'
-import { dynamic as dynamicRuntime } from './internal/build-dynamic.executor.js'
-import { supervisor as supervisorImpl } from './internal/supervisor-body.executor.js'
-import type { LockBinding } from './internal/with-lock-by-mode.executor.js'
+export * from './LeaderLock.schema.js'
+export * from './LeaderLockAdapter.js'
+export { LockPrimitiveError } from './LockPrimitive.schema.js'
+import { worker as workerImpl } from './DaemonWorkerExecutor.js'
+import { dynamic as dynamicRuntime } from './internal/BuildDynamicExecutor.js'
+import { supervisor as supervisorImpl } from './internal/SupervisorBodyExecutor.js'
+import type { LockBinding } from './internal/WithLockByModeExecutor.js'
 
 /**
  * Boots a worker. The leader-lock capability is acquired here, at the composition
@@ -160,39 +160,39 @@ export const supervisor = <E, R>(
     }
     return yield* supervisorImpl(s, reporter, binding)
   })
-export { withLeaderLock } from './internal/with-leader-lock.executor.js'
-export type { LeaderLockOptions } from './internal/with-leader-lock.executor.js'
+export { withLeaderLock } from './internal/WithLeaderLockExecutor.js'
+export type { LeaderLockOptions } from './internal/WithLeaderLockExecutor.js'
 export const run = {
   worker,
   supervisor,
   dynamic: dynamicRuntime,
 } as const
-import { LeaderConfig } from './internal/supervision-leader.state.js'
-import { TaskConfig } from './internal/supervision-task.state.js'
-import { WorkerConfig } from './internal/supervision-worker.state.js'
-import { custom } from './supervision-custom.kernel.js'
-import { leader as leaderKernel } from './supervision-leader.kernel.js'
-import { task as taskKernel } from './supervision-task.kernel.js'
-import { worker as supervisionKernel } from './supervision-worker.kernel.js'
+import { LeaderConfig } from './internal/SupervisionLeader.js'
+import { TaskConfig } from './internal/SupervisionTask.js'
+import { WorkerConfig } from './internal/SupervisionWorker.js'
+import { custom } from './SupervisionCustom.js'
+import { leader as leaderKernel } from './SupervisionLeader.js'
+import { task as taskKernel } from './SupervisionTask.js'
+import { worker as supervisionKernel } from './SupervisionWorker.js'
 export const leader = (cap: Duration.Input): Effect.Effect<SupervisionPolicy> =>
   Effect.flatMap(LeaderConfig, (config) => leaderKernel(config, cap))
 export const task = (budget: Duration.Input): Effect.Effect<SupervisionPolicy> =>
   Effect.flatMap(TaskConfig, (config) => taskKernel(config, budget))
 export const supervision = (cap: Duration.Input): Effect.Effect<SupervisionPolicy> =>
   Effect.flatMap(WorkerConfig, (config) => supervisionKernel(config, cap))
-export { LeaderConfig } from './internal/supervision-leader.state.js'
-export { TaskConfig } from './internal/supervision-task.state.js'
-export { WorkerConfig } from './internal/supervision-worker.state.js'
+export { LeaderConfig } from './internal/SupervisionLeader.js'
+export { TaskConfig } from './internal/SupervisionTask.js'
+export { WorkerConfig } from './internal/SupervisionWorker.js'
 export const Supervision = {
   leader,
   worker: supervision,
   task,
   custom,
 } as const
-import { dynamic as dynamicKernel, MAX_CHILDREN_CEILING } from './supervisor-dynamic.kernel.js'
-import { oneForAll as oneForAllKernel } from './supervisor-one-for-all.kernel.js'
-import { oneForOne as oneForOneKernel } from './supervisor-one-for-one.kernel.js'
-import { restForOne as restForOneKernel } from './supervisor-rest-for-one.kernel.js'
+import { dynamic as dynamicKernel, MAX_CHILDREN_CEILING } from './SupervisorDynamic.js'
+import { oneForAll as oneForAllKernel } from './SupervisorOneForAll.js'
+import { oneForOne as oneForOneKernel } from './SupervisorOneForOne.js'
+import { restForOne as restForOneKernel } from './SupervisorRestForOne.js'
 export const dynamic = <E, R, Args>(
   opts: {
     readonly name: string

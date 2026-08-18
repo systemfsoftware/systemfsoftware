@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [inlineSchemaTests()],
   test: {
     ...sharedConfig.test,
-    include: ['src/**/*.test.ts', '__tests__/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
     setupFiles: ['./vitest.setup.ts'],
     testTimeout: 120_000,
   },

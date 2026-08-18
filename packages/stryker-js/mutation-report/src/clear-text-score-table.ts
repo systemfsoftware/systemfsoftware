@@ -1,6 +1,6 @@
 import os from 'os'
 
-import { MutationScoreThresholds, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type MutationScoreThresholds, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 import { MetricsResult } from 'mutation-testing-metrics'
 
@@ -15,7 +15,8 @@ type TableCellValueFactory = (
   ancestorCount: number,
 ) => string
 
-const repeat = (char: string, nTimes: number) => new Array(nTimes > -1 ? nTimes + 1 : 0).join(char)
+// `new Array(n + 1).join(char)` yielded n separators; `repeat` states that directly.
+const repeat = (char: string, nTimes: number) => char.repeat(nTimes > -1 ? nTimes : 0)
 const spaces = (n: number) => repeat(' ', n)
 
 const determineContentWidth = (
@@ -111,7 +112,7 @@ class MutationScoreColumn extends SingleColumn {
       rows,
     )
   }
-  protected color(metricsResult: MetricsResult) {
+  protected override color(metricsResult: MetricsResult) {
     const {
       mutationScore: score,
       mutationScoreBasedOnCoveredCode: coveredScore,
@@ -150,7 +151,9 @@ class GroupColumn extends Column {
   columns: SingleColumn[]
   constructor(groupName: string, ...columns: SingleColumn[]) {
     // Calculate the width of the columns, use the `width`, since the gross width is included in this grouped column. Subtract 2 for the padding.
-    const { isFirstColumn } = columns[0]
+    const firstColumn = columns[0]
+    if (firstColumn === undefined) throw new Error('a group column needs at least one column')
+    const { isFirstColumn } = firstColumn
     const columnsWidth = columns.reduce((acc, cur) => acc + cur.width, 0) -
       (isFirstColumn ? 1 : 2)
     const groupNameWidth = stringWidth(groupName)
@@ -158,7 +161,7 @@ class GroupColumn extends Column {
     this.columns = columns
     if (this.netWidth > columnsWidth + 1) {
       // Resize the first column to fill the gap
-      columns[0].netWidth += this.netWidth - columnsWidth - 1
+      firstColumn.netWidth += this.netWidth - columnsWidth - 1
     }
   }
 

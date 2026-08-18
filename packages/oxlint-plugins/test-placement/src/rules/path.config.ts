@@ -1,11 +1,11 @@
 export const TEST_BASENAME = /\.(?:test|spec)\.[cm]?tsx?$/
 
-export const SANCTIONED_TEST_DIRS: ReadonlySet<string> = new Set(['__tests__'])
+export const SANCTIONED_TEST_DIRS: ReadonlySet<string> = new Set(['tests'])
 
 /**
- * The only test location sanctioned under `src/`. A property test earns
- * colocation with the cell it covers, but not adjacency: it lives in a
- * `__tests__` directory beside that cell, never as a sibling file.
+ * The only test location sanctioned under `src/`. A workflow property test
+ * earns colocation with the workflow it covers, but not adjacency: it lives in
+ * a `__tests__` directory beside that workflow, never as a sibling file.
  */
 export const NESTED_TEST_DIR = '__tests__' as const
 
@@ -26,40 +26,13 @@ export const SCHEMA_LAWS_BASENAME = 'schema-laws.test.ts' as const
 export const SCHEMA_SUFFIX = '.schema.test.ts' as const
 
 /**
- * The cells a colocated test may cover. A test whose stem names one of these
- * is legal beside the cell it covers, in whichever form the author needs; a
- * test naming any other cell is not, because those cells are covered at
- * composition altitude. This list sanctions a form — it never requires one.
- * Requiring a test is the `cellsRequiringTest` option on
- * `src-property-test-cell`, which a consumer opts into per cell.
- *
- * `kernel` is admitted because a kernel is domain-blind pure behaviour whose
- * laws are algebraic: every mutant is either a broken law or genuinely
- * equivalent, which is the ideal property-test target. A kernel property test
- * that kills no mutant another test file does not also kill fails the mutation
- * run: `requireTestContribution` in the package's `stryker.config.json` names
- * the suffix it judges, and this list is what makes that path reachable.
- *
- * `schema` is admitted for ONE purpose: refusal. The generated laws draw from
- * each schema's own arbitrary, so every input already satisfies the refinement
- * under test — no law can state what a schema REJECTS. This module rules on
- * the filename only; what may appear inside the file is not its concern.
+ * The one property-test basename sanctioned under `src/`: a single-segment
+ * stem, then `.workflow.property.test.ts`, beside the `<stem>.workflow.ts` it
+ * covers. Every other test file under `src/` is banned; a kernel, policy, or
+ * schema suite has no file home and becomes an in-source `import.meta.vitest`
+ * block in the module it covers.
  */
-export const COLOCATABLE_CELLS = ['workflow', 'policy', 'schema', 'kernel'] as const
-
-export const SHELL_CELL_SUFFIXES: readonly string[] = [
-  '.executor',
-  '.handler',
-  '.adapter',
-  '.store',
-  '.middleware',
-]
-
-export const SHELL_ENTRY_BASENAMES: ReadonlySet<string> = new Set([
-  'main',
-  'mod',
-  'index',
-])
+export const WORKFLOW_TEST_BASENAME = /^[^.]+\.workflow\.property\.test\.ts$/
 
 export const DOUBLE_BASENAME_PATTERN: RegExp = /(?:^|[^a-z])(?:fake|stub|mock|noop)(?:[^a-z]|$)/
 

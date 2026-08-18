@@ -12,7 +12,7 @@
       "default": "./dist/index.js"
     },
     "./runtime-lifecycle": {
-      "@systemfsoftware/source": "./src/runtime-lifecycle.middleware.ts",
+      "@systemfsoftware/source": "./src/RuntimeLifecycle.ts",
       "default": "./dist/runtime-lifecycle.js"
     },
     "./package.json": "./package.json"
@@ -31,10 +31,13 @@
     "@effect/vitest": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",

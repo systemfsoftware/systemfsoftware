@@ -1,9 +1,9 @@
-import { CheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
-import { MutantRunPlan } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type CheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
+import { type MutantRunPlan } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 import { ResourceDecorator } from '../worker-pool/index.js'
 
-import { CheckerResource } from './checker-resource.js'
+import { type CheckerResource } from './checker-resource.js'
 
 function toMap(mutantRunPlans: MutantRunPlan[]) {
   return new Map<string, MutantRunPlan>(

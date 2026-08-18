@@ -1,5 +1,8 @@
 import util from 'util'
 import { LogLevel } from './log-level.js'
+import { type SerializedLoggingEvent } from './logging-event.schema.js'
+
+export type { SerializedLoggingEvent } from './logging-event.schema.js'
 
 const pattern = [
   '[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]+)*|[a-zA-Z\\d]+(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?\\u0007)',
@@ -73,14 +76,6 @@ export class LoggingEvent {
       pid: this.pid,
     }
   }
-}
-
-export interface SerializedLoggingEvent {
-  startTime: string
-  categoryName: string
-  message: string
-  level: LogLevel
-  pid: number
 }
 
 const styles = Object.freeze({

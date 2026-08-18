@@ -2,12 +2,16 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath, pathToFileURL, URL } from 'url'
 
-import { notEmpty, propertyPath } from '@stryker-mutator/util'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
-import { commonTokens, Plugin, PluginKind, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Schema as S } from 'effect'
+
+import { errorToString, isErrnoException, notEmpty, propertyPath } from '@stryker-mutator/util'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, type Plugin, PluginKind, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 
 import { importModule } from '../config/module-loader.js'
 import { defaultOptions } from '../config/options-validator.js'
+
+import { PluginModuleSchema, SchemaValidationContributionSchema } from './plugin-loader.schema.js'
 
 const IGNORED_PACKAGES = ['core', 'api', 'util', 'instrumenter']
 
@@ -184,8 +188,9 @@ export class PluginLoader {
           ),
         )
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       if (
+        isErrnoException(e) &&
         e.code === 'ERR_MODULE_NOT_FOUND' &&
         e.message.indexOf(descriptor) !== -1
       ) {
@@ -197,7 +202,7 @@ export class PluginLoader {
         this.log.warn(
           'Error during loading "%s" plugin:\n  %s',
           descriptor,
-          e.message,
+          errorToString(e),
         )
       }
     }
@@ -216,24 +221,22 @@ function parsePluginExpression(pluginExpression: string) {
   if (parts.length > 1) {
     return {
       org: parts.slice(0, parts.length - 1).join('/'),
-      pkg: parts[parts.length - 1],
+      pkg: parts[parts.length - 1] ?? '',
     }
   } else {
     return {
       org: '',
-      pkg: parts[0],
+      pkg: parts[0] ?? '',
     }
   }
 }
 
 function isPluginModule(module: unknown): module is PluginModule {
-  const pluginModule = module as Partial<PluginModule>
-  return Array.isArray(pluginModule.strykerPlugins)
+  return S.is(PluginModuleSchema)(module)
 }
 
 function hasValidationSchemaContribution(
   module: unknown,
 ): module is SchemaValidationContribution {
-  const pluginModule = module as Partial<SchemaValidationContribution>
-  return typeof pluginModule.strykerValidationSchema === 'object'
+  return S.is(SchemaValidationContributionSchema)(module)
 }

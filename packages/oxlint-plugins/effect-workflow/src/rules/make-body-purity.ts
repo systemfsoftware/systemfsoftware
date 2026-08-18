@@ -9,19 +9,25 @@ import {
   IO_GLOBAL_ACTUAL,
   IO_IMPORT_ACTUAL,
   meta,
+  MODULE_MUTATION_ACTUAL,
+  MODULE_MUTATION_FIX,
   MODULE_STATE_ACTUAL,
   MODULE_STATE_FIX,
   MUTABLE_LOCAL_ACTUAL,
   MUTABLE_LOCAL_FIX,
   PURE_BODY_EXPECTED,
+  RUNTIME_IMPORT_ACTUAL,
+  RUNTIME_IMPORT_FIX,
   UNRESOLVABLE_ACTUAL,
   UNRESOLVABLE_FIX,
   UNRESOLVABLE_MAKE_ARGUMENT_ACTUAL,
   UNRESOLVABLE_MAKE_ARGUMENT_EXPECTED,
   UNRESOLVABLE_MAKE_ARGUMENT_FIX,
+  UNSEALED_IMPORT_ACTUAL,
+  UNSEALED_IMPORT_FIX,
 } from './make-body-purity.config.js'
-import { collectMakeBoundaries, type MakeBodyKind, type MakeBoundary } from './make-boundary.kernel.js'
-import { classifyBodyReferences, isFailingVerdict, type ReferenceVerdict } from './reference-classification.kernel.js'
+import { collectMakeBoundaries, type MakeBodyKind, type MakeBoundary } from './MakeBoundary.js'
+import { classifyBodyReferences, isFailingVerdict, type ReferenceVerdict } from './ReferenceClassification.js'
 import { isTestFile } from './workflow-match-exhaustive.config.js'
 
 export type MessageIds =
@@ -30,6 +36,9 @@ export type MessageIds =
   | 'moduleStateReference'
   | 'mutableLocalReference'
   | 'unresolvableReference'
+  | 'unsealedImportReference'
+  | 'runtimeImportReference'
+  | 'moduleMutationReference'
   | 'controlFlowBanned'
   | 'unresolvableMakeArgument'
 
@@ -76,12 +85,18 @@ const verdictOfKind = (verdict: ReferenceVerdict): MessageIds => {
   switch (verdict.kind) {
     case 'ioImport':
       return 'ioImportReference'
+    case 'unsealedImport':
+      return 'unsealedImportReference'
     case 'ioGlobal':
       return 'ioGlobalReference'
     case 'moduleState':
       return 'moduleStateReference'
     case 'localMutable':
       return 'mutableLocalReference'
+    case 'runtimeImport':
+      return 'runtimeImportReference'
+    case 'moduleMutation':
+      return 'moduleMutationReference'
     // The gate `isFailingVerdict` keeps the pass kinds out; the default is
     // unreachable and never carries a report.
     default:
@@ -123,6 +138,28 @@ const verdictData = (
         actual: MUTABLE_LOCAL_ACTUAL,
         fix: MUTABLE_LOCAL_FIX,
       }
+    case 'unsealedImport':
+      return {
+        name: referenceName,
+        expected: PURE_BODY_EXPECTED,
+        actual: UNSEALED_IMPORT_ACTUAL,
+        fix: UNSEALED_IMPORT_FIX,
+      }
+    case 'runtimeImport':
+      // The name slot already carries the full phrase; no `a reference to` prefix.
+      return {
+        name,
+        expected: PURE_BODY_EXPECTED,
+        actual: RUNTIME_IMPORT_ACTUAL,
+        fix: RUNTIME_IMPORT_FIX,
+      }
+    case 'moduleMutation':
+      return {
+        name,
+        expected: PURE_BODY_EXPECTED,
+        actual: MODULE_MUTATION_ACTUAL,
+        fix: MODULE_MUTATION_FIX,
+      }
     default:
       return {
         name: referenceName,
@@ -135,10 +172,10 @@ const verdictData = (
 
 /**
  * The KTD3 purity obligations of a `Workflow.make` decision body: references
- * resolve to parameters, const locals, module declarations, or audited-pure
- * imports; the refused set is I/O imports, module state, local mutation,
- * I/O globals, and the honest unknown. Control flow is limited to a single
- * converging first-statement guard; everything else branches and is banned.
+ * resolve to parameters, const locals, module declarations in this file, benign
+ * builtins, or the sealed pure `effect` surface. The refused set is I/O imports,
+ * every other import, module state, local mutation, I/O globals and an unbound
+ * name. Control flow is limited to a single converging first-statement guard.
  */
 export const makeBodyPurity = defineRule({
   meta,

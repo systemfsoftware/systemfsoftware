@@ -7,8 +7,6 @@
 // the lockfile's shim at the absolute path `$PWD/node_modules/.bin/turbo` —
 // the same object the lstat and the pin check see — so the grant is the
 // exact path and nothing earlier on PATH can stand in.
-// LOCKED SURFACE — evaluation script (AGENTS.md Surface Classes).
-// Never edit this file to make a PR pass; change the PR.
 //
 // The changeset requirement keys on the per-package turbo `build` task hash,
 // compared between the PR's pinned base commit and its head (REPO-R2). A

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isMetaVitest, isVitestGuard } from '../in-source-test-targets-private.js'
+import { isMetaVitest, isVitestGuard } from '../vitest-guard.js'
 
 const buildNode = (type: string, rest: Record<string, unknown> = {}): unknown => ({ type, ...rest })
 

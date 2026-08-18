@@ -8,12 +8,22 @@ import { createRuleTester } from './_tester.js'
 
 const ruleTester = createRuleTester()
 
+const stray = (name: string) => [{
+  messageId: 'strayTestFile',
+  data: {
+    name,
+    expected: STRAY_TEST_FILE_EXPECTED,
+    actual: STRAY_TEST_FILE_ACTUAL,
+    fix: STRAY_TEST_FILE_FIX,
+  },
+}]
+
 ruleTester.run('test-file-outside-tests-dir', testFileOutsideTestsDir, {
   valid: [
     {
-      name: 'Should_StaySilent_When_TestIsInNestedTestsDir',
+      name: 'Should_StaySilent_When_TestIsInTestsDir',
       code: '',
-      filename: '/repo/pkg/__tests__/a.integration.test.ts',
+      filename: '/repo/pkg/tests/a.integration.test.ts',
     },
     {
       name: 'Should_Allow_SrcPropertyTest_When_UnderSrc',
@@ -28,46 +38,22 @@ ruleTester.run('test-file-outside-tests-dir', testFileOutsideTestsDir, {
   ],
   invalid: [
     {
-      name: 'Should_Report_When_TestIsInTestsDir',
+      name: 'Should_Report_When_TestIsInDoubleUnderscoreTestsDir',
       code: '',
-      filename: '/repo/pkg/tests/a.integration.test.ts',
-      errors: [{
-        messageId: 'strayTestFile',
-        data: {
-          name: 'a.integration.test.ts',
-          expected: STRAY_TEST_FILE_EXPECTED,
-          actual: STRAY_TEST_FILE_ACTUAL,
-          fix: STRAY_TEST_FILE_FIX,
-        },
-      }],
+      filename: '/repo/pkg/__tests__/a.integration.test.ts',
+      errors: stray('a.integration.test.ts'),
     },
     {
       name: 'Should_Report_StrayIntegrationTest_When_AtRepoRoot',
       code: '',
       filename: '/repo/pkg/a.integration.test.ts',
-      errors: [{
-        messageId: 'strayTestFile',
-        data: {
-          name: 'a.integration.test.ts',
-          expected: STRAY_TEST_FILE_EXPECTED,
-          actual: STRAY_TEST_FILE_ACTUAL,
-          fix: STRAY_TEST_FILE_FIX,
-        },
-      }],
+      errors: stray('a.integration.test.ts'),
     },
     {
       name: 'Should_Report_StrayIntegrationTest_When_InUnrelatedLibDir',
       code: '',
       filename: '/repo/pkg/lib/a.integration.test.ts',
-      errors: [{
-        messageId: 'strayTestFile',
-        data: {
-          name: 'a.integration.test.ts',
-          expected: STRAY_TEST_FILE_EXPECTED,
-          actual: STRAY_TEST_FILE_ACTUAL,
-          fix: STRAY_TEST_FILE_FIX,
-        },
-      }],
+      errors: stray('a.integration.test.ts'),
     },
   ],
 })

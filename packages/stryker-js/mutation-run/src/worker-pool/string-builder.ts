@@ -12,8 +12,10 @@ export class StringBuilder {
     this.strings.push(str)
     this.currentLength += str.length
     while (this.currentLength > this.maxSize && this.strings.length > 1) {
-      const shifted = this.strings.shift()!
-      this.currentLength -= shifted.length
+      const shifted = this.strings.shift()
+      if (shifted !== undefined) {
+        this.currentLength -= shifted.length
+      }
     }
   }
 

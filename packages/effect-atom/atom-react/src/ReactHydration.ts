@@ -20,7 +20,7 @@ import { RegistryContext } from './RegistryContext.js'
  * @since 4.0.0
  */
 export interface HydrationBoundaryProps {
-  state?: Iterable<Hydration.DehydratedAtom>
+  state?: Iterable<Hydration.DehydratedAtomValue>
   children?: React.ReactNode
 }
 
@@ -68,7 +68,7 @@ export const HydrationBoundary: React.FC<HydrationBoundaryProps> = ({
   // updating the UI.
   const hydrationQueue: Hydration.DehydratedAtomValue[] | undefined = React.useMemo(() => {
     if (state) {
-      const dehydratedAtoms = Array.from(state) as Hydration.DehydratedAtomValue[]
+      const dehydratedAtoms = Array.from(state)
       const nodes = registry.getNodes()
 
       const newDehydratedAtoms: Hydration.DehydratedAtomValue[] = []

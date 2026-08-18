@@ -1,7 +1,7 @@
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { LogLevel } from './log-level.js'
 import { LoggingEvent } from './logging-event.js'
-import { LoggingSink } from './logging-sink.js'
+import { type LoggingSink } from './logging-sink.js'
 
 export class LoggerImpl implements Logger {
   #categoryName
@@ -30,7 +30,7 @@ export class LoggerImpl implements Logger {
   isFatalEnabled(): boolean {
     return this.#loggingBackend.isEnabled(LogLevel.Fatal)
   }
-  trace(message: string, ...args: any[]): void {
+  trace(message: string, ...args: unknown[]): void {
     this.#loggingBackend.log(
       LoggingEvent.create(this.#categoryName, LogLevel.Trace, [
         message,
@@ -38,7 +38,7 @@ export class LoggerImpl implements Logger {
       ]),
     )
   }
-  debug(message: string, ...args: any[]): void {
+  debug(message: string, ...args: unknown[]): void {
     this.#loggingBackend.log(
       LoggingEvent.create(this.#categoryName, LogLevel.Debug, [
         message,
@@ -46,7 +46,7 @@ export class LoggerImpl implements Logger {
       ]),
     )
   }
-  info(message: string, ...args: any[]): void {
+  info(message: string, ...args: unknown[]): void {
     this.#loggingBackend.log(
       LoggingEvent.create(this.#categoryName, LogLevel.Information, [
         message,
@@ -54,7 +54,7 @@ export class LoggerImpl implements Logger {
       ]),
     )
   }
-  warn(message: string, ...args: any[]): void {
+  warn(message: string, ...args: unknown[]): void {
     this.#loggingBackend.log(
       LoggingEvent.create(this.#categoryName, LogLevel.Warning, [
         message,
@@ -62,7 +62,7 @@ export class LoggerImpl implements Logger {
       ]),
     )
   }
-  error(message: string, ...args: any[]): void {
+  error(message: string, ...args: unknown[]): void {
     this.#loggingBackend.log(
       LoggingEvent.create(this.#categoryName, LogLevel.Error, [
         message,
@@ -70,7 +70,7 @@ export class LoggerImpl implements Logger {
       ]),
     )
   }
-  fatal(message: string, ...args: any[]): void {
+  fatal(message: string, ...args: unknown[]): void {
     this.#loggingBackend.log(
       LoggingEvent.create(this.#categoryName, LogLevel.Fatal, [
         message,

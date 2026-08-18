@@ -10,5 +10,5 @@
     // vendored forks — the plugin runs at the Effect Language Service defaults, correctness tier only.
     "plugins": [{ "name": "@effect/language-service" }]
   },
-  "include": ["src", "__tests__"]
+  "include": ["src", "tests"]
 }

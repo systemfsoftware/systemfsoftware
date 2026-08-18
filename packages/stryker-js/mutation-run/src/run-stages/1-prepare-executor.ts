@@ -1,7 +1,8 @@
 import { frameworkPluginsFileUrl } from '@stryker-mutator/instrumenter'
 import { deepFreeze } from '@stryker-mutator/util'
-import { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { BaseContext, commonTokens, Injector, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { type PartialStrykerOptions, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type BaseContext, commonTokens, type Injector, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import * as S from 'effect/Schema'
 import { execaCommand } from 'execa'
 import { forkCoreSchema } from '../config/fork-schema.js'
 
@@ -19,13 +20,14 @@ import { UnexpectedExitHandler } from '../unexpected-exit-handler.js'
 
 import { FileSystem, ProjectReader } from '../project/index.js'
 
-import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
-import { LoggingBackend, LoggingServerAddress } from '../logging/index.js'
-import { MutantInstrumenterContext } from './index.js'
+import { type Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
+import { LoggingBackend, type LoggingServerAddress } from '../logging/index.js'
+import { type MutantInstrumenterContext } from './index.js'
 
 export interface PrepareExecutorContext extends BaseContext {
   [injectionTokens.loggingServerAddress]: LoggingServerAddress
-  [injectionTokens.reporterOverride]?: Reporter
+  /** Always provided; `undefined` is the absence of an override. */
+  [injectionTokens.reporterOverride]?: Reporter | undefined
   [injectionTokens.reporterPluginModules]: string[]
   [injectionTokens.runEventSink]: RunEventSink
   [injectionTokens.runId]: string
@@ -86,7 +88,10 @@ export class PrepareExecutor {
     )
     const optionsValidatorInjector = configReaderInjector.provideValue(
       injectionTokens.validationSchema,
-      metaSchema,
+      // The merged schema is consumed as data by the validator: the same
+      // opaque `Record<string, unknown>` contract `forkCoreSchema` provides,
+      // not the ajv-typed view the builder returns.
+      S.decodeUnknownSync(S.Record(S.String, S.Unknown))(metaSchema),
     )
     const validator: OptionsValidator = optionsValidatorInjector.injectClass(OptionsValidator)
     validator.validate(options, true)

@@ -4,7 +4,7 @@ import path from 'path'
 import type { Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { Result } from 'effect'
+import { Result, Schema as S } from 'effect'
 import { type SourceFile, SyntaxKind } from 'typescript/unstable/ast'
 import type { FileSystem } from 'typescript/unstable/fs'
 import {
@@ -79,7 +79,7 @@ export class TypescriptCompiler implements ITypescriptCompiler, IFileRelationCre
     const buildModeEnabled = determineBuildModeEnabled(this.tsconfigFile)
 
     this.collectAllTSConfigFiles(buildModeEnabled)
-    this.api = new API({ fs: this.fs as FileSystem })
+    this.api = new API({ fs: this.fs })
     this.snapshot = this.api.updateSnapshot({
       openProjects: [...this.allTSConfigFiles],
     })
@@ -185,7 +185,7 @@ export class TypescriptCompiler implements ITypescriptCompiler, IFileRelationCre
     position: number,
   ): { line: number; character: number } | undefined {
     for (const program of this.getPrograms()) {
-      const sourceFile = program.getSourceFile(fileName as DocumentIdentifier)
+      const sourceFile = program.getSourceFile(fileName)
       if (sourceFile) {
         return sourceFile.getLineAndCharacterOfPosition(position)
       }
@@ -396,15 +396,18 @@ export class TypescriptCompiler implements ITypescriptCompiler, IFileRelationCre
       return dependencyFileName
     }
 
-    const sourceMapParsed = JSON.parse(sourceMap.content) as {
-      sources?: string[]
-    }
+    const sourceMapParsed = S.decodeUnknownSync(
+      S.Struct({ sources: S.optional(S.Array(S.String)) }),
+    )(JSON.parse(sourceMap.content))
     const sources = sourceMapParsed.sources
 
     if (sources?.length === 1) {
-      const [sourcePath] = sources
+      const sourcePath = sources[0]
+      if (sourcePath === undefined) {
+        return dependencyFileName
+      }
       return toPosixFileName(
-        path.resolve(path.dirname(sourceMapFileName), sourcePath!),
+        path.resolve(path.dirname(sourceMapFileName), sourcePath),
       )
     }
 

@@ -1,8 +1,8 @@
 import path from 'path'
 
-import { File } from '@stryker-mutator/instrumenter'
-import { I, StrykerError } from '@stryker-mutator/util'
-import { FileDescription, MutateDescription } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type File } from '@stryker-mutator/instrumenter'
+import { type I, StrykerError } from '@stryker-mutator/util'
+import { type FileDescription, type MutateDescription } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 import { FileSystem } from './file-system.js'
 

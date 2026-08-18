@@ -3,7 +3,7 @@ import { defineConfig } from 'tsdown'
 export default defineConfig({
   entry: {
     index: './src/index.ts',
-    'child-process-proxy-worker': './src/worker-pool/child-process-proxy-worker.ts',
+    'child-process-proxy-worker-main': './src/worker-pool/child-process-proxy-worker-main.ts',
     'checker-worker': './src/checker/checker-worker.ts',
     'child-process-test-runner-worker': './src/test-runner/child-process-test-runner-worker.ts',
     'config/base': './src/config/base-preset.ts',

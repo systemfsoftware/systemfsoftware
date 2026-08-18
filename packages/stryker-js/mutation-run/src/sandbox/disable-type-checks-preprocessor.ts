@@ -1,8 +1,8 @@
 import path from 'path'
 
 import type { disableTypeChecks } from '@stryker-mutator/instrumenter'
-import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 
 import { FileMatcher } from '../config/index.js'
@@ -13,7 +13,7 @@ import { map } from '../run-stages/map.js'
 
 import { Project } from '../project/project.js'
 
-import { FilePreprocessor } from './file-preprocessor.js'
+import { type FilePreprocessor } from './file-preprocessor.js'
 
 /**
  * Disabled type checking by inserting `@ts-nocheck` atop TS/JS files and removing other @ts-xxx directives from comments:
@@ -40,7 +40,11 @@ export class DisableTypeChecksPreprocessor implements FilePreprocessor {
           try {
             const { content } = await this.impl(
               await file.toInstrumenterFile(),
-              { plugins: this.options.mutator.plugins },
+              {
+                plugins: this.options.mutator.plugins
+                  ? [...this.options.mutator.plugins]
+                  : null,
+              },
             )
             file.setContent(content)
           } catch (err) {

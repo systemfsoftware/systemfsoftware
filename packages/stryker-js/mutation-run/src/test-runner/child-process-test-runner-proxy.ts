@@ -1,18 +1,18 @@
 import { URL } from 'url'
 
 import { ExpirableTask } from '@stryker-mutator/util'
-import { FileDescriptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type FileDescriptions, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import {
-  DryRunOptions,
-  DryRunResult,
-  MutantRunOptions,
-  MutantRunResult,
-  TestRunner,
-  TestRunnerCapabilities,
+  type DryRunOptions,
+  type DryRunResult,
+  type MutantRunOptions,
+  type MutantRunResult,
+  type TestRunner,
+  type TestRunnerCapabilities,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
-import { LoggingServerAddress } from '../logging/index.js'
+import { type LoggingServerAddress } from '../logging/index.js'
 import { ChildProcessCrashedError } from '../worker-pool/child-process-crashed-error.js'
 import { ChildProcessProxy } from '../worker-pool/child-process-proxy.js'
 

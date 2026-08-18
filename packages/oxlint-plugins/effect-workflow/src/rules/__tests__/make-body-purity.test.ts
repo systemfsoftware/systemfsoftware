@@ -16,7 +16,7 @@ const ruleTester = new RuleTester({
 })
 
 const PURE_BODY_EXPECTED =
-  'a Workflow.make decision body whose references resolve to parameters, local const bindings, or imports of audited-pure modules'
+  'a Workflow.make decision body whose references resolve to parameters, const locals, declarations in this same file, benign builtins, or the sealed pure effect surface'
 const CONTROL_EXPECTED =
   'a single decision path: one expression of exhaustive dispatch, with at most one defensive guard as the first statement converging immediately'
 const CONTROL_ACTUAL = 'a control-flow construct that opens a second path inside the decision'
@@ -27,15 +27,27 @@ const IO_GLOBAL_ACTUAL = 'a reference to an I/O global (console, process, Deno, 
 const MODULE_STATE_ACTUAL =
   'a reference to mutable module-level state (a let/var binding) — mutation is a second path and its read can race'
 const MUTABLE_LOCAL_ACTUAL = 'a reference to a mutable local binding (let/var) inside the decision'
+const UNSEALED_IMPORT_ACTUAL =
+  'a reference to an imported binding whose module this rule cannot read, so nothing decides whether it is pure'
+const UNSEALED_IMPORT_FIX =
+  'a decision is the innermost point of the sandwich, so imports run toward it and never out of it: the reader imports the workflow. Move the referenced code into this file, or move the decision into the file that already holds it - one of the two is the decision, and it cannot be split across both. Pass anything a caller must supply in as data'
 const UNRESOLVABLE_ACTUAL =
-  'a reference the purity rule cannot classify: an import from a module the audit has not sealed, or an unresolved global'
+  'an identifier that resolves to no parameter, no local binding, no import and no known global'
 const IO_FIX =
   'hoist the I/O into the file that performs it and pass the result into the decision as data; delete the reference when nothing consumes it'
 const MODULE_STATE_FIX =
   'pass the module state in as a parameter and keep it out of the decision; delete the binding when nothing consumes it'
 const MUTABLE_LOCAL_FIX = 'declare it const, or delete it when nothing consumes it'
 const UNRESOLVABLE_FIX =
-  'read the imported module, seal its classification in make-body-purity.config.ts, or move the reference out of the decision; delete it when nothing consumes it'
+  'bind the name, import it, or delete the reference; a name this file cannot resolve is a name the decision cannot depend on'
+const RUNTIME_IMPORT_ACTUAL =
+  'a runtime import inside the decision body — import(...) or require(...) performs a module load when the decision runs'
+const RUNTIME_IMPORT_FIX =
+  'hoist the import to the top of the file — a decision never imports at runtime; the module it loads must sit on the file\u2019s import lines where this rule reads it'
+const MODULE_MUTATION_ACTUAL =
+  'an assignment, update, delete or mutating container-method call that changes a module-scope object from inside the decision'
+const MODULE_MUTATION_FIX =
+  'pass the container in as data and write it where the caller owns it — a decision reads its inputs and returns a value; it never writes shared state'
 
 const referenceError = (
   messageId: string,
@@ -84,32 +96,6 @@ export const decide = Workflow.make(
       Match.tag('a', () => Result.succeed(DecisionA.make())),
       Match.exhaustive,
     ),
-)`,
-    },
-    {
-      name: 'Should_Pass_When_BodyReferencesAnAuditedKernelImport',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Match from 'effect/Match'
-import * as Result from 'effect/Result'
-import { restartIndicesFor } from './restart-decision.kernel.js'
-
-export const decide = Workflow.make(
-  (command: { readonly strategy: 'one_for_one' }): Result.Result<readonly number[], never> =>
-    Match.value(command).pipe(
-      Match.when({ strategy: 'one_for_one' }, () => Result.succeed(restartIndicesFor('one_for_one', 0, 1))),
-      Match.orElse(() => Result.succeed([])),
-    ),
-)`,
-    },
-    {
-      name: 'Should_Pass_When_BodyReferencesAnAuditedWorkflowImport',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Result from 'effect/Result'
-import { admitSurvivorsRun } from './survivors.workflow.js'
-
-export const adapter = Workflow.make(
-  ({ input }: { readonly input: unknown }): Result.Result<unknown, never> =>
-    Result.map(admitSurvivorsRun(input), (decision) => decision),
 )`,
     },
     {
@@ -260,7 +246,7 @@ export const decide = Workflow.make(
       Match.orElse(() => Result.succeed('restart')),
     ),
 )`,
-      filename: 'cancel-order.executor.ts',
+      filename: 'CancelOrderExecutor.ts',
     },
     {
       name: 'Should_Pass_When_AFixtureInATestFileUsesATernary',
@@ -288,8 +274,190 @@ export const decide = Workflow.make((command: { readonly n: number | undefined }
   )
 })`,
     },
+    {
+      // A same-file pure helper remains a pass: the classifier follows the
+      // const-arrow and scans it like the body itself, and an impurity inside
+      // would surface there.
+      name: 'Should_Pass_When_BodyCallsASameFileConstArrowPureHelper',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+
+const double = (x: number): number => x * 2
+
+export const decide = Workflow.make((x: number): Result.Result<number, never> => Result.succeed(double(x)))`,
+    },
+    {
+      // Alias resolution must make the body get *scanned*, not make aliasing illegal.
+      name: 'Should_Pass_When_AnAliasedMakeBodyIsPure',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+
+const W = Workflow
+export const decide = W.make((x: number): Result.Result<number, never> => Result.succeed(x + 1))`,
+    },
+    {
+      name: 'Should_Pass_When_AComputedMakeBodyIsPure',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+
+export const decide = Workflow['make']((x: number): Result.Result<number, never> => Result.succeed(x + 1))`,
+    },
+    {
+      name: 'Should_Pass_When_ABoundMakeBodyIsPure',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+
+export const decide = Workflow.make.bind(Workflow)((x: number): Result.Result<number, never> => Result.succeed(x + 1))`,
+    },
+    {
+      name: 'Should_Pass_When_ADestructuredMakeBodyIsPure',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+
+const { make } = Workflow
+export const decide = make((x: number): Result.Result<number, never> => Result.succeed(x + 1))`,
+    },
+    {
+      name: 'Should_Pass_When_ADestructuredRenamedMakeBodyIsPure',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+
+const { make: m } = Workflow
+export const decide = m((x: number): Result.Result<number, never> => Result.succeed(x + 1))`,
+    },
+    {
+      name: 'Should_Pass_When_AnAliasChainBodyIsPure',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+
+const W = Workflow
+const V = W
+export const decide = V.make((x: number): Result.Result<number, never> => Result.succeed(x + 1))`,
+    },
+    {
+      // The one canonical way to alias a pure module is a renamed import; the
+      // local name must never be what the sealed-pure verdict keys on.
+      name: 'Should_Pass_When_ARenamedEffectRootImportIsPure',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { Array as Arr } from 'effect'
+
+export const decide = Workflow.make((x: number) => Arr.range(0, x).length)`,
+    },
+    {
+      name: 'Should_Pass_When_ANamespaceEffectSubpathImportIsPure',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Arr from 'effect/Array'
+
+export const decide = Workflow.make((x: number) => Arr.makeBy(x, (i) => i).length)`,
+    },
+    {
+      // An object literal of only literal-valued properties is a constant
+      // record; reading it from the decision is a pure module-value read.
+      name: 'Should_Pass_When_BodyReadsAModuleConstantRecord',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+const LIMITS = { max: 10, name: 'request' } as const
+export const decide = Workflow.make((x: number) => Number(x <= LIMITS.max))`,
+    },
+    {
+      // A record carrying functions is only followed for the members the body
+      // actually executes: reading a literal member never runs the method.
+      name: 'Should_Pass_When_BodyReadsOnlyALiteralMemberOfAMixedRecord',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+const helpers = {
+  LIMIT: 10,
+  label: (x: number) => String(x),
+}
+export const decide = Workflow.make((x: number) => Number(x <= helpers.LIMIT))`,
+    },
+    {
+      // A pure local container mutated by the decision stays exempt: the
+      // module-scope container rule fires on shared state only.
+      name: 'Should_Pass_When_BodyMutatesAConstLocalContainer',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+export const decide = Workflow.make((input: { readonly n: number }) => {
+  const seen = { count: 0 }
+  seen.count += input.n
+  return seen.count
+})`,
+    },
   ],
   invalid: [
+    {
+      // Imports run toward the decision, never out of it: the reader imports the
+      // workflow. A make body reaching a sibling module invents a layer beneath
+      // the pure core, and no rule checks that layer - make-body-purity fires on
+      // make bodies alone. The allowlist that once admitted these certified
+      // modules it never opened and un-certified them on rename.
+      name: 'Should_ReportUnsealedImport_When_BodyCallsASiblingModule',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
+import { restartIndicesFor } from './RestartDecision.js'
+
+export const decide = Workflow.make(
+  (command: { readonly strategy: 'one_for_one' }): Result.Result<readonly number[], never> =>
+    Match.value(command).pipe(
+      Match.when({ strategy: 'one_for_one' }, () => Result.succeed(restartIndicesFor('one_for_one', 0, 1))),
+      Match.orElse(() => Result.succeed([])),
+    ),
+)`,
+      errors: [
+        referenceError(
+          'unsealedImportReference',
+          'a reference to restartIndicesFor',
+          UNSEALED_IMPORT_ACTUAL,
+          UNSEALED_IMPORT_FIX,
+        ),
+      ],
+    },
+    {
+      // A workflow wrapping a workflow is the same inversion one level up.
+      name: 'Should_ReportUnsealedImport_When_ADecisionWrapsAnotherWorkflow',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import { admitSurvivorsRun } from './Survivors.workflow.js'
+
+export const adapter = Workflow.make(
+  ({ input }: { readonly input: unknown }): Result.Result<unknown, never> =>
+    Result.map(admitSurvivorsRun(input), (decision) => decision),
+)`,
+      errors: [
+        referenceError(
+          'unsealedImportReference',
+          'a reference to admitSurvivorsRun',
+          UNSEALED_IMPORT_ACTUAL,
+          UNSEALED_IMPORT_FIX,
+        ),
+      ],
+    },
+    {
+      name: 'Should_ReportUnsealedImport_When_BodyCallsAThirdPartyBinding',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { maxSatisfying } from 'semver'
+
+Workflow.make((command: { readonly versions: readonly string[] }) => maxSatisfying(command.versions, '*'))`,
+      errors: [
+        referenceError(
+          'unsealedImportReference',
+          'a reference to maxSatisfying',
+          UNSEALED_IMPORT_ACTUAL,
+          UNSEALED_IMPORT_FIX,
+        ),
+      ],
+    },
+    {
+      // What `unresolvable` still means: a name bound by nothing this file can see.
+      name: 'Should_ReportUnresolvable_When_BodyReferencesAnUnboundName',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+Workflow.make((path: string) => mystery(path))`,
+      errors: [
+        referenceError('unresolvableReference', 'a reference to mystery', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
     {
       name: 'Should_ReportIoImport_When_BodyReferencesANodeIoBinding',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
@@ -350,16 +518,6 @@ Workflow.make((command: { readonly n: number }) => {
 })`,
       errors: [
         referenceError('mutableLocalReference', 'a reference to total', MUTABLE_LOCAL_ACTUAL, MUTABLE_LOCAL_FIX),
-      ],
-    },
-    {
-      name: 'Should_ReportUnresolvable_When_BodyImportsAnUnsealedLocalModule',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { mystery } from './mystery.module.js'
-
-Workflow.make((path: string) => mystery(path))`,
-      errors: [
-        referenceError('unresolvableReference', 'a reference to mystery', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
       ],
     },
     {
@@ -491,6 +649,218 @@ Workflow.make((command: { readonly tag: string }) => {
 })`,
       errors: [
         controlError('a switch statement inside the decision body'),
+      ],
+    },
+    {
+      // Hole 1: `const W = Workflow` defeated the boundary collector entirely -
+      // the callee object resolved to a Variable, not an ImportBinding, so the
+      // body was never scanned and the construction never counted.
+      name: 'Should_ReportIoGlobal_When_AnAliasedMakeBodyInvokesFetch',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+const W = Workflow
+export const d = W.make((x: number) => { fetch(\`https://example.com/\${x}\`) })`,
+      errors: [
+        referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
+      ],
+    },
+    {
+      // The general defect: the boundary judged a syntactic shape (callee
+      // object is an ImportBinding, property is an Identifier) instead of
+      // resolving where the callee comes from. Every indirection walked past.
+      name: 'Should_ReportIoGlobal_When_AComputedMakeBodyInvokesFetch',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+export const d = Workflow['make']((x: number) => { fetch(\`https://example.com/\${x}\`) })`,
+      errors: [
+        referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportIoGlobal_When_ABoundMakeBodyInvokesFetch',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+export const d = Workflow.make.bind(Workflow)((x: number) => { fetch(\`https://example.com/\${x}\`) })`,
+      errors: [
+        referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportIoGlobal_When_ADestructuredMakeBodyInvokesFetch',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+const { make } = Workflow
+export const d = make((x: number) => { fetch(\`https://example.com/\${x}\`) })`,
+      errors: [
+        referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportIoGlobal_When_AnAliasChainBodyInvokesFetch',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+const W = Workflow
+const V = W
+export const d = V.make((x: number) => { fetch(\`https://example.com/\${x}\`) })`,
+      errors: [
+        referenceError('ioGlobalReference', 'a reference to fetch', IO_GLOBAL_ACTUAL, IO_FIX),
+      ],
+    },
+    {
+      // Hole 2: a function smuggled inside an object record was never entered -
+      // only const-arrows and function declarations were followed, so the
+      // Math.random inside the method stayed invisible. Referencing the member
+      // follows exactly the touched function into the scan.
+      name: 'Should_ReportUnresolvable_When_BodyCallsAMethodOfAModuleRecord',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+const helpers = { bad(x: number): number { return Math.random() * x } }
+export const decide = Workflow.make((x: number) => helpers.bad(x))`,
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportUnresolvable_When_BodyCallsAFunctionValuedRecordProperty',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+const helpers = { bad: (x: number): number => Math.random() * x }
+export const decide = Workflow.make((x: number) => helpers.bad(x))`,
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
+      ],
+    },
+    {
+      // Hole 3: a dynamic import contributes no identifier reference, so the
+      // scope walk saw only a local const. A decision imports nothing at
+      // runtime - this needs no exemption.
+      name: 'Should_ReportRuntimeImport_When_BodyImportsDynamically',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+Workflow.make(async (x: number) => {
+  const fs = await import('node:fs')
+  return fs.readFileSync('/etc/hostname', 'utf-8').length + x
+})`,
+      errors: [
+        referenceError('runtimeImportReference', 'a runtime import', RUNTIME_IMPORT_ACTUAL, RUNTIME_IMPORT_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportRuntimeImport_When_BodyCallsRequire',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+Workflow.make((path: string) => {
+  const fs = require('node:fs')
+  return fs.readFileSync(path, 'utf-8').length
+})`,
+      errors: [
+        referenceError('runtimeImportReference', 'a runtime import', RUNTIME_IMPORT_ACTUAL, RUNTIME_IMPORT_FIX),
+      ],
+    },
+    {
+      // Hole 4: only let/var bindings classified as module state, so mutating a
+      // field of a const object record passed. Writing a module-scope const
+      // container from inside the decision is the same shared-state mutation.
+      name: 'Should_ReportModuleMutation_When_BodyAssignsToAModuleConstField',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+const state = { count: 0 }
+Workflow.make((x: number) => { state.count += x; return state.count })`,
+      errors: [
+        referenceError(
+          'moduleMutationReference',
+          'a mutation of state.count',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
+      ],
+    },
+    {
+      name: 'Should_ReportModuleMutation_When_BodyUpdatesAModuleConstField',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+const state = { count: 0 }
+Workflow.make((x: number) => { state.count++; return state.count })`,
+      errors: [
+        referenceError(
+          'moduleMutationReference',
+          'a mutation of state.count',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
+      ],
+    },
+    {
+      name: 'Should_ReportModuleMutation_When_BodyPushesToAModuleConstContainer',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+const state = { items: [] as readonly number[] }
+Workflow.make((x: number) => { state.items.push(x); return x })`,
+      errors: [
+        referenceError(
+          'moduleMutationReference',
+          'a mutating method call (state.items.push)',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
+      ],
+    },
+    {
+      name: 'Should_ReportModuleMutation_When_BodyCallsMapSetOnAModuleConst',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+const seen = new Map<string, number>()
+Workflow.make((x: number) => { seen.set('x', x); return x })`,
+      errors: [
+        referenceError(
+          'moduleMutationReference',
+          'a mutating method call (seen.set)',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
+      ],
+    },
+    {
+      name: 'Should_ReportModuleMutation_When_BodyAddsToAModuleConstSet',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+const seen = new Set<number>()
+Workflow.make((x: number) => { seen.add(x); return x })`,
+      errors: [
+        referenceError(
+          'moduleMutationReference',
+          'a mutating method call (seen.add)',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
+      ],
+    },
+    {
+      name: 'Should_ReportModuleMutation_When_BodyDeletesAModuleConstField',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+const state = { count: 1 }
+Workflow.make((x: number) => { delete state.count; return x })`,
+      errors: [
+        referenceError(
+          'moduleMutationReference',
+          'a mutation of state.count',
+          MODULE_MUTATION_ACTUAL,
+          MODULE_MUTATION_FIX,
+        ),
+      ],
+    },
+    {
+      // Hole 5: a getter runs I/O behind a plain property read - the read is
+      // the access, so entering the getter into the scan makes Math.random a
+      // finding; a call-only follow would miss it.
+      name: 'Should_ReportUnresolvable_When_BodyReadsAModuleGetterThatRunsIo',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+
+const obj = { get v() { return Math.random() } }
+export const decide = Workflow.make((x: number) => obj.v + x)`,
+      errors: [
+        referenceError('unresolvableReference', 'a reference to Math', UNRESOLVABLE_ACTUAL, UNRESOLVABLE_FIX),
       ],
     },
   ],

@@ -1,18 +1,20 @@
 import { errorToString } from '@stryker-mutator/util'
-import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { commonTokens, PluginKind, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import {
-  DryRunOptions,
-  DryRunResult,
+  type DryRunOptions,
+  type DryRunResult,
   DryRunStatus,
-  MutantRunOptions,
-  MutantRunResult,
+  type MutantRunOptions,
+  type MutantRunResult,
   MutantRunStatus,
-  TestRunner,
-  TestRunnerCapabilities,
+  type TestRunner,
+  type TestRunnerCapabilities,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import * as S from 'effect/Schema'
 
 import { injectionTokens, PluginCreator } from '../plugins/index.js'
+import { MutantCoverageSchema } from './mutant-coverage.schema.js'
 
 export class ChildProcessTestRunnerWorker implements TestRunner {
   private readonly underlyingTestRunner: TestRunner
@@ -48,7 +50,12 @@ export class ChildProcessTestRunnerWorker implements TestRunner {
       !dryRunResult.mutantCoverage &&
       options.coverageAnalysis !== 'off'
     ) {
-      dryRunResult.mutantCoverage = global.__mutantCoverage__
+      const mutantCoverage = S.decodeUnknownSync(
+        S.optional(MutantCoverageSchema),
+      )(globalThis.__mutantCoverage__)
+      if (mutantCoverage !== undefined) {
+        dryRunResult.mutantCoverage = mutantCoverage
+      }
     }
     if (dryRunResult.status === DryRunStatus.Error) {
       dryRunResult.errorMessage = errorToString(dryRunResult.errorMessage)

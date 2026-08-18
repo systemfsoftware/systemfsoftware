@@ -1,18 +1,18 @@
 import { EOL } from 'os'
 
-import { I, requireResolve } from '@stryker-mutator/util'
-import { Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
-import { commonTokens, Injector, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { DryRunCompletedEvent, RunTiming } from '@systemfsoftware/stryker-js-plugin-api/report'
+import { type I, requireResolve } from '@stryker-mutator/util'
+import { type Mutant, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, type Injector, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { type DryRunCompletedEvent, type RunTiming } from '@systemfsoftware/stryker-js-plugin-api/report'
 import {
-  CompleteDryRunResult,
-  DryRunResult,
+  type CompleteDryRunResult,
+  type DryRunResult,
   DryRunStatus,
-  ErrorDryRunResult,
-  FailedTestResult,
-  TestResult,
-  TestRunner,
+  type ErrorDryRunResult,
+  type FailedTestResult,
+  type TestResult,
+  type TestRunner,
   TestStatus,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { lastValueFrom, of } from 'rxjs'
@@ -23,7 +23,7 @@ import { ConfigError } from '../errors.js'
 import { IncrementalDiffer, MutantTestPlanner, TestCoverage } from '../mutants/index.js'
 import { injectionTokens } from '../plugins/index.js'
 import { MutationTestReportHelper } from '../reporting/mutation-test-report-helper.js'
-import { StrictReporter } from '../reporting/strict-reporter.js'
+import { type StrictReporter } from '../reporting/strict-reporter.js'
 import { Sandbox } from '../sandbox/sandbox.js'
 import { createTestRunnerFactory } from '../test-runner/index.js'
 import { Timer } from '../timer.js'
@@ -32,8 +32,8 @@ import { ConcurrencyTokenProvider, createTestRunnerPool, Pool } from '../worker-
 import { IdGenerator } from '../worker-pool/id-generator.js'
 import { map } from './map.js'
 
-import { MutantInstrumenterContext } from './2-mutant-instrumenter-executor.js'
-import { MutationTestContext } from './4-mutation-test-executor.js'
+import { type MutantInstrumenterContext } from './2-mutant-instrumenter-executor.js'
+import { type MutationTestContext } from './4-mutation-test-executor.js'
 
 const INITIAL_TEST_RUN_MARKER = 'Initial test run'
 
@@ -145,6 +145,13 @@ export class DryRunExecutor {
     const testFiles = project.testFiles.length > 0
       ? project.testFiles.map((file) => this.sandbox.sandboxFileFor(file))
       : undefined
+    const dryRunOptions = {
+      timeout: dryRunTimeout,
+      coverageAnalysis: this.options.coverageAnalysis,
+      disableBail: this.options.disableBail,
+      files: dryRunFiles,
+      ...(testFiles ? { testFiles } : {}),
+    }
     this.timer.mark(INITIAL_TEST_RUN_MARKER)
     this.log.info(
       `Starting initial test run (${this.options.testRunner} test runner with "${this.options.coverageAnalysis}" coverage analysis). This may take a while.`,
@@ -155,7 +162,7 @@ export class DryRunExecutor {
       coverageAnalysis: this.options.coverageAnalysis,
       disableBail: this.options.disableBail,
       files: dryRunFiles,
-      testFiles,
+      ...(testFiles ? { testFiles } : {}),
     })
     const grossTimeMS = this.timer.elapsedMs(INITIAL_TEST_RUN_MARKER)
     const capabilities = await testRunner.capabilities()

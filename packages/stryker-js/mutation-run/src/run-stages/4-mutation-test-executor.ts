@@ -1,16 +1,16 @@
-import { I } from '@stryker-mutator/util'
+import { type I } from '@stryker-mutator/util'
 import { CheckStatus } from '@systemfsoftware/stryker-js-plugin-api/check'
 import {
-  Mutant,
-  MutantResult,
-  MutantRunPlan,
-  MutantTestPlan,
+  type Mutant,
+  type MutantResult,
+  type MutantRunPlan,
+  type MutantTestPlan,
   PlanKind,
-  StrykerOptions,
+  type StrykerOptions,
 } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { CompleteDryRunResult, TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { type CompleteDryRunResult, type TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { bufferTime, concat, EMPTY, from, lastValueFrom, merge, mergeMap, Observable, partition } from 'rxjs'
 import { map, shareReplay, tap, toArray } from 'rxjs/operators'
 
@@ -18,11 +18,11 @@ import { CheckerFacade } from '../checker/index.js'
 import { isEarlyResult, MutantTestPlanner } from '../mutants/index.js'
 import { injectionTokens } from '../plugins/index.js'
 import { MutationTestReportHelper } from '../reporting/mutation-test-report-helper.js'
-import { StrictReporter } from '../reporting/strict-reporter.js'
+import { type StrictReporter } from '../reporting/strict-reporter.js'
 import { Timer } from '../timer.js'
 import { ConcurrencyTokenProvider, Pool } from '../worker-pool/index.js'
 
-import { DryRunContext } from './3-dry-run-executor.js'
+import { type DryRunContext } from './3-dry-run-executor.js'
 
 export interface MutationTestContext extends DryRunContext {
   [injectionTokens.testRunnerPool]: I<Pool<TestRunner>>

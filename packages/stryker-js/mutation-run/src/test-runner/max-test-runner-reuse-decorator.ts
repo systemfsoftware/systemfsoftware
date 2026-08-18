@@ -1,6 +1,10 @@
-import { MutantRunOptions, MutantRunResult, TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import {
+  type MutantRunOptions,
+  type MutantRunResult,
+  type TestRunner,
+} from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
-import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 import { TestRunnerDecorator } from './test-runner-decorator.js'
 
@@ -20,7 +24,7 @@ export class MaxTestRunnerReuseDecorator extends TestRunnerDecorator {
     this.restartAfter = options.maxTestRunnerReuse || 0
   }
 
-  public async mutantRun(options: MutantRunOptions): Promise<MutantRunResult> {
+  public override async mutantRun(options: MutantRunOptions): Promise<MutantRunResult> {
     this.runs++
     if (this.restartAfter > 0 && this.runs > this.restartAfter) {
       await this.recover()
@@ -30,7 +34,7 @@ export class MaxTestRunnerReuseDecorator extends TestRunnerDecorator {
     return super.mutantRun(options)
   }
 
-  public dispose(): Promise<any> {
+  public override dispose(): Promise<void> {
     this.runs = 0
     return super.dispose()
   }

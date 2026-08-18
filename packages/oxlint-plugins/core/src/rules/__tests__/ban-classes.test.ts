@@ -1,6 +1,6 @@
 import { RuleTester } from 'oxlint/plugins-dev'
 import * as vitest from 'vitest'
-
+import { EXPECTED, FIX } from '../ban-classes.config.js'
 import { banClasses } from '../ban-classes.js'
 
 RuleTester.it = vitest.it
@@ -15,385 +15,396 @@ const ruleTester = new RuleTester({
   },
 })
 
-const expectedPattern =
-  'S.TaggedError, Schema.TaggedError, Data.TaggedError, Data.Error, Context.Tag, Context.Reference, RpcGroup.make, Effect.Service, S.Class, or S.TaggedClass pattern'
-const fixSuggestion =
-  'Use S.TaggedError or Data.TaggedError for errors, Context.Tag/Context.Reference for context, RpcGroup.make for RPC groups, Effect.Service for services, S.Class/S.TaggedClass for data classes. Add to whitelist if exception needed'
+const PROD = 'src/feature.ts'
 
-const noClassesError = (name: string) => ({
-  messageId: 'noClasses' as const,
+const noSuperclassError = (name: string) => ({
+  messageId: 'banned' as const,
   data: {
     name,
-    expected: expectedPattern,
-    actual: `class ${name}`,
-    fix: fixSuggestion,
+    expected: EXPECTED,
+    actual: 'a class whose superclass is not a sanctioned Effect v4 constructor',
+    fix: FIX,
+  },
+})
+
+const unsanctionedBaseError = (name: string, basePath: string) => ({
+  messageId: 'banned' as const,
+  data: {
+    name,
+    expected: EXPECTED,
+    actual: `a class extending ${basePath}`,
+    fix: FIX,
   },
 })
 
 ruleTester.run('ban-classes', banClasses, {
   valid: [
     {
-      name: 'Should_Pass_When_UsingEffectGen',
-      code: `
-        import { Effect } from 'effect'
-        const myService = Effect.gen(function*() {
-          return yield* Effect.succeed(1)
-        })
-      `,
-    },
-    {
-      name: 'Should_Pass_When_UsingLayerEffect',
-      code: `
-        import { Layer } from 'effect'
-        const MyServiceLive = Layer.effectDiscard(Effect.succeed(undefined))
-      `,
-    },
-    {
-      name: 'Should_Pass_When_UsingContextGenericTagValue',
+      name: 'Should_Pass_When_ExtendsContextService_WithDoubleCall',
       code: `
         import { Context } from 'effect'
-        export const MyService = Context.GenericTag<{ doSomething: () => void }>('MyService')
+        class Service extends Context.Service<Service, { readonly value: number }>()("Service") {}
       `,
+      filename: PROD,
     },
     {
-      name: 'Should_Pass_When_UsingSTaggedError',
+      name: 'Should_Pass_When_ExtendsContextService_WithOptions',
+      code: `
+        import { Context } from 'effect'
+        class Service extends Context.Service<Service>()("Service", { make: Effect.sync(() => ({})) }) {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ExtendsContextService_ViaAliasedContextImport',
+      code: `
+        import { Context as Ctx } from 'effect'
+        class Database extends Ctx.Service<Database, Database>()("@app/Database") {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ExtendsContextReference_WithSingleCall',
+      code: `
+        import { Context } from 'effect'
+        class Interrupts extends Context.Reference("Interrupts", { defaultValue: () => ({ count: 0 }) }) {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ExtendsSchemaClass_ViaAliasedSchemaImport',
       code: `
         import { Schema as S } from 'effect'
-        export class MyError extends S.TaggedError<MyError>('MyError')('MyError', { message: S.String }) {}
+        class Person extends S.Class<Person>("Person")({ name: S.String }) {}
       `,
+      filename: PROD,
     },
     {
-      name: 'Should_Pass_When_UsingSchemaTaggedError',
+      name: 'Should_Pass_When_ExtendsSchemaClass_WithBrand',
       code: `
         import { Schema } from 'effect'
-        export class MyError extends Schema.TaggedError<MyError>('MyError')('MyError', { message: S.String }) {}
+        class Value extends Schema.Class<Value, { readonly brand: unique symbol }>("Value")({
+          a: Schema.Date
+        }) {}
       `,
+      filename: PROD,
     },
     {
-      name: 'Should_Pass_When_UsingDataTaggedError',
-      code: `
-        import { Data } from 'effect'
-        export class MyError extends Data.TaggedError('MyError')<{ message: string }> {}
-      `,
-    },
-    {
-      name: 'Should_Pass_When_UsingSchemaError',
+      name: 'Should_Pass_When_ExtendsSchemaError',
       code: `
         import { Schema } from 'effect'
-        export class MyError extends Schema.Error<MyError>('MyError')('MyError', { message: S.String }) {}
+        class E extends Schema.Error<E>("E")({ message: Schema.String }) {}
       `,
+      filename: PROD,
     },
     {
-      name: 'Should_Pass_When_UsingDataError',
-      code: `
-        import { Data } from 'effect'
-        export class MyError extends Data.Error('MyError')<{ message: string }> {}
-      `,
-    },
-    {
-      name: 'Should_Pass_When_UsingContextTagClassPattern',
-      code: `
-        import { Context } from 'effect'
-        export class DB extends Context.Tag('DB')<DB, { readonly connection: string }>() {}
-      `,
-    },
-    {
-      name: 'Should_Pass_When_UsingContextReferenceClassPattern',
-      code: `
-        import { Context } from 'effect'
-        export class MyConfig extends Context.Reference<MyConfig>()('MyConfig', { defaultValue: () => ({}) }) {}
-      `,
-    },
-    {
-      name: 'Should_Pass_When_UsingRpcGroupMake',
-      code: `
-        import { Rpc, RpcGroup } from '@effect/rpc'
-        export class DashboardRpcs extends RpcGroup.make(
-          Rpc.make('GetUsernames', { success: { items: [] } })
-        ) {}
-      `,
-    },
-    {
-      name: 'Should_Pass_When_ClassExpressionExtendsSTaggedError',
-      code: `
-        import { Schema as S } from 'effect'
-        export const MyError = class extends S.TaggedError<MyError>('MyError')('MyError', { message: S.String }) {}
-      `,
-    },
-    {
-      name: 'Should_Pass_When_ClassExpressionExtendsSchemaTaggedError',
+      name: 'Should_Pass_When_ExtendsSchemaTaggedError',
       code: `
         import { Schema } from 'effect'
-        export const MyError = class extends Schema.TaggedError<MyError>('MyError')('MyError', { message: S.String }) {}
+        class E extends Schema.TaggedError<E>()("E", { code: Schema.Number }) {}
       `,
+      filename: PROD,
     },
     {
-      name: 'Should_Pass_When_ClassExpressionExtendsDataTaggedError',
+      name: 'Should_Pass_When_ExtendsSchemaTaggedClass',
+      code: `
+        import { Schema } from 'effect'
+        class T extends Schema.TaggedClass<T>()("T", { value: Schema.Number }) {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ExtendsSchemaOpaque',
+      code: `
+        import { Schema } from 'effect'
+        class B extends Schema.Opaque<B>()(Schema.Struct({ a: Schema.String })) {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ExtendsDataClass_WithoutCall',
       code: `
         import { Data } from 'effect'
-        export const MyError = class extends Data.TaggedError('MyError')<{ message: string }> {}
+        class Person extends Data.Class<{ readonly name: string }> {}
       `,
+      filename: PROD,
     },
     {
-      name: 'Should_Pass_When_DirectContextTagCallAsSuper',
+      name: 'Should_Pass_When_ExtendsDataError_WithoutCall',
       code: `
-        import { Context } from 'effect'
-        class DB extends Context.Tag('DB') {}
+        import { Data } from 'effect'
+        class SystemError extends Data.Error<{ readonly code: number }> {}
       `,
+      filename: PROD,
     },
     {
-      name: 'Should_Pass_When_ClassIsWhitelisted',
+      name: 'Should_Pass_When_ExtendsDataTaggedClass_WithSingleCall',
       code: `
-        class WsCtor {
-          constructor() {}
-        }
+        import { Data } from 'effect'
+        class E extends Data.TaggedClass("E")<{ readonly code: number }> {}
       `,
-      options: [{ whitelist: ['WsCtor'] }],
+      filename: PROD,
     },
     {
-      name: 'Should_Pass_When_MultipleClassesWhitelisted',
+      name: 'Should_Pass_When_ExtendsDataTaggedError_SiblingRuleTerritoryIsSilent',
       code: `
-        class AllowedClass1 { method() {} }
-        class AllowedClass2 { method() {} }
+        import { Data } from 'effect'
+        class F extends Data.TaggedError("F")<{ readonly code: number }> {}
       `,
-      options: [{ whitelist: ['AllowedClass1', 'AllowedClass2'] }],
+      filename: PROD,
     },
     {
-      name: 'Should_Pass_When_ClassExpressionIsWhitelisted',
+      name: 'Should_Pass_When_ExtendsRequestClass_WithoutCall',
       code: `
-        const WsCtor = class {
-          constructor() {}
-        }
+        import { Request } from 'effect'
+        class GetUser extends Request.Class<{ id: number }, string> {}
       `,
-      options: [{ whitelist: ['WsCtor'] }],
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ExtendsRequestTaggedClass_WithSingleCall',
+      code: `
+        import { Request } from 'effect'
+        class GetUser extends Request.TaggedClass("GetUser")<{ id: number }, string, Error> {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ExtendsPipeableClass_WithoutCall',
+      code: `
+        import { Pipeable } from 'effect'
+        class StreamImpl extends Pipeable.Class {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ExtendsInspectableClass_WithoutCall',
+      code: `
+        import { Inspectable } from 'effect'
+        class Part extends Inspectable.Class {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ExtendsEffectableClass_WithoutCall',
+      code: `
+        import { Effectable } from 'effect'
+        class CustomEffect extends Effectable.Class<number> {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ExtendsPersistableClass_FromUnstable',
+      code: `
+        import { Persistable } from 'effect/unstable'
+        class Entry extends Persistable.Class({ payload: {} }) {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ExtendsRpcMake',
+      code: `
+        import { Rpc } from 'effect/unstable'
+        class Ping extends Rpc.make("Ping") {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ExtendsRpcMiddlewareService',
+      code: `
+        import { RpcMiddleware } from 'effect/unstable'
+        class Auth extends RpcMiddleware.Service<Auth, { provides: Identity }>()("effect/Auth", {}) {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ExtendsRpcGroupMake',
+      code: `
+        import { RpcGroup } from 'effect/unstable'
+        class PingRpcs extends RpcGroup.make(Ping) {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ExtendsSanctionedViaNamespaceImport',
+      code: `
+        import * as Effect from 'effect'
+        class Person extends Effect.Schema.Class<Person>("Person")({ name: Effect.Schema.String }) {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ClassExpression_ExtendsSanctionedBase',
+      code: `
+        import { Schema } from 'effect'
+        const Person = class extends Schema.Class<{ name: string }>('Person')({ name: Schema.String }) {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_BareClass_InTestFile_OutOfScope',
+      code: `
+        class Foo {}
+        class Bar extends Baz {}
+      `,
+      filename: 'src/feature.test.ts',
+    },
+    {
+      name: 'Should_Pass_When_BareClass_InSpecFile_OutOfScope',
+      code: `class Foo {}`,
+      filename: 'src/feature.spec.ts',
+    },
+    {
+      name: 'Should_Pass_When_BareClass_InTestsDir_OutOfScope',
+      code: `class Foo {}`,
+      filename: 'tests/helpers/shared.ts',
+    },
+    {
+      name: 'Should_Pass_When_BareClass_InTestResources_OutOfScope',
+      code: `class Foo {}`,
+      filename: 'packages/foo/testResources/infinite-loop/vitest.config.js',
+    },
+    {
+      name: 'Should_Pass_When_BareClass_InFixturesDir_OutOfScope',
+      code: `class Foo {}`,
+      filename: 'src/__fixtures__/fake.ts',
     },
   ],
   invalid: [
     {
-      name: 'Should_Report_When_ClassDeclaration',
+      name: 'Should_ReportViolation_When_ClassHasNoSuperclass',
+      code: `class Foo {}`,
+      filename: PROD,
+      errors: [noSuperclassError('class Foo')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ClassExtendsUnknownBase',
+      code: `class Foo extends Bar {}`,
+      filename: PROD,
+      errors: [noSuperclassError('class Foo')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ClassExpressionHasNoSuperclass',
+      code: `const Foo = class {}`,
+      filename: PROD,
+      errors: [noSuperclassError('class <anonymous>')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ClassExtendsGenericType',
+      code: `class Foo extends Generic<number> {}`,
+      filename: PROD,
+      errors: [noSuperclassError('class Foo')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ExportedClassHasNoSuperclass',
       code: `
-        class MyService {
-          doSomething() { return 1 }
+        export class Foo {
+          constructor() {}
         }
       `,
-      errors: [noClassesError('MyService')],
+      filename: PROD,
+      errors: [noSuperclassError('class Foo')],
     },
     {
-      name: 'Should_Report_When_ExportedClassDeclaration',
+      name: 'Should_ReportViolation_When_ClassExtendsLocalBaseClass',
       code: `
-        export class MyService {
-          doSomething() { return 1 }
-        }
+        class Base {}
+        class Child extends Base {}
       `,
-      errors: [noClassesError('MyService')],
+      filename: PROD,
+      errors: [noSuperclassError('class Base'), noSuperclassError('class Child')],
     },
     {
-      name: 'Should_Report_When_DefaultExportedClass',
+      name: 'Should_ReportViolation_When_ClassExtendsLocalFactoryFunction',
       code: `
-        export default class MyService {
-          doSomething() { return 1 }
-        }
+        function makeBase() { return class {} }
+        class Foo extends makeBase() {}
       `,
-      errors: [noClassesError('MyService')],
+      filename: PROD,
+      errors: [noSuperclassError('class <anonymous>'), noSuperclassError('class Foo')],
     },
     {
-      name: 'Should_Report_When_ClassExpressionAssignedToVariable',
+      name: 'Should_ReportViolation_When_ExtendsV3ContextTag',
       code: `
-        const MyService = class {
-          doSomething() { return 1 }
-        }
+        import { Context } from 'effect'
+        class MyService extends Context.Tag<string, string>()("my-service") {}
       `,
-      errors: [noClassesError('MyService')],
+      filename: PROD,
+      errors: [unsanctionedBaseError('class MyService', 'effect/Context.Tag')],
     },
     {
-      name: 'Should_Report_When_AnonymousClassExpression',
+      name: 'Should_ReportViolation_When_ExtendsSchemaUnion_WhichIsNotAClassBase',
       code: `
-        const handler = class {
-          handle() { return 1 }
-        }
+        import { Schema } from 'effect'
+        class X extends Schema.Union([Schema.String, Schema.Number]) {}
       `,
-      errors: [noClassesError('handler')],
+      filename: PROD,
+      errors: [unsanctionedBaseError('class X', 'effect/Schema.Union')],
     },
     {
-      name: 'Should_Report_When_AnonymousClassInReturn',
+      name: 'Should_ReportViolation_When_SchemaImportedFromOtherModule',
       code: `
-        function createHandler() {
-          return class {
-            handle() { return 1 }
-          }
-        }
+        import { Schema } from 'my-other-lib'
+        class X extends Schema.Class<X>("X")({ name: Schema.String }) {}
       `,
-      errors: [noClassesError('Anonymous class')],
+      filename: PROD,
+      errors: [unsanctionedBaseError('class X', 'my-other-lib/Schema.Class')],
     },
     {
-      name: 'Should_Report_When_MultipleClassDeclarations',
+      name: 'Should_ReportViolation_When_SchemaNamespaceNotImported',
       code: `
-        class ServiceA { method() {} }
-        class ServiceB { method() {} }
+        class X extends Schema.Class<X>("X")({}) {}
       `,
-      errors: [{ messageId: 'noClasses' }, { messageId: 'noClasses' }],
+      filename: PROD,
+      errors: [noSuperclassError('class X')],
     },
     {
-      name: 'Should_Report_When_ClassNotInWhitelist',
-      code: `
-        class NotWhitelisted {
-          method() {}
-        }
-      `,
-      options: [{ whitelist: ['AllowedClass'] }],
-      errors: [noClassesError('NotWhitelisted')],
-    },
-    {
-      name: 'Should_Report_When_OneClassNotInWhitelist',
-      code: `
-        class AllowedClass { method() {} }
-        class NotAllowedClass { method() {} }
-      `,
-      options: [{ whitelist: ['AllowedClass'] }],
-      errors: [noClassesError('NotAllowedClass')],
-    },
-    {
-      name: 'Should_Report_When_NoOptionsProvided',
-      code: `
-        class StrykerWasHere {
-          method() {}
-        }
-      `,
-      errors: [noClassesError('StrykerWasHere')],
-    },
-    {
-      name: 'Should_Report_When_ClassExpressionUsedInline',
-      code: `
-        const arr = [class { method() {} }]
-      `,
-      errors: [noClassesError('Anonymous class')],
-    },
-    {
-      name: 'Should_Report_When_ExtendsSWithWrongMethod',
+      name: 'Should_ReportViolation_When_SanctionedLocalIsShadowed',
       code: `
         import { Schema as S } from 'effect'
-        class MyError extends S.NotTaggedError('MyError')<{ message: string }> {}
+        function S() {}
+        class X extends S.Class<X>("X")({}) {}
       `,
-      errors: [noClassesError('MyError')],
-    },
-    {
-      name: 'Should_Report_When_ExtendsWrongObjectWithTaggedError',
-      code: `
-        import { Other } from 'effect'
-        class MyError extends Other.TaggedError('MyError')<{ message: string }> {}
-      `,
-      errors: [noClassesError('MyError')],
-    },
-    {
-      name: 'Should_Report_When_ExtendsCallWithIdentifierCallee',
-      code: `
-        function makeClass(_tag: string) {
-          return class {}
-        }
-        class MyError extends makeClass('Tag')<{}> {}
-      `,
-      errors: [{ messageId: 'noClasses' }, { messageId: 'noClasses' }],
-    },
-    {
-      name: 'Should_Report_When_OtherObjectWithTag',
-      code: `
-        import { Context } from 'effect'
-        const FakeContext = Context
-        class MyError extends FakeContext.Tag('Tag')<{}>() {}
-      `,
-      errors: [noClassesError('MyError')],
-    },
-    {
-      name: 'Should_Report_When_ContextWithWrongProperty',
-      code: `
-        import { Context } from 'effect'
-        class MyError extends Context.GenericTag('Tag')<{}>() {}
-      `,
-      errors: [noClassesError('MyError')],
-    },
-    {
-      name: 'Should_Report_When_ContextReferenceWithoutTypeArgs',
-      code: `
-        import { Context } from 'effect'
-        class MyConfig extends Context.Reference()('MyConfig', {}) {}
-      `,
-      errors: [noClassesError('MyConfig')],
-    },
-    {
-      name: 'Should_Report_When_NonContextObjectWithReference',
-      code: `
-        const Other = { Reference: <T>() => { void (0 as T); return (_id: string) => class {} } }
-        class MyConfig extends Other.Reference<string>()('MyConfig') {}
-      `,
-      options: [{ whitelist: ['Anonymous class'] }],
-      errors: [noClassesError('MyConfig')],
-    },
-    {
-      name: 'Should_Report_When_RpcGroupWithWrongProperty',
-      code: `
-        import { RpcGroup } from '@effect/rpc'
-        class MyRpcs extends RpcGroup.other() {}
-      `,
-      errors: [noClassesError('MyRpcs')],
-    },
-    {
-      name: 'Should_Report_When_OtherObjectWithMake',
-      code: `
-        const SomeOther = { make: () => class {} }
-        class MyRpcs extends SomeOther.make() {}
-      `,
-      errors: [{ messageId: 'noClasses' }, { messageId: 'noClasses' }],
-    },
-    {
-      name: 'Should_Report_When_ExtendsChainedGenericFactoryCall',
-      code: `
-        function makeFactory() {
-          return function withType<T>() {
-            void (0 as T)
-            return class GenericBase {}
-          }
-        }
-        class MyError extends makeFactory()<string>() {}
-      `,
-      options: [{ whitelist: ['GenericBase'] }],
-      errors: [noClassesError('MyError')],
-    },
-    {
-      name: 'Should_Report_When_FakeTaggedErrorChainedWithoutTypeArgs',
-      code: `
-        const S = {
-          TaggedError: (_tag: string) => () => class {},
-        }
-        class MyError extends S.TaggedError('MyError')() {}
-      `,
-      options: [{ whitelist: ['Anonymous class'] }],
-      errors: [noClassesError('MyError')],
-    },
-    {
-      name: 'Should_Report_When_NonEffectTaggedErrorChainedWithTypeArgs',
-      code: `
-        const Other = {
-          TaggedError: <T>() => {
-            void (0 as T)
-            return () => class {}
+      filename: PROD,
+      errors: [
+        {
+          messageId: 'banned',
+          data: {
+            name: 'class X',
+            expected: EXPECTED,
+            actual: 'a class whose superclass is not a sanctioned Effect v4 constructor',
+            fix: FIX,
           },
-        }
-        class MyError extends Other.TaggedError<string>()() {}
-      `,
-      options: [{ whitelist: ['Anonymous class'] }],
-      errors: [noClassesError('MyError')],
+        },
+      ],
     },
     {
-      name: 'Should_Report_When_ExtendsChainedCallWithNonTaggedError',
+      name: 'Should_ReportViolation_When_ExtendsComputedMember',
       code: `
-        function makeClass() {
-          return function () {
-            return class {}
-          }
-        }
-        class MyError extends makeClass()() {}
+        import { Context } from 'effect'
+        class X extends Context["Service"]<X>()("X") {}
       `,
-      errors: [{ messageId: 'noClasses' }, { messageId: 'noClasses' }],
+      filename: PROD,
+      errors: [noSuperclassError('class X')],
+    },
+    {
+      name: 'Should_ReportViolation_When_ExtendsDestructuredFactory',
+      code: `
+        import { Schema } from 'effect'
+        const { Class: SchemaClass } = Schema
+        class X extends SchemaClass<X>("X")({}) {}
+      `,
+      filename: PROD,
+      errors: [noSuperclassError('class X')],
+    },
+    {
+      name: 'Should_ReportMultipleViolations_When_MultipleClassesInOneFile',
+      code: `
+        class Foo {}
+        const Bar = class {}
+      `,
+      filename: PROD,
+      errors: [noSuperclassError('class Foo'), noSuperclassError('class <anonymous>')],
     },
   ],
 })

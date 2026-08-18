@@ -1,17 +1,17 @@
 import { errorToString } from '@stryker-mutator/util'
 import {
-  DryRunOptions,
-  DryRunResult,
+  type DryRunOptions,
+  type DryRunResult,
   DryRunStatus,
-  MutantRunOptions,
-  MutantRunResult,
+  type MutantRunOptions,
+  type MutantRunResult,
   MutantRunStatus,
-  TestRunner,
+  type TestRunner,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
 import { OutOfMemoryError } from '../worker-pool/out-of-memory-error.js'
 
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { TestRunnerDecorator } from './test-runner-decorator.js'
 
 const ERROR_MESSAGE =
@@ -29,7 +29,7 @@ export class RetryRejectedDecorator extends TestRunnerDecorator {
     super(producer)
   }
 
-  public async dryRun(options: DryRunOptions): Promise<DryRunResult> {
+  public override async dryRun(options: DryRunOptions): Promise<DryRunResult> {
     const result = await this.run(() => super.dryRun(options))
     if (typeof result === 'string') {
       return {
@@ -41,7 +41,7 @@ export class RetryRejectedDecorator extends TestRunnerDecorator {
     }
   }
 
-  public async mutantRun(options: MutantRunOptions): Promise<MutantRunResult> {
+  public override async mutantRun(options: MutantRunOptions): Promise<MutantRunResult> {
     const result = await this.run(() => super.mutantRun(options))
     if (typeof result === 'string') {
       return {

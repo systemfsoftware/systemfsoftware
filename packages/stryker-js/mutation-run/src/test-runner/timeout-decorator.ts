@@ -1,15 +1,15 @@
 import { ExpirableTask } from '@stryker-mutator/util'
 import {
-  DryRunOptions,
-  DryRunResult,
+  type DryRunOptions,
+  type DryRunResult,
   DryRunStatus,
-  MutantRunOptions,
-  MutantRunResult,
+  type MutantRunOptions,
+  type MutantRunResult,
   MutantRunStatus,
-  TestRunner,
+  type TestRunner,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { TestRunnerDecorator } from './test-runner-decorator.js'
 
 /**
@@ -23,7 +23,7 @@ export class TimeoutDecorator extends TestRunnerDecorator {
     super(producer)
   }
 
-  public async dryRun(options: DryRunOptions): Promise<DryRunResult> {
+  public override async dryRun(options: DryRunOptions): Promise<DryRunResult> {
     const result = await this.run(options, () => super.dryRun(options))
     if (result === ExpirableTask.TimeoutExpired) {
       return {
@@ -34,7 +34,7 @@ export class TimeoutDecorator extends TestRunnerDecorator {
     }
   }
 
-  public async mutantRun(options: MutantRunOptions): Promise<MutantRunResult> {
+  public override async mutantRun(options: MutantRunOptions): Promise<MutantRunResult> {
     const result = await this.run(options, () => super.mutantRun(options))
     if (result === ExpirableTask.TimeoutExpired) {
       return {

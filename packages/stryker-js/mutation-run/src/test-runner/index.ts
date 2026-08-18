@@ -1,9 +1,9 @@
-import { FileDescriptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type FileDescriptions, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { type TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
-import { LoggingServerAddress } from '../logging/index.js'
+import { type LoggingServerAddress } from '../logging/index.js'
 import { injectionTokens } from '../plugins/index.js'
 import { Sandbox } from '../sandbox/sandbox.js'
 

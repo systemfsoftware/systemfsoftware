@@ -19,6 +19,7 @@
     "effect-schema-declarations",
     "in-source-vitest-block"
   ],
+  "requireTestContribution": null,
   "thresholds": {
     "high": 100,
     "low": 100,

@@ -1,24 +1,24 @@
 import path from 'path'
 
-import { I, notEmpty, split } from '@stryker-mutator/util'
+import { type I, notEmpty, split } from '@stryker-mutator/util'
 import {
-  Mutant,
-  MutantEarlyResultPlan,
-  MutantRunPlan,
-  MutantStatus,
-  MutantTestPlan,
+  type Mutant,
+  type MutantEarlyResultPlan,
+  type MutantRunPlan,
+  type MutantStatus,
+  type MutantTestPlan,
   PlanKind,
-  StrykerOptions,
+  type StrykerOptions,
 } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { TestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { type TestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
 import { isWarningEnabled } from '../config/is-warning-enabled.js'
 import { optionsPath } from '../config/options-path.js'
 import { injectionTokens } from '../plugins/index.js'
 import { Project } from '../project/project.js'
-import { StrictReporter } from '../reporting/strict-reporter.js'
+import { type StrictReporter } from '../reporting/strict-reporter.js'
 import { Sandbox } from '../sandbox/index.js'
 
 import { IncrementalDiffer, toRelativeNormalizedFileName } from './incremental-differ.js'
@@ -85,10 +85,10 @@ export class MutantTestPlanner {
       // If this mutant was already ignored, early result
       return this.createMutantEarlyResultPlan(mutant, {
         isStatic,
-        coveredBy: mutant.coveredBy,
-        killedBy: mutant.killedBy,
+        ...(mutant.coveredBy === undefined ? {} : { coveredBy: mutant.coveredBy }),
+        ...(mutant.killedBy === undefined ? {} : { killedBy: mutant.killedBy }),
         status: mutant.status,
-        statusReason: mutant.statusReason,
+        ...(mutant.statusReason === undefined ? {} : { statusReason: mutant.statusReason }),
       })
     } else if (this.testCoverage.hasCoverage) {
       // If there was coverage information (coverageAnalysis not "off")
@@ -151,10 +151,10 @@ export class MutantTestPlanner {
       mutant: {
         ...mutant,
         status,
-        static: isStatic,
-        statusReason,
-        coveredBy,
-        killedBy,
+        ...(isStatic === undefined ? {} : { static: isStatic }),
+        ...(statusReason === undefined ? {} : { statusReason }),
+        ...(coveredBy === undefined ? {} : { coveredBy }),
+        ...(killedBy === undefined ? {} : { killedBy }),
       },
     }
   }
@@ -188,8 +188,8 @@ export class MutantTestPlanner {
       netTime,
       mutant: {
         ...mutant,
-        coveredBy,
-        static: isStatic,
+        ...(isStatic === undefined ? {} : { static: isStatic }),
+        ...(coveredBy === undefined ? {} : { coveredBy }),
       },
       runOptions: {
         // Copy over relevant mutant fields, we don't want to copy over "static" and "coveredBy", test runners should only care about the testFilter
@@ -202,9 +202,9 @@ export class MutantTestPlanner {
         },
         mutantActivation: testFilter ? 'runtime' : 'static',
         timeout,
-        testFilter,
+        ...(testFilter === undefined ? {} : { testFilter }),
         sandboxFileName: this.sandbox.sandboxFileFor(mutant.fileName),
-        hitLimit,
+        ...(hitLimit === undefined ? {} : { hitLimit }),
         disableBail,
         reloadEnvironment: !canHotSwap,
       },

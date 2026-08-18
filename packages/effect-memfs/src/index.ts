@@ -6,8 +6,8 @@ import * as Error from 'effect/PlatformError'
 import * as Random from 'effect/Random'
 import * as Stream from 'effect/Stream'
 import * as memfs from 'memfs'
-import { layer } from './memory-file-system.adapter.js'
-import type { Contents, FileHandle, Stat } from './memory-file-system.shape.js'
+import { layer } from './MemoryFileSystemAdapter.js'
+import type { Contents, FileHandle, Stat } from './MemoryFileSystemShape.js'
 
 const REASON_BY_ERRNO: Record<string, Error.SystemErrorTag> = {
   EACCES: 'PermissionDenied',
@@ -433,4 +433,4 @@ export const MemoryFileSystem: {
   readonly make: (contents?: Contents, opts?: { cwd: string }) => FileSystem.FileSystem
 } = { layer, layerWith, make }
 
-export type { Contents } from './memory-file-system.shape.js'
+export type { Contents } from './MemoryFileSystemShape.js'

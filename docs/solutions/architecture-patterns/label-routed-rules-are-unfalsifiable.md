@@ -172,6 +172,39 @@ reading of class (ii), so package membership and whole-graph facts are inside it
 Status: the manifest re-keying is demonstrated. The per-port and owned-union re-keyings are
 derivations with their mechanism named; each needs a rule written before it is a gate.
 
+## The recurrence, and the one label that does hold
+
+The failure returned in the session that abolished the dotted suffixes, and it returned by the hand of
+the agent applying this document. `behaviour-exercises-use-case` demanded that a `*.integration.test.ts`
+import a module whose basename ended in `Executor`, `Handler`, `Adapter`, `Store` or `Middleware`,
+which is this document's defect with the label moved from the dotted position into the module name.
+The renaming pass that put role words into 21 shell module names is good documentation and was
+mistaken for evidence.
+
+A probe settled it in one run: a pure kernel, `ZzPureAdapter.ts`, holding one total function and no
+import at all, reached by a behaviour test that touched nothing else. The rule stayed **silent**. The
+gate certified "this test drives a use case through the I/O sandwich" on the strength of five letters
+the author typed, and no step recomputed whether the module did any I/O — `CHK1` exactly, in a rule
+written to enforce this document.
+
+Which side of the sandwich an imported module sits on is not decidable from the importing file: one
+file carries no cross-file and no type information. So the rule was narrowed to the part that is —
+whether the file reaches the package under test at all — and the role word was demoted to what it
+honestly is, a note to the reader. Every behaviour test that had satisfied the old form by naming a
+role-suffixed module still passes, because each reaches package code; a test reaching nothing but its
+runner was silently accepted before and is now reported.
+
+The same session found the one nearby label that **does** hold, and it holds because it is not a
+label. `Policy<Xi> = <A, E, R>(self: Effect<A, E, R>) => Effect<A, E | Xi, R>` forbids a domain
+decision by parametricity: with `A` universally quantified there is no way to construct or inspect an
+`A`, so no branch on domain content can be written. Probed, the compiler rejects the attempt at the
+offending member access — `TS2339: Property 'kind' does not exist on type 'A'` — with no rule
+installed and no filename consulted. The limit is `REPO-A4`: nothing forces the annotation. The same
+body written monomorphically, declaring no `Policy`, typechecks clean. What binds is the door — a
+combinator or application site whose parameter is typed `Policy<Xi>` — never the file's name. A
+`*.policy.ts` suffix would have added a rule that fires only on files already carrying the suffix,
+which is this document's opening sentence.
+
 ## What would still defeat this
 
 A rule whose property is real, is expressible as no type fact, no graph fact and no package

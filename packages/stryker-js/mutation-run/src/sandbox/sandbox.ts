@@ -1,10 +1,10 @@
 import fs from 'fs'
 import path from 'path'
 
-import { I, isErrnoException, normalizeWhitespaces } from '@stryker-mutator/util'
-import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
-import { commonTokens, Disposable, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { type I, isErrnoException, normalizeWhitespaces } from '@stryker-mutator/util'
+import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { commonTokens, type Disposable, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import type { execaCommand } from 'execa'
 import { npmRunPathEnv } from 'npm-run-path'
 
@@ -165,7 +165,7 @@ export class Sandbox implements Disposable {
         this.options.buildCommand,
         this.workingDirectory,
       )
-      this.log.debug('(using PATH: %s)', env.PATH)
+      this.log.debug('(using PATH: %s)', env['PATH'])
       await this.execCommand(this.options.buildCommand, {
         cwd: this.workingDirectory,
         env,

@@ -3,11 +3,11 @@ import { defineConfig } from 'tsdown'
 export default defineConfig({
   // One entry per upstream subpath export (`./check ./core ./ignore ./logging ./plugin
   // ./report ./test-runner`). Each entry key ends in `/index` so the emitted module lands at
-  // `dist/<subpath>/index.mjs` — two levels below the package root. That is load-bearing:
-  // the vendored `src/core/stryker-options-schema.ts` reads `../../schema/stryker-core.json`
-  // relative to its own emitted module at runtime, and only a two-level nest resolves that to
-  // `schema/` at the package root (the same convention the sibling forks use, `../schema/`
-  // from a flat `dist/` entry). Flattening an entry breaks the `core` subpath at runtime.
+  // `dist/<subpath>/index.mjs` — matching the `./core` → `./dist/core/index.mjs` exports map
+  // in package.json (the same `dist/<subpath>/index.mjs` convention the sibling forks use).
+  // The option set is now `src/core/stryker-options.schema.ts`, which derives its JSON Schema
+  // document at build time — no `schema/` directory or runtime file read exists anymore, so
+  // nothing else depends on the nesting depth.
   entry: {
     'check/index': './src/check/index.ts',
     'core/index': './src/core/index.ts',

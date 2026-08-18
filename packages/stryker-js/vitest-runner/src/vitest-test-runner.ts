@@ -24,6 +24,7 @@ import path from 'path'
 import semver from 'semver'
 import { fileURLToPath } from 'url'
 
+import * as S from 'effect/Schema'
 import {
   collectTestsFromSuite,
   convertTestToTestResult,
@@ -33,12 +34,30 @@ import {
   VITEST_ERROR_CODES,
 } from './vitest-helpers.js'
 import { VitestRunnerOptionsWithStrykerOptions } from './vitest-runner-options-with-stryker-options.js'
+import type { VitestRunnerOptions } from './vitest-runner-options.schema.js'
+import { VitestSectionSchema } from './vitest-runner-options.schema.js'
 import { resolveVitest, Vitest, VitestResolver } from './vitest-wrapper.js'
 
 type StrykerNamespace = '__stryker__' | '__stryker2__'
 const STRYKER_SETUP = fileURLToPath(
   new URL('./stryker-setup.mjs', import.meta.url),
 )
+
+/**
+ * Applies the section codec at the point of use: the schema module declares the
+ * shape, the caller decodes. `undefined` survives the optional wrapper when the
+ * whole section is absent, so the default is restated here.
+ *
+ * `Sync` is deliberate and is the narrow exemption, not the default: this runs in
+ * a plugin constructor that Stryker calls before any Effect runtime exists, and a
+ * malformed `vitest` section in the user's config must abort the run loudly rather
+ * than be carried forward as a value. Everywhere with a runtime to thread the
+ * failure through, `S.decode(...)` and the error channel are the answer.
+ */
+const decodeVitestOptions = (input: unknown): VitestRunnerOptions => {
+  const options = S.decodeUnknownSync(VitestSectionSchema)(input)
+  return options === undefined ? { related: true } : options
+}
 
 interface RunFilter {
   /**
@@ -74,7 +93,10 @@ export class VitestTestRunner implements TestRunner {
     private readonly sandboxDirectory: string,
     private readonly resolveVitestFor: VitestResolver = resolveVitest,
   ) {
-    this.options = options as VitestRunnerOptionsWithStrykerOptions
+    this.options = {
+      ...options,
+      vitest: decodeVitestOptions(options.vitest),
+    }
   }
 
   public capabilities(): TestRunnerCapabilities {
@@ -92,12 +114,12 @@ export class VitestTestRunner implements TestRunner {
 
     const { createVitest, version } = await this.resolveVitestFor(projectRoot)
 
-    const scanDir = this.options.vitest?.dir
+    const scanDir = this.options.vitest.dir
       ? path.resolve(projectRoot, this.options.vitest.dir)
       : undefined
 
     this.ctx = await createVitest('test', {
-      config: this.options.vitest?.configFile,
+      config: this.options.vitest.configFile,
       // @ts-expect-error threads got renamed to "pool: threads" in vitest 1.0.0
       threads: true,
       pool: 'threads',
@@ -139,7 +161,7 @@ export class VitestTestRunner implements TestRunner {
   }
 
   public async dryRun(options: DryRunOptions): Promise<DryRunResult> {
-    this.ctx!.provide('mode', 'dry-run')
+    this.requireCtx().provide('mode', 'dry-run')
 
     // If testFilter is provided, use those files directly instead of relying on related files
     // We still need to pass relatedFiles for vitest to properly resolve the test files
@@ -171,10 +193,10 @@ export class VitestTestRunner implements TestRunner {
   }
 
   public async mutantRun(options: MutantRunOptions): Promise<MutantRunResult> {
-    this.ctx!.provide('mode', 'mutant')
-    this.ctx!.provide('hitLimit', options.hitLimit)
-    this.ctx!.provide('mutantActivation', options.mutantActivation)
-    this.ctx!.provide('activeMutant', options.activeMutant.id)
+    this.requireCtx().provide('mode', 'mutant')
+    this.requireCtx().provide('hitLimit', options.hitLimit)
+    this.requireCtx().provide('mutantActivation', options.mutantActivation)
+    this.requireCtx().provide('activeMutant', options.activeMutant.id)
     const dryRunResult = await this.run({
       testIds: options.testFilter,
       relatedFiles: [options.sandboxFileName],
@@ -189,8 +211,9 @@ export class VitestTestRunner implements TestRunner {
     relatedFiles,
     testFiles: explicitTestFiles,
   }: RunFilter = {}): Promise<DryRunResult> {
+    const ctx = this.requireCtx()
     this.resetContext()
-    this.ctx!.config.related = this.options.vitest.related && relatedFiles
+    ctx.config.related = this.options.vitest.related && relatedFiles
       ? relatedFiles.map(normalizeFileName)
       : undefined
     let testFilesToRun: string[] | undefined = explicitTestFiles
@@ -203,16 +226,16 @@ export class VitestTestRunner implements TestRunner {
       // Id file parts are root-relative, but Vitest matches filters against
       // the scan dir; absolute paths hit filterFiles' absolute branch.
       testFilesToRun = parsedTests.map(({ file }) => path.resolve(this.sandboxDirectory, file))
-      this.ctx!.projects.forEach((project) => {
+      ctx.projects.forEach((project) => {
         project.config.testNamePattern = regex
       })
     } else {
-      this.ctx!.projects.forEach((project) => {
+      ctx.projects.forEach((project) => {
         project.config.testNamePattern = undefined
       })
     }
     try {
-      await this.ctx!.start(testFilesToRun)
+      await ctx.start(testFilesToRun)
     } catch (error) {
       if (
         // No tests found, this isn't a problem, we can continue
@@ -223,7 +246,7 @@ export class VitestTestRunner implements TestRunner {
       }
     }
 
-    const tests = this.ctx!.state.getFiles()
+    const tests = ctx.state.getFiles()
       .flatMap((file) => collectTestsFromSuite(file))
       .filter((test) => test.result) // if no result: it was skipped because of bail
 
@@ -234,8 +257,8 @@ export class VitestTestRunner implements TestRunner {
       return testResult
     })
 
-    if (!failure && this.ctx!.state.errorsSet.size > 0) {
-      const errorText = [...this.ctx!.state.errorsSet]
+    if (!failure && ctx.state.errorsSet.size > 0) {
+      const errorText = [...ctx.state.errorsSet]
         .map(errorToString)
         .join('\n')
       return {
@@ -254,14 +277,23 @@ export class VitestTestRunner implements TestRunner {
     process.env.VITEST = '1'
   }
 
+  private requireCtx(): Vitest {
+    if (this.ctx === undefined) {
+      throw new Error(
+        'VitestTestRunner is not initialized; call init() before running tests',
+      )
+    }
+    return this.ctx
+  }
+
   private resetContext() {
     // Clear the state from the previous run
     // Note that this is kind of a hack, see https://github.com/vitest-dev/vitest/discussions/3017#discussioncomment-5901751
-    this.ctx!.state.filesMap.clear()
+    this.requireCtx().state.filesMap.clear()
   }
 
   private readHitCount() {
-    const hitCounters: number[] = this.ctx!.state.getFiles()
+    const hitCounters: number[] = this.requireCtx().state.getFiles()
       .map((file) => (file.meta as { hitCount?: number }).hitCount)
       .filter(notEmpty)
 
@@ -270,9 +302,10 @@ export class VitestTestRunner implements TestRunner {
 
   private readMutantCoverage(): MutantCoverage {
     // Read coverage from all projects
+    const ctx = this.requireCtx()
     const coverages: MutantCoverage[] = [
       ...new Map(
-        this.ctx!.state.getFiles().map(
+        ctx.state.getFiles().map(
           (file) => [`${file.projectName}-${file.name}`, file] as const,
         ),
       ).entries(),

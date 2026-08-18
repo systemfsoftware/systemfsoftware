@@ -5,7 +5,7 @@ export default defineConfig({
   test: {
     ...sharedConfig.test,
     testTimeout: isCI ? 60_000 : 30_000,
-    include: ['src/**/*.test.ts', '__tests__/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],

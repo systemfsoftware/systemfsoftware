@@ -1,12 +1,12 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
 import { warmRuntimeAfterStart } from '@systemfsoftware/omp-utils/runtime-lifecycle'
 
-import type { HookRunner } from './hook-runner.kernel.js'
-import type { HookRuntimeContext } from './hook-runtime.state.js'
+import type { HookRunner } from './HookRunner.js'
+import type { HookRuntimeContext } from './HookRuntime.js'
 
 // The runtime module stays lazy so the platform-node layer never evaluates
 // at plugin-registration time.
-const loadRuntime = () => import('./hook-runtime.state.js').then((mod) => mod.default)
+const loadRuntime = () => import('./HookRuntime.js').then((mod) => mod.default)
 
 const runner: HookRunner<HookRuntimeContext> = {
   runSafe: async (effect) => {
@@ -24,8 +24,8 @@ const runner: HookRunner<HookRuntimeContext> = {
 
 export default async function claudeCompatExtension(pi: ExtensionAPI): Promise<void> {
   const [{ HookDispatcherTask }, { InjectInstructionsTask }] = await Promise.all([
-    import('./hook-dispatcher.handler.js'),
-    import('./inject-instructions.handler.js'),
+    import('./HookDispatcherHandler.js'),
+    import('./InjectInstructionsHandler.js'),
   ])
   HookDispatcherTask(pi, runner)
   InjectInstructionsTask(pi, runner)

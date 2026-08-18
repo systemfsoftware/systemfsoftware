@@ -1,4 +1,14 @@
-import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type StrykerOptionsSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import type * as S from 'effect/Schema'
+
+/**
+ * The document a config file holds: the schema's INPUT side, before
+ * defaults are applied. Typed against the schema instead of the decoded
+ * `StrykerOptions` because this file is a template for user config files,
+ * not a resolved option set — and the deep-partial of the decoded type
+ * collapses array fields (`never[]`) that this document legitimately sets.
+ */
+type BasePreset = S.Codec.Encoded<typeof StrykerOptionsSchema>
 
 /**
  * Modal Stryker options, inherited via
@@ -7,7 +17,7 @@ import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-a
  * Relative paths below resolve against the working directory of the run that
  * reads them — the consuming package — not against this file.
  */
-const basePreset: PartialStrykerOptions = {
+const basePreset: BasePreset = {
   packageManager: 'pnpm',
   testRunner: 'vitest',
   checkers: ['typescript'],

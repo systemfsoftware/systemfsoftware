@@ -13,8 +13,8 @@ export default defineConfig({
   ...sharedConfig,
   test: {
     ...sharedConfig.test,
-    include: ['__tests__/**/*.feature.test.ts'],
-    globalSetup: ['./__tests__/global-setup.ts'],
+    include: ['tests/**/*.integration.test.ts'],
+    globalSetup: ['./tests/__fixtures__/GlobalSetup.ts'],
 
     // Overrides `sharedConfig`. A glob matching nothing must fail, not pass.
     passWithNoTests: false,

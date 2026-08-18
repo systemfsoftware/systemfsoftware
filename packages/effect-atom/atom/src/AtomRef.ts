@@ -105,6 +105,10 @@ export const make = <A>(value: A): AtomRef<A> => new AtomRefImpl(value)
  */
 export const collection = <A>(items: Iterable<A>): Collection<A> => new CollectionImpl(items)
 
+const isReadonlyRef = (u: unknown): u is ReadonlyRef<unknown> => typeof u === 'object' && u !== null && TypeId in u
+
+const isArrayWithProp = <A, K extends keyof A>(value: A, _prop: K): value is A & Array<A[K]> => Array.isArray(value)
+
 const keyState = {
   count: 0,
   generate() {
@@ -122,7 +126,7 @@ class ReadonlyRefImpl<A> implements ReadonlyRef<A> {
   }
 
   [Equal.symbol](that: Equal.Equal) {
-    return Equal.equals(this.value, (that as ReadonlyRef<A>).value)
+    return isReadonlyRef(that) && Equal.equals(this.value, that.value)
   }
 
   [Hash.symbol]() {
@@ -203,7 +207,7 @@ class MapRefImpl<A, B> implements ReadonlyRef<B> {
     this.transform = transform
   }
   [Equal.symbol](that: Equal.Equal) {
-    return Equal.equals(this.value, (that as ReadonlyRef<B>).value)
+    return isReadonlyRef(that) && Equal.equals(this.value, that.value)
   }
   [Hash.symbol]() {
     return Hash.hash(this.value)
@@ -241,7 +245,7 @@ class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
     this.previous = parent.value[_prop]
   }
   [Equal.symbol](that: Equal.Equal) {
-    return Equal.equals(this.value, (that as ReadonlyRef<A>).value)
+    return isReadonlyRef(that) && Equal.equals(this.value, that.value)
   }
   [Hash.symbol]() {
     return Hash.hash(this.value)
@@ -273,10 +277,10 @@ class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
     return new PropRefImpl(this, prop)
   }
   set(value: A[K]): AtomRef<A[K]> {
-    if (Array.isArray(this.parent.value)) {
-      const newArray = this.parent.value.slice()
-      newArray[this._prop as number] = value
-      this.parent.set(newArray as A)
+    if (isArrayWithProp(this.parent.value, this._prop)) {
+      const newArray = Object.assign(new Array<A[K]>(), this.parent.value)
+      newArray[Number(this._prop)] = value
+      this.parent.set(newArray)
     } else {
       this.parent.set({
         ...this.parent.value,
@@ -286,10 +290,10 @@ class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
     return this
   }
   update(f: (value: A[K]) => A[K]): AtomRef<A[K]> {
-    if (Array.isArray(this.parent.value)) {
-      const newArray = this.parent.value.slice()
-      newArray[this._prop as number] = f(this.parent.value[this._prop])
-      this.parent.set(newArray as A)
+    if (isArrayWithProp(this.parent.value, this._prop)) {
+      const newArray = Object.assign(new Array<A[K]>(), this.parent.value)
+      newArray[Number(this._prop)] = f(this.parent.value[this._prop])
+      this.parent.set(newArray)
     } else {
       this.parent.set({
         ...this.parent.value,
@@ -320,11 +324,12 @@ class CollectionImpl<A> extends ReadonlyRefImpl<AtomRef<A>[]> implements Collect
       }
     }
     proxy = new Proxy(ref, {
-      get(target, p, _receiver) {
+      get(target, p, receiver) {
         if (p === 'notify') {
           return notify
         }
-        return target[p as keyof AtomRef<A>]
+        const value: unknown = Reflect.get(target, p, receiver)
+        return value
       },
     })
     this.linked.add(proxy)

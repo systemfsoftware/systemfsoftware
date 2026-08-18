@@ -12,14 +12,16 @@ const _default: {
         name: string;
     };
     rules: {
+        'in-source-test-targets-private': Rule;
         'no-test-file-in-src': Rule;
         'src-property-test-cell': Rule;
-        'in-source-test-targets-private': Rule;
         'test-file-outside-tests-dir': Rule;
         'test-suffix-outside-src': Rule;
         'behaviour-test-requires-gherkin': Rule;
         'behaviour-exercises-use-case': Rule;
         'behaviour-one-feature-per-file': Rule;
+        'tests-dir-helpers-in-fixtures': Rule;
+        'no-io-module-in-source-test': Rule;
     };
     configs: {
         recommended: {

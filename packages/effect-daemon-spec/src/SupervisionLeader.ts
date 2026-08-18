@@ -1,0 +1,18 @@
+import { Duration, Effect, Schedule } from 'effect'
+import { cappedBackoff } from './Backoff.js'
+
+export const leader = <
+  INTENSITY,
+  COOLDOWN extends Duration.Input,
+  BACKOFFBASE extends Duration.Input,
+>(
+  config: { readonly intensity: INTENSITY; readonly backoffBase: BACKOFFBASE; readonly cooldown: COOLDOWN },
+  cap: Duration.Input,
+): Effect.Effect<
+  { readonly intensity: INTENSITY; readonly backoff: Schedule.Schedule<Duration.Duration>; readonly cooldown: COOLDOWN }
+> =>
+  Effect.succeed({
+    intensity: config.intensity,
+    backoff: cappedBackoff(config.backoffBase, cap),
+    cooldown: config.cooldown,
+  })
