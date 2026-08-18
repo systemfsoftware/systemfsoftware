@@ -31,6 +31,13 @@ const _default: {
         'no-native-setinterval-in-effect': Rule;
         'no-native-settimeout-in-effect': Rule;
     };
+    configs: {
+        recommended: {
+            rules: {
+                readonly [x: string]: "error";
+            };
+        };
+    };
 };
 export default _default;
 

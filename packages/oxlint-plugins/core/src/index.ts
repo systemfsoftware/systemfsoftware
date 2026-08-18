@@ -26,6 +26,37 @@ import { noNewWorkerWithWasmImport } from './rules/no-new-worker-with-wasm-impor
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin'
 
+const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
+
+/**
+ * The rules this plugin recommends, so a consumer preset can derive the set
+ * instead of transcribing it. Every sibling plugin in this family already
+ * publishes one; this plugin was the exception, which is why the only complete
+ * enablement lived in a config a consumer never installs.
+ *
+ * Four rules are deliberately absent, matching the architecture's own refusals:
+ * `no-barrels` and `no-inline-destructured-type` fire on correct code, and
+ * `ban-classes` and `no-bodyless-status-assertion` need a per-package whitelist
+ * or a status-assertion vocabulary that only some packages have. A consumer
+ * enables those by name; recommending them here would fire on their first file.
+ */
+const recommendedRules = {
+  [rule('ban-error-string')]: 'error',
+  [rule('no-context-generic-tag')]: 'error',
+  [rule('no-date-now-in-effect')]: 'error',
+  [rule('no-direct-tag-access')]: 'error',
+  [rule('no-domain-branching-density')]: 'error',
+  [rule('no-either-tag-assertions')]: 'error',
+  [rule('no-io-boundary-tests')]: 'error',
+  [rule('no-logging-in-catch')]: 'error',
+  [rule('no-native-map-in-effect')]: 'error',
+  [rule('no-native-set-in-effect')]: 'error',
+  [rule('no-native-setinterval-in-effect')]: 'error',
+  [rule('no-native-settimeout-in-effect')]: 'error',
+  [rule('no-new-promise-in-effect')]: 'error',
+  [rule('no-new-worker-with-wasm-import')]: 'error',
+} as const
+
 export default {
   meta: {
     name: PLUGIN_NAME,
@@ -49,5 +80,10 @@ export default {
     'no-native-set-in-effect': noNativeSetInEffect,
     'no-native-setinterval-in-effect': noNativeSetIntervalInEffect,
     'no-native-settimeout-in-effect': noNativeSetTimeoutInEffect,
+  },
+  configs: {
+    recommended: {
+      rules: recommendedRules,
+    },
   },
 }
