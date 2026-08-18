@@ -111,9 +111,14 @@ export interface Registry {
 export interface Node<A> {
   readonly atom: Atom.Atom<A>
   readonly value: () => A
-  parents: Set<Node<unknown>>
-  children: Set<Node<unknown>>
-  listeners: Set<() => void>
+  /**
+   * Read-only views of the registry's dependency graph. The registry mutates
+   * these sets internally; consumers can inspect them but must not coordinate
+   * through them.
+   */
+  readonly parents: ReadonlySet<Node<unknown>>
+  readonly children: ReadonlySet<Node<unknown>>
+  readonly listeners: ReadonlySet<() => void>
   currentState(): 'uninitialized' | 'stale' | 'valid' | 'removed'
 }
 
