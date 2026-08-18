@@ -16,6 +16,7 @@
   ],
   "publishConfig": {
     "access": "public",
+    "provenance": true,
     "exports": {
       ".": "./dist/index.mjs",
       "./checker-worker": "./dist/checker-worker.mjs",
