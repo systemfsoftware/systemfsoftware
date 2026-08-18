@@ -7,9 +7,9 @@ import semver from 'semver'
 
 import { strykerEngines } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 
-import { OutputModeProbe, OutputModeProbeLive } from './output-mode.adapter.js'
-import { RunEventStreamLive, RunEventStreamPort } from './run-event-stream.adapter.js'
-import { strykerCliEffect } from './stryker-cli.handler.js'
+import { OutputModeProbe, OutputModeProbeLive } from './OutputModeAdapter.js'
+import { RunEventStreamLive, RunEventStreamPort } from './RunEventStreamAdapter.js'
+import { strykerCliEffect } from './StrykerCliHandler.js'
 
 const EXIT_CODE_RUN_NEVER_REACHED_ITS_FINALIZER = 1
 

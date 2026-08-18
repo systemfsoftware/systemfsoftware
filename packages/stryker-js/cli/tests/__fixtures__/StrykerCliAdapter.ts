@@ -18,7 +18,7 @@ export class StrykerCli extends Context.Service<StrykerCli, {
   readonly run: (args: readonly string[], options?: ExecOptions) => Effect.Effect<CliResult>
   readonly sh: (script: string, options?: ExecOptions) => Effect.Effect<CliResult>
 }>()(
-  '@systemfsoftware/stryker-js-cli/tests/__fixtures__/stryker-cli.adapter/StrykerCli',
+  '@systemfsoftware/stryker-js-cli/tests/__fixtures__/StrykerCliAdapter/StrykerCli',
 ) {}
 
 export const layerStrykerCli: Layer.Layer<StrykerCli> = Layer.effect(

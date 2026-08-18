@@ -22,15 +22,15 @@ import type { ManifestRendered } from '@systemfsoftware/stryker-js-mutation-run/
 import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 
 import type { CliRequest } from './cli-request.schema.js'
-import { emitLLMSManifest } from './llms-manifest.kernel.js'
-import { STREAM_SCHEMA_VERSION } from './stream-protocol.kernel.js'
+import { emitLLMSManifest } from './LlmsManifest.js'
+import { STREAM_SCHEMA_VERSION } from './StreamProtocol.js'
 import {
   type CreateRunEventStreamCapability,
   type DetectModeCapability,
   runStrykerCli,
   strykerCliConsoleLayers,
   type StrykerRun,
-} from './stryker-cli.executor.js'
+} from './StrykerCliExecutor.js'
 
 function createSplitter(separator: string) {
   return (value: string) => value.split(separator).filter(Boolean)
@@ -448,7 +448,7 @@ function makeStrykerCommand(requestRef: Ref.Ref<Option.Option<CliRequest>>) {
     .make('stryker', rootConfig, (config) => {
       if (config.llms === true) {
         // U11 — the manifest is walked from the command's own compiled form
-        // (llms-manifest.kernel.ts), so a newly added option appears with no
+        // (LlmsManifest.ts), so a newly added option appears with no
         // manifest change. `strykerCommand` is the final tree, subcommands
         // included; the handler runs only after the const is bound (the same
         // pattern as the explicit root type above). Requesting `--llms` IS
@@ -563,7 +563,7 @@ export function strykerCliEffect(
     // run, and the executor's finalizer emits the captured content as the
     // terminal event. Human mode provides no Console binding: effect's own
     // default console already writes the prose rendering to the real
-    // descriptors (output-mode-console.state.ts).
+    // descriptors (OutputModeConsoleState.ts).
     const cliEffect = Command.runWith(command, { version: strykerVersion })(argv).pipe(
       Effect.provide(
         Layer.mergeAll(

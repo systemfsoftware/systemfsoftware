@@ -1,7 +1,23 @@
+import { Workflow } from '@systemfsoftware/effect-cell-types'
 import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 
+import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
 import { toRelativeNormalizedFileName } from '@systemfsoftware/stryker-js-mutation-run/mutants/incremental-differ'
+
+/**
+ * The decision's helper closure reaches three language built-ins the purity
+ * gate cannot resolve as globals, so each is bound at module scope and the
+ * helpers reference the bindings: `isArray` keeps `Array.isArray`'s narrow,
+ * `objectEntries`/`objectFromEntries`/`objectKeys` keep `Object`'s trio, and
+ * `stringify` keeps `JSON.stringify`'s exact text.
+ */
+const isArray: (value: unknown) => value is unknown[] = Array.isArray
+const { entries: objectEntries, fromEntries: objectFromEntries, keys: objectKeys } = Object
+const stringify = JSON.stringify
 
 /**
  * U8 — survivor re-run admission (R10, R11, KTD6, KTD7).
@@ -62,7 +78,7 @@ export type HashContent = (content: string) => string
 export type ResolveAbsolutePath = (file: string) => string
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return typeof value === 'object' && value !== null && !isArray(value)
 }
 
 /**
@@ -107,16 +123,16 @@ export function sourceContentHash(content: string, hash: HashContent): string {
  * loudly instead of silently invalidating every prior report in the wild.
  */
 export function serializeSurvivorsHashInput(input: SurvivorsHashInput): string {
-  return JSON.stringify(sortKeys(input))
+  return stringify(sortKeys(input))
 }
 
 function sortKeys(value: unknown): unknown {
-  if (Array.isArray(value)) {
+  if (isArray(value)) {
     return value.map(sortKeys)
   }
   if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.keys(value)
+    return objectFromEntries(
+      objectKeys(value)
         .sort()
         .map((key) => [key, sortKeys(value[key])]),
     )
@@ -194,7 +210,7 @@ export function extractSurvivors(
   resolveAbsolutePath: ResolveAbsolutePath,
 ): Mutant[] {
   const survivors: Mutant[] = []
-  for (const [file, fileResult] of Object.entries(priorReport.files)) {
+  for (const [file, fileResult] of objectEntries(priorReport.files)) {
     for (const mutant of fileResult.mutants) {
       if (mutant.status === 'Survived') {
         survivors.push(reportMutantToMutant(file, mutant, resolveAbsolutePath))
@@ -264,8 +280,8 @@ export function priorSourceHashes(
   priorReport: schema.MutationTestResult,
   hashContent: HashContent,
 ): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(priorReport.files).map(([file, fileResult]) => [
+  return objectFromEntries(
+    objectEntries(priorReport.files).map(([file, fileResult]) => [
       file,
       sourceContentHash(fileResult.source, hashContent),
     ]),
@@ -321,6 +337,105 @@ export function admissionVerdict(input: AdmitSurvivorsRunInput): AdmissionVerdic
   if (survivors.length === 0) return { kind: 'no-survivors' }
   if (!hashesMatch(priorReport, input)) return rejection('mismatch', MISMATCH_DETAIL)
   return { kind: 'admit', survivors }
+}
+
+export type SurvivorsRejectReason = 'no-report' | 'mismatch'
+
+export const SurvivorsAdmissionTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-cli/SurvivorsAdmission')
+export type SurvivorsAdmissionTypeId = typeof SurvivorsAdmissionTypeId
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {
+  survivors: S.Array(
+    S.Struct({
+      id: S.String,
+      fileName: S.String,
+      mutatorName: S.String,
+      replacement: S.String,
+      location: S.Struct({
+        start: S.Struct({ line: S.Finite, column: S.Finite }),
+        end: S.Struct({ line: S.Finite, column: S.Finite }),
+      }),
+    }),
+  ),
+}) {
+  readonly [SurvivorsAdmissionTypeId] = SurvivorsAdmissionTypeId
+}
+export class NoSurvivors extends S.TaggedClass<NoSurvivors>()('NoSurvivors', {}) {
+  readonly [SurvivorsAdmissionTypeId] = SurvivorsAdmissionTypeId
+}
+
+export const SurvivorsAdmission = S.Union([Admitted, NoSurvivors])
+export type SurvivorsAdmission = S.Schema.Type<typeof SurvivorsAdmission>
+export class SurvivorsRejection extends S.TaggedError<SurvivorsRejection>()('SurvivorsRejection', {
+  reason: S.Literals(['no-report', 'mismatch']),
+  remediation: S.String,
+}) {
+  readonly [SurvivorsAdmissionTypeId] = SurvivorsAdmissionTypeId
+}
+
+/**
+ * The survivors admission decision: the classification `admissionVerdict`
+ * produces, assigned to the workflow channels — one arm per kind, no guard
+ * chain. A missing report, a survivors-sourced report and a hash mismatch are
+ * the same reject outcome with different reasons; only the rejection's
+ * remediation names the full run to do first (R10).
+ */
+export const admitSurvivorsRun = Workflow.make(
+  (command: AdmitSurvivorsRunInput): Result.Result<SurvivorsAdmission, SurvivorsRejection> =>
+    Match.value(admissionVerdict(command)).pipe(
+      Match.discriminator('kind')(
+        'reject',
+        (verdict) => Result.fail(SurvivorsRejection.make({ reason: verdict.reason, remediation: verdict.remediation })),
+      ),
+      Match.discriminator('kind')('no-survivors', () => Result.succeed(NoSurvivors.make())),
+      Match.discriminator('kind')(
+        'admit',
+        (verdict) => Result.succeed(Admitted.make({ survivors: verdict.survivors })),
+      ),
+      Match.exhaustive,
+    ),
+)
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
+  // branch is statically dead in the build and never enters the published module graph.
+  const { refutes } = await import('@systemfsoftware/effect-schema-law')
+  const { FastCheck: fc } = await import('effect/testing')
+
+  const survivorWith = (
+    start: { line: number | null; column: number | null },
+    end: { line: number | null; column: number | null },
+  ): unknown => ({
+    _tag: 'Admitted',
+    survivors: [
+      {
+        id: 'A',
+        fileName: 'file.ts',
+        mutatorName: 'mutator',
+        replacement: 'replacement',
+        location: { start, end },
+      },
+    ],
+  })
+
+  /**
+   * `S.Finite` is one shared v4 node, so every location point weakens together
+   * and the harness keeps a single obligation. Measured 2026-08-17: the stored
+   * weakened arm accepts a non-finite number at `start.column` (the first
+   * reaching path) but not at `start.line` — so the witness sits there. One
+   * generator per schema discharges the shared obligation.
+   */
+  refutes(Admitted, {
+    AdmittedLocationNonFinite: fc.constant(
+      survivorWith({ line: 1, column: Number.POSITIVE_INFINITY }, { line: 1, column: 0 }),
+    ),
+  })
+
+  refutes(SurvivorsAdmission, {
+    SurvivorsAdmissionLocationNonFinite: fc.constant(
+      survivorWith({ line: 1, column: Number.POSITIVE_INFINITY }, { line: 1, column: 0 }),
+    ),
+  })
 }
 
 /** The root the survivors laws mount fixture files under. */
@@ -634,7 +749,7 @@ if (import.meta.vitest !== void 0) {
    *
    * One law, not a suite: measured defect by defect, reordering the hash check, dropping a file
    * from `priorSourceHashes` and losing the `no-report` precedence are each already red in
-   * `survivors.workflow.property.test.ts`, so laws for those would restate existing coverage.
+   * `Survivors.workflow.property.test.ts`, so laws for those would restate existing coverage.
    * Hoisting the emptiness check above the provenance check is the one defect that leaves that
    * whole suite green.
    */

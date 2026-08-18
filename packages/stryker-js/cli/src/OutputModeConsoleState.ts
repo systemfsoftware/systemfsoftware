@@ -13,7 +13,7 @@ import * as Layer from 'effect/Layer'
  * document is written *before* the failure propagates. Machine mode therefore
  * replaces the `Console` reference itself with a capturing implementation:
  * every write lands in an in-memory buffer instead of the real stdout/stderr,
- * and the terminating bootstrap (stryker-cli.handler.ts) emits the buffer as
+ * and the terminating bootstrap (StrykerCliHandler.ts) emits the buffer as
  * one JSON envelope at teardown. Human mode keeps the default console so the
  * framework's prose rendering is untouched.
  *

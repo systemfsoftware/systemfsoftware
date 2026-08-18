@@ -17,7 +17,7 @@ import semver from 'semver'
 import { expect } from 'vitest'
 import { ManifestSchema, type StreamLine, StreamLineSchema } from './__fixtures__/cli-contract.schema.js'
 import { CLI_BIN, fixtureDir, WORKDIR } from './__fixtures__/stryker-cli-env.js'
-import { type CliResult, layerStrykerCli, StrykerCli } from './__fixtures__/stryker-cli.adapter.js'
+import { type CliResult, layerStrykerCli, StrykerCli } from './__fixtures__/StrykerCliAdapter.js'
 
 interface Observed {
   readonly exitCode: number

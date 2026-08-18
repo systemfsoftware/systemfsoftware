@@ -36,21 +36,23 @@ import type { HelpRendered } from '@systemfsoftware/stryker-js-mutation-run/run-
 import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 import { buildVerdictEnvelope } from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
 
-import { admissionAdapter, type AdmissionDecoded, type AdmissionOutcome } from './admission-adapter.workflow.js'
-import { machineConsoleLayer, readCapturedConsole } from './output-mode-console.state.js'
-import type { OutputModeProbe } from './output-mode.adapter.js'
-import { isColorEnabled, isProgressEnabled } from './output-mode.kernel.js'
-import type { RunEventStream, RunEventStreamPort } from './run-event-stream.adapter.js'
-import { STREAM_SCHEMA_VERSION } from './stream-protocol.kernel.js'
-import { SURVIVORS_REJECT_EXIT_CLASS } from './survivors-exit.kernel.js'
+import { machineConsoleLayer, readCapturedConsole } from './OutputModeConsoleState.js'
+import type { OutputModeProbe } from './OutputModeAdapter.js'
+import { isColorEnabled, isProgressEnabled } from './OutputMode.js'
+import type { RunEventStream, RunEventStreamPort } from './RunEventStreamAdapter.js'
+import { STREAM_SCHEMA_VERSION } from './StreamProtocol.js'
+import { SURVIVORS_REJECT_EXIT_CLASS } from './SurvivorsExit.js'
 import {
   DEFAULT_SURVIVORS_PRIOR_REPORT,
+  type AdmitSurvivorsRunInput,
+  admitSurvivorsRun,
   type HashContent,
   type ResolveAbsolutePath,
   sourceContentHash,
+  type SurvivorsAdmission,
+  SurvivorsRejection,
   survivorMutateSpans,
-} from './survivors.kernel.js'
-import { SurvivorsRejection } from './survivors.workflow.js'
+} from './Survivors.workflow.js'
 
 /**
  * The mutation-testing entry the CLI calls once options are parsed. Injectable
@@ -99,7 +101,7 @@ export interface RunStrykerCliInput {
  * The machine-mode `Console` layer, bundled so the transport (which resolves
  * the mode) can provide it without importing the state cell. Human mode
  * provides no layer — effect's own default console is the prose rendering
- * (output-mode-console.state.ts).
+ * (OutputModeConsoleState.ts).
  */
 export const strykerCliConsoleLayers = {
   machine: machineConsoleLayer,
@@ -157,10 +159,10 @@ interface AdmissionPhases extends Cell.Phases {
     readonly priorReportPath: string
     readonly sourceContentHashes: Readonly<Record<string, string>>
   }
-  readonly decoded: AdmissionDecoded
-  readonly decision: AdmissionOutcome
+  readonly decoded: AdmitSurvivorsRunInput
+  readonly decision: SurvivorsAdmission
   readonly decisionError: SurvivorsRejection
-  readonly output: Result.Result<AdmissionOutcome, SurvivorsRejection>
+  readonly output: Result.Result<SurvivorsAdmission, SurvivorsRejection>
   readonly response: unknown
   readonly decodeError: never
   readonly readError: never
@@ -169,72 +171,88 @@ interface AdmissionPhases extends Cell.Phases {
   readonly writeContext: never
 }
 
+/** The run context the admission's write phase dispatches on, threaded beside the decision. */
+interface AdmissionRunContext {
+  readonly resolvedOptions: StrykerOptions
+  readonly priorReportPath: string
+}
+
 /**
  * The survivors admission, as a description whose phases chain by type and
  * read in the order they run. The read gathers the admission's whole input
  * product — resolved options, prior report and the current source hashes —
- * across its interior; `decode` packages the workflow input; `admitSurvivorsRun`
- * is the decide phase; `encode` is the identity because the write already
- * consumes the whole outcome; the write dispatches the decision to the
- * verdict/run and fails the run with a rejection.
+ * across its interior and stashes the shell context the write dispatches on
+ * into the executor-owned `runContext` ref; `decode` packages exactly the
+ * workflow input; `admitSurvivorsRun` is the decide phase; `encode` is the
+ * identity because write receives the outcome as-is; the write reads the
+ * stashed context back and dispatches the decision to the verdict/run,
+ * failing the run with a rejection.
  */
 const survivorsAdmissionDescription = (
   runMutationTest: StrykerRun,
   stream: RunEventStream,
   mode: ResolvedMode,
+  runContext: Ref.Ref<AdmissionRunContext | undefined>,
 ): Cell.WriteDone<AdmissionPhases> =>
   pipe(
     Cell.read<AdmissionPhases>((cliOptions) =>
       Effect.promise(() => resolveSurvivorsRunOptions(cliOptions)).pipe(
-        Effect.map((resolvedOptions) => {
+        Effect.flatMap((resolvedOptions) => {
           const priorReportPath = priorReportPathOf(resolvedOptions)
           const priorReport = readPriorReport(priorReportPath)
-          return {
-            resolvedOptions,
-            priorReport,
-            priorReportPath,
-            sourceContentHashes: sourceContentHashesOf(priorReport),
-          }
+          return Ref.set(runContext, { resolvedOptions, priorReportPath }).pipe(
+            Effect.as({
+              resolvedOptions,
+              priorReport,
+              priorReportPath,
+              sourceContentHashes: sourceContentHashesOf(priorReport),
+            }),
+          )
         }),
       )
     ),
-    Cell.decode<AdmissionPhases>(({ resolvedOptions, priorReport, priorReportPath, sourceContentHashes }) =>
+    Cell.decode<AdmissionPhases>(({ resolvedOptions, priorReport, sourceContentHashes }) =>
       Result.succeed({
-        input: {
-          priorReport,
-          currentConfig: resolvedOptions,
-          frameworkVersion: strykerVersion,
-          sourceContentHashes,
-          hashContent,
-          resolveAbsolutePath,
-        },
-        resolvedOptions,
-        priorReportPath,
-      })
+        priorReport,
+        currentConfig: resolvedOptions,
+        frameworkVersion: strykerVersion,
+        sourceContentHashes,
+        hashContent,
+        resolveAbsolutePath,
+      }),
     ),
-    Cell.decide<AdmissionPhases>(admissionAdapter),
+    Cell.decide<AdmissionPhases>(admitSurvivorsRun),
     Cell.encode<AdmissionPhases>((outcome) => outcome),
     Cell.write<AdmissionPhases>((outcome) =>
-      Result.match(outcome, {
-        onFailure: (rejection) => Effect.fail(rejection),
-        onSuccess: ({ decision, resolvedOptions, priorReportPath }) =>
-          Match.value(decision).pipe(
-            Match.tag('NoSurvivors', () => Effect.sync(() => emitEmptySurvivorsVerdict(stream, mode, resolvedOptions))),
-            Match.tag('Admitted', (admitted) => {
-              const restricted: SurvivorsRunOptions = {
-                ...resolvedOptions,
-                survivors: admitted.survivors,
-                mutate: survivorMutateSpans(admitted.survivors),
-                survivorsPriorReport: priorReportPath,
-                // The differ would otherwise reuse the prior run's survived
-                // verdicts.
-                incremental: false,
-              }
-              return Effect.promise(() => runMutationTest(restricted))
-            }),
-            Match.orElse(() => Effect.die('unreachable admission decision variant')),
-          ),
-      })
+      Effect.flatMap(Ref.get(runContext), (context) => {
+        // The chain runs read before write, so the read has stashed the
+        // context by the time the write dispatches; an absent one is a
+        // chain-order violation, never a run outcome.
+        if (context === undefined) {
+          return Effect.die('the survivors admission read must run before its write')
+        }
+        const { resolvedOptions, priorReportPath } = context
+        return Result.match(outcome, {
+          onSuccess: (decision) =>
+            Match.value(decision).pipe(
+              Match.tag('NoSurvivors', () => Effect.sync(() => emitEmptySurvivorsVerdict(stream, mode, resolvedOptions))),
+              Match.tag('Admitted', (admitted) => {
+                const restricted: SurvivorsRunOptions = {
+                  ...resolvedOptions,
+                  survivors: admitted.survivors,
+                  mutate: survivorMutateSpans(admitted.survivors),
+                  survivorsPriorReport: priorReportPath,
+                  // The differ would otherwise reuse the prior run's survived
+                  // verdicts.
+                  incremental: false,
+                }
+                return Effect.promise(() => runMutationTest(restricted))
+              }),
+              Match.orElse(() => Effect.die('unreachable admission decision variant')),
+            ),
+          onFailure: (rejection) => Effect.fail(rejection),
+        })
+      }),
     ),
   )
 
@@ -242,7 +260,8 @@ const survivorsAdmissionDescription = (
  * The `--survivors` request: re-test exactly the prior report's survivor set.
  * The survivors flag was parsed as a boolean; the admission decides between
  * running the survivors and the plain pipeline. The chain's order is carried by
- * the description's phase types.
+ * the description's phase types; the run's resolved context cell is created
+ * here, beside the description it feeds.
  */
 function runSurvivorsAdmission(
   runMutationTest: StrykerRun,
@@ -250,7 +269,13 @@ function runSurvivorsAdmission(
   mode: ResolvedMode,
   cliOptions: PartialStrykerOptions,
 ): Effect.Effect<unknown, SurvivorsRejection, never> {
-  return Cell.apply(survivorsAdmissionDescription(runMutationTest, stream, mode), cliOptions)
+  return Effect.gen(function*() {
+    const admissionContext = yield* Ref.make<AdmissionRunContext | undefined>(undefined)
+    return yield* Cell.apply(
+      survivorsAdmissionDescription(runMutationTest, stream, mode, admissionContext),
+      cliOptions,
+    )
+  })
 }
 
 /**

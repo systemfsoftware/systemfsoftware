@@ -13,7 +13,7 @@ import type { ModeSignal, OutputMode, ResolvedMode } from '@systemfsoftware/stry
 import type { RunEvent, RunEventSink } from '@systemfsoftware/stryker-js-mutation-run/run-event'
 import { generateRunId } from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
 
-import { STREAM_SCHEMA_VERSION, TICK_INTERVAL_MS } from './stream-protocol.kernel.js'
+import { STREAM_SCHEMA_VERSION, TICK_INTERVAL_MS } from './StreamProtocol.js'
 
 /**
  * The host side of the run-event sink (U13): the port whose live layer turns
@@ -43,7 +43,7 @@ export interface RunEventStreamPort {
 }
 
 class RunEventStreamPortTag extends Context.Service<RunEventStreamPortTag, RunEventStreamPort>()(
-  '@systemfsoftware/stryker-js-cli/run-event-stream.adapter/RunEventStreamPortTag',
+  '@systemfsoftware/stryker-js-cli/RunEventStreamAdapter/RunEventStreamPortTag',
 ) {}
 
 const RunEventStreamPort = RunEventStreamPortTag

@@ -10,12 +10,14 @@ import { isDeepStrictEqual } from 'node:util'
 
 import {
   type AdmitSurvivorsRunInput,
+  admitSurvivorsRun,
   extractSurvivors,
   type HashContent,
   sourceContentHash,
   SURVIVORS_RUN_FIRST_REMEDIATION,
-} from '../survivors.kernel.js'
-import { admitSurvivorsRun, SurvivorsAdmission, SurvivorsRejection } from '../survivors.workflow.js'
+  SurvivorsAdmission,
+  SurvivorsRejection,
+} from '../Survivors.workflow.js'
 
 const sha256Hex: HashContent = (content) => createHash('sha256').update(content, 'utf-8').digest('hex')
 
