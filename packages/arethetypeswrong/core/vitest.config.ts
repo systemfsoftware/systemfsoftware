@@ -11,7 +11,11 @@ export default defineConfig({
   plugins: [inlineSchemaTests()],
   test: {
     ...sharedConfig.test,
-    include: ['test/**/*.test.ts', 'src/schema-laws.test.ts'],
+    include: ['tests/**/*.test.ts', 'src/schema-laws.test.ts'],
     exclude: [...(sharedConfig.test?.exclude ?? []), '**/snapshots/**'],
+    // The capability, not a record of what exists: this package currently has no
+    // `import.meta.vitest` block, and in-source blocks are permitted for module-private
+    // helpers. Without the glob the next such block would silently never run.
+    includeSource: ['src/**/*.ts'],
   },
 })

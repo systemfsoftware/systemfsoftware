@@ -3,10 +3,8 @@ import { defineConfig } from 'tsdown'
 export default defineConfig({
   entry: [
     'src/index.ts',
-    'src/types.ts',
-    'src/utils.ts',
-    'src/problems.ts',
-    'src/versions.ts',
+    'src/Types.ts',
+    'src/Utils.ts',
   ],
   format: 'esm',
   clean: true,
