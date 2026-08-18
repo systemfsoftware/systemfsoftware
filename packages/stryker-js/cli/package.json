@@ -18,6 +18,7 @@
     "build": "tsdown",
     "prepare": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
+    "attw": "attw --pack .",
     "test": "vitest run",
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
@@ -36,6 +37,7 @@
     "semver": "catalog:stryker"
   },
   "devDependencies": {
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",

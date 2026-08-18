@@ -10,10 +10,14 @@
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
   "description": "The plugin API of the @systemfsoftware Stryker fork",
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
+    "attw": "attw --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "license": "Apache-2.0",
@@ -36,6 +40,7 @@
     "typed-inject": "~5.0.0"
   },
   "devDependencies": {
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
