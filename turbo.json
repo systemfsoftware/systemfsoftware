@@ -52,7 +52,11 @@
         "vitest.config.*",
         "src/**/*.test.ts",
         "src/**/*.spec.ts",
-        "$TURBO_ROOT$/packages/vitest-config/lib/**"
+        "$TURBO_ROOT$/packages/vitest-config/lib/**",
+        "!**/README.md",
+        "!**/AGENTS.md",
+        "!**/CHANGELOG.md",
+        "!**/etc/*.api.md"
       ],
       "outputLogs": "errors-only",
       "dependsOn": [
@@ -117,7 +121,8 @@
         "stryker.config.json",
         "vitest.config.ts",
         "vitest.setup.ts",
-        "reports/stryker-incremental.json"
+        "reports/stryker-incremental.json",
+        "!**/*.md"
       ],
       "outputs": [
         "reports/mutation-report.html",
