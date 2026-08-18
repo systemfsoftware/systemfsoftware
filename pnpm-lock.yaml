@@ -1950,9 +1950,6 @@ importers:
       '@systemfsoftware/stryker-js-plugin-api':
         specifier: workspace:^
         version: link:../plugin-api
-      ajv:
-        specifier: ~8.18.0
-        version: 8.18.0
       diff-match-patch:
         specifier: 1.0.5
         version: 1.0.5

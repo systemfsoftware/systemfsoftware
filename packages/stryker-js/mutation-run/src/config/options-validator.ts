@@ -2,13 +2,13 @@ import os from 'os'
 import path from 'path'
 
 import { deepFreeze, findUnserializables, type Immutable, noopLogger } from '@stryker-mutator/util'
-import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type StrykerOptions, StrykerOptionsSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import ajvModule, { type AnySchemaObject, type ValidateFunction } from 'ajv'
 import type { JSONSchema7 } from 'json-schema'
 import { Minimatch } from 'minimatch'
 
+import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { ConfigError } from '../errors.js'
 import { injectionTokens } from '../plugins/index.js'
@@ -21,25 +21,34 @@ import { optionsPath } from './options-path.js'
 import { REMOVED_OPTIONS } from './removed-surface.js'
 import { describeErrors } from './validation-errors.js'
 
-const Ajv = ajvModule.default
-
-/** The validation document: an AJV schema object whose `properties` map is treated as data, not code. */
-type ValidationSchemaDocument = AnySchemaObject & {
+/**
+ * The validation document. Its `properties` map names every option the core and
+ * the loaded plugins declare, which is what an unknown-option warning is keyed
+ * on. It is read as DATA only: validation itself runs on `StrykerOptionsSchema`,
+ * the same declaration the defaults come from.
+ */
+type ValidationSchemaDocument = {
   readonly properties?: unknown
+  readonly [key: string]: unknown
 }
 
-const ajv = new Ajv({
-  useDefaults: true,
-  allErrors: true,
-  jsPropertySyntax: true,
-  verbose: true,
-  logger: false,
-  strict: false,
-})
+/**
+ * Options are decoded by the schema that declares them. This replaced an ajv
+ * instance run with `useDefaults`, which filled defaults from the *derived* JSON
+ * Schema document and silently injected nothing wherever a `default` annotation
+ * did not survive that derivation: `timeoutFactor`, `timeoutMS` and
+ * `dryRunTimeoutMinutes` all arrived `undefined`, so
+ * `dryRunTimeoutMinutes * 1000 * 60` was `NaN`, every dry run was given a 1 ms
+ * budget, and each one reported "Initial test run timed out". Decoding through
+ * the declaration cannot drift from it, and the open struct keeps the
+ * plugin-contributed options a document-driven validator would have rejected.
+ *
+ * `errors: 'all'` keeps the previous behaviour of reporting every offending
+ * option in one pass rather than stopping at the first.
+ */
+const decodeOptions = S.decodeUnknownResult(StrykerOptionsSchema, { errors: 'all' })
 
 export class OptionsValidator {
-  private readonly validateFn: ValidateFunction
-
   public static readonly inject = tokens(
     injectionTokens.validationSchema,
     commonTokens.logger,
@@ -48,9 +57,7 @@ export class OptionsValidator {
   constructor(
     private readonly schema: ValidationSchemaDocument,
     private readonly log: Logger,
-  ) {
-    this.validateFn = ajv.compile(schema)
-  }
+  ) {}
 
   /**
    * Validates the provided options, throwing an error if something is wrong.
@@ -306,12 +313,21 @@ export class OptionsValidator {
     this.throwErrorIfNeeded(additionalErrors)
   }
 
-  private schemaValidate(options: unknown): asserts options is StrykerOptions {
-    if (!this.validateFn(options)) {
-      const describedErrors = describeErrors(this.validateFn.errors ?? [])
+  /**
+   * Decodes the options against their declaration, then writes the result back
+   * onto the caller's object: the previous engine filled defaults in place and
+   * every caller reads them off the object it passed, so the fill has to land
+   * there rather than in a copy.
+   */
+  private schemaValidate(options: Record<string, unknown>): asserts options is StrykerOptions {
+    const decoded = decodeOptions(options)
+    if (Result.isFailure(decoded)) {
+      const describedErrors = describeErrors(decoded.failure)
       describedErrors.forEach((error) => this.log.error(error))
       this.throwErrorIfNeeded(describedErrors)
+      return
     }
+    Object.assign(options, decoded.success)
   }
 
   private throwErrorIfNeeded(errors: string[]) {
@@ -379,14 +395,14 @@ export class OptionsValidator {
   }
 }
 
+/**
+ * The defaults are the declaration decoded against an empty object: every field
+ * that declares a default supplies it, and the result is the complete option
+ * set. It no longer routes through the validator, which used to be the only way
+ * to obtain them and produced an object missing three numeric defaults.
+ */
 export function createDefaultOptions(): StrykerOptions {
-  const options: Record<string, unknown> = {}
-  const validator: OptionsValidator = new OptionsValidator(
-    forkCoreSchema,
-    noopLogger,
-  )
-  validator.validate(options)
-  return options
+  return Result.getOrThrow(decodeOptions({}))
 }
 
 export const defaultOptions: Immutable<StrykerOptions> = deepFreeze(

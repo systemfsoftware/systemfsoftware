@@ -16,8 +16,14 @@ import * as S from 'effect/Schema'
  *   `S.StructWithRest` with a `Record<string, unknown>` index keeps arbitrary
  *   plugin-proposed keys and makes the decoded type carry
  *   `[k: string]: unknown`;
- * - objects with `additionalProperties: false` (`dashboard`, `eventReporter`,
- *   `htmlReporter`, `jsonReporter`, `thresholds`, `mutator`) are closed here.
+ * - objects with `additionalProperties: false` (`htmlReporter`, `jsonReporter`,
+ *   `thresholds`, `mutator`) are closed here.
+ *
+ * `dashboard` and `eventReporter` are absent: the reporters they configured were
+ * removed, and the removed-option check rejects both names. Declaring them here
+ * with defaults meant the default option set carried two options the very next
+ * validation step refused - invisible only while the defaults were filled by a
+ * separate engine that happened not to inject them.
  */
 
 /** Open object: fixed fields plus an index signature accepting arbitrary keys. */
@@ -80,18 +86,6 @@ const ClearTextReporterOptions = openStruct({
   skipFull: defaulted(S.Boolean, false),
 })
 
-const DashboardOptions = S.Struct({
-  project: S.optional(S.String),
-  version: S.optional(S.String),
-  module: S.optional(S.String),
-  baseUrl: defaulted(S.String, 'https://dashboard.stryker-mutator.io/api/reports'),
-  reportType: defaulted(ReportType, 'full'),
-})
-
-const EventRecorderOptions = S.Struct({
-  baseDir: defaulted(S.String, 'reports/mutation/events'),
-})
-
 const HtmlReporterOptions = S.Struct({
   fileName: defaulted(S.String, 'reports/mutation/mutation.html'),
 })
@@ -138,9 +132,7 @@ export const StrykerOptionsSchema = S.StructWithRest(
     commandRunner: defaulted(CommandRunnerOptionsSchema, {}),
     coverageAnalysis: defaulted(CoverageAnalysisMode, 'perTest'),
     clearTextReporter: defaulted(ClearTextReporterOptions, {}),
-    dashboard: defaulted(DashboardOptions, {}),
     dryRunOnly: defaulted(S.Boolean, false),
-    eventReporter: defaulted(EventRecorderOptions, {}),
     ignorePatterns: defaulted(S.Array(S.String), []),
     ignoreStatic: defaulted(S.Boolean, false),
     incremental: defaulted(S.Boolean, false),
