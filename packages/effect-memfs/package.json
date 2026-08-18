@@ -67,6 +67,13 @@
     "typescript": ">=5.0.0"
   },
   "publishConfig": {
-    "provenance": true
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/effect-memfs.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    }
   }
 }
