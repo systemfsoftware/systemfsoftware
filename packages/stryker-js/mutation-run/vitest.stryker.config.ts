@@ -12,15 +12,22 @@ import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
  * filesystem directly and would find this package's own config instead.
  *
  * Nothing is lost: the mutation surface is the pure decisions this fork owns,
- * today only `src/test-contribution.ts`; this spec never imports it, and
- * `related: true` already excludes it from every mutant run. It still runs
- * under `pnpm test`, which is its gate.
+ * today only `src/test-contribution.ts`, whose own lane is
+ * `tests/test-contribution.integration.test.ts`; the dropped spec never imports
+ * it, and `related: true` already excludes it from every mutant run. It still
+ * runs under `pnpm test`, which is its gate.
+ *
+ * The paths track `vitest.config.ts`. When the behaviour lane moved to
+ * `tests/*.integration.test.ts` these two globs kept naming the retired
+ * `test/**` layout, so the runner collected nothing and every mutant run for
+ * this package died in its dry run reporting "No tests were executed" -- an
+ * empty glob reads as a configuration error there, never as a passing zero.
  */
 export default defineConfig({
   ...sharedConfig,
   test: {
     ...sharedConfig.test,
-    include: ['test/**/*.spec.ts'],
-    exclude: ['test/unit/reporter-wiring.spec.ts'],
+    include: ['tests/**/*.integration.test.ts'],
+    exclude: ['tests/reporter-wiring.integration.test.ts'],
   },
 })
