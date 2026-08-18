@@ -16,7 +16,16 @@
 // `--keep` leaves the temp project on disk and prints its path.
 
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
@@ -72,6 +81,16 @@ const PLANTED = {
     body: `import { Effect } from 'effect'\n\nexport const now = Effect.sync(() => Date.now())\n`,
     expectRule: 'no-date-now-in-effect',
     family: 'house rules',
+  },
+  // The pure phases, the I/O sources and the description module are all walked
+  // off the published `Cell.vocabulary` by the rule itself, so this fixture is
+  // written the way that walk classifies: `decide` is pure, `effect/Clock` is
+  // I/O, and a call to one inside the other is the violation.
+  'src/confirm-order.executor.ts': {
+    body:
+      `import { Cell } from '@systemfsoftware/effect-cell-types'\nimport * as Clock from 'effect/Clock'\nimport * as Either from 'effect/Either'\n\nexport const description = Cell.decide((decoded) => Either.right(Clock.currentTimeMillis()))\n`,
+    expectRule: 'no-io-in-phase-bodies',
+    family: 'cell vocabulary',
   },
 }
 
@@ -305,6 +324,20 @@ const main = () => {
     findings.push(`lint baseline reports ${baseline.warnings} warning(s) — an unrecognised rule is reported this way`)
   }
 
+  // The preset must come from the published umbrella, never from this repo's own
+  // lint config. Recomputed from what the installer actually laid down, because a
+  // config that leaked in as a transitive dependency would make every rule count
+  // and every planted diagnostic below unattributable.
+  const internalConfigs = ['@systemfsoftware/oxlint-config', '@systemfsoftware/vitest-config']
+  for (const internal of internalConfigs) {
+    const store = path.join(consumer, 'node_modules/.pnpm')
+    const present = existsSync(path.join(consumer, 'node_modules', internal)) ||
+      (existsSync(store) &&
+        readdirSync(store).some((d) => d.startsWith(internal.replace(/[@/]/g, (c) => (c === '@' ? '@' : '+')))))
+    if (present) findings.push(`${internal} reached the consumer, so the preset under test is not the published one`)
+  }
+  note(`neither internal config is installed in the consumer (${internalConfigs.length} checked)`)
+
   const reference = run('pnpm', ['--filter', RULE_COUNT_REFERENCE, 'lint'], { cwd: repoRoot })
   const referenceRules = reference.out.match(/Finished in [\d.]+m?s on \d+ files? with (\d+) rules/)
   if (referenceRules === null) findings.push(`could not read the in-repo rule count from ${RULE_COUNT_REFERENCE}`)
@@ -328,10 +361,21 @@ const main = () => {
   for (const [rel, spec] of Object.entries(PLANTED)) writeFileSync(path.join(consumer, rel), spec.body)
   const planted = lintOnce(consumer)
   if (planted.code === 0) findings.push('planted violations did not fail the lint run')
+  // oxlint prefixes an error line with `x` and a warning with `!`, and prints its
+  // own tally. Both are checked: a rule that fired at `warn` would still appear in
+  // the output, so "the rule fired" is not the same claim as "the rule enforces".
   for (const [rel, spec] of Object.entries(PLANTED)) {
-    if (!planted.out.includes(spec.expectRule)) {
+    const line = planted.out.split('\n').find((l) => l.includes(spec.expectRule))
+    if (line === undefined) {
       findings.push(`${spec.family}: ${spec.expectRule} did not fire on ${rel}`)
+      continue
     }
+    if (!line.trim().startsWith('x ')) {
+      findings.push(`${spec.family}: ${spec.expectRule} fired below error severity — ${line.trim().slice(0, 80)}`)
+    }
+  }
+  if (planted.warnings !== 0) {
+    findings.push(`planted run reported ${planted.warnings} warning(s); every planted violation must be an error`)
   }
   for (const rel of Object.keys(PLANTED)) unlinkSync(path.join(consumer, rel))
   const restored = lintOnce(consumer)
