@@ -24,6 +24,10 @@
     "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
+  "optionalDependencies": {
+    "@systemfsoftware/omp-utils": "workspace:^",
+    "@std/toml": "catalog:"
+  },
   "peerDependencies": {
     "@effect/platform-node": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:",
