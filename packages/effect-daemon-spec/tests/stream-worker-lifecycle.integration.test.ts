@@ -6,8 +6,8 @@ import { Daemon } from '../src/mod.js'
 import { dynamic } from '../src/mod.js'
 import { MaxChildren } from '../src/mod.js'
 import { run } from '../src/mod.js'
-import { NoopLayer } from './__fixtures__/shared-layers.js'
-import { BufferedRef } from './__fixtures__/test-utils.js'
+import { NoopLayer } from './__fixtures__/SharedLayers.js'
+import { BufferedRef } from './__fixtures__/TestUtils.js'
 
 const Feature = makeFeature({ it, layer })
 

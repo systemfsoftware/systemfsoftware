@@ -14,7 +14,7 @@ import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect } from 'vitest'
 
-import { DOCTRINE_KERNEL } from '../src/dispatch-doctrine.executor.js'
+import { DOCTRINE_KERNEL } from '../src/DispatchDoctrineExecutor.js'
 
 const Feature = makeFeature({ it, layer })
 

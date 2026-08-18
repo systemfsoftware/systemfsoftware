@@ -5,8 +5,8 @@ import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
 import { run } from '../src/mod.js'
 import { Daemon } from '../src/mod.js'
-import { NoopLayer } from './__fixtures__/shared-layers.js'
-import { CounterRef } from './__fixtures__/test-utils.js'
+import { NoopLayer } from './__fixtures__/SharedLayers.js'
+import { CounterRef } from './__fixtures__/TestUtils.js'
 
 const Feature = makeFeature({ it, layer })
 

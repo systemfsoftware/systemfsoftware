@@ -5,7 +5,7 @@ import { TomlLoaderLive } from '@systemfsoftware/omp-utils'
 import { Effect, Layer } from 'effect'
 import * as PathModule from 'effect/Path'
 import { expect } from 'vitest'
-import { runNoSkillDelegation } from '../src/no-skill-delegation.executor.js'
+import { runNoSkillDelegation } from '../src/NoSkillDelegationExecutor.js'
 
 function present<A>(value: A | null | undefined): A {
   if (value === null || value === undefined) throw new Error('expected a value, got none')

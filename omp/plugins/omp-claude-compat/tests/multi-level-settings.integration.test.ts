@@ -7,8 +7,8 @@ import { FileSystem } from 'effect/FileSystem'
 import * as PathModule from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 import { expect } from 'vitest'
-import { loadSettingsWithPaths } from '../src/internal/load-settings.executor.js'
-import { expectLoaded } from './__fixtures__/loaded.observer.js'
+import { loadSettingsWithPaths } from '../src/internal/LoadSettingsExecutor.js'
+import { expectLoaded } from './__fixtures__/Loaded.js'
 
 const Feature = makeFeature({ it, layer })
 

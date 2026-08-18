@@ -27,7 +27,7 @@ import type * as HttpApiMiddleware from 'effect/unstable/httpapi/HttpApiMiddlewa
 import * as HttpApiSchema from 'effect/unstable/httpapi/HttpApiSchema'
 import * as Reactivity from 'effect/unstable/reactivity/Reactivity'
 import * as Atom from './Atom.js'
-import { schemaCodec } from './internal/result-schema.js'
+import { schemaCodec } from './internal/ResultSchema.js'
 import * as AsyncResult from './Result.js'
 // rc.108 does not expose HttpApiEndpoint.getSuccessSchemas/getErrorSchemas (added upstream
 // after rc.108); replicate them against the public .success/.error schema sets.

@@ -3,7 +3,7 @@ import { And, Gherkin, makeFeature, Then, When } from '@systemfsoftware/effect-g
 import { Effect, Fiber, Layer } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
-import { Noop } from '../src/daemon-reporter.adapter.js'
+import { Noop } from '../src/DaemonReporterAdapter.js'
 import { LeaderLock, withLeaderLock } from '../src/mod.js'
 import type { LeaderLockAcquireError, LeaderLockOptions } from '../src/mod.js'
 

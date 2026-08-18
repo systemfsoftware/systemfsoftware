@@ -3,9 +3,9 @@ import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/e
 import { Duration, Effect, Fiber, Layer, Option, Result } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
-import { LeaderLockFromPrimitive } from '../src/leader-lock.adapter.js'
+import { LeaderLockFromPrimitive } from '../src/LeaderLockAdapter.js'
 import { LeaderLock } from '../src/mod.js'
-import { mkStatefulLockPrimitive } from './__fixtures__/lock-primitive-fakes.js'
+import { mkStatefulLockPrimitive } from './__fixtures__/LockPrimitiveFakes.js'
 
 const Feature = makeFeature({ it, layer })
 

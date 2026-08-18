@@ -45,7 +45,7 @@ import {
   TypeId,
   writable,
   WritableTypeId,
-} from './internal/core.js'
+} from './internal/Core.js'
 export {
   isAtom,
   isWritable,
@@ -55,7 +55,7 @@ export {
   TypeId,
   writable,
   WritableTypeId,
-} from './internal/core.js'
+} from './internal/Core.js'
 import * as Result from 'effect/Result'
 import { AtomRegistry } from './Registry.js'
 import * as Registry from './Registry.js'
@@ -2555,6 +2555,6 @@ export const serializable: {
   })
 })
 
-export { makeRefreshOnSignal, refreshOnWindowFocus, searchParam, windowFocusSignal } from './browser.js'
-export { getServerValue, ServerValueTypeId, withServerValue, withServerValueInitial } from './server.js'
-export type { ServerValue } from './server.js'
+export { makeRefreshOnSignal, refreshOnWindowFocus, searchParam, windowFocusSignal } from './Browser.js'
+export { getServerValue, ServerValueTypeId, withServerValue, withServerValueInitial } from './Server.js'
+export type { ServerValue } from './Server.js'

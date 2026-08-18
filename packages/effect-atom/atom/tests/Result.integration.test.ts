@@ -2,7 +2,7 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import { Cause, Effect, Equal, Hash, Option, Predicate, Result as EffectResult, Schema } from 'effect'
 import { expect } from 'vitest'
 import { Atom, Registry, Result } from '../src/index.js'
-import { resultSchema, type TaggedError, taggedSchema } from './__fixtures__/result.schema.js'
+import { resultSchema, type TaggedError, taggedSchema } from './__fixtures__/Result.schema.js'
 
 const Feature = makeFeature({ it, layer })
 

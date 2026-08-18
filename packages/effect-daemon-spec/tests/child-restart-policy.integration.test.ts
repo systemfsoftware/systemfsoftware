@@ -10,8 +10,8 @@ import { Daemon } from '../src/mod.js'
 import { LeaderLock } from '../src/mod.js'
 import { Supervision } from '../src/mod.js'
 import { oneForAll, oneForOne, restForOne } from '../src/mod.js'
-import { ReporterSpyContext } from './__fixtures__/reporter-spy.js'
-import { NoopLayer } from './__fixtures__/shared-layers.js'
+import { ReporterSpyContext } from './__fixtures__/ReporterSpy.js'
+import { NoopLayer } from './__fixtures__/SharedLayers.js'
 
 const Feature = makeFeature({ it, layer })
 

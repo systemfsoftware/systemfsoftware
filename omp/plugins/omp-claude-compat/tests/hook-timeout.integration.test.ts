@@ -6,10 +6,10 @@ import { Effect, Layer } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import * as PathModule from 'effect/Path'
 import { expect } from 'vitest'
-import { HookScopeLive } from '../src/hook-runtime.state.js'
-import { loadSettingsWithPaths } from '../src/internal/load-settings.executor.js'
-import { runHookScript } from '../src/internal/run-hook-script.executor.js'
-import { runPreCompactHooks } from '../src/internal/run-pre-compact-hooks.executor.js'
+import { HookScopeLive } from '../src/HookRuntime.js'
+import { loadSettingsWithPaths } from '../src/internal/LoadSettingsExecutor.js'
+import { runHookScript } from '../src/internal/RunHookScriptExecutor.js'
+import { runPreCompactHooks } from '../src/internal/RunPreCompactHooksExecutor.js'
 
 const Feature = makeFeature({ it, layer })
 

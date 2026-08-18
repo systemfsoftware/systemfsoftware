@@ -5,7 +5,7 @@ import { TomlLoader, TomlLoaderLive } from '@systemfsoftware/omp-utils'
 import { Effect, Layer } from 'effect'
 import * as PathModule from 'effect/Path'
 import { expect } from 'vitest'
-import { loadReferencedContent } from '../src/inject-instructions.executor.js'
+import { loadReferencedContent } from '../src/InjectInstructionsExecutor.js'
 
 const Feature = makeFeature({ it, layer })
 

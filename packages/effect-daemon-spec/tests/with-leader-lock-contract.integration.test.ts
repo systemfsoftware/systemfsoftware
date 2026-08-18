@@ -3,10 +3,10 @@ import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/e
 import { Effect, Fiber, Layer, Result } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
-import { Noop } from '../src/daemon-reporter.adapter.js'
+import { Noop } from '../src/DaemonReporterAdapter.js'
 import { LeaderLock, LeaderLockNotAcquired, withLeaderLock } from '../src/mod.js'
 import type { LeaderLockAcquireError, LeaderLockOptions } from '../src/mod.js'
-import { LeaderLockFake } from './__fixtures__/leader-lock-fake.js'
+import { LeaderLockFake } from './__fixtures__/LeaderLockFake.js'
 
 const withLock = <A, E, R>(
   self: Effect.Effect<A, E, R>,

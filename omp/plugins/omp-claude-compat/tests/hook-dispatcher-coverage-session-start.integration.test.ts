@@ -5,9 +5,9 @@ import { Effect, Layer } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import * as PathModule from 'effect/Path'
 import { expect } from 'vitest'
-import { HookScopeLive } from '../src/hook-runtime.state.js'
-import { collectSettingsGapsWithPaths } from '../src/internal/collect-settings-gaps.executor.js'
-import { makeSettingsJson } from './__fixtures__/hook-dispatcher-fixture.observer.js'
+import { HookScopeLive } from '../src/HookRuntime.js'
+import { collectSettingsGapsWithPaths } from '../src/internal/CollectSettingsGapsExecutor.js'
+import { makeSettingsJson } from './__fixtures__/HookDispatcherFixture.js'
 
 const Feature = makeFeature({ it, layer })
 

@@ -3,13 +3,13 @@ import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/e
 import { Duration, Effect, Fiber, Latch, Layer, Match, Ref, Schedule, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
-import { Noop } from '../src/daemon-reporter.adapter.js'
+import { Noop } from '../src/DaemonReporterAdapter.js'
 import type { LockConfig } from '../src/mod.js'
 
 import { run } from '../src/mod.js'
 import { Daemon } from '../src/mod.js'
 import { LeaderLock } from '../src/mod.js'
-import { LeaderLockFake } from './__fixtures__/leader-lock-fake.js'
+import { LeaderLockFake } from './__fixtures__/LeaderLockFake.js'
 
 const Feature = makeFeature({ it, layer })
 

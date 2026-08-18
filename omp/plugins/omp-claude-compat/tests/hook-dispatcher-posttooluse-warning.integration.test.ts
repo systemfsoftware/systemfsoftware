@@ -5,12 +5,12 @@ import { Effect, Layer } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import * as PathModule from 'effect/Path'
 import { expect } from 'vitest'
-import { HookScopeLive } from '../src/hook-runtime.state.js'
-import type { HookSession, HookToolResult } from '../src/hook-session.shape.js'
-import { loadSettingsWithPaths } from '../src/internal/load-settings.executor.js'
-import { runPostToolUseHooks } from '../src/internal/run-post-tool-use-hooks.executor.js'
-import { makeSettingsJson, makeShellHookScript } from './__fixtures__/hook-dispatcher-fixture.observer.js'
-import { expectLoaded } from './__fixtures__/loaded.observer.js'
+import { HookScopeLive } from '../src/HookRuntime.js'
+import type { HookSession, HookToolResult } from '../src/HookSession.js'
+import { loadSettingsWithPaths } from '../src/internal/LoadSettingsExecutor.js'
+import { runPostToolUseHooks } from '../src/internal/RunPostToolUseHooksExecutor.js'
+import { makeSettingsJson, makeShellHookScript } from './__fixtures__/HookDispatcherFixture.js'
+import { expectLoaded } from './__fixtures__/Loaded.js'
 
 const Feature = makeFeature({ it, layer })
 

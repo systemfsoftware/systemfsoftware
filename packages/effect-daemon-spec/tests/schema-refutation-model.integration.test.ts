@@ -2,10 +2,10 @@ import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/e
 import { scanObligations } from '@systemfsoftware/effect-schema-law'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
-import { DynamicLimitExceeded } from '../src/daemon-health.schema.js'
-import { IntensityConfig, MaxChildren } from '../src/daemon-policy.schema.js'
-import { LeaderLockInfraError, LeaderLockNotAcquired } from '../src/leader-lock.schema.js'
-import { LockPrimitiveError } from '../src/lock-primitive.schema.js'
+import { DynamicLimitExceeded } from '../src/DaemonHealth.schema.js'
+import { IntensityConfig, MaxChildren } from '../src/DaemonPolicy.schema.js'
+import { LeaderLockInfraError, LeaderLockNotAcquired } from '../src/LeaderLock.schema.js'
+import { LockPrimitiveError } from '../src/LockPrimitive.schema.js'
 
 /**
  * The obligation model, recomputed from each schema's own AST rather than restated.

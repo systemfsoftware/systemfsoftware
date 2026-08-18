@@ -6,7 +6,7 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import { Effect } from 'effect'
 import * as fc from 'effect/testing/FastCheck'
 import { expect } from 'vitest'
-import { decideNodeFate, type NodeLifetimeInput } from '../src/internal/node-lifetime.observer.js'
+import { decideNodeFate, type NodeLifetimeInput } from '../src/internal/NodeLifetime.js'
 
 const Feature = makeFeature({ it, layer })
 

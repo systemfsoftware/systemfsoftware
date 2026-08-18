@@ -22,8 +22,8 @@ import { MixedScheduler } from 'effect/Scheduler'
 import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import type * as Atom from './Atom.js'
-import { hostNow, hostScheduleTimer } from './internal/host-timer.js'
-import { NodeImpl } from './internal/node.js'
+import { hostNow, hostScheduleTimer } from './internal/HostTimer.js'
+import { NodeImpl } from './internal/Node.js'
 import * as Result from './Result.js'
 
 /**
@@ -681,4 +681,4 @@ export class RegistryImpl implements Registry {
 /**
  * @internal
  */
-export { batch, BatchPhase, batchState } from './internal/node.js'
+export { batch, BatchPhase, batchState } from './internal/Node.js'
