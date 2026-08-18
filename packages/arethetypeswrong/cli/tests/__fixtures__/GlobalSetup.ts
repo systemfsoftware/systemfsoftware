@@ -26,8 +26,11 @@ const WORKSPACE_PACKAGES = [
   '@systemfsoftware/arethetypeswrong-core',
 ] as const
 
-const REPO_ROOT = fileURLToPath(new URL('../../../../', import.meta.url))
-const CLI_DIR = fileURLToPath(new URL('../', import.meta.url))
+// This file sits in `tests/__fixtures__/`, so the package root is two levels up and
+// the workspace root is five. Both were one level short, which sent the lane looking
+// for the built entry at `cli/tests/dist/main.mjs` and failing with it missing.
+const REPO_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url))
+const CLI_DIR = fileURLToPath(new URL('../../', import.meta.url))
 const FIXTURES_DIR = fileURLToPath(new URL('./fixtures', import.meta.url))
 const WORKDIR = '/work'
 const TARBALLS_IN_CONTAINER = '/opt/tarballs'
