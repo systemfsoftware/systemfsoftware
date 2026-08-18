@@ -55,6 +55,7 @@
     "./package.json": "./package.json"
   },
   "publishConfig": {
+    "provenance": true,
     "exports": {
       "./check": "./dist/check/index.mjs",
       "./core": "./dist/core/index.mjs",

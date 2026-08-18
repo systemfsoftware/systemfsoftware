@@ -67,6 +67,7 @@
     "vitest": "^4.1.10"
   },
   "publishConfig": {
+    "provenance": true,
     "exports": {
       ".": "./dist/index.mjs",
       "./stryker-setup": "./dist/stryker-setup.mjs",

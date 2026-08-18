@@ -51,6 +51,7 @@
     "@jsr/std__jsonc": "1.0.2"
   },
   "publishConfig": {
+    "provenance": true,
     "exports": {
       ".": "./dist/index.mjs",
       "./package.json": "./package.json"
