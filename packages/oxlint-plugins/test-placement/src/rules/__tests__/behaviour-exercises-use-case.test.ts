@@ -21,7 +21,7 @@ ruleTester.run('behaviour-exercises-use-case', behaviourExercisesUseCase, {
     {
       name: 'Should_Allow_IntegrationTest_When_ItImportsAnExecutor',
       code: `${FEATURE_IMPORTS}
-import { hookDispatcher } from '../src/hook-dispatcher.executor.js'
+import { hookDispatcher } from '../src/HookDispatcherExecutor.js'
 
 Feature('x', () => {})
 `,
@@ -30,7 +30,7 @@ Feature('x', () => {})
     {
       name: 'Should_Allow_IntegrationTest_When_ItImportsAHandler',
       code: `${FEATURE_IMPORTS}
-import { renderPrompt } from '../src/render.handler.js'
+import { renderPrompt } from '../src/RenderHandler.js'
 
 Feature('x', () => {})
 `,
@@ -39,7 +39,7 @@ Feature('x', () => {})
     {
       name: 'Should_Allow_IntegrationTest_When_ItImportsAnAdapter',
       code: `${FEATURE_IMPORTS}
-import { fsLayer } from '../src/fs.adapter.js'
+import { fsLayer } from '../src/FsAdapter.js'
 
 Feature('x', () => {})
 `,
@@ -48,7 +48,7 @@ Feature('x', () => {})
     {
       name: 'Should_Allow_IntegrationTest_When_ItImportsAStore',
       code: `${FEATURE_IMPORTS}
-import { openKv } from '../src/config.store.js'
+import { openKv } from '../src/ConfigStore.js'
 
 Feature('x', () => {})
 `,
@@ -57,7 +57,7 @@ Feature('x', () => {})
     {
       name: 'Should_Allow_IntegrationTest_When_ItImportsAMiddleware',
       code: `${FEATURE_IMPORTS}
-import { rateLimit } from '../src/rate-limit.middleware.js'
+import { rateLimit } from '../src/RateLimitMiddleware.js'
 
 Feature('x', () => {})
 `,
@@ -66,7 +66,7 @@ Feature('x', () => {})
     {
       name: 'Should_Allow_IntegrationTest_When_ItImportsAHandler',
       code: `${FEATURE_IMPORTS}
-import { renderPrompt } from '../src/render.handler.tsx'
+import { renderPrompt } from '../src/RenderHandler.tsx'
 
 Feature('x', () => {})
 `,
@@ -102,7 +102,7 @@ Feature('x', () => {})
     {
       name: 'Should_Allow_IntegrationTest_When_ShellTokenInNonFinalPathSegment',
       code: `${FEATURE_IMPORTS}
-import { util } from '../src/port/foo.executor.js'
+import { util } from '../src/port/FooExecutor.js'
 
 Feature('x', () => {})
 `,

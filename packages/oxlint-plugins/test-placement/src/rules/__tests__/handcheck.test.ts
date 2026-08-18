@@ -6,7 +6,7 @@ const ruleTester = createRuleTester()
 
 const PURE_ONLY = `import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { makeFeature } from '@systemfsoftware/effect-gherkin-spec'
-import { normalizeToolName } from './tool-name.kernel.js'
+import { normalizeToolName } from './ToolName.js'
 
 const Feature = makeFeature({ it, layer })
 Feature('x', () => {
@@ -16,7 +16,7 @@ Feature('x', () => {
 
 const SHELL_ONLY = `import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { makeFeature } from '@systemfsoftware/effect-gherkin-spec'
-import { runHookDispatcher } from '../src/hook-dispatcher.executor.js'
+import { runHookDispatcher } from '../src/HookDispatcherExecutor.js'
 
 const Feature = makeFeature({ it, layer })
 Feature('x', () => {

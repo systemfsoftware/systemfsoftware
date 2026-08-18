@@ -120,23 +120,23 @@ export const EFFECT_ROOT_PURE_NAMES: ReadonlySet<string> = new Set([
 
 /**
  * The local decision-source modules sealed by the spike's read: the three
- * production kernels (`restart-decision.kernel.ts`, `survivors.kernel.ts`,
- * `hook-verdict.kernel.ts`), the decode-only `hook-output.acl.ts`, the
- * schema declaration modules (`hook-dispatcher.schema.ts`,
- * `restart-decision.schema.ts`) and the two workflow modules consumers
- * re-wrap (`survivors.workflow.ts`, `hook-verdict.workflow.ts`). Each is
- * keyed by the source string exactly as the importing make site spells it;
- * an import the audit has not sealed is a finding, never a silent pass.
+ * production kernels (`RestartDecision.ts`, `Survivors.ts`, `HookVerdict.ts`),
+ * the decode-only `HookOutput.ts`, the schema declaration modules
+ * (`HookDispatcher.schema.ts`, `RestartDecision.schema.ts`) and the two
+ * workflow modules consumers re-wrap (`Survivors.workflow.ts`,
+ * `HookVerdict.workflow.ts`). Each is keyed by the source string exactly as
+ * the importing make site spells it; an import the audit has not sealed is a
+ * finding, never a silent pass.
  */
 export const LOCAL_PURE_SOURCES: ReadonlySet<string> = new Set([
-  './restart-decision.kernel.js',
-  './survivors.kernel.js',
-  './hook-verdict.kernel.js',
-  './hook-output.acl.js',
-  './hook-dispatcher.schema.js',
-  './restart-decision.schema.js',
-  './survivors.workflow.js',
-  '../hook-verdict.workflow.js',
+  './RestartDecision.js',
+  './Survivors.js',
+  './HookVerdict.js',
+  './HookOutput.js',
+  './HookDispatcher.schema.js',
+  './RestartDecision.schema.js',
+  './Survivors.workflow.js',
+  '../HookVerdict.workflow.js',
 ])
 
 /** The global names whose invocation performs I/O (KTD3's named globals). */

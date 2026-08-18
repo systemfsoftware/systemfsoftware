@@ -91,7 +91,7 @@ export const decide = Workflow.make(
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
-import { restartIndicesFor } from './restart-decision.kernel.js'
+import { restartIndicesFor } from './RestartDecision.js'
 
 export const decide = Workflow.make(
   (command: { readonly strategy: 'one_for_one' }): Result.Result<readonly number[], never> =>
@@ -105,7 +105,7 @@ export const decide = Workflow.make(
       name: 'Should_Pass_When_BodyReferencesAnAuditedWorkflowImport',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Result from 'effect/Result'
-import { admitSurvivorsRun } from './survivors.workflow.js'
+import { admitSurvivorsRun } from './Survivors.workflow.js'
 
 export const adapter = Workflow.make(
   ({ input }: { readonly input: unknown }): Result.Result<unknown, never> =>
@@ -260,7 +260,7 @@ export const decide = Workflow.make(
       Match.orElse(() => Result.succeed('restart')),
     ),
 )`,
-      filename: 'cancel-order.executor.ts',
+      filename: 'CancelOrderExecutor.ts',
     },
     {
       name: 'Should_Pass_When_AFixtureInATestFileUsesATernary',
