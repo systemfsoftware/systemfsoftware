@@ -21,6 +21,18 @@ const ruleTester = createRuleTester()
 ruleTester.run('in-source-test-targets-private', inSourceTestTargetsPrivate, {
   valid: [
     {
+      // A schema law: `refutes` discharges a generator obligation carried by the
+      // exported schema beside it. No module-private binding is involved, and none
+      // could be - the obligation belongs to that declaration.
+      name: 'Should_Pass_When_ABlockDischargesASchemaLaw',
+      code: `export const Admitted = 1
+if (import.meta.vitest !== void 0) {
+  const { refutes } = await import('@systemfsoftware/effect-schema-law')
+  refutes(Admitted, {})
+}`,
+      filename: '/repo/pkg/src/Survivors.workflow.ts',
+    },
+    {
       name: 'Should_Allow_PrivateConst_Test_When_ModuleLevelGuard',
       code: `
 const helper = (x: number): number => x + 1

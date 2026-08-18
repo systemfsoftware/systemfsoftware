@@ -31,6 +31,7 @@ const _default: {
         'no-behaviourless-assertion': Rule;
         'no-unrun-effect-test': Rule;
         'pbt-naming': Rule;
+        'in-source-test-targets-private': Rule;
         'no-test-file-in-src': Rule;
         'src-property-test-cell': Rule;
         'test-file-outside-tests-dir': Rule;
