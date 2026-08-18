@@ -15,7 +15,14 @@
     "LICENSE"
   ],
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    }
   },
   "scripts": {
     "build": "tsdown",
@@ -31,22 +38,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
-    },
-    "./types": {
-      "types": "./dist/types.d.ts",
-      "default": "./dist/types.mjs"
-    },
-    "./utils": {
-      "types": "./dist/utils.d.ts",
-      "default": "./dist/utils.mjs"
-    },
-    "./problems": {
-      "types": "./dist/problems.d.ts",
-      "default": "./dist/problems.mjs"
-    },
-    "./versions": {
-      "types": "./dist/versions.d.ts",
-      "default": "./dist/versions.mjs"
     },
     "./package.json": "./package.json"
   },
