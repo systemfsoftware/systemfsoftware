@@ -26,10 +26,9 @@ jobs:
       - uses: cachix/install-nix-action@v31
       - name: dprint from the flake
         run: echo "$(nix build --no-link --print-out-paths .#dprint)/bin" >> "$GITHUB_PATH"
-      # The runner image ships no Deno, and both `typecheck` and `test:types` in
-      # packages/core/effect/cell/type-tests run a Deno script that regenerates the package's
-      # untracked tstyche suite before checking it. Same reason changeset-check.yml and
-      # release.yml already carry this step.
+      # The runner image ships no Deno, and `pnpm check:ci` runs the Deno guards
+      # (`//#check:exported-wiring`) inside gate:tasks, so the runtime must be on PATH.
+      # Same reason changeset-check.yml and release.yml already carry this step.
       - uses: denoland/setup-deno@v2
       - name: Turbo cache
         uses: actions/cache@v4

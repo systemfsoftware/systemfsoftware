@@ -51,8 +51,8 @@ rules:
     dont: hand-write a phase table, duplicate an axis into a constant beside the
       constructors, or import a consumer — no package that walks this value may
       appear in this package's dependencies
-    harm: every derived consumer — the arbitrary, the type-test generator, and both
-      lint plugins — takes its whole behaviour from this value. A second declaration
+    harm: every derived consumer — the arbitrary and both lint plugins —
+      takes its whole behaviour from this value. A second declaration
       here is the one edit that can make them all wrong at once while every one of
       them still passes, because they would agree with each other and disagree only
       with the constructors
