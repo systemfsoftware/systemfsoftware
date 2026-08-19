@@ -83,3 +83,6 @@ packages:
   - packages/effect-atom/*
   - omp/packages/*
   - omp/plugins/*
+
+config:
+  confirm-modules-purge: false
