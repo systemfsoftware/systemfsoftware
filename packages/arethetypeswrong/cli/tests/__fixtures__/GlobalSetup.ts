@@ -116,6 +116,29 @@ export async function setup(project: TestProject): Promise<void> {
     throw new Error(`installing the packed tarball failed with ${installed.exitCode}:\n${installed.output}`)
   }
 
+  // npm exits 0 even when it silently skips a bin whose target is missing from the
+  // tarball, so a green install does not imply a runnable binary. Relink the bin
+  // explicitly and then assert it, so the lane's own precondition names the failure.
+  const relink = await attwContainer.exec(
+    ['npm', 'rebuild', '@systemfsoftware/arethetypeswrong-cli', '--no-audit', '--no-fund', '--loglevel=error'],
+    { workingDir: WORKDIR },
+  )
+  if (relink.exitCode !== 0) {
+    throw new Error(
+      `relinking the attw bin failed with ${relink.exitCode}. install output:\n${installed.output}\nrelink output:\n${relink.output}`,
+    )
+  }
+  const binOk = await attwContainer.exec(['sh', '-c', 'test -x node_modules/.bin/attw && echo ok'], {
+    workingDir: WORKDIR,
+  })
+  if (binOk.exitCode !== 0 || binOk.stdout.trim() !== 'ok') {
+    throw new Error(
+      `the installed CLI has no runnable bin: node_modules/.bin/attw is missing in the container. ` +
+        `This means the packed tarball lost its dist/ entry or its bin field. ` +
+        `install output:\n${installed.output}\nrelink output:\n${relink.output}`,
+    )
+  }
+
   const stubStart = await attwContainer.exec(
     ['sh', '-c', `nohup node ${STUB_SCRIPT_PATH} ${FIXTURE_TARBALL_IN_CONTAINER} > /tmp/stub.log 2>&1 &`],
     { workingDir: WORKDIR },
