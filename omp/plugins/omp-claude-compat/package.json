@@ -30,8 +30,10 @@
     "@oh-my-pi/pi-coding-agent": "catalog:",
     "effect": "catalog:"
   },
-  "dependencies": {
-    "@systemfsoftware/effect-cell-types": "workspace:^"
+  "optionalDependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/omp-utils": "workspace:^",
+    "@std/toml": "catalog:"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

@@ -10,7 +10,17 @@ export default defineConfig({
   minify: true,
   clean: false,
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
-  deps: { onlyBundle: false, alwaysBundle: [/^effect$/, /^effect\//, /^@effect\//] },
+  deps: {
+    onlyBundle: false,
+    alwaysBundle: [
+      /^effect$/,
+      /^effect\//,
+      /^@effect\//,
+      /^@systemfsoftware\/effect-cell-types$/,
+      /^@systemfsoftware\/omp-utils$/,
+      /^@std\/toml$/,
+    ],
+  },
   plugins: [eagerEntryBudget()],
   define: { 'import.meta.vitest': 'undefined' },
 })

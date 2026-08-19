@@ -295,9 +295,6 @@ importers:
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../../../packages/effect-schema-vite
-      '@systemfsoftware/omp-utils':
-        specifier: workspace:^
-        version: link:../../packages/omp-utils
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../packages/oxlint-config
@@ -328,12 +325,15 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+    optionalDependencies:
+      '@std/toml':
+        specifier: 'catalog:'
+        version: '@jsr/std__toml@1.0.11'
+      '@systemfsoftware/omp-utils':
+        specifier: workspace:^
+        version: link:../../packages/omp-utils
 
   omp/plugins/omp-claude-compat:
-    dependencies:
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../../packages/effect-cell-types
     devDependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
@@ -362,9 +362,6 @@ importers:
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../../../packages/effect-schema-vite
-      '@systemfsoftware/omp-utils':
-        specifier: workspace:^
-        version: link:../../packages/omp-utils
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../packages/oxlint-config
@@ -407,6 +404,16 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+    optionalDependencies:
+      '@std/toml':
+        specifier: 'catalog:'
+        version: '@jsr/std__toml@1.0.11'
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../../../packages/effect-cell-types
+      '@systemfsoftware/omp-utils':
+        specifier: workspace:^
+        version: link:../../packages/omp-utils
 
   packages/all:
     dependencies:
