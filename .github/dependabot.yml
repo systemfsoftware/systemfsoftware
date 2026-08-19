@@ -42,17 +42,15 @@ updates:
           - "@oxlint/*"
         update-types: ["major"]
 
-      effect-minor-patch:
+      effect:
+        # No update-types: the effect 4.x line ships only prereleases (4.0.0-rc.*),
+        # and a prerelease-to-prerelease bump changes neither major, minor, nor
+        # patch, so no update-types value matches it. update-types is limited to
+        # major/minor/patch and any group that sets it rejects those updates and
+        # Dependabot opens them individually.
         patterns:
           - "@effect/*"
           - "effect"
-        update-types: ["minor", "patch"]
-
-      effect-major:
-        patterns:
-          - "@effect/*"
-          - "effect"
-        update-types: ["major"]
 
       turborepo-minor-patch:
         patterns:
