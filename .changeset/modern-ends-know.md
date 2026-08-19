@@ -6,7 +6,6 @@
 "@systemfsoftware/effect-daemon-spec": minor
 "@systemfsoftware/effect-gherkin-spec": minor
 "@systemfsoftware/effect-memfs": minor
-"@systemfsoftware/effect-purity-law": minor
 "@systemfsoftware/effect-schema-extensions": minor
 "@systemfsoftware/effect-schema-law": minor
 "@systemfsoftware/hex-schema": minor

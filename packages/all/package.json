@@ -48,7 +48,6 @@
     "@systemfsoftware/effect-daemon-spec": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
-    "@systemfsoftware/effect-purity-law": "workspace:^",
     "@systemfsoftware/effect-schema-extensions": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",

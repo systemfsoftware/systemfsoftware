@@ -7,7 +7,6 @@
 '@systemfsoftware/effect-daemon-spec': none
 '@systemfsoftware/effect-gherkin-spec': none
 '@systemfsoftware/effect-memfs': none
-'@systemfsoftware/effect-purity-law': none
 '@systemfsoftware/effect-schema-extensions': none
 '@systemfsoftware/effect-schema-law': none
 '@systemfsoftware/effect-schema-vite': none

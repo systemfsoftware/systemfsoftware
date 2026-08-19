@@ -2,7 +2,6 @@
 '@systemfsoftware/effect-atom': patch
 '@systemfsoftware/effect-atom-react': patch
 '@systemfsoftware/effect-memfs': patch
-'@systemfsoftware/effect-purity-law': patch
 '@systemfsoftware/effect-schema-vite': patch
 '@systemfsoftware/hex-schema': patch
 '@systemfsoftware/omp-agent-discipline': patch
