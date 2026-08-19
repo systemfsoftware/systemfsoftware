@@ -10,7 +10,6 @@
 "@systemfsoftware/effect-schema-law": patch
 "@systemfsoftware/effect-schema-vite": patch
 "@systemfsoftware/oxlint-plugin": patch
-"@systemfsoftware/oxlint-plugin-cell-taxonomy": patch
 "@systemfsoftware/oxlint-plugin-effect-acl": patch
 "@systemfsoftware/oxlint-plugin-effect-entrypoint": patch
 "@systemfsoftware/oxlint-plugin-effect-executor": patch
