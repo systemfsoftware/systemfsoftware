@@ -136,3 +136,7 @@ jobs:
         run: corepack pnpm publish -r --provenance --access public --no-git-checks
       - name: Tag released versions
         run: deno run --allow-run=git,pnpm --allow-read scripts/tools/tag-released-packages.mjs
+      - name: GitHub Releases from authored changelogs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: deno run --allow-run=git,pnpm --allow-read --allow-net=api.github.com --allow-env=GITHUB_TOKEN scripts/tools/create-github-releases.mjs
