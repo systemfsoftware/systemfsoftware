@@ -14,12 +14,15 @@
 // The order is forced: npm-trust's prerequisites require the package to already
 // exist on the registry ("Package must exist"), so a debut publish can never use
 // OIDC and the trusted publisher can only be registered AFTER the package lands.
-// A publish or trust failure stops the run (non-zero exit); no trust runs for a
-// package that did not publish.
+// That constraint binds within one package: its publish → trust chain is strictly
+// sequential. Packages are independent, so their chains run concurrently, bounded
+// by --jobs. A package whose chain fails stops nothing else (each package already
+// published stays published); the exit code is 1 when any chain failed.
 //
 // Flags:
 //   --dry-run    print the exact commands, change nothing on npm.
 //   --only a,b   limit to the named packages.
+//   --jobs N     max concurrent package chains (default 4).
 //   --log-level  debug|info|warning|error (default info).
 //
 // Env:
@@ -33,13 +36,16 @@ import type { LevelName } from '@std/log'
 const {
   'dry-run': dryRun = false,
   'log-level': logLevelArg = 'info',
+  jobs: jobsArg,
   only: onlyArg,
 } = parseArgs(Deno.args, {
   boolean: ['dry-run'],
-  string: ['only', 'log-level'],
+  string: ['only', 'log-level', 'jobs'],
   alias: { o: 'only' },
-  default: { 'dry-run': false, 'log-level': 'info' },
+  default: { 'dry-run': false, 'log-level': 'info', jobs: '4' },
 })
+
+const jobs = Math.max(1, Number(jobsArg) || 4)
 
 const logLevel = logLevelArg.toUpperCase() as LevelName
 const only = new Set((onlyArg ?? '').split(',').map((s) => s.trim()).filter(Boolean))
@@ -112,6 +118,47 @@ async function runInteractive(args: string[], cwd: string): Promise<boolean> {
   return (await child.status).success
 }
 
+async function publishAndTrust(p: { name: string; path: string }): Promise<boolean> {
+  const name = p.name
+  const seq: Array<Array<string>> = [
+    ['corepack', 'pnpm', '--filter', name, 'build'],
+    ['corepack', 'pnpm', '--filter', name, 'publish', '--access', 'public', '--no-git-checks'],
+    ['npm', 'trust', 'github', name, '--repo', slug, '--file', 'release.yml', '--allow-publish', '--yes'],
+    ['npm', 'trust', 'list', name],
+  ]
+
+  log.info(`\n== ${name}`)
+  for (const args of seq) {
+    log.info(`  > ${args.join(' ')}`)
+    if (dryRun) continue
+    if (!(await runInteractive(args, p.path))) {
+      log.error(`  FAILED: ${args.join(' ')}`)
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * The publish -> trust chain is causal within one package only (npm-trust
+ * requires the package to exist, so its debut publish cannot itself use OIDC).
+ * Different packages are independent, so their chains run concurrently, bounded
+ * by `jobs` so npm and the local machine are not drowned in parallel publishes.
+ */
+async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<boolean>): Promise<boolean[]> {
+  const results = new Array<boolean>(items.length)
+  let next = 0
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (true) {
+      const i = next++
+      if (i >= items.length) return
+      results[i] = await fn(items[i])
+    }
+  })
+  await Promise.all(workers)
+  return results
+}
+
 const rows = workspaceRows().filter((p) => only.size === 0 || only.has(p.name))
 const slug = remoteSlug()
 
@@ -130,30 +177,11 @@ if (unpublished.length === 0) {
 }
 
 log.info('')
-log.info(`publishing ${unpublished.length} package(s):`)
-for (const p of unpublished) {
-  const name = p.name
-  const seq: Array<Array<string>> = [
-    ['corepack', 'pnpm', '--filter', name, 'build'],
-    ['corepack', 'pnpm', '--filter', name, 'publish', '--access', 'public', '--no-git-checks'],
-    ['npm', 'trust', 'github', name, '--repo', slug, '--file', 'release.yml', '--allow-publish', '--yes'],
-    ['npm', 'trust', 'list', name],
-  ]
-
-  log.info(`\n== ${name}`)
-  let ok = true
-  for (const args of seq) {
-    log.info(`  > ${args.join(' ')}`)
-    if (dryRun) continue
-    if (!(await runInteractive(args, p.path))) {
-      log.error(`  FAILED: ${args.join(' ')}`)
-      ok = false
-      break
-    }
-  }
-  if (!ok) {
-    log.error(`aborting: ${name} failed; remaining packages untouched`)
-    Deno.exit(1)
-  }
+log.info(`publishing ${unpublished.length} package(s) with --jobs ${jobs}:`)
+const pub = await mapLimit(unpublished, jobs, publishAndTrust)
+const failed = unpublished.filter((_, i) => !pub[i]).map((p) => p.name)
+if (failed.length > 0) {
+  log.error(`failed: ${failed.join(', ')}`)
+  Deno.exit(1)
 }
 log.info('\ndone')
