@@ -1,33 +1,13 @@
 #!/usr/bin/env -S deno run --allow-run=git,corepack,pnpm,npm --allow-env=NPM_REGISTRY --allow-net=registry.npmjs.org
 // publish-and-setup-npm-trust.ts — publish every unpublished non-private workspace
-// package, then register the npm trusted publisher (OIDC) for each one just published.
+// package, then register the npm trusted publisher (OIDC) for each one.
 //
-// Discovery and classification mirror scripts/tools/check-npm-publish.sh:
-//   1. `pnpm ls -r --depth=-1 --json`, keep packages with `private != true`.
-//   2. HEAD the npm registry; 404 = never published.
-//   3. For each unpublished package, in order:
-//        corepack pnpm --filter <pkg> build
-//        corepack pnpm --filter <pkg> publish --access public --no-git-checks
-//        npm trust github <pkg> --repo <slug> --file release.yml --allow-publish --yes
-//        npm trust list <pkg>
+// Per package: build -> publish (debuts can't use OIDC: npm-trust requires the
+// package to exist) -> npm trust github ... -> npm trust list. Chains run
+// concurrently, bounded by --jobs.
 //
-// The order is forced: npm-trust's prerequisites require the package to already
-// exist on the registry ("Package must exist"), so a debut publish can never use
-// OIDC and the trusted publisher can only be registered AFTER the package lands.
-// That constraint binds within one package: its publish → trust chain is strictly
-// sequential. Packages are independent, so their chains run concurrently, bounded
-// by --jobs. A package whose chain fails stops nothing else (each package already
-// published stays published); the exit code is 1 when any chain failed.
-//
-// Flags:
-//   --dry-run    print the exact commands, change nothing on npm.
-//   --only a,b   limit to the named packages.
-//   --jobs N     max concurrent package chains (default 4).
-//   --log-level  debug|info|warning|error (default info).
-//
-// Env:
-//   NPM_REGISTRY overrides the registry base URL; the shebang's allowed net host
-//   covers the default (registry.npmjs.org) — widen the flag for other hosts.
+// Flags: --dry-run --only a,b --jobs N (default 4) --log-level (default info)
+// Env:  NPM_REGISTRY overrides the registry base URL.
 
 import { parseArgs } from '@std/cli/parse-args'
 import { ConsoleHandler, getLogger, setup } from '@std/log'
@@ -139,12 +119,7 @@ async function publishAndTrust(p: { name: string; path: string }): Promise<boole
   return true
 }
 
-/**
- * The publish -> trust chain is causal within one package only (npm-trust
- * requires the package to exist, so its debut publish cannot itself use OIDC).
- * Different packages are independent, so their chains run concurrently, bounded
- * by `jobs` so npm and the local machine are not drowned in parallel publishes.
- */
+/** Bounded-concurrency map: at most `limit` `fn` calls in flight, results in input order. */
 async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<boolean>): Promise<boolean[]> {
   const results = new Array<boolean>(items.length)
   let next = 0
