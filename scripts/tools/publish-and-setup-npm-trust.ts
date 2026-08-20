@@ -34,7 +34,6 @@ const {
   boolean: ['dry-run'],
   string: ['only'],
   alias: { o: 'only' },
-  default: { 'dry-run': false },
 })
 const only = new Set((onlyArg ?? '').split(',').map((s) => s.trim()).filter(Boolean))
 
@@ -93,16 +92,13 @@ async function runInteractive(args: string[], cwd: string): Promise<boolean> {
 const rows = workspaceRows().filter((p) => only.size === 0 || only.has(p.name))
 const slug = remoteSlug()
 
+const statuses = await Promise.all(rows.map((p) => registryStatus(p.name)))
 const unpublished: Array<{ name: string; path: string }> = []
-for (const p of rows) {
-  console.log(`${p.name} … `)
-  const status = await registryStatus(p.name)
-  if (status === 404) {
-    console.log(`unpublished (404)`)
-    unpublished.push(p)
-  } else {
-    console.log(`published (HTTP ${status}) — skipped`)
-  }
+for (let i = 0; i < rows.length; i++) {
+  const p = rows[i]
+  const status = statuses[i]
+  console.log(`${p.name} … ${status === 404 ? 'unpublished (404)' : `published (HTTP ${status}) — skipped`}`)
+  if (status === 404) unpublished.push(p)
 }
 
 if (unpublished.length === 0) {

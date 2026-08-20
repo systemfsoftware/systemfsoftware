@@ -4,7 +4,7 @@
   // --config flag. nodeModulesDir none keeps pnpm's node_modules untouched and
   // stops Deno from migrating pnpm-workspace.yaml into package.json.
   "imports": {
-    "@std/cli": "jsr:@std/cli@1.0.32",
+    "@std/cli/parse-args": "jsr:@std/cli@1.0.32/parse-args",
     "@std/yaml": "jsr:@std/yaml@^1.2.0",
     "@toon-format/toon": "npm:@toon-format/toon@^4.1.1",
   },
