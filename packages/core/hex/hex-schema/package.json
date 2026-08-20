@@ -1,0 +1,80 @@
+{
+  "name": "@systemfsoftware/hex-schema",
+  "license": "Apache-2.0",
+  "version": "1.7.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/core/hex/hex-schema"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/core/hex/hex-schema#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Effect Schema definitions for hexadecimal wire formats — strict, colon-delimited, prefixed, and byte-level schemas with branded types.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "schema",
+    "codec",
+    "hex",
+    "hexstring",
+    "branded-types",
+    "validation",
+    "typescript"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/hex-schema.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown && pnpm api:check",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack .",
+    "mutation": "stryker run",
+    "mutation:full": "stryker run --force"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-vite": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/stryker-plugins": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/hex-schema.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}

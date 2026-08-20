@@ -228,13 +228,13 @@ const selftest = async () => {
   }
 
   // Reach, pinned as a prefix rather than a count: the defect lived under
-  // packages/oxlint-plugins/, and a discovery change that stops reaching it
+  // packages/lint/oxlint/plugins/, and a discovery change that stops reaching it
   // leaves every fixture green while guarding nothing.
   const projects = discoverProjects()
-  const guarded = projects.filter((dir) => dir.startsWith('packages/oxlint-plugins/'))
+  const guarded = projects.filter((dir) => dir.startsWith('packages/lint/oxlint/plugins/'))
   if (guarded.length === 0) {
     failures.push(
-      '  reach:\n    discovery no longer reaches packages/oxlint-plugins/ -- the sixteen\n' +
+      '  reach:\n    discovery no longer reaches packages/lint/oxlint/plugins/ -- the sixteen\n' +
         '    packages that broke live there. Check PROJECT_FILENAME and the git ls-files pattern.',
     )
   }
@@ -245,7 +245,7 @@ const selftest = async () => {
     process.exit(1)
   }
   console.log(
-    `check-project-references: selftest ok (5 fixtures: 2 compile + 3 preset-extends; discovery reaches ${guarded.length} project(s) under packages/oxlint-plugins/)`,
+    `check-project-references: selftest ok (5 fixtures: 2 compile + 3 preset-extends; discovery reaches ${guarded.length} project(s) under packages/lint/oxlint/plugins/)`,
   )
 }
 

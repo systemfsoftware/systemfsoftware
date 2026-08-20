@@ -1,0 +1,76 @@
+{
+  "name": "@systemfsoftware/oxlint-plugin-effect-workflow",
+  "license": "Apache-2.0",
+  "version": "2.0.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/lint/oxlint/plugins/cells/effect-workflow"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/lint/oxlint/plugins/cells/effect-workflow#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Oxlint rules enforcing the purity and exhaustiveness obligations of a Workflow.make decision body.",
+  "keywords": [
+    "oxlint",
+    "oxlint-plugin",
+    "oxc",
+    "lint",
+    "linter",
+    "lint-rules",
+    "effect",
+    "effect-ts",
+    "workflow",
+    "domain-decision",
+    "typescript"
+  ],
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/oxlint-plugin-effect-workflow.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown && pnpm api:check",
+    "clean": "rimraf dist",
+    "typecheck": "tsc --noEmit --incremental && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:run": "vitest run --coverage",
+    "mutation": "stryker run",
+    "mutation:full": "stryker run --force",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local"
+  },
+  "dependencies": {
+    "@oxc-project/types": "^0.140.0",
+    "@oxlint/plugins": "catalog:oxlint"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:",
+    "typescript": ">=5.0.0"
+  },
+  "publishConfig": {
+    "provenance": true
+  }
+}

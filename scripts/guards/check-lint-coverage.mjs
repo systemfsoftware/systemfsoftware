@@ -23,26 +23,26 @@ const root = process.cwd()
 const TOOLING = new Map([
   // The lint rules themselves; declaring oxlint-config would close a CO4 dependency cycle.
   ...[
-    'cell-vocabulary',
-    'core',
-    'effect-dmmf',
-    'effect-entrypoint',
-    'effect-schema',
-    'effect-workflow',
-    'property-testing',
-    'recommended',
-    'test-hygiene',
-    'test-placement',
+    'meta/core',
+    'meta/effect-dmmf',
+    'meta/recommended',
+    'testing/property-testing',
+    'testing/test-hygiene',
+    'testing/test-placement',
+    'cells/cell-vocabulary',
+    'cells/effect-workflow',
+    'effect/entrypoint',
+    'effect/schema',
   ].map((name) => [
-    `packages/oxlint-plugins/${name}`,
+    `packages/lint/oxlint/plugins/${name}`,
     'lint rules themselves; declaring oxlint-config closes a CO4 dependency cycle',
   ]),
-  ['packages/oxlint-config', 'the config package; cannot extend itself'],
+  ['packages/lint/oxlint/config', 'the config package; cannot extend itself'],
 
   ...[
-    'packages/stryker-js/typescript-checker/testResources/nodenext-project',
-    'packages/stryker-js/vitest-runner/testResources/async-failure',
-    'packages/stryker-js/vitest-runner/testResources/multiple-files',
+    'packages/testing/mutation/stryker-js/typescript-checker/testResources/nodenext-project',
+    'packages/testing/mutation/stryker-js/vitest-runner/testResources/async-failure',
+    'packages/testing/mutation/stryker-js/vitest-runner/testResources/multiple-files',
   ].map((dir) => [dir, 'test fixture project consumed by a runner suite, not product code']),
 ])
 
@@ -88,7 +88,7 @@ for (const file of tracked) {
 // tree. Keying this on the specifier alone reported four enrolled packages as uncovered.
 // The relative form is resolved against the config's own directory and must land on the
 // real base file, so a path pointing nowhere counts as absent rather than as enrolment.
-const SHARED_BASE = join(root, 'packages/oxlint-config/src/oxlint-config.base.ts')
+const SHARED_BASE = join(root, 'packages/lint/oxlint/config/src/oxlint-config.base.ts')
 
 const optsIn = (dir) => {
   const config = join(root, dir, 'oxlint.config.ts')
