@@ -2,15 +2,15 @@
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE)
 [![System F Software](https://img.shields.io/badge/systemfsoftware.com-constitution-black?style=flat-square)](https://systemfsoftware.com/constitution)
-[![Source of truth](https://img.shields.io/badge/source-single-blue?style=flat-square)](CONSTITUTION.md)
+[![Rules: 34](https://img.shields.io/badge/rules-34%20in%20corpus-blue?style=flat-square)](CONSTITUTION.md)
 
-> **Constitution is the design law for teams who want unbreakable code without tools lock-in.**
+Shared engineering laws for repositories at [System F Software](https://systemfsoftware.com).
 
-It binds every repository under [System F Software](https://systemfsoftware.com): a pure functional core behind a thin imperative shell, types before logic, the Testing Trophy, and removal over addition. It is **stack-neutral** — principles, not frameworks — so it governs any codebase, in any language.
+It sets baseline requirements for clean code: a pure functional core behind a thin imperative shell, domain types before logic, property tests, and deleting code before writing more. Principles are stack-neutral, so they apply to any language.
 
 ```mermaid
 flowchart LR
-    S[systemfsoftware/<br>constitution] -->|git subtree| A[Consumer Repo A]
+    S["<b>systemfsoftware/constitution</b><br><i>Upstream Repository</i>"] -->|git subtree| A[Consumer Repo A]
     S -->|git subtree| B[Consumer Repo B]
     S -->|git subtree| C[Consumer Repo C]
     A -.symlink.-> S
@@ -18,105 +18,102 @@ flowchart LR
     C -.symlink.-> S
 ```
 
-One source of truth. Every consumer vendored. Zero drift.
+---
 
-```bash
-# brand-new repo? commit once first: git commit --allow-empty -m "init"
-git fetch https://github.com/systemfsoftware/constitution.git main:refs/remotes/vendor/constitution
-git subtree add --prefix=vendor/constitution refs/remotes/vendor/constitution --squash -m "chore: vendor shared constitution"
-ln -s vendor/constitution/CONSTITUTION.md CONSTITUTION.md
+## Two files, two roles
+
+The rules split into two files based on when an agent needs to see them:
+
+```
+constitution/
+├── CONSTITUTION.md             # Resident: loaded on every run
+└── CONSTITUTION-ARTICLES.md    # On demand: retrieved when editing source files
 ```
 
-## The Problem
+| File | Delivery | Contents | How to load it |
+| :--- | :--- | :--- | :--- |
+| `CONSTITUTION.md` | **Always on** | Preamble, rule enforcement and Conduct (Article V) | Include in agent context on every turn (`@CONSTITUTION.md` in `AGENTS.md` or `CLAUDE.md`) |
+| `CONSTITUTION-ARTICLES.md` | **On demand** | Articles I to IV (Pure Core, Boundaries, Testing, Project Layout) | Load via tool hook or path rule when editing source code (never on read) |
 
-Design principles live in CONTRIBUTING.md, ARCHITECTURE.md, PR comments, Slack threads, the senior engineer's head. None of those propagate. A new repo starts from a blank page; an old repo inherits yesterday's opinions; a reviewer enforces a rule nobody else has read. By the fifth service, the codebase has five different architectures and five different definitions of "done."
+Rules about conduct and rule enforcement stay resident because nothing triggers them after a mistake happens. Craft rules (like how to structure a domain model or write a test) only need to load when someone touches source code.
 
-## The Solution
+---
 
-[`CONSTITUTION.md`](CONSTITUTION.md) is a single document — five articles, thirty-one rules — that every repo under System F Software vendors via `git subtree` and references via symlink. **Amend it once here, and every consumer picks up the new law on its next subtree pull.** No forks. No copies. No drift.
+## Quick start
 
-Stack neutrality is the load-bearing constraint: principles stay at the level of *"a state machine hidden in a record"* and *"mutation is the measure,"* not *"use this ESLint rule"* or *"this ORM."* Tools change every year; the laws do not.
-
-## Quick Start
-
-Vendor the constitution into your repository as a squashed subtree, then symlink it to the repo root:
+Vendor the repository using `git subtree` and symlink both files to the project root:
 
 ```bash
-# 0. A brand-new repo needs one commit before the subtree add
-git commit --allow-empty -m "init"
-
-# 1. Fetch into a named ref — a transient FETCH_HEAD silently breaks subtree tracking
+# 1. Fetch the remote into a local ref
 git fetch https://github.com/systemfsoftware/constitution.git main:refs/remotes/vendor/constitution
 
-# 2. Vendor it as a squashed subtree
+# 2. Add as a squashed subtree
 git subtree add --prefix=vendor/constitution refs/remotes/vendor/constitution --squash \
   -m "chore: vendor shared constitution"
 
-# 3. Symlink it to the repo root
+# 3. Symlink both files to the repo root
 ln -s vendor/constitution/CONSTITUTION.md CONSTITUTION.md
+ln -s vendor/constitution/CONSTITUTION-ARTICLES.md CONSTITUTION-ARTICLES.md
 ```
 
-Reference it from your agent harness (`AGENTS.md` or `CLAUDE.md`) so the bound rules are visible to every agent run:
+If the repository is brand new, create an initial commit first (`git commit --allow-empty -m "init"`).
 
-```markdown
-@CONSTITUTION.md
-```
+### Connect to your agent harness
 
-You should see `vendor/constitution/CONSTITUTION.md` tracked in git, `CONSTITUTION.md` at the root as a symlink, and `git subtree pull` ready to refresh it.
+1. Add `@CONSTITUTION.md` to `AGENTS.md` or `CLAUDE.md`.
+2. Set up a path-scoped rule (`.claude/rules/` or `.cursor/rules/`) to provide `CONSTITUTION-ARTICLES.md` when editing source files.
 
-## Update a Consumer
+---
+
+## The articles
+
+| Article | File | Mode | Core rules |
+| :--- | :--- | :--- | :--- |
+| **I: Pure Core** | `CONSTITUTION-ARTICLES.md` | Retrieved | Pure decisions, explicit types, tagged error variants, no `null` states. |
+| **II: Boundaries** | `CONSTITUTION-ARTICLES.md` | Retrieved | Functional core / imperative shell, values for effects, decode inputs rather than casting. |
+| **III: Verification** | `CONSTITUTION-ARTICLES.md` | Retrieved | Testing Trophy, property tests over examples, mutation testing to measure coverage. |
+| **IV: Organization** | `CONSTITUTION-ARTICLES.md` | Retrieved | Organize by domain responsibility, clear naming, keep modules small. |
+| **V: Conduct** | `CONSTITUTION.md` | **Always on** | Fix root causes, challenge decisions before committing, remove code before adding. |
+
+---
+
+## Pulling updates
+
+Pull upstream changes into the subtree without changing existing symlinks:
 
 ```bash
 git subtree pull --prefix=vendor/constitution https://github.com/systemfsoftware/constitution.git main --squash \
-  -m "chore: update constitution"
+  -m "chore: update shared constitution"
 ```
 
-The symlink never changes — it always points at `vendor/constitution/`, so a pull just refreshes the content underneath.
+---
 
-## Articles
+## Machine validation
 
-| Article | Principle |
-| --- | --- |
-| **I — The Pure Core** | Decisions are pure; types come first; errors are variants; null is not a state; one path. |
-| **II — The Boundary** | Functional core / imperative shell; effects are values; decode never cast; dependencies point inward. |
-| **III — Verification** | The Testing Trophy; properties over examples; mutation is the measure. |
-| **IV — Organization** | Organized by what it does; names scream the domain; fits in the head. |
-| **V — Conduct** | Depth over expedience; challenge before you commit; subtract before you add. |
+Every rule is defined in structured YAML:
 
-Each rule is a YAML block with `do`, `dont`, `harm`, and `gate` — machine-readable, agent-discoverable, and ready for property tests over the corpus. Read the full text: [`CONSTITUTION.md`](CONSTITUTION.md).
+```yaml
+- id: CONST-S4
+  title: Subtract Before You Add
+  gate: review
+  do: treat every line as a liability — removal is the default response to slop
+  dont: extend a copy-paste cluster; patch around a rotten core
+  harm: the codebase only grows; rot survives every patch and regrows
+  check: review reads the net line delta; fixes that leave root violations are rejected
+```
 
-## Amendment
+Run the validator to check rule IDs, schema compliance, and references across both files:
 
-The constitution is amendable by design. An amendment carries a written rationale, a version bump, a date, and a matching update to the consuming `AGENTS.md`. Proposed additions go through challenge first (`CONST-W2`) — every rule must name the harm it prevents, and removal is the default response to slop at every scale (`CONST-S4`).
+```bash
+pnpm test
+```
 
-## FAQ
-
-**Q: Why git subtree + symlink instead of a git submodule?**
-A: Submodules pin a commit and surface a detached `HEAD` to anyone cloning — bad for a document every contributor reads on day one. A subtree is just files, and the symlink makes the path stable so `AGENTS.md` can reference `@CONSTITUTION.md` once and never change.
-
-**Q: Why not pin CONSTITUTION.md to a specific version per consumer?**
-A: Drift. The whole point of one source of truth is that an amendment here propagates everywhere on the next pull. Pinning would reintroduce the fork-by-copy problem the constitution exists to solve.
-
-**Q: Can a consumer override a rule?**
-A: No — that is what an amendment is for. Override-by-fork has been the failure mode for every prior attempt at a shared design law.
-
-**Q: How do I cite a rule in a PR?**
-A: By the harm it prevents, not by clause number. `CONST-G1`: *"invoke a principle by showing the harm is present."* Ids are stable for cross-document reference and the prose around them can change — the family letter says what the rule is about (`CONST-B3` is a boundary rule), never which article it sits in.
-
-**Q: `git subtree add` fails with "ambiguous argument 'HEAD'".**
-A: The subtree command needs an existing commit. In a brand-new repo, run `git commit --allow-empty -m "init"` first, then re-run the add.
-
-**Q: Is this only for TypeScript / Effect / a specific stack?**
-A: No. The principles are stack-neutral. The harness that enforces them (`AGENTS.md`, lint rules, property tests) lives in each consumer repo and is free to vary by stack.
-
-## Support
-
-Questions, bug reports, and amendment proposals: [issue tracker](https://github.com/systemfsoftware/constitution/issues).
+---
 
 ## Contributing
 
-Development workflow, commit conventions, and verification commands: [AGENTS.md](AGENTS.md). This repository has no production code and no build step — the deliverable is the document itself.
+Amendments need a written explanation, a version bump, and updates to consuming repos. See [AGENTS.md](AGENTS.md) for commit standards and testing guidelines.
 
 ## License
 
-[Apache-2.0](LICENSE) © 2026 Ryan Lee.
+[Apache-2.0](LICENSE) (c) 2026 Ryan Lee.

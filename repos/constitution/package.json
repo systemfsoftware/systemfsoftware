@@ -3,7 +3,7 @@
   "description": "The supreme design law of System F Software — stack-neutral, vendored into every consumer repo via git subtree + symlink.",
   "main": "index.js",
   "scripts": {
-    "test": "python3 scripts/validate-constitution.py",
+    "test": "uv run --with pyyaml python3 scripts/validate-constitution.py",
     "prepare": "husky"
   },
   "repository": {

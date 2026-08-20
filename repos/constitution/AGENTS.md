@@ -1,16 +1,17 @@
 # AGENTS.md — Constitution Repository
 
-Single source of truth for [`CONSTITUTION.md`](CONSTITUTION.md) — the supreme design law of [System F Software](https://systemfsoftware.com). Consumer repos vendor via `git subtree` + symlink. This repo has no production code, no test suite, and no build step — it is a markdown document plus its governance tooling (commit validation, agent harness).
+Single source of truth for the supreme design law of [System F Software](https://systemfsoftware.com). Consumer repos vendor via `git subtree` + symlink. This repo has no production code, no test suite, and no build step — it is two markdown documents plus their governance tooling (commit validation, agent harness): `CONSTITUTION.md`, resident in every agent's context, and `CONSTITUTION-ARTICLES.md`, retrieved on write or edit of a source file.
+
+@CONSTITUTION.md
 
 ## Startup Workflow
 
 Before making changes:
 
 1. **Read this file** completely.
-2. **Read @CONSTITUTION.md** — every directive in there binds this repo too.
-3. **Confirm the active task** with the user or the agent's task list.
-4. **Review recent commits** with `git log --oneline -5`.
-5. **Ensure current branch is not `main`** — feature branches only. If on main, create one.
+2. **Confirm the active task** with the user or the agent's task list.
+3. **Review recent commits** with `git log --oneline -5`.
+4. **Ensure current branch is not `main`** — feature branches only. If on main, create one.
 
 ## Working Rules
 
@@ -21,6 +22,16 @@ Before making changes:
 - **Leave clean state.** The next session must run verification immediately.
 
 ## Amending the Constitution
+
+### Choosing the file
+
+A rule goes in `CONSTITUTION.md` when its harm fires before you would know to look it up: nothing announces it, and no mechanism catches it after the fact. It goes in `CONSTITUTION-ARTICLES.md` when the work announces it — an artifact is in front of you (a domain type, a decision function, a boundary object, a test, a module's name) and a trigger can fire on writing it.
+
+Where both branches fit, resident wins. "The work announces it" means an artifact a *complying* agent can be expected to have in hand — not a trigger that exists in principle. That is why the S and W families stay resident even though the family table describes them by their artifacts: the agent who conceals a bypass, shrinks scope, or copies the neighbouring file is precisely the agent who does not fetch the document, so a trigger that fires on the artifact never reaches the reader who needed the rule.
+
+The partition is not gated, deliberately. The obvious key — resident means `gate: review` — is a field the rule's own author writes, and it is false anyway: `CONST-B1`, `CONST-T2` and `CONST-N3` are review-gated and artifact-announced. Check: review — which of the two conditions above the rule meets, and whether the precedence applies.
+
+What `pnpm test` gates about the two files is narrower than "the union stays whole", and the gap is stated because it was measured: a rule left in **both** files fails on its duplicate id; a corpus file that exists but declares no rule fails; a dropped rule fails while any citation to it survives. A dropped rule that nobody cites does **not** fail — 28 of 34 rules have no inbound citation — so `pnpm test --against <rev>` reports it instead: it names every id vacated since that revision, and every corpus file it could not compare because the file did not exist there. Read those two clauses on the success line; a green run that silently measured less is the defect this gate exists to prevent, and reporting is how it stays visible without failing every legitimate deletion.
 
 ### Writing a rule
 
@@ -67,7 +78,7 @@ This is gated rather than requested because the remaining defect is the quiet on
 |---|---|---|
 | **Locked** | `AGENTS.md`, `.husky/_/`, verification scripts | Read and propose changes; do not edit to make verification pass. |
 | **Editable** | `package.json`, `pnpm-lock.yaml`, `commitlint.config.cjs`, `.gitignore`, `.husky/` (hooks only, not `_/`) | Edit freely within the active task. |
-| **Human-controlled** | `CONSTITUTION.md`, `README.md`, merging to `main`, pushing, destructive ops | Propose changes; ask the user before acting. |
+| **Human-controlled** | `CONSTITUTION.md`, `CONSTITUTION-ARTICLES.md`, `README.md`, merging to `main`, pushing, destructive ops | Propose changes; ask the user before acting. |
 
 ## Definition of Done
 
@@ -82,14 +93,14 @@ A task is done only when ALL of the following are true:
 ## Verification Commands
 
 ```bash
-pnpm test                          # schema, coverage, ids, families, dangling citations
+pnpm test                          # both files: schema, coverage, ids, families, dangling citations
 pnpm exec commitlint --from HEAD~1
 ```
 
 After a commit that deletes, splits, merges, or re-scopes a rule — not after every edit — also run the reassignment check against the revision before it:
 
 ```bash
-pnpm test -- --against <rev>
+pnpm test --against <rev>
 ```
 
 ### Anti-Bypass Rules
@@ -124,7 +135,7 @@ Before ending a session:
 
 ## Escalation
 
-- **Constitution conflict**: Consult @CONSTITUTION.md. If letter and purpose diverge, purpose governs.
+- **Constitution conflict**: `CONSTITUTION.md` is already in context — reread it there, not from disk. If letter and purpose diverge, purpose governs (`CONST-G1`).
 - **Unclear requirements**: Ask the user.
 - **Verification failure**: Record via memory, flag for review, do not bypass.
 - **Scope ambiguity**: Re-read this file and the Definition of Done.
