@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-atom-react",
   "license": "Apache-2.0",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",

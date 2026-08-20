@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/omp-claude-compat",
   "license": "Apache-2.0",
-  "version": "1.7.0",
+  "version": "2.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "description": "OMP Claude Code compatibility: dispatch .claude/settings.json hooks + inject CLAUDE.md @-references",
   "type": "module",
@@ -31,9 +31,9 @@
     "effect": "catalog:"
   },
   "optionalDependencies": {
+    "@std/toml": "catalog:",
     "@systemfsoftware/effect-cell-types": "workspace:^",
-    "@systemfsoftware/omp-utils": "workspace:^",
-    "@std/toml": "catalog:"
+    "@systemfsoftware/omp-utils": "workspace:^"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

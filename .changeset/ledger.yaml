@@ -1,0 +1,302 @@
+"@systemfsoftware/all@0.2.0":
+  dir: packages/all
+  intents:
+    - all-drops-unpublished-member
+    - debut-releases-gain-oidc
+    - umbrella-all-package
+"@systemfsoftware/arethetypeswrong-cli@2.0.0":
+  dir: packages/arethetypeswrong/cli
+  intents:
+    - array-type-spelling
+    - attw-config-file-honored
+    - attw-kernel-renames
+    - debut-releases-gain-oidc
+    - modern-ends-know
+    - projections-collapsed-into-ports
+    - rare-shims-relink
+"@systemfsoftware/arethetypeswrong-core@2.0.0":
+  dir: packages/arethetypeswrong/core
+  intents:
+    - array-type-spelling
+    - attw-kernel-renames
+    - debut-releases-gain-oidc
+    - modern-ends-know
+    - projections-collapsed-into-ports
+"@systemfsoftware/effect-atom-react@0.6.0":
+  dir: packages/effect-atom/atom-react
+  intents:
+    - array-type-spelling
+    - atom-v4-hardening
+    - debut-releases-gain-oidc
+    - effect-v4-rc-catalog
+    - modern-ends-know
+    - owned-not-forked
+    - package-landing-pages
+"@systemfsoftware/effect-atom@1.0.0":
+  dir: packages/effect-atom/atom
+  intents:
+    - array-type-spelling
+    - atom-deterministic-eviction
+    - atom-finite-timestamp
+    - atom-hydration-result-internal
+    - atom-previous-value-retention
+    - atom-v4-hardening
+    - debut-releases-gain-oidc
+    - effect-v4-rc-catalog
+    - modern-ends-know
+    - owned-not-forked
+    - package-landing-pages
+"@systemfsoftware/effect-cell-gen@0.1.0":
+  dir: packages/effect-cell-gen
+  intents:
+    - modern-ends-know
+    - workflow-brand-forced
+"@systemfsoftware/effect-cell-types@2.0.0":
+  dir: packages/effect-cell-types
+  intents:
+    - array-type-spelling
+    - cell-constructors-major
+    - cell-description-arbitrary
+    - cell-phase-description
+    - debut-releases-gain-oidc
+    - modern-ends-know
+    - slimy-kids-repair
+    - wire-alphabet-minted
+    - workflow-brand-forced
+    - workflow-channels-oblige-at-make
+"@systemfsoftware/effect-daemon-spec@1.0.0":
+  dir: packages/effect-daemon-spec
+  intents:
+    - array-type-spelling
+    - capabilities-passed-not-required
+    - debut-releases-gain-oidc
+    - executors-as-descriptions
+    - lock-binding-unrepresentable
+    - make-boundary-population-preset
+    - modern-ends-know
+    - restart-decision-emitted
+    - workflow-constructor-consumers
+"@systemfsoftware/effect-gherkin-spec@1.0.0":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - array-type-spelling
+    - debut-releases-gain-oidc
+    - modern-ends-know
+    - projections-collapsed-into-ports
+    - type-test-scripts
+"@systemfsoftware/effect-memfs@1.2.0":
+  dir: packages/effect-memfs
+  intents:
+    - array-type-spelling
+    - debut-releases-gain-oidc
+    - memfs-publishes-resolvable-exports
+    - memfs-shape-emitted
+    - modern-ends-know
+    - package-landing-pages
+"@systemfsoftware/effect-schema-extensions@0.8.0":
+  dir: packages/effect-schema-extensions
+  intents:
+    - debut-releases-gain-oidc
+    - modern-ends-know
+"@systemfsoftware/effect-schema-law@0.7.0":
+  dir: packages/effect-schema-law
+  intents:
+    - array-type-spelling
+    - debut-releases-gain-oidc
+    - modern-ends-know
+"@systemfsoftware/effect-schema-vite@1.5.2":
+  dir: packages/effect-schema-vite
+  intents:
+    - array-type-spelling
+    - debut-releases-gain-oidc
+    - khaki-paws-think
+    - package-landing-pages
+    - schema-vite-skip-use-combinators
+    - schema-vite-use-call-member-access
+"@systemfsoftware/hex-schema@1.7.0":
+  dir: packages/hex-schema
+  intents:
+    - debut-releases-gain-oidc
+    - hex-codec-kernel
+    - modern-ends-know
+    - package-landing-pages
+"@systemfsoftware/omp-agent-discipline@2.0.0":
+  dir: omp/plugins/omp-agent-discipline
+  intents:
+    - debut-releases-gain-oidc
+    - modern-ends-know
+    - package-landing-pages
+    - projections-collapsed-into-ports
+"@systemfsoftware/omp-claude-compat@2.0.0":
+  dir: omp/plugins/omp-claude-compat
+  intents:
+    - debut-releases-gain-oidc
+    - executors-as-descriptions
+    - hook-verdict-emitted
+    - modern-ends-know
+    - package-landing-pages
+    - projections-collapsed-into-ports
+    - workflow-brand-forced
+    - workflow-constructor-consumers
+"@systemfsoftware/oxlint-config@0.1.0":
+  dir: packages/oxlint-config
+  intents:
+    - drop-undecidable-state-rules
+    - make-boundary-regime
+"@systemfsoftware/oxlint-plugin-cell-vocabulary@1.1.0":
+  dir: packages/oxlint-plugins/cell-vocabulary
+  intents:
+    - cell-vocabulary-plugin
+    - debut-releases-gain-oidc
+    - near-miss-contract-promoted
+    - package-landing-pages
+"@systemfsoftware/oxlint-plugin-effect-dmmf@2.0.0":
+  dir: packages/oxlint-plugins/effect-dmmf
+  intents:
+    - cell-suffix-fleet-deleted
+    - debut-releases-gain-oidc
+    - decision-bodies-reject-imports
+    - io-module-in-source-test-rule
+    - law-blocks-keep-in-source
+    - workflow-convention-restoration
+    - workflow-rules-become-unreachable
+"@systemfsoftware/oxlint-plugin-effect-entrypoint@1.0.3":
+  dir: packages/oxlint-plugins/effect-entrypoint
+  intents:
+    - array-type-spelling
+    - debut-releases-gain-oidc
+"@systemfsoftware/oxlint-plugin-effect-schema@2.0.0":
+  dir: packages/oxlint-plugins/effect-schema
+  intents:
+    - array-type-spelling
+    - cell-suffix-fleet-deleted
+    - debut-releases-gain-oidc
+    - modern-ends-know
+    - rule-overrejection-fixes
+    - workflow-convention-restoration
+"@systemfsoftware/oxlint-plugin-effect-workflow@2.0.0":
+  dir: packages/oxlint-plugins/effect-workflow
+  intents:
+    - dead-spec-citations-removed
+    - debut-releases-gain-oidc
+    - decision-bodies-reject-imports
+    - make-boundary-regime
+    - near-miss-contract-promoted
+    - workflow-convention-restoration
+    - workflow-rules-become-unreachable
+"@systemfsoftware/oxlint-plugin-property-testing@1.2.0":
+  dir: packages/oxlint-plugins/property-testing
+  intents:
+    - array-type-spelling
+    - debut-releases-gain-oidc
+    - modern-ends-know
+"@systemfsoftware/oxlint-plugin-recommended@1.1.2":
+  dir: packages/oxlint-plugins/recommended
+  intents:
+    - dead-spec-citations-removed
+    - debut-releases-gain-oidc
+"@systemfsoftware/oxlint-plugin-test-hygiene@1.1.3":
+  dir: packages/oxlint-plugins/test-hygiene
+  intents:
+    - debut-releases-gain-oidc
+    - package-landing-pages
+"@systemfsoftware/oxlint-plugin-test-placement@2.0.0":
+  dir: packages/oxlint-plugins/test-placement
+  intents:
+    - array-type-spelling
+    - behaviour-scope-narrowed
+    - debut-releases-gain-oidc
+    - io-module-in-source-test-rule
+    - law-blocks-keep-in-source
+    - modern-ends-know
+    - workflow-convention-restoration
+"@systemfsoftware/oxlint-plugin@1.0.0":
+  dir: packages/oxlint-plugins/core
+  intents:
+    - array-type-spelling
+    - cut-ban-classes
+    - debut-releases-gain-oidc
+    - drop-undecidable-state-rules
+    - house-plugin-recommended-config
+    - make-boundary-regime
+    - modern-ends-know
+    - rule-overrejection-fixes
+"@systemfsoftware/rx-effect@0.6.0":
+  dir: packages/rx-effect
+  intents:
+    - array-type-spelling
+    - debut-releases-gain-oidc
+    - modern-ends-know
+"@systemfsoftware/storybook-gherkin@1.0.0":
+  dir: packages/storybook-gherkin
+  intents:
+    - debut-releases-gain-oidc
+    - modern-ends-know
+    - package-landing-pages
+    - storybook-gherkin-effect-v4
+"@systemfsoftware/stryker-js-cli@2.0.0":
+  dir: packages/stryker-js/cli
+  intents:
+    - array-type-spelling
+    - capabilities-passed-not-required
+    - cli-v4-runtime-repairs
+    - debut-releases-gain-oidc
+    - executors-as-descriptions
+    - modern-ends-know
+    - rare-shims-relink
+    - survivors-emitted
+    - workflow-brand-forced
+    - workflow-constructor-consumers
+"@systemfsoftware/stryker-js-mutation-report@1.2.6":
+  dir: packages/stryker-js/mutation-report
+  intents:
+    - debut-releases-gain-oidc
+    - package-landing-pages
+"@systemfsoftware/stryker-js-mutation-run@2.0.0":
+  dir: packages/stryker-js/mutation-run
+  intents:
+    - array-type-spelling
+    - debut-releases-gain-oidc
+    - extends-chain-resolver-independent
+    - make-boundary-population-preset
+    - modern-ends-know
+    - mutation-run-json-wire
+    - package-landing-pages
+    - published-packages-ship-only-what-runs
+    - stryker-options-defaults-and-validation
+"@systemfsoftware/stryker-js-plugin-api@1.0.0":
+  dir: packages/stryker-js/plugin-api
+  intents:
+    - array-type-spelling
+    - debut-releases-gain-oidc
+    - package-landing-pages
+    - published-packages-ship-only-what-runs
+    - stryker-options-defaults-and-validation
+"@systemfsoftware/stryker-js-typescript-checker@1.3.0":
+  dir: packages/stryker-js/typescript-checker
+  intents:
+    - checker-errors-only
+    - debut-releases-gain-oidc
+    - modern-ends-know
+    - package-landing-pages
+    - published-packages-ship-only-what-runs
+"@systemfsoftware/stryker-js-vitest-runner@0.1.1":
+  dir: packages/stryker-js/vitest-runner
+  intents:
+    - debut-releases-gain-oidc
+    - package-landing-pages
+    - published-packages-ship-only-what-runs
+"@systemfsoftware/stryker-plugins@0.12.0":
+  dir: packages/stryker-plugins
+  intents:
+    - array-type-spelling
+    - debut-releases-gain-oidc
+    - modern-ends-know
+    - owned-not-forked
+    - schema-class-brand-ignored
+    - type-test-scripts
+    - workflow-make-boundary-ignorer
+"@systemfsoftware/tsconfig@1.3.2":
+  dir: packages/tsconfig
+  intents:
+    - debut-releases-gain-oidc
