@@ -20,6 +20,7 @@
     "prepare": "concurrently \"husky\" \"node scripts/tools/patch-tsgo-if-needed.mjs\"",
     "bump:minor": "node scripts/tools/bump-all-minor.mjs",
     "map": "deno run --allow-read=. --allow-run=git scripts/tools/workspace-map.ts",
+    "publish:unpublished": "./scripts/tools/publish-and-setup-npm-trust.ts",
     "check:publish-config": "node scripts/guards/validate-publish-config.mjs --selftest && node scripts/guards/validate-publish-config.mjs",
     "check:runtime-deps": "node scripts/guards/check-runtime-deps.mjs --selftest && node scripts/guards/check-runtime-deps.mjs",
     "attw": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} attw",
