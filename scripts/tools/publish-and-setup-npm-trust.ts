@@ -9,6 +9,7 @@
 // Flags: --dry-run --only a,b --jobs N (default 4) --log-level (default info)
 // Env:  NPM_REGISTRY overrides the registry base URL.
 
+import { pooledMap } from '@std/async/pool'
 import { parseArgs } from '@std/cli/parse-args'
 import { ConsoleHandler, getLogger, setup } from '@std/log'
 import type { LevelName } from '@std/log'
@@ -98,7 +99,7 @@ async function runInteractive(args: string[], cwd: string): Promise<boolean> {
   return (await child.status).success
 }
 
-async function publishAndTrust(p: { name: string; path: string }): Promise<boolean> {
+async function publishAndTrust(p: { name: string; path: string }): Promise<{ name: string; ok: boolean }> {
   const name = p.name
   const seq: Array<Array<string>> = [
     ['corepack', 'pnpm', '--filter', name, 'build'],
@@ -113,25 +114,10 @@ async function publishAndTrust(p: { name: string; path: string }): Promise<boole
     if (dryRun) continue
     if (!(await runInteractive(args, p.path))) {
       log.error(`  FAILED: ${args.join(' ')}`)
-      return false
+      return { name, ok: false }
     }
   }
-  return true
-}
-
-/** Bounded-concurrency map: at most `limit` `fn` calls in flight, results in input order. */
-async function mapLimit<T>(items: T[], limit: number, fn: (item: T) => Promise<boolean>): Promise<boolean[]> {
-  const results = new Array<boolean>(items.length)
-  let next = 0
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (true) {
-      const i = next++
-      if (i >= items.length) return
-      results[i] = await fn(items[i])
-    }
-  })
-  await Promise.all(workers)
-  return results
+  return { name, ok: true }
 }
 
 const rows = workspaceRows().filter((p) => only.size === 0 || only.has(p.name))
@@ -153,8 +139,10 @@ if (unpublished.length === 0) {
 
 log.info('')
 log.info(`publishing ${unpublished.length} package(s) with --jobs ${jobs}:`)
-const pub = await mapLimit(unpublished, jobs, publishAndTrust)
-const failed = unpublished.filter((_, i) => !pub[i]).map((p) => p.name)
+const results: Array<{ name: string; ok: boolean }> = await Array.fromAsync(
+  pooledMap(jobs, unpublished, publishAndTrust),
+)
+const failed = results.filter((r) => !r.ok).map((r) => r.name)
 if (failed.length > 0) {
   log.error(`failed: ${failed.join(', ')}`)
   Deno.exit(1)
