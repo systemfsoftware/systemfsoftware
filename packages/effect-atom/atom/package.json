@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-atom",
   "license": "Apache-2.0",
-  "version": "0.5.3",
+  "version": "1.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -76,7 +76,6 @@
     "attw": "attw --pack .",
     "dts:check": "tsc --noEmit -p tsconfig.dts.json"
   },
-  "dependencies": {},
   "peerDependencies": {
     "effect": "catalog:"
   },

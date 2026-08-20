@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-test-hygiene",
   "license": "Apache-2.0",
-  "version": "1.1.2",
+  "version": "1.1.3",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
