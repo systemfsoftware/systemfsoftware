@@ -10,6 +10,7 @@
     - array-type-spelling
     - attw-config-file-honored
     - attw-kernel-renames
+    - attw-pack-without-lifecycle-scripts
     - debut-releases-gain-oidc
     - modern-ends-know
     - projections-collapsed-into-ports
