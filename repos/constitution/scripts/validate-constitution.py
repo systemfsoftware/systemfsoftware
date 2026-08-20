@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate CONSTITUTION.md against constitution-rule/v1.
+"""Validate the constitution corpus against constitution-rule/v1.
 
 Gate for CONST-E1 applied reflexively: the constitution's own format must fail a
 command, not a cited clause. Validates every fenced ```yaml block against
@@ -11,6 +11,15 @@ the block — so counting ids in the raw text and comparing against ids parsed
 out of blocks is the only way this gate can report on what it did NOT see.
 Without that comparison a green run means "no rule I happened to parse was
 malformed", which is not the claim the gate is making.
+
+The corpus is two files — the resident law and the retrieved articles — and the
+union is the unit every check runs over. Ids are unique across it and citations
+resolve across it: CONST-S4 cites CONST-T5, which lives in the other file. Point
+this at one file and the coverage comparison above still passes, on a third of
+the rules, which is precisely the vacuous pass it exists to prevent. A file that
+is merely absent is not the only shape of that pass: a file present and parsing
+but declaring no rule scores identically, so every path in PATHS must contribute
+at least one rule of its own.
 
 There is no backwards compatibility and no retirement ledger. A deleted rule
 leaves its number vacant and a citation to it resolves to nothing, which is a
@@ -30,7 +39,7 @@ import sys
 
 import yaml
 
-PATH = "CONSTITUTION.md"
+PATHS = ("CONSTITUTION.md", "CONSTITUTION-ARTICLES.md")
 
 ID_RE = re.compile(r"^CONST-[A-Z]\d+$")
 ID_IN_TEXT_RE = re.compile(r"^\s*- id:\s*(\S+)\s*$", re.M)
@@ -64,20 +73,30 @@ def fail(errors):
 
 def check_against(rev, errors, live_titles):
     """A rename and a renumber produce near-identical diffs; only a comparison
-    across revisions tells them apart.
+    across revisions tells them apart. A corpus file absent at that revision
+    contributes no old titles: a rule that moved between files kept its id and
+    its title, which is no reassignment, and a file's own birth is not one
+    either. Only an empty union means the revision is wrong.
     """
-    try:
-        old_text = subprocess.run(
-            ["git", "show", f"{rev}:{PATH}"],
-            capture_output=True, text=True, check=True,
-        ).stdout
-    except (subprocess.CalledProcessError, FileNotFoundError) as e:
-        errors.append(f"--against {rev}: cannot read {PATH} at that revision ({e})")
-        return
+    old_titles = {}
+    for p in PATHS:
+        try:
+            old_text = subprocess.run(
+                ["git", "show", f"{rev}:{p}"],
+                capture_output=True, text=True, check=True,
+            ).stdout
+        except FileNotFoundError as e:
+            errors.append(f"--against {rev}: git is not runnable ({e})")
+            return
+        except subprocess.CalledProcessError:
+            continue
+        old_titles.update(TITLE_IN_TEXT_RE.findall(old_text))
 
-    old_titles = dict(TITLE_IN_TEXT_RE.findall(old_text))
     if not old_titles:
-        errors.append(f"--against {rev}: no rules found at that revision — wrong rev, or the file moved")
+        errors.append(
+            f"--against {rev}: no rules found in any corpus file at that revision "
+            f"— wrong rev, or every file was renamed"
+        )
         return
 
     for rid, old_title in old_titles.items():
@@ -94,28 +113,40 @@ def main():
                     help="git revision to check for reassigned ids")
     args = ap.parse_args()
 
-    text = open(PATH, encoding="utf-8").read()
     errors = []
+    texts = {}
+    for p in PATHS:
+        try:
+            texts[p] = open(p, encoding="utf-8").read()
+        except FileNotFoundError:
+            fail([f"{p}: missing — the corpus is both files, and half a corpus "
+                  f"scores exactly like a whole one"])
 
-    blocks = re.findall(r"```yaml\n(.*?)```", text, re.S)
+    blocks = []
+    for p, t in texts.items():
+        found = re.findall(r"```yaml\n(.*?)```", t, re.S)
+        if not found:
+            errors.append(f"{p}: no fenced yaml rule blocks found")
+        blocks.extend((p, j, b) for j, b in enumerate(found))
     if not blocks:
-        fail(["no fenced yaml rule blocks found"])
+        errors.append("no fenced yaml rule blocks found in any corpus file")
+        fail(errors)
 
     rules = []
-    for i, block in enumerate(blocks):
+    for p, j, block in blocks:
         try:
             doc = yaml.safe_load(block)
         except yaml.YAMLError as e:
-            errors.append(f"block {i}: YAML parse error: {e}")
+            errors.append(f"{p} block {j}: YAML parse error: {e}")
             continue
         rules.extend(doc.get("rules", []))
 
     parsed_ids = [str(r.get("id")) for r in rules]
-    declared_ids = ID_IN_TEXT_RE.findall(text)
+    declared_ids = [i for t in texts.values() for i in ID_IN_TEXT_RE.findall(t)]
     uncovered = [i for i in declared_ids if i not in parsed_ids]
     if uncovered:
         errors.append(
-            f"{len(uncovered)} rule(s) declared in the file but never parsed "
+            f"{len(uncovered)} rule(s) declared in the corpus but never parsed "
             f"into a yaml block: {uncovered} — check for an unterminated ```yaml fence"
         )
 
@@ -152,17 +183,25 @@ def main():
         if ex is not None and not (isinstance(ex, dict) and all(isinstance(v, str) for v in ex.values())):
             errors.append(f"{rid}: 'example' must be a map of strings")
 
-    for cited in sorted(set(CITE_RE.findall(text))):
-        if cited not in seen:
-            errors.append(f"dangling citation: '{cited}' is cited in {PATH} but names no rule")
+    cites = {p: set(CITE_RE.findall(t)) for p, t in texts.items()}
+    for cited in sorted(set().union(*cites.values())):
+        if cited in seen:
+            continue
+        for p in PATHS:
+            if cited in cites.get(p, ()):
+                errors.append(f"dangling citation: '{cited}' is cited in {p} but names no rule")
 
     if args.against:
-        check_against(args.against, errors, dict(TITLE_IN_TEXT_RE.findall(text)))
+        live_titles = {}
+        for t in texts.values():
+            live_titles.update(TITLE_IN_TEXT_RE.findall(t))
+        check_against(args.against, errors, live_titles)
 
     if errors:
         fail(errors)
     suffix = f"; no id reassigned since {args.against}" if args.against else ""
-    print(f"valid: {len(rules)} rules across {len(blocks)} yaml blocks, {len(FAMILIES)} families{suffix}")
+    print(f"valid: {len(rules)} rules across {len(blocks)} yaml blocks in "
+          f"{len(texts)} files, {len(FAMILIES)} families{suffix}")
 
 
 if __name__ == "__main__":
