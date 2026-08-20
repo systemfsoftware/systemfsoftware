@@ -129,7 +129,15 @@ export function setup(project: TestProject): Promise<void> {
           execFileAsync(
             'pnpm',
             ['--filter', workspacePackage, 'exec', 'pnpm', 'pack', '--pack-destination', packDir],
-            { cwd: REPO_ROOT },
+            {
+              cwd: REPO_ROOT,
+              // Pack read-only: the lane packs a tree turbo already built, so a
+              // packed package's `prepare` hook (`stryker-js-cli` carries one)
+              // would clean-and-rebuild its `dist` mid-gate — a window in which
+              // concurrent tasks can observe a missing `dist`. `pnpm pack` takes
+              // no `--ignore-scripts` flag; the env var is the supported form.
+              env: { ...process.env, npm_config_ignore_scripts: 'true' },
+            },
           )
         )
       }

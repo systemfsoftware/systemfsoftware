@@ -22,7 +22,14 @@ export const PackRunnerLive: Layer.Layer<PackRunner, never, ChildProcessSpawner>
     pack: (cwd) =>
       Effect.gen(function*() {
         const spawner = yield* ChildProcessSpawner
-        const cmd = ChildProcess.make('npm', ['pack']).pipe(ChildProcess.setCwd(cwd))
+        // `--ignore-scripts`: packing here acquires the artifact for analysis, it
+        // does not deploy it. Running the target's pack hooks would execute
+        // arbitrary lifecycle scripts (`prepack`, `prepare`) and rebuild `dist`
+        // mid-analysis — in the turbo gate that clean-and-rebuild window races
+        // every concurrent task reading `dist` (a dependent's `tsc`, the contract
+        // lane's precondition) and is indistinguishable from a broken build.
+        // Analysis must not mutate the tree it reads.
+        const cmd = ChildProcess.make('npm', ['pack', '--ignore-scripts']).pipe(ChildProcess.setCwd(cwd))
         const output = yield* spawner.string(cmd).pipe(
           Effect.mapError((e) => new PackRunnerFailed({ message: `npm pack failed in ${cwd}`, cause: e })),
         )
