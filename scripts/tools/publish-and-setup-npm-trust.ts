@@ -20,22 +20,45 @@
 // Flags:
 //   --dry-run    print the exact commands, change nothing on npm.
 //   --only a,b   limit to the named packages.
+//   --log-level  debug|info|warning|error (default info).
 //
 // Env:
 //   NPM_REGISTRY overrides the registry base URL; the shebang's allowed net host
 //   covers the default (registry.npmjs.org) — widen the flag for other hosts.
 
 import { parseArgs } from '@std/cli/parse-args'
+import { ConsoleHandler, getLogger, setup } from '@std/log'
+import type { LevelName } from '@std/log'
 
 const {
   'dry-run': dryRun = false,
+  'log-level': logLevelArg = 'info',
   only: onlyArg,
 } = parseArgs(Deno.args, {
   boolean: ['dry-run'],
-  string: ['only'],
+  string: ['only', 'log-level'],
   alias: { o: 'only' },
+  default: { 'dry-run': false, 'log-level': 'info' },
 })
+
+const logLevel = logLevelArg.toUpperCase() as LevelName
 const only = new Set((onlyArg ?? '').split(',').map((s) => s.trim()).filter(Boolean))
+
+await setup({
+  handlers: {
+    console: new ConsoleHandler(logLevel, {
+      formatter: (record) => {
+        const level = record.levelName.toLowerCase()
+        return level === 'info' ? String(record.msg) : `${level.toUpperCase()}: ${record.msg}`
+      },
+    }),
+  },
+  loggers: {
+    default: { level: logLevel, handlers: ['console'] },
+  },
+})
+
+const log = getLogger()
 
 const repoRoot = new TextDecoder().decode(
   new Deno.Command('git', { args: ['rev-parse', '--show-toplevel'] }).outputSync().stdout,
@@ -97,17 +120,17 @@ const unpublished: Array<{ name: string; path: string }> = []
 for (let i = 0; i < rows.length; i++) {
   const p = rows[i]
   const status = statuses[i]
-  console.log(`${p.name} … ${status === 404 ? 'unpublished (404)' : `published (HTTP ${status}) — skipped`}`)
+  log.info(`${p.name} … ${status === 404 ? 'unpublished (404)' : `published (HTTP ${status}) — skipped`}`)
   if (status === 404) unpublished.push(p)
 }
 
 if (unpublished.length === 0) {
-  console.log('nothing to publish')
+  log.info('nothing to publish')
   Deno.exit(0)
 }
 
-console.log('')
-console.log(`publishing ${unpublished.length} package(s):`)
+log.info('')
+log.info(`publishing ${unpublished.length} package(s):`)
 for (const p of unpublished) {
   const name = p.name
   const seq: Array<Array<string>> = [
@@ -117,20 +140,20 @@ for (const p of unpublished) {
     ['npm', 'trust', 'list', name],
   ]
 
-  console.log(`\n== ${name}`)
+  log.info(`\n== ${name}`)
   let ok = true
   for (const args of seq) {
-    console.log(`  > ${args.join(' ')}`)
+    log.info(`  > ${args.join(' ')}`)
     if (dryRun) continue
     if (!(await runInteractive(args, p.path))) {
-      console.error(`  FAILED: ${args.join(' ')}`)
+      log.error(`  FAILED: ${args.join(' ')}`)
       ok = false
       break
     }
   }
   if (!ok) {
-    console.error(`aborting: ${name} failed; remaining packages untouched`)
+    log.error(`aborting: ${name} failed; remaining packages untouched`)
     Deno.exit(1)
   }
 }
-console.log('\ndone')
+log.info('\ndone')

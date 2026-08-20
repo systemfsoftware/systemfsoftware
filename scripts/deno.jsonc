@@ -5,6 +5,7 @@
   // stops Deno from migrating pnpm-workspace.yaml into package.json.
   "imports": {
     "@std/cli/parse-args": "jsr:@std/cli@1.0.32/parse-args",
+    "@std/log": "jsr:@std/log@0.224.0",
     "@std/yaml": "jsr:@std/yaml@^1.2.0",
     "@toon-format/toon": "npm:@toon-format/toon@^4.1.1",
   },
