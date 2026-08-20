@@ -1,6 +1,7 @@
 ---
 title: First publish under npm OIDC trusted publishing
 date: 2026-08-11
+last_updated: 2026-08-20
 category: tooling-decisions
 module: release-tooling
 problem_type: tooling_decision
@@ -72,6 +73,14 @@ exist, the debut publish happens from a maintainer machine. This is a
 once-per-package cost.
 
 ## Runbook — bootstrap a new package for OIDC publishing
+
+The whole sequence (steps 2–5 below) is automated by
+`scripts/tools/publish-and-setup-npm-trust.ts` (run via `pnpm publish:unpublished
+-- --dry-run` to preview, or plain `pnpm publish:unpublished` to execute): it
+discovers the non-private workspace set the same way, publishes every package
+npm returns 404 for, then registers the trusted publisher for each one just
+published. The manual steps remain below in case a single package needs the
+treatment by hand.
 
 One-time, per package, from a maintainer machine:
 
@@ -159,7 +168,8 @@ correct replacement.
 ## When to Apply
 
 - **Adding a new publishable package under `packages/`** — set its manifest
-  `version` to the intended debut, then run the bootstrap sequence once.
+  `version` to the intended debut, then run `pnpm publish:unpublished` once
+  (it publishes the new package and registers its trusted publisher).
 - **A release fails with an npm OIDC auth error** — run
   `bash scripts/check-npm-publish.sh --preflight`; it names every never-published
   package with its bootstrap commands. The published-but-unregistered class is
@@ -216,6 +226,9 @@ partial publish behind.
 
 ## Related
 
+- `scripts/tools/publish-and-setup-npm-trust.ts` — automates the runbook:
+  publishes every unpublished non-private package, then registers the trusted
+  publisher for each one just published (root script alias `publish:unpublished`).
 - `.github/workflows/release.yml` — the `publish` job's Preflight step
   (:78-83) and the OIDC publish step (:89-94).
 - `scripts/check-npm-publish.sh` — the `--preflight` gate (:175-208) and the
