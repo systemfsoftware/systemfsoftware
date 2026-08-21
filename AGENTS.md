@@ -58,18 +58,18 @@ Not derivable from the manifests:
 
 Directories and the root doctrine file `CONCEPTS.md`; the packages inside them are never listed here, because a hand-written inventory is stale on the next `pnpm add` and reads as complete while it is not — the one this replaced named 20 of 40. Run `pnpm map` when you need the shape of the tree: which packages exist, which carry their own leaf, which publish. It derives every fact from `pnpm-workspace.yaml` and `git ls-files` on each run, and it names what it does not cover.
 
-| Directory         | What it is                                                                                                                            | Governance                                  |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| `packages/`       | Workspace packages, published for adopters outside this tree (`REPO-A5`); `pnpm map` derives the inventory and its governance         | Root invariants plus a hook-delivered leaf  |
-| `repos/`          | One `[[repos]]` entry in `subtrees.toml` ↔ one `repos/<name>` tree: third-party source, tests and git history, read-only              | `REPO-S3` read-only; `REPO-W4`              |
-| `scripts/`        | Root guards (`guards/`, wired into the check chain or CI) and utilities (`tools/`, wired into no chain); release and harness tooling  | Editable except the Evaluator scripts above |
-| `.github/`        | CI workflows and reusable actions; `.github/AGENTS.md` is the repo's only CI-failure runbook — read it when a check fails, not before | Evaluator                                   |
-| `.claude/`        | Hook scripts that enforce the gates (`hooks/`) and harness settings                                                                   | Evaluator                                   |
-| `docs/`           | Plans, audits, issue notes, explainers, papers — everything outside `docs/solutions/`                                                 | Editable                                    |
-| `docs/solutions/` | Documented decisions and learnings, categorized by topic                                                                              | Doctrine                                    |
-| `CONCEPTS.md`     | Project vocabulary — the terms every agent must use identically                                                                       | Doctrine                                    |
-| `omp/`            | OMP plugin packages                                                                                                                   | Leaf-governed                               |
-| `agent-plugins/`  | Distributable agent-plugins.org plugins (Deno, standalone)                                                                            | Leaf-governed                               |
+1: | Directory | What it is | Governance |
+1: | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+1: | `packages/` | Workspace packages, published for adopters outside this tree (`REPO-A5`); `pnpm map` derives the inventory and its governance | Root invariants plus a plugin-delivered leaf — gate: `omp plugin doctor` + `node omp/scripts/smoke-plugin.mjs omp/plugins/omp-leaf-context/dist/index.js` |
+1: | `repos/` | One `[[repos]]` entry in `subtrees.toml` ↔ one `repos/<name>` tree: third-party source, tests and git history, read-only | `REPO-S3` read-only; `REPO-W4` |
+1: | `scripts/` | Root guards (`guards/`, wired into the check chain or CI) and utilities (`tools/`, wired into no chain); release and harness tooling | Editable except the Evaluator scripts above |
+1: | `.github/` | CI workflows and reusable actions; `.github/AGENTS.md` is the repo's only CI-failure runbook — read it when a check fails, not before | Evaluator |
+1: | `.claude/` | Hook scripts that enforce the gates (`hooks/`) and harness settings | Evaluator |
+1: | `docs/` | Plans, audits, issue notes, explainers, papers — everything outside `docs/solutions/` | Editable |
+1: | `docs/solutions/` | Documented decisions and learnings, categorized by topic | Doctrine |
+1: | `CONCEPTS.md` | Project vocabulary — the terms every agent must use identically | Doctrine |
+1: | `omp/` | OMP plugin packages | Leaf-governed |
+1: | `agent-plugins/` | Distributable agent-plugins.org plugins (Deno, standalone) | Leaf-governed |
 
 ## Working Rules
 
