@@ -22,6 +22,7 @@
 '@systemfsoftware/oxlint-plugin-effect-schema': patch
 '@systemfsoftware/oxlint-plugin-effect-workflow': patch
 '@systemfsoftware/oxlint-plugin-property-testing': patch
+'@systemfsoftware/oxlint-plugin-recommended': none
 '@systemfsoftware/oxlint-plugin-test-hygiene': patch
 '@systemfsoftware/oxlint-plugin-test-placement': patch
 '@systemfsoftware/rx-effect': patch
@@ -33,6 +34,7 @@
 '@systemfsoftware/stryker-js-typescript-checker': none
 '@systemfsoftware/stryker-js-vitest-runner': none
 '@systemfsoftware/stryker-plugins': patch
+'@systemfsoftware/tsconfig': none
 ---
 
 The peer requirements for `effect` and for the Effect test-runner integration now accept any compatible `4.0.0-rc` release, instead of demanding one exact release candidate.
