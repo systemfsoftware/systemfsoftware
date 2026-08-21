@@ -29,8 +29,8 @@
 ### Patch Changes
 
 - Updated dependencies:
-  - @systemfsoftware/oxlint-plugin@1.0.0
-  - @systemfsoftware/oxlint-plugin-effect-dmmf@2.0.0
-  - @systemfsoftware/oxlint-plugin-effect-schema@2.0.0
-  - @systemfsoftware/oxlint-plugin-effect-workflow@2.0.0
-  - @systemfsoftware/oxlint-plugin-test-placement@2.0.0
+  - @systemfsoftware/oxlint-plugin@2.0.0
+  - @systemfsoftware/oxlint-plugin-effect-dmmf@3.0.0
+  - @systemfsoftware/oxlint-plugin-effect-schema@3.0.0
+  - @systemfsoftware/oxlint-plugin-effect-workflow@3.0.0
+  - @systemfsoftware/oxlint-plugin-test-placement@3.0.0
