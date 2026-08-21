@@ -1,5 +1,4 @@
 ---
-'@systemfsoftware/all': patch
 '@systemfsoftware/arethetypeswrong-cli': patch
 '@systemfsoftware/arethetypeswrong-core': patch
 '@systemfsoftware/effect-atom': patch

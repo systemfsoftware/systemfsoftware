@@ -22,9 +22,11 @@
   "dependencies": {
     "@systemfsoftware/oxlint-plugin": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-dmmf": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-entrypoint": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-workflow": "workspace:^",
     "@systemfsoftware/oxlint-plugin-property-testing": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-recommended": "workspace:^",
     "@systemfsoftware/oxlint-plugin-test-hygiene": "workspace:^",
     "@systemfsoftware/oxlint-plugin-test-placement": "workspace:^",
     "oxlint": "catalog:oxlint",

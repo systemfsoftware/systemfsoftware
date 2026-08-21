@@ -1,9 +1,3 @@
-"@systemfsoftware/all@0.2.0":
-  dir: packages/all
-  intents:
-    - all-drops-unpublished-member
-    - debut-releases-gain-oidc
-    - umbrella-all-package
 "@systemfsoftware/arethetypeswrong-cli@2.0.0":
   dir: packages/arethetypeswrong/cli
   intents:

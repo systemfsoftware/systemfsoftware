@@ -14,33 +14,32 @@ A pnpm monorepo of [Effect-TS](https://effect.website) packages — pure functio
 
 ## Packages
 
-| Package                                                         | npm                                         | What it does                                                                                                                                                                                                     |
-| --------------------------------------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`all`](packages/all)                                           | `@systemfsoftware/all`                      | The whole stack in one install, plus an oxlint config that turns on every rule this architecture recommends — see [Install](#install).                                                                           |
-| [`effect-gherkin-spec`](packages/effect-gherkin-spec)           | `@systemfsoftware/effect-gherkin-spec`      | `feature`/`scenario`/`outline` DSL for Gherkin-style behaviour tests composed as Effects, with Scenario Outline expansion and typed step errors.                                                                 |
-| [`effect-daemon-spec`](packages/effect-daemon-spec)             | `@systemfsoftware/effect-daemon-spec`       | A typed supervision-tree daemon for Effect — leader election, lock primitives, restart-intensity windows, dynamic children, and health latches.                                                                  |
-| [`oxlint-plugin`](packages/oxlint-plugins/core)                 | `@systemfsoftware/oxlint-plugin`            | 18 [oxlint](https://oxc.rs) rules enforcing the constitution: ban classes and string errors, forbid native timers/`Promise`/`Date` inside Effect, require pipeable composition, keep tests off the I/O boundary. |
-| [`effect-schema-law`](packages/effect-schema-law)               | `@systemfsoftware/effect-schema-law`        | One call asserts the codec laws of any Effect `Schema` as Vitest property tests — decode∘encode is identity, and encoding is stable under a decode round-trip.                                                   |
-| [`stryker-plugins`](packages/stryker-plugins)                   | `@systemfsoftware/stryker-plugins`          | Stryker mutation-testing plugins for Effect — `effect-schema-ignorer` skips equivalent mutants on Effect `Schema` declarations so the score reflects behaviour, not data.                                        |
-| [`rx-effect`](packages/rx-effect)                               | `@systemfsoftware/rx-effect`                | Bridge RxJS and Effect — turn an Observable into a typed Effect `Stream` with backpressure and proper interruption.                                                                                              |
-| [`effect-schema-extensions`](packages/effect-schema-extensions) | `@systemfsoftware/effect-schema-extensions` | Extra Effect `Schema` codecs — branded hex-string schemas with decode/encode and arbitraries.                                                                                                                    |
+| Package | npm | What it does |
+| ------- | --- | ------------ |
+
+| [`effect-gherkin-spec`](packages/effect-gherkin-spec) | `@systemfsoftware/effect-gherkin-spec` | `feature`/`scenario`/`outline` DSL for Gherkin-style behaviour tests composed as Effects, with Scenario Outline expansion and typed step errors. |
+| [`effect-daemon-spec`](packages/effect-daemon-spec) | `@systemfsoftware/effect-daemon-spec` | A typed supervision-tree daemon for Effect — leader election, lock primitives, restart-intensity windows, dynamic children, and health latches. |
+| [`oxlint-plugin`](packages/oxlint-plugins/core) | `@systemfsoftware/oxlint-plugin` | 18 [oxlint](https://oxc.rs) rules enforcing the constitution: ban classes and string errors, forbid native timers/`Promise`/`Date` inside Effect, require pipeable composition, keep tests off the I/O boundary. |
+| [`effect-schema-law`](packages/effect-schema-law) | `@systemfsoftware/effect-schema-law` | One call asserts the codec laws of any Effect `Schema` as Vitest property tests — decode∘encode is identity, and encoding is stable under a decode round-trip. |
+| [`stryker-plugins`](packages/stryker-plugins) | `@systemfsoftware/stryker-plugins` | Stryker mutation-testing plugins for Effect — `effect-schema-ignorer` skips equivalent mutants on Effect `Schema` declarations so the score reflects behaviour, not data. |
+| [`rx-effect`](packages/rx-effect) | `@systemfsoftware/rx-effect` | Bridge RxJS and Effect — turn an Observable into a typed Effect `Stream` with backpressure and proper interruption. |
+| [`effect-schema-extensions`](packages/effect-schema-extensions) | `@systemfsoftware/effect-schema-extensions` | Extra Effect `Schema` codecs — branded hex-string schemas with decode/encode and arbitraries. |
 
 `oxlint-config` and `vitest-config` are internal to this repository and are not published. Every
-other package under `packages/` is, and `@systemfsoftware/all` carries the ones a consumer uses.
+other package under `packages/` is published independently.
 
-## Install
+## Lint Configuration
 
-The whole stack in one install, with every rule this architecture recommends turned on:
-
-```bash
-pnpm add -D @systemfsoftware/all effect oxlint oxlint-tsgolint typescript
-```
+Use the shared oxlint configuration presets from `@systemfsoftware/oxlint-config`:
 
 ```ts
 // oxlint.config.ts
-import all from '@systemfsoftware/all'
+import base from '@systemfsoftware/oxlint-config/base'
+import { defineConfig } from 'oxlint'
 
-export default all
+export default defineConfig({
+  extends: [base],
+})
 ```
 
 That config enables the built-in `correctness` category and every custom rule — the workflow,

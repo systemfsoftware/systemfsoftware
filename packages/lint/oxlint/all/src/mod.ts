@@ -82,7 +82,7 @@ export const ignorePatterns: readonly string[] = [
 ]
 
 /**
- * The whole stack as one `extends`-consumable oxlint config, and this package's
+ * The complete preset as one `extends`-consumable oxlint config, and this package's
  * default export: `export default all` in an `oxlint.config.ts` delivers the
  * plugins, type awareness, the correctness category, the stock defect and
  * test-hygiene tiers, and every recommended cell rule at `error`.
