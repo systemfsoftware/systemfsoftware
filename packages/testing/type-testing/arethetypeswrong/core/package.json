@@ -29,7 +29,7 @@
     "build": "tsdown",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
-    "attw": "attw --pack .",
+    "attw": "npm_config_ignore_scripts=true attw --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "test": "vitest run",
     "test:run": "vitest run --coverage",

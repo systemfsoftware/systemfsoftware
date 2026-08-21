@@ -7,7 +7,7 @@ export default defineConfig({
   ],
   format: 'esm',
   clean: true,
-  dts: { tsgo: { path: 'tsc' } },
+  dts: true,
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   tsconfig: './tsconfig.build.json',
   deps: {

@@ -55,7 +55,7 @@ Context selection: hooks are wanted at **install** (`prepare` builds the bin tar
 **Every writer of shared build output must be a schedulable task node.** A reader's safety is `dependsOn` the writer; a writer invisible to the graph (a lifecycle hook fired inside a pack) cannot be ordered, so it must not exist in any context that runs concurrently with readers. Equivalently: after removing graph-invisible writers, every remaining writer is a build task and every reader is graph-ordered after it — the failure window is structurally empty, not merely unlikely.
 
 ```text
-gate-time pack:  read-only acquisition      (ignore-scripts / config env)
+gate-time pack:  read-only acquisition      (pnpm pack --config.ignore-scripts=true)
 install pack:    hooks ON  (prepare builds the bin target)
 publish pack:    hooks ON  (prepack rebuilds dist)
 ```
@@ -71,12 +71,14 @@ publish pack:    hooks ON  (prepack rebuilds dist)
 
 ## Prevention
 
-- **Any new gate-time pack consumer must pack with scripts ignored.** Grep-smell: `npm pack` / `pnpm pack` (directly or via a spawn) on the gate surface without `--ignore-scripts` or `npm_config_ignore_scripts`.
+- **Any new gate-time pack consumer must pack with scripts ignored.** `pnpm pack` accepts no `--ignore-scripts` **and silently ignores `npm_config_ignore_scripts`** — measured by inode, a pack in that form replaced the build output it was supposed to only read, so a lane can carry a read-only comment and an env var and still be the mutator. The form that works is `--config.ignore-scripts=true`, which reaches the setting pnpm reads. Swapping in `npm pack --ignore-scripts` does stop the hooks but is not a substitute here: pnpm rewrites `workspace:*` in the packed manifest to the real version and npm leaves the protocol in place, so the tarball no longer installs. Grep-smell: a gate-surface pack with neither the config flag nor `--ignore-scripts`.
 - **A package gaining `prepack`/`prepare` changes the contract for everyone that packs it.** The lanes' pack lists and the analyzer cover new packages automatically through the shared surfaces above; a _new_ pack surface must adopt the read-only form or it reintroduces the race.
 - **Keep hooks minimal.** `prepare` on a bin-shipping package is a ~60 ms transpile-only build by design; a hook that grows into a workspace-wide operation turns one pack into a multi-package mutation.
+- **A package that reaches a workspace tool through its published version never receives that tool's unreleased fix.** Where a package consumes its own sibling from the registry to avoid closing a dependency cycle, the sibling's in-source read-only packing is invisible to it: the analysis task executes the published binary, which packs with hooks enabled and rebuilds the very output its concurrent readers are importing. Diagnose it by identity, not timestamp — a clean-and-rebuild replaces the files, so the inode changes while the byte size does not. Force the read-only form from the caller's environment, which holds for every version of the tool, instead of relying on the tool carrying its own flag.
 - Verification that closed this: cold `attw` for the fixed package exits 0 with `dist/` md5-identical and zero hook executions in the log; `check:local` exits 0; a live graph query confirms both lanes' `test:contract` still wait on own and `^build`; CI runs both lanes in containers against the hookless tarballs.
 
 ## Related Issues
 
 - [pnpm skips a `.bin` shim whose target is gitignored build output, and never retries](./pnpm-bin-shim-skipped-for-gitignored-build-target.md) — why `prepare` exists at all and must not be deleted; the two docs together draw the install/publish vs analysis context line.
 - [first publish under OIDC trusted publishing](../tooling-decisions/first-publish-under-oidc-trusted-publishing.md) — the second, independent blocker on the same failed release: the publish preflight aborts on packages that have never existed on the registry.
+- [a lifecycle build that runs during install must resolve its compiler by module resolution, never through PATH](./install-time-tool-resolution-must-not-use-path.md) — the third axis of the same lifecycle window: this doc governs when a hook may mutate output, that one governs how a hook locates the tool it runs.

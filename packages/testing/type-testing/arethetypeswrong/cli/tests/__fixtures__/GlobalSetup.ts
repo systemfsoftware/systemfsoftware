@@ -63,17 +63,17 @@ export async function setup(project: TestProject): Promise<void> {
   for (const workspacePackage of WORKSPACE_PACKAGES) {
     await execFileAsync(
       'pnpm',
-      ['--filter', workspacePackage, 'exec', 'pnpm', 'pack', '--pack-destination', packDir],
-      {
-        cwd: REPO_ROOT,
-        // Pack read-only: the lane packs a tree turbo already built, so the
-        // packages' `prepack`/`prepare` hooks would only clean-and-rebuild
-        // `dist` mid-gate — a window in which this lane's own precondition and
-        // every concurrent dependent `tsc` can observe a missing `dist`.
-        // `pnpm pack` takes no `--ignore-scripts` flag; the env var is the
-        // supported form.
-        env: { ...process.env, npm_config_ignore_scripts: 'true' },
-      },
+      [
+        '--filter',
+        workspacePackage,
+        'exec',
+        'pnpm',
+        'pack',
+        '--config.ignore-scripts=true',
+        '--pack-destination',
+        packDir,
+      ],
+      { cwd: REPO_ROOT },
     )
   }
   const packed = (await readdir(packDir)).filter((entry) => entry.endsWith('.tgz'))
