@@ -58,7 +58,7 @@
     "typescript": "catalog:"
   },
   "peerDependencies": {
-    "effect": "catalog:",
+    "effect": "catalog:peers",
     "oxlint": "catalog:oxlint",
     "oxlint-tsgolint": "catalog:oxlint",
     "typescript": ">=5.0.0"
