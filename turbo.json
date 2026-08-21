@@ -269,18 +269,6 @@
       "outputs": [],
       "cache": true
     },
-    "//#check:project-references": {
-      "inputs": [
-        "$TURBO_ROOT$/scripts/guards/check-project-references.mjs",
-        "$TURBO_ROOT$/packages/**/tsconfig*.json",
-        "$TURBO_ROOT$/packages/**/src/**",
-        "$TURBO_ROOT$/packages/**/dist/**",
-        "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
-        "!$TURBO_ROOT$/packages/**/sandbox-*/**"
-      ],
-      "outputs": [],
-      "cache": true
-    },
     "clean": {
       "cache": false
     },

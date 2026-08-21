@@ -21,6 +21,7 @@
     "map": "deno run --allow-read=. --allow-run=git scripts/tools/workspace-map.ts",
     "publish:unpublished": "./scripts/tools/publish-and-setup-npm-trust.ts",
     "attw": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} attw",
+    "check:boundaries": "turbo boundaries",
     "pack:all": "node scripts/tools/pack-all.mjs"
   },
   "devDependencies": {

@@ -1,1 +1,6 @@
-{ "ignoreRules": ["no-resolution", "cjs-resolves-to-esm"] }
+{
+  "ignoreRules": [
+    "no-resolution",
+    "cjs-resolves-to-esm"
+  ]
+}

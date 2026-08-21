@@ -3,10 +3,6 @@
   "compilerOptions": {
     "incremental": true,
     "declarationMap": false,
-    "sourceMap": false,
-    "stripInternal": true
-  },
-  "include": [
-    "src/**/*.ts"
-  ]
+    "sourceMap": false
+  }
 }
