@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-run=git,corepack,pnpm,npm --allow-env=NPM_REGISTRY --allow-net=registry.npmjs.org
+#!/usr/bin/env -S deno run --allow-run=git,corepack,pnpm,npm --allow-read --allow-env=NPM_REGISTRY --allow-net=registry.npmjs.org
 // publish-and-setup-npm-trust.ts — publish every unpublished non-private workspace
 // package, then register the npm trusted publisher (OIDC) for each one.
 //
@@ -99,14 +99,28 @@ async function runInteractive(args: string[], cwd: string): Promise<boolean> {
   return (await child.status).success
 }
 
+async function hasBuildScript(packagePath: string): Promise<boolean> {
+  try {
+    const manifestPath = `${packagePath}/package.json`
+    const raw = await Deno.readTextFile(manifestPath)
+    const manifest = JSON.parse(raw) as { scripts?: Record<string, string> }
+    return typeof manifest.scripts?.build === 'string'
+  } catch {
+    return false
+  }
+}
+
 async function publishAndTrust(p: { name: string; path: string }): Promise<{ name: string; ok: boolean }> {
   const name = p.name
-  const seq: Array<Array<string>> = [
-    ['corepack', 'pnpm', '--filter', name, 'build'],
+  const seq: Array<Array<string>> = []
+  if (await hasBuildScript(p.path)) {
+    seq.push(['corepack', 'pnpm', '--filter', name, 'build'])
+  }
+  seq.push(
     ['corepack', 'pnpm', '--filter', name, 'publish', '--access', 'public', '--no-git-checks'],
     ['npm', 'trust', 'github', name, '--repo', slug, '--file', 'release.yml', '--allow-publish', '--yes'],
     ['npm', 'trust', 'list', name],
-  ]
+  )
 
   log.info(`\n== ${name}`)
   for (const args of seq) {
