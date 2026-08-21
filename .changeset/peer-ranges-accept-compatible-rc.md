@@ -1,5 +1,7 @@
 ---
 '@systemfsoftware/all': patch
+'@systemfsoftware/arethetypeswrong-cli': none
+'@systemfsoftware/arethetypeswrong-core': none
 '@systemfsoftware/effect-atom': patch
 '@systemfsoftware/effect-atom-react': patch
 '@systemfsoftware/effect-cell-types': patch
@@ -12,8 +14,10 @@
 '@systemfsoftware/hex-schema': patch
 '@systemfsoftware/omp-agent-discipline': patch
 '@systemfsoftware/omp-claude-compat': patch
+'@systemfsoftware/omp-typescript-discipline': none
 '@systemfsoftware/oxlint-plugin': patch
 '@systemfsoftware/oxlint-plugin-cell-vocabulary': patch
+'@systemfsoftware/oxlint-plugin-effect-dmmf': none
 '@systemfsoftware/oxlint-plugin-effect-entrypoint': patch
 '@systemfsoftware/oxlint-plugin-effect-schema': patch
 '@systemfsoftware/oxlint-plugin-effect-workflow': patch
@@ -22,7 +26,12 @@
 '@systemfsoftware/oxlint-plugin-test-placement': patch
 '@systemfsoftware/rx-effect': patch
 '@systemfsoftware/storybook-gherkin': patch
+'@systemfsoftware/stryker-js-cli': none
+'@systemfsoftware/stryker-js-mutation-report': none
 '@systemfsoftware/stryker-js-mutation-run': patch
+'@systemfsoftware/stryker-js-plugin-api': none
+'@systemfsoftware/stryker-js-typescript-checker': none
+'@systemfsoftware/stryker-js-vitest-runner': none
 '@systemfsoftware/stryker-plugins': patch
 ---
 
