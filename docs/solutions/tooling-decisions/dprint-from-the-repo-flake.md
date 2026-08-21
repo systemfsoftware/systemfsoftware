@@ -18,7 +18,6 @@ related_components:
   - package.json
   - pnpm-workspace.yaml
   - .github/workflows/reusable-checks.yml
-  - scripts/guards/guard-action-provenance.mjs
 tags:
   - dprint
   - nix
@@ -47,7 +46,7 @@ Deciding criterion: the formatter version the tree is formatted with, obtained w
 
 - **dprint exists only as a flake package.** `flake.nix` exposes `.#dprint` and a dev shell (dprint + node 24 + deno; pnpm is deliberately absent — `packageManager` pins pnpm and corepack resolves it). `bin/dprint` is the single entry point: it takes the first dprint on PATH (dev shell, direnv, CI's `nix build --print-out-paths` store path) and otherwise `nix run`s the flake; with neither, it prints the error message pointing at CONTRIBUTING.md. Never add a `dprint` npm dependency back — the `allowBuilds` entry is gone with it.
 - **Bumping the formatter is a deliberate act.** Change the `version` and per-platform `sha256` in `nix/dprint.nix` (sums from the release notes), then `pnpm format` and inspect the diff — a version move may legitimately reflow the tree, and that diff is the review.
-- **A third-party action was admitted for this.** `cachix/install-nix-action` entered `ALLOWED_THIRD_PARTY` in `guard-action-provenance.mjs` in its own commit (the guard's documented two-commit procedure), because the runner image ships no nix and no GitHub-owned installer exists. The gate job holds `contents: read` only. It beat `DeterminateSystems/nix-installer-action` (installs a vendor distribution of Nix rather than upstream) and `nixbuild/nix-quick-install-action` (smaller ecosystem).
+- **A third-party action was admitted for this.** `cachix/install-nix-action` is allowed because the runner image ships no nix and no GitHub-owned installer exists. The gate job holds `contents: read` only. It beat `DeterminateSystems/nix-installer-action` (installs a vendor distribution of Nix rather than upstream) and `nixbuild/nix-quick-install-action` (smaller ecosystem).
 
 ## Related
 
@@ -55,4 +54,3 @@ Deciding criterion: the formatter version the tree is formatted with, obtained w
 - `bin/dprint` — the one entry point
 - `CONTRIBUTING.md` — Setup section: the flake before lint/format
 - `.github/workflows/reusable-checks.yml` — the gate job installs nix and puts the flake-built dprint on PATH
-- `scripts/guards/guard-action-provenance.mjs` — the admission, in its own commit

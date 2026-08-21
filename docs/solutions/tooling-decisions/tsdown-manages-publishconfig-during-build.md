@@ -53,4 +53,3 @@ Wasting time merging "duplicate" `publishConfig` blocks or assuming they're a bu
 
 - AGENTS.md: "Don't hand-edit package.json#exports on tsdown packages — change tsdown.config.ts."
 - `packages/stryker-js/mutation-run/tsdown.config.ts` — uses `exports: { devExports: '@systemfsoftware/source' }`
-- `scripts/bump-all-minor.mjs` — the version-bump script that would hit this issue via JSON.parse
