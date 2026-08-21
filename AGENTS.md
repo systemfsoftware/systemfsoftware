@@ -16,7 +16,7 @@
   do: export the capability ports a package needs from outside and the service it offers, the way `@effect/platform` exports `FileSystem.FileSystem`; collapse a per-operation projection back into the port it came from and prove the collapse by assignment, since `{ a, b }` is assignable to `{ a }`
   dont: mint a second projection of a port that already exists
   harm: a projection records which members one operation happened to reach for, so exporting it turns internal composition into a surface commitment and forces every consumer to discover and provide N aggregators where one port serves. It escapes silently, because the tag rides the `R` channel of an exported signature and a consumer meets it only at their own call site
-  check: "`pnpm check:exported-wiring`"
+  check: review
 - id: REPO-A4
   title: A type binds only where something forces the constructor
   do: put an interior constraint in the description types where they can express it — a stage brand whose member name is the sentence a diagnostic reports, a marker interface whose property type states the fix — and land it together with the instrument that forces the construction
@@ -34,7 +34,7 @@
 ## Safety
 
 - **REPO-S3** — `repos/` is a vendored third-party reference subtree, read-only — never edit it. Gate: `.claude/hooks/guard-protected-writes.ts`.
-- **REPO-S4** — never hand-edit `package.json#exports` or `publishConfig.exports` on a tsdown package; change `tsdown.config.ts`. Gate: `pnpm check:exports`.
+- **REPO-S4** — never hand-edit `package.json#exports` or `publishConfig.exports` on a tsdown package; change `tsdown.config.ts`. Gate: review.
 - **REPO-O1** — every package under `packages/`, `omp/`, and `agent-plugins/` is owned outright. A ported or forked package's origin is history, never governance: do not defer to an original project, do not contribute changes back, do not preserve mergeability with one, do not label one "upstream". Refactor any such package like first-party code. Only `repos/` is third-party (REPO-S3). Gate: review — the reviewer rejects any mandate to "contribute back", "keep the diff mergeable", or "intended for upstream", and any instruction file that calls an owned package a fork or upstream.
 
 ## Stack
@@ -42,17 +42,17 @@
 Not derivable from the manifests:
 
 - `pnpm --filter <pkg> <cmd>` from the root. Never `cd` into a package, never `npx`.
-- Lint is a per-package `oxlint.config.ts` extending `@systemfsoftware/oxlint-config`. Registration is not delivery — a rule reaches only the packages that opt in. Gate: `pnpm check:lint-coverage`, which also defines the production/tooling boundary — never re-derive it by hand.
+- Lint is a per-package `oxlint.config.ts` extending `@systemfsoftware/oxlint-config`.
 - Mutation runs on pure decisions only, and fails when a `*.property.test.ts` kills no mutant nothing else kills. Opt out with `requireTestContribution: null` in the package's `stryker.config.json`, never by deleting a test. Which files a package mutates is that package's `stryker.config.json` and nothing above it: a filename suffix is not a scoping instrument, because a rule keyed on one never fires on the violation it exists to catch — see `docs/solutions/architecture-patterns/label-routed-rules-are-unfalsifiable.md`.
 
 ## Surface Classes
 
-| Surface              | Examples                                                                                                  | Rule                                                                                                       |
-| -------------------- | --------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **Evaluator**        | `scripts/guards/*.mjs`, `packages/stryker-js/mutation-run/src/test-contribution.ts`, `.github/workflows/` | Its own commit, never shared with the work it judges; gate observed red before and green after.            |
-| **Doctrine**         | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`                                    | Editable, but never an input to a gate. Read `CONSTITUTION.md` before architecture or rule-authoring work. |
-| **Editable**         | Everything else, including `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                         | Edit freely, including the rules that govern you; `CONST-E4` governs loosening one.                        |
-| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                            | `REPO-P1`.                                                                                                 |
+| Surface              | Examples                                                                                                               | Rule                                                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Evaluator**        | `scripts/guards/check-changeset.ts`, `packages/stryker-js/mutation-run/src/test-contribution.ts`, `.github/workflows/` | Its own commit, never shared with the work it judges; gate observed red before and green after.            |
+| **Doctrine**         | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`                                                 | Editable, but never an input to a gate. Read `CONSTITUTION.md` before architecture or rule-authoring work. |
+| **Editable**         | Everything else, including `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                                      | Edit freely, including the rules that govern you; `CONST-E4` governs loosening one.                        |
+| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                                         | `REPO-P1`.                                                                                                 |
 
 ## Directory Map
 
