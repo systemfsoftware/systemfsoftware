@@ -27,7 +27,7 @@ jobs:
       - name: dprint from the flake
         run: echo "$(nix build --no-link --print-out-paths .#dprint)/bin" >> "$GITHUB_PATH"
       # The runner image ships no Deno, and both `typecheck` and `test:types` in
-      # packages/effect-cell-type-tests run a Deno script that regenerates the package's
+      # packages/core/effect/cell/type-tests run a Deno script that regenerates the package's
       # untracked tstyche suite before checking it. Same reason changeset-check.yml and
       # release.yml already carry this step.
       - uses: denoland/setup-deno@v2

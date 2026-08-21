@@ -22,7 +22,7 @@ const WORKFLOW_SUFFIX = '.workflow.ts'
 
 // The rule packages are excluded from the workflow conventions (user instruction);
 // vendored trees are read-only (REPO-S3).
-const EXCLUDED_PREFIXES = ['packages/oxlint-plugins/', 'repos/']
+const EXCLUDED_PREFIXES = ['packages/lint/oxlint/plugins/', 'repos/']
 
 const isExcluded = (path) => EXCLUDED_PREFIXES.some((prefix) => path.startsWith(prefix))
 
@@ -144,8 +144,8 @@ const selftest = () => {
     },
     {
       name: 'rule packages are excluded',
-      candidates: ['packages/oxlint-plugins/effect-workflow/src/rules/x.workflow.ts'],
-      onDisk: ['packages/oxlint-plugins/effect-workflow/src/rules/x.workflow.ts'],
+      candidates: ['packages/lint/oxlint/plugins/cells/effect-workflow/src/rules/x.workflow.ts'],
+      onDisk: ['packages/lint/oxlint/plugins/cells/effect-workflow/src/rules/x.workflow.ts'],
       expectMissing: false,
     },
     {

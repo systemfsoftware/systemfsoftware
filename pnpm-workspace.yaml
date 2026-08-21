@@ -76,13 +76,24 @@ overrides:
   fast-check: ^4
   vite: ^8
 packages:
-  - packages/*
-  - packages/oxlint-plugins/*
-  - packages/stryker-js/*
-  - packages/arethetypeswrong/*
-  - packages/effect-atom/*
+  - packages/core/effect/*
+  - packages/core/effect/atom/*
+  - packages/core/effect/cell/*
+  - packages/core/effect/schema/*
+  - packages/core/effect/filesystem/*
+  - packages/core/effect/rx/*
+  - packages/core/hex/*
+  - packages/testing/specs/gherkin/*
+  - packages/testing/mutation/stryker-js/*
+  - packages/testing/mutation/plugins/*
+  - packages/testing/type-testing/arethetypeswrong/*
+  - packages/lint/oxlint/*
+  - packages/lint/oxlint/plugins/meta/*
+  - packages/lint/oxlint/plugins/testing/*
+  - packages/lint/oxlint/plugins/cells/*
+  - packages/lint/oxlint/plugins/effect/*
+  - packages/toolchain/*
   - omp/packages/*
   - omp/plugins/*
-
 config:
   confirm-modules-purge: false
