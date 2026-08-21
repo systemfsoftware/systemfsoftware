@@ -73,21 +73,7 @@ export async function setup(project: TestProject): Promise<void> {
         '--pack-destination',
         packDir,
       ],
-      {
-        cwd: REPO_ROOT,
-        // Pack read-only: the lane packs a tree turbo already built, so the
-        // packages' `prepack`/`prepare` hooks would only clean-and-rebuild
-        // `dist` mid-gate — a window in which this lane's own precondition and
-        // every concurrent dependent `tsc` can observe a missing `dist`.
-        //
-        // `pnpm pack` must stay the packer: it rewrites `workspace:*` in the
-        // packed manifest to the real version, and `npm pack` leaves the
-        // protocol in place, producing a tarball the container cannot install.
-        // It accepts no `--ignore-scripts` and silently ignores
-        // `npm_config_ignore_scripts` — measured by inode, that form replaced
-        // the files. `--config.ignore-scripts=true` reaches the setting pnpm
-        // actually reads, and leaves `dist` untouched.
-      },
+      { cwd: REPO_ROOT },
     )
   }
   const packed = (await readdir(packDir)).filter((entry) => entry.endsWith('.tgz'))
