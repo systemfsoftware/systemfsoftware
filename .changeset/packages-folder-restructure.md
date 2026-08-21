@@ -1,5 +1,4 @@
 ---
-"@systemfsoftware/all": none
 "@systemfsoftware/arethetypeswrong-cli": none
 "@systemfsoftware/arethetypeswrong-core": none
 "@systemfsoftware/effect-atom": none

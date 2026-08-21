@@ -153,11 +153,8 @@ const main = () => {
   const tarballs = manifest.packed
   note(`packed ${tarballs.length} tarball(s) into ${packDir}`)
 
-  const umbrella = tarballs.find((p) => p.name === '@systemfsoftware/all')
-  if (umbrella === undefined) {
-    console.error('consumer-smoke: @systemfsoftware/all was not packed')
-    process.exit(1)
-  }
+  // consumer-smoke tests the published package tarballs.
+  // @systemfsoftware/all was consolidated into @systemfsoftware/oxlint-config/all preset.
 
   // ── a project that is not this workspace ──────────────────────────────────
   const consumer = mkdtempSync(path.join(tmpdir(), 'systemfsoftware-consumer-'))
@@ -172,20 +169,7 @@ const main = () => {
     return match === null ? undefined : match[1].replace(/['"]/g, '')
   }
 
-  const umbrellaManifest = readTarballManifest(umbrella.tarball)
-  const requiredPeers = Object.entries(umbrellaManifest.peerDependencies ?? {})
-    .filter(([name]) => umbrellaManifest.peerDependenciesMeta?.[name]?.optional !== true)
-  const devDependencies = { '@systemfsoftware/all': `file:${umbrella.tarball}` }
-  for (const [name, spec] of requiredPeers) {
-    const resolved = spec.startsWith('catalog:')
-      ? catalogVersion(name, spec === 'catalog:' ? undefined : spec.slice('catalog:'.length))
-      : spec
-    if (resolved === undefined) {
-      findings.push(`required peer ${name} has spec '${spec}' that no catalog resolves`)
-      continue
-    }
-    devDependencies[name] = resolved
-  }
+  const devDependencies = {}
   // Every tarball is also installed directly, so each package's own published
   // entry points are resolvable: pnpm does not hoist a transitive dependency,
   // so an umbrella install alone cannot prove the libraries are importable.
@@ -216,7 +200,7 @@ const main = () => {
   )
   writeFileSync(
     path.join(consumer, 'oxlint.config.ts'),
-    `import all from '@systemfsoftware/all'\n\nexport default all\n`,
+    `import base from '@systemfsoftware/oxlint-config/base'\n\nexport default base\n`,
   )
   writeFileSync(
     path.join(consumer, 'tsconfig.json'),
@@ -347,7 +331,7 @@ const main = () => {
   } else note(`consumer loads ${baseline.rules} rules (repo loads ${referenceRules[1]} for ${RULE_COUNT_REFERENCE})`)
 
   const bogusConfig =
-    `import all from '@systemfsoftware/all'\n\nexport default {\n  ...all,\n  rules: { ...all.rules, '${BOGUS_RULE}': 'error' },\n}\n`
+    `import base from '@systemfsoftware/oxlint-config/base'\n\nexport default {\n  ...base,\n  rules: { ...base.rules, '${BOGUS_RULE}': 'error' },\n}\n`
   const realConfig = readFileSync(path.join(consumer, 'oxlint.config.ts'), 'utf8')
   writeFileSync(path.join(consumer, 'oxlint.config.ts'), bogusConfig)
   const bogus = lintOnce(consumer)
