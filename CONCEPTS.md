@@ -94,10 +94,6 @@ The npm publish orchestrator the repo used before adopting intent versioning: tr
 
 ## Validation tooling
 
-### check-exports
-
-The script at `scripts/guards/check-exports.mjs` that compares each package's `package.json#exports` paths against the actual `dist/` directory. Catches drift where `exports.types` references a file the `build` script never produces. Runs as `pnpm check:exports`, blocking inside `pnpm check`.
-
 ### attw
 
 `arethetypeswrong` — the type-resolution validator. `attw --pack .` runs against the package tarball the same way npm would install it, validating that `exports` declarations resolve to consistent types across node10 / node16-CJS / node16-ESM / bundler. Catches downstream-facing drift that workspace-local checks miss.
