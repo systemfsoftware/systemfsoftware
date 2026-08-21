@@ -80,3 +80,4 @@ publish pack:    hooks ON  (prepack rebuilds dist)
 
 - [pnpm skips a `.bin` shim whose target is gitignored build output, and never retries](./pnpm-bin-shim-skipped-for-gitignored-build-target.md) — why `prepare` exists at all and must not be deleted; the two docs together draw the install/publish vs analysis context line.
 - [first publish under OIDC trusted publishing](../tooling-decisions/first-publish-under-oidc-trusted-publishing.md) — the second, independent blocker on the same failed release: the publish preflight aborts on packages that have never existed on the registry.
+- [a lifecycle build that runs during install must resolve its compiler by module resolution, never through PATH](./install-time-tool-resolution-must-not-use-path.md) — the third axis of the same lifecycle window: this doc governs when a hook may mutate output, that one governs how a hook locates the tool it runs.
