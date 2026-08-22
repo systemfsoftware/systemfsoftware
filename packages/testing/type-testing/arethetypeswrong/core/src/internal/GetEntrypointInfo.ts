@@ -1,3 +1,4 @@
+import { Effect } from 'effect'
 import ts from 'typescript'
 import type { CheckPackageOptions } from '../CheckPackage.js'
 import type { Package } from '../CreatePackage.js'
@@ -11,7 +12,7 @@ import type {
   ResolutionOption,
 } from '../Types.js'
 import { allBuildTools, getResolutionKinds } from '../Utils.js'
-import { type CompilerHosts, CompilerHostWrapper } from './MultiCompilerHost.js'
+import { type CompilerHost, type CompilerHosts } from './MultiCompilerHost.js'
 
 const extensions = new Set(['.jsx', '.tsx', '.js', '.ts', '.mjs', '.cjs', '.mts', '.cjs'])
 
@@ -132,94 +133,93 @@ function getProxyDirectories(rootDir: string, fs: Package) {
     })
   }
 }
-
-export function getEntrypointInfo(
+export const getEntrypointInfo = (
   packageName: string,
   fs: Package,
   hosts: CompilerHosts,
   options: CheckPackageOptions | undefined,
-): Record<string, EntrypointInfo> {
-  const packageJson: unknown = JSON.parse(fs.readFile(`/node_modules/${packageName}/package.json`))
-  const exportsObject: unknown = Object.getOwnPropertyDescriptor(packageJson, 'exports')?.value
-  let entrypoints = getEntrypoints(fs, exportsObject, options)
-  if (fs.typesPackage) {
-    const typesPackageJson: unknown = JSON.parse(
-      fs.readFile(`/node_modules/${fs.typesPackage.packageName}/package.json`),
-    )
-    const typesExportsObject: unknown = Object.getOwnPropertyDescriptor(typesPackageJson, 'exports')?.value
-    const typesEntrypoints = getEntrypoints(fs, typesExportsObject, options)
-    entrypoints = unique([...entrypoints, ...typesEntrypoints])
-  }
-  const result: Record<string, EntrypointInfo> = {}
-  for (const entrypoint of entrypoints) {
-    const resolutions: Record<ResolutionKind, EntrypointResolutionAnalysis> = {
-      node10: getEntrypointResolution(packageName, hosts.node10, 'node10', entrypoint),
-      'node16-cjs': getEntrypointResolution(packageName, hosts.node16, 'node16-cjs', entrypoint),
-      'node16-esm': getEntrypointResolution(packageName, hosts.node16, 'node16-esm', entrypoint),
-      bundler: getEntrypointResolution(packageName, hosts.bundler, 'bundler', entrypoint),
+): Effect.Effect<Record<string, EntrypointInfo>> =>
+  Effect.gen(function*() {
+    const packageJson: unknown = JSON.parse(fs.readFile(`/node_modules/${packageName}/package.json`))
+    const exportsObject: unknown = Object.getOwnPropertyDescriptor(packageJson, 'exports')?.value
+    let entrypoints = getEntrypoints(fs, exportsObject, options)
+    if (fs.typesPackage) {
+      const typesPackageJson: unknown = JSON.parse(
+        fs.readFile(`/node_modules/${fs.typesPackage.packageName}/package.json`),
+      )
+      const typesExportsObject: unknown = Object.getOwnPropertyDescriptor(typesPackageJson, 'exports')?.value
+      const typesEntrypoints = getEntrypoints(fs, typesExportsObject, options)
+      entrypoints = unique([...entrypoints, ...typesEntrypoints])
     }
-    result[entrypoint] = {
-      subpath: entrypoint,
-      resolutions,
-      hasTypes: Object.values(resolutions).some((r) => r.resolution?.isTypeScript),
-      isWildcard: !!resolutions.bundler.isWildcard,
+    const result: Record<string, EntrypointInfo> = {}
+    for (const entrypoint of entrypoints) {
+      const resolutions: Record<ResolutionKind, EntrypointResolutionAnalysis> = {
+        node10: yield* getEntrypointResolution(packageName, hosts.node10, 'node10', entrypoint),
+        'node16-cjs': yield* getEntrypointResolution(packageName, hosts.node16, 'node16-cjs', entrypoint),
+        'node16-esm': yield* getEntrypointResolution(packageName, hosts.node16, 'node16-esm', entrypoint),
+        bundler: yield* getEntrypointResolution(packageName, hosts.bundler, 'bundler', entrypoint),
+      }
+      result[entrypoint] = {
+        subpath: entrypoint,
+        resolutions,
+        hasTypes: Object.values(resolutions).some((r) => r.resolution?.isTypeScript),
+        isWildcard: !!resolutions.bundler.isWildcard,
+      }
     }
-  }
-  return result
-}
-function getEntrypointResolution(
+    return result
+  })
+
+const getEntrypointResolution = (
   packageName: string,
-  host: CompilerHostWrapper,
+  host: CompilerHost,
   resolutionKind: ResolutionKind,
   entrypoint: string,
-): EntrypointResolutionAnalysis {
-  if (entrypoint.includes('*')) {
-    return { name: entrypoint, resolutionKind, isWildcard: true }
-  }
-  const moduleSpecifier = packageName + entrypoint.substring(1) // remove leading . before slash
-  const importingFileName = resolutionKind === 'node16-esm' ? '/index.mts' : '/index.ts'
-  const resolutionMode = resolutionKind === 'node16-esm'
-    ? ts.ModuleKind.ESNext
-    : resolutionKind === 'node16-cjs'
-    ? ts.ModuleKind.CommonJS
-    : undefined
-  const resolution = tryResolve()
-  const implementationResolution = tryResolve(/*noDtsResolution*/ true)
-  const files = resolution
-    ? host
-      .createPrimaryProgram(resolution.fileName)
-      .getSourceFiles()
-      .map((f) => f.fileName)
-    : undefined
-
-  return {
-    name: entrypoint,
-    resolutionKind,
-    resolution,
-    implementationResolution,
-    files,
-  }
-
-  function tryResolve(noDtsResolution?: boolean): Resolution | undefined {
-    const { resolution, trace } = host.resolveModuleName(
-      moduleSpecifier,
-      importingFileName,
-      resolutionMode,
-      noDtsResolution,
-    )
-    const fileName = resolution.resolvedModule?.resolvedFileName
-    if (!fileName) {
-      return undefined
+): Effect.Effect<EntrypointResolutionAnalysis> =>
+  Effect.gen(function*() {
+    if (entrypoint.includes('*')) {
+      return { name: entrypoint, resolutionKind, isWildcard: true }
     }
+    const moduleSpecifier = packageName + entrypoint.substring(1)
+    const importingFileName = resolutionKind === 'node16-esm' ? '/index.mts' : '/index.ts'
+    const resolutionMode = resolutionKind === 'node16-esm'
+      ? ts.ModuleKind.ESNext
+      : resolutionKind === 'node16-cjs'
+      ? ts.ModuleKind.CommonJS
+      : undefined
+    const resolution = tryResolve()
+    const implementationResolution = tryResolve(true)
+    const files = resolution
+      ? (yield* host.createPrimaryProgram(resolution.fileName)).getSourceFiles().map((f) => f.fileName)
+      : undefined
 
     return {
-      fileName,
-      isJson: resolution.resolvedModule.extension === ts.Extension.Json,
-      isTypeScript: ts.hasTSFileExtension(resolution.resolvedModule.resolvedFileName),
-      trace,
+      name: entrypoint,
+      resolutionKind,
+      resolution,
+      implementationResolution,
+      files,
     }
-  }
-}
+
+    function tryResolve(noDtsResolution?: boolean): Resolution | undefined {
+      const { resolution, trace } = host.resolveModuleName(
+        moduleSpecifier,
+        importingFileName,
+        resolutionMode,
+        noDtsResolution,
+      )
+      const fileName = resolution.resolvedModule?.resolvedFileName
+      if (!fileName) {
+        return undefined
+      }
+
+      return {
+        fileName,
+        isJson: resolution.resolvedModule.extension === ts.Extension.Json,
+        isTypeScript: ts.hasTSFileExtension(resolution.resolvedModule.resolvedFileName),
+        trace,
+      }
+    }
+  })
 function unique<T>(array: readonly T[]): T[] {
   return array.filter((value, index) => array.indexOf(value) === index)
 }

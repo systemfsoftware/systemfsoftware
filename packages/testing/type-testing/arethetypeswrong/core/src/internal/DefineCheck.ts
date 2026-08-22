@@ -1,3 +1,4 @@
+import type { Effect } from 'effect'
 import type { Package } from '../CreatePackage.js'
 import type { Analysis, Problem, ResolutionKind, ResolutionOption } from '../Types.js'
 import type { CompilerHosts } from './MultiCompilerHost.js'
@@ -38,18 +39,29 @@ export type Serializable =
 export interface AnyCheck {
   name: string
   enumerateFiles?: boolean
-  // Method syntax, not a property: parameter positions are bivariant here, so a
-  // check declaring its own dependency tuple stays assignable to this erased
-  // supertype without an `any` standing in for it.
   dependencies(context: CheckDependenciesContext<boolean>): EnsureSerializable<readonly unknown[]>
-  execute(dependencies: readonly unknown[], context: CheckExecutionContext): Problem[] | Problem | undefined
+  gather?(dependencies: readonly unknown[], context: CheckExecutionContext): Effect.Effect<unknown>
+  execute(
+    dependencies: readonly unknown[],
+    context: CheckExecutionContext,
+    gathered: unknown,
+  ): Problem[] | Problem | undefined
 }
 
-export function defineCheck<const Dependencies extends readonly unknown[], EnumerateFiles extends boolean>(options: {
+export function defineCheck<
+  const Dependencies extends readonly unknown[],
+  EnumerateFiles extends boolean,
+  Gathered = undefined,
+>(options: {
   name: string
   enumerateFiles?: EnumerateFiles
   dependencies: (context: CheckDependenciesContext<EnumerateFiles>) => EnsureSerializable<Dependencies>
-  execute: (dependencies: Dependencies, context: CheckExecutionContext) => Problem[] | Problem | undefined
+  gather?: (dependencies: Dependencies, context: CheckExecutionContext) => Effect.Effect<Gathered>
+  execute: (
+    dependencies: Dependencies,
+    context: CheckExecutionContext,
+    gathered: Gathered,
+  ) => Problem[] | Problem | undefined
 }) {
   return options
 }

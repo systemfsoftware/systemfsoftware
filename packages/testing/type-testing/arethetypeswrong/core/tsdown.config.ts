@@ -46,7 +46,6 @@ export default defineConfig({
       '@loaderkit/resolve',
       'cjs-module-lexer',
       'fflate',
-      'lru-cache',
       'semver',
       'validate-npm-package-name',
     ],
