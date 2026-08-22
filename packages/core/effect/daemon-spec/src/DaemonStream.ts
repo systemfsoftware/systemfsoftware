@@ -1,4 +1,5 @@
 import { WorkerTypeId } from './Brands.js'
+import { StreamLoopTag } from './internal/LoopTags.js'
 
 type WorkerRecord<TICK, THOOKS, CHILD, LCK, L> = {
   readonly [WorkerTypeId]: WorkerTypeId
@@ -24,10 +25,10 @@ export const stream = <
     readonly child?: CHILD
     readonly lock: LCK
   },
->(opts: O): WorkerRecord<TICK, THOOKS, CHILD, LCK, { readonly _tag: 'Stream'; readonly stream: S }> => ({
+>(opts: O): WorkerRecord<TICK, THOOKS, CHILD, LCK, StreamLoopTag & { readonly stream: S }> => ({
   [WorkerTypeId]: WorkerTypeId,
   name: opts.name,
-  loop: { _tag: 'Stream' as const, stream: opts.stream },
+  loop: { ...StreamLoopTag, stream: opts.stream },
   child: opts.child ?? {},
   tick: opts.tick,
   tickHooks: opts.tickHooks ?? {},

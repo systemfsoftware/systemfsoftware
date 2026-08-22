@@ -12,6 +12,7 @@ import {
   Scope,
   Stream,
 } from 'effect'
+import type { PollLoop, StreamLoop, SubscriptionLoop } from '../DaemonSpec.schema.js'
 
 type DaemonHealthShape = {
   readonly name: string
@@ -26,26 +27,11 @@ type TickPolicyHooksShape = {
   readonly trackDuration?: Metric.Histogram<Duration.Duration>
 }
 
-type PollLoopShape<E, R> = {
-  readonly _tag: 'Poll'
-  readonly gate: Effect.Effect<Option.Option<Effect.Effect<void, E, R>>, E, R>
-  readonly interval: Duration.Input
-}
-
-type StreamLoopShape<E, R> = {
-  readonly _tag: 'Stream'
-  readonly stream: Stream.Stream<unknown, E, R>
-}
-
-type SubscriptionLoopShape<E, R> = {
-  readonly _tag: 'Subscription'
-  readonly acquire: Effect.Effect<void, E, R>
-}
 type WorkerShape<_W, E, R> = {
   readonly name: string
   readonly tick: { readonly tickTimeout: Duration.Input; readonly spanName?: string | undefined }
   readonly tickHooks: TickPolicyHooksShape
-  readonly loop: PollLoopShape<E, R> | StreamLoopShape<E, R> | SubscriptionLoopShape<E, R>
+  readonly loop: PollLoop<E, R> | StreamLoop<E, R> | SubscriptionLoop<E, R>
 }
 
 const applySpanAttributes = (hooks: TickPolicyHooksShape) => {
@@ -129,7 +115,7 @@ const wrapSpan = <_WE, EEff, R, W extends { readonly name: string }>(
 
 const buildPollLoop = <E, R, W extends WorkerShape<unknown, E, R>>(
   worker: W,
-  loop: PollLoopShape<E, R>,
+  loop: PollLoop<E, R>,
   health: DaemonHealthShape,
   readyGauge: Metric.Gauge<number>,
 ): Effect.Effect<void, E | Cause.TimeoutError, R> => {
@@ -145,7 +131,7 @@ const propagateExit = <A, Err>(exit: Exit.Exit<A, Err>): Effect.Effect<void, Err
 
 const buildStreamLoop = <E, R, W extends WorkerShape<unknown, E, R>>(
   worker: W,
-  loop: StreamLoopShape<E, R>,
+  loop: StreamLoop<E, R>,
   health: DaemonHealthShape,
   readyGauge: Metric.Gauge<number>,
 ): Effect.Effect<void, E | Cause.TimeoutError, R | Scope.Scope> => {
@@ -168,7 +154,7 @@ const buildStreamLoop = <E, R, W extends WorkerShape<unknown, E, R>>(
 
 const buildSubscriptionLoop = <E, R, W extends WorkerShape<unknown, E, R>>(
   worker: W,
-  loop: SubscriptionLoopShape<E, R>,
+  loop: SubscriptionLoop<E, R>,
   health: DaemonHealthShape,
   readyGauge: Metric.Gauge<number>,
 ): Effect.Effect<void, E | Cause.TimeoutError, R> => {
