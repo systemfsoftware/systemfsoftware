@@ -20,16 +20,23 @@ export type MakeBodyKind = ESTree.ArrowFunctionExpression | FunctionLike
 
 /**
  * A located `Workflow.make(...)` decision boundary. `resolvedBody` is the
- * argument body when the argument is a function written inline or a
+ * decider body when the decider is a function written inline or a
  * module-scope function reference resolved in the same file; it is `null`
  * when the body cannot be located from this file's AST (an imported
- * decision, a non-function argument). A `null` body is a finding the caller
- * reports, never a silent skip.
+ * decision, a call with no function argument at all). A `null` body is a
+ * finding the caller reports, never a silent skip.
+ *
+ * `commandArgument` is the schema-class position — the first construction
+ * argument, after the `call`/`apply` shift. It is a slot rather than a shape
+ * because that is what the signature says: `make` takes the command first and
+ * the decider second. It is `null` when the call passes no such argument, which
+ * the compiler already refuses; a rule reading it stays silent there rather
+ * than reporting a second time.
  */
 export interface MakeBoundary {
   readonly makeCall: ESTree.CallExpression
-  readonly argument: ESTree.Node | undefined
   readonly resolvedBody: MakeBodyKind | null
+  readonly commandArgument: ESTree.Node | null
 }
 
 interface ScopeLike {
@@ -198,27 +205,49 @@ export const collectMakeBoundaries = (context: Context): readonly MakeBoundary[]
     if (!isCallExpression(node)) return
     const origin = resolveImportOrigin(node.callee, context.sourceCode.getScope)
     if (origin === null || !isMakeBoundaryOrigin(origin)) return
-    // The construction is the call that INVOKES the make function. A
-    // `make.bind(...)` call is a partial application - its arguments are the
-    // this-bound target, not the decision body; the construction is the later
-    // call of the bound value. `make.call(...)` / `make.apply(...)` invoke
-    // make directly but carry the construction argument one slot later.
+    // The construction is the call that INVOKES the make function, and its own
+    // argument list is not always the call's. `make.bind(...)` is a partial
+    // application - its arguments are the this-bound target, not the decision body -
+    // so the construction is the later call of the bound value. `make.call(this, a, b)`
+    // invokes make directly and shifts every construction argument one slot later.
+    // `make.apply(this, [a, b])` invokes it too, but puts the whole list inside an
+    // array: reading slot 1 there yields the array, so the command position resolved
+    // to an ArrayExpression the rules cannot classify and the body search found no
+    // function - both layers silently dark on a real construction.
     const callee = node.callee
-    let argument: ESTree.Node | undefined = node.arguments[0]
+    let constructionArguments: readonly (ESTree.Node | null)[] = node.arguments
     if (isMemberExpression(callee) && !callee.computed && callee.property.type === 'Identifier') {
       const memberName = callee.property.name
       if (memberName === 'bind') return
-      if (memberName === 'call' || memberName === 'apply') argument = node.arguments[1]
-    }
-    let resolvedBody: MakeBodyKind | null = null
-    if (argument !== undefined) {
-      if (isArrowFunction(argument) || isFunctionLike(argument)) {
-        resolvedBody = argument
-      } else if (isIdentifier(argument)) {
-        resolvedBody = followIdentifier(argument, context.sourceCode.getScope, 0)
+      if (memberName === 'call') constructionArguments = node.arguments.slice(1)
+      if (memberName === 'apply') {
+        const list = node.arguments[1]
+        // A spread or a non-literal list is unreadable from the AST; there is no
+        // argument list to judge, so the boundary carries none rather than guessing.
+        constructionArguments = list !== undefined && list.type === 'ArrayExpression' ? list.elements : []
       }
     }
-    boundaries.push({ makeCall: node, argument, resolvedBody })
+    // The decider is found by SHAPE, never by slot index: `make` takes the
+    // command schema class first and the decider second, and a locator pinned
+    // to one slot resolves the class, yields no body, and turns every
+    // body-scoped rule silently dark. Search forward and take the first
+    // argument that resolves to a function.
+    let resolvedBody: MakeBodyKind | null = null
+    for (const argument of constructionArguments) {
+      if (argument === null) continue
+      if (isArrowFunction(argument) || isFunctionLike(argument)) {
+        resolvedBody = argument
+        break
+      }
+      if (isIdentifier(argument)) {
+        const followed = followIdentifier(argument, context.sourceCode.getScope, 0)
+        if (followed !== null) {
+          resolvedBody = followed
+          break
+        }
+      }
+    }
+    boundaries.push({ makeCall: node, resolvedBody, commandArgument: constructionArguments[0] ?? null })
   })
   return boundaries
 }

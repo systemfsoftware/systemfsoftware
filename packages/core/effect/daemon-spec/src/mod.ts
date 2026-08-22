@@ -16,6 +16,7 @@ export {
 } from './DaemonPolicy.schema.js'
 export * from './DaemonReporterAdapter.js'
 export * from './DaemonSpec.schema.js'
+export { PollLoopTag, StreamLoopTag, SubscriptionLoopTag } from './internal/LoopTags.js'
 import type { DaemonHealth, SupervisorHealth } from './DaemonHealth.schema.js'
 import { MaxChildren } from './DaemonPolicy.schema.js'
 import type { ChildPolicyConfig, TickPolicyConfig } from './DaemonPolicy.schema.js'

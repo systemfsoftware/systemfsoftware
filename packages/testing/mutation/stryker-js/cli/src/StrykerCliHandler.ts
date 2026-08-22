@@ -65,10 +65,12 @@ const optional = <A>(option: Flag.Flag<A>) => Flag.optional(option)
 /**
  * Commander left an omitted flag out of the parsed options; `deepMerge` treats
  * `undefined` as absent but an explicit `false` would override a config-file
- * `true`. The framework's boolean defaults to `false` when absent, so map that
- * back to `undefined` (KTD4).
+ * `true`. `Flag.optional` yields `Option.none` when the flag is absent and
+ * `Option.some(false)` for an explicit `--no-x`, so both map back to
+ * `undefined` and leave the config-file default in force (KTD4).
  */
-const absentWhenFalse = (value: boolean): boolean | undefined => value ? true : undefined
+const absentWhenFalse = (value: Option.Option<boolean>): boolean | undefined =>
+  Option.isSome(value) && value.value ? true : undefined
 
 const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'off'] as const
 const LOG_LEVEL_LOOKUP: Record<string, true> = {
@@ -110,17 +112,17 @@ const runOptions = {
       Flag.map(splitOnComma),
       optional,
     ),
-  ignoreStatic: Flag.map(Flag.boolean('ignoreStatic'), absentWhenFalse).pipe(
+  ignoreStatic: Flag.map(optional(Flag.boolean('ignoreStatic')), absentWhenFalse).pipe(
     Flag.withDescription(
       'Ignore static mutants. Static mutants are mutants which are only executed during the loading of a file.',
     ),
   ),
-  incremental: Flag.map(Flag.boolean('incremental'), absentWhenFalse).pipe(
+  incremental: Flag.map(optional(Flag.boolean('incremental')), absentWhenFalse).pipe(
     Flag.withDescription(
       "Enable 'incremental mode'. Stryker will store results in a file and use that file to speed up the next --incremental run",
     ),
   ),
-  allowEmpty: Flag.map(Flag.boolean('allowEmpty'), absentWhenFalse).pipe(
+  allowEmpty: Flag.map(optional(Flag.boolean('allowEmpty')), absentWhenFalse).pipe(
     Flag.withDescription(
       'Allows stryker to exit without any errors in cases where no tests are found',
     ),
@@ -130,7 +132,7 @@ const runOptions = {
       Flag.withDescription('Specify the file to use for incremental mode.'),
       optional,
     ),
-  force: Flag.map(Flag.boolean('force'), absentWhenFalse).pipe(
+  force: Flag.map(optional(Flag.boolean('force')), absentWhenFalse).pipe(
     Flag.withDescription(
       'Run all mutants, even if --incremental is provided and an incremental file exists. Can be used to force a rebuild of the incremental file.',
     ),
@@ -162,7 +164,7 @@ const runOptions = {
       ),
       optional,
     ),
-  dryRunOnly: Flag.map(Flag.boolean('dryRunOnly'), absentWhenFalse).pipe(
+  dryRunOnly: Flag.map(optional(Flag.boolean('dryRunOnly')), absentWhenFalse).pipe(
     Flag.withDescription(
       'Execute the initial test run only, without doing actual mutation testing. Doing a dry run only can be used to test that StrykerJS can run your test setup, for example, in CI pipelines.',
     ),
@@ -264,7 +266,7 @@ const runOptions = {
       Flag.map(parseConcurrency),
       optional,
     ),
-  disableBail: Flag.map(Flag.boolean('disableBail'), absentWhenFalse).pipe(
+  disableBail: Flag.map(optional(Flag.boolean('disableBail')), absentWhenFalse).pipe(
     Flag.withDescription(
       'Force the test runner to keep running tests, even when a mutant is already killed.',
     ),
@@ -290,7 +292,7 @@ const runOptions = {
       ),
       optional,
     ),
-  inPlace: Flag.map(Flag.boolean('inPlace'), absentWhenFalse).pipe(
+  inPlace: Flag.map(optional(Flag.boolean('inPlace')), absentWhenFalse).pipe(
     Flag.withDescription(
       'Determines whether or not Stryker should mutate your files in place. Note: mutating your files in place is generally not needed for mutation testing, unless you have a dependency in your project that is really dependent on the file locations (like "app-root-path" for example).\nWhen `true`, Stryker will override your files, but it will keep a copy of the originals in the temp directory (using `tempDirName`) and it will place the originals back after it is done. Also with `true` the `ignorePatterns` has no effect any more.\nWhen `false` (default) Stryker will work in the copy of your code inside the temp directory.',
     ),
@@ -310,7 +312,7 @@ const runOptions = {
       Flag.map(parseCleanDirOption),
       optional,
     ),
-  survivors: Flag.map(Flag.boolean('survivors'), absentWhenFalse).pipe(
+  survivors: Flag.map(optional(Flag.boolean('survivors')), absentWhenFalse).pipe(
     Flag.withDescription(
       "Re-run only the mutants that survived a previous run. Admits against the previous run's mutation report (the `survivorsPriorReport` config option, default `reports/mutation-report.json`) and re-tests exactly the survivor set. Exits 2 with a remediation naming a full run when the report is missing, drifted, or the configuration changed; exits 0 with a null score when the report has no survivors.",
     ),
@@ -327,7 +329,7 @@ const runConfig = {
 }
 
 const rootConfig = {
-  llms: Flag.map(Flag.boolean('llms'), absentWhenFalse).pipe(
+  llms: Flag.map(optional(Flag.boolean('llms')), absentWhenFalse).pipe(
     Flag.withDescription(
       'Print the agent-facing command manifest as one JSON object on stdout: every option, alias, kind, default, allowed value set and description, plus the subcommands and positional arguments, walked from the command descriptors.',
     ),

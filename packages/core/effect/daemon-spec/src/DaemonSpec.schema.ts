@@ -1,6 +1,7 @@
 import type { Cause, Duration, Effect, Metric, Option, Schedule, Stream } from 'effect'
 import type { DynamicSpecTypeId, SupervisorTypeId, WorkerTypeId } from './Brands.js'
 import type { ChildPolicyConfig, Intensity, MaxChildren, TickPolicyConfig } from './DaemonPolicy.schema.js'
+import type { PollLoopTag, StreamLoopTag, SubscriptionLoopTag } from './internal/LoopTags.js'
 
 export type LockConfig =
   | { mode: 'none' }
@@ -37,19 +38,16 @@ export interface ReporterPolicyHooks {
   readonly onExhausted?: (cause: Cause.Cause<never>) => Effect.Effect<void>
 }
 
-export type PollLoop<E, R> = {
-  readonly _tag: 'Poll'
+export interface PollLoop<E, R> extends PollLoopTag {
   readonly gate: Effect.Effect<Option.Option<Effect.Effect<void, E, R>>, E, R>
   readonly interval: Duration.Input
 }
 
-export type StreamLoop<E, R> = {
-  readonly _tag: 'Stream'
+export interface StreamLoop<E, R> extends StreamLoopTag {
   readonly stream: Stream.Stream<unknown, E, R>
 }
 
-export type SubscriptionLoop<E, R> = {
-  readonly _tag: 'Subscription'
+export interface SubscriptionLoop<E, R> extends SubscriptionLoopTag {
   readonly acquire: Effect.Effect<void, E, R>
 }
 

@@ -1,4 +1,5 @@
 import type { Result } from 'effect/Result'
+import type * as Schema from 'effect/Schema'
 
 /**
  * The nominal brand a workflow carries. `Workflow.make` is the only door that applies it,
@@ -42,11 +43,6 @@ export interface UntaggedError {
     'this error carries no _tag the consumer can dispatch on; declare it as an S.TaggedError'
 }
 
-/** The shape an error channel must have: a tag the consumer dispatches on. */
-export interface Tagged {
-  readonly _tag: string
-}
-
 /**
  * A decider whose channels are both inhabited, or the marker naming which channel is not.
  *
@@ -62,18 +58,52 @@ export type Workflow<Command, Decision, DecisionError> = [Decision] extends [nev
   : ((command: Command) => Result<Decision, DecisionError>) & WorkflowBrand
 
 /**
- * `unknown` when both channels are inhabited and the error carries a tag, so the intersection in
- * {@link make} collapses to the plain `Result` and neither inference nor the authoring surface
- * changes. Otherwise the marker the author must satisfy, which they cannot, which is the point.
+ * `unknown` when the error channel carries a tag a consumer can dispatch on, the {@link UntaggedError}
+ * marker otherwise. Two steps, both load-bearing: `'_tag' extends keyof E` asks whether the key is
+ * there, and `[E['_tag']] extends [string]` asks whether what it holds is dispatchable. Key presence
+ * alone admits `_tag: number`, `_tag?: string` and a `_tag()` method — none of which `Match.tag` can
+ * dispatch on, which is exactly what the marker claims to refuse.
+ *
+ * Both steps read the tag through `keyof` and an indexed access rather than declaring a `_tag`
+ * member, which is why the erased `Tagged` interface cannot come back: stating the requirement as a
+ * shape would write the very member this repo forbids.
  */
-export type Inhabited<Decision, DecisionError> = [Decision] extends [never] ? UninhabitedDecision
-  : [DecisionError] extends [never] ? UninhabitedError
-  : [DecisionError] extends [Tagged] ? unknown
+type DispatchableTag<E> = '_tag' extends keyof E ? [E['_tag']] extends [string] ? unknown : UntaggedError
   : UntaggedError
 
 /**
- * Builds a workflow, refusing an uninhabited or untagged channel at this call rather than at
+ * `unknown` when both channels are inhabited and the error carries a dispatchable tag, so the
+ * intersection in {@link make} collapses to the plain `Result` and neither inference nor the
+ * authoring surface changes. Otherwise the marker the author must satisfy, which they cannot, which
+ * is the point.
+ */
+export type Inhabited<Decision, DecisionError> = [Decision] extends [never] ? UninhabitedDecision
+  : [DecisionError] extends [never] ? UninhabitedError
+  : DispatchableTag<DecisionError>
+
+/**
+ * Builds a workflow from the command's schema class and a decider over that class's
+ * instance type, refusing an uninhabited or untagged channel at this call rather than at
  * whoever first calls the result — which for a workflow nothing calls yet is never.
+ *
+ * The command is constrained on the **value**, not on a type parameter inferred from the
+ * decider's parameter. That is the whole mechanism. Any constraint on such a parameter is a
+ * structural predicate, and TypeScript cannot say "this type came from a class declaration"
+ * — so a marker placed there is a property, every property is declarable, and
+ * `interface Fake extends Marker {}` satisfies it. A declared type produces no value, so it
+ * cannot reach an argument position at all: there is no marker to smuggle because there is
+ * no marker.
+ *
+ * The three parameters mirror `Schema.Class`'s own bound exactly, and that is load-bearing.
+ * `Class<Self, S, Inherited>` places `S` in both covariant (`S["Type"]`) and contravariant
+ * (`S["fields"]`) positions, so it is invariant in `S`: every *fixed* spelling —
+ * `Class<unknown, Struct<Struct.Fields>, unknown>` and its variants — rejects real command
+ * classes. Generic over `S` accepts them and still refuses a `Struct`, which lacks
+ * `identifier` and `extend`. `Class<any, any, any>` also works and is banned here.
+ *
+ * `Schema.TaggedClass` returns this same `Class` interface, so one constraint covers both
+ * factories with no union. The import is type-only: this package gains no runtime dependency
+ * on Effect Schema, and `make` stays the identity function it always was.
  *
  * The markers ride the parameter function's return type, not the parameter as `Workflow<C, D, E>`:
  * a conditional type in parameter position resolves `D` and `E` to `unknown` and the markers become
@@ -88,15 +118,22 @@ export type Inhabited<Decision, DecisionError> = [Decision] extends [never] ? Un
  * The narrowing goes through an assertion signature rather than an `as` cast: every narrowing
  * assertion trips `typescript(no-unsafe-type-assertion)`, and a suppression comment would hide the
  * one place this file could lie. It is sound rather than merely permitted — with both channels
- * inhabited `Workflow<C, D, E>` is `(command: C) => Result<D, E>` carrying the {@link WorkflowBrand}
- * conjunct, and otherwise the return type is a marker with no call signature, so the value handed
- * back is unobservable through it. The brand is applied here and nowhere else: the assertion adds
- * no runtime property, so `make` stays the identity function it always was, yet a value that did
- * not pass through this door fails the conjunct wherever a decision is run.
+ * inhabited `Workflow<Self, D, E>` is `(command: Self) => Result<D, E>` carrying the
+ * {@link WorkflowBrand} conjunct, and otherwise the return type is a marker with no call
+ * signature, so the value handed back is unobservable through it. The brand is applied here and
+ * nowhere else: the assertion adds no runtime property, yet a value that did not pass through this
+ * door fails the conjunct wherever a decision is run.
  */
-export const make = <C, D, E>(
-  decide: (command: C) => Result<D, E> & Inhabited<D, E>,
-): Workflow<C, D, E> => {
+export const make = <
+  Self,
+  S extends Schema.Constraint & { readonly fields: Schema.Struct.Fields },
+  Inherited,
+  D,
+  E,
+>(
+  _command: Schema.Class<Self, S, Inherited>,
+  decide: (command: Self) => Result<D, E> & Inhabited<D, E>,
+): Workflow<Self, D, E> => {
   assertWorkflow(decide)
   return decide
 }

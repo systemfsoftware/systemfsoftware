@@ -12,17 +12,22 @@
  * from `@effect/cli`-parsed values. The exported type therefore carries the
  * fields' real types rather than the schema's `any`, so consumers (the
  * executor's `Match.tag` arms) stay typed; the two must not drift into a
- * decode path. The union is spelled as two lone member aliases because an
- * inline tagged union would itself be flagged by `no-manual-tag-member`.
+ * decode path. The types are derived from the named variant schemas instead —
+ * `Omit` swaps each `S.Any` field for its real type — so the `_tag`
+ * discriminants come from `S.TaggedStruct` rather than a hand-declared member.
  */
 import type { ManifestRendered } from '@systemfsoftware/stryker-js-mutation-run/run-event'
 import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as S from 'effect/Schema'
 
-export const CliRequest = S.Union([
-  S.TaggedStruct('run', { options: S.Any, survivors: S.Boolean }),
-  S.TaggedStruct('llms', { document: S.Any }),
-])
-export type RunRequest = { readonly _tag: 'run'; readonly options: PartialStrykerOptions; readonly survivors: boolean }
-export type LlmsRequest = { readonly _tag: 'llms'; readonly document: ManifestRendered }
+const RunRequestSchema = S.TaggedStruct('run', { options: S.Any, survivors: S.Boolean })
+const LlmsRequestSchema = S.TaggedStruct('llms', { document: S.Any })
+
+export const CliRequest = S.Union([RunRequestSchema, LlmsRequestSchema])
+export type RunRequest = Omit<typeof RunRequestSchema['Type'], 'options'> & {
+  readonly options: PartialStrykerOptions
+}
+export type LlmsRequest = Omit<typeof LlmsRequestSchema['Type'], 'document'> & {
+  readonly document: ManifestRendered
+}
 export type CliRequest = RunRequest | LlmsRequest

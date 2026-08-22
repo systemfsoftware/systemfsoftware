@@ -7,7 +7,7 @@ import * as Layer from 'effect/Layer'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
 import {
-  type Admitted,
+  Admitted,
   decide as decideFixture,
   type Decoded,
   type Refused,
@@ -257,7 +257,7 @@ Feature('Applying a phase description')
               trace.push('decode')
               return Result.succeed({ length: 0 })
             }
-            const tracedDecide: Cell.DecidePhase<Bag> = tracedDecideFixture(trace)
+            const tracedDecide: Cell.DecidePhase<Bag> = tracedDecideFixture(trace, new Admitted({ length: 0 }))
             const tracedEncode: Cell.EncodePhase<Bag> = () => {
               trace.push('encode')
               return { line: 'declared' }

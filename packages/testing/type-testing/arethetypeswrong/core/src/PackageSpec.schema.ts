@@ -9,3 +9,12 @@ export const ParsedPackageSpecSchema = Schema.Struct({
   version: Schema.String,
 })
 export type ParsedPackageSpec = Schema.Schema.Type<typeof ParsedPackageSpecSchema>
+
+/**
+ * Refusal a specifier parse returns: the specifier named no valid package, or
+ * carried a version that was neither an exact version nor a range.
+ */
+export class PackageSpecParseError extends Schema.TaggedError<PackageSpecParseError>()(
+  'PackageSpecParseError',
+  { message: Schema.String },
+) {}
