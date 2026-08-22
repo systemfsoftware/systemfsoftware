@@ -26,6 +26,13 @@ const failedIndexAddressesAChild = (input: {
 }): boolean => input.failedIndex < input.totalChildren
 
 /**
+ * The message the cross-field filter reports. One binding, referenced by the filter and
+ * by the law that asserts on it: a second copy would let the law pass against a message
+ * the schema no longer produces, which is the whole failure the law exists to catch.
+ */
+const BOUND_MESSAGE = 'failedIndex must be < totalChildren'
+
+/**
  * The command's field map and cross-field check, named so the class below extends a binding
  * rather than an inline factory call. An anonymous base adds a new `ae-forgotten-export`
  * `*_base` warning to the committed API report, which this package fixes at the source
@@ -38,7 +45,7 @@ const DecideInputBase = Schema.Struct({
   exitSuccess: Schema.Boolean,
   intensityExceeded: Schema.Boolean,
 }).pipe(
-  Schema.check(Schema.makeFilter(failedIndexAddressesAChild, { message: 'failedIndex must be < totalChildren' })),
+  Schema.check(Schema.makeFilter(failedIndexAddressesAChild, { message: BOUND_MESSAGE })),
 )
 
 /**
@@ -49,8 +56,6 @@ const DecideInputBase = Schema.Struct({
  */
 export class DecideInput extends Schema.Class<DecideInput>('DecideInput')(DecideInputBase) {}
 
-/** The filter's message, named at. */
-const BOUND_MESSAGE = 'failedIndex must be < totalChildren'
 const OVERSHOOT = 8
 
 if (import.meta.vitest !== void 0) {
