@@ -1,23 +1,42 @@
 # @systemfsoftware/omp-claude-compat
 
-OMP Claude Code compatibility: dispatch .claude/settings.json hooks + inject CLAUDE.md @-references
+Claude Code compatibility layer for Oh My Pi.
 
-## Install
+Allows Oh My Pi agents to seamlessly execute `.claude/settings.json` hook configurations and resolve `CLAUDE.md` `@-references`.
 
-```sh
-pnpm add @systemfsoftware/omp-claude-compat '@effect/platform-node@catalog:' '@oh-my-pi/pi-coding-agent@catalog:' 'effect@4.0.0-rc.108'
+## Features
+
+- **Hook Dispatcher:** Executes user-defined pre/post command lifecycle hooks from `.claude/settings.json`.
+- **Instruction Injection:** Dynamically parses and injects linked markdown references directly into prompt context.
+- **Non-Blocking Runtime:** Integrates with Effect's execution loop while keeping initial plugin registration instantaneous.
+
+## Installation
+
+Add the extension to your Oh My Pi configuration:
+
+```json
+{
+  "plugins": [
+    "@systemfsoftware/omp-claude-compat"
+  ]
+}
 ```
 
-Those are peer dependencies: this package declares them but does not install them, so one copy is shared with the rest of your project.
+Or install manually via package manager:
 
-## Entry points
+```bash
+pnpm add @systemfsoftware/omp-claude-compat
+```
 
-- `@systemfsoftware/omp-claude-compat`
+## How It Works
 
-## API
+- **Configuration Discovery:** Automatically locates `.claude/settings.json` at project root and binds relevant hook handlers to corresponding agent lifecycle events.
+- **File Reference Resolving:** Matches `@path/to/file` directives in instructions and substitutes live file contents at execution time.
 
-The public surface is generated from the source and versioned with the package: [`etc/omp-claude-compat.api.md`](./etc/omp-claude-compat.api.md).
+## API Reference
+
+The exported TypeScript definitions are published with the package: [`etc/omp-claude-compat.api.md`](./etc/omp-claude-compat.api.md).
 
 ## License
 
-Apache-2.0. Part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware).
+Apache-2.0
