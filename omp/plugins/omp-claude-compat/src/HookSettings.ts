@@ -1,5 +1,5 @@
 import { Effect, Match, Option, Schema as S } from 'effect'
-import type { BridgedEvent, MatcherReach } from './HookCatalog.js'
+import type { BridgedEvent } from './HookCatalog.js'
 import {
   ALL_CLAUDE_CODE_EVENTS,
   BRIDGED_EVENTS,
@@ -84,21 +84,13 @@ const CATALOG_EVENTS: readonly string[] = ALL_CLAUDE_CODE_EVENTS
 const UNBRIDGED_LOOKUP: Readonly<Record<string, string>> = UNBRIDGED_REASONS
 const NON_EVALUABLE_LOOKUP: Readonly<Record<string, string>> = NON_EVALUABLE_MATCHERS
 const IF_EVALUATING_EVENTS: readonly string[] = TOOL_EVENTS
-const REACH_LOOKUP: Readonly<Record<string, Readonly<Record<string, MatcherReach>>>> = MATCHER_REACH
+const REACH_LOOKUP: Readonly<Record<string, Readonly<Record<string, string>>>> = MATCHER_REACH
 
 const declaredMatchers = (value: unknown): readonly string[] =>
   Option.getOrElse(asHookRows(value), () => NO_ROWS)
     .flatMap((row) => row.matcher === undefined ? [] : [row.matcher])
 
 const declaresMatcher = (value: unknown): boolean => declaredMatchers(value).length > 0
-
-const reachGap = (reach: MatcherReach): Option.Option<string> =>
-  Match.value(reach).pipe(
-    Match.tag('Reachable', () => Option.none<string>()),
-    Match.tag('Partial', (out) => Option.some(out.reason)),
-    Match.tag('Unreachable', (out) => Option.some(out.reason)),
-    Match.exhaustive,
-  )
 
 /**
  * Why a configured key will not run, in input order. The classes are distinct
@@ -137,14 +129,9 @@ function hookCoverage(json: unknown): HookCoverage {
         if (reach === undefined) continue
         matcherOutOfReach.push(
           ...declaredMatchers(namespace[event]).flatMap((matcher): readonly HookCoverageRow[] => {
-            const value = reach[matcher]
-            if (value === undefined) return []
-            return Option.match(reachGap(value), {
-              onNone: (): readonly HookCoverageRow[] => [],
-              onSome: (reason) => [
-                { event: `${displayable(event)} (matcher "${displayable(matcher)}")`, reason },
-              ],
-            })
+            const reason = reach[matcher]
+            if (reason === undefined) return []
+            return [{ event: `${displayable(event)} (matcher "${displayable(matcher)}")`, reason }]
           }),
         )
       }

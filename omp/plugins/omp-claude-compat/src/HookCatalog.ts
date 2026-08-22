@@ -134,34 +134,19 @@ export const WRAPPED_SHADOW_REASON =
 /** Hooks a settings file switches off rather than this bridge failing to carry. */
 export const DISABLED_ALL_REASON = 'switched off by `disableAllHooks` in'
 
-const ReachableTag = { _tag: 'Reachable' } as const
-type ReachableTag = typeof ReachableTag
-
-const PartialTag = { _tag: 'Partial' } as const
-type PartialTag = typeof PartialTag
-
-const UnreachableTag = { _tag: 'Unreachable' } as const
-type UnreachableTag = typeof UnreachableTag
-
-export type MatcherReach =
-  | ReachableTag
-  | (PartialTag & { readonly reason: string })
-  | (UnreachableTag & { readonly reason: string })
-
-/** Per-event matcher reach. Coverage is per-matcher, not only per-event. */
+/**
+ * Per-event matcher reach: why a declared matcher will not run as written,
+ * keyed by the matcher a settings file names. Gaps only — a matcher this
+ * bridge carries faithfully is absent, exactly as in `NON_EVALUABLE_MATCHERS`.
+ * `SessionStart`'s `startup`, `compact` and `fork` were audited and reach, so
+ * they are named here and nowhere in the data.
+ *
+ * Coverage is per-matcher, not only per-event.
+ */
 export const MATCHER_REACH = {
   SessionStart: {
-    startup: { ...ReachableTag },
-    compact: { ...ReachableTag },
-    fork: { ...ReachableTag },
-    resume: {
-      ...PartialTag,
-      reason:
-        'covers a mid-session resume, which arrives as `session_switch` with `reason: "resume"`. A cold start under `--resume` never emits that signal — it reaches extensions through a bare `session_start` — so it presents as `startup` and a resume-scoped hook does not run there.',
-    },
-    clear: {
-      ...UnreachableTag,
-      reason: 'OMP emits no signal when a session is cleared.',
-    },
+    resume:
+      'covers a mid-session resume, which arrives as `session_switch` with `reason: "resume"`. A cold start under `--resume` never emits that signal — it reaches extensions through a bare `session_start` — so it presents as `startup` and a resume-scoped hook does not run there.',
+    clear: 'OMP emits no signal when a session is cleared.',
   },
-} as const satisfies Partial<Record<BridgedEvent, Record<string, MatcherReach>>>
+} as const satisfies Partial<Record<BridgedEvent, Record<string, string>>>
