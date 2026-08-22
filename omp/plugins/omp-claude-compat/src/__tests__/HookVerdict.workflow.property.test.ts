@@ -3,7 +3,12 @@ import { Exit, Option, Result } from 'effect'
 import { FastCheck as fc } from 'effect/testing'
 import { parseHookOutput } from '../HookOutput.js'
 import type { ParsedHookOutput } from '../HookOutput.schema.js'
-import { InterpretHookCommand, interpretHookResult, submitVerdict } from '../HookVerdict.workflow.js'
+import {
+  InterpretHookCommand,
+  interpretHookResult,
+  submitVerdict,
+  SubmitVerdictCommand,
+} from '../HookVerdict.workflow.js'
 
 /**
  * The decode exactly as the shell supplies it: `None` when the stdout never
@@ -261,7 +266,7 @@ describe('submitVerdict (PBT)', () => {
         event: 'UserPromptSubmit',
         parsed: parsedOf(''),
       })
-      const result = submitVerdict({ cmd, code, stdout })
+      const result = submitVerdict(new SubmitVerdictCommand({ cmd, code, stdout }))
       return Result.isSuccess(result) &&
         result.success.code === code &&
         result.success.stdout === stdout
@@ -282,7 +287,7 @@ describe('submitVerdict (PBT)', () => {
         event: 'UserPromptSubmit',
         parsed: parsedOf('{'),
       })
-      const result = submitVerdict({ cmd, code, stdout })
+      const result = submitVerdict(new SubmitVerdictCommand({ cmd, code, stdout }))
       return Result.isFailure(result) &&
         result.failure.error.raw === '{' &&
         result.failure.code === code &&
