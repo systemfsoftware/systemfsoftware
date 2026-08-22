@@ -3,7 +3,7 @@ import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
-import { canonicalDecide } from './CanonicalDecide.workflow.js'
+import { CanonicalCommand, canonicalDecide } from './CanonicalDecide.workflow.js'
 import { type WorkflowBrand } from './Workflow.js'
 /**
  * The type bag. Every phase's input and output type travels in one record so that a
@@ -446,6 +446,17 @@ export interface Vocabulary {
 }
 
 /**
+ * The bag the canonical description is built with. It is `Phases` with one member
+ * pinned: `decoded` is the canonical command class, because `canonicalDecide` is a
+ * decider over that class and a decider's parameter is contravariant — a phase typed
+ * `(decoded: unknown) => …` would demand that `unknown` be assignable to the command,
+ * which it is not. Every other member stays `unknown`, so nothing else narrows.
+ */
+interface CanonicalPhases extends Phases {
+  readonly decoded: CanonicalCommand
+}
+
+/**
  * A canonical description, built through the public constructors with phases that do
  * nothing. It is exported so a consumer — a generator, a lint rule, a documenter — can
  * obtain a real branded description without replaying the constructor chain: spread it
@@ -457,10 +468,10 @@ export interface Vocabulary {
  * any other sequence fails to typecheck here — which is what keeps the derived order
  * non-circular: it is read off a value, and the value's shape is enforced by the types.
  */
-export const canonical: WriteDone<Phases> = write(
+export const canonical: WriteDone<CanonicalPhases> = write(
   encode(
     decide(
-      decode(read<Phases>(() => Effect.void), () => Result.succeed(undefined)),
+      decode(read<CanonicalPhases>(() => Effect.void), () => Result.succeed(CanonicalCommand.make({}))),
       // The canonical's decide never resolves — the description's phases "do nothing" —
       // but its error channel must still satisfy the tagged channel rule the brand rides
       // on, so the decider is a `make` value whose phantom error channel is `Tagged`.

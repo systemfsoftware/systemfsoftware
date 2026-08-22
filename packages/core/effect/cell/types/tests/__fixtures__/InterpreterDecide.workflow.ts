@@ -1,10 +1,20 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
 
-export interface Decoded {
-  readonly length: number
-}
+/**
+ * The decoded command. An untagged `Schema.Class`, so the interpreter's decode
+ * phase keeps returning a plain record: the constraint `Workflow.make` applies is
+ * on the command argument it receives, not on what decode produces.
+ *
+ * Declared here because this is the owning single-segment `<stem>.workflow.ts`,
+ * which `schema-declaration-location` admits.
+ */
+export class Decoded extends S.Class<Decoded>('Decoded')({
+  length: S.Int,
+}) {}
+
 export interface Admitted {
   readonly kind: 'Admitted'
   readonly length: number
@@ -19,6 +29,7 @@ export interface Refused {
 }
 
 export const decide = Workflow.make(
+  Decoded,
   (decoded: Decoded): Result.Result<Admitted, Refused> =>
     Match.value(decoded.length > 3).pipe(
       Match.when(true, () => Result.succeed<Admitted>({ kind: 'Admitted', length: decoded.length })),
