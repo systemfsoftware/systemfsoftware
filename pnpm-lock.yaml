@@ -2338,9 +2338,6 @@ importers:
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
-      ts-expose-internals:
-        specifier: ^5.6.0
-        version: 5.6.3
       tsdown:
         specifier: 'catalog:'
         version: 0.22.14(oxc-resolver@11.24.2)(typescript@6.0.3)(unrun@0.2.39)
@@ -7341,9 +7338,6 @@ packages:
   ts-dedent@2.3.0:
     resolution: {integrity: sha512-JfJeIHke7y2egdGGgRAvpCwYFUsHlM2gPcrVOxFkznt/4uzQ7HFmvE63iFHVLBJNDuyDOQgijDK/tXH/f6Msjg==}
     engines: {node: '>=6.10'}
-
-  ts-expose-internals@5.6.3:
-    resolution: {integrity: sha512-reb+7TXGaC0odGjywnLocM4f2i8mBhSEjc3gnKqdM21wDy8FcGGVjKbtMNjn17hka34CrwvqNREs0R7CGIeH3w==}
 
   tsconfck@3.1.6:
     resolution: {integrity: sha512-ks6Vjr/jEw0P1gmOVwutM3B7fWxoWBL2KRDb1JfqGVawBmO5UsvmWOQFGHBPl5yxYz4eERr19E6L7NMv+Fej4w==}
@@ -12705,8 +12699,6 @@ snapshots:
   triple-beam@1.4.1: {}
 
   ts-dedent@2.3.0: {}
-
-  ts-expose-internals@5.6.3: {}
 
   tsconfck@3.1.6(typescript@7.0.2):
     optionalDependencies:

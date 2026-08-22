@@ -51,7 +51,6 @@ export class CompilerHostWrapper {
   > = {}
   private traceCollector: TraceCollector = new TraceCollector()
   private sourceFileCache: Map<ts.Path, ts.SourceFile> = new Map()
-  private resolvedModules: Exclude<ts.Program['resolvedModules'], undefined> = new Map()
   private languageVersion = ts.ScriptTarget.Latest
 
   constructor(fs: Package, moduleResolution: ts.ModuleResolutionKind, moduleKind: ts.ModuleKind) {
@@ -174,44 +173,17 @@ export class CompilerHostWrapper {
   }
 
   createPrimaryProgram(rootName: string) {
-    const program = this.getProgram([rootName], this.compilerOptions)
-
-    program.resolvedModules?.forEach((cache, path) => {
-      const ownCache = this.resolvedModules.get(path) ?? ts.createModeAwareCache()
-      if (!this.resolvedModules.has(path)) {
-        this.resolvedModules.set(path, ownCache)
-      }
-      cache.forEach((resolution, key, mode) => {
-        ownCache.set(key, mode, resolution)
-      })
-    })
-
-    return program
+    return this.getProgram([rootName], this.compilerOptions)
   }
 
-  createAuxiliaryProgram(rootNames: string[], extraOptions?: ts.CompilerOptions): ts.Program {
-    if (
-      extraOptions &&
-      ts.changesAffectModuleResolution(
-        // allowJs and noDtsResolution are part of the cache key, but any other resolution-affecting options
-        // are assumed to be constant for the host.
-        {
-          ...this.compilerOptions,
-          allowJs: extraOptions.allowJs,
-          checkJs: extraOptions.checkJs,
-          noDtsResolution: extraOptions.noDtsResolution,
-        },
-        { ...this.compilerOptions, ...extraOptions },
-      )
-    ) {
-      throw new Error('Cannot override resolution-affecting options for host due to potential cache pollution')
-    }
-    const options = extraOptions ? { ...this.compilerOptions, ...extraOptions } : this.compilerOptions
-    return this.getProgram(rootNames, options)
+  createAuxiliaryProgram(rootNames: string[]): ts.Program {
+    return this.getProgram(rootNames, this.compilerOptions)
   }
 
   getResolvedModule(sourceFile: ts.SourceFile, moduleName: string, resolutionMode: ts.ResolutionMode) {
-    return this.resolvedModules.get(sourceFile.path)?.get(moduleName, resolutionMode)
+    return this.moduleResolutionCache[sourceFile.fileName]?.[
+      this.getModuleKey(moduleName, resolutionMode, /*noDtsResolution*/ undefined, /*allowJs*/ undefined)
+    ]?.resolution
   }
 
   private createCompilerHost(fs: Package, sourceFileCache: Map<ts.Path, ts.SourceFile>): ts.CompilerHost {

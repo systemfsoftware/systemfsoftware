@@ -1,5 +1,6 @@
 import type { Exports } from 'cjs-module-lexer'
 import ts from 'typescript'
+import { hasModifier } from '../TsCompat.js'
 
 // Note: There is a pretty solid module `es-module-lexer` which performs a similar lexing operation
 // as `cjs-module-lexer`, but has some limitations in what it can express. This implementation
@@ -61,8 +62,8 @@ export function getEsmModuleBindings(sourceText: string): Exports {
   }
 
   function collectClassOrFunction(declaration: ts.ClassDeclaration | ts.FunctionDeclaration): void {
-    if (ts.hasSyntacticModifier(declaration, ts.ModifierFlags.Export)) {
-      if (ts.hasSyntacticModifier(declaration, ts.ModifierFlags.Default)) {
+    if (hasModifier(declaration, ts.SyntaxKind.ExportKeyword)) {
+      if (hasModifier(declaration, ts.SyntaxKind.DefaultKeyword)) {
         exports.push('default')
       } else if (declaration.name) {
         exports.push(declaration.name.text)
@@ -71,7 +72,7 @@ export function getEsmModuleBindings(sourceText: string): Exports {
   }
 
   function collectVariableStatement(statement: ts.VariableStatement): void {
-    if (ts.hasSyntacticModifier(statement, ts.ModifierFlags.Export)) {
+    if (hasModifier(statement, ts.SyntaxKind.ExportKeyword)) {
       for (const declarator of statement.declarationList.declarations) {
         exports.push(...extractDestructedNames(declarator.name))
       }
