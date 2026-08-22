@@ -16,11 +16,14 @@ export {
 } from './DaemonPolicy.schema.js'
 export * from './DaemonReporterAdapter.js'
 export * from './DaemonSpec.schema.js'
-// The carriers are construction wiring, but their values cannot be withheld: the
-// type is spelled `typeof PollLoopTag`, so any surface naming it needs the const
-// to resolve, and `export type` narrows the statement without narrowing the emit
-// (measured: the declaration file still declares all three consts). A carrier
-// pays for its keep with a public runtime value wherever its type escapes.
+// The carriers are construction wiring, and `export type` does withhold their
+// values from the runtime surface — but it desynchronizes the package instead of
+// narrowing it. The published types entry is api-extractor's rollup, and the
+// rollup re-declares each one as `export declare const`, so a consumer's value
+// import type-checks and then finds nothing at runtime. Measured: with `export
+// type`, all three leave `dist/index.mjs`'s export list and stay in the rollup,
+// and attw, api:check, typecheck and lint all pass. Exporting the values keeps
+// the two surfaces honest, which is worth more than a smaller one.
 export { PollLoopTag, StreamLoopTag, SubscriptionLoopTag } from './internal/LoopTags.js'
 import type { DaemonHealth, SupervisorHealth } from './DaemonHealth.schema.js'
 import { MaxChildren } from './DaemonPolicy.schema.js'
