@@ -45,15 +45,11 @@ export default defineCheck({
       const typeChecker = program.getTypeChecker()
       return { typesSourceFile, typeChecker, typesFileName, implementationFileName }
     }),
-  execute: (
-    [implementationFileName, _implementationModuleKind, typesFileName, _typesModuleKind, _resolutionKind],
-    context,
-    gathered,
-  ) => {
+  execute: (_deps, context, gathered) => {
     if (!gathered) {
       return
     }
-    const { typesSourceFile, typeChecker } = gathered
+    const { typesSourceFile, typeChecker, typesFileName, implementationFileName } = gathered
 
     const moduleType = typeChecker.getTypeOfSymbol(typeChecker.resolveExternalModuleSymbol(typesSourceFile.symbol))
     if (typeChecker.isArrayLikeType(moduleType) || typeChecker.getPropertyOfType(moduleType, '0')) {
@@ -76,9 +72,6 @@ export default defineCheck({
 
     let exports: readonly string[] | undefined
     try {
-      if (!implementationFileName) {
-        return
-      }
       exports = getEsmModuleNamespace(context.pkg, implementationFileName)
     } catch {
       return
@@ -90,12 +83,10 @@ export default defineCheck({
     const missing = expectedNames.filter((name) => !exports.includes(name))
     if (missing.length > 0) {
       const lengthWithoutDefault = (names: readonly string[]) => names.length - (names.includes('default') ? 1 : 0)
-      const implementationFileNameString = typeof implementationFileName === 'string' ? implementationFileName : ''
-      const typesFileNameString = typeof typesFileName === 'string' ? typesFileName : ''
       return {
         kind: 'NamedExports',
-        implementationFileName: implementationFileNameString,
-        typesFileName: typesFileNameString,
+        implementationFileName,
+        typesFileName,
         isMissingAllNamed: lengthWithoutDefault(missing) === lengthWithoutDefault(expectedNames),
         missing,
       }

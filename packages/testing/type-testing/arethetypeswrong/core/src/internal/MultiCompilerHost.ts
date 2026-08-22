@@ -1,4 +1,4 @@
-import { Cache, Effect, MutableHashMap, Option } from 'effect'
+import { Cache, Effect, MutableHashMap, Option, Schema } from 'effect'
 import ts from 'typescript'
 import type { Package } from '../CreatePackage.js'
 import type { ModuleKind } from '../Types.js'
@@ -235,16 +235,25 @@ const makeCompilerHost = (
 
     compilerHost = createCompilerHostObject()
 
-    const programKeyMap = MutableHashMap.empty<string, [readonly string[], ts.CompilerOptions]>()
+    const CompilerOptionsValueSchema = Schema.Union([
+      Schema.String,
+      Schema.Number,
+      Schema.Boolean,
+      Schema.Null,
+      Schema.mutable(Schema.Array(Schema.String)),
+    ])
+    const ProgramKeySchema = Schema.Tuple([
+      Schema.Array(Schema.String),
+      Schema.Array(Schema.Tuple([Schema.String, CompilerOptionsValueSchema])),
+    ])
     const programCache = yield* Cache.make<string, ts.Program>({
       capacity: 2,
       lookup: (key) =>
         Effect.gen(function*() {
-          const entry = MutableHashMap.get(programKeyMap, key)
-          if (Option.isNone(entry)) {
-            return yield* Effect.die(new Error(`Missing program key: ${key}`))
-          }
-          const [rootNames, options] = entry.value
+          const [rootNames, entries] = yield* Schema.decodeEffect(Schema.fromJsonString(ProgramKeySchema))(key).pipe(
+            Effect.orDie,
+          )
+          const options: ts.CompilerOptions = Object.fromEntries(entries)
           return ts.createProgram({
             rootNames: [...rootNames],
             options,
@@ -253,11 +262,9 @@ const makeCompilerHost = (
         }),
     })
 
-    const getProgram = (rootNames: readonly string[], options: ts.CompilerOptions): Effect.Effect<ts.Program> => {
-      const key = programKey(rootNames, options)
-      MutableHashMap.set(programKeyMap, key, [rootNames, options])
-      return Cache.get(programCache, key)
-    }
+    const getProgram = (rootNames: readonly string[], options: ts.CompilerOptions): Effect.Effect<ts.Program> =>
+      Cache.get(programCache, programKey(rootNames, options))
+
     const getCompilerOptions = (): ts.CompilerOptions => compilerOptions
 
     const getSourceFile = (fileName: string): ts.SourceFile | undefined =>
@@ -312,22 +319,21 @@ const makeCompilerHost = (
       }
       return cacheOption.value.get(moduleName, resolutionMode)
     }
-
     const createPrimaryProgram = (rootName: string): Effect.Effect<ts.Program> =>
       Effect.gen(function*() {
         const program = yield* getProgram([rootName], compilerOptions)
-
-        program.resolvedModules?.forEach((cache, path) => {
-          const ownCacheOption = MutableHashMap.get(resolvedModules, path)
-          const ownCache = Option.isSome(ownCacheOption) ? ownCacheOption.value : ts.createModeAwareCache()
-          if (Option.isNone(ownCacheOption)) {
-            MutableHashMap.set(resolvedModules, path, ownCache)
-          }
-          cache.forEach((resolution, key, mode) => {
-            ownCache.set(key, mode, resolution)
+        yield* Effect.sync(() => {
+          program.resolvedModules?.forEach((cache, path) => {
+            const ownCacheOption = MutableHashMap.get(resolvedModules, path)
+            const ownCache = Option.isSome(ownCacheOption) ? ownCacheOption.value : ts.createModeAwareCache()
+            if (Option.isNone(ownCacheOption)) {
+              MutableHashMap.set(resolvedModules, path, ownCache)
+            }
+            cache.forEach((resolution, key, mode) => {
+              ownCache.set(key, mode, resolution)
+            })
           })
         })
-
         return program
       })
 
