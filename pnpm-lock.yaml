@@ -2296,9 +2296,6 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
-      '@systemfsoftware/all':
-        specifier: workspace:^
-        version: link:../../../../lint/oxlint/all
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
