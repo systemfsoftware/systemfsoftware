@@ -20,15 +20,14 @@ export type MakeBodyKind = ESTree.ArrowFunctionExpression | FunctionLike
 
 /**
  * A located `Workflow.make(...)` decision boundary. `resolvedBody` is the
- * argument body when the argument is a function written inline or a
+ * decider body when the decider is a function written inline or a
  * module-scope function reference resolved in the same file; it is `null`
  * when the body cannot be located from this file's AST (an imported
- * decision, a non-function argument). A `null` body is a finding the caller
- * reports, never a silent skip.
+ * decision, a call with no function argument at all). A `null` body is a
+ * finding the caller reports, never a silent skip.
  */
 export interface MakeBoundary {
   readonly makeCall: ESTree.CallExpression
-  readonly argument: ESTree.Node | undefined
   readonly resolvedBody: MakeBodyKind | null
 }
 
@@ -202,23 +201,36 @@ export const collectMakeBoundaries = (context: Context): readonly MakeBoundary[]
     // `make.bind(...)` call is a partial application - its arguments are the
     // this-bound target, not the decision body; the construction is the later
     // call of the bound value. `make.call(...)` / `make.apply(...)` invoke
-    // make directly but carry the construction argument one slot later.
+    // make directly but shift every construction argument one slot later.
     const callee = node.callee
-    let argument: ESTree.Node | undefined = node.arguments[0]
+    let searchFrom = 0
     if (isMemberExpression(callee) && !callee.computed && callee.property.type === 'Identifier') {
       const memberName = callee.property.name
       if (memberName === 'bind') return
-      if (memberName === 'call' || memberName === 'apply') argument = node.arguments[1]
+      if (memberName === 'call' || memberName === 'apply') searchFrom = 1
     }
+    // The decider is found by SHAPE, never by slot index: `make` takes the
+    // command schema class first and the decider second, and a locator pinned
+    // to one slot resolves the class, yields no body, and turns every
+    // body-scoped rule silently dark. Search forward and take the first
+    // argument that resolves to a function.
     let resolvedBody: MakeBodyKind | null = null
-    if (argument !== undefined) {
+    for (let index = searchFrom; index < node.arguments.length; index++) {
+      const argument = node.arguments[index]
+      if (argument === undefined) continue
       if (isArrowFunction(argument) || isFunctionLike(argument)) {
         resolvedBody = argument
-      } else if (isIdentifier(argument)) {
-        resolvedBody = followIdentifier(argument, context.sourceCode.getScope, 0)
+        break
+      }
+      if (isIdentifier(argument)) {
+        const followed = followIdentifier(argument, context.sourceCode.getScope, 0)
+        if (followed !== null) {
+          resolvedBody = followed
+          break
+        }
       }
     }
-    boundaries.push({ makeCall: node, argument, resolvedBody })
+    boundaries.push({ makeCall: node, resolvedBody })
   })
   return boundaries
 }
