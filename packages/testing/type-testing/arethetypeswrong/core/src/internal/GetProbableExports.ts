@@ -1,5 +1,11 @@
 import ts from 'typescript'
-
+import {
+  accessExpressionNameNode,
+  isAccessExpression,
+  isFunctionExpressionOrArrowFunction,
+  isStringOrNumericLiteralLike,
+  skipParentheses,
+} from './TsCompat.js'
 const minifiedVariableAssignmentPattern = /[^\s];(?:var|let|const) [a-zA-Z0-9_]=[^\s]/
 
 export interface Export {
@@ -56,7 +62,7 @@ function getEsbuildStatementExports(statement: ts.Statement, sourceFile: ts.Sour
   return statement.expression.arguments[1].properties.flatMap((prop): Export[] => {
     if (
       ts.isPropertyAssignment(prop) &&
-      (ts.isIdentifier(prop.name) || ts.isStringOrNumericLiteralLike(prop.name))
+      (ts.isIdentifier(prop.name) || isStringOrNumericLiteralLike(prop.name))
     ) {
       return [{ name: prop.name.text, node: prop }]
     }
@@ -92,7 +98,7 @@ function isEsbuildExportFunction(decl: ts.Declaration | undefined) {
   return (
     ts.isVariableDeclaration(decl) &&
     decl.initializer &&
-    ts.isFunctionExpressionOrArrowFunction(decl.initializer) &&
+    isFunctionExpressionOrArrowFunction(decl.initializer) &&
     ts.isBlock(decl.initializer.body) &&
     decl.initializer.body.statements.length == 1 &&
     ts.isForInStatement(decl.initializer.body.statements[0])
@@ -113,12 +119,12 @@ function getWebpackBootstrapExports(sourceFile: ts.SourceFile): Export[] | undef
       continue
     }
 
-    const bootstrapCall = ts.skipParentheses(assignment.right)
+    const bootstrapCall = skipParentheses(assignment.right)
     if (!ts.isCallExpression(bootstrapCall)) {
       continue
     }
 
-    const bootstrap = ts.skipParentheses(bootstrapCall.expression)
+    const bootstrap = skipParentheses(bootstrapCall.expression)
     if (
       !ts.isFunctionExpression(bootstrap) ||
       !ts.isBlock(bootstrap.body) ||
@@ -152,7 +158,7 @@ function getWebpackBootstrapExports(sourceFile: ts.SourceFile): Export[] | undef
       if (
         ts.isBinaryExpression(node) &&
         node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-        ts.isAccessExpression(node.left) &&
+        isAccessExpression(node.left) &&
         ts.isIdentifier(node.left.expression) &&
         node.left.expression.text === exportsParameterText
       ) {
@@ -177,7 +183,7 @@ function getWebpackEntryModuleId(body: ts.Block): number | undefined {
 }
 
 function getWebpackEntryModuleIdFromExpression(expression: ts.Expression): number | undefined {
-  expression = ts.skipParentheses(expression)
+  expression = skipParentheses(expression)
   if (ts.isCallExpression(expression) && expression.arguments.length === 1) {
     return getNumericValue(expression.arguments[0])
   }
@@ -187,7 +193,7 @@ function getWebpackEntryModuleIdFromExpression(expression: ts.Expression): numbe
 }
 
 function getNumericValue(node: ts.Expression): number | undefined {
-  node = ts.skipParentheses(node)
+  node = skipParentheses(node)
   if (ts.isNumericLiteral(node)) {
     return Number(node.text)
   }
@@ -198,7 +204,7 @@ function getNumericValue(node: ts.Expression): number | undefined {
 
 function isModuleExports(node: ts.Expression) {
   return (
-    ts.isAccessExpression(node) &&
+    isAccessExpression(node) &&
     ts.isIdentifier(node.expression) &&
     node.expression.text === 'module' &&
     getNameOfAccessExpression(node) === 'exports'
@@ -206,7 +212,7 @@ function isModuleExports(node: ts.Expression) {
 }
 
 function getNameOfAccessExpression(accessExpression: ts.AccessExpression): string | undefined {
-  const node = ts.getNameOfAccessExpression(accessExpression)
+  const node = accessExpressionNameNode(accessExpression)
   if (ts.isIdentifier(node) || ts.isStringLiteralLike(node)) {
     return node.text
   }

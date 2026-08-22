@@ -4,6 +4,14 @@ import { getResolutionOption } from '../../Utils.js'
 import { defineCheck } from '../DefineCheck.js'
 import { type Export, getProbableExports } from '../GetProbableExports.js'
 import { type CompilerHostWrapper } from '../MultiCompilerHost.js'
+import {
+  accessExpressionNameNode,
+  isAccessExpression,
+  isFunctionBlock,
+  PrimitiveTypeFlags,
+  skipParentheses,
+  typeHasCallOrConstructSignatures,
+} from '../TsCompat.js'
 
 const bindOptions: ts.CompilerOptions = {
   target: ts.ScriptTarget.Latest,
@@ -135,8 +143,8 @@ function analyzeExportDefaultDisagreement(input: DisagreementAnalysis): Problem 
     input.implementationExports.has(ts.InternalSymbolName.ExportEquals) &&
     getTypesDefaultSymbol(input, memo) &&
     ((getImplExportEqualsIsExportDefault(input, memo) &&
-      getTypesChecker(input, memo).typeHasCallOrConstructSignatures(getTypesTypeOfDefault(input, memo))) ||
-      getImplChecker(input, memo).typeHasCallOrConstructSignatures(getImplTypeOfModuleExports(input, memo)))
+      typeHasCallOrConstructSignatures(getTypesChecker(input, memo), getTypesTypeOfDefault(input, memo))) ||
+      typeHasCallOrConstructSignatures(getImplChecker(input, memo), getImplTypeOfModuleExports(input, memo)))
   ) {
     return {
       kind: 'MissingExportEquals',
@@ -215,7 +223,7 @@ function implIsAnalyzable(input: DisagreementAnalysis, memo: AnalysisMemo): bool
     // module.exports inside an IIFE.
     let commonContainer
     for (const decl of exportEquals.declarations) {
-      const container = ts.findAncestor(decl, (node) => ts.isFunctionBlock(node) || ts.isSourceFile(node))
+      const container = ts.findAncestor(decl, (node) => isFunctionBlock(node) || ts.isSourceFile(node))
       if (commonContainer === undefined) {
         commonContainer = container
       } else if (commonContainer !== container) {
@@ -322,14 +330,14 @@ function getImplExportEqualsIsExportDefault(input: DisagreementAnalysis, memo: A
 function typeIsObjecty(type: ts.Type, checker: ts.TypeChecker) {
   return (
     type.flags & ts.TypeFlags.Object &&
-    !(type.flags & ts.TypeFlags.Primitive) &&
-    !checker.typeHasCallOrConstructSignatures(type)
+    !(type.flags & PrimitiveTypeFlags) &&
+    !typeHasCallOrConstructSignatures(checker, type)
   )
 }
 
 function isModuleExports(target: ts.Expression) {
   return (
-    (ts.isAccessExpression(target) &&
+    (isAccessExpression(target) &&
       ts.isIdentifier(target.expression) &&
       target.expression.text === 'module' &&
       getNameOfAccessExpression(target) === 'exports') ||
@@ -339,12 +347,12 @@ function isModuleExports(target: ts.Expression) {
 
 function isExportsDefault(target: ts.Expression) {
   return (
-    (ts.isAccessExpression(target) &&
+    (isAccessExpression(target) &&
       ts.isIdentifier(target.expression) &&
       target.expression.text === 'exports' &&
       getNameOfAccessExpression(target) === 'default') ||
-    (ts.isAccessExpression(target) &&
-      ts.isAccessExpression(target.expression) &&
+    (isAccessExpression(target) &&
+      isAccessExpression(target.expression) &&
       ts.isIdentifier(target.expression.expression) &&
       target.expression.expression.text === 'module' &&
       getNameOfAccessExpression(target.expression) === 'exports' &&
@@ -362,7 +370,7 @@ function forEachAssignmentTarget<ReturnT>(
 ): ReturnT | undefined {
   // For `module.exports = exports = exports.default`, fires `cb` once for
   // `exports.default`, once for `exports`, and once for `module.exports`.
-  const target = ts.skipParentheses(assignment.right)
+  const target = skipParentheses(assignment.right)
   if (ts.isBinaryExpression(target) && target.operatorToken.kind === ts.SyntaxKind.EqualsToken) {
     const res = forEachAssignmentTarget(target, cb)
     if (res) {
@@ -374,11 +382,11 @@ function forEachAssignmentTarget<ReturnT>(
       return res
     }
   }
-  return cb(ts.skipParentheses(assignment.left))
+  return cb(skipParentheses(assignment.left))
 }
 
 function getNameOfAccessExpression(accessExpression: ts.AccessExpression): string | undefined {
-  const node = ts.getNameOfAccessExpression(accessExpression)
+  const node = accessExpressionNameNode(accessExpression)
   if (ts.isIdentifier(node) || ts.isStringLiteralLike(node)) {
     return node.text
   }
