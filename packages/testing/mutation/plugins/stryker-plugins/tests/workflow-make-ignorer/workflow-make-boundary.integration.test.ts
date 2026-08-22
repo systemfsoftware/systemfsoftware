@@ -14,6 +14,7 @@ import {
 import { taggedCall } from '../__fixtures__/EffectSchemaAst.fixtures.js'
 import {
   callOf,
+  classDeclarationOf,
   constBindingOf,
   identifier,
   makeBodyOf,
@@ -23,6 +24,7 @@ import {
   unrelatedImport,
   workflowAliasedImport,
   workflowMakeCallOf,
+  workflowMakeCallOfTwo,
   workflowNamedImport,
   workflowNamespaceImport,
 } from '../__fixtures__/WorkflowMakeAst.fixtures.js'
@@ -174,6 +176,65 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
           (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
         ),
         Then('it returns undefined — the referenced function body stays inside the mutation population')((s) =>
+          Effect.sync(() => {
+            expect(s.reason).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_NotIgnore_When_TwoArgumentMakeArgumentIsAModuleScopeFunctionReference',
+      Gherkin.Do.pipe(
+        Given(
+          'a two-argument `Workflow.make(Command, decide)` whose second argument names the mutant-bearing function',
+        )(
+          'fixture',
+          () =>
+            Effect.sync(() => {
+              const mutant = stringLiteral('decide')
+              const body = makeBodyOf(mutant)
+              const decision = constBindingOf('decision', body)
+              const command = classDeclarationOf('Cmd')
+              const call = workflowMakeCallOfTwo(identifier('Cmd'), identifier('decision'))
+              const program = programOf([workflowNamedImport(), command, decision, call])
+              // Slot 0 resolves to a class, never a function. A resolver pinned
+              // to that slot drops this body from the population and every
+              // mutant in the decision silently stops being tested.
+              return makeFixture(mutant, [mutant, body, decision, program])
+            }),
+        ),
+        When('the boundary decision runs on that mutant')(
+          'reason',
+          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+        ),
+        Then('it returns undefined — the referenced decider stays inside the mutation population')((s) =>
+          Effect.sync(() => {
+            expect(s.reason).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Should_NotIgnore_When_TwoArgumentMakeBodyIsInline',
+      Gherkin.Do.pipe(
+        Given('a two-argument `Workflow.make(Command, (c) => ...)` holding the mutant inline')(
+          'fixture',
+          () =>
+            Effect.sync(() => {
+              const mutant = stringLiteral('inline')
+              const body = makeBodyOf(mutant)
+              const call = workflowMakeCallOfTwo(identifier('Cmd'), body)
+              const program = programOf([workflowNamedImport(), classDeclarationOf('Cmd'), call])
+              return makeFixture(mutant, [body, call, program])
+            }),
+        ),
+        When('the boundary decision runs on that mutant')(
+          'reason',
+          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+        ),
+        Then('it returns undefined — an argument-slot ancestor is slot-agnostic')((s) =>
           Effect.sync(() => {
             expect(s.reason).toBeUndefined()
           })

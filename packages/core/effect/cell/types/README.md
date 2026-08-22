@@ -23,22 +23,28 @@ can satisfy, so the mistake is a compile error with the remediation attached (be
 
 ## The constructor
 
-Executors build a workflow from a plain decider with `make` — runtime identity, one cast across the branded return:
+Executors build a workflow from the command's schema class and a decider over that class — runtime identity, one assertion across the branded return:
 
 ```ts
 import { make } from '@systemfsoftware/effect-cell-types'
 import { Result } from 'effect'
+import * as S from 'effect/Schema'
 
-export const decide = make<DecideInput, RestartDecision, RestartDecisionExhausted>(
-  (
-    input,
-  ) => (input.exitSuccess
+export class DecideInput extends S.Class<DecideInput>('DecideInput')({
+  exitSuccess: S.Boolean,
+}) {}
+
+export const decide = make(
+  DecideInput,
+  (input) => (input.exitSuccess
     ? Result.succeed(new RestartDecisionContinue())
     : Result.fail(new RestartDecisionExhausted())),
 )
 ```
 
-The parameter is the plain function type, not `Workflow<C, D, E>`: the `never`-channel conditional lives on the **return** type, so a total decision (`Result<Decision, never>`) resolves to `UninhabitedError` and the call site fails with "This expression is not callable", while a `Promise`- or bare-value-returning decider is rejected at the argument. `make` is a runtime value, so consumers need it as an ordinary import only where they construct workflows; everywhere else `import type` still erases at compile time.
+The command is constrained on the **value**, not on a type parameter inferred from the decider's parameter, and that is the whole mechanism. A constraint on such a parameter is a structural predicate, and TypeScript cannot express "this type came from a class declaration" — so a marker placed there is just a property, and `interface Fake extends Marker {}` satisfies it. A declared type produces no value, so it cannot reach an argument position at all: an interface at the command position is refused with "only refers to a type, but is being used as a value here". `Schema.Class` and `Schema.TaggedClass` are both accepted; a `Schema.Struct`, a plain class, an object literal and a primitive are each refused.
+
+No type argument needs writing: the command type comes from the class, so the decider's parameter needs no annotation. The `never`-channel conditional still lives on the **return** type, so a total decision (`Result<Decision, never>`) resolves to `UninhabitedError` and the call site fails with "This expression is not callable", while a `Promise`- or bare-value-returning decider is rejected at the argument. `make` is a runtime value, so consumers need it as an ordinary import only where they construct workflows; everywhere else `import type` still erases at compile time.
 
 ## Worked example
 
@@ -92,7 +98,8 @@ const restartIndicesFor = (
   )
 
 export const decideRestart = Workflow.make(
-  (input: DecideInput): Result.Result<
+  DecideInput,
+  (input): Result.Result<
     RestartDecisionContinue | RestartDecisionRestart,
     RestartDecisionExhausted
   > =>
@@ -113,25 +120,28 @@ export const decideRestart = Workflow.make(
 )
 ```
 
-The shape to copy: one exported decision built by `Workflow.make`, whose body returns
-`Result` values via `Result.succeed` and `Result.fail`. The constructor infers the channels
-from the annotated return and is the only door to the `WorkflowBrand` conjunct — annotating
-a function `Workflow<…>` directly is now refused wherever the brand is demanded, because a
-workflow that never passed through `make` is not a decision anything may run. The error
-channel is a real variant (`RestartDecisionExhausted`) — giving up is a decision the caller
-must branch on, so declaring the error channel `never` is rejected, not allowed.
+The shape to copy: one exported decision built by `Workflow.make`, taking the command's
+schema class and a decider over that class, whose body returns `Result` values via
+`Result.succeed` and `Result.fail`. The command channel comes from the class, the decision
+and error channels are inferred from the annotated return, and `make` is the only door to
+the `WorkflowBrand` conjunct — annotating a function `Workflow<…>` directly is still refused
+wherever the brand is demanded, because a workflow that never passed through `make` is not a
+decision anything may run. The error channel is a real variant (`RestartDecisionExhausted`) —
+giving up is a decision the caller must branch on, so declaring the error channel `never` is
+rejected, not allowed.
 
 ## What it rejects at compile time
 
-All five violations fail `tsc`; the messages below are what `tsc` reports (verified against this package and `effect@4.0.0-rc.108`).
+All six violations fail `tsc`; the messages below are what `tsc` reports (verified against this package and `effect@4.0.0-rc.108`).
 
-| Violation                              | `tsc` reports                                                                             | Why it is rejected                                                                                                         |
-| -------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| A `Promise` return                     | `Type 'Promise<Decision>' is not assignable to type 'Result<Decision, Err>'`              | a workflow is a synchronous pure decision; async work belongs in the executor shell around it                              |
-| An `Effect` return                     | `Type 'Effect<Decision, never, never>' is not assignable to type 'Result<Decision, Err>'` | the workflow returns a value, not an effect handle; the executor runs effects and hands the workflow its input             |
-| `never` decision channel               | `Type '...' is not assignable to type 'UninhabitedDecision'`                              | a workflow that can never produce a decision can never succeed                                                             |
-| `never` error channel                  | `Type '...' is not assignable to type 'UninhabitedError'`                                 | a workflow that cannot fail decides nothing; move it to a `*.kernel.ts`                                                    |
-| A bare decider handed to `Cell.decide` | `Type '(command: Cmd) => Result<Dec, Err>' is not assignable to type 'WorkflowBrand'`     | only a `Workflow.make` value satisfies `DecidePhase`; a lambda that skipped `make` is not a decision a description may run |
+| Violation                                 | `tsc` reports                                                                             | Why it is rejected                                                                                                         |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| A `Promise` return                        | `Type 'Promise<Decision>' is not assignable to type 'Result<Decision, Err>'`              | a workflow is a synchronous pure decision; async work belongs in the executor shell around it                              |
+| An `Effect` return                        | `Type 'Effect<Decision, never, never>' is not assignable to type 'Result<Decision, Err>'` | the workflow returns a value, not an effect handle; the executor runs effects and hands the workflow its input             |
+| `never` decision channel                  | `Type '...' is not assignable to type 'UninhabitedDecision'`                              | a workflow that can never produce a decision can never succeed                                                             |
+| `never` error channel                     | `Type '...' is not assignable to type 'UninhabitedError'`                                 | a workflow that cannot fail decides nothing; move it to a `*.kernel.ts`                                                    |
+| A bare decider handed to `Cell.decide`    | `Type '(command: Cmd) => Result<Dec, Err>' is not assignable to type 'WorkflowBrand'`     | only a `Workflow.make` value satisfies `DecidePhase`; a lambda that skipped `make` is not a decision a description may run |
+| A plain interface at the command position | `'Cmd' only refers to a type, but is being used as a value here`                          | the command is constrained on the value, and a declared type produces none — so there is no marker to smuggle              |
 
 The two `never` cases are where the content-vs-filename distinction pays off. `Workflow<C, never, E>` resolves to `UninhabitedDecision` and `Workflow<C, D, never>` to `UninhabitedError` — interfaces whose only property is required and whose _type_ is the remediation, so the compile error points at the fix:
 
@@ -159,17 +169,17 @@ the outcome once:
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Result } from 'effect'
 import * as Match from 'effect/Match'
+import * as S from 'effect/Schema'
 
 class Decision {}
 class Err {
   constructor(readonly reason: string) {}
 }
-interface Input {
-  readonly valid: boolean
-}
+class Input extends S.Class<Input>('Input')({ valid: S.Boolean }) {}
 
 const decide = Workflow.make(
-  (input: Input): Result.Result<Decision, Err> =>
+  Input,
+  (input): Result.Result<Decision, Err> =>
     Result.gen(function*() {
       const outcome = Match.value(input).pipe(
         Match.when({ valid: false }, () => Result.fail(new Err('invalid input'))),
@@ -192,7 +202,8 @@ type — so an unreachable error channel is rejected rather than silently allowe
 
 ```ts
 const decide = Workflow.make(
-  (input: Input): Result.Result<Decision, Err> =>
+  Input,
+  (input): Result.Result<Decision, Err> =>
     Result.gen(function*() {
       return new Decision()
     }),
