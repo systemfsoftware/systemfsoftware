@@ -1,9 +1,7 @@
 ---
-'@systemfsoftware/stryker-js-cli': major
+'@systemfsoftware/stryker-js-cli': patch
 ---
 
-A `--survivors` run given a prior report that exists but is not a readable report now stops with a parse failure instead of reporting a source mismatch. The old message claimed your sources had moved when the report itself was the problem. A genuinely mismatched report still reports a mismatch, and a missing one still reports that none was found.
+A `--survivors` run given a prior report that exists but does not parse now stops and names the parse failure. It previously reported that no prior report was found — the same message as an absent report — so a corrupted or truncated report looked like a missing one.
 
-`AdmitSurvivorsRunInput` and `structuralHash` are removed. The admission command is now the `AdmitSurvivorsRunCommand` class, carrying only data: no hashing function, no path resolver, and instead the prior report's per-file source hashes and its already-converted survivors. `decodePriorReport`, `PriorReportFacts` and `PriorReportDocument` are new exports for building it.
-
-Every report admitted or rejected before is admitted or rejected the same way.
+The exit code is unchanged, and so is every admission verdict: a report whose recorded options, framework version or source content disagree with the current run still reports a mismatch, a report a `--survivors` run produced itself is still refused, an absent report still reports that none was found, and a report with no surviving mutants still ends the run without re-testing.
