@@ -27,7 +27,7 @@ tags:
 
 `@systemfsoftware/effect-cell-types` publishes a set of chaining phase constructors — `Cell.read`, `Cell.decode`, `Cell.decide`, `Cell.encode`, `Cell.write` — whose return types admit only one order, a description value `Cell.canonical` built through them, and `Cell.vocabulary`, a fold over that value carrying `module`, `ioCells`, `phases`, `byKind` and `applier`. Five axes come off the fold as data: the phase names, their purity, their intra-layer order, the owning module name, and the I/O-cell classification.
 
-Four packages outside the description now derive their whole behaviour from that one value, and naming them beats counting them, because an enumeration decays quietly: a FastCheck arbitrary that generates random-but-valid descriptions as the interpreter's property oracle; a generator that emits a type-test suite; and two oxlint rule plugins, `cell-vocabulary` deciding which calls a pure phase body may make and `effect-executor` requiring the description at all.
+Three packages outside the description derive their whole behaviour from that one value, and naming them beats counting them, because an enumeration decays quietly: a FastCheck arbitrary that generates random-but-valid descriptions as the interpreter's property oracle, and two oxlint rule plugins, `cell-vocabulary` deciding which calls a pure phase body may make and `effect-executor` requiring the description at all.
 
 ## Guidance
 

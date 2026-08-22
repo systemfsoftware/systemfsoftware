@@ -13,6 +13,7 @@ import {
   InterpretHookCommand,
   type SubmitHookVerdictError,
   submitVerdict,
+  SubmitVerdictCommand,
 } from '../HookVerdict.workflow.js'
 import { isHostBound } from '../PromptDestination.js'
 import type { HookPrompt, HookSession } from './HookSession.js'
@@ -35,7 +36,7 @@ export class RunUserPromptSubmitHooksExecutorDeps extends Context.Service<
 interface SubmitPhases extends Cell.Phases {
   readonly command: { readonly hook: CommandHook; readonly input: Record<string, unknown> }
   readonly raw: HookResult
-  readonly decoded: { readonly cmd: InterpretHookCommand; readonly code: number; readonly stdout: string }
+  readonly decoded: SubmitVerdictCommand
   readonly decision: { readonly verdict: HookDecision; readonly code: number; readonly stdout: string }
   readonly decisionError: SubmitHookVerdictError
   readonly output: { readonly blockReason: string | undefined; readonly code: number; readonly stdout: string }
@@ -81,18 +82,20 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
   const submitDescription = pipe(
     Cell.read<SubmitPhases>(({ hook, input }) => runHookScript(hook, input, cwd, 'UserPromptSubmit')),
     Cell.decode<SubmitPhases>((raw) =>
-      Result.succeed({
-        cmd: new InterpretHookCommand({
-          result: raw,
-          event: 'UserPromptSubmit',
-          parsed: Exit.match(parseHookOutput(raw.stdout), {
-            onFailure: () => Option.none(),
-            onSuccess: Option.some,
+      Result.succeed(
+        new SubmitVerdictCommand({
+          cmd: new InterpretHookCommand({
+            result: raw,
+            event: 'UserPromptSubmit',
+            parsed: Exit.match(parseHookOutput(raw.stdout), {
+              onFailure: () => Option.none(),
+              onSuccess: Option.some,
+            }),
           }),
+          code: raw.code,
+          stdout: raw.stdout,
         }),
-        code: raw.code,
-        stdout: raw.stdout,
-      })
+      )
     ),
     Cell.decide<SubmitPhases>(submitVerdict),
     Cell.encode<SubmitPhases>((outcome) =>

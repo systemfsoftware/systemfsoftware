@@ -12,7 +12,7 @@ The `stryker` bin's home. Core (`@systemfsoftware/stryker-js-core`) is the mutat
 
 ## Mutation config
 
-`stryker.config.json` exists and scopes `mutate` to `src/survivors.workflow.ts`, the package's decision cell; the gate runs through the `mutation` and `mutation:full` scripts. Root `AGENTS.md` (Stack) forbids shell cells in a mutation surface, and `check:mutate-scope` fails any config whose `mutate` glob names a forbidden cell — so widen the glob only for a new genuine `*.workflow.ts` cell, never to sweep the whole `src/` tree.
+`stryker.config.json` scopes `mutate` to `src/**/*.ts` minus tests, not to one named cell — read the config for the current globs rather than trusting a name written here, because a filename in this file is stale the moment a cell is added or renamed. The gate runs through the `mutation` and `mutation:full` scripts. Root `AGENTS.md` (Stack) forbids shell cells in a mutation surface, and `check:mutate-scope` fails any config whose `mutate` glob names a forbidden cell.
 
 ## Lint enrolment
 

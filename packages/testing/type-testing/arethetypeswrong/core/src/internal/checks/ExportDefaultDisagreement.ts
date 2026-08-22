@@ -188,7 +188,7 @@ function implIsAnalyzable(input: DisagreementAnalysis, memo: AnalysisMemo): bool
   if (exportEquals?.declarations?.length && exportEquals.declarations.length > 1) {
     let commonContainer
     for (const decl of exportEquals.declarations) {
-      const container = ts.findAncestor(decl, (node) => ts.isFunctionBlock(node) || ts.isSourceFile(node))
+      const container = ts.findAncestor(decl, (node) => isFunctionBlock(node) || ts.isSourceFile(node))
       if (commonContainer === undefined) {
         commonContainer = container
       } else if (commonContainer !== container) {

@@ -11,10 +11,10 @@ allowBuilds:
   unrs-resolver: false
 catalog:
   typescript: ^7
-  "@effect/platform-node": ^4.0.0-rc.108
-  "@effect/platform-node-shared": ^4.0.0-rc.108
-  effect: 4.0.0-rc.108
-  "@effect/vitest": 4.0.0-rc.108
+  "@effect/platform-node": ^4.0.0-rc.111
+  "@effect/platform-node-shared": ^4.0.0-rc.111
+  effect: 4.0.0-rc.111
+  "@effect/vitest": 4.0.0-rc.111
   fast-check: ^4
   vitest: ^4.1.10
   "@vitest/coverage-v8": ^4
@@ -57,8 +57,8 @@ catalogs:
   # declared `catalog:` against an exact pin ships an exact peer and forces
   # every consumer on a different rc to duplicate the package.
   peers:
-    effect: ^4.0.0-rc.108
-    "@effect/vitest": ^4.0.0-rc.108
+    effect: ^4.0.0-rc.111
+    "@effect/vitest": ^4.0.0-rc.111
   oxlint:
     oxlint: ^1.77.0
     "@oxlint/plugins": ^1.77.0

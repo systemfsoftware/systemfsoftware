@@ -1,23 +1,43 @@
 # @systemfsoftware/omp-agent-discipline
 
-OMP agent discipline: mechanical enforcement of rules prose can't hold (xd:// retry guard, ...)
+Mechanical harness discipline for Oh My Pi agents.
 
-## Install
+Enforces execution constraints and dispatch doctrine at the tool call boundary rather than relying on LLM compliance with prose system prompts.
 
-```sh
-pnpm add @systemfsoftware/omp-agent-discipline '@effect/platform-node@catalog:' '@oh-my-pi/pi-coding-agent@catalog:' 'effect@4.0.0-rc.108'
+## Features
+
+- **Dispatch Doctrine Enforcement:** Blocks prohibited tool calls and invalid delegation before execution.
+- **XD Device Retry Guard:** Prevents agents from endlessly looping on broken dynamic device tool calls.
+- **Lazy Runtime Initialization:** Defers heavy Effect runtimes to avoid penalizing initial CLI startup latency.
+
+## Installation
+
+Add the extension to your Oh My Pi configuration:
+
+```json
+{
+  "plugins": [
+    "@systemfsoftware/omp-agent-discipline"
+  ]
+}
 ```
 
-Those are peer dependencies: this package declares them but does not install them, so one copy is shared with the rest of your project.
+Or install manually via package manager:
 
-## Entry points
+```bash
+pnpm add @systemfsoftware/omp-agent-discipline
+```
 
-- `@systemfsoftware/omp-agent-discipline`
+## How It Works
 
-## API
+1. **Pre-flight Tool Validation:** Intercepts `emitToolCall` events across registered sessions.
+2. **Short-Circuit Rejection:** If an agent attempts an unauthorized tool invocation or invalid pattern, the extension immediately cancels the action and injects remediation guidance back to the model.
+3. **Session Lifecycle Hooking:** Warms required background resources on `session_start` without blocking extension registration.
 
-The public surface is generated from the source and versioned with the package: [`etc/omp-agent-discipline.api.md`](./etc/omp-agent-discipline.api.md).
+## API Reference
+
+The exported TypeScript definitions are published with the package: [`etc/omp-agent-discipline.api.md`](./etc/omp-agent-discipline.api.md).
 
 ## License
 
-Apache-2.0. Part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware).
+Apache-2.0

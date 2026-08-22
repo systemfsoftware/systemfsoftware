@@ -68,7 +68,6 @@
     "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
-    "ts-expose-internals": "^5.6.0",
     "tsdown": "catalog:",
     "vitest": "catalog:"
   },

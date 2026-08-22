@@ -3,7 +3,7 @@ import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import type { DecideInput } from './RestartDecision.schema.js'
+import { DecideInput } from './RestartDecision.schema.js'
 
 /**
  * The supervision strategies a restart decision covers.
@@ -33,19 +33,6 @@ export const restartIndicesFor = (
     Match.exhaustive,
   )
 
-/**
- * The cross-field invariant the decode input carries: a failed child's index addresses one of
- * the children that exist.
- *
- * It lives here rather than inline in `Schema.filter` because naming it makes it reachable by
- * a property test, which an inline arrow is not. The schema imports the name to build its
- * filter; the decision file is where the invariant is owned.
- */
-export const failedIndexAddressesAChild = (input: {
-  readonly failedIndex: number
-  readonly totalChildren: number
-}): boolean => input.failedIndex < input.totalChildren
-
 /** The strategies the restart law quantifies over. */
 const RESTART_STRATEGIES = ['one_for_one', 'one_for_all', 'rest_for_one'] as const
 
@@ -64,6 +51,17 @@ export class RestartDecisionExhausted extends S.TaggedError<RestartDecisionExhau
   readonly [RestartDecisionTypeId] = RestartDecisionTypeId
 }
 
+/**
+ * The outcome a restart decision produces. Named here, at the module that owns the
+ * decision, so consumers import the contract instead of reconstructing it with
+ * `ReturnType<…>` — which couples them to this signature's shape and attaches no
+ * documentation of its own.
+ */
+export type RestartDecisionOutcome = Result.Result<
+  RestartDecisionContinue | RestartDecisionRestart,
+  RestartDecisionExhausted
+>
+
 export type RestartDecisionWorkflow = Workflow.Workflow<
   DecideInput,
   RestartDecisionContinue | RestartDecisionRestart,
@@ -71,7 +69,8 @@ export type RestartDecisionWorkflow = Workflow.Workflow<
 >
 
 export const decideRestart = Workflow.make(
-  (command: DecideInput): Result.Result<RestartDecisionContinue | RestartDecisionRestart, RestartDecisionExhausted> =>
+  DecideInput,
+  (command): RestartDecisionOutcome =>
     Match.value(command).pipe(
       Match.when({ exitSuccess: true }, () => Result.succeed(RestartDecisionContinue.make())),
       Match.when({ exitSuccess: false, intensityExceeded: true }, () => Result.fail(RestartDecisionExhausted.make())),

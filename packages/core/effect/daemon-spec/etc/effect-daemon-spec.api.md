@@ -252,11 +252,20 @@ export const oneForOne: <E, R, L extends LockConfig = LockConfig>(opts: Supervis
 export const poll: <A, E, R, L extends LockConfig>(opts: PollOpts<A, E, R, L>) => Worker_2<E, R, L>;
 
 // @public (undocumented)
-export type PollLoop<E, R> = {
-    readonly _tag: 'Poll';
+export interface PollLoop<E, R> extends PollLoopTag {
+    // (undocumented)
     readonly gate: Effect.Effect<Option_2.Option<Effect.Effect<void, E, R>>, E, R>;
+    // (undocumented)
     readonly interval: Duration.Input;
+}
+
+// @public (undocumented)
+export const PollLoopTag: {
+    readonly _tag: 'Poll';
 };
+
+// @public (undocumented)
+export type PollLoopTag = typeof PollLoopTag;
 
 // @public (undocumented)
 export type PollOpts<A, E, R, L extends LockConfig> = CommonOpts<L> & {
@@ -298,10 +307,18 @@ export const stream: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> & {
 }) => Worker_2<E, R, L>;
 
 // @public (undocumented)
-export type StreamLoop<E, R> = {
-    readonly _tag: 'Stream';
+export interface StreamLoop<E, R> extends StreamLoopTag {
+    // (undocumented)
     readonly stream: Stream.Stream<unknown, E, R>;
+}
+
+// @public (undocumented)
+export const StreamLoopTag: {
+    readonly _tag: 'Stream';
 };
+
+// @public (undocumented)
+export type StreamLoopTag = typeof StreamLoopTag;
 
 // @public (undocumented)
 export const subscription: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> & {
@@ -309,10 +326,18 @@ export const subscription: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> &
 }) => Worker_2<E, R, L>;
 
 // @public (undocumented)
-export type SubscriptionLoop<E, R> = {
-    readonly _tag: 'Subscription';
+export interface SubscriptionLoop<E, R> extends SubscriptionLoopTag {
+    // (undocumented)
     readonly acquire: Effect.Effect<void, E, R>;
+}
+
+// @public (undocumented)
+export const SubscriptionLoopTag: {
+    readonly _tag: 'Subscription';
 };
+
+// @public (undocumented)
+export type SubscriptionLoopTag = typeof SubscriptionLoopTag;
 
 // @public (undocumented)
 export const Supervision: {
@@ -479,8 +504,8 @@ export type WorkerTypeId = typeof WorkerTypeId;
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:290:3 - (ae-forgotten-export) The symbol "dynamic$1" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:299:3 - (ae-forgotten-export) The symbol "custom" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:301:3 - (ae-forgotten-export) The symbol "dynamic$1" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:310:3 - (ae-forgotten-export) The symbol "custom" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 
