@@ -28,6 +28,21 @@ const PROTECTED_RULE_IDS: readonly string[] = ['make-command-schema']
 /** A disable directive of either linter, in either comment syntax. */
 const DISABLE_DIRECTIVE = /(?:oxlint|eslint)-disable(?:-next-line|-line)?/
 
+/**
+ * The same directive with whatever follows it, so a blanket form can be told from a
+ * targeted one. A directive naming no rule disables every rule, which is a suppression
+ * of each protected id without ever spelling one - the shape a scan keyed only on the id
+ * cannot see. `--` opens oxlint's explanation, so text after it names nothing.
+ */
+const DIRECTIVE_WITH_TAIL = /(?:oxlint|eslint)-disable(?:-next-line|-line)?([^\n]*)/
+
+/** True when the directive names no rule, and so disables all of them. */
+const isBlanket = (line: string): boolean => {
+  const tail = DIRECTIVE_WITH_TAIL.exec(line)?.[1] ?? ''
+  const named = tail.split('--')[0] ?? ''
+  return named.replace(/[*/\s]/g, '') === ''
+}
+
 const SOURCE_EXTENSIONS: readonly string[] = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']
 
 /**
@@ -45,12 +60,30 @@ interface Finding {
   readonly text: string
 }
 
-/** A comment suppressing a protected rule, if this line is one. */
+/**
+ * A comment suppressing a protected rule, if this line is one.
+ *
+ * Two forms this gate shipped blind to, both measured, both honoured by oxlint:
+ *
+ * A directive inside a block comment the formatter has wrapped sits on a continuation
+ * line carrying neither `//` nor `/*`, only a leading `*`.
+ *
+ * A directive naming no rule at all disables every rule, so it suppresses each
+ * protected id without spelling one - invisible to a scan keyed on the id, and the
+ * broadest suppression available. It is reported against the first protected id,
+ * because the finding is about the directive and not about which id it reached.
+ *
+ * The predicate errs closed on purpose. A string literal that spells out a full
+ * directive is flagged, which costs an author one rename; the opposite error costs
+ * the only layer that closes a laundered command.
+ */
 export const suppressionOn = (line: string): string | null => {
   if (!DISABLE_DIRECTIVE.test(line)) return null
-  const comment = line.includes('//') || line.includes('/*')
+  const comment = line.includes('//') || line.includes('/*') || line.trimStart().startsWith('*')
   if (!comment) return null
-  return PROTECTED_RULE_IDS.find((ruleId) => line.includes(ruleId)) ?? null
+  const named = PROTECTED_RULE_IDS.find((ruleId) => line.includes(ruleId))
+  if (named !== undefined) return named
+  return isBlanket(line) ? PROTECTED_RULE_IDS[0] ?? null : null
 }
 
 const trackedSourceFiles = async (): Promise<readonly string[]> => {
@@ -104,6 +137,14 @@ const selftest = (): number => {
     '/* oxlint-disable make-command-schema */',
     '// oxlint-disable-line @systemfsoftware/oxlint-plugin-effect-workflow/make-command-schema',
     '// eslint-disable @systemfsoftware/oxlint-plugin-effect-workflow/make-command-schema',
+    // The wrapped block comment. This gate shipped exiting 0 on a file carrying it.
+    ' * oxlint-disable make-command-schema',
+    '   * eslint-disable-next-line make-command-schema -- wrapped by the formatter',
+    // The blanket directive. It names no rule and so disables every one, including
+    // this one; the gate shipped exiting 0 on it too.
+    '// oxlint-disable',
+    '/* eslint-disable */',
+    '// oxlint-disable -- the whole file is generated',
   ]
   const mustIgnore: readonly string[] = [
     '// oxlint-disable-next-line no-console',
@@ -112,6 +153,10 @@ const selftest = (): number => {
     "  [rule('make-command-schema')]: 'error',",
     '// a comment mentioning make-command-schema without a directive',
     'oxlint-disable-next-line make-command-schema',
+    // A targeted directive naming some other rule leaves this one on, so it is not a
+    // suppression. This row is what stops the blanket case from swallowing everything.
+    '// eslint-disable-next-line no-misused-spread, no-console',
+    '/* oxlint-disable no-console */',
   ]
 
   const missed = mustCatch.filter((line) => suppressionOn(line) === null)
