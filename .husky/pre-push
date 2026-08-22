@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+# Refuse a push whose refs do not contain remote main.
+# Local main is not the source of truth — fetch the remote tip.
+# stderr from the script is the gate's product output.
+set -e
+./scripts/guards/check-remote-main.ts "$@"
