@@ -6,13 +6,6 @@ import { CommandRefused, StructCmd, TaggedCmd, UntaggedCmd } from '../tests/__fi
 import { decideTagged } from '../tests/__fixtures__/TaggedCommand.workflow.js'
 import { decideWidened } from '../tests/__fixtures__/WidenedCommand.workflow.js'
 
-// The fixtures declare their `_tag` directly. `no-manual-tag-member` exempts
-// `*.tst.ts`, because every replacement it names is a runtime value and this
-// file must contain none — inheriting from a carrier would have meant a const
-// existing only to be read back by `typeof`. The discrimination claim below
-// compares `_tag` directly, which `no-direct-tag-access` permits here for the
-// same reason: the comparison is the assertion under test rather than a
-// dispatch a consumer routes on.
 interface Cmd {
   readonly _tag: 'Cmd'
 }

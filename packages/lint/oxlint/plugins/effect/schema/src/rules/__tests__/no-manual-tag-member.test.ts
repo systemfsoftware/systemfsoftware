@@ -71,10 +71,6 @@ ruleTester.run('no-manual-tag-member', noManualTagMember, {
       `,
     },
     {
-      // Every replacement the rule names is a runtime value, and a type-test
-      // fixture holds none. Firing here would demand a value the file class
-      // cannot carry, so the only reachable answer was a const existing purely
-      // to be read back by `typeof` — which is what this exemption retires.
       name: 'Should_Allow_HandWritten_Tag_When_File_Is_A_Tst_Fixture',
       code: `
         interface Cmd { readonly _tag: 'Cmd' }
