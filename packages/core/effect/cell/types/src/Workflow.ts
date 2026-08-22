@@ -42,11 +42,6 @@ export interface UntaggedError {
     'this error carries no _tag the consumer can dispatch on; declare it as an S.TaggedError'
 }
 
-/** The shape an error channel must have: a tag the consumer dispatches on. */
-export interface Tagged {
-  readonly _tag: string
-}
-
 /**
  * A decider whose channels are both inhabited, or the marker naming which channel is not.
  *
@@ -68,7 +63,7 @@ export type Workflow<Command, Decision, DecisionError> = [Decision] extends [nev
  */
 export type Inhabited<Decision, DecisionError> = [Decision] extends [never] ? UninhabitedDecision
   : [DecisionError] extends [never] ? UninhabitedError
-  : [DecisionError] extends [Tagged] ? unknown
+  : '_tag' extends keyof DecisionError ? unknown
   : UntaggedError
 
 /**

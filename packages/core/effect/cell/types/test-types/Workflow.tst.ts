@@ -2,28 +2,24 @@ import { Cell, type Workflow } from '@systemfsoftware/effect-cell-types'
 import type { Result } from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
-// The fixtures are deliberately plain interfaces with a literal `_tag`, and the
-// discrimination claim below compares `_tag` directly. That authoring trips
-// `@systemfsoftware/effect-dmmf(no-manual-tag-member)` and
-// `@systemfsoftware(no-direct-tag-access)` — a known rule-scope defect fixed in a
-// later unit, not a signal to reach for S.TaggedStruct (this file must contain no
-// runtime values).
-interface Cmd {
-  readonly _tag: 'Cmd'
-}
+import type { AltTag, CmdTag, DecTag, ErrTag } from './tags.js'
 
-interface Dec {
-  readonly _tag: 'Dec'
+// The fixtures inherit their tags from `./tags.js` instead of declaring a `_tag`
+// member: this file must contain no runtime values, and a type-only import emits
+// none. The discrimination claim below still compares `_tag` directly, which
+// trips `@systemfsoftware(no-direct-tag-access)` — a known rule-scope defect
+// fixed in a later unit.
+type Cmd = CmdTag
+
+interface Dec extends DecTag {
   readonly succeeded: boolean
 }
 
-interface Alt {
-  readonly _tag: 'Alt'
+interface Alt extends AltTag {
   readonly reason: string
 }
 
-interface Err {
-  readonly _tag: 'Err'
+interface Err extends ErrTag {
   readonly code: number
 }
 

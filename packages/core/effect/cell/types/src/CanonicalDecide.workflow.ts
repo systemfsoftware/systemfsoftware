@@ -1,4 +1,6 @@
 import * as Result from 'effect/Result'
+
+import { CanonicalDecideError } from './CanonicalDecide.schema.js'
 import * as Workflow from './Workflow.js'
 
 /**
@@ -8,5 +10,5 @@ import * as Workflow from './Workflow.js'
  * the interpreter rely on.
  */
 export const canonicalDecide = Workflow.make(
-  (_decoded: unknown): Result.Result<undefined, Workflow.Tagged> => Result.succeed(undefined),
+  (_decoded: unknown): Result.Result<undefined, CanonicalDecideError> => Result.succeed(undefined),
 )

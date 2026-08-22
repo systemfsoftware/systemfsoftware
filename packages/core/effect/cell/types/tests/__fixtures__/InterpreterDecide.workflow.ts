@@ -9,20 +9,25 @@ export interface Admitted {
   readonly kind: 'Admitted'
   readonly length: number
 }
-export interface Refused {
+const RefusedTag = { _tag: 'Refused' } as const
+type RefusedTag = typeof RefusedTag
+
+/**
+ * The decide error channel must carry a `_tag` the consumer can dispatch on,
+ * which the branded `Workflow.make` demands. The tag is inherited from the
+ * carrier above rather than declared here, and the same carrier is spread into
+ * the failure value, so the literal has exactly one source.
+ */
+export interface Refused extends RefusedTag {
   readonly kind: 'Refused'
   readonly why: string
-  // The decide error channel must satisfy the tagged-channel rule the workflow brand rides
-  // on, so it can be handed through `Workflow.make`. The tag is set by the fail literal;
-  // the type declaration stays string-wide to keep this fixture out of the manual-tag rule.
-  readonly _tag: string
 }
 
 export const decide = Workflow.make(
   (decoded: Decoded): Result.Result<Admitted, Refused> =>
     Match.value(decoded.length > 3).pipe(
       Match.when(true, () => Result.succeed<Admitted>({ kind: 'Admitted', length: decoded.length })),
-      Match.when(false, () => Result.fail<Refused>({ kind: 'Refused', why: 'too short', _tag: 'Refused' })),
+      Match.when(false, () => Result.fail<Refused>({ ...RefusedTag, kind: 'Refused', why: 'too short' })),
       Match.exhaustive,
     ),
 )
