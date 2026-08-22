@@ -27,22 +27,25 @@ ruleOfSchemas('Email', Email)
 import { boundedUnion, ruleOfSchemas } from '@systemfsoftware/effect-schema-law'
 import { Schema as S } from 'effect'
 
-interface Lit {
-  readonly _tag: 'Lit'
-  readonly value: number
-}
-interface Add {
-  readonly _tag: 'Add'
+// The tag is declared once, by the schema. A hand-written `readonly _tag: 'Lit'`
+// member is refused by `no-manual-tag-member`, and deriving it keeps the tag and
+// the schema from drifting apart.
+const LitBase = S.TaggedStruct('Lit', { value: S.JsonNumber })
+const AddBase = S.TaggedStruct('Add', {})
+
+type Lit = S.Schema.Type<typeof LitBase>
+type Add = S.Schema.Type<typeof AddBase> & {
   readonly left: Expr
   readonly right: Expr
 }
 type Expr = Lit | Add
 
-const Lit = S.Struct({ _tag: S.Literal('Lit'), value: S.JsonNumber })
-const Add: S.Schema<Add> = S.suspend((): S.Schema<Add> => S.Struct({ _tag: S.Literal('Add'), left: Expr, right: Expr }))
+// Only the self-referential fields stay hand-written. The tag never participates in
+// the recursion, so the base carries it and `suspend` carries only the cycle.
+const Add: S.Codec<Add> = S.suspend((): S.Codec<Add> => S.Struct({ ...AddBase.fields, left: Expr, right: Expr }))
 
-const Expr: S.Schema<Expr> = boundedUnion('Expr', {
-  base: [Lit],
+const Expr: S.Codec<Expr> = boundedUnion('Expr', {
+  base: [LitBase],
   recur: [Add],
 })
 

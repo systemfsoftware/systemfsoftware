@@ -6,9 +6,9 @@ import type { AltTag, CmdTag, DecTag, ErrTag } from './tags.js'
 
 // The fixtures inherit their tags from `./tags.js` instead of declaring a `_tag`
 // member: this file must contain no runtime values, and a type-only import emits
-// none. The discrimination claim below still compares `_tag` directly, which
-// trips `@systemfsoftware(no-direct-tag-access)` — a known rule-scope defect
-// fixed in a later unit.
+// none. The discrimination claim below compares `_tag` directly, which
+// `no-direct-tag-access` permits here: it exempts `*.tst.ts`, where the comparison
+// is the assertion under test rather than a dispatch a consumer routes on.
 type Cmd = CmdTag
 
 interface Dec extends DecTag {
@@ -22,6 +22,16 @@ interface Alt extends AltTag {
 interface Err extends ErrTag {
   readonly code: number
 }
+
+/**
+ * The three shapes a bare key-presence test admits and a dispatchable-tag test refuses. Each is
+ * spelled through `Record` rather than a `_tag` property signature, so these fixtures pin the
+ * bound without writing the member `no-manual-tag-member` forbids — the evasion shape earns its
+ * keep as the fixture for the bound it evades.
+ */
+type NumericTagError = Record<'_tag', number>
+type OptionalTagError = Partial<Record<'_tag', string>>
+type CallableTagError = Record<'_tag', () => void>
 
 declare const cmd: Cmd
 declare const decision: Dec | Alt
@@ -112,6 +122,18 @@ describe('the constructor compiled evidence', () => {
 
   it('Should_DemandUntaggedErrorMarker_When_ErrorChannelCarriesNoTag', () => {
     expect<Workflow.Inhabited<Dec, Error>>().type.toBe<Workflow.UntaggedError>()
+  })
+
+  it('Should_DemandUntaggedErrorMarker_When_TagIsNotAString', () => {
+    expect<Workflow.Inhabited<Dec, NumericTagError>>().type.toBe<Workflow.UntaggedError>()
+  })
+
+  it('Should_DemandUntaggedErrorMarker_When_TagIsOptional', () => {
+    expect<Workflow.Inhabited<Dec, OptionalTagError>>().type.toBe<Workflow.UntaggedError>()
+  })
+
+  it('Should_DemandUntaggedErrorMarker_When_TagHoldsACallable', () => {
+    expect<Workflow.Inhabited<Dec, CallableTagError>>().type.toBe<Workflow.UntaggedError>()
   })
 })
 

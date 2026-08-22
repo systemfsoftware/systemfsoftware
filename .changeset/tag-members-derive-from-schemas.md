@@ -1,6 +1,7 @@
 ---
 "@systemfsoftware/oxlint-plugin-effect-schema": major
 "@systemfsoftware/oxlint-plugin-effect-dmmf": major
+"@systemfsoftware/all": major
 ---
 
 A hand-written `_tag` member in a type is now an error.
@@ -13,5 +14,5 @@ the payload, declare the tag once as a value and let the type inherit it and the
 it.
 
 The rule has no options, no allowlist, no per-package disable and no filename exemption, and it is
-on in the recommended preset — so upgrading surfaces every hand-declared tag in your sources at
-once. The only way to satisfy it is to derive or inherit the member.
+on in the recommended preset — so upgrading reports every `_tag` member your types declare, in one
+pass. A reported member has no suppression path: derive it or inherit it.

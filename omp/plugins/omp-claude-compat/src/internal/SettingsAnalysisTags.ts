@@ -49,14 +49,6 @@ export type SettingsAnalysisIfEvaluatingEventCommand = SettingsAnalysisIfEvaluat
   readonly event: string
 }
 
-export type SettingsAnalysisCommand =
-  | SettingsAnalysisMergeCommand
-  | SettingsAnalysisCoverageCommand
-  | SettingsAnalysisDisabledCoverageCommand
-  | SettingsAnalysisUnsupportedHookTypesCommand
-  | SettingsAnalysisMatcherUnreadableCommand
-  | SettingsAnalysisIfEvaluatingEventCommand
-
 export const settingsAnalysisTags = {
   Merge: SettingsAnalysisMergeTag,
   Coverage: SettingsAnalysisCoverageTag,

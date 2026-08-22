@@ -13,10 +13,10 @@ execution: code
 
 ## Goal Capsule
 
-- **Objective.** Ship an oxlint rule in `@systemfsoftware/oxlint-plugin-effect-schema` that forbids a `_tag` property signature in every type position, with **no options, no allowlist, no per-package disable, and no filename gate**, and migrate all seven in-repo sites to derived tags. The rule is a pure prohibition: the only way to satisfy it is to stop hand-writing the member.
+- **Objective.** Ship an oxlint rule in `@systemfsoftware/oxlint-plugin-effect-schema` that forbids a `_tag` property signature in every type position, with **no options, no allowlist, no per-package disable, and no filename gate**, and migrate every in-repo site to a derived or inherited tag. The rule is a pure prohibition: a reported member has no suppression path.
 - **Product authority.** Repository owner, this session: an `allow` list and a package `off` were both rejected as cheating. Grounded in `CONSTITUTION.md` `CONST-E1` (prefer the gate), root `AGENTS.md` `REPO-A4` (a type binds only where something forces the constructor), `CHK1` (a check keyed on a value its own author supplied certifies nothing), and the wiki's `rule-polarity` `A6` — a gate that can be satisfied by writing a declaration is unverifiable by construction.
 - **Open blockers.** None. Every "cannot migrate" claim in the prior revision was falsified this session by a compiling probe (see Proven Migration Patterns).
-- **Execution profile.** Code. The rule lands unregistered, all seven sites migrate, then registration flips it to `error`; no intermediate commit lints red.
+- **Execution profile.** Code. The rule lands unregistered, every enumerated site migrates, then registration flips it to `error`; no intermediate commit lints red.
 - **Stop conditions.** A `_tag` declaration is found that no derivation expresses (none known — the probe covers all five shapes present); the whole-tree scan reports a site absent from the disposition table.
 - **Tail ownership.** This plan opens a PR and drives CI to green; publish is human-controlled (`REPO-P1`).
 
@@ -30,7 +30,7 @@ execution: code
 
 The prior revision of this plan carried a per-name `allow` list, then a per-package `off`. Both were rejected: an escape hatch an agent can reach for converts the rule from a negative constraint into a positive directive ("declare a reason"), which passes while the forbidden tag stands. What made both look necessary was the belief that six of the seven sites could not migrate — five behind a package `off`, one behind a `.tst.ts` filename gate. That belief is false. **The `_tag` literal never participates in what makes those types hard** — recursion, prototype methods, and unencodable fields all live in _other_ members — so the tag is always derivable, and the hard members stay hand-written next to it.
 
-All seven in-repo sites migrate. In-repo effect is seven conversions and zero suppressions.
+Every in-repo site migrates; nothing is suppressed. The count is deliberately not fixed here: the disposition table below is a hypothesis, and the authoritative population is whatever the whole-tree scan in U7 reports with the rule live. That distinction earned its keep — the scan found a cohort this table never listed (`omp-claude-compat`'s hook and settings command unions, 18 members across three files), which is exactly the stop condition below firing as designed rather than a defect in it.
 
 ### Problem Frame
 
@@ -135,7 +135,7 @@ Two facts the probe established that constrain the implementation:
 - **KTD4 — No filename gate.** The prior rule died on `.shape.ts`; a `.tst.ts` gate is the same mechanism with a friendlier suffix. P5 removes the need for it.
 - **KTD5 — Severity `error` everywhere, `warn` nowhere.** A warning is prose wearing a linter's syntax (`OP7`).
 - **KTD6 — The tag's single source of truth moves to value space.** This is a strict improvement independent of the rule: today the literal is written twice (once in the type, once in the constructor) and nothing keeps them equal; after migration the constructor's value _is_ the type's tag. It also runs with the grain of `REPO-A1` — types derive from the data the edge produces.
-- **KTD7 — Migration precedes registration.** The rule is implemented and unit-proven in U1, all seven sites migrate in U2-U6, and only U7 registers it. Every commit is lint-clean, and U7's scan is a real check rather than a formality.
+- **KTD7 — Migration precedes registration.** The rule is implemented and unit-proven in U1, every enumerated site migrates in U2-U6, and only U7 registers it. Every commit is lint-clean, and U7's scan is a real check rather than a formality — it is the step that decides the true population, not the disposition table.
 
 ### Detection decision tree
 
@@ -219,7 +219,7 @@ U1 rule + suite → U2…U6 migrations (independent; parallelizable by package) 
 
 **Files:** `packages/lint/oxlint/plugins/effect/schema/src/index.ts`, that plugin's `README.md` and regenerated `etc/*.api.md`, plus `.changeset/` entries
 
-**Approach:** one `rules` row and one `configs.recommended` row at `error`; README row; `api:check` regenerates. Then the whole-tree scan: with the rule live, repo lint must report **zero** `no-manual-tag-member` findings. Any finding is either a cohort U2-U6 missed or a false positive, and both are fixed in the rule or the migration — there is no third disposition. Record the runtime delta the rule adds. Changesets: the schema plugin (new rule reaching preset adopters as a new `error`), arethetypeswrong-core (constructor-shape break), and each migrated package whose exported type graph gains a carrier name (`REPO-R14`); bumps follow what a consumer observes, per `REPO-R2`, and no changeset names a rule, a gate, or a file (`REPO-R3`).
+**Approach:** one `rules` row and one `configs.recommended` row at `error`; README row; `api:check` regenerates. Then the whole-tree scan: with the rule live, repo lint must report **zero** `no-manual-tag-member` findings. Any finding is either a cohort U2-U6 missed or a false positive, and both are fixed in the rule or the migration — there is no third disposition. Record the runtime delta the rule adds. Changesets are decided by the release gate, which demands an intent for every publishable package whose turbo `build` hash moved, so the set is wider than the packages this branch edits: `major` for the schema plugin, the meta plugin that aggregates its rules, and the preset that aggregates that (each hands preset adopters a new `error` on upgrade); `major` for arethetypeswrong-core (constructor-shape break) and effect-cell-types (a removed public bound); `minor` for effect-daemon-spec (new exported carriers); `none` for every remaining package, whose hash moved only through a development-dependency edge or whose changed sources reach no export. Bumps follow what a consumer observes (`REPO-R2`). Per `REPO-R3` a body may name the rule id, because that is the string a consumer reads in their own build output, but never a file, a gate, a script, or a test count.
 
 **Verification:** repo lint reports zero findings for the rule; `pnpm check:local` exits 0 after the last edit; `gh pr checks --watch --fail-fast` exits 0.
 

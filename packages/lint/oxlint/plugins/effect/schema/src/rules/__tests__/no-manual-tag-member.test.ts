@@ -9,7 +9,7 @@ const expectedTaggedStruct =
   'S.TaggedStruct, deriving the type with S.Schema.Type, from effect (Schema as S from "effect")'
 const expectedTaggedError = 'S.TaggedError from effect (Schema as S from "effect")'
 const fix =
-  'Inherit the member from a tag carrier (interface X extends XTag) or derive it (type X = S.Schema.Type<typeof XBase> & { ... }); keep hand-written only the members no schema can express, or delete the type when it defends nothing'
+  "Inherit the member from a tag carrier (const XTag = { _tag: 'X' } as const; type XTag = typeof XTag; interface X extends XTag) or derive it from a schema base (const XBase = S.TaggedStruct('X', { ... }); type X = S.Schema.Type<typeof XBase> & { ... }), placing that base in a *.schema.ts or in the *.workflow.ts that owns it so schema-declaration-location stays satisfied; keep hand-written only the members no schema can express, or delete the type when it defends nothing"
 
 const forbidden = (name: string, expected: string) => ({
   messageId: 'forbidden' as const,
@@ -57,6 +57,17 @@ ruleTester.run('no-manual-tag-member', noManualTagMember, {
       name: 'Should_Allow_MethodNamed_Tag_When_It_Is_A_MethodSignature',
       code: `
         interface I { _tag(): void }
+      `,
+    },
+    {
+      // The rule is grammatical: it reads the key it is given and resolves no
+      // indirection. A computed key naming a const is therefore outside it, and
+      // this case pins that boundary rather than pretending it is covered —
+      // closing it needs a same-file const registry, which is its own change.
+      name: 'Should_Allow_Tag_Behind_A_ComputedIdentifier_When_Key_Is_Indirect',
+      code: `
+        const T = '_tag'
+        type Indirect = { [T]: 'Indirect' }
       `,
     },
   ],
@@ -138,6 +149,20 @@ ruleTester.run('no-manual-tag-member', noManualTagMember, {
       errors: [
         forbidden('an anonymous type literal with a hand-written _tag member', expectedTaggedStruct),
       ],
+    },
+    {
+      name: 'Should_Report_Tag_When_Key_Is_A_ComputedStringLiteral',
+      code: `
+        type Computed = { ['_tag']: 'Computed' }
+      `,
+      errors: [forbidden('Computed with a hand-written _tag member', expectedTaggedStruct)],
+    },
+    {
+      name: 'Should_Report_Tag_When_ReturnType_Of_A_NamedFunctionDeclaration',
+      code: `
+        function parse(): { readonly _tag: 'Ok' } { return { _tag: 'Ok' } }
+      `,
+      errors: [forbidden('parse with a hand-written _tag member', expectedTaggedStruct)],
     },
   ],
 })
