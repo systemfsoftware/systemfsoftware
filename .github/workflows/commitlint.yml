@@ -16,6 +16,10 @@ jobs:
       head_sha: ${{ github.event.pull_request.head.sha }}
   commitlint:
     needs: conflicts
+    # Dependabot PRs are machine-generated update commits (deterministic
+    # subjects, often long); linting them produces unstoppable red checks that
+    # stall the automerge flow. The conflict check above still guards them.
+    if: github.actor != 'dependabot[bot]'
     name: lint PR commits
     runs-on: ubuntu-latest
     timeout-minutes: 5
