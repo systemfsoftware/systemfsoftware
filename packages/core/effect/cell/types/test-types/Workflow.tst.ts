@@ -5,24 +5,30 @@ import { describe, expect, it } from 'tstyche'
 import { CommandRefused, StructCmd, TaggedCmd, UntaggedCmd } from '../tests/__fixtures__/Command.schema.js'
 import { decideTagged } from '../tests/__fixtures__/TaggedCommand.workflow.js'
 import { decideWidened } from '../tests/__fixtures__/WidenedCommand.workflow.js'
-import type { AltTag, CmdTag, DecTag, ErrTag } from './tags.js'
 
-// The fixtures inherit their tags from `./tags.js` instead of declaring a `_tag`
-// member: this file must contain no runtime values, and a type-only import emits
-// none. The discrimination claim below compares `_tag` directly, which
-// `no-direct-tag-access` permits here: it exempts `*.tst.ts`, where the comparison
-// is the assertion under test rather than a dispatch a consumer routes on.
-type Cmd = CmdTag
+// The fixtures declare their `_tag` directly. `no-manual-tag-member` exempts
+// `*.tst.ts`, because every replacement it names is a runtime value and this
+// file must contain none — inheriting from a carrier would have meant a const
+// existing only to be read back by `typeof`. The discrimination claim below
+// compares `_tag` directly, which `no-direct-tag-access` permits here for the
+// same reason: the comparison is the assertion under test rather than a
+// dispatch a consumer routes on.
+interface Cmd {
+  readonly _tag: 'Cmd'
+}
 
-interface Dec extends DecTag {
+interface Dec {
+  readonly _tag: 'Dec'
   readonly succeeded: boolean
 }
 
-interface Alt extends AltTag {
+interface Alt {
+  readonly _tag: 'Alt'
   readonly reason: string
 }
 
-interface Err extends ErrTag {
+interface Err {
+  readonly _tag: 'Err'
   readonly code: number
 }
 
