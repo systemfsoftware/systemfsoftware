@@ -13,6 +13,7 @@ import {
   InterpretHookCommand,
   type SubmitHookVerdictError,
   submitVerdict,
+  SubmitVerdictCommand,
   Warning,
 } from '../HookVerdict.workflow.js'
 import type { HooksForEventResult } from './HookFeedback.js'
@@ -40,7 +41,7 @@ const AGGREGATE_CEILING_MS = 26_000
 interface HookVerdictPhases extends Cell.Phases {
   readonly command: { readonly hook: CommandHook; readonly input: Record<string, unknown> }
   readonly raw: HookResult
-  readonly decoded: { readonly cmd: InterpretHookCommand; readonly code: number; readonly stdout: string }
+  readonly decoded: SubmitVerdictCommand
   readonly decision: { readonly verdict: HookDecision; readonly code: number; readonly stdout: string }
   readonly decisionError: SubmitHookVerdictError
   readonly output: HookOutcome
@@ -79,18 +80,20 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
   const hookVerdictDescription = pipe(
     Cell.read<HookVerdictPhases>(({ hook, input }) => runHookScript(hook, input, cwd, event)),
     Cell.decode<HookVerdictPhases>((raw) =>
-      Result.succeed({
-        cmd: new InterpretHookCommand({
-          result: raw,
-          event,
-          parsed: Exit.match(parseHookOutput(raw.stdout), {
-            onFailure: () => Option.none(),
-            onSuccess: Option.some,
+      Result.succeed(
+        new SubmitVerdictCommand({
+          cmd: new InterpretHookCommand({
+            result: raw,
+            event,
+            parsed: Exit.match(parseHookOutput(raw.stdout), {
+              onFailure: () => Option.none(),
+              onSuccess: Option.some,
+            }),
           }),
+          code: raw.code,
+          stdout: raw.stdout,
         }),
-        code: raw.code,
-        stdout: raw.stdout,
-      })
+      )
     ),
     Cell.decide<HookVerdictPhases>(submitVerdict),
     Cell.encode<HookVerdictPhases>((outcome) =>

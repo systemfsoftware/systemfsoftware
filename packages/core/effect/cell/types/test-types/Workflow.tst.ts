@@ -2,6 +2,9 @@ import { Cell, type Workflow } from '@systemfsoftware/effect-cell-types'
 import type { Result } from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
+import { CommandRefused, StructCmd, TaggedCmd, UntaggedCmd } from '../tests/__fixtures__/Command.schema.js'
+import { decideTagged } from '../tests/__fixtures__/TaggedCommand.workflow.js'
+import { decideWidened } from '../tests/__fixtures__/WidenedCommand.workflow.js'
 import type { AltTag, CmdTag, DecTag, ErrTag } from './tags.js'
 
 // The fixtures inherit their tags from `./tags.js` instead of declaring a `_tag`
@@ -36,10 +39,21 @@ type CallableTagError = Record<'_tag', () => void>
 declare const cmd: Cmd
 declare const decision: Dec | Alt
 declare const decideInhabited: (command: Cmd) => Result<Dec, Err>
-declare const decidePromise: (command: Cmd) => Promise<Dec>
-declare const decideValue: (command: Cmd) => Dec
+declare const decidePromiseOverTagged: (command: TaggedCmd) => Promise<Dec>
+declare const decideValueOverTagged: (command: TaggedCmd) => Dec
 declare const totallyDecided: Workflow.Workflow<Cmd, boolean, never>
 declare const madeDecide: Workflow.Workflow<Cmd, Dec, Err>
+
+// The command channel is keyed on the command VALUE, so these fixtures are the
+// arguments `make` receives. The negatives are `declare`d rather than written:
+// a plain class, an object literal and a primitive need no runtime value to be
+// refused, and this file declares none.
+declare const decideOverTagged: (command: TaggedCmd) => Result<Dec, Err>
+declare const decideOverUntagged: (command: UntaggedCmd) => Result<Dec, Err>
+declare const decideOverUnrelated: (command: { readonly nope: boolean }) => Result<Dec, Err>
+declare const PlainCmdCtor: new(value: number) => { readonly value: number }
+declare const objectLiteralCmd: { readonly value: number }
+declare const primitiveCmd: number
 
 /**
  * A bag whose decide phase is the exact shape of `decideInhabited`, so the brand is the
@@ -84,10 +98,6 @@ describe('the four contractual claims', () => {
 })
 
 describe('the constructor compiled evidence', () => {
-  it('Should_AcceptInhabitedDecider_When_BothChannelsInhabited', () => {
-    expect<typeof Workflow.make>().type.toBeCallableWith(decideInhabited)
-  })
-
   it('Should_ResolveTotalDecisionToUninhabitedError_When_ErrorChannelIsNever', () => {
     expect<Workflow.Workflow<Cmd, boolean, never>>().type.toBe<Workflow.UninhabitedError>()
     expect<Workflow.Workflow<Cmd, boolean, never>>().type.not.toBeAssignableTo<(...args: never[]) => unknown>()
@@ -101,11 +111,20 @@ describe('the constructor compiled evidence', () => {
   })
 
   it('Should_RejectPromiseReturningDecider_When_ParameterRequiresResultReturn', () => {
-    expect<typeof Workflow.make>().type.not.toBeCallableWith(decidePromise)
+    // Paired with a real command so the refusal is about the decider's return type,
+    // not about arity — a one-argument call would now fail for the wrong reason and
+    // the assertion would stop testing what it names.
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(TaggedCmd, decidePromiseOverTagged)
   })
 
   it('Should_RejectBareValueDecider_When_ParameterRequiresResultReturn', () => {
-    expect<typeof Workflow.make>().type.not.toBeCallableWith(decideValue)
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(TaggedCmd, decideValueOverTagged)
+  })
+
+  it('Should_RejectDeciderWithNoCommand_When_TheCommandArgumentIsMissing', () => {
+    // The arity claim, stated once and on purpose: the command is not optional, so a
+    // bare decider is not a workflow constructor call.
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(decideOverTagged)
   })
 
   it('Should_CollapseToUnknown_When_BothChannelsInhabitedAndErrorTagged', () => {
@@ -149,5 +168,63 @@ describe('the brand Cell.decide demands', () => {
     expect<Cell.DecidePhase<Shape>>().type.toBe<((decoded: Cmd) => Result<Dec, Err>) & Workflow.WorkflowBrand>()
     expect<Cell.DecidePhase<Shape>>().type.toBeCallableWith(cmd)
     expect<typeof Cell.decide<Shape>>().type.toBeCallableWith(madeDecide)
+  })
+})
+
+describe('the command channel the value constrains', () => {
+  it('Should_RefuseInterfaceAtTheCommandPosition_When_TheCommandIsAPlainInterface', () => {
+    // The load-bearing claim, and the reason enforcement moved to the value: a
+    // declared type produces no value, so an interface cannot reach an argument
+    // position at all. Stated here as the type-level truth behind that — no
+    // interface is assignable to the command parameter, so there is nothing to
+    // smuggle a marker into.
+    expect<Cmd>().type.not.toBeAssignableTo<Parameters<typeof Workflow.make>[0]>()
+    expect<Shape>().type.not.toBeAssignableTo<Parameters<typeof Workflow.make>[0]>()
+  })
+
+  it('Should_AcceptTaggedClassCommand_When_PassedAtTheCommandPosition', () => {
+    expect<typeof Workflow.make>().type.toBeCallableWith(TaggedCmd, decideOverTagged)
+  })
+
+  it('Should_AcceptUntaggedClassCommand_When_PassedAtTheCommandPosition', () => {
+    expect<typeof Workflow.make>().type.toBeCallableWith(UntaggedCmd, decideOverUntagged)
+  })
+
+  it('Should_ExposeEveryCommandFieldAndTag_When_CommandIsATaggedClass', () => {
+    expect<typeof decideTagged>().type.toBe<
+      ((command: TaggedCmd) => Result<number, CommandRefused>) & Workflow.WorkflowBrand
+    >()
+    expect<TaggedCmd['value']>().type.toBe<number>()
+    expect<TaggedCmd['_tag']>().type.toBe<'TaggedCmd'>()
+  })
+
+  it('Should_RefuseStructCommand_When_PassedAtTheCommandPosition', () => {
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(StructCmd, decideOverTagged)
+  })
+
+  it('Should_RefusePlainClassCommand_When_ItCarriesNoSchemaSurface', () => {
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(PlainCmdCtor, decideOverTagged)
+  })
+
+  it('Should_RefuseObjectLiteralCommand_When_PassedAtTheCommandPosition', () => {
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(objectLiteralCmd, decideOverTagged)
+  })
+
+  it('Should_RefusePrimitiveCommand_When_PassedAtTheCommandPosition', () => {
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(primitiveCmd, decideOverTagged)
+  })
+
+  it('Should_RefuseUnrelatedDeciderParameter_When_ItDoesNotMatchTheCommand', () => {
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(TaggedCmd, decideOverUnrelated)
+  })
+
+  it('Should_KeepTheClassAsTheCommandChannel_When_TheDeciderWidensToUnknown', () => {
+    // Contravariance is ordinary and allowed: widening the decider's own parameter
+    // does not degrade the published command channel, which stays the class. This
+    // is asserted on the resulting type, not merely accepted, because a channel
+    // that silently became `unknown` would reopen the hole the unit closes.
+    expect<typeof decideWidened>().type.toBe<
+      ((command: TaggedCmd) => Result<number, CommandRefused>) & Workflow.WorkflowBrand
+    >()
   })
 })

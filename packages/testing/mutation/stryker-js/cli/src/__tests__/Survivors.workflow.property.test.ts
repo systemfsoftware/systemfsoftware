@@ -10,9 +10,11 @@ import { isDeepStrictEqual } from 'node:util'
 
 import {
   admitSurvivorsRun,
-  type AdmitSurvivorsRunInput,
+  AdmitSurvivorsRunCommand,
   extractSurvivors,
   type HashContent,
+  PriorReportFacts,
+  priorSourceHashes,
   sourceContentHash,
   SURVIVORS_RUN_FIRST_REMEDIATION,
   SurvivorsAdmission,
@@ -114,8 +116,25 @@ const survivorsProducedReportArb = reportArb(
   cleanConfigArb.map((config) => ({ ...config, survivorsPriorReport: 'reports/prior.json' })),
 )
 
-const matchingInput = (report: schema.MutationTestResult): AdmitSurvivorsRunInput => ({
-  priorReport: report,
+/**
+ * The fields of a command whose prior and current sides agree, as plain data. The report
+ * the arbitraries build is the shape the codec accepts, so it stands in for a decoded
+ * document here — the decode itself is the executor's edge, not this suite's subject.
+ *
+ * The two precomputed fields are built with the same helpers the edge uses, so a change to
+ * either helper moves both sides of the comparison together rather than silently making
+ * every admission mismatch.
+ *
+ * This is a record and not a command on purpose: the variants below override one field
+ * each, and spreading a class instance drops its prototype while staying structurally
+ * assignable — the suite would keep passing while no longer exercising a command. Spread
+ * the data, construct once, and every variant is a real instance.
+ */
+const matchingFields = (report: schema.MutationTestResult) => ({
+  priorReport: PriorReportFacts.make({
+    config: report.config ?? {},
+    frameworkVersion: report.framework?.version,
+  }),
   currentConfig: report.config ?? {},
   frameworkVersion: report.framework?.version ?? '',
   sourceContentHashes: Object.fromEntries(
@@ -124,14 +143,26 @@ const matchingInput = (report: schema.MutationTestResult): AdmitSurvivorsRunInpu
       sourceContentHash(fileResult.source, sha256Hex),
     ]),
   ),
-  hashContent: sha256Hex,
-  resolveAbsolutePath: absPath,
+  priorSourceHashes: priorSourceHashes(report, sha256Hex),
+  priorSurvivors: extractSurvivors(report, absPath),
 })
 
-const driftedInput = (report: schema.MutationTestResult): AdmitSurvivorsRunInput => ({
-  ...matchingInput(report),
-  frameworkVersion: `${report.framework?.version ?? ''}-drifted`,
-})
+const matchingCommand = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand =>
+  AdmitSurvivorsRunCommand.make(matchingFields(report))
+
+/** The same command with the framework version drifted, so the two sides disagree. */
+const driftedCommand = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand =>
+  AdmitSurvivorsRunCommand.make({
+    ...matchingFields(report),
+    frameworkVersion: `${report.framework?.version ?? ''}-drifted`,
+  })
+
+/** The same command with no prior report, so the admission has nothing to inspect. */
+const commandWithoutPriorReport = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand =>
+  AdmitSurvivorsRunCommand.make({
+    ...matchingFields(report),
+    priorReport: undefined,
+  })
 
 const fingerprint = (mutant: Mutant): string =>
   JSON.stringify([
@@ -155,7 +186,7 @@ describe('admitSurvivorsRun', () => {
     [reportWithSurvivorsArb],
     ([report]) => {
       const rejection = rejectionOf(
-        admitSurvivorsRun({ ...matchingInput(report), priorReport: undefined }),
+        admitSurvivorsRun(commandWithoutPriorReport(report)),
       )
       return rejection?.reason === 'no-report' &&
         rejection.remediation.includes('No prior mutation report found')
@@ -166,7 +197,7 @@ describe('admitSurvivorsRun', () => {
     '∀r_SurvivorsProducedReport_≡RejectedAsUnusableSource',
     [survivorsProducedReportArb],
     ([report]) => {
-      const rejection = rejectionOf(admitSurvivorsRun(matchingInput(report)))
+      const rejection = rejectionOf(admitSurvivorsRun(matchingCommand(report)))
       return rejection?.reason === 'mismatch' &&
         rejection.remediation.includes('itself produced by a --survivors run')
     },
@@ -176,7 +207,7 @@ describe('admitSurvivorsRun', () => {
     '∀r_NoSurvivors_≡AdmittedEmptyEvenWhenHashesDrift',
     [reportWithoutSurvivorsArb],
     ([report]) => {
-      const drifted = admitSurvivorsRun(driftedInput(report))
+      const drifted = admitSurvivorsRun(driftedCommand(report))
       return Result.isSuccess(drifted) && drifted.success._tag === 'NoSurvivors'
     },
   )
@@ -185,7 +216,7 @@ describe('admitSurvivorsRun', () => {
     '∀r_SurvivorsWithDriftedHashes_≡MismatchRejection',
     [reportWithSurvivorsArb],
     ([report]) => {
-      const rejection = rejectionOf(admitSurvivorsRun(driftedInput(report)))
+      const rejection = rejectionOf(admitSurvivorsRun(driftedCommand(report)))
       return rejection?.reason === 'mismatch' &&
         rejection.remediation.includes('does not match the current run')
     },
@@ -195,7 +226,7 @@ describe('admitSurvivorsRun', () => {
     '∀r_SurvivorsWithMatchingHashes_≡AdmittedWithExactSurvivors',
     [reportWithSurvivorsArb],
     ([report]) => {
-      const admission = admitSurvivorsRun(matchingInput(report))
+      const admission = admitSurvivorsRun(matchingCommand(report))
       if (!Result.isSuccess(admission) || admission.success._tag !== 'Admitted') return false
       const expected = extractSurvivors(report, absPath)
       return expected.length > 0 &&
@@ -211,8 +242,8 @@ describe('admitSurvivorsRun', () => {
     [fc.oneof(reportWithSurvivorsArb, survivorsProducedReportArb)],
     ([report]) => {
       const rejections = [
-        rejectionOf(admitSurvivorsRun({ ...matchingInput(report), priorReport: undefined })),
-        rejectionOf(admitSurvivorsRun(driftedInput(report))),
+        rejectionOf(admitSurvivorsRun(commandWithoutPriorReport(report))),
+        rejectionOf(admitSurvivorsRun(driftedCommand(report))),
       ].filter((rejection): rejection is SurvivorsRejection => rejection !== undefined)
       return rejections.length === 2 &&
         rejections.every((rejection) =>
@@ -226,7 +257,7 @@ describe('admitSurvivorsRun', () => {
     '∀r_ReportWithoutFramework_≡DecidesWithoutThrowing',
     [frameworklessReportArb],
     ([report]) => {
-      const rejection = rejectionOf(admitSurvivorsRun(matchingInput(report)))
+      const rejection = rejectionOf(admitSurvivorsRun(matchingCommand(report)))
       return rejection?.reason === 'mismatch' &&
         rejection._tag === 'SurvivorsRejection'
     },
@@ -236,7 +267,7 @@ describe('admitSurvivorsRun', () => {
     '∀i_EveryRejection_≡CarriesTheRejectionTag',
     [reportWithSurvivorsArb],
     ([report]) =>
-      rejectionOf(admitSurvivorsRun({ ...matchingInput(report), priorReport: undefined }))?._tag ===
+      rejectionOf(admitSurvivorsRun(commandWithoutPriorReport(report)))?._tag ===
         'SurvivorsRejection',
   )
 
@@ -290,9 +321,9 @@ describe('admitSurvivorsRun', () => {
     [reportWithSurvivorsArb],
     ([report]) => {
       const crossRealmBrand = Symbol.for('@systemfsoftware/stryker-js-cli/SurvivorsAdmission')
-      const admitted = admitSurvivorsRun(matchingInput(report))
-      const empty = admitSurvivorsRun(matchingInput({ ...report, files: {} }))
-      const rejected = admitSurvivorsRun({ ...matchingInput(report), priorReport: undefined })
+      const admitted = admitSurvivorsRun(matchingCommand(report))
+      const empty = admitSurvivorsRun(matchingCommand({ ...report, files: {} }))
+      const rejected = admitSurvivorsRun(commandWithoutPriorReport(report))
       return Result.isSuccess(admitted) && Result.isSuccess(empty) && Result.isFailure(rejected) &&
         crossRealmBrand in admitted.success &&
         crossRealmBrand in empty.success &&

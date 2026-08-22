@@ -3,7 +3,7 @@ import { Cell } from '@systemfsoftware/effect-cell-types'
 import * as Effect from 'effect/Effect'
 import * as Result from 'effect/Result'
 import { FastCheck as fc } from 'effect/testing'
-import { drawnDecision, DrawnDecisionError } from './DrawnDecision.workflow.js'
+import { DrawnCommand, drawnDecision, DrawnDecisionError } from './DrawnDecision.workflow.js'
 
 /**
  * The phase bag the generated descriptions instantiate. `command` passes through the pure
@@ -15,19 +15,19 @@ import { drawnDecision, DrawnDecisionError } from './DrawnDecision.workflow.js'
  * which phase drew the `Failure` off the drawn value.
  *
  * The payload types are this generator's own input choice, not a claim about the
- * description: every value a phase consumes or produces is `number` (with the one tagged
- * exception above), so one drawn function satisfies every phase that shares an invocation
- * shape. `raw` and `decoded` being the same type is what lets the `'either-fail'` run
- * serve the decode phase while the `'either-pass'` run — a branded `Workflow.make` value —
- * serves the decide phase; `command`, `output` and `response` being the same type is what
- * lets a single `'effect'` run serve both effect phases. A description whose phases
- * genuinely disagree about a payload type is expressible — this bag just does not draw
- * one, because the properties never observe the payload values.
+ * description. `command`, `output` and `response` share `number`, and that sharing is what
+ * lets a single `'effect'` run serve both effect phases.
+ *
+ * `raw` and `decoded` do not share: the decode phase is the one place this bag genuinely
+ * converts, wrapping the drawn `number` into the `DrawnCommand` the decide phase reads
+ * `value` back out of. So the `'either-fail'` run that serves decode is a real
+ * construction, not the identity pass-through it once was — a description whose phases
+ * disagree about a payload type is not merely expressible here, it is what this bag draws.
  */
 export interface Bag extends Cell.Phases {
   readonly command: number
   readonly raw: number
-  readonly decoded: number
+  readonly decoded: DrawnCommand
   readonly decision: number
   readonly decisionError: DrawnDecisionError
   readonly output: number
@@ -129,12 +129,12 @@ const substituteLayer = (
         case 'either-fail':
           return {
             ...phase,
-            run: (input: number): Result.Result<number, number> => {
+            run: (input: number): Result.Result<DrawnCommand, number> => {
               trace.push(phase.name)
               if (failure !== undefined && failure.phaseIndex === phaseIndex) {
                 return Result.fail(failure.error)
               }
-              return Result.succeed(input)
+              return Result.succeed(DrawnCommand.make({ value: input }))
             },
           }
         case 'either-pass': {
