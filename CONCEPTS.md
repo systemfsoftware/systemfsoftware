@@ -182,6 +182,12 @@ The pure decision — one business decision as a pure function: typed command in
 
 A workflow is produced by calling `Workflow.make`, not by annotating a value with its type. The annotation form type-checks while deriving none of the channel markers, so it silently forfeits the guarantee the type exists to provide; only `make` infers the decision and error channels from the decider it is handed and derives the markers that make a total decision uncallable.
 
+### Tag carrier
+
+A one-member module-scope pair — `const XTag = { _tag: 'X' } as const` and `type XTag = typeof XTag` — that a variant inherits its discriminant from (`interface X extends XTag`) instead of restating it. It exists because a `_tag` in a type position is a lint error and the tag must still reach two places: the type, so `Match.tag` can dispatch, and a value, so a construction site can spread it. The const-and-type pair sharing one name is required rather than redundant: `interface X extends typeof XTag` is invalid syntax, so a named alias must exist for the interface to extend.
+
+A carrier is the residual form, used when no schema can express the variant — its other members hold an `Effect`, a `Stream`, a `Duration.Input`, a prototype chain, or a field that must stay wider than any schema's output. Where the members _are_ encodable, `S.TaggedStruct` or `S.TaggedError` plus `S.Schema.Type` derivation is the shape, and it buys a codec for the same keystrokes; the carrier buys nothing there. Both forms move the tag's single source of truth into value space, so the literal is written once instead of once in the type and once in every constructor.
+
 ### Cell constructor
 
 A `make` a cell type exposes so that authors produce that cell by calling it rather than by annotating a value. Its force lives entirely in the parameter type — what the author hands in — and it earns existence only by computing something the author could not write: inferring the cell's channels from the argument and deriving markers from them. A constructor whose rejections all follow from its parameter type alone computes nothing an annotation would not, and is ceremony rather than enforcement.
