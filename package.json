@@ -29,7 +29,7 @@
     "@commitlint/config-conventional": "^21.2.0",
     "@commitlint/config-pnpm-scopes": "^21.2.0",
     "@commitlint/types": "^21.2.0",
-    "@effect/tsgo": "^0.36.0",
+    "@effect/tsgo": "^0.36.5",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/stryker-js-cli": "workspace:^",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
