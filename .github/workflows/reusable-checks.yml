@@ -32,7 +32,7 @@ jobs:
       # release.yml already carry this step.
       - uses: denoland/setup-deno@v2
       - name: Turbo cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -40,7 +40,7 @@ jobs:
             turbo-${{ runner.os }}-
       # atom-react tests run in Vitest browser mode (playwright chromium).
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
