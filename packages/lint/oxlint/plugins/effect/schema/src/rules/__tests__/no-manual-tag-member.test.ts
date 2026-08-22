@@ -70,6 +70,17 @@ ruleTester.run('no-manual-tag-member', noManualTagMember, {
         type Indirect = { [T]: 'Indirect' }
       `,
     },
+    {
+      // Every replacement the rule names is a runtime value, and a type-test
+      // fixture holds none. Firing here would demand a value the file class
+      // cannot carry, so the only reachable answer was a const existing purely
+      // to be read back by `typeof` — which is what this exemption retires.
+      name: 'Should_Allow_HandWritten_Tag_When_File_Is_A_Tst_Fixture',
+      code: `
+        interface Cmd { readonly _tag: 'Cmd' }
+      `,
+      filename: 'cmd.tst.ts',
+    },
   ],
   invalid: [
     {
@@ -118,14 +129,6 @@ ruleTester.run('no-manual-tag-member', noManualTagMember, {
         const f = (o: O): { _tag: 'Stream'; stream: S } => o
       `,
       errors: [forbidden('f with a hand-written _tag member', expectedTaggedStruct)],
-    },
-    {
-      name: 'Should_Report_In_Tst_Fixture_When_There_Is_No_Filename_Gate',
-      code: `
-        interface Cmd { readonly _tag: 'Cmd' }
-      `,
-      filename: 'cmd.tst.ts',
-      errors: [forbidden('Cmd with a hand-written _tag member', expectedTaggedStruct)],
     },
     {
       name: 'Should_Report_StringLiteral_Key_When_Key_Written_Quoted',

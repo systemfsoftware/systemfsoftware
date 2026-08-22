@@ -19,6 +19,8 @@ a schema. Only where a member cannot be encoded at all — a running effect, a s
 prototype — declare the tag once as a value and let the type inherit it; that form forces no
 constructor and validates nothing, so it is the last answer rather than the first.
 
-The rule has no options, no allowlist, no per-package disable and no filename exemption, and it is
-on in the recommended preset — so upgrading reports every `_tag` member your types declare, in one
-pass.
+The rule has no options, no allowlist and no per-package disable, and it is on in the recommended
+preset — so upgrading reports every `_tag` member your types declare, in one pass. It is silent in
+`.tst.ts` type-test fixtures, and only there: every replacement it names is a runtime value, and a
+type-test fixture holds none, so firing there could only be answered by a value that exists to be
+read back by `typeof`.

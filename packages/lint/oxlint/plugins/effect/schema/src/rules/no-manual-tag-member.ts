@@ -87,6 +87,14 @@ const namedAncestorOf = (node: ESTree.TSPropertySignature): string | null => {
 export const noManualTagMember = defineRule({
   meta,
   create(context: Context) {
+    // Scope: a `.tst.ts` file is a type-test fixture that must contain no runtime
+    // values, and every replacement this rule names is one — `S.TaggedStruct` is a
+    // value, and so is the carrier const a member would inherit from. Firing here
+    // would demand a fix the file class cannot hold, so the fixture would carry a
+    // runtime value that exists only to be read back by `typeof`. The boundary is
+    // a property of what a type-test file *is*, matching `ban-data-taggederror`.
+    if (context.filename.endsWith('.tst.ts')) return {}
+
     return {
       TSPropertySignature(node: ESTree.TSPropertySignature) {
         if (!isTagKey(node.key)) return
