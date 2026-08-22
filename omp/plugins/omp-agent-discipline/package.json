@@ -31,7 +31,7 @@
   "peerDependencies": {
     "@effect/platform-node": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:",
-    "effect": "catalog:"
+    "effect": "catalog:peers"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",

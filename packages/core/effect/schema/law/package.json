@@ -64,8 +64,8 @@
     "vitest": "^4.1.10"
   },
   "peerDependencies": {
-    "@effect/vitest": "catalog:",
-    "effect": "catalog:",
+    "@effect/vitest": "catalog:peers",
+    "effect": "catalog:peers",
     "vitest": "*"
   },
   "publishConfig": {

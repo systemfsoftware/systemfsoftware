@@ -135,7 +135,7 @@
     "typed-inject": "~5.0.0"
   },
   "peerDependencies": {
-    "effect": "catalog:"
+    "effect": "catalog:peers"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

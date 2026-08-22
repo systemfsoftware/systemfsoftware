@@ -19,6 +19,14 @@ const execFileAsync = promisify(execFile)
 
 // Manifest-list digest (not the amd64 platform digest) for tag 22-alpine, resolved 2026-08-10.
 const NODE_IMAGE = 'node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32'
+// The packed tarballs resolve their `effect` spec against the live registry: the
+// widened peer ranges (catalog:peers) pull the newest release candidate, while
+// the tarballs' own exact dependencies pin `4.0.0-rc.108` - two copies of effect
+// in one tree, and the cross-copy Schema/Order interop dies with "Cannot convert
+// a Symbol value to a number". The lane pins its node image digest; pin the
+// toolchain in the container the same way, so the packed surface is exercised
+// against the same effect the tree built with (REPO-R2's hash floor).
+const EFFECT_PIN = '4.0.0-rc.108'
 // The CLI's workspace dependencies are not on the registry at this version,
 // so each one is packed and installed from a local tarball beside it.
 const WORKSPACE_PACKAGES = [
@@ -37,7 +45,13 @@ const CLI_DIR = fileURLToPath(new URL('../../', import.meta.url))
 const FIXTURES_DIR = fileURLToPath(new URL('./fixtures', import.meta.url))
 const WORKDIR = '/work'
 const TARBALLS_IN_CONTAINER = '/opt/tarballs'
-const WORKSPACE_MANIFEST = JSON.stringify({ name: 'stryker-contract-workspace', private: true })
+const WORKSPACE_MANIFEST = JSON.stringify({
+  name: 'stryker-contract-workspace',
+  private: true,
+  // npm 7+ auto-installs peer ranges; the widened peers would float the tree to
+  // the newest rc while exact deps stay pinned, duplicating effect (see above).
+  overrides: { effect: EFFECT_PIN },
+})
 
 let container: StartedTestContainer | undefined
 let tarballDir: string | undefined

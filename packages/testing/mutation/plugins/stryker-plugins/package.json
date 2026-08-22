@@ -87,7 +87,7 @@
   "peerDependencies": {
     "@stryker-mutator/api": "catalog:stryker",
     "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
-    "effect": "catalog:",
+    "effect": "catalog:peers",
     "typescript": ">=5.0.0"
   },
   "publishConfig": {
