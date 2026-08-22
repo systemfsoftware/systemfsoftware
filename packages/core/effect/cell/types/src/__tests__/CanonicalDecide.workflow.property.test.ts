@@ -3,8 +3,8 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
 
+import { CanonicalDecideError } from '../CanonicalDecide.schema.js'
 import { CanonicalCommand, canonicalDecide } from '../CanonicalDecide.workflow.js'
-import * as Workflow from '../Workflow.js'
 
 describe('canonicalDecide', () => {
   // The law is that the decider is constant: for any command it yields success
@@ -24,11 +24,11 @@ describe('canonicalDecide', () => {
       }),
   )
 
-  // The make carries the `Workflow.Tagged` phantom on its error channel and the
-  // command class on its command channel. Asserted by assignment — the brand
+  // The make carries the uninhabited CanonicalDecideError on its error channel and
+  // the command class on its command channel. Asserted by assignment — the brand
   // conjunct has to be satisfied, never cast into place — so widening either
   // channel is a compile error in a file the type gate reads.
   const _phantomCheck: (
     command: CanonicalCommand,
-  ) => Result.Result<undefined, Workflow.Tagged> = canonicalDecide
+  ) => Result.Result<undefined, CanonicalDecideError> = canonicalDecide
 })

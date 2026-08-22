@@ -1,5 +1,5 @@
-import { Effect, Match, Option, Schema as S } from 'effect'
-import type { BridgedEvent, MatcherReach } from './HookCatalog.js'
+import { Effect, Option, Schema as S } from 'effect'
+import type { BridgedEvent } from './HookCatalog.js'
 import {
   ALL_CLAUDE_CODE_EVENTS,
   BRIDGED_EVENTS,
@@ -17,7 +17,6 @@ import {
   type HookCoverageRow,
   type HookEntry,
   type HookSettings,
-  type SettingsAnalysisCommand,
   SettingsJSON,
   type SettingsSource,
 } from './HookSettings.schema.js'
@@ -84,21 +83,13 @@ const CATALOG_EVENTS: readonly string[] = ALL_CLAUDE_CODE_EVENTS
 const UNBRIDGED_LOOKUP: Readonly<Record<string, string>> = UNBRIDGED_REASONS
 const NON_EVALUABLE_LOOKUP: Readonly<Record<string, string>> = NON_EVALUABLE_MATCHERS
 const IF_EVALUATING_EVENTS: readonly string[] = TOOL_EVENTS
-const REACH_LOOKUP: Readonly<Record<string, Readonly<Record<string, MatcherReach>>>> = MATCHER_REACH
+const REACH_LOOKUP: Readonly<Record<string, Readonly<Record<string, string>>>> = MATCHER_REACH
 
 const declaredMatchers = (value: unknown): readonly string[] =>
   Option.getOrElse(asHookRows(value), () => NO_ROWS)
     .flatMap((row) => row.matcher === undefined ? [] : [row.matcher])
 
 const declaresMatcher = (value: unknown): boolean => declaredMatchers(value).length > 0
-
-const reachGap = (reach: MatcherReach): Option.Option<string> =>
-  Match.value(reach).pipe(
-    Match.tag('Reachable', () => Option.none<string>()),
-    Match.tag('Partial', (out) => Option.some(out.reason)),
-    Match.tag('Unreachable', (out) => Option.some(out.reason)),
-    Match.exhaustive,
-  )
 
 /**
  * Why a configured key will not run, in input order. The classes are distinct
@@ -107,7 +98,7 @@ const reachGap = (reach: MatcherReach): Option.Option<string> =>
  * read, and a matcher that names a moment OMP cannot reach. Collapsing them is
  * what made the old report call a correct settings file wrong.
  */
-function hookCoverage(json: unknown): HookCoverage {
+export function hookCoverage(json: unknown): HookCoverage {
   return Option.match(settingsNamespace(json), {
     onNone: () => EMPTY_COVERAGE,
     onSome: ({ isWrapped, namespace, outer }) => {
@@ -137,14 +128,9 @@ function hookCoverage(json: unknown): HookCoverage {
         if (reach === undefined) continue
         matcherOutOfReach.push(
           ...declaredMatchers(namespace[event]).flatMap((matcher): readonly HookCoverageRow[] => {
-            const value = reach[matcher]
-            if (value === undefined) return []
-            return Option.match(reachGap(value), {
-              onNone: (): readonly HookCoverageRow[] => [],
-              onSome: (reason) => [
-                { event: `${displayable(event)} (matcher "${displayable(matcher)}")`, reason },
-              ],
-            })
+            const reason = reach[matcher]
+            if (reason === undefined) return []
+            return [{ event: `${displayable(event)} (matcher "${displayable(matcher)}")`, reason }]
           }),
         )
       }
@@ -169,7 +155,7 @@ function hookCoverage(json: unknown): HookCoverage {
  * non-managed file, so a hook can vanish because of a file its author never
  * opened. The merge is the only place that decision exists.
  */
-function disabledCoverage(sources: readonly DisableSource[]): readonly HookCoverageRow[] {
+export function disabledCoverage(sources: readonly DisableSource[]): readonly HookCoverageRow[] {
   const disabler = sources.find((s) => !s.managed && s.settings.disableAllHooks === true)
   if (disabler === undefined) return []
   const reason = `${DISABLED_ALL_REASON} ${displayable(disabler.label)}`
@@ -180,7 +166,7 @@ function disabledCoverage(sources: readonly DisableSource[]): readonly HookCover
 }
 
 /** Hook transports present in the settings that the dispatcher will skip. */
-function unsupportedHookTypes(json: unknown): readonly string[] {
+export function unsupportedHookTypes(json: unknown): readonly string[] {
   return Option.match(settingsNamespace(json), {
     onNone: () => [],
     onSome: ({ namespace }) => {
@@ -204,7 +190,7 @@ function unsupportedHookTypes(json: unknown): readonly string[] {
  * a managed one turns everything off. Disabling is settled here, so no caller
  * downstream has to re-check it.
  */
-function mergeSettings(sources: readonly SettingsSource[]): HookSettings {
+export function mergeSettings(sources: readonly SettingsSource[]): HookSettings {
   /**
    * Annotation and `satisfies` guard opposite directions: a bridged event with
    * no `HookGroups` field fails the annotation, a `HookGroups` field no longer
@@ -235,32 +221,12 @@ function mergeSettings(sources: readonly SettingsSource[]): HookSettings {
   return { hooks }
 }
 
-type SettingsAnalysisValue =
-  | HookSettings
-  | HookCoverage
-  | readonly HookCoverageRow[]
-  | readonly string[]
-  | boolean
-
-function analyzeSettingsCommand(cmd: SettingsAnalysisCommand): SettingsAnalysisValue {
-  return Match.value(cmd).pipe(
-    Match.tag('Merge', ({ sources }) => mergeSettings(sources)),
-    Match.tag('Coverage', ({ json }) => hookCoverage(json)),
-    Match.tag('DisabledCoverage', ({ sources }) => disabledCoverage(sources)),
-    Match.tag('UnsupportedHookTypes', ({ json }) => unsupportedHookTypes(json)),
-    Match.tag('MatcherUnreadable', ({ event }) => NON_EVALUABLE_LOOKUP[event] !== undefined),
-    Match.tag('IfEvaluatingEvent', ({ event }) => IF_EVALUATING_EVENTS.includes(event)),
-    Match.exhaustive,
-  )
+/** Whether this event's matcher cannot be read, so a matcher-scoped hook is skipped. */
+export function matcherUnreadable(event: string): boolean {
+  return NON_EVALUABLE_LOOKUP[event] !== undefined
 }
 
-/**
- * Run one settings-analysis operation. The caller names the result schema so
- * the command's result type is checked against the value it actually returns.
- */
-export function analyzeSettings<A>(
-  cmd: SettingsAnalysisCommand,
-  resultSchema: S.ConstraintDecoder<A>,
-): A {
-  return S.decodeUnknownSync(resultSchema)(analyzeSettingsCommand(cmd))
+/** Whether this event evaluates a hook's `if` condition. */
+export function ifEvaluatingEvent(event: string): boolean {
+  return IF_EVALUATING_EVENTS.includes(event)
 }

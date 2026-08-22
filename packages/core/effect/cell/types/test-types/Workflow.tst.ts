@@ -6,12 +6,6 @@ import { CommandRefused, StructCmd, TaggedCmd, UntaggedCmd } from '../tests/__fi
 import { decideTagged } from '../tests/__fixtures__/TaggedCommand.workflow.js'
 import { decideWidened } from '../tests/__fixtures__/WidenedCommand.workflow.js'
 
-// The fixtures are deliberately plain interfaces with a literal `_tag`, and the
-// discrimination claim below compares `_tag` directly. That authoring trips
-// `@systemfsoftware/effect-dmmf(no-manual-tag-member)` and
-// `@systemfsoftware(no-direct-tag-access)` — a known rule-scope defect fixed in a
-// later unit, not a signal to reach for S.TaggedStruct (this file must contain no
-// runtime values).
 interface Cmd {
   readonly _tag: 'Cmd'
 }
@@ -30,6 +24,16 @@ interface Err {
   readonly _tag: 'Err'
   readonly code: number
 }
+
+/**
+ * The three shapes a bare key-presence test admits and a dispatchable-tag test refuses. Each is
+ * spelled through `Record` rather than a `_tag` property signature, so these fixtures pin the
+ * bound without writing the member `no-manual-tag-member` forbids — the evasion shape earns its
+ * keep as the fixture for the bound it evades.
+ */
+type NumericTagError = Record<'_tag', number>
+type OptionalTagError = Partial<Record<'_tag', string>>
+type CallableTagError = Record<'_tag', () => void>
 
 declare const cmd: Cmd
 declare const decision: Dec | Alt
@@ -136,6 +140,18 @@ describe('the constructor compiled evidence', () => {
 
   it('Should_DemandUntaggedErrorMarker_When_ErrorChannelCarriesNoTag', () => {
     expect<Workflow.Inhabited<Dec, Error>>().type.toBe<Workflow.UntaggedError>()
+  })
+
+  it('Should_DemandUntaggedErrorMarker_When_TagIsNotAString', () => {
+    expect<Workflow.Inhabited<Dec, NumericTagError>>().type.toBe<Workflow.UntaggedError>()
+  })
+
+  it('Should_DemandUntaggedErrorMarker_When_TagIsOptional', () => {
+    expect<Workflow.Inhabited<Dec, OptionalTagError>>().type.toBe<Workflow.UntaggedError>()
+  })
+
+  it('Should_DemandUntaggedErrorMarker_When_TagHoldsACallable', () => {
+    expect<Workflow.Inhabited<Dec, CallableTagError>>().type.toBe<Workflow.UntaggedError>()
   })
 })
 

@@ -1,5 +1,6 @@
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
+import { CanonicalDecideError } from './CanonicalDecide.schema.js'
 import * as Workflow from './Workflow.js'
 
 /**
@@ -21,5 +22,5 @@ export class CanonicalCommand extends S.TaggedClass<CanonicalCommand>()('Canonic
  */
 export const canonicalDecide = Workflow.make(
   CanonicalCommand,
-  (_command: CanonicalCommand): Result.Result<undefined, Workflow.Tagged> => Result.succeed(undefined),
+  (_command: CanonicalCommand): Result.Result<undefined, CanonicalDecideError> => Result.succeed(undefined),
 )

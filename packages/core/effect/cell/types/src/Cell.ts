@@ -474,7 +474,8 @@ export const canonical: WriteDone<CanonicalPhases> = write(
       decode(read<CanonicalPhases>(() => Effect.void), () => Result.succeed(CanonicalCommand.make({}))),
       // The canonical's decide never resolves — the description's phases "do nothing" —
       // but its error channel must still satisfy the tagged channel rule the brand rides
-      // on, so the decider is a `make` value whose phantom error channel is `Tagged`.
+      // on, so the decider is a `make` value whose phantom error channel is an uninhabited
+      // `S.TaggedError`.
       canonicalDecide,
     ),
     () => undefined,

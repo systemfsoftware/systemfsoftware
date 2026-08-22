@@ -15,25 +15,27 @@ export class Decoded extends S.Class<Decoded>('Decoded')({
   length: S.Int,
 }) {}
 
-export interface Admitted {
-  readonly kind: 'Admitted'
-  readonly length: number
-}
-export interface Refused {
-  readonly kind: 'Refused'
-  readonly why: string
-  // The decide error channel must satisfy the tagged-channel rule the workflow brand rides
-  // on, so it can be handed through `Workflow.make`. The tag is set by the fail literal;
-  // the type declaration stays string-wide to keep this fixture out of the manual-tag rule.
-  readonly _tag: string
-}
+/**
+ * The decide channels, declared as schema classes: the decision is a
+ * `TaggedClass` and the refusal a `TaggedError`. Both carry the `_tag` the
+ * branded `Workflow.make` demands of an error channel without any member being
+ * hand-written, and neither needs the second hand-rolled discriminant the `kind`
+ * field used to be.
+ */
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {
+  length: S.Number,
+}) {}
+
+export class Refused extends S.TaggedError<Refused>()('Refused', {
+  why: S.String,
+}) {}
 
 export const decide = Workflow.make(
   Decoded,
   (decoded: Decoded): Result.Result<Admitted, Refused> =>
     Match.value(decoded.length > 3).pipe(
-      Match.when(true, () => Result.succeed<Admitted>({ kind: 'Admitted', length: decoded.length })),
-      Match.when(false, () => Result.fail<Refused>({ kind: 'Refused', why: 'too short', _tag: 'Refused' })),
+      Match.when(true, () => Result.succeed(new Admitted({ length: decoded.length }))),
+      Match.when(false, () => Result.fail(new Refused({ why: 'too short' }))),
       Match.exhaustive,
     ),
 )
