@@ -15,6 +15,7 @@ const _default: {
         'make-file-location': Rule;
         'workflow-match-exhaustive': Rule;
         'make-body-purity': Rule;
+        'make-command-schema': Rule;
     };
     configs: {
         recommended: {

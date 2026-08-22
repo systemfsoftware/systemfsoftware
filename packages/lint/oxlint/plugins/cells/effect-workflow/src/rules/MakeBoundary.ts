@@ -25,10 +25,18 @@ export type MakeBodyKind = ESTree.ArrowFunctionExpression | FunctionLike
  * when the body cannot be located from this file's AST (an imported
  * decision, a call with no function argument at all). A `null` body is a
  * finding the caller reports, never a silent skip.
+ *
+ * `commandArgument` is the schema-class position — the first construction
+ * argument, after the `call`/`apply` shift. It is a slot rather than a shape
+ * because that is what the signature says: `make` takes the command first and
+ * the decider second. It is `null` when the call passes no such argument, which
+ * the compiler already refuses; a rule reading it stays silent there rather
+ * than reporting a second time.
  */
 export interface MakeBoundary {
   readonly makeCall: ESTree.CallExpression
   readonly resolvedBody: MakeBodyKind | null
+  readonly commandArgument: ESTree.Node | null
 }
 
 interface ScopeLike {
@@ -230,7 +238,7 @@ export const collectMakeBoundaries = (context: Context): readonly MakeBoundary[]
         }
       }
     }
-    boundaries.push({ makeCall: node, resolvedBody })
+    boundaries.push({ makeCall: node, resolvedBody, commandArgument: node.arguments[searchFrom] ?? null })
   })
   return boundaries
 }
