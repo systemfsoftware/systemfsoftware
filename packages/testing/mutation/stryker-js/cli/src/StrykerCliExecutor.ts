@@ -685,10 +685,16 @@ function carriesConfigError(cause: Cause.Cause<unknown>): boolean {
 /**
  * Classifies a failed run for the finalizer: usage/parse failures
  * (`CliError` — except a bare help request, which exits 0), rejected
- * survivors runs (`SurvivorsRejection`) and a rejected config (`ConfigError`)
- * all exit 2, all other failures exit 1 (the framework's default). A
- * successful run exits 0; the verdict gates (U5) then resolve the final
- * classed code.
+ * survivors runs (`SurvivorsRejection`), an unreadable prior report
+ * (`S.SchemaError`) and a rejected config (`ConfigError`) all exit 2, all
+ * other failures exit 1 (the framework's default). A successful run exits 0;
+ * the verdict gates (U5) then resolve the final classed code.
+ *
+ * The report parse failure shares the survivors class deliberately. It is not a
+ * verdict — the decider never sees the report — but the operator's answer is the
+ * same class of answer as a rejection: the input you named cannot be used. Letting
+ * it fall through to 1 would make an unusable `--survivors` input indistinguishable
+ * from a crash.
  */
 function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
   if (Exit.isSuccess(exit)) {
@@ -710,6 +716,9 @@ function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
       return 2
     }
     if (S.is(SurvivorsRejection)(value)) {
+      return SURVIVORS_REJECT_EXIT_CLASS
+    }
+    if (value instanceof S.SchemaError) {
       return SURVIVORS_REJECT_EXIT_CLASS
     }
   }

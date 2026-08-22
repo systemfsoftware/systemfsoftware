@@ -117,62 +117,52 @@ const survivorsProducedReportArb = reportArb(
 )
 
 /**
- * A command whose prior and current sides agree. The report the arbitraries build is the
- * shape the codec accepts, so it stands in for a decoded document here — the decode itself
- * is the executor's edge, not this suite's subject.
+ * The fields of a command whose prior and current sides agree, as plain data. The report
+ * the arbitraries build is the shape the codec accepts, so it stands in for a decoded
+ * document here — the decode itself is the executor's edge, not this suite's subject.
  *
  * The two precomputed fields are built with the same helpers the edge uses, so a change to
  * either helper moves both sides of the comparison together rather than silently making
  * every admission mismatch.
+ *
+ * This is a record and not a command on purpose: the variants below override one field
+ * each, and spreading a class instance drops its prototype while staying structurally
+ * assignable — the suite would keep passing while no longer exercising a command. Spread
+ * the data, construct once, and every variant is a real instance.
  */
-const matchingCommand = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand =>
-  AdmitSurvivorsRunCommand.make({
-    priorReport: PriorReportFacts.make({
-      config: report.config ?? {},
-      frameworkVersion: report.framework?.version,
-    }),
-    currentConfig: report.config ?? {},
-    frameworkVersion: report.framework?.version ?? '',
-    sourceContentHashes: Object.fromEntries(
-      Object.entries(report.files).map(([file, fileResult]) => [
-        file,
-        sourceContentHash(fileResult.source, sha256Hex),
-      ]),
-    ),
-    priorSourceHashes: priorSourceHashes(report, sha256Hex),
-    priorSurvivors: extractSurvivors(report, absPath),
-  })
+const matchingFields = (report: schema.MutationTestResult) => ({
+  priorReport: PriorReportFacts.make({
+    config: report.config ?? {},
+    frameworkVersion: report.framework?.version,
+  }),
+  currentConfig: report.config ?? {},
+  frameworkVersion: report.framework?.version ?? '',
+  sourceContentHashes: Object.fromEntries(
+    Object.entries(report.files).map(([file, fileResult]) => [
+      file,
+      sourceContentHash(fileResult.source, sha256Hex),
+    ]),
+  ),
+  priorSourceHashes: priorSourceHashes(report, sha256Hex),
+  priorSurvivors: extractSurvivors(report, absPath),
+})
 
-/**
- * The same command with the framework version drifted, so the two sides disagree.
- * Rebuilt field by field rather than spread over the matching one: spreading a class
- * instance drops its prototype while staying structurally assignable, so the suite would
- * keep passing while no longer exercising a command.
- */
-const driftedCommand = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand => {
-  const matching = matchingCommand(report)
-  return AdmitSurvivorsRunCommand.make({
-    priorReport: matching.priorReport,
-    currentConfig: matching.currentConfig,
+const matchingCommand = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand =>
+  AdmitSurvivorsRunCommand.make(matchingFields(report))
+
+/** The same command with the framework version drifted, so the two sides disagree. */
+const driftedCommand = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand =>
+  AdmitSurvivorsRunCommand.make({
+    ...matchingFields(report),
     frameworkVersion: `${report.framework?.version ?? ''}-drifted`,
-    sourceContentHashes: matching.sourceContentHashes,
-    priorSourceHashes: matching.priorSourceHashes,
-    priorSurvivors: matching.priorSurvivors,
   })
-}
 
 /** The same command with no prior report, so the admission has nothing to inspect. */
-const commandWithoutPriorReport = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand => {
-  const matching = matchingCommand(report)
-  return AdmitSurvivorsRunCommand.make({
+const commandWithoutPriorReport = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand =>
+  AdmitSurvivorsRunCommand.make({
+    ...matchingFields(report),
     priorReport: undefined,
-    currentConfig: matching.currentConfig,
-    frameworkVersion: matching.frameworkVersion,
-    sourceContentHashes: matching.sourceContentHashes,
-    priorSourceHashes: matching.priorSourceHashes,
-    priorSurvivors: matching.priorSurvivors,
   })
-}
 
 const fingerprint = (mutant: Mutant): string =>
   JSON.stringify([

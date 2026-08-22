@@ -141,14 +141,6 @@ function sortKeys(value: unknown): unknown {
 }
 
 /**
- * The canonical serialization is the comparison, not a digest of it. Two runs agree
- * exactly when their serialized hash inputs are equal, so digesting both sides added a
- * capability the decider cannot hold - `hashContent` reaches a runtime module - while
- * making the comparison strictly weaker. Content hashing still uses the capability, but
- * at the edge, where the per-file source hashes are computed.
- */
-
-/**
  * The survivor matching key (R10/R11): the same identifying key the
  * incremental differ uses — relative file name, location, mutator name and
  * replacement — so a per-mutant entry taken from the verdict envelope (U4),
