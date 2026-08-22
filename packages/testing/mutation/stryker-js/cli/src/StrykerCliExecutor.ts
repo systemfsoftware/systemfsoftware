@@ -43,9 +43,13 @@ import type { RunEventStream, RunEventStreamPort } from './RunEventStreamAdapter
 import { STREAM_SCHEMA_VERSION } from './StreamProtocol.js'
 import {
   admitSurvivorsRun,
-  type AdmitSurvivorsRunInput,
+  AdmitSurvivorsRunCommand,
+  decodePriorReport,
   DEFAULT_SURVIVORS_PRIOR_REPORT,
+  extractSurvivors,
   type HashContent,
+  PriorReportFacts,
+  priorSourceHashes,
   type ResolveAbsolutePath,
   sourceContentHash,
   survivorMutateSpans,
@@ -155,16 +159,27 @@ interface AdmissionPhases extends Cell.Phases {
   readonly command: PartialStrykerOptions
   readonly raw: {
     readonly resolvedOptions: StrykerOptions
-    readonly priorReport: schema.MutationTestResult | undefined
+    /**
+     * The prior report exactly as it came off disk, undecoded. `undefined` means no
+     * report was there to read; a value that is present but malformed is the decode
+     * phase's problem, not the read's, so nothing validates it here.
+     */
+    readonly priorReportRaw: unknown
+    readonly priorReportFound: boolean
     readonly priorReportPath: string
     readonly sourceContentHashes: Readonly<Record<string, string>>
   }
-  readonly decoded: AdmitSurvivorsRunInput
+  readonly decoded: AdmitSurvivorsRunCommand
   readonly decision: SurvivorsAdmission
   readonly decisionError: SurvivorsRejection
   readonly output: Result.Result<SurvivorsAdmission, SurvivorsRejection>
   readonly response: unknown
-  readonly decodeError: never
+  /**
+   * A prior report that is present but does not decode. Fatal by construction: a decode
+   * `Left` reaches the derived error channel and no write runs, so a malformed report
+   * stops the run instead of being classified as a mismatch by the decider.
+   */
+  readonly decodeError: S.SchemaError
   readonly readError: never
   readonly writeError: SurvivorsRejection
   readonly readContext: never
@@ -199,28 +214,51 @@ const survivorsAdmissionDescription = (
       Effect.promise(() => resolveSurvivorsRunOptions(cliOptions)).pipe(
         Effect.flatMap((resolvedOptions) => {
           const priorReportPath = priorReportPathOf(resolvedOptions)
-          const priorReport = readPriorReport(priorReportPath)
+          const read = readPriorReport(priorReportPath)
           return Ref.set(runContext, { resolvedOptions, priorReportPath }).pipe(
             Effect.as({
               resolvedOptions,
-              priorReport,
+              priorReportRaw: read.raw,
+              priorReportFound: read.found,
               priorReportPath,
-              sourceContentHashes: sourceContentHashesOf(priorReport),
+              sourceContentHashes: currentSourceHashesFor(priorReportFileKeys(read.raw)),
             }),
           )
         }),
       )
     ),
-    Cell.decode<AdmissionPhases>(({ resolvedOptions, priorReport, sourceContentHashes }) =>
-      Result.succeed({
-        priorReport,
-        currentConfig: resolvedOptions,
-        frameworkVersion: strykerVersion,
-        sourceContentHashes,
-        hashContent,
-        resolveAbsolutePath,
-      })
-    ),
+    /**
+     * The one place the prior report is decoded, and the one place the two capabilities
+     * are applied. A report that was never there yields a command with no facts, which
+     * the decider rejects as `no-report`; a report that was there and does not decode
+     * yields a `Left`, which stops the run before the decider sees it.
+     */
+    Cell.decode<AdmissionPhases>(({ resolvedOptions, priorReportRaw, priorReportFound, sourceContentHashes }) => {
+      if (!priorReportFound) {
+        return Result.succeed(
+          AdmitSurvivorsRunCommand.make({
+            priorReport: undefined,
+            currentConfig: resolvedOptions,
+            frameworkVersion: strykerVersion,
+            sourceContentHashes,
+            priorSourceHashes: {},
+            priorSurvivors: [],
+          }),
+        )
+      }
+      return Result.map(decodePriorReport(priorReportRaw), (document) =>
+        AdmitSurvivorsRunCommand.make({
+          priorReport: PriorReportFacts.make({
+            config: document.config ?? {},
+            frameworkVersion: document.framework?.version,
+          }),
+          currentConfig: resolvedOptions,
+          frameworkVersion: strykerVersion,
+          sourceContentHashes,
+          priorSourceHashes: priorSourceHashes(document, hashContent),
+          priorSurvivors: extractSurvivors(document, resolveAbsolutePath),
+        }))
+    }),
     Cell.decide<AdmissionPhases>(admitSurvivorsRun),
     Cell.encode<AdmissionPhases>((outcome) => outcome),
     Cell.write<AdmissionPhases>((outcome) =>
@@ -265,13 +303,19 @@ const survivorsAdmissionDescription = (
  * running the survivors and the plain pipeline. The chain's order is carried by
  * the description's phase types; the run's resolved context cell is created
  * here, beside the description it feeds.
+ *
+ * Two failures reach the caller, and they are not the same thing. A rejection is the
+ * decision's own outcome — the run was inspected and refused. A `SchemaError` is a prior
+ * report that was present and did not decode, which stops the chain before any decision
+ * is made; it is in this signature because the phase types put it there, not because the
+ * admission chose it.
  */
 function runSurvivorsAdmission(
   runMutationTest: StrykerRun,
   stream: RunEventStream,
   mode: ResolvedMode,
   cliOptions: PartialStrykerOptions,
-): Effect.Effect<unknown, SurvivorsRejection, never> {
+): Effect.Effect<unknown, S.SchemaError | SurvivorsRejection, never> {
   return Effect.gen(function*() {
     const admissionContext = yield* Ref.make<AdmissionRunContext | undefined>(undefined)
     return yield* Cell.apply(
@@ -307,30 +351,45 @@ function priorReportPathOf(resolved: StrykerOptions): string {
   return typeof configured === 'string' ? configured : DEFAULT_SURVIVORS_PRIOR_REPORT
 }
 
-/**
- * A report is usable only when it parses and carries a `files` dictionary; a
- * missing, unreadable or misshapen report is the `no-report` rejection.
- */
-function isMutationTestResultShape(value: unknown): value is schema.MutationTestResult {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    return false
-  }
-  return (
-    'files' in value &&
-    typeof value.files === 'object' &&
-    value.files !== null &&
-    !Array.isArray(value.files)
-  )
+/** A prior report as it came off disk: whether a file was there, and what it held. */
+interface PriorReportRead {
+  readonly found: boolean
+  readonly raw: unknown
 }
 
-function readPriorReport(priorReportPath: string): schema.MutationTestResult | undefined {
+/**
+ * Reads the prior report without validating it. Absence and malformation are different
+ * outcomes and the caller must be able to tell them apart: an absent report is the
+ * `no-report` rejection the decider states, while a present-but-malformed one is a decode
+ * failure that stops the run. Text that is not JSON is reported as found, carrying the
+ * text itself, so the codec refuses it and names what it got.
+ */
+function readPriorReport(priorReportPath: string): PriorReportRead {
+  let text: string
   try {
-    const raw = readFileSync(priorReportPath, 'utf-8')
-    const parsed: unknown = JSON.parse(raw)
-    return isMutationTestResultShape(parsed) ? parsed : undefined
+    text = readFileSync(priorReportPath, 'utf-8')
   } catch {
-    return undefined
+    return { found: false, raw: undefined }
   }
+  try {
+    return { found: true, raw: JSON.parse(text) }
+  } catch {
+    return { found: true, raw: text }
+  }
+}
+
+/**
+ * The relative file names a report claims, read structurally rather than through the
+ * codec because the current sources must be hashed before the report is decoded — the
+ * read phase does the disk I/O, and the keys are what tell it which files to read. An
+ * unrecognisable report yields no keys and is refused a phase later by the codec.
+ */
+function priorReportFileKeys(raw: unknown): readonly string[] {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return []
+  if (!('files' in raw)) return []
+  const files = raw.files
+  if (typeof files !== 'object' || files === null || Array.isArray(files)) return []
+  return Object.keys(files)
 }
 
 function readSourceFile(file: string): string {
@@ -345,19 +404,13 @@ function readSourceFile(file: string): string {
 }
 
 /**
- * The per-file content hashes of the current sources, keyed by the relative
- * file names the prior report uses — the current side of the admission
- * comparison (`admitSurvivorsRun` hashes the prior side from the sources the
- * report embeds).
+ * The per-file content hashes of the current sources, keyed by the relative file names
+ * the prior report uses — the current side of the admission comparison. The prior side is
+ * hashed from the sources the report embeds, in the decode phase.
  */
-function sourceContentHashesOf(
-  priorReport: schema.MutationTestResult | undefined,
-): Record<string, string> {
+function currentSourceHashesFor(files: readonly string[]): Record<string, string> {
   const hashes: Record<string, string> = {}
-  if (priorReport === undefined) {
-    return hashes
-  }
-  for (const file of Object.keys(priorReport.files)) {
+  for (const file of files) {
     hashes[file] = sourceContentHash(readSourceFile(file), hashContent)
   }
   return hashes
@@ -632,10 +685,16 @@ function carriesConfigError(cause: Cause.Cause<unknown>): boolean {
 /**
  * Classifies a failed run for the finalizer: usage/parse failures
  * (`CliError` — except a bare help request, which exits 0), rejected
- * survivors runs (`SurvivorsRejection`) and a rejected config (`ConfigError`)
- * all exit 2, all other failures exit 1 (the framework's default). A
- * successful run exits 0; the verdict gates (U5) then resolve the final
- * classed code.
+ * survivors runs (`SurvivorsRejection`), an unreadable prior report
+ * (`S.SchemaError`) and a rejected config (`ConfigError`) all exit 2, all
+ * other failures exit 1 (the framework's default). A successful run exits 0;
+ * the verdict gates (U5) then resolve the final classed code.
+ *
+ * The report parse failure shares the survivors class deliberately. It is not a
+ * verdict — the decider never sees the report — but the operator's answer is the
+ * same class of answer as a rejection: the input you named cannot be used. Letting
+ * it fall through to 1 would make an unusable `--survivors` input indistinguishable
+ * from a crash.
  */
 function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
   if (Exit.isSuccess(exit)) {
@@ -657,6 +716,9 @@ function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
       return 2
     }
     if (S.is(SurvivorsRejection)(value)) {
+      return SURVIVORS_REJECT_EXIT_CLASS
+    }
+    if (value instanceof S.SchemaError) {
       return SURVIVORS_REJECT_EXIT_CLASS
     }
   }
@@ -716,7 +778,7 @@ export const runStrykerCli = (
       }
     }
 
-    const dispatch = (request: CliRequest): Effect.Effect<unknown, SurvivorsRejection, never> =>
+    const dispatch = (request: CliRequest): Effect.Effect<unknown, S.SchemaError | SurvivorsRejection, never> =>
       Match.value(request).pipe(
         Match.tag('run', (runRequest) =>
           runRequest.survivors

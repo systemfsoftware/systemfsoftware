@@ -16,6 +16,7 @@ jobs:
       head_sha: ${{ github.event.pull_request.head.sha }}
   commitlint:
     needs: conflicts
+    if: github.actor != 'dependabot[bot]'
     name: lint PR commits
     runs-on: ubuntu-latest
     timeout-minutes: 5

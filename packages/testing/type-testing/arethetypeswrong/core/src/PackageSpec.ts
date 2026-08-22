@@ -2,13 +2,7 @@ import { Result } from 'effect'
 import { valid, validRange } from 'semver'
 import validatePackageName from 'validate-npm-package-name'
 
-import type { ParsedPackageSpec } from './PackageSpec.schema.js'
-
-export type PackageSpecParseError = { readonly _tag: 'PackageSpecParseError'; readonly message: string }
-export const PackageSpecParseError = (message: string): PackageSpecParseError => ({
-  _tag: 'PackageSpecParseError',
-  message,
-})
+import { PackageSpecParseError, type ParsedPackageSpec } from './PackageSpec.schema.js'
 
 export const parsePackageSpec = (input: string): Result.Result<ParsedPackageSpec, PackageSpecParseError> => {
   let name: string
@@ -16,7 +10,7 @@ export const parsePackageSpec = (input: string): Result.Result<ParsedPackageSpec
   if (input.startsWith('@')) {
     i = input.indexOf('/')
     if (i === -1 || i === 1) {
-      return Result.fail(PackageSpecParseError('Invalid package name'))
+      return Result.fail(new PackageSpecParseError({ message: 'Invalid package name' }))
     }
     i++
   }
@@ -29,7 +23,7 @@ export const parsePackageSpec = (input: string): Result.Result<ParsedPackageSpec
   const version = i === -1 ? '' : input.slice(i + 1)
 
   if (validatePackageName(name).errors) {
-    return Result.fail(PackageSpecParseError('Invalid package name'))
+    return Result.fail(new PackageSpecParseError({ message: 'Invalid package name' }))
   }
   if (!version) {
     return Result.succeed({ versionKind: 'none' as const, name, version: '' })

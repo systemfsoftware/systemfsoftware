@@ -1,5 +1,7 @@
 import { Effect } from 'effect'
 import { WorkerTypeId } from './Brands.js'
+import type { SubscriptionLoop } from './DaemonSpec.schema.js'
+import { SubscriptionLoopTag } from './internal/LoopTags.js'
 
 type WorkerRecord<TICK, THOOKS, CHILD, LCK, L> = {
   readonly [WorkerTypeId]: WorkerTypeId
@@ -34,11 +36,11 @@ export const subscription = <
   THOOKS,
   CHILD,
   LCK,
-  { readonly _tag: 'Subscription'; readonly acquire: Effect.Effect<void, AE, AR> }
+  SubscriptionLoop<AE, AR>
 > => ({
   [WorkerTypeId]: WorkerTypeId,
   name: opts.name,
-  loop: { _tag: 'Subscription' as const, acquire: Effect.asVoid(opts.acquire) },
+  loop: { ...SubscriptionLoopTag, acquire: Effect.asVoid(opts.acquire) },
   child: opts.child ?? {},
   tick: opts.tick,
   tickHooks: opts.tickHooks ?? {},

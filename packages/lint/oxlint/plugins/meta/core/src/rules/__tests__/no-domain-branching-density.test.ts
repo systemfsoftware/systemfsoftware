@@ -219,6 +219,55 @@ ruleTester.run('no-domain-branching-density', noDomainBranchingDensity, {
       options: [{ max: 2 }],
     },
     {
+      // The mirror control: this package vendors its own copy of the
+      // make-boundary kernel. If that copy still resolves only argument 0 it
+      // finds the command class, produces no body, the exemption never
+      // applies, and this rule starts reporting every decider in the tree.
+      name: 'Should_Exempt_Function_When_Inside_TwoArgument_Inline_Make_Body',
+      code: `
+        ${WITH_WORKFLOW_IMPORT}
+        class Cmd {}
+        const cell = Workflow.make(Cmd, (input: number) => {
+          if (input > 1) return input + 1
+          if (input > 2) return input + 2
+          if (input > 3) return input + 3
+          if (input > 4) return input + 4
+          if (input > 5) return input + 5
+          if (input > 6) return input + 6
+          if (input > 7) return input + 7
+          if (input > 8) return input + 8
+          if (input > 9) return input + 9
+          if (input > 10) return input + 10
+          if (input > 11) return input + 11
+          return input
+        })
+      `,
+      options: [{ max: 2 }],
+    },
+    {
+      name: 'Should_Exempt_Named_Module_Function_Passed_As_TheSecondArgument',
+      code: `
+        ${WITH_WORKFLOW_IMPORT}
+        class Cmd {}
+        function decide(input: number): number {
+          if (input > 1) return input + 1
+          if (input > 2) return input + 2
+          if (input > 3) return input + 3
+          if (input > 4) return input + 4
+          if (input > 5) return input + 5
+          if (input > 6) return input + 6
+          if (input > 7) return input + 7
+          if (input > 8) return input + 8
+          if (input > 9) return input + 9
+          if (input > 10) return input + 10
+          if (input > 11) return input + 11
+          return input
+        }
+        const cell = Workflow.make(Cmd, decide)
+      `,
+      options: [{ max: 2 }],
+    },
+    {
       name: 'Should_Exempt_Nested_Function_Inside_Make_Body',
       code: `
         ${WITH_WORKFLOW_IMPORT}

@@ -1,9 +1,15 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Result from 'effect/Result'
-import type { Admitted, Refused } from './InterpreterDecide.workflow.js'
+import { type Admitted, Decoded, type Refused } from './InterpreterDecide.workflow.js'
 
-export const tracedDecide = (trace: string[]) =>
-  Workflow.make((): Result.Result<Admitted, Refused> => {
+/**
+ * The traced decider. It takes the decision as data so the body references only
+ * its own parameters (`make-body-purity`), and it passes `Decoded` as the command
+ * because `Workflow.make` now derives the command channel from the class it is
+ * handed — a zero-argument decider can no longer express a command at all.
+ */
+export const tracedDecide = (trace: string[], admitted: Admitted) =>
+  Workflow.make(Decoded, (_command: Decoded): Result.Result<Admitted, Refused> => {
     trace.push('decide')
-    return Result.succeed({ kind: 'Admitted', length: 0 })
+    return Result.succeed(admitted)
   })

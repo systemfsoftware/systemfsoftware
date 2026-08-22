@@ -14,6 +14,7 @@ const _default: {
     rules: {
         'ban-effect-schema-imports': Rule;
         'ban-data-taggederror': Rule;
+        'no-manual-tag-member': Rule;
         'no-manual-tag-property': Rule;
         'no-schema-law-duplicate': Rule;
         'schema-declaration-location': Rule;
@@ -21,6 +22,7 @@ const _default: {
         'make-file-location': Rule;
         'workflow-match-exhaustive': Rule;
         'make-body-purity': Rule;
+        'make-command-schema': Rule;
         'no-silent-return': Rule;
         'no-assert-in-property': Rule;
         'property-file-purity': Rule;

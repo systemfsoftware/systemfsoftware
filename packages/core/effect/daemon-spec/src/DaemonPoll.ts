@@ -1,5 +1,7 @@
 import { Duration, Effect, Option } from 'effect'
 import { WorkerTypeId } from './Brands.js'
+import type { PollLoop } from './DaemonSpec.schema.js'
+import { PollLoopTag } from './internal/LoopTags.js'
 
 type WorkerRecord<TICK, THOOKS, CHILD, LCK, L> = {
   readonly [WorkerTypeId]: WorkerTypeId
@@ -11,11 +13,6 @@ type WorkerRecord<TICK, THOOKS, CHILD, LCK, L> = {
   readonly lock: LCK
 }
 
-type PollLoopResult<WE, WR> = {
-  readonly _tag: 'Poll'
-  readonly gate: Effect.Effect<Option.Option<Effect.Effect<void, WE, WR>>, WE, WR>
-  readonly interval: Duration.Input
-}
 type PollShape<W, D, WE, WR> =
   | {
     readonly name: string
@@ -45,13 +42,13 @@ export const poll = <
     readonly child?: CHILD
     readonly lock: LCK
   },
->(opts: O): WorkerRecord<TICK, THOOKS, CHILD, LCK, PollLoopResult<WE, WR>> => {
+>(opts: O): WorkerRecord<TICK, THOOKS, CHILD, LCK, PollLoop<WE, WR>> => {
   if (typeof opts.prereq === 'undefined') {
     const gate = Effect.succeed(Option.some(Effect.asVoid(opts.work)))
     return {
       [WorkerTypeId]: WorkerTypeId,
       name: opts.name,
-      loop: { _tag: 'Poll' as const, gate, interval: opts.interval },
+      loop: { ...PollLoopTag, gate, interval: opts.interval },
       child: opts.child ?? {},
       tick: opts.tick,
       tickHooks: opts.tickHooks ?? {},
@@ -63,7 +60,7 @@ export const poll = <
   return {
     [WorkerTypeId]: WorkerTypeId,
     name: opts.name,
-    loop: { _tag: 'Poll' as const, gate, interval: opts.interval },
+    loop: { ...PollLoopTag, gate, interval: opts.interval },
     child: opts.child ?? {},
     tick: opts.tick,
     tickHooks: opts.tickHooks ?? {},

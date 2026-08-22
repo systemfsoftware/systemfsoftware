@@ -63,6 +63,25 @@ export const workflowMakeCallOf = (arg: unknown, objectName = 'Workflow'): CallE
   callOf(memberOf(objectName, 'make'), [arg])
 
 /**
+ * `Workflow.make(Command, argument)` — the two-argument boundary call. The
+ * command schema class occupies slot 0 and the decider slot 1, so a resolver
+ * pinned to slot 0 finds a class, resolves no function, and silently drops the
+ * referenced decision body out of the mutation population.
+ */
+export const workflowMakeCallOfTwo = (
+  command: unknown,
+  arg: unknown,
+  objectName = 'Workflow',
+): CallExpression => callOf(memberOf(objectName, 'make'), [command, arg])
+
+/** `class <name> {}` — a command class in slot 0; never a decision body. */
+export const classDeclarationOf = (name: string) => ({
+  type: 'ClassDeclaration' as const,
+  id: identifier(name),
+  body: { type: 'ClassBody' as const, body: [] },
+})
+
+/**
  * The decision body of a `Workflow.make(...)` argument — the object that must be
  * reference-identical with the call's first argument for containment to hold.
  */

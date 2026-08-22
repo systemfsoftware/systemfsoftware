@@ -2,69 +2,42 @@
 
 # systemfsoftware
 
-_Effect-TS libraries and the lint plugin that enforces the [constitution](https://systemfsoftware.com/constitution)_
+_Effect-TS libraries and developer tooling for functional software architecture_
 
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache_2.0-blue?style=flat-square)](LICENSE)
 [![CI](https://img.shields.io/github/actions/workflow/status/systemfsoftware/systemfsoftware/release.yml?branch=main&style=flat-square&label=CI)](https://github.com/systemfsoftware/systemfsoftware/actions)
-[![Constitution](https://img.shields.io/badge/built%20to-the%20constitution-black?style=flat-square)](https://systemfsoftware.com/constitution)
 
 </div>
 
-A pnpm monorepo of [Effect-TS](https://effect.website) packages — pure functional cores behind thin imperative shells, property-tested and mutation-gated. The `oxlint-plugin` enforces the [System F Software constitution](https://systemfsoftware.com/constitution); the monorepo lints itself with it.
+A workspace of modular [Effect-TS](https://effect.website) libraries, testing utilities, and linters designed around pure functional cores and verifiable boundaries.
 
 ## Packages
 
-| Package | npm | What it does |
-| ------- | --- | ------------ |
+| Package                                                                     | Purpose                                                                               |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| [`@systemfsoftware/effect-gherkin-spec`](packages/effect-gherkin-spec)      | BDD `feature`/`scenario` specifications composed as typed Effect workflows.           |
+| [`@systemfsoftware/effect-daemon-spec`](packages/effect-daemon-spec)        | Supervision tree daemon primitives, leader election, and health monitors.             |
+| [`@systemfsoftware/effect-schema-law`](packages/effect-schema-law)          | Property-based law tests asserting bidirectional roundtrips for Effect Schemas.       |
+| [`@systemfsoftware/rx-effect`](packages/rx-effect)                          | Bidirectional bridge between RxJS Observables and backpressured Effect Streams.       |
+| [`@systemfsoftware/oxlint-plugin`](packages/oxlint-plugins/core)            | Fast Oxlint rules enforcing functional purity, schema invariants, and test placement. |
+| [`@systemfsoftware/omp-agent-discipline`](omp/plugins/omp-agent-discipline) | Guardrails and dispatch interception for Oh My Pi coding agents.                      |
+| [`@systemfsoftware/omp-claude-compat`](omp/plugins/omp-claude-compat)       | Claude Code settings and hook compatibility extension for Oh My Pi.                   |
 
-| [`effect-gherkin-spec`](packages/effect-gherkin-spec) | `@systemfsoftware/effect-gherkin-spec` | `feature`/`scenario`/`outline` DSL for Gherkin-style behaviour tests composed as Effects, with Scenario Outline expansion and typed step errors. |
-| [`effect-daemon-spec`](packages/effect-daemon-spec) | `@systemfsoftware/effect-daemon-spec` | A typed supervision-tree daemon for Effect — leader election, lock primitives, restart-intensity windows, dynamic children, and health latches. |
-| [`oxlint-plugin`](packages/oxlint-plugins/core) | `@systemfsoftware/oxlint-plugin` | 18 [oxlint](https://oxc.rs) rules enforcing the constitution: ban classes and string errors, forbid native timers/`Promise`/`Date` inside Effect, require pipeable composition, keep tests off the I/O boundary. |
-| [`effect-schema-law`](packages/effect-schema-law) | `@systemfsoftware/effect-schema-law` | One call asserts the codec laws of any Effect `Schema` as Vitest property tests — decode∘encode is identity, and encoding is stable under a decode round-trip. |
-| [`stryker-plugins`](packages/stryker-plugins) | `@systemfsoftware/stryker-plugins` | Stryker mutation-testing plugins for Effect — `effect-schema-ignorer` skips equivalent mutants on Effect `Schema` declarations so the score reflects behaviour, not data. |
-| [`rx-effect`](packages/rx-effect) | `@systemfsoftware/rx-effect` | Bridge RxJS and Effect — turn an Observable into a typed Effect `Stream` with backpressure and proper interruption. |
-| [`effect-schema-extensions`](packages/effect-schema-extensions) | `@systemfsoftware/effect-schema-extensions` | Extra Effect `Schema` codecs — branded hex-string schemas with decode/encode and arbitraries. |
+## Quick Start
 
-`oxlint-config` and `vitest-config` are internal to this repository and are not published. Every
-other package under `packages/` is published independently.
-
-## Lint Configuration
-
-Use the shared oxlint configuration presets from `@systemfsoftware/oxlint-config`:
-
-```ts
-// oxlint.config.ts
-import base from '@systemfsoftware/oxlint-config/base'
-import { defineConfig } from 'oxlint'
-
-export default defineConfig({
-  extends: [base],
-})
-```
-
-That config enables the built-in `correctness` category and every custom rule — the workflow,
-schema, test-placement, property-testing, hygiene, entrypoint and cell-vocabulary tiers — each
-at `error`. The rules are type-aware, so the files you lint must be covered by a
-`tsconfig.json`; without one, roughly half of them produce no diagnostics while still reading
-as enabled.
-
-Or install one library at a time:
+Install packages directly using your preferred package manager:
 
 ```bash
 pnpm add @systemfsoftware/effect-gherkin-spec
-pnpm add @systemfsoftware/effect-daemon-spec
+```
+
+```bash
 pnpm add -D @systemfsoftware/oxlint-plugin
 ```
 
-Each package's README has a usage example and API reference.
-
-> `effect` is a peer dependency of every published package. `effect-gherkin-spec` also peers `@effect/vitest` and `vitest`.
-
 ## Contributing
 
-Development setup, build, test, and lint commands: [AGENTS.md](AGENTS.md).
-
-Read the [constitution](https://systemfsoftware.com/constitution) and [`CONSTITUTION.md`](CONSTITUTION.md) before contributing. The constitution is vendored from [systemfsoftware/constitution](https://github.com/systemfsoftware/constitution) as a subtree.
+Development setup and developer commands are documented in [AGENTS.md](AGENTS.md).
 
 ## License
 

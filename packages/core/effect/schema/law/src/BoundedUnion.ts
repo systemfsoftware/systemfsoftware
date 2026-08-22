@@ -72,22 +72,31 @@ if (import.meta.vitest !== void 0) {
    */
 
   /**
-   * The recursive members keep explicit type anchors: deriving a recursive type
-   * from its schema const (`type Binary = S.Schema.Type<typeof Binary>` with the
-   * const annotated `: S.Codec<Binary>` and the type named `Binary`) is circular
-   * (TS2502/TS2456), and leaving the const unannotated cannot be inferred
-   * (TS7022). The leaf members derive from their consts; the recursive anchors
-   * are structurally identical to the interfaces they replaced.
+   * The recursive members keep hand-written anchors for their recursive fields:
+   * deriving the whole type from its own schema const (`type Binary =
+   * S.Schema.Type<typeof Binary>` with the const annotated `: S.Codec<Binary>`)
+   * is circular (TS2502/TS2456), and leaving the const unannotated cannot be
+   * inferred (TS7022).
+   *
+   * The tag is no part of that constraint. Each variant's non-recursive half is
+   * its own `S.TaggedStruct`, which nothing recursive mentions and the type can
+   * therefore derive from; only the self-referencing fields stay declared by
+   * hand. So no `_tag` is written in a type position, and the runtime schema
+   * spreads the base's fields rather than restating the tag.
    */
-  type Binary = { readonly _tag: 'Binary'; readonly op: string; readonly left: Expr; readonly right: Expr }
-  type Member = { readonly _tag: 'Member'; readonly object: Expr; readonly property: Expr }
-  type Conditional = {
-    readonly _tag: 'Conditional'
+  const BinaryBase = S.TaggedStruct('Binary', { op: S.String })
+  const MemberBase = S.TaggedStruct('Member', {})
+  const ConditionalBase = S.TaggedStruct('Conditional', {})
+  const CallBase = S.TaggedStruct('Call', {})
+
+  type Binary = S.Schema.Type<typeof BinaryBase> & { readonly left: Expr; readonly right: Expr }
+  type Member = S.Schema.Type<typeof MemberBase> & { readonly object: Expr; readonly property: Expr }
+  type Conditional = S.Schema.Type<typeof ConditionalBase> & {
     readonly test: Expr
     readonly consequent: Expr
     readonly alternate: Expr
   }
-  type Call = { readonly _tag: 'Call'; readonly callee: Expr; readonly args: readonly Expr[] }
+  type Call = S.Schema.Type<typeof CallBase> & { readonly callee: Expr; readonly args: readonly Expr[] }
 
   type Expr = Lit | Id | Binary | Member | Conditional | Call
 
@@ -95,16 +104,16 @@ if (import.meta.vitest !== void 0) {
   const Id = S.TaggedStruct('Id', { name: S.String })
 
   const Binary: S.Codec<Binary> = S.suspend((): S.Codec<Binary> =>
-    S.TaggedStruct('Binary', { op: S.String, left: Expr, right: Expr })
+    S.Struct({ ...BinaryBase.fields, left: Expr, right: Expr })
   )
   const Member: S.Codec<Member> = S.suspend((): S.Codec<Member> =>
-    S.TaggedStruct('Member', { object: Expr, property: Expr })
+    S.Struct({ ...MemberBase.fields, object: Expr, property: Expr })
   )
   const Conditional: S.Codec<Conditional> = S.suspend((): S.Codec<Conditional> =>
-    S.TaggedStruct('Conditional', { test: Expr, consequent: Expr, alternate: Expr })
+    S.Struct({ ...ConditionalBase.fields, test: Expr, consequent: Expr, alternate: Expr })
   )
   const Call: S.Codec<Call> = S.suspend((): S.Codec<Call> =>
-    S.TaggedStruct('Call', { callee: Expr, args: S.Array(Expr) })
+    S.Struct({ ...CallBase.fields, callee: Expr, args: S.Array(Expr) })
   )
 
   const BASE = [Lit, Id] as const

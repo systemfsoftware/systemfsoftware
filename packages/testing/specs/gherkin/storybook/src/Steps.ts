@@ -125,8 +125,11 @@ export type StepHandler<TCaps, TArgs = unknown> = (
   caps: TCaps,
 ) => void | Promise<void>
 
-export interface Step<TArgs = unknown> {
-  readonly _tag: 'Step'
+const STEP_TAG = 'Step'
+export const StepTag = { _tag: STEP_TAG } as const
+export type StepTag = typeof StepTag
+
+export interface Step<TArgs = unknown> extends StepTag {
   readonly model: StepModel
   readonly run: (
     values: Readonly<Record<string, string>>,
@@ -148,8 +151,6 @@ export type StepCtor = {
     ...holes: THoles
   ): StepBuilder<THoles, TArgs>
 }
-
-const STEP_TAG = 'Step'
 
 const buildModel = (
   keyword: Keyword,
@@ -217,7 +218,7 @@ const makeStepCtor = (keyword: Keyword): StepCtor => {
     return <TArgs = unknown>(handler: StepHandler<CapsOf<typeof holes>, TArgs>): Step<TArgs> => {
       const model = buildModel(keyword, statics, holes)
       const _step: Step<TArgs> = {
-        _tag: STEP_TAG,
+        ...StepTag,
         model,
         run: (values: Readonly<Record<string, string>>, ctx: StepContext<TArgs>) =>
           Effect.forEach(model.captures, (cap) => decodeCapture(cap, values, model)).pipe(

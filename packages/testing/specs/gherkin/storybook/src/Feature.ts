@@ -13,7 +13,7 @@ import {
   UnresolvedCapture,
 } from './Errors.schema.js'
 import type { ExampleRow, PlayContext, Step, StepContext, StepModel } from './Steps.js'
-import { displayPattern, isStep, renderStepText, resolveKeywords } from './Steps.js'
+import { displayPattern, isStep, renderStepText, resolveKeywords, StepTag } from './Steps.js'
 
 export interface StorySpec<TArgs = unknown> {
   readonly name: string
@@ -403,7 +403,7 @@ export const From = <TArgs>(story: StoryWithPlay<TArgs>): Step<TArgs>[] => {
   const play = story.play
   if (play === undefined) return []
   const step: Step<TArgs> = {
-    _tag: 'Step',
+    ...StepTag,
     model: { keyword: 'Given', parts: ['the prior scenario completed'], captures: [] },
     run: (_values: Readonly<Record<string, string>>, ctx: StepContext<TArgs>) =>
       Effect.promise(() => Promise.resolve(play(ctx.context))),
