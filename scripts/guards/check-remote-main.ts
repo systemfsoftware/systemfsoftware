@@ -6,11 +6,19 @@
  * it to be an ancestor of each refs/heads/* SHA. Tags and deletes are ignored.
  * A failed query refuses.
  *
- * Permissions: git only; read cwd (the repo) and /tmp (selftest trees); write
- * /tmp for selftest. No --allow-env (git inherits). No --allow-net (git speaks).
+ * Permissions: git only; read cwd (the repo) and /tmp (test trees); write
+ * /tmp for tests. No --allow-env (git inherits). No --allow-net (git speaks).
  */
 import { type } from 'arktype'
 
+declare global {
+  interface ImportMeta {
+    readonly vitest?: {
+      readonly it: (name: string, fn: () => void | Promise<void>) => void
+      readonly expect: (actual: unknown) => { readonly toBe: (expected: unknown) => void }
+    }
+  }
+}
 const CommitSha = type('/^[0-9a-f]{40}([0-9a-f]{24})?$/#CommitSha')
 const RefName = type('/^\\S+$/#RefName')
 const ZeroSha = type('/^0+$/')
@@ -225,149 +233,142 @@ const run = async (
   }
   return shape(decide(RemoteMain.assert({ kind: 'RemoteMain', sha: listed.sha, refs })))
 }
-
-const ALL_ZERO = '0000000000000000000000000000000000000000'
-const SHA_A = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
-const SHA_B = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
-
-const decideHolds = (check: Check): boolean => {
-  const verdict = decide(check)
-  if (NoRemoteMain.allows(check)) return AllowNoRemoteMain.allows(verdict)
-  const behind = check.refs.filter((ref: RefCheck): ref is typeof Behind.infer => Behind.allows(ref))
-  if (behind.length === 0) return AllowContainsRemoteMain.allows(verdict)
-  return RefuseBehindRemoteMain.allows(verdict) &&
-    verdict.offenders.length === behind.length &&
-    verdict.sha === check.sha
-}
-
-const refKinds = ['Delete', 'Ignore', 'Contains', 'Behind'] as const
-
-const allChecks = (): readonly Check[] => {
-  const sha = CommitSha.assert(SHA_A)
-  const name = RefName.assert('refs/heads/feat')
-  const kinds: RefCheck[][] = [[]]
-  for (const kind of refKinds) {
-    const next: RefCheck[][] = []
-    for (const prefix of kinds) {
-      next.push(prefix)
-      next.push([
-        ...prefix,
-        kind === 'Delete' || kind === 'Ignore'
-          ? { kind }
-          : { kind, name, sha: CommitSha.assert(SHA_B) },
-      ])
-    }
-    kinds.splice(0, kinds.length, ...next)
-  }
-  return [
-    NoRemoteMain.assert({ kind: 'NoRemoteMain' }),
-    ...kinds.map((refs) => RemoteMain.assert({ kind: 'RemoteMain', sha, refs })),
-  ]
-}
-
-const gitIn = (cwd: string, args: readonly string[]): Promise<GitResult> => gitAt(cwd)(args)
-
-const requireOk = (result: GitResult, step: string): void => {
-  if (!result.success) throw new Error(`${step}: ${result.stderr.trim()}`)
-}
-
-const configIdentity = async (dir: string): Promise<void> => {
-  requireOk(await gitIn(dir, ['config', 'user.email', 'hook@example.test']), 'email')
-  requireOk(await gitIn(dir, ['config', 'user.name', 'hook']), 'name')
-  requireOk(await gitIn(dir, ['config', 'commit.gpgsign', 'false']), 'gpgsign')
-}
-
-const composition = async (): Promise<boolean> => {
-  const root = await Deno.makeTempDir({ dir: '/tmp', prefix: 'prepush-main-' })
-  const tally = { n: 0 }
-  try {
-    const bare = `${root}/remote.git`
-    const ahead = `${root}/ahead`
-    const behind = `${root}/behind`
-    requireOk(await gitIn(root, ['init', '--bare', '-b', 'main', bare]), 'bare')
-    requireOk(await gitIn(root, ['clone', bare, ahead]), 'clone-ahead')
-    await configIdentity(ahead)
-    await Deno.writeTextFile(`${ahead}/base`, 'base')
-    requireOk(await gitIn(ahead, ['add', 'base']), 'add-base')
-    requireOk(await gitIn(ahead, ['commit', '-m', 'base']), 'commit-base')
-    requireOk(await gitIn(ahead, ['push', 'origin', 'main']), 'push-base')
-    requireOk(await gitIn(root, ['clone', bare, behind]), 'clone-behind')
-    await configIdentity(behind)
-    requireOk(await gitIn(behind, ['checkout', '-b', 'feat']), 'branch')
-    await Deno.writeTextFile(`${behind}/feat`, 'feat')
-    requireOk(await gitIn(behind, ['add', 'feat']), 'add-feat')
-    requireOk(await gitIn(behind, ['commit', '-m', 'feat']), 'commit-feat')
-
-    const current = await run(gitAt(behind, tally), 'origin', '')
-    if (current.code !== 0) return false
-
-    await Deno.writeTextFile(`${ahead}/trunk`, 'trunk')
-    requireOk(await gitIn(ahead, ['add', 'trunk']), 'add-trunk')
-    requireOk(await gitIn(ahead, ['commit', '-m', 'trunk']), 'commit-trunk')
-    requireOk(await gitIn(ahead, ['push', 'origin', 'main']), 'push-trunk')
-
-    const stale = await run(gitAt(behind, tally), 'origin', '')
-    if (stale.code !== 1) return false
-    const tagOnly = await run(
-      gitAt(behind, tally),
-      'origin',
-      `refs/tags/v0 ${SHA_A} refs/tags/v0 ${ALL_ZERO}`,
-    )
-    if (tagOnly.code !== 0) return false
-
-    requireOk(await gitIn(behind, ['fetch', 'origin', 'main']), 'fetch-main')
-    requireOk(await gitIn(behind, ['rebase', 'origin/main']), 'rebase')
-    const rebased = await run(gitAt(behind, tally), 'origin', '')
-    if (rebased.code !== 0) return false
-
-    const deleted = await run(
-      gitAt(behind, tally),
-      'origin',
-      `refs/heads/gone ${ALL_ZERO} refs/heads/gone ${SHA_A}`,
-    )
-    return deleted.code === 0 && tally.n >= 8
-  } finally {
-    await Deno.remove(root, { recursive: true }).catch(() => {})
-  }
-}
-
-const selftest = async (): Promise<number> => {
-  const failed = allChecks().filter((check) => !decideHolds(check))
-  if (failed.length > 0) {
-    console.error(`decide: ${failed.length} check(s) broke the refuse-iff-behind invariant`)
-    return 1
-  }
-  const lsEmpty = decodeLsRemote('')
-  if (!NoRemoteMain.allows(lsEmpty)) {
-    console.error('decode: empty ls-remote is not NoRemoteMain')
-    return 1
-  }
-  const pushDelete = decodePushStdin(`refs/heads/gone ${ALL_ZERO} refs/heads/gone ${ALL_ZERO}`)
-  if (DecodeFailure.allows(pushDelete) || !Delete.allows(pushDelete[0])) {
-    console.error('decode: delete line failed')
-    return 1
-  }
-  if (!await composition()) {
-    console.error('composition: real-git sandwich failed or spawned too few git processes')
-    return 1
-  }
-  return 0
-}
-
 const readStdin = async (): Promise<string> => {
   if (Deno.stdin.isTerminal()) return ''
   return new TextDecoder().decode(await new Response(Deno.stdin.readable).arrayBuffer())
 }
-
-try {
-  if (Deno.args.includes('--selftest')) {
-    Deno.exitCode = await selftest()
-  } else {
+if (import.meta.main) {
+  try {
     const output = await run(gitAt(Deno.cwd()), Deno.args[0], await readStdin())
     for (const line of output.lines) console.error(line)
     Deno.exitCode = output.code
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error))
+    Deno.exitCode = 1
   }
-} catch (error) {
-  console.error(error instanceof Error ? error.message : String(error))
-  Deno.exitCode = 1
+}
+
+if (import.meta.vitest) {
+  const { it, expect } = import.meta.vitest
+
+  const ALL_ZERO = '0000000000000000000000000000000000000000'
+  const SHA_A = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+  const SHA_B = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+
+  const decideHolds = (check: Check): boolean => {
+    const verdict = decide(check)
+    if (NoRemoteMain.allows(check)) return AllowNoRemoteMain.allows(verdict)
+    const behind = check.refs.filter((ref: RefCheck): ref is typeof Behind.infer => Behind.allows(ref))
+    if (behind.length === 0) return AllowContainsRemoteMain.allows(verdict)
+    return RefuseBehindRemoteMain.allows(verdict) &&
+      verdict.offenders.length === behind.length &&
+      verdict.sha === check.sha
+  }
+
+  const refKinds = ['Delete', 'Ignore', 'Contains', 'Behind'] as const
+
+  const allChecks = (): readonly Check[] => {
+    const sha = CommitSha.assert(SHA_A)
+    const name = RefName.assert('refs/heads/feat')
+    const kinds: RefCheck[][] = [[]]
+    for (const kind of refKinds) {
+      const next: RefCheck[][] = []
+      for (const prefix of kinds) {
+        next.push(prefix)
+        next.push([
+          ...prefix,
+          kind === 'Delete' || kind === 'Ignore'
+            ? { kind }
+            : { kind, name, sha: CommitSha.assert(SHA_B) },
+        ])
+      }
+      kinds.splice(0, kinds.length, ...next)
+    }
+    return [
+      NoRemoteMain.assert({ kind: 'NoRemoteMain' }),
+      ...kinds.map((refs) => RemoteMain.assert({ kind: 'RemoteMain', sha, refs })),
+    ]
+  }
+
+  const gitIn = (cwd: string, args: readonly string[]): Promise<GitResult> => gitAt(cwd)(args)
+
+  const requireOk = (result: GitResult, step: string): void => {
+    if (!result.success) throw new Error(`${step}: ${result.stderr.trim()}`)
+  }
+
+  const configIdentity = async (dir: string): Promise<void> => {
+    requireOk(await gitIn(dir, ['config', 'user.email', 'hook@example.test']), 'email')
+    requireOk(await gitIn(dir, ['config', 'user.name', 'hook']), 'name')
+    requireOk(await gitIn(dir, ['config', 'commit.gpgsign', 'false']), 'gpgsign')
+  }
+
+  it('decide refuses iff a Behind ref exists', () => {
+    for (const check of allChecks()) {
+      expect(decideHolds(check)).toBe(true)
+    }
+  })
+
+  it('empty ls-remote is NoRemoteMain', () => {
+    expect(NoRemoteMain.allows(decodeLsRemote(''))).toBe(true)
+  })
+
+  it('zero SHA push line is Delete', () => {
+    const decoded = decodePushStdin(`refs/heads/gone ${ALL_ZERO} refs/heads/gone ${ALL_ZERO}`)
+    if (DecodeFailure.allows(decoded)) throw new Error(decoded.detail)
+    expect(Delete.allows(decoded[0])).toBe(true)
+  })
+
+  it('current allows, stale refuses, tag allows, rebase allows', async () => {
+    const root = await Deno.makeTempDir({ dir: '/tmp', prefix: 'prepush-main-' })
+    const tally = { n: 0 }
+    try {
+      const bare = `${root}/remote.git`
+      const ahead = `${root}/ahead`
+      const behind = `${root}/behind`
+      requireOk(await gitIn(root, ['init', '--bare', '-b', 'main', bare]), 'bare')
+      requireOk(await gitIn(root, ['clone', bare, ahead]), 'clone-ahead')
+      await configIdentity(ahead)
+      await Deno.writeTextFile(`${ahead}/base`, 'base')
+      requireOk(await gitIn(ahead, ['add', 'base']), 'add-base')
+      requireOk(await gitIn(ahead, ['commit', '-m', 'base']), 'commit-base')
+      requireOk(await gitIn(ahead, ['push', 'origin', 'main']), 'push-base')
+      requireOk(await gitIn(root, ['clone', bare, behind]), 'clone-behind')
+      await configIdentity(behind)
+      requireOk(await gitIn(behind, ['checkout', '-b', 'feat']), 'branch')
+      await Deno.writeTextFile(`${behind}/feat`, 'feat')
+      requireOk(await gitIn(behind, ['add', 'feat']), 'add-feat')
+      requireOk(await gitIn(behind, ['commit', '-m', 'feat']), 'commit-feat')
+
+      expect((await run(gitAt(behind, tally), 'origin', '')).code).toBe(0)
+
+      await Deno.writeTextFile(`${ahead}/trunk`, 'trunk')
+      requireOk(await gitIn(ahead, ['add', 'trunk']), 'add-trunk')
+      requireOk(await gitIn(ahead, ['commit', '-m', 'trunk']), 'commit-trunk')
+      requireOk(await gitIn(ahead, ['push', 'origin', 'main']), 'push-trunk')
+
+      expect((await run(gitAt(behind, tally), 'origin', '')).code).toBe(1)
+      expect(
+        (await run(
+          gitAt(behind, tally),
+          'origin',
+          `refs/tags/v0 ${SHA_A} refs/tags/v0 ${ALL_ZERO}`,
+        )).code,
+      ).toBe(0)
+
+      requireOk(await gitIn(behind, ['fetch', 'origin', 'main']), 'fetch-main')
+      requireOk(await gitIn(behind, ['rebase', 'origin/main']), 'rebase')
+      expect((await run(gitAt(behind, tally), 'origin', '')).code).toBe(0)
+
+      expect(
+        (await run(
+          gitAt(behind, tally),
+          'origin',
+          `refs/heads/gone ${ALL_ZERO} refs/heads/gone ${SHA_A}`,
+        )).code,
+      ).toBe(0)
+      expect(tally.n >= 8).toBe(true)
+    } finally {
+      await Deno.remove(root, { recursive: true }).catch(() => {})
+    }
+  })
 }
