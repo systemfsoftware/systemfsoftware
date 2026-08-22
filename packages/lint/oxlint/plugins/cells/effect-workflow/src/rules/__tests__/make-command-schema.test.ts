@@ -171,6 +171,14 @@ ruleTester.run('make-command-schema', makeCommandSchema, {
       code: `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.make(new Cmd(), (c: unknown) => c)`,
       filename: '/repo/pkg/src/d.workflow.ts',
     },
+    {
+      // `satisfies` keeps the operand's type, so it cannot relabel a non-class into
+      // one; the compiler refuses the laundering attempt (TS2740) and this rule has
+      // nothing to add. Pinned so the member cannot drift back into the enumeration.
+      name: 'Should_Ignore_When_TheCommandCarriesASatisfiesClause',
+      code: `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.make(Cmd satisfies unknown, (c: Cmd) => c)`,
+      filename: '/repo/pkg/src/d.workflow.ts',
+    },
   ],
   invalid: [
     {
@@ -178,12 +186,6 @@ ruleTester.run('make-command-schema', makeCommandSchema, {
       code: `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.make({} as unknown as Cmd, (c: Cmd) => c)`,
       filename: '/repo/pkg/src/d.workflow.ts',
       errors: [assertedError('TSAsExpression')],
-    },
-    {
-      name: 'Should_Report_When_TheCommandIsASatisfiesAssertion',
-      code: `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.make(Cmd satisfies unknown, (c: Cmd) => c)`,
-      filename: '/repo/pkg/src/d.workflow.ts',
-      errors: [assertedError('TSSatisfiesExpression')],
     },
     {
       name: 'Should_Report_When_TheCommandIsANonNullAssertion',
@@ -231,6 +233,52 @@ ruleTester.run('make-command-schema', makeCommandSchema, {
       name: 'Should_Report_When_AnAssertedCommandIsPassedThroughCall',
       code:
         `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.make.call(null, {} as unknown as Cmd, (c: Cmd) => c)`,
+      filename: '/repo/pkg/src/d.workflow.ts',
+      errors: [assertedError('TSAsExpression')],
+    },
+    {
+      // `make.apply(...)` carries the construction arguments inside an array. Reading
+      // the call's own slot 1 yields that array, which no branch classifies - so this
+      // fixture was silent until the locator unwrapped the list.
+      name: 'Should_Report_When_AnAssertedCommandIsPassedThroughApply',
+      code:
+        `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.make.apply(null, [{} as unknown as Cmd, (c: Cmd) => c])`,
+      filename: '/repo/pkg/src/d.workflow.ts',
+      errors: [assertedError('TSAsExpression')],
+    },
+    {
+      // A revocable Proxy is the enumerated wrapper reached by a property read instead
+      // of `new`, so the bare command position is a MemberExpression. Measured silent
+      // across the whole toolchain before the peel.
+      name: 'Should_Report_When_TheCommandIsARevocableProxy',
+      code:
+        `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.make(Proxy.revocable(Cmd, {}).proxy, (c: unknown) => c)`,
+      filename: '/repo/pkg/src/d.workflow.ts',
+      errors: [launderedError('Proxy.revocable')],
+    },
+    {
+      // `globalThis.X` is the same binding under its qualified spelling, not an alias,
+      // so stripping it reaches the enumeration rather than reading as a third segment.
+      name: 'Should_Report_When_TheLaunderingCallIsQualifiedByGlobalThis',
+      code:
+        `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.make(globalThis.Object.assign(class {}, Cmd), (c: unknown) => c)`,
+      filename: '/repo/pkg/src/d.workflow.ts',
+      errors: [launderedError('Object.assign')],
+    },
+    {
+      name: 'Should_Report_When_TheLaunderingConstructorIsQualifiedByGlobalThis',
+      code:
+        `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.make(new globalThis.Proxy(Cmd, {}), (c: unknown) => c)`,
+      filename: '/repo/pkg/src/d.workflow.ts',
+      errors: [launderedError('Proxy')],
+    },
+    {
+      // The assertion moved one statement away. This compiles, typechecks, and was
+      // measured silent across the whole toolchain except the repo's general anti-cast
+      // rule - which an adopter installing this plugin need not have.
+      name: 'Should_Report_When_TheCommandBindingWasInitialisedByAnAssertion',
+      code:
+        `${IMPORT}\n${SCHEMA}\n${CMD}\nconst Forged = {} as unknown as typeof Cmd\nexport const d = Workflow.make(Forged, (c: Cmd) => c)`,
       filename: '/repo/pkg/src/d.workflow.ts',
       errors: [assertedError('TSAsExpression')],
     },

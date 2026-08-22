@@ -27,6 +27,9 @@ export const LAUNDERING_CALLS: readonly string[] = [
   'Object.setPrototypeOf',
   'Reflect.construct',
   'Reflect.set',
+  // The revocable Proxy is the same wrapper the constructor list names, reached through
+  // a call whose result carries it on `.proxy` rather than through `new`.
+  'Proxy.revocable',
 ]
 
 /** Constructors that wrap a target and forward to it, standing in for the class. */

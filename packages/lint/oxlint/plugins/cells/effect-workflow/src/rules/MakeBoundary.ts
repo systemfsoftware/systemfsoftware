@@ -205,17 +205,27 @@ export const collectMakeBoundaries = (context: Context): readonly MakeBoundary[]
     if (!isCallExpression(node)) return
     const origin = resolveImportOrigin(node.callee, context.sourceCode.getScope)
     if (origin === null || !isMakeBoundaryOrigin(origin)) return
-    // The construction is the call that INVOKES the make function. A
-    // `make.bind(...)` call is a partial application - its arguments are the
-    // this-bound target, not the decision body; the construction is the later
-    // call of the bound value. `make.call(...)` / `make.apply(...)` invoke
-    // make directly but shift every construction argument one slot later.
+    // The construction is the call that INVOKES the make function, and its own
+    // argument list is not always the call's. `make.bind(...)` is a partial
+    // application - its arguments are the this-bound target, not the decision body -
+    // so the construction is the later call of the bound value. `make.call(this, a, b)`
+    // invokes make directly and shifts every construction argument one slot later.
+    // `make.apply(this, [a, b])` invokes it too, but puts the whole list inside an
+    // array: reading slot 1 there yields the array, so the command position resolved
+    // to an ArrayExpression the rules cannot classify and the body search found no
+    // function - both layers silently dark on a real construction.
     const callee = node.callee
-    let searchFrom = 0
+    let constructionArguments: readonly (ESTree.Node | null)[] = node.arguments
     if (isMemberExpression(callee) && !callee.computed && callee.property.type === 'Identifier') {
       const memberName = callee.property.name
       if (memberName === 'bind') return
-      if (memberName === 'call' || memberName === 'apply') searchFrom = 1
+      if (memberName === 'call') constructionArguments = node.arguments.slice(1)
+      if (memberName === 'apply') {
+        const list = node.arguments[1]
+        // A spread or a non-literal list is unreadable from the AST; there is no
+        // argument list to judge, so the boundary carries none rather than guessing.
+        constructionArguments = list !== undefined && list.type === 'ArrayExpression' ? list.elements : []
+      }
     }
     // The decider is found by SHAPE, never by slot index: `make` takes the
     // command schema class first and the decider second, and a locator pinned
@@ -223,9 +233,8 @@ export const collectMakeBoundaries = (context: Context): readonly MakeBoundary[]
     // body-scoped rule silently dark. Search forward and take the first
     // argument that resolves to a function.
     let resolvedBody: MakeBodyKind | null = null
-    for (let index = searchFrom; index < node.arguments.length; index++) {
-      const argument = node.arguments[index]
-      if (argument === undefined) continue
+    for (const argument of constructionArguments) {
+      if (argument === null) continue
       if (isArrowFunction(argument) || isFunctionLike(argument)) {
         resolvedBody = argument
         break
@@ -238,7 +247,7 @@ export const collectMakeBoundaries = (context: Context): readonly MakeBoundary[]
         }
       }
     }
-    boundaries.push({ makeCall: node, resolvedBody, commandArgument: node.arguments[searchFrom] ?? null })
+    boundaries.push({ makeCall: node, resolvedBody, commandArgument: constructionArguments[0] ?? null })
   })
   return boundaries
 }
