@@ -1,12 +1,4 @@
 import { Effect, Schema as S, SchemaGetter } from 'effect'
-import type {
-  SettingsAnalysisCoverageCommand,
-  SettingsAnalysisDisabledCoverageCommand,
-  SettingsAnalysisIfEvaluatingEventCommand,
-  SettingsAnalysisMatcherUnreadableCommand,
-  SettingsAnalysisMergeCommand,
-  SettingsAnalysisUnsupportedHookTypesCommand,
-} from './internal/SettingsAnalysisTags.js'
 
 const CommandHook = S.Struct({
   type: S.Literal('command'),
@@ -125,27 +117,3 @@ export interface SettingsSource {
   /** Read from the managed-settings path, which downstream files may not disable. */
   readonly managed: boolean
 }
-
-/**
- * In-memory analysis commands: constructed inside this ACL, consumed by
- * `analyzeSettings`, never decoded from an external source. Field schemas are
- * `S.Any` because no schema exists for the source types (SettingsSource and
- * DisableSource are plain interfaces); the exported type is hand-declared to
- * keep the real field types. Must not drift into a decode path.
- */
-export const SettingsAnalysisCommandSchema = S.Union([
-  S.TaggedStruct('Merge', { sources: S.Any }),
-  S.TaggedStruct('Coverage', { json: S.Any }),
-  S.TaggedStruct('DisabledCoverage', { sources: S.Any }),
-  S.TaggedStruct('UnsupportedHookTypes', { json: S.Any }),
-  S.TaggedStruct('MatcherUnreadable', { event: S.Any }),
-  S.TaggedStruct('IfEvaluatingEvent', { event: S.Any }),
-])
-
-export type SettingsAnalysisCommand =
-  | SettingsAnalysisMergeCommand
-  | SettingsAnalysisCoverageCommand
-  | SettingsAnalysisDisabledCoverageCommand
-  | SettingsAnalysisUnsupportedHookTypesCommand
-  | SettingsAnalysisMatcherUnreadableCommand
-  | SettingsAnalysisIfEvaluatingEventCommand

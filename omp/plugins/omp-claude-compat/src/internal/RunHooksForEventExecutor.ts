@@ -1,12 +1,12 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { matchesMatcher, matchesPermissionRule } from '@systemfsoftware/omp-utils'
-import { Context, Effect, Exit, Match, Option, pipe, Result, Schema as S, type Scope } from 'effect'
+import { Context, Effect, Exit, Match, Option, pipe, Result, type Scope } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { Blocked, Continue } from '../HookDispatcher.schema.js'
 import type { HookOutcome, HookResult } from '../HookDispatcher.schema.js'
 import { parseHookOutput } from '../HookOutput.js'
-import { analyzeSettings } from '../HookSettings.js'
+import { ifEvaluatingEvent, matcherUnreadable } from '../HookSettings.js'
 import type { CommandHook, HookEntry } from '../HookSettings.schema.js'
 import {
   type HookDecision,
@@ -20,7 +20,6 @@ import type { HooksForEventResult } from './HookFeedback.js'
 import { asToolInput, EMPTY_TOOL_INPUT } from './HookPayload.js'
 import type { HookSession } from './HookSession.js'
 import { runHookScript, type RunHookScriptExecutorDeps } from './RunHookScriptExecutor.js'
-import { settingsAnalysisTags } from './SettingsAnalysisTags.js'
 import { superviseFork } from './SuperviseForkExecutor.js'
 
 export class RunHooksForEventExecutorDeps extends Context.Service<RunHooksForEventExecutorDeps, Scope.Scope>()(
@@ -65,7 +64,7 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
   let currentInput = input
   // A matcher this event cannot evaluate must not behave as a match. U3 already
   // named the hook at session start, so this is a silent skip, not a report.
-  const matcherUnreadable = analyzeSettings({ ...settingsAnalysisTags.MatcherUnreadable, event }, S.Boolean)
+  const unreadableMatcher = matcherUnreadable(event)
 
   /**
    * The verdict chain, as a description applied per hook iteration. The read
@@ -128,7 +127,7 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
   )
 
   for (const entry of entries) {
-    if (matcherUnreadable && entry.matcher !== undefined) continue
+    if (unreadableMatcher && entry.matcher !== undefined) continue
     if (!matchesMatcher(matchValue, entry.matcher)) continue
 
     for (const hook of entry.hooks) {
@@ -136,7 +135,7 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
       if (hook.if !== undefined) {
         // `if` is a permission rule over a tool call, so only a tool event can
         // satisfy one. Elsewhere a hook that sets `if` never runs.
-        if (!analyzeSettings({ ...settingsAnalysisTags.IfEvaluatingEvent, event }, S.Boolean)) continue
+        if (!ifEvaluatingEvent(event)) continue
         if (!matchesPermissionRule(hook.if, matchValue, ruleInput, cwd)) continue
       }
       if (hook.async === true || hook.asyncRewake === true) {

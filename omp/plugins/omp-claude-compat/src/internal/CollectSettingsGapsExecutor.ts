@@ -1,9 +1,7 @@
 import { Context, Effect, Exit, Schema as S, type Scope } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
-import { analyzeSettings, parseSettings } from '../HookSettings.js'
+import { disabledCoverage, hookCoverage, parseSettings, unsupportedHookTypes } from '../HookSettings.js'
 import type { DisableSource, HookCoverageRow } from '../HookSettings.schema.js'
-import { HookCoverageRowSchema, HookCoverageSchema } from '../HookSettings.schema.js'
-import { settingsAnalysisTags } from './SettingsAnalysisTags.js'
 import { MANAGED_SETTINGS_PATH } from './SettingsPaths.js'
 
 export class CollectSettingsGapsExecutorDeps extends Context.Service<CollectSettingsGapsExecutorDeps, Scope.Scope>()(
@@ -33,15 +31,13 @@ export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPa
       malformed.push(path)
       continue
     }
-    const coverage = analyzeSettings({ ...settingsAnalysisTags.Coverage, json: parsed.value }, HookCoverageSchema)
+    const coverage = hookCoverage(parsed.value)
     unrecognized.push(...coverage.unrecognized)
     notCarried.push(...coverage.notCarried)
     matcherNotEvaluable.push(...coverage.matcherNotEvaluable)
     matcherOutOfReach.push(...coverage.matcherOutOfReach)
     shadowed.push(...coverage.shadowed)
-    hookTypes.push(
-      ...analyzeSettings({ ...settingsAnalysisTags.UnsupportedHookTypes, json: parsed.value }, S.Array(S.String)),
-    )
+    hookTypes.push(...unsupportedHookTypes(parsed.value))
     // The loader skips a file it cannot decode, contributing no hooks at all.
     // Name it rather than starting the session unguarded with no sign of it.
     const settings = parseSettings(parsed.value)
@@ -55,9 +51,7 @@ export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPa
       matcherNotEvaluable: dedupeByEvent(matcherNotEvaluable),
       matcherOutOfReach: dedupeByEvent(matcherOutOfReach),
       shadowed: dedupeByEvent(shadowed),
-      disabled: dedupeByEvent(
-        analyzeSettings({ ...settingsAnalysisTags.DisabledCoverage, sources }, S.Array(HookCoverageRowSchema)),
-      ),
+      disabled: dedupeByEvent(disabledCoverage(sources)),
     },
     unsupportedHookTypes: Array.from(new Set(hookTypes)),
     malformedFiles: Array.from(new Set(malformed)),

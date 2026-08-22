@@ -1,9 +1,7 @@
 import { Context, Effect, Exit, Schema as S, type Scope } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
-import { analyzeSettings, parseSettings } from '../HookSettings.js'
-import { SettingsWrapped } from '../HookSettings.schema.js'
+import { mergeSettings, parseSettings } from '../HookSettings.js'
 import type { SettingsSource } from '../HookSettings.schema.js'
-import { settingsAnalysisTags } from './SettingsAnalysisTags.js'
 import { MANAGED_SETTINGS_PATH } from './SettingsPaths.js'
 
 export class LoadSettingsExecutorDeps extends Context.Service<LoadSettingsExecutorDeps, Scope.Scope>()(
@@ -31,5 +29,5 @@ export const loadSettingsWithPaths = Effect.fn('loadSettingsWithPaths')(function
     if (s !== null) sources.push({ settings: s, managed: p === managedPath })
   }
   if (sources.length === 0) return null
-  return analyzeSettings({ ...settingsAnalysisTags.Merge, sources }, SettingsWrapped)
+  return mergeSettings(sources)
 })
