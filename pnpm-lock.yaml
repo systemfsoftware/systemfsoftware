@@ -20,8 +20,8 @@ catalogs:
       specifier: ^4.0.0-rc.108
       version: 4.0.0-rc.109
     '@effect/vitest':
-      specifier: 4.0.0-rc.108
-      version: 4.0.0-rc.108
+      specifier: 4.0.0-rc.110
+      version: 4.0.0-rc.110
     '@microsoft/api-extractor':
       specifier: ^7.58.7
       version: 7.58.9
@@ -228,7 +228,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../../packages/testing/specs/gherkin/effect
@@ -276,7 +276,7 @@ importers:
         version: 4.0.0-rc.109(effect@4.0.0-rc.108)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@oh-my-pi/pi-coding-agent':
         specifier: 'catalog:'
         version: 17.0.5
@@ -343,7 +343,7 @@ importers:
         version: 4.0.0-rc.109(effect@4.0.0-rc.108)
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@oh-my-pi/pi-coding-agent':
         specifier: 'catalog:'
         version: 17.0.5
@@ -428,7 +428,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
@@ -477,7 +477,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
@@ -562,7 +562,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
@@ -629,7 +629,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
@@ -678,7 +678,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@microsoft/api-extractor':
         specifier: ^7.58.7
         version: 7.58.9(@types/node@24.13.2)
@@ -745,7 +745,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
@@ -787,7 +787,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
@@ -842,7 +842,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
@@ -887,7 +887,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
@@ -984,7 +984,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
@@ -1593,7 +1593,7 @@ importers:
         version: 7.29.8
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
@@ -1866,7 +1866,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
@@ -2046,7 +2046,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
@@ -2097,7 +2097,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
@@ -2219,7 +2219,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../../specs/gherkin/effect
@@ -2298,7 +2298,7 @@ importers:
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
-        version: 4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)
+        version: 4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
@@ -2764,10 +2764,10 @@ packages:
   '@effect/tsgo@0.36.0':
     resolution: {integrity: sha512-fmill6zNZS0QYClAYxq2Npuvl7cDfSxTGIuFdjN1K76Tb03h+6eusXMFbnEflwV3DnJiYJmaPkMeLKXjS0F9Yg==}
 
-  '@effect/vitest@4.0.0-rc.108':
-    resolution: {integrity: sha512-XD2GP1JATN28wnIeFGsBqYMuQDCHIodKKgFulGyG91GvuHqgf2gz+WxR2LPdyNoKMtr7lsbRzVj07niSYtIKzA==}
+  '@effect/vitest@4.0.0-rc.110':
+    resolution: {integrity: sha512-ZvceBAWOPDnLgQgoObxPZOBuRTaRhBUR0K8sT4vfwwnf6Sv92GvCFp+WmfFV31j58Inf2p+wU1C3o9TNC1MZrQ==}
     peerDependencies:
-      effect: ^4.0.0-rc.108
+      effect: ^4.0.0-rc.110
       vitest: '>=4.1.0 <5.0.0'
 
   '@emnapi/core@1.10.0':
@@ -8307,7 +8307,7 @@ snapshots:
       '@effect/tsgo-win32-arm64': 0.36.0
       '@effect/tsgo-win32-x64': 0.36.0
 
-  '@effect/vitest@4.0.0-rc.108(effect@4.0.0-rc.108)(vitest@4.1.10)':
+  '@effect/vitest@4.0.0-rc.110(effect@4.0.0-rc.108)(vitest@4.1.10)':
     dependencies:
       effect: 4.0.0-rc.108
       vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))

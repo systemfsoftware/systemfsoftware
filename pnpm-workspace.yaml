@@ -14,7 +14,7 @@ catalog:
   "@effect/platform-node": ^4.0.0-rc.108
   "@effect/platform-node-shared": ^4.0.0-rc.108
   effect: 4.0.0-rc.108
-  "@effect/vitest": 4.0.0-rc.108
+  "@effect/vitest": 4.0.0-rc.110
   fast-check: ^4
   vitest: ^4.1.10
   "@vitest/coverage-v8": ^4
