@@ -77,7 +77,7 @@
     "dts:check": "tsc --noEmit -p tsconfig.dts.json"
   },
   "peerDependencies": {
-    "effect": "catalog:"
+    "effect": "catalog:peers"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

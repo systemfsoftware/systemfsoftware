@@ -69,7 +69,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "effect": "catalog:",
+    "effect": "catalog:peers",
     "typescript": ">=5.0.0"
   },
   "publishConfig": {

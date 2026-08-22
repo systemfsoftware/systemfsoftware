@@ -67,7 +67,7 @@
   },
   "peerDependencies": {
     "@systemfsoftware/effect-schema-law": "workspace:*",
-    "effect": "catalog:",
+    "effect": "catalog:peers",
     "vite": ">5.0.0",
     "vitest": "*"
   },

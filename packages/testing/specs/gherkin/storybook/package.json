@@ -51,7 +51,7 @@
     "type-fest": "catalog:"
   },
   "peerDependencies": {
-    "effect": "catalog:",
+    "effect": "catalog:peers",
     "storybook": ">=10.0.0"
   },
   "devDependencies": {

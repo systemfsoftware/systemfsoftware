@@ -46,7 +46,7 @@
     "@systemfsoftware/effect-atom": "workspace:^"
   },
   "peerDependencies": {
-    "effect": "catalog:",
+    "effect": "catalog:peers",
     "react": "catalog:",
     "react-dom": "catalog:",
     "scheduler": "*"

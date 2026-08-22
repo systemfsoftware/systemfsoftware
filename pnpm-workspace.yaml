@@ -52,6 +52,13 @@ catalog:
   playwright: ^1
 catalogMode: prefer
 catalogs:
+  # Peer ranges, deliberately separate from the exact pins above.
+  # `catalog:` expands at publish to the catalog's literal value, so a peer
+  # declared `catalog:` against an exact pin ships an exact peer and forces
+  # every consumer on a different rc to duplicate the package.
+  peers:
+    effect: ^4.0.0-rc.108
+    "@effect/vitest": ^4.0.0-rc.108
   oxlint:
     oxlint: ^1.77.0
     "@oxlint/plugins": ^1.77.0
