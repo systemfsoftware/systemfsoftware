@@ -3,7 +3,7 @@ import { Cell } from '@systemfsoftware/effect-cell-types'
 import * as Effect from 'effect/Effect'
 import * as Result from 'effect/Result'
 import { FastCheck as fc } from 'effect/testing'
-import { drawnDecision, DrawnDecisionError } from './DrawnDecision.workflow.js'
+import { DrawnCommand, drawnDecision, DrawnDecisionError } from './DrawnDecision.workflow.js'
 
 /**
  * The phase bag the generated descriptions instantiate. `command` passes through the pure
@@ -27,7 +27,7 @@ import { drawnDecision, DrawnDecisionError } from './DrawnDecision.workflow.js'
 export interface Bag extends Cell.Phases {
   readonly command: number
   readonly raw: number
-  readonly decoded: number
+  readonly decoded: DrawnCommand
   readonly decision: number
   readonly decisionError: DrawnDecisionError
   readonly output: number
@@ -129,12 +129,12 @@ const substituteLayer = (
         case 'either-fail':
           return {
             ...phase,
-            run: (input: number): Result.Result<number, number> => {
+            run: (input: number): Result.Result<DrawnCommand, number> => {
               trace.push(phase.name)
               if (failure !== undefined && failure.phaseIndex === phaseIndex) {
                 return Result.fail(failure.error)
               }
-              return Result.succeed(input)
+              return Result.succeed(DrawnCommand.make({ value: input }))
             },
           }
         case 'either-pass': {
