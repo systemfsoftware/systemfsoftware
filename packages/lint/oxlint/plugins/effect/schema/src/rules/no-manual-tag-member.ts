@@ -92,9 +92,7 @@ export const noManualTagMember = defineRule({
         if (!isTagKey(node.key)) return
 
         const ancestor = namedAncestorOf(node)
-        const name = ancestor === null
-          ? `${ANONYMOUS_NAME} ${NAME_SUFFIX}`
-          : `${ancestor} ${NAME_SUFFIX}`
+        const name = `${ancestor ?? ANONYMOUS_NAME} ${NAME_SUFFIX}`
         const expected = isErrorShaped(siblingNamesOf(node))
           ? EXPECTED_TAGGED_ERROR
           : EXPECTED_TAGGED_STRUCT

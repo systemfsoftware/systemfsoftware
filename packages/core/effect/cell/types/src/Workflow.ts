@@ -57,21 +57,28 @@ export type Workflow<Command, Decision, DecisionError> = [Decision] extends [nev
   : ((command: Command) => Result<Decision, DecisionError>) & WorkflowBrand
 
 /**
- * `unknown` when both channels are inhabited and the error carries a tag, so the intersection in
- * {@link make} collapses to the plain `Result` and neither inference nor the authoring surface
- * changes. Otherwise the marker the author must satisfy, which they cannot, which is the point.
+ * `unknown` when the error channel carries a tag a consumer can dispatch on, the {@link UntaggedError}
+ * marker otherwise. Two steps, both load-bearing: `'_tag' extends keyof E` asks whether the key is
+ * there, and `[E['_tag']] extends [string]` asks whether what it holds is dispatchable. Key presence
+ * alone admits `_tag: number`, `_tag?: string` and a `_tag()` method — none of which `Match.tag` can
+ * dispatch on, which is exactly what the marker claims to refuse.
  *
- * The tag test is two steps, and both are load-bearing. `'_tag' extends keyof DecisionError` asks
- * whether the key is there; `[DecisionError['_tag']] extends [string]` asks whether what it holds
- * is dispatchable. Key presence alone admits `_tag: number`, `_tag?: string` and a `_tag()` method
- * — none of which `Match.tag` can dispatch on, which is exactly what {@link UntaggedError} claims
- * to refuse. Both steps read the tag through `keyof` and an indexed access rather than declaring a
- * `_tag` member, so the requirement is stated without writing the shape this repo forbids.
+ * Both steps read the tag through `keyof` and an indexed access rather than declaring a `_tag`
+ * member, which is why the erased `Tagged` interface cannot come back: stating the requirement as a
+ * shape would write the very member this repo forbids.
+ */
+type DispatchableTag<E> = '_tag' extends keyof E ? [E['_tag']] extends [string] ? unknown : UntaggedError
+  : UntaggedError
+
+/**
+ * `unknown` when both channels are inhabited and the error carries a dispatchable tag, so the
+ * intersection in {@link make} collapses to the plain `Result` and neither inference nor the
+ * authoring surface changes. Otherwise the marker the author must satisfy, which they cannot, which
+ * is the point.
  */
 export type Inhabited<Decision, DecisionError> = [Decision] extends [never] ? UninhabitedDecision
   : [DecisionError] extends [never] ? UninhabitedError
-  : '_tag' extends keyof DecisionError ? [DecisionError['_tag']] extends [string] ? unknown : UntaggedError
-  : UntaggedError
+  : DispatchableTag<DecisionError>
 
 /**
  * Builds a workflow, refusing an uninhabited or untagged channel at this call rather than at

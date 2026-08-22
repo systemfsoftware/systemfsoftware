@@ -12,7 +12,7 @@ import {
   Scope,
   Stream,
 } from 'effect'
-import type { PollLoop, StreamLoop, SubscriptionLoop } from '../DaemonSpec.schema.js'
+import type { LoopShape, PollLoop, StreamLoop, SubscriptionLoop } from '../DaemonSpec.schema.js'
 
 type DaemonHealthShape = {
   readonly name: string
@@ -31,7 +31,7 @@ type WorkerShape<_W, E, R> = {
   readonly name: string
   readonly tick: { readonly tickTimeout: Duration.Input; readonly spanName?: string | undefined }
   readonly tickHooks: TickPolicyHooksShape
-  readonly loop: PollLoop<E, R> | StreamLoop<E, R> | SubscriptionLoop<E, R>
+  readonly loop: LoopShape<E, R>
 }
 
 const applySpanAttributes = (hooks: TickPolicyHooksShape) => {
