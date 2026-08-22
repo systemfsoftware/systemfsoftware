@@ -1,7 +1,19 @@
 import type { ExtensionAPI, InputEvent, ToolCallEvent, ToolResultEvent } from '@oh-my-pi/pi-coding-agent'
 import type { InputEventResult, ToolCallEventResult, ToolResultEventResult } from '@oh-my-pi/pi-coding-agent'
 import { Effect, Option, Result } from 'effect'
-import { dispatchHookEvent, type HookDispatchContext } from './HookDispatcherExecutor.js'
+import {
+  dispatchHookEvent,
+  type HookDispatchContext,
+  HookPreCompactTag,
+  HookPromptTag,
+  HookSessionCompactTag,
+  HookSessionShutdownTag,
+  HookSessionStartTag,
+  HookSessionStopTag,
+  HookSessionSwitchTag,
+  HookToolCallTag,
+  HookToolResultTag,
+} from './HookDispatcherExecutor.js'
 import type {
   HookEventCommand,
   HookPreCompactCommand,
@@ -37,13 +49,13 @@ export const HookDispatcherTask = (pi: ExtensionAPI, runner: HookRunner<HookDisp
     return Option.getOrUndefined(await runner.runSafe(timed))
   }
 
-  pi.on('tool_call', (event: ToolCallEvent, ctx) => dispatch({ _tag: 'ToolCall', event, ctx }))
-  pi.on('tool_result', (event: ToolResultEvent, ctx) => dispatch({ _tag: 'ToolResult', event, ctx }))
-  pi.on('input', (event: InputEvent, ctx) => dispatch({ _tag: 'Prompt', event, ctx }))
-  pi.on('session_start', (_event, ctx) => dispatch({ _tag: 'SessionStart', reason: 'startup', ctx }))
-  pi.on('session_compact', (_event, ctx) => dispatch({ _tag: 'SessionCompact', ctx }))
-  pi.on('session_before_compact', (_event, ctx) => dispatch({ _tag: 'PreCompact', ctx }))
-  pi.on('session_switch', (event, ctx) => dispatch({ _tag: 'SessionSwitch', reason: event.reason, ctx }))
-  pi.on('session_shutdown', (_event, ctx) => dispatch({ _tag: 'SessionShutdown', ctx }))
-  pi.on('session_stop', (_event, ctx) => dispatch({ _tag: 'SessionStop', ctx }))
+  pi.on('tool_call', (event: ToolCallEvent, ctx) => dispatch({ ...HookToolCallTag, event, ctx }))
+  pi.on('tool_result', (event: ToolResultEvent, ctx) => dispatch({ ...HookToolResultTag, event, ctx }))
+  pi.on('input', (event: InputEvent, ctx) => dispatch({ ...HookPromptTag, event, ctx }))
+  pi.on('session_start', (_event, ctx) => dispatch({ ...HookSessionStartTag, reason: 'startup', ctx }))
+  pi.on('session_compact', (_event, ctx) => dispatch({ ...HookSessionCompactTag, ctx }))
+  pi.on('session_before_compact', (_event, ctx) => dispatch({ ...HookPreCompactTag, ctx }))
+  pi.on('session_switch', (event, ctx) => dispatch({ ...HookSessionSwitchTag, reason: event.reason, ctx }))
+  pi.on('session_shutdown', (_event, ctx) => dispatch({ ...HookSessionShutdownTag, ctx }))
+  pi.on('session_stop', (_event, ctx) => dispatch({ ...HookSessionStopTag, ctx }))
 }

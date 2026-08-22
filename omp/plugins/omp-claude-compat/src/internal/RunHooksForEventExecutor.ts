@@ -19,6 +19,7 @@ import type { HooksForEventResult } from './HookFeedback.js'
 import { asToolInput, EMPTY_TOOL_INPUT } from './HookPayload.js'
 import type { HookSession } from './HookSession.js'
 import { runHookScript, type RunHookScriptExecutorDeps } from './RunHookScriptExecutor.js'
+import { settingsAnalysisTags } from './SettingsAnalysisTags.js'
 import { superviseFork } from './SuperviseForkExecutor.js'
 
 export class RunHooksForEventExecutorDeps extends Context.Service<RunHooksForEventExecutorDeps, Scope.Scope>()(
@@ -63,7 +64,7 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
   let currentInput = input
   // A matcher this event cannot evaluate must not behave as a match. U3 already
   // named the hook at session start, so this is a silent skip, not a report.
-  const matcherUnreadable = analyzeSettings({ _tag: 'MatcherUnreadable', event }, S.Boolean)
+  const matcherUnreadable = analyzeSettings({ ...settingsAnalysisTags.MatcherUnreadable, event }, S.Boolean)
 
   /**
    * The verdict chain, as a description applied per hook iteration. The read
@@ -132,7 +133,7 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
       if (hook.if !== undefined) {
         // `if` is a permission rule over a tool call, so only a tool event can
         // satisfy one. Elsewhere a hook that sets `if` never runs.
-        if (!analyzeSettings({ _tag: 'IfEvaluatingEvent', event }, S.Boolean)) continue
+        if (!analyzeSettings({ ...settingsAnalysisTags.IfEvaluatingEvent, event }, S.Boolean)) continue
         if (!matchesPermissionRule(hook.if, matchValue, ruleInput, cwd)) continue
       }
       if (hook.async === true || hook.asyncRewake === true) {

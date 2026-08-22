@@ -134,24 +134,33 @@ export const WRAPPED_SHADOW_REASON =
 /** Hooks a settings file switches off rather than this bridge failing to carry. */
 export const DISABLED_ALL_REASON = 'switched off by `disableAllHooks` in'
 
+const ReachableTag = { _tag: 'Reachable' } as const
+type ReachableTag = typeof ReachableTag
+
+const PartialTag = { _tag: 'Partial' } as const
+type PartialTag = typeof PartialTag
+
+const UnreachableTag = { _tag: 'Unreachable' } as const
+type UnreachableTag = typeof UnreachableTag
+
 export type MatcherReach =
-  | { readonly _tag: 'Reachable' }
-  | { readonly _tag: 'Partial'; readonly reason: string }
-  | { readonly _tag: 'Unreachable'; readonly reason: string }
+  | ReachableTag
+  | (PartialTag & { readonly reason: string })
+  | (UnreachableTag & { readonly reason: string })
 
 /** Per-event matcher reach. Coverage is per-matcher, not only per-event. */
 export const MATCHER_REACH = {
   SessionStart: {
-    startup: { _tag: 'Reachable' },
-    compact: { _tag: 'Reachable' },
-    fork: { _tag: 'Reachable' },
+    startup: { ...ReachableTag },
+    compact: { ...ReachableTag },
+    fork: { ...ReachableTag },
     resume: {
-      _tag: 'Partial',
+      ...PartialTag,
       reason:
         'covers a mid-session resume, which arrives as `session_switch` with `reason: "resume"`. A cold start under `--resume` never emits that signal — it reaches extensions through a bare `session_start` — so it presents as `startup` and a resume-scoped hook does not run there.',
     },
     clear: {
-      _tag: 'Unreachable',
+      ...UnreachableTag,
       reason: 'OMP emits no signal when a session is cleared.',
     },
   },

@@ -34,53 +34,71 @@ import { runUserPromptSubmitHooks } from './internal/RunUserPromptSubmitHooksExe
 import { settingsPaths } from './internal/SettingsPaths.js'
 import { SuperviseForkExecutorDeps } from './internal/SuperviseForkExecutor.js'
 
-export type HookToolCallCommand = {
-  readonly _tag: 'ToolCall'
+export const HookToolCallTag = { _tag: 'ToolCall' } as const
+type HookToolCallTag = typeof HookToolCallTag
+
+export const HookToolResultTag = { _tag: 'ToolResult' } as const
+type HookToolResultTag = typeof HookToolResultTag
+
+export const HookPromptTag = { _tag: 'Prompt' } as const
+type HookPromptTag = typeof HookPromptTag
+
+export const HookSessionStartTag = { _tag: 'SessionStart' } as const
+type HookSessionStartTag = typeof HookSessionStartTag
+
+export const HookSessionCompactTag = { _tag: 'SessionCompact' } as const
+type HookSessionCompactTag = typeof HookSessionCompactTag
+
+export const HookPreCompactTag = { _tag: 'PreCompact' } as const
+type HookPreCompactTag = typeof HookPreCompactTag
+
+export const HookSessionSwitchTag = { _tag: 'SessionSwitch' } as const
+type HookSessionSwitchTag = typeof HookSessionSwitchTag
+
+export const HookSessionShutdownTag = { _tag: 'SessionShutdown' } as const
+type HookSessionShutdownTag = typeof HookSessionShutdownTag
+
+export const HookSessionStopTag = { _tag: 'SessionStop' } as const
+type HookSessionStopTag = typeof HookSessionStopTag
+
+export interface HookToolCallCommand extends HookToolCallTag {
   readonly event: HookToolCall
   readonly ctx: HookSession
 }
 
-export type HookToolResultCommand = {
-  readonly _tag: 'ToolResult'
+export interface HookToolResultCommand extends HookToolResultTag {
   readonly event: ToolResultEvent
   readonly ctx: HookSession
 }
 
-export type HookPromptCommand = {
-  readonly _tag: 'Prompt'
+export interface HookPromptCommand extends HookPromptTag {
   readonly event: HookPrompt
   readonly ctx: HookSession
 }
 
-export type HookSessionStartCommand = {
-  readonly _tag: 'SessionStart'
+export interface HookSessionStartCommand extends HookSessionStartTag {
   readonly reason: string
   readonly ctx: HookSession
 }
 
-export type HookSessionCompactCommand = {
-  readonly _tag: 'SessionCompact'
+export interface HookSessionCompactCommand extends HookSessionCompactTag {
   readonly ctx: HookSession
 }
 
-export type HookPreCompactCommand = {
-  readonly _tag: 'PreCompact'
+export interface HookPreCompactCommand extends HookPreCompactTag {
   readonly ctx: HookSession
 }
 
-export type HookSessionSwitchCommand = {
-  readonly _tag: 'SessionSwitch'
+export interface HookSessionSwitchCommand extends HookSessionSwitchTag {
   readonly reason: string
   readonly ctx: HookSession
 }
 
-export type HookSessionShutdownCommand = {
-  readonly _tag: 'SessionShutdown'
+export interface HookSessionShutdownCommand extends HookSessionShutdownTag {
   readonly ctx: HookSession
 }
 
-export type HookSessionStopCommand = {
-  readonly _tag: 'SessionStop'
+export interface HookSessionStopCommand extends HookSessionStopTag {
   readonly ctx: HookSession
 }
 

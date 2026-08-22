@@ -5,6 +5,7 @@ import { analyzeSettings } from '../HookSettings.js'
 import type { CommandHook, HookEntry } from '../HookSettings.schema.js'
 import type { HookSession } from './HookSession.js'
 import { runHookScript } from './RunHookScriptExecutor.js'
+import { settingsAnalysisTags } from './SettingsAnalysisTags.js'
 import { superviseFork } from './SuperviseForkExecutor.js'
 
 export class RunLifecycleHooksExecutorDeps extends Context.Service<RunLifecycleHooksExecutorDeps, Scope.Scope>()(
@@ -15,7 +16,7 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(
   function*(entries: readonly HookEntry[], ctx: HookSession, event: string) {
     const cwd = ctx.cwd
     const input: Record<string, unknown> = { ...sessionIds(() => ctx.sessionManager.getSessionId()) }
-    const matcherUnreadable = analyzeSettings({ _tag: 'MatcherUnreadable', event: event }, S.Boolean)
+    const matcherUnreadable = analyzeSettings({ ...settingsAnalysisTags.MatcherUnreadable, event: event }, S.Boolean)
     yield* Effect.forEach(
       Arr.filter(entries, (entry) => !(matcherUnreadable && entry.matcher !== undefined)),
       (entry) =>

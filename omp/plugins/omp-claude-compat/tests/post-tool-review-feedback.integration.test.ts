@@ -7,7 +7,7 @@ import { FileSystem } from 'effect/FileSystem'
 import * as PathModule from 'effect/Path'
 import { expect } from 'vitest'
 import type { HookDispatchResult } from '../src/HookDispatcherExecutor.js'
-import { dispatchHookEvent } from '../src/HookDispatcherExecutor.js'
+import { dispatchHookEvent, HookToolResultTag } from '../src/HookDispatcherExecutor.js'
 import { HookScopeLive } from '../src/HookRuntime.js'
 import type { HookSession } from '../src/HookSession.js'
 import { makeSettingsJson, makeShellHookScript } from './__fixtures__/HookDispatcherFixture.js'
@@ -73,7 +73,7 @@ Feature('Reviewing a change the agent already made')
       })
 
     const theToolRuns = (event: ToolResultEvent) => (s: { readonly dir: string }) =>
-      dispatchHookEvent({ _tag: 'ToolResult', event, ctx: makeCtx(s.dir) })
+      dispatchHookEvent({ ...HookToolResultTag, event, ctx: makeCtx(s.dir) })
 
     scenario(
       'A reviewer objects to a file the agent has already written',

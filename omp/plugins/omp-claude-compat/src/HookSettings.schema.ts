@@ -1,4 +1,12 @@
 import { Effect, Schema as S, SchemaGetter } from 'effect'
+import type {
+  SettingsAnalysisCoverageCommand,
+  SettingsAnalysisDisabledCoverageCommand,
+  SettingsAnalysisIfEvaluatingEventCommand,
+  SettingsAnalysisMatcherUnreadableCommand,
+  SettingsAnalysisMergeCommand,
+  SettingsAnalysisUnsupportedHookTypesCommand,
+} from './internal/SettingsAnalysisTags.js'
 
 const CommandHook = S.Struct({
   type: S.Literal('command'),
@@ -133,16 +141,6 @@ export const SettingsAnalysisCommandSchema = S.Union([
   S.TaggedStruct('MatcherUnreadable', { event: S.Any }),
   S.TaggedStruct('IfEvaluatingEvent', { event: S.Any }),
 ])
-
-type SettingsAnalysisMergeCommand = { readonly _tag: 'Merge'; readonly sources: readonly SettingsSource[] }
-type SettingsAnalysisCoverageCommand = { readonly _tag: 'Coverage'; readonly json: unknown }
-type SettingsAnalysisDisabledCoverageCommand = {
-  readonly _tag: 'DisabledCoverage'
-  readonly sources: readonly DisableSource[]
-}
-type SettingsAnalysisUnsupportedHookTypesCommand = { readonly _tag: 'UnsupportedHookTypes'; readonly json: unknown }
-type SettingsAnalysisMatcherUnreadableCommand = { readonly _tag: 'MatcherUnreadable'; readonly event: string }
-type SettingsAnalysisIfEvaluatingEventCommand = { readonly _tag: 'IfEvaluatingEvent'; readonly event: string }
 
 export type SettingsAnalysisCommand =
   | SettingsAnalysisMergeCommand
