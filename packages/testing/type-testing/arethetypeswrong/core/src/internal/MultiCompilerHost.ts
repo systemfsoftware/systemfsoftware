@@ -97,10 +97,6 @@ const makeCompilerHost = (
       Record<string, { resolution: ts.ResolvedModuleWithFailedLookupLocations; trace: string[] }>
     > = {}
     const sourceFileCache = MutableHashMap.empty<ts.Path, ts.SourceFile>()
-    const resolvedModules: MutableHashMap.MutableHashMap<
-      ts.Path,
-      ts.ModeAwareCache<ts.ResolvedModuleWithFailedLookupLocations>
-    > = MutableHashMap.empty()
     const languageVersion = ts.ScriptTarget.Latest
 
     const traces: string[] = []
@@ -313,55 +309,15 @@ const makeCompilerHost = (
       sourceFile: ts.SourceFile,
       moduleName: string,
       resolutionMode: ts.ResolutionMode,
-    ): ts.ResolvedModuleWithFailedLookupLocations | undefined => {
-      const cacheOption = MutableHashMap.get(resolvedModules, sourceFile.path)
-      if (Option.isNone(cacheOption)) {
-        return undefined
-      }
-      return cacheOption.value.get(moduleName, resolutionMode)
-    }
-    const createPrimaryProgram = (rootName: string): Effect.Effect<ts.Program> =>
-      Effect.gen(function*() {
-        const program = yield* getProgram([rootName], compilerOptions)
-        yield* Effect.sync(() => {
-          program.resolvedModules?.forEach((cache, path) => {
-            const ownCacheOption = MutableHashMap.get(resolvedModules, path)
-            const ownCache = Option.isSome(ownCacheOption) ? ownCacheOption.value : ts.createModeAwareCache()
-            if (Option.isNone(ownCacheOption)) {
-              MutableHashMap.set(resolvedModules, path, ownCache)
-            }
-            cache.forEach((resolution, key, mode) => {
-              ownCache.set(key, mode, resolution)
-            })
-          })
-        })
-        return program
-      })
+    ): ts.ResolvedModuleWithFailedLookupLocations | undefined =>
+      moduleResolutionCache[sourceFile.fileName]?.[
+        getModuleKey(moduleName, resolutionMode, undefined, undefined)
+      ]?.resolution
+    const createPrimaryProgram = (rootName: string): Effect.Effect<ts.Program> => getProgram([rootName], compilerOptions)
 
-    const createAuxiliaryProgram = (
-      rootNames: string[],
-      extraOptions?: ts.CompilerOptions,
-    ): Effect.Effect<ts.Program> =>
-      Effect.gen(function*() {
-        if (
-          extraOptions &&
-          ts.changesAffectModuleResolution(
-            {
-              ...compilerOptions,
-              allowJs: extraOptions.allowJs,
-              checkJs: extraOptions.checkJs,
-              noDtsResolution: extraOptions.noDtsResolution,
-            },
-            { ...compilerOptions, ...extraOptions },
-          )
-        ) {
-          return yield* Effect.die(
-            new Error('Cannot override resolution-affecting options for host due to potential cache pollution'),
-          )
-        }
-        const options = extraOptions ? { ...compilerOptions, ...extraOptions } : compilerOptions
-        return yield* getProgram(rootNames, options)
-      })
+
+    const createAuxiliaryProgram = (rootNames: string[]): Effect.Effect<ts.Program> => getProgram(rootNames, compilerOptions)
+
     return {
       getCompilerOptions,
       getSourceFile,

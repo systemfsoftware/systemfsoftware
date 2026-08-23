@@ -5,6 +5,7 @@ import { getResolutionOption } from '../../Utils.js'
 import { defineCheck } from '../DefineCheck.js'
 import { type Export, getProbableExports } from '../GetProbableExports.js'
 import type { CompilerHost } from '../MultiCompilerHost.js'
+import { isFunctionBlock, typeHasCallOrConstructSignatures } from '../TsCompat.js'
 
 const bindOptions: ts.CompilerOptions = {
   target: ts.ScriptTarget.Latest,
@@ -121,8 +122,8 @@ function analyzeExportDefaultDisagreement(input: DisagreementAnalysis): Problem 
     input.implementationExports.has(ts.InternalSymbolName.ExportEquals) &&
     getTypesDefaultSymbol(input, memo) &&
     ((getImplExportEqualsIsExportDefault(input, memo) &&
-      input.typesChecker.typeHasCallOrConstructSignatures(getTypesTypeOfDefault(input, memo))) ||
-      input.implChecker.typeHasCallOrConstructSignatures(getImplTypeOfModuleExports(input, memo)))
+      typeHasCallOrConstructSignatures(input.typesChecker, getTypesTypeOfDefault(input, memo))) ||
+      typeHasCallOrConstructSignatures(input.implChecker, getImplTypeOfModuleExports(input, memo)))
   ) {
     return {
       kind: 'MissingExportEquals',
@@ -270,11 +271,9 @@ function getImplExportEqualsIsExportDefault(input: DisagreementAnalysis, memo: A
   }
   return memo.implExportEqualsIsExportDefault
 }
-
 function typeIsObjecty(type: ts.Type, checker: ts.TypeChecker): boolean {
-  return !!(type.flags & ts.TypeFlags.Object) && !checker.typeHasCallOrConstructSignatures(type)
+  return !!(type.flags & ts.TypeFlags.Object) && !typeHasCallOrConstructSignatures(checker, type)
 }
-
 function isModuleExports(target: ts.Expression): boolean {
   return (
     ts.isPropertyAccessExpression(target) &&
