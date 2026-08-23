@@ -29,9 +29,15 @@ jobs:
           fetch-tags: true
       - uses: ./.github/actions/install-deps
       - uses: denoland/setup-deno@v2
+      - name: Name the packages npm has never seen
+        # OIDC cannot debut a package, so one that npm has never seen is not
+        # something this pipeline can ever release. Naming it here keeps it out
+        # of the owed set, which would otherwise pin the phase at `publish`
+        # forever and stop every intent from ever being consumed.
+        run: ./scripts/tools/check-npm-publish.ts --emit-deferred /tmp/deferred.txt
       - id: plan
         name: Decide release phase from repository state
-        run: ./scripts/tools/plan-release.mjs >> "$GITHUB_OUTPUT"
+        run: ./scripts/tools/plan-release.mjs --deferred /tmp/deferred.txt --output "$GITHUB_OUTPUT"
 
   version:
     if: needs.plan.outputs.phase == 'version'
@@ -140,21 +146,25 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/install-deps
-      - name: Compute publish filters
-        # Necessary: npm trusted publishing cannot debut a package, so one
-        # never-published package aborts the whole recursive publish and the
-        # packages that could ship do not. These exclusions keep it out. The
-        # debut itself still fails the job, at the last step.
-        run: |
-          bash scripts/tools/check-npm-publish.sh --emit-filters /tmp/publish-filters.txt
-          cat /tmp/publish-filters.txt
       - uses: denoland/setup-deno@v2
+      - name: Name the packages npm has never seen
+        # Two spellings of one set: `pnpm --filter` exclusions keep a package
+        # OIDC cannot debut out of the recursive publish, and the bare names
+        # keep it out of the tag and release steps. Tagging a version npm never
+        # received would publish a GitHub Release nobody can install. The debut
+        # itself still fails the job, at the last step.
+        run: |
+          ./scripts/tools/check-npm-publish.ts \
+            --emit-filters /tmp/publish-filters.txt \
+            --emit-deferred /tmp/deferred.txt
       - name: Build
         # Necessary: every package publishes files: ["dist"] against a gitignored
         # dist/ and none carries a prepack hook, so the build is an explicit step.
         run: corepack pnpm build
       - name: Capture release set
-        run: ./scripts/tools/tag-released-packages.mjs --dry-run --json --output /tmp/captured.json && cat /tmp/captured.json
+        run: |
+          ./scripts/tools/tag-released-packages.mjs \
+            --dry-run --json --exclude /tmp/deferred.txt --output /tmp/captured.json
       - name: Assert release notes
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -177,4 +187,4 @@ jobs:
         # the trusted publisher — so this ends the run red while naming it. It
         # runs after tag and release so the packages that could ship already
         # did, and the next push to main retries only what is still owed.
-        run: bash scripts/tools/check-npm-publish.sh --preflight
+        run: ./scripts/tools/check-npm-publish.ts --preflight

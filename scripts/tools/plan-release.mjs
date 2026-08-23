@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read=.changeset --allow-run=./scripts/tools/tag-released-packages.mjs
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-run=./scripts/tools/tag-released-packages.mjs
 // plan-release.mjs — decide which release phase this push is, from repository
 // state alone.
 //
@@ -50,11 +50,12 @@ const countPendingIntents = async () => {
   return count
 }
 
-const thisCycleCount = async () => {
+const thisCycleCount = async (deferredFile) => {
   // Spawned by path so the script's own shebang supplies its permissions;
-  // restating them here would let the two drift apart.
+  // restating them here would let the two drift apart. `--exclude` is forwarded
+  // rather than re-implemented, so "owed" means the same set here and at tag time.
   const out = await new Deno.Command(TAG_SCRIPT, {
-    args: ['--dry-run', '--json'],
+    args: deferredFile ? ['--dry-run', '--json', '--exclude', deferredFile] : ['--dry-run', '--json'],
     stdout: 'piped',
     stderr: 'inherit',
   }).output()
@@ -62,6 +63,12 @@ const thisCycleCount = async () => {
   const parsed = JSON.parse(new TextDecoder().decode(out.stdout))
   if (!Array.isArray(parsed)) throw new Error(`${TAG_SCRIPT} must print a JSON array`)
   return parsed.length
+}
+
+const readDeferred = async (file) => {
+  if (!file) return []
+  const text = await Deno.readTextFile(file)
+  return text.split('\n').map((line) => line.trim()).filter(Boolean)
 }
 
 /**
@@ -97,18 +104,50 @@ const selftest = () => {
 }
 
 const main = async () => {
-  if (Deno.args.includes('--selftest')) return selftest()
+  const args = Deno.args
+  if (args.includes('--selftest')) return selftest()
 
+  const valueOf = (flag) => {
+    const at = args.indexOf(flag)
+    if (at === -1) return null
+    const value = args[at + 1]
+    if (value === undefined || value.startsWith('-')) throw new Error(`missing argument for ${flag}`)
+    return value
+  }
+
+  const deferredFile = valueOf('--deferred')
+  const outputFile = valueOf('--output')
+
+  const deferred = await readDeferred(deferredFile)
   const pending = await countPendingIntents()
-  const owed = await thisCycleCount()
+  const owed = await thisCycleCount(deferredFile)
   const phase = decidePhase(pending, owed)
 
-  console.error(`plan-release: pending_intents=${pending} this_cycle=${owed} -> phase=${phase}`)
+  // A package npm has never seen cannot be released by this pipeline at all, so
+  // counting it as owed would pin the phase at `publish` forever and no intent
+  // would ever be consumed again. It is excluded from `owed` and annotated here
+  // instead — loud on every release run, but never blocking one.
+  for (const name of deferred) {
+    console.log(
+      `::warning title=Unpublished package::${name} has never been published, and OIDC cannot debut a package. Run \`pnpm publish:unpublished\`, then register the trusted publisher.`,
+    )
+  }
 
-  // stdout carries key=value only, for `>> "$GITHUB_OUTPUT"`.
-  console.log(`phase=${phase}`)
-  console.log(`pending_intents=${pending}`)
-  console.log(`this_cycle=${owed}`)
+  console.error(
+    `plan-release: pending_intents=${pending} this_cycle=${owed} deferred=${deferred.length} -> phase=${phase}`,
+  )
+
+  // The key=value block is the job output. It goes to --output when given,
+  // because stdout also carries the annotations above and `>> "$GITHUB_OUTPUT"`
+  // would write those into the output file as bogus keys.
+  const outputs = [
+    `phase=${phase}`,
+    `pending_intents=${pending}`,
+    `this_cycle=${owed}`,
+    `deferred=${deferred.length}`,
+  ].join('\n')
+  if (outputFile) await Deno.writeTextFile(outputFile, `${outputs}\n`, { append: true })
+  else console.log(outputs)
   return 0
 }
 
