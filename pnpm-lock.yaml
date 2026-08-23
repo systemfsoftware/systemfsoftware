@@ -1,24 +1,3 @@
----
-lockfileVersion: '9.0'
-
-importers:
-
-  .:
-    configDependencies:
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: 2.0.0
-        version: 2.0.0
-
-packages:
-
-  '@systemfsoftware/effect-gherkin-spec@2.0.0':
-    resolution: {integrity: sha512-BHDU2CqPOziw7fRv3LxetjCeACQjlBixSHr+QsMUssWDcedSBbCO1elSplL2mhHrGv3Bgtd8bP+v4NTd1u59rQ==}
-
-snapshots:
-
-  '@systemfsoftware/effect-gherkin-spec@2.0.0': {}
-
----
 lockfileVersion: '9.0'
 
 settings:
@@ -7722,6 +7701,7 @@ packages:
   typescript@6.0.3:
     resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
     engines: {node: '>=14.17'}
+    hasBin: true
 
   typescript@7.0.2:
     resolution: {integrity: sha512-8FYau96o3NKOhbjKi/qNvG/W5jhzxkbdm5sj9AbZ/5T5sWqn3hJgLfGx27sRKZWTvyzCP8dLRBTf5tBTSRVUNA==}
