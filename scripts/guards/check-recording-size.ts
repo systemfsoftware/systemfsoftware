@@ -1,8 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read --allow-env --allow-write=/tmp
-// deno-lint-ignore no-import-prefix
-import ts from 'npm:typescript@6.0.3'
-// deno-lint-ignore no-import-prefix
-import { dirname, join, relative, resolve } from 'jsr:@std/path@1.0.0'
+import { dirname, join, relative, resolve } from '@std/path'
+import ts from 'typescript'
 
 const CEILING = 50
 

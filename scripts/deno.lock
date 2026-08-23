@@ -8,9 +8,11 @@
     "jsr:@std/fs@0.224": "0.224.0",
     "jsr:@std/io@0.224": "0.224.9",
     "jsr:@std/log@0.224.0": "0.224.0",
+    "jsr:@std/path@1.0.0": "1.0.0",
     "jsr:@std/yaml@^1.2.0": "1.2.0",
     "npm:@toon-format/toon@^4.1.1": "4.1.1",
-    "npm:arktype@2.2.3": "2.2.3"
+    "npm:arktype@2.2.3": "2.2.3",
+    "npm:typescript@6.0.3": "6.0.3"
   },
   "jsr": {
     "@std/assert@0.224.0": {
@@ -39,6 +41,9 @@
         "jsr:@std/fs",
         "jsr:@std/io"
       ]
+    },
+    "@std/path@1.0.0": {
+      "integrity": "77fcb858b6e38777d1154df0f02245ba0b07e2c40ca3c0eec57c9233188c2d21"
     },
     "@std/yaml@1.2.0": {
       "integrity": "20beb41e4983ba3437dbefac62b14061ab058e8a187596f19d28ff9035f6e6cf"
@@ -70,6 +75,10 @@
         "@ark/util",
         "arkregex"
       ]
+    },
+    "typescript@6.0.3": {
+      "integrity": "sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==",
+      "bin": true
     }
   },
   "workspace": {
@@ -77,9 +86,11 @@
       "jsr:@std/async@1.5.0",
       "jsr:@std/cli@1.0.32",
       "jsr:@std/log@0.224.0",
+      "jsr:@std/path@1.0.0",
       "jsr:@std/yaml@^1.2.0",
       "npm:@toon-format/toon@^4.1.1",
-      "npm:arktype@2.2.3"
+      "npm:arktype@2.2.3",
+      "npm:typescript@6.0.3"
     ]
   }
 }
