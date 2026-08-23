@@ -60,7 +60,7 @@ if (import.meta.vitest !== void 0) {
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
-  const { Match } = await import('effect')
+  const { Exit, Match } = await import('effect')
   const { Schema: S } = await import('effect')
   const { FastCheck: fc } = await import('effect/testing')
 
@@ -273,5 +273,27 @@ if (import.meta.vitest !== void 0) {
     [fc.integer()],
     ([seed]) => widestBranchDriftOf(sampleAt(seed)) <= SHARE_TOLERANCE,
     { fastCheck: { numRuns: SEEDS } },
+  )
+
+  /**
+   * The cap bounds generation and nothing else. Everything above draws values
+   * *from* the schema, so every one of them is bounded by construction and all
+   * four stay green if `maxDepth` leaks into decoding. This one builds input the
+   * generator can never produce — a chain far deeper than `DEPTH_CAP` — and
+   * requires the codec to accept it, which is the promise a runtime dependency
+   * makes to a consumer decoding real input at a boundary.
+   */
+  const encodedChain = (depth: number): unknown =>
+    depth <= 1
+      ? { _tag: 'Lit', value: 1 }
+      : { _tag: 'Binary', op: '+', left: encodedChain(depth - 1), right: { _tag: 'Lit', value: 1 } }
+
+  it.prop(
+    '∀d_DeeperThanCap_=Depth',
+    [fc.integer({ min: DEPTH_CAP + 1, max: DEPTH_CAP + 20 })],
+    ([depth]) => {
+      const decoded = S.decodeUnknownExit(Expr)(encodedChain(depth))
+      return Exit.isSuccess(decoded) && nestingDepth(decoded.value) === depth
+    },
   )
 }

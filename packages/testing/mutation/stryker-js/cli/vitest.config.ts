@@ -3,7 +3,7 @@ import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
 export default defineConfig({
   ...sharedConfig,
-  plugins: [inlineSchemaTests()],
+  plugins: [inlineSchemaTests({ refutationCoverage: true })],
   test: {
     ...sharedConfig.test,
     // KTD5: the container lane lives in `tests` under its own config

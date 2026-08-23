@@ -85,22 +85,23 @@ const isInsideConsequent = (
 }
 
 /**
- * The schema-law harness. A law is not behaviour coverage: `refutes(Admitted, …)`
+ * The schema-refutation harness. A law is not behaviour coverage: `refutes(Admitted, …)`
  * discharges a generator obligation carried by ONE schema declaration, and the
  * obligation is per-declaration, so composition altitude cannot discharge it and
  * moving the law out only relocates it away from the thing it constrains. The
  * declaration is usually exported — that is what makes it a wire contract worth
- * pinning — so the private-target demand does not apply to it, and this package's
- * `inlineSchemaTests()` plugin exists precisely to run the law where it is written.
+ * pinning — so the private-target demand does not apply to it, and the
+ * `@systemfsoftware/effect-schema-vite` plugin's `inlineSchemaTests()` exists precisely
+ * to run the law where it is written.
  *
  * The exemption is keyed on the harness's own module specifier, never on a name an
  * author supplies: a block earns it by importing the harness, statically or through
  * the dynamic form the build requires, and nothing else spells it.
  */
-const SCHEMA_LAW_SOURCE = '@systemfsoftware/effect-schema-law'
+const SCHEMA_REFUTATION_SOURCE = '@systemfsoftware/effect-schema-refutation'
 
-const isSchemaLawSource = (source: ESTree.Node): boolean =>
-  source.type === 'Literal' && source.value === SCHEMA_LAW_SOURCE
+const isSchemaRefutationSource = (source: ESTree.Node): boolean =>
+  source.type === 'Literal' && source.value === SCHEMA_REFUTATION_SOURCE
 
 export const inSourceTestTargetsPrivate = defineRule({
   meta,
@@ -143,7 +144,7 @@ export const inSourceTestTargetsPrivate = defineRule({
         if (guard !== undefined) guard.hit = true
       },
       ImportExpression(node: ESTree.ImportExpression) {
-        if (!isSchemaLawSource(node.source)) return
+        if (!isSchemaRefutationSource(node.source)) return
         const guard = guards.find((g) => isInsideConsequent(node, g.node.consequent))
         if (guard !== undefined) guard.hit = true
       },
@@ -152,7 +153,7 @@ export const inSourceTestTargetsPrivate = defineRule({
         // that calls it references an import binding rather than a private name.
         // Importing the harness at all is the evidence; a source file has no other
         // reason to reach for it.
-        if (isSchemaLawSource(node.source)) { for (const guard of guards) guard.hit = true }
+        if (isSchemaRefutationSource(node.source)) { for (const guard of guards) guard.hit = true }
       },
       'Program:exit'() {
         for (const guard of guards) {

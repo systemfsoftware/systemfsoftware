@@ -51,6 +51,7 @@
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-refutation": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/stryker-plugins": "workspace:^",

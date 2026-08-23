@@ -27,7 +27,7 @@ ruleTester.run('in-source-test-targets-private', inSourceTestTargetsPrivate, {
       name: 'Should_Pass_When_ABlockDischargesASchemaLaw',
       code: `export const Admitted = 1
 if (import.meta.vitest !== void 0) {
-  const { refutes } = await import('@systemfsoftware/effect-schema-law')
+  const { refutes } = await import('@systemfsoftware/effect-schema-refutation')
   refutes(Admitted, {})
 }`,
       filename: '/repo/pkg/src/Survivors.workflow.ts',
@@ -320,6 +320,24 @@ if (import.meta.vitest !== undefined) {
 }
 `,
       filename: '/repo/pkg/src/widget.ts',
+      errors: [{
+        messageId: 'noPrivateTarget',
+        data: {
+          name: NO_PRIVATE_TARGET_NAME,
+          expected: NO_PRIVATE_TARGET_EXPECTED,
+          actual: NO_PRIVATE_TARGET_ACTUAL,
+          fix: NO_PRIVATE_TARGET_FIX,
+        },
+      }],
+    },
+    {
+      name: 'Should_Report_NoPrivateTarget_When_OldLawSpecifierInsideRefutesBlockIsNotExempt',
+      code: `export const Admitted = 1
+if (import.meta.vitest !== void 0) {
+  const { refutes } = await import('@systemfsoftware/effect-schema-law')
+  refutes(Admitted, {})
+}`,
+      filename: '/repo/pkg/src/Survivors.workflow.ts',
       errors: [{
         messageId: 'noPrivateTarget',
         data: {

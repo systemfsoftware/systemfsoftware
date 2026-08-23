@@ -20,7 +20,7 @@ if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
-  const { scanObligations } = await import('@systemfsoftware/effect-schema-law')
+  const { scanObligations } = await import('@systemfsoftware/effect-schema-refutation')
   const { expect, it } = await import('vitest')
   const { ColonHex } = await import('./ColonHex.schema.js')
   const { HexBytes } = await import('./HexBytes.schema.js')

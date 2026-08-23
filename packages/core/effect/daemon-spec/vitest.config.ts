@@ -3,7 +3,7 @@ import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
 export default defineConfig({
   ...sharedConfig,
-  plugins: [inlineSchemaTests()],
+  plugins: [inlineSchemaTests({ refutationCoverage: true })],
   test: {
     ...sharedConfig.test,
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],

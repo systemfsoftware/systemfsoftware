@@ -1,3 +1,4 @@
+/// <reference types="vitest/import-meta" />
 import { Schema as S } from 'effect'
 import * as AST from 'effect/SchemaAST'
 import { FastCheck } from 'effect/testing'

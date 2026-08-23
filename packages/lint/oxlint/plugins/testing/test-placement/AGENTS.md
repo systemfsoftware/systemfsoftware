@@ -28,10 +28,10 @@ This package ships eight rules enforcing where tests may live and which test suf
 
 - id: TP4
   title: "`*.schema.test.ts` is forbidden; generated laws and in-source refusals are the two sanctioned forms"
-  do: leave a schema's round-trip coverage to the generated `src/schema-laws.test.ts`, and state any refusal it needs as an in-source `if (import.meta.vitest !== void 0)` block in the schema module holding a `refutes(schema, generators)` call — the combinator from `@systemfsoftware/effect-schema-law` is the sanctioned form a refusal takes; a block's fixture schemas stay inside the block so they never reach `schema-declaration-location`'s module-scope arm
+  do: leave a schema's round-trip coverage to the generated `src/schema-laws.test.ts`, and state any refusal it needs as an in-source `if (import.meta.vitest !== void 0)` block in the schema module holding a `refutes(schema, generators)` call — the combinator from `@systemfsoftware/effect-schema-refutation` is the sanctioned form a refusal takes; a block's fixture schemas stay inside the block so they never reach `schema-declaration-location`'s module-scope arm
   dont: re-admit a `*.schema.test.ts` branch to no-test-file-in-src, or add a second name-whitelisted test file, or file the refusal as a `<name>.schema.property.test.ts` beside a schema whose only test is a refusal
   harm: the generated `ruleOfSchemas` pair draws every input from the arbitrary the schema itself supplies, so it covers everything the schema accepts and nothing it rejects — an authored `*.schema.test.ts` restates the covered half and drifts, while the uncovered half is a refusal that has no file home under the workflow taxonomy
-  check: "`grep -rn 'SCHEMA_SUFFIX' packages/oxlint-plugins/test-placement/src` hits only path.config.ts and no-test-file-in-src.ts — the rule whose schema report is solely schemaTestInSrc; `grep -rn '=== SCHEMA_LAWS_BASENAME' packages/oxlint-plugins/test-placement/src` hits only the single exact-basename allowance in no-test-file-in-src.ts"
+  check: "`grep -rn 'SCHEMA_SUFFIX' packages/lint/oxlint/plugins/testing/test-placement/src` hits only path.config.ts and no-test-file-in-src.ts — the rule whose schema report is solely schemaTestInSrc; `grep -rn '=== SCHEMA_LAWS_BASENAME' packages/lint/oxlint/plugins/testing/test-placement/src` hits only the single exact-basename allowance in no-test-file-in-src.ts"
 
 - id: TP5
   title: One behaviour suffix — the double policy is a judgement, not a filename

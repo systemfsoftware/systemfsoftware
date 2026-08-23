@@ -54,6 +54,7 @@
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-refutation": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
@@ -67,9 +68,15 @@
   },
   "peerDependencies": {
     "@systemfsoftware/effect-schema-law": "workspace:*",
+    "@systemfsoftware/effect-schema-refutation": "workspace:*",
     "effect": "catalog:peers",
     "vite": ">5.0.0",
     "vitest": "*"
+  },
+  "peerDependenciesMeta": {
+    "@systemfsoftware/effect-schema-refutation": {
+      "optional": true
+    }
   },
   "publishConfig": {
     "exports": {

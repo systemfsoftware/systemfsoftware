@@ -32,6 +32,7 @@
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-refutation": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",

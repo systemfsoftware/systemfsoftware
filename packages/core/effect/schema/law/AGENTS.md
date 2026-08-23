@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/effect-schema-law`
 
-Property-test codec laws for any Effect `Schema`. Usage, install, and `boundedUnion` are documented in `README.md`; diagnosing a failing law test is documented in `docs/solutions/test-failures/effect-schema-law-failure-diagnosis.md`.
+Property-test codec laws for any Effect `Schema`. This package holds one export, `ruleOfSchemas`, and nothing else: a schema's rejection contract belongs to `@systemfsoftware/effect-schema-refutation`, and a recursive union whose generation must terminate belongs to `@systemfsoftware/effect-schema-bounded-union`. Usage and install are in `README.md`; diagnosing a failing law test is in `docs/solutions/test-failures/effect-schema-law-failure-diagnosis.md`.
 
 ## What the Laws Enforce
 
@@ -30,7 +30,10 @@ rules:
     harm: an error is a failure value, not a two-way codec; its `cause` field is
       routinely `S.Unknown`, which carries no round-trip guarantee, so the law
       fails against a schema that was never meant to satisfy it
-    check: review — the vite plugin's integration test proves TaggedError is
-      excluded from auto-discovery, and no hand-written ruleOfSchemas call names
-      an error schema
+    check: "`pnpm --filter @systemfsoftware/effect-schema-vite test` exits 0 — the
+      `toEqual` at `tests/inline-schema-tests.integration.test.ts:126-132` names the
+      five schemas the plugin discovers in a fixture that also declares a
+      `Schema.TaggedError`; an exact-object match fails the moment a sixth appears,
+      so auto-discovery cannot start law-testing an error without reddening it.
+      A hand-written call is review's to catch"
 ```

@@ -9,6 +9,12 @@ import type { Plugin, ResolvedConfig } from 'vite'
 export interface InlineSchemaTestsOptions {
   /** Directory to scan for schema files, relative to Vite root. Default: `"src"`. */
   dir?: string
+  /**
+   * Emit the obligation-coverage assertion alongside the codec laws.
+   *
+   * Requires `@systemfsoftware/effect-schema-refutation` to be installed. Default: `false`.
+   */
+  refutationCoverage?: boolean
 }
 
 /**
@@ -409,7 +415,11 @@ function extendsSchemaClass(superClass: Expression | null | undefined): boolean 
  *
  * @since 1.4.0
  */
-export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string => {
+export const generateSchemaLaws = (
+  lawFilePath: string,
+  srcDir: string,
+  options?: { refutationCoverage?: boolean },
+): string => {
   const schemas = findExportedSchemas(srcDir)
   if (schemas.length === 0) return '// no schemas found\nexport {}\n'
 
@@ -424,6 +434,15 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string 
   const labelOf = (s: FoundSchema): string =>
     (nameCount.get(s.name) ?? 0) > 1 ? `${s.name} (${specifierOf(s.filePath)})` : s.name
 
+  if (!(options?.refutationCoverage ?? false)) {
+    return [
+      `import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
+      schemas.map((s, i) => `import { ${s.name} as schema_${i} } from ${quote(specifierOf(s.filePath))}`).join('\n'),
+      '',
+      schemas.map((s, i) => `ruleOfSchemas(${quote(labelOf(s))}, schema_${i})`).join('\n'),
+    ].join('\n')
+  }
+
   const refuted = findRefutedIdentities(srcDir, schemas)
   const quoted = schemas
     .filter((s) => refuted.has(identityOf(s.filePath, s.name)))
@@ -434,7 +453,8 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string 
   return [
     `import type { AST } from 'effect/SchemaAST'`,
     `import { it } from 'vitest'`,
-    `import { obligationsOf, ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
+    `import { obligationsOf } from '@systemfsoftware/effect-schema-refutation'`,
+    `import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
     schemas.map((s, i) => `import { ${s.name} as schema_${i} } from ${quote(specifierOf(s.filePath))}`).join('\n'),
     '',
     schemas.map((s, i) => `ruleOfSchemas(${quote(labelOf(s))}, schema_${i})`).join('\n'),
@@ -498,7 +518,9 @@ export const inlineSchemaTests = (options?: InlineSchemaTestsOptions): Plugin =>
     transform(_code, id) {
       const lawFile = id.split('?')[0]
       if (lawFile === undefined || !lawFile.endsWith(`/${LAW_FILE_BASENAME}`)) return
-      return generateSchemaLaws(lawFile, resolve(config.root, options?.dir ?? 'src'))
+      return generateSchemaLaws(lawFile, resolve(config.root, options?.dir ?? 'src'), {
+        refutationCoverage: options?.refutationCoverage ?? false,
+      })
     },
   }
 }

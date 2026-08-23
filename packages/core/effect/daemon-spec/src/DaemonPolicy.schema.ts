@@ -67,7 +67,7 @@ const decodesSupervisorPolicy = Schema.decodeUnknownExit(SupervisorPolicyConfig)
 
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
-  const { refutes } = await import('@systemfsoftware/effect-schema-law')
+  const { refutes } = await import('@systemfsoftware/effect-schema-refutation')
   const { Duration, Exit } = await import('effect')
   const { FastCheck: fc } = await import('effect/testing')
 
