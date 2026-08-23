@@ -10,8 +10,11 @@
     in
     {
       packages = forEachSystem (pkgs:
-        let dprint = pkgs.callPackage ./nix/dprint.nix { };
-        in { inherit dprint; default = dprint; });
+        let
+          dprint = pkgs.callPackage ./nix/dprint.nix { };
+          comment-checker = pkgs.callPackage ./nix/comment-checker.nix { };
+          comment-checker-bwrap = pkgs.callPackage ./nix/comment-checker-bwrap.nix { inherit comment-checker; };
+        in { inherit dprint comment-checker comment-checker-bwrap; default = dprint; });
 
       # pnpm is deliberately absent: `packageManager` pins pnpm@11.21.0 and
       # corepack is the one thing allowed to resolve it. A second pnpm on PATH
@@ -20,6 +23,7 @@
         default = pkgs.mkShell {
           packages = [
             self.packages.${pkgs.stdenv.hostPlatform.system}.dprint
+            self.packages.${pkgs.stdenv.hostPlatform.system}.comment-checker-bwrap
             pkgs.nodejs_24
             pkgs.deno
           ];
