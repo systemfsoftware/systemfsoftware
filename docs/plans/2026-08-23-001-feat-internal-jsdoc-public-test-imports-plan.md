@@ -13,11 +13,11 @@ execution: code
 
 ## Goal Capsule
 
-- **Objective.** Every export whose file sits under an `internal` directory carries `@internal` JSDoc. No file outside an `internal` directory carries that tag. Tests that live outside `src` import the package only through its published name and subpaths. Published `.d.ts` files omit `@internal` declarations. Integration tests whose subject is an internal are deleted.
-- **Product authority.** Repository owner, this session. Grounded in `CONSTITUTION.md` `CONST-E1` (prefer the gate), root `AGENTS.md` `REPO-A5` (the audience is every adopter), and `CHK1` (a check keyed on a value its own author supplied certifies nothing).
+- **Objective.** Every export whose file sits under an `internal` directory carries `@internal` JSDoc. No file outside an `internal` directory carries that tag. A public barrel never writes `from './internal/'`. Names an adopter must depend on are authored as public surface. Tests that live outside `src` import the package only through its published name and subpaths. Published `.d.ts` files omit `@internal` declarations. Integration tests whose subject is an internal are deleted.
+- **Product authority.** Repository owner, this session. Grounded in `CONSTITUTION.md` `CONST-E1` (prefer the gate), root `AGENTS.md` `REPO-A5` (the audience is every adopter), `CONCEPTS.md` internal folder (published `exports.types` omits that folder), and `CHK1` (a check keyed on a value its own author supplied certifies nothing).
 - **Open blockers.** None.
-- **Execution profile.** Code. Rules land unregistered. Existing sites migrate. Registration flips the rules to `error` in a later commit so no intermediate commit lints red (`CONST-E4`).
-- **Stop conditions.** An `internal` export whose published type is required by a public signature and cannot be un-exported without a product change. A package-level integration test whose only honest subject is an internal and that the owner refuses to delete.
+- **Execution profile.** Code. Rules land, existing sites migrate, public barrel names are authored as public. Registration stays at `error`.
+- **Stop conditions.** A name that is neither a capability nor unpublished wiring — escalate, do not hide it under `internal/` and re-export it.
 - **Tail ownership.** This plan opens a PR and drives CI to green. Publish is human-controlled (`REPO-P1`).
 
 ---
@@ -68,6 +68,7 @@ Product Contract source: `ce-plan-bootstrap`. No upstream brainstorm.
 
 - R12. An integration or feature test whose subject is an internal module is deleted. A package-level test that only reached into `src` to exercise public behavior is rewritten onto the package name or a subpath export.
 - R13. Existing `internal` exports are tagged and misplaced tags are removed in this work. The rules flip to `error` only after the tree is clean.
+- R14. A package entry barrel (`src/mod.ts`, `src/index.ts`) must not import or re-export from a specifier whose segments include `internal`. Capability names are authored in public modules. Implementation the barrel does not name stays in `internal/` and is tagged.
 
 ### Acceptance Examples
 
@@ -110,6 +111,7 @@ Product Contract source: `ce-plan-bootstrap`. No upstream brainstorm.
 - KTD4. **Published hide is `publicTrimmedFilePath` on packages whose `exports.types` is an api-extractor rollup, plus existing `stripInternal` on tsdown dts.** Do not point `exports.types` at tsdown's `dist/index.d.ts` on rollup packages (`docs/solutions/build-errors/exports-types-rollup-drift.md`). Untrimmed rollup stays for same-maintainer inspection if a path is already configured; `exports.types` / `apiExtractorRollups` name the public-trimmed file. Governs R9–R11.
 - KTD5. **Rules stay unregistered until U3–U5 have cleaned the tree, then flip to `error` in their own commit.** `warn` is invisible under `AGENT` + `--quiet` (`docs/solutions/tooling-decisions/rule-admission-severity-and-accretion.md`). Known-bad proof is the RuleTester suite, not a committed warn. Governs R13.
 - KTD6. **Do not put `@internal` on a public re-export clause.** Tag the declaration in the `internal` file. A tagged `export { publicName } from` is the strip-class failure in `docs/solutions/build-errors/dts-emitter-drops-bundled-entry-reexports.md`.
+- KTD7. **A name the barrel publishes is public surface, never an `internal/` re-export.** (session-settled: user-directed — chosen over turning `internal-export-jsdoc` off, and over a mechanical `git mv` of the same file one directory up: `CONCEPTS.md` says published types omit `internal/`; if the adopter must depend on the name it is not internal.) Governs R11, R14.
 
 ### High-Level Technical Design
 
@@ -161,7 +163,7 @@ Authoring order: rules and suites first, then annotations, then type-path switch
 
 ### Sequencing
 
-U1 and U2 are independent. U3 needs the rule messages from U1 so annotations match. U4 needs U3 tags in place or the trimmed rollup will still emit untagged internals. U5 depends on U2 (its verification runs that rule) and coordinates with U3 if a deleted test was the only client of an internal. U6 is last.
+U1 and U2 are independent. U3 needs the rule messages from U1. U4 needs U3 tags. U5 depends on U2. U7 authors remaining barrel-from-internal sites as public surface. U6 stays at `error`; do not turn the require-tag rule off.
 
 ### Sources and Research
 
@@ -294,7 +296,32 @@ Software-wiki query (not a path to re-open from the clone): collection `software
   2. Severity is `error`. Not `warn`.
   3. README rows already added in U1/U2; regenerate API reports here if the recommended map is published surface.
 - **Test expectation:** none — registration. The suites in U1/U2 already cover behavior.
-- **Verification.** `pnpm lint` exits 0 on packages that extend `base` or `strict`. `pnpm check:local` exits 0. A one-line known-bad scratch file under an enrolled package is reported, then deleted.
+
+### U7. Author barrel-published names as public surface
+
+- **Goal.** No entry barrel writes `from './internal/'`. Capability names live in public modules. `internal-export-jsdoc` stays at `error`.
+- **Requirements.** R11, R14.
+- **Dependencies.** U3, U6.
+- **Files.**
+  - `packages/core/effect/daemon-spec/src/mod.ts`
+  - `packages/core/effect/daemon-spec/src/LoopTags.ts` (new public module; Worker discriminants)
+  - `packages/core/effect/daemon-spec/src/WithLeaderLock.ts` (new public module; capability)
+  - `packages/core/effect/daemon-spec/src/SupervisionLeader.ts` (absorb `LeaderConfig` port; delete `src/internal/SupervisionLeader.ts`)
+  - same for `SupervisionTask.ts` / `SupervisionWorker.ts` ports
+  - `packages/core/effect/daemon-spec/src/BuildDynamicExecutor.ts` only if `run.dynamic` remains an alias of that function — otherwise a public wrapper whose signature names only public types
+  - remaining `src/internal/*` that the barrel does not name stay tagged
+- **Approach.**
+  1. For each `export { X } from './internal/…'` on `mod.ts`, decide: capability or leak. Capability is authored as a public module (ports live with the public kernel). Leak is dropped from the barrel.
+  2. Do not `git mv` an internal file and call it done. Public modules are written as public: no `@internal`, no `internal/` path, barrel imports `./LoopTags.js`.
+  3. Implementation the barrel does not name stays under `internal/` with the tag.
+  4. Keep `internal-export-jsdoc` at `error` in `oxlint-config.base.ts` and the plugin recommended map.
+- **Patterns to follow.** `packages/core/effect/atom/atom/src/ResultValues.ts` after it left `internal/` because `Result.ts` re-exports it. Architecture audit F1/F1b/F1c on this barrel.
+- **Test scenarios.**
+  - Happy: `mod.ts` has zero specifiers containing an `internal` segment.
+  - Happy: packed `exports.types` still lists `withLeaderLock`, `PollLoopTag`, `LeaderConfig`.
+  - Error: a remaining `internal/` export without `@internal` is reported by `internal-export-jsdoc`.
+  - Error: `@internal` on a public module is reported by `no-internal-jsdoc-outside`.
+- **Verification.** `rg "from '\\./internal/" packages/core/effect/daemon-spec/src/mod.ts` prints zero lines. `pnpm --filter @systemfsoftware/effect-daemon-spec build` exits 0. `pnpm --filter @systemfsoftware/effect-daemon-spec lint` exits 0.
 
 ---
 

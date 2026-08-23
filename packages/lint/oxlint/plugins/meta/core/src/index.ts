@@ -57,7 +57,7 @@ const recommendedRules = {
   [rule('no-native-settimeout-in-effect')]: 'error',
   [rule('no-new-promise-in-effect')]: 'error',
   [rule('no-new-worker-with-wasm-import')]: 'error',
-  [rule('internal-export-jsdoc')]: 'off',
+  [rule('internal-export-jsdoc')]: 'error',
 
   [rule('no-internal-jsdoc-outside')]: 'error',
 } as const

@@ -1,5 +1,18 @@
-import { Duration, Effect, Schedule } from 'effect'
+import { Context, Duration, Effect, Schedule } from 'effect'
 import { cappedBackoff } from './Backoff.js'
+import { BoundedIntensity } from './DaemonPolicy.schema.js'
+import type { SupervisionConfig } from './DaemonSpec.schema.js'
+
+export const WorkerConfig = Context.Reference<SupervisionConfig>(
+  '@systemfsoftware/effect-daemon-spec/WorkerConfig',
+  {
+    defaultValue: (): SupervisionConfig => ({
+      backoffBase: Duration.seconds(10),
+      intensity: BoundedIntensity.make({ restarts: 10, window: Duration.seconds(60) }),
+      cooldown: Duration.seconds(30),
+    }),
+  },
+)
 
 export const worker = <
   INTENSITY,

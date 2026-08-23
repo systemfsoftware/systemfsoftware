@@ -1,7 +1,7 @@
 import { Effect } from 'effect'
 import { WorkerTypeId } from './Brands.js'
 import type { SubscriptionLoop } from './DaemonSpec.schema.js'
-import { SubscriptionLoopTag } from './internal/LoopTags.js'
+import { SubscriptionLoopTag } from './LoopTags.js'
 
 type WorkerRecord<TICK, THOOKS, CHILD, LCK, L> = {
   readonly [WorkerTypeId]: WorkerTypeId

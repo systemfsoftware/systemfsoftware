@@ -1,5 +1,5 @@
 import { WorkerTypeId } from './Brands.js'
-import { StreamLoopTag } from './internal/LoopTags.js'
+import { StreamLoopTag } from './LoopTags.js'
 
 type WorkerRecord<TICK, THOOKS, CHILD, LCK, L> = {
   readonly [WorkerTypeId]: WorkerTypeId

@@ -1,5 +1,5 @@
 import { Duration, Effect } from 'effect'
-import type { Scope, Stream } from 'effect'
+import type { Stream } from 'effect'
 export * from './Backoff.js'
 export * from './Brands.js'
 export * from './DaemonHealth.schema.js'
@@ -16,12 +16,10 @@ export {
 } from './DaemonPolicy.schema.js'
 export * from './DaemonReporterAdapter.js'
 export * from './DaemonSpec.schema.js'
-export { PollLoopTag, StreamLoopTag, SubscriptionLoopTag } from './internal/LoopTags.js'
-import type { DaemonHealth, SupervisorHealth } from './DaemonHealth.schema.js'
+export { PollLoopTag, StreamLoopTag, SubscriptionLoopTag } from './LoopTags.js'
 import { MaxChildren } from './DaemonPolicy.schema.js'
 import type { ChildPolicyConfig, TickPolicyConfig } from './DaemonPolicy.schema.js'
 import { poll as pollKernel } from './DaemonPoll.js'
-import { DaemonReporter } from './DaemonReporterAdapter.js'
 import type {
   Child,
   CommonOpts,
@@ -37,8 +35,6 @@ import type {
 } from './DaemonSpec.schema.js'
 import { stream as streamKernel } from './DaemonStream.js'
 import { subscription as subscriptionKernel } from './DaemonSubscription.js'
-import { isModeNone } from './LeaderLock.js'
-import { LeaderLock } from './LeaderLockAdapter.js'
 export const poll = <A, E, R, L extends LockConfig>(opts: PollOpts<A, E, R, L>): Worker<E, R, L> =>
   pollKernel<
     Effect.Effect<A, E, R>,
@@ -97,83 +93,24 @@ export const Daemon = {
 export * from './LeaderLock.schema.js'
 export * from './LeaderLockAdapter.js'
 export { LockPrimitiveError } from './LockPrimitive.schema.js'
-import { worker as workerImpl } from './DaemonWorkerExecutor.js'
-import { dynamic as dynamicRuntime } from './internal/BuildDynamicExecutor.js'
-import { supervisor as supervisorImpl } from './internal/SupervisorBodyExecutor.js'
-import type { LockBinding } from './internal/WithLockByModeExecutor.js'
+import { dynamic as dynamicRuntime } from './RunDynamic.js'
+import { supervisor } from './RunSupervisor.js'
+import { worker } from './RunWorker.js'
+export { supervisor, worker }
 
-/**
- * Boots a worker. The leader-lock capability is acquired here, at the composition
- * root, and handed down as part of the lock binding: the executor behind this
- * entry point never sees the tag. A worker whose lock is `{ mode: 'none' }`
- * takes no lock at all.
- */
-export const worker: {
-  <E, R>(w: Worker<E, R, { mode: 'none' }>): Effect.Effect<
-    DaemonHealth,
-    never,
-    R | Scope.Scope
-  >
-  <E, R>(w: Worker<E, R, LockConfig>): Effect.Effect<
-    DaemonHealth,
-    never,
-    R | LeaderLock | Scope.Scope
-  >
-} = <E, R>(
-  w: Worker<E, R, LockConfig>,
-): Effect.Effect<
-  DaemonHealth,
-  never,
-  R | LeaderLock | Scope.Scope
-> =>
-  Effect.gen(function*() {
-    let binding: LockBinding
-    if (isModeNone(w.lock)) {
-      binding = { kind: 'unlocked' }
-    } else {
-      const lock = yield* LeaderLock
-      binding = { kind: 'locked', spec: w.lock, lock }
-    }
-    return yield* workerImpl(w, binding)
-  })
-
-/**
- * The supervisor: acquires the `DaemonReporter` and — unless the lock mode is none —
- * the `LeaderLock` capabilities at the composition root, then hands them down to the
- * supervisor body via the lock binding. The body itself only ever sees the service
- * values.
- */
-export const supervisor = <E, R>(
-  s: Supervisor<E, R, LockConfig>,
-): Effect.Effect<
-  SupervisorHealth,
-  never,
-  R | DaemonReporter | LeaderLock | Scope.Scope
-> =>
-  Effect.gen(function*() {
-    const reporter = yield* DaemonReporter
-    let binding: LockBinding
-    if (isModeNone(s.lock)) {
-      binding = { kind: 'unlocked' }
-    } else {
-      const lock = yield* LeaderLock
-      binding = { kind: 'locked', spec: s.lock, lock }
-    }
-    return yield* supervisorImpl(s, reporter, binding)
-  })
-export { withLeaderLock } from './internal/WithLeaderLockExecutor.js'
-export type { LeaderLockOptions } from './internal/WithLeaderLockExecutor.js'
+export { withLeaderLock } from './WithLeaderLock.js'
+export type { LeaderLockOptions } from './WithLeaderLock.js'
 export const run = {
   worker,
   supervisor,
   dynamic: dynamicRuntime,
 } as const
-import { LeaderConfig } from './internal/SupervisionLeader.js'
-import { TaskConfig } from './internal/SupervisionTask.js'
-import { WorkerConfig } from './internal/SupervisionWorker.js'
 import { custom } from './SupervisionCustom.js'
+import { LeaderConfig } from './SupervisionLeader.js'
 import { leader as leaderKernel } from './SupervisionLeader.js'
+import { TaskConfig } from './SupervisionTask.js'
 import { task as taskKernel } from './SupervisionTask.js'
+import { WorkerConfig } from './SupervisionWorker.js'
 import { worker as supervisionKernel } from './SupervisionWorker.js'
 export const leader = (cap: Duration.Input): Effect.Effect<SupervisionPolicy> =>
   Effect.flatMap(LeaderConfig, (config) => leaderKernel(config, cap))
@@ -181,9 +118,9 @@ export const task = (budget: Duration.Input): Effect.Effect<SupervisionPolicy> =
   Effect.flatMap(TaskConfig, (config) => taskKernel(config, budget))
 export const supervision = (cap: Duration.Input): Effect.Effect<SupervisionPolicy> =>
   Effect.flatMap(WorkerConfig, (config) => supervisionKernel(config, cap))
-export { LeaderConfig } from './internal/SupervisionLeader.js'
-export { TaskConfig } from './internal/SupervisionTask.js'
-export { WorkerConfig } from './internal/SupervisionWorker.js'
+export { LeaderConfig } from './SupervisionLeader.js'
+export { TaskConfig } from './SupervisionTask.js'
+export { WorkerConfig } from './SupervisionWorker.js'
 export const Supervision = {
   leader,
   worker: supervision,

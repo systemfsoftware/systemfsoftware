@@ -36,7 +36,7 @@ const _default: {
     configs: {
         recommended: {
             rules: {
-                readonly [x: string]: "error" | "off";
+                readonly [x: string]: "error";
             };
         };
     };

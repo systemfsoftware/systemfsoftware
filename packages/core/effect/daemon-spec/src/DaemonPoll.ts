@@ -1,7 +1,7 @@
 import { Duration, Effect, Option } from 'effect'
 import { WorkerTypeId } from './Brands.js'
 import type { PollLoop } from './DaemonSpec.schema.js'
-import { PollLoopTag } from './internal/LoopTags.js'
+import { PollLoopTag } from './LoopTags.js'
 
 type WorkerRecord<TICK, THOOKS, CHILD, LCK, L> = {
   readonly [WorkerTypeId]: WorkerTypeId

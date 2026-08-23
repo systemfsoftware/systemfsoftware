@@ -1,14 +1,14 @@
 import { Effect, Equal, Fiber, HashMap, Latch, Metric, Option, Ref } from 'effect'
 import type { Scope } from 'effect'
-import type { ChildRef, DynamicHandle, SupervisorHealth } from '../DaemonHealth.schema.js'
-import { DynamicLimitExceeded } from '../DaemonHealth.schema.js'
-import { healthStateGauge, supervisorChildrenGauge } from '../DaemonMetrics.js'
-import type { DaemonReporter } from '../DaemonReporterAdapter.js'
-import type { DynamicSpec } from '../DaemonSpec.schema.js'
-import type { LeaderLock } from '../LeaderLockAdapter.js'
-import { allocateSupervisorHealth } from './AllocateSupervisorHealth.js'
-import { allocateWorkerHealth } from './AllocateWorkerHealth.js'
-import { buildWorkerLoop } from './BuildWorkerLoop.js'
+import type { ChildRef, DynamicHandle, SupervisorHealth } from './DaemonHealth.schema.js'
+import { DynamicLimitExceeded } from './DaemonHealth.schema.js'
+import { healthStateGauge, supervisorChildrenGauge } from './DaemonMetrics.js'
+import type { DaemonReporter } from './DaemonReporterAdapter.js'
+import type { DynamicSpec } from './DaemonSpec.schema.js'
+import { allocateSupervisorHealth } from './internal/AllocateSupervisorHealth.js'
+import { allocateWorkerHealth } from './internal/AllocateWorkerHealth.js'
+import { buildWorkerLoop } from './internal/BuildWorkerLoop.js'
+import type { LeaderLock } from './LeaderLockAdapter.js'
 
 interface DynamicChildState<E> {
   readonly fiber: Option.Option<Fiber.Fiber<void, E>>

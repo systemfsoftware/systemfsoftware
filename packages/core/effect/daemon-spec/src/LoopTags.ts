@@ -1,3 +1,9 @@
+/**
+ * Discriminants on the public Worker loop variants.
+ *
+ * These tags are part of the published type identity of `poll`, `stream`,
+ * and `subscription`. They are not unpublished wiring.
+ */
 export const PollLoopTag = { _tag: 'Poll' } as const
 export type PollLoopTag = typeof PollLoopTag
 
