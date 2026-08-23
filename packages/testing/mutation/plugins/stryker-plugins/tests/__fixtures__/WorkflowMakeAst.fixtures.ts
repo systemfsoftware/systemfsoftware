@@ -25,11 +25,16 @@ interface Program {
   readonly body: readonly unknown[]
 }
 
-type AstNode = Identifier | MemberExpression | CallExpression | Program | ArrowFunctionExpression
+interface StringLiteral {
+  readonly type: 'StringLiteral'
+  readonly value: string
+}
+
+type AstNode = Identifier | MemberExpression | CallExpression | Program | ArrowFunctionExpression | StringLiteral
 
 export const identifier = (name: string): Identifier => ({ type: 'Identifier', name })
 
-export const stringLiteral = (value: string) => ({ type: 'StringLiteral' as const, value })
+export const stringLiteral = (value: string): StringLiteral => ({ type: 'StringLiteral', value })
 
 export const importSpecifierOf = (imported: string, local: string) => ({
   type: 'ImportSpecifier' as const,

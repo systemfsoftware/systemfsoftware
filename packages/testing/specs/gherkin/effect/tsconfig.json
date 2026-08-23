@@ -8,10 +8,8 @@
     ]
   },
   "include": [
-    "src",
-    "tests"
+    "src"
   ],
-
   "references": [
     {
       "path": "./tsconfig.node.json"

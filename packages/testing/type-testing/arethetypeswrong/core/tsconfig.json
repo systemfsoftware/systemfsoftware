@@ -9,7 +9,6 @@
     "types": [],
     "plugins": [{ "name": "@effect/language-service" }]
   },
-  "include": ["src", "tests", "TsInternals.d.ts"],
-
+  "include": ["src", "TsInternals.d.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
