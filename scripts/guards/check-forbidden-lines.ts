@@ -1,43 +1,22 @@
 #!/usr/bin/env -S deno run --allow-read --allow-run=git
-// Reads the tracked bytes once and reports every line whose shape is forbidden.
-// Two predicates share the pass: a lint-rule suppression (source files, because
-// it reads comments) and an unresolved merge conflict marker (every file).
-//
-// Deliberate: markers are NOT skipped inside fenced code blocks. A fence tracker
-// is a state machine over untrusted prose and hides real markers both ways it
-// breaks; the two fixtures named `marker inside a * fence` are the reproductions.
-// The middle `=` x7 marker is not reported at all — it collides with a Markdown
-// setext heading underline, and a conflict always writes the other two.
 
-/** The rule ids whose suppression fails the build, bare form. */
 const PROTECTED_RULE_IDS: readonly string[] = ['make-command-schema']
-
-/** A disable directive of either linter, in either comment syntax. */
 const DISABLE_DIRECTIVE = /(?:oxlint|eslint)-disable(?:-next-line|-line)?/
-
-/** The directive plus its tail, so a blanket form can be told from a targeted one. */
 const DIRECTIVE_WITH_TAIL = /(?:oxlint|eslint)-disable(?:-next-line|-line)?([^\n]*)/
 
-/** True when the directive names no rule, and so disables all of them. */
 const isBlanket = (line: string): boolean => {
   const tail = DIRECTIVE_WITH_TAIL.exec(line)?.[1] ?? ''
   const named = tail.split('--')[0] ?? ''
   return named.replace(/[*/\s]/g, '') === ''
 }
 
-/** Leading whitespace is allowed: the marker this gate was built for was indented inside a list item. */
 const CONFLICT_START = /^\s*<{7}(?:\s|$)/
-/** The closing marker, same shape. */
 const CONFLICT_END = /^\s*>{7}(?:\s|$)/
-
-/** The suppression predicate reads comments, so it only applies to code. */
 const SOURCE_EXTENSIONS: readonly string[] = ['.ts', '.tsx', '.mts', '.cts', '.js', '.jsx', '.mjs', '.cjs']
 
-/** `repos/` is vendored (REPO-S3); lockfiles are generated and never hand-resolved. */
 const isExcluded = (path: string): boolean =>
   path.startsWith('repos/') || path.endsWith('.lock') || path.endsWith('pnpm-lock.yaml')
 
-/** Excluded because this file's own fixtures are literal violations of both predicates. */
 const SELF_PATH = 'scripts/guards/check-forbidden-lines.ts'
 
 interface Finding {
@@ -48,31 +27,17 @@ interface Finding {
   readonly text: string
 }
 
-/**
- * A comment suppressing a protected rule, if this line is one.
- *
- * Errs closed: a string literal spelling out a full directive is flagged, which
- * costs an author one rename, while the opposite error costs the only layer that
- * closes a laundered command.
- */
 export const suppressionOn = (line: string): string | null => {
   if (!DISABLE_DIRECTIVE.test(line)) return null
   const comment = line.includes('//') || line.includes('/*') || line.trimStart().startsWith('*')
   if (!comment) return null
-  // Named id before the blanket fallback, so the finding reports the id the line
-  // named. Both orders agree at one protected id; at two, blanket-first misreports.
   const named = PROTECTED_RULE_IDS.find((ruleId) => line.includes(ruleId))
   if (named !== undefined) return named
   return isBlanket(line) ? PROTECTED_RULE_IDS[0] ?? null : null
 }
 
-/** True when this line is an opening or closing conflict marker. */
 export const isConflictMarker = (line: string): boolean => CONFLICT_START.test(line) || CONFLICT_END.test(line)
 
-/**
- * Exported so the selftest drives the function the scan drives; a selftest over a
- * second copy of the logic proves nothing about the copy that runs.
- */
 export const findingsIn = (file: string, contents: string): readonly Finding[] => {
   const findings: Finding[] = []
   const checkSuppression = SOURCE_EXTENSIONS.some((extension) => file.endsWith(extension))
@@ -115,9 +80,7 @@ const trackedFiles = async (): Promise<readonly string[]> => {
 
 interface Scan {
   readonly findings: readonly Finding[]
-  /** Files read. Zero means the gate examined nothing, which must never pass. */
   readonly examined: number
-  /** Files that would not decode as text. Reported, not swallowed. */
   readonly skipped: readonly string[]
 }
 
@@ -138,7 +101,6 @@ const scan = async (): Promise<Scan> => {
   return { findings, examined, skipped }
 }
 
-/** Negative control: a gate that reports nothing must be distinguishable from one that cannot report. */
 const selftest = (): number => {
   const open = '<'.repeat(7)
   const close = '>'.repeat(7)
@@ -150,10 +112,8 @@ const selftest = (): number => {
     '/* oxlint-disable make-command-schema */',
     '// oxlint-disable-line @systemfsoftware/oxlint-plugin-effect-workflow/make-command-schema',
     '// eslint-disable @systemfsoftware/oxlint-plugin-effect-workflow/make-command-schema',
-    // Wrapped by the formatter onto a `*` continuation line.
     ' * oxlint-disable make-command-schema',
     '   * eslint-disable-next-line make-command-schema -- wrapped by the formatter',
-    // Blanket: names no rule, so disables every one including this.
     '// oxlint-disable',
     '/* eslint-disable */',
     '// oxlint-disable -- the whole file is generated',
@@ -165,7 +125,6 @@ const selftest = (): number => {
     "  [rule('make-command-schema')]: 'error',",
     '// a comment mentioning make-command-schema without a directive',
     'oxlint-disable-next-line make-command-schema',
-    // Targeted at another rule, so this one stays on.
     '// eslint-disable-next-line no-misused-spread, no-console',
     '/* oxlint-disable no-console */',
   ]
@@ -175,11 +134,8 @@ const selftest = (): number => {
     ['labelled closing marker', `${close} Stashed changes\n`],
     ['bare opening marker', `${open}\nours\n`],
     ['full conflict', `${open} HEAD\nours\n${middle}\ntheirs\n${close} feature\n`],
-    // The shape this gate exists for: indented inside a list item, so a
-    // column-zero-only pattern saw nothing.
     ['indented opening marker', `- rule one\n  ${open} Updated upstream\n- rule two`],
     ['indented closing marker', `- rule two\n\n  ${close} Stashed changes\n`],
-    // The two false negatives a fence tracker produced. Kept so nobody reintroduces one.
     ['marker inside a backtick fence', `text\n\`\`\`\n${open} HEAD\n${middle}\n${close} other\n\`\`\`\ntext`],
     ['marker inside a tilde fence', `text\n~~~\n${close} Stashed changes\n~~~\n`],
   ]
@@ -229,7 +185,6 @@ if (import.meta.main) {
 
   const { findings, examined, skipped } = await scan()
 
-  // Green over an empty population is bought by looking at nothing.
   if (examined === 0) {
     console.error('::error::examined 0 tracked files — the gate scanned nothing, so its silence proves nothing')
     Deno.exit(1)
