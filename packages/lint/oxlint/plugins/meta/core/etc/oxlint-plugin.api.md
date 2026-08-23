@@ -19,6 +19,8 @@ const _default: {
         'no-context-generic-tag': Rule;
         'no-date-now-in-effect': Rule;
         'no-inline-destructured-type': Rule;
+        'internal-export-jsdoc': Rule;
+        'no-internal-jsdoc-outside': Rule;
         'no-io-boundary-tests': Rule;
         'no-logging-in-catch': Rule;
         'no-new-promise-in-effect': Rule;

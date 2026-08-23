@@ -25,6 +25,7 @@ const recommendedRules = {
   [rule('behaviour-one-feature-per-file')]: 'error',
   [rule('tests-dir-helpers-in-fixtures')]: 'error',
   [rule('no-io-module-in-source-test')]: 'error',
+  [rule('tests-import-public-api')]: 'error',
 } as const
 
 export default {
