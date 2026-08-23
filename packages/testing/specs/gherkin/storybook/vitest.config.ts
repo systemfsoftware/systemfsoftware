@@ -1,13 +1,15 @@
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin'
+import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 import { playwright } from '@vitest/browser-playwright'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vitest/config'
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
+  ...sharedConfig,
   test: {
+    ...sharedConfig.test,
     projects: [
       {
         extends: true,

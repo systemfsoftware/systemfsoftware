@@ -34,6 +34,7 @@
   },
   "devDependencies": {
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "rimraf": "catalog:",
     "vitest": "catalog:"
