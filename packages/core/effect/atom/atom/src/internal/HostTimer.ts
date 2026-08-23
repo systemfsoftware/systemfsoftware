@@ -17,8 +17,8 @@
 // `now` / `scheduleTimer` to `Registry.make`. These are the platform defaults for
 // a caller who does not. Moving them into Effect would put a runtime under every
 // registry read, which is the design this file is the boundary of.
-// @effect-diagnostics-next-line globalDate:off
 /** @internal */
+// @effect-diagnostics-next-line globalDate:off
 export const hostNow = (): number => Date.now()
 
 /** @internal */

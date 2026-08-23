@@ -43,6 +43,16 @@ void childProcess.fork(DIST_DIR)`,
       filename: '/repo/pkg/tests/worker-bootstrap.integration.test.ts',
     },
     {
+      name: 'Should_Allow_IntegrationTest_When_ItImportsItsOwnGherkinPackage',
+      code: `${FEATURE_IMPORTS}
+import { expandOutline } from '@systemfsoftware/effect-gherkin-spec'
+
+Feature('x', () => { void expandOutline })
+`,
+      filename: '/repo/packages/testing/specs/gherkin/effect/tests/outline.integration.test.ts',
+    },
+
+    {
       // The reached module's role is not the rule's business - any package
       // module satisfies it, whatever the file is called.
       name: 'Should_Allow_IntegrationTest_When_ItImportsAPackageModule',

@@ -25,11 +25,22 @@ const FOUNDATION_PACKAGES: ReadonlySet<string> = new Set([...FOREIGN_RUNNERS, GH
  * non-runner import is `node:assert` still never touches the package under
  * test. Whether `node:child_process` legitimately reaches a CLI's behaviour is
  * a decision for the file's other imports - the builtin itself never does.
+ *
+ * The gherkin spec package is scaffolding for every other package's tests. A
+ * behaviour file that lives inside that package and imports the package name
+ * is exercising the package under test, not importing a runner.
  */
-const isFoundationImport = (source: string): boolean =>
-  FOUNDATION_PACKAGES.has(source) ||
-  source.startsWith(`${EFFECT_PACKAGE}/`) ||
-  source.startsWith('node:')
+const isGherkinPackageTree = (filename: string): boolean =>
+  filename.includes('/gherkin/effect/') || filename.includes('/effect-gherkin-spec/')
+
+const isFoundationImport = (source: string, filename: string): boolean => {
+  if (source === GHERKIN_PACKAGE && isGherkinPackageTree(filename)) return false
+  return (
+    FOUNDATION_PACKAGES.has(source) ||
+    source.startsWith(`${EFFECT_PACKAGE}/`) ||
+    source.startsWith('node:')
+  )
+}
 
 const isBehaviourTest = (basename: string): boolean => basename.endsWith(INTEGRATION_SUFFIX)
 
@@ -111,7 +122,7 @@ export const behaviourExercisesUseCase = defineRule({
           reached = true
           return
         }
-        if (!isFoundationImport(node.source.value)) reached = true
+        if (!isFoundationImport(node.source.value, context.filename)) reached = true
       },
       Literal(node: ESTree.StringLiteral) {
         // The package's own emitted output. Some defects exist ONLY in the built
@@ -130,7 +141,7 @@ export const behaviourExercisesUseCase = defineRule({
           if (statement.type !== 'ImportDeclaration') continue
           if (statement.importKind === 'type') continue
           const source = statement.source.value
-          if (isFoundationImport(source)) continue
+          if (isFoundationImport(source, context.filename)) continue
           if (sourceResolvesToItself(source, context.filename)) continue
           if (!hasRuntimeSpecifier(statement)) continue
           return
