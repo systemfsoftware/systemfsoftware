@@ -16,6 +16,15 @@
 // `=` x7 middle one. A line of exactly seven `=` is a Markdown setext heading
 // underline, and this tree is documentation-heavy; a conflict always writes all
 // three markers, so dropping the ambiguous one costs no detection.
+//
+// It does NOT skip fenced code blocks, deliberately. A fence tracker is a state
+// machine over untrusted prose, and both ways it goes wrong hide a real marker:
+// an unterminated fence makes every line after it invisible, and a `~~~` line
+// inside a backtick fence flips the state so the closing fence reopens it. Both
+// were reproduced against the tracked predicate before this note was written.
+// A false negative here is a gate that silently stopped working — the exact
+// defect it exists to catch — while the false positive it trades for is loud and
+// fixed by indenting one space. A marker at column zero is never real content.
 
 /**
  * git writes a label after the opening marker, but tolerate a bare one. Leading
@@ -26,9 +35,6 @@
 const CONFLICT_START = /^\s*<{7}(?:\s|$)/
 /** The closing marker, same shape. */
 const CONFLICT_END = /^\s*>{7}(?:\s|$)/
-
-/** A doc may quote a conflict inside a fence; the fence is not the defect. */
-const FENCE = /^\s{0,3}(?:`{3,}|~{3,})/
 
 /**
  * Lockfiles are generated, can legitimately hold long runs of punctuation, and
@@ -46,7 +52,7 @@ interface Finding {
 }
 
 /**
- * Every conflict marker in one file's contents, ignoring fenced regions.
+ * Every conflict marker in one file's contents.
  *
  * Exported so the selftest drives the same predicate the scan drives; a gate
  * whose selftest exercises a second copy of the logic proves nothing about the
@@ -54,13 +60,7 @@ interface Finding {
  */
 export const markersIn = (file: string, contents: string): readonly Finding[] => {
   const findings: Finding[] = []
-  let fenced = false
   for (const [index, line] of contents.split('\n').entries()) {
-    if (FENCE.test(line)) {
-      fenced = !fenced
-      continue
-    }
-    if (fenced) continue
     if (CONFLICT_START.test(line) || CONFLICT_END.test(line)) {
       findings.push({ file, line: index + 1, text: line.trimEnd() })
     }
@@ -110,20 +110,25 @@ const selftest = (): number => {
     ['labelled closing marker', `- rule two\n\n${close} Stashed changes\n`],
     ['bare opening marker', `${open}\nours\n`],
     ['full conflict', `${open} HEAD\nours\n${middle}\ntheirs\n${close} feature\n`],
-    ['reopened after a closed fence', `\`\`\`\n${open} quoted\n\`\`\`\n${open} real\n`],
     // The shape this gate exists for: AGENTS.md carried the opening marker
     // indented inside a list item, so a column-zero-only pattern saw nothing.
     ['indented opening marker', `- rule one\n  ${open} Updated upstream\n- rule two`],
     ['indented closing marker', `- rule two\n\n  ${close} Stashed changes\n`],
+    // The two false negatives a fence tracker produced, kept as fixtures so no
+    // future reader reintroduces one. Both returned zero findings when the
+    // predicate skipped fenced regions.
+    ['marker after an unterminated fence', `text\n\`\`\`\n${open} HEAD\nours\n`],
+    ['marker after a cross-character fence flip', `\`\`\`\n~~~\n\`\`\`\n${open} HEAD\n`],
+    ['marker inside a backtick fence', `text\n\`\`\`\n${open} HEAD\n${middle}\n${close} other\n\`\`\`\ntext`],
+    ['marker inside a tilde fence', `text\n~~~\n${close} Stashed changes\n~~~\n`],
   ]
   const mustIgnore: readonly (readonly [string, string])[] = [
     ['marker quoted mid-line', `Delete the \`${open} Updated upstream\` marker.`],
     ['setext heading underline', `Release and Commits\n${middle}\n`],
     ['markdown thematic break', '---\n***\n___\n'],
-    ['marker inside a fence', `text\n\`\`\`\n${open} HEAD\n${middle}\n${close} other\n\`\`\`\ntext`],
-    ['marker inside a tilde fence', `text\n~~~\n${close} Stashed changes\n~~~\n`],
     ['shorter run of angle brackets', `${'<'.repeat(6)} not a marker\n${'>'.repeat(6)} nor this\n`],
     ['heredoc-ish redirection', 'cat <<EOF\nbody\nEOF\n'],
+    ['nested markdown blockquote', `> > > > > > > quoted seven deep\n`],
   ]
 
   const missed = mustCatch.filter(([, contents]) => markersIn('fixture', contents).length === 0)
