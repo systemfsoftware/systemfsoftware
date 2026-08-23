@@ -34,9 +34,9 @@ jobs:
       - uses: denoland/setup-deno@v2
       - name: Consume pending change intents
         run: corepack pnpm version -r
-      - name: Capture this-cycle set (KTD1)
+      - name: Capture release set
         run: ./scripts/tools/tag-released-packages.mjs --dry-run --json --output /tmp/captured.json && cat /tmp/captured.json
-      - name: Assert changelogs for this-cycle bumps
+      - name: Assert release notes
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: ./scripts/tools/create-github-releases.mjs --assert --captured /tmp/captured.json
@@ -139,9 +139,9 @@ jobs:
         # Necessary: every package publishes files: ["dist"] against a gitignored
         # dist/ and none carries a prepack hook, so the build is an explicit step.
         run: corepack pnpm build
-      - name: Capture this-cycle set (KTD1)
+      - name: Capture release set
         run: ./scripts/tools/tag-released-packages.mjs --dry-run --json --output /tmp/captured.json && cat /tmp/captured.json
-      - name: Assert changelogs for this-cycle bumps
+      - name: Assert release notes
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: ./scripts/tools/create-github-releases.mjs --assert --captured /tmp/captured.json
