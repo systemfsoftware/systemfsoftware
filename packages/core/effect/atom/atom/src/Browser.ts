@@ -13,7 +13,7 @@ import * as Exit from 'effect/Exit'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import type { Atom, Type, WithoutSerializable, Writable, WriteContext } from './Atom.js'
-import { readable, transform, writable } from './internal/Core.js'
+import { readable, transform, writable } from './AtomCore.js'
 
 // -----------------------------------------------------------------------------
 // Focus

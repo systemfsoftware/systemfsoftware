@@ -4,10 +4,10 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Queue from 'effect/Queue'
 import * as Stream from 'effect/Stream'
-import type * as Atom from '../Atom.js'
-import type { RegistryImpl } from '../Registry.js'
-import * as Result from '../Result.js'
-import { decideNodeFate } from './NodeLifetime.js'
+import type * as Atom from './Atom.js'
+import { decideNodeFate } from './internal/NodeLifetime.js'
+import type { RegistryImpl } from './Registry.js'
+import * as Result from './Result.js'
 
 const notifyListener = (listener: () => void): void => {
   listener()
@@ -28,7 +28,6 @@ const NodeState = {
 } as const
 type NodeState = number
 
-/** @internal */
 export class NodeImpl<A> {
   constructor(
     registry: RegistryImpl,
@@ -537,17 +536,14 @@ class WriteContextImpl<A> implements Atom.WriteContext<A> {
 // batching
 // -----------------------------------------------------------------------------
 
-/** @internal */
 export const BatchPhase = {
   disabled: 0,
   collect: 1,
   commit: 2,
 } as const
 
-/** @internal */
 export type BatchPhase = typeof BatchPhase[keyof typeof BatchPhase]
 
-/** @internal */
 export const batchState = {
   phase: BatchPhase.disabled as BatchPhase,
   depth: 0,
@@ -555,8 +551,7 @@ export const batchState = {
   notify: new Set<NodeImpl<unknown>>(),
 }
 
-/** @internal */
-export function batch(f: () => void): void {
+export function runInternalBatch(f: () => void): void {
   batchState.phase = BatchPhase.collect
   batchState.depth++
   try {

@@ -45,17 +45,8 @@ import {
   TypeId,
   writable,
   WritableTypeId,
-} from './internal/Core.js'
-export {
-  isAtom,
-  isWritable,
-  readable,
-  setIdleTTL,
-  transform,
-  TypeId,
-  writable,
-  WritableTypeId,
-} from './internal/Core.js'
+} from './AtomCore.js'
+export { isAtom, isWritable, readable, setIdleTTL, transform, TypeId, writable, WritableTypeId } from './AtomCore.js'
 import * as Result from 'effect/Result'
 import { AtomRegistry } from './Registry.js'
 import * as Registry from './Registry.js'

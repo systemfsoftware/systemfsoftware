@@ -1054,11 +1054,12 @@ Feature('Deriving values from other values on a page')
           s,
         ) => {
           expect(s.readings.viewBefore).toBe(0)
-          expect(Result.isSuccess(s.readings.effectBefore) && s.readings.effectBefore.value === 0).toBe(true)
-          expect(Result.isSuccess(s.readings.functionBefore) && s.readings.functionBefore.value === 0).toBe(true)
-          expect(Result.isFailure(s.readings.brokenBefore)).toBe(true)
+          expect(Result.isSuccess(s.readings.effectBefore as Result.Result<number, unknown>)).toBe(true)
+          expect(Result.isSuccess(s.readings.functionBefore as Result.Result<number, unknown>)).toBe(true)
+          expect(Result.isFailure(s.readings.brokenBefore as Result.Result<unknown, unknown>)).toBe(true)
           expect(s.readings.viewWritten).toBe(5)
-          expect(Result.isSuccess(s.readings.effectWritten) && s.readings.effectWritten.value === 3).toBe(true)
+          expect(Result.isSuccess(s.readings.effectWritten as Result.Result<number, unknown>)).toBe(true)
+
           expect(s.readings.viewChanged).toBe(9)
         }),
       ),

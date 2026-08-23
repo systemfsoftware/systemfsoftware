@@ -1,7 +1,8 @@
 import type { Context, ESTree } from '@oxlint/plugins'
 
-const REQUIRED_TAG = /@internal\b/
-const FORBIDDEN_TAG = /@internal\b/i
+/** A JSDoc tag at the start of a comment line, not a mid-sentence mention. */
+const REQUIRED_TAG = /^\s*\*?\s*@internal\b/m
+const FORBIDDEN_TAG = /^\s*\*?\s*@Internal\b/im
 
 const commentsCarry = (context: Context, node: ESTree.Node, pattern: RegExp): boolean => {
   for (const comment of context.sourceCode.getCommentsBefore(node)) {

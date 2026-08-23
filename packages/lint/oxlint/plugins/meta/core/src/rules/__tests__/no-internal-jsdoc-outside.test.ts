@@ -37,6 +37,11 @@ ruleTester.run('no-internal-jsdoc-outside', noInternalJsdocOutside, {
       filename: '/repo/pkg/src/mod.ts',
       code: `export const foo = 1\n`,
     },
+    {
+      name: 'Should_StaySilent_When_ProseCommentMentionsTheTag',
+      filename: '/repo/pkg/src/mod.ts',
+      code: `// documents with @category/@since/@internal; teach the tag checker\nexport const foo = 1\n`,
+    },
   ],
   invalid: [
     {

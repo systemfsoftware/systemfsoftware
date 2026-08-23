@@ -16,7 +16,6 @@ import type { Result } from './ResultValues.js'
  * @category schemas
  * @since 4.0.0
  */
-/** @internal */
 export interface Schema<
   Success extends Schema_.Constraint,
   Error extends Schema_.Constraint,
@@ -37,7 +36,6 @@ export interface Schema<
  * @category schemas
  * @since 4.0.0
  */
-/** @internal */
 export const Schema = <
   A extends Schema_.Constraint = typeof Schema_.Never,
   E extends Schema_.Constraint = typeof Schema_.Never,
@@ -185,8 +183,7 @@ export const Schema = <
 
 /**
  * A codec for `Result` values built from the given success and error schemas.
- *
- * @internal
  */
+
 export const schemaCodec = (success: Schema_.Top, error: Schema_.Top): Schema<Schema_.Top, Schema_.Top> =>
   Schema({ success, error })
