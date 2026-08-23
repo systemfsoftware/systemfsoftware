@@ -137,4 +137,42 @@ Feature('Selecting tests related to a mutated file')
         }),
       ),
     )
+
+    scenario(
+      'related mode follows a published package specifier to the mutated file',
+      Gherkin.Do.pipe(
+        Given('a runner on the package-name-imports project with related mode enabled')(
+          'runner',
+          () =>
+            runnerContext('package-name-imports', (options) => {
+              options.vitest.related = true
+            }),
+        ),
+        When('the runner is initialized')('initialized', (s) =>
+          Effect.promise(async () => {
+            await s.runner.sut.init()
+            return s.runner
+          })),
+        When('a dry run is requested for the math source file')(
+          'mathResult',
+          (s) =>
+            Effect.promise(() =>
+              s.runner.sut.dryRun(
+                createDryRunOptions({
+                  files: [path.resolve(s.runner.sandbox.tmpDir, 'src', 'math.ts')],
+                }),
+              )
+            ),
+        ),
+        Then('only the tests that import the package name are reported')((s) => {
+          expectCompleted(s.mathResult)
+          expect(
+            sortTestResults(s.mathResult.tests).map(({ id }) => id),
+          ).toEqual([
+            'src/math.spec.ts#math should support simple addition',
+            'src/math.spec.ts#math should support simple subtraction',
+          ])
+        }),
+      ),
+    )
   })

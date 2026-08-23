@@ -25,6 +25,7 @@ import semver from 'semver'
 import { fileURLToPath } from 'url'
 
 import * as S from 'effect/Schema'
+import { readSandboxSelfAliases, sandboxSelfPlugin } from './sandbox-self-aliases.js'
 import {
   collectTestsFromSuite,
   convertTestToTestResult,
@@ -36,6 +37,7 @@ import {
 import { VitestRunnerOptionsWithStrykerOptions } from './vitest-runner-options-with-stryker-options.js'
 import type { VitestRunnerOptions } from './vitest-runner-options.schema.js'
 import { VitestSectionSchema } from './vitest-runner-options.schema.js'
+
 import { resolveVitest, Vitest, VitestResolver } from './vitest-wrapper.js'
 
 type StrykerNamespace = '__stryker__' | '__stryker2__'
@@ -118,28 +120,39 @@ export class VitestTestRunner implements TestRunner {
       ? path.resolve(projectRoot, this.options.vitest.dir)
       : undefined
 
-    this.ctx = await createVitest('test', {
-      config: this.options.vitest.configFile,
-      // @ts-expect-error threads got renamed to "pool: threads" in vitest 1.0.0
-      threads: true,
-      pool: 'threads',
-      coverage: { enabled: false },
-      poolOptions: {
-        // Since vitest 1.0.0
-        threads: {
-          maxThreads: 1,
-          minThreads: 1,
+    this.ctx = await createVitest(
+      'test',
+      {
+        config: this.options.vitest.configFile,
+        // @ts-expect-error threads got renamed to "pool: threads" in vitest 1.0.0
+        threads: true,
+        pool: 'threads',
+        coverage: { enabled: false },
+        poolOptions: {
+          // Since vitest 1.0.0
+          threads: {
+            maxThreads: 1,
+            minThreads: 1,
+          },
         },
+        maxWorkers: 1,
+        singleThread: false,
+        maxConcurrency: 1,
+        watch: false,
+        root: projectRoot,
+        ...(scanDir === undefined ? {} : { dir: scanDir }),
+        bail: this.options.disableBail ? 0 : 1,
+        onConsoleLog: () => false,
       },
-      maxWorkers: 1,
-      singleThread: false,
-      maxConcurrency: 1,
-      watch: false,
-      root: projectRoot,
-      ...(scanDir === undefined ? {} : { dir: scanDir }),
-      bail: this.options.disableBail ? 0 : 1,
-      onConsoleLog: () => false,
-    })
+      {
+        resolve: {
+          alias: [...readSandboxSelfAliases(projectRoot)],
+          conditions: ['@systemfsoftware/source', 'import'],
+        },
+        plugins: [sandboxSelfPlugin(projectRoot)],
+      },
+    )
+
     this.ctx.provide('globalNamespace', this.globalNamespace)
     this.ctx.provide(
       'isGreaterThanVitest4Point1',

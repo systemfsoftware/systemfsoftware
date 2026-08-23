@@ -10,7 +10,7 @@
   "vitest": {
     "configFile": "vitest.stryker.config.ts",
     "dir": ".",
-    "related": false
+    "related": true
   },
 
   "reporters": [
