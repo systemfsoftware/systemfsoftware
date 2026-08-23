@@ -67,7 +67,6 @@ catalogs:
     # The fork packages' pinned third-party deps; the catalog keeps the name it
     # had when the strykerjs org packages lived here.
     semver: ^7.7.0
-    tslib: ~2.8.0
   attw:
     # @systemfsoftware/arethetypeswrong runs the JS compiler bridge (typescript@6).
     # typescript@7 is the native Go compiler with no JS API; see

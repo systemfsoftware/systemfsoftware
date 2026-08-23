@@ -35,8 +35,7 @@
   ],
   "dependencies": {
     "effect": "catalog:",
-    "mutation-testing-report-schema": "3.7.3",
-    "tslib": "catalog:stryker"
+    "mutation-testing-report-schema": "3.7.3"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",

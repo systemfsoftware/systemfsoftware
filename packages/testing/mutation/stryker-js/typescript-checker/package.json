@@ -8,7 +8,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/testing/mutation/stryker-js/typescript-checker#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "TypeScript checker plugin for Stryker — TS7 native",
+  "description": "TypeScript checker plugin for Stryker \u2014 TS7 native",
   "type": "module",
   "files": [
     "dist",
@@ -35,7 +35,6 @@
     "@systemfsoftware/stryker-js-util": "workspace:^",
     "effect": "catalog:",
     "semver": "catalog:stryker",
-    "tslib": "catalog:stryker",
     "typescript": "catalog:"
   },
   "devDependencies": {

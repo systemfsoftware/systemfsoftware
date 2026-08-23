@@ -47,8 +47,7 @@
   "dependencies": {
     "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
     "@systemfsoftware/stryker-js-util": "workspace:^",
-    "semver": "catalog:stryker",
-    "tslib": "catalog:stryker"
+    "semver": "catalog:stryker"
   },
   "peerDependencies": {
     "vitest": ">=2.0.0"
