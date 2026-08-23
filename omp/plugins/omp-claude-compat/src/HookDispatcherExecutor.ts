@@ -73,10 +73,11 @@ export const onToolResult = (event: ToolResultEvent, ctx: HookSession) =>
     if (!settings) return undefined
     const result = yield* runToolResultHooks(settings, event, ctx)
     if (result.warning === undefined) return undefined
-    return {
+    const patched: ToolResultEventResult = {
       content: [...event.content, { type: 'text' as const, text: result.warning }],
       isError: event.isError,
     }
+    return patched
   })
 
 export const onPrompt = (event: HookPrompt, ctx: HookSession) =>
