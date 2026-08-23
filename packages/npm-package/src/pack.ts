@@ -1,5 +1,5 @@
 import { gzipSync } from 'fflate'
-import type { Package } from './CreatePackage.js'
+import type { Package } from './Package.js'
 
 /**
  * In-process ustar + Gzip (fflate) packer.
@@ -29,8 +29,10 @@ export function packPackage(pkg: Package): Uint8Array {
 }
 
 /**
- * Pack an authored file tree directly. Useful for GlobalSetup and tests that
- * want to avoid the Package mutation of Uint8Array bodies.
+ * Pack an authored file tree directly, without building a {@link Package} first.
+ *
+ * Reading a file through `Package` caches its decoded text, so packing a tree
+ * that carries binary bodies straight from the map avoids that conversion.
  */
 export function packTree(
   files: Record<string, string | Uint8Array>,
@@ -88,7 +90,7 @@ function buildTar(entries: Array<{ name: string; data: Uint8Array }>): Uint8Arra
     encoder.encodeInto('00', header.subarray(263, 265))
 
     let sum = 0
-    for (let i = 0; i < 512; i++) sum += header[i]
+    for (let i = 0; i < 512; i++) sum += header[i] ?? 0
     const chk = sum.toString(8).padStart(6, '0') + '\0 '
     encoder.encodeInto(chk, header.subarray(148, 156))
 
@@ -115,16 +117,18 @@ function buildTar(entries: Array<{ name: string; data: Uint8Array }>): Uint8Arra
 
 function writeOctal(header: Uint8Array, offset: number, length: number, value: number): void {
   const oct = value.toString(8).padStart(length - 1, '0')
-  const enc = new TextEncoder().encode(oct + '\0')
+  const enc = new TextEncoder().encode(`${oct}\0`)
   header.set(enc.subarray(0, length), offset)
 }
-
 function splitUstarName(full: string): { prefix: string; name: string } {
   for (let i = Math.min(155, full.length); i >= 0; i--) {
-    if (full[i] === '/') {
+    if (full.charAt(i) === '/') {
       const prefix = full.slice(0, i)
       const name = full.slice(i + 1)
-      if (new TextEncoder().encode(prefix).byteLength <= 155 && new TextEncoder().encode(name).byteLength <= 100) {
+      if (
+        new TextEncoder().encode(prefix).byteLength <= 155 &&
+        new TextEncoder().encode(name).byteLength <= 100
+      ) {
         return { prefix, name }
       }
     }

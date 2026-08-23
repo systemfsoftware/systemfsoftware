@@ -1,3 +1,24 @@
+---
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    configDependencies:
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: 2.0.0
+        version: 2.0.0
+
+packages:
+
+  '@systemfsoftware/effect-gherkin-spec@2.0.0':
+    resolution: {integrity: sha512-BHDU2CqPOziw7fRv3LxetjCeACQjlBixSHr+QsMUssWDcedSBbCO1elSplL2mhHrGv3Bgtd8bP+v4NTd1u59rQ==}
+
+snapshots:
+
+  '@systemfsoftware/effect-gherkin-spec@2.0.0': {}
+
+---
 lockfileVersion: '9.0'
 
 settings:
@@ -1563,6 +1584,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../testing/specs/gherkin/effect
       '@systemfsoftware/effect-memfs':
         specifier: workspace:^
         version: link:../core/effect/filesystem/memfs

@@ -1,10 +1,5 @@
-import {
-  createPackage,
-  createPackageFromTarballData,
-  packPackage,
-  packTree,
-} from '@systemfsoftware/arethetypeswrong-core'
 import { it, layer, makeFeature, StepError } from '@systemfsoftware/effect-gherkin-spec'
+import { createPackage, createPackageFromTarballData, packPackage, packTree } from '@systemfsoftware/npm-package'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 
