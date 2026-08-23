@@ -1,6 +1,6 @@
 ---
 "@systemfsoftware/arethetypeswrong-cli": minor
-"@systemfsoftware/arethetypeswrong-core": minor
+"@systemfsoftware/arethetypeswrong": minor
 "@systemfsoftware/effect-cell-gen": minor
 "@systemfsoftware/effect-cell-types": minor
 "@systemfsoftware/effect-daemon-spec": minor

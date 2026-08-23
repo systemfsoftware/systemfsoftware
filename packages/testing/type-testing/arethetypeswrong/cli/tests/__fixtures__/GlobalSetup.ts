@@ -1,4 +1,5 @@
-import { packPackage, recipes } from '@systemfsoftware/arethetypeswrong-core'
+import { recipes } from '@systemfsoftware/arethetypeswrong-recipes'
+import { packPackage } from '@systemfsoftware/npm-package'
 import { execFile } from 'node:child_process'
 import { access, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -20,10 +21,10 @@ const execFileAsync = promisify(execFile)
 
 // Manifest-list digest (not the amd64 platform digest) for tag 22-alpine, resolved 2026-08-10.
 const NODE_IMAGE = 'node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32'
-
 const WORKSPACE_PACKAGES = [
   '@systemfsoftware/arethetypeswrong-cli',
-  '@systemfsoftware/arethetypeswrong-core',
+  '@systemfsoftware/arethetypeswrong',
+  '@systemfsoftware/npm-package',
 ] as const
 
 // This file sits in `tests/__fixtures__/`, so the package root is two levels up and

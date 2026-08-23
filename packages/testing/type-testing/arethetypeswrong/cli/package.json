@@ -36,11 +36,13 @@
   "dependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
-    "@systemfsoftware/arethetypeswrong-core": "workspace:*",
+    "@systemfsoftware/arethetypeswrong": "workspace:*",
+    "@systemfsoftware/npm-package": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@systemfsoftware/arethetypeswrong-recipes": "workspace:*",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",

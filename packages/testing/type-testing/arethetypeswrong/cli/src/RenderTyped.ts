@@ -1,4 +1,4 @@
-import type { Problem, ResolutionKind } from '@systemfsoftware/arethetypeswrong-core'
+import type { Problem, ResolutionKind } from '@systemfsoftware/arethetypeswrong'
 import type { AnsiAnnotation } from './RenderAnsi.js'
 import { colorizeCell } from './RenderAnsi.js'
 import { renderFlippedTable, renderTable } from './RenderTable.js'

@@ -1,4 +1,4 @@
-import type { Problem } from '@systemfsoftware/arethetypeswrong-core'
+import type { Problem } from '@systemfsoftware/arethetypeswrong'
 
 import { ComputeExitCodeCommand, ComputeExitCodeDecision } from './GetExitCode.schema.js'
 import { problemFlagForKind } from './ProblemUtils.js'

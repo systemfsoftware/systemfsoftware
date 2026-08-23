@@ -1,4 +1,4 @@
-import type { Problem } from '@systemfsoftware/arethetypeswrong-core'
+import type { Problem } from '@systemfsoftware/arethetypeswrong'
 import { renderTable } from './RenderTable.js'
 import { partitionProblemsByCell, problemsForCell, resolutionKindOrder, symbolForProblem } from './RenderTyped.js'
 

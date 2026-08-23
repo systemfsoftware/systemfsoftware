@@ -1,0 +1,18 @@
+import { Context, Effect, Layer } from 'effect'
+
+export interface LexerAdapterService {
+  readonly init: () => Effect.Effect<void, Error>
+  readonly parseCjsExports: (source: string) => Effect.Effect<readonly string[], Error>
+}
+
+export class LexerAdapter extends Context.Service<LexerAdapter, LexerAdapterService>()(
+  '@systemfsoftware/arethetypeswrong/LexerAdapter',
+) {}
+
+export const LexerAdapterStub: Layer.Layer<LexerAdapter, never, never> = Layer.succeed(
+  LexerAdapter,
+  {
+    init: () => Effect.succeed(undefined),
+    parseCjsExports: (_source) => Effect.succeed([]),
+  },
+)

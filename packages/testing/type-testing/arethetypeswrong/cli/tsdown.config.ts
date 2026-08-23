@@ -12,7 +12,8 @@ export default defineConfig({
   tsconfig: './tsconfig.build.json',
   deps: {
     neverBundle: [
-      '@systemfsoftware/arethetypeswrong-core',
+      '@systemfsoftware/arethetypeswrong',
+      '@systemfsoftware/npm-package',
       'effect',
       '@effect/cli',
       '@effect/printer',

@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/arethetypeswrong-core": major
+"@systemfsoftware/arethetypeswrong": major
 ---
 
 `PackageSpecParseError` is a class you construct rather than a function you call.

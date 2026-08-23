@@ -24,7 +24,7 @@ updates:
     ignore:
       # typescript majors are deliberate migrations, not routine bumps:
       # typescript@7 (native) has no JS compiler API, so
-      # @systemfsoftware/arethetypeswrong-core runs the typescript@6 bridge
+      # @systemfsoftware/arethetypeswrong runs the typescript@6 bridge
       # (catalog:attw); a 7.x major would break it.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]

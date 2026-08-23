@@ -2,10 +2,10 @@ import {
   CheckPackage,
   CheckPackageLive,
   type CheckResult,
-  PackageStoreAdapter,
-  PackageStoreAdapterStub,
+  PackageStore,
+  PackageStoreStub,
   type ResolutionKind,
-} from '@systemfsoftware/arethetypeswrong-core'
+} from '@systemfsoftware/arethetypeswrong'
 import { Effect, Layer, Schema as S } from 'effect'
 import { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 
@@ -150,7 +150,7 @@ export const runAttw = (
     const terminal = yield* Terminal
 
     const { bytes, ref } = yield* acquireTarball(request)
-    const storeLayer = PackageStoreAdapterStub(ref, bytes)
+    const storeLayer = PackageStoreStub(ref, bytes)
     const checkPackageLayer = CheckPackageLive.pipe(Layer.provide(storeLayer))
 
     const checkEffect: Effect.Effect<CheckResult, never, never> = Effect.gen(function*() {
@@ -202,5 +202,5 @@ export const _attwCliExecutorUsed = {
   renderAnalysis,
   prepareAnalysis,
   CheckPackage,
-  PackageStoreAdapter,
+  PackageStore,
 }
