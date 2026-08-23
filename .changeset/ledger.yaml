@@ -3,6 +3,11 @@
   intents:
     - omp-typescript-discipline-plugin
     - refactor-oxlint-all-preset
+"@systemfsoftware/all@1.0.0":
+  dir: packages/lint/oxlint/all
+  intents:
+    - peer-ranges-accept-compatible-rc
+    - tag-members-derive-from-schemas
 "@systemfsoftware/arethetypeswrong-cli@2.0.0":
   dir: packages/arethetypeswrong/cli
   intents:
@@ -25,6 +30,11 @@
     - modern-ends-know
     - projections-collapsed-into-ports
     - rare-shims-relink
+"@systemfsoftware/arethetypeswrong-cli@3.0.1":
+  dir: packages/testing/type-testing/arethetypeswrong/cli
+  intents:
+    - attw-in-memory-package-dsl-cli
+    - cli-hash-bump
 "@systemfsoftware/arethetypeswrong-core@2.0.0":
   dir: packages/arethetypeswrong/core
   intents:
@@ -41,6 +51,13 @@
     - debut-releases-gain-oidc
     - modern-ends-know
     - projections-collapsed-into-ports
+"@systemfsoftware/arethetypeswrong-core@4.0.0":
+  dir: packages/testing/type-testing/arethetypeswrong/core
+  intents:
+    - attw-effect-native-cache
+    - attw-in-memory-package-dsl
+    - package-class-is-public
+    - parse-error-is-constructed
 "@systemfsoftware/effect-atom-react@0.6.0":
   dir: packages/effect-atom/atom-react
   intents:
@@ -61,6 +78,10 @@
     - modern-ends-know
     - owned-not-forked
     - package-landing-pages
+"@systemfsoftware/effect-atom-react@0.7.1":
+  dir: packages/core/effect/atom/atom-react
+  intents:
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/effect-atom@1.0.0":
   dir: packages/effect-atom/atom
   intents:
@@ -89,6 +110,11 @@
     - modern-ends-know
     - owned-not-forked
     - package-landing-pages
+"@systemfsoftware/effect-atom@3.0.0":
+  dir: packages/core/effect/atom/atom
+  intents:
+    - peer-ranges-accept-compatible-rc
+    - published-types-omit-internal
 "@systemfsoftware/effect-cell-gen@0.1.0":
   dir: packages/core/effect/cell/gen
   intents:
@@ -120,6 +146,12 @@
     - wire-alphabet-minted
     - workflow-brand-forced
     - workflow-channels-oblige-at-make
+"@systemfsoftware/effect-cell-types@4.0.0":
+  dir: packages/core/effect/cell/types
+  intents:
+    - peer-ranges-accept-compatible-rc
+    - workflow-command-takes-a-schema-class
+    - workflow-tagged-bound-removed
 "@systemfsoftware/effect-daemon-spec@1.0.0":
   dir: packages/effect-daemon-spec
   intents:
@@ -144,6 +176,12 @@
     - modern-ends-know
     - restart-decision-emitted
     - workflow-constructor-consumers
+"@systemfsoftware/effect-daemon-spec@3.0.0":
+  dir: packages/core/effect/daemon-spec
+  intents:
+    - loop-tags-ship-as-values
+    - peer-ranges-accept-compatible-rc
+    - published-types-omit-internal
 "@systemfsoftware/effect-gherkin-spec@1.0.0":
   dir: packages/effect-gherkin-spec
   intents:
@@ -160,6 +198,10 @@
     - modern-ends-know
     - projections-collapsed-into-ports
     - type-test-scripts
+"@systemfsoftware/effect-gherkin-spec@2.0.1":
+  dir: packages/testing/specs/gherkin/effect
+  intents:
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/effect-memfs@1.2.0":
   dir: packages/effect-memfs
   intents:
@@ -178,6 +220,10 @@
     - memfs-shape-emitted
     - modern-ends-know
     - package-landing-pages
+"@systemfsoftware/effect-memfs@1.3.1":
+  dir: packages/core/effect/filesystem/memfs
+  intents:
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/effect-schema-extensions@0.8.0":
   dir: packages/effect-schema-extensions
   intents:
@@ -188,6 +234,10 @@
   intents:
     - debut-releases-gain-oidc
     - modern-ends-know
+"@systemfsoftware/effect-schema-extensions@0.9.1":
+  dir: packages/core/effect/schema/extensions
+  intents:
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/effect-schema-law@0.7.0":
   dir: packages/effect-schema-law
   intents:
@@ -200,6 +250,11 @@
     - array-type-spelling
     - debut-releases-gain-oidc
     - modern-ends-know
+"@systemfsoftware/effect-schema-law@0.9.0":
+  dir: packages/core/effect/schema/law
+  intents:
+    - peer-ranges-accept-compatible-rc
+    - public-names-stay-public
 "@systemfsoftware/effect-schema-vite@1.5.2":
   dir: packages/effect-schema-vite
   intents:
@@ -218,6 +273,10 @@
     - package-landing-pages
     - schema-vite-skip-use-combinators
     - schema-vite-use-call-member-access
+"@systemfsoftware/effect-schema-vite@1.5.4":
+  dir: packages/core/effect/schema/vite
+  intents:
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/hex-schema@1.7.0":
   dir: packages/hex-schema
   intents:
@@ -232,6 +291,10 @@
     - hex-codec-kernel
     - modern-ends-know
     - package-landing-pages
+"@systemfsoftware/hex-schema@1.8.1":
+  dir: packages/core/hex/hex-schema
+  intents:
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/omp-agent-discipline@2.0.0":
   dir: omp/plugins/omp-agent-discipline
   intents:
@@ -239,6 +302,11 @@
     - modern-ends-know
     - package-landing-pages
     - projections-collapsed-into-ports
+"@systemfsoftware/omp-agent-discipline@2.1.0":
+  dir: omp/plugins/omp-agent-discipline
+  intents:
+    - omp-test-api-subpath
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/omp-claude-compat@2.0.0":
   dir: omp/plugins/omp-claude-compat
   intents:
@@ -250,6 +318,11 @@
     - projections-collapsed-into-ports
     - workflow-brand-forced
     - workflow-constructor-consumers
+"@systemfsoftware/omp-claude-compat@2.1.0":
+  dir: omp/plugins/omp-claude-compat
+  intents:
+    - omp-test-api-subpath
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/omp-typescript-discipline@1.0.0":
   dir: omp/plugins/omp-typescript-discipline
   intents:
@@ -273,6 +346,10 @@
     - debut-releases-gain-oidc
     - near-miss-contract-promoted
     - package-landing-pages
+"@systemfsoftware/oxlint-plugin-cell-vocabulary@1.2.1":
+  dir: packages/lint/oxlint/plugins/cells/cell-vocabulary
+  intents:
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/oxlint-plugin-effect-dmmf@2.0.0":
   dir: packages/oxlint-plugins/effect-dmmf
   intents:
@@ -293,6 +370,11 @@
     - law-blocks-keep-in-source
     - workflow-convention-restoration
     - workflow-rules-become-unreachable
+"@systemfsoftware/oxlint-plugin-effect-dmmf@4.0.0":
+  dir: packages/lint/oxlint/plugins/meta/effect-dmmf
+  intents:
+    - dmmf-carries-the-command-rule
+    - tag-members-derive-from-schemas
 "@systemfsoftware/oxlint-plugin-effect-entrypoint@1.0.3":
   dir: packages/oxlint-plugins/effect-entrypoint
   intents:
@@ -303,6 +385,10 @@
   intents:
     - array-type-spelling
     - debut-releases-gain-oidc
+"@systemfsoftware/oxlint-plugin-effect-entrypoint@1.0.5":
+  dir: packages/lint/oxlint/plugins/effect/entrypoint
+  intents:
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/oxlint-plugin-effect-schema@2.0.0":
   dir: packages/oxlint-plugins/effect-schema
   intents:
@@ -321,6 +407,11 @@
     - modern-ends-know
     - rule-overrejection-fixes
     - workflow-convention-restoration
+"@systemfsoftware/oxlint-plugin-effect-schema@4.0.0":
+  dir: packages/lint/oxlint/plugins/effect/schema
+  intents:
+    - peer-ranges-accept-compatible-rc
+    - tag-members-derive-from-schemas
 "@systemfsoftware/oxlint-plugin-effect-workflow@2.0.0":
   dir: packages/oxlint-plugins/effect-workflow
   intents:
@@ -341,6 +432,11 @@
     - near-miss-contract-promoted
     - workflow-convention-restoration
     - workflow-rules-become-unreachable
+"@systemfsoftware/oxlint-plugin-effect-workflow@4.0.0":
+  dir: packages/lint/oxlint/plugins/cells/effect-workflow
+  intents:
+    - command-position-rule-ships
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/oxlint-plugin-property-testing@1.2.0":
   dir: packages/oxlint-plugins/property-testing
   intents:
@@ -353,6 +449,10 @@
     - array-type-spelling
     - debut-releases-gain-oidc
     - modern-ends-know
+"@systemfsoftware/oxlint-plugin-property-testing@1.3.1":
+  dir: packages/lint/oxlint/plugins/testing/property-testing
+  intents:
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/oxlint-plugin-recommended@1.1.2":
   dir: packages/oxlint-plugins/recommended
   intents:
@@ -373,6 +473,10 @@
   intents:
     - debut-releases-gain-oidc
     - package-landing-pages
+"@systemfsoftware/oxlint-plugin-test-hygiene@1.1.5":
+  dir: packages/lint/oxlint/plugins/testing/test-hygiene
+  intents:
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/oxlint-plugin-test-placement@2.0.0":
   dir: packages/oxlint-plugins/test-placement
   intents:
@@ -393,6 +497,11 @@
     - law-blocks-keep-in-source
     - modern-ends-know
     - workflow-convention-restoration
+"@systemfsoftware/oxlint-plugin-test-placement@3.1.0":
+  dir: packages/lint/oxlint/plugins/testing/test-placement
+  intents:
+    - internal-surface-rules
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/oxlint-plugin@1.0.0":
   dir: packages/oxlint-plugins/core
   intents:
@@ -415,6 +524,12 @@
     - make-boundary-regime
     - modern-ends-know
     - rule-overrejection-fixes
+"@systemfsoftware/oxlint-plugin@2.1.0":
+  dir: packages/lint/oxlint/plugins/meta/core
+  intents:
+    - branching-density-exempts-two-argument-bodies
+    - internal-surface-rules
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/rx-effect@0.6.0":
   dir: packages/rx-effect
   intents:
@@ -427,6 +542,10 @@
     - array-type-spelling
     - debut-releases-gain-oidc
     - modern-ends-know
+"@systemfsoftware/rx-effect@0.7.1":
+  dir: packages/core/effect/rx/rx-effect
+  intents:
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/storybook-gherkin@1.0.0":
   dir: packages/storybook-gherkin
   intents:
@@ -441,6 +560,10 @@
     - modern-ends-know
     - package-landing-pages
     - storybook-gherkin-effect-v4
+"@systemfsoftware/storybook-gherkin@2.0.1":
+  dir: packages/testing/specs/gherkin/storybook
+  intents:
+    - peer-ranges-accept-compatible-rc
 "@systemfsoftware/stryker-js-cli@2.0.0":
   dir: packages/stryker-js/cli
   intents:
@@ -467,6 +590,11 @@
     - survivors-emitted
     - workflow-brand-forced
     - workflow-constructor-consumers
+"@systemfsoftware/stryker-js-cli@3.0.1":
+  dir: packages/testing/mutation/stryker-js/cli
+  intents:
+    - malformed-prior-report-stops-the-run
+    - stryker-cli-boolean-flags-optional
 "@systemfsoftware/stryker-js-mutation-report@1.2.6":
   dir: packages/stryker-js/mutation-report
   intents:
@@ -501,6 +629,13 @@
     - package-landing-pages
     - published-packages-ship-only-what-runs
     - stryker-options-defaults-and-validation
+"@systemfsoftware/stryker-js-mutation-run@4.0.0":
+  dir: packages/testing/mutation/stryker-js/mutation-run
+  intents:
+    - mutation-run-drops-contribution-gate
+    - peer-ranges-accept-compatible-rc
+    - public-names-stay-public
+    - test-contribution-entry
 "@systemfsoftware/stryker-js-plugin-api@1.0.0":
   dir: packages/stryker-js/plugin-api
   intents:
@@ -517,6 +652,10 @@
     - package-landing-pages
     - published-packages-ship-only-what-runs
     - stryker-options-defaults-and-validation
+"@systemfsoftware/stryker-js-plugin-api@2.1.0":
+  dir: packages/testing/mutation/stryker-js/plugin-api
+  intents:
+    - plugin-api-evaluator-kind
 "@systemfsoftware/stryker-js-typescript-checker@1.3.0":
   dir: packages/stryker-js/typescript-checker
   intents:
@@ -545,6 +684,10 @@
     - debut-releases-gain-oidc
     - package-landing-pages
     - published-packages-ship-only-what-runs
+"@systemfsoftware/stryker-js-vitest-runner@0.1.3":
+  dir: packages/testing/mutation/stryker-js/vitest-runner
+  intents:
+    - sandbox-self-aliases
 "@systemfsoftware/stryker-plugins@0.12.0":
   dir: packages/stryker-plugins
   intents:
@@ -565,6 +708,14 @@
     - schema-class-brand-ignored
     - type-test-scripts
     - workflow-make-boundary-ignorer
+"@systemfsoftware/stryker-plugins@0.13.1":
+  dir: packages/testing/mutation/plugins/stryker-plugins
+  intents:
+    - peer-ranges-accept-compatible-rc
+"@systemfsoftware/stryker-test-contribution@0.1.0":
+  dir: packages/testing/mutation/plugins/stryker-test-contribution
+  intents:
+    - stryker-test-contribution-addon
 "@systemfsoftware/tsconfig@1.3.2":
   dir: packages/tsconfig
   intents:
