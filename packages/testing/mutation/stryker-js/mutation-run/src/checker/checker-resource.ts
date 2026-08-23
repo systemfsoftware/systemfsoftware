@@ -2,7 +2,6 @@ import type { CheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
 import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
 import type * as Effect from 'effect/Effect'
 
-import type { Resource } from '../worker-pool/pool.js'
 import type { ChildProcessCrashedError, OutOfMemoryError } from '../worker-pool/worker-pool.schema.js'
 
 /** How a pooled checker can fail: its worker crashed, either way round. */
@@ -11,14 +10,12 @@ export type CheckerCrash = ChildProcessCrashedError | OutOfMemoryError
 /**
  * A checker held by the pool.
  *
- * `Effect` rather than `Promise` for the reason the whole engine moved: the
- * pool has to be able to interrupt a checker mid-call when the run is
- * cancelled, and it cannot interrupt work that has already started.
- *
- * The error channel names both crash variants rather than `unknown`, which is
- * what lets the retry combinator prove it handles every one of them.
+ * The pool must be able to interrupt a checker mid-call when the run is
+ * cancelled, so the port uses Effect, which can be interrupted, where a Promise
+ * cannot. The error channel names both crash variants rather than `unknown`,
+ * which lets the retry combinator prove it handles every one of them.
  */
-export interface CheckerResourceService extends Resource {
+export interface CheckerResourceService {
   readonly check: (
     checkerName: string,
     mutants: readonly Mutant[],

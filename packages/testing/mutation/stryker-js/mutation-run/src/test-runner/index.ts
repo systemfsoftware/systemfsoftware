@@ -36,9 +36,8 @@ export interface TestRunnerBuildContext {
  * The command runner, wrapped in the two adjustments that apply to it.
  *
  * No reuse limit and no environment reload, because every call is a new
- * process: there is nothing to reuse and nothing loaded to reload. The class
- * chain said that by omission, as the shape of one branch of a nested
- * constructor expression; here it is the list of combinators applied.
+ * process: there is nothing to reuse and nothing loaded to reload. The
+ * combinators applied are the list that remains.
  *
  * The spawner is provided into each operation here rather than appearing in the
  * port's `R`. A port that named its own dependencies would make every consumer
@@ -69,13 +68,11 @@ const commandRunner = (
 /**
  * Build the test runner this run's options select.
  *
- * The order is the class chain's, read outwards from the base: timeout is
- * innermost so a retry re-runs the timeout, reuse counting sits above the reload
- * decision so a reload does not reset the count, and retry is outermost so it
- * can restart a runner any inner layer gave up on.
- *
- * As a pipeline rather than five nested `new` expressions, that order is a list
- * a reader can check against this sentence.
+ * The order is: timeout is innermost so a retry re-runs the timeout, reuse
+ * counting sits above the reload decision so a reload does not reset the
+ * count, and retry is outermost so it can restart a runner any inner layer
+ * gave up on. As a pipeline, that order is a list a reader can check against
+ * this sentence.
  */
 export const buildTestRunner = (
   context: TestRunnerBuildContext,

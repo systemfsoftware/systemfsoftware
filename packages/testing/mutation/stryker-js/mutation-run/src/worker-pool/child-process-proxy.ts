@@ -2,6 +2,7 @@ import { Schema as S } from 'effect'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import type { PlatformError } from 'effect/PlatformError'
 import * as Ref from 'effect/Ref'
 import * as Scope from 'effect/Scope'
 import * as Sink from 'effect/Sink'
@@ -23,6 +24,7 @@ import {
   WorkerConnectTimeoutError,
   WorkerMethodError,
   WorkerReplySchema,
+  WorkerSocketListenFailed,
   WorkerSocketNotTcpError,
 } from './worker-protocol.schema.js'
 
@@ -98,6 +100,12 @@ const spawnFn = (command: ChildProcess.Command) =>
   })
 
 const spawner = ChildProcessSpawner.make(spawnFn)
+/** Every way acquiring a worker can fail before it is usable. */
+export type ChildProcessProxyError =
+  | WorkerSocketNotTcpError
+  | WorkerSocketListenFailed
+  | WorkerConnectTimeoutError
+  | PlatformError
 
 export const makeChildProcessProxy = <T>(params: {
   modulePath: string
@@ -110,7 +118,7 @@ export const makeChildProcessProxy = <T>(params: {
   logger: Logger
   execArgv: readonly string[]
   idGenerator: IdGenerator
-}): Effect.Effect<ChildProcessProxyShape<T>, unknown, Scope.Scope> =>
+}): Effect.Effect<ChildProcessProxyShape<T>, ChildProcessProxyError, Scope.Scope> =>
   Effect.gen(function*() {
     const stdoutRef = yield* Ref.make('')
     const stderrRef = yield* Ref.make('')
@@ -127,7 +135,7 @@ export const makeChildProcessProxy = <T>(params: {
     const needsStripTypes = workerMainPath.endsWith('.ts')
 
     const server = yield* Effect.acquireRelease(
-      Effect.callback<net.Server, unknown>((resume) => {
+      Effect.callback<net.Server, WorkerSocketListenFailed>((resume) => {
         const srv = net.createServer((socket) => {
           socket.setEncoding('utf-8')
           let buffer = ''
@@ -196,9 +204,13 @@ export const makeChildProcessProxy = <T>(params: {
           resume(Effect.succeed(srv))
         })
         srv.on('error', (cause) => {
-          resume(Effect.fail(cause))
+          resume(Effect.fail(new WorkerSocketListenFailed({ cause })))
         })
-        return Effect.sync(() => srv)
+        // Interrupted while `listen` is still pending: close the half-bound
+        // server, so no socket is left bound with nobody holding it.
+        return Effect.sync(() => {
+          srv.close()
+        })
       }),
       (srv) => Effect.sync(() => srv.close()),
     )

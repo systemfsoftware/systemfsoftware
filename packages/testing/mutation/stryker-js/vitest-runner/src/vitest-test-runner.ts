@@ -4,33 +4,25 @@ import {
   MutantCoverage,
   StrykerOptions,
 } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
-import { commonTokens, Injector, SandboxPluginContext, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import {
   determineHitLimitReached,
-  DryRunOptions,
   DryRunResult,
   DryRunStatus,
-  MutantRunOptions,
-  MutantRunResult,
   TestRunner,
-  TestRunnerCapabilities,
   TestStatus,
   toMutantRunResult,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
-import {
-  errorToString,
-  escapeRegExp,
-  normalizeFileName,
-  notEmpty,
-  testFilesProvided,
-} from '@systemfsoftware/stryker-js-util'
+import { TestRunnerFailed } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { errorToString, escapeRegExp, normalizeFileName, testFilesProvided } from '@systemfsoftware/stryker-js-util'
+import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
+import * as Option from 'effect/Option'
+import * as Ref from 'effect/Ref'
+import * as S from 'effect/Schema'
 import fs from 'fs'
 import path from 'path'
-import semver from 'semver'
 import { fileURLToPath } from 'url'
 
-import * as S from 'effect/Schema'
 import { readSandboxSelfAliases, sandboxSelfPlugin } from './sandbox-self-aliases.js'
 import {
   collectTestsFromSuite,
@@ -40,357 +32,448 @@ import {
   normalizeCoverage,
   VITEST_ERROR_CODES,
 } from './vitest-helpers.js'
-import { VitestRunnerOptionsWithStrykerOptions } from './vitest-runner-options-with-stryker-options.js'
-import type { VitestRunnerOptions } from './vitest-runner-options.schema.js'
 import { VitestSectionSchema } from './vitest-runner-options.schema.js'
 
-import { resolveVitest, Vitest, VitestResolver } from './vitest-wrapper.js'
+import type { Vitest } from 'vitest/node'
+import { resolveVitest, type VitestResolver } from './vitest-wrapper.js'
 
 type StrykerNamespace = '__stryker__' | '__stryker2__'
 const STRYKER_SETUP = fileURLToPath(
   new URL('./stryker-setup.mjs', import.meta.url),
 )
 
-/**
- * Applies the section codec at the point of use: the schema module declares the
- * shape, the caller decodes. `undefined` survives the optional wrapper when the
- * whole section is absent, so the default is restated here.
- *
- * `Sync` is deliberate and is the narrow exemption, not the default: this runs in
- * a plugin constructor that Stryker calls before any Effect runtime exists, and a
- * malformed `vitest` section in the user's config must abort the run loudly rather
- * than be carried forward as a value. Everywhere with a runtime to thread the
- * failure through, `S.decode(...)` and the error channel are the answer.
- */
-const decodeVitestOptions = (input: unknown): VitestRunnerOptions => {
-  const options = S.decodeUnknownSync(VitestSectionSchema)(input)
-  return options === undefined ? { related: true } : options
+export const shouldUseSuiteMetaSecondArg = (version: string): boolean => {
+  const parts = version.split('.')
+  const major = Number(parts[0] ?? '0')
+  const minor = Number(parts[1] ?? '0')
+  if (Number.isNaN(major) || Number.isNaN(minor)) {
+    return false
+  }
+  return major > 4 || (major === 4 && minor >= 1)
 }
 
 interface RunFilter {
-  /**
-   * Run only tests with the specified IDs
-   */
   testIds?: string[]
-  /**
-   * Run only tests that cover a list of source files
-   * @see https://vitest.dev/guide/cli.html#vitest-related
-   */
   relatedFiles?: string[]
-  /**
-   * Run only tests from the specified test files (absolute paths)
-   */
   testFiles?: string[]
 }
 
-export class VitestTestRunner implements TestRunner {
-  public static inject = [
-    commonTokens.options,
-    commonTokens.logger,
-    'globalNamespace',
-    commonTokens.sandboxDirectory,
-  ] as const
-  private ctx?: Vitest
-  private readonly options: VitestRunnerOptionsWithStrykerOptions
-  private localSetupFile?: string
+interface RunnerState {
+  ctx: Vitest | undefined
+  localSetupFile: string | undefined
+}
 
-  constructor(
-    options: StrykerOptions,
-    private readonly log: Logger,
-    private globalNamespace: StrykerNamespace,
-    private readonly sandboxDirectory: string,
-    private readonly resolveVitestFor: VitestResolver = resolveVitest,
-  ) {
-    this.options = {
-      ...options,
-      vitest: decodeVitestOptions(options.vitest),
-    }
-  }
+import {
+  CoverageDecodeFailed,
+  HitCountMetaSchema,
+  MutantCoverageMetaSchema,
+  MutantCoverageShapeSchema,
+} from './vitest-runner-coverage.schema.js'
 
-  public capabilities(): TestRunnerCapabilities {
-    return { reloadEnvironment: true }
-  }
+const experimentalStateGetFiles = (vitest: Vitest): readonly unknown[] => (vitest.state.getFiles())
 
-  public async init(): Promise<void> {
-    this.setEnv()
-    const projectRoot = this.sandboxDirectory
-    // Anchored at the project root, never the scan dir: a consumer-supplied
-    // `vitest.dir` subdirectory must not move the file Vitest's setup runs.
-    const localSetupFile = path.resolve(projectRoot, `stryker-setup-${process.pid}.js`)
-    this.localSetupFile = localSetupFile
-    await fs.promises.copyFile(STRYKER_SETUP, localSetupFile)
-
-    const { createVitest, version } = await this.resolveVitestFor(projectRoot)
-
-    const scanDir = this.options.vitest.dir
-      ? path.resolve(projectRoot, this.options.vitest.dir)
-      : undefined
-
-    this.ctx = await createVitest(
-      'test',
-      {
-        config: this.options.vitest.configFile,
-        // @ts-expect-error threads got renamed to "pool: threads" in vitest 1.0.0
-        threads: true,
-        pool: 'threads',
-        coverage: { enabled: false },
-        poolOptions: {
-          // Since vitest 1.0.0
-          threads: {
-            maxThreads: 1,
-            minThreads: 1,
-          },
-        },
-        maxWorkers: 1,
-        singleThread: false,
-        maxConcurrency: 1,
-        watch: false,
-        root: projectRoot,
-        ...(scanDir === undefined ? {} : { dir: scanDir }),
-        bail: this.options.disableBail ? 0 : 1,
-        onConsoleLog: () => false,
-      },
-      {
-        resolve: {
-          alias: [...readSandboxSelfAliases(projectRoot)],
-          conditions: ['@systemfsoftware/source', 'import'],
-        },
-        plugins: [sandboxSelfPlugin(projectRoot)],
-      },
-    )
-
-    this.ctx.provide('globalNamespace', this.globalNamespace)
-    this.ctx.provide(
-      'isGreaterThanVitest4Point1',
-      semver.satisfies(version, '>=4.1.0'),
-    )
-    this.ctx.config.browser.screenshotFailures = false
-    this.ctx.projects.forEach((project) => {
-      project.config.setupFiles = [
-        localSetupFile,
-        ...project.config.setupFiles,
-      ]
-      project.config.browser.screenshotFailures = false
-    })
-    if (this.log.isDebugEnabled()) {
-      this.log.debug(
-        `vitest final config: ${JSON.stringify(this.ctx.config, null, 2)}`,
-      )
-    }
-  }
-
-  public async dryRun(options: DryRunOptions): Promise<DryRunResult> {
-    this.requireCtx().provide('mode', 'dry-run')
-
-    // If testFilter is provided, use those files directly instead of relying on related files
-    // We still need to pass relatedFiles for vitest to properly resolve the test files
-    const testResult = testFilesProvided(options)
-      ? await this.run({
-        testFiles: options.testFiles,
-        relatedFiles: options.files,
-      })
-      : await this.run({ relatedFiles: options.files })
-    if (
-      testResult.status === DryRunStatus.Complete &&
-      testResult.tests.length === 0 &&
-      this.options.vitest.related &&
-      !options.testFiles
-    ) {
-      this.log.warn(
-        'Vitest failed to find test files related to mutated files. Either disable `vitest.related` or import your source files directly from your test files. See https://stryker-mutator.io/docs/stryker-js/troubleshooting/#vitest-failed-to-find-test-files-related-to-mutated-files',
-      )
-    }
-    const mutantCoverage = this.readMutantCoverage()
-    if (testResult.status === DryRunStatus.Complete) {
-      return {
-        status: testResult.status,
-        tests: testResult.tests,
-        mutantCoverage,
-      }
-    }
-    return testResult
-  }
-
-  public async mutantRun(options: MutantRunOptions): Promise<MutantRunResult> {
-    this.requireCtx().provide('mode', 'mutant')
-    this.requireCtx().provide('hitLimit', options.hitLimit)
-    this.requireCtx().provide('mutantActivation', options.mutantActivation)
-    this.requireCtx().provide('activeMutant', options.activeMutant.id)
-    const dryRunResult = await this.run({
-      testIds: options.testFilter,
-      relatedFiles: [options.sandboxFileName],
-    })
-    const hitCount = this.readHitCount()
-    const timeOut = determineHitLimitReached(hitCount, options.hitLimit)
-    return toMutantRunResult(timeOut ?? dryRunResult)
-  }
-
-  private async run({
-    testIds = [],
-    relatedFiles,
-    testFiles: explicitTestFiles,
-  }: RunFilter = {}): Promise<DryRunResult> {
-    const ctx = this.requireCtx()
-    this.resetContext()
-    ctx.config.related = this.options.vitest.related && relatedFiles
-      ? relatedFiles.map(normalizeFileName)
-      : undefined
-    let testFilesToRun: string[] | undefined = explicitTestFiles
-    if (testIds.length > 0) {
-      const parsedTests = testIds.map(fromTestId)
-      const regexTestNameFilter = parsedTests
-        .map(({ test: name }) => escapeRegExp(name))
-        .join('|')
-      const regex = new RegExp(regexTestNameFilter)
-      // Id file parts are root-relative, but Vitest matches filters against
-      // the scan dir; absolute paths hit filterFiles' absolute branch.
-      testFilesToRun = parsedTests.map(({ file }) => path.resolve(this.sandboxDirectory, file))
-      ctx.projects.forEach((project) => {
-        project.config.testNamePattern = regex
-      })
-    } else {
-      ctx.projects.forEach((project) => {
-        project.config.testNamePattern = undefined
-      })
-    }
-    try {
-      await ctx.start(testFilesToRun)
-    } catch (error) {
-      if (
-        // No tests found, this isn't a problem, we can continue
-        !isErrorCodeError(error) ||
-        VITEST_ERROR_CODES.FILES_NOT_FOUND !== error.code
-      ) {
-        throw error
-      }
-    }
-
-    const tests = ctx.state.getFiles()
-      .flatMap((file) => collectTestsFromSuite(file))
-      .filter((test) => test.result) // if no result: it was skipped because of bail
-
-    let failure = false
-    const testResults = tests.map((test) => {
-      const testResult = convertTestToTestResult(test, this.sandboxDirectory)
-      failure ||= testResult.status === TestStatus.Failed
-      return testResult
-    })
-
-    if (!failure && ctx.state.errorsSet.size > 0) {
-      const errorText = [...ctx.state.errorsSet]
-        .map(errorToString)
-        .join('\n')
-      return {
-        status: DryRunStatus.Error,
-        errorMessage: `An error occurred outside of a test run: ${errorText}`,
-      }
-    }
-    return { tests: testResults, status: DryRunStatus.Complete }
-  }
-
-  private setEnv() {
-    // Set node environment for issues like these: https://github.com/stryker-mutator/stryker-js/issues/4289
-    process.env.NODE_ENV = 'test'
-    // Set vitest environment to signal that we are running in vitest
-    // as some plugins only initiate when this is set: https://github.com/testing-library/svelte-testing-library/blob/6096f05e805cf55474f52f303562f4013785d25f/src/vite.js#L20
-    process.env.VITEST = '1'
-  }
-
-  private requireCtx(): Vitest {
-    if (this.ctx === undefined) {
-      throw new Error(
-        'VitestTestRunner is not initialized; call init() before running tests',
-      )
-    }
-    return this.ctx
-  }
-
-  private resetContext() {
-    // Clear the state from the previous run
-    // Note that this is kind of a hack, see https://github.com/vitest-dev/vitest/discussions/3017#discussioncomment-5901751
-    this.requireCtx().state.filesMap.clear()
-  }
-
-  private readHitCount() {
-    const hitCounters: number[] = this.requireCtx().state.getFiles()
-      .map((file) => (file.meta as { hitCount?: number }).hitCount)
-      .filter(notEmpty)
-
-    return hitCounters.reduce((acc, hitCount) => acc + hitCount, 0)
-  }
-
-  private readMutantCoverage(): MutantCoverage {
-    // Read coverage from all projects
-    const ctx = this.requireCtx()
-    const coverages: MutantCoverage[] = [
-      ...new Map(
-        ctx.state.getFiles().map(
-          (file) => [`${file.projectName}-${file.name}`, file] as const,
-        ),
-      ).entries(),
-    ]
-      .map(
-        ([, file]) => (file.meta as { mutantCoverage?: MutantCoverage }).mutantCoverage,
-      )
-      .filter(notEmpty)
-      .map((coverage) => normalizeCoverage(coverage, this.sandboxDirectory))
-
-    if (coverages.length > 1) {
-      return coverages.reduce((acc, projectCoverage) => {
-        // perTest contains the coverage per test id
-        Object.entries(projectCoverage.perTest).forEach(
-          ([testId, testCoverage]) => {
-            if (testId in acc.perTest) {
-              // Keys are mutant ids, the numbers are the amount of times it was hit.
-              mergeCoverage(acc.perTest[testId], testCoverage)
-            } else {
-              acc.perTest[testId] = testCoverage
-            }
-          },
-        )
-        mergeCoverage(acc.static, projectCoverage.static)
-        return acc
-      })
-    }
-    return coverages[0]
-
-    function mergeCoverage(to: CoverageData, from: CoverageData) {
-      Object.entries(from).forEach(([mutantId, hitCount]) => {
-        if (mutantId in to) {
-          to[mutantId] += hitCount
-        } else {
-          to[mutantId] = hitCount
+const experimentalStateClearFiles = (vitest: unknown): void => {
+  if (typeof vitest === 'object' && vitest !== null && 'state' in vitest) {
+    const state = Reflect.get(vitest, 'state')
+    if (typeof state === 'object' && state !== null && 'filesMap' in state) {
+      const filesMap = Reflect.get(state, 'filesMap')
+      if (filesMap instanceof Map) {
+        filesMap.clear()
+      } else if (typeof filesMap === 'object' && filesMap !== null && 'clear' in filesMap) {
+        const clear = Reflect.get(filesMap, 'clear')
+        if (typeof clear === 'function') {
+          Reflect.apply(clear, filesMap, [])
         }
-      })
-    }
-  }
-
-  public async dispose(): Promise<void> {
-    const localSetupFile = this.localSetupFile
-    this.ctx?.onClose(async () => {
-      if (localSetupFile !== undefined) {
-        await fs.promises.rm(localSetupFile, { force: true })
       }
-    })
-    await this.ctx?.close()
+    }
   }
 }
 
-export const vitestTestRunnerFactory = createVitestTestRunnerFactory()
-
-export function createVitestTestRunnerFactory(
-  namespace:
-    | typeof INSTRUMENTER_CONSTANTS.NAMESPACE
-    | '__stryker2__' = INSTRUMENTER_CONSTANTS.NAMESPACE,
-): {
-  (injector: Injector<SandboxPluginContext>): VitestTestRunner
-  inject: ['$injector']
-} {
-  createVitestTestRunner.inject = tokens(commonTokens.injector)
-  function createVitestTestRunner(injector: Injector<SandboxPluginContext>) {
-    return injector
-      .provideValue('globalNamespace', namespace)
-      .injectClass(VitestTestRunner)
+const experimentalStateHasExternalErrors = (vitest: unknown): boolean => {
+  if (typeof vitest === 'object' && vitest !== null && 'state' in vitest) {
+    const state = Reflect.get(vitest, 'state')
+    if (typeof state === 'object' && state !== null && 'errorsSet' in state) {
+      const errorsSet = Reflect.get(state, 'errorsSet')
+      if (errorsSet instanceof Set) {
+        return errorsSet.size > 0
+      }
+      if (typeof errorsSet === 'object' && errorsSet !== null && 'size' in errorsSet) {
+        const size = Reflect.get(errorsSet, 'size')
+        return typeof size === 'number' ? size > 0 : false
+      }
+    }
   }
-  return createVitestTestRunner
+  return false
+}
+
+const experimentalStateGetExternalErrorText = (vitest: unknown): string => {
+  if (typeof vitest === 'object' && vitest !== null && 'state' in vitest) {
+    const state = Reflect.get(vitest, 'state')
+    if (typeof state === 'object' && state !== null && 'errorsSet' in state) {
+      const errorsSet = Reflect.get(state, 'errorsSet')
+      if (errorsSet instanceof Set) {
+        return [...errorsSet].map(errorToString).join('\n')
+      }
+      const isIterable = (value: unknown): value is Iterable<unknown> =>
+        typeof value === 'object' &&
+        value !== null &&
+        Symbol.iterator in value &&
+        typeof Reflect.get(value, Symbol.iterator) === 'function'
+      if (isIterable(errorsSet)) {
+        return [...errorsSet].map(errorToString).join('\n')
+      }
+    }
+  }
+  return ''
+}
+
+const applyRunFilterToConfig = (
+  vitest: Vitest,
+  options: { related: string[] | undefined; testNamePattern: RegExp | undefined },
+): void => {
+  Reflect.set(vitest.config, 'related', options.related)
+  for (const project of vitest.projects) {
+    Reflect.set(project.config, 'testNamePattern', options.testNamePattern)
+  }
+}
+
+const applySetupFilesToProjects = (vitest: Vitest, localSetupFile: string): void => {
+  const browser = Reflect.get(vitest.config, 'browser')
+  if (typeof browser === 'object' && browser !== null) {
+    Reflect.set(browser, 'screenshotFailures', false)
+  }
+  for (const project of vitest.projects) {
+    const setupFilesRaw = Reflect.get(project.config, 'setupFiles')
+    const files = Array.isArray(setupFilesRaw)
+      ? setupFilesRaw.filter((x: unknown): x is string => typeof x === 'string')
+      : []
+    Reflect.set(project.config, 'setupFiles', [localSetupFile, ...files])
+    const pBrowser = Reflect.get(project.config, 'browser')
+    if (typeof pBrowser === 'object' && pBrowser !== null) {
+      Reflect.set(pBrowser, 'screenshotFailures', false)
+    }
+  }
+}
+
+export interface VitestRunnerLayerInput {
+  readonly options: StrykerOptions
+  readonly sandboxDirectory: string
+  /**
+   * No `logger` member. A fiber inherits the run's logger, so `Effect.logDebug`
+   * and friends reach it without this layer being handed one.
+   */
+  readonly globalNamespace?: StrykerNamespace
+  readonly resolveVitestFor?: VitestResolver
+}
+
+export const makeVitestRunnerLayer = (input: VitestRunnerLayerInput): Layer.Layer<TestRunner> =>
+  Layer.effect(
+    TestRunner,
+    Effect.gen(function*() {
+      const stateRef = yield* Ref.make<RunnerState>({ ctx: undefined, localSetupFile: undefined })
+      const getState = Ref.get(stateRef)
+      const requireCtx = Effect.gen(function*() {
+        const state = yield* getState
+        if (state.ctx === undefined) {
+          return yield* new TestRunnerFailed({
+            runnerName: 'vitest',
+            phase: 'dryRun',
+            cause: new Error('VitestTestRunner is not initialized; call init() before running tests'),
+          })
+        }
+        return state.ctx
+      })
+      const decodedOptionsEffect = (raw: unknown) =>
+        S.decodeUnknownEffect(VitestSectionSchema)(raw).pipe(
+          Effect.map((decoded) => (decoded === undefined ? { related: true } : decoded)),
+          Effect.mapError((cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause })),
+        )
+      const rawVitest = Reflect.get(input.options, 'vitest')
+      const optionsEffect = decodedOptionsEffect(rawVitest).pipe(
+        Effect.map((vitestOptions) => ({ ...input.options, vitest: vitestOptions })),
+      )
+      const capabilities: TestRunner['Service']['capabilities'] = Effect.succeed({ reloadEnvironment: true })
+      const init: TestRunner['Service']['init'] = Effect.gen(function*() {
+        const options = yield* optionsEffect
+        yield* Effect.sync(() => {
+          process.env.NODE_ENV = 'test'
+          process.env.VITEST = '1'
+        })
+        const projectRoot = input.sandboxDirectory
+        const localSetupFile = path.resolve(projectRoot, `stryker-setup-${process.pid}.js`)
+        yield* Ref.update(stateRef, (s) => ({ ...s, localSetupFile }))
+        yield* Effect.tryPromise({
+          try: () => fs.promises.copyFile(STRYKER_SETUP, localSetupFile),
+          catch: (cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause }),
+        })
+        const resolver = input.resolveVitestFor ?? resolveVitest
+        const { createVitest, version } = yield* Effect.tryPromise({
+          try: () => resolver(projectRoot),
+          catch: (cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause }),
+        })
+        const namespace = input.globalNamespace ?? INSTRUMENTER_CONSTANTS.NAMESPACE
+        const scanDir = typeof options.vitest.dir === 'string'
+          ? path.resolve(projectRoot, options.vitest.dir)
+          : undefined
+        const ctx = yield* Effect.tryPromise({
+          try: () =>
+            createVitest(
+              'test',
+              {
+                config: options.vitest.configFile,
+                coverage: { enabled: false },
+                // @ts-expect-error poolOptions is not in CliOptions but Vitest forwards it to the pool
+                poolOptions: { threads: { maxThreads: 1, minThreads: 1 } },
+                singleThread: false,
+                maxConcurrency: 1,
+                watch: false,
+                root: projectRoot,
+                ...(scanDir === undefined ? {} : { dir: scanDir }),
+                bail: options.disableBail ? 0 : 1,
+                onConsoleLog: () => false,
+              },
+              {
+                resolve: {
+                  alias: [...readSandboxSelfAliases(projectRoot)],
+                  conditions: ['@systemfsoftware/source', 'import'],
+                },
+                plugins: [sandboxSelfPlugin(projectRoot)],
+              },
+            ),
+          catch: (cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause }),
+        })
+        ctx.provide('globalNamespace', namespace)
+        ctx.provide('isGreaterThanVitest4Point1', shouldUseSuiteMetaSecondArg(version))
+        applySetupFilesToProjects(ctx, localSetupFile)
+        yield* Effect.logDebug(`vitest final config: ${JSON.stringify(ctx.config, null, 2)}`)
+        yield* Ref.update(stateRef, (s) => ({ ...s, ctx }))
+      }).pipe(Effect.mapError((cause) => (cause instanceof TestRunnerFailed
+        ? cause
+        : new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause }))
+      ))
+      const resetContext = Effect.gen(function*() {
+        const ctx = yield* requireCtx
+        experimentalStateClearFiles(ctx)
+      })
+      const getFileMeta = (file: unknown): unknown => {
+        if (file !== null && typeof file === 'object' && 'meta' in file) {
+          return Reflect.get(file, 'meta')
+        }
+        return undefined
+      }
+      const readHitCount: Effect.Effect<number, CoverageDecodeFailed> = Effect.gen(function*() {
+        const ctx = yield* requireCtx.pipe(Effect.mapError((cause) => new CoverageDecodeFailed({ cause })))
+        const files = experimentalStateGetFiles(ctx)
+        let total = 0
+        for (const file of files) {
+          const meta = getFileMeta(file)
+          const decoded = yield* S.decodeUnknownEffect(HitCountMetaSchema)(meta).pipe(
+            Effect.mapError((cause) => new CoverageDecodeFailed({ cause })),
+            Effect.orElseSucceed(() => ({ hitCount: undefined })),
+          )
+          if (decoded.hitCount !== undefined) {
+            total += decoded.hitCount
+          }
+        }
+        return total
+      })
+      const readMutantCoverage: Effect.Effect<MutantCoverage | undefined, CoverageDecodeFailed> = Effect.gen(
+        function*() {
+          const ctx = yield* requireCtx.pipe(Effect.mapError((cause) => new CoverageDecodeFailed({ cause })))
+          const files = experimentalStateGetFiles(ctx)
+          const deduped: Record<string, unknown> = {}
+          for (const file of files) {
+            const projectNameValue = typeof file === 'object' && file !== null && 'projectName' in file
+              ? Reflect.get(file, 'projectName')
+              : undefined
+            const projectName = typeof projectNameValue === 'string' ? projectNameValue : ''
+            const nameValue = typeof file === 'object' && file !== null && 'name' in file
+              ? Reflect.get(file, 'name')
+              : undefined
+            const name = typeof nameValue === 'string' ? nameValue : ''
+            const key = `${projectName}-${name}`
+            deduped[key] = file
+          }
+          const coverages: MutantCoverage[] = []
+          for (const file of Object.values(deduped)) {
+            const rawMeta = getFileMeta(file)
+            const decoded = yield* S.decodeUnknownEffect(MutantCoverageMetaSchema)(rawMeta).pipe(
+              Effect.mapError((cause) => new CoverageDecodeFailed({ cause })),
+              Effect.orElseSucceed(() => ({ mutantCoverage: undefined })),
+            )
+            if (decoded.mutantCoverage !== undefined) {
+              const normalized = normalizeCoverage(decoded.mutantCoverage, input.sandboxDirectory)
+              const validated = yield* S.decodeEffect(MutantCoverageShapeSchema)(normalized).pipe(
+                Effect.mapError((cause) => new CoverageDecodeFailed({ cause })),
+                Effect.map(() => normalized),
+              )
+              coverages.push(validated)
+            }
+          }
+          if (coverages.length === 0) {
+            return undefined
+          }
+          if (coverages.length === 1) {
+            return coverages[0]
+          }
+          const first = coverages[0]
+          if (first === undefined) {
+            return undefined
+          }
+          return coverages.slice(1).reduce((acc, projectCoverage) => {
+            for (const [testId, testCoverage] of Object.entries(projectCoverage.perTest)) {
+              const existing = acc.perTest[testId]
+              if (existing !== undefined) {
+                mergeCoverage(existing, testCoverage)
+              } else {
+                acc.perTest[testId] = testCoverage
+              }
+            }
+            mergeCoverage(acc.static, projectCoverage.static)
+            return acc
+          }, first)
+        },
+      )
+      const run = (
+        filter: RunFilter,
+      ): Effect.Effect<DryRunResult, TestRunnerFailed> =>
+        Effect.gen(function*() {
+          const ctx = yield* requireCtx
+          const options = yield* optionsEffect
+          yield* resetContext.pipe(
+            Effect.mapError((cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'dryRun', cause })),
+          )
+          const vitestInRun = Reflect.get(options, 'vitest')
+          const relatedValue = Reflect.get(vitestInRun, 'related')
+          const related = relatedValue !== false && filter.relatedFiles !== undefined
+            ? filter.relatedFiles.map(normalizeFileName)
+            : undefined
+          let testFilesToRun: string[] | undefined = filter.testFiles
+          let pattern: RegExp | undefined
+          if ((filter.testIds ?? []).length > 0) {
+            const parsedTests = (filter.testIds ?? []).map(fromTestId)
+            const regexTestNameFilter = parsedTests.map(({ test: name }) => escapeRegExp(name)).join('|')
+            pattern = new RegExp(regexTestNameFilter)
+            testFilesToRun = parsedTests.map(({ file }) => path.resolve(input.sandboxDirectory, file))
+          }
+          applyRunFilterToConfig(ctx, { related, testNamePattern: pattern })
+          yield* Effect.tryPromise({
+            try: () => ctx.start(testFilesToRun),
+            catch: (cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'dryRun', cause }),
+          }).pipe(
+            Effect.catchIf(
+              (error) => isErrorCodeError(error.cause) && error.cause.code === VITEST_ERROR_CODES.FILES_NOT_FOUND,
+              () => Effect.void,
+            ),
+          )
+          const allFiles = experimentalStateGetFiles(ctx)
+          const tests = allFiles
+            .flatMap((file) => {
+              // @ts-expect-error File is compatible with RunnerTestSuite at runtime
+              return collectTestsFromSuite(file)
+            })
+            .filter((test) => test.result !== undefined)
+          let failure = false
+          const testResults = tests.map((test) => {
+            const testResult = convertTestToTestResult(test, input.sandboxDirectory)
+            failure ||= testResult.status === TestStatus.Failed
+            return testResult
+          })
+          if (!failure && experimentalStateHasExternalErrors(ctx)) {
+            const errorText = experimentalStateGetExternalErrorText(ctx)
+            return { status: DryRunStatus.Error, errorMessage: `An error occurred outside of a test run: ${errorText}` }
+          }
+          return { tests: testResults, status: DryRunStatus.Complete }
+        })
+      const dryRun: TestRunner['Service']['dryRun'] = (options) =>
+        Effect.gen(function*() {
+          const ctx = yield* requireCtx
+          ctx.provide('mode', 'dry-run')
+          const hasTestFiles = testFilesProvided(options)
+          const testResult: DryRunResult = hasTestFiles
+            ? yield* run({ testFiles: options.testFiles, relatedFiles: options.files })
+            : yield* run({ relatedFiles: options.files })
+          if (
+            testResult.status === DryRunStatus.Complete &&
+            testResult.tests.length === 0 &&
+            (yield* optionsEffect).vitest.related !== false &&
+            !options.testFiles
+          ) {
+            yield* Effect.logWarning(
+              'Vitest failed to find test files related to mutated files. Either disable `vitest.related` or import your source files directly from your test files. See https://stryker-mutator.io/docs/stryker-js/troubleshooting/#vitest-failed-to-find-test-files-related-to-mutated-files',
+            )
+          }
+          if (testResult.status === DryRunStatus.Complete) {
+            const mutantCoverage = yield* readMutantCoverage.pipe(
+              Effect.mapError((cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'dryRun', cause })),
+            )
+            if (mutantCoverage === undefined) {
+              return testResult
+            }
+            return { ...testResult, mutantCoverage }
+          }
+          return testResult
+        }).pipe(Effect.mapError((cause) => (cause instanceof TestRunnerFailed
+          ? cause
+          : new TestRunnerFailed({ runnerName: 'vitest', phase: 'dryRun', cause }))
+        ))
+      const mutantRun: TestRunner['Service']['mutantRun'] = (options) =>
+        Effect.gen(function*() {
+          const ctx = yield* requireCtx
+          ctx.provide('mode', 'mutant')
+          ctx.provide('hitLimit', options.hitLimit)
+          ctx.provide('mutantActivation', options.mutantActivation)
+          ctx.provide('activeMutant', options.activeMutant.id)
+          const dryRunResult = yield* run({ testIds: options.testFilter, relatedFiles: [options.sandboxFileName] })
+          const hitCount = yield* readHitCount.pipe(
+            Effect.mapError((cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'mutantRun', cause })),
+          )
+          const timeOut = determineHitLimitReached(hitCount, options.hitLimit)
+          const effectiveResult = Option.isSome(timeOut) ? timeOut.value : dryRunResult
+          const reportAllKillers = typeof input.options.disableBail === 'boolean' ? input.options.disableBail : false
+          return toMutantRunResult(effectiveResult, reportAllKillers)
+        }).pipe(Effect.mapError((cause) => (cause instanceof TestRunnerFailed
+          ? cause
+          : new TestRunnerFailed({ runnerName: 'vitest', phase: 'mutantRun', cause }))
+        ))
+      const dispose: TestRunner['Service']['dispose'] = Effect.gen(function*() {
+        const state = yield* getState
+        if (state.ctx !== undefined) {
+          const localSetupFile = state.localSetupFile
+          if (localSetupFile !== undefined) {
+            state.ctx.onClose(async () => {
+              await fs.promises.rm(localSetupFile, { force: true })
+            })
+          }
+          const currentCtx = state.ctx
+          yield* Effect.tryPromise({
+            try: () => currentCtx.close(),
+            catch: (cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'dispose', cause }),
+          })
+        }
+      })
+      return TestRunner.of({ capabilities, init, dryRun, mutantRun, dispose })
+    }),
+  )
+
+function mergeCoverage(to: CoverageData, from: CoverageData): void {
+  for (const [mutantId, hitCount] of Object.entries(from)) {
+    const existing = to[mutantId]
+    if (existing !== undefined) {
+      to[mutantId] = existing + hitCount
+    } else {
+      to[mutantId] = hitCount
+    }
+  }
+}
+
+export class VitestTestRunner {
+  public static inject = [] as const
+  constructor(_a: unknown, _b: unknown, _c: unknown, _d: unknown, _e: unknown = resolveVitest) {
+    throw new Error('VitestTestRunner class is removed. Use makeVitestRunnerLayer instead.')
+  }
+}
+
+export function createVitestTestRunnerFactory(_namespace?: StrykerNamespace): (injector: unknown) => never {
+  throw new Error('createVitestTestRunnerFactory is removed. Use makeVitestRunnerLayer and declarePlugin instead.')
 }

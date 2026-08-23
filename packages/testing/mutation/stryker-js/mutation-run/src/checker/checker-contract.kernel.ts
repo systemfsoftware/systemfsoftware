@@ -15,12 +15,12 @@ import {
  * one way is a projection, but coming back is a join that can fail two ways —
  * the checker answered about something it was not asked about, or it did not
  * answer about something it was. Both are the plugin breaking its contract, and
- * both were `throw new Error` with the ids interpolated into prose, so a caller
- * could only re-parse the message to find out which.
+ * each carries its own tag, so a caller matches on the failure rather than
+ * parsing ids out of a message.
  *
- * Pure: the pairing is a decision over two lists. It runs without a checker, a
- * process or a clock, which is the point — this is the part worth testing and it
- * used to be reachable only by starting a child process.
+ * Pure: the pairing is a decision over two lists, so it runs without a checker,
+ * a process or a clock — which is the point, because this is the part worth
+ * testing.
  */
 export const pairCheckResults = (
   checkerName: string,

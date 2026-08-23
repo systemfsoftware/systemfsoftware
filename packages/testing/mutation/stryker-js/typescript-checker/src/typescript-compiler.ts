@@ -2,9 +2,9 @@ import { readFileSync } from 'fs'
 import path from 'path'
 
 import type { Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
-import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { Result, Schema as S } from 'effect'
+import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Predicate, Result } from 'effect'
+import * as S from 'effect/Schema'
 import { type SourceFile, SyntaxKind } from 'typescript/unstable/ast'
 import type { FileSystem } from 'typescript/unstable/fs'
 import {
@@ -17,7 +17,6 @@ import {
 } from 'typescript/unstable/sync'
 
 import { TSFileNode } from './grouping/ts-file-node.js'
-import * as pluginTokens from './plugin-tokens.js'
 import { HybridFileSystem } from './project/index.js'
 import {
   determineBuildModeEnabled,
@@ -47,12 +46,6 @@ export type SourceFiles = Map<
 >
 
 export class TypescriptCompiler implements ITypescriptCompiler, IFileRelationCreator {
-  public static inject = tokens(
-    commonTokens.logger,
-    commonTokens.options,
-    pluginTokens.fs,
-  )
-
   private readonly allTSConfigFiles: Set<string>
   private readonly tsconfigFile: string
   private api?: API
@@ -62,11 +55,16 @@ export class TypescriptCompiler implements ITypescriptCompiler, IFileRelationCre
   private lastMutants: Mutant[] = []
   private lastMutatedFileNames: string[] = []
 
+  private readonly options: StrykerOptions
+
   constructor(
-    private readonly log: Logger,
-    private readonly options: StrykerOptions,
+    options: unknown,
     private readonly fs: HybridFileSystem,
   ) {
+    if (!S.is(StrykerOptionsSchema)(options)) {
+      throw new Error('Invalid StrykerOptions')
+    }
+    this.options = options
     this.tsconfigFile = toPosixFileName(
       path.resolve(toPosixFileName(this.options.tsconfigFile)),
     )
@@ -219,11 +217,6 @@ export class TypescriptCompiler implements ITypescriptCompiler, IFileRelationCre
       const content = readFileSync(current, 'utf-8')
       const parsed = parseTsConfig(current, content)
       if (Result.isFailure(parsed)) {
-        this.log.warn(
-          `Could not parse tsconfig file "%s": %s. Compiler-option overrides and project-reference walking were skipped for this file, so mutants may be misreported as compile errors.`,
-          current,
-          parsed.failure.reason,
-        )
         tsConfigOverrides.set(current, content)
         continue
       }
@@ -392,14 +385,18 @@ export class TypescriptCompiler implements ITypescriptCompiler, IFileRelationCre
     )
     const sourceMap = this.fs.getFile(sourceMapFileName)
     if (!sourceMap) {
-      this.log.warn(`Could not find sourcemap ${sourceMapFileName}`)
       return dependencyFileName
     }
 
-    const sourceMapParsed = S.decodeUnknownSync(
-      S.Struct({ sources: S.optional(S.Array(S.String)) }),
-    )(JSON.parse(sourceMap.content))
-    const sources = sourceMapParsed.sources
+    const rawMap: unknown = JSON.parse(sourceMap.content)
+    let sources: readonly string[] | undefined
+    if (
+      Predicate.hasProperty(rawMap, 'sources') &&
+      Array.isArray(rawMap.sources)
+    ) {
+      const filtered = rawMap.sources.filter((s): s is string => typeof s === 'string')
+      sources = filtered
+    }
 
     if (sources?.length === 1) {
       const sourcePath = sources[0]

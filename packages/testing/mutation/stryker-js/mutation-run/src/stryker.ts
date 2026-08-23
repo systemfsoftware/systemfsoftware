@@ -10,16 +10,12 @@ import { RunEnvironment, type RunEnvironmentShape } from './RunEnvironment.js'
 /**
  * The four stages, as values.
  *
- * The container version resolved each stage by calling `injectClass` on the
- * child injector the previous stage returned, so the order was a property of
- * four separate `execute()` bodies and nothing stated it in one place. Here the
- * chain is one type: each stage's input is the previous stage's output, so an
- * ordering mistake is a compile error rather than a runtime one.
+ * The chain is one type: each stage's input is the previous stage's output, so
+ * mis-ordering them is a compile error rather than a runtime one.
  *
- * A caller supplies these, which is what makes the run testable without a
- * sandbox, a child process or a plugin on disk — the shape the container was
- * supposed to provide and did not, because every stage reached into the injector
- * for its own dependencies rather than receiving them.
+ * A caller supplies them, which is what makes a run testable without a sandbox,
+ * a child process or a plugin on disk — every dependency a stage needs arrives
+ * as an argument or a requirement in its own signature.
  */
 export interface MutationRunStages<E, R> {
   readonly prepare: PrepareStage<E, R>

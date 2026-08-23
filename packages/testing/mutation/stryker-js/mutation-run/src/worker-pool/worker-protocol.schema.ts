@@ -44,9 +44,9 @@ export type WorkerMessage = typeof WorkerMessageSchema.Type
  * The parent bound its IPC socket but the OS did not give it a TCP address.
  *
  * Unreachable through the one call site, which listens without a path and only
- * asks after `listening` fires. Declared anyway because the alternative was
- * `new Error('Server not listening')`, and an untagged `Error` in a failure
- * channel merges with every other untagged `Error` a caller might see.
+ * asks after `listening` fires. It carries a tag anyway, because an untagged
+ * `Error` in a failure channel merges with every other untagged `Error` a
+ * caller might see.
  */
 export class WorkerSocketNotTcpError extends S.TaggedError<WorkerSocketNotTcpError>()(
   'WorkerSocketNotTcpError',
@@ -67,5 +67,20 @@ export class WorkerConnectTimeoutError extends S.TaggedError<WorkerConnectTimeou
   {
     modulePath: S.String,
     waitedMs: S.Number,
+  },
+) {}
+
+/**
+ * The parent could not bind its IPC socket.
+ *
+ * Emitted as an `error` event on the server rather than thrown, so it arrives
+ * asynchronously and has to be carried out of the listen callback rather than
+ * caught. It is distinct from a worker that never connected: nothing was ever
+ * listening for it to connect to.
+ */
+export class WorkerSocketListenFailed extends S.TaggedError<WorkerSocketListenFailed>()(
+  'WorkerSocketListenFailed',
+  {
+    cause: S.Unknown,
   },
 ) {}

@@ -156,8 +156,8 @@ export const LoggingServerLive: Layer.Layer<LoggingServerAddressService, Logging
         bound.listen(() => {
           resume(Effect.succeed(bound))
         })
-        // Interrupted mid-listen: close the half-bound server. Returning the
-        // server here, as this did, leaks the handle instead.
+        // Interrupted mid-listen: close the half-bound server, so the handle is
+        // not left open with nobody holding it.
         return Effect.sync(() => {
           bound.close()
         })

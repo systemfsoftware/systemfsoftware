@@ -9,15 +9,17 @@ import { Reporter } from '../report/index.js'
 import { TestRunner } from '../test-runner/index.js'
 
 import { PluginKind } from './PluginKind.js'
+import type { RunConfiguration } from './RunConfiguration.js'
+import type { SandboxDirectory } from './SandboxDirectory.js'
 
 /**
  * Maps each `PluginKind` to the port it contributes.
  *
  * Ports are `Context.Service` classes (except `Ignorer`, which stays a plain
  * synchronous predicate — lifting it to `Effect` would force every call site
- * to run an Effect for a pure value). A `Layer` that provides one is the
- * construction recipe; the plugin declaration no longer needs to know whether
- * that recipe came from a class, a factory, or a value.
+ * to run an Effect for a pure value). A `Layer` that provides one is the whole
+ * construction recipe, so a declaration says what a plugin offers and never how
+ * it was built.
  */
 export interface PluginInterfaces {
   [PluginKind.Checker]: Checker
@@ -31,15 +33,22 @@ const pluginContributionTag = { _tag: 'PluginContribution' } as const
 type PluginContributionTag = typeof pluginContributionTag
 
 /**
+ * What the engine guarantees to every plugin layer.
+ *
+ * A plugin's `Layer` may ask for these and nothing else. `unknown` here would
+ * accept a layer requiring anything at all, which no engine can discharge — so
+ * building it would need a cast at the one place that must not have one.
+ */
+export type PluginEnvironment = RunConfiguration | SandboxDirectory
+
+/**
  * A plugin declares what it contributes, and the contribution carries the
  * `Layer` that provides the port.
  *
- * Three declaration forms existed only because the container needed to know
- * how to *construct* the value — class, factory, or value. A `Layer` already
- * encodes construction, so the distinction disappears: the caller builds the
- * `Layer` however it wants (succeed, effect, merge, provide) and hands it
- * over as a single shape. No `Promise` is involved; every operation on the
- * port is an `Effect` and the engine decides when to run it.
+ * A `Layer` encodes construction, so a declaration says only what the plugin
+ * offers: the caller builds it however it likes — `succeed`, `effect`, `merge`,
+ * `provide` — and hands over one shape. No `Promise` is involved; every
+ * operation on a port is an `Effect` and the engine decides when to run it.
  *
  * Outcomes are not errors. A failing test, a surviving mutant, or a compile
  * error is a value on the success channel. The error channel is only for the
@@ -48,21 +57,40 @@ type PluginContributionTag = typeof pluginContributionTag
 export interface PluginContribution<K extends PluginKind> extends PluginContributionTag {
   readonly kind: K
   readonly name: string
-  readonly layer: Layer.Layer<PluginInterfaces[K]>
+  readonly layer: Layer.Layer<PluginInterfaces[K], never, PluginEnvironment>
 }
+
+/**
+ * A contribution of any kind, as a union discriminated on `kind`.
+ *
+ * `PluginContribution<PluginKind>` is not that: it is one object whose `kind`
+ * happens to be the whole enum, so testing `c.kind === PluginKind.TestRunner`
+ * narrows nothing and a caller that needs the port type has to assert. This
+ * distributes first, so the same test narrows `layer` to that kind's port.
+ */
+export type AnyPluginContribution = { [K in PluginKind]: PluginContribution<K> }[PluginKind]
+
+/**
+ * The contribution for one kind, as a member of {@link AnyPluginContribution}.
+ *
+ * `PluginContribution<K>` says the same thing for a concrete `K`, but for a
+ * generic `K` the compiler cannot see it is one of the union's members, so a
+ * narrowing predicate against it is rejected. `Extract` states the membership,
+ * which is what a lookup filtering by `kind` needs to return.
+ */
+export type ContributionOf<K extends PluginKind> = Extract<AnyPluginContribution, { readonly kind: K }>
 
 /**
  * Declare a plugin contribution.
  *
- * The `Layer` already encodes how the port is built, so one function replaces
- * `declareClassPlugin` / `declareFactoryPlugin` / `declareValuePlugin`.
- * `R` is `never` — a plugin's own dependencies come from the `Layer` that
- * builds it, never from the interface.
+ * A plugin that needs its configuration reads `RunConfiguration`, and one that
+ * needs the sandbox reads `SandboxDirectory`. The `R` channel makes the
+ * requirement visible, and the composition root discharges it.
  */
 export function declarePlugin<K extends PluginKind>(
   kind: K,
   name: string,
-  layer: Layer.Layer<PluginInterfaces[K]>,
+  layer: Layer.Layer<PluginInterfaces[K], never, PluginEnvironment>,
 ): PluginContribution<K> {
   return { _tag: 'PluginContribution', kind, name, layer }
 }
@@ -96,7 +124,7 @@ export interface Shadowing {
  * with "no plugins" instead.
  */
 export interface ComposedPlugins {
-  readonly layer: Option.Option<Layer.Layer<PluginInterfaces[PluginKind]>>
+  readonly layer: Option.Option<Layer.Layer<PluginInterfaces[PluginKind], never, unknown>>
   readonly shadowings: readonly Shadowing[]
 }
 
@@ -168,9 +196,8 @@ export function composePlugins(
   contributions: readonly PluginContribution<PluginKind>[],
 ): ComposedPlugins {
   const { resolved, shadowings } = foldContributions(contributions)
-  const layers: readonly Layer.Layer<PluginInterfaces[PluginKind]>[] = [...resolved.values()]
+  const layers: readonly Layer.Layer<PluginInterfaces[PluginKind], never, unknown>[] = [...resolved.values()]
     .map((contribution) => contribution.layer)
-
   return {
     layer: layers.length === 0
       ? Option.none()

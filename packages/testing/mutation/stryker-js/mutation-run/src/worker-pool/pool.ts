@@ -1,85 +1,60 @@
-import type { TestRunnerService } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import * as Effect from 'effect/Effect'
 import * as Pool from 'effect/Pool'
 import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 
-import type { CheckerResourceService } from '../checker/checker-resource.js'
 import type { ChildProcessCrashedError, OutOfMemoryError } from './worker-pool.schema.js'
 
-// Pool.make  — repos/effect/packages/effect/src/Pool.ts:220
-// Pool.get    — repos/effect/packages/effect/src/Pool.ts:423
+// Pool.make       — repos/effect/packages/effect/src/Pool.ts:220
+// Pool.get        — repos/effect/packages/effect/src/Pool.ts:423
 // Pool.invalidate — repos/effect/packages/effect/src/Pool.ts:511
 
-/**
- * A resource that can be initialized and disposed via Effect.
- */
-export interface Resource {
-  readonly init: Effect.Effect<void>
-  readonly dispose: Effect.Effect<void>
-}
-
-export type TestRunnerResource = TestRunnerService & Resource
-export type CheckerResource = CheckerResourceService
 type PoolError = ChildProcessCrashedError | OutOfMemoryError
 
-const acquireWorker = <R extends Resource>(factory: () => R): Effect.Effect<R, never, Scope.Scope> =>
-  Effect.acquireRelease(
-    Effect.flatMap(Effect.sync(factory), (worker) => Effect.as(worker.init, worker)),
-    (worker) => worker.dispose,
-  )
+/**
+ * Create a fixed-size pool of workers.
+ *
+ * `acquire` is a **scoped** Effect: acquiring a worker spawns a child process
+ * and registers its teardown on the scope `Pool.make` opens for that worker, so
+ * a worker lives exactly as long as its slot in the pool. That is the whole
+ * reason this signature takes an `Effect` and not a `() => Worker` — a
+ * synchronous factory cannot spawn a process or register a finalizer, so a
+ * caller handed one has no way to acquire anything but a lazily-connecting
+ * object, and ends up spawning inside each method call instead.
+ *
+ * `size` is the worker count, amortised across thousands of mutants. It is not
+ * the fan-out width: that is the stream `concurrency` in {@link runWithPool},
+ * and the two are deliberately separate numbers.
+ */
+export const makeWorkerPool = <Worker, E>(
+  acquire: Effect.Effect<Worker, E, Scope.Scope>,
+  size: number,
+): Effect.Effect<Pool.Pool<Worker, E>, never, Scope.Scope> => Pool.make({ acquire, size })
 
 /**
- * Create a fixed-size pool whose lifetime is the pool's `Scope`.
+ * Run each input on a pooled worker.
  *
- * `size` is the number of workers amortised across thousands of mutants
- * (Pool.make line 220). It comes from `ConcurrencyTokenProvider.concurrencyTestRunners`
- * derived from `os.availableParallelism()` — the machine's parallelism.
+ * The `Effect.scoped` here is the **checkout** scope, not the worker's: `Pool.get`
+ * registers the return-to-pool on the caller's scope, so closing it hands the
+ * worker back rather than tearing it down. A crash instead retires the worker
+ * through `Pool.invalidate`, and the pool replaces it on the next checkout.
  */
-export const makeTestRunnerPool = (
-  factory: () => TestRunnerResource,
-  concurrencyTestRunners: number,
-): Effect.Effect<Pool.Pool<TestRunnerResource>, never, Scope.Scope> =>
-  Pool.make({
-    acquire: acquireWorker(factory),
-    size: concurrencyTestRunners,
-  })
-
-export const makeCheckerPool = (
-  factory: () => CheckerResource,
-  concurrencyCheckers: number,
-): Effect.Effect<Pool.Pool<CheckerResource>, never, Scope.Scope> =>
-  Pool.make({
-    acquire: acquireWorker(factory),
-    size: concurrencyCheckers,
-  })
-
-/**
- * Run each input on a pooled worker, recycling the worker after each item.
- *
- * Worker checkout uses `Pool.get` (line 423) whose return-to-pool is the
- * caller scope's finalizer, and `Pool.invalidate` (line 511) retires a
- * crashed worker so the pool replaces it. The fan-out uses
- * `Stream.mapEffect` with a `concurrency` bound that is *different* from the
- * pool's `size`: `size` is the worker count, `concurrency` is the stream's
- * parallelism for the mutant queue.
- */
-export const runWithPool = <R extends Resource, In, Out>(
-  pool: Pool.Pool<R>,
+export const runWithPool = <Worker, In, Out>(
+  pool: Pool.Pool<Worker, never>,
   inputs: Stream.Stream<In, never, never>,
-  task: (resource: R, input: In) => Effect.Effect<Out, PoolError>,
+  task: (worker: Worker, input: In) => Effect.Effect<Out, PoolError>,
   streamConcurrency: number,
 ): Stream.Stream<Out, PoolError> =>
   inputs.pipe(
     Stream.mapEffect(
       (input) =>
         Effect.scoped(
-          Effect.flatMap(Pool.get(pool), (resource) =>
-            Effect.catchTags(task(resource, input), {
+          Effect.flatMap(Pool.get(pool), (worker) =>
+            Effect.catchTags(task(worker, input), {
               OutOfMemoryError: (error: OutOfMemoryError) =>
-                Effect.flatMap(Pool.invalidate(pool, resource), () => Effect.fail(error)),
+                Effect.flatMap(Pool.invalidate(pool, worker), () => Effect.fail(error)),
               ChildProcessCrashedError: (error: ChildProcessCrashedError) =>
-                Effect.flatMap(Pool.invalidate(pool, resource), () => Effect.fail(error)),
+                Effect.flatMap(Pool.invalidate(pool, worker), () => Effect.fail(error)),
             })),
         ),
       { concurrency: streamConcurrency },

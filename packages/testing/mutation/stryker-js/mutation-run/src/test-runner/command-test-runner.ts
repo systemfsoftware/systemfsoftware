@@ -28,20 +28,11 @@ export const isCommandRunner = (name: string): name is 'command' => name.toLower
  * mimics a single test result from the exit code. It cannot know how many tests
  * ran or what they covered.
  *
- * Three things the class shape carried are gone, and each was a defect rather
- * than a feature:
- *
- * - **The `timeoutHandler` field.** The old runner stored a closure that killed
- *   the child, so `dispose()` could reach back and stop a run started by an
- *   earlier call. Timeout is now the caller's `Effect.timeout` and teardown is
- *   the scope's: interrupting the run interrupts the spawn, whose finalizer
- *   kills the process group. Nothing has to remember a pid between calls.
- * - **The single-pid kill.** The helper it called killed `pid` alone, orphaning
- *   the process group — the run's children survived the run. `spawn`'s
- *   finalizer uses the platform's group kill, which covers Windows too.
- * - **The `new Promise` with listeners.** The result is the value of an
- *   `Effect`, so the work has not started until something runs it, and a
- *   caller can time it out, retry it or interrupt it.
+ * Timeout is the caller's `Effect.timeout` and teardown is the scope's:
+ * interrupting the run interrupts the spawn, whose finalizer kills the process
+ * group. The result is the value of an `Effect`, so the work has not started
+ * until something runs it, and a caller can time it out, retry it or
+ * interrupt it.
  */
 export interface CommandTestRunnerConfig {
   readonly workingDir: string
@@ -50,15 +41,10 @@ export interface CommandTestRunnerConfig {
 /**
  * Why this runner cannot honour a configuration, if it cannot.
  *
- * This is a *configuration* check, so it is answered before any runner exists.
- * The original asked it inside `init`, which deferred a question about the
- * options to the moment a process was being started: the run had already
- * resolved config, built a sandbox and spawned a worker before reporting that
- * the options were contradictory. It also had to travel as a runner failure,
- * which classes as a runtime fault and exits 3, when the user's options are
- * what is wrong and the exit should be 2.
- *
- * The options validator calls this. `init` has nothing to do and says so.
+ * This is a configuration check, answered before any runner exists. The
+ * options validator calls this; `init` has nothing to do and says so.
+ * A contradictory configuration is a user error (exit 2), not a runtime
+ * fault (exit 3).
  */
 export const commandRunnerRejects = (
   options: StrykerOptions,

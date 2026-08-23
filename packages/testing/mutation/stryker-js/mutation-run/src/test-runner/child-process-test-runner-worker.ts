@@ -1,69 +1,93 @@
-import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { commonTokens, PluginKind, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import {
-  type DryRunOptions,
-  type DryRunResult,
-  DryRunStatus,
-  type MutantRunOptions,
-  type MutantRunResult,
-  MutantRunStatus,
-  type TestRunner,
-  type TestRunnerCapabilities,
+import type { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { PluginKind, RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import type {
+  DryRunOptions,
+  DryRunResult,
+  MutantRunOptions,
+  MutantRunResult,
+  TestRunnerCapabilities,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { DryRunStatus, MutantRunStatus, TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { errorToString } from '@systemfsoftware/stryker-js-util'
+import * as Context from 'effect/Context'
+import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
 import * as S from 'effect/Schema'
+import type * as Scope from 'effect/Scope'
 
-import { injectionTokens, PluginCreator } from '../plugins/index.js'
+import type { PluginCreator } from '../plugins/index.js'
+import { PluginNotFoundError } from '../plugins/plugin-loader.schema.js'
+
 import { MutantCoverageSchema } from './mutant-coverage.schema.js'
 
-export class ChildProcessTestRunnerWorker implements TestRunner {
-  private readonly underlyingTestRunner: TestRunner
+export class ChildProcessTestRunnerWorker {
+  private readonly underlying: TestRunner['Service']
 
-  public static inject = tokens(commonTokens.options, injectionTokens.pluginCreator)
-  constructor({ testRunner }: StrykerOptions, pluginCreator: PluginCreator) {
-    this.underlyingTestRunner = pluginCreator.create(
-      PluginKind.TestRunner,
-      testRunner,
+  constructor(underlying: TestRunner['Service']) {
+    this.underlying = underlying
+  }
+
+  /**
+   * Build the worker around the test runner the run configured.
+   *
+   * `options.testRunner` names a `PluginKind.TestRunner` contribution, the
+   * contribution carries a `Layer`, and building that layer in this scope is
+   * what produces the runner. The layer asks for the plugin environment, which
+   * this process supplies from what it has: the options arrived over the IPC
+   * channel, and the sandbox is its own working directory because the parent
+   * spawned it there.
+   *
+   * A missing or unbuildable runner fails. It must not resolve to something
+   * whose `mutantRun` answers `status: Error`, because `Error` is neither killed
+   * nor survived — every mutant would drop out of the score with nothing
+   * reporting a reason.
+   */
+  static make(
+    options: StrykerOptions,
+    pluginCreator: PluginCreator,
+  ): Effect.Effect<ChildProcessTestRunnerWorker, PluginNotFoundError, Scope.Scope> {
+    return Effect.gen(function*() {
+      const contribution = yield* pluginCreator.create(PluginKind.TestRunner, options.testRunner)
+      const context = yield* Layer.build(contribution.layer)
+      return new ChildProcessTestRunnerWorker(Context.get(context, TestRunner))
+    }).pipe(
+      Effect.provideService(RunConfiguration, options),
+      Effect.provideService(SandboxDirectory, process.cwd()),
     )
   }
 
-  public async capabilities(): Promise<TestRunnerCapabilities> {
-    return this.underlyingTestRunner.capabilities()
+  async capabilities(): Promise<TestRunnerCapabilities> {
+    return Effect.runPromise(this.underlying.capabilities)
   }
 
-  public async init(): Promise<void> {
-    if (this.underlyingTestRunner.init) {
-      await this.underlyingTestRunner.init()
-    }
+  async init(): Promise<void> {
+    await Effect.runPromise(this.underlying.init)
   }
 
-  public async dispose(): Promise<void> {
-    if (this.underlyingTestRunner.dispose) {
-      await this.underlyingTestRunner.dispose()
-    }
+  async dispose(): Promise<void> {
+    await Effect.runPromise(this.underlying.dispose)
   }
 
-  public async dryRun(options: DryRunOptions): Promise<DryRunResult> {
-    const dryRunResult = await this.underlyingTestRunner.dryRun(options)
-    if (
-      dryRunResult.status === DryRunStatus.Complete &&
-      !dryRunResult.mutantCoverage &&
-      options.coverageAnalysis !== 'off'
-    ) {
-      const mutantCoverage = S.decodeUnknownSync(
-        S.optional(MutantCoverageSchema),
-      )(globalThis.__mutantCoverage__)
-      if (mutantCoverage !== undefined) {
-        dryRunResult.mutantCoverage = mutantCoverage
+  async dryRun(options: DryRunOptions): Promise<DryRunResult> {
+    const result = await Effect.runPromise(this.underlying.dryRun(options))
+    if (result.status === DryRunStatus.Complete && !result.mutantCoverage && options.coverageAnalysis !== 'off') {
+      const decoded = await Effect.runPromise(
+        S.decodeUnknownEffect(S.optional(MutantCoverageSchema))(globalThis.__mutantCoverage__).pipe(
+          Effect.orElseSucceed(() => undefined),
+        ),
+      )
+      if (decoded !== undefined) {
+        result.mutantCoverage = decoded
       }
     }
-    if (dryRunResult.status === DryRunStatus.Error) {
-      dryRunResult.errorMessage = errorToString(dryRunResult.errorMessage)
+    if (result.status === DryRunStatus.Error) {
+      result.errorMessage = errorToString(result.errorMessage)
     }
-    return dryRunResult
+    return result
   }
-  public async mutantRun(options: MutantRunOptions): Promise<MutantRunResult> {
-    const result = await this.underlyingTestRunner.mutantRun(options)
+
+  async mutantRun(options: MutantRunOptions): Promise<MutantRunResult> {
+    const result = await Effect.runPromise(this.underlying.mutantRun(options))
     if (result.status === MutantRunStatus.Error) {
       result.errorMessage = errorToString(result.errorMessage)
     }

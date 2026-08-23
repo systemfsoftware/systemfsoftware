@@ -26,21 +26,8 @@ const describe = (error: CheckerCrash): string =>
 /**
  * Retry a checker call once in a fresh process when the worker crashed.
  *
- * Replaces `CheckerRetryDecorator`, and repairs a defect the tagged-error
- * rewrite exposed. That class nested its checks:
- *
- * ```ts
- * if (error instanceof ChildProcessCrashedError) {
- *   if (error instanceof OutOfMemoryError) { … }
- * ```
- *
- * which only ever worked because `OutOfMemoryError` extended
- * `ChildProcessCrashedError`. They are sibling variants now, so the outer test
- * is false for an out-of-memory crash and the inner branch is unreachable — the
- * checker would have stopped retrying the exact failure this exists for, and
- * nothing would have said so. Branching on the tag makes the two cases
- * independent, and adding a third crash variant is then a compile error here
- * rather than a silent fall-through to `throw`.
+ * Branching on the tag makes the two crash variants independent, and adding a
+ * third variant is a compile error here rather than a silent fall-through.
  *
  * `retire` comes from whoever owns the worker's lifetime, so the retry does not
  * rebuild a process the pool still believes it owns.

@@ -17,13 +17,6 @@ import { OutOfMemoryError } from '../worker-pool/worker-pool.schema.js'
 /**
  * The engine's adjustments to a test runner, as functions on the port.
  *
- * These replace five classes — `TestRunnerDecorator` and the four extending
- * it — totalling about 340 lines. Each was an inheritance layer whose
- * `super.mutantRun(...)` call was the only thing joining it to the next, so the
- * chain's order existed in one deeply nested constructor expression and nowhere
- * else. Three of the four expressed something Effect already has; the fourth
- * was hiding a bug.
- *
  * A combinator that holds state returns an `Effect`, because allocating that
  * state is an effect. The stateless ones are plain functions, and the
  * difference is visible in the type rather than hidden in a constructor.
@@ -33,11 +26,9 @@ export type TestRunnerCombinator = (inner: TestRunnerService) => TestRunnerServi
 /**
  * Report a run that outlives its timeout as a timed-out result.
  *
- * Replaces `TimeoutDecorator`, which raced the run against a hand-rolled
- * `ExpirableTask` and then restarted the process itself. Neither half is
- * needed: `Effect.timeoutOrElse` is the race, and retiring the worker belongs to
- * the pool, which invalidates it. The old race also leaked its losing side — a
- * `Promise` that lost was never cancelled — where an interrupted `Effect` is.
+ * `Effect.timeoutOrElse` is the race, and retiring the worker belongs to the
+ * pool, which invalidates it. An interrupted `Effect` is cancelled, where a
+ * losing `Promise` was not.
  */
 export const withTimeout: TestRunnerCombinator = (inner) => ({
   ...inner,
@@ -64,15 +55,11 @@ export const maxRetries = 2
  * Retry a run whose runner crashed, and report the crash as a result once the
  * attempts are spent.
  *
- * Replaces `RetryRejectedDecorator`. Two details of the original are load
- * bearing and preserved: it retried on *every* failure, not only on
- * out-of-memory — that check existed solely to log a more useful message — and
- * on exhaustion it produced a `status: Error` result rather than failing,
- * because one broken runner must not end the whole run.
- *
- * The exhausted message renders the `Cause`, which keeps the chain that led
- * there. Stringifying the error instead would discard exactly the part someone
- * debugging this needs.
+ * Every failure is retried, not only out-of-memory; the out-of-memory check
+ * only changes the log message. On exhaustion the combinator produces a
+ * `status: Error` result rather than failing, because one broken runner must
+ * not end the whole run. The exhausted message renders the `Cause`, which
+ * keeps the chain that led there.
  */
 export const withRetry: TestRunnerCombinator = (inner) => {
   const attempt = <A>(
@@ -115,14 +102,11 @@ export const withRetry: TestRunnerCombinator = (inner) => {
 /**
  * Retire a runner after a configured number of mutant runs.
  *
- * Replaces `MaxTestRunnerReuseDecorator` and its public mutable `runs` field.
  * The count lives in a `Ref` the combinator closes over, so nothing outside can
- * read or reset it and `dispose` no longer has to remember to zero it.
- *
- * `retire` is supplied rather than being a `recover()` the runner performs on
- * itself: the pool owns worker lifetime, so retiring one is `Pool.invalidate`,
- * and a runner that restarts itself behind the pool's back is precisely how two
- * owners of one process come about.
+ * read or reset it. `retire` is supplied rather than being a `recover()` the
+ * runner performs on itself: the pool owns worker lifetime, so retiring one is
+ * `Pool.invalidate`, and a runner that restarts itself behind the pool's back
+ * would create two owners of one process.
  */
 export const withMaxReuse = (
   options: Pick<StrykerOptions, 'maxTestRunnerReuse'>,
@@ -132,8 +116,6 @@ export const withMaxReuse = (
   Effect.gen(function*() {
     const restartAfter = options.maxTestRunnerReuse ?? 0
     if (restartAfter <= 0) {
-      // Not configured. Returning `inner` untouched says so, where the class
-      // version counted every run and compared against zero forever.
       return inner
     }
 
@@ -159,12 +141,9 @@ type EnvironmentState = 'pristine' | 'loaded' | 'loaded-static-mutant'
 /**
  * Decide whether the test environment must be reloaded before a mutant runs.
  *
- * Replaces `ReloadEnvironmentDecorator` and fixes a real defect in it: that
- * class assigned to `options.reloadEnvironment` on the object its caller passed
- * in. The caller owned that object, so the decision leaked outward, and a caller
- * that reused or inspected its own options afterwards read a value it never
- * wrote. Here the decision produces a new options value and the caller's stays
- * as it was.
+ * The decision produces a new options value; the caller's options are not
+ * mutated, so a caller that reuses its own options does not read a value it
+ * never wrote.
  */
 export const withEnvironmentReload = (
   retire: Effect.Effect<void>,
