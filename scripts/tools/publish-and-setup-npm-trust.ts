@@ -1,10 +1,31 @@
 #!/usr/bin/env -S deno run --allow-run=git,corepack,pnpm,npm --allow-read --allow-env=NPM_REGISTRY --allow-net=registry.npmjs.org
-// publish-and-setup-npm-trust.ts — publish every unpublished non-private workspace
-// package, then register the npm trusted publisher (OIDC) for each one.
+// publish-and-setup-npm-trust.ts — bring every non-private workspace package to
+// the state CI needs: published on npm AND carrying a registered trusted
+// publisher (OIDC).
 //
-// Per package: build -> publish (debuts can't use OIDC: npm-trust requires the
-// package to exist) -> npm trust github ... -> npm trust list. Chains run
-// concurrently, bounded by --jobs.
+// Existing on the registry is not that state. A package published from a
+// maintainer machine, or published before its trusted publisher was registered,
+// answers HTTP 200 while its latest version carries no provenance attestation —
+// so keying the skip on the status code alone declares the bootstrap finished on
+// exactly the packages that still need it, and the release pipeline then meets
+// them as `no-oidc` forever. The skip is keyed on the attestation instead:
+//
+//   unpublished (404)        -> debut:     build -> publish -> trust -> list
+//   published, no attestation-> untrusted: trust -> list  (the version exists,
+//                               so re-publishing it would be rejected)
+//   published + attested     -> skipped
+//   unreadable registry      -> named, and the run ends non-zero
+//
+// An untrusted package does not become attested by being registered: an
+// attestation is stamped at publish time and never granted retroactively, so its
+// already-published version stays unattested until its next version ships from
+// CI (docs/solutions/tooling-decisions/first-publish-under-oidc-trusted-publishing.md,
+// "The debut version carries no provenance attestation"). Re-running therefore
+// picks the same package up again, and `npm trust github` is idempotent so that
+// is safe. Registration is the state this script converges; attestation is the
+// release pipeline's to produce.
+//
+// Chains run concurrently, bounded by --jobs.
 //
 // Flags: --dry-run --only a,b --jobs N (default 4) --log-level (default info)
 // Env:  NPM_REGISTRY overrides the registry base URL.
@@ -13,6 +34,7 @@ import { pooledMap } from '@std/async/pool'
 import { parseArgs } from '@std/cli/parse-args'
 import { ConsoleHandler, getLogger, setup } from '@std/log'
 import type { LevelName } from '@std/log'
+import { queryRegistry } from './npm-query.ts'
 
 const {
   'dry-run': dryRun = false,
@@ -84,10 +106,6 @@ function workspaceRows(): Array<{ name: string; path: string }> {
   return (tree ?? []).filter((p) => p.private !== true).map((p) => ({ name: p.name, path: p.path }))
 }
 
-async function registryStatus(name: string): Promise<number> {
-  return (await fetch(`${registry}/${encodeURIComponent(name)}`, { method: 'HEAD' })).status
-}
-
 async function runInteractive(args: string[], cwd: string): Promise<boolean> {
   const child = new Deno.Command(args[0], {
     args: args.slice(1),
@@ -110,19 +128,30 @@ async function hasBuildScript(packagePath: string): Promise<boolean> {
   }
 }
 
-async function publishAndTrust(p: { name: string; path: string }): Promise<{ name: string; ok: boolean }> {
+/** One package's outstanding bootstrap work, and how much of the chain it needs. */
+interface Owed {
+  readonly name: string
+  readonly path: string
+  readonly mode: 'debut' | 'untrusted'
+}
+
+async function publishAndTrust(p: Owed): Promise<{ name: string; ok: boolean }> {
   const name = p.name
   const seq: Array<Array<string>> = []
-  if (await hasBuildScript(p.path)) {
-    seq.push(['corepack', 'pnpm', '--filter', name, 'build'])
+  // An untrusted package is already on the registry at this version, so only the
+  // registration is missing. Publishing it again would be rejected.
+  if (p.mode === 'debut') {
+    if (await hasBuildScript(p.path)) {
+      seq.push(['corepack', 'pnpm', '--filter', name, 'build'])
+    }
+    seq.push(['corepack', 'pnpm', '--filter', name, 'publish', '--access', 'public', '--no-git-checks'])
   }
   seq.push(
-    ['corepack', 'pnpm', '--filter', name, 'publish', '--access', 'public', '--no-git-checks'],
     ['npm', 'trust', 'github', name, '--repo', slug, '--file', 'release.yml', '--allow-publish', '--yes'],
     ['npm', 'trust', 'list', name],
   )
 
-  log.info(`\n== ${name}`)
+  log.info(`\n== ${name} (${p.mode})`)
   for (const args of seq) {
     log.info(`  > ${args.join(' ')}`)
     if (dryRun) continue
@@ -137,28 +166,62 @@ async function publishAndTrust(p: { name: string; path: string }): Promise<{ nam
 const rows = workspaceRows().filter((p) => only.size === 0 || only.has(p.name))
 const slug = remoteSlug()
 
-const statuses = await Promise.all(rows.map((p) => registryStatus(p.name)))
-const unpublished: Array<{ name: string; path: string }> = []
-for (let i = 0; i < rows.length; i++) {
-  const p = rows[i]
-  const status = statuses[i]
-  log.info(`${p.name} … ${status === 404 ? 'unpublished (404)' : `published (HTTP ${status}) — skipped`}`)
-  if (status === 404) unpublished.push(p)
-}
-
-if (unpublished.length === 0) {
-  log.info('nothing to publish')
-  Deno.exit(0)
-}
-
-log.info('')
-log.info(`publishing ${unpublished.length} package(s) with --jobs ${jobs}:`)
-const results: Array<{ name: string; ok: boolean }> = await Array.fromAsync(
-  pooledMap(jobs, unpublished, publishAndTrust),
-)
-const failed = results.filter((r) => !r.ok).map((r) => r.name)
-if (failed.length > 0) {
-  log.error(`failed: ${failed.join(', ')}`)
+// An `--only` that matches nothing would otherwise reach the "everything is
+// published and attested" branch below having queried no package at all, and
+// report a clean bootstrap on the strength of a typo.
+if (rows.length === 0) {
+  log.error(
+    only.size > 0
+      ? `--only matched no workspace package: ${[...only].join(', ')}`
+      : 'no non-private workspace packages discovered (did `pnpm ls -r` fail?)',
+  )
   Deno.exit(1)
 }
+
+// Bounded, because an unbounded map over every member is an fd and rate-limit
+// hazard. `queryRegistry` never throws, so one unreadable package is reported
+// alongside the rest instead of aborting the run and discarding every other
+// answer; `pooledMap` yields in input order, so a snapshot still pairs with its
+// row by index.
+const snapshots = await Array.fromAsync(pooledMap(jobs, rows, (p) => queryRegistry(p.name, registry)))
+const owed: Owed[] = []
+const unreadable: string[] = []
+for (let i = 0; i < rows.length; i++) {
+  const p = rows[i]
+  const snapshot = snapshots[i]
+  if (snapshot.status === 'error') {
+    log.error(`${p.name} … registry unreadable — cannot tell whether it is published`)
+    unreadable.push(p.name)
+  } else if (snapshot.status === 'unpublished') {
+    log.info(`${p.name} … unpublished (404) — debut`)
+    owed.push({ ...p, mode: 'debut' })
+  } else if (!snapshot.attested) {
+    log.info(`${p.name} … published ${snapshot.latest}, no provenance attestation — registering trusted publisher`)
+    owed.push({ ...p, mode: 'untrusted' })
+  } else {
+    log.info(`${p.name} … published ${snapshot.latest} + attested — skipped`)
+  }
+}
+
+if (owed.length === 0) {
+  log.info(
+    unreadable.length > 0
+      ? 'no package has outstanding work, but the registry could not be read for some'
+      : 'every package is published and attested — nothing to do',
+  )
+  Deno.exit(unreadable.length > 0 ? 1 : 0)
+}
+
+const debuts = owed.filter((p) => p.mode === 'debut').length
+log.info('')
+log.info(
+  `processing ${owed.length} package(s) with --jobs ${jobs}: ${debuts} debut, ${owed.length - debuts} untrusted`,
+)
+const results: Array<{ name: string; ok: boolean }> = await Array.fromAsync(
+  pooledMap(jobs, owed, publishAndTrust),
+)
+const failed = results.filter((r) => !r.ok).map((r) => r.name)
+if (failed.length > 0) log.error(`failed: ${failed.join(', ')}`)
+if (unreadable.length > 0) log.error(`registry unreadable: ${unreadable.join(', ')}`)
+if (failed.length > 0 || unreadable.length > 0) Deno.exit(1)
 log.info('\ndone')
