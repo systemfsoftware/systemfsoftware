@@ -1,6 +1,7 @@
 import babel from '@babel/core'
 
-import { type NodeMutator } from './node-mutator.js'
+import { type MutatorContext, type NodeMutator } from './node-mutator.js'
+import { registerMutator } from './registry.js'
 
 const { types: t } = babel
 
@@ -15,21 +16,22 @@ const operators = {
   '!==': ['==='],
 } as const
 
-function isEqualityOperator(
-  operator: string,
-): operator is keyof typeof operators {
+function isEqualityOperator(operator: string): operator is keyof typeof operators {
   return Object.keys(operators).includes(operator)
 }
+
 export const equalityOperatorMutator: NodeMutator = {
   name: 'EqualityOperator',
 
-  *mutate(path) {
-    if (path.isBinaryExpression() && isEqualityOperator(path.node.operator)) {
-      for (const mutableOperator of operators[path.node.operator]) {
-        const replacement = t.cloneNode(path.node, true)
+  *mutate(node, _context: MutatorContext) {
+    if (t.isBinaryExpression(node) && isEqualityOperator(node.operator)) {
+      for (const mutableOperator of operators[node.operator]) {
+        const replacement = t.cloneNode(node, true)
         replacement.operator = mutableOperator
         yield replacement
       }
     }
   },
 }
+
+registerMutator(equalityOperatorMutator)

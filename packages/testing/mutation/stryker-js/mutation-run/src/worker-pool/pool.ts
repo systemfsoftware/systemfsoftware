@@ -1,221 +1,87 @@
-import { type TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
-import { notEmpty } from '@systemfsoftware/stryker-js-util'
-import {
-  BehaviorSubject,
-  filter,
-  ignoreElements,
-  lastValueFrom,
-  mergeMap,
-  Observable,
-  ReplaySubject,
-  Subject,
-  takeUntil,
-  tap,
-  zip,
-} from 'rxjs'
-import { type Disposable, tokens } from 'typed-inject'
+import type { TestRunnerService } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import * as Effect from 'effect/Effect'
+import * as Pool from 'effect/Pool'
+import * as Scope from 'effect/Scope'
+import * as Stream from 'effect/Stream'
 
-import { CheckerFacade } from '../checker/index.js'
-import { injectionTokens } from '../plugins/index.js'
+import type { CheckerResourceService } from '../checker/checker-resource.js'
+import type { ChildProcessCrashedError, OutOfMemoryError } from './worker-pool.schema.js'
 
-const MAX_CONCURRENT_INIT = 2
+// Pool.make  — repos/effect/packages/effect/src/Pool.ts:220
+// Pool.get    — repos/effect/packages/effect/src/Pool.ts:423
+// Pool.invalidate — repos/effect/packages/effect/src/Pool.ts:511
 
 /**
- * Represents a TestRunner that is also a Resource (with an init and dispose)
+ * A resource that can be initialized and disposed via Effect.
  */
-export type TestRunnerResource = Resource & TestRunner
-
-export interface Resource extends Partial<Disposable> {
-  init?(): Promise<void>
+export interface Resource {
+  readonly init: Effect.Effect<void>
+  readonly dispose: Effect.Effect<void>
 }
 
-createTestRunnerPool.inject = tokens(
-  injectionTokens.testRunnerFactory,
-  injectionTokens.testRunnerConcurrencyTokens,
-)
-export function createTestRunnerPool(
-  factory: () => TestRunnerResource,
-  concurrencyToken$: Observable<number>,
-): Pool<TestRunner> {
-  return new Pool(factory, concurrencyToken$)
-}
+export type TestRunnerResource = TestRunnerService & Resource
+export type CheckerResource = CheckerResourceService
+type PoolError = ChildProcessCrashedError | OutOfMemoryError
 
-createCheckerPool.inject = tokens(
-  injectionTokens.checkerFactory,
-  injectionTokens.checkerConcurrencyTokens,
-)
-export function createCheckerPool(
-  factory: () => CheckerFacade,
-  concurrencyToken$: Observable<number>,
-): Pool<CheckerFacade> {
-  return new Pool<CheckerFacade>(factory, concurrencyToken$)
-}
-
-/**
- * Represents a work item: an input with a task and with a `result$` observable where the result (exactly one) will be streamed to.
- */
-class WorkItem<TResource extends Resource, TIn, TOut> {
-  private readonly resultSubject = new Subject<TOut>()
-  public readonly result$ = this.resultSubject.asObservable()
-
-  /**
-   * @param input The input to the ask
-   * @param task The task, where a resource and input is presented
-   */
-  constructor(
-    private readonly input: TIn,
-    private readonly task: (
-      resource: TResource,
-      input: TIn,
-    ) => Promise<TOut> | TOut,
-  ) {}
-
-  public async execute(resource: TResource) {
-    try {
-      const output = await this.task(resource, this.input)
-      this.resultSubject.next(output)
-      this.resultSubject.complete()
-    } catch (err) {
-      this.resultSubject.error(err)
-    }
-  }
-
-  public reject(error: unknown) {
-    this.resultSubject.error(error)
-  }
-
-  public complete() {
-    this.resultSubject.complete()
-  }
-}
-
-/**
- * The parts of a {@link WorkItem} the pool touches while it sits in the todo
- * queue, before a resource picks it up. The input/output types are only
- * meaningful at the schedule site, so the queue stores this structural view.
- */
-interface QueuedWorkItem<TResource extends Resource> {
-  readonly result$: Observable<unknown>
-  execute(resource: TResource): Promise<void>
-  reject(error: unknown): void
-  complete(): void
-}
-
-/**
- * Represents a pool of resources. Use `schedule` to schedule work to be executed on the resources.
- * The pool will automatically recycle the resources, but will make sure only one task is executed
- * on one resource at any one time. Creates as many resources as the concurrency tokens allow.
- * Also takes care of the initialing of the resources (with `init()`)
- */
-export class Pool<TResource extends Resource> implements Disposable {
-  // The init subject. Using an RxJS subject instead of a promise, so errors are silently ignored when nobody is listening
-  private readonly initSubject = new ReplaySubject<void>()
-
-  // The disposedSubject emits true when it is disposed, and false when not disposed yet
-  private readonly disposedSubject = new BehaviorSubject(false)
-
-  // The dispose$ only emits one `true` value when disposed (never emits `false`). Useful for `takeUntil`
-  private readonly dispose$ = this.disposedSubject.pipe(
-    filter((isDisposed) => isDisposed),
+const acquireWorker = <R extends Resource>(factory: () => R): Effect.Effect<R, never, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.flatMap(Effect.sync(factory), (worker) => Effect.as(worker.init, worker)),
+    (worker) => worker.dispose,
   )
 
-  private readonly createdResources: TResource[] = []
-  // The queued work items. This is a replay subject, so scheduled work items can easily be rejected after it was picked up
-  private readonly todoSubject = new ReplaySubject<
-    QueuedWorkItem<TResource>
-  >()
+/**
+ * Create a fixed-size pool whose lifetime is the pool's `Scope`.
+ *
+ * `size` is the number of workers amortised across thousands of mutants
+ * (Pool.make line 220). It comes from `ConcurrencyTokenProvider.concurrencyTestRunners`
+ * derived from `os.availableParallelism()` — the machine's parallelism.
+ */
+export const makeTestRunnerPool = (
+  factory: () => TestRunnerResource,
+  concurrencyTestRunners: number,
+): Effect.Effect<Pool.Pool<TestRunnerResource>, never, Scope.Scope> =>
+  Pool.make({
+    acquire: acquireWorker(factory),
+    size: concurrencyTestRunners,
+  })
 
-  constructor(factory: () => TResource, concurrencyToken$: Observable<number>) {
-    // Stream resources that are ready to pick up work
-    const resourcesSubject = new Subject<TResource>()
+export const makeCheckerPool = (
+  factory: () => CheckerResource,
+  concurrencyCheckers: number,
+): Effect.Effect<Pool.Pool<CheckerResource>, never, Scope.Scope> =>
+  Pool.make({
+    acquire: acquireWorker(factory),
+    size: concurrencyCheckers,
+  })
 
-    // Stream ongoing work.
-    zip(resourcesSubject, this.todoSubject)
-      .pipe(
-        mergeMap(async ([resource, workItem]) => {
-          await workItem.execute(resource)
-          resourcesSubject.next(resource) // recycle resource so it can pick up more work
-        }),
-        ignoreElements(),
-        takeUntil(this.dispose$),
-      )
-      .subscribe({
-        error: (error) => {
-          this.todoSubject.subscribe((workItem) => workItem.reject(error))
-        },
-      })
-
-    // Create resources
-    concurrencyToken$
-      .pipe(
-        takeUntil(this.dispose$),
-        mergeMap(async () => {
-          if (this.disposedSubject.value) {
-            // Don't create new resources when disposed
-            return
-          }
-          const resource = factory()
-          this.createdResources.push(resource)
-          await resource.init?.()
-          return resource
-        }, MAX_CONCURRENT_INIT),
-        filter(notEmpty),
-        tap({
-          complete: () => {
-            // Signal init complete
-            this.initSubject.next()
-            this.initSubject.complete()
-          },
-          error: (err) => {
-            this.initSubject.error(err)
-          },
-        }),
-      )
-      .subscribe({
-        next: (resource) => resourcesSubject.next(resource),
-        error: (err) => resourcesSubject.error(err),
-      })
-  }
-
-  /**
-   * Returns a promise that resolves if all concurrency tokens have resulted in initialized resources.
-   * This is optional, resources will get initialized either way.
-   */
-  public async init(): Promise<void> {
-    await lastValueFrom(this.initSubject)
-  }
-
-  /**
-   * Schedules a task to be executed on resources in the pool. Each input is paired with a resource, which allows async work to be done.
-   * @param input$ The inputs to pair up with a resource.
-   * @param task The task to execute on each resource
-   */
-  public schedule<TIn, TOut>(
-    input$: Observable<TIn>,
-    task: (resource: TResource, input: TIn) => Promise<TOut> | TOut,
-  ): Observable<TOut> {
-    return input$.pipe(
-      mergeMap((input) => {
-        const workItem = new WorkItem(input, task)
-        this.todoSubject.next(workItem)
-        return workItem.result$
-      }),
-    )
-  }
-
-  /**
-   * Dispose the pool
-   */
-  public async dispose(): Promise<void> {
-    if (!this.disposedSubject.value) {
-      this.disposedSubject.next(true)
-      this.todoSubject.subscribe((workItem) => workItem.complete())
-      this.todoSubject.complete()
-      await Promise.all(
-        // We're mixing promises with undefined values, which triggers the lint warning. We can safely ignore it here.
-        // eslint-disable-next-line @typescript-eslint/await-thenable
-        this.createdResources.map((resource) => resource.dispose?.()),
-      )
-    }
-  }
-}
+/**
+ * Run each input on a pooled worker, recycling the worker after each item.
+ *
+ * Worker checkout uses `Pool.get` (line 423) whose return-to-pool is the
+ * caller scope's finalizer, and `Pool.invalidate` (line 511) retires a
+ * crashed worker so the pool replaces it. The fan-out uses
+ * `Stream.mapEffect` with a `concurrency` bound that is *different* from the
+ * pool's `size`: `size` is the worker count, `concurrency` is the stream's
+ * parallelism for the mutant queue.
+ */
+export const runWithPool = <R extends Resource, In, Out>(
+  pool: Pool.Pool<R>,
+  inputs: Stream.Stream<In, never, never>,
+  task: (resource: R, input: In) => Effect.Effect<Out, PoolError>,
+  streamConcurrency: number,
+): Stream.Stream<Out, PoolError> =>
+  inputs.pipe(
+    Stream.mapEffect(
+      (input) =>
+        Effect.scoped(
+          Effect.flatMap(Pool.get(pool), (resource) =>
+            Effect.catchTags(task(resource, input), {
+              OutOfMemoryError: (error: OutOfMemoryError) =>
+                Effect.flatMap(Pool.invalidate(pool, resource), () => Effect.fail(error)),
+              ChildProcessCrashedError: (error: ChildProcessCrashedError) =>
+                Effect.flatMap(Pool.invalidate(pool, resource), () => Effect.fail(error)),
+            })),
+        ),
+      { concurrency: streamConcurrency },
+    ),
+  )

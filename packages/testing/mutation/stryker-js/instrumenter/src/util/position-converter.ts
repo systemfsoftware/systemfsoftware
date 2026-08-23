@@ -53,9 +53,7 @@ export class PositionConverter {
       const ch = text.charCodeAt(pos)
       pos++
       switch (ch) {
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
         case CharacterCodes.carriageReturn: {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
           if (text.charCodeAt(pos) === CharacterCodes.lineFeed) {
             pos++
           }
@@ -63,13 +61,11 @@ export class PositionConverter {
           lineStart = pos
           break
         }
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
         case CharacterCodes.lineFeed:
           result.push(lineStart)
           lineStart = pos
           break
         default:
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
           if (ch > CharacterCodes.maxAsciiCharacter && isLineBreak(ch)) {
             result.push(lineStart)
             lineStart = pos
@@ -122,13 +118,13 @@ function compare(a: number, b: number) {
     ? Comparison.GreaterThan
     : Comparison.EqualTo
 }
-const enum CharacterCodes {
-  lineFeed = 0x0a, // \n
-  carriageReturn = 0x0d, // \r
-  maxAsciiCharacter = 0x7f,
-  lineSeparator = 0x2028,
-  paragraphSeparator = 0x2029,
-}
+const CharacterCodes = {
+  lineFeed: 0x0a,
+  carriageReturn: 0x0d,
+  maxAsciiCharacter: 0x7f,
+  lineSeparator: 0x2028,
+  paragraphSeparator: 0x2029,
+} as const
 
 function isLineBreak(ch: number): boolean {
   // ES5 7.3:
@@ -143,13 +139,9 @@ function isLineBreak(ch: number): boolean {
   // breaking characters are treated as white space but not as line terminators.
 
   return (
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
     ch === CharacterCodes.lineFeed ||
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
     ch === CharacterCodes.carriageReturn ||
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
     ch === CharacterCodes.lineSeparator ||
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-enum-comparison
     ch === CharacterCodes.paragraphSeparator
   )
 }

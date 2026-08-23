@@ -1,8 +1,12 @@
 import type { types } from '@babel/core'
+import babel from '@babel/core'
 
 import { deepCloneNode } from '../util/index.js'
 
-import { type NodeMutator } from './node-mutator.js'
+import { type MutatorContext, type NodeMutator } from './node-mutator.js'
+import { registerMutator } from './registry.js'
+
+const { types: t } = babel
 
 const arithmeticOperatorReplacements = Object.freeze(
   {
@@ -17,13 +21,10 @@ const arithmeticOperatorReplacements = Object.freeze(
 export const arithmeticOperatorMutator: NodeMutator = {
   name: 'ArithmeticOperator',
 
-  *mutate(path) {
-    if (
-      path.isBinaryExpression() &&
-      isSupported(path.node.operator, path.node)
-    ) {
-      const mutatedOperator = arithmeticOperatorReplacements[path.node.operator]
-      const replacement = deepCloneNode(path.node)
+  *mutate(node, _context: MutatorContext) {
+    if (t.isBinaryExpression(node) && isSupported(node.operator, node)) {
+      const mutatedOperator = arithmeticOperatorReplacements[node.operator]
+      const replacement = deepCloneNode(node)
       replacement.operator = mutatedOperator
       yield replacement
     }
@@ -39,9 +40,7 @@ function isSupported(
   }
 
   const stringTypes = ['StringLiteral', 'TemplateLiteral']
-  const leftType = node.left.type === 'BinaryExpression'
-    ? node.left.right.type
-    : node.left.type
+  const leftType = t.isBinaryExpression(node.left) ? node.left.right.type : node.left.type
 
   if (stringTypes.includes(node.right.type) || stringTypes.includes(leftType)) {
     return false
@@ -49,3 +48,5 @@ function isSupported(
 
   return true
 }
+
+registerMutator(arithmeticOperatorMutator)

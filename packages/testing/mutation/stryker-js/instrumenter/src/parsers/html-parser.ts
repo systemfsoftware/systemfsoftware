@@ -7,7 +7,7 @@ import {
   type ScriptAst,
   type ScriptFormat,
 } from '../syntax/index.js'
-import { ParseError } from './parse-error.js'
+import { ParseFailed } from './parse-error.schema.js'
 import { type ParserContext } from './parser-context.js'
 
 const TSX_SCRIPT_TYPES = Object.freeze(['tsx', 'text/tsx'])
@@ -54,13 +54,19 @@ async function ngHtmlParser(
   if (errors.length !== 0) {
     const firstError = errors[0]
     if (firstError === undefined) {
-      throw new Error('HTML parser reported errors but first error is missing')
+      throw new ParseFailed({
+        fileName,
+        message: 'HTML parser reported errors but first error is missing',
+        location: { line: 0, column: 0 },
+        cause: errors,
+      })
     }
-    throw new ParseError(
-      firstError.msg,
+    throw new ParseFailed({
       fileName,
-      toSourceLocation(firstError.span.start),
-    )
+      message: firstError.msg,
+      location: toSourceLocation(firstError.span.start),
+      cause: firstError,
+    })
   }
   const scriptsAsPromised: Array<Promise<ScriptAst>> = []
   ngParser.visitAll(

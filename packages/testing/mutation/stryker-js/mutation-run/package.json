@@ -149,6 +149,7 @@
     "glob": "13.0.6",
     "oxlint": "catalog:oxlint",
     "tsdown": "catalog:",
+    "tsx": "^4.20.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

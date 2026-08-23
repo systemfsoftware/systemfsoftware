@@ -1,87 +1,94 @@
-import babel, { type NodePath } from '@babel/core'
+import babel from '@babel/core'
+import * as Predicate from 'effect/Predicate'
 
-import { type NodeMutator } from './node-mutator.js'
+import { type MutatorContext, type NodeMutator } from './node-mutator.js'
+import { registerMutator } from './registry.js'
 
 const { types } = babel
 
 export const blockStatementMutator: NodeMutator = {
   name: 'BlockStatement',
 
-  *mutate(path) {
-    if (path.isBlockStatement() && isValid(path)) {
+  *mutate(node, context: MutatorContext) {
+    if (types.isBlockStatement(node) && isValid(node, context)) {
       yield types.blockStatement([])
     }
   },
 }
 
-function isValid(path: NodePath<babel.types.BlockStatement>) {
-  return !isEmpty(path) && !isInvalidConstructorBody(path)
+function isValid(node: babel.types.BlockStatement, context: MutatorContext): boolean {
+  return !isEmpty(node) && !isInvalidConstructorBody(node, context)
 }
 
-function isEmpty(path: NodePath<babel.types.BlockStatement>) {
-  return !path.node.body.length
+function isEmpty(node: babel.types.BlockStatement): boolean {
+  return node.body.length === 0
 }
 
-/**
- * Checks to see if a statement is an invalid constructor body
- * @example
- * // Invalid!
- * class Foo extends Bar {
- *   constructor(public baz: string) {
- *     super(42);
- *   }
- * }
- * @example
- * // Invalid!
- * class Foo extends Bar {
- *   public baz = 'string';
- *   constructor() {
- *     super(42);
- *   }
- * }
- * @see https://github.com/stryker-mutator/stryker-js/issues/2314
- * @see https://github.com/stryker-mutator/stryker-js/issues/2474
- */
-function isInvalidConstructorBody(
-  blockStatement: NodePath<babel.types.BlockStatement>,
-): boolean {
-  return Boolean(
-    blockStatement.parentPath.isClassMethod() &&
-      blockStatement.parentPath.node.kind === 'constructor' &&
-      (containsTSParameterProperties(blockStatement.parentPath) ||
-        containsInitializedClassProperties(blockStatement.parentPath)) &&
-      hasSuperExpression(blockStatement),
+function isInvalidConstructorBody(node: babel.types.BlockStatement, context: MutatorContext): boolean {
+  const parent = context.parent
+  if (parent === undefined || !types.isClassMethod(parent) || parent.kind !== 'constructor') {
+    return false
+  }
+  const hasParamProps = parent.params.some((param) => types.isTSParameterProperty(param))
+  const hasInitProps = containsInitializedClassProperties(parent, context)
+  const hasSuper = hasSuperExpression(node)
+  return (hasParamProps || hasInitProps) && hasSuper
+}
+
+function containsInitializedClassProperties(constructor: babel.types.ClassMethod, context: MutatorContext): boolean {
+  const grandParent = context.grandParent
+  if (grandParent === undefined || !types.isClassBody(grandParent)) {
+    return false
+  }
+  return grandParent.body.some((classMember) =>
+    types.isClassProperty(classMember) && classMember.value !== null && classMember.value !== undefined
   )
 }
 
-function containsTSParameterProperties(
-  constructor: NodePath<babel.types.ClassMethod>,
-): boolean {
-  return constructor.node.params.some((param) => types.isTSParameterProperty(param))
+function hasSuperExpression(block: babel.types.BlockStatement): boolean {
+  return containsSuperCall(block)
 }
 
-function containsInitializedClassProperties(
-  constructor: NodePath<babel.types.ClassMethod>,
-): boolean {
+function isSuperType(node: unknown): boolean {
+  return Predicate.hasProperty(node, 'type') && node['type'] === 'Super'
+}
+
+function isSuperCallExpression(node: unknown): boolean {
   return (
-    constructor.parentPath.isClassBody() &&
-    constructor.parentPath.node.body.some(
-      (classMember) => types.isClassProperty(classMember) && classMember.value,
-    )
+    Predicate.hasProperty(node, 'type') &&
+    node['type'] === 'CallExpression' &&
+    Predicate.hasProperty(node, 'callee') &&
+    isSuperType(node['callee'])
   )
 }
 
-function hasSuperExpression(
-  constructor: NodePath<babel.types.BlockStatement>,
-): boolean {
-  let hasSuper = false
-  constructor.traverse({
-    Super(path) {
-      if (path.parentPath.isCallExpression()) {
-        path.stop()
-        hasSuper = true
-      }
-    },
-  })
-  return hasSuper
+function containsSuperCall(node: unknown): boolean {
+  if (typeof node !== 'object' || node === null) {
+    return false
+  }
+  if (isSuperType(node) || isSuperCallExpression(node)) {
+    return true
+  }
+  return hasSuperInChildren(node)
 }
+
+function hasSuperInChildren(node: object): boolean {
+  for (const key of Object.keys(node)) {
+    if (!Predicate.hasProperty(node, key)) {
+      continue
+    }
+    const value = node[key]
+    if (Array.isArray(value)) {
+      for (const element of value) {
+        if (containsSuperCall(element)) {
+          return true
+        }
+      }
+    } else if (typeof value === 'object' && value !== null && containsSuperCall(value)) {
+      return true
+    }
+  }
+  return false
+}
+
+registerMutator(blockStatementMutator)

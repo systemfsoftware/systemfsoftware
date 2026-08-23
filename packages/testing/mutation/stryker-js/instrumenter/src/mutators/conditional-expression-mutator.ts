@@ -1,92 +1,82 @@
-import babel, { type NodePath } from '@babel/core'
+import babel from '@babel/core'
 
 import { deepCloneNode } from '../util/index.js'
 
-import { type NodeMutator } from './node-mutator.js'
+import { type MutatorContext, type NodeMutator } from './node-mutator.js'
+import { registerMutator } from './registry.js'
 
-const booleanOperators = Object.freeze([
-  '!=',
-  '!==',
-  '&&',
-  '<',
-  '<=',
-  '==',
-  '===',
-  '>',
-  '>=',
-  '||',
-])
+const booleanOperators = Object.freeze(['!=', '!==', '&&', '<', '<=', '==', '===', '>', '>=', '||'])
 
 const { types } = babel
 
 export const conditionalExpressionMutator: NodeMutator = {
   name: 'ConditionalExpression',
 
-  *mutate(path) {
-    if (isTestOfLoop(path)) {
+  *mutate(node, context: MutatorContext) {
+    if (isTestOfLoop(node, context)) {
       yield types.booleanLiteral(false)
-    } else if (isTestOfCondition(path)) {
+    } else if (isTestOfCondition(node, context)) {
       yield types.booleanLiteral(true)
       yield types.booleanLiteral(false)
-    } else if (isBooleanExpression(path)) {
-      if (path.parent?.type === 'LogicalExpression') {
-        // For (x || y), do not generate the (true || y) mutation as it
-        // has the same behavior as the (true) mutator, handled in the
-        // isTestOfCondition branch above
-        if (path.parent.operator === '||') {
+    } else if (isBooleanExpression(node)) {
+      const parent = context.parent
+      if (parent !== undefined && types.isLogicalExpression(parent)) {
+        if (parent.operator === '||') {
           yield types.booleanLiteral(false)
           return
         }
-        // For (x && y), do not generate the (false && y) mutation as it
-        // has the same behavior as the (false) mutator, handled in the
-        // isTestOfCondition branch above
-        if (path.parent.operator === '&&') {
+        if (parent.operator === '&&') {
           yield types.booleanLiteral(true)
           return
         }
       }
       yield types.booleanLiteral(true)
       yield types.booleanLiteral(false)
-    } else if (path.isForStatement() && !path.node.test) {
-      const replacement = deepCloneNode(path.node)
+    } else if (types.isForStatement(node) && node.test === null) {
+      const replacement = deepCloneNode(node)
       replacement.test = types.booleanLiteral(false)
       yield replacement
-    } else if (path.isSwitchCase() && path.node.consequent.length > 0) {
-      // if not a fallthrough case
-      const replacement = deepCloneNode(path.node)
+    } else if (types.isSwitchCase(node) && node.consequent.length > 0) {
+      const replacement = deepCloneNode(node)
       replacement.consequent = []
       yield replacement
     }
   },
 }
 
-function isTestOfLoop(path: NodePath): boolean {
-  const { parentPath } = path
-  if (!parentPath) {
+function isTestOfLoop(node: babel.types.Node, context: MutatorContext): boolean {
+  const parent = context.parent
+  if (parent === undefined) {
     return false
   }
-  return (
-    (parentPath.isForStatement() ||
-      parentPath.isWhileStatement() ||
-      parentPath.isDoWhileStatement()) &&
-    parentPath.node.test === path.node
-  )
+  if (types.isForStatement(parent) && parent.test === node) {
+    return true
+  }
+  if (types.isWhileStatement(parent) && parent.test === node) {
+    return true
+  }
+  if (types.isDoWhileStatement(parent) && parent.test === node) {
+    return true
+  }
+  return false
 }
 
-function isTestOfCondition(path: NodePath): boolean {
-  const { parentPath } = path
-  if (!parentPath) {
+function isTestOfCondition(node: babel.types.Node, context: MutatorContext): boolean {
+  const parent = context.parent
+  if (parent === undefined) {
     return false
   }
-  return (
-    parentPath.isIfStatement() /*|| parentPath.isConditionalExpression()*/ &&
-    parentPath.node.test === path.node
-  )
+  return types.isIfStatement(parent) && parent.test === node
 }
 
-function isBooleanExpression(path: NodePath) {
-  return (
-    (path.isBinaryExpression() || path.isLogicalExpression()) &&
-    booleanOperators.includes(path.node.operator)
-  )
+function isBooleanExpression(node: babel.types.Node): boolean {
+  if (types.isBinaryExpression(node)) {
+    return booleanOperators.includes(node.operator)
+  }
+  if (types.isLogicalExpression(node)) {
+    return booleanOperators.includes(node.operator)
+  }
+  return false
 }
+
+registerMutator(conditionalExpressionMutator)

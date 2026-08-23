@@ -1,5 +1,7 @@
 import { Schema as S } from 'effect'
 
+import { ExitClass } from '../exit-classification.js'
+
 /**
  * The child worker was pointed at a module that carries no constructable value
  * under the requested export name. It is a tagged error rather than a bare
@@ -8,7 +10,11 @@ import { Schema as S } from 'effect'
  */
 export class SubjectModuleError extends S.TaggedError<SubjectModuleError>()(
   'SubjectModuleError',
-  { modulePath: S.String, namedExport: S.String },
+  {
+    modulePath: S.String,
+    namedExport: S.String,
+    exitClass: S.Literal(ExitClass.InternalError),
+  },
 ) {}
 
 /**
@@ -19,5 +25,8 @@ export class SubjectModuleError extends S.TaggedError<SubjectModuleError>()(
  */
 export class ProtocolEncodeError extends S.TaggedError<ProtocolEncodeError>()(
   'ProtocolEncodeError',
-  { reason: S.String },
+  {
+    reason: S.String,
+    exitClass: S.Literal(ExitClass.InternalError),
+  },
 ) {}
