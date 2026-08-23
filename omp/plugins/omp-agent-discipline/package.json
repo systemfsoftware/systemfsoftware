@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/omp-agent-discipline",
   "license": "Apache-2.0",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "description": "OMP agent discipline: mechanical enforcement of rules prose can't hold (xd:// retry guard, ...)",
   "type": "module",
