@@ -23,6 +23,7 @@ export const sharedConfig = {
     includeSource: ['src/**/*.{js,ts}'],
     exclude: ['**/.stryker-tmp/**', '**/node_modules/**', '**/.repo/**'],
     passWithNoTests: true,
+    update: 'none',
     testTimeout: sharedTestTimeout,
     silent: isAgent ? 'passed-only' : false,
     ...(isAgent ? { bail: 1 } : {}),
