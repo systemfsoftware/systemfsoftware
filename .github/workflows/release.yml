@@ -3,8 +3,6 @@ name: Release
 on:
   push:
     branches: [main]
-  pull_request:
-    types: [closed]
 
 concurrency:
   group: release-${{ github.ref }}
@@ -15,8 +13,29 @@ permissions:
   pull-requests: write
 
 jobs:
+  plan:
+    name: plan · derive phase
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      phase: ${{ steps.plan.outputs.phase }}
+    env:
+      HUSKY: "0"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: ./.github/actions/install-deps
+      - uses: denoland/setup-deno@v2
+      - id: plan
+        name: Decide release phase from repository state
+        run: ./scripts/tools/plan-release.mjs >> "$GITHUB_OUTPUT"
+
   version:
-    if: github.event_name == 'push'
+    if: needs.plan.outputs.phase == 'version'
+    needs: [plan]
     name: version · open release PR
     runs-on: ubuntu-latest
     permissions:
@@ -101,25 +120,18 @@ jobs:
           gh workflow run ci.yml --ref "$BRANCH"
 
   gate:
-    if: >-
-      github.event_name == 'pull_request'
-      && github.event.pull_request.merged == true
-      && github.event.pull_request.head.ref == 'changeset-release/main'
-      && github.event.pull_request.user.login == 'github-actions[bot]'
+    if: needs.plan.outputs.phase == 'publish'
+    needs: [plan]
     name: the gate (pnpm check:ci)
     uses: ./.github/workflows/reusable-checks.yml
 
   publish:
-    if: >-
-      github.event_name == 'pull_request'
-      && github.event.pull_request.merged == true
-      && github.event.pull_request.head.ref == 'changeset-release/main'
-      && github.event.pull_request.user.login == 'github-actions[bot]'
+    if: needs.plan.outputs.phase == 'publish'
     permissions:
       contents: write
       id-token: write
     name: publish · oidc · tag
-    needs: [gate]
+    needs: [plan, gate]
     runs-on: ubuntu-latest
     env:
       HUSKY: "0"
@@ -128,12 +140,14 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/install-deps
-      - name: Preflight — every package must already exist on npm
-        # Necessary: npm trusted publishing cannot debut a package (npm-trust
-        # prerequisite "Package must exist"). Without this, `pnpm publish -r`
-        # attempts each never-published package, aborts on an OIDC auth error,
-        # and leaves a partial publish behind.
-        run: bash scripts/tools/check-npm-publish.sh --preflight
+      - name: Compute publish filters
+        # Necessary: npm trusted publishing cannot debut a package, so one
+        # never-published package aborts the whole recursive publish and the
+        # packages that could ship do not. These exclusions keep it out. The
+        # debut itself still fails the job, at the last step.
+        run: |
+          bash scripts/tools/check-npm-publish.sh --emit-filters /tmp/publish-filters.txt
+          cat /tmp/publish-filters.txt
       - uses: denoland/setup-deno@v2
       - name: Build
         # Necessary: every package publishes files: ["dist"] against a gitignored
@@ -150,10 +164,17 @@ jobs:
         # checks because the version-bump commit from the Release PR need not be
         # HEAD-of-remote at publish time. Do not copy this flag elsewhere.
         # Unregistered packages fail loudly with an OIDC auth error.
-        run: corepack pnpm publish -r --provenance --access public --no-git-checks
+        run: corepack pnpm publish -r --provenance --access public --no-git-checks $(cat /tmp/publish-filters.txt)
       - name: Tag released versions
         run: ./scripts/tools/tag-released-packages.mjs --captured /tmp/captured.json
       - name: GitHub Releases from authored changelogs
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: ./scripts/tools/create-github-releases.mjs --captured /tmp/captured.json
+      - name: Assert every package now exists on npm
+        # The job's verdict, deliberately last. A package npm has never seen
+        # cannot be debuted by OIDC — a maintainer bootstraps it and registers
+        # the trusted publisher — so this ends the run red while naming it. It
+        # runs after tag and release so the packages that could ship already
+        # did, and the next push to main retries only what is still owed.
+        run: bash scripts/tools/check-npm-publish.sh --preflight

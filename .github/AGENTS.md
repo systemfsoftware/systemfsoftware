@@ -5,9 +5,13 @@ Read this file when a check fails, not before.
 ## Architecture
 
 - **`check:ci` is the single definition of the gate.** `package.json#scripts.check:ci` defines what runs; `.github/workflows/reusable-checks.yml` invokes it. CI workflows enumerate no check steps.
-- **`Release` is two-phase pnpm-native.**
-  1. `push` to `main`: `pnpm version -r` consumes `.changeset/` intents and opens a Release PR (`changeset-release/main`). The job dispatches CI for the branch via `gh workflow run ci.yml --ref changeset-release/main` so required checks start automatically.
-  2. Merge of Release PR: runs `the gate (pnpm check:ci)`, builds, publishes via npm OIDC trusted publishing with provenance, tags `name@v<version>`, and creates a GitHub Release per package from `.changeset/changelogs/`.
+- **`Release` is push-triggered and phase is derived from repository state.** Every phase hangs off `push` to `main`; nothing hangs off a pull-request event, because merging the Release PR with branch deletion destroys `refs/pull/<n>/merge` and GitHub cancels the queued run with zero jobs. `scripts/tools/plan-release.mjs` reads durable state instead and prints `phase=`:
+  1. `version` — pending `.changeset/` intents exist. `pnpm version -r` consumes them and opens a Release PR (`changeset-release/main`). The job dispatches CI for the branch via `gh workflow run ci.yml --ref changeset-release/main` so required checks start automatically.
+  2. `publish` — no intents pending, but some `name@v<version>` tag is absent from `origin`. Runs `the gate (pnpm check:ci)`, builds, publishes via npm OIDC trusted publishing with provenance, tags, and creates a GitHub Release per package from `.changeset/changelogs/`.
+  3. `none` — nothing owed.
+
+  Merging the Release PR is itself a push to `main`, so it re-plans into `publish`. A publish that fails leaves the tags absent, so the next push re-plans into `publish` again and retries only what is still owed. Never re-trigger a release by hand.
+- **A never-published package fails the publish job, last.** OIDC cannot debut a package. `check-npm-publish.sh --emit-filters` excludes it so the rest still publish, tag and release; the trailing `--preflight` then ends the run red naming it. Remedy is a maintainer's: `pnpm publish:unpublished`, then `npm trust github <pkg> --repo systemfsoftware/systemfsoftware --file release.yml --allow-publish`.
 - **`changeset-check.yml` enforces release intent.** Fails any PR changing a publishable package's turbo `build` hash without a `.changeset/` intent.
 
 ## Local Reproduction

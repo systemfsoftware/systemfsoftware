@@ -20,20 +20,31 @@ check_mode=false
 preflight_mode=false
 
 usage() {
-  echo "Usage: $0 [--check] [--json] [--preflight]" >&2
+  echo "Usage: $0 [--check] [--json] [--preflight] [--emit-filters <file>]" >&2
   echo "  --check     exit 1 if any non-private package is unpublished or lacks OIDC attestations" >&2
   echo "  --json      emit a machine-readable JSON report" >&2
   echo "  --preflight exit 1 if any non-private package has never been published (the release gate)" >&2
+  echo "  --emit-filters <file> write pnpm --filter exclusion args for unpublished packages to <file> and exit 0" >&2
   echo "  NPM_REGISTRY env overrides the registry base URL" >&2
   exit 2
 }
 
 json_mode=false
+filter_output=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --check) check_mode=true ;;
     --json) json_mode=true ;;
     --preflight) preflight_mode=true ;;
+    --emit-filters)
+      if [[ $# -lt 2 ]]; then echo "Missing argument for --emit-filters" >&2; usage; fi
+      filter_output="$2"
+      shift 2
+      continue
+      ;;
+    --emit-filters=*)
+      filter_output="${1#*=}"
+      ;;
     -h|--help) usage ;;
     *) echo "Unknown option: $1" >&2; usage ;;
   esac
@@ -119,8 +130,29 @@ for name in "${!local_version[@]}"; do
       ;;
   esac
 done
+# --- 3b. --emit-filters: write pnpm filter exclusions for unpublished packages -----------
+# Reuses the classification above as the single source of the unpublished verdict
+# (no second registry query). Exits 0 after writing, even when unpublished exists.
+# The publish step consumes this file to exclude debut packages from `pnpm publish -r`.
+if [[ -n "$filter_output" ]]; then
+  mkdir -p "$(dirname "$filter_output")"
+  filters=()
+  for name in "${!klass[@]}"; do
+    if [[ "${klass[$name]}" == "unpublished" ]]; then
+      filters+=("--filter=!${name}")
+    fi
+  done
+  if [[ ${#filters[@]} -gt 0 ]]; then
+    printf '%s\n' "${filters[@]}" > "$filter_output"
+  else
+    : > "$filter_output"
+  fi
+  echo "wrote ${#filters[@]} filter(s) to $filter_output" >&2
+  for f in "${filters[@]}"; do echo "  $f" >&2; done
+  exit 0
+fi
 
-# --- 4. Report ----------------------------------------------------------------------------
+ # --- 4. Report ----------------------------------------------------------------------------
 if $json_mode; then
   for name in "${!local_version[@]}"; do
     jq -cn \
