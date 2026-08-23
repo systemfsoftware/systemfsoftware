@@ -1,26 +1,28 @@
-import util from 'util'
-import { LogLevel } from './log-level.js'
-import { type SerializedLoggingEvent } from './logging-event.schema.js'
+import util from 'node:util'
+
+import type { StrykerLogLevel } from './log-level.js'
+import type { SerializedLoggingEvent } from './logging-event.schema.js'
 
 export type { SerializedLoggingEvent } from './logging-event.schema.js'
 
-const pattern = [
-  '[\\u001B\\u009B][[\\]()#;?]*(?:(?:(?:(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]+)*|[a-zA-Z\\d]+(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?\\u0007)',
-  '(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-nq-uy=><~]))',
-].join('|')
-const ansiRegex = new RegExp(pattern, 'g')
-
+/**
+ * A single log event that crossed (or will cross) the framed TCP channel.
+ * Formatting is deliberately minimal: workers serialize with `formatMessage`
+ * (via `util.format`), the parent re-emits the already-formatted string
+ * through Effect's `Logger` (`formatSimple` / `formatJson`) so colours and
+ * destination are the Logger's concern, not the event's.
+ */
 export class LoggingEvent {
-  readonly startTime
+  readonly startTime: Date
   readonly categoryName: string
-  readonly data: unknown[]
-  readonly level: LogLevel
+  readonly data: readonly unknown[]
+  readonly level: StrykerLogLevel
   readonly pid: number
 
   private constructor(
     categoryName: string,
-    level: LogLevel,
-    data: unknown[],
+    level: StrykerLogLevel,
+    data: readonly unknown[],
     startTime: Date,
     pid: number,
   ) {
@@ -31,30 +33,24 @@ export class LoggingEvent {
     this.pid = pid
   }
 
-  static create(categoryName: string, level: LogLevel, data: unknown[]) {
+  static create(
+    categoryName: string,
+    level: StrykerLogLevel,
+    data: readonly unknown[],
+  ): LoggingEvent {
     return new LoggingEvent(categoryName, level, data, new Date(), process.pid)
   }
 
   format(): string {
-    return `${this.#formatPrefix()} ${this.#formatMessage().replace(ansiRegex, '')}`
+    return `${this.formatPrefix()} ${this.formatMessage()}`
   }
 
-  formatColorized(): string {
-    return `${this.#colorizedStart()}${this.#formatPrefix()}${this.#colorizedEnd()} ${this.#formatMessage()}`
-  }
-
-  #formatPrefix(): string {
+  private formatPrefix(): string {
     return `${this.startTime.toTimeString().slice(0, 8)} (${this.pid}) ${this.level.toUpperCase()} ${this.categoryName}`
   }
 
-  #formatMessage(): string {
+  private formatMessage(): string {
     return util.format(...this.data)
-  }
-  #colorizedStart() {
-    return `\x1B[${styles[this.level]}m`
-  }
-  #colorizedEnd() {
-    return '\x1B[39m'
   }
 
   static deserialize(ser: SerializedLoggingEvent): LoggingEvent {
@@ -71,19 +67,9 @@ export class LoggingEvent {
     return {
       startTime: this.startTime.toJSON(),
       categoryName: this.categoryName,
-      message: this.#formatMessage(),
+      message: this.formatMessage(),
       level: this.level,
       pid: this.pid,
     }
   }
 }
-
-const styles = Object.freeze({
-  trace: 34, // blue
-  debug: 36, // cyan
-  info: 32, // green
-  warn: 33, // yellow
-  error: 91, // red
-  fatal: 35, // magenta
-  off: 90, // grey
-})

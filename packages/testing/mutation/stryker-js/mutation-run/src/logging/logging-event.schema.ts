@@ -1,6 +1,6 @@
 import { Schema as S } from 'effect'
 
-import { LogLevel } from './log-level.js'
+import { StrykerLogLevel } from './log-level.js'
 
 /**
  * The wire format of a {@link LoggingEvent}; worker processes serialize
@@ -11,13 +11,13 @@ export const SerializedLoggingEventSchema = S.Struct({
   categoryName: S.String,
   message: S.String,
   level: S.Literals([
-    LogLevel.Trace,
-    LogLevel.Debug,
-    LogLevel.Information,
-    LogLevel.Warning,
-    LogLevel.Error,
-    LogLevel.Fatal,
-    LogLevel.Off,
+    StrykerLogLevel.Trace,
+    StrykerLogLevel.Debug,
+    StrykerLogLevel.Information,
+    StrykerLogLevel.Warning,
+    StrykerLogLevel.Error,
+    StrykerLogLevel.Fatal,
+    StrykerLogLevel.Off,
   ]),
   pid: S.Finite,
 })
