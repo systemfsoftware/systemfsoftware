@@ -4,11 +4,13 @@ import type { Package } from '../CreatePackage.js'
 import type { ModuleKind } from '../Types.js'
 import minimalLibDts from './MinimalLibDts.js'
 
+/** @internal */
 export interface ResolveModuleNameResult {
   resolution: ts.ResolvedModuleWithFailedLookupLocations
   trace: string[]
 }
 
+/** @internal */
 export interface CompilerHost {
   readonly getCompilerOptions: () => ts.CompilerOptions
   readonly getSourceFile: (fileName: string) => ts.SourceFile | undefined
@@ -38,6 +40,7 @@ export interface CompilerHost {
   ) => Effect.Effect<ts.Program>
 }
 
+/** @internal */
 export interface CompilerHosts {
   readonly node10: CompilerHost
   readonly node16: CompilerHost
@@ -45,6 +48,7 @@ export interface CompilerHosts {
   readonly findHostForFiles: (files: string[]) => CompilerHost | undefined
 }
 
+/** @internal */
 export const createCompilerHosts = (pkg: Package): Effect.Effect<CompilerHosts> =>
   Effect.gen(function*() {
     const node10 = yield* makeCompilerHost(pkg, ts.ModuleResolutionKind.Node10, ts.ModuleKind.CommonJS)

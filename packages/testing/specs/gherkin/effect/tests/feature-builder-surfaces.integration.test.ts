@@ -6,9 +6,9 @@
  * consumer would call it.
  */
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, Given, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Clock, Context, Effect, Layer } from 'effect'
 import { expect } from 'vitest'
-import { Gherkin, Given, Then } from '../src/mod.js'
 
 const Feature = makeFeature({ it, layer })
 

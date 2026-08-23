@@ -9,6 +9,7 @@
  *
  * @since 4.0.0
  */
+import { HydrationBoundary, RegistryContext, useAtomValue } from '@systemfsoftware/effect-atom-react'
 import * as Atom from '@systemfsoftware/effect-atom/Atom'
 import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
 import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
@@ -20,7 +21,6 @@ import * as Schema from 'effect/Schema'
 import * as React from 'react'
 import { renderToString } from 'react-dom/server'
 import { expect, vi } from 'vitest'
-import { HydrationBoundary, RegistryContext, useAtomValue } from '../src/index.js'
 
 const Feature = makeFeature({ it, layer })
 

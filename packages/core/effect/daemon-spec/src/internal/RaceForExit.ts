@@ -1,5 +1,6 @@
 import { Effect, Exit, Fiber } from 'effect'
 
+/** @internal */
 export const raceForExit = <A, E>(
   fibers: readonly Fiber.Fiber<A, E>[],
 ): Effect.Effect<readonly [number, Exit.Exit<A, E>]> =>

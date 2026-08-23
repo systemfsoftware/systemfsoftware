@@ -10,6 +10,14 @@
       "@systemfsoftware/source": "./src/index.ts",
       "default": "./dist/index.js"
     },
+    "./api": {
+      "@systemfsoftware/source": "./src/api.ts",
+      "default": "./dist/api.js"
+    },
+    "./inject": {
+      "@systemfsoftware/source": "./src/inject.ts",
+      "default": "./dist/inject.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -69,6 +77,8 @@
   "publishConfig": {
     "exports": {
       ".": "./dist/index.js",
+      "./api": "./dist/api.js",
+      "./inject": "./dist/inject.js",
       "./package.json": "./package.json"
     },
     "provenance": true

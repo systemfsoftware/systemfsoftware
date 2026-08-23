@@ -1,6 +1,6 @@
+import { DaemonReporter, Noop } from '@systemfsoftware/effect-daemon-spec'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Cause, Effect } from 'effect'
-import { DaemonReporter, Noop } from '../src/DaemonReporterAdapter.js'
 
 const Feature = makeFeature({ it, layer })
 

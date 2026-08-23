@@ -5,11 +5,14 @@ import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 
 import type { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { createVitestTestRunnerFactory, VitestTestRunner } from '../../dist/index.mjs'
-import type {
-  VitestRunnerOptions,
-  VitestRunnerOptionsWithStrykerOptions,
-} from '../../src/vitest-runner-options-with-stryker-options.js'
-import { createStrykerOptions, createTestInjector, createVitestRunnerOptions } from './factories.js'
+import {
+  createStrykerOptions,
+  createTestInjector,
+  createVitestRunnerOptions,
+  type VitestRunnerOptions,
+  type VitestRunnerOptionsWithStrykerOptions,
+} from './factories.js'
+
 import { TempTestDirectorySandbox } from './temp-test-directory-sandbox.js'
 
 /**

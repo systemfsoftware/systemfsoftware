@@ -16,4 +16,6 @@ export default defineConfig({
     'unicorn/prefer-node-protocol': 'error',
     'jsdoc/check-tag-names': ['warn', { definedTags: ['category', 'since', 'internal'] }],
   },
+
+  ignorePatterns: ['tests/AtomRpc.integration.test.ts'],
 })

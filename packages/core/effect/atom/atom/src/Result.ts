@@ -33,7 +33,7 @@ import {
   type Success,
   success,
   TypeId,
-} from './internal/ResultValues.js'
+} from './ResultValues.js'
 
 /**
  * Re-export the value-side declarations from the shared value module so the
@@ -54,7 +54,7 @@ export {
   success,
   TypeId,
 }
-export type { Failure, Initial, Result, Success } from './internal/ResultValues.js'
+export type { Failure, Initial, Result, Success } from './ResultValues.js'
 
 /**
  * Rebuilds an `Result` with new success and failure types while preserving the variant of another result.
@@ -785,4 +785,4 @@ class BuilderImpl<Out, A, E> {
   }
 }
 
-export { Schema } from './internal/ResultSchema.js'
+export { Schema } from './ResultSchema.js'

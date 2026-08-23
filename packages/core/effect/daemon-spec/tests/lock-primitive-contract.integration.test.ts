@@ -1,10 +1,10 @@
+import { LockPrimitive } from '@systemfsoftware/effect-daemon-spec'
+import { LockPrimitiveError } from '@systemfsoftware/effect-daemon-spec'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Fiber, Result } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
-import { LockPrimitive } from '../src/LeaderLockAdapter.js'
-import { LockPrimitiveError } from '../src/mod.js'
 import {
   mkBlockingStatefulLockPrimitive,
   mkFailingLockPrimitive,

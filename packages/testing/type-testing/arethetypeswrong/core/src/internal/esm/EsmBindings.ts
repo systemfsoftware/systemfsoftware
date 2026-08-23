@@ -31,6 +31,7 @@ function* extractDestructedNames(node: ts.BindingName): Iterable<string> {
   }
 }
 
+/** @internal */
 export function getEsmModuleBindings(sourceText: string): Exports {
   const options: ts.CreateSourceFileOptions = {
     languageVersion: ts.ScriptTarget.ESNext,

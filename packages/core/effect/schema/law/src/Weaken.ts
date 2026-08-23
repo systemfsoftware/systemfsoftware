@@ -292,8 +292,7 @@ const walk = (
  * `throw`-style failure isolation: a schema whose arbitrary construction
  * throws is reported as a thrown error rather than a silent `None`. U2's
  * fallback chain consumes this alongside the type-side arbitrary.
- *
- * @internal */
+ */
 export const safeEncodedArbitrary = (
   schema: S.ConstraintDecoder<unknown>,
 ): FastCheck.Arbitrary<unknown> => S.toArbitrary(S.toEncoded(schema))(FastCheck)
@@ -302,8 +301,7 @@ export const safeEncodedArbitrary = (
  * The fast-check arbitrary for the type side of a schema. Safe the same way
  * `safeEncodedArbitrary` is — never returns a placeholder for a thrown
  * arbitrary.
- *
- * @internal */
+ */
 export const safeTypeArbitrary = (schema: S.ConstraintDecoder<unknown>): FastCheck.Arbitrary<unknown> =>
   S.toArbitrary(schema)(FastCheck)
 

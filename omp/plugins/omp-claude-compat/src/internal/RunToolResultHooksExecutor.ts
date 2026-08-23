@@ -5,10 +5,12 @@ import type { HookSession, HookToolResult } from './HookSession.js'
 import { runPostToolUseFailureHooks } from './RunPostToolUseFailureHooksExecutor.js'
 import { runPostToolUseHooks } from './RunPostToolUseHooksExecutor.js'
 
+/** @internal */
 export class RunToolResultHooksExecutorDeps extends Context.Service<RunToolResultHooksExecutorDeps, Scope.Scope>()(
   'RunToolResultHooksExecutorDeps',
 ) {}
 
+/** @internal */
 export const runToolResultHooks = Effect.fn('runToolResultHooks')(function*(
   settings: HookSettings,
   event: HookToolResult,

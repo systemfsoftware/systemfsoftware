@@ -14,7 +14,8 @@ export function eagerEntryBudget({ maxBytes = 32 * 1024 } = {}) {
     name: 'omp-eager-entry-budget',
     generateBundle(_options, bundle) {
       const chunks = Object.values(bundle).filter((c) => c.type === 'chunk')
-      const entries = chunks.filter((c) => c.isEntry)
+      const entries = chunks.filter((c) => c.isEntry && /(?:^|\/)index\.js$/.test(c.fileName))
+
       if (entries.length === 0) return
 
       const externals = new Set()

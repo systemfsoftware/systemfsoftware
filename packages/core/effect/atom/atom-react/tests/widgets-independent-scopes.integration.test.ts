@@ -1,3 +1,4 @@
+import { RegistryContext, useAtomSuspense } from '@systemfsoftware/effect-atom-react'
 import * as Atom from '@systemfsoftware/effect-atom/Atom'
 import * as AtomRegistry from '@systemfsoftware/effect-atom/Registry'
 import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
@@ -7,7 +8,6 @@ import * as Effect from 'effect/Effect'
 import * as React from 'react'
 import { Suspense } from 'react'
 import { expect, vi } from 'vitest'
-import { RegistryContext, useAtomSuspense } from '../src/index.js'
 
 const Feature = makeFeature({ it, layer })
 

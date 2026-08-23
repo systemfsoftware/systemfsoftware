@@ -7,10 +7,15 @@ import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import type { DryRunOptions, MutantRunOptions } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { createInjector } from 'typed-inject'
 
-import type {
-  VitestRunnerOptions,
-  VitestRunnerOptionsWithStrykerOptions,
-} from '../../src/vitest-runner-options-with-stryker-options.js'
+export interface VitestRunnerOptions {
+  dir?: string
+  related?: boolean
+  configFile?: string
+}
+
+export interface VitestRunnerOptionsWithStrykerOptions extends StrykerOptions {
+  vitest: VitestRunnerOptions
+}
 
 // Decoding `{}` through the schema applies every decoding default the
 // declaration carries — nested section defaults included — so the options

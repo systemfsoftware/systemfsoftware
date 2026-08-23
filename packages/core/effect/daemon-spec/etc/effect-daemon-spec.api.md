@@ -15,6 +15,7 @@ import { Option as Option_2 } from 'effect';
 import { Schedule } from 'effect';
 import { Schema } from 'effect';
 import { Scope } from 'effect';
+import { Scope as Scope_2 } from 'effect/Scope';
 import { Stream } from 'effect';
 import { YieldableError } from 'effect/Cause';
 
@@ -259,7 +260,7 @@ export interface PollLoop<E, R> extends PollLoopTag {
     readonly interval: Duration.Input;
 }
 
-// @public (undocumented)
+// @public
 export const PollLoopTag: {
     readonly _tag: 'Poll';
 };
@@ -294,8 +295,8 @@ export const run: {
     readonly worker: {
         <E, R>(w: Worker_2<E, R, {
             mode: 'none';
-        }>): Effect.Effect<DaemonHealth, never, R | Scope.Scope>;
-        <E, R>(w: Worker_2<E, R, LockConfig>): Effect.Effect<DaemonHealth, never, R | LeaderLock | Scope.Scope>;
+        }>): Effect.Effect<DaemonHealth, never, R | Scope_2>;
+        <E, R>(w: Worker_2<E, R, LockConfig>): Effect.Effect<DaemonHealth, never, R | LeaderLock | Scope_2>;
     };
     readonly supervisor: typeof supervisor;
     readonly dynamic: typeof dynamic$1;
@@ -463,7 +464,7 @@ export class UnboundedIntensity extends UnboundedIntensity_base {
     readonly [IntensityTypeId]: symbol;
 }
 
-// @public (undocumented)
+// @public
 export function withLeaderLock<A, E, R>(self: Effect.Effect<A, E, R>, options: LeaderLockOptions, lock: LeaderLock['Service']): Effect.Effect<A | void, E | LeaderLockAcquireError, R>;
 
 // @public
@@ -504,8 +505,8 @@ export type WorkerTypeId = typeof WorkerTypeId;
 
 // Warnings were encountered during analysis:
 //
-// dist/index.d.ts:301:3 - (ae-forgotten-export) The symbol "dynamic$1" needs to be exported by the entry point index.d.ts
-// dist/index.d.ts:310:3 - (ae-forgotten-export) The symbol "custom" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:314:3 - (ae-forgotten-export) The symbol "dynamic$1" needs to be exported by the entry point index.d.ts
+// dist/index.d.ts:323:3 - (ae-forgotten-export) The symbol "custom" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

@@ -6,7 +6,7 @@ import {
   decideInSourceTestIgnore,
   IN_SOURCE_TEST_IGNORED,
   isInSourceTestGuard,
-} from '../../src/in-source-test-ignorer/index.js'
+} from '@systemfsoftware/stryker-plugins/in-source-test-ignorer'
 
 import { binaryOf, guardOf, identifier, importMetaMember, metaOf } from '../__fixtures__/InSourceTestAst.fixtures.js'
 

@@ -2,14 +2,14 @@ import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChild
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import type { ToolResultEvent } from '@oh-my-pi/pi-coding-agent'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import type { HookDispatchResult } from './__fixtures__/HookPublic.js'
+import { HookScopeLive, onToolResult } from './__fixtures__/HookPublic.js'
+import type { HookSession } from './__fixtures__/HookPublic.js'
+
 import { Effect, Layer } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import * as PathModule from 'effect/Path'
 import { expect } from 'vitest'
-import type { HookDispatchResult } from '../src/HookDispatcherExecutor.js'
-import { onToolResult } from '../src/HookDispatcherExecutor.js'
-import { HookScopeLive } from '../src/HookRuntime.js'
-import type { HookSession } from '../src/HookSession.js'
 import { makeSettingsJson, makeShellHookScript } from './__fixtures__/HookDispatcherFixture.js'
 
 const Feature = makeFeature({ it, layer })

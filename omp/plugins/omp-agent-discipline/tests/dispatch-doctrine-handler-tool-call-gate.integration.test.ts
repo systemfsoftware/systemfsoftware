@@ -8,9 +8,9 @@
  */
 
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { DOCTRINE_KERNEL } from '@systemfsoftware/omp-agent-discipline/api'
+import type { DispatchDoctrineExtension as _DispatchDoctrineExtension } from '@systemfsoftware/omp-agent-discipline/api'
 import { Effect } from 'effect'
-import { DOCTRINE_KERNEL } from '../src/DispatchDoctrineExecutor.js'
-import type { DispatchDoctrineExtension as _DispatchDoctrineExtension } from '../src/DispatchDoctrineHandler.js'
 import {
   BOTH_GUARDS_TOML,
   buildSession,
@@ -35,8 +35,8 @@ Feature('Dispatch-doctrine — handler tool_call gate')
             Effect.promise(async () => {
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
-              const mod = await import('../src/DispatchDoctrineHandler.js')
-              const { runSafe } = await import('../src/RunSafePolicy.js')
+              const mod = await import('@systemfsoftware/omp-agent-discipline/api')
+              const { runSafe } = await import('@systemfsoftware/omp-agent-discipline/api')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
               mod.DispatchDoctrineExtension(session.api as never, runSafe)
               return { projectDir, session }
@@ -77,8 +77,8 @@ Feature('Dispatch-doctrine — handler tool_call gate')
             Effect.promise(async () => {
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
-              const mod = await import('../src/DispatchDoctrineHandler.js')
-              const { runSafe } = await import('../src/RunSafePolicy.js')
+              const mod = await import('@systemfsoftware/omp-agent-discipline/api')
+              const { runSafe } = await import('@systemfsoftware/omp-agent-discipline/api')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
               mod.DispatchDoctrineExtension(session.api as never, runSafe)
               await session.fireAsync('tool_call', {
@@ -126,8 +126,8 @@ Feature('Dispatch-doctrine — handler tool_call gate')
               // user-level config would arm the gate and void 'config absent'.
               process.env['OMP_USER_CONFIG_HOME'] = projectDir
               vi.resetModules()
-              const mod = await import('../src/DispatchDoctrineHandler.js')
-              const { runSafe } = await import('../src/RunSafePolicy.js')
+              const mod = await import('@systemfsoftware/omp-agent-discipline/api')
+              const { runSafe } = await import('@systemfsoftware/omp-agent-discipline/api')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
               mod.DispatchDoctrineExtension(session.api as never, runSafe)
               return { projectDir, session }
@@ -168,8 +168,8 @@ Feature('Dispatch-doctrine — handler tool_call gate')
             Effect.promise(async () => {
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
-              const mod = await import('../src/DispatchDoctrineHandler.js')
-              const { runSafe } = await import('../src/RunSafePolicy.js')
+              const mod = await import('@systemfsoftware/omp-agent-discipline/api')
+              const { runSafe } = await import('@systemfsoftware/omp-agent-discipline/api')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
               mod.DispatchDoctrineExtension(session.api as never, runSafe)
               await session.fireAsync('tool_call', {
@@ -224,8 +224,8 @@ Feature('Dispatch-doctrine — handler tool_call gate')
             Effect.promise(async () => {
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
-              const mod = await import('../src/DispatchDoctrineHandler.js')
-              const { runSafe } = await import('../src/RunSafePolicy.js')
+              const mod = await import('@systemfsoftware/omp-agent-discipline/api')
+              const { runSafe } = await import('@systemfsoftware/omp-agent-discipline/api')
               const a = buildSession({ sessionId: SESSION_A, cwd: projectDir })
               const b = buildSession({ sessionId: SESSION_B, cwd: projectDir })
               mod.DispatchDoctrineExtension(a.api as never, runSafe)
@@ -275,8 +275,8 @@ Feature('Dispatch-doctrine — handler tool_call gate')
             Effect.promise(async () => {
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
-              const mod = await import('../src/DispatchDoctrineHandler.js')
-              const { runSafe } = await import('../src/RunSafePolicy.js')
+              const mod = await import('@systemfsoftware/omp-agent-discipline/api')
+              const { runSafe } = await import('@systemfsoftware/omp-agent-discipline/api')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
               mod.DispatchDoctrineExtension(session.api as never, runSafe)
               return { projectDir, session }
@@ -328,8 +328,8 @@ Feature('Dispatch-doctrine — handler tool_call gate')
             Effect.promise(async () => {
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
-              const mod = await import('../src/DispatchDoctrineHandler.js')
-              const { runSafe } = await import('../src/RunSafePolicy.js')
+              const mod = await import('@systemfsoftware/omp-agent-discipline/api')
+              const { runSafe } = await import('@systemfsoftware/omp-agent-discipline/api')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
               mod.DispatchDoctrineExtension(session.api as never, runSafe)
               return { projectDir, session }
@@ -382,8 +382,8 @@ Feature('Dispatch-doctrine — handler tool_call gate')
             Effect.promise(async () => {
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
-              const mod = await import('../src/DispatchDoctrineHandler.js')
-              const { runSafe } = await import('../src/RunSafePolicy.js')
+              const mod = await import('@systemfsoftware/omp-agent-discipline/api')
+              const { runSafe } = await import('@systemfsoftware/omp-agent-discipline/api')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
               mod.DispatchDoctrineExtension(session.api as never, runSafe)
               return { projectDir, session }
@@ -438,8 +438,8 @@ Feature('Dispatch-doctrine — handler tool_call gate')
             Effect.promise(async () => {
               const projectDir = createProjectDir({ 'systemfsoftware.toml': BOTH_GUARDS_TOML })
               vi.resetModules()
-              const mod = await import('../src/DispatchDoctrineHandler.js')
-              const { runSafe } = await import('../src/RunSafePolicy.js')
+              const mod = await import('@systemfsoftware/omp-agent-discipline/api')
+              const { runSafe } = await import('@systemfsoftware/omp-agent-discipline/api')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
               mod.DispatchDoctrineExtension(session.api as never, runSafe)
               return { projectDir, session }
@@ -481,8 +481,8 @@ Feature('Dispatch-doctrine — handler tool_call gate')
             Effect.promise(async () => {
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
-              const mod = await import('../src/DispatchDoctrineHandler.js')
-              const { runSafe } = await import('../src/RunSafePolicy.js')
+              const mod = await import('@systemfsoftware/omp-agent-discipline/api')
+              const { runSafe } = await import('@systemfsoftware/omp-agent-discipline/api')
               const session = buildSession({ sessionId: SESSION_A, cwd: projectDir })
               mod.DispatchDoctrineExtension(session.api as never, runSafe)
               return { projectDir, session }
@@ -496,8 +496,8 @@ Feature('Dispatch-doctrine — handler tool_call gate')
                 // Pre-fill the flag map with 50 unrelated session ids.
                 for (let i = 0; i < 50; i++) {
                   const flood = buildSession({ sessionId: 'flood-' + i, cwd: s.setup.projectDir })
-                  const mod = await import('../src/DispatchDoctrineHandler.js')
-                  const { runSafe } = await import('../src/RunSafePolicy.js')
+                  const mod = await import('@systemfsoftware/omp-agent-discipline/api')
+                  const { runSafe } = await import('@systemfsoftware/omp-agent-discipline/api')
                   mod.DispatchDoctrineExtension(flood.api as never, runSafe)
                   await flood.fireAsync('tool_call', {
                     type: 'tool_call',

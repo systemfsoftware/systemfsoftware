@@ -2,6 +2,7 @@ import ts from 'typescript'
 import type { InternalResolutionErrorProblem } from '../../Types.js'
 import { defineCheck } from '../DefineCheck.js'
 
+/** @internal */
 export default defineCheck({
   name: 'InternalResolutionError',
   enumerateFiles: true,

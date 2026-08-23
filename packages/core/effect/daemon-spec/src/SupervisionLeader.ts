@@ -1,5 +1,18 @@
-import { Duration, Effect, Schedule } from 'effect'
+import { Context, Duration, Effect, Schedule } from 'effect'
 import { cappedBackoff } from './Backoff.js'
+import { UnboundedIntensity } from './DaemonPolicy.schema.js'
+import type { SupervisionConfig } from './DaemonSpec.schema.js'
+
+export const LeaderConfig = Context.Reference<SupervisionConfig>(
+  '@systemfsoftware/effect-daemon-spec/LeaderConfig',
+  {
+    defaultValue: (): SupervisionConfig => ({
+      backoffBase: Duration.seconds(1),
+      intensity: UnboundedIntensity.make(),
+      cooldown: Duration.zero,
+    }),
+  },
+)
 
 export const leader = <
   INTENSITY,

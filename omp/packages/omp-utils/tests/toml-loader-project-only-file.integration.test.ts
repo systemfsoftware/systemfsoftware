@@ -13,7 +13,7 @@ import { Effect, Layer } from 'effect'
 import * as PathModule from 'effect/Path'
 import { expect } from 'vitest'
 
-import { TomlLoader, TomlLoaderLive } from '../src/TomlLoader.js'
+import { TomlLoader, TomlLoaderLive } from '@systemfsoftware/omp-utils'
 
 const Feature = makeFeature({ it, layer })
 

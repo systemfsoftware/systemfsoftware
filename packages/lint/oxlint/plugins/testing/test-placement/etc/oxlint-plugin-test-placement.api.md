@@ -22,6 +22,7 @@ const _default: {
         'behaviour-one-feature-per-file': Rule;
         'tests-dir-helpers-in-fixtures': Rule;
         'no-io-module-in-source-test': Rule;
+        'tests-import-public-api': Rule;
     };
     configs: {
         recommended: {

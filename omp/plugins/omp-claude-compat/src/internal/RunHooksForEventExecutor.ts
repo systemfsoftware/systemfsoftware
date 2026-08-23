@@ -22,6 +22,7 @@ import type { HookSession } from './HookSession.js'
 import { runHookScript, type RunHookScriptExecutorDeps } from './RunHookScriptExecutor.js'
 import { superviseFork } from './SuperviseForkExecutor.js'
 
+/** @internal */
 export class RunHooksForEventExecutorDeps extends Context.Service<RunHooksForEventExecutorDeps, Scope.Scope>()(
   'RunHooksForEventExecutorDeps',
 ) {}
@@ -156,6 +157,7 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
   } satisfies HooksForEventResult
 })
 
+/** @internal */
 export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
   entries: readonly HookEntry[],
   matchValue: string,

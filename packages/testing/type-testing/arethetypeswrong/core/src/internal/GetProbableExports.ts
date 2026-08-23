@@ -8,11 +8,13 @@ import {
 } from './TsCompat.js'
 const minifiedVariableAssignmentPattern = /[^\s];(?:var|let|const) [a-zA-Z0-9_]=[^\s]/
 
+/** @internal */
 export interface Export {
   name: string
   node: ts.Node
 }
 
+/** @internal */
 export function getProbableExports(sourceFile: ts.SourceFile): Export[] {
   return getEsbuildBabelSwcExports(sourceFile) ?? getWebpackBootstrapExports(sourceFile) ?? []
 }

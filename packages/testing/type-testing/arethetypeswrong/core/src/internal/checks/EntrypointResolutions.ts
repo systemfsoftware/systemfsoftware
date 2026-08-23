@@ -3,6 +3,7 @@ import type { Problem } from '../../Types.js'
 import { resolvedThroughFallback } from '../../Utils.js'
 import { defineCheck } from '../DefineCheck.js'
 
+/** @internal */
 export default defineCheck({
   name: 'EntrypointResolutions',
   dependencies: ({ subpath, resolutionKind }) => [subpath, resolutionKind],

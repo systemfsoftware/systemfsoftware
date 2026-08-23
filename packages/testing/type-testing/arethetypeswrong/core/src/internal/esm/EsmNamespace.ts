@@ -6,6 +6,7 @@ import { esmResolve } from './Resolve.js'
 // Note: this doesn't handle ambiguous indirect exports which probably isn't worth the
 // implementation complexity.
 
+/** @internal */
 export function getEsmModuleNamespace(
   fs: Package,
   specifier: string,

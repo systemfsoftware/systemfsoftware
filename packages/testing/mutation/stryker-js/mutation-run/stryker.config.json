@@ -12,6 +12,7 @@
     "dir": ".",
     "related": true
   },
+
   "reporters": [
     "progress",
     "json"

@@ -7,9 +7,9 @@
  * step body or options object was supplied where it should not have been.
  */
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+import { resolveScenarioArgs, StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Result } from 'effect'
 import { expect } from 'vitest'
-import { resolveScenarioArgs, StepError } from '../src/mod.js'
 
 const Feature = makeFeature({ it, layer })
 

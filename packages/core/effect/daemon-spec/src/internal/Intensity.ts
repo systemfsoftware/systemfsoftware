@@ -1,18 +1,21 @@
 import { Clock, Duration, Effect, Ref } from 'effect'
 import { exceedsRestarts, pruneTimestamps, recordTimestamp } from './IntensityWindow.js'
 
+/** @internal */
 export interface IntensityTracker {
   readonly record: Effect.Effect<void>
   readonly isExceeded: Effect.Effect<boolean>
   readonly count: Effect.Effect<number>
 }
 
+/** @internal */
 export const neverExceeds: IntensityTracker = {
   record: Effect.void,
   isExceeded: Effect.succeed(false),
   count: Effect.succeed(0),
 }
 
+/** @internal */
 export const make = (restarts: number, window: Duration.Duration): Effect.Effect<IntensityTracker> =>
   Effect.gen(function*() {
     const windowMillis = Duration.toMillis(window)

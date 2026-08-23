@@ -8,6 +8,7 @@ import { srcPropertyTestCell } from './rules/src-property-test-cell.js'
 import { testFileOutsideTestsDir } from './rules/test-file-outside-tests-dir.js'
 import { testSuffixOutsideSrc } from './rules/test-suffix-outside-src.js'
 import { testsDirHelpersInFixtures } from './rules/tests-dir-helpers-in-fixtures.js'
+import { testsImportPublicApi } from './rules/tests-import-public-api.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-test-placement'
 
@@ -24,6 +25,7 @@ const recommendedRules = {
   [rule('behaviour-one-feature-per-file')]: 'error',
   [rule('tests-dir-helpers-in-fixtures')]: 'error',
   [rule('no-io-module-in-source-test')]: 'error',
+  [rule('tests-import-public-api')]: 'error',
 } as const
 
 export default {
@@ -41,6 +43,7 @@ export default {
     'behaviour-one-feature-per-file': behaviourOneFeaturePerFile,
     'tests-dir-helpers-in-fixtures': testsDirHelpersInFixtures,
     'no-io-module-in-source-test': noIoModuleInSourceTest,
+    'tests-import-public-api': testsImportPublicApi,
   },
   configs: {
     recommended: {

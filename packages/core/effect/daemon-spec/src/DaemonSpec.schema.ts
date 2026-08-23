@@ -1,7 +1,7 @@
 import type { Cause, Duration, Effect, Metric, Option, Schedule, Stream } from 'effect'
 import type { DynamicSpecTypeId, SupervisorTypeId, WorkerTypeId } from './Brands.js'
 import type { ChildPolicyConfig, Intensity, MaxChildren, TickPolicyConfig } from './DaemonPolicy.schema.js'
-import type { PollLoopTag, StreamLoopTag, SubscriptionLoopTag } from './internal/LoopTags.js'
+import type { PollLoopTag, StreamLoopTag, SubscriptionLoopTag } from './LoopTags.js'
 
 export type LockConfig =
   | { mode: 'none' }

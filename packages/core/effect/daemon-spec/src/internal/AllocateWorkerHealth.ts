@@ -1,6 +1,7 @@
 import { Effect, Latch, Metric } from 'effect'
 import { healthStateGauge } from '../DaemonMetrics.js'
 
+/** @internal */
 export const allocateWorkerHealth = (
   name: string,
 ): Effect.Effect<{

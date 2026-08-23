@@ -11,13 +11,13 @@ import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { Effect, Schema as S } from 'effect'
 import { expect } from 'vitest'
 
-import { forkCoreSchema } from '../src/config/fork-schema.js'
+import { forkCoreSchema } from '@systemfsoftware/stryker-js-mutation-run/config/fork-schema'
 import {
   contributionByTestFile,
   judgeTestContribution,
   suffixesToRequire,
   toothlessTestFiles,
-} from '../src/test-contribution.js'
+} from '@systemfsoftware/stryker-js-mutation-run/test-contribution'
 import { OptionDocument, RequireTestContributionEntry } from './__fixtures__/option-document.schema.js'
 
 const decodeOptionDocument = S.decodeUnknownSync(S.fromJsonString(OptionDocument))

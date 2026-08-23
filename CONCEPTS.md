@@ -20,6 +20,12 @@ The consolidated `.d.ts` written by `api-extractor` to `dist/<name>.d.ts` per th
 
 _Avoid:_ "the dist .d.ts" (ambiguous with tsdown output)
 
+### internal folder
+
+A source directory whose path contains a segment exactly equal to `internal` (`src/internal`, `src/**/internal`). Exports in those files carry the TSDoc `@internal` tag. The tag is forbidden outside those folders. Workspace typecheck still sees the declarations through `@systemfsoftware/source`; the published `exports.types` artifact omits them.
+
+_Avoid:_ treating a filename substring as the folder (`internalize.ts` is not an internal folder)
+
 ### Externalized dependency
 
 A package.json `dependencies` (or `peerDependencies`) entry that tsdown leaves as a bare import in the tsdown output instead of inlining — the consumer's environment must provide it at runtime. The counterpart, a `devDependencies` entry, is inlined into the output. The dependency category therefore decides what a published tarball still needs from outside: anything private or unpublishable must never be externalized, because no consumer environment can provide it. Distinct from `bundledPackages`, which inlines _types_ into the api-extractor rollup — this concept concerns _runtime code_ in the tsdown output.

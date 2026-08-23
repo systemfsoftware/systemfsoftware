@@ -8,9 +8,17 @@
  * exactly as a downstream consumer would import them.
  */
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+import {
+  expandOutline,
+  Gherkin,
+  Given,
+  renderTitle,
+  stringifyForTitle,
+  Then,
+  tokenizeTemplate,
+} from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Result } from 'effect'
 import { expect } from 'vitest'
-import { expandOutline, Gherkin, Given, renderTitle, stringifyForTitle, Then, tokenizeTemplate } from '../src/mod.js'
 
 const Feature = makeFeature({ it, layer })
 

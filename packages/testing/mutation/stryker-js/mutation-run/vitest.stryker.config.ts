@@ -13,9 +13,10 @@ import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
  *
  * Nothing is lost: the mutation surface is the pure decisions this fork owns,
  * today only `src/test-contribution.ts`, whose own lane is
- * `tests/test-contribution.integration.test.ts`; the dropped spec never imports
- * it, and `related: true` already excludes it from every mutant run. It still
- * runs under `pnpm test`, which is its gate.
+ * `tests/test-contribution.integration.test.ts`. That test imports the
+ * published `@systemfsoftware/stryker-js-mutation-run/test-contribution`
+ * specifier. The runner aliases the sandbox package's `@systemfsoftware/source`
+ * exports onto the sandbox copy so `related: true` can walk that import.
  *
  * The paths track `vitest.config.ts`. When the behaviour lane moved to
  * `tests/*.integration.test.ts` these two globs kept naming the retired

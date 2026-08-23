@@ -6,12 +6,6 @@ import * as AsyncResult from '@systemfsoftware/effect-atom/Result'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { act, render, screen } from '@testing-library/react'
 import '@vitest/browser/matchers'
-import * as Effect from 'effect/Effect'
-import * as Exit from 'effect/Exit'
-import * as Schema from 'effect/Schema'
-import * as React from 'react'
-import { Suspense } from 'react'
-import { expect, vi } from 'vitest'
 import {
   HydrationBoundary,
   RegistryContext,
@@ -24,7 +18,13 @@ import {
   useAtomSubscribe,
   useAtomSuspense,
   useAtomValue,
-} from '../src/index.js'
+} from '@systemfsoftware/effect-atom-react'
+import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
+import * as Schema from 'effect/Schema'
+import * as React from 'react'
+import { Suspense } from 'react'
+import { expect, vi } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 

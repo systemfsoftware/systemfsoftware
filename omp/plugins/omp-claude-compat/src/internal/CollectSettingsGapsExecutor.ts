@@ -4,6 +4,7 @@ import { disabledCoverage, hookCoverage, parseSettings, unsupportedHookTypes } f
 import type { DisableSource, HookCoverageRow } from '../HookSettings.schema.js'
 import { MANAGED_SETTINGS_PATH } from './SettingsPaths.js'
 
+/** @internal */
 export class CollectSettingsGapsExecutorDeps extends Context.Service<CollectSettingsGapsExecutorDeps, Scope.Scope>()(
   'CollectSettingsGapsExecutorDeps',
 ) {}
@@ -11,6 +12,7 @@ export class CollectSettingsGapsExecutorDeps extends Context.Service<CollectSett
 const dedupeByEvent = (rows: readonly HookCoverageRow[]): readonly HookCoverageRow[] =>
   rows.filter((row, index) => rows.findIndex((other) => other.event === row.event) === index)
 
+/** @internal */
 export const collectSettingsGapsWithPaths = Effect.fn('collectSettingsGapsWithPaths')(function*(
   paths: readonly string[],
 ) {

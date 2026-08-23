@@ -1,4 +1,13 @@
-import type { Identifier, MetaProperty } from '../../src/in-source-test-ignorer/AstNode.schema.js'
+interface Identifier {
+  readonly type: 'Identifier'
+  readonly name: string
+}
+
+interface MetaProperty {
+  readonly type: 'MetaProperty'
+  readonly meta: Identifier
+  readonly property: Identifier
+}
 
 export const identifier = (name: string): Identifier => ({ type: 'Identifier', name })
 

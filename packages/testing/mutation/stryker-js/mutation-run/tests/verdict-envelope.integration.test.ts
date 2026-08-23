@@ -12,7 +12,11 @@ import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 
-import { buildVerdictEnvelope, generateRunId, VERDICT_ENVELOPE_SCHEMA_VERSION } from '../src/verdict-envelope.js'
+import {
+  buildVerdictEnvelope,
+  generateRunId,
+  VERDICT_ENVELOPE_SCHEMA_VERSION,
+} from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
 
 const Feature = makeFeature({ it, layer })
 

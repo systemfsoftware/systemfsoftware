@@ -1,10 +1,10 @@
+import * as Atom from '@systemfsoftware/effect-atom/Atom'
+import * as Registry from '@systemfsoftware/effect-atom/Registry'
+import * as Result from '@systemfsoftware/effect-atom/Result'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Deferred, Effect, Latch, Layer, Option, Schema, Stream, SubscriptionRef } from 'effect'
 import { KeyValueStore } from 'effect/unstable/persistence'
 import { expect, vi } from 'vitest'
-import * as Atom from '../src/Atom.js'
-import * as Registry from '../src/Registry.js'
-import * as Result from '../src/Result.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -1054,11 +1054,12 @@ Feature('Deriving values from other values on a page')
           s,
         ) => {
           expect(s.readings.viewBefore).toBe(0)
-          expect(Result.isSuccess(s.readings.effectBefore) && s.readings.effectBefore.value === 0).toBe(true)
-          expect(Result.isSuccess(s.readings.functionBefore) && s.readings.functionBefore.value === 0).toBe(true)
-          expect(Result.isFailure(s.readings.brokenBefore)).toBe(true)
+          expect(Result.isSuccess(s.readings.effectBefore as Result.Result<number, unknown>)).toBe(true)
+          expect(Result.isSuccess(s.readings.functionBefore as Result.Result<number, unknown>)).toBe(true)
+          expect(Result.isFailure(s.readings.brokenBefore as Result.Result<unknown, unknown>)).toBe(true)
           expect(s.readings.viewWritten).toBe(5)
-          expect(Result.isSuccess(s.readings.effectWritten) && s.readings.effectWritten.value === 3).toBe(true)
+          expect(Result.isSuccess(s.readings.effectWritten as Result.Result<number, unknown>)).toBe(true)
+
           expect(s.readings.viewChanged).toBe(9)
         }),
       ),

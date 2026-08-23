@@ -28,8 +28,8 @@ import type { RequestId } from 'effect/unstable/rpc/RpcMessage'
 import * as RpcSchema from 'effect/unstable/rpc/RpcSchema'
 import type { SetParameterType, SetReturnType } from 'type-fest'
 import * as Atom from './Atom.js'
-import { schemaCodec } from './internal/ResultSchema.js'
 import * as AsyncResult from './Result.js'
+import { schemaCodec } from './ResultSchema.js'
 
 /**
  * A `Context.Service` for a flattened RPC client integrated with atom reactivity.

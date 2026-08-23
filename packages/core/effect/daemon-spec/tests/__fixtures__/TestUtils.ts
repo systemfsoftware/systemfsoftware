@@ -1,6 +1,6 @@
+import type { Worker } from '@systemfsoftware/effect-daemon-spec'
+import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { Duration, Effect, Ref } from 'effect'
-import type { Worker } from '../../src/DaemonSpec.schema.js'
-import { Daemon } from '../../src/mod.js'
 
 export const CounterRef = {
   make: Ref.make<number>(0),

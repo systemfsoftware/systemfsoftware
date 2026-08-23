@@ -1,3 +1,4 @@
+/** @internal */
 export interface HooksForEventResult {
   readonly block?: boolean
   readonly reason?: string
@@ -5,7 +6,9 @@ export interface HooksForEventResult {
   readonly updatedInput?: Record<string, unknown>
 }
 
+/** @internal */
 export type FeedbackOnlyResult = Omit<HooksForEventResult, 'block' | 'reason'>
 
+/** @internal */
 export const blockAsFeedback = (result: HooksForEventResult): FeedbackOnlyResult =>
   result.reason === undefined ? {} : { warning: result.reason }

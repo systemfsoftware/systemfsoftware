@@ -1,15 +1,40 @@
-import type {
-  ArrowFunctionExpression,
-  AstNode,
-  CallExpression,
-  Identifier,
-  MemberExpression,
-  Program,
-} from '../../src/workflow-make-ignorer/AstNode.schema.js'
+interface Identifier {
+  readonly type: 'Identifier'
+  readonly name: string
+}
+
+interface MemberExpression {
+  readonly type: 'MemberExpression'
+  readonly object: Identifier
+  readonly property: Identifier
+}
+
+interface CallExpression {
+  readonly type: 'CallExpression'
+  readonly callee: AstNode
+  readonly arguments: readonly unknown[]
+}
+
+interface ArrowFunctionExpression {
+  readonly type: 'ArrowFunctionExpression'
+  readonly body: unknown
+}
+
+interface Program {
+  readonly type: 'Program'
+  readonly body: readonly unknown[]
+}
+
+interface StringLiteral {
+  readonly type: 'StringLiteral'
+  readonly value: string
+}
+
+type AstNode = unknown
 
 export const identifier = (name: string): Identifier => ({ type: 'Identifier', name })
 
-export const stringLiteral = (value: string) => ({ type: 'StringLiteral' as const, value })
+export const stringLiteral = (value: string): StringLiteral => ({ type: 'StringLiteral', value })
 
 export const importSpecifierOf = (imported: string, local: string) => ({
   type: 'ImportSpecifier' as const,

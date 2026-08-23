@@ -7,9 +7,9 @@
  * `StepError`, and the pipeline can be pre-seeded via `Gherkin.startWith`.
  */
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+import { And, But, Gherkin, Given, StepError, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Result } from 'effect'
 import { expect } from 'vitest'
-import { And, But, Gherkin, Given, StepError, Then, When } from '../src/mod.js'
 import { TestDomainError } from './__fixtures__/TestDomainError.schema.js'
 
 const Feature = makeFeature({ it, layer })

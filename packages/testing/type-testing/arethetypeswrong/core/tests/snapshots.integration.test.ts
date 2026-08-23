@@ -3,7 +3,7 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import { Effect, Exit } from 'effect'
 import { expect } from 'vitest'
 
-import { checkPackage, ProblemKindSchema, recipes } from '../src/index.js'
+import { checkPackage, ProblemKindSchema, recipes } from '@systemfsoftware/arethetypeswrong-core'
 
 const Feature = makeFeature({ it, layer })
 

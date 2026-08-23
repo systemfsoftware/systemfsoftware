@@ -1,7 +1,8 @@
+import { checkPackage, createPackage } from '@systemfsoftware/arethetypeswrong-core'
 import { it, layer, makeFeature, StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
-import { checkPackage, createPackage } from '../src/index.ts'
+
 /**
  * Entrypoint discovery — null-target subpath pruning.
  *

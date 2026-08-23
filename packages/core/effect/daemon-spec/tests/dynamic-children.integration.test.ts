@@ -1,13 +1,13 @@
+import { DynamicLimitExceeded } from '@systemfsoftware/effect-daemon-spec'
+import { run } from '@systemfsoftware/effect-daemon-spec'
+import { Daemon } from '@systemfsoftware/effect-daemon-spec'
+import { dynamic } from '@systemfsoftware/effect-daemon-spec'
+import { MaxChildren } from '@systemfsoftware/effect-daemon-spec'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Latch, Match, Ref, Result, Stream } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
-import { DynamicLimitExceeded } from '../src/mod.js'
-import { run } from '../src/mod.js'
-import { Daemon } from '../src/mod.js'
-import { dynamic } from '../src/mod.js'
-import { MaxChildren } from '../src/mod.js'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 
 const Feature = makeFeature({ it, layer })

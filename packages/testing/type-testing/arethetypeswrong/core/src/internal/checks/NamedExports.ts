@@ -4,6 +4,7 @@ import { getResolutionOption } from '../../Utils.js'
 import { defineCheck } from '../DefineCheck.js'
 import { getEsmModuleNamespace } from '../esm/EsmNamespace.js'
 
+/** @internal */
 export default defineCheck({
   name: 'NamedExports',
   dependencies: ({ entrypoints, subpath, resolutionKind, programInfo }) => {

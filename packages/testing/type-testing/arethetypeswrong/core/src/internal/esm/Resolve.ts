@@ -15,10 +15,12 @@ function makeFileSystemAdapter(fs: Package): FileSystemSync {
   }
 }
 
+/** @internal */
 export function cjsResolve(fs: Package, specifier: string, parentURL: URL) {
   return cjs.resolveSync(makeFileSystemAdapter(fs), specifier, parentURL)
 }
 
+/** @internal */
 export function esmResolve(fs: Package, specifier: string, parentURL: URL) {
   return esm.resolveSync(makeFileSystemAdapter(fs), specifier, parentURL)
 }

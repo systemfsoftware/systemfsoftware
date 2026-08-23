@@ -1,8 +1,8 @@
+import { toDirectoryJSON } from '@systemfsoftware/arethetypeswrong-core'
 import { it, layer, makeFeature, StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
-import { toDirectoryJSON } from '../src/index.js'
 
 const Feature = makeFeature({ it, layer })
 
