@@ -51,5 +51,11 @@ ruleTester.run('no-internal-jsdoc-outside', noInternalJsdocOutside, {
       code: `/** @internal */\nexport { publicName } from './public.js'\n`,
       errors: tagged,
     },
+    {
+      name: 'Should_ReportOnlyTaggedExport_When_UntaggedNeighborFollows',
+      filename: '/repo/pkg/src/mod.ts',
+      code: `/** @internal */\nexport const a = 1\nexport const b = 2\n`,
+      errors: tagged,
+    },
   ],
 })

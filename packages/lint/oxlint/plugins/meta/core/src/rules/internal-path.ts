@@ -1,6 +1,6 @@
 const segmentsOf = (filename: string): readonly string[] => filename.split(/[/\\]/)
 
-export const directoriesOf = (filename: string): readonly string[] => {
+const directoriesOf = (filename: string): readonly string[] => {
   const segments = segmentsOf(filename)
   return segments.slice(0, -1)
 }

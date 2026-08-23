@@ -47,6 +47,11 @@ ruleTester.run('internal-export-jsdoc', internalExportJsdoc, {
       filename: '/repo/pkg/src/internal/a.ts',
       code: `const foo = 1\n`,
     },
+    {
+      name: 'Should_StaySilent_When_StringLiteralMentionsInternal',
+      filename: '/repo/pkg/src/internal/a.ts',
+      code: `/** @internal */\nexport const MESSAGE = 'the @internal surface'\n`,
+    },
   ],
   invalid: [
     {
@@ -65,6 +70,31 @@ ruleTester.run('internal-export-jsdoc', internalExportJsdoc, {
       name: 'Should_Report_When_StarExportMissingTag',
       filename: '/repo/pkg/src/internal/a.ts',
       code: `export * from './x.js'\n`,
+      errors: missing,
+    },
+    {
+      name: 'Should_Report_When_SecondExportIsUntaggedAfterTaggedNeighbor',
+      filename: '/repo/pkg/src/internal/a.ts',
+      code: `/** @internal */\nexport const a = 1\nexport const b = 2\n`,
+      errors: missing,
+    },
+    {
+      name: 'Should_Report_When_DefaultExportMissingTag',
+      filename: '/repo/pkg/src/internal/a.ts',
+      code: `export default function a() {}\n`,
+      errors: missing,
+    },
+    {
+      name: 'Should_Report_When_InternalExportUsesCapitalizedTag',
+      filename: '/repo/pkg/src/internal/a.ts',
+      code: `/** @Internal */\nexport const foo = 1\n`,
+      errors: missing,
+    },
+
+    {
+      name: 'Should_Report_When_InternalExportStringMentionsTagButHasNone',
+      filename: '/repo/pkg/src/internal/a.ts',
+      code: `export const MESSAGE = 'the @internal surface'\n`,
       errors: missing,
     },
   ],

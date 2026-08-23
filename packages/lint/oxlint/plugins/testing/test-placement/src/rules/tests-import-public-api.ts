@@ -3,7 +3,7 @@ import type { Context, ESTree } from '@oxlint/plugins'
 import { basenameOf, isTestFile, isUnderSrc } from './path.js'
 import { meta, REACH_IN_ACTUAL, REACH_IN_EXPECTED, REACH_IN_FIX } from './tests-import-public-api.config.js'
 
-export const isForbiddenRelativeSpecifier = (value: string): boolean => {
+const isForbiddenRelativeSpecifier = (value: string): boolean => {
   if (!value.startsWith('.')) return false
   let sawDotDot = false
   for (const segment of value.split('/')) {
@@ -53,20 +53,9 @@ export const testsImportPublicApi = defineRule({
       ImportExpression(node: ESTree.ImportExpression) {
         reportIfForbidden(node.source)
       },
-      TSImportEqualsDeclaration(node: ESTree.Node) {
-        if (!('moduleReference' in node)) return
-        const reference = node.moduleReference
-        if (
-          reference !== null &&
-          typeof reference === 'object' &&
-          'type' in reference &&
-          reference.type === 'TSExternalModuleReference' &&
-          'expression' in reference
-        ) {
-          const expression = reference.expression
-          if (expression !== null && typeof expression === 'object' && 'type' in expression) {
-            reportIfForbidden(expression)
-          }
+      TSImportEqualsDeclaration(node: ESTree.TSImportEqualsDeclaration) {
+        if (node.moduleReference.type === 'TSExternalModuleReference') {
+          reportIfForbidden(node.moduleReference.expression)
         }
       },
     }

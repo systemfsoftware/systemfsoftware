@@ -68,5 +68,11 @@ ruleTester.run('tests-import-public-api', testsImportPublicApi, {
       code: `// fixture: the rule must see ImportExpression\nconst mod = await import('../src/mod.js')\n`,
       errors: reachIn('../src/mod.js'),
     },
+    {
+      name: 'Should_Report_When_TestClimbsIntoInternal',
+      filename: '/repo/pkg/tests/a.integration.test.ts',
+      code: `import { x } from '../internal/helper.js'\n`,
+      errors: reachIn('../internal/helper.js'),
+    },
   ],
 })
