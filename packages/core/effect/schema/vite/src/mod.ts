@@ -447,6 +447,7 @@ export const generateSchemaLaws = (
     .map((s) => quote(labelOf(s)))
     .sort()
     .join(', ')
+  const timeoutArg = options?.timeout === undefined ? '' : `, { timeout: ${options.timeout} }`
 
   return [
     `import type { AST } from 'effect/SchemaAST'`,
@@ -462,9 +463,7 @@ export const generateSchemaLaws = (
     schemas.map((s, i) => `  [${quote(labelOf(s))}, schema_${i}],`).join('\n'),
     `]`,
     '',
-    `it('every obligation reachable from an exported schema is refuted somewhere'${
-      options?.timeout !== undefined ? `, { timeout: ${options.timeout} }` : ''
-    }, () => {`,
+    `it('every obligation reachable from an exported schema is refuted somewhere'${timeoutArg}, () => {`,
     `  const covered = new Set<AST>()`,
     `  for (const [name, schema] of EXPORTED) {`,
     `    if (!REFUTED.has(name)) continue`,
