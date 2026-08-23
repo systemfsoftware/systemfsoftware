@@ -164,6 +164,14 @@ The verification altitude that exercises a published command-line surface from o
 
 It exists because a class of properties is process-level by category and admits no honest double: exit status, bytes arriving on a real file descriptor, a timer firing in real elapsed time, a pipe closed by its reader, a signal delivered mid-run, resolution of an installed binary, and whether importing a module has side effects. Substituting the process, the writer, or the clock for any of these asserts the substitute rather than the program, so evidence gathered that way does not count at this altitude — while a logical property, such as the order in which a pipeline emits events, stays at composition altitude and is asserted against a declared port instead. Because the lane depends on a container runtime it can fail for reasons unrelated to the code, and its governing rule is that such a failure must be loud and must name its cause: reporting a skip, or zero passing tests, would make an unrun lane indistinguishable from a passing one, which is the false green the lane was built to remove.
 
+### Recorded outcome
+
+A committed expected value a test compares a freshly computed one against — the file `toMatchFileSnapshot` reads, or the literal `toMatchInlineSnapshot` rewrites in place. It is an assertion technique, never a test kind: the kinds are altitudes — property, integration, the **Contract lane** — and a recording is how the comparison is made at whichever altitude the test already occupies. The file holding one is therefore named for the feature it drives, and the recording leaves no trace in that name; a test file named for its mechanism is announcing that its author could not name the behaviour under test.
+
+No suffix keys on it, and none can. A suffix is an author's assertion about a file's contents, so a rule keyed on one runs only on files already carrying the name and stays silent on exactly the file it exists to catch — the general form is **Drifted key**. What decides whether a recording is honest is not its name but the runner's update state. Pinned to `none`, a missing or mismatched recording fails the run and replacing one is an explicit flag a reader can see in a command. Left at its default it resolves to `new` outside a forge, and a deleted recording is rewritten in place while the suite reports green: the forge was already closed by the runner's own environment detection, so the whole exposure was the developer's shell and the agent's — the two run classes where an unreviewed recording actually gets committed.
+
+A recording is evidence only so far as someone reads it. The technique's own literature puts the reviewable ceiling at a few dozen lines and treats anything past it as a file that gets regenerated rather than examined, so how much a single assertion pins is a constraint on the assertion, not an accident of the subject.
+
 ## Architecture cells (constitution §I–V)
 
 ### Cell
