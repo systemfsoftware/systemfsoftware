@@ -1,7 +1,7 @@
 ---
 '@systemfsoftware/all': patch
 '@systemfsoftware/arethetypeswrong-cli': none
-'@systemfsoftware/arethetypeswrong-core': none
+'@systemfsoftware/arethetypeswrong': none
 '@systemfsoftware/effect-atom': patch
 '@systemfsoftware/effect-atom-react': patch
 '@systemfsoftware/effect-cell-types': patch
