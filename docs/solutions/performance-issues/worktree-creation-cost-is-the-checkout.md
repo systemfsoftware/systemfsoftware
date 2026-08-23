@@ -1,7 +1,7 @@
 ---
 title: Worktree creation cost is the checkout, and three cache seeds were failing silently
 date: "2026-08-10"
-last_updated: "2026-08-10"
+last_updated: "2026-08-23"
 category: performance-issues
 module: systemfsoftware
 problem_type: performance_issue
@@ -104,6 +104,50 @@ Two consequences, both silent:
 The script now uses `--reflink=always` so the degrade is observable, names the
 mechanism that actually ran, guards on `-s` rather than `-f`, and writes through
 a temp name renamed into place.
+
+## Defect 5 — the seed registered nothing, and a byte-level copy can land a torn index
+
+Two further failures sat behind the warm copy itself.
+
+1. **The seed conferred no registration.** A copied index is inert: it lands in
+   `.codegraph/` without the worktree being known to the codegraph daemon as a
+   project. Registration (the canonical `init` step — config, daemon awareness)
+   is separate, is an idempotent no-op once an index exists, and is what builds
+   the index on a fresh tree. The hook now runs it unconditionally after any
+   copy outcome: cheap when the seed landed, authoritative when no seed did.
+2. **The non-transactional copy rungs can land a torn index that the size guard
+   trusts.** The consistent-snapshot rung (`sqlite .backup`) fails exactly on
+   this mount (Defect 3), leaving the byte-level rungs (`reflink`, plain `cp`).
+   Those snapshot a database the primary daemon is actively writing (live WAL)
+   at page granularity; a torn read lands a file that is non-empty, individually
+   readable, and transactionally inconsistent. The `-s` guard classifies it as a
+   valid index, the follow-up `init` no-ops on the existing file, and the
+   worktree is warm, registered, and wrong — every log line green.
+
+Fix: when a byte-level rung produces the file, verify it at the destination with
+the engine's own integrity check (`PRAGMA quick_check`) whenever the checker
+binary exists; on a non-`ok` verdict, drop the file so the unconditional `init`
+rebuilds. Cleanup: sweep stale `.partial.<pid>` files from earlier interrupted
+runs at copy entry — the trap only knows the current PID's temp name.
+
+## Architectural invariants
+
+- **A seed is a cache, never the registration.** A copied artifact confers no
+  identity, config, or daemon awareness on its destination. Registration is a
+  separate, idempotent operation that runs unconditionally after every seeding
+  path — cheap when the seed landed, authoritative when it did not.
+- **Non-transactional seeds carry a consistency gate.** Any path that snapshots
+  a live, incrementally-written datastore by byte-level copy must verify the
+  snapshot at the destination before declaring it a seed; verify with an
+  independent engine check, never with size or presence. A torn seed that is
+  trusted is worse than a cold start — it is a warm, wrong answer.
+- **A cleanup trap owns its own PID, so entry must sweep.** Only a trap in the
+  interrupted process could have removed its partial; the next run must remove
+  stragglers before consulting the guard, or a forgotten partial becomes a
+  poisoned guard (Defect 3's 0-byte case in another shape).
+- **Idempotency claims are load-bearing.** An unconditional init step rests on
+  the CLI's no-op contract for existing indices; verify that contract once on
+  the real binary before shipping the unconditional call.
 
 ## Defect 4 — the include list is read from the source worktree
 
