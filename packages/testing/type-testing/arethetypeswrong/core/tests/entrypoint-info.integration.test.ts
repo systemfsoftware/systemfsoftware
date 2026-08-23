@@ -1,9 +1,7 @@
 import { it, layer, makeFeature, StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
-import { checkPackage } from '../src/index.ts'
-import { createTestPackage } from './__fixtures__/Utils.ts'
-
+import { checkPackage, createPackage } from '../src/index.ts'
 /**
  * Entrypoint discovery — null-target subpath pruning.
  *
@@ -17,7 +15,7 @@ Feature('Entrypoint discovery — pruning null-target subpaths').body(({ scenari
   scenario(
     'Should_SkipExportSubpaths_When_ExportTargetIsNull',
     checkPackage(
-      createTestPackage({
+      createPackage({
         'dist/browser.d.ts': 'export {};',
         'dist/browser.js': 'export {};',
         'index.d.ts': 'export {};',

@@ -1,3 +1,4 @@
+import { packPackage, recipes } from '@systemfsoftware/arethetypeswrong-core'
 import { execFile } from 'node:child_process'
 import { access, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -7,7 +8,6 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { GenericContainer, getContainerRuntimeClient, type StartedTestContainer } from 'testcontainers'
 import type { TestProject } from 'vitest/node'
-
 import { FIXTURE_FILES, FIXTURE_PACKAGE, STUB_REGISTRY_PORT, STUB_REGISTRY_SCRIPT } from './StubRegistry.js'
 
 declare module 'vitest' {
@@ -31,7 +31,6 @@ const WORKSPACE_PACKAGES = [
 // for the built entry at `cli/tests/dist/main.mjs` and failing with it missing.
 const REPO_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url))
 const CLI_DIR = fileURLToPath(new URL('../../', import.meta.url))
-const FIXTURES_DIR = fileURLToPath(new URL('./fixtures', import.meta.url))
 const WORKDIR = '/work'
 const TARBALLS_IN_CONTAINER = '/opt/tarballs'
 const STUB_SCRIPT_PATH = `${WORKDIR}/stub-registry.mjs`
@@ -40,6 +39,7 @@ const FIXTURE_TARBALL_IN_CONTAINER = `${TARBALLS_IN_CONTAINER}/${FIXTURE_PACKAGE
 let attwContainer: StartedTestContainer | undefined
 let tarballDir: string | undefined
 let fixtureDir: string | undefined
+let recipeFixtureDir: string | undefined
 
 export async function setup(project: TestProject): Promise<void> {
   const distEntry = join(CLI_DIR, 'dist', 'main.mjs')
@@ -91,6 +91,15 @@ export async function setup(project: TestProject): Promise<void> {
   await execFileAsync('npm', ['pack'], { cwd: fixtureDir })
   const fixtureTarball = join(fixtureDir, `${FIXTURE_PACKAGE.name}-${FIXTURE_PACKAGE.version}.tgz`)
 
+  // Pack recipes in-process into a temp dir; do not read committed .tgz.
+  recipeFixtureDir = await mkdtemp(join(tmpdir(), 'attw-recipe-fixtures-'))
+  for (const [key, fn] of Object.entries(recipes)) {
+    if (key === 'KnownBad' || key === 'TypesCompanionTypes') continue
+    const pkg = fn()
+    const bytes = packPackage(pkg)
+    await writeFile(join(recipeFixtureDir, `${pkg.packageName}.tgz`), bytes)
+  }
+
   attwContainer = await new GenericContainer(NODE_IMAGE)
     .withCopyFilesToContainer(
       [
@@ -105,7 +114,7 @@ export async function setup(project: TestProject): Promise<void> {
         target: `${WORKDIR}/package.json`,
       },
     ])
-    .withCopyDirectoriesToContainer([{ source: FIXTURES_DIR, target: `${WORKDIR}/fixtures` }])
+    .withCopyDirectoriesToContainer([{ source: recipeFixtureDir, target: `${WORKDIR}/fixtures` }])
     .withWorkingDir(WORKDIR)
     .withCommand(['sleep', 'infinity'])
     .start()
@@ -177,4 +186,5 @@ export async function teardown(): Promise<void> {
   await attwContainer?.stop()
   if (tarballDir !== undefined) await rm(tarballDir, { recursive: true, force: true })
   if (fixtureDir !== undefined) await rm(fixtureDir, { recursive: true, force: true })
+  if (recipeFixtureDir !== undefined) await rm(recipeFixtureDir, { recursive: true, force: true })
 }

@@ -37,10 +37,17 @@ Requires Node `>=24` and `typescript@6.0.3` on the `catalog:attw` line (the 6.x 
 Check an in-memory package:
 
 ```ts
-import { checkPackage } from '@systemfsoftware/arethetypeswrong-core'
-import { createPackageFromTarballData } from '@systemfsoftware/arethetypeswrong-core'
+import { checkPackage, createPackage } from '@systemfsoftware/arethetypeswrong-core'
 
-const pkg = createPackageFromTarballData(tarballBytes)
+const pkg = createPackage(
+  {
+    'package.json': JSON.stringify({ name: 'demo', version: '1.0.0', type: 'module' }),
+    'index.d.ts': 'export declare const x: number',
+    'index.js': 'export const x = 1',
+  },
+  'demo',
+  '1.0.0',
+)
 
 const result = await checkPackage(pkg)
 
@@ -52,6 +59,24 @@ if ('entrypoints' in result) {
     console.error(problem.kind, problem.entrypoint, problem.pos)
   }
 }
+```
+
+Mount the same tree on an in-memory filesystem (keys stay `/node_modules/<name>/…`):
+
+```ts
+import { toDirectoryJSON } from '@systemfsoftware/arethetypeswrong-core'
+import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
+import { Effect } from 'effect'
+
+const tree = {
+  'package.json': JSON.stringify({ name: 'demo', version: '1.0.0' }),
+  'index.js': 'export const x = 1',
+}
+const contents = toDirectoryJSON(tree, 'demo')
+// `contents` is a plain `Record<string, string>` like `{ '/node_modules/demo/package.json': '...' }`
+const fs = MemoryFileSystem.make(contents as never)
+const bytes = await Effect.runPromise(fs.readFile('/node_modules/demo/package.json'))
+const text = new TextDecoder().decode(bytes)
 ```
 
 Check a real tarball on disk:
