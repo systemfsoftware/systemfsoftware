@@ -10,10 +10,20 @@
 // exactly the packages that still need it, and the release pipeline then meets
 // them as `no-oidc` forever. The skip is keyed on the attestation instead:
 //
-//   404                      -> debut:     build -> publish -> trust -> list
-//   200, no attestation      -> untrusted: trust -> list  (the version exists,
+//   unpublished (404)        -> debut:     build -> publish -> trust -> list
+//   published, no attestation-> untrusted: trust -> list  (the version exists,
 //                               so re-publishing it would be rejected)
-//   200, attestation present -> skipped
+//   published + attested     -> skipped
+//   unreadable registry      -> named, and the run ends non-zero
+//
+// An untrusted package does not become attested by being registered: an
+// attestation is stamped at publish time and never granted retroactively, so its
+// already-published version stays unattested until its next version ships from
+// CI (docs/solutions/tooling-decisions/first-publish-under-oidc-trusted-publishing.md,
+// "The debut version carries no provenance attestation"). Re-running therefore
+// picks the same package up again, and `npm trust github` is idempotent so that
+// is safe. Registration is the state this script converges; attestation is the
+// release pipeline's to produce.
 //
 // Chains run concurrently, bounded by --jobs.
 //
@@ -24,6 +34,7 @@ import { pooledMap } from '@std/async/pool'
 import { parseArgs } from '@std/cli/parse-args'
 import { ConsoleHandler, getLogger, setup } from '@std/log'
 import type { LevelName } from '@std/log'
+import { queryRegistry } from './npm-query.ts'
 
 const {
   'dry-run': dryRun = false,
@@ -95,32 +106,6 @@ function workspaceRows(): Array<{ name: string; path: string }> {
   return (tree ?? []).filter((p) => p.private !== true).map((p) => ({ name: p.name, path: p.path }))
 }
 
-/**
- * Published-ness and OIDC evidence in one read. `attested` is true when the
- * registry's `latest` carries `dist.attestations`, which is the only signal for
- * "this went out through trusted publishing" available without authenticating.
- */
-async function registrySnapshot(name: string): Promise<{ published: boolean; attested: boolean }> {
-  const response = await fetch(`${registry}/${encodeURIComponent(name)}`, {
-    headers: { accept: 'application/json' },
-  })
-  if (response.status === 404) {
-    await response.body?.cancel()
-    return { published: false, attested: false }
-  }
-  if (!response.ok) {
-    await response.body?.cancel()
-    throw new Error(`${name}: registry returned HTTP ${response.status}`)
-  }
-  const doc = await response.json() as {
-    'dist-tags'?: Record<string, string>
-    versions?: Record<string, { dist?: { attestations?: unknown } }>
-  }
-  const latest = doc['dist-tags']?.['latest']
-  if (typeof latest !== 'string') throw new Error(`${name}: registry doc carries no dist-tags.latest`)
-  return { published: true, attested: doc.versions?.[latest]?.dist?.attestations != null }
-}
-
 async function runInteractive(args: string[], cwd: string): Promise<boolean> {
   const child = new Deno.Command(args[0], {
     args: args.slice(1),
@@ -143,9 +128,14 @@ async function hasBuildScript(packagePath: string): Promise<boolean> {
   }
 }
 
-async function publishAndTrust(
-  p: { name: string; path: string; mode: 'debut' | 'untrusted' },
-): Promise<{ name: string; ok: boolean }> {
+/** One package's outstanding bootstrap work, and how much of the chain it needs. */
+interface Owed {
+  readonly name: string
+  readonly path: string
+  readonly mode: 'debut' | 'untrusted'
+}
+
+async function publishAndTrust(p: Owed): Promise<{ name: string; ok: boolean }> {
   const name = p.name
   const seq: Array<Array<string>> = []
   // An untrusted package is already on the registry at this version, so only the
@@ -176,25 +166,50 @@ async function publishAndTrust(
 const rows = workspaceRows().filter((p) => only.size === 0 || only.has(p.name))
 const slug = remoteSlug()
 
-const snapshots = await Promise.all(rows.map((p) => registrySnapshot(p.name)))
-const owed: Array<{ name: string; path: string; mode: 'debut' | 'untrusted' }> = []
+// An `--only` that matches nothing would otherwise reach the "everything is
+// published and attested" branch below having queried no package at all, and
+// report a clean bootstrap on the strength of a typo.
+if (rows.length === 0) {
+  log.error(
+    only.size > 0
+      ? `--only matched no workspace package: ${[...only].join(', ')}`
+      : 'no non-private workspace packages discovered (did `pnpm ls -r` fail?)',
+  )
+  Deno.exit(1)
+}
+
+// Bounded, because an unbounded map over every member is an fd and rate-limit
+// hazard. `queryRegistry` never throws, so one unreadable package is reported
+// alongside the rest instead of aborting the run and discarding every other
+// answer; `pooledMap` yields in input order, so a snapshot still pairs with its
+// row by index.
+const snapshots = await Array.fromAsync(pooledMap(jobs, rows, (p) => queryRegistry(p.name, registry)))
+const owed: Owed[] = []
+const unreadable: string[] = []
 for (let i = 0; i < rows.length; i++) {
   const p = rows[i]
-  const { published, attested } = snapshots[i]
-  if (!published) {
+  const snapshot = snapshots[i]
+  if (snapshot.status === 'error') {
+    log.error(`${p.name} … registry unreadable — cannot tell whether it is published`)
+    unreadable.push(p.name)
+  } else if (snapshot.status === 'unpublished') {
     log.info(`${p.name} … unpublished (404) — debut`)
     owed.push({ ...p, mode: 'debut' })
-  } else if (!attested) {
-    log.info(`${p.name} … published, no provenance attestation — registering trusted publisher`)
+  } else if (!snapshot.attested) {
+    log.info(`${p.name} … published ${snapshot.latest}, no provenance attestation — registering trusted publisher`)
     owed.push({ ...p, mode: 'untrusted' })
   } else {
-    log.info(`${p.name} … published + attested — skipped`)
+    log.info(`${p.name} … published ${snapshot.latest} + attested — skipped`)
   }
 }
 
 if (owed.length === 0) {
-  log.info('every package is published and attested — nothing to do')
-  Deno.exit(0)
+  log.info(
+    unreadable.length > 0
+      ? 'no package has outstanding work, but the registry could not be read for some'
+      : 'every package is published and attested — nothing to do',
+  )
+  Deno.exit(unreadable.length > 0 ? 1 : 0)
 }
 
 const debuts = owed.filter((p) => p.mode === 'debut').length
@@ -206,8 +221,7 @@ const results: Array<{ name: string; ok: boolean }> = await Array.fromAsync(
   pooledMap(jobs, owed, publishAndTrust),
 )
 const failed = results.filter((r) => !r.ok).map((r) => r.name)
-if (failed.length > 0) {
-  log.error(`failed: ${failed.join(', ')}`)
-  Deno.exit(1)
-}
+if (failed.length > 0) log.error(`failed: ${failed.join(', ')}`)
+if (unreadable.length > 0) log.error(`registry unreadable: ${unreadable.join(', ')}`)
+if (failed.length > 0 || unreadable.length > 0) Deno.exit(1)
 log.info('\ndone')

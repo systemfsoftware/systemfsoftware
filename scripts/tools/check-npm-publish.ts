@@ -15,13 +15,9 @@
 // different host needs a deliberately wider grant at the call site. That is the
 // point: the default invocation can reach exactly one registry.
 
+import { queryRegistry, REGISTRY_CONCURRENCY, type RegistrySnapshot } from './npm-query.ts'
+
 const REGISTRY_DEFAULT = 'https://registry.npmjs.org'
-
-/** Concurrent registry queries. Eight is the repo's network-fan-out ceiling. */
-const CONCURRENCY = 8
-
-/** A network call the caller acts on: a timeout classifies the package `error`. */
-const QUERY_TIMEOUT_MS = 30_000
 
 const dec = new TextDecoder()
 
@@ -33,11 +29,7 @@ const run = async (cmd: string, args: readonly string[]): Promise<string> => {
 
 type Klass = 'unpublished' | 'no-oidc' | 'stuck' | 'ok' | 'error'
 
-interface Snapshot {
-  readonly status: 'published' | 'unpublished' | 'error'
-  readonly latest: string
-  readonly attested: boolean
-}
+type Snapshot = RegistrySnapshot
 
 interface Evaluation {
   readonly name: string
@@ -65,41 +57,6 @@ export const classify = (localVersion: string, snapshot: Snapshot): Klass => {
   if (snapshot.status === 'error') return 'error'
   if (!snapshot.attested) return 'no-oidc'
   return localVersion === snapshot.latest ? 'ok' : 'stuck'
-}
-
-const queryRegistry = async (name: string, registry: string): Promise<Snapshot> => {
-  const unqueryable: Snapshot = { status: 'error', latest: '?', attested: false }
-  let body: unknown
-  try {
-    const response = await fetch(`${registry}/${encodeURIComponent(name)}`, {
-      headers: { accept: 'application/json' },
-      signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
-    })
-    if (response.status === 404) {
-      await response.body?.cancel()
-      return { status: 'unpublished', latest: '—', attested: false }
-    }
-    if (!response.ok) {
-      await response.body?.cancel()
-      return unqueryable
-    }
-    body = await response.json()
-  } catch {
-    return unqueryable
-  }
-
-  if (typeof body !== 'object' || body === null) return unqueryable
-  const doc = body as Record<string, unknown>
-  if (doc['error'] === 'Not found') return { status: 'unpublished', latest: '—', attested: false }
-
-  const distTags = doc['dist-tags']
-  if (typeof distTags !== 'object' || distTags === null) return unqueryable
-  const latest = (distTags as Record<string, unknown>)['latest']
-  if (typeof latest !== 'string') return unqueryable
-
-  const versions = doc['versions'] as Record<string, { dist?: { attestations?: unknown } }> | undefined
-  const attested = versions?.[latest]?.dist?.attestations != null
-  return { status: 'published', latest, attested }
 }
 
 interface Member {
@@ -138,7 +95,7 @@ const evaluate = async (registry: string): Promise<readonly Evaluation[]> => {
   if (members.length === 0) {
     throw new Error('no non-private workspace packages discovered (did `pnpm ls -r` fail?)')
   }
-  return await mapBounded(members, CONCURRENCY, async (member) => {
+  return await mapBounded(members, REGISTRY_CONCURRENCY, async (member) => {
     const manifest = JSON.parse(await Deno.readTextFile(`${member.dir}/package.json`)) as {
       version?: string
       publishConfig?: { provenance?: boolean }
