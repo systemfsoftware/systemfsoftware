@@ -9,6 +9,7 @@
     "@std/log": "jsr:@std/log@0.224.0",
     "@std/yaml": "jsr:@std/yaml@^1.2.0",
     "@toon-format/toon": "npm:@toon-format/toon@^4.1.1",
+    "arktype": "npm:arktype@2.2.3",
   },
   "nodeModulesDir": "none",
 }

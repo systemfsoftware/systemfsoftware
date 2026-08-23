@@ -1,100 +1,30 @@
-# .github/AGENTS.md — CI debugging guide
+# .github/AGENTS.md — CI-failure runbook
 
-## Workflow
+Read this file when a check fails, not before.
 
-`Release` is two-phase pnpm-native: on push to `main`, `corepack pnpm version -r` consumes `.changeset/` intents and opens a Release PR (`changeset-release/main`); on that PR's merge it runs `the gate (pnpm check:ci)` via `reusable-checks.yml`, then builds, publishes via npm OIDC trusted publishing with provenance, tags each released `name@v<version>`, and creates a GitHub Release per package from its authored changelog in `.changeset/changelogs/` (idempotent — it also heals gaps from earlier releases). `changeset-check.yml` fails a PR that changes a publishable package's turbo `build` hash (verdict computed between the event's pinned base SHA and the run's checked-out head tree — the PR merge ref as of the run) without a `.changeset/` intent naming it.
+## Architecture
 
-**CI enumerates no steps.** Root `package.json` `check:ci` is the only definition of what the gate runs; `reusable-checks.yml` invokes it. Read that script to learn what is covered — a copy here would drift, which is exactly how `attw` stopped running in CI while three other lists still claimed it.
+- **`check:ci` is the single definition of the gate.** `package.json#scripts.check:ci` defines what runs; `.github/workflows/reusable-checks.yml` invokes it. CI workflows enumerate no check steps.
+- **`Release` is two-phase pnpm-native.**
+  1. `push` to `main`: `pnpm version -r` consumes `.changeset/` intents and opens a Release PR (`changeset-release/main`). The job dispatches CI for the branch via `gh workflow run ci.yml --ref changeset-release/main` so required checks start automatically.
+  2. Merge of Release PR: runs `the gate (pnpm check:ci)`, builds, publishes via npm OIDC trusted publishing with provenance, tags `name@v<version>`, and creates a GitHub Release per package from `.changeset/changelogs/`.
+- **`changeset-check.yml` enforces release intent.** Fails any PR changing a publishable package's turbo `build` hash without a `.changeset/` intent.
 
-### Failure patterns by task
-
-| Task                   | Failure pattern                                                                                                                      |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `install-deps`         | Lockfile drift → `pnpm install` locally and commit the lockfile                                                                      |
-| `build`                | tsdown / TypeScript errors                                                                                                           |
-| `typecheck`            | tsc errors                                                                                                                           |
-| `test`                 | Vitest failures                                                                                                                      |
-| `lint`, `format:check` | oxlint / dprint failures                                                                                                             |
-| `api:check`            | api-extractor drift in any package with a committed `etc/*.api.md` golden → `pnpm --filter <pkg> api:update`, then commit the report |
-| `//#check:*` guards    | each prints its own remedy on stderr; run the one script it names                                                                    |
-| `actions/checkout@v7`  | git exit 128 → usually a cascade from an earlier failure                                                                             |
-
-## Local reproduction
+## Local Reproduction
 
 ```bash
-pnpm check      # frozen install, then the full gate
-pnpm check:ci   # the gate alone — exactly what CI runs
+pnpm check:local   # uncommitted diffs: turbo gate + dprint check + commitlint
+pnpm check:ci      # exactly what CI runs (--continue reports all failing tasks)
 ```
 
-`check:ci` runs under `--continue`, so one run reports every failing task. The first red task is not necessarily the only one.
+## Failure Runbook
 
-## Common failure patterns
-
-### 1. `Failed to find tsgolint executable`
-
-**Symptom:** `oxlint . … --format=github` fails with "Failed to find tsgolint executable"
-
-**Root cause:** `@systemfsoftware/oxlint-config/base` sets `options: { typeAware: true }` for type-aware linting. oxlint requires `oxlint-tsgolint` (optional peer dep ≥0.24.0) for this feature. The binary must be present in the dependency tree.
-
-**Fix:** Ensure `oxlint-tsgolint` is in the dependency tree of any package extending `@systemfsoftware/oxlint-config/base`. It's declared in `@systemfsoftware/oxlint-config`'s dependencies and pulled transitively.
-
-**Verify:** `ls node_modules/.pnpm/oxlint-tsgolint*/node_modules/oxlint-tsgolint/` — should exist.
-
-### 2. Lockfile drift (`specifiers don't match`)
-
-**Symptom:** `install-deps` step fails with "specifiers in the lockfile don't match specifiers in package.json"
-
-**Root cause:** package.json was updated without running `pnpm install` to update `pnpm-lock.yaml`.
-
-**Fix:** `pnpm install` (without `--frozen-lockfile`) and commit the lockfile.
-
-### 3. Git exit code 128
-
-**Symptom:** A git step (checkout, merge, push) exits 128.
-
-**Root cause:** Nearly always a secondary cascade from a prior failed step that left the workspace dirty. Look at the FIRST failing step, not the git step.
-
-### 4. pnpm peer dep warnings
-
-**Symptom:** `pnpm install` succeeds but shows "Issues with peer dependencies found"
-
-**Known pre-existing issues:**
-
-- `@effect/vitest@0.30.0` wants `vitest@^3.2.0` but we have `vitest@4.1.9` — effect/vitest lags vitest 4, non-blocking
-
-These don't block CI.
-
-### 5. dprint formatting fails
-
-**Symptom:** `format:check` step fails with formatting diffs.
-
-**Fix:** `pnpm format` then commit.
-
-### 6. Annotation extraction (from browser)
-
-When API log download is unavailable (403 even on public repos — requires push access):
-
-1. Open `https://github.com/systemfsoftware/systemfsoftware/actions/runs/<run_id>/job/<job_id>`
-2. Click the failing step's disclosure triangle to expand logs
-3. Extract the error output from the expanded section
-
-Annotations appear at the page top under "Annotations" section. Use them as entry point, then expand the associated step for full context.
-
-## Dependency chain
-
-```
-root oxlint (devDep) + @systemfsoftware/oxlint-config (workspace dep)
-  → oxlint (dep)
-  → oxlint-tsgolint (dep, optional peer of oxlint ≥0.24.0)
-    → provides tsgolint binary for type-aware linting
-```
-
-Any package's `lint` script that uses `@systemfsoftware/oxlint-config/base` with `typeAware: true` transitively needs `oxlint-tsgolint` in the installed tree.
-
-## Debugging checklist
-
-1. ✅ Is the lockfile committed? → `git diff pnpm-lock.yaml`
-2. ✅ Does a clean `pnpm install --frozen-lockfile` succeed?
-3. ✅ Does `pnpm check:local` pass locally? (catches most CI-only issues)
-4. ✅ Are annotations the first failure or a cascade? (check step order)
-5. ✅ Is the `oxlint-tsgolint` binary present in CI? (caught by step 2)
+| Failure                                         | Root Cause                                                      | Remedy                                                                                                         |
+| ----------------------------------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `install-deps` fails (`specifiers don't match`) | `package.json` changed without lockfile update                  | `pnpm install` and commit `pnpm-lock.yaml`                                                                     |
+| `api:check` fails                               | Public API surface changed in package with committed golden     | `pnpm --filter <pkg> api:update` and commit `etc/*.api.md`                                                     |
+| `format:check` fails                            | Unformatted files in commit                                     | `pnpm format`                                                                                                  |
+| `Failed to find tsgolint executable`            | Missing `oxlint-tsgolint` peer in package using type-aware lint | Ensure `@systemfsoftware/oxlint-config` provides it transitively                                               |
+| `//#check:*` guard fails                        | Guard invariant violated                                        | Run the named script directly; stderr prints the remedy                                                        |
+| Git step exits 128                              | Dirty workspace cascade from prior step                         | Inspect the first failing step, not the git step                                                               |
+| Log download gives HTTP 403                     | GitHub API restricts log download without push access           | Open `https://github.com/systemfsoftware/systemfsoftware/actions/runs/<run_id>` and read the step log directly |
