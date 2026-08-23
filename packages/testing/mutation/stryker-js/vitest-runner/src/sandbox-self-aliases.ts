@@ -1,4 +1,4 @@
-import { escapeRegExp } from '@stryker-mutator/util'
+import { escapeRegExp } from '@systemfsoftware/stryker-js-util'
 import { Option } from 'effect'
 import * as S from 'effect/Schema'
 import fs from 'fs'

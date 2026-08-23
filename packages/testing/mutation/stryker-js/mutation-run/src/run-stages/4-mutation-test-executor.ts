@@ -1,4 +1,3 @@
-import { type I } from '@stryker-mutator/util'
 import { CheckStatus } from '@systemfsoftware/stryker-js-plugin-api/check'
 import {
   type Mutant,
@@ -11,6 +10,7 @@ import {
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { type CompleteDryRunResult, type TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { type I } from '@systemfsoftware/stryker-js-util'
 import { bufferTime, concat, EMPTY, from, lastValueFrom, merge, mergeMap, Observable, partition } from 'rxjs'
 import { map, shareReplay, tap, toArray } from 'rxjs/operators'
 

@@ -63,16 +63,12 @@ updates:
         patterns:
           - "vitest"
           - "@vitest/*"
-          - "@stryker-mutator/*"
-          - "stryker"
         update-types: ["minor", "patch"]
 
       testing-major:
         patterns:
           - "vitest"
           - "@vitest/*"
-          - "@stryker-mutator/*"
-          - "stryker"
         update-types: ["major"]
       commitlint-minor-patch:
         patterns:
@@ -90,8 +86,6 @@ updates:
           - "oxlint"
           - "@oxlint/*"
           - "@effect/*"
-          - "@stryker-mutator/*"
-          - "stryker"
           - "@commitlint/*"
           - "typescript"
         update-types: ["minor", "patch"]
@@ -101,8 +95,6 @@ updates:
         exclude-patterns:
           - "oxlint"
           - "@oxlint/*"
-          - "@stryker-mutator/*"
-          - "stryker"
           - "@commitlint/*"
           - "typescript"
         update-types: ["major"]

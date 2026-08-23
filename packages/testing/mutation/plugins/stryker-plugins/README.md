@@ -19,7 +19,7 @@ In `stryker.config.json`:
 {
   "plugins": [
     "@systemfsoftware/stryker-js-vitest-runner",
-    "@stryker-mutator/typescript-checker",
+    "@systemfsoftware/stryker-js-typescript-checker",
     "@systemfsoftware/stryker-plugins"
   ],
   "ignorers": ["effect-schema-declarations"]

@@ -51,12 +51,12 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
-    "@stryker-mutator/util": "catalog:stryker",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/stryker-js-util": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",

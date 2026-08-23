@@ -1,4 +1,3 @@
-import { errorToString } from '@stryker-mutator/util'
 import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { commonTokens, PluginKind, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import {
@@ -11,6 +10,7 @@ import {
   type TestRunner,
   type TestRunnerCapabilities,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { errorToString } from '@systemfsoftware/stryker-js-util'
 import * as S from 'effect/Schema'
 
 import { injectionTokens, PluginCreator } from '../plugins/index.js'

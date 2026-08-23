@@ -1,6 +1,6 @@
 # @systemfsoftware/stryker-js-mutation-run
 
-A source-code fork of @stryker-mutator/core
+A source-code fork of the upstream StrykerJS core package
 
 ## Install
 

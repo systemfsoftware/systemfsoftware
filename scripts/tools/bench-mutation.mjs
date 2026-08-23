@@ -77,7 +77,7 @@ const reportPathOf = (dir) => {
 const run = (pkg, opts) =>
   new Promise((resolve) => {
     // Each package's own `mutation` script, NOT `pnpm exec stryker`: the latter resolves to
-    // upstream @stryker-mutator/core, which dies on this repo's tsgo-patched tsc with
+    // upstream's stryker core, which dies on this repo's tsgo-patched tsc with
     // "ts.parseConfigFileTextToJson is not a function". The fork's parse-config-helper is the
     // whole point. pnpm forwards trailing args straight to the script.
     const args = [

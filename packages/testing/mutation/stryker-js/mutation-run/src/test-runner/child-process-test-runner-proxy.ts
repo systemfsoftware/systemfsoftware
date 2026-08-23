@@ -1,6 +1,5 @@
 import { URL } from 'url'
 
-import { ExpirableTask } from '@stryker-mutator/util'
 import { type FileDescriptions, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import {
@@ -11,6 +10,7 @@ import {
   type TestRunner,
   type TestRunnerCapabilities,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { ExpirableTask } from '@systemfsoftware/stryker-js-util'
 
 import { type LoggingServerAddress } from '../logging/index.js'
 import { ChildProcessCrashedError } from '../worker-pool/child-process-crashed-error.js'

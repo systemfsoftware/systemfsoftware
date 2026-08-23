@@ -8,7 +8,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/testing/mutation/stryker-js/mutation-run#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "A source-code fork of @stryker-mutator/core",
+  "description": "The mutation engine of the systemfsoftware Stryker fork",
   "type": "module",
   "files": [
     "dist",
@@ -116,10 +116,9 @@
     "mutation:full": "stryker run --force"
   },
   "dependencies": {
-    "@stryker-mutator/api": "catalog:stryker",
-    "@stryker-mutator/instrumenter": "catalog:stryker",
-    "@stryker-mutator/util": "catalog:stryker",
+    "@systemfsoftware/stryker-js-instrumenter": "workspace:^",
     "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
+    "@systemfsoftware/stryker-js-util": "workspace:^",
     "diff-match-patch": "1.0.5",
     "execa": "~9.6.0",
     "lodash.groupby": "~4.6.0",

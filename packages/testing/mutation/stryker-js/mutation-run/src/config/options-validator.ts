@@ -1,10 +1,10 @@
 import os from 'os'
 import path from 'path'
 
-import { deepFreeze, findUnserializables, type Immutable, noopLogger } from '@stryker-mutator/util'
 import { type StrykerOptions, StrykerOptionsSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { deepFreeze, findUnserializables, type Immutable, noopLogger } from '@systemfsoftware/stryker-js-util'
 import type { JSONSchema7 } from 'json-schema'
 import { Minimatch } from 'minimatch'
 

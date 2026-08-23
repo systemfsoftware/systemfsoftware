@@ -1,6 +1,5 @@
 import path from 'path'
 
-import { type I, normalizeFileName, normalizeLineEndings, notEmpty } from '@stryker-mutator/util'
 import {
   type FileDescriptions,
   type Location,
@@ -13,6 +12,7 @@ import {
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { type TestResult, TestStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { type I, normalizeFileName, normalizeLineEndings, notEmpty } from '@systemfsoftware/stryker-js-util'
 import { diff_match_patch as DiffMatchPatch } from 'diff-match-patch'
 import { type TestDefinition } from 'mutation-testing-report-schema'
 

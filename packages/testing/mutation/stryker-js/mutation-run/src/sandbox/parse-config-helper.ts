@@ -10,7 +10,7 @@
 import { parse } from '@std/jsonc'
 import { Result, Schema as S } from 'effect'
 
-import { errorToString } from '@stryker-mutator/util'
+import { errorToString } from '@systemfsoftware/stryker-js-util'
 
 import { type TSConfig, TsConfigSchema } from './parse-config.schema.js'
 import { TsConfigParseError } from './parse-config.schema.js'

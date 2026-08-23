@@ -1,7 +1,6 @@
 import path from 'path'
 import { isDeepStrictEqual } from 'util'
 
-import { ERROR_CODES, type I, isErrnoException, notEmpty } from '@stryker-mutator/util'
 import {
   type FileDescription,
   type FileDescriptions,
@@ -11,6 +10,7 @@ import {
 } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { ERROR_CODES, type I, isErrnoException, notEmpty } from '@systemfsoftware/stryker-js-util'
 import * as S from 'effect/Schema'
 import { Minimatch } from 'minimatch'
 import type { MutationTestResult } from 'mutation-testing-report-schema/api'

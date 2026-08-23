@@ -1,6 +1,5 @@
 import { EOL } from 'os'
 
-import { type I, requireResolve } from '@stryker-mutator/util'
 import { type Mutant, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, type Injector, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
@@ -15,6 +14,7 @@ import {
   type TestRunner,
   TestStatus,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { type I, requireResolve } from '@systemfsoftware/stryker-js-util'
 import { lastValueFrom, of } from 'rxjs'
 
 import { CheckerFacade } from '../checker/index.js'

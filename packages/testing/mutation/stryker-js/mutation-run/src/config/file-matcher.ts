@@ -1,6 +1,6 @@
 import path from 'path'
 
-import { normalizeFileName } from '@stryker-mutator/util'
+import { normalizeFileName } from '@systemfsoftware/stryker-js-util'
 import { minimatch } from 'minimatch'
 
 /**

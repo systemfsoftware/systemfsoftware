@@ -1,7 +1,6 @@
 import { exec } from 'child_process'
 import os from 'os'
 
-import { errorToString, testFilesProvided } from '@stryker-mutator/util'
 import { INSTRUMENTER_CONSTANTS, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import {
   type CompleteDryRunResult,
@@ -16,6 +15,7 @@ import {
   TestStatus,
   toMutantRunResult,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { errorToString, testFilesProvided } from '@systemfsoftware/stryker-js-util'
 
 import { Timer } from '../timer.js'
 import { kill } from '../worker-pool/kill.js'

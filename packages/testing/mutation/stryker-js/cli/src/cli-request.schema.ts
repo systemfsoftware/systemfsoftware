@@ -7,7 +7,7 @@
  * help into the `help` terminal event instead.
  *
  * The schema's `options`/`document` fields are `S.Any`: no schema exists for
- * `PartialStrykerOptions` or `ManifestRendered` in `@stryker-mutator/api/core`,
+ * `PartialStrykerOptions` or `ManifestRendered` in `@systemfsoftware/stryker-js-plugin-api/core`,
  * and the request is never decoded from external bytes — the handler builds it
  * from `@effect/cli`-parsed values. The exported type therefore carries the
  * fields' real types rather than the schema's `any`, so consumers (the
