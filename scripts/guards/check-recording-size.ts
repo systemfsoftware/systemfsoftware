@@ -12,6 +12,18 @@ type Finding = {
   readonly message: string
 }
 
+type Loc = { readonly line: number; readonly column: number }
+
+const at = (filePath: string, loc: Loc): string => `${filePath}:${loc.line}:${loc.column}`
+
+const finding = (kind: Finding['kind'], filePath: string, loc: Loc, detail: string): Finding => ({
+  file: filePath,
+  line: loc.line,
+  column: loc.column,
+  kind,
+  message: `${at(filePath, loc)}: ${detail}`,
+})
+
 const MATCHERS: Record<string, true> = {
   toMatchFileSnapshot: true,
   toMatchInlineSnapshot: true,
@@ -76,24 +88,18 @@ const findingsInSource = async (filePath: string, text: string): Promise<readonl
         if (name === 'toMatchFileSnapshot') {
           const arg = node.arguments[0] as ts.Expression | undefined
           if (!arg) {
-            immediate.push({
-              file: filePath,
-              line: loc.line,
-              column: loc.column,
-              kind: 'unmeasurable',
-              message: `${filePath}:${loc.line}:${loc.column}: UNMEASURABLE toMatchFileSnapshot has no argument`,
-            })
+            immediate.push(finding('unmeasurable', filePath, loc, 'UNMEASURABLE toMatchFileSnapshot has no argument'))
           } else {
             const val = literalValue(arg)
             if (val === null) {
-              immediate.push({
-                file: filePath,
-                line: loc.line,
-                column: loc.column,
-                kind: 'unmeasurable',
-                message:
-                  `${filePath}:${loc.line}:${loc.column}: UNMEASURABLE toMatchFileSnapshot argument is not a string literal`,
-              })
+              immediate.push(
+                finding(
+                  'unmeasurable',
+                  filePath,
+                  loc,
+                  'UNMEASURABLE toMatchFileSnapshot argument is not a string literal',
+                ),
+              )
               if (ts.isTemplateExpression(arg)) {
                 const prefix = (arg as ts.TemplateExpression).head.text
                 const lastSpan =
@@ -118,8 +124,9 @@ const findingsInSource = async (filePath: string, text: string): Promise<readonl
                               line: loc.line,
                               column: loc.column,
                               kind: 'oversize',
-                              message:
-                                `${relCandidate} has ${lines} lines (ceiling ${CEILING}) — via ${filePath}:${loc.line}:${loc.column}`,
+                              message: `${relCandidate} has ${lines} lines (ceiling ${CEILING}) — via ${
+                                at(filePath, loc)
+                              }`,
                             })
                           }
                         } catch { /* ignore */ }
@@ -136,58 +143,41 @@ const findingsInSource = async (filePath: string, text: string): Promise<readonl
                 Deno.readTextFile(resolved).then((content) => {
                   const lines = countLines(content)
                   if (lines > CEILING) {
-                    return {
-                      file: filePath,
-                      line: loc.line,
-                      column: loc.column,
-                      kind: 'oversize' as const,
-                      message:
-                        `${filePath}:${loc.line}:${loc.column}: oversize recording toMatchFileSnapshot -> ${relResolved} has ${lines} lines (ceiling ${CEILING})`,
-                    }
+                    return finding(
+                      'oversize',
+                      filePath,
+                      loc,
+                      `oversize recording toMatchFileSnapshot -> ${relResolved} has ${lines} lines (ceiling ${CEILING})`,
+                    )
                   }
                   return null
-                }).catch(() => ({
-                  file: filePath,
-                  line: loc.line,
-                  column: loc.column,
-                  kind: 'unmeasurable' as const,
-                  message:
-                    `${filePath}:${loc.line}:${loc.column}: UNMEASURABLE toMatchFileSnapshot target not readable: ${relResolved}`,
-                })),
+                }).catch(() =>
+                  finding(
+                    'unmeasurable',
+                    filePath,
+                    loc,
+                    `UNMEASURABLE toMatchFileSnapshot target not readable: ${relResolved}`,
+                  )
+                ),
               )
             }
           }
         } else {
           const sel = selectInlineRecording(node.arguments as readonly ts.Expression[])
           if ('unmeasurable' in sel) {
-            immediate.push({
-              file: filePath,
-              line: loc.line,
-              column: loc.column,
-              kind: 'unmeasurable',
-              message: `${filePath}:${loc.line}:${loc.column}: ${sel.unmeasurable} at ${name}`,
-            })
+            immediate.push(finding('unmeasurable', filePath, loc, `${sel.unmeasurable} at ${name}`))
           } else {
             const val = literalValue(sel.literal)
             if (val === null) {
-              immediate.push({
-                file: filePath,
-                line: loc.line,
-                column: loc.column,
-                kind: 'unmeasurable',
-                message: `${filePath}:${loc.line}:${loc.column}: UNMEASURABLE ${name} snapshot not a string literal`,
-              })
+              immediate.push(
+                finding('unmeasurable', filePath, loc, `UNMEASURABLE ${name} snapshot not a string literal`),
+              )
             } else {
               const lines = countLines(val)
               if (lines > CEILING) {
-                immediate.push({
-                  file: filePath,
-                  line: loc.line,
-                  column: loc.column,
-                  kind: 'oversize',
-                  message:
-                    `${filePath}:${loc.line}:${loc.column}: oversize ${name} has ${lines} lines (ceiling ${CEILING})`,
-                })
+                immediate.push(
+                  finding('oversize', filePath, loc, `oversize ${name} has ${lines} lines (ceiling ${CEILING})`),
+                )
               }
             }
           }
@@ -225,14 +215,14 @@ const findingsInSnap = (filePath: string, text: string): readonly Finding[] => {
             if (!seen[key]) {
               seen[key] = true
               const loc = lineOf(sf, node)
-              findings.push({
-                file: filePath,
-                line: loc.line,
-                column: loc.column,
-                kind: 'oversize',
-                message:
-                  `${filePath}:${loc.line}:${loc.column}: oversize .snap entry ${keyText} has ${lines} lines (ceiling ${CEILING})`,
-              })
+              findings.push(
+                finding(
+                  'oversize',
+                  filePath,
+                  loc,
+                  `oversize .snap entry ${keyText} has ${lines} lines (ceiling ${CEILING})`,
+                ),
+              )
             }
           }
         }
