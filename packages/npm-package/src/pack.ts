@@ -1,6 +1,8 @@
 import { gzipSync } from 'fflate'
 import type { Package } from './Package.js'
 
+const encoder = new TextEncoder()
+
 /**
  * In-process ustar + Gzip (fflate) packer.
  *
@@ -19,13 +21,11 @@ export function packPackage(pkg: Package): Uint8Array {
     const data = content === undefined
       ? new Uint8Array(0)
       : typeof content === 'string'
-      ? new TextEncoder().encode(content)
+      ? encoder.encode(content)
       : content
     entries.push({ name: tarName, data })
   }
-  entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-  const tar = buildTar(entries)
-  return gzipSync(tar, { mtime: 0 })
+  return packEntries(entries)
 }
 
 /**
@@ -47,16 +47,20 @@ export function packTree(
     }
     const relative = normalized.slice(prefix.length)
     const tarName = `package/${relative}`
-    const data = typeof content === 'string' ? new TextEncoder().encode(content) : content
+    const data = typeof content === 'string' ? encoder.encode(content) : content
     entries.push({ name: tarName, data })
   }
+  return packEntries(entries)
+}
+
+/** Sort by entry name, lay out the ustar blocks, and gzip with a zeroed mtime. */
+function packEntries(entries: Array<{ name: string; data: Uint8Array }>): Uint8Array {
   entries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-  return gzipSync(buildTar(entries))
+  return gzipSync(buildTar(entries), { mtime: 0 })
 }
 
 function buildTar(entries: Array<{ name: string; data: Uint8Array }>): Uint8Array {
   const blocks: Uint8Array[] = []
-  const encoder = new TextEncoder()
 
   for (const entry of entries) {
     const header = new Uint8Array(512)
@@ -117,7 +121,7 @@ function buildTar(entries: Array<{ name: string; data: Uint8Array }>): Uint8Arra
 
 function writeOctal(header: Uint8Array, offset: number, length: number, value: number): void {
   const oct = value.toString(8).padStart(length - 1, '0')
-  const enc = new TextEncoder().encode(`${oct}\0`)
+  const enc = encoder.encode(`${oct}\0`)
   header.set(enc.subarray(0, length), offset)
 }
 function splitUstarName(full: string): { prefix: string; name: string } {
@@ -126,8 +130,8 @@ function splitUstarName(full: string): { prefix: string; name: string } {
       const prefix = full.slice(0, i)
       const name = full.slice(i + 1)
       if (
-        new TextEncoder().encode(prefix).byteLength <= 155 &&
-        new TextEncoder().encode(name).byteLength <= 100
+        encoder.encode(prefix).byteLength <= 155 &&
+        encoder.encode(name).byteLength <= 100
       ) {
         return { prefix, name }
       }

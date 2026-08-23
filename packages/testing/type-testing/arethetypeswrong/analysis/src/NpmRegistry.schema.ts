@@ -22,10 +22,3 @@ export const NpmRegistryDocSchema = Schema.Struct({
   time: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 })
 export type NpmRegistryDoc = Schema.Schema.Type<typeof NpmRegistryDocSchema>
-
-/** The `package.json` fields read out of a downloaded tarball. */
-export const TarballPackageJsonSchema = Schema.Struct({
-  name: Schema.String,
-  version: Schema.String,
-})
-export type TarballPackageJson = Schema.Schema.Type<typeof TarballPackageJsonSchema>

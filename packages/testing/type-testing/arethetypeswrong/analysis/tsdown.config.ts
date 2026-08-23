@@ -21,13 +21,9 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
 }
 
 export default defineConfig({
-  // The root entry is the whole public surface. The map this config now generates used
-  // to be hand-written and had drifted: it carried `./types`, `./utils`, `./problems`
-  // and `./versions` pointing at files the module renames moved or removed, so four of
-  // a consumer's five entry points resolved to nothing. Nothing in or outside this tree
-  // imports any of them, and everything a consumer reaches is re-exported from
-  // `index.ts`. Declaring `exports` here is what makes the build own the map, so the
-  // same drift cannot recur.
+  // The root entry is the whole public surface, and everything a consumer reaches is
+  // re-exported from `index.ts`. Declaring `exports` here makes the build own the map, so
+  // it cannot drift away from what the package actually emits.
   entry: ['src/index.ts'],
   format: 'esm',
   clean: true,

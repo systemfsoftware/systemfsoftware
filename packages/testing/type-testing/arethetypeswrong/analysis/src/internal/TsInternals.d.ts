@@ -2,9 +2,8 @@
 // ambient declarations, which use `Symbol` for `ts.Symbol` and `String`/`Number` for branded strings.
 // The wrapper-object rule is for application code, not for compiler-type augmentations.
 // Ambient augmentation for the TypeScript compiler's internal API. This file is the sole
-// declaration site for the small internal surface this package calls; it replaces the
-// previous augmentation package. Every member here exists in the installed
-// `typescript@6.0.3` runtime. Keep this list minimal: do not re-add members U1/U2 removed.
+// declaration site for the small internal surface this package calls. Every member here must
+// exist in the installed `typescript@6.0.3` runtime; keep the list minimal.
 import 'typescript'
 
 declare module 'typescript' {
