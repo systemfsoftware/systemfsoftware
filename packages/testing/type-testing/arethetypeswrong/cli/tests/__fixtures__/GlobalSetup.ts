@@ -1,3 +1,4 @@
+import { packPackage, recipes } from '@systemfsoftware/arethetypeswrong-core'
 import { execFile } from 'node:child_process'
 import { access, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -7,8 +8,6 @@ import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import { GenericContainer, getContainerRuntimeClient, type StartedTestContainer } from 'testcontainers'
 import type { TestProject } from 'vitest/node'
-import { packPackage } from '../../../core/src/pack.js'
-import { recipes } from '../../../core/src/recipes.js'
 import { FIXTURE_FILES, FIXTURE_PACKAGE, STUB_REGISTRY_PORT, STUB_REGISTRY_SCRIPT } from './StubRegistry.js'
 
 declare module 'vitest' {
