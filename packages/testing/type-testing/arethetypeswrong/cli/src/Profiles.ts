@@ -1,4 +1,4 @@
-import type { ResolutionKind } from '@systemfsoftware/arethetypeswrong-core'
+import type { ResolutionKind } from '@systemfsoftware/arethetypeswrong'
 
 import { ApplyProfileCommand, ApplyProfileDecision } from './Profiles.schema.js'
 

@@ -1,4 +1,4 @@
-import type { ProblemKind, ResolutionKind } from '@systemfsoftware/arethetypeswrong-core'
+import type { ProblemKind, ResolutionKind } from '@systemfsoftware/arethetypeswrong'
 
 export const CliProblemFlags = [
   'no-resolution',

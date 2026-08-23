@@ -1,4 +1,4 @@
-import { CheckResultSchema } from '@systemfsoftware/arethetypeswrong-core'
+import { CheckResultSchema } from '@systemfsoftware/arethetypeswrong'
 import * as S from 'effect/Schema'
 
 /**

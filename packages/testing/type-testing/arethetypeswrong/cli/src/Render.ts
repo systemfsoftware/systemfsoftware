@@ -1,4 +1,4 @@
-import type { Analysis, CheckResult, Problem } from '@systemfsoftware/arethetypeswrong-core'
+import type { Analysis, CheckResult, Problem } from '@systemfsoftware/arethetypeswrong'
 import { problemFlagForKind } from './ProblemUtils.js'
 import type { AnsiAnnotation } from './RenderAnsi.js'
 import { renderAsciiAnalysis } from './RenderAscii.js'
