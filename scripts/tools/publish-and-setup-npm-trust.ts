@@ -1,10 +1,21 @@
 #!/usr/bin/env -S deno run --allow-run=git,corepack,pnpm,npm --allow-read --allow-env=NPM_REGISTRY --allow-net=registry.npmjs.org
-// publish-and-setup-npm-trust.ts — publish every unpublished non-private workspace
-// package, then register the npm trusted publisher (OIDC) for each one.
+// publish-and-setup-npm-trust.ts — bring every non-private workspace package to
+// the state CI needs: published on npm AND carrying a registered trusted
+// publisher (OIDC).
 //
-// Per package: build -> publish (debuts can't use OIDC: npm-trust requires the
-// package to exist) -> npm trust github ... -> npm trust list. Chains run
-// concurrently, bounded by --jobs.
+// Existing on the registry is not that state. A package published from a
+// maintainer machine, or published before its trusted publisher was registered,
+// answers HTTP 200 while its latest version carries no provenance attestation —
+// so keying the skip on the status code alone declares the bootstrap finished on
+// exactly the packages that still need it, and the release pipeline then meets
+// them as `no-oidc` forever. The skip is keyed on the attestation instead:
+//
+//   404                      -> debut:     build -> publish -> trust -> list
+//   200, no attestation      -> untrusted: trust -> list  (the version exists,
+//                               so re-publishing it would be rejected)
+//   200, attestation present -> skipped
+//
+// Chains run concurrently, bounded by --jobs.
 //
 // Flags: --dry-run --only a,b --jobs N (default 4) --log-level (default info)
 // Env:  NPM_REGISTRY overrides the registry base URL.
@@ -84,8 +95,30 @@ function workspaceRows(): Array<{ name: string; path: string }> {
   return (tree ?? []).filter((p) => p.private !== true).map((p) => ({ name: p.name, path: p.path }))
 }
 
-async function registryStatus(name: string): Promise<number> {
-  return (await fetch(`${registry}/${encodeURIComponent(name)}`, { method: 'HEAD' })).status
+/**
+ * Published-ness and OIDC evidence in one read. `attested` is true when the
+ * registry's `latest` carries `dist.attestations`, which is the only signal for
+ * "this went out through trusted publishing" available without authenticating.
+ */
+async function registrySnapshot(name: string): Promise<{ published: boolean; attested: boolean }> {
+  const response = await fetch(`${registry}/${encodeURIComponent(name)}`, {
+    headers: { accept: 'application/json' },
+  })
+  if (response.status === 404) {
+    await response.body?.cancel()
+    return { published: false, attested: false }
+  }
+  if (!response.ok) {
+    await response.body?.cancel()
+    throw new Error(`${name}: registry returned HTTP ${response.status}`)
+  }
+  const doc = await response.json() as {
+    'dist-tags'?: Record<string, string>
+    versions?: Record<string, { dist?: { attestations?: unknown } }>
+  }
+  const latest = doc['dist-tags']?.['latest']
+  if (typeof latest !== 'string') throw new Error(`${name}: registry doc carries no dist-tags.latest`)
+  return { published: true, attested: doc.versions?.[latest]?.dist?.attestations != null }
 }
 
 async function runInteractive(args: string[], cwd: string): Promise<boolean> {
@@ -110,19 +143,25 @@ async function hasBuildScript(packagePath: string): Promise<boolean> {
   }
 }
 
-async function publishAndTrust(p: { name: string; path: string }): Promise<{ name: string; ok: boolean }> {
+async function publishAndTrust(
+  p: { name: string; path: string; mode: 'debut' | 'untrusted' },
+): Promise<{ name: string; ok: boolean }> {
   const name = p.name
   const seq: Array<Array<string>> = []
-  if (await hasBuildScript(p.path)) {
-    seq.push(['corepack', 'pnpm', '--filter', name, 'build'])
+  // An untrusted package is already on the registry at this version, so only the
+  // registration is missing. Publishing it again would be rejected.
+  if (p.mode === 'debut') {
+    if (await hasBuildScript(p.path)) {
+      seq.push(['corepack', 'pnpm', '--filter', name, 'build'])
+    }
+    seq.push(['corepack', 'pnpm', '--filter', name, 'publish', '--access', 'public', '--no-git-checks'])
   }
   seq.push(
-    ['corepack', 'pnpm', '--filter', name, 'publish', '--access', 'public', '--no-git-checks'],
     ['npm', 'trust', 'github', name, '--repo', slug, '--file', 'release.yml', '--allow-publish', '--yes'],
     ['npm', 'trust', 'list', name],
   )
 
-  log.info(`\n== ${name}`)
+  log.info(`\n== ${name} (${p.mode})`)
   for (const args of seq) {
     log.info(`  > ${args.join(' ')}`)
     if (dryRun) continue
@@ -137,24 +176,34 @@ async function publishAndTrust(p: { name: string; path: string }): Promise<{ nam
 const rows = workspaceRows().filter((p) => only.size === 0 || only.has(p.name))
 const slug = remoteSlug()
 
-const statuses = await Promise.all(rows.map((p) => registryStatus(p.name)))
-const unpublished: Array<{ name: string; path: string }> = []
+const snapshots = await Promise.all(rows.map((p) => registrySnapshot(p.name)))
+const owed: Array<{ name: string; path: string; mode: 'debut' | 'untrusted' }> = []
 for (let i = 0; i < rows.length; i++) {
   const p = rows[i]
-  const status = statuses[i]
-  log.info(`${p.name} … ${status === 404 ? 'unpublished (404)' : `published (HTTP ${status}) — skipped`}`)
-  if (status === 404) unpublished.push(p)
+  const { published, attested } = snapshots[i]
+  if (!published) {
+    log.info(`${p.name} … unpublished (404) — debut`)
+    owed.push({ ...p, mode: 'debut' })
+  } else if (!attested) {
+    log.info(`${p.name} … published, no provenance attestation — registering trusted publisher`)
+    owed.push({ ...p, mode: 'untrusted' })
+  } else {
+    log.info(`${p.name} … published + attested — skipped`)
+  }
 }
 
-if (unpublished.length === 0) {
-  log.info('nothing to publish')
+if (owed.length === 0) {
+  log.info('every package is published and attested — nothing to do')
   Deno.exit(0)
 }
 
+const debuts = owed.filter((p) => p.mode === 'debut').length
 log.info('')
-log.info(`publishing ${unpublished.length} package(s) with --jobs ${jobs}:`)
+log.info(
+  `processing ${owed.length} package(s) with --jobs ${jobs}: ${debuts} debut, ${owed.length - debuts} untrusted`,
+)
 const results: Array<{ name: string; ok: boolean }> = await Array.fromAsync(
-  pooledMap(jobs, unpublished, publishAndTrust),
+  pooledMap(jobs, owed, publishAndTrust),
 )
 const failed = results.filter((r) => !r.ok).map((r) => r.name)
 if (failed.length > 0) {
