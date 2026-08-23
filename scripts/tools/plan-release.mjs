@@ -6,8 +6,16 @@
 // trigger is single-shot: run 32650470424 failed at its preflight step and no
 // later push to main could retry it, so 32 packages sat version-bumped on main
 // with no tag, no npm release and no GitHub Release. State is durable where a PR
-// event is not — pending intents mean "version", an untagged this-cycle set
-// means "publish" — so a half-finished release resumes on the next push.
+// event is not, so phase comes from state and a half-finished release resumes on
+// the next push.
+//
+// Owed publishes drain before new intents are consumed. Both can be true at
+// once — on 2026-08-23 main carried 35 pending intents and 33 owed tags — and
+// consuming intents first is destructive: `pnpm version -r` bumps on top, the
+// owed version stops being any package's local version, and computeThisCycle
+// drops it. That release is then unreachable forever, with its authored
+// changelog orphaned. Draining first only ever delays intent consumption to the
+// next push, and tags are cut for everything owed, so the queue always empties.
 //
 // The this-cycle set comes from tag-released-packages.mjs, which owns the one
 // definition of "released this cycle". A second copy here would drift.
@@ -26,9 +34,9 @@ const TAG_SCRIPT = './scripts/tools/tag-released-packages.mjs'
 export const isPendingIntent = (name) =>
   name.endsWith('.md') && !name.includes('changelogs/') && name.split('/').pop() !== 'README.md'
 
-/** version when intents are pending, publish when tags are owed, else nothing to do. */
+/** Owed publishes first (draining is lossless, bumping over them is not), then intents. */
 export const decidePhase = (pendingIntents, thisCycle) =>
-  pendingIntents > 0 ? 'version' : thisCycle > 0 ? 'publish' : 'none'
+  thisCycle > 0 ? 'publish' : pendingIntents > 0 ? 'version' : 'none'
 
 const countPendingIntents = async () => {
   let count = 0
@@ -62,10 +70,10 @@ const thisCycleCount = async () => {
  */
 const selftest = () => {
   const phases = [
-    ['pending intents win over an empty cycle', decidePhase(3, 0), 'version'],
-    ['pending intents win over a full cycle', decidePhase(3, 5), 'version'],
-    ['no intents and tags owed is publish', decidePhase(0, 5), 'publish'],
-    ['no intents and no tags owed is none', decidePhase(0, 0), 'none'],
+    ['owed tags win over pending intents', decidePhase(3, 5), 'publish'],
+    ['owed tags with no intents is publish', decidePhase(0, 5), 'publish'],
+    ['pending intents with nothing owed is version', decidePhase(3, 0), 'version'],
+    ['nothing pending and nothing owed is none', decidePhase(0, 0), 'none'],
   ]
   const intents = [
     ['a slug intent is pending', isPendingIntent('cyan-wombats-own.md'), true],

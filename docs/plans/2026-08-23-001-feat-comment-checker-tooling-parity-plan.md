@@ -62,7 +62,7 @@ The GitHub-Release mechanism is already correct. Run `32502958871` (2026-08-21T1
 
 **Release phase from durable state**
 
-- R6. The `Release` workflow triggers only on `push` to `main`. A `plan` job derives the phase from repository state: pending `.changeset/*.md` intents mean `version`; otherwise a non-empty this-cycle set from `tag-released-packages.mjs --dry-run --json` means `publish`; otherwise `none`. The `version`, `gate` and `publish` jobs gate on that output.
+- R6. The `Release` workflow triggers only on `push` to `main`. A `plan` job derives the phase from repository state: a non-empty this-cycle set from `tag-released-packages.mjs --dry-run --json` means `publish`; otherwise pending `.changeset/*.md` intents mean `version`; otherwise `none`. Owed publishes drain before intents are consumed, because `pnpm version -r` bumps over an owed version and makes that release unreachable. The `version`, `gate` and `publish` jobs gate on that output.
 
 **Release progress under a debut package**
 
@@ -83,7 +83,7 @@ Out of scope: publishing `@systemfsoftware/stryker-test-contribution` (needs npm
 - AE1. Covers R3. `nix build --no-link --print-out-paths .#comment-checker-bwrap` prints a store path containing `bin/comment-checker`, and running it with an empty JSON object on stdin exits 0 or 2, not 127.
 - AE2. Covers R4. With `comment-checker` absent from PATH and `direnv` absent, the hook command prints the dev-shell instruction to stderr and exits 1.
 - AE3. Covers R6. On a tree with no pending intents and every this-cycle tag already on `origin`, `plan-release.mjs` prints `phase=none`.
-- AE4. Covers R6. On a tree with one file at `.changeset/<slug>.md`, it prints `phase=version`.
+- AE4. Covers R6. On a tree with one file at `.changeset/<slug>.md` and nothing owed, it prints `phase=version`; with tags owed it prints `phase=publish` regardless of pending intents.
 - AE5. Covers R7, R8. Given a workspace where exactly one package is absent from npm, the computed filter list excludes that package and includes the rest, and the final assertion exits non-zero naming it.
 - AE6. Covers R10. The marker check exits non-zero on a fixture containing `<<<<<<<` at line start and exits 0 on the current tree once U5 has landed.
 
