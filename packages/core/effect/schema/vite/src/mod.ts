@@ -9,6 +9,19 @@ import type { Plugin, ResolvedConfig } from 'vite'
 export interface InlineSchemaTestsOptions {
   /** Directory to scan for schema files, relative to Vite root. Default: `"src"`. */
   dir?: string
+  /**
+   * Timeout in milliseconds for the generated law test
+   * (`'every obligation reachable from an exported schema is refuted somewhere'`).
+   * When omitted the test inherits vitest's ambient `testTimeout`, so existing
+   * consumers see no behaviour change.
+   *
+   * A large corpus can let the law outgrow the ambient cap (observed
+   * 27_938ms then 21_158ms against a 30_000ms cap, same machine, load ~136),
+   * so a consumer can raise just this one test instead of loosening
+   * `testTimeout` for every test in the package (31 packages in one
+   * consumer at the time of this fix).
+   */
+  timeout?: number
 }
 
 /**
@@ -409,7 +422,11 @@ function extendsSchemaClass(superClass: Expression | null | undefined): boolean 
  *
  * @since 1.4.0
  */
-export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string => {
+export const generateSchemaLaws = (
+  lawFilePath: string,
+  srcDir: string,
+  options?: { timeout?: number },
+): string => {
   const schemas = findExportedSchemas(srcDir)
   if (schemas.length === 0) return '// no schemas found\nexport {}\n'
 
@@ -445,7 +462,9 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string 
     schemas.map((s, i) => `  [${quote(labelOf(s))}, schema_${i}],`).join('\n'),
     `]`,
     '',
-    `it('every obligation reachable from an exported schema is refuted somewhere', () => {`,
+    `it('every obligation reachable from an exported schema is refuted somewhere'${
+      options?.timeout !== undefined ? `, { timeout: ${options.timeout} }` : ''
+    }, () => {`,
     `  const covered = new Set<AST>()`,
     `  for (const [name, schema] of EXPORTED) {`,
     `    if (!REFUTED.has(name)) continue`,
@@ -498,7 +517,12 @@ export const inlineSchemaTests = (options?: InlineSchemaTestsOptions): Plugin =>
     transform(_code, id) {
       const lawFile = id.split('?')[0]
       if (lawFile === undefined || !lawFile.endsWith(`/${LAW_FILE_BASENAME}`)) return
-      return generateSchemaLaws(lawFile, resolve(config.root, options?.dir ?? 'src'))
+      const timeout = options?.timeout
+      return generateSchemaLaws(
+        lawFile,
+        resolve(config.root, options?.dir ?? 'src'),
+        timeout === undefined ? undefined : { timeout },
+      )
     },
   }
 }

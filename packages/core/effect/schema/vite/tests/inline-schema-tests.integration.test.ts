@@ -234,4 +234,30 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
       }),
     ),
   )
+
+  scenario(
+    'A consumer that sets a timeout sees it in the generated law test',
+    Gherkin.Do.pipe(
+      Given('a package declaring five data schemas')('pkg', () => Effect.succeed(NESTED)),
+      When('the plugin generates that package’s law suite with a 60_000ms timeout')(
+        'code',
+        (s) =>
+          Effect.sync(() =>
+            generateSchemaLaws(join(s.pkg, 'src', LAW_FILE_BASENAME), join(s.pkg, 'src'), { timeout: 60_000 })
+          ),
+      ),
+      Then('the generated law test carries the requested timeout')((s) => {
+        expect(s.code).toContain(
+          `it('every obligation reachable from an exported schema is refuted somewhere', { timeout: 60000 }, () => {`,
+        )
+      }),
+      Then('the same package without a timeout generates the default without a timeout object')((s) => {
+        const defaultCode = lawSuiteFor(s.pkg)
+        expect(defaultCode).toContain(
+          `it('every obligation reachable from an exported schema is refuted somewhere', () => {`,
+        )
+        expect(defaultCode).not.toContain('{ timeout:')
+      }),
+    ),
+  )
 })
