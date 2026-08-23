@@ -434,14 +434,16 @@ export const generateSchemaLaws = (
   const labelOf = (s: FoundSchema): string =>
     (nameCount.get(s.name) ?? 0) > 1 ? `${s.name} (${specifierOf(s.filePath)})` : s.name
 
-  if (!(options?.refutationCoverage ?? false)) {
-    return [
-      `import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
-      schemas.map((s, i) => `import { ${s.name} as schema_${i} } from ${quote(specifierOf(s.filePath))}`).join('\n'),
-      '',
-      schemas.map((s, i) => `ruleOfSchemas(${quote(labelOf(s))}, schema_${i})`).join('\n'),
-    ].join('\n')
-  }
+  // The law half of the suite is what both branches agree on; coverage only
+  // wraps it. Stating it once is what keeps the two emitted forms from drifting.
+  const lawLines = [
+    `import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
+    schemas.map((s, i) => `import { ${s.name} as schema_${i} } from ${quote(specifierOf(s.filePath))}`).join('\n'),
+    '',
+    schemas.map((s, i) => `ruleOfSchemas(${quote(labelOf(s))}, schema_${i})`).join('\n'),
+  ]
+
+  if (!(options?.refutationCoverage ?? false)) return lawLines.join('\n')
 
   const refuted = findRefutedIdentities(srcDir, schemas)
   const quoted = schemas
@@ -454,10 +456,7 @@ export const generateSchemaLaws = (
     `import type { AST } from 'effect/SchemaAST'`,
     `import { it } from 'vitest'`,
     `import { obligationsOf } from '@systemfsoftware/effect-schema-refutation'`,
-    `import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
-    schemas.map((s, i) => `import { ${s.name} as schema_${i} } from ${quote(specifierOf(s.filePath))}`).join('\n'),
-    '',
-    schemas.map((s, i) => `ruleOfSchemas(${quote(labelOf(s))}, schema_${i})`).join('\n'),
+    ...lawLines,
     '',
     `const REFUTED: ReadonlySet<string> = new Set([${quoted}])`,
     '',
@@ -466,13 +465,16 @@ export const generateSchemaLaws = (
     `]`,
     '',
     `it('every obligation reachable from an exported schema is refuted somewhere', () => {`,
+    `  // One scan per schema: obligationsOf hunts a witness per arm, so asking`,
+    `  // twice doubles the most expensive work in this suite.`,
+    `  const scanned = EXPORTED.map(([name, schema]) => [name, [...obligationsOf(schema).keys()]] as const)`,
     `  const covered = new Set<AST>()`,
-    `  for (const [name, schema] of EXPORTED) {`,
+    `  for (const [name, nodes] of scanned) {`,
     `    if (!REFUTED.has(name)) continue`,
-    `    for (const node of obligationsOf(schema).keys()) covered.add(node)`,
+    `    for (const node of nodes) covered.add(node)`,
     `  }`,
-    `  const naked = EXPORTED`,
-    `    .filter(([, schema]) => [...obligationsOf(schema).keys()].some((n) => !covered.has(n)))`,
+    `  const naked = scanned`,
+    `    .filter(([, nodes]) => nodes.some((n) => !covered.has(n)))`,
     `    .map(([name]) => name)`,
     `  if (naked.length > 0) {`,
     "    throw new Error(`schema(s) reaching an obligation no refutes call discharges: ${naked.join(', ')}`)",
@@ -518,9 +520,7 @@ export const inlineSchemaTests = (options?: InlineSchemaTestsOptions): Plugin =>
     transform(_code, id) {
       const lawFile = id.split('?')[0]
       if (lawFile === undefined || !lawFile.endsWith(`/${LAW_FILE_BASENAME}`)) return
-      return generateSchemaLaws(lawFile, resolve(config.root, options?.dir ?? 'src'), {
-        refutationCoverage: options?.refutationCoverage ?? false,
-      })
+      return generateSchemaLaws(lawFile, resolve(config.root, options?.dir ?? 'src'), options)
     },
   }
 }

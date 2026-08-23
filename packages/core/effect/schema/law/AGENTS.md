@@ -43,3 +43,4 @@ rules:
       packages/core/effect/schema/vite/tests/inline-schema-tests.integration.test.ts`;
       no line is cited because that file is edited far more often than this rule.
       A hand-written call is review's to catch"
+```
