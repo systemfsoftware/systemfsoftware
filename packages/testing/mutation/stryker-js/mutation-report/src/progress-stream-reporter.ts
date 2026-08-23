@@ -1,60 +1,102 @@
-import { type MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { commonTokens, type PluginContext } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { type MutationTestingPlanReadyEvent, type Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
-import { type Injector, tokens } from 'typed-inject'
+import type { MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core'
+import type { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import type {
+  DryRunCompletedEvent,
+  MutationTestingPlanReadyEvent,
+  MutationTestMetricsResult,
+  ReporterService,
+} from '@systemfsoftware/stryker-js-plugin-api/report'
+import { ReporterFailed } from '@systemfsoftware/stryker-js-plugin-api/report'
+import * as Effect from 'effect/Effect'
 
-import { injectionTokens } from '@systemfsoftware/stryker-js-mutation-run/plugins'
-import type { RunEventSink } from '@systemfsoftware/stryker-js-mutation-run/run-event'
-import { isActionableStatus } from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
+type RunEvent =
+  | { kind: 'plan'; total: number }
+  | {
+    kind: 'mutant'
+    id: string
+    status: string
+    file: string
+    location: schema.Location
+    mutator: string
+    replacement: string | null
+    completed: number
+    total: number
+  }
 
-/**
- * The machine-mode progress events (R17, R19, R20): the reporter seam that
- * turns the plan and the tested-mutant callbacks into `plan` and `mutant`
- * run events. The sink (U4) is resolved from the plugin creator's injector
- * at construction — the same chain core provided `injectionTokens.runEventSink`
- * on — so an unwired chain throws here rather than pushing into a silent
- * no-op (R2). Everything else — the mode gate, the fd-1 write path, the
- * heartbeat, the terminal line — lives on the sink's host side, not here.
- * This reporter writes no lines itself; it stays registered as the fifth
- * surviving reporter name — U9 must not prune it.
- */
-export class ProgressStreamReporter implements Reporter {
-  public static readonly inject = tokens(commonTokens.injector)
+export type RunEventSink = (event: RunEvent) => void
 
+const ACTIONABLE_STATUSES = ['Survived', 'NoCoverage', 'Timeout', 'RuntimeError'] as const
+
+function isActionableStatus(status: string): boolean {
+  return (ACTIONABLE_STATUSES as readonly string[]).includes(status)
+}
+
+export function filterActionable(result: MutantResult): boolean {
+  return isActionableStatus(result.status)
+}
+
+export function toRunEvent(
+  result: MutantResult,
+  completed: number,
+  total: number,
+): RunEvent {
+  return {
+    kind: 'mutant',
+    id: result.id,
+    status: result.status,
+    file: result.fileName,
+    location: result.location,
+    mutator: result.mutatorName,
+    replacement: result.replacement ?? null,
+    completed,
+    total,
+  }
+}
+
+export class ProgressStreamReporter implements ReporterService {
   private total = 0
   private completed = 0
 
-  constructor(injector: Injector<PluginContext & { [injectionTokens.runEventSink]: RunEventSink }>) {
-    this.runEventSink = injector.resolve(injectionTokens.runEventSink)
-  }
+  constructor(private readonly runEventSink: RunEventSink = () => {}) {}
 
-  private readonly runEventSink: RunEventSink
+  public readonly onDryRunCompleted = (_event: DryRunCompletedEvent) => Effect.void
 
-  public onMutationTestingPlanReady(event: MutationTestingPlanReadyEvent): void {
-    this.total = event.mutantPlans.length
-    this.runEventSink({ kind: 'plan', total: this.total })
-  }
-
-  public onMutantTested(result: MutantResult): void {
-    this.completed += 1
-    // The R20 actionable filter: a `Killed`, `Ignored`, or `CompileError`
-    // mutant is a count only, never a `mutant` line — the shared definition
-    // from the verdict envelope, so the lines and `verdict.mutants` can
-    // never disagree. The completed counter still counts every tested
-    // mutant; the count travels on the events that do get pushed.
-    if (!isActionableStatus(result.status)) {
-      return
-    }
-    this.runEventSink({
-      kind: 'mutant',
-      id: result.id,
-      status: result.status,
-      file: result.fileName,
-      location: result.location,
-      mutator: result.mutatorName,
-      replacement: result.replacement ?? null,
-      completed: this.completed,
-      total: this.total,
+  public readonly onMutationTestingPlanReady = (event: MutationTestingPlanReadyEvent) =>
+    Effect.try({
+      try: () => {
+        this.total = event.mutantPlans.length
+        this.runEventSink({ kind: 'plan', total: this.total })
+      },
+      catch: (cause) =>
+        new ReporterFailed({ reporterName: 'progress-stream', event: 'onMutationTestingPlanReady', cause }),
     })
-  }
+
+  public readonly onMutantTested = (result: MutantResult) =>
+    Effect.try({
+      try: () => {
+        this.completed += 1
+        if (!isActionableStatus(result.status)) {
+          return
+        }
+        this.runEventSink({
+          kind: 'mutant',
+          id: result.id,
+          status: result.status,
+          file: result.fileName,
+          location: result.location,
+          mutator: result.mutatorName,
+          replacement: result.replacement ?? null,
+          completed: this.completed,
+          total: this.total,
+        })
+      },
+      catch: (cause) => new ReporterFailed({ reporterName: 'progress-stream', event: 'onMutantTested', cause }),
+    })
+
+  public readonly onMutationTestReportReady = (
+    _report: schema.MutationTestResult,
+    _metrics: MutationTestMetricsResult,
+  ) => Effect.void
+
+  public readonly wrapUp = Effect.void
 }

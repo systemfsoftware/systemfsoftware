@@ -1,4 +1,6 @@
-import { declareClassPlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { declarePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
+import * as Layer from 'effect/Layer'
 
 import { ClearTextReporter } from './clear-text-reporter.js'
 import { HtmlReporter } from './html-reporter.js'
@@ -13,9 +15,9 @@ export { ProgressBarReporter }
 export { ProgressStreamReporter }
 
 export const strykerPlugins = [
-  declareClassPlugin(PluginKind.Reporter, 'clear-text', ClearTextReporter),
-  declareClassPlugin(PluginKind.Reporter, 'progress', ProgressBarReporter),
-  declareClassPlugin(PluginKind.Reporter, 'html', HtmlReporter),
-  declareClassPlugin(PluginKind.Reporter, 'json', JsonReporter),
-  declareClassPlugin(PluginKind.Reporter, 'progress-stream', ProgressStreamReporter),
+  declarePlugin(PluginKind.Reporter, 'clear-text', Layer.succeed(Reporter, new ClearTextReporter())),
+  declarePlugin(PluginKind.Reporter, 'progress', Layer.succeed(Reporter, new ProgressBarReporter())),
+  declarePlugin(PluginKind.Reporter, 'html', Layer.succeed(Reporter, new HtmlReporter())),
+  declarePlugin(PluginKind.Reporter, 'json', Layer.succeed(Reporter, new JsonReporter())),
+  declarePlugin(PluginKind.Reporter, 'progress-stream', Layer.succeed(Reporter, new ProgressStreamReporter())),
 ]

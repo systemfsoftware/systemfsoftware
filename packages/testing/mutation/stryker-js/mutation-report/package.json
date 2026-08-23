@@ -26,12 +26,8 @@
   "dependencies": {
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
     "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
-    "chalk": "~5.6.0",
-    "emoji-regex": "~10.6.0",
     "mutation-testing-elements": "3.7.3",
-    "mutation-testing-metrics": "3.7.3",
-    "progress": "~2.0.3",
-    "typed-inject": "~5.0.0"
+    "mutation-testing-metrics": "3.7.3"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
@@ -41,7 +37,6 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
-    "@types/progress": "2.0.7",
     "effect": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
@@ -71,5 +66,8 @@
       "default": "./dist/stryker-plugins.mjs"
     },
     "./package.json": "./package.json"
+  },
+  "inlinedDependencies": {
+    "effect": "4.0.0-rc.111"
   }
 }

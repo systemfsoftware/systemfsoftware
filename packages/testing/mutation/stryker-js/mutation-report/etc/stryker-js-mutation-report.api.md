@@ -4,77 +4,97 @@
 
 ```ts
 
-import { ClassPlugin } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { DryRunCompletedEvent } from '@systemfsoftware/stryker-js-plugin-api/report';
-import { injectionTokens } from '@systemfsoftware/stryker-js-mutation-run/plugins';
-import { Injector } from 'typed-inject';
 import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging';
 import { MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { MutationTestingPlanReadyEvent } from '@systemfsoftware/stryker-js-plugin-api/report';
-import { MutationTestMetricsResult } from 'mutation-testing-metrics';
-import { PluginContext } from '@systemfsoftware/stryker-js-plugin-api/plugin';
+import { MutationTestMetricsResult } from '@systemfsoftware/stryker-js-plugin-api/report';
+import { PluginContribution } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
-import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report';
-import { RunEventSink } from '@systemfsoftware/stryker-js-mutation-run/run-event';
+import { ReporterFailed } from '@systemfsoftware/stryker-js-plugin-api/report';
+import { ReporterService } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core';
 
 // @public (undocumented)
-export class ClearTextReporter implements Reporter {
-    constructor(log: Logger, options: StrykerOptions);
+export class ClearTextReporter implements ReporterService {
+    constructor(options?: StrykerOptions | undefined, log?: Logger, out?: NodeJS.WritableStream);
+    // Warning: (ae-forgotten-export) The symbol "Effect" needs to be exported by the entry point index.d.mts
+    //
     // (undocumented)
-    static inject: ["logger", "options"];
+    readonly onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect<void, never, never>;
     // (undocumented)
-    onMutationTestReportReady(_report: schema.MutationTestResult, metrics: MutationTestMetricsResult): void;
+    readonly onMutantTested: (_result: MutantResult) => Effect<void, never, never>;
+    // (undocumented)
+    readonly onMutationTestingPlanReady: (_event: MutationTestingPlanReadyEvent) => Effect<void, never, never>;
+    // (undocumented)
+    readonly onMutationTestReportReady: (report: schema.MutationTestResult, metrics: MutationTestMetricsResult) => Effect<void, ReporterFailed, never>;
+    // (undocumented)
+    readonly wrapUp: Effect<void, never, never>;
 }
 
 // @public (undocumented)
-export class HtmlReporter implements Reporter {
-    constructor(options: StrykerOptions, log: Logger);
+export class HtmlReporter implements ReporterService {
+    constructor(options?: StrykerOptions | undefined, log?: Logger);
     // (undocumented)
-    static readonly inject: ["options", "logger"];
+    readonly onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect<void, never, never>;
     // (undocumented)
-    onMutationTestReportReady(report: schema.MutationTestResult): void;
+    readonly onMutantTested: (_result: MutantResult) => Effect<void, never, never>;
     // (undocumented)
-    wrapUp(): Promise<void> | undefined;
+    readonly onMutationTestingPlanReady: (_event: MutationTestingPlanReadyEvent) => Effect<void, never, never>;
+    // (undocumented)
+    readonly onMutationTestReportReady: (report: schema.MutationTestResult, _metrics: MutationTestMetricsResult) => Effect<void, ReporterFailed, never>;
+    // (undocumented)
+    readonly wrapUp: Effect<void, never, never>;
 }
 
 // @public (undocumented)
-export class JsonReporter implements Reporter {
-    constructor(options: StrykerOptions, log: Logger);
+export class JsonReporter implements ReporterService {
+    constructor(options?: StrykerOptions | undefined, log?: Logger);
     // (undocumented)
-    static readonly inject: ["options", "logger"];
+    readonly onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect<void, never, never>;
     // (undocumented)
-    onMutationTestReportReady(report: schema.MutationTestResult): void;
+    readonly onMutantTested: (_result: MutantResult) => Effect<void, never, never>;
     // (undocumented)
-    wrapUp(): Promise<void> | undefined;
-}
-
-// Warning: (ae-forgotten-export) The symbol "ProgressKeeper" needs to be exported by the entry point index.d.mts
-//
-// @public (undocumented)
-export class ProgressBarReporter extends ProgressKeeper {
+    readonly onMutationTestingPlanReady: (_event: MutationTestingPlanReadyEvent) => Effect<void, never, never>;
     // (undocumented)
-    onMutantTested(result: MutantResult): number;
+    readonly onMutationTestReportReady: (report: schema.MutationTestResult, _metrics: MutationTestMetricsResult) => Effect<void, ReporterFailed, never>;
     // (undocumented)
-    onMutationTestingPlanReady(event: MutationTestingPlanReadyEvent): void;
-}
-
-// @public
-export class ProgressStreamReporter implements Reporter {
-    constructor(injector: Injector<PluginContext & {
-        [injectionTokens.runEventSink]: RunEventSink;
-    }>);
-    // (undocumented)
-    static readonly inject: ["$injector"];
-    // (undocumented)
-    onMutantTested(result: MutantResult): void;
-    // (undocumented)
-    onMutationTestingPlanReady(event: MutationTestingPlanReadyEvent): void;
+    readonly wrapUp: Effect<void, never, never>;
 }
 
 // @public (undocumented)
-export const strykerPlugins: ClassPlugin<PluginKind.Reporter, []>[];
+export class ProgressBarReporter implements ReporterService {
+    // (undocumented)
+    readonly onDryRunCompleted: (event: DryRunCompletedEvent) => Effect<void, ReporterFailed, never>;
+    // (undocumented)
+    readonly onMutantTested: (result: MutantResult) => Effect<void, ReporterFailed, never>;
+    // (undocumented)
+    readonly onMutationTestingPlanReady: (event: MutationTestingPlanReadyEvent) => Effect<void, ReporterFailed, never>;
+    // (undocumented)
+    readonly onMutationTestReportReady: (_report: schema.MutationTestResult, _metrics: MutationTestMetricsResult) => Effect<void, never, never>;
+    // (undocumented)
+    readonly wrapUp: Effect<void, never, never>;
+}
+
+// @public (undocumented)
+export class ProgressStreamReporter implements ReporterService {
+    // Warning: (ae-forgotten-export) The symbol "RunEventSink" needs to be exported by the entry point index.d.mts
+    constructor(runEventSink?: RunEventSink);
+    // (undocumented)
+    readonly onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect<void, never, never>;
+    // (undocumented)
+    readonly onMutantTested: (result: MutantResult) => Effect<void, ReporterFailed, never>;
+    // (undocumented)
+    readonly onMutationTestingPlanReady: (event: MutationTestingPlanReadyEvent) => Effect<void, ReporterFailed, never>;
+    // (undocumented)
+    readonly onMutationTestReportReady: (_report: schema.MutationTestResult, _metrics: MutationTestMetricsResult) => Effect<void, never, never>;
+    // (undocumented)
+    readonly wrapUp: Effect<void, never, never>;
+}
+
+// @public (undocumented)
+export const strykerPlugins: PluginContribution<PluginKind.Reporter>[];
 
 // (No @packageDocumentation comment for this package)
 

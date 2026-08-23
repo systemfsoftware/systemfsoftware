@@ -10,14 +10,28 @@ export enum ExitClass {
   InternalError = 4,
 }
 
-const pendingExitClasses: Set<ExitClass> = new Set()
-
-export function setPendingExitClass(exitClass: ExitClass): void {
-  pendingExitClasses.add(exitClass)
-}
-
-export function getPendingExitClasses(): ReadonlySet<ExitClass> {
-  return pendingExitClasses
+/**
+ * Whether a finished run's score fails its own breaking threshold.
+ *
+ * A pure decision over two numbers, which is what it always was: the run knows
+ * the score, the configuration knows the threshold, and the comparison needs
+ * nothing else. It replaces a module-scope `Set` that one package wrote to and
+ * another read from — a channel invisible in both signatures, shared by every
+ * run in the process, and correct only if the reader happened to run after the
+ * writer. Nothing expressed that ordering, so two runs in one process (a test
+ * suite, or the programmatic API called twice) saw each other's verdicts.
+ *
+ * `null` for "nothing to report": no breaking threshold configured, or a run
+ * with no mutants and therefore no score. Neither is a failure.
+ */
+export function verdictExitClass(
+  score: number | null,
+  breakingThreshold: number | null,
+): ExitClass | null {
+  if (breakingThreshold === null || score === null) {
+    return null
+  }
+  return score < breakingThreshold ? ExitClass.VerdictFail : null
 }
 
 /**
@@ -27,12 +41,12 @@ export function getPendingExitClasses(): ReadonlySet<ExitClass> {
  *
  * Pure function — unit-tested over the whole precedence matrix.
  *
- * @param pending the classes recorded by the verdict gates
+ * @param pending the classes the run reported, usually none or one
  * @param signal the OS signal number that terminated the run, if any
  * (SIGINT = 2, SIGTERM = 15, …)
  */
 export function resolveExitCode(
-  pending: ReadonlySet<ExitClass>,
+  pending: Iterable<ExitClass>,
   signal: number | null,
 ): number {
   if (signal !== null) {
