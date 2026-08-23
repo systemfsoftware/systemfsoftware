@@ -10,6 +10,10 @@
       "@systemfsoftware/source": "./src/index.ts",
       "default": "./dist/index.js"
     },
+    "./api": {
+      "@systemfsoftware/source": "./src/api.ts",
+      "default": "./dist/api.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -69,6 +73,7 @@
   "publishConfig": {
     "exports": {
       ".": "./dist/index.js",
+      "./api": "./dist/api.js",
       "./package.json": "./package.json"
     },
     "provenance": true

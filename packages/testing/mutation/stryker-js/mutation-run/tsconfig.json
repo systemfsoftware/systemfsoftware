@@ -4,6 +4,7 @@
     "outDir": "dist",
     "rootDir": ".",
     "skipLibCheck": true,
+    "customConditions": ["@systemfsoftware/source"],
     "types": [
       "node",
       "vitest/globals"
@@ -14,6 +15,7 @@
       }
     ]
   },
+
   "include": [
     "src",
     "test",

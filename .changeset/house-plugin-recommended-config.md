@@ -2,8 +2,8 @@
 '@systemfsoftware/oxlint-plugin': minor
 ---
 
-The plugin now recommends its own rules. `configs.recommended` lists every rule it ships at
-`error`, so a configuration can spread it instead of transcribing the rule names:
+The plugin now recommends its own rules. `configs.recommended` lists every rule it ships,
+so a configuration can spread it instead of transcribing the rule names:
 
 ```ts
 import house from '@systemfsoftware/oxlint-plugin'

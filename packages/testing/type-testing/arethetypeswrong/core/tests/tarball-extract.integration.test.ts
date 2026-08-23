@@ -1,8 +1,12 @@
+import {
+  createPackage,
+  createPackageFromTarballData,
+  packPackage,
+  packTree,
+} from '@systemfsoftware/arethetypeswrong-core'
 import { it, layer, makeFeature, StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
-import { createPackage, createPackageFromTarballData } from '../src/index.js'
-import { packPackage, packTree } from '../src/pack.js'
 
 const Feature = makeFeature({ it, layer })
 

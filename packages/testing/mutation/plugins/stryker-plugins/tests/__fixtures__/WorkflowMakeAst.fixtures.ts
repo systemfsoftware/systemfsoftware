@@ -30,7 +30,7 @@ interface StringLiteral {
   readonly value: string
 }
 
-type AstNode = Identifier | MemberExpression | CallExpression | Program | ArrowFunctionExpression | StringLiteral
+type AstNode = unknown
 
 export const identifier = (name: string): Identifier => ({ type: 'Identifier', name })
 

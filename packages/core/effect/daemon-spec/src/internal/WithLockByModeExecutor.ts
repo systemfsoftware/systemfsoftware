@@ -9,7 +9,6 @@ import { withLeaderLock } from './WithLeaderLockExecutor.js'
  * which carry a `key`. A `{ mode: 'none' }` spec is excluded here rather than
  * paired with a nullable adapter elsewhere.
  */
-/** @internal */
 export type KeyedLockConfig = Exclude<LockConfig, { mode: 'none' }>
 
 /**
@@ -20,7 +19,6 @@ export type KeyedLockConfig = Exclude<LockConfig, { mode: 'none' }>
  * combination "required spec, no adapter" cannot be written in this type, so a
  * later edit cannot give it a silently unwrapping behaviour.
  */
-/** @internal */
 export type LockBinding =
   | { readonly kind: 'unlocked' }
   | { readonly kind: 'locked'; readonly spec: KeyedLockConfig; readonly lock: LeaderLock['Service'] }
@@ -38,7 +36,6 @@ export type LockBinding =
  * The worker and the supervisor make the same choice over the same cases, so it is
  * made here once rather than in each of them.
  */
-/** @internal */
 export const withLockByMode = <A, E, R>(
   self: Effect.Effect<A, E, R>,
   binding: LockBinding,

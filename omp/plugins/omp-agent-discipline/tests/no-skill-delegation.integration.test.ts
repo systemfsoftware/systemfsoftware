@@ -1,7 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { runNoSkillDelegation } from '@systemfsoftware/omp-agent-discipline'
+import { runNoSkillDelegation } from '@systemfsoftware/omp-agent-discipline/api'
 import { TomlLoaderLive } from '@systemfsoftware/omp-utils'
 import { Effect, Layer } from 'effect'
 import * as PathModule from 'effect/Path'

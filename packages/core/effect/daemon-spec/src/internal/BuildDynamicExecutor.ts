@@ -152,7 +152,6 @@ const buildDynamic = <E, R, Args>(
     }
   })
 
-/** @internal */
 export const dynamic = <E, R, Args>(
   spec: DynamicSpec<E, R, Args>,
 ): Effect.Effect<

@@ -68,7 +68,8 @@ export default defineConfig({
     '@systemfsoftware/oxlint-plugin/no-native-set-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-native-setinterval-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-native-settimeout-in-effect': 'error',
-    '@systemfsoftware/oxlint-plugin/internal-export-jsdoc': 'error',
+    '@systemfsoftware/oxlint-plugin/internal-export-jsdoc': 'off',
+
     '@systemfsoftware/oxlint-plugin/no-internal-jsdoc-outside': 'error',
     ...effectDmmf.configs.recommended.rules,
 

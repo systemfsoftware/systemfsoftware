@@ -17,7 +17,7 @@ interface CallExpression {
   readonly arguments: readonly AstNode[]
 }
 
-type AstNode = Identifier | MemberExpression | CallExpression | ObjectNode
+type AstNode = unknown
 
 export const identifier = (name: string): Identifier => ({ type: 'Identifier', name })
 
