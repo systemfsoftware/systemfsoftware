@@ -1,47 +1,25 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import { createPackageFromTarballData } from '../src/index.js'
+import { recipes } from '../src/index.js'
 import { createCompilerHosts } from '../src/internal/MultiCompilerHost.js'
-import { readBytes } from './__fixtures__/fixture-io.mjs'
 
 const Feature = makeFeature({ it, layer })
-
-const fixturesDir = new URL('./__fixtures__/fixtures/', import.meta.url)
-const urlOf = (dir: URL, name: string): URL => new URL(`./${name}`, dir)
 
 Feature('Compiler host program cache').body(({ scenario }) => {
   scenario(
     'Should_ReturnSameReference_When_SameRootRequested_And_Evict_When_CapacityExceeded',
     Gherkin.Do.pipe(
-      Given('a package with at least three files')(
-        'pkg',
-        () =>
-          Effect.sync(() => {
-            const bytes = readBytes(urlOf(fixturesDir, 'semver@7.6.3.tgz'))
-            return createPackageFromTarballData(bytes)
-          }),
-      ),
+      Given('a package with at least three files')('pkg', () => Effect.sync(() => recipes.MultiEntrypoint())),
       When('the cache is exercised')(
         'result',
         ({ pkg }) =>
           Effect.gen(function*() {
             const hosts = yield* createCompilerHosts(pkg)
-            const allFiles = pkg.listFiles().filter((f) => f.endsWith('.js'))
-            let a = ''
-            let b = ''
-            let c = ''
-            if (allFiles.length >= 3) {
-              const first = allFiles[0]
-              const second = allFiles[1]
-              const third = allFiles[2]
-              a = first
-              b = second
-              c = third
-            } else {
-              a = '/index.js'
-              b = '/preload.js'
-              c = '/range.js'
+            const jsFiles = pkg.listFiles().filter((f) => f.endsWith('.js') || f.endsWith('.mjs') || f.endsWith('.cjs'))
+            if (jsFiles.length < 3) {
+              return yield* Effect.fail(new Error('recipe must produce at least three JS files'))
             }
+            const [a, b, c] = jsFiles
 
             const p1 = yield* hosts.node16.createAuxiliaryProgram([a])
             const p2 = yield* hosts.node16.createAuxiliaryProgram([a])

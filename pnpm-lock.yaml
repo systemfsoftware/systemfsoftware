@@ -2274,6 +2274,9 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../../specs/gherkin/effect
+      '@systemfsoftware/effect-memfs':
+        specifier: workspace:^
+        version: link:../../../../core/effect/filesystem/memfs
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../../../../core/effect/schema/law

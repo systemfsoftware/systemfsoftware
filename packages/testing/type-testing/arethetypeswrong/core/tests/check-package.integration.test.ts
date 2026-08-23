@@ -1,50 +1,27 @@
-/// <reference types="node" />
 import { it, layer, makeFeature, StepError } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Layer } from 'effect'
-import { readFile } from 'node:fs/promises'
+import { Effect } from 'effect'
 import { expect } from 'vitest'
-import { CheckPackage, CheckPackageLive } from '../src/CheckPackageExecutor.ts'
-import { PackageStoreAdapterStub } from '../src/PackageStoreAdapter.ts'
+import { checkPackage, recipes } from '../src/index.js'
 
 /**
- * CheckPackage executor — live layer wiring.
+ * CheckPackage — analysis of a synthetic recipe package.
  *
- * Composes the published `CheckPackage` service through `CheckPackageLive`
- * with a stub package store backed by a real fixture tarball, proving that the
- * executor entrypoint resolves a spec, fetches bytes, analyzes the package,
- * and decodes the result into the published `CheckResult` shape.
+ * Drives the real `checkPackage` analysis over a recipe-built package,
+ * proving that the in-memory constructor path yields an analysable package
+ * without reading a committed tarball.
  */
 const Feature = makeFeature({ it, layer })
 
-const executorCheck = async (tarball: Uint8Array) => {
-  const storeLayer = PackageStoreAdapterStub(
-    { packageName: 'semver', packageVersion: '7.6.3', tarballUrl: 'file://semver@7.6.3.tgz' },
-    tarball,
-  )
-  const checkPackageLayer = CheckPackageLive.pipe(Layer.provide(storeLayer))
-  const checkEffect = Effect.gen(function*() {
-    const checkPackage = yield* CheckPackage
-    return yield* checkPackage.execute('semver', { entrypoints: ['.'] })
-  }).pipe(Effect.provide(Layer.mergeAll(checkPackageLayer, storeLayer)))
-  return Effect.runPromise(checkEffect)
-}
-
-Feature('CheckPackage executor — analysis through the live layer').body(({ scenario }) => {
+Feature('CheckPackage — analysis of a synthetic recipe package').body(({ scenario }) => {
   scenario(
-    'Should_ReturnAnalysis_When_StoreServesFixtureTarball',
+    'Should_ReturnAnalysis_When_RecipePackageIsAnalysed',
     Effect.gen(function*() {
-      const tarball = new Uint8Array(
-        yield* Effect.tryPromise({
-          try: async () => await readFile(new URL('./__fixtures__/fixtures/semver@7.6.3.tgz', import.meta.url)),
-          catch: () => new StepError({ keyword: 'scenario', text: 'readFile failed', cause: void 0 }),
-        }),
+      const pkg = recipes.NamedExports()
+      const result = yield* checkPackage(pkg).pipe(
+        Effect.mapError((cause) => new StepError({ keyword: 'scenario', text: 'checkPackage failed', cause })),
       )
-      const result = yield* Effect.tryPromise({
-        try: () => executorCheck(tarball),
-        catch: () => new StepError({ keyword: 'scenario', text: 'execute failed', cause: void 0 }),
-      })
       if ('packageName' in result && result.packageName !== undefined) {
-        expect(result.packageName).toBe('semver')
+        expect(result.packageName).toBe('named-exports')
       }
       if ('entrypoints' in result) {
         expect(Object.keys(result.entrypoints)).toContain('.')
