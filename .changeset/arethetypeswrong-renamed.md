@@ -2,7 +2,7 @@
 "@systemfsoftware/arethetypeswrong": major
 ---
 
-Renamed from `@systemfsoftware/arethetypeswrong-core`; the first release under the new name is `4.0.0`, continuing the old package's history.
+Renamed from `@systemfsoftware/arethetypeswrong-core`, which stopped at `4.0.0`. The first release under the new name is `5.0.0`, continuing that sequence.
 
 `Package`, `createPackage`, `createPackageFromTarballData`, `toDirectoryJSON`, `packPackage`, `packTree` and `DirectoryJSON` now come from `@systemfsoftware/npm-package`. `checkPackage` still accepts the `Package` it builds.
 
