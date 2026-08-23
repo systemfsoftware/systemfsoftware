@@ -1,47 +1,65 @@
-import { MutationTestMetricsResult } from 'mutation-testing-metrics'
+import * as Context from 'effect/Context'
+import type * as Effect from 'effect/Effect'
 
-import { MutantResult, schema } from '../core/index.js'
+import type { MutantResult, schema } from '../core/index.js'
 
-import { DryRunCompletedEvent } from './DryRunCompletedEvent.js'
-import { MutationTestingPlanReadyEvent } from './MutationTestingPlanReadyEvent.js'
+import type { DryRunCompletedEvent } from './DryRunCompletedEvent.js'
+import type { MutationTestingPlanReadyEvent } from './MutationTestingPlanReadyEvent.js'
+import type { MutationTestMetricsResult } from './MutationTestMetrics.schema.js'
+import type { ReporterFailed } from './ReporterFailed.schema.js'
 
 /**
- * Represents a reporter which can report during or after a Stryker run
+ * What a reporter does, as values rather than started work.
+ *
+ * Every operation returns an `Effect`, so the engine can time it out, retry
+ * it, or interrupt it — none of which is possible once eager work has been
+ * returned, because the work is already running. That single change lets the
+ * engine drop its hand-rolled timeout race and its retry loop.
+ *
+ * `R` is `never` on every operation. A reporter's own dependencies — a
+ * filesystem, a logger — are supplied by the `Layer` that builds it, never by
+ * the caller, so they do not appear in the interface. A port that leaked them
+ * would force every consumer to discover and provide them.
+ *
+ * No member is optional. The interface this replaces used `onX?()` /
+ * `wrapUp?()`, which made every broadcast site branch on `typeof reporter.X`
+ * and made a reporter that ignored an event indistinguishable from one that
+ * had not been updated for it. A reporter with nothing to do for an event
+ * returns `Effect.void`.
+ *
+ * Outcomes are not errors. A failing test, a surviving mutant, or a compile
+ * error in the code under test is a value on the success channel. The error
+ * channel (`ReporterFailed`) is only for the reporter itself breaking
+ * (filesystem, serialization, or plugin-author code throwing), and it carries
+ * `reporterName` and `event` because the broadcast fans out to N reporters
+ * and "a reporter threw" is not actionable.
  */
-export interface Reporter {
-  /**
-   * An event emitted when the dry run completed successfully.
-   * @param event The dry run completed event
-   */
-  onDryRunCompleted?(event: DryRunCompletedEvent): void
+export interface ReporterService {
+  readonly onDryRunCompleted: (event: DryRunCompletedEvent) => Effect.Effect<void, ReporterFailed>
+
+  readonly onMutationTestingPlanReady: (
+    event: MutationTestingPlanReadyEvent,
+  ) => Effect.Effect<void, ReporterFailed>
+
+  readonly onMutantTested: (result: Readonly<MutantResult>) => Effect.Effect<void, ReporterFailed>
 
   /**
-   * An event emitted when the mutant test plan is calculated.
-   * @param event The mutant test plan ready event
+   * Called when mutation testing is done.
+   * The `report` shape is `mutation-testing-report-schema`'s `MutationTestResult`;
+   * it is restated as an owned `Wire` declaration in a later unit that owns `src/core/**` — that directory is off-limits here.
    */
-  onMutationTestingPlanReady?(event: MutationTestingPlanReadyEvent): void
-
-  /**
-   * Called when a mutant was tested
-   * @param result The immutable result
-   */
-  onMutantTested?(result: Readonly<MutantResult>): void
-
-  /**
-   * Called when mutation testing is done
-   * @param report the mutation test result that is valid according to the mutation-testing-report-schema (json schema)
-   * @see https://github.com/stryker-mutator/mutation-testing-elements/blob/master/packages/report-schema/src/mutation-testing-report-schema.json
-   */
-  onMutationTestReportReady?(
+  readonly onMutationTestReportReady: (
     report: Readonly<schema.MutationTestResult>,
     metrics: Readonly<MutationTestMetricsResult>,
-  ): void
+  ) => Effect.Effect<void, ReporterFailed>
 
   /**
-   * Called when stryker wants to quit
-   * Gives a reporter the ability to finish up any async tasks
-   * Stryker will not close until the promise is either resolved or rejected.
-   * @returns a promise which will resolve when the reporter is done reporting
+   * Called when Stryker wants to quit — gives the reporter a chance to finish
+   * async work. No arguments, so it is a plain `Effect`, not a thunk.
    */
-  wrapUp?(): Promise<void> | void
+  readonly wrapUp: Effect.Effect<void, ReporterFailed>
 }
+
+export class Reporter extends Context.Service<Reporter, ReporterService>()(
+  '@systemfsoftware/stryker-js-plugin-api/report/Reporter',
+) {}

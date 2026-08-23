@@ -2082,19 +2082,16 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.111
-      mutation-testing-metrics:
-        specifier: 3.7.3
-        version: 3.7.3
       mutation-testing-report-schema:
         specifier: 3.7.3
         version: 3.7.3
       tslib:
         specifier: catalog:stryker
         version: 2.8.1
-      typed-inject:
-        specifier: ~5.0.0
-        version: 5.0.0
     devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(vitest@4.1.10)
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
@@ -2104,6 +2101,9 @@ importers:
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../toolchain/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../../../toolchain/vitest-config
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
@@ -2119,6 +2119,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
 
   packages/testing/mutation/stryker-js/typescript-checker:
     dependencies:

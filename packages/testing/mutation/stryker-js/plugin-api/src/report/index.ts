@@ -1,3 +1,5 @@
 export type { DryRunCompletedEvent, RunTiming } from './DryRunCompletedEvent.js'
 export type { MutationTestingPlanReadyEvent } from './MutationTestingPlanReadyEvent.js'
-export type { Reporter } from './Reporter.js'
+export type { Metrics, MetricsResult, MutationTestMetricsResult, TestMetrics } from './MutationTestMetrics.schema.js'
+export * from './Reporter.js'
+export * from './ReporterFailed.schema.js'

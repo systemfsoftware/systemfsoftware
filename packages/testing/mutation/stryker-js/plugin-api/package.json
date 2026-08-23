@@ -17,6 +17,7 @@
     "clean": "rimraf dist",
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
     "attw": "attw --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
@@ -34,20 +35,21 @@
   ],
   "dependencies": {
     "effect": "catalog:",
-    "mutation-testing-metrics": "3.7.3",
     "mutation-testing-report-schema": "3.7.3",
-    "tslib": "catalog:stryker",
-    "typed-inject": "~5.0.0"
+    "tslib": "catalog:stryker"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "exports": {
     "./check": "./dist/check/index.mjs",
@@ -73,5 +75,20 @@
       "./test-runner": "./dist/test-runner/index.mjs",
       "./package.json": "./package.json"
     }
+  },
+  "inlinedDependencies": {
+    "@effect/vitest": "4.0.0-rc.111",
+    "@jridgewell/sourcemap-codec": "1.5.5",
+    "@vitest/expect": "4.1.10",
+    "@vitest/pretty-format": "4.1.10",
+    "@vitest/runner": "4.1.10",
+    "@vitest/snapshot": "4.1.10",
+    "@vitest/spy": "4.1.10",
+    "@vitest/utils": "4.1.10",
+    "chai": "6.2.2",
+    "magic-string": "0.30.21",
+    "pathe": "2.0.3",
+    "tinyrainbow": "3.1.1",
+    "vitest": "4.1.10"
   }
 }
