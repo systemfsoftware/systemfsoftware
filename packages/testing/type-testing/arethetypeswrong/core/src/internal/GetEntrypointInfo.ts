@@ -133,6 +133,7 @@ function getProxyDirectories(rootDir: string, fs: Package) {
     })
   }
 }
+/** @internal */
 export const getEntrypointInfo = (
   packageName: string,
   fs: Package,
@@ -223,6 +224,7 @@ const getEntrypointResolution = (
 function unique<T>(array: readonly T[]): T[] {
   return array.filter((value, index) => array.indexOf(value) === index)
 }
+/** @internal */
 export function getBuildTools(packageJson: {
   devDependencies?: Record<string, string>
 }): Partial<Record<BuildTool, string>> {
@@ -237,6 +239,7 @@ export function getBuildTools(packageJson: {
   }
   return result
 }
+/** @internal */
 export function getModuleKinds(
   entrypoints: Record<string, EntrypointInfo>,
   resolutionOption: ResolutionOption,

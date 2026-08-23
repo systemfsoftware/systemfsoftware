@@ -3,6 +3,7 @@ import type { Package } from '../CreatePackage.js'
 import type { Analysis, Problem, ResolutionKind, ResolutionOption } from '../Types.js'
 import type { CompilerHosts } from './MultiCompilerHost.js'
 
+/** @internal */
 export interface CheckDependenciesContext<EnumerateFiles extends boolean = false> extends CheckExecutionContext {
   subpath: string
   resolutionKind: ResolutionKind
@@ -10,6 +11,7 @@ export interface CheckDependenciesContext<EnumerateFiles extends boolean = false
   fileName: EnumerateFiles extends true ? string : undefined
 }
 
+/** @internal */
 export interface CheckExecutionContext {
   pkg: Package
   hosts: CompilerHosts
@@ -22,11 +24,13 @@ export interface CheckExecutionContext {
 // implicit index signatures for assignability purposes.
 type Structure<T> = T extends (...args: never) => unknown ? T : { [K in keyof T]: Structure<T[K]> }
 
+/** @internal */
 export type EnsureSerializable<T> = [T] extends [Serializable] ? T
   : [T] extends [object] ? Structure<T> extends Serializable ? T
     : never
   : never
 
+/** @internal */
 export type Serializable =
   | string
   | number
@@ -36,6 +40,7 @@ export type Serializable =
   | { [key: string]: Serializable }
   | readonly Serializable[]
 
+/** @internal */
 export interface AnyCheck {
   name: string
   enumerateFiles?: boolean
@@ -48,6 +53,7 @@ export interface AnyCheck {
   ): Problem[] | Problem | undefined
 }
 
+/** @internal */
 export function defineCheck<
   const Dependencies extends readonly unknown[],
   EnumerateFiles extends boolean,

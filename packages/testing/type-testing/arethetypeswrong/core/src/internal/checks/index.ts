@@ -6,6 +6,7 @@ import moduleKindDisagreement from './ModuleKindDisagreement.js'
 import namedExports from './NamedExports.js'
 import unexpectedModuleSyntax from './UnexpectedModuleSyntax.js'
 
+/** @internal */
 export default [
   entrypointResolutions,
   moduleKindDisagreement,

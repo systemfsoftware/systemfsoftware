@@ -9,9 +9,13 @@ import 'typescript'
 
 declare module 'typescript' {
   // Path/string utilities
+  /** @internal */
   export function combinePaths(path: string, ...paths: (string | undefined)[]): string
+  /** @internal */
   export function ensureTrailingDirectorySeparator(path: Path): Path
+  /** @internal */
   export function ensureTrailingDirectorySeparator(path: string): string
+  /** @internal */
   export function comparePathsCaseInsensitive(a: string, b: string): Comparison
   /** @internal */
   export enum Comparison {
@@ -19,58 +23,78 @@ declare module 'typescript' {
     EqualTo = 0,
     GreaterThan = 1,
   }
+  /** @internal */
   export function forEachAncestorDirectory<T>(
     directory: Path,
     callback: (directory: Path) => T | undefined,
   ): T | undefined
+  /** @internal */
   export function forEachAncestorDirectory<T>(
     directory: string,
     callback: (directory: string) => T | undefined,
   ): T | undefined
+  /** @internal */
   export function toPath(
     fileName: string,
     basePath: string | undefined,
     getCanonicalFileName: (path: string) => string,
   ): Path
+  /** @internal */
   export type GetCanonicalFileName = (fileName: string) => string
+  /** @internal */
   export function createGetCanonicalFileName(useCaseSensitiveFileNames: boolean): GetCanonicalFileName
+  /** @internal */
   export function getAnyExtensionFromPath(path: string): string
+  /** @internal */
   export function getAnyExtensionFromPath(
     path: string,
     extensions: string | readonly string[],
     ignoreCase: boolean,
   ): string
+  /** @internal */
   export function hasTSFileExtension(fileName: string): boolean
+  /** @internal */
   export function hasJSFileExtension(fileName: string): boolean
+  /** @internal */
   export function isDeclarationFileName(fileName: string): boolean
+  /** @internal */
   export function pathIsRelative(path: string): boolean
+  /** @internal */
   export function getTypesPackageName(packageName: string): string
+  /** @internal */
   export function unmangleScopedPackageName(typesPackageName: string): string
 
   // Binder
+  /** @internal */
   export function bindSourceFile(file: SourceFile, options: CompilerOptions): void
 
   // Package-scope resolution
+  /** @internal */
   export function getTemporaryModuleResolutionState(
     packageJsonInfoCache: PackageJsonInfoCache | undefined,
     host: ModuleResolutionHost,
     options: CompilerOptions,
   ): ModuleResolutionState
+  /** @internal */
   export function getPackageScopeForPath(directory: string, state: ModuleResolutionState): PackageJsonInfo | undefined
+  /** @internal */
   export interface ModuleResolutionState {
     host: ModuleResolutionHost
     compilerOptions: CompilerOptions
     packageJsonInfoCache: PackageJsonInfoCache | undefined
   }
+  /** @internal */
   export interface PackageJsonInfo {
     packageDirectory: string
     contents: PackageJsonInfoContents
   }
+  /** @internal */
   export interface PackageJsonInfoContents {
     packageJsonContent: {
       type?: string
     }
   }
+  /** @internal */
   export interface SourceFile {
     symbol: Symbol
     locals?: SymbolTable
@@ -82,6 +106,7 @@ declare module 'typescript' {
   }
 
   // TypeChecker internals
+  /** @internal */
   export interface TypeChecker {
     resolveExternalModuleSymbol(symbol: Symbol): Symbol
     getExportsAndPropertiesOfModule(moduleSymbol: Symbol): Symbol[]
@@ -89,6 +114,7 @@ declare module 'typescript' {
   }
 
   // CompilerOptions extra
+  /** @internal */
   export interface CompilerOptions {
     /** @internal */
     noDtsResolution?: boolean

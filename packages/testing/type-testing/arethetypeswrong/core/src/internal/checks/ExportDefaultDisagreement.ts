@@ -13,6 +13,7 @@ const bindOptions: ts.CompilerOptions = {
   checkJs: true,
 }
 
+/** @internal */
 export default defineCheck({
   name: 'ExportDefaultDisagreement',
   dependencies: ({ entrypoints, subpath, resolutionKind, programInfo }) => {

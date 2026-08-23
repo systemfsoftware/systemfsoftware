@@ -2,6 +2,7 @@ import { Package } from '../../CreatePackage.js'
 import { getCjsModuleBindings } from './CjsBindings.js'
 import { cjsResolve } from './Resolve.js'
 
+/** @internal */
 export function getCjsModuleNamespace(fs: Package, file: URL, seen = new Set<string>()): Set<string> {
   seen.add(file.pathname)
   const exports = new Set<string>()

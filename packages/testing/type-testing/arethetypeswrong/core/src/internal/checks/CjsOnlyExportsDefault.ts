@@ -1,6 +1,7 @@
 import ts from 'typescript'
 import { defineCheck } from '../DefineCheck.js'
 
+/** @internal */
 export default defineCheck({
   name: 'CJSOnlyExportsDefault',
   dependencies: ({ entrypoints, subpath, resolutionKind }) => {
