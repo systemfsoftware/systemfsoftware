@@ -23,6 +23,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: write
+      actions: write
     env:
       HUSKY: "0"
     steps:
@@ -30,8 +31,15 @@ jobs:
         with:
           fetch-depth: 0
       - uses: ./.github/actions/install-deps
+      - uses: denoland/setup-deno@v2
       - name: Consume pending change intents
         run: corepack pnpm version -r
+      - name: Capture release set
+        run: ./scripts/tools/tag-released-packages.mjs --dry-run --json --output /tmp/captured.json && cat /tmp/captured.json
+      - name: Assert release notes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./scripts/tools/create-github-releases.mjs --assert --captured /tmp/captured.json
       - name: Open or update the Release PR
         env:
           GH_TOKEN: ${{ github.token }}
@@ -89,6 +97,9 @@ jobs:
               --label release
           fi
 
+          echo "dispatching CI for branch $BRANCH at $(git rev-parse HEAD)"
+          gh workflow run ci.yml --ref "$BRANCH"
+
   gate:
     if: >-
       github.event_name == 'pull_request'
@@ -128,6 +139,12 @@ jobs:
         # Necessary: every package publishes files: ["dist"] against a gitignored
         # dist/ and none carries a prepack hook, so the build is an explicit step.
         run: corepack pnpm build
+      - name: Capture release set
+        run: ./scripts/tools/tag-released-packages.mjs --dry-run --json --output /tmp/captured.json && cat /tmp/captured.json
+      - name: Assert release notes
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./scripts/tools/create-github-releases.mjs --assert --captured /tmp/captured.json
       - name: Publish via OIDC trusted publishing
         # Necessary: --no-git-checks disables pnpm's clean-tree and commit-is-HEAD
         # checks because the version-bump commit from the Release PR need not be
@@ -135,8 +152,8 @@ jobs:
         # Unregistered packages fail loudly with an OIDC auth error.
         run: corepack pnpm publish -r --provenance --access public --no-git-checks
       - name: Tag released versions
-        run: deno run --allow-run=git,pnpm --allow-read scripts/tools/tag-released-packages.mjs
+        run: ./scripts/tools/tag-released-packages.mjs --captured /tmp/captured.json
       - name: GitHub Releases from authored changelogs
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: deno run --allow-run=git,pnpm --allow-read --allow-net=api.github.com --allow-env=GITHUB_TOKEN scripts/tools/create-github-releases.mjs
+        run: ./scripts/tools/create-github-releases.mjs --captured /tmp/captured.json
