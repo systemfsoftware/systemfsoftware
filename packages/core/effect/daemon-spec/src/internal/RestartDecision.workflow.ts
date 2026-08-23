@@ -13,6 +13,7 @@ import { DecideInput } from './RestartDecision.schema.js'
  * borrowing a schema's. The schema's `RestartStrategy` is the same literal union, so a
  * decoded value satisfies this structurally.
  */
+/** @internal */
 export type RestartStrategyName = 'one_for_one' | 'one_for_all' | 'rest_for_one'
 
 /**
@@ -21,6 +22,7 @@ export type RestartStrategyName = 'one_for_one' | 'one_for_all' | 'rest_for_one'
  * A pure total function: the one part of the restart decision that is computation rather
  * than dispatch, so it lives in the decision cell beside the `Workflow.make` it serves.
  */
+/** @internal */
 export const restartIndicesFor = (
   strategy: RestartStrategyName,
   failedIndex: number,
@@ -39,14 +41,17 @@ const RESTART_STRATEGIES = ['one_for_one', 'one_for_all', 'rest_for_one'] as con
 const RestartDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon/RestartDecision')
 type RestartDecisionTypeId = typeof RestartDecisionTypeId
 
+/** @internal */
 export class RestartDecisionContinue extends S.TaggedClass<RestartDecisionContinue>()('Continue', {}) {
   readonly [RestartDecisionTypeId] = RestartDecisionTypeId
 }
+/** @internal */
 export class RestartDecisionRestart extends S.TaggedClass<RestartDecisionRestart>()('Restart', {
   indices: S.NonEmptyArray(S.Int),
 }) {
   readonly [RestartDecisionTypeId] = RestartDecisionTypeId
 }
+/** @internal */
 export class RestartDecisionExhausted extends S.TaggedError<RestartDecisionExhausted>()('Exhausted', {}) {
   readonly [RestartDecisionTypeId] = RestartDecisionTypeId
 }
@@ -57,17 +62,20 @@ export class RestartDecisionExhausted extends S.TaggedError<RestartDecisionExhau
  * `ReturnType<…>` — which couples them to this signature's shape and attaches no
  * documentation of its own.
  */
+/** @internal */
 export type RestartDecisionOutcome = Result.Result<
   RestartDecisionContinue | RestartDecisionRestart,
   RestartDecisionExhausted
 >
 
+/** @internal */
 export type RestartDecisionWorkflow = Workflow.Workflow<
   DecideInput,
   RestartDecisionContinue | RestartDecisionRestart,
   RestartDecisionExhausted
 >
 
+/** @internal */
 export const decideRestart = Workflow.make(
   DecideInput,
   (command): RestartDecisionOutcome =>
