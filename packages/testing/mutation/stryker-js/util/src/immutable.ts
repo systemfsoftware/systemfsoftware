@@ -2,17 +2,20 @@ import { type Primitive } from './primitive.js'
 
 type ImmutablePrimitive = Primitive | ((...args: never[]) => unknown)
 
+/**
+ * The deeply-readonly view of `T`.
+ *
+ * The per-container arms are written inline rather than as four exported
+ * aliases. Each alias had exactly one use — this type — so exporting them
+ * published four names that named no capability and that a consumer could
+ * only ever reach through `Immutable` anyway.
+ */
 export type Immutable<T> = T extends ImmutablePrimitive ? T
-  : T extends Array<infer U> ? ImmutableArray<U>
-  : T extends Map<infer K, infer V> ? ImmutableMap<K, V>
-  : T extends Set<infer M> ? ImmutableSet<M>
+  : T extends Array<infer U> ? ReadonlyArray<Immutable<U>>
+  : T extends Map<infer K, infer V> ? ReadonlyMap<Immutable<K>, Immutable<V>>
+  : T extends Set<infer M> ? ReadonlySet<Immutable<M>>
   : T extends RegExp ? Readonly<RegExp>
-  : ImmutableObject<T>
-
-export type ImmutableArray<T> = ReadonlyArray<Immutable<T>>
-export type ImmutableMap<K, V> = ReadonlyMap<Immutable<K>, Immutable<V>>
-export type ImmutableSet<T> = ReadonlySet<Immutable<T>>
-export type ImmutableObject<T> = { readonly [K in keyof T]: Immutable<T[K]> }
+  : { readonly [K in keyof T]: Immutable<T[K]> }
 
 function isUnknownArray(value: unknown): value is unknown[] {
   return Array.isArray(value)

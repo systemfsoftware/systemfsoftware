@@ -2,7 +2,7 @@ import path from 'path'
 
 import { NodePath } from '@babel/core'
 import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { propertyPath } from '@systemfsoftware/stryker-js-util'
+import { propertyPath, strykerReportBugUrl } from '@systemfsoftware/stryker-js-util'
 
 import { Mutant } from '../mutant.js'
 
@@ -27,11 +27,7 @@ export function throwPlacementError(
         'mutator',
         'excludedMutations',
       )
-    }). Please report this issue at https://github.com/stryker-mutator/stryker-js/issues/new?assignees=&labels=%F0%9F%90%9B+Bug&template=bug_report.md&title=${
-      encodeURIComponent(
-        message,
-      )
-    }. Original error: ${error.stack}`
+    }). Please report this issue at ${strykerReportBugUrl(message)}. Original error: ${error.stack}`
   let builtError = new Error(errorMessage)
   try {
     // `buildCodeFrameError` is kind of flaky, see https://github.com/stryker-mutator/stryker-js/issues/2695

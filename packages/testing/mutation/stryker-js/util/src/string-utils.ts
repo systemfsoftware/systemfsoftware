@@ -44,13 +44,9 @@ export function propertyPath<T>(): PropertyPathOverloads<T> {
 }
 
 /**
- * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions#Escaping
- */
-export function escapeRegExpLiteral(input: string): string {
-  return input.replace(/[.*+\-?^${}()|[\]\\/]/g, '\\$&') // $& means the whole matched string
-}
-
-/**
+ * Escapes the characters that carry meaning inside a regular expression, so the
+ * input matches itself literally.
+ *
  * @see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_Expressions#Escaping
  */
 export function escapeRegExp(input: string): string {
@@ -65,13 +61,17 @@ export function normalizeFileName(fileName: string): string {
 }
 
 /**
- * Creates a URL to the page where you can report a bug.
+ * Creates a URL to the page where a consumer can report a bug against this
+ * project.
+ *
+ * The tracker is ours. The ported original addressed the upstream StrykerJS
+ * repository, along with its label and issue-template parameters, so every bug
+ * a consumer filed from a Stryker run arrived at a project that does not own
+ * this code (`REPO-O1`) and prefilled a template that does not exist here.
+ *
  * @param titleSuggestion The title to be prefilled in.
  */
 export function strykerReportBugUrl(titleSuggestion: string): string {
-  return `https://github.com/stryker-mutator/stryker-js/issues/new?assignees=&labels=%F0%9F%90%9B+Bug&template=bug_report.md&title=${
-    encodeURIComponent(
-      titleSuggestion,
-    )
-  }`
+  const title = encodeURIComponent(titleSuggestion)
+  return `https://github.com/systemfsoftware/systemfsoftware/issues/new?title=${title}`
 }
