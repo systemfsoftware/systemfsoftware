@@ -8,7 +8,6 @@ import { ClassPlugin } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { Evaluator } from '@systemfsoftware/stryker-js-plugin-api/evaluate';
 import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging';
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
-import * as S from 'effect/Schema';
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core';
 
@@ -21,19 +20,10 @@ export const contributionByTestFile: (report: ReportView) => ReadonlyMap<string,
 export const defaultRequireTestContributionSuffixes: readonly ['.workflow.property.test.ts', '.policy.property.test.ts', '.kernel.property.test.ts'];
 
 // @public (undocumented)
-export const judgeTestContribution: (report: ReportView, requireTestContribution: unknown, everyKillerRecorded: boolean) => TestContributionVerdict | undefined;
-
-// @public (undocumented)
-export const RequireTestContribution: S.NullOr<S.$Array<S.String>>;
+export const judgeTestContribution: (report: ReportView, everyKillerRecorded: boolean, suffixes?: readonly string[]) => TestContributionVerdict;
 
 // @public (undocumented)
 export const strykerPlugins: ClassPlugin<PluginKind.Evaluator, ["options", "logger"]>[];
-
-// @public (undocumented)
-export const strykerValidationSchema: Record<string, unknown>;
-
-// @public (undocumented)
-export const suffixesToRequire: (value: unknown) => readonly string[] | undefined;
 
 // @public (undocumented)
 export class TestContributionEvaluator implements Evaluator {
@@ -50,11 +40,6 @@ export interface TestContributionInput {
     // (undocumented)
     readonly suffixes: readonly string[];
 }
-
-// @public (undocumented)
-export const TestContributionOptionsSchema: S.Struct<{
-    readonly requireTestContribution: S.optional<S.NullOr<S.$Array<S.String>>>;
-}>;
 
 // @public (undocumented)
 export interface TestContributionVerdict {

@@ -31,7 +31,19 @@ export class PluginCreator {
     kind: TPlugin,
     name: string,
   ): PluginInterfaces[TPlugin] {
-    const plugin = this.findPlugin(kind, name)
+    return this.instantiate(this.findPlugin(kind, name))
+  }
+
+  public createAll<TPlugin extends keyof Plugins>(kind: TPlugin): PluginInterfaces[TPlugin][] {
+    const plugins = this.pluginsByKind.get(kind) ?? []
+    return plugins
+      .filter((plugin): plugin is Plugins[TPlugin] => isPluginOfKind(plugin, kind))
+      .map((plugin) => this.instantiate(plugin))
+  }
+
+  private instantiate<TPlugin extends keyof Plugins>(
+    plugin: Plugins[TPlugin],
+  ): PluginInterfaces[TPlugin] {
     if (isFactoryPlugin(plugin)) {
       return this.injector.injectFunction(
         plugin.factory,
@@ -44,15 +56,8 @@ export class PluginCreator {
       return plugin.value
     }
     throw new Error(
-      `Plugin "${kind}:${name}" could not be created, missing "factory", "injectableClass" or "value" property.`,
+      'Plugin could not be created, missing "factory", "injectableClass" or "value" property.',
     )
-  }
-
-  public createAll<TPlugin extends keyof Plugins>(kind: TPlugin): PluginInterfaces[TPlugin][] {
-    const plugins = this.pluginsByKind.get(kind) ?? []
-    return plugins
-      .filter((plugin): plugin is Plugins[TPlugin] => isPluginOfKind(plugin, kind))
-      .map((plugin) => this.create(kind, plugin.name))
   }
 
   private findPlugin<T extends keyof Plugins>(

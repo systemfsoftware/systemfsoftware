@@ -15,24 +15,15 @@ export class TestContributionEvaluator implements Evaluator {
   ) {}
 
   public evaluate(report: schema.MutationTestResult): void {
-    const verdict = judgeTestContribution(
-      report,
-      this.options['requireTestContribution'],
-      this.options.disableBail,
-    )
-    if (verdict === undefined) {
-      this.log.debug(
-        "No test contribution required. Won't fail the build for a test file that kills nothing another test file does not also kill. Set `requireTestContribution` to change this behavior.",
-      )
-      return
-    }
+    // The plugin's presence in `plugins` is the switch; there is no option to read.
+    const verdict = judgeTestContribution(report, this.options.disableBail)
     if (!verdict.failed) {
       this.log.info(verdict.message)
       return
     }
     this.log.error(`${verdict.message}\nSetting exit code to 1 (failure).`)
     this.log.info(
-      '(sharpen or delete them, or set `requireTestContribution = null` to prevent this error in the future)',
+      '(sharpen or delete them, or remove the test-contribution plugin from `plugins` to prevent this error in the future)',
     )
     setPendingExitClass(ExitClass.VerdictFail)
   }

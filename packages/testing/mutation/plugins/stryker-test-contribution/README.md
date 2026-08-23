@@ -2,7 +2,7 @@
 
 Fails a mutation run when a required test file kills no mutant that another test file does not also kill.
 
-Listing the plugin turns the check on. There is no reporter to add.
+Listing the plugin in `plugins` turns the check on. There is no option to set and no reporter to add.
 
 ## Install
 
@@ -14,13 +14,8 @@ pnpm add -D @systemfsoftware/stryker-test-contribution
 
 ```json
 {
-  "plugins": ["@systemfsoftware/stryker-test-contribution"],
-  "requireTestContribution": [
-    ".workflow.property.test.ts",
-    ".policy.property.test.ts",
-    ".kernel.property.test.ts"
-  ]
+  "plugins": ["@systemfsoftware/stryker-test-contribution"]
 }
 ```
 
-Set `requireTestContribution` to `null` to turn the check off while leaving the plugin installed.
+The gate polices `.workflow.property.test.ts`, `.policy.property.test.ts`, and `.kernel.property.test.ts` files. To turn the check off, remove the plugin from `plugins`.

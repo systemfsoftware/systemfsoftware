@@ -14,7 +14,7 @@ import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 
-import { strykerPlugins, strykerValidationSchema, suffixesToRequire } from '../src/mod.js'
+import { strykerPlugins } from '../src/mod.js'
 import { TestContributionEvaluator } from '../src/test-contribution-evaluator.js'
 
 const Feature = makeFeature({ it, layer })
@@ -36,7 +36,7 @@ const silentLogger = (): Logger => ({
   fatal: () => undefined,
 })
 
-const reportWithToothlessPropertyFile = (): schema.MutationTestResult => ({
+const reportWithToothlessKernelFile = (): schema.MutationTestResult => ({
   schemaVersion: '2',
   thresholds: { high: 80, low: 60 },
   files: {
@@ -55,10 +55,13 @@ const reportWithToothlessPropertyFile = (): schema.MutationTestResult => ({
     },
   },
   testFiles: {
-    'earns.property.test.ts': { tests: [{ id: 't1', name: 'test t1' }] },
-    'idle.property.test.ts': { tests: [{ id: 't2', name: 'test t2' }] },
+    'earns.kernel.property.test.ts': { tests: [{ id: 't1', name: 'test t1' }] },
+    'idle.kernel.property.test.ts': { tests: [{ id: 't2', name: 'test t2' }] },
   },
 })
+
+const evaluatorWith = (options: Record<string, unknown>): TestContributionEvaluator =>
+  new TestContributionEvaluator(options as unknown as StrykerOptions, silentLogger())
 
 Feature('test-contribution evaluator plugin')
   .body(({ scenario }) => {
@@ -75,38 +78,15 @@ Feature('test-contribution evaluator plugin')
     )
 
     scenario(
-      'Should_DeclareRequireTestContributionOnTheValidationSchema',
-      Gherkin.Do.pipe(
-        Given('the published validation schema')(
-          'document',
-          () => Effect.succeed(JSON.stringify(strykerValidationSchema)),
-        ),
-        Then('properties.requireTestContribution exists and names the default suffixes')((s) => {
-          expect(s.document).toContain('requireTestContribution')
-          expect(s.document).toContain('.workflow.property.test.ts')
-          expect(s.document).toContain('.policy.property.test.ts')
-          expect(s.document).toContain('.kernel.property.test.ts')
-        }),
-      ),
-    )
-
-    scenario(
       'Should_RecordVerdictFail_When_ARequiredFileIsToothless',
       Gherkin.Do.pipe(
-        Given('an evaluator with the property suffix required and disableBail true')(
+        Given('an evaluator with disableBail true and no other options')(
           'evaluator',
-          () =>
-            Effect.sync(() => {
-              const options = {
-                requireTestContribution: ['.property.test.ts'],
-                disableBail: true,
-              } as unknown as StrykerOptions
-              return new TestContributionEvaluator(options, silentLogger())
-            }),
+          () => Effect.sync(() => evaluatorWith({ disableBail: true })),
         ),
-        When('a report with one toothless in-scope file is evaluated')('pending', (s) =>
+        When('a report with one toothless kernel property file is evaluated')('pending', (s) =>
           Effect.sync(() => {
-            s.evaluator.evaluate(reportWithToothlessPropertyFile())
+            s.evaluator.evaluate(reportWithToothlessKernelFile())
             return getPendingExitClasses()
           })),
         Then('VerdictFail is pending and the resolved exit code is 1')((s) => {
@@ -117,12 +97,19 @@ Feature('test-contribution evaluator plugin')
     )
 
     scenario(
-      'Should_TreatNullAndUndefinedAsOff',
+      'Should_RefuseToJudge_When_BailStoppedRecordingKillers',
       Gherkin.Do.pipe(
-        Given('null and undefined option values')('values', () => Effect.succeed([null, undefined] as const)),
-        Then('suffixesToRequire stays undefined')((s) => {
-          expect(suffixesToRequire(s.values[0])).toBeUndefined()
-          expect(suffixesToRequire(s.values[1])).toBeUndefined()
+        Given('an evaluator with bail active (disableBail unset)')(
+          'evaluator',
+          () => Effect.sync(() => evaluatorWith({})),
+        ),
+        When('a report with one toothless kernel property file is evaluated')('pending', (s) =>
+          Effect.sync(() => {
+            s.evaluator.evaluate(reportWithToothlessKernelFile())
+            return getPendingExitClasses()
+          })),
+        Then('VerdictFail is pending with the disableBail instruction')((s) => {
+          expect(s.pending.has(ExitClass.VerdictFail)).toBe(true)
         }),
       ),
     )

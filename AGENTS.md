@@ -43,7 +43,7 @@ Not derivable from the manifests:
 
 - `pnpm --filter <pkg> <cmd>` from the root. Never `cd` into a package, never `npx`.
 - Lint is a per-package `oxlint.config.ts` extending `@systemfsoftware/oxlint-config`.
-- Mutation runs on pure decisions only, and fails when a `*.property.test.ts` kills no mutant nothing else kills. Opt out with `requireTestContribution: null` in the package's `stryker.config.json`, never by deleting a test. Which files a package mutates is that package's `stryker.config.json` and nothing above it: a filename suffix is not a scoping instrument, because a rule keyed on one never fires on the violation it exists to catch — see `docs/solutions/architecture-patterns/label-routed-rules-are-unfalsifiable.md`.
+- Mutation runs on pure decisions only, and fails when a `*.property.test.ts` kills no mutant nothing else kills. The gate is the `@systemfsoftware/stryker-test-contribution` plugin: it is on exactly when the config lists it in `plugins`, and off when it does not — there is no option. Never turn it off by deleting a test. Which files a package mutates is that package's `stryker.config.json` and nothing above it: a filename suffix is not a scoping instrument, because a rule keyed on one never fires on the violation it exists to catch — see `docs/solutions/architecture-patterns/label-routed-rules-are-unfalsifiable.md`.
 
 ## Surface Classes
 

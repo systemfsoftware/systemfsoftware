@@ -10,14 +10,14 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/testing/mutation/plugins/stryker-test-contribution#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Stryker reporter addon that fails a run when a required test file kills no mutant that another test file does not also kill.",
+  "description": "Stryker evaluator addon that fails a run when a required test file kills no mutant that another test file does not also kill.",
   "keywords": [
     "stryker",
     "stryker-mutator",
     "mutation-testing",
     "test-contribution",
     "test-quality",
-    "reporter"
+    "evaluator"
   ],
   "type": "module",
   "files": [
