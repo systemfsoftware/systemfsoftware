@@ -1,8 +1,8 @@
 import path from 'path'
 
-import { errorToString } from '@stryker-mutator/util'
 import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import type { Injector, SandboxPluginContext } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { errorToString } from '@systemfsoftware/stryker-js-util'
 import { Exit, Schema as S } from 'effect'
 import { createInjector } from 'typed-inject'
 

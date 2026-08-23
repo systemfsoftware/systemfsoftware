@@ -1,4 +1,3 @@
-import { errorToString, escapeRegExp, normalizeFileName, notEmpty, testFilesProvided } from '@stryker-mutator/util'
 import {
   CoverageData,
   INSTRUMENTER_CONSTANTS,
@@ -19,6 +18,13 @@ import {
   TestStatus,
   toMutantRunResult,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import {
+  errorToString,
+  escapeRegExp,
+  normalizeFileName,
+  notEmpty,
+  testFilesProvided,
+} from '@systemfsoftware/stryker-js-util'
 import fs from 'fs'
 import path from 'path'
 import semver from 'semver'

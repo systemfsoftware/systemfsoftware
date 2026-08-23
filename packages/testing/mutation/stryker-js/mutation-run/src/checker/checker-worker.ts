@@ -1,7 +1,7 @@
-import { StrykerError } from '@stryker-mutator/util'
 import { type Checker, type CheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
 import { type Mutant, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { commonTokens, PluginKind, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { StrykerError } from '@systemfsoftware/stryker-js-util'
 
 import { injectionTokens, PluginCreator } from '../plugins/index.js'
 

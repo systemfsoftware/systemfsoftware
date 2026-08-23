@@ -4,16 +4,23 @@ import { fileURLToPath, pathToFileURL, URL } from 'url'
 
 import { Schema as S } from 'effect'
 
-import { errorToString, isErrnoException, notEmpty, propertyPath } from '@stryker-mutator/util'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, type Plugin, PluginKind, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { errorToString, isErrnoException, notEmpty, propertyPath } from '@systemfsoftware/stryker-js-util'
 
 import { importModule } from '../config/module-loader.js'
 import { defaultOptions } from '../config/options-validator.js'
 
 import { PluginModuleSchema, SchemaValidationContributionSchema } from './plugin-loader.schema.js'
 
-const IGNORED_PACKAGES = ['core', 'api', 'util', 'instrumenter']
+const IGNORED_PACKAGES = [
+  'stryker-js-plugin-api',
+  'stryker-js-util',
+  'stryker-js-instrumenter',
+  'stryker-js-mutation-run',
+  'stryker-js-mutation-report',
+  'stryker-js-cli',
+]
 
 interface PluginModule {
   strykerPlugins: Plugin<PluginKind>[]
@@ -51,11 +58,11 @@ export class PluginLoader {
   /**
    * Loads plugins based on configured plugin descriptors.
    * A plugin descriptor can be:
-   *  * A full url: "file:///home/nicojs/github/my-plugin.js"
-   *  * An absolute file path: "/home/nicojs/github/my-plugin.js"
+   *  * A full url: "file:///home/user/github/my-plugin.js"
+   *  * An absolute file path: "/home/user/github/my-plugin.js"
    *  * A relative path: "./my-plugin.js"
-   *  * A bare import expression: "@stryker-mutator/karma-runner"
-   *  * A simple glob expression (only wild cards are supported): "@stryker-mutator/*"
+   *  * A bare import expression: "@systemfsoftware/stryker-js-vitest-runner"
+   *  * A simple glob expression (only wild cards are supported): "@systemfsoftware/stryker-js-*"
    */
   public async load(
     pluginDescriptors: readonly string[],
@@ -114,7 +121,7 @@ export class PluginLoader {
           ) {
             return pathToFileURL(path.resolve(pluginExpression)).toString()
           } else {
-            // Bare plugin expression like "@stryker-mutator/mocha-runner" (or file URL)
+            // Bare plugin expression like "@systemfsoftware/stryker-js-vitest-runner" (or file URL)
             return pluginExpression
           }
         }),
@@ -127,13 +134,9 @@ export class PluginLoader {
   private async globPluginModules(pluginExpression: string) {
     const { org, pkg } = parsePluginExpression(pluginExpression)
 
-    const pluginDirectory = path.resolve(
-      fileURLToPath(new URL('../../../../../', import.meta.url)),
-      org,
-    )
     const regexp = new RegExp('^' + pkg.replace('*', '.*'))
-    this.log.debug('Loading %s from %s', pluginExpression, pluginDirectory)
-    const plugins = (await fs.promises.readdir(pluginDirectory))
+    const pluginNames = await this.readOrgDirectory(org)
+    const plugins = pluginNames
       .filter(
         (pluginName) => !IGNORED_PACKAGES.includes(pluginName) && regexp.test(pluginName),
       )
@@ -155,6 +158,49 @@ export class PluginLoader {
       )
     )
     return plugins
+  }
+
+  /**
+   * Reads the org's package names from every install directory above this
+   * module, unioned.
+   *
+   * Never a fixed number of `..` segments: `dist/` and `src/plugins/` sit at
+   * different depths, so a numeric walk resolves to a different directory
+   * depending on which one is running — and a wrong directory yields zero
+   * plugins rather than an error, so the mistake ships as a silent 100% score.
+   *
+   * Never the first directory that happens to be populated either: under a
+   * pnpm-isolated install this package's own virtual `node_modules` holds only
+   * its own dependencies, and stopping there hides every sibling plugin the
+   * project installed one level up. The union spans both, so discovery reaches
+   * as far as a hoisted layout does. A missing org directory contributes
+   * nothing; it is not an error.
+   */
+  private async readOrgDirectory(org: string): Promise<string[]> {
+    const names = new Set<string>()
+    let directory = path.dirname(fileURLToPath(import.meta.url))
+    for (;;) {
+      const installRoot = path.basename(directory) === 'node_modules'
+        ? directory
+        : path.join(directory, 'node_modules')
+      const orgDirectory = path.resolve(installRoot, org)
+      try {
+        const entries = await fs.promises.readdir(orgDirectory)
+        if (entries.length > 0) {
+          this.log.debug('Found %d %s packages in %s', entries.length, org, orgDirectory)
+          entries.forEach((entry) => names.add(entry))
+        }
+      } catch (error: unknown) {
+        if (!isErrnoException(error) || error.code !== 'ENOENT') {
+          throw error
+        }
+      }
+      const parent = path.dirname(directory)
+      if (parent === directory) {
+        return [...names]
+      }
+      directory = parent
+    }
   }
 
   private async loadPlugin(descriptor: string): Promise<
@@ -213,7 +259,7 @@ export class PluginLoader {
 /**
  * Distills organization name from a package expression.
  * @example
- *  '@stryker-mutator/core' => { org: '@stryker-mutator', 'core' }
+ *  '@systemfsoftware/stryker-js-mutation-run' => { org: '@systemfsoftware', 'stryker-js-mutation-run' }
  *  'glob' => { org: '', 'glob' }
  */
 function parsePluginExpression(pluginExpression: string) {

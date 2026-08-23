@@ -1,4 +1,3 @@
-import { errorToString } from '@stryker-mutator/util'
 import {
   type DryRunOptions,
   type DryRunResult,
@@ -8,6 +7,7 @@ import {
   MutantRunStatus,
   type TestRunner,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { errorToString } from '@systemfsoftware/stryker-js-util'
 
 import { OutOfMemoryError } from '../worker-pool/out-of-memory-error.js'
 

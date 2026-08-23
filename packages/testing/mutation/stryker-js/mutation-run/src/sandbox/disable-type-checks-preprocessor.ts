@@ -1,6 +1,6 @@
 import path from 'path'
 
-import type { disableTypeChecks } from '@stryker-mutator/instrumenter'
+import type { disableTypeChecks } from '@systemfsoftware/stryker-js-instrumenter'
 import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'

@@ -2,10 +2,10 @@ import fs from 'fs'
 import path from 'path'
 import { pathToFileURL } from 'url'
 
-import { deepMerge, type I, isErrnoException } from '@stryker-mutator/util'
 import { type PartialStrykerOptions, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { deepMerge, type I, isErrnoException } from '@systemfsoftware/stryker-js-util'
 import * as S from 'effect/Schema'
 
 import { ConfigError } from '../errors.js'

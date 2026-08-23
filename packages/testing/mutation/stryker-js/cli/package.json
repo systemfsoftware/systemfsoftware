@@ -28,11 +28,11 @@
   "dependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
-    "@stryker-mutator/util": "catalog:stryker",
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/stryker-js-mutation-report": "workspace:^",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
     "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
+    "@systemfsoftware/stryker-js-util": "workspace:^",
     "effect": "catalog:",
     "semver": "catalog:stryker"
   },

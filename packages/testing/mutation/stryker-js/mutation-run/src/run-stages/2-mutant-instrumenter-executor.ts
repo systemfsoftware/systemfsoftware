@@ -1,5 +1,8 @@
-import { createInstrumenter, type InstrumenterOptions, type InstrumentResult } from '@stryker-mutator/instrumenter'
-import { type I } from '@stryker-mutator/util'
+import {
+  createInstrumenter,
+  type InstrumenterOptions,
+  type InstrumentResult,
+} from '@systemfsoftware/stryker-js-instrumenter'
 import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import {
   commonTokens,
@@ -9,6 +12,7 @@ import {
   tokens,
 } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { type Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
+import { type I } from '@systemfsoftware/stryker-js-util'
 import type { execaCommand } from 'execa'
 
 import { createCheckerFactory } from '../checker/index.js'

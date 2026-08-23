@@ -1,0 +1,18 @@
+{
+  "extends": "@systemfsoftware/tsconfig/tsc/no-dom/library",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": ".",
+    "types": ["node"],
+    // Ported from the upstream StrykerJS util package; the sources are held to this repo's
+    // strictness, not upstream's. The constitution policy in @systemfsoftware/tsconfig/effect
+    // is not extended here: this package declares no cells.
+    "plugins": [
+      {
+        "name": "@effect/language-service"
+      }
+    ]
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}

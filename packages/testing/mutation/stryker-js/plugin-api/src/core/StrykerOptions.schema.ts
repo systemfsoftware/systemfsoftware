@@ -149,7 +149,7 @@ export const StrykerOptionsSchema = S.StructWithRest(
     ]),
     mutator: defaulted(MutatorDescriptor, {}),
     packageManager: S.optionalKey(PackageManager),
-    plugins: defaulted(S.Array(S.String), ['@stryker-mutator/*']),
+    plugins: defaulted(S.Array(S.String), ['@systemfsoftware/stryker-js-*']),
     appendPlugins: defaulted(S.Array(S.String), []),
     reporters: defaulted(S.Array(S.String), ['clear-text', 'progress', 'html']),
     htmlReporter: defaulted(HtmlReporterOptions, {}),

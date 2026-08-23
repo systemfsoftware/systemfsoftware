@@ -1,5 +1,5 @@
-import { notEmpty } from '@stryker-mutator/util'
 import { type TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { notEmpty } from '@systemfsoftware/stryker-js-util'
 import {
   BehaviorSubject,
   filter,

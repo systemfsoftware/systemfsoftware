@@ -1,7 +1,7 @@
 import path from 'path'
 
-import { normalizeFileName } from '@stryker-mutator/util'
 import { type MutantStatus, schema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { normalizeFileName } from '@systemfsoftware/stryker-js-util'
 import { calculateMutationTestMetrics } from 'mutation-testing-metrics'
 import { randomFillSync } from 'node:crypto'
 

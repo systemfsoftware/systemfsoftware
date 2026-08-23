@@ -2,7 +2,6 @@
  * Evaluator plugin wiring: listing the plugin is enough. A failed
  * contribution verdict records VerdictFail.
  */
-import { noopLogger } from '@stryker-mutator/util'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import {
   ExitClass,
@@ -11,6 +10,7 @@ import {
 } from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
 import { type PartialStrykerOptions, schema, StrykerOptionsSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { noopLogger } from '@systemfsoftware/stryker-js-util'
 import { Effect, Schema } from 'effect'
 import { expect } from 'vitest'
 

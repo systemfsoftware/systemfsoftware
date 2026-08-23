@@ -31,8 +31,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@stryker-mutator/util": "catalog:stryker",
     "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
+    "@systemfsoftware/stryker-js-util": "workspace:^",
     "effect": "catalog:",
     "semver": "catalog:stryker",
     "tslib": "catalog:stryker",

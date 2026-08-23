@@ -1,8 +1,8 @@
-import { notEmpty } from '@stryker-mutator/util'
 import { type CoverageData } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { type CompleteDryRunResult, type TestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { notEmpty } from '@systemfsoftware/stryker-js-util'
 
 import { injectionTokens } from '../plugins/index.js'
 

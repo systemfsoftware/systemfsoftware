@@ -1,6 +1,6 @@
 import { commonTokens, type Injector, type PluginContext, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 
-import { disableTypeChecks } from '@stryker-mutator/instrumenter'
+import { disableTypeChecks } from '@systemfsoftware/stryker-js-instrumenter'
 
 import { injectionTokens } from '../plugins/index.js'
 

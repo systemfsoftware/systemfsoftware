@@ -39,14 +39,14 @@
   "keywords": [
     "stryker",
     "vitest",
-    "@stryker-mutator/test-runner-plugin"
+    "@systemfsoftware/stryker-js-test-runner-plugin"
   ],
   "initStrykerConfig": {
     "coverageAnalysis": "perTest"
   },
   "dependencies": {
-    "@stryker-mutator/util": "catalog:stryker",
     "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
+    "@systemfsoftware/stryker-js-util": "workspace:^",
     "semver": "catalog:stryker",
     "tslib": "catalog:stryker"
   },

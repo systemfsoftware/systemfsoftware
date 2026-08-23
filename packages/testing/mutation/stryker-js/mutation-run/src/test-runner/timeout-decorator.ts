@@ -1,4 +1,3 @@
-import { ExpirableTask } from '@stryker-mutator/util'
 import {
   type DryRunOptions,
   type DryRunResult,
@@ -8,6 +7,7 @@ import {
   MutantRunStatus,
   type TestRunner,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { ExpirableTask } from '@systemfsoftware/stryker-js-util'
 
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { TestRunnerDecorator } from './test-runner-decorator.js'

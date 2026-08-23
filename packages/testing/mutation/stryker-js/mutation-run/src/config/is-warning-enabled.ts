@@ -1,5 +1,5 @@
-import { type KnownKeys } from '@stryker-mutator/util'
 import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type KnownKeys } from '@systemfsoftware/stryker-js-util'
 
 /**
  * The warning-option record: `warnings` accepts `true`/`false` or this
