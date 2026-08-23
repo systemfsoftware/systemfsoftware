@@ -30,5 +30,10 @@ export default defineConfig({
         },
       },
     ],
+    // The shared config turns on v8 coverage under CI, and the v8 provider
+    // cannot load inside browser mode. This suite is the M1 story-run - a
+    // proof that specs compile, import and run - and never collected coverage
+    // before it began inheriting the shared config. Keep it off.
+    coverage: { enabled: false },
   },
 })
