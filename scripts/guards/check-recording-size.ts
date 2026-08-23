@@ -30,15 +30,12 @@ const literalValue = (node: ts.Expression): string | null => {
   return null
 }
 
-const templateValue = (node: ts.Expression): string | null => {
-  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
-    return (node as ts.StringLiteral | ts.NoSubstitutionTemplateLiteral).text
+const calleeName = (expression: ts.Expression): string => {
+  if (ts.isPropertyAccessExpression(expression)) return expression.name.text
+  if (ts.isElementAccessExpression(expression) && ts.isStringLiteral(expression.argumentExpression)) {
+    return expression.argumentExpression.text
   }
-  if (ts.isTemplateExpression(node)) {
-    const te = node as ts.TemplateExpression
-    return te.head.text + te.templateSpans.map((s) => s.literal.text).join('')
-  }
-  return null
+  return ''
 }
 
 const lineOf = (sf: ts.SourceFile, node: ts.Node): { line: number; column: number } => {
@@ -72,8 +69,8 @@ const findingsInSource = async (filePath: string, text: string): Promise<readonl
   const pending: Promise<Finding | null>[] = []
   const immediate: Finding[] = []
   const visit = (node: ts.Node): void => {
-    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
-      const name = node.expression.name.text
+    if (ts.isCallExpression(node)) {
+      const name = calleeName(node.expression)
       if (isMatcher(name)) {
         const loc = lineOf(sf, node)
         if (name === 'toMatchFileSnapshot') {
@@ -171,7 +168,7 @@ const findingsInSource = async (filePath: string, text: string): Promise<readonl
               message: `${filePath}:${loc.line}:${loc.column}: ${sel.unmeasurable} at ${name}`,
             })
           } else {
-            const val = templateValue(sel.literal)
+            const val = literalValue(sel.literal)
             if (val === null) {
               immediate.push({
                 file: filePath,
@@ -219,7 +216,7 @@ const findingsInSnap = (filePath: string, text: string): readonly Finding[] => {
       if (
         ts.isElementAccessExpression(left) && ts.isIdentifier(left.expression) && left.expression.text === 'exports'
       ) {
-        const val = templateValue(right as ts.Expression)
+        const val = literalValue(right as ts.Expression)
         if (val !== null) {
           const lines = countLines(val)
           if (lines > CEILING) {
@@ -383,6 +380,18 @@ const selftest = async (): Promise<number> => {
         file: join(tmp, 'k.ts'),
         content: 'expect(x).toMatchSnapshot()',
         expectKind: 'unmeasurable',
+      },
+      {
+        label: 'interpolated inline snapshot unmeasurable, not measured at its static parts',
+        file: join(tmp, 'l.ts'),
+        content: 'expect(x).toMatchInlineSnapshot(`${huge}`)',
+        expectKind: 'unmeasurable',
+      },
+      {
+        label: 'matcher reached by bracket access still measured',
+        file: join(tmp, 'm.ts'),
+        content: 'expect(x)["toMatchInlineSnapshot"](`' + long + '`)',
+        expectKind: 'oversize',
       },
     ]
 
