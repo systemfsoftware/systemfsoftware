@@ -2,6 +2,12 @@
 
 ### Patch Changes
 
-- The peer requirements for `effect` and for the Effect test-runner integration now accept any compatible `4.0.0-rc` release, instead of demanding one exact release candidate.
+- Plugins are discovered under this scope by default. The `plugins` option now
+  defaults to a glob over this scope instead of the original project's, so a
+  configuration that relied on the previous default while installing plugins from
+  the original project must now list those plugins explicitly. Discovery also no
+  longer fails when no matching scope directory is installed: it loads nothing and
+  warns.
 
-  Installing alongside a newer release candidate no longer reports an unmet peer dependency or resolves a second copy of `effect` into the dependency tree.
+  The report's dependency section names the packages of this scope, and the
+  report's home link points at this project.

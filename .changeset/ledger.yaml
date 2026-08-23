@@ -594,7 +594,12 @@
   dir: packages/testing/mutation/stryker-js/cli
   intents:
     - malformed-prior-report-stops-the-run
+    - plugin-discovery-names-this-scope
     - stryker-cli-boolean-flags-optional
+"@systemfsoftware/stryker-js-instrumenter@0.1.0":
+  dir: packages/testing/mutation/stryker-js/instrumenter
+  intents:
+    - self-hosted-instrumenter
 "@systemfsoftware/stryker-js-mutation-report@1.2.6":
   dir: packages/stryker-js/mutation-report
   intents:
@@ -605,6 +610,10 @@
   intents:
     - debut-releases-gain-oidc
     - package-landing-pages
+"@systemfsoftware/stryker-js-mutation-report@1.2.8":
+  dir: packages/testing/mutation/stryker-js/mutation-report
+  intents:
+    - plugin-discovery-names-this-scope
 "@systemfsoftware/stryker-js-mutation-run@2.0.0":
   dir: packages/stryker-js/mutation-run
   intents:
@@ -634,6 +643,7 @@
   intents:
     - mutation-run-drops-contribution-gate
     - peer-ranges-accept-compatible-rc
+    - plugin-discovery-names-this-scope
     - public-names-stay-public
     - test-contribution-entry
 "@systemfsoftware/stryker-js-plugin-api@1.0.0":
@@ -656,6 +666,7 @@
   dir: packages/testing/mutation/stryker-js/plugin-api
   intents:
     - plugin-api-evaluator-kind
+    - plugin-discovery-names-this-scope
 "@systemfsoftware/stryker-js-typescript-checker@1.3.0":
   dir: packages/stryker-js/typescript-checker
   intents:
@@ -672,6 +683,14 @@
     - modern-ends-know
     - package-landing-pages
     - published-packages-ship-only-what-runs
+"@systemfsoftware/stryker-js-typescript-checker@1.4.1":
+  dir: packages/testing/mutation/stryker-js/typescript-checker
+  intents:
+    - plugin-discovery-names-this-scope
+"@systemfsoftware/stryker-js-util@0.1.0":
+  dir: packages/testing/mutation/stryker-js/util
+  intents:
+    - self-hosted-instrumenter
 "@systemfsoftware/stryker-js-vitest-runner@0.1.1":
   dir: packages/stryker-js/vitest-runner
   intents:
@@ -687,6 +706,7 @@
 "@systemfsoftware/stryker-js-vitest-runner@0.1.3":
   dir: packages/testing/mutation/stryker-js/vitest-runner
   intents:
+    - plugin-discovery-names-this-scope
     - sandbox-self-aliases
 "@systemfsoftware/stryker-plugins@0.12.0":
   dir: packages/stryker-plugins
@@ -712,6 +732,7 @@
   dir: packages/testing/mutation/plugins/stryker-plugins
   intents:
     - peer-ranges-accept-compatible-rc
+    - plugin-discovery-names-this-scope
 "@systemfsoftware/stryker-test-contribution@0.1.0":
   dir: packages/testing/mutation/plugins/stryker-test-contribution
   intents:
