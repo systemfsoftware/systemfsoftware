@@ -1,4 +1,0 @@
-advisors:
-  - name: default
-    model: minimax-code/MiniMax-M2.7-highspeed:medium
-    enabled: false
