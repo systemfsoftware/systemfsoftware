@@ -2,22 +2,19 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import { Effect } from 'effect'
 import { createPackageFromTarballData } from '../src/index.js'
 import { createCompilerHosts } from '../src/internal/MultiCompilerHost.js'
-import { readBytes } from './__fixtures__/fixture-io.mjs'
+import { FixtureIO, fixturesDir, readTarball } from './__fixtures__/FixtureIO.js'
 
 const Feature = makeFeature({ it, layer })
 
-const fixturesDir = new URL('./__fixtures__/fixtures/', import.meta.url)
-const urlOf = (dir: URL, name: string): URL => new URL(`./${name}`, dir)
-
-Feature('Compiler host program cache').body(({ scenario }) => {
+Feature('Compiler host program cache').withLayer(FixtureIO).body(({ scenario }) => {
   scenario(
     'Should_ReturnSameReference_When_SameRootRequested_And_Evict_When_CapacityExceeded',
     Gherkin.Do.pipe(
       Given('a package with at least three files')(
         'pkg',
         () =>
-          Effect.sync(() => {
-            const bytes = readBytes(urlOf(fixturesDir, 'semver@7.6.3.tgz'))
+          Effect.gen(function*() {
+            const bytes = yield* readTarball(fixturesDir, 'semver@7.6.3.tgz')
             return createPackageFromTarballData(bytes)
           }),
       ),

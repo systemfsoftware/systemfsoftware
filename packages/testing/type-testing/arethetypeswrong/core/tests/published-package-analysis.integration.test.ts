@@ -4,14 +4,11 @@ import * as Result from 'effect/Result'
 import { expect } from 'vitest'
 
 import { checkPackage, createPackageFromTarballData } from '../src/index.js'
-import { listDirectory, readBytes } from './__fixtures__/fixture-io.mjs'
+import { FixtureIO, fixturesDir, listNames, readTarball, snapshotsDir } from './__fixtures__/FixtureIO.js'
 
 const Feature = makeFeature({ it, layer })
 
 const SNAPSHOTS_DIR = './__fixtures__/snapshots/'
-
-const fixturesDir = new URL('./__fixtures__/fixtures/', import.meta.url)
-const snapshotsDir = new URL(SNAPSHOTS_DIR, import.meta.url)
 
 const serialize = (analysis: unknown): string => `${JSON.stringify(analysis, null, 2)}\n`
 
@@ -25,30 +22,36 @@ const typesPackages: Readonly<Partial<Record<string, string>>> = {
 /** A fixture whose analysis is expected to fail; it has no recorded snapshot. */
 const rejectedFixture = 'Babel@0.0.1.tgz'
 
-const urlOf = (dir: URL, name: string): URL => new URL(`./${name}`, dir)
-
 const isRealEntry = (name: string): boolean => name !== '.DS_Store'
 
 const fileNameOf = (fixture: string): string => `${fixture}.json`
 
 const recordingOf = (fixture: string): string => `${SNAPSHOTS_DIR}${fileNameOf(fixture)}`
 
-const fixtures = listDirectory(fixturesDir).filter(
+// Vitest collects a file before running any scenario, so the fixture list - which
+// decides how many scenarios exist - is resolved here rather than inside one.
+const discovered = await Effect.runPromise(listNames(fixturesDir).pipe(Effect.provide(FixtureIO)))
+
+const fixtures = discovered.filter(
   (fixture) => isRealEntry(fixture) && !fixture.startsWith('@types__') && fixture !== rejectedFixture,
 )
 
-Feature('Type-resolution analysis of a published package', { timeout: 60_000 }).body(
-  ({ scenario }) => {
+Feature('Type-resolution analysis of a published package', { timeout: 60_000 })
+  .withLayer(FixtureIO)
+  .body(({ scenario }) => {
     for (const fixture of fixtures) {
       const typesFixture = typesPackages[fixture]
       scenario(
         `the analysis of ${fixture} is unchanged from its recorded outcome`,
         Gherkin.Do.pipe(
           Given('the fixture tarball, and its @types companion when recorded')('loaded', () =>
-            Effect.sync(() => ({
-              tarball: readBytes(urlOf(fixturesDir, fixture)),
-              typesTarball: typesFixture === undefined ? undefined : readBytes(urlOf(fixturesDir, typesFixture)),
-            }))),
+            Effect.gen(function*() {
+              const tarball = yield* readTarball(fixturesDir, fixture)
+              const typesTarball = typesFixture === undefined
+                ? undefined
+                : yield* readTarball(fixturesDir, typesFixture)
+              return { tarball, typesTarball }
+            })),
           When('the package is analysed with the recorded types companion')(
             'analysis',
             ({ loaded }) =>
@@ -72,7 +75,7 @@ Feature('Type-resolution analysis of a published package', { timeout: 60_000 }).
       Gherkin.Do.pipe(
         Given('the recorded outcomes on disk')(
           'recorded',
-          () => Effect.sync(() => listDirectory(snapshotsDir).filter(isRealEntry)),
+          () => listNames(snapshotsDir).pipe(Effect.map((names) => names.filter(isRealEntry))),
         ),
         Then('no recorded outcome is orphaned and none is missing')(({ recorded }) =>
           Effect.sync(() => {
@@ -87,7 +90,7 @@ Feature('Type-resolution analysis of a published package', { timeout: 60_000 }).
       Gherkin.Do.pipe(
         Given(`the ${rejectedFixture} fixture`)(
           'tarball',
-          () => Effect.sync(() => readBytes(urlOf(fixturesDir, rejectedFixture))),
+          () => readTarball(fixturesDir, rejectedFixture),
         ),
         When('the fixture is analysed')(
           'outcome',
@@ -106,5 +109,4 @@ Feature('Type-resolution analysis of a published package', { timeout: 60_000 }).
         ),
       ),
     )
-  },
-)
+  })
