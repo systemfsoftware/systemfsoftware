@@ -128,10 +128,6 @@ catalogs:
     oxlint-tsgolint:
       specifier: '>=0.24.0'
       version: 0.24.0
-  stryker:
-    semver:
-      specifier: ^7.7.0
-      version: 7.8.5
 
 overrides:
   fast-check: ^4
@@ -1748,9 +1744,6 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.111
-      semver:
-        specifier: catalog:stryker
-        version: 7.8.5
     devDependencies:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
@@ -1785,9 +1778,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
-      '@types/semver':
-        specifier: 7.7.1
-        version: 7.7.1
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.9(vitest@4.1.10)
@@ -2171,9 +2161,6 @@ importers:
       '@systemfsoftware/stryker-js-util':
         specifier: workspace:^
         version: link:../util
-      semver:
-        specifier: catalog:stryker
-        version: 7.8.5
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -2196,9 +2183,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
-      '@types/semver':
-        specifier: 7.7.1
-        version: 7.7.1
       '@vitest/browser-playwright':
         specifier: 'catalog:'
         version: 4.1.10(playwright@1.62.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))(vitest@4.1.10)
@@ -2214,9 +2198,6 @@ importers:
       tsdown:
         specifier: 'catalog:'
         version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      typed-inject:
-        specifier: ~5.0.0
-        version: 5.0.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

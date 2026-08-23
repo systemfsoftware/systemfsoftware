@@ -1,7 +1,2 @@
-import { Stryker, type StrykerHostOptions } from './stryker.js'
-
-export { Stryker }
-export type { StrykerHostOptions }
-
-// One default export for backward compatibility
-export default Stryker
+export { RunEnvironment, type RunEnvironmentShape } from './RunEnvironment.js'
+export { type MutationRunStages, runMutationTest, shouldKeepTempDir } from './stryker.js'
