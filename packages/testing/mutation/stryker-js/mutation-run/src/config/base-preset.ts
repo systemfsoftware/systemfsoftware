@@ -26,6 +26,7 @@ const basePreset: BasePreset = {
     '@systemfsoftware/stryker-js-typescript-checker',
     '@systemfsoftware/stryker-plugins/effect-schema-ignorer',
     '@systemfsoftware/stryker-plugins/workflow-make-ignorer',
+    '@systemfsoftware/stryker-test-contribution',
   ],
   reporters: ['progress', 'html', 'json', 'progress-stream'],
   htmlReporter: { fileName: 'reports/mutation-report.html' },

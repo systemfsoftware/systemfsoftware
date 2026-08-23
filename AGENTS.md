@@ -43,16 +43,16 @@ Not derivable from the manifests:
 
 - `pnpm --filter <pkg> <cmd>` from the root. Never `cd` into a package, never `npx`.
 - Lint is a per-package `oxlint.config.ts` extending `@systemfsoftware/oxlint-config`.
-- Mutation runs on pure decisions only, and fails when a `*.property.test.ts` kills no mutant nothing else kills. Opt out with `requireTestContribution: null` in the package's `stryker.config.json`, never by deleting a test. Which files a package mutates is that package's `stryker.config.json` and nothing above it: a filename suffix is not a scoping instrument, because a rule keyed on one never fires on the violation it exists to catch — see `docs/solutions/architecture-patterns/label-routed-rules-are-unfalsifiable.md`.
+- Mutation runs on pure decisions only, and fails when a `*.property.test.ts` kills no mutant nothing else kills. The gate is the `@systemfsoftware/stryker-test-contribution` plugin: it is on exactly when the config lists it in `plugins`, and off when it does not — there is no option. Never turn it off by deleting a test. Which files a package mutates is that package's `stryker.config.json` and nothing above it: a filename suffix is not a scoping instrument, because a rule keyed on one never fires on the violation it exists to catch — see `docs/solutions/architecture-patterns/label-routed-rules-are-unfalsifiable.md`.
 
 ## Surface Classes
 
-| Surface              | Examples                                                                                                               | Rule                                                                                                       |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **Evaluator**        | `scripts/guards/check-changeset.ts`, `packages/stryker-js/mutation-run/src/test-contribution.ts`, `.github/workflows/` | Its own commit, never shared with the work it judges; gate observed red before and green after.            |
-| **Doctrine**         | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`                                                 | Editable, but never an input to a gate. Read `CONSTITUTION.md` before architecture or rule-authoring work. |
-| **Editable**         | Everything else, including `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                                      | Edit freely, including the rules that govern you; `CONST-E4` governs loosening one.                        |
-| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                                         | `REPO-P1`.                                                                                                 |
+| Surface              | Examples                                                                                                | Rule                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Evaluator**        | `scripts/guards/check-changeset.ts`, `@systemfsoftware/stryker-test-contribution`, `.github/workflows/` | Its own commit, never shared with the work it judges; gate observed red before and green after.            |
+| **Doctrine**         | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`                                  | Editable, but never an input to a gate. Read `CONSTITUTION.md` before architecture or rule-authoring work. |
+| **Editable**         | Everything else, including `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                       | Edit freely, including the rules that govern you; `CONST-E4` governs loosening one.                        |
+| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                          | `REPO-P1`.                                                                                                 |
 
 ## Directory Map
 

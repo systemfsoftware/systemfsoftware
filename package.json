@@ -36,6 +36,7 @@
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
+    "@systemfsoftware/stryker-test-contribution": "workspace:^",
     "concurrently": "^9.2.1",
     "estree-walker": "^3",
     "husky": "^9.1.7",

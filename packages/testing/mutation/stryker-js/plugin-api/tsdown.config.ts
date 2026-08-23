@@ -11,6 +11,7 @@ export default defineConfig({
   entry: {
     'check/index': './src/check/index.ts',
     'core/index': './src/core/index.ts',
+    'evaluate/index': './src/evaluate/index.ts',
     'ignore/index': './src/ignore/index.ts',
     'logging/index': './src/logging/index.ts',
     'plugin/index': './src/plugin/index.ts',

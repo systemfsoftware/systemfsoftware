@@ -12,7 +12,7 @@ import {
   type StrykerOptions,
 } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
-import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { commonTokens, PluginKind, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { type Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
 import {
   type MutantRunResult,
@@ -25,12 +25,11 @@ import { calculateMutationTestMetrics, type MutationTestMetricsResult } from 'mu
 import { ExitClass, setPendingExitClass } from '../exit-classification.js'
 import { TestCoverage } from '../mutants/index.js'
 import type { ResolvedMode } from '../output-mode.js'
-import { injectionTokens } from '../plugins/index.js'
+import { injectionTokens, PluginCreator } from '../plugins/index.js'
 import { FileSystem, Project } from '../project/index.js'
 import type { RunEventSink } from '../run-event.js'
 import { strykerVersion } from '../stryker-package.js'
 
-import { judgeTestContribution } from '../test-contribution.js'
 import { buildVerdictEnvelope } from '../verdict-envelope.js'
 
 const STRYKER_FRAMEWORK: Readonly<
@@ -84,6 +83,7 @@ export class MutationTestReportHelper {
     injectionTokens.runEventSink,
     injectionTokens.runId,
     injectionTokens.resolvedMode,
+    injectionTokens.pluginCreator,
   )
 
   constructor(
@@ -97,6 +97,7 @@ export class MutationTestReportHelper {
     private readonly runEventSink: RunEventSink,
     private readonly runId: string,
     private readonly resolvedMode: ResolvedMode,
+    private readonly pluginCreator: PluginCreator,
   ) {}
 
   public reportCheckFailed(
@@ -194,7 +195,9 @@ export class MutationTestReportHelper {
       )
     }
     this.determineExitCode(metrics)
-    this.determineTestContribution(report)
+    for (const evaluator of this.pluginCreator.createAll(PluginKind.Evaluator)) {
+      evaluator.evaluate(report)
+    }
     this.emitVerdict(report)
   }
 
@@ -215,29 +218,6 @@ export class MutationTestReportHelper {
         this.runId,
       ),
     })
-  }
-
-  private determineTestContribution(report: schema.MutationTestResult) {
-    const verdict = judgeTestContribution(
-      report,
-      this.options['requireTestContribution'],
-      this.options.disableBail,
-    )
-    if (verdict === undefined) {
-      this.log.debug(
-        "No test contribution required. Won't fail the build for a test file that kills nothing another test file does not also kill. Set `requireTestContribution` to change this behavior.",
-      )
-      return
-    }
-    if (!verdict.failed) {
-      this.log.info(verdict.message)
-      return
-    }
-    this.log.error(`${verdict.message}\nSetting exit code to 1 (failure).`)
-    this.log.info(
-      '(sharpen or delete them, or set `requireTestContribution = null` to prevent this error in the future)',
-    )
-    setPendingExitClass(ExitClass.VerdictFail)
   }
 
   private determineExitCode(metrics: MutationTestMetricsResult) {

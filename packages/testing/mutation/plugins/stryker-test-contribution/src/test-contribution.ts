@@ -1,5 +1,11 @@
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 
+export const defaultRequireTestContributionSuffixes = [
+  '.workflow.property.test.ts',
+  '.policy.property.test.ts',
+  '.kernel.property.test.ts',
+] as const
+
 export interface TestFileContribution {
   readonly soleKills: number
   readonly totalKills: number
@@ -106,14 +112,6 @@ export const toothlessTestFiles = (
   return toothless.sort()
 }
 
-export const suffixesToRequire = (value: unknown): readonly string[] | undefined => {
-  if (!Array.isArray(value)) return undefined
-  const suffixes = value.filter((entry): entry is string => typeof entry === 'string')
-  // An empty list is off, not on-matching-nothing: a guarantee that can never fire is worse
-  // than an absent one, because it reads in config as though the run is being policed.
-  return suffixes.length === 0 ? undefined : suffixes
-}
-
 export interface TestContributionVerdict {
   readonly failed: boolean
   readonly message: string
@@ -124,11 +122,9 @@ const PRECISION = 'every killing test was recorded'
 
 export const judgeTestContribution = (
   report: ReportView,
-  requireTestContribution: unknown,
   everyKillerRecorded: boolean,
-): TestContributionVerdict | undefined => {
-  const suffixes = suffixesToRequire(requireTestContribution)
-  if (suffixes === undefined) return undefined
+  suffixes: readonly string[] = defaultRequireTestContributionSuffixes,
+): TestContributionVerdict => {
   const matches = suffixes.join(', ')
   const contribution = contributionByTestFile(report)
   const inScope = [...contribution.keys()].filter((fileName) => suffixes.some((suffix) => fileName.endsWith(suffix)))
@@ -142,7 +138,7 @@ export const judgeTestContribution = (
     return {
       failed: true,
       message:
-        `This run used Stryker's bail mode, which stops each mutant at its first killing test. A test file's contribution therefore cannot be measured on this evidence. Set \`disableBail: true\` to record every killing test, or remove \`${matches}\` from \`requireTestContribution\` (set it to \`null\` to disable the check) to narrow the gate out of scope for this run.`,
+        `This run used Stryker's bail mode, which stops each mutant at its first killing test. A test file's contribution therefore cannot be measured on this evidence. Set \`disableBail: true\` to record every killing test, or remove the test-contribution plugin from \`plugins\` to turn the check off for this run.`,
     }
   }
   // Zero attribution is the run failing to say who killed what, not every test failing to

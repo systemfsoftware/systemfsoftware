@@ -7,8 +7,6 @@ import { randomFillSync } from 'node:crypto'
 
 import type { ModeSignal, OutputMode } from './output-mode.js'
 
-import { judgeTestContribution, type TestContributionVerdict } from './test-contribution.js'
-
 /**
  * U4 — the verdict envelope (R5, R11, R20): the single JSON document machine
  * mode prints to stdout at the end of a run. Everything an agent needs to
@@ -76,9 +74,8 @@ export interface VerdictCounts {
 /**
  * The full verdict document. `score` and `reportFile` are `null` for a run
  * with zero mutants (AE3): there is no score to report and no report file was
- * written. `testContribution` is `null` when the check is not configured.
- * `mutants` is bounded to `ACTIONABLE_STATUSES` (R20) — see that definition
- * for why the remaining statuses are counts only.
+ * written. `mutants` is bounded to `ACTIONABLE_STATUSES` (R20) — see that
+ * definition for why the remaining statuses are counts only.
  */
 export interface VerdictEnvelope {
   readonly schemaVersion: string
@@ -88,7 +85,6 @@ export interface VerdictEnvelope {
   readonly score: number | null
   readonly thresholds: VerdictThresholds
   readonly counts: VerdictCounts
-  readonly testContribution: TestContributionVerdict | null
   readonly reportFile: string | null
   readonly mutants: readonly VerdictMutant[]
 }
@@ -139,13 +135,9 @@ function embeddedConfig(
   report: schema.MutationTestResult,
 ): {
   readonly jsonReporterFileName: string | undefined
-  readonly requireTestContribution: unknown
-  readonly disableBail: boolean
 } {
   const config = report.config
   let jsonReporterFileName: string | undefined
-  let requireTestContribution: unknown
-  let disableBail = false
   if (typeof config === 'object' && config !== null) {
     if (
       'jsonReporter' in config &&
@@ -156,14 +148,8 @@ function embeddedConfig(
     ) {
       jsonReporterFileName = config.jsonReporter.fileName
     }
-    if ('requireTestContribution' in config) {
-      requireTestContribution = config.requireTestContribution
-    }
-    if ('disableBail' in config && typeof config.disableBail === 'boolean') {
-      disableBail = config.disableBail
-    }
   }
-  return { jsonReporterFileName, requireTestContribution, disableBail }
+  return { jsonReporterFileName }
 }
 
 function breakThreshold(thresholds: schema.Thresholds): number | null {
@@ -185,7 +171,7 @@ export function buildVerdictEnvelope(
   signal: ModeSignal,
   runId: string,
 ): VerdictEnvelope {
-  const { jsonReporterFileName, requireTestContribution, disableBail } = embeddedConfig(report)
+  const { jsonReporterFileName } = embeddedConfig(report)
   const metrics = calculateMutationTestMetrics(report)
     .systemUnderTestMetrics.metrics
   const hasMutants = metrics.totalMutants > 0
@@ -232,8 +218,6 @@ export function buildVerdictEnvelope(
       ignored: metrics.ignored,
       pending: metrics.pending,
     },
-    testContribution: judgeTestContribution(report, requireTestContribution, disableBail) ??
-      null,
     reportFile,
     mutants,
   }

@@ -39,22 +39,35 @@ const parseArgs = (argv) => {
   return opts
 }
 
+// A part is any directory holding a readable mutation-part.json. The download
+// layout of the artifacts varies: one artifact per part extracts each into its
+// own subdirectory, a single-artifact download may land its files directly
+// under the parts directory, and a zip rooted at the repo checkout nests them
+// under the package path. Walking for the marker file accepts every layout.
+const findPartDirs = (dir) => {
+  const found = []
+  for (const entry of readdirSync(dir, { withFileTypes: true }).sort(byName)) {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) found.push(...findPartDirs(path))
+    else if (entry.name === 'mutation-part.json') found.push(dir)
+  }
+  return found
+}
+
+const byName = (a, b) => a.name.localeCompare(b.name)
+
 const readParts = (partsDir) => {
-  const names = readdirSync(partsDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort()
   const parts = []
   const skipped = []
-  for (const name of names) {
+  for (const dir of findPartDirs(partsDir)) {
     let meta
     try {
-      meta = JSON.parse(readFileSync(join(partsDir, name, 'mutation-part.json'), 'utf8'))
+      meta = JSON.parse(readFileSync(join(dir, 'mutation-part.json'), 'utf8'))
     } catch {
-      skipped.push(name)
+      skipped.push(dir)
       continue
     }
-    parts.push({ dir: join(partsDir, name), label: meta.package, outcome: meta.outcome })
+    parts.push({ dir, label: meta.package, outcome: meta.outcome })
   }
   return { parts, skipped }
 }
