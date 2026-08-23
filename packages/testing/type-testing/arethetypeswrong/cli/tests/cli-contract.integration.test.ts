@@ -19,10 +19,10 @@ Feature('Analyzing published packages with the installed binary')
             const container = yield* Container
             return yield* container.sh('test -x node_modules/.bin/attw && echo ok')
           })),
-        When('axios 1.4.0 is analyzed')('result', () =>
+        When('untyped-resolution is analyzed')('result', () =>
           Effect.gen(function*() {
             const container = yield* Container
-            return yield* container.run([fixture('axios@1.4.0')], { cwd: fixtureDir('axios@1.4.0') })
+            return yield* container.run([fixture('untyped-resolution')], { cwd: fixtureDir('untyped-resolution') })
           })),
         Then('the analysis reports resolution problems')((s) => {
           expect(s.binOk.stdout.trim()).toBe('ok')
@@ -37,10 +37,10 @@ Feature('Analyzing published packages with the installed binary')
     scenario(
       'a package with false CommonJS declarations exits non-zero and names the problem',
       Gherkin.Do.pipe(
-        When('klona 2.0.6 is analyzed')('result', () =>
+        When('false-cjs is analyzed')('result', () =>
           Effect.gen(function*() {
             const container = yield* Container
-            return yield* container.run([fixture('klona@2.0.6')], { cwd: fixtureDir('klona@2.0.6') })
+            return yield* container.run([fixture('false-cjs')], { cwd: fixtureDir('false-cjs') })
           })),
         Then('the analysis reports false CommonJS problems')((s) => {
           expect(s.result.exitCode).not.toBe(0)
@@ -58,11 +58,11 @@ Feature('Analyzing published packages with the installed binary')
       ] as const,
       (row) =>
         Gherkin.Do.pipe(
-          When(() => `klona 2.0.6 is analyzed in ${row.format} format`)('result', () =>
+          When(() => `false-cjs is analyzed in ${row.format} format`)('result', () =>
             Effect.gen(function*() {
               const container = yield* Container
-              return yield* container.run([fixture('klona@2.0.6'), '-f', row.format], {
-                cwd: fixtureDir('klona@2.0.6'),
+              return yield* container.run([fixture('false-cjs'), '-f', row.format], {
+                cwd: fixtureDir('false-cjs'),
               })
             })),
           Then('the analysis produces output')((s) => {
@@ -75,11 +75,11 @@ Feature('Analyzing published packages with the installed binary')
     scenario(
       'json output parses into an analysis with a problems section',
       Gherkin.Do.pipe(
-        When('axios 1.4.0 is analyzed as json')('result', () =>
+        When('untyped-resolution is analyzed as json')('result', () =>
           Effect.gen(function*() {
             const container = yield* Container
-            return yield* container.run([fixture('axios@1.4.0'), '-f', 'json'], {
-              cwd: fixtureDir('axios@1.4.0'),
+            return yield* container.run([fixture('untyped-resolution'), '-f', 'json'], {
+              cwd: fixtureDir('untyped-resolution'),
             })
           })),
         Then('the output has analysis and problems keys')((s) => {
@@ -88,7 +88,7 @@ Feature('Analyzing published packages with the installed binary')
             analysis: { packageName?: string }
             problems?: unknown
           }
-          expect(parsed.analysis.packageName).toBe('axios')
+          expect(parsed.analysis.packageName).toBe('untyped-resolution')
           expect(parsed.problems).toBeDefined()
         }),
       ),
@@ -97,17 +97,20 @@ Feature('Analyzing published packages with the installed binary')
     scenario(
       'entrypoints can be restricted to a subset',
       Gherkin.Do.pipe(
-        When('vue 3.3.4 is analyzed fully and restricted to the root entrypoint')(
+        When('multi-entrypoint is analyzed fully and restricted to the root entrypoint')(
           'results',
           () =>
             Effect.gen(function*() {
               const container = yield* Container
-              const full = yield* container.run([fixture('vue@3.3.4'), '-f', 'json'], {
-                cwd: fixtureDir('vue@3.3.4'),
+              const full = yield* container.run([fixture('multi-entrypoint'), '-f', 'json'], {
+                cwd: fixtureDir('multi-entrypoint'),
               })
-              const restricted = yield* container.run([fixture('vue@3.3.4'), '--entrypoints', '.', '-f', 'json'], {
-                cwd: fixtureDir('vue@3.3.4'),
-              })
+              const restricted = yield* container.run(
+                [fixture('multi-entrypoint'), '--entrypoints', '.', '-f', 'json'],
+                {
+                  cwd: fixtureDir('multi-entrypoint'),
+                },
+              )
               return { full, restricted }
             }),
         ),
@@ -128,16 +131,22 @@ Feature('Analyzing published packages with the installed binary')
     scenario(
       'excluded entrypoints are removed from the analyzed set',
       Gherkin.Do.pipe(
-        When('vue 3.3.4 is analyzed excluding the macros entrypoint')('result', () =>
+        When('multi-entrypoint is analyzed excluding the macros entrypoint')('result', () =>
           Effect.gen(function*() {
             const container = yield* Container
-            return yield* container.run([fixture('vue@3.3.4'), '--exclude-entrypoints', 'macros', '-f', 'json'], {
-              cwd: fixtureDir('vue@3.3.4'),
-            })
+            return yield* container.run(
+              [fixture('multi-entrypoint'), '--exclude-entrypoints', 'macros', '-f', 'json'],
+              {
+                cwd: fixtureDir('multi-entrypoint'),
+              },
+            )
           })),
         Then('the macros entrypoint is absent from the analysis')((s) => {
           const parsed = JSON.parse(s.result.stdout) as { analysis: { entrypoints: Record<string, unknown> } }
+          // KTD4 recipe exposes './macros'; the CLI normalizes 'macros' to './macros', so check both forms
           expect(parsed.analysis.entrypoints).not.toHaveProperty('macros')
+          expect(parsed.analysis.entrypoints).not.toHaveProperty('./macros')
+          expect(Object.keys(parsed.analysis.entrypoints).some((k) => k.includes('macros'))).toBe(false)
         }),
       ),
     )
@@ -194,19 +203,19 @@ Feature('Analyzing published packages with the installed binary')
     scenario(
       'a .attw.json in the working directory waives the problem it names',
       Gherkin.Do.pipe(
-        Given('klona 2.0.6 analyzed with no config file present')('before', () =>
+        Given('false-cjs analyzed with no config file present')('before', () =>
           Effect.gen(function*() {
             const container = yield* Container
-            yield* container.sh(`rm -f ${fixtureDir('klona@2.0.6')}/.attw.json`)
-            return yield* container.run([fixture('klona@2.0.6')], { cwd: fixtureDir('klona@2.0.6') })
+            yield* container.sh(`rm -f ${fixtureDir('false-cjs')}/.attw.json`)
+            return yield* container.run([fixture('false-cjs')], { cwd: fixtureDir('false-cjs') })
           })),
         When('a .attw.json waiving that rule is written beside it')('after', () =>
           Effect.gen(function*() {
             const container = yield* Container
             yield* container.sh(
-              `printf '%s' '{"ignoreRules":["false-cjs"]}' > ${fixtureDir('klona@2.0.6')}/.attw.json`,
+              `printf '%s' '{"ignoreRules":["false-cjs"]}' > ${fixtureDir('false-cjs')}/.attw.json`,
             )
-            return yield* container.run([fixture('klona@2.0.6')], { cwd: fixtureDir('klona@2.0.6') })
+            return yield* container.run([fixture('false-cjs')], { cwd: fixtureDir('false-cjs') })
           })),
         Then('the waiver is applied, so the same package now passes')((s) => {
           // Red before, green after, on one package: the file is the only change.
