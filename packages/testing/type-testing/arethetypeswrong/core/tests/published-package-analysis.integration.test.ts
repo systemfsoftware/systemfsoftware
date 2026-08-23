@@ -52,12 +52,12 @@ Feature('Type-resolution analysis of a published package', { timeout: 60_000 }).
           When('the package is analysed with the recorded types companion')(
             'analysis',
             ({ loaded }) =>
-              Effect.tryPromise(() => {
+              Effect.gen(function*() {
                 const pkg = createPackageFromTarballData(loaded.tarball)
                 const merged = loaded.typesTarball === undefined
                   ? pkg
                   : pkg.mergedWithTypes(createPackageFromTarballData(loaded.typesTarball))
-                return checkPackage(merged)
+                return yield* checkPackage(merged)
               }),
           ),
           Then('the analysis matches the outcome recorded for this package')(({ analysis }) =>
@@ -91,7 +91,13 @@ Feature('Type-resolution analysis of a published package', { timeout: 60_000 }).
         ),
         When('the fixture is analysed')(
           'outcome',
-          ({ tarball }) => Effect.result(Effect.tryPromise(() => checkPackage(createPackageFromTarballData(tarball)))),
+          ({ tarball }) =>
+            Effect.result(
+              Effect.gen(function*() {
+                const pkg = yield* Effect.try(() => createPackageFromTarballData(tarball))
+                return yield* checkPackage(pkg)
+              }),
+            ),
         ),
         Then('the analysis fails')(({ outcome }) =>
           Effect.sync(() => {

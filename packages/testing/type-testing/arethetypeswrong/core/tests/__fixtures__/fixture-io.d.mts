@@ -1,4 +1,4 @@
-/** List entries of a directory URL. */
+/** List the entry names directly inside a directory URL. */
 export declare const listDirectory: (dirUrl: URL) => string[]
 
 /** Read a file as raw bytes. */

@@ -26,10 +26,9 @@ export class CheckPackage extends Context.Service<CheckPackage, CheckPackageServ
               { name: pkgSpec, versionKind: 'tag', version: 'latest' },
             ])
             const bytes = yield* store.fetchTarball(ref.tarballUrl)
-            const result = yield* Effect.tryPromise({
-              try: () => checkPackage(createPackageFromTarballData(bytes), options),
-              catch: (e) => new Error('Analysis failed', { cause: e }),
-            })
+            const result = yield* checkPackage(createPackageFromTarballData(bytes), options).pipe(
+              Effect.catchDefect((cause: unknown) => Effect.fail(new Error('Analysis failed', { cause }))),
+            )
             return yield* Schema.decodeUnknownEffect(CheckResultSchema)(result)
           }),
       }

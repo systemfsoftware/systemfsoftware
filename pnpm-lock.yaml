@@ -2270,9 +2270,6 @@ importers:
       fflate:
         specifier: ^0.8.3
         version: 0.8.3
-      lru-cache:
-        specifier: ^11.0.1
-        version: 11.5.2
       semver:
         specifier: ^7.5.4
         version: 7.8.5
