@@ -51,7 +51,6 @@ export const createCompilerHosts = (pkg: Package): Effect.Effect<CompilerHosts> 
     const node16 = yield* makeCompilerHost(pkg, ts.ModuleResolutionKind.Node16, ts.ModuleKind.Node16)
     const bundler = yield* makeCompilerHost(pkg, ts.ModuleResolutionKind.Bundler, ts.ModuleKind.ESNext)
 
-
     return {
       node10,
       node16,
@@ -313,10 +312,11 @@ const makeCompilerHost = (
       moduleResolutionCache[sourceFile.fileName]?.[
         getModuleKey(moduleName, resolutionMode, undefined, undefined)
       ]?.resolution
-    const createPrimaryProgram = (rootName: string): Effect.Effect<ts.Program> => getProgram([rootName], compilerOptions)
+    const createPrimaryProgram = (rootName: string): Effect.Effect<ts.Program> =>
+      getProgram([rootName], compilerOptions)
 
-
-    const createAuxiliaryProgram = (rootNames: string[]): Effect.Effect<ts.Program> => getProgram(rootNames, compilerOptions)
+    const createAuxiliaryProgram = (rootNames: string[]): Effect.Effect<ts.Program> =>
+      getProgram(rootNames, compilerOptions)
 
     return {
       getCompilerOptions,
