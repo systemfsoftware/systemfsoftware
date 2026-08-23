@@ -1,24 +1,14 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Schema } from 'effect'
+import { Effect } from 'effect'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
 
 import { checkPackage, createPackageFromTarballData } from '../src/index.js'
-import {
-  fileExists,
-  listDirectory,
-  parseJson,
-  readBytes,
-  readEnv,
-  readTextFile,
-  writeTextFile,
-} from './__fixtures__/fixture-io.mjs'
-import { SnapshotRecordSchema } from './__fixtures__/Snapshot.schema.js'
+import { listDirectory, readBytes } from './__fixtures__/fixture-io.mjs'
 
 const Feature = makeFeature({ it, layer })
 
 const fixturesDir = new URL('./__fixtures__/fixtures/', import.meta.url)
-const snapshotsDir = new URL('./__fixtures__/snapshots/', import.meta.url)
 
 /** Fixtures whose analysis is exercised together with their recorded @types companion. */
 const typesPackages: Readonly<Partial<Record<string, string>>> = {
@@ -30,17 +20,10 @@ const typesPackages: Readonly<Partial<Record<string, string>>> = {
 /** A fixture whose analysis is expected to fail; it has no recorded snapshot. */
 const rejectedFixture = 'Babel@0.0.1.tgz'
 
-const updateSnapshots = readEnv('UPDATE_SNAPSHOTS') ?? readEnv('U') ?? ''
-const testFilter = (readEnv('TEST_FILTER') ?? readEnv('T') ?? '').toLowerCase()
-
 const urlOf = (dir: URL, name: string): URL => new URL(`./${name}`, dir)
 
 const fixtures = listDirectory(fixturesDir).filter(
-  (fixture) =>
-    fixture !== '.DS_Store' &&
-    !fixture.startsWith('@types__') &&
-    fixture !== rejectedFixture &&
-    (testFilter === '' || fixture.toLowerCase().includes(testFilter)),
+  (fixture) => fixture !== '.DS_Store' && !fixture.startsWith('@types__') && fixture !== rejectedFixture,
 )
 
 Feature('The analysis of a published package reproduces its recorded outcome', { timeout: 60_000 }).body(
@@ -58,24 +41,20 @@ Feature('The analysis of a published package reproduces its recorded outcome', {
           When('the package is analysed with the recorded types companion')(
             'analysis',
             ({ loaded }) =>
-              Effect.tryPromise(() => {
+              Effect.gen(function*() {
                 const pkg = createPackageFromTarballData(loaded.tarball)
                 const merged = loaded.typesTarball === undefined
                   ? pkg
                   : pkg.mergedWithTypes(createPackageFromTarballData(loaded.typesTarball))
-                return checkPackage(merged)
+                return yield* checkPackage(merged)
               }),
           ),
           Then('the recorded snapshot still matches the canonical analysis')(({ analysis }) =>
-            Effect.sync(() => {
-              const snapshotURL = urlOf(snapshotsDir, `${fixture}.json`)
-              if (updateSnapshots !== '' || !fileExists(snapshotURL)) {
-                writeTextFile(snapshotURL, JSON.stringify(analysis, null, 2) + '\n')
-                return
-              }
-              const recorded = Schema.decodeUnknownSync(SnapshotRecordSchema)(parseJson(readTextFile(snapshotURL)))
-              expect(recorded).toEqual(analysis)
-            })
+            Effect.promise(() =>
+              expect(JSON.stringify(analysis, null, 2) + '\n').toMatchFileSnapshot(
+                `./__fixtures__/snapshots/${fixture}.json`,
+              )
+            )
           ),
         ),
       )
@@ -90,7 +69,13 @@ Feature('The analysis of a published package reproduces its recorded outcome', {
         ),
         When('the fixture is analysed')(
           'outcome',
-          ({ tarball }) => Effect.result(Effect.tryPromise(() => checkPackage(createPackageFromTarballData(tarball)))),
+          ({ tarball }) =>
+            Effect.result(
+              Effect.gen(function*() {
+                const pkg = yield* Effect.try(() => createPackageFromTarballData(tarball))
+                return yield* checkPackage(pkg)
+              }),
+            ),
         ),
         Then('the analysis fails')(({ outcome }) =>
           Effect.sync(() => {

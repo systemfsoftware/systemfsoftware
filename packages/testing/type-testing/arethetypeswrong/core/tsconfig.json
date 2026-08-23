@@ -5,29 +5,10 @@
     "exactOptionalPropertyTypes": false,
     "noUncheckedIndexedAccess": false,
     "noImplicitReturns": false,
-    "customConditions": [
-      "@systemfsoftware/source"
-    ],
+    "customConditions": ["@systemfsoftware/source"],
     "types": [],
-    // Fork of arethetypeswrong.github.io: the constitution policy in
-    // @systemfsoftware/tsconfig/effect is deliberately NOT extended here, so the upstream diff stays
-    // mergeable. The Effect Language Service runs at its own defaults — correctness tier only.
-    "plugins": [
-      {
-        "name": "@effect/language-service"
-      }
-    ]
+    "plugins": [{ "name": "@effect/language-service" }]
   },
-  "include": [
-    "src"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist"
-  ],
-  "references": [
-    {
-      "path": "./tsconfig.node.json"
-    }
-  ]
+  "include": ["src", "TsInternals.d.ts"],
+  "references": [{ "path": "./tsconfig.node.json" }]
 }

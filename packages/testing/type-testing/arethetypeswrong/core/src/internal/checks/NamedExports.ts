@@ -1,3 +1,4 @@
+import { Effect } from 'effect'
 import ts from 'typescript'
 import { getResolutionOption } from '../../Utils.js'
 import { defineCheck } from '../DefineCheck.js'
@@ -16,31 +17,40 @@ export default defineCheck({
       : undefined
     return [implementationFileName, implementationModuleKind, typesFileName, typesModuleKind, resolutionKind]
   },
-  execute: (
+  gather: (
     [implementationFileName, implementationModuleKind, typesFileName, typesModuleKind, resolutionKind],
     context,
-  ) => {
-    if (
-      !implementationFileName ||
-      !typesFileName ||
-      resolutionKind !== 'node16-esm' ||
-      typesModuleKind?.detectedKind !== ts.ModuleKind.CommonJS ||
-      implementationModuleKind?.detectedKind !== ts.ModuleKind.CommonJS
-    ) {
-      return
-    }
+  ) =>
+    Effect.gen(function*() {
+      if (
+        !implementationFileName ||
+        !typesFileName ||
+        resolutionKind !== 'node16-esm' ||
+        typesModuleKind?.detectedKind !== ts.ModuleKind.CommonJS ||
+        implementationModuleKind?.detectedKind !== ts.ModuleKind.CommonJS
+      ) {
+        return undefined
+      }
 
-    // Get declared exported names from TypeScript
-    const host = context.hosts.findHostForFiles([typesFileName])
-    if (!host) {
-      return
-    }
-    const typesSourceFile = host.getSourceFile(typesFileName)
-    if (!typesSourceFile || typesSourceFile.scriptKind === ts.ScriptKind.JSON || !typesSourceFile.symbol) {
-      return
-    }
+      const host = context.hosts.findHostForFiles([typesFileName])
+      if (!host) {
+        return undefined
+      }
+      const typesSourceFile = host.getSourceFile(typesFileName)
+      if (!typesSourceFile || typesSourceFile.scriptKind === ts.ScriptKind.JSON || !typesSourceFile.symbol) {
+        return undefined
+      }
 
-    const typeChecker = host.createAuxiliaryProgram([typesFileName]).getTypeChecker()
+      const program = yield* host.createAuxiliaryProgram([typesFileName])
+      const typeChecker = program.getTypeChecker()
+      return { typesSourceFile, typeChecker, typesFileName, implementationFileName }
+    }),
+  execute: (_deps, context, gathered) => {
+    if (!gathered) {
+      return
+    }
+    const { typesSourceFile, typeChecker, typesFileName, implementationFileName } = gathered
+
     const moduleType = typeChecker.getTypeOfSymbol(typeChecker.resolveExternalModuleSymbol(typesSourceFile.symbol))
     if (typeChecker.isArrayLikeType(moduleType) || typeChecker.getPropertyOfType(moduleType, '0')) {
       return
@@ -51,27 +61,25 @@ export default defineCheck({
           .getExportsAndPropertiesOfModule(typesSourceFile.symbol)
           .filter((symbol) => {
             return (
-              // TS treats `prototype` and other static class members as exports. There's possibly
-              // a fix to be done in TS itself, since these show up as auto-imports.
               symbol.name !== 'prototype' &&
               // @ts-expect-error `getSymbolFlags` extra arguments are not declared on TypeChecker
-              typeChecker.getSymbolFlags(symbol, /*excludeTypeOnlyMeanings*/ true) & ts.SymbolFlags.Value
+              typeChecker.getSymbolFlags(symbol, true) & ts.SymbolFlags.Value
             )
           })
           .map((symbol) => symbol.name),
       ),
     )
 
-    // Get actual exported names as seen by nodejs
     let exports: readonly string[] | undefined
     try {
       exports = getEsmModuleNamespace(context.pkg, implementationFileName)
     } catch {
-      // If this fails then the result is indeterminate. This could happen in many cases, but
-      // a common one would be for packages which re-export from another another package.
       return
     }
 
+    if (!exports) {
+      return
+    }
     const missing = expectedNames.filter((name) => !exports.includes(name))
     if (missing.length > 0) {
       const lengthWithoutDefault = (names: readonly string[]) => names.length - (names.includes('default') ? 1 : 0)
