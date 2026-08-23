@@ -8,10 +8,10 @@ import { listDirectory, readBytes } from './__fixtures__/fixture-io.mjs'
 
 const Feature = makeFeature({ it, layer })
 
-const fixturesDir = new URL('./__fixtures__/fixtures/', import.meta.url)
-const snapshotsDir = new URL('./__fixtures__/snapshots/', import.meta.url)
+const SNAPSHOTS_DIR = './__fixtures__/snapshots/'
 
-const recordingOf = (fixture: string): string => `./__fixtures__/snapshots/${fixture}.json`
+const fixturesDir = new URL('./__fixtures__/fixtures/', import.meta.url)
+const snapshotsDir = new URL(SNAPSHOTS_DIR, import.meta.url)
 
 const serialize = (analysis: unknown): string => `${JSON.stringify(analysis, null, 2)}\n`
 
@@ -28,6 +28,10 @@ const rejectedFixture = 'Babel@0.0.1.tgz'
 const urlOf = (dir: URL, name: string): URL => new URL(`./${name}`, dir)
 
 const isRealEntry = (name: string): boolean => name !== '.DS_Store'
+
+const fileNameOf = (fixture: string): string => `${fixture}.json`
+
+const recordingOf = (fixture: string): string => `${SNAPSHOTS_DIR}${fileNameOf(fixture)}`
 
 const fixtures = listDirectory(fixturesDir).filter(
   (fixture) => isRealEntry(fixture) && !fixture.startsWith('@types__') && fixture !== rejectedFixture,
@@ -72,7 +76,7 @@ Feature('Type-resolution analysis of a published package', { timeout: 60_000 }).
         ),
         Then('no recorded outcome is orphaned and none is missing')(({ recorded }) =>
           Effect.sync(() => {
-            expect([...recorded].sort()).toEqual(fixtures.map((fixture) => `${fixture}.json`).sort())
+            expect([...recorded].sort()).toEqual(fixtures.map(fileNameOf).sort())
           })
         ),
       ),
