@@ -1,24 +1,19 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect, Schema } from 'effect'
+import { Effect } from 'effect'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
 
 import { checkPackage, createPackageFromTarballData } from '../src/index.js'
-import {
-  fileExists,
-  listDirectory,
-  parseJson,
-  readBytes,
-  readEnv,
-  readTextFile,
-  writeTextFile,
-} from './__fixtures__/fixture-io.mjs'
-import { SnapshotRecordSchema } from './__fixtures__/Snapshot.schema.js'
+import { listDirectory, readBytes } from './__fixtures__/fixture-io.mjs'
 
 const Feature = makeFeature({ it, layer })
 
 const fixturesDir = new URL('./__fixtures__/fixtures/', import.meta.url)
 const snapshotsDir = new URL('./__fixtures__/snapshots/', import.meta.url)
+
+const recordingOf = (fixture: string): string => `./__fixtures__/snapshots/${fixture}.json`
+
+const serialize = (analysis: unknown): string => `${JSON.stringify(analysis, null, 2)}\n`
 
 /** Fixtures whose analysis is exercised together with their recorded @types companion. */
 const typesPackages: Readonly<Partial<Record<string, string>>> = {
@@ -30,25 +25,20 @@ const typesPackages: Readonly<Partial<Record<string, string>>> = {
 /** A fixture whose analysis is expected to fail; it has no recorded snapshot. */
 const rejectedFixture = 'Babel@0.0.1.tgz'
 
-const updateSnapshots = readEnv('UPDATE_SNAPSHOTS') ?? readEnv('U') ?? ''
-const testFilter = (readEnv('TEST_FILTER') ?? readEnv('T') ?? '').toLowerCase()
-
 const urlOf = (dir: URL, name: string): URL => new URL(`./${name}`, dir)
 
+const isRealEntry = (name: string): boolean => name !== '.DS_Store'
+
 const fixtures = listDirectory(fixturesDir).filter(
-  (fixture) =>
-    fixture !== '.DS_Store' &&
-    !fixture.startsWith('@types__') &&
-    fixture !== rejectedFixture &&
-    (testFilter === '' || fixture.toLowerCase().includes(testFilter)),
+  (fixture) => isRealEntry(fixture) && !fixture.startsWith('@types__') && fixture !== rejectedFixture,
 )
 
-Feature('The analysis of a published package reproduces its recorded outcome', { timeout: 60_000 }).body(
+Feature('Type-resolution analysis of a published package', { timeout: 60_000 }).body(
   ({ scenario }) => {
     for (const fixture of fixtures) {
       const typesFixture = typesPackages[fixture]
       scenario(
-        `the analysis of ${fixture} reproduces its recorded snapshot`,
+        `the analysis of ${fixture} is unchanged from its recorded outcome`,
         Gherkin.Do.pipe(
           Given('the fixture tarball, and its @types companion when recorded')('loaded', () =>
             Effect.sync(() => ({
@@ -66,20 +56,27 @@ Feature('The analysis of a published package reproduces its recorded outcome', {
                 return checkPackage(merged)
               }),
           ),
-          Then('the recorded snapshot still matches the canonical analysis')(({ analysis }) =>
-            Effect.sync(() => {
-              const snapshotURL = urlOf(snapshotsDir, `${fixture}.json`)
-              if (updateSnapshots !== '' || !fileExists(snapshotURL)) {
-                writeTextFile(snapshotURL, JSON.stringify(analysis, null, 2) + '\n')
-                return
-              }
-              const recorded = Schema.decodeUnknownSync(SnapshotRecordSchema)(parseJson(readTextFile(snapshotURL)))
-              expect(recorded).toEqual(analysis)
-            })
+          Then('the analysis matches the outcome recorded for this package')(({ analysis }) =>
+            Effect.tryPromise(() => expect(serialize(analysis)).toMatchFileSnapshot(recordingOf(fixture)))
           ),
         ),
       )
     }
+
+    scenario(
+      'the recorded corpus and the driven fixtures are the same set',
+      Gherkin.Do.pipe(
+        Given('the recorded outcomes on disk')(
+          'recorded',
+          () => Effect.sync(() => listDirectory(snapshotsDir).filter(isRealEntry)),
+        ),
+        Then('no recorded outcome is orphaned and none is missing')(({ recorded }) =>
+          Effect.sync(() => {
+            expect([...recorded].sort()).toEqual(fixtures.map((fixture) => `${fixture}.json`).sort())
+          })
+        ),
+      ),
+    )
 
     scenario(
       `the malformed ${rejectedFixture} fixture is rejected by the analysis`,
