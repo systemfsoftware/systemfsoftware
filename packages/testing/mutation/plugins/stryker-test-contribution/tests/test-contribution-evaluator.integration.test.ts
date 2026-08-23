@@ -9,9 +9,9 @@ import {
   getPendingExitClasses,
   resolveExitCode,
 } from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
-import { schema, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type PartialStrykerOptions, schema, StrykerOptionsSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { Effect } from 'effect'
+import { Effect, Schema } from 'effect'
 import { expect } from 'vitest'
 
 import { strykerPlugins } from '../src/mod.js'
@@ -45,8 +45,8 @@ const reportWithToothlessKernelFile = (): schema.MutationTestResult => ({
   },
 })
 
-const evaluatorWith = (options: Record<string, unknown>): TestContributionEvaluator =>
-  new TestContributionEvaluator(options as unknown as StrykerOptions, noopLogger)
+const evaluatorWith = (options: PartialStrykerOptions): TestContributionEvaluator =>
+  new TestContributionEvaluator(Schema.decodeUnknownSync(StrykerOptionsSchema)(options), noopLogger)
 
 Feature('test-contribution evaluator plugin')
   .body(({ scenario }) => {
