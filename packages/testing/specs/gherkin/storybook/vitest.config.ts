@@ -1,13 +1,15 @@
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin'
+import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 import { playwright } from '@vitest/browser-playwright'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { defineConfig } from 'vitest/config'
 
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
+  ...sharedConfig,
   test: {
+    ...sharedConfig.test,
     projects: [
       {
         extends: true,
@@ -28,5 +30,10 @@ export default defineConfig({
         },
       },
     ],
+    // The shared config turns on v8 coverage under CI, and the v8 provider
+    // cannot load inside browser mode. This suite is the M1 story-run - a
+    // proof that specs compile, import and run - and never collected coverage
+    // before it began inheriting the shared config. Keep it off.
+    coverage: { enabled: false },
   },
 })

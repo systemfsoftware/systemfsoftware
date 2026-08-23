@@ -46,6 +46,7 @@
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
     "oxlint": "catalog:oxlint",

@@ -35,6 +35,7 @@
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
     "oxlint": "catalog:oxlint",
