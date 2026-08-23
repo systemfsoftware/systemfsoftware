@@ -35,10 +35,11 @@ rules:
     harm: an error is a failure value, not a two-way codec; its `cause` field is
       routinely `S.Unknown`, which carries no round-trip guarantee, so the law
       fails against a schema that was never meant to satisfy it
-    check: "`pnpm --filter @systemfsoftware/effect-schema-vite test` exits 0 — the
-      `toEqual` at `tests/inline-schema-tests.integration.test.ts:126-132` names the
-      five schemas the plugin discovers in a fixture that also declares a
-      `Schema.TaggedError`; an exact-object match fails the moment a sixth appears,
-      so auto-discovery cannot start law-testing an error without reddening it.
+    check: "`pnpm --filter @systemfsoftware/effect-schema-vite test` exits 0 — its
+      integration suite declares a `Schema.TaggedError` beside five data schemas in
+      one fixture and matches the discovered set with an exact-object `toEqual`, so
+      the error joining that set reddens the suite the moment it does. Locate the
+      fixture with `grep -n TaggedError
+      packages/core/effect/schema/vite/tests/inline-schema-tests.integration.test.ts`;
+      no line is cited because that file is edited far more often than this rule.
       A hand-written call is review's to catch"
-```

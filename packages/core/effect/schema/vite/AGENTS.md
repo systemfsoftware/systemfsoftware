@@ -17,9 +17,9 @@ Consumers must not hand-write codec-law properties for schemas the plugin covers
 - id: VITE-V2
   title: Obligation coverage is opt-in, so its absence is silent by construction
   do: pass `refutationCoverage: true` in a package whose schemas carry constraints — a refinement, a pattern, a length bound — and state the refusals with `refutes` from `@systemfsoftware/effect-schema-refutation`; a package whose schemas carry no constraint leaves it off and installs nothing
-    dont: read a green suite in a coverage-off package as evidence that its refusals are adequate, or add a gate that turns coverage back on everywhere to remove the judgement
-    harm: with coverage off, a schema that grows its first constraint gains an obligation nothing refuses, and no command anywhere says so — `ruleOfSchemas` still passes, because it draws only values the schema accepts. The loss is silent until someone re-reads this decision. That silence is the price of not forcing every round-trip consumer to resolve the refutation package, which is the whole reason the flag exists; a gate that removes the silence removes the opt-in with it
-    check: review — when a schema in a coverage-off package gains its first constraint, whether that package flipped the flag in the same change
+  dont: read a green suite in a coverage-off package as evidence that its refusals are adequate, or add a gate that turns coverage back on everywhere to remove the judgement
+  harm: with coverage off, a schema that grows its first constraint gains an obligation nothing refuses, and no command anywhere says so — `ruleOfSchemas` still passes, because it draws only values the schema accepts. The loss is silent until someone re-reads this decision. That silence is the price of not forcing every round-trip consumer to resolve the refutation package, which is the whole reason the flag exists; a gate that removes the silence removes the opt-in with it
+  check: review — when a schema in a coverage-off package gains its first constraint, whether that package flipped the flag in the same change
 ```
 
 | Check | Command                                                       |
