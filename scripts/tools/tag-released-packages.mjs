@@ -5,6 +5,12 @@
 // Supports --dry-run (no push), --json/--output for capturing the this-cycle set
 // (KTD1), and --captured to reuse a prior capture file. Unchanged packages already
 // have their tag and are skipped.
+//
+// --exclude <file> drops the packages named in that file, one per line. OIDC
+// cannot debut a package npm has never seen, so the publish step skips it; if
+// this script tagged it anyway, create-github-releases.mjs would publish a
+// GitHub Release for a version no consumer can install. The release job still
+// fails naming the package, so the omission is never silent.
 
 const dec = new TextDecoder()
 
@@ -22,12 +28,15 @@ const jsonFlag = args.includes('--json')
 const selftestFlag = args.includes('--selftest')
 let outputFile = null
 let capturedFile = null
+let excludeFile = null
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--output') outputFile = args[i + 1]
   if (args[i].startsWith('--output=')) outputFile = args[i].slice('--output='.length)
   if (args[i] === '--captured' || args[i] === '--captured-file') capturedFile = args[i + 1]
   if (args[i].startsWith('--captured=')) capturedFile = args[i].slice('--captured='.length)
   if (args[i].startsWith('--captured-file=')) capturedFile = args[i].slice('--captured-file='.length)
+  if (args[i] === '--exclude') excludeFile = args[i + 1]
+  if (args[i].startsWith('--exclude=')) excludeFile = args[i].slice('--exclude='.length)
 }
 
 const changelogPath = (name, version) => `.changeset/changelogs/${name.replace('/', '!')}@${version}.md`
@@ -68,11 +77,20 @@ const normalizeCaptured = (raw) => {
   })
 }
 
+/** Drop entries whose package name appears in the exclusion set. */
+const dropExcluded = (cycle, excluded) => cycle.filter((entry) => !excluded.has(entry.name))
+
+const readExcluded = async () => {
+  if (!excludeFile) return new Set()
+  const text = await Deno.readTextFile(excludeFile)
+  return new Set(text.split('\n').map((line) => line.trim()).filter(Boolean))
+}
+
 const loadThisCycle = async () => {
+  const excluded = await readExcluded()
   if (capturedFile) {
     const text = await Deno.readTextFile(capturedFile)
-    const raw = JSON.parse(text)
-    return normalizeCaptured(raw)
+    return dropExcluded(normalizeCaptured(JSON.parse(text)), excluded)
   }
   const pkgs = JSON.parse(await run('pnpm', ['ls', '-r', '--json', '--depth=-1']))
   const remote = new Set(
@@ -80,7 +98,7 @@ const loadThisCycle = async () => {
       .split('\n').filter(Boolean)
       .map((l) => l.replace(/.*refs\/tags\//, '').replace(/\^\{\}$/, '')),
   )
-  return computeThisCycle(pkgs, remote)
+  return dropExcluded(computeThisCycle(pkgs, remote), excluded)
 }
 
 const selftest = async () => {
@@ -111,6 +129,15 @@ const selftest = async () => {
   {
     const n = normalizeCaptured([{ name: '@scope/y', version: '2.0.0', tag: '@scope/y@v2.0.0' }])
     ok(n[0].changelog === '.changeset/changelogs/@scope!y@2.0.0.md', 'normalize object')
+  }
+  {
+    const cycle = computeThisCycle(
+      [{ name: '@scope/a', version: '1.0.0' }, { name: '@scope/debut', version: '0.1.0' }],
+      new Set(),
+    )
+    ok(dropExcluded(cycle, new Set()).length === 2, 'no exclusions keeps the cycle')
+    const kept = dropExcluded(cycle, new Set(['@scope/debut']))
+    ok(kept.length === 1 && kept[0].name === '@scope/a', 'excluded package gets neither tag nor release')
   }
   if (failures.length > 0) {
     console.error('tag-released-packages: selftest FAILED\n')

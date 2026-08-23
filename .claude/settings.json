@@ -70,7 +70,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "comment-checker"
+            "command": "command -v comment-checker >/dev/null 2>&1 && exec comment-checker; command -v direnv >/dev/null 2>&1 && exec direnv exec \"$CLAUDE_PROJECT_DIR\" comment-checker; echo 'comment-checker: not found on PATH - run direnv allow or nix develop to provision it' >&2; exit 1",
+            "timeout": 30
           },
           {
             "type": "command",

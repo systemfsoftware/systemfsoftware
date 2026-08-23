@@ -30,9 +30,9 @@ pre-registration path: a trusted publisher can only be registered _for_ an
 existing package. Every new package must therefore be published once by some
 other credential, from a maintainer machine, before CI can take over with OIDC.
 
-This is a real, currently-painful gap in this repo. The release-time gate
-added for it measures the exposure live: `bash scripts/check-npm-publish.sh
---preflight` run this session (2026-08-11) against
+This is a real, currently-painful gap in this repo. The release-time preflight
+added for it measures the exposure live: the workspace publish-status checker's
+`--preflight` mode, run 2026-08-11 against
 `https://registry.npmjs.org` reported **20 of 46** non-private workspace
 packages as 404-on-npm (never published), and exited 1. Without the gate,
 `pnpm -r publish` would attempt all 20 mid-batch, hit an OIDC auth error on
@@ -109,8 +109,8 @@ One-time, per package, from a maintainer machine:
 6. **Every later version ships from CI** with OIDC + provenance. Record the
    change with `pnpm change --bump <patch|minor|major>` as normal.
 
-> These exact commands (steps 2–4) are what the release gate prints per
-> unpublished package — `scripts/check-npm-publish.sh:203-205`.
+> These exact commands (steps 2–4) are what the preflight prints per
+> unpublished package.
 
 ### Prerequisites for step 4
 
@@ -170,8 +170,8 @@ correct replacement.
 - **Adding a new publishable package under `packages/`** — set its manifest
   `version` to the intended debut, then run `pnpm publish:unpublished` once
   (it publishes the new package and registers its trusted publisher).
-- **A release fails with an npm OIDC auth error** — run
-  `bash scripts/check-npm-publish.sh --preflight`; it names every never-published
+- **A release fails with an npm OIDC auth error** — run the workspace
+  publish-status checker with `--preflight`; it names every never-published
   package with its bootstrap commands. The published-but-unregistered class is
   not the preflight's job (it cannot read registration without authenticating);
   `npm trust list <pkg>` per package covers that.
@@ -180,30 +180,31 @@ correct replacement.
 
 ## Examples
 
-**Gate observation (the RED evidence).** Running
-`bash scripts/check-npm-publish.sh --preflight` this session (2026-08-11,
-registry `https://registry.npmjs.org`) printed an `::error::` line —
+**Gate observation (the RED evidence).** The preflight, run 2026-08-11 against
+registry `https://registry.npmjs.org`, printed an `::error::` line —
 "preflight failed — 20 package(s) have never been published, 0 unqueryable" —
 then one block per never-published package (e.g. `@systemfsoftware/effect-cell-types`,
 `@systemfsoftware/storybook-gherkin`) with its three bootstrap commands, and
-exited 1. This is the exact output the release workflow's Preflight step
-(`.github/workflows/release.yml:78-83`) produces on `main` today.
+exited 1.
 
-**The gate's mechanics (grounded).** The preflight block lives at
-`scripts/check-npm-publish.sh:175-208`. It is flagged by `preflight_mode`
-(`:20`, `:36`). When every package is published and queryable it prints
-"PREFLIGHT OK: every non-private workspace package exists on the registry." and
-proceeds; otherwise it emits the `::error::` line (`:197`), iterates the
-unpublished/error set printing `corepack pnpm --filter $name build`,
-`corepack pnpm --filter $name publish --access public --no-git-checks`, and
-`npm trust github $name --repo $slug --file release.yml --allow-publish --yes`
-(`:202-204`), and `exit 1` (`:206`). The `no-oidc` class is deliberately a
-non-failure — a previously unattested version says nothing about whether a
-trusted publisher is registered now. The doctrine path
-`docs/solutions/tooling-decisions/` appears only inside the block's `#`
-comment (`:186-187`), never in an echo, because the provenance guard
-(`scripts/guard-script-provenance.mjs` Arm 1) treats a doctrine path in a
-non-comment shell line as a doctrine read and fails the build.
+**The classifier's mechanics.** Every non-private workspace package is placed in
+exactly one class from two facts — the registry snapshot and the local manifest
+version:
+
+| Class         | Meaning                                                     | Preflight verdict |
+| ------------- | ----------------------------------------------------------- | ----------------- |
+| `unpublished` | 404 on the registry — never published                       | **fails**         |
+| `error`       | the registry could not be read                              | **fails**         |
+| `no-oidc`     | published, latest version carries no provenance attestation | passes            |
+| `stuck`       | published and attested, local version ahead of the registry | passes            |
+| `ok`          | published, attested, local matches the registry             | passes            |
+
+`error` fails alongside `unpublished` because absence of evidence that a package
+exists is not evidence that it does; a network fault must never read as `ok`.
+`no-oidc` is deliberately a non-failure — a previously unattested version says
+nothing about whether a trusted publisher is registered now, and registration
+cannot be read without authenticating. This is a publishability preflight, not a
+registration preflight.
 
 **A full single-package flow.** For a genuinely new package:
 (`package.json` `version: "0.1.0"`, correct `repository.url`) →
@@ -215,24 +216,36 @@ version ships from CI with an OIDC provenance attestation.
 
 ## Prevention
 
-`bash scripts/check-npm-publish.sh --preflight` exits 1 when any non-private
-workspace package has never been published, naming each one with its three
-bootstrap commands. The `publish` job of `.github/workflows/release.yml`
-runs it as its first substantive step (after `install-deps`, before the
-build — `.github/workflows/release.yml:78-83`), so a release fails **before**
-any partial publish: `pnpm publish -r` would otherwise attempt each
-never-published package mid-batch, abort on an OIDC auth error, and leave a
-partial publish behind.
+The never-published class is **deferred, not prevented**. Two facts force that
+shape: OIDC cannot debut a package, and a recursive publish that meets one
+mid-batch aborts after publishing its predecessors. So the release pipeline
+partitions instead of blocking:
+
+1. The publish-status checker names the deferred set twice — as `pnpm --filter`
+   exclusions, and as bare package names.
+2. The exclusions keep the deferred package out of the recursive publish, so
+   every publishable package still ships.
+3. The bare names keep it out of the tag and GitHub-Release steps. A tag and
+   release for a version the registry never received is a release nobody can
+   install — a tombstone that misinforms anyone reading the release history.
+4. The release planner subtracts the deferred set from the owed set. Counting an
+   unreleasable package as owed would pin the phase at `publish` permanently and
+   stop every pending change intent from ever being consumed; the planner
+   annotates each deferred package on every release run instead.
+5. The preflight runs **last** and ends the run red, naming the package. Placing
+   it first would block the packages that can ship on one that cannot.
+
+The remedy is a maintainer's, never CI's: publish the debut from a maintainer
+machine, then register its trusted publisher. The next push retries only what is
+still owed.
 
 ## Related
 
-- `scripts/tools/publish-and-setup-npm-trust.ts` — automates the runbook:
-  publishes every unpublished non-private package, then registers the trusted
-  publisher for each one just published (root script alias `publish:unpublished`).
-- `.github/workflows/release.yml` — the `publish` job's Preflight step
-  (:78-83) and the OIDC publish step (:89-94).
-- `scripts/check-npm-publish.sh` — the `--preflight` gate (:175-208) and the
-  `--check` status reporter.
+- `publish-and-setup-npm-trust` — automates the runbook: publishes every
+  unpublished non-private package, then registers the trusted publisher for each
+  one just published (root script alias `publish:unpublished`).
+- The CI-failure runbook under `.github/` — the `publish` job's step order, the
+  deferred-set partitioning, and the OIDC publish invocation.
 - `docs/solutions/runtime-errors/pnpm-internal-range-breaks-recursive-versioning.md`
   — the pnpm-native recursive-versioning failure that shaped the release model
   this runbook serves.
