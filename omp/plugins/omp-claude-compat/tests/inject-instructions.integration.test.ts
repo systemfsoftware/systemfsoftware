@@ -1,7 +1,7 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { loadReferencedContent } from '@systemfsoftware/omp-claude-compat/api'
+import { loadReferencedContent } from '@systemfsoftware/omp-claude-compat/inject'
 import { TomlLoader, TomlLoaderLive } from '@systemfsoftware/omp-utils'
 import { Effect, Layer } from 'effect'
 import * as PathModule from 'effect/Path'
