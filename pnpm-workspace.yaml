@@ -82,6 +82,7 @@ overrides:
   fast-check: ^4
   vite: ^8
 packages:
+  - packages/*
   - packages/core/effect/*
   - packages/core/effect/atom/*
   - packages/core/effect/cell/*
