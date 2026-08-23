@@ -1,85 +1,79 @@
+/// <reference types="node" />
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect } from 'effect'
-import * as Result from 'effect/Result'
+import { Effect, Exit } from 'effect'
 import { expect } from 'vitest'
 
-import { checkPackage, createPackageFromTarballData } from '../src/index.js'
-import { listDirectory, readBytes } from './__fixtures__/fixture-io.mjs'
+import { checkPackage, ProblemKindSchema, recipes } from '../src/index.js'
 
 const Feature = makeFeature({ it, layer })
 
-const fixturesDir = new URL('./__fixtures__/fixtures/', import.meta.url)
+const kindNames = new Set<string>(ProblemKindSchema.literals)
 
-/** Fixtures whose analysis is exercised together with their recorded @types companion. */
-const typesPackages: Readonly<Partial<Record<string, string>>> = {
-  'big.js@6.2.1.tgz': '@types__big.js@6.2.0.tgz',
-  'react@18.2.0.tgz': '@types__react@18.2.21.tgz',
-  'semver@7.6.3.tgz': '@types__semver@7.5.8.tgz',
-}
-
-/** A fixture whose analysis is expected to fail; it has no recorded snapshot. */
-const rejectedFixture = 'Babel@0.0.1.tgz'
-
-const urlOf = (dir: URL, name: string): URL => new URL(`./${name}`, dir)
-
-const fixtures = listDirectory(fixturesDir).filter(
-  (fixture) => fixture !== '.DS_Store' && !fixture.startsWith('@types__') && fixture !== rejectedFixture,
+const kindRecipeEntries = Object.entries(recipes).filter(([key]) => kindNames.has(key))
+const companionEntries = Object.entries(recipes).filter(
+  ([key]) => !kindNames.has(key) && key !== 'KnownBad' && key !== 'TypesCompanionTypes',
 )
 
-Feature('The analysis of a published package reproduces its recorded outcome', { timeout: 60_000 }).body(
+Feature('The analysis of a synthetic package reproduces its recorded outcome', { timeout: 60_000 }).body(
   ({ scenario }) => {
-    for (const fixture of fixtures) {
-      const typesFixture = typesPackages[fixture]
+    scenario(
+      'every problem kind has a named recipe (AE7)',
+      Effect.sync(() => {
+        const kinds = new Set(kindRecipeEntries.map(([key]) => key))
+        const missing = ProblemKindSchema.literals.filter((kind) => !kinds.has(kind))
+        expect(missing).toEqual([])
+      }),
+    )
+
+    for (const [recipeKey, recipeFn] of [...kindRecipeEntries, ...companionEntries]) {
       scenario(
-        `the analysis of ${fixture} reproduces its recorded snapshot`,
+        `the analysis of ${recipeKey} reproduces its recorded snapshot`,
         Gherkin.Do.pipe(
-          Given('the fixture tarball, and its @types companion when recorded')('loaded', () =>
-            Effect.sync(() => ({
-              tarball: readBytes(urlOf(fixturesDir, fixture)),
-              typesTarball: typesFixture === undefined ? undefined : readBytes(urlOf(fixturesDir, typesFixture)),
-            }))),
-          When('the package is analysed with the recorded types companion')(
-            'analysis',
-            ({ loaded }) =>
-              Effect.gen(function*() {
-                const pkg = createPackageFromTarballData(loaded.tarball)
-                const merged = loaded.typesTarball === undefined
-                  ? pkg
-                  : pkg.mergedWithTypes(createPackageFromTarballData(loaded.typesTarball))
-                return yield* checkPackage(merged)
-              }),
-          ),
+          Given('the recipe package')('pkg', () =>
+            Effect.sync(() => {
+              const pkg = recipeFn()
+              if (recipeKey === 'TypesCompanion') {
+                return pkg.mergedWithTypes(recipes.TypesCompanionTypes())
+              }
+              return pkg
+            })),
+          When('the package is analysed')('analysis', ({ pkg }) =>
+            Effect.gen(function*() {
+              return yield* checkPackage(pkg)
+            })),
           Then('the recorded snapshot still matches the canonical analysis')(({ analysis }) =>
             Effect.promise(() =>
               expect(JSON.stringify(analysis, null, 2) + '\n').toMatchFileSnapshot(
-                `./__fixtures__/snapshots/${fixture}.json`,
+                `./__fixtures__/snapshots/${recipeKey}.json`,
               )
             )
+          ),
+          Then('the analysis reports the problem kind the recipe is named for')(({ analysis }) =>
+            Effect.sync(() => {
+              if (kindNames.has(recipeKey)) {
+                expect(
+                  'problems' in analysis && analysis.problems.some((problem) => problem.kind === recipeKey),
+                ).toBe(true)
+              }
+            })
           ),
         ),
       )
     }
 
     scenario(
-      `the malformed ${rejectedFixture} fixture is rejected by the analysis`,
+      'the known-bad recipe is rejected by the analysis',
       Gherkin.Do.pipe(
-        Given(`the ${rejectedFixture} fixture`)(
-          'tarball',
-          () => Effect.sync(() => readBytes(urlOf(fixturesDir, rejectedFixture))),
-        ),
-        When('the fixture is analysed')(
-          'outcome',
-          ({ tarball }) =>
-            Effect.result(
-              Effect.gen(function*() {
-                const pkg = yield* Effect.try(() => createPackageFromTarballData(tarball))
-                return yield* checkPackage(pkg)
-              }),
-            ),
-        ),
+        Given('the known-bad recipe')('pkg', () => Effect.sync(() => recipes.KnownBad())),
+        When('the fixture is analysed')('outcome', ({ pkg }) =>
+          Effect.exit(
+            Effect.gen(function*() {
+              return yield* checkPackage(pkg)
+            }),
+          )),
         Then('the analysis fails')(({ outcome }) =>
           Effect.sync(() => {
-            expect(outcome).toEqual(Result.fail(expect.anything()))
+            expect(Exit.isFailure(outcome)).toBe(true)
           })
         ),
       ),

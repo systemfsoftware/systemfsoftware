@@ -1,0 +1,373 @@
+{
+  "packageName": "named-exports",
+  "packageVersion": "1.0.0",
+  "types": {
+    "kind": "included"
+  },
+  "buildTools": {},
+  "entrypoints": {
+    ".": {
+      "subpath": ".",
+      "resolutions": {
+        "node10": {
+          "name": ".",
+          "resolutionKind": "node10",
+          "resolution": {
+            "fileName": "/node_modules/named-exports/dist/index.d.ts",
+            "isJson": false,
+            "isTypeScript": true,
+            "trace": [
+              "======== Resolving module 'named-exports' from '/index.ts'. ========",
+              "Explicitly specified module resolution kind: 'Node10'.",
+              "Loading module 'named-exports' from 'node_modules' folder, target file types: TypeScript, Declaration.",
+              "Searching all ancestor node_modules directories for preferred extensions: TypeScript, Declaration.",
+              "Found 'package.json' at '/node_modules/named-exports/package.json'.",
+              "File '/node_modules/named-exports.ts' does not exist.",
+              "File '/node_modules/named-exports.tsx' does not exist.",
+              "File '/node_modules/named-exports.d.ts' does not exist.",
+              "'package.json' does not have a 'typesVersions' field.",
+              "'package.json' does not have a 'typings' field.",
+              "'package.json' has 'types' field './dist/index.d.ts' that references '/node_modules/named-exports/dist/index.d.ts'.",
+              "File '/node_modules/named-exports/dist/index.d.ts' exists - use it as a name resolution result.",
+              "'package.json' does not have a 'peerDependencies' field.",
+              "======== Module name 'named-exports' was successfully resolved to '/node_modules/named-exports/dist/index.d.ts' with Package ID 'named-exports/dist/index.d.ts@1.0.0'. ========"
+            ]
+          },
+          "implementationResolution": {
+            "fileName": "/node_modules/named-exports/dist/index.cjs",
+            "isJson": false,
+            "isTypeScript": false,
+            "trace": [
+              "======== Resolving module 'named-exports' from '/index.ts'. ========",
+              "Explicitly specified module resolution kind: 'Node10'.",
+              "Loading module 'named-exports' from 'node_modules' folder, target file types: TypeScript.",
+              "Searching all ancestor node_modules directories for preferred extensions: TypeScript.",
+              "Found 'package.json' at '/node_modules/named-exports/package.json'.",
+              "File '/node_modules/named-exports.ts' does not exist.",
+              "File '/node_modules/named-exports.tsx' does not exist.",
+              "'package.json' does not have a 'typesVersions' field.",
+              "'package.json' has 'main' field './dist/index.cjs' that references '/node_modules/named-exports/dist/index.cjs'.",
+              "File name '/node_modules/named-exports/dist/index.cjs' has a '.cjs' extension - stripping it.",
+              "File '/node_modules/named-exports/dist/index.cts' does not exist.",
+              "Loading module as file / folder, candidate module location '/node_modules/named-exports/dist/index.cjs', target file types: TypeScript.",
+              "File name '/node_modules/named-exports/dist/index.cjs' has a '.cjs' extension - stripping it.",
+              "File '/node_modules/named-exports/dist/index.cts' does not exist.",
+              "File '/node_modules/named-exports/dist/index.cjs.ts' does not exist.",
+              "File '/node_modules/named-exports/dist/index.cjs.tsx' does not exist.",
+              "Directory '/node_modules/named-exports/dist/index.cjs' does not exist, skipping all lookups in it.",
+              "File '/node_modules/named-exports/index.ts' does not exist.",
+              "File '/node_modules/named-exports/index.tsx' does not exist.",
+              "Loading module 'named-exports' from 'node_modules' folder, target file types: JavaScript, JSON.",
+              "Searching all ancestor node_modules directories for fallback extensions: JavaScript, JSON.",
+              "File '/node_modules/named-exports/package.json' exists according to earlier cached lookups.",
+              "File '/node_modules/named-exports.js' does not exist.",
+              "File '/node_modules/named-exports.jsx' does not exist.",
+              "'package.json' has 'main' field './dist/index.cjs' that references '/node_modules/named-exports/dist/index.cjs'.",
+              "File name '/node_modules/named-exports/dist/index.cjs' has a '.cjs' extension - stripping it.",
+              "File '/node_modules/named-exports/dist/index.cjs' exists - use it as a name resolution result.",
+              "'package.json' does not have a 'peerDependencies' field.",
+              "Resolution of non-relative name failed; trying with '--moduleResolution bundler' to see if project may need configuration update.",
+              "Loading module 'named-exports' from 'node_modules' folder, target file types: TypeScript.",
+              "Searching all ancestor node_modules directories for preferred extensions: TypeScript.",
+              "File '/node_modules/named-exports/package.json' exists according to earlier cached lookups.",
+              "Entering conditional exports.",
+              "Saw non-matching condition 'types'.",
+              "Matched 'exports' condition 'import'.",
+              "Using 'exports' subpath '.' with target './dist/index.js'.",
+              "File name '/node_modules/named-exports/dist/index.js' has a '.js' extension - stripping it.",
+              "File '/node_modules/named-exports/dist/index.ts' does not exist.",
+              "File '/node_modules/named-exports/dist/index.tsx' does not exist.",
+              "Failed to resolve under condition 'import'.",
+              "Saw non-matching condition 'require'.",
+              "Exiting conditional exports.",
+              "======== Module name 'named-exports' was successfully resolved to '/node_modules/named-exports/dist/index.cjs' with Package ID 'named-exports/dist/index.cjs@1.0.0'. ========"
+            ]
+          },
+          "files": [
+            "/node_modules/typescript/lib/lib.d.ts",
+            "/node_modules/named-exports/dist/index.d.ts"
+          ],
+          "visibleProblems": []
+        },
+        "node16-cjs": {
+          "name": ".",
+          "resolutionKind": "node16-cjs",
+          "resolution": {
+            "fileName": "/node_modules/named-exports/dist/index.d.ts",
+            "isJson": false,
+            "isTypeScript": true,
+            "trace": [
+              "======== Resolving module 'named-exports' from '/index.ts'. ========",
+              "Explicitly specified module resolution kind: 'Node16'.",
+              "Resolving in CJS mode with conditions 'require', 'types', 'node'.",
+              "File '/package.json' does not exist.",
+              "Loading module 'named-exports' from 'node_modules' folder, target file types: TypeScript, JavaScript, Declaration, JSON.",
+              "Searching all ancestor node_modules directories for preferred extensions: TypeScript, Declaration.",
+              "Found 'package.json' at '/node_modules/named-exports/package.json'.",
+              "Entering conditional exports.",
+              "Matched 'exports' condition 'types'.",
+              "Using 'exports' subpath '.' with target './dist/index.d.ts'.",
+              "File '/node_modules/named-exports/dist/index.d.ts' exists - use it as a name resolution result.",
+              "'package.json' does not have a 'peerDependencies' field.",
+              "Resolved under condition 'types'.",
+              "Exiting conditional exports.",
+              "======== Module name 'named-exports' was successfully resolved to '/node_modules/named-exports/dist/index.d.ts' with Package ID 'named-exports/dist/index.d.ts@1.0.0'. ========"
+            ]
+          },
+          "implementationResolution": {
+            "fileName": "/node_modules/named-exports/dist/index.cjs",
+            "isJson": false,
+            "isTypeScript": false,
+            "trace": [
+              "======== Resolving module 'named-exports' from '/index.ts'. ========",
+              "Explicitly specified module resolution kind: 'Node16'.",
+              "Resolving in CJS mode with conditions 'require', 'node'.",
+              "File '/package.json' does not exist.",
+              "Loading module 'named-exports' from 'node_modules' folder, target file types: TypeScript, JavaScript, JSON.",
+              "Searching all ancestor node_modules directories for preferred extensions: TypeScript.",
+              "Found 'package.json' at '/node_modules/named-exports/package.json'.",
+              "Entering conditional exports.",
+              "Saw non-matching condition 'types'.",
+              "Saw non-matching condition 'import'.",
+              "Matched 'exports' condition 'require'.",
+              "Using 'exports' subpath '.' with target './dist/index.cjs'.",
+              "File name '/node_modules/named-exports/dist/index.cjs' has a '.cjs' extension - stripping it.",
+              "File '/node_modules/named-exports/dist/index.cts' does not exist.",
+              "Failed to resolve under condition 'require'.",
+              "Exiting conditional exports.",
+              "Searching all ancestor node_modules directories for fallback extensions: JavaScript, JSON.",
+              "File '/node_modules/named-exports/package.json' exists according to earlier cached lookups.",
+              "Entering conditional exports.",
+              "Saw non-matching condition 'types'.",
+              "Saw non-matching condition 'import'.",
+              "Matched 'exports' condition 'require'.",
+              "Using 'exports' subpath '.' with target './dist/index.cjs'.",
+              "File name '/node_modules/named-exports/dist/index.cjs' has a '.cjs' extension - stripping it.",
+              "File '/node_modules/named-exports/dist/index.cjs' exists - use it as a name resolution result.",
+              "'package.json' does not have a 'peerDependencies' field.",
+              "Resolved under condition 'require'.",
+              "Exiting conditional exports.",
+              "======== Module name 'named-exports' was successfully resolved to '/node_modules/named-exports/dist/index.cjs' with Package ID 'named-exports/dist/index.cjs@1.0.0'. ========"
+            ]
+          },
+          "files": [
+            "/node_modules/typescript/lib/lib.d.ts",
+            "/node_modules/named-exports/dist/index.d.ts"
+          ],
+          "visibleProblems": []
+        },
+        "node16-esm": {
+          "name": ".",
+          "resolutionKind": "node16-esm",
+          "resolution": {
+            "fileName": "/node_modules/named-exports/dist/index.d.ts",
+            "isJson": false,
+            "isTypeScript": true,
+            "trace": [
+              "======== Resolving module 'named-exports' from '/index.mts'. ========",
+              "Explicitly specified module resolution kind: 'Node16'.",
+              "Resolving in ESM mode with conditions 'import', 'types', 'node'.",
+              "File '/package.json' does not exist according to earlier cached lookups.",
+              "Loading module 'named-exports' from 'node_modules' folder, target file types: TypeScript, JavaScript, Declaration, JSON.",
+              "Searching all ancestor node_modules directories for preferred extensions: TypeScript, Declaration.",
+              "File '/node_modules/named-exports/package.json' exists according to earlier cached lookups.",
+              "Entering conditional exports.",
+              "Matched 'exports' condition 'types'.",
+              "Using 'exports' subpath '.' with target './dist/index.d.ts'.",
+              "File '/node_modules/named-exports/dist/index.d.ts' exists - use it as a name resolution result.",
+              "Resolved under condition 'types'.",
+              "Exiting conditional exports.",
+              "======== Module name 'named-exports' was successfully resolved to '/node_modules/named-exports/dist/index.d.ts' with Package ID 'named-exports/dist/index.d.ts@1.0.0'. ========"
+            ]
+          },
+          "implementationResolution": {
+            "fileName": "/node_modules/named-exports/dist/index.js",
+            "isJson": false,
+            "isTypeScript": false,
+            "trace": [
+              "======== Resolving module 'named-exports' from '/index.mts'. ========",
+              "Explicitly specified module resolution kind: 'Node16'.",
+              "Resolving in ESM mode with conditions 'import', 'node'.",
+              "File '/package.json' does not exist according to earlier cached lookups.",
+              "Loading module 'named-exports' from 'node_modules' folder, target file types: TypeScript, JavaScript, JSON.",
+              "Searching all ancestor node_modules directories for preferred extensions: TypeScript.",
+              "File '/node_modules/named-exports/package.json' exists according to earlier cached lookups.",
+              "Entering conditional exports.",
+              "Saw non-matching condition 'types'.",
+              "Matched 'exports' condition 'import'.",
+              "Using 'exports' subpath '.' with target './dist/index.js'.",
+              "File name '/node_modules/named-exports/dist/index.js' has a '.js' extension - stripping it.",
+              "File '/node_modules/named-exports/dist/index.ts' does not exist.",
+              "File '/node_modules/named-exports/dist/index.tsx' does not exist.",
+              "Failed to resolve under condition 'import'.",
+              "Saw non-matching condition 'require'.",
+              "Exiting conditional exports.",
+              "Searching all ancestor node_modules directories for fallback extensions: JavaScript, JSON.",
+              "File '/node_modules/named-exports/package.json' exists according to earlier cached lookups.",
+              "Entering conditional exports.",
+              "Saw non-matching condition 'types'.",
+              "Matched 'exports' condition 'import'.",
+              "Using 'exports' subpath '.' with target './dist/index.js'.",
+              "File name '/node_modules/named-exports/dist/index.js' has a '.js' extension - stripping it.",
+              "File '/node_modules/named-exports/dist/index.js' exists - use it as a name resolution result.",
+              "Resolved under condition 'import'.",
+              "Exiting conditional exports.",
+              "Resolution of non-relative name failed; trying with modern Node resolution features disabled to see if npm library needs configuration update.",
+              "File '/package.json' does not exist according to earlier cached lookups.",
+              "Loading module 'named-exports' from 'node_modules' folder, target file types: TypeScript.",
+              "Searching all ancestor node_modules directories for preferred extensions: TypeScript.",
+              "File '/node_modules/named-exports/package.json' exists according to earlier cached lookups.",
+              "'package.json' does not have a 'typesVersions' field.",
+              "'package.json' has 'main' field './dist/index.cjs' that references '/node_modules/named-exports/dist/index.cjs'.",
+              "File name '/node_modules/named-exports/dist/index.cjs' has a '.cjs' extension - stripping it.",
+              "File '/node_modules/named-exports/dist/index.cts' does not exist.",
+              "Loading module as file / folder, candidate module location '/node_modules/named-exports/dist/index.cjs', target file types: TypeScript.",
+              "File name '/node_modules/named-exports/dist/index.cjs' has a '.cjs' extension - stripping it.",
+              "File '/node_modules/named-exports/dist/index.cts' does not exist.",
+              "File '/node_modules/named-exports/dist/index.cjs.ts' does not exist.",
+              "File '/node_modules/named-exports/dist/index.cjs.tsx' does not exist.",
+              "Directory '/node_modules/named-exports/dist/index.cjs' does not exist, skipping all lookups in it.",
+              "======== Module name 'named-exports' was successfully resolved to '/node_modules/named-exports/dist/index.js' with Package ID 'named-exports/dist/index.js@1.0.0'. ========"
+            ]
+          },
+          "files": [
+            "/node_modules/typescript/lib/lib.d.ts",
+            "/node_modules/named-exports/dist/index.d.ts"
+          ],
+          "visibleProblems": [
+            0
+          ]
+        },
+        "bundler": {
+          "name": ".",
+          "resolutionKind": "bundler",
+          "resolution": {
+            "fileName": "/node_modules/named-exports/dist/index.d.ts",
+            "isJson": false,
+            "isTypeScript": true,
+            "trace": [
+              "======== Resolving module 'named-exports' from '/index.ts'. ========",
+              "Explicitly specified module resolution kind: 'Bundler'.",
+              "Resolving in CJS mode with conditions 'import', 'types'.",
+              "File '/package.json' does not exist.",
+              "Loading module 'named-exports' from 'node_modules' folder, target file types: TypeScript, JavaScript, Declaration, JSON.",
+              "Searching all ancestor node_modules directories for preferred extensions: TypeScript, Declaration.",
+              "Found 'package.json' at '/node_modules/named-exports/package.json'.",
+              "Entering conditional exports.",
+              "Matched 'exports' condition 'types'.",
+              "Using 'exports' subpath '.' with target './dist/index.d.ts'.",
+              "File '/node_modules/named-exports/dist/index.d.ts' exists - use it as a name resolution result.",
+              "'package.json' does not have a 'peerDependencies' field.",
+              "Resolved under condition 'types'.",
+              "Exiting conditional exports.",
+              "======== Module name 'named-exports' was successfully resolved to '/node_modules/named-exports/dist/index.d.ts' with Package ID 'named-exports/dist/index.d.ts@1.0.0'. ========"
+            ]
+          },
+          "implementationResolution": {
+            "fileName": "/node_modules/named-exports/dist/index.js",
+            "isJson": false,
+            "isTypeScript": false,
+            "trace": [
+              "======== Resolving module 'named-exports' from '/index.ts'. ========",
+              "Explicitly specified module resolution kind: 'Bundler'.",
+              "Resolving in CJS mode with conditions 'import'.",
+              "File '/package.json' does not exist.",
+              "Loading module 'named-exports' from 'node_modules' folder, target file types: TypeScript, JavaScript, JSON.",
+              "Searching all ancestor node_modules directories for preferred extensions: TypeScript.",
+              "Found 'package.json' at '/node_modules/named-exports/package.json'.",
+              "Entering conditional exports.",
+              "Saw non-matching condition 'types'.",
+              "Matched 'exports' condition 'import'.",
+              "Using 'exports' subpath '.' with target './dist/index.js'.",
+              "File name '/node_modules/named-exports/dist/index.js' has a '.js' extension - stripping it.",
+              "File '/node_modules/named-exports/dist/index.ts' does not exist.",
+              "File '/node_modules/named-exports/dist/index.tsx' does not exist.",
+              "Failed to resolve under condition 'import'.",
+              "Saw non-matching condition 'require'.",
+              "Exiting conditional exports.",
+              "Searching all ancestor node_modules directories for fallback extensions: JavaScript, JSON.",
+              "File '/node_modules/named-exports/package.json' exists according to earlier cached lookups.",
+              "Entering conditional exports.",
+              "Saw non-matching condition 'types'.",
+              "Matched 'exports' condition 'import'.",
+              "Using 'exports' subpath '.' with target './dist/index.js'.",
+              "File name '/node_modules/named-exports/dist/index.js' has a '.js' extension - stripping it.",
+              "File '/node_modules/named-exports/dist/index.js' exists - use it as a name resolution result.",
+              "'package.json' does not have a 'peerDependencies' field.",
+              "Resolved under condition 'import'.",
+              "Exiting conditional exports.",
+              "Resolution of non-relative name failed; trying with modern Node resolution features disabled to see if npm library needs configuration update.",
+              "File '/package.json' does not exist according to earlier cached lookups.",
+              "Loading module 'named-exports' from 'node_modules' folder, target file types: TypeScript.",
+              "Searching all ancestor node_modules directories for preferred extensions: TypeScript.",
+              "File '/node_modules/named-exports/package.json' exists according to earlier cached lookups.",
+              "File '/node_modules/named-exports.ts' does not exist.",
+              "File '/node_modules/named-exports.tsx' does not exist.",
+              "'package.json' does not have a 'typesVersions' field.",
+              "'package.json' has 'main' field './dist/index.cjs' that references '/node_modules/named-exports/dist/index.cjs'.",
+              "File name '/node_modules/named-exports/dist/index.cjs' has a '.cjs' extension - stripping it.",
+              "File '/node_modules/named-exports/dist/index.cts' does not exist.",
+              "Loading module as file / folder, candidate module location '/node_modules/named-exports/dist/index.cjs', target file types: TypeScript.",
+              "File name '/node_modules/named-exports/dist/index.cjs' has a '.cjs' extension - stripping it.",
+              "File '/node_modules/named-exports/dist/index.cts' does not exist.",
+              "File '/node_modules/named-exports/dist/index.cjs.ts' does not exist.",
+              "File '/node_modules/named-exports/dist/index.cjs.tsx' does not exist.",
+              "Directory '/node_modules/named-exports/dist/index.cjs' does not exist, skipping all lookups in it.",
+              "File '/node_modules/named-exports/index.ts' does not exist.",
+              "File '/node_modules/named-exports/index.tsx' does not exist.",
+              "======== Module name 'named-exports' was successfully resolved to '/node_modules/named-exports/dist/index.js' with Package ID 'named-exports/dist/index.js@1.0.0'. ========"
+            ]
+          },
+          "files": [
+            "/node_modules/typescript/lib/lib.d.ts",
+            "/node_modules/named-exports/dist/index.d.ts"
+          ],
+          "visibleProblems": []
+        }
+      },
+      "hasTypes": true,
+      "isWildcard": false
+    }
+  },
+  "programInfo": {
+    "node10": {},
+    "node16": {
+      "moduleKinds": {
+        "/node_modules/typescript/lib/lib.d.ts": {
+          "detectedKind": 1,
+          "detectedReason": "no:type",
+          "reasonFileName": "/node_modules/typescript/lib/lib.d.ts"
+        },
+        "/node_modules/named-exports/dist/index.d.ts": {
+          "detectedKind": 1,
+          "detectedReason": "no:type",
+          "reasonFileName": "/node_modules/named-exports/package.json"
+        },
+        "/node_modules/named-exports/dist/index.cjs": {
+          "detectedKind": 1,
+          "detectedReason": "extension",
+          "reasonFileName": "/node_modules/named-exports/dist/index.cjs"
+        },
+        "/node_modules/named-exports/dist/index.js": {
+          "detectedKind": 1,
+          "detectedReason": "no:type",
+          "reasonFileName": "/node_modules/named-exports/package.json"
+        }
+      }
+    },
+    "bundler": {}
+  },
+  "problems": [
+    {
+      "kind": "NamedExports",
+      "implementationFileName": "/node_modules/named-exports/dist/index.js",
+      "typesFileName": "/node_modules/named-exports/dist/index.d.ts",
+      "isMissingAllNamed": true,
+      "missing": [
+        "a",
+        "b",
+        "c"
+      ]
+    }
+  ]
+}
