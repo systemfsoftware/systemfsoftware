@@ -17,7 +17,6 @@ export default defineConfig({
     'run-event': './src/run-event.ts',
     'stryker-package': './src/stryker-package.ts',
     'exit-classification': './src/exit-classification.ts',
-    'test-contribution': './src/test-contribution.ts',
     'timer': './src/timer.ts',
   },
   format: 'esm',
