@@ -13,7 +13,7 @@ import {
   defaultRequireTestContributionSuffixes,
   judgeTestContribution,
   toothlessTestFiles,
-} from '../src/mod.js'
+} from '@systemfsoftware/stryker-test-contribution'
 
 const Feature = makeFeature({ it, layer })
 
