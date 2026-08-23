@@ -27,13 +27,17 @@ const NODE_IMAGE = 'node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e
 // toolchain in the container the same way, so the packed surface is exercised
 // against the same effect the tree built with (REPO-R2's hash floor).
 const EFFECT_PIN = '4.0.0-rc.108'
-// The CLI's workspace dependencies are not on the registry at this version,
-// so each one is packed and installed from a local tarball beside it.
+// Every workspace package in the CLI's transitive closure is packed and
+// installed from a local tarball: none is on the registry at this version, so
+// one left out of this list is fetched from npm and the install 404s before a
+// single test is collected.
 const WORKSPACE_PACKAGES = [
   '@systemfsoftware/stryker-js-cli',
   '@systemfsoftware/stryker-js-mutation-run',
   '@systemfsoftware/stryker-js-mutation-report',
   '@systemfsoftware/stryker-js-plugin-api',
+  '@systemfsoftware/stryker-js-instrumenter',
+  '@systemfsoftware/stryker-js-util',
   '@systemfsoftware/effect-cell-types',
 ] as const
 const REPO_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url))
