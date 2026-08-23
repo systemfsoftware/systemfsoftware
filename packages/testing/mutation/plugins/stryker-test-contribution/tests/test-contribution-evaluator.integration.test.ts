@@ -14,8 +14,7 @@ import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { Effect, Schema } from 'effect'
 import { expect } from 'vitest'
 
-import { strykerPlugins } from '../src/mod.js'
-import { TestContributionEvaluator } from '../src/test-contribution-evaluator.js'
+import { strykerPlugins, TestContributionEvaluator } from '@systemfsoftware/stryker-test-contribution'
 
 const Feature = makeFeature({ it, layer })
 
