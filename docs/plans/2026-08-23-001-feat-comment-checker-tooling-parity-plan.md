@@ -215,19 +215,19 @@ U1 → U2 (the hook instruction names the shell U1 creates). U3 → U4 (U4 edits
 
 **Requirements.** R10.
 
-**Files.** `scripts/guards/check-conflict-markers.ts` (new), `package.json`, `.github/workflows/reusable-checks.yml` or the `check:ci` chain.
+**Files.** `scripts/guards/check-forbidden-lines.ts` (replaces `check-rule-suppression.ts` and absorbs this concern), `package.json`.
 
-**Approach.** `conflict-check.yml` runs `git merge-tree` against the base, so it detects a _prospective_ merge conflict and is blind to markers already committed on both sides — which is exactly how the `AGENTS.md` markers reached `main`. Add a Deno guard following `scripts/guards/check-rule-suppression.ts`: enumerate tracked files with `git ls-files`, skip `repos/` and lockfiles, and report every line matching a conflict marker at line start with its path and line number. Wire it into `check:ci` and `check:local` beside `check:suppression`. Ship this unit as its own commit (KTD6).
+**Approach.** `conflict-check.yml` runs `git merge-tree` against the base, so it detects a _prospective_ merge conflict and is blind to markers already committed on both sides — which is exactly how the `AGENTS.md` markers reached `main`. The gate is earned on restraint polarity: "never commit a conflict marker" forbids an end state, prose is the floor of the enforcement channels, and no free refusal covers it — `dprint` formats a marker happily and `oxlint` never reads Markdown. But a _second_ guard is not: `check-rule-suppression.ts` is already the same mechanism — `git ls-files`, skip vendored, read bytes, match a forbidden line shape — so a new script would buy a second tree read and a second chain entry for one scan. Subsume instead. One guard named for the mechanism, two predicates at their own file scopes (suppression reads comments, so source files only; markers apply to every tracked file), one chain entry replacing two. Close the vacuous-pass hole both guards shipped with while the file is open: a gate that examines zero files must fail rather than report success.
 
-**Test scenarios.** `--selftest` over two fixtures: a string containing `<<<<<<<` at line start yields one finding; a string containing `<<<<<<<` mid-line, and a fenced code block quoting the markers, yield none — this plan and `AGENTS.md`'s own prose must not be false positives.
+**Test scenarios.** Both predicates keep their full fixture sets, plus two scope cases — a suppression in a `.ts` fixture is reported, the identical line in a `.md` fixture is not — and the population guard. The conflict fixtures include the indented marker `AGENTS.md` actually carried and the two false negatives a fence tracker produced.
 
-**Verification.** Observed red before and green after: run the guard at U5's parent commit and record a non-zero exit naming `AGENTS.md`; run it at U5's commit and record exit 0. Both exit codes belong in the commit body.
+**Verification.** Observed red before and green after: run the guard at U5's parent commit and record a non-zero exit naming `AGENTS.md`; run it at U5's commit and record exit 0. Report the net delta on the enforcement surface, not just the addition: scripts and chain entries both go down by one.
 
 ## Verification Contract
 
 - `pnpm check:local` after the last edit, exit 0 (`REPO-D1`). Note it runs `./bin/dprint check`, which takes the first `dprint` on PATH — run it inside the dev shell.
 - `nix build --no-link --print-out-paths .#comment-checker-bwrap` and `.#comment-checker`, plus `nix flake check`.
-- `./scripts/tools/plan-release.mjs --selftest`, `./scripts/tools/tag-released-packages.mjs --selftest`, `./scripts/tools/create-github-releases.mjs --selftest`, and `deno run --allow-read scripts/guards/check-conflict-markers.ts --selftest` — each exit 0.
+- `./scripts/tools/plan-release.mjs --selftest`, `./scripts/tools/tag-released-packages.mjs --selftest`, `./scripts/tools/create-github-releases.mjs --selftest`, `./scripts/tools/check-npm-publish.ts --selftest`, and `./scripts/guards/check-forbidden-lines.ts --selftest` — each exit 0.
 - `deno run --allow-read scripts/guards/check-changeset.ts --selftest`, exit 0.
 - `git grep -nI -e '^<<<<<<< ' -e '^>>>>>>> ' -- . ':!repos/' ':!*.lock'` prints nothing.
 - No mutation run (`REPO-D3`).
