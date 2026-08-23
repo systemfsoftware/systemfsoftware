@@ -4,6 +4,7 @@ import type { HookResult } from '../HookDispatcher.schema.js'
 import { parseHookOutput } from '../HookOutput.js'
 import type { HookSession } from './HookSession.js'
 
+/** @internal */
 export class SuperviseForkExecutorDeps extends Context.Service<SuperviseForkExecutorDeps, Scope.Scope>()(
   'SuperviseForkExecutorDeps',
 ) {}
@@ -12,6 +13,7 @@ export class SuperviseForkExecutorDeps extends Context.Service<SuperviseForkExec
  * Nothing awaits a forked hook, so an unhandled failure here reaches no one:
  * a mistyped exec-form command would fail to spawn in total silence.
  */
+/** @internal */
 export const superviseFork = <E, R>(
   hook: Effect.Effect<HookResult, E, R>,
   ctx: HookSession,

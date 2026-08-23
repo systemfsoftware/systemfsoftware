@@ -441,6 +441,7 @@ const bootChild = <E, R>(
     return { name: child.name, health, run: body, childPolicy: {} }
   })
 
+/** @internal */
 export const supervisor = <E, R>(
   s: Supervisor<E, R, LockConfig>,
   reporter: DaemonReporter['Service'],

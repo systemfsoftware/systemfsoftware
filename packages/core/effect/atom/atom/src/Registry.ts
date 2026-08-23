@@ -364,7 +364,7 @@ const isNodeImplFor = <A>(atom: Atom.Atom<A>, node: NodeImpl<unknown>): node is 
   atomKey(node.atom) === atomKey(atom)
 
 /**
- * @internal
+ * Concrete registry used by the package implementation.
  */
 export class RegistryImpl implements Registry {
   readonly [TypeId]: TypeId
@@ -683,7 +683,5 @@ export class RegistryImpl implements Registry {
 // internal
 // -----------------------------------------------------------------------------
 
-/**
- * @internal
- */
+/** Re-export of batch helpers implemented in the internal Node module. */
 export { batch, BatchPhase, batchState } from './internal/Node.js'

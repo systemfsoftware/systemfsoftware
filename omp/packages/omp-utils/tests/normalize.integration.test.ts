@@ -25,7 +25,7 @@ import {
   normalizeToolInput,
   normalizeToolName,
   sessionIds,
-} from '../src/mod.js'
+} from '@systemfsoftware/omp-utils'
 
 const Feature = makeFeature({ it, layer })
 

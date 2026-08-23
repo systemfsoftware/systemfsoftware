@@ -2,6 +2,7 @@ import { Context, Duration } from 'effect'
 import { BoundedIntensity } from '../DaemonPolicy.schema.js'
 import type { SupervisionConfig } from '../DaemonSpec.schema.js'
 
+/** @internal */
 export const WorkerConfig = Context.Reference<SupervisionConfig>(
   '@systemfsoftware/effect-daemon-spec/WorkerConfig',
   {

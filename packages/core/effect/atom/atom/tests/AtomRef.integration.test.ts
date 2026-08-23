@@ -1,7 +1,7 @@
+import { AtomRef } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
-import { AtomRef } from '../src/index.js'
 
 const Feature = makeFeature({ it, layer })
 

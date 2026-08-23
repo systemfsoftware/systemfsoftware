@@ -1,6 +1,6 @@
+import { LockPrimitive } from '@systemfsoftware/effect-daemon-spec'
+import { LockPrimitiveError } from '@systemfsoftware/effect-daemon-spec'
 import { Effect, HashMap, Layer, Option, Ref, Scope } from 'effect'
-import { LockPrimitive } from '../../src/LeaderLockAdapter.js'
-import { LockPrimitiveError } from '../../src/LockPrimitive.schema.js'
 
 export const mkStatefulLockPrimitive: Layer.Layer<LockPrimitive> = Layer.effect(
   LockPrimitive,

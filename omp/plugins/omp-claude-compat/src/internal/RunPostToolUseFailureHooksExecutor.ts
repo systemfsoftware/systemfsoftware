@@ -6,6 +6,7 @@ import { asToolInput, EMPTY_TOOL_INPUT } from './HookPayload.js'
 import type { HookSession, HookToolResult } from './HookSession.js'
 import { runHooksForEvent } from './RunHooksForEventExecutor.js'
 
+/** @internal */
 export class RunPostToolUseFailureHooksExecutorDeps
   extends Context.Service<RunPostToolUseFailureHooksExecutorDeps, Scope.Scope>()(
     'RunPostToolUseFailureHooksExecutorDeps',
@@ -22,6 +23,7 @@ const errorText = (content: unknown): string =>
     onNone: () => Option.getOrElse(asPlainText(content), () => ''),
   })
 
+/** @internal */
 export const runPostToolUseFailureHooks = Effect.fn('runPostToolUseFailureHooks')(function*(
   settings: HookSettings,
   event: HookToolResult,

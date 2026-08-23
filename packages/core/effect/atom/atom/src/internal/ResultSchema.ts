@@ -16,6 +16,7 @@ import type { Result } from './ResultValues.js'
  * @category schemas
  * @since 4.0.0
  */
+/** @internal */
 export interface Schema<
   Success extends Schema_.Constraint,
   Error extends Schema_.Constraint,
@@ -36,6 +37,7 @@ export interface Schema<
  * @category schemas
  * @since 4.0.0
  */
+/** @internal */
 export const Schema = <
   A extends Schema_.Constraint = typeof Schema_.Never,
   E extends Schema_.Constraint = typeof Schema_.Never,

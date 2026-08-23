@@ -167,6 +167,7 @@ const buildSubscriptionLoop = <E, R, W extends WorkerShape<unknown, E, R>>(
   return wrapSpan(worker, body.pipe(Effect.asVoid))
 }
 
+/** @internal */
 export const buildWorkerLoop = <E, R>(
   worker: WorkerShape<WorkerShape<unknown, E, R>, E, R>,
   health: DaemonHealthShape,

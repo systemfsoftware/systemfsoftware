@@ -7,10 +7,12 @@ import type { HookSession } from './HookSession.js'
 import { runHookScript } from './RunHookScriptExecutor.js'
 import { superviseFork } from './SuperviseForkExecutor.js'
 
+/** @internal */
 export class RunLifecycleHooksExecutorDeps extends Context.Service<RunLifecycleHooksExecutorDeps, Scope.Scope>()(
   'RunLifecycleHooksExecutorDeps',
 ) {}
 
+/** @internal */
 export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(
   function*(entries: readonly HookEntry[], ctx: HookSession, event: string) {
     const cwd = ctx.cwd

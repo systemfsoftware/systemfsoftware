@@ -19,6 +19,7 @@ export const PipeInspectableProto = {
  * @category type IDs
  * @since 4.0.0
  */
+/** @internal */
 export type TypeId = '~effect/reactivity/Atom'
 
 /**
@@ -27,6 +28,7 @@ export type TypeId = '~effect/reactivity/Atom'
  * @category type IDs
  * @since 4.0.0
  */
+/** @internal */
 export const TypeId: TypeId = '~effect/reactivity/Atom'
 
 /**
@@ -35,6 +37,7 @@ export const TypeId: TypeId = '~effect/reactivity/Atom'
  * @category type IDs
  * @since 4.0.0
  */
+/** @internal */
 export type WritableTypeId = '~effect/reactivity/Atom/Writable'
 
 /**
@@ -43,6 +46,7 @@ export type WritableTypeId = '~effect/reactivity/Atom/Writable'
  * @category type IDs
  * @since 4.0.0
  */
+/** @internal */
 export const WritableTypeId: WritableTypeId = '~effect/reactivity/Atom/Writable'
 
 /**
@@ -51,6 +55,7 @@ export const WritableTypeId: WritableTypeId = '~effect/reactivity/Atom/Writable'
  * @category guards
  * @since 4.0.0
  */
+/** @internal */
 export const isAtom = (u: unknown): u is Atom<unknown> => hasProperty(u, TypeId)
 
 /**
@@ -59,6 +64,7 @@ export const isAtom = (u: unknown): u is Atom<unknown> => hasProperty(u, TypeId)
  * @category combinators
  * @since 4.0.0
  */
+/** @internal */
 export const setIdleTTL: {
   (duration: Duration.Input): <A extends Atom<unknown>>(self: A) => A
   <A extends Atom<unknown>>(self: A, duration: Duration.Input): A
@@ -110,6 +116,7 @@ export const WritableProto = {
  * @category guards
  * @since 4.0.0
  */
+/** @internal */
 export const isWritable = <R, W>(atom: Atom<R>): atom is Writable<R, W> => WritableTypeId in atom
 
 /**
@@ -118,6 +125,7 @@ export const isWritable = <R, W>(atom: Atom<R>): atom is Writable<R, W> => Writa
  * @category constructors
  * @since 4.0.0
  */
+/** @internal */
 export const readable = <A>(
   read: (get: AtomContext) => A,
   refresh?: (f: <A>(atom: Atom<A>) => void) => void,
@@ -138,6 +146,7 @@ export const readable = <A>(
  * @category constructors
  * @since 4.0.0
  */
+/** @internal */
 export const writable = <R, W>(
   read: (get: AtomContext) => R,
   write: (ctx: WriteContext<R>, value: W) => void,
@@ -175,6 +184,7 @@ const getInitialValueTarget = <A>(atom: Atom<A>): Atom<A> => {
  * @category combinators
  * @since 4.0.0
  */
+/** @internal */
 export const transform: {
   <R extends Atom<unknown>, B>(
     f: (get: AtomContext, atom: R) => B,

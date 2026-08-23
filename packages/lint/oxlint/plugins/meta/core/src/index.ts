@@ -7,6 +7,7 @@
 
 import { banClasses } from './rules/ban-classes.js'
 import { banErrorString } from './rules/ban-error-string.js'
+import { internalExportJsdoc } from './rules/internal-export-jsdoc.js'
 import { noBarrels } from './rules/no-barrels.js'
 import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.js'
 import { noContextGenericTag } from './rules/no-context-generic-tag.js'
@@ -15,6 +16,7 @@ import { noDirectTagAccess } from './rules/no-direct-tag-access.js'
 import { noDomainBranchingDensity } from './rules/no-domain-branching-density.js'
 import { noEitherTagAssertions } from './rules/no-either-tag-assertions.js'
 import { noInlineDestructuredType } from './rules/no-inline-destructured-type.js'
+import { noInternalJsdocOutside } from './rules/no-internal-jsdoc-outside.js'
 import { noIoBoundaryTests } from './rules/no-io-boundary-tests.js'
 import { noLoggingInCatch } from './rules/no-logging-in-catch.js'
 import { noNativeMapInEffect } from './rules/no-native-map-in-effect.js'
@@ -69,6 +71,8 @@ export default {
     'no-context-generic-tag': noContextGenericTag,
     'no-date-now-in-effect': noDateNowInEffect,
     'no-inline-destructured-type': noInlineDestructuredType,
+    'internal-export-jsdoc': internalExportJsdoc,
+    'no-internal-jsdoc-outside': noInternalJsdocOutside,
     'no-io-boundary-tests': noIoBoundaryTests,
     'no-logging-in-catch': noLoggingInCatch,
     'no-new-promise-in-effect': noNewPromiseInEffect,

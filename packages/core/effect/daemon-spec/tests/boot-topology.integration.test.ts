@@ -1,10 +1,10 @@
+import { Daemon } from '@systemfsoftware/effect-daemon-spec'
+import { run } from '@systemfsoftware/effect-daemon-spec'
+import { Supervision } from '@systemfsoftware/effect-daemon-spec'
+import { oneForOne } from '@systemfsoftware/effect-daemon-spec'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect } from 'effect'
 import { expect } from 'vitest'
-import { Daemon } from '../src/mod.js'
-import { run } from '../src/mod.js'
-import { Supervision } from '../src/mod.js'
-import { oneForOne } from '../src/mod.js'
 import { NoopLayer } from './__fixtures__/SharedLayers.js'
 
 const Feature = makeFeature({ it, layer })

@@ -39,10 +39,12 @@ const SHELL_INVOCATION = {
 /** The hook payload's wire contract, declared once and used in both directions. */
 const encodeHookPayload = S.encodeSync(S.fromJsonString(ToolInputRecord))
 
+/** @internal */
 export class RunHookScriptExecutorDeps extends Context.Service<RunHookScriptExecutorDeps, Scope.Scope>()(
   'RunHookScriptExecutorDeps',
 ) {}
 
+/** @internal */
 export const runHookScript = Effect.fn('runHookScript')(function*(
   hook: CommandHook,
   input: Record<string, unknown>,

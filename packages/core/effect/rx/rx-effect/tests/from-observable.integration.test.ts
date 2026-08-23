@@ -22,7 +22,7 @@ import { expect } from 'vitest'
 
 import { Observable, ReplaySubject } from 'rxjs'
 
-import { fromObservable } from '../src/mod.js'
+import { fromObservable } from '@systemfsoftware/rx-effect'
 
 const Feature = makeFeature({ it, layer })
 

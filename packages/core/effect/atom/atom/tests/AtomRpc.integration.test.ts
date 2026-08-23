@@ -1,11 +1,11 @@
+import * as AtomRpc from '@systemfsoftware/effect-atom/AtomRpc'
+import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
+import * as Registry from '@systemfsoftware/effect-atom/Registry'
+import * as Result from '@systemfsoftware/effect-atom/Result'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Schema, Stream } from 'effect'
 import { Rpc, RpcGroup } from 'effect/unstable/rpc'
 import { expect } from 'vitest'
-import * as AtomRpc from '../src/AtomRpc.js'
-import * as Hydration from '../src/Hydration.js'
-import * as Registry from '../src/Registry.js'
-import * as Result from '../src/Result.js'
 
 const Feature = makeFeature({ it, layer })
 

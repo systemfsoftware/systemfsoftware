@@ -5,12 +5,14 @@ import type { InputEvent } from '@oh-my-pi/pi-coding-agent'
  * keeps the executor off the full `ExtensionContext` union surface and lets a
  * caller — production or test — supply exactly what is used, with no cast.
  */
+/** @internal */
 export interface HookSession {
   readonly cwd: string
   readonly sessionManager: { readonly getSessionId: () => string }
   readonly ui: { readonly notify: (message: string, type?: 'info' | 'warning' | 'error') => void }
 }
 
+/** @internal */
 export interface HookToolCall {
   readonly toolName: string
   readonly toolCallId: string
@@ -18,11 +20,13 @@ export interface HookToolCall {
   readonly input: object
 }
 
+/** @internal */
 export interface HookToolResult extends HookToolCall {
   readonly content: unknown
   readonly isError?: boolean | undefined
 }
 
+/** @internal */
 export interface HookPrompt {
   readonly text: string
   readonly source: InputEvent['source']

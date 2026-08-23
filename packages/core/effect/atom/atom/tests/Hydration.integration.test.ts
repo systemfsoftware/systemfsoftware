@@ -1,7 +1,7 @@
+import { Atom, Hydration, Registry, Result } from '@systemfsoftware/effect-atom'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Deferred, Effect, Fiber, Schema } from 'effect'
 import { expect, vi } from 'vitest'
-import { Atom, Hydration, Registry, Result } from '../src/index.js'
 
 const Feature = makeFeature({ it, layer })
 

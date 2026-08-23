@@ -19,6 +19,7 @@ import { isHostBound } from '../PromptDestination.js'
 import type { HookPrompt, HookSession } from './HookSession.js'
 import { runHookScript, type RunHookScriptExecutorDeps } from './RunHookScriptExecutor.js'
 
+/** @internal */
 export class RunUserPromptSubmitHooksExecutorDeps extends Context.Service<
   RunUserPromptSubmitHooksExecutorDeps,
   Scope.Scope
@@ -48,6 +49,7 @@ interface SubmitPhases extends Cell.Phases {
   readonly writeContext: never
 }
 
+/** @internal */
 export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(function*(
   settings: HookSettings,
   event: HookPrompt,

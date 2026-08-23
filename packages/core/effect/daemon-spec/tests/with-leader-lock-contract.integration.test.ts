@@ -1,11 +1,11 @@
+import { Noop } from '@systemfsoftware/effect-daemon-spec'
+import { LeaderLock, LeaderLockNotAcquired, withLeaderLock } from '@systemfsoftware/effect-daemon-spec'
+import type { LeaderLockAcquireError, LeaderLockOptions } from '@systemfsoftware/effect-daemon-spec'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Fiber, Layer, Result } from 'effect'
 import { TestClock } from 'effect/testing'
 import { expect } from 'vitest'
-import { Noop } from '../src/DaemonReporterAdapter.js'
-import { LeaderLock, LeaderLockNotAcquired, withLeaderLock } from '../src/mod.js'
-import type { LeaderLockAcquireError, LeaderLockOptions } from '../src/mod.js'
 import { LeaderLockFake } from './__fixtures__/LeaderLockFake.js'
 
 const withLock = <A, E, R>(

@@ -15,7 +15,7 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { parseSync } from 'oxc-parser'
 import { afterAll, expect } from 'vitest'
 
-import { generateSchemaLaws, LAW_FILE_BASENAME } from '../src/mod.js'
+import { generateSchemaLaws, LAW_FILE_BASENAME } from '@systemfsoftware/effect-schema-vite'
 
 const Feature = makeFeature({ it, layer })
 

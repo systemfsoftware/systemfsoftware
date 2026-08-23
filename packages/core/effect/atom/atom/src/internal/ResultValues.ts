@@ -31,6 +31,7 @@ const now = () => Effect.runSync(Clock.currentTimeMillis)
  * @category type IDs
  * @since 4.0.0
  */
+/** @internal */
 export type TypeId = '~effect-atom/atom/Result'
 
 /**
@@ -39,6 +40,7 @@ export type TypeId = '~effect-atom/atom/Result'
  * @category type IDs
  * @since 4.0.0
  */
+/** @internal */
 export const TypeId: TypeId = '~effect-atom/atom/Result'
 
 /**
@@ -48,6 +50,7 @@ export const TypeId: TypeId = '~effect-atom/atom/Result'
  *
  * @since 4.0.0
  */
+/** @internal */
 export declare namespace Result {
   /**
    * Common prototype fields implemented by every `Result` variant, including
@@ -56,6 +59,7 @@ export declare namespace Result {
    * @category models
    * @since 4.0.0
    */
+  /** @internal */
   export interface Proto<A, E> extends Pipeable {
     readonly [TypeId]: {
       readonly E: (_: never) => E
@@ -70,6 +74,7 @@ export declare namespace Result {
    * @category utility types
    * @since 4.0.0
    */
+  /** @internal */
   export type Success<R> = R extends Result<infer A, infer _> ? A : never
 
   /**
@@ -78,6 +83,7 @@ export declare namespace Result {
    * @category utility types
    * @since 4.0.0
    */
+  /** @internal */
   export type Failure<R> = R extends Result<infer _, infer E> ? E : never
 }
 
@@ -88,6 +94,7 @@ export declare namespace Result {
  * @category models
  * @since 4.0.0
  */
+/** @internal */
 export type Result<A, E = never> = Initial<A, E> | Success<A, E> | Failure<A, E>
 
 /**
@@ -102,6 +109,7 @@ export type Result<A, E = never> = Initial<A, E> | Success<A, E> | Failure<A, E>
  *
  * @since 4.0.0
  */
+/** @internal */
 export const ResultProto = {
   [TypeId]: {
     E: identity,
@@ -147,6 +155,7 @@ export const ResultProto = {
 }
 
 const InitialTag = { _tag: 'Initial' } as const
+/** @internal */
 export type InitialTag = typeof InitialTag
 
 /**
@@ -155,9 +164,11 @@ export type InitialTag = typeof InitialTag
  * @category models
  * @since 4.0.0
  */
+/** @internal */
 export interface Initial<A, E = never> extends Result.Proto<A, E>, InitialTag {}
 
 const SuccessTag = { _tag: 'Success' } as const
+/** @internal */
 export type SuccessTag = typeof SuccessTag
 
 /**
@@ -167,12 +178,14 @@ export type SuccessTag = typeof SuccessTag
  * @category models
  * @since 4.0.0
  */
+/** @internal */
 export interface Success<A, E = never> extends Result.Proto<A, E>, SuccessTag {
   readonly value: A
   readonly timestamp: number
 }
 
 const FailureTag = { _tag: 'Failure' } as const
+/** @internal */
 export type FailureTag = typeof FailureTag
 
 /**
@@ -182,6 +195,7 @@ export type FailureTag = typeof FailureTag
  * @category models
  * @since 4.0.0
  */
+/** @internal */
 export interface Failure<A, E = never> extends Result.Proto<A, E>, FailureTag {
   readonly cause: Cause.Cause<E>
   readonly previousSuccess: Option.Option<Success<A, E>>
@@ -193,6 +207,7 @@ export interface Failure<A, E = never> extends Result.Proto<A, E>, FailureTag {
  * @category guards
  * @since 4.0.0
  */
+/** @internal */
 export const isResult = (u: unknown): u is Result<unknown, unknown> => hasProperty(u, TypeId)
 
 /**
@@ -201,6 +216,7 @@ export const isResult = (u: unknown): u is Result<unknown, unknown> => hasProper
  * @category constructors
  * @since 4.0.0
  */
+/** @internal */
 export const initial = <A = never, E = never>(waiting = false): Initial<A, E> => {
   const result: Initial<A, E> = {
     ...ResultProto,
@@ -217,6 +233,7 @@ export const initial = <A = never, E = never>(waiting = false): Initial<A, E> =>
  * @category constructors
  * @since 4.0.0
  */
+/** @internal */
 export const success = <A, E = never>(value: A, options?: {
   readonly waiting?: boolean | undefined
   readonly timestamp?: number | undefined
@@ -238,6 +255,7 @@ export const success = <A, E = never>(value: A, options?: {
  * @category constructors
  * @since 4.0.0
  */
+/** @internal */
 export const failure = <A, E = never>(
   cause: Cause.Cause<E>,
   options?: {

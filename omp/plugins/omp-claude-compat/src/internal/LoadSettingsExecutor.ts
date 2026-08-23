@@ -4,6 +4,7 @@ import { mergeSettings, parseSettings } from '../HookSettings.js'
 import type { SettingsSource } from '../HookSettings.schema.js'
 import { MANAGED_SETTINGS_PATH } from './SettingsPaths.js'
 
+/** @internal */
 export class LoadSettingsExecutorDeps extends Context.Service<LoadSettingsExecutorDeps, Scope.Scope>()(
   'LoadSettingsExecutorDeps',
 ) {}
@@ -19,6 +20,7 @@ const loadSettingsFile = Effect.fn('loadSettingsFile')(function*(path: string) {
   return Exit.isFailure(exit) ? null : exit.value
 })
 
+/** @internal */
 export const loadSettingsWithPaths = Effect.fn('loadSettingsWithPaths')(function*(
   paths: readonly string[],
   managedPath: string = MANAGED_SETTINGS_PATH,

@@ -4,6 +4,7 @@ import type { HookSettings } from '../HookSettings.schema.js'
 import type { HookSession } from './HookSession.js'
 import { runHooksForEvent } from './RunHooksForEventExecutor.js'
 
+/** @internal */
 export class RunPreCompactHooksExecutorDeps extends Context.Service<RunPreCompactHooksExecutorDeps, Scope.Scope>()(
   'RunPreCompactHooksExecutorDeps',
 ) {}
@@ -13,6 +14,7 @@ export class RunPreCompactHooksExecutorDeps extends Context.Service<RunPreCompac
  * payload does not carry — U4's gate skips any hook that declares one, so only
  * unscoped hooks reach here and `matchValue` is never consulted.
  */
+/** @internal */
 export const runPreCompactHooks = Effect.fn('runPreCompactHooks')(function*(
   settings: HookSettings,
   ctx: HookSession,

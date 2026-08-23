@@ -1,5 +1,5 @@
+import { DaemonReporter } from '@systemfsoftware/effect-daemon-spec'
 import { Cause, Effect, Layer, Ref } from 'effect'
-import { DaemonReporter } from '../../src/DaemonReporterAdapter.js'
 
 export const ReporterSpyContext = Effect.gen(function*() {
   const restartsRef = yield* Ref.make<{ name: string; cause: Cause.Cause<unknown> }[]>([])

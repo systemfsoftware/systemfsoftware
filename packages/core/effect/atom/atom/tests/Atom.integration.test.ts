@@ -1,10 +1,10 @@
+import * as Atom from '@systemfsoftware/effect-atom/Atom'
+import * as Registry from '@systemfsoftware/effect-atom/Registry'
+import * as Result from '@systemfsoftware/effect-atom/Result'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Deferred, Effect, Latch, Layer, Option, Schema, Stream, SubscriptionRef } from 'effect'
 import { KeyValueStore } from 'effect/unstable/persistence'
 import { expect, vi } from 'vitest'
-import * as Atom from '../src/Atom.js'
-import * as Registry from '../src/Registry.js'
-import * as Result from '../src/Result.js'
 
 const Feature = makeFeature({ it, layer })
 

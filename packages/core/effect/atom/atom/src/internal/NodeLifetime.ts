@@ -1,5 +1,6 @@
 import type { NodeFate } from './NodeLifetime.schema.js'
 
+/** @internal */
 export interface NodeLifetimeInput {
   readonly keepAlive: boolean
   readonly listenerCount: number
@@ -10,6 +11,7 @@ export interface NodeLifetimeInput {
   readonly defaultIdleTTL: number | undefined
 }
 
+/** @internal */
 export const decideNodeFate = (input: NodeLifetimeInput): NodeFate => {
   if (input.keepAlive || input.listenerCount > 0 || input.childCount > 0 || !input.isLive || input.isWaiting) {
     return { _tag: 'Alive' }

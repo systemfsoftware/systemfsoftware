@@ -3,7 +3,7 @@ import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect
 import { Effect } from 'effect'
 import { expect, vi } from 'vitest'
 
-import * as XdRetryGuard from '../src/XdRetryGuardMiddleware.js'
+import * as XdRetryGuard from '@systemfsoftware/omp-agent-discipline'
 
 const Feature = makeFeature({ it, layer })
 
@@ -83,7 +83,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const g = createMockGuard()
-          await import('../src/XdRetryGuardMiddleware.js')
+          await import('@systemfsoftware/omp-agent-discipline')
 
           XdRetryGuard.XdRetryGuardExtension(g.api as never)
           return g
@@ -112,7 +112,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const g = createMockGuard()
-          await import('../src/XdRetryGuardMiddleware.js')
+          await import('@systemfsoftware/omp-agent-discipline')
 
           XdRetryGuard.XdRetryGuardExtension(g.api as never)
           return g
@@ -136,7 +136,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const g = createMockGuard()
-          await import('../src/XdRetryGuardMiddleware.js')
+          await import('@systemfsoftware/omp-agent-discipline')
 
           XdRetryGuard.XdRetryGuardExtension(g.api as never)
           g.fire('tool_execution_end', notFoundResult('recall'))
@@ -167,7 +167,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const g = createMockGuard()
-          await import('../src/XdRetryGuardMiddleware.js')
+          await import('@systemfsoftware/omp-agent-discipline')
 
           XdRetryGuard.XdRetryGuardExtension(g.api as never)
           g.fire('tool_execution_end', notFoundResult('web_search'))
@@ -199,7 +199,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const g = createMockGuard()
-          await import('../src/XdRetryGuardMiddleware.js')
+          await import('@systemfsoftware/omp-agent-discipline')
 
           XdRetryGuard.XdRetryGuardExtension(g.api as never)
           return g
@@ -230,7 +230,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const g = createMockGuard()
-          await import('../src/XdRetryGuardMiddleware.js')
+          await import('@systemfsoftware/omp-agent-discipline')
 
           XdRetryGuard.XdRetryGuardExtension(g.api as never)
           return g
@@ -262,7 +262,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const g = createMockGuard()
-          await import('../src/XdRetryGuardMiddleware.js')
+          await import('@systemfsoftware/omp-agent-discipline')
 
           XdRetryGuard.XdRetryGuardExtension(g.api as never)
           return g
@@ -294,7 +294,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const g = createMockGuard()
-          await import('../src/XdRetryGuardMiddleware.js')
+          await import('@systemfsoftware/omp-agent-discipline')
 
           XdRetryGuard.XdRetryGuardExtension(g.api as never)
           return g
@@ -326,7 +326,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const g = createMockGuard()
-          await import('../src/XdRetryGuardMiddleware.js')
+          await import('@systemfsoftware/omp-agent-discipline')
 
           XdRetryGuard.XdRetryGuardExtension(g.api as never)
           for (let i = 0; i < 50; i++) {
@@ -370,7 +370,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const g = createMockGuard()
-          await import('../src/XdRetryGuardMiddleware.js')
+          await import('@systemfsoftware/omp-agent-discipline')
 
           XdRetryGuard.XdRetryGuardExtension(g.api as never)
           g.fire('tool_execution_end', notFoundResult('retain'))
@@ -396,7 +396,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const g = createMockGuard()
-          await import('../src/XdRetryGuardMiddleware.js')
+          await import('@systemfsoftware/omp-agent-discipline')
 
           XdRetryGuard.XdRetryGuardExtension(g.api as never)
           g.fire('tool_execution_end', notFoundResult('retain'))
@@ -424,7 +424,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const g = createMockGuard()
-          await import('../src/XdRetryGuardMiddleware.js')
+          await import('@systemfsoftware/omp-agent-discipline')
 
           XdRetryGuard.XdRetryGuardExtension(g.api as never)
           g.fire('tool_execution_end', notFoundResult('retain'))

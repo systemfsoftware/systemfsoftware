@@ -1,13 +1,13 @@
+import * as AtomHttpApi from '@systemfsoftware/effect-atom/AtomHttpApi'
+import * as Hydration from '@systemfsoftware/effect-atom/Hydration'
+import * as Registry from '@systemfsoftware/effect-atom/Registry'
+import * as Result from '@systemfsoftware/effect-atom/Result'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer, Option, Schema } from 'effect'
 import { HttpClient, HttpClientRequest, HttpClientResponse } from 'effect/unstable/http'
 import type * as HttpClientError from 'effect/unstable/http/HttpClientError'
 import { HttpApi, HttpApiEndpoint, HttpApiGroup } from 'effect/unstable/httpapi'
 import { expect } from 'vitest'
-import * as AtomHttpApi from '../src/AtomHttpApi.js'
-import * as Hydration from '../src/Hydration.js'
-import * as Registry from '../src/Registry.js'
-import * as Result from '../src/Result.js'
 
 const Feature = makeFeature({ it, layer })
 

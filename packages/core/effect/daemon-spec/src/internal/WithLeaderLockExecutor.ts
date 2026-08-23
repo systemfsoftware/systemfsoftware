@@ -2,12 +2,14 @@ import { Duration, Effect, Match, Option, Predicate, Schedule } from 'effect'
 import { type LeaderLockAcquireError, LeaderLockNotAcquired } from '../LeaderLock.schema.js'
 import type { LeaderLock } from '../LeaderLockAdapter.js'
 
+/** @internal */
 export interface LeaderLockOptions {
   readonly key: string
   readonly mode: 'required' | 'optional'
   readonly acquireRetryBackoff?: Schedule.Schedule<Duration.Duration>
 }
 
+/** @internal */
 export function withLeaderLock<A, E, R>(
   self: Effect.Effect<A, E, R>,
   options: LeaderLockOptions,

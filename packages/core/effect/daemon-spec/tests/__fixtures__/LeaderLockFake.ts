@@ -1,5 +1,5 @@
+import { LeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import { Effect, HashSet, Layer, Match, Option, Ref } from 'effect'
-import { LeaderLock } from '../../src/mod.js'
 
 export const LeaderLockFake: Layer.Layer<LeaderLock> = Layer.effect(
   LeaderLock,

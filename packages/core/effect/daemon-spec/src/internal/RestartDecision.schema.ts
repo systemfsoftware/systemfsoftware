@@ -1,7 +1,9 @@
 import { Schema } from 'effect'
 import { MAX_CHILDREN_CEILING } from '../SupervisorDynamic.js'
 
+/** @internal */
 export const RestartStrategy = Schema.Literals(['one_for_one', 'one_for_all', 'rest_for_one'])
+/** @internal */
 export type RestartStrategy = typeof RestartStrategy.Type
 
 /**
@@ -54,6 +56,7 @@ const DecideInputBase = Schema.Struct({
  * no `extend` — the constraint refuses it. Every field schema and the cross-field check are
  * the ones the struct carried.
  */
+/** @internal */
 export class DecideInput extends Schema.Class<DecideInput>('DecideInput')(DecideInputBase) {}
 
 const OVERSHOOT = 8
