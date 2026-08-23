@@ -120,15 +120,8 @@ const findWitness = (
   return Result.succeed(Option.none())
 }
 
-/**
- * Walk `armsOf` and classify every arm. An arm is an obligation iff a witness
- * exists — an input the weakened schema accepts and the original rejects —
- * drawn from a fallback chain (encoded arbitrary, type arbitrary, generic
- * pool). An arm whose every source failed to construct is `blind`: "no
- * obligation" and "could not look" are different answers, and collapsing
- * them is the silent miss this scan exists to prevent.
- */
-export const scanObligations = (schema: S.ConstraintDecoder<unknown>): ObligationScan => {
+/** Uncached implementation — see `scanObligations` for contract. */
+const _scanObligationsUncached = (schema: S.ConstraintDecoder<unknown>): ObligationScan => {
   const collected = new Map<AST.AST, { paths: string[]; witness: unknown; weakened: AST.AST }>()
   const blind: BlindArm[] = []
 
@@ -159,6 +152,28 @@ export const scanObligations = (schema: S.ConstraintDecoder<unknown>): Obligatio
     })
   }
   return { obligations, blind }
+}
+
+const _scanObligationsCache = new WeakMap<S.ConstraintDecoder<unknown>, ObligationScan>()
+
+/**
+ * Walk `armsOf` and classify every arm. An arm is an obligation iff a witness
+ * exists — an input the weakened schema accepts and the original rejects —
+ * drawn from a fallback chain (encoded arbitrary, type arbitrary, generic
+ * pool). An arm whose every source failed to construct is `blind`: "no
+ * obligation" and "could not look" are different answers, and collapsing
+ * them is the silent miss this scan exists to prevent.
+ *
+ * The scan is a pure function of an immutable schema, so results are cached
+ * per schema instance.
+ */
+export const scanObligations = (schema: S.ConstraintDecoder<unknown>): ObligationScan => {
+  let cached = _scanObligationsCache.get(schema)
+  if (cached === undefined) {
+    cached = _scanObligationsUncached(schema)
+    _scanObligationsCache.set(schema, cached)
+  }
+  return cached
 }
 
 export const obligationsOf = (schema: S.ConstraintDecoder<unknown>): ReadonlyMap<AST.AST, Obligation> =>
@@ -216,6 +231,7 @@ if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
   const { Schema: S } = await import('effect')
   const { FastCheck: fc } = await import('effect/testing')
+  const { expect } = await import('vitest')
 
   // Fixture schemas stay inside the block so they never reach
   // schema-declaration-location's module-scope arm.
@@ -275,4 +291,14 @@ if (import.meta.vitest !== void 0) {
     },
     { fastCheck: { numRuns: SCHEMA_DRAWS } },
   )
+
+  it('Should_MemoiseScan_When_SameSchemaQueriedTwice', () => {
+    const first = scanObligations(Hexish)
+    const second = scanObligations(Hexish)
+    expect(first).toBe(second)
+    expect(first.obligations).toBe(second.obligations)
+    expect(first.blind).toBe(second.blind)
+    const other = scanObligations(Slug)
+    expect(other).not.toBe(first)
+  })
 }
