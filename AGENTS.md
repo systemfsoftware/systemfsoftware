@@ -47,12 +47,12 @@ Not derivable from the manifests:
 
 ## Surface Classes
 
-| Surface              | Examples                                                                                                               | Rule                                                                                                       |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| **Evaluator**        | `scripts/guards/check-changeset.ts`, `packages/stryker-js/mutation-run/src/test-contribution.ts`, `.github/workflows/` | Its own commit, never shared with the work it judges; gate observed red before and green after.            |
-| **Doctrine**         | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`                                                 | Editable, but never an input to a gate. Read `CONSTITUTION.md` before architecture or rule-authoring work. |
-| **Editable**         | Everything else, including `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                                      | Edit freely, including the rules that govern you; `CONST-E4` governs loosening one.                        |
-| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                                         | `REPO-P1`.                                                                                                 |
+| Surface              | Examples                                                                                                | Rule                                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Evaluator**        | `scripts/guards/check-changeset.ts`, `@systemfsoftware/stryker-test-contribution`, `.github/workflows/` | Its own commit, never shared with the work it judges; gate observed red before and green after.            |
+| **Doctrine**         | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`                                  | Editable, but never an input to a gate. Read `CONSTITUTION.md` before architecture or rule-authoring work. |
+| **Editable**         | Everything else, including `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                       | Edit freely, including the rules that govern you; `CONST-E4` governs loosening one.                        |
+| **Human-controlled** | Merge to `main`, publish, deploy, destructive ops, credentials                                          | `REPO-P1`.                                                                                                 |
 
 ## Directory Map
 

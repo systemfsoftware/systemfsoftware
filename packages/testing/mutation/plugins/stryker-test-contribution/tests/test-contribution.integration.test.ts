@@ -1,26 +1,19 @@
 /**
- * The `requireTestContribution` gate and the contribution bookkeeping under
- * it: which files earn a reported kill, which files are provably toothless,
- * and how the run is judged and told apart under bail.
+ * The test-contribution gate and the contribution bookkeeping under it: which
+ * files earn a reported kill, which files are provably toothless, and how the
+ * run is judged and told apart under bail.
  */
-import { readFile } from 'node:fs/promises'
-import { resolve as resolvePath } from 'node:path'
-
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Effect, Schema as S } from 'effect'
+import { Effect } from 'effect'
 import { expect } from 'vitest'
 
-import { forkCoreSchema } from '@systemfsoftware/stryker-js-mutation-run/config/fork-schema'
 import {
   contributionByTestFile,
+  defaultRequireTestContributionSuffixes,
   judgeTestContribution,
-  suffixesToRequire,
   toothlessTestFiles,
-} from '@systemfsoftware/stryker-js-mutation-run/test-contribution'
-import { OptionDocument, RequireTestContributionEntry } from './__fixtures__/option-document.schema.js'
-
-const decodeOptionDocument = S.decodeUnknownSync(S.fromJsonString(OptionDocument))
+} from '../src/mod.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -59,14 +52,9 @@ const PROPERTY = ['.property.test.ts']
 const EXACT = { suffixes: PROPERTY, everyKillerRecorded: true }
 const BAILED = { suffixes: PROPERTY, everyKillerRecorded: false }
 
-/** The default requireTestContribution suffix list the fork schema ships. */
-const defaultSuffixes = (): readonly string[] => {
-  const doc = S.decodeUnknownSync(OptionDocument)(forkCoreSchema)
-  const entry = S.decodeUnknownSync(RequireTestContributionEntry)(doc.properties['requireTestContribution'])
-  return entry['default'] ?? []
-}
+const defaultSuffixes: readonly string[] = defaultRequireTestContributionSuffixes
 
-Feature('Judging test contribution under requireTestContribution')
+Feature('Judging test contribution under the test-contribution gate')
   .body(({ scenario }) => {
     // contributionByTestFile — the per-file kill accounting
     scenario(
@@ -366,76 +354,6 @@ Feature('Judging test contribution under requireTestContribution')
       ),
     )
 
-    // suffixesToRequire — input normalization of the requireTestContribution option
-    scenario(
-      'Should_SwitchTheCheckOff_When_TheValueIsNull',
-      Gherkin.Do.pipe(
-        Given('a null requireTestContribution value')('value', () => Effect.succeed(null)),
-        When('the required suffixes are derived')('suffixes', (s) => Effect.sync(() => suffixesToRequire(s.value))),
-        Then('no suffixes are required')((s) => {
-          expect(s.suffixes).toBeUndefined()
-        }),
-      ),
-    )
-
-    scenario(
-      'Should_SwitchTheCheckOff_When_TheValueIsUndefined',
-      Gherkin.Do.pipe(
-        Given('an undefined requireTestContribution value')('value', () => Effect.succeed(undefined)),
-        When('the required suffixes are derived')('suffixes', (s) => Effect.sync(() => suffixesToRequire(s.value))),
-        Then('no suffixes are required')((s) => {
-          expect(s.suffixes).toBeUndefined()
-        }),
-      ),
-    )
-
-    scenario(
-      'Should_SwitchTheCheckOff_When_TheValueIsAnEmptyList',
-      Gherkin.Do.pipe(
-        Given('an empty requireTestContribution list')('value', () => Effect.succeed([])),
-        When('the required suffixes are derived')('suffixes', (s) => Effect.sync(() => suffixesToRequire(s.value))),
-        Then('no suffixes are required')((s) => {
-          expect(s.suffixes).toBeUndefined()
-        }),
-      ),
-    )
-
-    scenario(
-      'Should_SwitchTheCheckOff_When_TheValueIsAString',
-      Gherkin.Do.pipe(
-        Given('a string requireTestContribution value')('value', () => Effect.succeed('.property.test.ts')),
-        When('the required suffixes are derived')('suffixes', (s) => Effect.sync(() => suffixesToRequire(s.value))),
-        Then('no suffixes are required')((s) => {
-          expect(s.suffixes).toBeUndefined()
-        }),
-      ),
-    )
-
-    scenario(
-      'Should_SwitchTheCheckOff_When_TheValueContainsNoStrings',
-      Gherkin.Do.pipe(
-        Given('a requireTestContribution list of numbers and booleans')('value', () => Effect.succeed([1, false])),
-        When('the required suffixes are derived')('suffixes', (s) => Effect.sync(() => suffixesToRequire(s.value))),
-        Then('no suffixes are required')((s) => {
-          expect(s.suffixes).toBeUndefined()
-        }),
-      ),
-    )
-
-    scenario(
-      'Should_KeepTheStringEntries_When_TheListIsMixed',
-      Gherkin.Do.pipe(
-        Given('a requireTestContribution list mixing strings and numbers')(
-          'value',
-          () => Effect.succeed(['.property.test.ts', 7]),
-        ),
-        When('the required suffixes are derived')('suffixes', (s) => Effect.sync(() => suffixesToRequire(s.value))),
-        Then('only the string suffixes are kept')((s) => {
-          expect(s.suffixes).toEqual(['.property.test.ts'])
-        }),
-      ),
-    )
-
     // judgeTestContribution — the run-level verdict
     scenario(
       'Should_FailTheRunAndNameTheFile_When_AFileEarnsNothing',
@@ -449,7 +367,7 @@ Feature('Judging test contribution under requireTestContribution')
           )),
         When('the run is judged with exact killer recording')(
           'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, PROPERTY, true)),
+          (s) => Effect.sync(() => judgeTestContribution(s.report, true, PROPERTY)),
         ),
         Then('the run fails and the idle file is named')((s) => {
           expect(s.verdict?.failed).toBe(true)
@@ -477,7 +395,7 @@ Feature('Judging test contribution under requireTestContribution')
           )),
         When('the verdict is judged normally')(
           'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, PROPERTY, true)),
+          (s) => Effect.sync(() => judgeTestContribution(s.report, true, PROPERTY)),
         ),
         Then('the run passes')((s) => {
           expect(s.verdict?.failed).toBe(false)
@@ -498,7 +416,7 @@ Feature('Judging test contribution under requireTestContribution')
           )),
         When('the verdict is judged with everyKillerRecorded false')(
           'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, PROPERTY, false)),
+          (s) => Effect.sync(() => judgeTestContribution(s.report, false, PROPERTY)),
         ),
         Then('the run fails citing the bail configuration')((s) => {
           expect(s.verdict?.failed).toBe(true)
@@ -520,7 +438,7 @@ Feature('Judging test contribution under requireTestContribution')
           )),
         When('the verdict is judged with every killer recorded')(
           'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, PROPERTY, true)),
+          (s) => Effect.sync(() => judgeTestContribution(s.report, true, PROPERTY)),
         ),
         Then('the zero-kill file is still accused without the bail text')((s) => {
           expect(s.verdict?.failed).toBe(true)
@@ -542,7 +460,7 @@ Feature('Judging test contribution under requireTestContribution')
           )),
         When('the verdict is judged under bail')(
           'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, PROPERTY, false)),
+          (s) => Effect.sync(() => judgeTestContribution(s.report, false, PROPERTY)),
         ),
         Then('the run stays silent')((s) => {
           expect(s.verdict?.failed).toBe(false)
@@ -567,7 +485,7 @@ Feature('Judging test contribution under requireTestContribution')
           )),
         When('the verdict is judged with the workflow suffix')(
           'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, ['.workflow.property.test.ts'], false)),
+          (s) => Effect.sync(() => judgeTestContribution(s.report, false, ['.workflow.property.test.ts'])),
         ),
         Then('the configuration error names the flag, not the files')((s) => {
           expect(s.verdict?.message).not.toContain('sole.workflow.property.test.ts')
@@ -589,7 +507,7 @@ Feature('Judging test contribution under requireTestContribution')
           )),
         When('the verdict is judged with every killer recorded')(
           'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, PROPERTY, true)),
+          (s) => Effect.sync(() => judgeTestContribution(s.report, true, PROPERTY)),
         ),
         Then('the run is blamed and the files are not')((s) => {
           expect(s.verdict?.failed).toBe(true)
@@ -611,7 +529,7 @@ Feature('Judging test contribution under requireTestContribution')
           )),
         When('the verdict is judged with every killer recorded')(
           'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, PROPERTY, true)),
+          (s) => Effect.sync(() => judgeTestContribution(s.report, true, PROPERTY)),
         ),
         Then('the run passes and nothing was judged')((s) => {
           expect(s.verdict?.failed).toBe(false)
@@ -657,7 +575,7 @@ Feature('Judging test contribution under requireTestContribution')
           )),
         When('the verdict is judged against both suffixes')(
           'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, ['.property.test.ts', '.law.test.ts'], true)),
+          (s) => Effect.sync(() => judgeTestContribution(s.report, true, ['.property.test.ts', '.law.test.ts'])),
         ),
         Then('the matching file is judged in scope')((s) => {
           expect(s.verdict?.failed).toBe(true)
@@ -678,7 +596,7 @@ Feature('Judging test contribution under requireTestContribution')
           )),
         When('the verdict is judged against both suffixes')(
           'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, ['.property.test.ts', '.law.test.ts'], true)),
+          (s) => Effect.sync(() => judgeTestContribution(s.report, true, ['.property.test.ts', '.law.test.ts'])),
         ),
         Then('the message names both suffixes')((s) => {
           expect(s.verdict?.message).toContain('.property.test.ts, .law.test.ts')
@@ -698,7 +616,7 @@ Feature('Judging test contribution under requireTestContribution')
           )),
         When('the verdict is judged with every killer recorded')(
           'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, PROPERTY, true)),
+          (s) => Effect.sync(() => judgeTestContribution(s.report, true, PROPERTY)),
         ),
         Then('the message claims exact killer recording')((s) => {
           expect(s.verdict?.message).toContain('every killing test was recorded')
@@ -722,7 +640,7 @@ Feature('Judging test contribution under requireTestContribution')
           )),
         When('the verdict is judged with every killer recorded')(
           'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, PROPERTY, true)),
+          (s) => Effect.sync(() => judgeTestContribution(s.report, true, PROPERTY)),
         ),
         Then('each accused file is listed on its own bullet line')((s) => {
           expect(s.verdict?.message).toContain(
@@ -732,7 +650,7 @@ Feature('Judging test contribution under requireTestContribution')
       ),
     )
 
-    // requireTestContribution default — the schema-shipped suffixes in action
+    // default suffixes — the plugin-shipped list in action
     scenario(
       'Should_ProduceNoContributionVerdict_WhenOnlySchemaPropertyTestsRun',
       Gherkin.Do.pipe(
@@ -748,7 +666,7 @@ Feature('Judging test contribution under requireTestContribution')
           )),
         When('the verdict is judged with the schema default suffixes')(
           'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, defaultSuffixes(), true)),
+          (s) => Effect.sync(() => judgeTestContribution(s.report, true, defaultSuffixes)),
         ),
         Then('there is no judgement')((s) => {
           expect(s.verdict?.message).toContain('so none was judged')
@@ -771,7 +689,7 @@ Feature('Judging test contribution under requireTestContribution')
           )),
         When('the verdict is judged with the schema default suffixes')(
           'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, defaultSuffixes(), true)),
+          (s) => Effect.sync(() => judgeTestContribution(s.report, true, defaultSuffixes)),
         ),
         Then('the gate applies and the run fails')((s) => {
           expect(s.verdict?.failed).toBe(true)
@@ -780,9 +698,9 @@ Feature('Judging test contribution under requireTestContribution')
     )
 
     scenario(
-      'Should_OverrideTheDefault_When_AConfigDeclaresRequireTestContribution',
+      'Should_JudgeAgainstACustomSuffixList_When_OneIsSupplied',
       Gherkin.Do.pipe(
-        Given('a report with only schema property tests and an explicit override')('report', () =>
+        Given('a report with only schema property tests and a custom suffix list')('report', () =>
           Effect.succeed(
             reportOf(
               [mutantOf('m1', 'Killed', ['t1'])],
@@ -792,45 +710,12 @@ Feature('Judging test contribution under requireTestContribution')
               },
             ),
           )),
-        When('the verdict is judged with the explicit schema suffix list')(
+        When('the verdict is judged with the schema suffix list')(
           'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, ['.schema.property.test.ts'], true)),
+          (s) => Effect.sync(() => judgeTestContribution(s.report, true, ['.schema.property.test.ts'])),
         ),
-        Then('the explicit override applies and fails the run')((s) => {
+        Then('the custom suffix list applies and fails the run')((s) => {
           expect(s.verdict?.failed).toBe(true)
-        }),
-      ),
-    )
-
-    scenario(
-      'Should_KeepTheForkAndShippedDescriptionsInSync_When_NeitherClaimsBailAccusation',
-      Gherkin.Do.pipe(
-        Given('the fork schema and the shipped schema document')('documents', () =>
-          Effect.promise(async () => {
-            const forkDoc = S.decodeUnknownSync(OptionDocument)(forkCoreSchema)
-            const rawShipped = await readFile(
-              resolvePath(import.meta.dirname, '../schema/stryker-schema.json'),
-              'utf-8',
-            )
-            const shippedDoc = decodeOptionDocument(rawShipped)
-            return { forkDoc, shippedDoc }
-          })),
-        When('both requireTestContribution descriptions are read')('descriptions', (s) =>
-          Effect.sync(() => {
-            const forkEntry = S.decodeUnknownSync(RequireTestContributionEntry)(
-              s.documents.forkDoc.properties['requireTestContribution'],
-            )
-            const shippedEntry = S.decodeUnknownSync(RequireTestContributionEntry)(
-              s.documents.shippedDoc.properties['requireTestContribution'],
-            )
-            return {
-              fork: forkEntry['description'] ?? '',
-              shipped: shippedEntry['description'] ?? '',
-            }
-          })),
-        Then('they are identical and neither accuses files under bail')((s) => {
-          expect(s.descriptions.fork).toBe(s.descriptions.shipped)
-          expect(s.descriptions.shipped).not.toContain('provably toothless')
         }),
       ),
     )

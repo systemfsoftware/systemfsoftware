@@ -48,6 +48,13 @@ export class PluginCreator {
     )
   }
 
+  public createAll<TPlugin extends keyof Plugins>(kind: TPlugin): PluginInterfaces[TPlugin][] {
+    const plugins = this.pluginsByKind.get(kind) ?? []
+    return plugins
+      .filter((plugin): plugin is Plugins[TPlugin] => isPluginOfKind(plugin, kind))
+      .map((plugin) => this.create(kind, plugin.name))
+  }
+
   private findPlugin<T extends keyof Plugins>(
     kind: T,
     name: string,

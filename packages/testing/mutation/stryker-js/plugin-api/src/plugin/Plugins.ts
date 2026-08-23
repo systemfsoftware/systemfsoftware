@@ -1,6 +1,7 @@
 import type { InjectableClass, InjectableFunction, InjectionToken } from 'typed-inject'
 
 import { Checker } from '../check/index.js'
+import { Evaluator } from '../evaluate/index.js'
 import { Reporter } from '../report/index.js'
 import { TestRunner } from '../test-runner/index.js'
 
@@ -141,6 +142,7 @@ export interface PluginInterfaces {
   [PluginKind.TestRunner]: TestRunner
   [PluginKind.Checker]: Checker
   [PluginKind.Ignore]: Ignorer
+  [PluginKind.Evaluator]: Evaluator
 }
 
 /**

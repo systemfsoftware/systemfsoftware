@@ -9,15 +9,6 @@ import * as S from 'effect/Schema'
 /** The `properties` map of an option document: option name → any JSON Schema fragment. */
 export const PropertiesEntry = S.Record(S.String, S.Unknown)
 
-/** The `requireTestContribution` option entry: its default suffix list and description. */
-export const RequireTestContributionEntry = S.StructWithRest(
-  S.Struct({
-    default: S.optional(S.Array(S.String)),
-    description: S.optional(S.String),
-  }),
-  [S.Record(S.String, S.Unknown)],
-)
-
 /** An option document narrowed to the `properties` map the lanes inspect. */
 export const OptionDocument = S.StructWithRest(
   S.Struct({

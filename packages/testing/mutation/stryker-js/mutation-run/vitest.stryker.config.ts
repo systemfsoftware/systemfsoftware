@@ -11,12 +11,8 @@ import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
  * `process.cwd()` cannot be stubbed for it because `ConfigReader` probes the
  * filesystem directly and would find this package's own config instead.
  *
- * Nothing is lost: the mutation surface is the pure decisions this fork owns,
- * today only `src/test-contribution.ts`, whose own lane is
- * `tests/test-contribution.integration.test.ts`. That test imports the
- * published `@systemfsoftware/stryker-js-mutation-run/test-contribution`
- * specifier. The runner aliases the sandbox package's `@systemfsoftware/source`
- * exports onto the sandbox copy so `related: true` can walk that import.
+ * The dropped spec never imports the remaining lanes, and `related: true`
+ * already excludes it from every mutant run. It still runs under `pnpm test`.
  *
  * The paths track `vitest.config.ts`. When the behaviour lane moved to
  * `tests/*.integration.test.ts` these two globs kept naming the retired

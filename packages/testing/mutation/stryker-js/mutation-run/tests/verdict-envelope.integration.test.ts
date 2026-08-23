@@ -2,10 +2,9 @@
  * The verdict envelope: the single JSON document machine mode prints at the
  * end of a run. The build derives score and per-status counts from the
  * report metrics, carries only the actionable statuses as per-mutant
- * entries, reads the report file name from the embedded config, resolves the
- * test-contribution verdict against the configured check, and stays under
- * the 64 KB scanner limit even for an all-killed 2164-mutant report. Run ids
- * are unique across calls.
+ * entries, reads the report file name from the embedded config, and stays
+ * under the 64 KB scanner limit even for an all-killed 2164-mutant report.
+ * Run ids are unique across calls.
  */
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
@@ -39,7 +38,6 @@ const reportOf = (
   mutants: schema.MutantResult[],
   config: Record<string, unknown> | undefined = {
     jsonReporter: { fileName: 'reports/mutation/mutation.json' },
-    requireTestContribution: null,
     disableBail: false,
   },
 ) => ({
@@ -105,7 +103,6 @@ Feature('Building the machine-mode verdict envelope')
             ignored: 0,
             pending: 0,
           })
-          expect(s.envelope.testContribution).toBeNull()
           expect(s.envelope.reportFile).toBe('reports/mutation/mutation.json')
           expect(s.envelope.mutants).toHaveLength(2)
           expect(s.envelope.mutants.map((mutant) => mutant.id)).toEqual(['1', '3'])
@@ -276,61 +273,6 @@ Feature('Building the machine-mode verdict envelope')
         Then('there is nothing to score')((s) => {
           expect(s.envelope.score).toBeNull()
           expect(s.envelope.counts.compileErrors).toBe(1)
-        }),
-      ),
-    )
-
-    scenario(
-      'Should_CarryTheTestContributionVerdict_When_TheCheckIsConfigured',
-      Gherkin.Do.pipe(
-        Given('a report whose killing test matches the configured contribution suffix')(
-          'report',
-          () =>
-            Effect.sync(() => ({
-              ...reportOf([mutantOf('1', 'Killed', LOCATION_A, { killedBy: ['t1'] })]),
-              testFiles: {
-                'src/subject.spec.ts': {
-                  tests: [{ id: 't1', name: 'kills the mutant' }],
-                },
-              },
-              config: {
-                jsonReporter: { fileName: 'reports/mutation/mutation.json' },
-                requireTestContribution: ['.spec.ts'],
-                disableBail: true,
-              },
-            })),
-        ),
-        When('the verdict envelope is built')(
-          'envelope',
-          (s) => Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'env', RUN_ID)),
-        ),
-        Then('the verdict explains that the suffix pulls its weight')((s) => {
-          expect(s.envelope.testContribution).toEqual({
-            failed: false,
-            message:
-              'Every test file matching .spec.ts kills a mutant nothing else kills (every killing test was recorded).',
-          })
-        }),
-      ),
-    )
-
-    scenario(
-      'Should_CarryANullTestContributionVerdict_When_TheCheckIsDisabled',
-      Gherkin.Do.pipe(
-        Given('a report with the contribution check disabled')('report', () =>
-          Effect.succeed(
-            reportOf([mutantOf('1', 'Survived', LOCATION_A)], {
-              jsonReporter: { fileName: 'reports/mutation/mutation.json' },
-              requireTestContribution: null,
-              disableBail: false,
-            }),
-          )),
-        When('the verdict envelope is built')(
-          'envelope',
-          (s) => Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID)),
-        ),
-        Then('the verdict is null')((s) => {
-          expect(s.envelope.testContribution).toBeNull()
         }),
       ),
     )

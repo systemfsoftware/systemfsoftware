@@ -9,6 +9,9 @@ import type * as S from 'effect/Schema'
  * collapses array fields (`never[]`) that this document legitimately sets.
  */
 type BasePreset = S.Codec.Encoded<typeof StrykerOptionsSchema>
+type RepoBasePreset = BasePreset & {
+  requireTestContribution: readonly string[]
+}
 
 /**
  * Modal Stryker options, inherited via
@@ -17,7 +20,7 @@ type BasePreset = S.Codec.Encoded<typeof StrykerOptionsSchema>
  * Relative paths below resolve against the working directory of the run that
  * reads them — the consuming package — not against this file.
  */
-const basePreset: BasePreset = {
+const basePreset: RepoBasePreset = {
   packageManager: 'pnpm',
   testRunner: 'vitest',
   checkers: ['typescript'],
@@ -26,6 +29,7 @@ const basePreset: BasePreset = {
     '@systemfsoftware/stryker-js-typescript-checker',
     '@systemfsoftware/stryker-plugins/effect-schema-ignorer',
     '@systemfsoftware/stryker-plugins/workflow-make-ignorer',
+    '@systemfsoftware/stryker-test-contribution',
   ],
   reporters: ['progress', 'html', 'json', 'progress-stream'],
   htmlReporter: { fileName: 'reports/mutation-report.html' },
@@ -43,6 +47,11 @@ const basePreset: BasePreset = {
   // its loader plugin stays here so every inheriting config can name it.
   ignorers: ['effect-schema-declarations'],
   thresholds: { high: 100, low: 80, break: 100 },
+  requireTestContribution: [
+    '.workflow.property.test.ts',
+    '.policy.property.test.ts',
+    '.kernel.property.test.ts',
+  ],
 }
 
 export default basePreset
