@@ -130,8 +130,14 @@ export const suppressionOn = (line: string): string | null => {
   if (!DISABLE_DIRECTIVE.test(line)) return null
   const comment = line.includes('//') || line.includes('/*') || line.trimStart().startsWith('*')
   if (!comment) return null
-  if (isBlanket(line)) return PROTECTED_RULE_IDS[0] ?? null
-  return PROTECTED_RULE_IDS.find((ruleId) => line.includes(ruleId)) ?? null
+  // A named id wins over the blanket fallback, so the finding reports the id the
+  // line actually named. Both orders agree while PROTECTED_RULE_IDS holds one
+  // entry; the moment a second is added, blanket-first would report the wrong
+  // name for `disable -- <other id> is broken`, whose tail is empty before `--`
+  // and so reads as blanket while naming a different rule.
+  const named = PROTECTED_RULE_IDS.find((ruleId) => line.includes(ruleId))
+  if (named !== undefined) return named
+  return isBlanket(line) ? PROTECTED_RULE_IDS[0] ?? null : null
 }
 
 /** True when this line is an opening or closing conflict marker. */
@@ -185,21 +191,32 @@ const trackedFiles = async (): Promise<readonly string[]> => {
 
 interface Scan {
   readonly findings: readonly Finding[]
-  /** How many files were actually read. Zero means the gate examined nothing. */
+  /** How many files were read. Zero means the gate examined nothing. */
   readonly examined: number
+  /**
+   * Tracked files that could not be decoded as text — a binary blob in the
+   * eligible set. Reported rather than swallowed: today this is 0, and a scan
+   * that silently stops reading files is the same class of hole as one that
+   * examines none, just smaller.
+   */
+  readonly skipped: readonly string[]
 }
 
 const scan = async (): Promise<Scan> => {
   const files = await trackedFiles()
   const findings: Finding[] = []
+  const skipped: string[] = []
   let examined = 0
   for (const file of files) {
     const contents = await Deno.readTextFile(file).catch(() => null)
-    if (contents === null) continue
+    if (contents === null) {
+      skipped.push(file)
+      continue
+    }
     examined++
     findings.push(...findingsIn(file, contents))
   }
-  return { findings, examined }
+  return { findings, examined, skipped }
 }
 
 /**
@@ -302,7 +319,7 @@ const selftest = (): number => {
 if (import.meta.main) {
   if (Deno.args.includes('--selftest')) Deno.exit(selftest())
 
-  const { findings, examined } = await scan()
+  const { findings, examined, skipped } = await scan()
 
   // A gate that discovers an empty population must not report success: "0
   // findings" over 0 files is a green run bought by looking at nothing, which is
@@ -319,7 +336,7 @@ if (import.meta.main) {
     const conflicts = findings.filter((finding) => finding.kind === 'conflict').length
     if (conflicts > 0) {
       console.error(
-        `\n${conflicts} unresolved conflict marker(s) in tracked files. Resolve the conflict: keep the text that should govern, delete the other side and every marker. A committed marker means two rules are live and neither is.`,
+        `\n${conflicts} unresolved conflict marker(s) in tracked files. Resolve the conflict: keep the text that should govern, delete the other side and every marker. A committed marker means two rules are live and neither is.\nQuoting a marker on purpose? This gate does not read fences, so indent the line by one space — a marker at column zero is never real content.`,
       )
     }
     const suppressions = findings.length - conflicts
@@ -330,5 +347,6 @@ if (import.meta.main) {
     }
     Deno.exit(1)
   }
-  console.log(`no forbidden lines in ${examined} tracked files`)
+  const unread = skipped.length === 0 ? '' : ` (${skipped.length} not decodable as text: ${skipped.join(', ')})`
+  console.log(`no forbidden lines in ${examined} tracked files${unread}`)
 }
