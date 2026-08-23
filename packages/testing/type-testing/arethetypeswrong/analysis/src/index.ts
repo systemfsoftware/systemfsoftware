@@ -106,5 +106,5 @@ export {
   isResolutionOption,
 } from './ResolutionKind.js'
 
-export { containsTypes, isPackageWithCompanion, withTypesCompanion } from './TypesCompanion.js'
+export { containsTypes, withTypesCompanion } from './TypesCompanion.js'
 export type { PackageWithCompanion, TypesCompanionInfo } from './TypesCompanion.js'

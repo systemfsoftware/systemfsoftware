@@ -150,4 +150,4 @@ Development setup, build, and test workflow live in the repository.
 
 ## License
 
-[Apache-2.0](./LICENSE) — the licence the original `arethetypeswrong.github.io` was published under.
+[Apache-2.0](./LICENSE)

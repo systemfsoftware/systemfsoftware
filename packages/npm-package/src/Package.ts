@@ -71,6 +71,12 @@ export class Package {
       : Object.keys(this.#files).filter((f) => f.startsWith(directory))
   }
 
+  /**
+   * Merge `other`'s files over this package's, returning a new package and
+   * mutating neither. The result keeps THIS package's name, version and
+   * resolved URL, so when `other` carries its own `package.json` the returned
+   * package's `packageName` need not match the name inside its own bytes.
+   */
   withOverlay(other: Package): Package {
     const files = { ...this.#files, ...other.#files }
     return new Package(files, this.packageName, this.packageVersion, this.resolvedUrl)

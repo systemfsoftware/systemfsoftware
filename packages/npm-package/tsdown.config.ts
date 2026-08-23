@@ -34,9 +34,8 @@ export default defineConfig({
   format: 'esm',
   dts: true,
   clean: true,
-  // Unlike the analyser this package was extracted from, publishing a source
-  // condition is safe here: nothing in `src` reaches a compiler's internal API,
-  // so a consumer compiling these files inherits no errors.
+  // Publishing a source condition is safe here: nothing in `src` reaches a
+  // compiler's internal API, so a consumer compiling these files inherits no errors.
   exports: { devExports: '@systemfsoftware/source', customExports: injectTypes },
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   tsconfig: './tsconfig.build.json',
