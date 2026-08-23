@@ -146,15 +146,19 @@ export const ResultProto = {
   },
 }
 
+const InitialTag = { _tag: 'Initial' } as const
+export type InitialTag = typeof InitialTag
+
 /**
  * Initial `Result` state before a success value or failure cause is available.
  *
  * @category models
  * @since 4.0.0
  */
-export interface Initial<A, E = never> extends Result.Proto<A, E> {
-  readonly _tag: 'Initial'
-}
+export interface Initial<A, E = never> extends Result.Proto<A, E>, InitialTag {}
+
+const SuccessTag = { _tag: 'Success' } as const
+export type SuccessTag = typeof SuccessTag
 
 /**
  * Successful `Result` containing the current value, its timestamp, and the
@@ -163,11 +167,13 @@ export interface Initial<A, E = never> extends Result.Proto<A, E> {
  * @category models
  * @since 4.0.0
  */
-export interface Success<A, E = never> extends Result.Proto<A, E> {
-  readonly _tag: 'Success'
+export interface Success<A, E = never> extends Result.Proto<A, E>, SuccessTag {
   readonly value: A
   readonly timestamp: number
 }
+
+const FailureTag = { _tag: 'Failure' } as const
+export type FailureTag = typeof FailureTag
 
 /**
  * Failed `Result` containing a failure cause and the latest previous success
@@ -176,8 +182,7 @@ export interface Success<A, E = never> extends Result.Proto<A, E> {
  * @category models
  * @since 4.0.0
  */
-export interface Failure<A, E = never> extends Result.Proto<A, E> {
-  readonly _tag: 'Failure'
+export interface Failure<A, E = never> extends Result.Proto<A, E>, FailureTag {
   readonly cause: Cause.Cause<E>
   readonly previousSuccess: Option.Option<Success<A, E>>
 }
@@ -199,7 +204,7 @@ export const isResult = (u: unknown): u is Result<unknown, unknown> => hasProper
 export const initial = <A = never, E = never>(waiting = false): Initial<A, E> => {
   const result: Initial<A, E> = {
     ...ResultProto,
-    _tag: 'Initial',
+    ...InitialTag,
     waiting,
   }
   return result
@@ -218,7 +223,7 @@ export const success = <A, E = never>(value: A, options?: {
 }): Success<A, E> => {
   const result: Success<A, E> = {
     ...ResultProto,
-    _tag: 'Success',
+    ...SuccessTag,
     value,
     waiting: options?.waiting ?? false,
     timestamp: options?.timestamp ?? now(),
@@ -242,7 +247,7 @@ export const failure = <A, E = never>(
 ): Failure<A, E> => {
   const result: Failure<A, E> = {
     ...ResultProto,
-    _tag: 'Failure',
+    ...FailureTag,
     cause,
     ...(options?.previousSuccess === undefined
       ? { previousSuccess: Option.none() }

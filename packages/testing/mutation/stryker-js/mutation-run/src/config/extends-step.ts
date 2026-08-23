@@ -46,21 +46,31 @@ export const initialExtendsStepState: ExtendsStepState = {
 
 export type ExtendsRefusalReason = 'cycle' | 'non-string-extends'
 
+const DoneTag = { _tag: 'done' } as const
+type DoneTag = typeof DoneTag
+const ReadTag = { _tag: 'read' } as const
+type ReadTag = typeof ReadTag
+const ResolveTag = { _tag: 'resolve' } as const
+type ResolveTag = typeof ResolveTag
+const RefusedTag = { _tag: 'refused' } as const
+type RefusedTag = typeof RefusedTag
+
 /**
  * The next act, returned as data. `read` and `resolve` carry the state the
  * shell must feed back together with the document the act yields; `done`
  * carries the fully merged options; `refused` carries a named reason.
+ * Each variant inherits its `_tag` from a value-space carrier (`...Tag`),
+ * so the literal appears in exactly one place per tag.
  */
 export type ExtendsStepDecision =
-  | { readonly _tag: 'done'; readonly options: PartialStrykerOptions }
-  | { readonly _tag: 'read'; readonly path: string; readonly state: ExtendsStepState }
-  | {
-    readonly _tag: 'resolve'
+  | DoneTag & { readonly options: PartialStrykerOptions }
+  | ReadTag & { readonly path: string; readonly state: ExtendsStepState }
+  | ResolveTag & {
     readonly specifier: string
     readonly directory: string
     readonly state: ExtendsStepState
   }
-  | { readonly _tag: 'refused'; readonly reason: ExtendsRefusalReason; readonly file: string }
+  | RefusedTag & { readonly reason: ExtendsRefusalReason; readonly file: string }
 
 /**
  * Merge a child config over a parent's resolved options.
@@ -158,7 +168,7 @@ export const decideExtendsStep = (
   file: string,
 ): ExtendsStepDecision => {
   if (state.visited.includes(file)) {
-    return { _tag: 'refused', reason: 'cycle', file }
+    return { ...RefusedTag, reason: 'cycle', file }
   }
   const nextState: ExtendsStepState = {
     visited: [...state.visited, file],
@@ -166,24 +176,24 @@ export const decideExtendsStep = (
   }
   return Match.value(document['extends']).pipe(
     Match.when(undefined, (): ExtendsStepDecision => ({
-      _tag: 'done',
+      ...DoneTag,
       options: mergeChainDocuments(nextState.documents),
     })),
     // `null` is "no extends" exactly as in the original, which treated it as absent.
     Match.when(null, (): ExtendsStepDecision => ({
-      _tag: 'done',
+      ...DoneTag,
       options: mergeChainDocuments(nextState.documents),
     })),
     Match.when(Match.string, (extendValue) =>
       Match.value(isModuleSpecifier(extendValue)).pipe(
         Match.when(true, (): ExtendsStepDecision => ({
-          _tag: 'resolve',
+          ...ResolveTag,
           specifier: extendValue,
           directory: path.dirname(file),
           state: nextState,
         })),
         Match.when(false, (): ExtendsStepDecision => ({
-          _tag: 'read',
+          ...ReadTag,
           path: path.resolve(path.dirname(file), extendValue),
           state: nextState,
         })),
@@ -193,6 +203,6 @@ export const decideExtendsStep = (
     // `unknown`: no finite family of `when` guards can narrow the remainder to
     // `never`, and `Match.exhaustive` requires exactly that. Everything that is
     // neither absent nor a name is refused — the decision stays total.
-    Match.orElse((): ExtendsStepDecision => ({ _tag: 'refused', reason: 'non-string-extends', file })),
+    Match.orElse((): ExtendsStepDecision => ({ ...RefusedTag, reason: 'non-string-extends', file })),
   )
 }

@@ -28,6 +28,19 @@ import * as Result from 'effect/Result'
 const inMakeBody = (body: string): string =>
   `${MAKE_IMPORTS}export const decision = Workflow.make((input: unknown): Result.Result<string, never> => ${body})`
 
+/**
+ * The two-argument spine: the command schema class occupies slot 0 and the
+ * decider slot 1. Every fixture built here proves the boundary is still found
+ * after the decider moved — a locator that resolves only slot 0 finds a class,
+ * yields no body, and this rule goes silently dark.
+ */
+const inTwoArgMakeBody = (body: string): string =>
+  `${MAKE_IMPORTS}import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+
+export const decision = Workflow.make(Cmd, (input: Cmd): Result.Result<string, never> => ${body})`
+
 const NORELSE_ON_CLOSED = {
   name: 'Match.orElse',
   expected: 'Match.exhaustive',
@@ -233,6 +246,14 @@ export const decision = Workflow.make(decide)`,
       )`),
       filename: 'interpreter.integration.test.ts',
     },
+    {
+      name: 'Should_Pass_When_TwoArgumentTagChainEndsWithExhaustive',
+      code: inTwoArgMakeBody(`Match.value(input).pipe(
+        Match.tag('A', () => Result.succeed('a')),
+        Match.exhaustive
+      )`),
+      filename: 'cancel-order.workflow.ts',
+    },
   ],
   invalid: [
     {
@@ -242,6 +263,35 @@ export const decision = Workflow.make(decide)`,
         Match.tag('B', () => b),
         Match.orElse(() => fallback)
       )`),
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
+      // The dark-boundary control: if the locator resolves only argument 0 it
+      // finds the class, produces no body, and this violation goes unreported.
+      name: 'Should_ReportOrElse_When_TheDeciderIsTheSecondArgument',
+      code: inTwoArgMakeBody(`Match.value(input).pipe(
+        Match.tag('A', () => a),
+        Match.tag('B', () => b),
+        Match.orElse(() => fallback)
+      )`),
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
+      // Slot 1 reached by name, not inline: `followIdentifier` must run on the
+      // argument that resolves to a function, not stop at the class in slot 0.
+      name: 'Should_ReportOrElse_When_TheSecondArgumentIsAModuleScopeReference',
+      code: `${MAKE_IMPORTS}import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+
+const decide = (input: Cmd): Result.Result<string, never> =>
+  Match.value(input).pipe(
+    Match.tag('A', () => a),
+    Match.tag('B', () => b),
+    Match.orElse(() => fallback)
+  )
+
+export const decision = Workflow.make(Cmd, decide)`,
       errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
     },
     {

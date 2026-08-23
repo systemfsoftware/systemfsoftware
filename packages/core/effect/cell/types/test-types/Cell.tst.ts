@@ -251,10 +251,8 @@ describe('the description value is a foldable record', () => {
     expect<Cell.EncodeDone<Shape>>().type.toBeAssignableTo<Cell.Description<Shape>>()
   })
 
-  // The classification's literal type is asserted where it is derived, in
-  // `effect-cell-type-tests`, whose generated suite reads the cells and sources off a walk of
-  // `Cell.vocabulary`. Restating them here measured nothing the walk does not, and made a
-  // reclassification inside this module fail in a file outside it.
+  // The module and I/O-cell classification are closed vocabularies this module declares,
+  // so asserting them here cannot make a reclassification fail in a file outside it.
   it('Should_CarryModuleAndIoCells_When_ReadingTheDescriptionRoot', () => {
     expect<Cell.Description<Shape>['module']>().type.toBe<typeof Cell.DESCRIPTION_MODULE>()
     expect<Cell.Description<Shape>['ioCells']>().type.toBe<typeof Cell.IO_CELLS>()
@@ -267,12 +265,11 @@ describe('the description value is a foldable record', () => {
   })
 
   it('Should_CarryKindAndConvention_When_ReadingAPhaseRecord', () => {
-    // `name` is not asserted here. Each phase's name is claimed where it is derived, in
-    // `effect-cell-type-tests`, whose generated suite reads every phase's name off a walk of
-    // `Cell.vocabulary`. A literal union of the names is a second declaration of axis 1, and
-    // it made adding a phase inside this module fail in a file outside it. `kind` and
-    // `convention` stay: they are closed vocabularies this module declares, not per-phase
-    // facts, so a new phase does not extend them.
+    // `name` is not asserted here. A literal union of the names would be a second
+    // declaration of axis 1, and it would make adding a phase fail in this file rather
+    // than in the module that owns the name. `kind` and `convention` stay: they are closed
+    // vocabularies this module declares, not per-phase facts, so a new phase does not
+    // extend them.
     expect<Cell.Phase<Shape>['kind']>().type.toBe<'pure' | 'impure'>()
     expect<Cell.Phase<Shape>['convention']>().type.toBe<Cell.Convention>()
   })

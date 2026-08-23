@@ -134,25 +134,19 @@ export const WRAPPED_SHADOW_REASON =
 /** Hooks a settings file switches off rather than this bridge failing to carry. */
 export const DISABLED_ALL_REASON = 'switched off by `disableAllHooks` in'
 
-export type MatcherReach =
-  | { readonly _tag: 'Reachable' }
-  | { readonly _tag: 'Partial'; readonly reason: string }
-  | { readonly _tag: 'Unreachable'; readonly reason: string }
-
-/** Per-event matcher reach. Coverage is per-matcher, not only per-event. */
+/**
+ * Per-event matcher reach: why a declared matcher will not run as written,
+ * keyed by the matcher a settings file names. Gaps only — a matcher this
+ * bridge carries faithfully is absent, exactly as in `NON_EVALUABLE_MATCHERS`.
+ * `SessionStart`'s `startup`, `compact` and `fork` were audited and reach, so
+ * they are named here and nowhere in the data.
+ *
+ * Coverage is per-matcher, not only per-event.
+ */
 export const MATCHER_REACH = {
   SessionStart: {
-    startup: { _tag: 'Reachable' },
-    compact: { _tag: 'Reachable' },
-    fork: { _tag: 'Reachable' },
-    resume: {
-      _tag: 'Partial',
-      reason:
-        'covers a mid-session resume, which arrives as `session_switch` with `reason: "resume"`. A cold start under `--resume` never emits that signal — it reaches extensions through a bare `session_start` — so it presents as `startup` and a resume-scoped hook does not run there.',
-    },
-    clear: {
-      _tag: 'Unreachable',
-      reason: 'OMP emits no signal when a session is cleared.',
-    },
+    resume:
+      'covers a mid-session resume, which arrives as `session_switch` with `reason: "resume"`. A cold start under `--resume` never emits that signal — it reaches extensions through a bare `session_start` — so it presents as `startup` and a resume-scoped hook does not run there.',
+    clear: 'OMP emits no signal when a session is cleared.',
   },
-} as const satisfies Partial<Record<BridgedEvent, Record<string, MatcherReach>>>
+} as const satisfies Partial<Record<BridgedEvent, Record<string, string>>>

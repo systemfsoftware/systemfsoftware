@@ -102,7 +102,7 @@ export function stripSurvivorsKeys(config: unknown): Record<string, unknown> {
  * never a valid input for another survivors run (KTD7): without this check
  * the second run would either re-read a shrunken set or re-test a stale one.
  */
-export function wasProducedBySurvivorsRun(priorReport: schema.MutationTestResult): boolean {
+export function wasProducedBySurvivorsRun(priorReport: { readonly config: unknown }): boolean {
   const config = priorReport.config
   return isRecord(config) && 'survivorsPriorReport' in config
 }
@@ -140,11 +140,6 @@ function sortKeys(value: unknown): unknown {
   return value
 }
 
-/** The single structural hash the admission compares (KTD6). */
-export function structuralHash(input: SurvivorsHashInput, hash: HashContent): string {
-  return hash(serializeSurvivorsHashInput(input))
-}
-
 /**
  * The survivor matching key (R10/R11): the same identifying key the
  * incremental differ uses — relative file name, location, mutator name and
@@ -179,7 +174,7 @@ export function survivorIdentifyingKey(input: {
  */
 export function reportMutantToMutant(
   file: string,
-  mutant: schema.MutantResult,
+  mutant: PriorReportMutant,
   resolveAbsolutePath: ResolveAbsolutePath,
 ): Mutant {
   return {
@@ -206,7 +201,7 @@ export function reportMutantToMutant(
  * them.
  */
 export function extractSurvivors(
-  priorReport: schema.MutationTestResult,
+  priorReport: PriorReportDocument,
   resolveAbsolutePath: ResolveAbsolutePath,
 ): Mutant[] {
   const survivors: Mutant[] = []
@@ -241,33 +236,107 @@ export function survivorMutateSpans(survivors: readonly Mutant[]): string[] {
 }
 
 /**
- * The command of the admission workflow. It lives here rather than in the workflow
- * because every field is a kernel type or a capability the kernel already names, and the
- * workflow imports its kernel rather than the reverse.
+ * The mutant shape the admission carries, named once because both the decision's
+ * `Admitted` payload and the command's precomputed survivor list are the same shape.
  */
-export interface AdmitSurvivorsRunInput {
+const MutantShape = S.Struct({
+  id: S.String,
+  fileName: S.String,
+  mutatorName: S.String,
+  replacement: S.String,
+  location: S.Struct({
+    start: S.Struct({ line: S.Finite, column: S.Finite }),
+    end: S.Struct({ line: S.Finite, column: S.Finite }),
+  }),
+})
+
+/**
+ * The prior report as a document, decoded at the boundary. Module-internal: consumers
+ * get {@link decodePriorReport}, not the schema, so the report's wire shape is not a
+ * surface commitment and the codec has exactly one caller.
+ *
+ * `status` is a bare string rather than the closed status set on purpose: the decide only
+ * compares it to `'Survived'`, so a report written by a newer engine that added a status
+ * must not be refused for carrying one.
+ */
+const PriorReportDocument = S.Struct({
+  config: S.optional(S.Record(S.String, S.Unknown)),
+  framework: S.optional(S.Struct({ version: S.optional(S.String) })),
+  files: S.Record(
+    S.String,
+    S.Struct({
+      source: S.String,
+      mutants: S.Array(S.Struct({
+        id: S.String,
+        mutatorName: S.String,
+        replacement: S.optional(S.String),
+        status: S.String,
+        location: S.Struct({
+          start: S.Struct({ line: S.Finite, column: S.Finite }),
+          end: S.Struct({ line: S.Finite, column: S.Finite }),
+        }),
+      })),
+    }),
+  ),
+})
+
+/** The decoded prior report the edge precomputes from. */
+export type PriorReportDocument = S.Schema.Type<typeof PriorReportDocument>
+
+/** One mutant of a decoded prior report, before the 1-based to 0-based shift. */
+export type PriorReportMutant = PriorReportDocument['files'][string]['mutants'][number]
+
+/**
+ * Decodes a prior report read from disk. Pure, so it runs in the decode phase, whose
+ * `Left` is fatal by construction — it reaches the derived error channel and no write
+ * runs. A malformed report therefore never reaches the decider, and nothing here casts
+ * a third-party report type.
+ */
+export const decodePriorReport: (raw: unknown) => Result.Result<PriorReportDocument, S.SchemaError> = S
+  .decodeUnknownResult(PriorReportDocument)
+
+/**
+ * The prior report's facts the decision reads: its embedded configuration, which carries
+ * both the compared options and the survivors-run provenance marker, and the engine
+ * version it recorded. The report's files are not here — the survivors and the per-file
+ * source hashes derived from them need capabilities the command cannot hold, so they
+ * arrive already computed.
+ */
+export class PriorReportFacts extends S.Class<PriorReportFacts>('PriorReportFacts')({
+  config: S.Record(S.String, S.Unknown),
+  frameworkVersion: S.UndefinedOr(S.String),
+}) {}
+
+/**
+ * The command of the admission workflow: a schema class, because `Workflow.make`
+ * constrains its first argument on the class value and a declared interface produces no
+ * value to pass. Every field is pure data — the two capabilities the previous shape
+ * carried, a digest function and a path resolver, can never be schema fields, so their
+ * results arrive precomputed from the decode phase instead.
+ */
+export class AdmitSurvivorsRunCommand extends S.Class<AdmitSurvivorsRunCommand>('AdmitSurvivorsRunCommand')({
   /**
-   * The prior run's mutation report. `undefined` when no usable report
-   * exists — the run cannot be admitted without one ('no-report').
+   * The prior run's report facts, `undefined` when no report exists — the run cannot be
+   * admitted without one ('no-report'). Explicitly nullable rather than key-optional: a
+   * missing report is a state the edge determined and states, not a key it forgot.
    */
-  readonly priorReport: schema.MutationTestResult | undefined
+  priorReport: S.UndefinedOr(PriorReportFacts),
   /** The current run's resolved options (defaults + config file + CLI). */
-  readonly currentConfig: Record<string, unknown>
+  currentConfig: S.Record(S.String, S.Unknown),
   /** The current CLI/framework version (`strykerVersion`). */
-  readonly frameworkVersion: string
+  frameworkVersion: S.String,
   /**
-   * Per-file content hashes of the current source, keyed by the prior
-   * report's relative file keys. The prior side is hashed from the sources
-   * the report embeds, so an editor save that shifts line ranges — which
-   * would silently re-test a different mutant than the one that survived —
-   * is caught here.
+   * Per-file content hashes of the current source, keyed by the prior report's relative
+   * file keys. The prior side is hashed from the sources the report embeds, so an editor
+   * save that shifts line ranges — which would silently re-test a different mutant than
+   * the one that survived — is caught here.
    */
-  readonly sourceContentHashes: Readonly<Record<string, string>>
-  /** The sha256 digest capability the admission hash needs. */
-  readonly hashContent: HashContent
-  /** The relative-to-absolute path capability the mutant conversion needs. */
-  readonly resolveAbsolutePath: ResolveAbsolutePath
-}
+  sourceContentHashes: S.Record(S.String, S.String),
+  /** The same hashes for the sources the prior report embeds, computed at the edge. */
+  priorSourceHashes: S.Record(S.String, S.String),
+  /** The prior report's survivors, already converted to the internal mutant shape. */
+  priorSurvivors: S.Array(MutantShape),
+}) {}
 
 const NO_REPORT_DETAIL = 'No prior mutation report found — a --survivors run needs the report of a previous run.'
 const SURVIVORS_RUN_SOURCE_DETAIL =
@@ -277,7 +346,7 @@ const MISMATCH_DETAIL =
 
 /** The per-file source hashes of the sources the prior report embeds. */
 export function priorSourceHashes(
-  priorReport: schema.MutationTestResult,
+  priorReport: PriorReportDocument,
   hashContent: HashContent,
 ): Record<string, string> {
   return objectFromEntries(
@@ -289,24 +358,26 @@ export function priorSourceHashes(
 }
 
 /**
- * Whether the admission hashes agree: the prior report's embedded resolved
- * options, framework version and source content against the current run's.
+ * Whether the admission inputs agree: the prior report's embedded resolved options,
+ * framework version and source content against the current run's.
+ *
+ * The comparison is on the canonical serializations rather than digests of them. Equal
+ * serializations are equal runs, so the digest was a lossy restatement of the check that
+ * also demanded a capability no command can carry.
  */
 export function hashesMatch(
-  priorReport: schema.MutationTestResult,
-  input: AdmitSurvivorsRunInput,
+  priorReport: PriorReportFacts,
+  input: AdmitSurvivorsRunCommand,
 ): boolean {
-  const priorHash = structuralHash({
+  return serializeSurvivorsHashInput({
     resolvedOptions: stripSurvivorsKeys(priorReport.config),
-    frameworkVersion: priorReport.framework?.version,
-    sourceContentHashes: priorSourceHashes(priorReport, input.hashContent),
-  }, input.hashContent)
-  const currentHash = structuralHash({
+    frameworkVersion: priorReport.frameworkVersion,
+    sourceContentHashes: input.priorSourceHashes,
+  }) === serializeSurvivorsHashInput({
     resolvedOptions: stripSurvivorsKeys(input.currentConfig),
     frameworkVersion: input.frameworkVersion,
     sourceContentHashes: input.sourceContentHashes,
-  }, input.hashContent)
-  return priorHash === currentHash
+  })
 }
 
 /**
@@ -329,14 +400,13 @@ const rejection = (reason: 'no-report' | 'mismatch', detail: string): AdmissionV
   remediation: `${detail} ${SURVIVORS_RUN_FIRST_REMEDIATION}`,
 })
 
-export function admissionVerdict(input: AdmitSurvivorsRunInput): AdmissionVerdict {
+export function admissionVerdict(input: AdmitSurvivorsRunCommand): AdmissionVerdict {
   const priorReport = input.priorReport
   if (priorReport === undefined) return rejection('no-report', NO_REPORT_DETAIL)
   if (wasProducedBySurvivorsRun(priorReport)) return rejection('mismatch', SURVIVORS_RUN_SOURCE_DETAIL)
-  const survivors = extractSurvivors(priorReport, input.resolveAbsolutePath)
-  if (survivors.length === 0) return { kind: 'no-survivors' }
+  if (input.priorSurvivors.length === 0) return { kind: 'no-survivors' }
   if (!hashesMatch(priorReport, input)) return rejection('mismatch', MISMATCH_DETAIL)
-  return { kind: 'admit', survivors }
+  return { kind: 'admit', survivors: input.priorSurvivors }
 }
 
 export type SurvivorsRejectReason = 'no-report' | 'mismatch'
@@ -345,18 +415,7 @@ export const SurvivorsAdmissionTypeId: unique symbol = Symbol.for('@systemfsoftw
 export type SurvivorsAdmissionTypeId = typeof SurvivorsAdmissionTypeId
 
 export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {
-  survivors: S.Array(
-    S.Struct({
-      id: S.String,
-      fileName: S.String,
-      mutatorName: S.String,
-      replacement: S.String,
-      location: S.Struct({
-        start: S.Struct({ line: S.Finite, column: S.Finite }),
-        end: S.Struct({ line: S.Finite, column: S.Finite }),
-      }),
-    }),
-  ),
+  survivors: S.Array(MutantShape),
 }) {
   readonly [SurvivorsAdmissionTypeId] = SurvivorsAdmissionTypeId
 }
@@ -381,7 +440,8 @@ export class SurvivorsRejection extends S.TaggedError<SurvivorsRejection>()('Sur
  * remediation names the full run to do first (R10).
  */
 export const admitSurvivorsRun = Workflow.make(
-  (command: AdmitSurvivorsRunInput): Result.Result<SurvivorsAdmission, SurvivorsRejection> =>
+  AdmitSurvivorsRunCommand,
+  (command): Result.Result<SurvivorsAdmission, SurvivorsRejection> =>
     Match.value(admissionVerdict(command)).pipe(
       Match.discriminator('kind')(
         'reject',
@@ -447,7 +507,6 @@ if (import.meta.vitest !== void 0) {
   // the published module graph. A static import would ship it.
   const { describe, it } = await import('@systemfsoftware/effect-gherkin-spec')
   const { FastCheck: fc } = await import('effect/testing')
-  const { createHash } = await import('node:crypto')
   const { isDeepStrictEqual } = await import('node:util')
 
   /** The arbitrary alias — `fc` is a block-local value here, so its type section is read through the module. */
@@ -542,8 +601,6 @@ if (import.meta.vitest !== void 0) {
 
   const survivorListArb = fc.array(mutantArb, { maxLength: 8 })
 
-  const sha256Hex: HashContent = (content) => createHash('sha256').update(content, 'utf-8').digest('hex')
-
   const absPath = (file: string): string => `${ABS_WORK_ROOT}/${file}`
 
   const permuteRecord = <T>(record: Readonly<Record<string, T>>): Record<string, T> =>
@@ -610,15 +667,17 @@ if (import.meta.vitest !== void 0) {
         JSON.parse(JSON.stringify(input)),
       ))
 
+    /**
+     * Key order is not data. `sortKeys` is what makes the comparison a function of the
+     * values, and the serialization is what the admission compares, so the invariance is
+     * asserted on it directly rather than through a digest that could only hide a
+     * difference behind a collision.
+     */
     it.prop(
-      '∀i_StructuralHashKeyOrder_≡SameDigest',
+      '∀i_SerializationKeyOrder_≡SameText',
       [hashInputArb],
-      ([input]) => structuralHash(input, sha256Hex) === structuralHash(permuteHashInput(input), sha256Hex),
+      ([input]) => serializeSurvivorsHashInput(input) === serializeSurvivorsHashInput(permuteHashInput(input)),
     )
-
-    it.prop('∀i_StructuralHash_≡SerializedSourceHash', [hashInputArb], ([input]) =>
-      structuralHash(input, sha256Hex) ===
-        sourceContentHash(serializeSurvivorsHashInput(input), sha256Hex))
   })
 
   describe('survivorIdentifyingKey', () => {
@@ -794,16 +853,69 @@ if (import.meta.vitest !== void 0) {
      */
     it.prop('∀r_SurvivorsSourced_→MismatchReject', [sourcesArb, fc.boolean()], ([sources, survived]) => {
       const prior = survivorsProducedReport(sources, survived)
-      const verdict = admissionVerdict({
-        priorReport: prior,
-        currentConfig: prior.config ?? {},
-        frameworkVersion: prior.framework?.version ?? '',
-        sourceContentHashes: {},
-        hashContent: sha256Hex,
-        resolveAbsolutePath: (file) => `${ABS_WORK_ROOT}/${file}`,
-      })
+      const verdict = admissionVerdict(
+        AdmitSurvivorsRunCommand.make({
+          priorReport: PriorReportFacts.make({
+            config: prior.config ?? {},
+            frameworkVersion: prior.framework?.version,
+          }),
+          currentConfig: prior.config ?? {},
+          frameworkVersion: prior.framework?.version ?? '',
+          sourceContentHashes: {},
+          priorSourceHashes: {},
+          priorSurvivors: [],
+        }),
+      )
       return verdict.kind === 'reject' && verdict.reason === 'mismatch' &&
         verdict.remediation.includes('itself produced by a --survivors run')
     })
+  })
+
+  /**
+   * The codec's admission boundary. Effect owns the decoding; what is decided here is the
+   * shape — which fields a report must carry and which it may omit — and each of these
+   * would flip on a plausible tightening or loosening of that shape.
+   */
+  describe('decodePriorReport', () => {
+    /**
+     * Shape against admission. Effect owns the decoding; what is decided here is which
+     * fields a report must carry and which it may omit, and every row flips on a
+     * plausible tightening or loosening of that decision.
+     */
+    const admissionCases = [
+      // `files` is the only field the precompute needs, so a report without one carries
+      // nothing to admit.
+      { raw: { config: {}, framework: { version: '1' } }, decodes: false },
+      // Text that never parsed as JSON arrives as the text itself.
+      { raw: 'not a report', decodes: false },
+      // `config` and `framework` are absent from a report whose run recorded neither, so
+      // requiring them would refuse a report the engine legitimately produced.
+      { raw: { files: {} }, decodes: true },
+      // The deliberate liberality: `status` is a bare string, so a report from an engine
+      // that added a status decodes. Closing that set would refuse a newer report
+      // wholesale rather than ignoring the one status it does not recognise.
+      {
+        raw: {
+          files: {
+            'src/a.ts': {
+              source: 'x',
+              mutants: [{
+                id: 'A',
+                mutatorName: 'm',
+                status: 'SomeStatusThisEngineNeverHeardOf',
+                location: { start: { line: 1, column: 1 }, end: { line: 1, column: 2 } },
+              }],
+            },
+          },
+        },
+        decodes: true,
+      },
+    ] as const
+
+    it.prop(
+      '∀r_ReportAdmission_≡Shape',
+      [fc.constantFrom(...admissionCases)],
+      ([expected]) => Result.isSuccess(decodePriorReport(expected.raw)) === expected.decodes,
+    )
   })
 }

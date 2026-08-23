@@ -212,10 +212,19 @@ const makeArgumentBodiesOf = (program: unknown): ReadonlySet<object> => {
     walkAllNodes(program, (node) => {
       if (!isCallExpression(node)) return
       if (!isWorkflowMakeCallee(node.callee, localNames)) return
-      const firstArgument = node.arguments[0]
-      if (firstArgument === undefined || !isIdentifier(firstArgument)) return
-      const resolved = followFunctionReference(firstArgument.name, bindings, 0)
-      if (resolved !== null && typeof resolved === 'object') bodies.add(resolved)
+      // The decider is found by SHAPE, never by slot index: `make` takes the
+      // command schema class first and the decider second, so a resolver pinned
+      // to slot 0 resolves a class to nothing and silently drops the referenced
+      // decision body out of the mutation population — every mutant in it stops
+      // being tested while the score still reports green.
+      for (const argument of node.arguments) {
+        if (!isIdentifier(argument)) continue
+        const resolved = followFunctionReference(argument.name, bindings, 0)
+        if (resolved !== null && typeof resolved === 'object') {
+          bodies.add(resolved)
+          break
+        }
+      }
     })
   }
   MAKE_ARGUMENT_BODIES_BY_PROGRAM.set(program, bodies)

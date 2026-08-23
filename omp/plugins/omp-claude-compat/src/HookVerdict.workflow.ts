@@ -169,12 +169,19 @@ export const interpretHookResult = (
     Match.exhaustive,
   )
 
-/** The submit chain's command: the verdict command plus the raw's code and stdout. */
-export interface SubmitVerdictDecoded {
-  readonly cmd: InterpretHookCommand
-  readonly code: number
-  readonly stdout: string
-}
+/**
+ * The submit chain's command: the verdict command plus the raw's code and stdout.
+ *
+ * A schema class rather than an interface because `Workflow.make` constrains its
+ * command argument on the class value — a declared type produces none, so it cannot
+ * reach the argument position at all. `InterpretHookCommand` is itself a tagged class,
+ * so it is usable directly as a field schema.
+ */
+export class SubmitVerdictCommand extends S.TaggedClass<SubmitVerdictCommand>()('SubmitVerdictCommand', {
+  cmd: InterpretHookCommand,
+  code: S.Finite,
+  stdout: S.String,
+}) {}
 
 /** The submit chain's decision: the verdict plus the context the write acts on. */
 export interface SubmitVerdictDecision {
@@ -203,7 +210,8 @@ export type SubmitHookVerdictError = S.Schema.Type<typeof SubmitHookVerdictError
  * the reader imports this workflow and never reaches past it.
  */
 export const submitVerdict = Workflow.make(
-  ({ cmd, code, stdout }: SubmitVerdictDecoded): Result.Result<SubmitVerdictDecision, SubmitHookVerdictError> =>
+  SubmitVerdictCommand,
+  ({ cmd, code, stdout }): Result.Result<SubmitVerdictDecision, SubmitHookVerdictError> =>
     Result.mapBoth(interpretHookResult(cmd), {
       onFailure: (error) => SubmitHookVerdictError.make({ error, code, stdout }),
       onSuccess: (verdict) => ({ verdict, code, stdout }),
@@ -304,4 +312,28 @@ if (import.meta.vitest !== void 0) {
       return raw === undefined || raw.trim() === '' ? stated.includes(ev) : stated === raw
     },
   )
+
+  // The command's sole obligation: `code` is a finite exit status, so a non-finite one
+  // is the refusal class. A spawned process reports no exit code at all when it is
+  // signalled, so this is a wire shape the edge can really hand over.
+  //
+  // The witness is a valid instance encoded and then broken on one field, because the
+  // discrimination law requires a value the schema rejects for exactly this reason -
+  // a hand-written record that also got the nested `parsed` wire shape wrong would be
+  // rejected for that instead, and would discharge nothing.
+  const { refutes } = await import('@systemfsoftware/effect-schema-law')
+  const validWire = S.encodeUnknownSync(SubmitVerdictCommand)(
+    new SubmitVerdictCommand({
+      cmd: new InterpretHookCommand({
+        result: { code: 0, stdout: '', stderr: '' },
+        event: 'UserPromptSubmit',
+        parsed: Option.none(),
+      }),
+      code: 0,
+      stdout: '',
+    }),
+  )
+  refutes(SubmitVerdictCommand, {
+    SubmitVerdictCommandNonFiniteCode: fc.constant({ ...validWire, code: Number.NaN }),
+  })
 }
