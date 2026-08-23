@@ -13,9 +13,13 @@ import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
  *
  * Nothing is lost: the mutation surface is the pure decisions this fork owns,
  * today only `src/test-contribution.ts`, whose own lane is
- * `tests/test-contribution.integration.test.ts`; the dropped spec never imports
- * it, and `related: true` already excludes it from every mutant run. It still
- * runs under `pnpm test`, which is its gate.
+ * `tests/test-contribution.integration.test.ts`. That test imports the
+ * published `@systemfsoftware/stryker-js-mutation-run/test-contribution`
+ * specifier. Vitest related-mode walks the sandbox file graph; a package
+ * name resolves outside the sandbox, so `related: true` finds zero tests
+ * and the dry run aborts. `stryker.config.json` therefore sets
+ * `vitest.related` to false. The dropped chdir spec never imports the
+ * mutated file and is still excluded here. It still runs under `pnpm test`.
  *
  * The paths track `vitest.config.ts`. When the behaviour lane moved to
  * `tests/*.integration.test.ts` these two globs kept naming the retired

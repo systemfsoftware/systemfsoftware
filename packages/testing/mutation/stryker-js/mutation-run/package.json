@@ -32,6 +32,7 @@
       "./plugins": "./dist/plugins.mjs",
       "./run-event": "./dist/run-event.mjs",
       "./stryker-package": "./dist/stryker-package.mjs",
+      "./test-contribution": "./dist/test-contribution.mjs",
       "./timer": "./dist/timer.mjs",
       "./verdict-envelope": "./dist/verdict-envelope.mjs",
       "./package.json": "./package.json"
@@ -93,6 +94,10 @@
     "./stryker-package": {
       "@systemfsoftware/source": "./src/stryker-package.ts",
       "default": "./dist/stryker-package.mjs"
+    },
+    "./test-contribution": {
+      "@systemfsoftware/source": "./src/test-contribution.ts",
+      "default": "./dist/test-contribution.mjs"
     },
     "./timer": {
       "@systemfsoftware/source": "./src/timer.ts",
