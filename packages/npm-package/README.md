@@ -23,7 +23,7 @@ pkg.readFile('/node_modules/greeter/index.js')
 pkg.listFiles()
 ```
 
-A `Package` is a read-only view over its own file map: `readFile`, `tryReadFile`, `tryReadBytes`, `fileExists`, `directoryExists`, and `listFiles`. Overlaying one package on another returns a new `Package` whose colliding paths take the other's bodies, leaving both inputs untouched.
+A `Package` is a read-only view over its own file map: `readFile`, `tryReadFile`, `tryReadBytes`, `fileExists`, `directoryExists`, and `listFiles`. `withOverlay` returns a new `Package` whose colliding paths take the other's bodies, leaving both inputs untouched.
 
 ## Pack it to tarball bytes
 
@@ -31,8 +31,9 @@ A `Package` is a read-only view over its own file map: `readFile`, `tryReadFile`
 
 ```ts
 import { packPackage } from '@systemfsoftware/npm-package'
+import { writeFile } from 'node:fs/promises'
 
-await Bun.write('greeter-1.0.0.tgz', packPackage(pkg))
+await writeFile('greeter-1.0.0.tgz', packPackage(pkg))
 ```
 
 Because the bytes are produced from the map you authored, packing runs no lifecycle scripts and never mutates a build output.
@@ -43,8 +44,9 @@ Because the bytes are produced from the map you authored, packing runs no lifecy
 
 ```ts
 import { createPackageFromTarballData } from '@systemfsoftware/npm-package'
+import { readFile } from 'node:fs/promises'
 
-const fromTarball = createPackageFromTarballData(await Bun.file('greeter-1.0.0.tgz').bytes())
+const fromTarball = createPackageFromTarballData(await readFile('greeter-1.0.0.tgz'))
 fromTarball.packageName // 'greeter'
 ```
 

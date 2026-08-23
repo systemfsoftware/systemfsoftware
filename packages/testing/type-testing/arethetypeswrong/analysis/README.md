@@ -140,14 +140,14 @@ Entrypoint discovery reads `package.json` `exports`, `main`, `bin`, and `types`/
 
 ## TypeScript version
 
-This package runs on the **TypeScript 6.x JS bridge** (`typescript@^6.0.3` via `catalog:attw`). TypeScript 7 is a native Go compiler with no JS `createProgram` / `resolveModuleName` / `CompilerHost` API, so the analysis engine cannot run on it. The bridge line is the last TypeScript with the full JS compiler surface. Majors are never automated — see [`.github/dependabot.yml`](../../../.github/dependabot.yml) and the decision record at [`docs/solutions/tooling-decisions/arethetypeswrong-core-requires-js-typescript-api.md`](../../../docs/solutions/tooling-decisions/arethetypeswrong-core-requires-js-typescript-api.md).
+This package runs on the **TypeScript 6.x JS bridge** and requires `typescript@^6.0.3`. TypeScript 7 is a native Go compiler with no JS `createProgram` / `resolveModuleName` / `CompilerHost` API, so the analysis engine cannot run on it; 6.x is the last line carrying the full JS compiler surface.
 
-Snapshot fixtures (`moment@2.29.1`, `react@18.2.0`) embed the compiler version in resolution traces and were regenerated for `6.0.3`.
+Resolution traces embed the compiler version, so a report produced under a different TypeScript may differ in detail.
 
 ## Contributing
 
-Development setup, build, and test workflow: [`AGENTS.md`](./AGENTS.md).
+Development setup, build, and test workflow live in the repository.
 
 ## License
 
-[Apache-2.0](../../../LICENSE) — same as the upstream `arethetypeswrong.github.io`.
+[Apache-2.0](./LICENSE) — the licence the original `arethetypeswrong.github.io` was published under.
