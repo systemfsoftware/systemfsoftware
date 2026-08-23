@@ -1639,6 +1639,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@stryker-mutator/util':
+        specifier: catalog:stryker
+        version: 9.6.1
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1

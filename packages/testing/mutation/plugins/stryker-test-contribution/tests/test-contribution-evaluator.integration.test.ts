@@ -2,6 +2,7 @@
  * Evaluator plugin wiring: listing the plugin is enough. A failed
  * contribution verdict records VerdictFail.
  */
+import { noopLogger } from '@stryker-mutator/util'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import {
   ExitClass,
@@ -9,7 +10,6 @@ import {
   resolveExitCode,
 } from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
 import { schema, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
@@ -20,21 +20,6 @@ import { TestContributionEvaluator } from '../src/test-contribution-evaluator.js
 const Feature = makeFeature({ it, layer })
 
 const LOCATION = { start: { line: 1, column: 1 }, end: { line: 1, column: 2 } }
-
-const silentLogger = (): Logger => ({
-  isTraceEnabled: () => false,
-  isDebugEnabled: () => false,
-  isInfoEnabled: () => true,
-  isWarnEnabled: () => true,
-  isErrorEnabled: () => true,
-  isFatalEnabled: () => true,
-  trace: () => undefined,
-  debug: () => undefined,
-  info: () => undefined,
-  warn: () => undefined,
-  error: () => undefined,
-  fatal: () => undefined,
-})
 
 const reportWithToothlessKernelFile = (): schema.MutationTestResult => ({
   schemaVersion: '2',
@@ -61,7 +46,7 @@ const reportWithToothlessKernelFile = (): schema.MutationTestResult => ({
 })
 
 const evaluatorWith = (options: Record<string, unknown>): TestContributionEvaluator =>
-  new TestContributionEvaluator(options as unknown as StrykerOptions, silentLogger())
+  new TestContributionEvaluator(options as unknown as StrykerOptions, noopLogger)
 
 Feature('test-contribution evaluator plugin')
   .body(({ scenario }) => {
