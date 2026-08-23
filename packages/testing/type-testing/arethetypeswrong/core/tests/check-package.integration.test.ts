@@ -1,7 +1,8 @@
+
 import { it, layer, makeFeature, StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
-import { checkPackage, recipes } from '../src/index.js'
+import { checkPackage, recipes } from '@systemfsoftware/arethetypeswrong-core'
 
 /**
  * CheckPackage — analysis of a synthetic recipe package.

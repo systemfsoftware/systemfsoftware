@@ -3,13 +3,16 @@ import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 
-import { decideSchemaDeclarationIgnore, TAGGED_TAG_IGNORED } from '../../src/effect-schema-ignorer/index.js'
-import { strykerPlugins as composedPlugins } from '../../src/mod.js'
+import { strykerPlugins as composedPlugins } from '@systemfsoftware/stryker-plugins'
+import {
+  decideSchemaDeclarationIgnore,
+  TAGGED_TAG_IGNORED,
+} from '@systemfsoftware/stryker-plugins/effect-schema-ignorer'
 import {
   decideWorkflowMakeBoundaryIgnore,
   NOT_INSIDE_WORKFLOW_MAKE,
   strykerPlugins,
-} from '../../src/workflow-make-ignorer/index.js'
+} from '@systemfsoftware/stryker-plugins/workflow-make-ignorer'
 
 import { taggedCall } from '../__fixtures__/EffectSchemaAst.fixtures.js'
 import {

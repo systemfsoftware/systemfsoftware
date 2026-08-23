@@ -9,7 +9,7 @@ import {
   CLASS_ID_IGNORED,
   decideSchemaDeclarationIgnore,
   OPTIONAL_DEFAULT_IGNORED,
-} from '../../src/effect-schema-ignorer/index.js'
+} from '@systemfsoftware/stryker-plugins/effect-schema-ignorer'
 
 import {
   annotationsCall,

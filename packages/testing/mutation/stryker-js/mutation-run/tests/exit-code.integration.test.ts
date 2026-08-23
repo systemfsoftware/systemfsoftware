@@ -11,7 +11,7 @@ import { type LogLevel } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 
-import { ExitClass, resolveExitCode } from '../src/exit-classification.js'
+import { ExitClass, resolveExitCode } from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
 
 const Feature = makeFeature({ it, layer })
 

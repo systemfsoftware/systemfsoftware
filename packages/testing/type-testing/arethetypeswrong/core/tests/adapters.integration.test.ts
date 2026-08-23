@@ -2,11 +2,11 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 
-import { LexerAdapter, LexerAdapterStub } from '../src/LexerAdapter.js'
-import { PackageStoreAdapter, PackageStoreAdapterStub } from '../src/PackageStoreAdapter.js'
-import { ResolverAdapter, ResolverAdapterStub } from '../src/ResolverAdapter.js'
-import { TarballAdapter, TarballAdapterStub } from '../src/TarballAdapter.js'
-import { TypescriptAdapter, TypescriptAdapterStub } from '../src/TypescriptAdapter.js'
+import { LexerAdapter, LexerAdapterStub } from '@systemfsoftware/arethetypeswrong-core'
+import { PackageStoreAdapter, PackageStoreAdapterStub } from '@systemfsoftware/arethetypeswrong-core'
+import { ResolverAdapter, ResolverAdapterStub } from '@systemfsoftware/arethetypeswrong-core'
+import { TarballAdapter, TarballAdapterStub } from '@systemfsoftware/arethetypeswrong-core'
+import { TypescriptAdapter, TypescriptAdapterStub } from '@systemfsoftware/arethetypeswrong-core'
 
 const Feature = makeFeature({ it, layer })
 

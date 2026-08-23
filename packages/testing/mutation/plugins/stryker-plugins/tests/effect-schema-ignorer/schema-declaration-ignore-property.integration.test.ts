@@ -9,7 +9,7 @@ import {
   SYMBOL_DESCRIPTION_IGNORED,
   TAGGED_FIELDS_IGNORED,
   TAGGED_TAG_IGNORED,
-} from '../../src/effect-schema-ignorer/index.js'
+} from '@systemfsoftware/stryker-plugins/effect-schema-ignorer'
 
 import {
   annotationsCall,

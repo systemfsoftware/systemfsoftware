@@ -7,10 +7,10 @@
  * behaviours are covered through the same scenario surface.
  */
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
+import { Gherkin, pairwiseFor, StepError, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Context, Effect, Layer, Ref, Result } from 'effect'
 import { UnknownError } from 'effect/Cause'
 import { expect } from 'vitest'
-import { Gherkin, pairwiseFor, StepError, Then } from '../src/mod.js'
 
 const Feature = makeFeature({ it, layer })
 

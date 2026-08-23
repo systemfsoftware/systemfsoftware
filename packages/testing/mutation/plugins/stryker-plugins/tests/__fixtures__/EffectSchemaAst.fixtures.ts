@@ -1,10 +1,23 @@
 import { FastCheck as fc } from 'effect/testing'
-import {
-  type AstNode,
-  type CallExpression,
-  type Identifier,
-  type MemberExpression,
-} from '../../src/effect-schema-ignorer/AstNode.schema.js'
+
+interface Identifier {
+  readonly type: 'Identifier'
+  readonly name: string
+}
+
+interface MemberExpression {
+  readonly type: 'MemberExpression'
+  readonly object: Identifier
+  readonly property: Identifier
+}
+
+interface CallExpression {
+  readonly type: 'CallExpression'
+  readonly callee: AstNode
+  readonly arguments: readonly AstNode[]
+}
+
+type AstNode = Identifier | MemberExpression | CallExpression | ObjectNode
 
 export const identifier = (name: string): Identifier => ({ type: 'Identifier', name })
 
