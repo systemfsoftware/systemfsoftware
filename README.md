@@ -13,15 +13,16 @@ A workspace of modular [Effect-TS](https://effect.website) libraries, testing ut
 
 ## Packages
 
-| Package                                                                     | Purpose                                                                               |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| [`@systemfsoftware/effect-gherkin-spec`](packages/effect-gherkin-spec)      | BDD `feature`/`scenario` specifications composed as typed Effect workflows.           |
-| [`@systemfsoftware/effect-daemon-spec`](packages/effect-daemon-spec)        | Supervision tree daemon primitives, leader election, and health monitors.             |
-| [`@systemfsoftware/effect-schema-law`](packages/effect-schema-law)          | Property-based law tests asserting bidirectional roundtrips for Effect Schemas.       |
-| [`@systemfsoftware/rx-effect`](packages/rx-effect)                          | Bidirectional bridge between RxJS Observables and backpressured Effect Streams.       |
-| [`@systemfsoftware/oxlint-plugin`](packages/oxlint-plugins/core)            | Fast Oxlint rules enforcing functional purity, schema invariants, and test placement. |
-| [`@systemfsoftware/omp-agent-discipline`](omp/plugins/omp-agent-discipline) | Guardrails and dispatch interception for Oh My Pi coding agents.                      |
-| [`@systemfsoftware/omp-claude-compat`](omp/plugins/omp-claude-compat)       | Claude Code settings and hook compatibility extension for Oh My Pi.                   |
+| Package                                                                                     | Purpose                                                                                 |
+| ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| [`@systemfsoftware/effect-gherkin-spec`](packages/testing/specs/gherkin/effect)             | BDD `feature`/`scenario` specifications composed as typed Effect workflows.             |
+| [`@systemfsoftware/effect-daemon-spec`](packages/core/effect/daemon-spec)                   | Supervision tree daemon primitives, leader election, and health monitors.               |
+| [`@systemfsoftware/effect-schema-law`](packages/core/effect/schema/law)                     | The Rule of Schemas as a property test, and — at `/refutation` — what a schema rejects. |
+| [`@systemfsoftware/effect-schema-bounded-union`](packages/core/effect/schema/bounded-union) | A recursive schema union whose generated values terminate; decoding is unchanged.       |
+| [`@systemfsoftware/rx-effect`](packages/core/effect/rx/rx-effect)                           | Bidirectional bridge between RxJS Observables and backpressured Effect Streams.         |
+| [`@systemfsoftware/oxlint-plugin`](packages/lint/oxlint/plugins/meta/core)                  | Fast Oxlint rules enforcing functional purity, schema invariants, and test placement.   |
+| [`@systemfsoftware/omp-agent-discipline`](omp/plugins/omp-agent-discipline)                 | Guardrails and dispatch interception for Oh My Pi coding agents.                        |
+| [`@systemfsoftware/omp-claude-compat`](omp/plugins/omp-claude-compat)                       | Claude Code settings and hook compatibility extension for Oh My Pi.                     |
 
 ## Quick Start
 

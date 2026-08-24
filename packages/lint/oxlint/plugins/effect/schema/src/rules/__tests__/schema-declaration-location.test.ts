@@ -311,7 +311,7 @@ export const number = mint(S.Finite)`,
       filename: '/repo/pkg/src/Wire.ts',
     },
     {
-      // effect-schema-law/src/BoundedUnion.ts — `Expr = boundedUnion('Expr', {...})`:
+      // effect-schema-bounded-union/src/BoundedUnion.ts — `Expr = boundedUnion('Expr', {...})`:
       // a helper that builds a codec union over base and recursive members. The local
       // builder's body does not fold; no positive evidence of a declaration here.
       name: 'Should_Pass_When_ALocalCodecBuilderIsInvoked',
@@ -355,7 +355,7 @@ export const provided = program.pipe((value: unknown) => value)`,
       filename: '/repo/pkg/src/main.ts',
     },
     {
-      // effect-schema-law/src/Refutes.ts — the tree's sanctioned in-source fixture
+      // effect-schema-law/src/refutation/Refutes.ts — the tree's sanctioned in-source fixture
       // guard is `if (import.meta.vitest !== void 0)`; the exemption keys on the
       // positive guard, so a fixture schema inside stays silent like the bare
       // `import.meta.vitest` spelling.

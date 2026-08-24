@@ -1,11 +1,16 @@
 # @systemfsoftware/effect-schema-law
 
-Codec-law property tests for [Effect](https://effect.website) `Schema`, in one call.
+Property-test codec laws and refusal adequacy for [Effect](https://effect.website) `Schema`.
 
-A schema is a two-way codec. `ruleOfSchemas` asserts the two laws every well-formed codec must obey, generating its inputs from the schema itself (via `@effect/vitest`'s `it.prop` + fast-check):
+- **Codec Laws (`@systemfsoftware/effect-schema-law`)** — Generates property tests for round-trip identity and encode stability.
+- **Refusal Adequacy (`@systemfsoftware/effect-schema-law/refutation`)** — Asserts that every custom constraint or refinement rejects invalid input.
 
-- **Round-trip identity** — `decode(encode(x))` equals `x` (by the schema's type equivalence).
-- **Encode stability** — re-encoding the decoded value reproduces the original encoded form (by the encoded-side equivalence).
+## `.` — codec laws
+
+A schema is a two-way codec. `ruleOfSchemas` asserts the two laws, generating inputs from the schema itself (via `@effect/vitest`'s `it.prop` + fast-check):
+
+- **Round-trip identity** — `decode(encode(x))` equals `x`.
+- **Encode stability** — re-encoding the decoded value reproduces the original encoded form.
 
 ```ts
 import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'
@@ -17,42 +22,40 @@ const Email = S.String.pipe(S.brand('Email'))
 ruleOfSchemas('Email', Email)
 ```
 
-## Recursive schemas
+## `./refutation` — refusal and adequacy
 
-`ruleOfSchemas` generates its inputs from the schema. Effect bounds that generation at array seams, but a **union that recurses through a non-array field** — `Binary.left: Expression`, `Member.object: Expression` — is generated as an unbounded `fc.oneof(...members)`. A single sample can then recurse until the call stack overflows, and the test crashes before it ever checks a law.
-
-`boundedUnion` builds the same union — decode, encode, and equivalence are identical to `S.Union(...)` — but caps generation depth. Past `maxDepth` (default `2`), generation collapses to the base case, so every variant stays reachable while the recursion always terminates. Split the members into the non-recursive `base` (the leaves, used as the base case) and the self-referential `recur`:
+A schema's generated laws draw inputs from the schema itself, so they cover what it accepts and nothing it refuses. `refutes` covers the other half:
 
 ```ts
-import { boundedUnion, ruleOfSchemas } from '@systemfsoftware/effect-schema-law'
+import { refutes } from '@systemfsoftware/effect-schema-law/refutation'
 import { Schema as S } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 
-// The tag is declared once, by the schema. A hand-written `readonly _tag: 'Lit'`
-// member is refused by `no-manual-tag-member`, and deriving it keeps the tag and
-// the schema from drifting apart.
-const LitBase = S.TaggedStruct('Lit', { value: S.JsonNumber })
-const AddBase = S.TaggedStruct('Add', {})
+const Hex = S.String.pipe(S.check(S.isPattern(/^[0-9a-f]*$/)), S.annotate({ identifier: 'Hex' }))
 
-type Lit = S.Schema.Type<typeof LitBase>
-type Add = S.Schema.Type<typeof AddBase> & {
-  readonly left: Expr
-  readonly right: Expr
-}
-type Expr = Lit | Add
-
-// Only the self-referential fields stay hand-written. The tag never participates in
-// the recursion, so the base carries it and `suspend` carries only the cycle.
-const Add: S.Codec<Add> = S.suspend((): S.Codec<Add> => S.Struct({ ...AddBase.fields, left: Expr, right: Expr }))
-
-const Expr: S.Codec<Expr> = boundedUnion('Expr', {
-  base: [LitBase],
-  recur: [Add],
-})
-
-ruleOfSchemas('Expr', Expr) // generates and law-tests, no stack overflow
+// inside a Vitest file
+refutes(Hex, { NonHex: fc.stringMatching(/^[^0-9a-f]$/) })
 ```
 
-The first argument is both the schema's `identifier` and the `depthIdentifier` fast-check counts depth against — keep it unique per recursive cycle.
+One call registers three property kinds:
+
+- **Refusal** — every value the named generator draws is rejected.
+- **Discrimination** — every drawn value is rejected _for a reason the schema actually states_.
+- **Adequacy** — every constraint the schema carries is defended by at least one generator.
+
+Delete one constraint from a schema and you get a strictly more permissive schema. If some value is accepted by that weakened schema and rejected by the real one, that value is a **witness**: proof the constraint does real work. `refutes` enumerates weakenings, searches for a witness for each, and checks that a declared generator draws something the constraint refuses. A constraint nobody refuses is reported by name, with the path and witness.
+
+```ts
+import { adequacyReport, obligationsOf, scanObligations } from '@systemfsoftware/effect-schema-law/refutation'
+
+obligationsOf(Hex) // Map keyed by the AST node each weakening removes
+scanObligations(Hex) // plus blind arms no generator could draw for
+adequacyReport(Hex, generators) // { adequate, undischarged, message }
+```
+
+Obligations are keyed by AST node, not by path. Three schemas built on one refinement owe **one** refusal between them — a generator that discharges that node discharges it everywhere.
+
+A generator must be derived from what the type _promises about its values_, never read back off the refinement literal. Building the generator by negating the schema's own regex reproduces the circularity that makes generated laws blind.
 
 ## Install
 
@@ -60,4 +63,8 @@ The first argument is both the schema's `identifier` and the `depthIdentifier` f
 pnpm add -D @systemfsoftware/effect-schema-law
 ```
 
-Install it as a **devDependency** — it's a test helper. `effect`, `vitest`, and `@effect/vitest` are peer dependencies: you bring your own (you already have them to run your tests), so the helper shares your single test-runner instance. Call `ruleOfSchemas(name, schema)` at the top level of a Vitest test file; it registers the two `it.prop` cases for you.
+Install as a **devDependency** — both entries register tests. `effect`, `vitest`, and `@effect/vitest` are peer dependencies: you bring your own (you already have them to run your tests), so the helper shares your single test-runner instance.
+
+Call `ruleOfSchemas(name, schema)` or `refutes(schema, generators)` at the top level of a Vitest test file, or inside an `if (import.meta.vitest !== void 0)` block in the module that declares the schema — a bundler that defines `import.meta.vitest` as `undefined` compiles that branch away, so nothing reaches your published output.
+
+`@systemfsoftware/effect-schema-law` is the only import for laws. `@systemfsoftware/effect-schema-law/refutation` is the only import for the refusal surface. No other path in the package resolves.

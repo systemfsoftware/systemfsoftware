@@ -1,0 +1,4 @@
+{
+  "extends": "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
+  "include": ["dist/refutation.d.ts"]
+}

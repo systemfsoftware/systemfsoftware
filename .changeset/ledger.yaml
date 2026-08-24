@@ -58,6 +58,16 @@
     - attw-in-memory-package-dsl
     - package-class-is-public
     - parse-error-is-constructed
+"@systemfsoftware/arethetypeswrong@6.0.0":
+  dir: packages/testing/type-testing/arethetypeswrong/analysis
+  intents:
+    - arethetypeswrong-renamed
+    - attw-effect-native-cache
+    - attw-in-memory-package-dsl
+    - debut-releases-gain-oidc
+    - modern-ends-know
+    - parse-error-is-constructed
+    - projections-collapsed-into-ports
 "@systemfsoftware/effect-atom-react@0.6.0":
   dir: packages/effect-atom/atom-react
   intents:
@@ -224,6 +234,14 @@
   dir: packages/core/effect/filesystem/memfs
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/effect-schema-bounded-union@0.1.0":
+  dir: packages/core/effect/schema/bounded-union
+  intents:
+    - bounded-union-package-debut
+"@systemfsoftware/effect-schema-discovery@0.1.0":
+  dir: packages/core/effect/schema/discovery
+  intents:
+    - discovery-package-debut
 "@systemfsoftware/effect-schema-extensions@0.8.0":
   dir: packages/effect-schema-extensions
   intents:
@@ -255,6 +273,14 @@
   intents:
     - peer-ranges-accept-compatible-rc
     - public-names-stay-public
+"@systemfsoftware/effect-schema-law@1.0.0":
+  dir: packages/core/effect/schema/law
+  intents:
+    - law-adds-the-refutation-entry
+"@systemfsoftware/effect-schema-refutation-vite@0.1.0":
+  dir: packages/core/effect/schema/refutation-vite
+  intents:
+    - refutation-vite-package-debut
 "@systemfsoftware/effect-schema-vite@1.5.2":
   dir: packages/effect-schema-vite
   intents:
@@ -277,6 +303,10 @@
   dir: packages/core/effect/schema/vite
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/effect-schema-vite@2.0.0":
+  dir: packages/core/effect/schema/vite
+  intents:
+    - vite-emits-only-the-codec-laws
 "@systemfsoftware/hex-schema@1.7.0":
   dir: packages/hex-schema
   intents:
@@ -295,6 +325,10 @@
   dir: packages/core/hex/hex-schema
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/npm-package@0.2.0":
+  dir: packages/npm-package
+  intents:
+    - npm-package-in-memory-tree
 "@systemfsoftware/omp-agent-discipline@2.0.0":
   dir: omp/plugins/omp-agent-discipline
   intents:
@@ -375,6 +409,10 @@
   intents:
     - dmmf-carries-the-command-rule
     - tag-members-derive-from-schemas
+"@systemfsoftware/oxlint-plugin-effect-dmmf@4.0.1":
+  dir: packages/lint/oxlint/plugins/meta/effect-dmmf
+  intents:
+    - refutation-suites-are-sanctioned-in-src
 "@systemfsoftware/oxlint-plugin-effect-entrypoint@1.0.3":
   dir: packages/oxlint-plugins/effect-entrypoint
   intents:
@@ -412,6 +450,10 @@
   intents:
     - peer-ranges-accept-compatible-rc
     - tag-members-derive-from-schemas
+"@systemfsoftware/oxlint-plugin-effect-schema@4.0.1":
+  dir: packages/lint/oxlint/plugins/effect/schema
+  intents:
+    - refutation-suites-are-sanctioned-in-src
 "@systemfsoftware/oxlint-plugin-effect-workflow@2.0.0":
   dir: packages/oxlint-plugins/effect-workflow
   intents:
@@ -502,6 +544,10 @@
   intents:
     - internal-surface-rules
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/oxlint-plugin-test-placement@3.2.0":
+  dir: packages/lint/oxlint/plugins/testing/test-placement
+  intents:
+    - refutation-suites-are-sanctioned-in-src
 "@systemfsoftware/oxlint-plugin@1.0.0":
   dir: packages/oxlint-plugins/core
   intents:
@@ -595,6 +641,14 @@
   intents:
     - malformed-prior-report-stops-the-run
     - stryker-cli-boolean-flags-optional
+"@systemfsoftware/stryker-js-cli@3.1.0":
+  dir: packages/testing/mutation/stryker-js/cli
+  intents:
+    - plugin-discovery-names-this-scope
+"@systemfsoftware/stryker-js-instrumenter@0.2.0":
+  dir: packages/testing/mutation/stryker-js/instrumenter
+  intents:
+    - self-hosted-instrumenter
 "@systemfsoftware/stryker-js-mutation-report@1.2.6":
   dir: packages/stryker-js/mutation-report
   intents:
@@ -605,6 +659,10 @@
   intents:
     - debut-releases-gain-oidc
     - package-landing-pages
+"@systemfsoftware/stryker-js-mutation-report@1.2.9":
+  dir: packages/testing/mutation/stryker-js/mutation-report
+  intents:
+    - plugin-discovery-names-this-scope
 "@systemfsoftware/stryker-js-mutation-run@2.0.0":
   dir: packages/stryker-js/mutation-run
   intents:
@@ -636,6 +694,10 @@
     - peer-ranges-accept-compatible-rc
     - public-names-stay-public
     - test-contribution-entry
+"@systemfsoftware/stryker-js-mutation-run@4.1.0":
+  dir: packages/testing/mutation/stryker-js/mutation-run
+  intents:
+    - plugin-discovery-names-this-scope
 "@systemfsoftware/stryker-js-plugin-api@1.0.0":
   dir: packages/stryker-js/plugin-api
   intents:
@@ -656,6 +718,10 @@
   dir: packages/testing/mutation/stryker-js/plugin-api
   intents:
     - plugin-api-evaluator-kind
+"@systemfsoftware/stryker-js-plugin-api@2.2.0":
+  dir: packages/testing/mutation/stryker-js/plugin-api
+  intents:
+    - plugin-discovery-names-this-scope
 "@systemfsoftware/stryker-js-typescript-checker@1.3.0":
   dir: packages/stryker-js/typescript-checker
   intents:
@@ -672,6 +738,14 @@
     - modern-ends-know
     - package-landing-pages
     - published-packages-ship-only-what-runs
+"@systemfsoftware/stryker-js-typescript-checker@1.4.1":
+  dir: packages/testing/mutation/stryker-js/typescript-checker
+  intents:
+    - plugin-discovery-names-this-scope
+"@systemfsoftware/stryker-js-util@0.2.0":
+  dir: packages/testing/mutation/stryker-js/util
+  intents:
+    - self-hosted-instrumenter
 "@systemfsoftware/stryker-js-vitest-runner@0.1.1":
   dir: packages/stryker-js/vitest-runner
   intents:
@@ -688,6 +762,10 @@
   dir: packages/testing/mutation/stryker-js/vitest-runner
   intents:
     - sandbox-self-aliases
+"@systemfsoftware/stryker-js-vitest-runner@0.1.4":
+  dir: packages/testing/mutation/stryker-js/vitest-runner
+  intents:
+    - plugin-discovery-names-this-scope
 "@systemfsoftware/stryker-plugins@0.12.0":
   dir: packages/stryker-plugins
   intents:
@@ -712,6 +790,10 @@
   dir: packages/testing/mutation/plugins/stryker-plugins
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/stryker-plugins@0.13.2":
+  dir: packages/testing/mutation/plugins/stryker-plugins
+  intents:
+    - plugin-discovery-names-this-scope
 "@systemfsoftware/stryker-test-contribution@0.1.0":
   dir: packages/testing/mutation/plugins/stryker-test-contribution
   intents:

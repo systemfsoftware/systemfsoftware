@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-schema-vite",
   "license": "Apache-2.0",
-  "version": "1.5.4",
+  "version": "2.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -47,6 +47,7 @@
   },
   "dependencies": {
     "@oxc-project/types": "catalog:",
+    "@systemfsoftware/effect-schema-discovery": "workspace:^",
     "oxc-parser": "catalog:"
   },
   "devDependencies": {

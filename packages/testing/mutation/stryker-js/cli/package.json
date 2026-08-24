@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/stryker-js-cli",
-  "version": "3.0.1",
+  "version": "3.1.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
@@ -39,6 +39,7 @@
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-refutation-vite": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",

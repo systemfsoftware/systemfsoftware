@@ -1,0 +1,77 @@
+{
+  "name": "@systemfsoftware/effect-schema-bounded-union",
+  "license": "Apache-2.0",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/core/effect/schema/bounded-union"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/core/effect/schema/bounded-union#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "A recursive Effect Schema union whose generated values terminate — same decode, encode and equivalence as Schema.Union, with a depth cap on arbitrary generation.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "schema",
+    "codec",
+    "union",
+    "recursive",
+    "arbitrary",
+    "fast-check",
+    "property-testing",
+    "typescript"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/effect-schema-bounded-union.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown && pnpm api:check",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
+    "test:run": "vitest run",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack ."
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "vitest": "^4.1.10"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/effect-schema-bounded-union.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}

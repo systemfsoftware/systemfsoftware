@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-effect-dmmf",
   "license": "Apache-2.0",
-  "version": "4.0.0",
+  "version": "4.0.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",

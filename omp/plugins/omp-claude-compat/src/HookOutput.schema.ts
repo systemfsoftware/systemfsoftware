@@ -54,7 +54,7 @@ export const HookOutputFromStdout = S.String.pipe(
 if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
   // branch is statically dead in the build and never enters the published module graph.
-  const { refutes } = await import('@systemfsoftware/effect-schema-law')
+  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
   const { FastCheck: fc } = await import('effect/testing')
 
   // The sole obligation: the parse boundary accepts any string, so a non-JSON

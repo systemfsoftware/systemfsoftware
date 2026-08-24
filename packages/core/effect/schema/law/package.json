@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-schema-law",
   "license": "Apache-2.0",
-  "version": "0.9.0",
+  "version": "1.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/core/effect/schema/law#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Property-test the codec laws of any Effect Schema in one call — decode/encode round-trip identity and encode stability, generated with @effect/vitest and fast-check.",
+  "description": "Property-test any Effect Schema's codec laws and its refusal contract — round-trip identity, encode stability, refusal and adequacy, generated with @effect/vitest and fast-check.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -21,6 +21,10 @@
     "vitest",
     "roundtrip",
     "law-testing",
+    "validation",
+    "refutation",
+    "negative-testing",
+    "adequacy",
     "serialization",
     "typescript"
   ],
@@ -30,6 +34,11 @@
       "@systemfsoftware/source": "./src/mod.ts",
       "types": "./dist/effect-schema-law.d.ts",
       "default": "./dist/index.mjs"
+    },
+    "./refutation": {
+      "@systemfsoftware/source": "./src/refutation/mod.ts",
+      "types": "./dist/refutation.d.ts",
+      "default": "./dist/refutation.mjs"
     },
     "./package.json": "./package.json"
   },
@@ -41,9 +50,8 @@
     "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "test:run": "vitest run",
-    "api:check": "api-extractor run",
-    "api:update": "api-extractor run --local",
+    "api:check": "api-extractor run && api-extractor run --config api-extractor.refutation.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.refutation.json",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },
@@ -51,7 +59,6 @@
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
-    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
@@ -73,6 +80,10 @@
       ".": {
         "types": "./dist/effect-schema-law.d.ts",
         "default": "./dist/index.mjs"
+      },
+      "./refutation": {
+        "types": "./dist/refutation.d.ts",
+        "default": "./dist/refutation.mjs"
       },
       "./package.json": "./package.json"
     },

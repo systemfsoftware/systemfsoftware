@@ -4,6 +4,7 @@ type ExportEntry = string | Record<string, string | undefined>
 
 const typesMap: Record<string, string> = {
   '.': './dist/effect-schema-law.d.ts',
+  './refutation': './dist/refutation.d.ts',
 }
 
 const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
@@ -21,7 +22,7 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
 }
 
 export default defineConfig({
-  entry: { index: './src/mod.ts' },
+  entry: { index: './src/mod.ts', refutation: './src/refutation/mod.ts' },
   format: 'esm',
   dts: true,
   exports: {
