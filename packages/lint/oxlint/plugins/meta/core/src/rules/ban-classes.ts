@@ -36,13 +36,29 @@ const isTestPath = (filename: string): boolean => TEST_OR_FIXTURE_PATH.test(file
 const canonicalModule = (source: string): string =>
   source === 'effect' || source.startsWith('effect/') ? SANCTIONED_MODULE : source
 
+/**
+ * The namespace segment a namespace import contributes to the resolved path.
+ *
+ * `import * as Context from 'effect/Context'` binds the MEMBERS of `Context`, so
+ * the local name stands for the namespace and `Context.Service` must resolve to
+ * `effect/Context.Service`. `import * as Effect from 'effect'` binds the package
+ * root instead, so the namespace arrives as the first property access and this
+ * contributes nothing.
+ *
+ * `canonicalModule` collapses both spellings to `effect` because that is what
+ * the membership test needs, which destroys exactly this distinction — so it is
+ * read from the original specifier here rather than recovered later.
+ */
+const namespaceSegmentOf = (source: string): string | null =>
+  source.startsWith(`${SANCTIONED_MODULE}/`) ? source.slice(SANCTIONED_MODULE.length + 1) : null
+
 export const banClasses = defineRule({
   meta,
   create(context: Context) {
     if (isTestPath(context.filename)) return {}
 
     const namedBindings = new Map<string, { readonly module: string; readonly namespace: string }>()
-    const namespaceImports = new Set<string>()
+    const namespaceImports = new Map<string, string | null>()
     const shadowedLocals = new Set<string>()
 
     const markShadowed = (name: string): void => {
@@ -91,7 +107,16 @@ export const banClasses = defineRule({
       }
 
       if (namespaceImports.has(localName)) {
-        return segments.length > 0 ? `${SANCTIONED_MODULE}/${segments.join('.')}` : null
+        const namespace = namespaceImports.get(localName) ?? null
+        // A deep import (`effect/Context`) already names the namespace, so the
+        // member is the only segment the extends-expression needs to supply. A
+        // root import (`effect`) supplies the namespace as its first segment,
+        // which needs at least two.
+        const path = namespace === null
+          ? `${SANCTIONED_MODULE}/${segments.join('.')}`
+          : `${SANCTIONED_MODULE}/${namespace}.${segments.join('.')}`
+        const required = namespace === null ? 2 : 1
+        return segments.length >= required ? path : null
       }
 
       return null
@@ -112,7 +137,31 @@ export const banClasses = defineRule({
       })
     }
 
+    /**
+     * Whether the class is a type-only declaration rather than a runtime one.
+     *
+     * `declare module '@babel/core' { export class File { … } }` augments a
+     * dependency whose published types omit a class its runtime exports. That
+     * declaration emits nothing, so it holds no field, runs no constructor and
+     * has no instance — none of the harms this rule exists to prevent can occur
+     * in it, and there is no alternative spelling to migrate it to.
+     *
+     * A `namespace Foo { class Bar {} }` without `declare` DOES emit a runtime
+     * class, so the ambient flag is read from the ancestor rather than assumed
+     * from its being a module at all.
+     */
+    const isAmbientDeclaration = (node: ESTree.Class): boolean => {
+      let current: unknown = node.parent
+      while (current !== undefined && current !== null && typeof current === 'object') {
+        const candidate: { type?: unknown; declare?: unknown; parent?: unknown } = current
+        if (candidate.type === 'TSModuleDeclaration' && candidate.declare === true) return true
+        current = candidate.parent
+      }
+      return false
+    }
+
     const checkClass = (node: ESTree.Class): void => {
+      if (isAmbientDeclaration(node)) return
       const className = node.id === null ? ANONYMOUS_CLASS : node.id.name
 
       if (node.superClass === null) {
@@ -140,7 +189,7 @@ export const banClasses = defineRule({
             namedBindings.set(spec.local.name, { module, namespace: spec.imported.name })
           } else if (spec.type === 'ImportNamespaceSpecifier') {
             if (module === SANCTIONED_MODULE) {
-              namespaceImports.add(spec.local.name)
+              namespaceImports.set(spec.local.name, namespaceSegmentOf(node.source.value))
             }
           } else {
             markShadowed(spec.local.name)
