@@ -32,13 +32,8 @@ const WORKSPACE_PACKAGES = [
   '@systemfsoftware/stryker-js-util',
   '@systemfsoftware/effect-cell-types',
 ] as const
-const REPO_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url))
-// Two levels: this file sits at `cli/tests/__fixtures__/`, so `../../` is `cli/`.
-// `REPO_ROOT` needs five for the same reason. When this file moved from
-// `cli/__tests__/` both constants needed one more level; only `REPO_ROOT` got it,
-// and the lane has died in `setup` - before collecting a single test - ever since.
-const CLI_DIR = fileURLToPath(new URL('../../', import.meta.url))
-const FIXTURES_DIR = fileURLToPath(new URL('./fixtures', import.meta.url))
+const CLI_DIR = fileURLToPath(new URL('./', import.meta.url))
+const FIXTURES_DIR = fileURLToPath(new URL('./tests/__fixtures__/fixtures', import.meta.url))
 const WORKDIR = '/work'
 const TARBALLS_IN_CONTAINER = '/opt/tarballs'
 const WORKSPACE_MANIFEST = JSON.stringify({
@@ -137,7 +132,7 @@ export function setup(project: TestProject): Promise<void> {
             'pnpm',
             ['--filter', workspacePackage, 'exec', 'pnpm', 'pack', '--pack-destination', packDir],
             {
-              cwd: REPO_ROOT,
+              cwd: CLI_DIR,
               // Pack read-only: the lane packs a tree turbo already built, so a
               // packed package's `prepare` hook (`stryker-js-cli` carries one)
               // would clean-and-rebuild its `dist` mid-gate — a window in which
