@@ -13,7 +13,7 @@ import type {
 import { ReporterFailed } from '@systemfsoftware/stryker-js-plugin-api/report'
 import * as Effect from 'effect/Effect'
 
-import { buildJsonReport } from './json-kernel.js'
+import { buildJsonReport } from './json-document.js'
 import { writeOutputFile } from './output-file.js'
 import type { ProvidedStrykerOptions } from './provided-options.js'
 

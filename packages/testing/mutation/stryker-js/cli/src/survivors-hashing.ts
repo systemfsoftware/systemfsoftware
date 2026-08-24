@@ -1,4 +1,4 @@
-import type { PriorReportDocument } from './survivors-report.kernel.js'
+import type { PriorReportDocument } from './survivors-report.js'
 
 const { entries: objectEntries, fromEntries: objectFromEntries } = Object
 

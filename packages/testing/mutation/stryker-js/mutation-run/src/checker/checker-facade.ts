@@ -2,7 +2,7 @@ import type { CheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
 import type { MutantRunPlan } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Effect from 'effect/Effect'
 
-import { pairCheckResults, pairGroups } from './checker-contract.kernel.js'
+import { pairCheckResults, pairGroups } from './checker-contract.js'
 import type { CheckerContractBroken } from './checker-contract.schema.js'
 import type { CheckerCrash, CheckerResourceService } from './checker-resource.js'
 
@@ -11,7 +11,7 @@ import type { CheckerCrash, CheckerResourceService } from './checker-resource.js
  *
  * The port speaks `Mutant` because that is all a checker needs; the engine
  * schedules `MutantRunPlan`. This is the two-line shell around that translation:
- * project the plans down, call the checker, and hand the answers to the kernel
+ * project the plans down, call the checker, and hand the answers to the pure decision
  * that joins them back. The join is where the work is, and it is pure.
  */
 export const checkPlans = (

@@ -10,11 +10,11 @@ import { resolveMode, TOOL_VARIABLES } from './output-mode.js'
  * The one impure adapter over `resolveMode` (U3): reads the process
  * environment so callers with no CLI-parsed flags — the library entry point,
  * the reporters — cannot drift into private copies of the probe and disagree
- * about the mode. Shell, never a kernel: it reads `process.stdout.isTTY` and
+ * about the mode. Impure by nature: it reads `process.stdout.isTTY` and
  * `process.env`, and the pure decision (`resolveMode`) stays downstream of
  * these reads.
  *
- * The tool-variable probe is derived from the kernel's `TOOL_VARIABLES`
+ * The tool-variable probe is derived from the pure decision's `TOOL_VARIABLES`
  * constant, so the known-variable list has exactly one declaration.
  */
 // The interface is the type consumers index into (`OutputModeProbe['detectMode']`),
@@ -34,7 +34,7 @@ export { OutputModeProbe }
 export const OutputModeProbeLive: Layer.Layer<OutputModeProbeTag> = Layer.succeed(
   OutputModeProbe,
   OutputModeProbe.of({
-    // The probe never sets the two mutually-exclusive flags, so the kernel's
+    // The probe never sets the two mutually-exclusive flags, so the decision's
     // `failure` is unreachable; getOrThrow keeps the port total.
     detectMode: () => {
       const envMode = process.env['STRYKER_MODE']

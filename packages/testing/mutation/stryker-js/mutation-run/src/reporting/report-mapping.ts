@@ -6,21 +6,12 @@ import type {
   MutantResult,
   MutantStatus,
   MutantTestCoverage,
-  Position,
   schema,
 } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { normalizeFileName } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type MutantRunResult, MutantRunStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
-export const toSchemaPosition = (pos: Position): schema.Position => ({
-  column: pos.column + 1,
-  line: pos.line + 1,
-})
-
-export const toSchemaLocation = (location: Location): schema.Location => ({
-  start: toSchemaPosition(location.start),
-  end: toSchemaPosition(location.end),
-})
+import { toSchemaLocation } from './report-location.js'
 
 export const checkStatusToMutantStatus = (
   status: Exclude<CheckStatus, CheckStatus.Passed>,

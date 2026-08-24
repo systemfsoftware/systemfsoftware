@@ -3,7 +3,7 @@ import type { types as t } from '@babel/core'
 import { deepCloneNode } from '../babel/clone.js'
 
 import babel from '@babel/core'
-import { type MutatorContext, type NodeMutator } from './node-mutator.js'
+import type { Mutator, MutatorContext } from './mutator.js'
 
 const { types } = babel
 
@@ -27,17 +27,13 @@ const assignmentOperatorReplacements = Object.freeze(
 const stringTypes = Object.freeze(['StringLiteral', 'TemplateLiteral'])
 const stringAssignmentTypes = Object.freeze(['&&=', '||=', '??='])
 
-export const assignmentOperatorMutator: NodeMutator = {
-  name: 'AssignmentOperator',
-
-  *mutate(node, _context: MutatorContext) {
-    if (types.isAssignmentExpression(node) && isSupportedAssignmentOperator(node.operator) && isSupported(node)) {
-      const mutatedOperator = assignmentOperatorReplacements[node.operator]
-      const replacement = deepCloneNode(node)
-      replacement.operator = mutatedOperator
-      yield replacement
-    }
-  },
+export const assignmentOperatorMutator: Mutator = function*(node, _context: MutatorContext) {
+  if (types.isAssignmentExpression(node) && isSupportedAssignmentOperator(node.operator) && isSupported(node)) {
+    const mutatedOperator = assignmentOperatorReplacements[node.operator]
+    const replacement = deepCloneNode(node)
+    replacement.operator = mutatedOperator
+    yield replacement
+  }
 }
 
 function isSupportedAssignmentOperator(operator: string): operator is keyof typeof assignmentOperatorReplacements {

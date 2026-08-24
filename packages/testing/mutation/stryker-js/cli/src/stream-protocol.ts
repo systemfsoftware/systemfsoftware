@@ -31,7 +31,7 @@ if (import.meta.vitest !== void 0) {
   const { FastCheck: fc } = await import('effect/testing')
 
   /**
-   * The kernel exports only the two wire constants, so each law is an invariant
+   * Only the two wire constants are exported, so each law is an invariant
    * over the single defined value rather than a quantified relation: a value
    * change (a non-positive tick, a version that stops being `N.N`) is exactly
    * the bug these pin.

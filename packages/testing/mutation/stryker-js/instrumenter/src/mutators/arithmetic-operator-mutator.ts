@@ -3,7 +3,7 @@ import babel from '@babel/core'
 
 import { deepCloneNode } from '../babel/clone.js'
 
-import { type MutatorContext, type NodeMutator } from './node-mutator.js'
+import type { Mutator, MutatorContext } from './mutator.js'
 
 const { types: t } = babel
 
@@ -17,17 +17,13 @@ const arithmeticOperatorReplacements = Object.freeze(
   } as const,
 )
 
-export const arithmeticOperatorMutator: NodeMutator = {
-  name: 'ArithmeticOperator',
-
-  *mutate(node, _context: MutatorContext) {
-    if (t.isBinaryExpression(node) && isSupported(node.operator, node)) {
-      const mutatedOperator = arithmeticOperatorReplacements[node.operator]
-      const replacement = deepCloneNode(node)
-      replacement.operator = mutatedOperator
-      yield replacement
-    }
-  },
+export const arithmeticOperatorMutator: Mutator = function*(node, _context: MutatorContext) {
+  if (t.isBinaryExpression(node) && isSupported(node.operator, node)) {
+    const mutatedOperator = arithmeticOperatorReplacements[node.operator]
+    const replacement = deepCloneNode(node)
+    replacement.operator = mutatedOperator
+    yield replacement
+  }
 }
 
 function isSupported(

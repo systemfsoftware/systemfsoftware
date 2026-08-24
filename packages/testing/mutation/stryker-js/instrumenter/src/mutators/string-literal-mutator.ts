@@ -1,25 +1,21 @@
 import babel from '@babel/core'
 
-import { type MutatorContext, type NodeMutator } from './node-mutator.js'
+import type { Mutator, MutatorContext } from './mutator.js'
 
 const { types } = babel
 
-export const stringLiteralMutator: NodeMutator = {
-  name: 'StringLiteral',
-
-  *mutate(node, context: MutatorContext) {
-    if (types.isTemplateLiteral(node)) {
-      const firstQuasi = node.quasis[0]
-      if (firstQuasi === undefined) {
-        return
-      }
-      const replacement = node.quasis.length === 1 && firstQuasi.value.raw.length === 0 ? 'Stryker was here!' : ''
-      yield types.templateLiteral([types.templateElement({ raw: replacement })], [])
+export const stringLiteralMutator: Mutator = function*(node, context: MutatorContext) {
+  if (types.isTemplateLiteral(node)) {
+    const firstQuasi = node.quasis[0]
+    if (firstQuasi === undefined) {
+      return
     }
-    if (types.isStringLiteral(node) && isValidParent(node, context)) {
-      yield types.stringLiteral(node.value.length === 0 ? 'Stryker was here!' : '')
-    }
-  },
+    const replacement = node.quasis.length === 1 && firstQuasi.value.raw.length === 0 ? 'Stryker was here!' : ''
+    yield types.templateLiteral([types.templateElement({ raw: replacement })], [])
+  }
+  if (types.isStringLiteral(node) && isValidParent(node, context)) {
+    yield types.stringLiteral(node.value.length === 0 ? 'Stryker was here!' : '')
+  }
 }
 
 function isValidParent(child: babel.types.StringLiteral, context: MutatorContext): boolean {

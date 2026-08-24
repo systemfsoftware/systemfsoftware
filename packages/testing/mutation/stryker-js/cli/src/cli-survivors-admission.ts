@@ -34,9 +34,9 @@ import {
   SurvivorsRejection,
 } from './survivors-admission.workflow.js'
 import { DEFAULT_SURVIVORS_PRIOR_REPORT } from './survivors-bookkeeping.js'
-import { type HashContent, priorSourceHashes, sourceContentHash } from './survivors-hashing.kernel.js'
-import { extractSurvivors, type ResolveAbsolutePath, survivorMutateSpans } from './survivors-mutants.kernel.js'
-import { decodePriorReport } from './survivors-report.kernel.js'
+import { type HashContent, priorSourceHashes, sourceContentHash } from './survivors-hashing.js'
+import { extractSurvivors, type ResolveAbsolutePath, survivorMutateSpans } from './survivors-mutants.js'
+import { decodePriorReport } from './survivors-report.js'
 const hashContent: HashContent = (content) => createHash('sha256').update(content, 'utf-8').digest('hex')
 
 const resolveAbsolutePath: ResolveAbsolutePath = (file) => resolvePath(file)

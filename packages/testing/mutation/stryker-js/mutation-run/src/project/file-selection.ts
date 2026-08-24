@@ -1,6 +1,5 @@
 import type { FileDescription, FileDescriptions, Location, Position } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Predicate from 'effect/Predicate'
-import type { OpenEndLocation } from 'mutation-testing-report-schema'
 
 import { createFileMatcher } from '../config/file-matcher.js'
 
@@ -142,25 +141,4 @@ export function resolveTestFiles(inputFileNames: string[], testFilePatterns: rea
     resolvedTestFiles.push(...matchedFiles)
   }
   return [...new Set(resolvedTestFiles)]
-}
-
-function reportPositionToStrykerPosition({ line, column }: Position): Position {
-  return { line, column }
-}
-
-export function reportOpenEndLocationToStrykerLocation({ start, end }: OpenEndLocation): OpenEndLocation {
-  if (end === undefined) {
-    return { start: reportPositionToStrykerPosition(start) }
-  }
-  return {
-    start: reportPositionToStrykerPosition(start),
-    end: reportPositionToStrykerPosition(end),
-  }
-}
-
-export function reportLocationToStrykerLocation({ start, end }: Location): Location {
-  return {
-    start: reportPositionToStrykerPosition(start),
-    end: reportPositionToStrykerPosition(end),
-  }
 }

@@ -2,9 +2,9 @@ import { type Mutant, normalizeFileName } from '@systemfsoftware/stryker-js-plug
 import { Result } from 'effect'
 import type { Diagnostic } from 'typescript/unstable/sync'
 
-import { getMutantsWithReferenceToChildrenOrSelf, type TSFileNode } from '../grouping/ts-file-node.js'
+import { getMutantsWithReferenceToChildrenOrSelf, type TSFileNode } from './grouping/ts-file-node.js'
 
-import { DiagnosticInUnrelatedFileError, DiagnosticWithoutFileError } from './check-kernel.schema.js'
+import { DiagnosticInUnrelatedFileError, DiagnosticWithoutFileError } from './diagnostics.schema.js'
 
 export interface Classification {
   readonly definitive: ReadonlyMap<string, readonly Diagnostic[]>

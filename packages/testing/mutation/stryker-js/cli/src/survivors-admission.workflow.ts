@@ -24,7 +24,7 @@ import { MutantShape } from './survivors-report.schema.js'
  * These live here, beside the decision, because `make-body-purity` follows the
  * decision's reachable set: a helper `admissionVerdict` calls is checked as part
  * of the body even though it is declared outside it. That is why the properties
- * covering them are in this file's in-source block rather than in a kernel -
+ * covering them are in this file's in-source block rather than beside a pure helper -
  * testing a copy the decision does not run is worse than not testing it, because
  * the suite goes green either way.
  */
@@ -163,7 +163,7 @@ export function hashesMatch(
 }
 
 /**
- * The admission classification, over primitives and kernel types only.
+ * The admission classification, over primitives and plain data only.
  *
  * The three rejecting kinds already carry the reason and the composed remediation, so the
  * workflow assigns channels rather than re-deciding: one arm per kind, no guard chain. The
@@ -281,7 +281,7 @@ if (import.meta.vitest !== void 0) {
 
   // These cover the helpers THIS file declares, which are the ones
   // `admissionVerdict` runs. `make-body-purity` follows the decision's
-  // reachable set, so the helpers cannot be imported from a kernel; the
+  // reachable set, so the helpers cannot be imported from elsewhere; the
   // properties therefore have to live beside them. A copy of these functions
   // tested somewhere else would leave the suite green whichever copy drifted.
   const { describe, it: gherkinIt } = await import('@systemfsoftware/effect-gherkin-spec')

@@ -1,18 +1,14 @@
 import babel from '@babel/core'
 import * as Predicate from 'effect/Predicate'
 
-import { type MutatorContext, type NodeMutator } from './node-mutator.js'
+import type { Mutator, MutatorContext } from './mutator.js'
 
 const { types } = babel
 
-export const blockStatementMutator: NodeMutator = {
-  name: 'BlockStatement',
-
-  *mutate(node, context: MutatorContext) {
-    if (types.isBlockStatement(node) && isValid(node, context)) {
-      yield types.blockStatement([])
-    }
-  },
+export const blockStatementMutator: Mutator = function*(node, context: MutatorContext) {
+  if (types.isBlockStatement(node) && isValid(node, context)) {
+    yield types.blockStatement([])
+  }
 }
 
 function isValid(node: babel.types.BlockStatement, context: MutatorContext): boolean {

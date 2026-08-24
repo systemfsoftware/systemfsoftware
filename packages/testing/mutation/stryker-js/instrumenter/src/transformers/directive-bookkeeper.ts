@@ -1,6 +1,6 @@
 import type { types } from '@babel/core'
 
-import { type NodeMutator } from '../mutators/node-mutator.js'
+import type { Mutator } from '../mutators/mutator.js'
 
 const WILDCARD = 'all'
 const DEFAULT_REASON = 'Ignored using a comment'

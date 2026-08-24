@@ -16,8 +16,8 @@ import {
   SurvivorsRejection,
 } from '../survivors-admission.workflow.js'
 import { SURVIVORS_RUN_FIRST_REMEDIATION } from '../survivors-bookkeeping.js'
-import { type HashContent, priorSourceHashes, sourceContentHash } from '../survivors-hashing.kernel.js'
-import { extractSurvivors } from '../survivors-mutants.kernel.js'
+import { type HashContent, priorSourceHashes, sourceContentHash } from '../survivors-hashing.js'
+import { extractSurvivors } from '../survivors-mutants.js'
 const sha256Hex: HashContent = (content) => createHash('sha256').update(content, 'utf-8').digest('hex')
 
 const absPath = (file: string): string => `/work/${file}`

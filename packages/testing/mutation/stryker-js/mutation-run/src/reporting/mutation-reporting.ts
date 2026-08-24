@@ -31,14 +31,13 @@ import type { RunEventSink } from '../run-event.js'
 import type { RunOutcome } from '../run-stages/stage-results.js'
 import { strykerVersion } from '../stryker-package.js'
 import { buildVerdictEnvelope, type VerdictEvaluatorVerdict } from '../verdict-envelope.js'
+import { toSchemaLocation, toSchemaPosition } from './report-location.js'
 import {
   checkStatusToMutantStatus,
   determineLanguage,
   mapRunResult,
   normalizeReportFileName,
-  toSchemaLocation,
-  toSchemaPosition,
-} from './mutation-reporting.kernel.js'
+} from './report-mapping.js'
 
 const STRYKER_FRAMEWORK: Readonly<Pick<schema.FrameworkInformation, 'branding' | 'name' | 'version'>> = Object.freeze({
   branding: {
@@ -403,4 +402,4 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
 export const makeMutationReportingLayer = (input: MakeMutationReportingInput): Layer.Layer<MutationReporting> =>
   Layer.succeed(MutationReporting, makeMutationReportingService(input))
 
-export { normalizeReportFileName } from './mutation-reporting.kernel.js'
+export { normalizeReportFileName } from './report-mapping.js'

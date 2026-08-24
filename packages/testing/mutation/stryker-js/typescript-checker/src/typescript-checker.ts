@@ -12,9 +12,9 @@ import * as Match from 'effect/Match'
 import { DiagnosticCategory } from 'typescript/unstable/sync'
 import type { Diagnostic } from 'typescript/unstable/sync'
 
+import { classifyDiagnostics, partitionMutantsForGrouping } from './diagnostics.js'
 import { createGroups } from './grouping/create-groups.js'
 import type { TSFileNode } from './grouping/ts-file-node.js'
-import { classifyDiagnostics, partitionMutantsForGrouping } from './kernel/check-kernel.js'
 import type { TypeScriptCompiler } from './typescript-compiler.js'
 
 interface CheckerDeps {

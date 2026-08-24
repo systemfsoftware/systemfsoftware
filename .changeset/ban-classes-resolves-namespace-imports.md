@@ -10,12 +10,9 @@ through a namespace import.
 rule dropped the namespace when resolving the base, so it compared
 `effect/Service` against its sanctioned list instead of `effect/Context.Service`.
 That spelling is the common one, so the rule was loudest exactly where the code
-was correct — 59 of 61 reports in one package were false.
-
-Deep namespace imports such as `effect/Schema` resolve correctly too, and a
-member of a foreign module is still rejected.
+was correct. Deep namespace imports such as `effect/Schema` resolve correctly
+too, and a member of a foreign module is still rejected.
 
 An ambient class declaration is no longer reported, whether it sits inside a
 `declare module` or stands at file scope as `declare class`. Neither emits
-anything at runtime, so none of the harms this rule prevents can occur there and
-there is no other spelling to move them to.
+anything at runtime, so none of the harms this rule prevents can occur there.

@@ -3,7 +3,7 @@ import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 import { toRelativeNormalizedFileName } from '@systemfsoftware/stryker-js-mutation-run/mutants/incremental-differ'
 
-import type { PriorReportDocument, PriorReportMutant } from './survivors-report.kernel.js'
+import type { PriorReportDocument, PriorReportMutant } from './survivors-report.js'
 
 const { entries: objectEntries } = Object
 

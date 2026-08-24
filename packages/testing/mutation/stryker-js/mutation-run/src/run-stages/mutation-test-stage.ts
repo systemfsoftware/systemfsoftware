@@ -28,12 +28,8 @@ import { forMutant, hasStaticCoverage } from '../mutants/test-coverage.js'
 import type { TestCoverage } from '../mutants/test-coverage.js'
 import { makeMutationReportingService } from '../reporting/mutation-reporting.js'
 import type { MutationReportingService } from '../reporting/mutation-reporting.js'
-import {
-  checkStatusToMutantStatus,
-  mapRunResult,
-  normalizeReportFileName,
-  toSchemaLocation,
-} from '../reporting/mutation-reporting.kernel.js'
+import { toSchemaLocation } from '../reporting/report-location.js'
+import { checkStatusToMutantStatus, mapRunResult, normalizeReportFileName } from '../reporting/report-mapping.js'
 import { RunEnvironment } from '../run-environment.js'
 import type { SandboxHandle } from '../sandbox/sandbox.js'
 import { StrykerError } from '../stryker-error.schema.js'

@@ -15,7 +15,7 @@ import { ReporterFailed } from '@systemfsoftware/stryker-js-plugin-api/report'
 import * as Effect from 'effect/Effect'
 import { createRequire } from 'module'
 
-import { buildReportHtml } from './html-kernel.js'
+import { buildReportHtml } from './html-document.js'
 import { writeOutputFile } from './output-file.js'
 import type { ProvidedStrykerOptions } from './provided-options.js'
 

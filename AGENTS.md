@@ -2,7 +2,7 @@
 
 ## Purpose
 
-- **REPO-A1** — this repository exists to make an agent produce the impure/pure/impure sandwich by construction — gather at the edge, decide in the pure middle, act on the returned decision at the edge. A `kernel` cell is the pure core and takes data; an `executor` cell is the shell and does the I/O. Every other mechanism here is instrumentation for that shape.
+- **REPO-A1** — this repository exists to make an agent produce the impure/pure/impure sandwich by construction — gather at the edge, decide in the pure middle, act on the returned decision at the edge. The shape is a property of the code, never of a filename: the only suffixes this tree carries are `.workflow.ts` for a decision a caller drives and `.schema.ts` for a declaration, and neither grants a file powers or scopes a check (see **Drifted key** in `CONCEPTS.md`). Every other mechanism here is instrumentation for that shape.
 
 ```yaml
 - id: REPO-A2

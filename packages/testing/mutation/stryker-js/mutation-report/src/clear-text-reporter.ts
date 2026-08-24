@@ -12,7 +12,7 @@ import type {
 import { ReporterFailed } from '@systemfsoftware/stryker-js-plugin-api/report'
 import * as Effect from 'effect/Effect'
 
-import { renderClearText } from './clear-text-kernel.js'
+import { renderClearText } from './clear-text-render.js'
 import type { ProvidedStrykerOptions } from './provided-options.js'
 
 function noopLogger(): Logger {

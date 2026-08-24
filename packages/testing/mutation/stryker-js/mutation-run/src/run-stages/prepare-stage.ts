@@ -25,7 +25,7 @@ import { RunEnvironment } from '../run-environment.js'
 import { TemporaryDirectory, TemporaryDirectoryLive } from '../sandbox/temporary-directory.js'
 import { makeTimer } from '../timer.js'
 
-import { selectReporters } from '../reporting/reporter-selection.kernel.js'
+import { selectReporters } from '../reporting/reporter-selection.js'
 import type { PrepareDone, PrepareStage } from './stage-results.js'
 import { StageError } from './stage.schema.js'
 

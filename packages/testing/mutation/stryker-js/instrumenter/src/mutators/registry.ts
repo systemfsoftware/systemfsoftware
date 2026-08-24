@@ -8,7 +8,7 @@ import { conditionalExpressionMutator } from './conditional-expression-mutator.j
 import { equalityOperatorMutator } from './equality-operator-mutator.js'
 import { logicalOperatorMutator } from './logical-operator-mutator.js'
 import { methodExpressionMutator } from './method-expression-mutator.js'
-import type { NodeMutator } from './node-mutator.js'
+import type { Mutator } from './mutator.js'
 import { objectLiteralMutator } from './object-literal-mutator.js'
 import { optionalChainingMutator } from './optional-chaining-mutator.js'
 import { regexMutator } from './regex-mutator.js'
@@ -32,21 +32,21 @@ import { updateOperatorMutator } from './update-operator-mutator.js'
  * Naming each mutator here costs one line when a mutator is added and makes
  * that line a compile-checked import instead of a runtime effect.
  */
-export const allMutators: readonly NodeMutator[] = Object.freeze([
-  arithmeticOperatorMutator,
-  arrayDeclarationMutator,
-  arrowFunctionMutator,
-  assignmentOperatorMutator,
-  blockStatementMutator,
-  booleanLiteralMutator,
-  conditionalExpressionMutator,
-  equalityOperatorMutator,
-  logicalOperatorMutator,
-  methodExpressionMutator,
-  objectLiteralMutator,
-  optionalChainingMutator,
-  regexMutator,
-  stringLiteralMutator,
-  unaryOperatorMutator,
-  updateOperatorMutator,
-])
+export const allMutators: Readonly<Record<string, Mutator>> = Object.freeze({
+  ArithmeticOperator: arithmeticOperatorMutator,
+  ArrayDeclaration: arrayDeclarationMutator,
+  ArrowFunction: arrowFunctionMutator,
+  AssignmentOperator: assignmentOperatorMutator,
+  BlockStatement: blockStatementMutator,
+  BooleanLiteral: booleanLiteralMutator,
+  ConditionalExpression: conditionalExpressionMutator,
+  EqualityOperator: equalityOperatorMutator,
+  LogicalOperator: logicalOperatorMutator,
+  MethodExpression: methodExpressionMutator,
+  ObjectLiteral: objectLiteralMutator,
+  OptionalChaining: optionalChainingMutator,
+  Regex: regexMutator,
+  StringLiteral: stringLiteralMutator,
+  UnaryOperator: unaryOperatorMutator,
+  UpdateOperator: updateOperatorMutator,
+})

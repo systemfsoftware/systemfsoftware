@@ -46,7 +46,7 @@ Feature('Instrumenter characterization')
         Given('the registry')('mutators', () => Effect.succeed(allMutators)),
         Then('the names are the sixteen expected')(({ mutators }: { mutators: typeof allMutators }) =>
           Effect.sync(() => {
-            const names = mutators.map((mutator) => mutator.name).slice().sort()
+            const names = Object.keys(mutators).slice().sort()
             expect(names).toEqual([
               'ArithmeticOperator',
               'ArrayDeclaration',

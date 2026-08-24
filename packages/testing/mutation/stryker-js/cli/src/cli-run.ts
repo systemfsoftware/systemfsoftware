@@ -23,7 +23,7 @@ import type {
   ConfigFileUnreadableError,
 } from '@systemfsoftware/stryker-js-mutation-run/errors'
 import type { SchemaError } from 'effect/Schema'
-import { isExitClass, resolveCliExitCode } from './cli-exit-code.kernel.js'
+import { isExitClass, resolveCliExitCode } from './cli-exit-code.js'
 import { emitMachineModeOutput } from './cli-machine-output.js'
 import type { CreateRunEventStreamCapability, RunStrykerCliInput, StrykerRun } from './cli-ports.js'
 import type { CliRequest } from './cli-request.schema.js'

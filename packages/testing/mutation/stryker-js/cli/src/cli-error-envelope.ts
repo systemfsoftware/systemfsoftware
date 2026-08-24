@@ -1,6 +1,6 @@
 import * as Exit from 'effect/Exit'
 
-import { describeFailure, remediationFor, unrecognizedArgumentOf } from './cli-failure-text.kernel.js'
+import { describeFailure, remediationFor, unrecognizedArgumentOf } from './cli-failure-text.js'
 import { STREAM_SCHEMA_VERSION } from './stream-protocol.js'
 
 export interface ErrorEnvelope {

@@ -13,17 +13,19 @@ import type { MutationTestResult } from 'mutation-testing-report-schema/api'
 
 import { defaultOptions } from '../config/index.js'
 
-import { IncrementalReportSchema } from './incremental-report.schema.js'
-import { logProjectFiles, makeProject, type Project } from './project.js'
+import {
+  reportLocationToStrykerLocation,
+  reportOpenEndLocationToStrykerLocation,
+} from '../reporting/report-location.js'
 import {
   ALWAYS_IGNORE,
   filterMutatePattern,
   IGNORE_PATTERN_CHARACTER,
-  reportLocationToStrykerLocation,
-  reportOpenEndLocationToStrykerLocation,
   resolveFileDescriptions,
   resolveTestFiles,
-} from './project.kernel.js'
+} from './file-selection.js'
+import { IncrementalReportSchema } from './incremental-report.schema.js'
+import { logProjectFiles, makeProject, type Project } from './project.js'
 
 export function readProject(
   options: StrykerOptions,

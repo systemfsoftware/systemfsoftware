@@ -6,7 +6,7 @@ import { isImportDeclaration, isTypeNode } from '../babel/type-guards.js'
 import { allMutantPlacers, type MutantPlacer, throwPlacementError } from '../mutant-placers/index.js'
 import { applyMutant, type Mutable, type Mutant } from '../mutant.js'
 import { allMutators } from '../mutators/index.js'
-import type { MutatorContext } from '../mutators/node-mutator.js'
+import type { MutatorContext } from '../mutators/mutator.js'
 import { type ScriptFormat } from '../syntax/index.js'
 import { locationIncluded, locationOverlaps } from '../syntax/location.js'
 
@@ -37,7 +37,8 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
   const placementMap: PlacementMap = new Map()
 
   let directiveRule: Rule = rootRule
-  const allMutatorNames = mutators.map((m) => m.name.toLowerCase())
+  const mutatorEntries = Object.entries(mutators)
+  const allMutatorNames = mutatorEntries.map(([name]) => name.toLowerCase())
 
   let ignorerState = createIgnorerBookkeeper(options.ignorers)
 
@@ -142,14 +143,14 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
 
   function* mutate(path: NodePath): Iterable<Mutable> {
     const context = toMutatorContext(path)
-    for (const mutator of mutators) {
-      for (const replacement of mutator.mutate(path.node, context)) {
-        const ignoreReason = findIgnoreReason(directiveRule, mutator.name, getNodeLocation(path.node).start.line) ??
-          findExcludedMutatorIgnoreReason(mutator.name) ??
+    for (const [mutatorName, mutate] of mutatorEntries) {
+      for (const replacement of mutate(path.node, context)) {
+        const ignoreReason = findIgnoreReason(directiveRule, mutatorName, getNodeLocation(path.node).start.line) ??
+          findExcludedMutatorIgnoreReason(mutatorName) ??
           currentIgnoreMessage(ignorerState)
         yield {
           replacement,
-          mutatorName: mutator.name,
+          mutatorName,
           ...(ignoreReason === undefined ? {} : { ignoreReason }),
         }
       }
