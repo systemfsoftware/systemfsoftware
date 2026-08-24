@@ -420,6 +420,9 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../packages/lint/oxlint/config
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@0.24.0)
