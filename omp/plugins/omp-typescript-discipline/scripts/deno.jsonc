@@ -1,0 +1,13 @@
+{
+  "imports": {
+    "@std/path": "jsr:@std/path@^1.1.6",
+  },
+  "nodeModulesDir": "none",
+  "tasks": {
+    "check": {
+      "dependencies": ["check:no-effect", "check:no-ts"],
+    },
+    "check:no-effect": "deno run --allow-read=../package.json checks/check-no-effect-dependency.ts",
+    "check:no-ts": "deno run --allow-read=.. checks/check-no-typescript-files.ts",
+  },
+}

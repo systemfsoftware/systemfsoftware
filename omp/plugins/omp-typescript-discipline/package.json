@@ -8,6 +8,9 @@
   "files": [
     "rules"
   ],
+  "scripts": {
+    "check": "deno task --cwd scripts check"
+  },
   "publishConfig": {
     "exports": {
       "./package.json": "./package.json"
