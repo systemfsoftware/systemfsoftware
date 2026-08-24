@@ -74,21 +74,17 @@ export type ExtendsStepDecision =
 
 /**
  * Merge a child config over a parent's resolved options.
- * R2: scalars replace wholesale; objects merge one level deep; arrays replace
- * wholesale, `plugins` included.
+ * R2: scalars replace wholesale; objects merge one level deep.
  * R3: a child key set to `null` deletes the inherited key.
+ * R4: the `plugins` array is the one exception to wholesale array replacement —
+ * the parent's plugin loaders stay inherited and the child's descriptors are
+ * appended, with the first occurrence of a descriptor winning.
  *
- * `plugins` was once the one array that appended to its parent's instead of
- * replacing it, so an explicit `"plugins": []` could not turn a base preset's
- * loaders off — it read as "add nothing" and every inherited plugin still
- * loaded. Nothing wanted that: every config in this repository that extends a
- * preset and names `plugins` names the whole set it needs. A consumer writing
- * the empty array means it.
- *
- * Where the precedence logic this replaced re-decoded each object through
- * `ConfigDocumentSchema`, this one spreads the validated objects directly:
+ * A copy of the precedence logic in `resolve-extends.ts`, moved here with the
+ * original staying put. Where the original re-decoded each object through
+ * `ConfigDocumentSchema`, this copy spreads the validated objects directly:
  * they already passed that schema at the read boundary, so the re-decode was
- * dead weight and its throw site is gone with it.
+ * dead weight and its throw site does not move into this module.
  */
 export function mergeConfigs(
   parent: PartialStrykerOptions,
@@ -101,6 +97,15 @@ export function mergeConfigs(
       continue
     }
     const parentValue = parent[key]
+    if (key === 'plugins') {
+      const parentPlugins: readonly unknown[] = Array.isArray(parentValue) ? parentValue : []
+      const childPlugins: readonly unknown[] = Array.isArray(value) ? value : []
+      const merged = [...parentPlugins, ...childPlugins]
+      out[key] = merged.filter(
+        (descriptor, index) => typeof descriptor !== 'string' || !merged.slice(0, index).includes(descriptor),
+      )
+      continue
+    }
     const bothObjects = parentValue !== null &&
       parentValue !== undefined &&
       typeof parentValue === 'object' &&
