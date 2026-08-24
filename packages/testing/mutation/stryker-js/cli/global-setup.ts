@@ -9,24 +9,10 @@ import { promisify } from 'node:util'
 import { GenericContainer, getContainerRuntimeClient, type StartedTestContainer } from 'testcontainers'
 import type { TestProject } from 'vitest/node'
 
-declare module 'vitest' {
-  interface ProvidedContext {
-    strykerContainerId: string
-  }
-}
-
 const execFileAsync = promisify(execFile)
 
 // Manifest-list digest (not the amd64 platform digest) for tag 22-alpine, resolved 2026-08-10.
 const NODE_IMAGE = 'node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32'
-// The packed tarballs resolve their `effect` spec against the live registry: the
-// widened peer ranges (catalog:peers) pull the newest release candidate, while
-// the tarballs' own exact dependencies pin `4.0.0-rc.108` - two copies of effect
-// in one tree, and the cross-copy Schema/Order interop dies with "Cannot convert
-// a Symbol value to a number". The lane pins its node image digest; pin the
-// toolchain in the container the same way, so the packed surface is exercised
-// against the same effect the tree built with (REPO-R2's hash floor).
-const EFFECT_PIN = '4.0.0-rc.108'
 // Every workspace package in the CLI's transitive closure is packed and
 // installed from a local tarball: none is on the registry at this version, so
 // one left out of this list is fetched from npm and the install 404s before a
@@ -39,21 +25,13 @@ const WORKSPACE_PACKAGES = [
   '@systemfsoftware/stryker-js-instrumenter',
   '@systemfsoftware/effect-cell-types',
 ] as const
-const REPO_ROOT = fileURLToPath(new URL('../../../../../', import.meta.url))
-// Two levels: this file sits at `cli/tests/__fixtures__/`, so `../../` is `cli/`.
-// `REPO_ROOT` needs five for the same reason. When this file moved from
-// `cli/__tests__/` both constants needed one more level; only `REPO_ROOT` got it,
-// and the lane has died in `setup` - before collecting a single test - ever since.
-const CLI_DIR = fileURLToPath(new URL('../../', import.meta.url))
-const FIXTURES_DIR = fileURLToPath(new URL('./fixtures', import.meta.url))
+const CLI_DIR = fileURLToPath(new URL('./', import.meta.url))
+const FIXTURES_DIR = fileURLToPath(new URL('./tests/__fixtures__/fixtures', import.meta.url))
 const WORKDIR = '/work'
 const TARBALLS_IN_CONTAINER = '/opt/tarballs'
 const WORKSPACE_MANIFEST = JSON.stringify({
   name: 'stryker-contract-workspace',
   private: true,
-  // npm 7+ auto-installs peer ranges; the widened peers would float the tree to
-  // the newest rc while exact deps stay pinned, duplicating effect (see above).
-  overrides: { effect: EFFECT_PIN },
 })
 
 let container: StartedTestContainer | undefined
@@ -145,16 +123,17 @@ export function setup(project: TestProject): Promise<void> {
         yield* Effect.promise(() =>
           execFileAsync(
             'pnpm',
-            ['--filter', workspacePackage, 'exec', 'pnpm', 'pack', '--pack-destination', packDir],
-            {
-              cwd: REPO_ROOT,
-              // Pack read-only: the lane packs a tree turbo already built, so a
-              // packed package's `prepare` hook (`stryker-js-cli` carries one)
-              // would clean-and-rebuild its `dist` mid-gate — a window in which
-              // concurrent tasks can observe a missing `dist`. `pnpm pack` takes
-              // no `--ignore-scripts` flag; the env var is the supported form.
-              env: { ...process.env, npm_config_ignore_scripts: 'true' },
-            },
+            [
+              '--filter',
+              workspacePackage,
+              'exec',
+              'pnpm',
+              'pack',
+              '--config.ignore-scripts=true',
+              '--pack-destination',
+              packDir,
+            ],
+            { cwd: CLI_DIR },
           )
         )
       }
