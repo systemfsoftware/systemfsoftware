@@ -196,17 +196,6 @@
         "build"
       ]
     },
-    "check": {
-      "inputs": [
-        "$TURBO_DEFAULT$",
-        "deno.jsonc",
-        "scripts/checks/**",
-        "package.json",
-        "rules/**"
-      ],
-      "outputs": [],
-      "cache": true
-    },
     "//#check:exports": {
       "inputs": [
         "$TURBO_ROOT$/scripts/guards/check-exports.mjs",

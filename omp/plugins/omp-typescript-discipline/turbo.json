@@ -1,0 +1,21 @@
+{
+  "extends": ["//"],
+  "tasks": {
+    "check": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "deno.jsonc",
+        "deno.lock",
+        "scripts/checks/**",
+        "package.json",
+        "rules/**",
+        "**/*.ts",
+        "**/*.tsx",
+        "**/*.mts",
+        "**/*.cts"
+      ],
+      "outputs": [],
+      "cache": true
+    }
+  }
+}
