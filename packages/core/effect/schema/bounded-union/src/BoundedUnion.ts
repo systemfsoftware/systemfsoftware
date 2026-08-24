@@ -1,6 +1,6 @@
 /// <reference types="vitest/import-meta" />
 import { Schema as S } from 'effect'
-import { FastCheck } from 'effect/testing'
+import type { FastCheck } from 'effect/testing'
 
 export const boundedUnion = <
   Base extends readonly [S.ConstraintCodec<unknown, unknown>, ...readonly S.ConstraintCodec<unknown, unknown>[]],
