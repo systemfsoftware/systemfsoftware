@@ -2058,9 +2058,6 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.111
-      semver:
-        specifier: catalog:stryker
-        version: 7.8.5
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -2086,9 +2083,6 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
-      '@types/semver':
-        specifier: ^7.5.8
-        version: 7.7.1
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@0.24.0)
@@ -2098,9 +2092,6 @@ importers:
       tsdown:
         specifier: 'catalog:'
         version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      typed-inject:
-        specifier: ~5.0.0
-        version: 5.0.0
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
