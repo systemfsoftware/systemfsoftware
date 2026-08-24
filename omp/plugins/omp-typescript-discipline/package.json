@@ -9,7 +9,7 @@
     "rules"
   ],
   "scripts": {
-    "check": "deno task check"
+    "check": "deno task --cwd scripts check"
   },
   "publishConfig": {
     "exports": {

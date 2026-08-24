@@ -4,8 +4,8 @@
     "check": {
       "inputs": [
         "$TURBO_DEFAULT$",
-        "deno.jsonc",
-        "deno.lock",
+        "scripts/deno.jsonc",
+        "scripts/deno.lock",
         "scripts/checks/**",
         "package.json",
         "rules/**",
