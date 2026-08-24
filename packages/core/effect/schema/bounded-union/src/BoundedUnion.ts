@@ -144,11 +144,15 @@ if (import.meta.vitest !== void 0) {
   const SAMPLE_SIZE = 200
 
   /**
-   * Seeds per sampling property. Breadth across seeds is what replaces the one
-   * recorded seed the deleted snapshots pinned, and each seed costs
-   * `SAMPLE_SIZE` generated values; 25 buys that breadth while keeping the file
-   * under a fifth of a second.
+   * Each sampling property draws `SEEDS * SAMPLE_SIZE` values from a recursive
+   * schema, which is CPU-bound and does not share a core well. Measured on the
+   * same commit: 612ms for the file's slowest property run alone, 45.7s for the
+   * same property inside a full parallel gate — a 74x spread. The timeout has to
+   * cover the contended cost, because a bound set near the isolated cost hands
+   * the verdict to whichever sibling tasks happen to run alongside, and a red
+   * from that is indistinguishable from a real one.
    */
+  const SAMPLE_TIMEOUT_MS = 120_000
 
   const VARIANT_COUNT = BASE.length + RECUR.length
 
@@ -242,7 +246,7 @@ if (import.meta.vitest !== void 0) {
     '∀s_ExprDeepest_=DepthCap',
     [fc.integer()],
     ([seed]) => deepestOf(sampleAt(seed)) === DEPTH_CAP,
-    { fastCheck: { numRuns: SEEDS } },
+    { timeout: SAMPLE_TIMEOUT_MS, fastCheck: { numRuns: SEEDS } },
   )
 
   /**
@@ -257,7 +261,7 @@ if (import.meta.vitest !== void 0) {
     '∀s_ExprComposition_⊇AllTags',
     [fc.integer()],
     ([seed]) => distinctTagsOf(sampleAt(seed)) === VARIANT_COUNT,
-    { fastCheck: { numRuns: SEEDS } },
+    { timeout: SAMPLE_TIMEOUT_MS, fastCheck: { numRuns: SEEDS } },
   )
 
   /**
@@ -272,7 +276,7 @@ if (import.meta.vitest !== void 0) {
     '∀s_ExprBranches_≤ShareTolerance',
     [fc.integer()],
     ([seed]) => widestBranchDriftOf(sampleAt(seed)) <= SHARE_TOLERANCE,
-    { fastCheck: { numRuns: SEEDS } },
+    { timeout: SAMPLE_TIMEOUT_MS, fastCheck: { numRuns: SEEDS } },
   )
 
   /**

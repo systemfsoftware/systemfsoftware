@@ -66,7 +66,7 @@ if (import.meta.vitest !== void 0) {
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
   const { it } = await import('@systemfsoftware/effect-gherkin-spec')
-  const { refutes } = await import('@systemfsoftware/effect-schema-refutation')
+  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
   const { Exit, Option, Result } = await import('effect')
   const { FastCheck: fc } = await import('effect/testing')
   const { RestartDecisionRestart } = await import('./RestartDecision.workflow.js')

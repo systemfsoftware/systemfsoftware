@@ -232,9 +232,9 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../../../packages/core/effect/schema/law
-      '@systemfsoftware/effect-schema-refutation':
+      '@systemfsoftware/effect-schema-refutation-vite':
         specifier: workspace:^
-        version: link:../../../packages/core/effect/schema/refutation
+        version: link:../../../packages/core/effect/schema/refutation-vite
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../../../packages/core/effect/schema/vite
@@ -356,9 +356,9 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../../../packages/core/effect/schema/law
-      '@systemfsoftware/effect-schema-refutation':
+      '@systemfsoftware/effect-schema-refutation-vite':
         specifier: workspace:^
-        version: link:../../../packages/core/effect/schema/refutation
+        version: link:../../../packages/core/effect/schema/refutation-vite
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../../../packages/core/effect/schema/vite
@@ -663,9 +663,9 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../schema/law
-      '@systemfsoftware/effect-schema-refutation':
+      '@systemfsoftware/effect-schema-refutation-vite':
         specifier: workspace:^
-        version: link:../schema/refutation
+        version: link:../schema/refutation-vite
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../schema/vite
@@ -851,6 +851,46 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
 
+  packages/core/effect/schema/discovery:
+    dependencies:
+      '@oxc-project/types':
+        specifier: 'catalog:'
+        version: 0.140.0
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.140.0
+    devDependencies:
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: catalog:attw
+        version: 1.1.1
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../../../lint/oxlint/config
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../../../toolchain/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../../../toolchain/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+
   packages/core/effect/schema/extensions:
     dependencies:
       '@systemfsoftware/hex-schema':
@@ -926,45 +966,6 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.111
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
-      vitest:
-        specifier: ^4.1.10
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
-
-  packages/core/effect/schema/refutation:
-    devDependencies:
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(vitest@4.1.10)
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/oxlint-config':
-        specifier: workspace:^
-        version: link:../../../../lint/oxlint/config
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../../../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.111
       fast-check:
         specifier: ^4
         version: 4.9.0
@@ -981,11 +982,14 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
 
-  packages/core/effect/schema/vite:
+  packages/core/effect/schema/refutation-vite:
     dependencies:
       '@oxc-project/types':
         specifier: 'catalog:'
         version: 0.140.0
+      '@systemfsoftware/effect-schema-discovery':
+        specifier: workspace:^
+        version: link:../discovery
       oxc-parser:
         specifier: 'catalog:'
         version: 0.140.0
@@ -1002,9 +1006,61 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../law
-      '@systemfsoftware/effect-schema-refutation':
+      '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../refutation
+        version: link:../../../../lint/oxlint/config
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../../../toolchain/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../../../toolchain/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(typescript@7.0.2)(unrun@0.2.39)
+      vite:
+        specifier: ^8
+        version: 8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0)
+      vitest:
+        specifier: ^4.1.10
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(yaml@2.9.0))
+
+  packages/core/effect/schema/vite:
+    dependencies:
+      '@oxc-project/types':
+        specifier: 'catalog:'
+        version: 0.140.0
+      '@systemfsoftware/effect-schema-discovery':
+        specifier: workspace:^
+        version: link:../discovery
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.140.0
+    devDependencies:
+      '@microsoft/api-extractor':
+        specifier: 'catalog:'
+        version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: catalog:attw
+        version: 1.1.1
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../../../testing/specs/gherkin/effect
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../law
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../../lint/oxlint/config
@@ -1050,9 +1106,9 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../../effect/schema/law
-      '@systemfsoftware/effect-schema-refutation':
+      '@systemfsoftware/effect-schema-refutation-vite':
         specifier: workspace:^
-        version: link:../../effect/schema/refutation
+        version: link:../../effect/schema/refutation-vite
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../../effect/schema/vite
@@ -1860,9 +1916,9 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../../../../core/effect/schema/law
-      '@systemfsoftware/effect-schema-refutation':
+      '@systemfsoftware/effect-schema-refutation-vite':
         specifier: workspace:^
-        version: link:../../../../core/effect/schema/refutation
+        version: link:../../../../core/effect/schema/refutation-vite
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../../../../core/effect/schema/vite
@@ -6931,6 +6987,7 @@ packages:
   nanoid@3.3.18:
     resolution: {integrity: sha512-DTg4MJbGMWkfi6VZFdNt2/caMbQy4Ou+Op/hJQvGEWcnVfoA1QA+xzRKAzw9jD6+GVOOeYr/mIcuDSdug6F6+w==}
     engines: {node: ^10 || ^12 || ^13.7 || ^14 || >=15.0.1}
+    hasBin: true
 
   neo-async@2.6.2:
     resolution: {integrity: sha512-Yd3UES5mWCSqR+qNT93S3UoYUkqAZ9lLg8a7g9rimsWmYGK8cVToA4/sF3RrshdyV3sAGMXVUmpMYOw+dLpOuw==}
@@ -7313,6 +7370,7 @@ packages:
   rolldown@1.2.3:
     resolution: {integrity: sha512-rn9wpmxplLf7NLNyCk9FyWh3FM43DbY8jOzCdEPzH7uflhTftRbCEpqi6Ly2osgoU8OwObtmavMbWLaWy4LX7A==}
     engines: {node: ^20.19.0 || >=22.12.0}
+    hasBin: true
 
   rollup@4.62.4:
     resolution: {integrity: sha512-RXOqwaPsBGjMNMa4sQjDjHieHEZDFoj/Rdr46l2MU5DfEs16wHJPC2RPTPHWhNl+M3aI472LLqFkFKut4SblOg==}

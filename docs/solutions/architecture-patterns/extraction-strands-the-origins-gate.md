@@ -20,7 +20,7 @@ tags:
 
 Splitting `@systemfsoftware/effect-schema-law` down to its namesake export left the origin package with **zero tests**, and its own doctrine went on citing the package's `test` command as the check for both codec laws. The command still exited 0. It was running nothing.
 
-The extraction was correct: `refutes`, `scanObligations` and the weakening chain went to one new package, `boundedUnion` to another, and `ruleOfSchemas` stayed. What nobody wrote down is that under an in-source test convention, **a module's tests are bytes inside the module**, so a file move is simultaneously a test move — and the surviving export's coverage was never in its own module at all. It rode along in a sibling that left.
+The extraction was correct: `refutes`, `scanObligations` and the weakening chain left the module, `boundedUnion` went to its own package, and `ruleOfSchemas` stayed. What nobody wrote down is that under an in-source test convention, **a module's tests are bytes inside the module**, so a file move is simultaneously a test move — and the surviving export's coverage was never in its own module at all. It rode along in a sibling that left. Where the departed code lands does not soften this: two of the three later came back as a second entry on the same package, and the origin's gate was already empty by then.
 
 ## Failure mechanics
 

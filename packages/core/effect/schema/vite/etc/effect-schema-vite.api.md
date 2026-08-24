@@ -7,9 +7,7 @@
 import { Plugin as Plugin_2 } from 'vite';
 
 // @public
-export const generateSchemaLaws: (lawFilePath: string, srcDir: string, options?: {
-    refutationCoverage?: boolean;
-}) => string;
+export const generateSchemaLaws: (lawFilePath: string, srcDir: string) => string;
 
 // @public
 export const inlineSchemaTests: (options?: InlineSchemaTestsOptions) => Plugin_2;
@@ -17,7 +15,6 @@ export const inlineSchemaTests: (options?: InlineSchemaTestsOptions) => Plugin_2
 // @public
 export interface InlineSchemaTestsOptions {
     dir?: string;
-    refutationCoverage?: boolean;
 }
 
 // @public

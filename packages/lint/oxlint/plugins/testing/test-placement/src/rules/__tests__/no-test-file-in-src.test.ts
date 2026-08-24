@@ -39,6 +39,11 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       filename: '/repo/pkg/src/schema-laws.test.ts',
     },
     {
+      name: 'Should_Allow_SchemaRefutationsEntryPoint_When_NamedExactly',
+      code: '',
+      filename: '/repo/pkg/src/schema-refutations.test.ts',
+    },
+    {
       name: 'Should_Allow_NonTestFileInSrc_When_WorkflowSource',
       code: '',
       filename: '/repo/pkg/src/confirm-order.workflow.ts',
@@ -89,6 +94,12 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       code: '',
       filename: '/repo/pkg/src/hook-timeout.test.ts',
       errors: unsanctioned('hook-timeout.test.ts'),
+    },
+    {
+      name: 'Should_Report_FooTestInSrc_When_Arbitrary',
+      code: '',
+      filename: '/repo/pkg/src/foo.test.ts',
+      errors: unsanctioned('foo.test.ts'),
     },
     {
       name: 'Should_Report_SpecInSrc_When_NotProperty',

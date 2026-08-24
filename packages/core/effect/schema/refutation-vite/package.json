@@ -1,37 +1,28 @@
 {
-  "name": "@systemfsoftware/effect-schema-refutation",
+  "name": "@systemfsoftware/effect-schema-refutation-vite",
   "license": "Apache-2.0",
   "version": "0.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/core/effect/schema/refutation"
+    "directory": "packages/core/effect/schema/refutation-vite"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/core/effect/schema/refutation#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/core/effect/schema/refutation-vite#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "State what an Effect Schema rejects and prove nothing is left undefended — refusal property tests plus an adequacy check derived from the schema's own AST.",
+  "description": "Vite plugin that asserts every obligation reachable from an exported Effect Schema is refuted — the obligation-coverage half of effect-schema-vite.",
   "keywords": [
     "effect",
     "effect-ts",
     "schema",
-    "property-testing",
-    "fast-check",
+    "vite",
     "vitest",
-    "validation",
+    "plugin",
+    "property-testing",
     "refutation",
-    "negative-testing",
     "typescript"
   ],
   "type": "module",
-  "exports": {
-    ".": {
-      "@systemfsoftware/source": "./src/mod.ts",
-      "types": "./dist/effect-schema-refutation.d.ts",
-      "default": "./dist/index.mjs"
-    },
-    "./package.json": "./package.json"
-  },
   "files": [
     "dist"
   ],
@@ -46,34 +37,49 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },
+  "dependencies": {
+    "@oxc-project/types": "catalog:",
+    "@systemfsoftware/effect-schema-discovery": "workspace:^",
+    "oxc-parser": "catalog:"
+  },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
-    "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
+    "vite": "catalog:",
     "vitest": "^4.1.10"
   },
   "peerDependencies": {
-    "@effect/vitest": "catalog:peers",
+    "@systemfsoftware/effect-schema-law": "workspace:*",
     "effect": "catalog:peers",
+    "vite": ">5.0.0",
     "vitest": "*"
   },
   "publishConfig": {
+    "provenance": true,
     "exports": {
       ".": {
-        "types": "./dist/effect-schema-refutation.d.ts",
+        "types": "./dist/effect-schema-refutation-vite.d.ts",
         "default": "./dist/index.mjs"
       },
       "./package.json": "./package.json"
+    }
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/effect-schema-refutation-vite.d.ts",
+      "default": "./dist/index.mjs"
     },
-    "provenance": true
+    "./package.json": "./package.json"
   }
 }

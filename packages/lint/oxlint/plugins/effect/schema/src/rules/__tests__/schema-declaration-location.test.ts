@@ -355,7 +355,7 @@ export const provided = program.pipe((value: unknown) => value)`,
       filename: '/repo/pkg/src/main.ts',
     },
     {
-      // effect-schema-refutation/src/Refutes.ts — the tree's sanctioned in-source fixture
+      // effect-schema-law/src/refutation/Refutes.ts — the tree's sanctioned in-source fixture
       // guard is `if (import.meta.vitest !== void 0)`; the exemption keys on the
       // positive guard, so a fixture schema inside stays silent like the bare
       // `import.meta.vitest` spelling.

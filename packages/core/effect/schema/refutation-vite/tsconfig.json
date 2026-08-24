@@ -2,9 +2,14 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": ["@systemfsoftware/tsconfig/tsc/dom/library-monorepo", "@systemfsoftware/tsconfig/effect"],
   "compilerOptions": {
-    "customConditions": ["@systemfsoftware/source"]
+    "customConditions": [
+      "@systemfsoftware/source"
+    ]
   },
-  "include": ["src"],
+  "include": [
+    "src",
+    "tests"
+  ],
   "references": [
     {
       "path": "./tsconfig.node.json"

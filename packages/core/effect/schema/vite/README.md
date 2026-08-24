@@ -10,23 +10,6 @@ pnpm add -D @systemfsoftware/effect-schema-vite @systemfsoftware/effect-schema-l
 
 `@systemfsoftware/effect-schema-law`, `effect`, `vite` and `vitest` are peer dependencies: this package declares them and does not install them, so one copy is shared with the rest of your project. No version is pinned here — the ranges the package accepts are in its manifest, and a version repeated in prose goes stale without anything noticing.
 
-Obligation coverage is off by default: the generated file contains only the `ruleOfSchemas` laws and names no refutation symbol, so you need not install that package at all. To turn it on, add the optional peer and pass the option:
-
-```sh
-pnpm add -D @systemfsoftware/effect-schema-refutation
-```
-
-```ts
-// vitest.config.ts
-import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
-
-export default defineConfig({
-  plugins: [inlineSchemaTests({ refutationCoverage: true })],
-})
-```
-
-With it on, the generated suite additionally asserts that every constraint reachable from an exported schema is refuted by some `refutes` call — so a refinement nobody refuses fails the suite by name.
-
 ## Entry points
 
 - `@systemfsoftware/effect-schema-vite`
@@ -35,7 +18,7 @@ With it on, the generated suite additionally asserts that every constraint reach
 
 The public surface is generated from the source and versioned with the package: [`etc/effect-schema-vite.api.md`](./etc/effect-schema-vite.api.md).
 
-Options: `InlineSchemaTestsOptions` — `dir` (default `"src"`), `refutationCoverage` (default `false`; requires `@systemfsoftware/effect-schema-refutation`).
+Options: `InlineSchemaTestsOptions` — `dir` (default `"src"`).
 
 ## License
 

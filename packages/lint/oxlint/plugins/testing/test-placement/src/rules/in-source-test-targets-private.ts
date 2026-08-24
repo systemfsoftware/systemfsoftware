@@ -98,7 +98,7 @@ const isInsideConsequent = (
  * author supplies: a block earns it by importing the harness, statically or through
  * the dynamic form the build requires, and nothing else spells it.
  */
-const SCHEMA_REFUTATION_SOURCE = '@systemfsoftware/effect-schema-refutation'
+const SCHEMA_REFUTATION_SOURCE = '@systemfsoftware/effect-schema-law/refutation'
 
 const isSchemaRefutationSource = (source: ESTree.Node): boolean =>
   source.type === 'Literal' && source.value === SCHEMA_REFUTATION_SOURCE

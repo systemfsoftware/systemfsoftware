@@ -2,10 +2,22 @@
 "@systemfsoftware/effect-schema-vite": major
 ---
 
-Obligation-coverage assertions are now opt-in. By default the generated suite emits only the codec laws, and no refutation package needs to be installed for it to run.
+The plugin now emits only the codec laws. Obligation-coverage assertions ship as a separate plugin.
 
-To keep the coverage assertion, install `@systemfsoftware/effect-schema-refutation` and set the new `refutationCoverage` option:
+`inlineSchemaTests` no longer accepts a `refutationCoverage` option, and the suite it generates never names the refusal surface — nothing beyond this plugin's own peers has to be installed for that suite to run.
+
+To keep the coverage assertion, install the companion plugin and list it beside this one:
+
+```sh
+pnpm add -D @systemfsoftware/effect-schema-refutation-vite
+```
 
 ```ts
-inlineSchemaTests({ refutationCoverage: true })
+import { inlineRefutationCoverage } from '@systemfsoftware/effect-schema-refutation-vite'
+import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
+
+plugins: ;
+;[inlineSchemaTests(), inlineRefutationCoverage()]
 ```
+
+Each plugin generates its own test file, so the two compose without either overwriting the other's.
