@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/stryker-js-cli`
 
-> **Location:** `packages/stryker-js/cli/` — the stryker command-line interface, extracted out of `packages/stryker-js/core/`.
+> **Location:** `packages/testing/mutation/stryker-js/cli/` — the stryker command-line interface, extracted out of `packages/testing/mutation/stryker-js/core/`.
 
 ## Why this package exists
 

@@ -19,16 +19,12 @@ import * as CliError from 'effect/unstable/cli/CliError'
 import * as Command from 'effect/unstable/cli/Command'
 import * as Flag from 'effect/unstable/cli/Flag'
 import * as GlobalFlag from 'effect/unstable/cli/GlobalFlag'
+import type { CreateRunEventStreamCapability, DetectModeCapability, StrykerRun } from './cli-ports.js'
 import type { CliRequest } from './cli-request.schema.js'
-import { emitLLMSManifest } from './LlmsManifest.js'
-import { STREAM_SCHEMA_VERSION } from './StreamProtocol.js'
-import {
-  type CreateRunEventStreamCapability,
-  type DetectModeCapability,
-  runStrykerCli,
-  strykerCliConsoleLayers,
-  type StrykerRun,
-} from './StrykerCliExecutor.js'
+import { runStrykerCli } from './cli-run.js'
+import { machineConsoleLayer } from './console-capture.js'
+import { emitLLMSManifest } from './llms-manifest.js'
+import { STREAM_SCHEMA_VERSION } from './stream-protocol.js'
 
 function createSplitter(separator: string) {
   return (value: string) => value.split(separator).filter(Boolean)
@@ -562,7 +558,7 @@ export function strykerCliEffect(
     const cliEffect = Command.runWith(command, { version: strykerVersion })(argv).pipe(
       Effect.provide(
         Layer.mergeAll(
-          mode.mode === 'machine' ? strykerCliConsoleLayers.machine : Layer.empty,
+          mode.mode === 'machine' ? machineConsoleLayer : Layer.empty,
           cliLayer,
         ),
       ),

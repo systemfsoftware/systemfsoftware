@@ -4,12 +4,13 @@ import * as NodeStdio from '@effect/platform-node/NodeStdio'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
+import * as Logger from 'effect/Logger'
 
 import { strykerEngines } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 
-import { OutputModeProbe, OutputModeProbeLive } from './OutputModeAdapter.js'
-import { RunEventStreamLive, RunEventStreamPort } from './RunEventStreamAdapter.js'
-import { strykerCliEffect } from './StrykerCliHandler.js'
+import { OutputModeProbe, OutputModeProbeLive } from './output-mode-probe.js'
+import { RunEventStreamLive, RunEventStreamPort } from './run-event-stream.js'
+import { strykerCliEffect } from './stryker-cli.js'
 
 const EXIT_CODE_RUN_NEVER_REACHED_ITS_FINALIZER = 1
 
@@ -51,6 +52,11 @@ const program = Effect.gen(function*() {
     runEvents.createRunEventStream,
   )
 }).pipe(
+  // stdout carries the NDJSON protocol and nothing else. Effect's built-in
+  // loggers write to stdout by default, which puts a log line in the middle of
+  // the stream and makes every consumer's parse fail on it. One reference,
+  // provided once at the only interpretation edge, moves them all to stderr.
+  Effect.provideService(Logger.LogToStderr, true),
   Effect.provide(Layer.merge(OutputModeProbeLive, RunEventStreamLive).pipe(Layer.provide(NodeStdio.layer))),
 )
 

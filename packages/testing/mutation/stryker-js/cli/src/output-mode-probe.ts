@@ -4,7 +4,7 @@ import * as Result from 'effect/Result'
 
 import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
 
-import { resolveMode, TOOL_VARIABLES } from './OutputMode.js'
+import { resolveMode, TOOL_VARIABLES } from './output-mode.js'
 
 /**
  * The one impure adapter over `resolveMode` (U3): reads the process
@@ -24,7 +24,7 @@ export interface OutputModeProbe {
 }
 
 class OutputModeProbeTag extends Context.Service<OutputModeProbeTag, OutputModeProbe>()(
-  '@systemfsoftware/stryker-js-cli/OutputModeAdapter/OutputModeProbeTag',
+  '@systemfsoftware/stryker-js-cli/output-mode-probe/OutputModeProbeTag',
 ) {}
 
 const OutputModeProbe = OutputModeProbeTag

@@ -11,16 +11,13 @@ import { isDeepStrictEqual } from 'node:util'
 import {
   admitSurvivorsRun,
   AdmitSurvivorsRunCommand,
-  extractSurvivors,
-  type HashContent,
   PriorReportFacts,
-  priorSourceHashes,
-  sourceContentHash,
-  SURVIVORS_RUN_FIRST_REMEDIATION,
   SurvivorsAdmission,
   SurvivorsRejection,
-} from '../Survivors.workflow.js'
-
+} from '../survivors-admission.workflow.js'
+import { SURVIVORS_RUN_FIRST_REMEDIATION } from '../survivors-bookkeeping.js'
+import { type HashContent, priorSourceHashes, sourceContentHash } from '../survivors-hashing.kernel.js'
+import { extractSurvivors } from '../survivors-mutants.kernel.js'
 const sha256Hex: HashContent = (content) => createHash('sha256').update(content, 'utf-8').digest('hex')
 
 const absPath = (file: string): string => `/work/${file}`
