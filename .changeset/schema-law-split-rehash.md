@@ -16,14 +16,11 @@
 "@systemfsoftware/omp-typescript-discipline": none
 "@systemfsoftware/oxlint-plugin": none
 "@systemfsoftware/oxlint-plugin-cell-vocabulary": none
-"@systemfsoftware/oxlint-plugin-effect-dmmf": none
 "@systemfsoftware/oxlint-plugin-effect-entrypoint": none
-"@systemfsoftware/oxlint-plugin-effect-schema": none
 "@systemfsoftware/oxlint-plugin-effect-workflow": none
 "@systemfsoftware/oxlint-plugin-property-testing": none
 "@systemfsoftware/oxlint-plugin-recommended": none
 "@systemfsoftware/oxlint-plugin-test-hygiene": none
-"@systemfsoftware/oxlint-plugin-test-placement": none
 "@systemfsoftware/rx-effect": none
 "@systemfsoftware/storybook-gherkin": none
 "@systemfsoftware/stryker-js-cli": none
