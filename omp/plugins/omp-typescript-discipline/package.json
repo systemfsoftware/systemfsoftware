@@ -16,7 +16,6 @@
   },
   "devDependencies": {
     "@systemfsoftware/oxlint-config": "workspace:^",
-    "effect": "catalog:",
     "oxlint": "catalog:oxlint"
   },
   "repository": {
