@@ -30,11 +30,22 @@ const runGeneratedSuite = (srcDir: string) => {
   const generatedPath = join(srcDir, REFUTATION_FILE_BASENAME)
   const body = generateRefutationCoverage(generatedPath, srcDir)
   writeFileSync(generatedPath, body)
-  return spawnSync('pnpm', ['exec', 'vitest', 'run', generatedPath, '--reporter=verbose'], {
-    cwd: PKG_ROOT,
-    encoding: 'utf8',
-    env: { ...process.env, VITEST_FIXTURE_RUN: '1' },
-  })
+  // `--coverage.enabled=false` is load-bearing, not tidiness. The shared config
+  // turns coverage on whenever `CI` or `COVERAGE` is set, the child inherits
+  // that environment, and it runs with this package's own cwd — so both
+  // processes claim one `coverage/.tmp`. The child clearing it kills the parent
+  // with `Something removed the coverage directory`, after every assertion here
+  // has already passed: a green suite and a red job. What this child is for is
+  // its exit code, which coverage instrumentation does not affect.
+  return spawnSync(
+    'pnpm',
+    ['exec', 'vitest', 'run', generatedPath, '--reporter=verbose', '--coverage.enabled=false'],
+    {
+      cwd: PKG_ROOT,
+      encoding: 'utf8',
+      env: { ...process.env, VITEST_FIXTURE_RUN: '1' },
+    },
+  )
 }
 
 afterAll(() => {
