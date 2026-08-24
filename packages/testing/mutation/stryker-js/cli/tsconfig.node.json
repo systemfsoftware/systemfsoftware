@@ -1,5 +1,8 @@
 {
   "extends": "@systemfsoftware/tsconfig/node",
+  "compilerOptions": {
+    "target": "es2024"
+  },
   "include": [
     "oxlint.config.ts",
     "tsdown.config.ts",
