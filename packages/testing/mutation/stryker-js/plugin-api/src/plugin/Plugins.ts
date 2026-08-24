@@ -1,16 +1,20 @@
 /// <reference types="vitest/importMeta" />
+import * as Context from 'effect/Context'
+import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 
 import { Checker } from '../check/index.js'
 import { Evaluator } from '../evaluate/index.js'
 import { Ignorer } from '../ignore/index.js'
+import { broadcastReporter } from '../report/BroadcastReporter.js'
+import type { NamedReporter } from '../report/BroadcastReporter.js'
 import { Reporter } from '../report/index.js'
 import { TestRunner } from '../test-runner/index.js'
 
 import { PluginKind } from './PluginKind.js'
-import type { RunConfiguration } from './RunConfiguration.js'
-import type { SandboxDirectory } from './SandboxDirectory.js'
+import { RunConfiguration } from './RunConfiguration.js'
+import { SandboxDirectory } from './SandboxDirectory.js'
 
 /**
  * Maps each `PluginKind` to the port it contributes.
@@ -195,13 +199,53 @@ export function composePlugins(
   contributions: readonly AnyPluginContribution[],
 ): ComposedPlugins {
   const { resolved, shadowings } = foldContributions(contributions)
-  const layers: readonly Layer.Layer<MergedPluginServices, never, PluginEnvironment>[] = [...resolved.values()].map(
-    (contribution) => contribution.layer,
+  const allResolved = [...resolved.values()]
+  const reporterContributions = allResolved.filter(
+    (c): c is ContributionOf<PluginKind.Reporter> => c.kind === PluginKind.Reporter,
   )
-  if (layers.length === 0) {
+  const nonReporterLayers: Array<Layer.Layer<MergedPluginServices, never, PluginEnvironment>> = allResolved
+    .filter((c) => c.kind !== PluginKind.Reporter)
+    .map((contribution) => contribution.layer)
+
+  const broadcastLayer: Layer.Layer<Reporter, never, PluginEnvironment> | undefined = reporterContributions.length === 0
+    ? undefined
+    : Layer.effect(
+      Reporter,
+      Effect.gen(function*() {
+        const config = yield* RunConfiguration
+        const wantedNames: Record<string, true> = {}
+        for (const name of config.reporters) {
+          wantedNames[name.toLowerCase()] = true
+        }
+        const selected = reporterContributions.filter((c) => wantedNames[c.name.toLowerCase()] === true)
+        const sandboxOption = yield* Effect.serviceOption(SandboxDirectory)
+        const namedReporters: NamedReporter[] = []
+        for (const contribution of selected) {
+          const base = Layer.build(contribution.layer)
+          let buildEffect = base.pipe(
+            Effect.provideService(RunConfiguration, config),
+          )
+          if (Option.isSome(sandboxOption)) {
+            buildEffect = buildEffect.pipe(
+              Effect.provideService(SandboxDirectory, sandboxOption.value),
+            )
+          }
+          const ctx = yield* buildEffect
+          const reporter = Context.get(ctx, Reporter)
+          namedReporters.push({ name: contribution.name, reporter })
+        }
+        return broadcastReporter(namedReporters)
+      }),
+    )
+
+  const allLayers = broadcastLayer === undefined
+    ? nonReporterLayers
+    : [...nonReporterLayers, broadcastLayer]
+
+  if (allLayers.length === 0) {
     return { layer: Option.none(), shadowings }
   }
-  const merged = layers.reduce((acc, next) => Layer.merge(acc, next))
+  const merged = allLayers.reduce((acc, next) => Layer.merge(acc, next))
   return { layer: Option.some(merged), shadowings }
 }
 

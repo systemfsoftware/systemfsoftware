@@ -1,7 +1,11 @@
 /**
  * The classed process exit codes (R6). The final code is decided once, at
- * teardown, by the precedence `signal > 4 > 3 > 2 > 1 > 0`; verdict gates
- * record a pending class instead of writing `process.exitCode` directly.
+ * teardown, by the precedence `signal > 4 > 3 > 2 > 1 > 0` implemented by
+ * `highestExitClass` (`4 > 3 > 2 > 1`) and `resolveExitCode` (`signal > 4 > 3 > 2 > 1 > 0`);
+ * verdict gates record a pending class, and the CLI collects `exitClass` values
+ * from every reason in the failure's `Cause` and from each error's nested
+ * `cause` field, taking the highest — so the precedence is not a comment but
+ * the function callers actually use.
  */
 import { ExitClass } from '@systemfsoftware/stryker-js-plugin-api/evaluate'
 

@@ -1,8 +1,7 @@
 import path from 'node:path'
 
 import { parse } from '@std/jsonc'
-import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { errorToString } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { errorToString, normalizeFileName, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { Schema as S } from 'effect'
 import * as Effect from 'effect/Effect'
@@ -76,7 +75,7 @@ export const makeTSConfigPreprocessor =
       const fileName = path.resolve(path.dirname(originTSConfigFileName), reference)
       const relativeToSandbox = path.relative(basePath, fileName)
       if (relativeToSandbox.startsWith('..')) {
-        return ['..', '..', reference].map((segment) => segment.replace(/\\/g, '/')).join('/')
+        return ['..', '..', normalizeFileName(reference)].join('/')
       }
       return false
     }

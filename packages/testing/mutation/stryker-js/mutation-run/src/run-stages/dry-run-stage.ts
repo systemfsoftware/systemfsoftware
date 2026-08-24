@@ -3,23 +3,23 @@ import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js-
 import { Reporter, type ReporterService } from '@systemfsoftware/stryker-js-plugin-api/report'
 import { DryRunStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { TestStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import type { FailedTestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Scope from 'effect/Scope'
-
-import type { FailedTestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
-import { LoggingServerAddressService } from '../logging/logging-server.js'
+import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
+import fs from 'node:fs'
 import { testCoverageFrom } from '../mutants/test-coverage.js'
 import { IdGeneratorService } from '../run-layers.js'
 import { makeChildProcessTestRunner } from '../test-runner/child-process-test-runner-proxy.js'
+import { buildTestRunner } from '../test-runner/index.js'
 import { elapsedMs, humanReadableElapsed, markTimer } from '../timer.js'
 import type { IdGenerator } from '../worker-pool/id-generator.js'
 import type { DryRunDone, DryRunStage, InstrumentDone } from './stage-results.js'
 import { DryRunFailedError, DryRunNoTestsError } from './stage.schema.js'
-
 const INITIAL_TEST_RUN_MARKER = 'Initial test run'
 
 export class DryRunLogger extends Context.Service<DryRunLogger, Logger>()('DryRunLogger') {}
@@ -42,11 +42,10 @@ const noopReporter: ReporterService = {
 
 export const dryRunStage: DryRunStage<
   DryRunFailedError | DryRunNoTestsError,
-  DryRunLogger | Scope.Scope | LoggingServerAddressService | IdGenerator
+  DryRunLogger | Scope.Scope | IdGenerator | ChildProcessSpawner.ChildProcessSpawner
 > = (prev) =>
   Effect.gen(function*() {
     const log = yield* DryRunLogger
-    const loggingServerAddress = yield* LoggingServerAddressService
     const idGenerator = yield* IdGeneratorService
 
     const reporterService: ReporterService = yield* Effect.gen(function*() {
@@ -84,15 +83,25 @@ export const dryRunStage: DryRunStage<
     log.info('Starting dry run')
     const { rawResult, capabilities, gross } = yield* Effect.scoped(
       Effect.gen(function*() {
-        const runner = yield* makeChildProcessTestRunner({
+        const childRunnerEffect = makeChildProcessTestRunner({
           options: prev.options,
           fileDescriptions: prev.project.fileDescriptions,
           sandboxWorkingDirectory: prev.sandbox.workingDirectory,
-          loggingServerAddress,
           pluginModulePaths: [...prev.loadedPlugins.pluginModulePaths],
           logger: log,
           idGenerator,
         })
+        const runner = yield* buildTestRunner(
+          {
+            options: prev.options,
+            fileDescriptions: prev.project.fileDescriptions,
+            sandboxWorkingDirectory: prev.sandbox.workingDirectory,
+            pluginModulePaths: [...prev.loadedPlugins.pluginModulePaths],
+            idGenerator,
+            retire: Effect.void,
+          },
+          childRunnerEffect,
+        )
         const rawResult = yield* runner
           .dryRun({
             timeout: dryRunTimeout,

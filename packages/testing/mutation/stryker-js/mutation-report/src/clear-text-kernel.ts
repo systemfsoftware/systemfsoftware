@@ -4,6 +4,7 @@ import * as Predicate from 'effect/Predicate'
 
 import { ansi } from './ansi.js'
 import { drawClearTextScoreTable } from './clear-text-score-table.js'
+import type { ProvidedStrykerOptions } from './provided-options.js'
 import { getEmojiForStatus, plural } from './render-text.js'
 
 function sourceLocation(fileName: string, position: Position, allowColor: boolean): string {
@@ -54,7 +55,7 @@ function replacementLines(replacement: string | undefined, allowColor: boolean):
   return replacement.split('\n').filter(Boolean).map((l) => allowColor ? ansi.green(`+   ${l}`) : `+   ${l}`)
 }
 
-function statusTail(mutant: ReportMutant, options: StrykerOptions): string[] {
+function statusTail(mutant: ReportMutant, options: ProvidedStrykerOptions): string[] {
   if (mutant.status === 'Survived') {
     if (mutant.static) {
       return ['Ran all tests for this mutant.']
@@ -74,7 +75,7 @@ function statusTail(mutant: ReportMutant, options: StrykerOptions): string[] {
   return []
 }
 
-function formatCoveredTests(tests: readonly string[], options: StrykerOptions): string[] {
+function formatCoveredTests(tests: readonly string[], options: ProvidedStrykerOptions): string[] {
   const count = Math.min(options.clearTextReporter.maxTestsToLog, tests.length)
   if (count <= 0) return []
   const out: string[] = ['Tests ran:']
@@ -93,7 +94,7 @@ function mutantBlock(
   fileName: string,
   mutant: ReportMutant,
   source: string | undefined,
-  options: StrykerOptions,
+  options: ProvidedStrykerOptions,
 ): string[] {
   const allowColor = options.clearTextReporter.allowColor
   const allowEmojis = options.clearTextReporter.allowEmojis
@@ -117,7 +118,7 @@ function isInfoStatus(status: string): boolean {
 
 function collectMutants(
   report: schema.MutationTestResult,
-  options: StrykerOptions,
+  options: ProvidedStrykerOptions,
 ): { stdout: string[]; debug: string[]; totalTests: number } {
   const stdout: string[] = []
   const debug: string[] = []
@@ -133,7 +134,7 @@ function collectMutants(
   return { stdout, debug, totalTests }
 }
 
-function scoreTable(metrics: MutationTestMetricsResult, options: StrykerOptions): string | undefined {
+function scoreTable(metrics: MutationTestMetricsResult, options: ProvidedStrykerOptions): string | undefined {
   const shouldDraw = options.clearTextReporter.reportScoreTable &&
     (!options.clearTextReporter.skipFull ||
       metrics.systemUnderTestMetrics.childResults.some(
@@ -146,7 +147,7 @@ function scoreTable(metrics: MutationTestMetricsResult, options: StrykerOptions)
 export function renderClearText(
   report: schema.MutationTestResult,
   metrics: MutationTestMetricsResult,
-  options: StrykerOptions,
+  options: ProvidedStrykerOptions,
 ): { stdout: string[]; debug: string[] } {
   const stdout: string[] = []
   const debug: string[] = []
@@ -168,7 +169,7 @@ export function renderClearText(
 export function renderClearTextString(
   report: schema.MutationTestResult,
   metrics: MutationTestMetricsResult,
-  options: StrykerOptions,
+  options: ProvidedStrykerOptions,
 ): string {
   const { stdout } = renderClearText(report, metrics, options)
   return stdout.join('\n')

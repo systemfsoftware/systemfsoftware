@@ -1,5 +1,7 @@
 import { declarePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { RunConfiguration } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
+import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 
 import { makeClearTextReporter } from './clear-text-reporter.js'
@@ -30,9 +32,21 @@ export { filterActionable, makeProgressStreamReporter, toRunEvent } from './prog
 export type { RunEventSink } from './progress-stream-reporter.js'
 
 export const strykerPlugins = [
-  declarePlugin(PluginKind.Reporter, 'clear-text', Layer.succeed(Reporter, makeClearTextReporter({}))),
+  declarePlugin(
+    PluginKind.Reporter,
+    'clear-text',
+    Layer.effect(Reporter, Effect.map(RunConfiguration, (options) => makeClearTextReporter({ options }))),
+  ),
   declarePlugin(PluginKind.Reporter, 'progress', Layer.effect(Reporter, makeProgressBarReporter())),
-  declarePlugin(PluginKind.Reporter, 'html', Layer.succeed(Reporter, makeHtmlReporter({}))),
-  declarePlugin(PluginKind.Reporter, 'json', Layer.succeed(Reporter, makeJsonReporter({}))),
+  declarePlugin(
+    PluginKind.Reporter,
+    'html',
+    Layer.effect(Reporter, Effect.map(RunConfiguration, (options) => makeHtmlReporter({ options }))),
+  ),
+  declarePlugin(
+    PluginKind.Reporter,
+    'json',
+    Layer.effect(Reporter, Effect.map(RunConfiguration, (options) => makeJsonReporter({ options }))),
+  ),
   declarePlugin(PluginKind.Reporter, 'progress-stream', Layer.effect(Reporter, makeProgressStreamReporter())),
 ]

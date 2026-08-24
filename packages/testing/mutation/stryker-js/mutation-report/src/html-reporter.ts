@@ -17,6 +17,7 @@ import { createRequire } from 'module'
 
 import { buildReportHtml } from './html-kernel.js'
 import { writeOutputFile } from './output-file.js'
+import type { ProvidedStrykerOptions } from './provided-options.js'
 
 function noopLogger(): Logger {
   return {
@@ -36,7 +37,7 @@ function noopLogger(): Logger {
 }
 
 export const makeHtmlReporter = (params: {
-  readonly options?: StrykerOptions
+  readonly options?: ProvidedStrykerOptions
   readonly log?: Logger
 }): ReporterService => {
   const options = params.options

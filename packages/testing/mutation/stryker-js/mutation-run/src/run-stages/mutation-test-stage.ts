@@ -23,14 +23,13 @@ import { createRequire } from 'node:module'
 import { checkPlans, groupPlans } from '../checker/checker-facade.js'
 import { createCheckerFactory } from '../checker/checker-factory.js'
 import type { CheckerResourceService } from '../checker/checker-resource.js'
-import { LoggingServerAddressService } from '../logging/logging-server.js'
 import { forMutant, hasStaticCoverage } from '../mutants/test-coverage.js'
 import type { TestCoverage } from '../mutants/test-coverage.js'
 import { makeMutationReportingService } from '../reporting/mutation-reporting.js'
 import type { MutationReportingService } from '../reporting/mutation-reporting.js'
 import { checkStatusToMutantStatus, mapRunResult, toSchemaLocation } from '../reporting/mutation-reporting.kernel.js'
+import { RunEnvironment } from '../run-environment.js'
 import { IdGeneratorService } from '../run-layers.js'
-import { RunEnvironment } from '../RunEnvironment.js'
 import type { SandboxHandle } from '../sandbox/sandbox.js'
 import { StrykerError } from '../stryker-error.schema.js'
 import { makeChildProcessTestRunner } from '../test-runner/child-process-test-runner-proxy.js'
@@ -99,13 +98,7 @@ const voidReporter: ReporterService = {
 }
 export const mutationTestStage: MutationTestStage<
   unknown,
-  | MutationTestLogger
-  | RunEnvironment
-  | Scope.Scope
-  | LoggingServerAddressService
-  | IdGenerator
-  | FileSystem.FileSystem
-  | Path.Path
+  MutationTestLogger | RunEnvironment | Scope.Scope | IdGenerator | FileSystem.FileSystem | Path.Path
 > = (prev) =>
   Effect.gen(function*() {
     const log = yield* MutationTestLogger
@@ -145,7 +138,6 @@ export const mutationTestStage: MutationTestStage<
       }
       return maybeReporter.value
     })
-    const loggingServerAddress = yield* LoggingServerAddressService
     const idGenerator = yield* IdGeneratorService
     const hasCheckers = prev.options.checkers.length > 0
     const checkerPool: Pool.Pool<CheckerResourceService, unknown> | undefined = hasCheckers
@@ -153,7 +145,6 @@ export const mutationTestStage: MutationTestStage<
         acquire: createCheckerFactory(
           prev.options,
           prev.project.fileDescriptions,
-          loggingServerAddress,
           prev.loadedPlugins.pluginModulePaths,
           () => log,
           idGenerator,
@@ -167,7 +158,6 @@ export const mutationTestStage: MutationTestStage<
         options: prev.options,
         fileDescriptions: prev.project.fileDescriptions,
         sandboxWorkingDirectory: prev.sandbox.workingDirectory,
-        loggingServerAddress,
         pluginModulePaths: [...prev.loadedPlugins.pluginModulePaths],
         logger: log,
         idGenerator,

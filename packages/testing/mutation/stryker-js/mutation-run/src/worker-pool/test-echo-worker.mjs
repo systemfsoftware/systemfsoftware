@@ -1,3 +1,4 @@
+/// <reference types="node" />
 export const TestEchoWorker = {
   echo(n) {
     return n * 2
@@ -9,6 +10,19 @@ export const TestEchoWorker = {
     const d = typeof delayMs === 'number' ? delayMs : 0
     await new Promise((r) => setTimeout(r, d))
     return n * 2
+  },
+  die() {
+    process.exit(0)
+  },
+  noop() {
+    return undefined
+  },
+  oom() {
+    process.stdout.write('JavaScript heap out of memory')
+    process.exit(1)
+  },
+  killSelf() {
+    return new Promise(() => {})
   },
 }
 

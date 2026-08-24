@@ -1,6 +1,6 @@
 import path from 'path'
 
-import { MutantCoverage } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { MutantCoverage, normalizeFileName } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { BaseTestResult, TestResult, TestStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { type RunMode, type RunnerTestSuite, type TaskState } from 'vitest'
 import { RunnerTestCase } from 'vitest/node'
@@ -85,7 +85,7 @@ export function fromTestId(id: string): { file: string; test: string } {
 
 export function normalizeTestId(id: string, projectRoot: string): string {
   const { file, test } = fromTestId(id)
-  return `${path.relative(projectRoot, file).replace(/\\/g, '/')}#${test}`
+  return `${normalizeFileName(path.relative(projectRoot, file))}#${test}`
 }
 
 export function normalizeCoverage(rawCoverage: MutantCoverage, projectRoot: string): MutantCoverage {

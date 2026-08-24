@@ -12,7 +12,10 @@ rule dropped the namespace when resolving the base, so it compared
 That spelling is the common one, so the rule was loudest exactly where the code
 was correct — 59 of 61 reports in one package were false.
 
-Deep namespace imports such as `effect/Schema` resolve correctly too, a member
-of a foreign module is still rejected, and a class inside an ambient
-`declare module` is no longer reported: it has no runtime existence, so none of
-the harms this rule prevents can occur there.
+Deep namespace imports such as `effect/Schema` resolve correctly too, and a
+member of a foreign module is still rejected.
+
+An ambient class declaration is no longer reported, whether it sits inside a
+`declare module` or stands at file scope as `declare class`. Neither emits
+anything at runtime, so none of the harms this rule prevents can occur there and
+there is no other spelling to move them to.

@@ -11,6 +11,7 @@ import * as Context$1 from 'effect/Context';
 import { CoverageData } from '@systemfsoftware/stryker-js-plugin-api/core';
 import * as Effect$1 from 'effect/Effect';
 import * as Exit from 'effect/Exit';
+import { ExitClass } from '@systemfsoftware/stryker-js-plugin-api/evaluate';
 import { FileDescription } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { FileDescriptions } from '@systemfsoftware/stryker-js-plugin-api/core';
 import * as FileSystem from 'effect/FileSystem';
@@ -27,12 +28,10 @@ import { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/co
 import * as Path from 'effect/Path';
 import { PluginContribution } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
-import * as S from 'effect/Schema';
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core';
 import * as Scope from 'effect/Scope';
 import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { TestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner';
-import { YieldableError } from 'effect/Cause';
 
 // @public (undocumented)
 export const ChildProcessSpawnerLive: Layer.Layer<ChildProcessSpawner.ChildProcessSpawner, never, never>;
@@ -42,23 +41,14 @@ export const ChildProcessSpawnerLive: Layer.Layer<ChildProcessSpawner.ChildProce
 // @public (undocumented)
 export const defaultStages: MutationRunStages<unknown, DefaultStagesContext>;
 
-// Warning: (ae-forgotten-export) The symbol "LoggingServerNotTcpError_base" needs to be exported by the entry point index.d.mts
-//
-// @public
-export class LoggingServerNotTcpError extends LoggingServerNotTcpError_base {
-    // (undocumented)
-    readonly exitClass = ExitClass.InternalError;
-}
-
 // Warning: (ae-forgotten-export) The symbol "PrepareLogger" needs to be exported by the entry point index.d.mts
 // Warning: (ae-forgotten-export) The symbol "InstrumentLogger" needs to be exported by the entry point index.d.mts
 // Warning: (ae-forgotten-export) The symbol "DryRunLogger" needs to be exported by the entry point index.d.mts
 // Warning: (ae-forgotten-export) The symbol "MutationTestLogger" needs to be exported by the entry point index.d.mts
-// Warning: (ae-forgotten-export) The symbol "LoggingServerAddressService" needs to be exported by the entry point index.d.mts
 // Warning: (ae-forgotten-export) The symbol "IdGenerator" needs to be exported by the entry point index.d.mts
 //
 // @public (undocumented)
-export const makeRunLayer: (env: RunEnvironmentShape) => Layer.Layer<RunEnvironment | PrepareLogger | InstrumentLogger | DryRunLogger | MutationTestLogger | FileSystem.FileSystem | Path.Path | LoggingServerAddressService | IdGenerator | ChildProcessSpawner.ChildProcessSpawner, LoggingServerNotTcpError, never>;
+export const makeRunLayer: (env: RunEnvironmentShape) => Layer.Layer<RunEnvironment | PrepareLogger | InstrumentLogger | DryRunLogger | MutationTestLogger | FileSystem.FileSystem | Path.Path | IdGenerator | ChildProcessSpawner.ChildProcessSpawner, never, never>;
 
 // @public
 export interface MutationRunStages<E, R> {
@@ -88,10 +78,6 @@ export class RunEnvironment extends RunEnvironment_base {}
 // @public
 export interface RunEnvironmentShape {
     readonly basePath: string;
-    // (undocumented)
-    readonly clearTextEnabled: boolean;
-    // (undocumented)
-    readonly progressEnabled: boolean;
     readonly reporterPluginModules: readonly string[];
     // Warning: (ae-forgotten-export) The symbol "ResolvedMode" needs to be exported by the entry point index.d.mts
     readonly resolvedMode: ResolvedMode;

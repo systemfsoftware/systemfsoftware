@@ -5,7 +5,7 @@ import { CheckerFailed } from '@systemfsoftware/stryker-js-plugin-api/check'
 import { CheckStatus } from '@systemfsoftware/stryker-js-plugin-api/check'
 import type { CheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
 import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { strykerReportBugUrl } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { normalizeFileName, strykerReportBugUrl } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { Predicate, Result } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
@@ -15,7 +15,6 @@ import type { Diagnostic } from 'typescript/unstable/sync'
 import { createGroups } from './grouping/create-groups.js'
 import type { TSFileNode } from './grouping/ts-file-node.js'
 import { classifyDiagnostics, partitionMutantsForGrouping } from './kernel/check-kernel.js'
-import { toPosixFileName } from './posix-file-name.js'
 import type { TypescriptCompiler } from './typescript-compiler.js'
 
 interface CheckerDeps {
@@ -168,7 +167,7 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
         result.set(mutant.id, { status: CheckStatus.Passed })
       }
       const firstMutant = mutants[0]
-      if (!firstMutant || !compiler.nodes.get(toPosixFileName(firstMutant.fileName))) {
+      if (!firstMutant || !compiler.nodes.get(normalizeFileName(firstMutant.fileName))) {
         return Effect.succeed(result)
       }
       const errorsMap = new Map<string, Diagnostic[]>()

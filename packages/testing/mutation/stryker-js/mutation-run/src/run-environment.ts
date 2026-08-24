@@ -8,14 +8,14 @@ import type { RunEventSink } from './run-event.js'
  * without probing for it.
  *
  * One service, not one per member. The container held these as ten separate
- * string tokens — `runEventSink`, `runId`, `resolvedMode`, `progressEnabled`,
- * `clearTextEnabled`, `runStartedAt`, `reporterPluginModules`,
- * `reporterOverride`, `loggerConsoleOut`, `loggerShowColors` — which forced
- * every consumer to name each member it wanted and every test to provide ten
- * bindings to exercise one. They are a single capability: *what this run's
- * host already decided*. A consumer that needs only `runId` still depends on
- * the environment, because `{ runId, … }` is assignable to `{ runId }` and the
- * narrower projection would be a second name for the same thing (`REPO-A3`).
+ * string tokens — `runEventSink`, `runId`, `resolvedMode`, `runStartedAt`,
+ * `reporterPluginModules`, `reporterOverride`, `loggerConsoleOut`,
+ * `loggerShowColors` — which forced every consumer to name each member it
+ * wanted and every test to provide ten bindings to exercise one. They are a
+ * single capability: *what this run's host already decided*. A consumer that
+ * needs only `runId` still depends on the environment, because `{ runId, … }`
+ * is assignable to `{ runId }` and the narrower projection would be a second
+ * name for the same thing (`REPO-A3`).
  *
  * Every member is data. Nothing here performs I/O, so the engine cannot reach
  * the terminal, the clock or the process through it — those are separate
@@ -30,9 +30,6 @@ export interface RunEnvironmentShape {
 
   /** Resolved once at the edge, with the signal that decided it. */
   readonly resolvedMode: ResolvedMode
-
-  readonly progressEnabled: boolean
-  readonly clearTextEnabled: boolean
 
   /**
    * The run's clock zero. Every `elapsedMs` measures from here, so a stage

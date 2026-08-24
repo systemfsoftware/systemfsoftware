@@ -2,22 +2,23 @@ import { Schema as S } from 'effect'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
+import * as Option from 'effect/Option'
 import type { PlatformError } from 'effect/PlatformError'
+import * as PlatformErrorNS from 'effect/PlatformError'
 import * as Ref from 'effect/Ref'
 import * as Scope from 'effect/Scope'
 import * as Sink from 'effect/Sink'
 import * as Stream from 'effect/Stream'
-
 import * as ChildProcess from 'effect/unstable/process/ChildProcess'
 
 import type { FileDescriptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 
-import type { LoggingServerAddress } from '../logging/index.js'
-
 import type { IdGenerator } from './id-generator.js'
+import { DELIMITER } from './ipc-framing.js'
 import { ChildProcessSpawner, net, nodeSpawn, resolveWorkerMainPath } from './ipc-transport.js'
 import { ChildProcessCrashedError, OutOfMemoryError } from './worker-pool.schema.js'
 import {
@@ -29,7 +30,6 @@ import {
   WorkerSocketNotTcpError,
 } from './worker-protocol.schema.js'
 
-const DELIMITER = '\n'
 const DISPOSE_TIMEOUT_MS = 2000
 
 /** How long the parent waits for a spawned worker to connect back. */
@@ -55,6 +55,7 @@ export interface ChildProcessProxyShape<T> {
   readonly stdout: string
   readonly stderr: string
   readonly dispose: Effect.Effect<void>
+  readonly pid: number
 }
 
 const spawnFn = (command: ChildProcess.Command) =>
@@ -71,6 +72,10 @@ const spawnFn = (command: ChildProcess.Command) =>
     child.on('exit', (code, signal) => {
       Deferred.doneUnsafe(exitDeferred, Effect.succeed([code, signal] as const))
     })
+    child.on('error', (cause) => {
+      Deferred.doneUnsafe(exitDeferred, Effect.succeed([null, null] as const))
+      void cause
+    })
     const scope = yield* Scope.Scope
     const handle = ChildProcessSpawner.makeHandle({
       pid: ChildProcessSpawner.ProcessId(child.pid ?? 0),
@@ -78,8 +83,7 @@ const spawnFn = (command: ChildProcess.Command) =>
       isRunning: Effect.sync(() => child.exitCode === null && child.signalCode === null),
       kill: () =>
         Effect.sync(() => {
-          const ok = child.kill('SIGTERM')
-          if (!ok) throw new Error('kill failed')
+          child.kill('SIGTERM')
         }),
       stdin: Sink.drain,
       stdout: Stream.empty,
@@ -119,7 +123,6 @@ export type ChildProcessProxyError =
 export const makeChildProcessProxy = <T>(params: {
   modulePath: string
   namedExport: string
-  loggingServerAddress: LoggingServerAddress
   options: StrykerOptions
   fileDescriptions: FileDescriptions
   pluginModulePaths: readonly string[]
@@ -138,11 +141,52 @@ export const makeChildProcessProxy = <T>(params: {
     const socketRef = yield* Ref.make<net.Socket | undefined>(undefined)
     const serverRef = yield* Ref.make<net.Server | undefined>(undefined)
     const connectedDeferred = yield* Deferred.make<void, never>()
-
+    const spawnErrorDeferred = yield* Deferred.make<unknown, never>()
+    const rawExitDeferred = yield* Deferred.make<readonly [number | null, NodeJS.Signals | null], never>()
     const workerId = (yield* params.idGenerator.next).toString()
     const workerMainPath = resolveWorkerMainPath()
-    const needsStripTypes = workerMainPath.endsWith('.ts')
 
+    const MAX_OUTPUT_CHARS = 4096
+    // Twice the 2000-char slice used for crash reporting, so an OOM marker (~30 chars) near the tail is not truncated away, while a chatty worker cannot grow the accumulator without bound. Tail is kept so OOM text at the end remains visible.
+    const appendCapped = (existing: string, chunk: string): string => {
+      const next = existing + chunk
+      return next.length > MAX_OUTPUT_CHARS ? next.slice(-MAX_OUTPUT_CHARS) : next
+    }
+    let spawnedHandle: ChildProcessSpawner.ChildProcessHandle | undefined
+
+    // Deferred.doneUnsafe is idempotent per repos/effect/packages/effect/src/Deferred.ts:856-858 — `if (self.effect) return false` — so a second completion (error then close) returns false without overwriting, and double drain is safe because the second getAndSet sees an empty map.
+    const drainPendingOnSocketClose = Effect.gen(function*() {
+      const pending = yield* Ref.getAndSet(pendingRef, {})
+      const ids = Object.keys(pending)
+      if (ids.length === 0) return
+      const stdout = yield* Ref.get(stdoutRef)
+      const stderr = yield* Ref.get(stderrRef)
+      const combined = stdout + stderr
+      const isOom = combined.includes('JavaScript heap out of memory') ||
+        combined.includes('FatalProcessOutOfMemory')
+      const pid = spawnedHandle !== undefined ? Number(spawnedHandle.pid) : 0
+      const exitOption = yield* Deferred.await(rawExitDeferred).pipe(Effect.timeoutOption(500))
+      const exit = Option.isSome(exitOption)
+        ? (() => {
+          const [code, signal] = exitOption.value
+          return signal !== null
+            ? ({ _tag: 'Signal' as const, signal } as const)
+            : ({ _tag: 'Code' as const, code: code ?? 1 } as const)
+        })()
+        : ({ _tag: 'Code' as const, code: 1 } as const)
+      const maybeSignal = Option.isSome(exitOption) ? exitOption.value[1] : null
+      const cause = maybeSignal !== null
+        ? `the worker was killed by signal ${maybeSignal}${combined.length > 0 ? `\n${combined.slice(0, 2000)}` : ''}`
+        : combined.slice(0, 2000) || 'socket closed without exit status'
+      const err = isOom
+        ? new OutOfMemoryError({ pid, exitCode: Option.isSome(exitOption) ? (exitOption.value[0] ?? 1) : 1 })
+        : new ChildProcessCrashedError({ pid, exit, cause })
+      for (const k of ids) {
+        const n = Number(k)
+        const d = pending[n]
+        if (d !== undefined) Deferred.doneUnsafe(d, Effect.fail(err))
+      }
+    })
     const server = yield* Effect.acquireRelease(
       Effect.callback<net.Server, WorkerSocketListenFailed>((resume) => {
         const srv = net.createServer((socket) => {
@@ -180,7 +224,6 @@ export const makeChildProcessProxy = <T>(params: {
                     return [defer, next] as const
                   })
                   if (d === undefined) {
-                    const current = yield* Ref.get(pendingRef)
                     return
                   }
                   if (decoded.success) {
@@ -195,26 +238,15 @@ export const makeChildProcessProxy = <T>(params: {
           Effect.runSync(Ref.set(socketRef, socket))
           Deferred.doneUnsafe(connectedDeferred, Effect.void)
           socket.on('close', () => {
+            void Effect.runPromise(drainPendingOnSocketClose.pipe(Effect.ignore))
+          })
+          socket.on('error', (cause) => {
             void Effect.runPromise(
-              Effect.gen(function*() {
-                const pending = yield* Ref.getAndSet(pendingRef, {})
-                const ids = Object.keys(pending)
-                if (ids.length === 0) return
-                const stdout = yield* Ref.get(stdoutRef)
-                const stderr = yield* Ref.get(stderrRef)
-                const combined = stdout + stderr
-                const isOom = combined.includes('JavaScript heap out of memory') ||
-                  combined.includes('FatalProcessOutOfMemory')
-                const err = isOom
-                  ? new OutOfMemoryError({ pid: 0, exitCode: 1 })
-                  : new ChildProcessCrashedError({ pid: 0, exit: { _tag: 'Code', code: 1 }, cause: 'socket closed' })
-                for (const k of ids) {
-                  const n = Number(k)
-                  const d = pending[n]
-                  if (d !== undefined) Deferred.doneUnsafe(d, Effect.fail(err))
-                }
-              }),
+              Effect.sync(() => params.logger.warn(`IPC socket error for worker ${workerId}`, cause)).pipe(
+                Effect.ignore,
+              ),
             )
+            void Effect.runPromise(drainPendingOnSocketClose.pipe(Effect.ignore))
           })
         })
         srv.listen(0, '127.0.0.1', () => {
@@ -264,6 +296,72 @@ export const makeChildProcessProxy = <T>(params: {
       String(ipcPort),
     ]
 
+    const localSpawnFn = (command: ChildProcess.Command) =>
+      Effect.gen(function*() {
+        if (!ChildProcess.isStandardCommand(command)) {
+          return yield* Effect.die(new Error('Only StandardCommand is supported'))
+        }
+        const cwd = command.options.cwd
+        const envOption = command.options.env
+        const extendEnv = command.options.extendEnv
+        const env = extendEnv && envOption !== undefined ? { ...process.env, ...envOption } : envOption ?? process.env
+        const child = nodeSpawn(command.command, [...command.args], { cwd, env, stdio: 'pipe' })
+        if (child.stdout) {
+          child.stdout.on('data', (chunk: Buffer) => {
+            const text = chunk.toString('utf-8')
+            Effect.runSync(Ref.update(stdoutRef, (existing) => appendCapped(existing, text)))
+          })
+        }
+        if (child.stderr) {
+          child.stderr.on('data', (chunk: Buffer) => {
+            const text = chunk.toString('utf-8')
+            Effect.runSync(Ref.update(stderrRef, (existing) => appendCapped(existing, text)))
+          })
+        }
+        const exitDeferred = rawExitDeferred
+        child.on('exit', (code, signal) => {
+          Deferred.doneUnsafe(exitDeferred, Effect.succeed([code, signal] as const))
+        })
+        child.on('error', (cause) => {
+          Deferred.doneUnsafe(
+            spawnErrorDeferred,
+            Effect.succeed(cause),
+          )
+          Deferred.doneUnsafe(exitDeferred, Effect.succeed([null, null] as const))
+        })
+        const scope = yield* Scope.Scope
+        const handle = ChildProcessSpawner.makeHandle({
+          pid: ChildProcessSpawner.ProcessId(child.pid ?? 0),
+          exitCode: Effect.map(Deferred.await(exitDeferred), ([code]) => ChildProcessSpawner.ExitCode(code ?? 0)),
+          isRunning: Effect.sync(() => child.exitCode === null && child.signalCode === null),
+          kill: () =>
+            Effect.sync(() => {
+              child.kill('SIGTERM')
+            }),
+          stdin: Sink.drain,
+          stdout: Stream.empty,
+          stderr: Stream.empty,
+          all: Stream.empty,
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+          unref: Effect.sync(() => {
+            child.unref()
+            return Effect.sync(() => {
+              child.ref()
+            })
+          }),
+        })
+        yield* Scope.addFinalizer(
+          scope,
+          Effect.ignore(handle.kill()).pipe(Effect.timeoutOrElse({
+            duration: DISPOSE_TIMEOUT_MS,
+            orElse: () => Effect.void,
+          })),
+        )
+        return handle
+      })
+    const localSpawner = ChildProcessSpawner.make(localSpawnFn)
+
     const command = ChildProcess.make('node', baseArgs, {
       cwd: params.workingDirectory,
       env: {
@@ -273,8 +371,21 @@ export const makeChildProcessProxy = <T>(params: {
       extendEnv: true,
     })
 
-    const handle = yield* Effect.provideService(command, ChildProcessSpawner.ChildProcessSpawner, spawner)
-    yield* Deferred.await(connectedDeferred).pipe(
+    const handle = yield* Effect.provideService(command, ChildProcessSpawner.ChildProcessSpawner, localSpawner)
+    spawnedHandle = handle
+    const spawnErrorEffect = Deferred.await(spawnErrorDeferred).pipe(
+      Effect.flatMap((cause) =>
+        Effect.fail(
+          PlatformErrorNS.systemError({
+            _tag: 'Unknown',
+            module: 'ChildProcess',
+            method: 'spawn',
+            cause,
+          }),
+        )
+      ),
+    )
+    yield* Effect.race(Deferred.await(connectedDeferred), spawnErrorEffect).pipe(
       Effect.timeoutOrElse({
         duration: CONNECT_TIMEOUT_MS,
         orElse: () =>
@@ -288,7 +399,7 @@ export const makeChildProcessProxy = <T>(params: {
     )
 
     yield* Effect.forkScoped(
-      Effect.flatMap(handle.exitCode, (code) =>
+      Effect.flatMap(Deferred.await(rawExitDeferred), ([code, signal]) =>
         Effect.gen(function*() {
           const stdout = yield* Ref.get(stdoutRef)
           const stderr = yield* Ref.get(stderrRef)
@@ -300,26 +411,30 @@ export const makeChildProcessProxy = <T>(params: {
           if (ids.length === 0) return
           const pid = Number(handle.pid)
           if (isOom) {
-            const err = new OutOfMemoryError({ pid, exitCode: Number(code) })
+            const err = new OutOfMemoryError({ pid, exitCode: code ?? 0 })
             for (const k of ids) {
               const d = pending[Number(k)]
               if (d !== undefined) Deferred.doneUnsafe(d, Effect.fail(err))
             }
           } else {
-            const numericCode = Number(code)
-            if (numericCode !== 0) {
-              const err = new ChildProcessCrashedError({
-                pid,
-                exit: { _tag: 'Code', code: numericCode },
-                cause: combined.slice(0, 2000),
-              })
-              for (const k of ids) {
-                const d = pending[Number(k)]
-                if (d !== undefined) Deferred.doneUnsafe(d, Effect.fail(err))
-              }
-            } else {
-              // Child exited zero with no pending to fail — restore the empty map
-              // (getAndSet already cleared it, so nothing to do)
+            const exit = signal !== null
+              ? { _tag: 'Signal' as const, signal }
+              : { _tag: 'Code' as const, code: code ?? 1 }
+            const cause = signal !== null
+              ? `the worker was killed by signal ${signal}${combined.length > 0 ? `\n${combined.slice(0, 2000)}` : ''}`
+              : (code ?? 0) === 0
+              ? `the worker exited without answering ${ids.length} call(s) with exit code 0${
+                combined.length > 0 ? `\n${combined.slice(0, 2000)}` : ''
+              }`
+              : combined.slice(0, 2000)
+            const err = new ChildProcessCrashedError({
+              pid,
+              exit,
+              cause,
+            })
+            for (const k of ids) {
+              const d = pending[Number(k)]
+              if (d !== undefined) Deferred.doneUnsafe(d, Effect.fail(err))
             }
           }
         })).pipe(Effect.ignore),
@@ -350,7 +465,6 @@ export const makeChildProcessProxy = <T>(params: {
               WorkerMethodError | ChildProcessCrashedError | OutOfMemoryError
             >()
             yield* Ref.update(pendingRef, (p) => ({ ...p, [callId]: deferred }))
-            const afterAdd = yield* Ref.get(pendingRef)
             const sock = yield* Ref.get(socketRef)
             if (sock === undefined || sock.destroyed || !sock.writable) {
               yield* Ref.update(pendingRef, (p) => {
@@ -393,7 +507,13 @@ export const makeChildProcessProxy = <T>(params: {
           if (d !== undefined) {
             Deferred.doneUnsafe(
               d,
-              Effect.fail(new ChildProcessCrashedError({ pid: 0, exit: { _tag: 'Code', code: 1 }, cause: 'disposed' })),
+              Effect.fail(
+                new ChildProcessCrashedError({
+                  pid: Number(handle.pid),
+                  exit: { _tag: 'Code', code: 1 },
+                  cause: 'disposed',
+                }),
+              ),
             )
           }
         }
@@ -420,6 +540,7 @@ export const makeChildProcessProxy = <T>(params: {
         return Effect.runSync(Ref.get(stderrRef))
       },
       dispose,
+      pid: Number(handle.pid),
     }
   })
 
@@ -432,11 +553,16 @@ if (import.meta.vitest !== undefined) {
   // them test-only.
   const { makeIdGenerator: makeTestIdGenerator } = await import('./id-generator.js')
   const { WorkerMethodError } = await import('./worker-protocol.schema.js')
+  const { ChildProcessCrashedError, OutOfMemoryError } = await import('./worker-pool.schema.js')
 
   interface EchoWorker {
     echo(n: unknown): Promise<unknown>
     throws(): Promise<unknown>
     delayedEcho(n: unknown, delayMs: unknown): Promise<unknown>
+    die(): Promise<unknown>
+    noop(): Promise<unknown>
+    oom(): Promise<unknown>
+    killSelf(): Promise<unknown>
   }
 
   // Touch the private marker so `in-source-test-targets-private` is satisfied.
@@ -465,7 +591,6 @@ if (import.meta.vitest !== undefined) {
       const shape = yield* makeChildProcessProxy<EchoWorker>({
         modulePath,
         namedExport,
-        loggingServerAddress: { port: 0 },
         options,
         fileDescriptions: {},
         pluginModulePaths: [],
@@ -548,6 +673,97 @@ if (import.meta.vitest !== undefined) {
       // The method name is the whole point: a bare "call failed" would leave the
       // operator exactly where the silent `undefined` left them.
       expect(failure.message).toContain('echo')
+    } finally {
+      await Effect.runPromise(shape.dispose.pipe(Effect.orDie))
+      await Effect.runPromise(Scope.close(scope, Exit.succeed(undefined)))
+    }
+  })
+
+  it('Should_FailWithCrashedError_When_WorkerDiesWithPendingCall', async () => {
+    const modulePath = new URL('./test-echo-worker.mjs', import.meta.url).pathname
+    const { shape, scope } = await Effect.runPromise(makeTestProxy(modulePath, 'TestEchoWorker'))
+    try {
+      // genuine outermost deadline: TimeoutError fails the test if worker death hangs — its TimeoutError propagates to the caller that acts on it
+      const outcome = await Effect.runPromise(
+        shape.proxy.die().pipe(
+          Effect.timeout(2000),
+          Effect.as('success' as const),
+          Effect.catchTags({
+            ChildProcessCrashedError: () => Effect.succeed('crashed' as const),
+            TimeoutError: () => Effect.succeed('timeout' as const),
+            WorkerMethodError: () => Effect.succeed('workerMethod' as const),
+            OutOfMemoryError: () => Effect.succeed('oom' as const),
+          }),
+        ),
+      )
+      expect(outcome).toBe('crashed')
+    } finally {
+      await Effect.runPromise(shape.dispose.pipe(Effect.orDie))
+      await Effect.runPromise(Scope.close(scope, Exit.succeed(undefined)))
+    }
+  })
+
+  it('Should_ReturnUndefined_When_NoopReturnsNothing', async () => {
+    const modulePath = new URL('./test-echo-worker.mjs', import.meta.url).pathname
+    const { shape, scope } = await Effect.runPromise(makeTestProxy(modulePath, 'TestEchoWorker'))
+    try {
+      const result = await Effect.runPromise(shape.proxy.noop())
+      expect(result).toBeUndefined()
+    } finally {
+      await Effect.runPromise(shape.dispose.pipe(Effect.orDie))
+      await Effect.runPromise(Scope.close(scope, Exit.succeed(undefined)))
+    }
+  })
+
+  it('Should_FailWithOutOfMemoryError_When_WorkerOutputsOomMarkerThenDies', async () => {
+    const modulePath = new URL('./test-echo-worker.mjs', import.meta.url).pathname
+    const { shape, scope } = await Effect.runPromise(makeTestProxy(modulePath, 'TestEchoWorker'))
+    try {
+      const outcome = await Effect.runPromise(
+        shape.proxy.oom().pipe(
+          Effect.timeout(2000),
+          Effect.as('success' as const),
+          Effect.catchTags({
+            OutOfMemoryError: () => Effect.succeed('oom' as const),
+            ChildProcessCrashedError: () => Effect.succeed('crashed' as const),
+            TimeoutError: () => Effect.succeed('timeout' as const),
+            WorkerMethodError: () => Effect.succeed('workerMethod' as const),
+          }),
+        ),
+      )
+      expect(outcome).toBe('oom')
+    } finally {
+      await Effect.runPromise(shape.dispose.pipe(Effect.orDie))
+      await Effect.runPromise(Scope.close(scope, Exit.succeed(undefined)))
+    }
+  })
+
+  it('Should_FailWithSignalExit_When_WorkerKilledBySignal', async () => {
+    const modulePath = new URL('./test-echo-worker.mjs', import.meta.url).pathname
+    const { shape, scope } = await Effect.runPromise(makeTestProxy(modulePath, 'TestEchoWorker'))
+    try {
+      const outcome = await Effect.runPromise(
+        Effect.gen(function*() {
+          const fiber = yield* Effect.forkChild(shape.proxy.killSelf())
+          yield* Effect.sync(() => process.kill(shape.pid, 'SIGKILL'))
+          const result = yield* Fiber.join(fiber).pipe(
+            Effect.timeout(2000),
+            Effect.as('success' as const),
+            Effect.catchTags({
+              ChildProcessCrashedError: (error) => Effect.succeed(error),
+              OutOfMemoryError: () => Effect.succeed('oom' as const),
+              TimeoutError: () => Effect.succeed('timeout' as const),
+              WorkerMethodError: () => Effect.succeed('workerMethod' as const),
+            }),
+          )
+          return result
+        }),
+      )
+      expect(outcome).toBeInstanceOf(ChildProcessCrashedError)
+      if (outcome instanceof ChildProcessCrashedError) {
+        expect(outcome.exit).toMatchObject({ _tag: 'Signal', signal: 'SIGKILL' })
+        expect(outcome.pid).not.toBe(0)
+      }
     } finally {
       await Effect.runPromise(shape.dispose.pipe(Effect.orDie))
       await Effect.runPromise(Scope.close(scope, Exit.succeed(undefined)))

@@ -5,8 +5,6 @@ import * as Option from 'effect/Option'
 import type { AnyPluginContribution, ContributionOf } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 
-import { isCommandRunner } from '../test-runner/command-test-runner.js'
-
 import { PluginNotFoundError } from './plugin-loader.schema.js'
 
 function findPlugin<K extends PluginKind>(
@@ -39,9 +37,6 @@ export function create<K extends PluginKind>(
   kind: K,
   name: string,
 ): Effect.Effect<ContributionOf<K>, PluginNotFoundError> {
-  if (kind === PluginKind.TestRunner && isCommandRunner(name)) {
-    return Effect.fail(new PluginNotFoundError({ descriptor: name }))
-  }
   return findPlugin(pluginsByKind, kind, name)
 }
 

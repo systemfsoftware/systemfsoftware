@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/stryker-js-vitest-runner`
 
-> **Location:** `packages/stryker-js/vitest-runner/` — Vitest test-runner plugin for Stryker.
+> **Location:** `packages/testing/mutation/stryker-js/vitest-runner/` — Vitest test-runner plugin for Stryker.
 
 Ported from `@stryker-mutator/vitest-runner` v9.6.1 (commit `e1abfbe`). The tsconfig reproduces the original's strictness so the ported source typechecks unmodified; the package carries no type-suppression comments and no non-null assertions.
 

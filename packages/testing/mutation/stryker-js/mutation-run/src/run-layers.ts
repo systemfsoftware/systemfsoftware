@@ -6,24 +6,21 @@ import * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
 
 import { NodeFileSystem, NodePath } from '@effect/platform-node'
-import { noopLogger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 
 import * as Scope from 'effect/Scope'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
-import { LoggingServerAddressService, LoggingServerLive } from './logging/logging-server.js'
-import { LoggingServerNotTcpError } from './logging/logging-server.schema.js'
-import { PrepareLogger } from './run-stages/1-prepare-executor.js'
-import { prepareStage } from './run-stages/1-prepare-executor.js'
-import { InstrumentLogger } from './run-stages/2-mutant-instrumenter-executor.js'
-import { instrumentStage } from './run-stages/2-mutant-instrumenter-executor.js'
-import { DryRunLogger } from './run-stages/3-dry-run-executor.js'
-import { dryRunStage } from './run-stages/3-dry-run-executor.js'
-import { MutationTestLogger } from './run-stages/4-mutation-test-executor.js'
-import { mutationTestStage } from './run-stages/4-mutation-test-executor.js'
+import { engineConsoleLogger, engineLogLevelHolder } from './engine-logger.js'
+import { RunEnvironment, type RunEnvironmentShape } from './run-environment.js'
+import { DryRunLogger } from './run-stages/dry-run-stage.js'
+import { dryRunStage } from './run-stages/dry-run-stage.js'
+import { InstrumentLogger } from './run-stages/instrument-stage.js'
+import { instrumentStage } from './run-stages/instrument-stage.js'
+import { MutationTestLogger } from './run-stages/mutation-test-stage.js'
+import { mutationTestStage } from './run-stages/mutation-test-stage.js'
+import { PrepareLogger, prepareStage } from './run-stages/prepare-stage.js'
 import { PrepareFailedError } from './run-stages/stage.schema.js'
 import { InstrumentFailedError } from './run-stages/stage.schema.js'
 import { DryRunFailedError, DryRunNoTestsError } from './run-stages/stage.schema.js'
-import { RunEnvironment, type RunEnvironmentShape } from './RunEnvironment.js'
 import type { MutationRunStages } from './stryker.js'
 import { ChildProcessSpawnerLive } from './worker-pool/child-process-proxy.js'
 import type { IdGenerator } from './worker-pool/id-generator.js'
@@ -48,7 +45,6 @@ type DefaultStagesContext =
   | FileSystem.FileSystem
   | Path.Path
   | Scope.Scope
-  | LoggingServerAddressService
   | IdGenerator
   | ChildProcessSpawner.ChildProcessSpawner
 export const defaultStages: MutationRunStages<unknown, DefaultStagesContext> = {
@@ -57,7 +53,10 @@ export const defaultStages: MutationRunStages<unknown, DefaultStagesContext> = {
   dryRun: dryRunStage,
   mutationTest: mutationTestStage,
 }
-const provideLogger = <A>(tag: Context.Service<A, Logger>): Layer.Layer<A> => Layer.succeed(tag, noopLogger)
+const provideLogger = <A>(tag: Context.Service<A, Logger>): Layer.Layer<A> => Layer.succeed(tag, engineConsoleLogger)
+export const setEngineLogLevel = (level: typeof engineLogLevelHolder.current): void => {
+  engineLogLevelHolder.current = level
+}
 export const makeRunLayer = (
   env: RunEnvironmentShape,
 ): Layer.Layer<
@@ -68,10 +67,9 @@ export const makeRunLayer = (
   | MutationTestLogger
   | FileSystem.FileSystem
   | Path.Path
-  | LoggingServerAddressService
   | IdGenerator
   | ChildProcessSpawner.ChildProcessSpawner,
-  LoggingServerNotTcpError,
+  never,
   never
 > =>
   Layer.mergeAll(
@@ -82,7 +80,6 @@ export const makeRunLayer = (
     provideLogger(MutationTestLogger),
     NodeFileSystem.layer,
     NodePath.layer,
-    LoggingServerLive,
     Layer.effect(IdGeneratorService, makeIdGenerator),
     ChildProcessSpawnerLive,
   )

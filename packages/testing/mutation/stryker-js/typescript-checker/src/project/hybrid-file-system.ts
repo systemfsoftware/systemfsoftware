@@ -1,11 +1,9 @@
 import { readFileSync } from 'fs'
 
-import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Mutant, normalizeFileName } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Effect from 'effect/Effect'
 import * as Ref from 'effect/Ref'
 import type { FileSystem, FileSystemEntries } from 'typescript/unstable/fs'
-
-import { toPosixFileName } from '../posix-file-name.js'
 
 import { HybridFileNotFoundError } from './hybrid-file-system.schema.js'
 import { makeScriptFile, mutateScriptFile, resetScriptFile, type ScriptFile, withContent } from './script-file.js'
@@ -40,7 +38,7 @@ export const makeHybridFileSystem: Effect.Effect<HybridFileSystem> = Effect.gen(
 
   const fileSystem: FileSystem = {
     readFile: (fileName: string): string | null | undefined => {
-      const normalized = toPosixFileName(fileName)
+      const normalized = normalizeFileName(fileName)
       if (fileNameIsBuildInfo(normalized)) {
         return null
       }
@@ -60,7 +58,7 @@ export const makeHybridFileSystem: Effect.Effect<HybridFileSystem> = Effect.gen(
     },
 
     fileExists: (fileName: string): boolean | undefined => {
-      const normalized = toPosixFileName(fileName)
+      const normalized = normalizeFileName(fileName)
       if (fileNameIsBuildInfo(normalized)) {
         return false
       }
@@ -82,7 +80,7 @@ export const makeHybridFileSystem: Effect.Effect<HybridFileSystem> = Effect.gen(
   }
   const getFile = (fileName: string): Effect.Effect<ScriptFile | undefined> =>
     Effect.gen(function*() {
-      const normalized = toPosixFileName(fileName)
+      const normalized = normalizeFileName(fileName)
       const files = yield* Ref.get(filesRef)
       if (files.has(normalized)) {
         return files.get(normalized)
@@ -101,7 +99,7 @@ export const makeHybridFileSystem: Effect.Effect<HybridFileSystem> = Effect.gen(
 
   const writeFile = (fileName: string, data: string): Effect.Effect<void> =>
     Effect.gen(function*() {
-      const normalized = toPosixFileName(fileName)
+      const normalized = normalizeFileName(fileName)
       const files = yield* Ref.get(filesRef)
       const existing = files.get(normalized)
       if (existing) {
@@ -123,13 +121,13 @@ export const makeHybridFileSystem: Effect.Effect<HybridFileSystem> = Effect.gen(
         return yield* new HybridFileNotFoundError({ fileName })
       }
       const next = mutateScriptFile(file, mutant)
-      const normalized = toPosixFileName(fileName)
+      const normalized = normalizeFileName(fileName)
       yield* Ref.update(filesRef, (m) => copyAndSet(m, normalized, next))
     })
 
   const resetFile = (fileName: string): Effect.Effect<void> =>
     Effect.gen(function*() {
-      const normalized = toPosixFileName(fileName)
+      const normalized = normalizeFileName(fileName)
       const files = yield* Ref.get(filesRef)
       const file = files.get(normalized)
       if (file) {
@@ -141,7 +139,7 @@ export const makeHybridFileSystem: Effect.Effect<HybridFileSystem> = Effect.gen(
   const existsInMemory = (fileName: string): Effect.Effect<boolean> =>
     Effect.gen(function*() {
       const files = yield* Ref.get(filesRef)
-      const file = files.get(toPosixFileName(fileName))
+      const file = files.get(normalizeFileName(fileName))
       return file !== undefined
     })
 

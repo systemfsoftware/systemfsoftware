@@ -5,6 +5,7 @@
 ```ts
 
 import { DryRunCompletedEvent } from '@systemfsoftware/stryker-js-plugin-api/report';
+import * as Effect from 'effect/Effect';
 import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging';
 import { Metrics } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { MetricsResult } from '@systemfsoftware/stryker-js-plugin-api/report';
@@ -14,9 +15,9 @@ import { MutationTestingPlanReadyEvent } from '@systemfsoftware/stryker-js-plugi
 import { PluginContribution } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { ReporterService } from '@systemfsoftware/stryker-js-plugin-api/report';
+import { RunConfiguration } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { RunTiming } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core';
-import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { TestRunnerCapabilities } from '@systemfsoftware/stryker-js-plugin-api/test-runner';
 import { Timer } from '@systemfsoftware/stryker-js-mutation-run/timer';
 
@@ -53,8 +54,10 @@ export type Column = {
     readonly columns: readonly Column[];
 };
 
+// Warning: (ae-forgotten-export) The symbol "ProvidedStrykerOptions" needs to be exported by the entry point index.d.mts
+//
 // @public (undocumented)
-export const drawClearTextScoreTable: (metricsResult: MetricsResult<Metrics>, options: StrykerOptions) => string;
+export const drawClearTextScoreTable: (metricsResult: MetricsResult<Metrics>, options: ProvidedStrykerOptions) => string;
 
 // @public (undocumented)
 export const emptyTally: (timer: Timer) => ProgressTally;
@@ -85,7 +88,7 @@ export const isComplete: (state: ProgressBarState) => boolean;
 
 // @public (undocumented)
 export const makeClearTextReporter: (params: {
-    readonly options?: StrykerOptions;
+    readonly options?: ProvidedStrykerOptions;
     readonly log?: Logger;
     readonly out?: NodeJS.WritableStream;
 }) => ReporterService;
@@ -95,18 +98,16 @@ export const makeEmptyTimer: () => Timer;
 
 // @public (undocumented)
 export const makeHtmlReporter: (params: {
-    readonly options?: StrykerOptions;
+    readonly options?: ProvidedStrykerOptions;
     readonly log?: Logger;
 }) => ReporterService;
 
 // @public (undocumented)
 export const makeJsonReporter: (params: {
-    readonly options?: StrykerOptions;
+    readonly options?: ProvidedStrykerOptions;
     readonly log?: Logger;
 }) => ReporterService;
 
-// Warning: (ae-forgotten-export) The symbol "Effect" needs to be exported by the entry point index.d.mts
-//
 // @public (undocumented)
 export const makeProgressBarReporter: (params?: {
     readonly out?: NodeJS.WritableStream;
@@ -116,7 +117,7 @@ export const makeProgressBarReporter: (params?: {
         readonly incomplete: string;
         readonly width: number;
     };
-}) => Effect<ReporterService>;
+}) => Effect.Effect<ReporterService>;
 
 // @public (undocumented)
 export const makeProgressBarState: (format: string, options: {
@@ -127,7 +128,7 @@ export const makeProgressBarState: (format: string, options: {
 }) => ProgressBarState;
 
 // @public (undocumented)
-export const makeProgressStreamReporter: (runEventSink?: RunEventSink) => Effect<ReporterService>;
+export const makeProgressStreamReporter: (runEventSink?: RunEventSink) => Effect.Effect<ReporterService>;
 
 // @public (undocumented)
 export type ProgressBarState = {
@@ -172,7 +173,7 @@ export function toRunEvent(result: MutantResult, completed: number, total: numbe
 
 // Warnings were encountered during analysis:
 //
-// dist/index-BgAeIn0i.d.mts:21:3 - (ae-forgotten-export) The symbol "TableCellValueFactory" needs to be exported by the entry point index.d.mts
+// dist/index-CChXdh6B.d.mts:36:3 - (ae-forgotten-export) The symbol "TableCellValueFactory" needs to be exported by the entry point index.d.mts
 
 // (No @packageDocumentation comment for this package)
 

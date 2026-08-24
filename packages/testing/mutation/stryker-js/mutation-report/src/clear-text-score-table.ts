@@ -6,6 +6,7 @@ import type { Metrics, MetricsResult } from '@systemfsoftware/stryker-js-plugin-
 
 import { ansi } from './ansi.js'
 
+import type { ProvidedStrykerOptions } from './provided-options.js'
 import { stringWidth } from './render-text.js'
 
 const FILES_ROOT_NAME = 'All files'
@@ -199,7 +200,7 @@ const makeGroupColumn = (groupName: string, ...columns: readonly Column[]): Colu
 
 const createColumns = (
   metricsResult: MetricsResult<Metrics>,
-  options: StrykerOptions,
+  options: ProvidedStrykerOptions,
 ): readonly Column[] => {
   const allowColor = options.clearTextReporter.allowColor
   return [
@@ -273,7 +274,7 @@ const drawColumnHeader = (columns: readonly Column[]): string => drawRow(columns
 const drawTableBody = (
   columns: readonly Column[],
   metricsResult: MetricsResult<Metrics>,
-  options: StrykerOptions,
+  options: ProvidedStrykerOptions,
   current: MetricsResult<Metrics> = metricsResult,
   ancestorCount = 0,
 ): readonly string[] => {
@@ -289,7 +290,7 @@ const drawTableBody = (
 
 export const drawClearTextScoreTable = (
   metricsResult: MetricsResult<Metrics>,
-  options: StrykerOptions,
+  options: ProvidedStrykerOptions,
 ): string => {
   const columns = createColumns(metricsResult, options)
   return [

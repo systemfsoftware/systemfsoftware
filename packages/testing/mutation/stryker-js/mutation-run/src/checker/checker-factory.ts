@@ -5,14 +5,12 @@ import * as Scope from 'effect/Scope'
 
 import type { IdGenerator } from '../worker-pool/id-generator.js'
 
-import type { LoggingServerAddress } from '../logging/index.js'
 import { makeCheckerChildProcess } from './checker-child-process-proxy.js'
 import type { CheckerResourceService } from './checker-resource.js'
 
 export const createCheckerFactory = (
   options: StrykerOptions,
   fileDescriptions: FileDescriptions,
-  loggingServerAddress: LoggingServerAddress,
   pluginModulePaths: readonly string[],
   getLogger: LoggerFactoryMethod,
   idGenerator: IdGenerator,
@@ -22,7 +20,6 @@ export const createCheckerFactory = (
     options,
     fileDescriptions,
     pluginModulePaths,
-    loggingServerAddress,
     workingDirectory,
     logger: getLogger('CheckerChildProcess'),
     execArgv: [...(options.checkerNodeArgs ?? [])],

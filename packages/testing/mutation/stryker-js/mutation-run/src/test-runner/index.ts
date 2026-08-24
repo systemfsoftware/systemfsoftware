@@ -1,11 +1,10 @@
 import type { FileDescriptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import type { MutantRunOptions, TestRunnerService } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import type { MutantRunOptions } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import * as Effect from 'effect/Effect'
+import * as Scope from 'effect/Scope'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
-
-import type { LoggingServerAddress } from '../logging/index.js'
 import type { IdGenerator } from '../worker-pool/id-generator.js'
-
+import type { PooledTestRunner } from './child-process-test-runner-proxy.js'
 import {
   commandRunnerCapabilities,
   commandRunnerDryRun,
@@ -13,7 +12,6 @@ import {
   isCommandRunner,
 } from './command-test-runner.js'
 import { withEnvironmentReload, withMaxReuse, withRetry, withTimeout } from './test-runner-combinators.js'
-
 export * from './test-runner-combinators.js'
 
 /** What building a runner for this run needs. */
@@ -21,7 +19,6 @@ export interface TestRunnerBuildContext {
   readonly options: StrykerOptions
   readonly fileDescriptions: FileDescriptions
   readonly sandboxWorkingDirectory: string
-  readonly loggingServerAddress: LoggingServerAddress
   readonly pluginModulePaths: readonly string[]
   readonly idGenerator: IdGenerator
   /**
@@ -47,19 +44,18 @@ export interface TestRunnerBuildContext {
 const commandRunner = (
   context: TestRunnerBuildContext,
   spawner: ChildProcessSpawner.ChildProcessSpawner['Service'],
-): TestRunnerService => {
+): PooledTestRunner => {
   const config = {
     workingDir: context.sandboxWorkingDirectory,
     options: context.options,
   }
   const provided = Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner)
 
-  const base: TestRunnerService = {
+  const base: PooledTestRunner = {
     capabilities: Effect.succeed(commandRunnerCapabilities),
     init: Effect.void,
     dryRun: () => commandRunnerDryRun(config).pipe(provided),
     mutantRun: (options: MutantRunOptions) => commandRunnerMutantRun(config, options).pipe(provided),
-    dispose: Effect.void,
   }
 
   return withRetry(withTimeout(base))
@@ -76,8 +72,8 @@ const commandRunner = (
  */
 export const buildTestRunner = (
   context: TestRunnerBuildContext,
-  childProcessRunner: Effect.Effect<TestRunnerService>,
-): Effect.Effect<TestRunnerService, never, ChildProcessSpawner.ChildProcessSpawner> =>
+  childProcessRunner: Effect.Effect<PooledTestRunner, unknown, Scope.Scope>,
+): Effect.Effect<PooledTestRunner, unknown, ChildProcessSpawner.ChildProcessSpawner | Scope.Scope> =>
   Effect.gen(function*() {
     if (isCommandRunner(context.options.testRunner)) {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner

@@ -3,9 +3,9 @@ import * as Clock from 'effect/Clock'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 
+import { RunEnvironment, type RunEnvironmentShape } from './run-environment.js'
 import type { RunPhase } from './run-event.js'
 import type { DryRunStage, InstrumentStage, MutationTestStage, PrepareStage } from './run-stages/stage-results.js'
-import { RunEnvironment, type RunEnvironmentShape } from './RunEnvironment.js'
 
 /**
  * The four stages, as values.

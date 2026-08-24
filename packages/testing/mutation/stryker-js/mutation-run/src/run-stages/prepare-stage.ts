@@ -12,6 +12,7 @@ import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
 import * as Scope from 'effect/Scope'
+import { setEngineLogLevel } from '../run-layers.js'
 
 import { readConfig } from '../config/config-reader.js'
 import { forkCoreSchema } from '../config/fork-schema.js'
@@ -20,10 +21,11 @@ import { validateOptions } from '../config/options-validator.js'
 import { createAll } from '../plugins/plugin-creator.js'
 import { loadPlugins } from '../plugins/plugin-loader.js'
 import { readProject } from '../project/project-reader.js'
-import { RunEnvironment } from '../RunEnvironment.js'
+import { RunEnvironment } from '../run-environment.js'
 import { TemporaryDirectory, TemporaryDirectoryLive } from '../sandbox/temporary-directory.js'
 import { makeTimer } from '../timer.js'
 
+import { selectReporters } from '../reporting/reporter-selection.kernel.js'
 import type { PrepareDone, PrepareStage } from './stage-results.js'
 import { PrepareFailedError } from './stage.schema.js'
 
@@ -87,9 +89,17 @@ export const prepareStage: PrepareStage<
 
     const coreSchema: ValidationSchemaDocument = forkCoreSchema
 
-    const options = yield* readConfig(args.cliOptions, log, coreSchema, env.basePath).pipe(
+    const configured = yield* readConfig(args.cliOptions, log, coreSchema, env.basePath).pipe(
       Effect.mapError((cause) => new PrepareFailedError({ reason: 'Failed to read config', cause })),
     )
+    // Narrowed once, here, before any plugin is composed: the reporter set the
+    // rest of the run sees is already the one this output mode permits, so the
+    // broadcast needs no second opinion about it.
+    const options = {
+      ...configured,
+      reporters: selectReporters(configured.reporters, env.resolvedMode.mode),
+    }
+    yield* Effect.sync(() => setEngineLogLevel(options.logLevel))
 
     const descriptors: readonly string[] = [...options.plugins, ...options.appendPlugins, ...env.reporterPluginModules]
 

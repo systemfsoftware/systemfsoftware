@@ -1,9 +1,8 @@
-import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { type Mutant, normalizeFileName } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { Result } from 'effect'
 import type { Diagnostic } from 'typescript/unstable/sync'
 
 import { getMutantsWithReferenceToChildrenOrSelf, type TSFileNode } from '../grouping/ts-file-node.js'
-import { toPosixFileName } from '../posix-file-name.js'
 
 import { DiagnosticInUnrelatedFileError, DiagnosticWithoutFileError } from './check-kernel.schema.js'
 
@@ -104,7 +103,7 @@ export function partitionMutantsForGrouping(
   const outside: Mutant[] = []
   const inside: Mutant[] = []
   for (const m of mutants) {
-    if (nodes.get(toPosixFileName(m.fileName)) == null) {
+    if (nodes.get(normalizeFileName(m.fileName)) == null) {
       outside.push(m)
     } else {
       inside.push(m)

@@ -11,7 +11,7 @@ import type { Project } from '../project/index.js'
 import type { SandboxHandle } from '../sandbox/sandbox.js'
 import type { Timer } from '../timer.js'
 
-import type { PrepareExecutorArgs } from './1-prepare-executor.js'
+import type { PrepareExecutorArgs } from './prepare-stage.js'
 
 /**
  * The run's stages, as four values.

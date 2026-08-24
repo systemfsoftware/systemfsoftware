@@ -13,6 +13,7 @@ import { ReporterFailed } from '@systemfsoftware/stryker-js-plugin-api/report'
 import * as Effect from 'effect/Effect'
 
 import { renderClearText } from './clear-text-kernel.js'
+import type { ProvidedStrykerOptions } from './provided-options.js'
 
 function noopLogger(): Logger {
   return {
@@ -32,14 +33,13 @@ function noopLogger(): Logger {
 }
 
 export const makeClearTextReporter = (params: {
-  readonly options?: StrykerOptions
+  readonly options?: ProvidedStrykerOptions
   readonly log?: Logger
   readonly out?: NodeJS.WritableStream
 }): ReporterService => {
   const options = params.options
   const log = params.log ?? noopLogger()
   const out = params.out ?? process.stdout
-
   return {
     onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
 

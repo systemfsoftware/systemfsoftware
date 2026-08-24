@@ -15,8 +15,7 @@ import {
 } from './__fixtures__/assertions.js'
 import { createDryRunOptions, createMutant, createMutantRunOptions } from './__fixtures__/factories.js'
 import { TempTestDirectorySandbox } from './__fixtures__/temp-test-directory-sandbox.js'
-import { runnerContext } from './__fixtures__/vitest-runner-harness.js'
-
+import { runnerContext, twoRunnersContext } from './__fixtures__/vitest-runner-harness.js'
 const Feature = makeFeature({ it, layer })
 
 const test1 = 'tests/add.spec.ts#add should be able to add two numbers'
@@ -658,41 +657,12 @@ Feature('Driving the Vitest runner through the Stryker interface')
     scenario(
       'two runners in one process write distinct setup files and dispose only their own',
       Gherkin.Do.pipe(
-        Given('two runners on separate simple-project sandboxes')('runners', () =>
-          Effect.promise(async () => {
-            const sandbox1 = new TempTestDirectorySandbox('simple-project')
-            await sandbox1.init()
-            const sandbox2 = new TempTestDirectorySandbox('simple-project')
-            await sandbox2.init()
-            const setupFile1 = path.resolve(sandbox1.tmpDir, `stryker-setup-${process.pid}.js`)
-            const setupFile2 = path.resolve(sandbox2.tmpDir, `stryker-setup-${process.pid}.js`)
-            await fs.promises.writeFile(setupFile1, '// setup1')
-            await fs.promises.writeFile(setupFile2, '// setup2')
-            const sut1 = {
-              init: async () => {},
-              dispose: async () => {
-                await fs.promises.rm(setupFile1, { force: true })
-              },
-            }
-            const sut2 = {
-              init: async () => {},
-              dispose: async () => {
-                await fs.promises.rm(setupFile2, { force: true })
-              },
-            }
-            return { sandbox1, sandbox2, sut1: sut1, sut2: sut2, setupFile1, setupFile2 }
-          })),
-        When('the second runner is disposed')('disposed', (s) =>
-          Effect.promise(async () => {
-            await s.runners.sut2.dispose()
-          })),
+        Given('two runners on separate simple-project sandboxes')('runners', () => twoRunnersContext('simple-project')),
+        When('the second runner is disposed')('disposed', (s) => Effect.promise(() => s.runners.runner2.sut.dispose())),
         Then('the first setup file still exists and the second is gone')((s) =>
-          Effect.promise(async () => {
-            await fs.promises.access(s.runners.setupFile1)
-            await expect(fs.promises.access(s.runners.setupFile2)).rejects.toThrow('ENOENT')
-            await s.runners.sut1.dispose()
-            await s.runners.sandbox1.dispose()
-            await s.runners.sandbox2.dispose()
+          Effect.gen(function*() {
+            yield* Effect.promise(() => fs.promises.access(s.runners.setupFile1))
+            yield* Effect.promise(() => expect(fs.promises.access(s.runners.setupFile2)).rejects.toThrow('ENOENT'))
           })
         ),
       ),

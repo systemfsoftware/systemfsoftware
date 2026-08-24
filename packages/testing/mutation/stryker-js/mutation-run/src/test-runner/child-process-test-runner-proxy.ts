@@ -14,12 +14,10 @@ import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
 import type * as Scope from 'effect/Scope'
 
-import type { LoggingServerAddress } from '../logging/index.js'
 import { type ChildProcessProxyError, makeChildProcessProxy } from '../worker-pool/child-process-proxy.js'
 import type { IdGenerator } from '../worker-pool/id-generator.js'
 import type { ChildProcessCrashedError, OutOfMemoryError } from '../worker-pool/worker-pool.schema.js'
 import type { WorkerMethodError } from '../worker-pool/worker-protocol.schema.js'
-
 type TestRunnerWorkerShape = {
   capabilities(): Promise<TestRunnerCapabilities>
   init(options: StrykerOptions): Promise<void>
@@ -35,7 +33,6 @@ export interface ChildProcessTestRunnerParams {
   readonly options: StrykerOptions
   readonly fileDescriptions: FileDescriptions
   readonly sandboxWorkingDirectory: string
-  readonly loggingServerAddress: LoggingServerAddress
   readonly pluginModulePaths: readonly string[]
   readonly logger: Logger
   readonly idGenerator: IdGenerator
@@ -95,7 +92,6 @@ export const makeChildProcessTestRunner = (
     const { proxy } = yield* makeChildProcessProxy<TestRunnerWorkerShape>({
       modulePath: new URL('./child-process-test-runner-worker.mjs', import.meta.url).pathname,
       namedExport: 'ChildProcessTestRunnerWorker',
-      loggingServerAddress: params.loggingServerAddress,
       options: params.options,
       fileDescriptions: params.fileDescriptions,
       pluginModulePaths: [...params.pluginModulePaths],

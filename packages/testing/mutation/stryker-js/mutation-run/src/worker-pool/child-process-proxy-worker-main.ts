@@ -4,32 +4,9 @@ import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
 import net from 'node:net'
 
+import { causeText } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { DELIMITER } from './ipc-framing.js'
 import { WorkerCallSchema, WorkerMethodError } from './worker-protocol.schema.js'
-
-const DELIMITER = '\n'
-
-const stringField = (value: object, key: string): string | undefined => {
-  if (!(key in value)) return undefined
-  const field: unknown = Reflect.get(value, key)
-  return typeof field === 'string' && field.length > 0 ? field : undefined
-}
-
-const tagOf = (value: object): string | undefined => {
-  const tag: unknown = '_tag' in value ? Reflect.get(value, '_tag') : undefined
-  if (typeof tag === 'string' && tag.length > 0) return tag
-  return value instanceof Error && value.name.length > 0 ? value.name : undefined
-}
-
-const causeText = (cause: unknown, depth: number): string | undefined => {
-  if (depth > 4 || cause === undefined || cause === null) return undefined
-  if (typeof cause === 'string') return cause.length > 0 ? cause : undefined
-  if (typeof cause !== 'object') return undefined
-  const own = stringField(cause, 'reason') ?? stringField(cause, 'message') ??
-    (cause instanceof Error && cause.message.length > 0 ? cause.message : tagOf(cause))
-  const nested = 'cause' in cause ? causeText(Reflect.get(cause, 'cause'), depth + 1) : undefined
-  if (own === undefined) return nested
-  return nested === undefined ? own : `${own}: ${nested}`
-}
 
 const messageOf = (cause: unknown): string => {
   const text = causeText(cause, 0)

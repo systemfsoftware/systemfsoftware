@@ -1,6 +1,4 @@
-import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
-
-import { toPosixFileName } from '../posix-file-name.js'
+import { type Mutant, normalizeFileName } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 export interface TSFileNode {
   readonly fileName: string
@@ -50,7 +48,7 @@ export function getMutantsWithReferenceToChildrenOrSelf(
   nodesChecked.push(node.fileName)
 
   const relatedMutants = mutants.filter(
-    (m) => toPosixFileName(m.fileName) === node.fileName,
+    (m) => normalizeFileName(m.fileName) === node.fileName,
   )
   const childResult = node.children.flatMap((c) => getMutantsWithReferenceToChildrenOrSelf(c, mutants, nodesChecked))
   return [...relatedMutants, ...childResult]

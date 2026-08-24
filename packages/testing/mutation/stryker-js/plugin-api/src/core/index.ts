@@ -1,3 +1,4 @@
+export * from './cause-chain-text.js'
 export * from './error-to-string.js'
 export * from './FileDescription.js'
 export * from './Instrument.js'

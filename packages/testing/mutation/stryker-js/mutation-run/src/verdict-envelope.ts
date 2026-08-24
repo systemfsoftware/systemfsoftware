@@ -1,6 +1,7 @@
 import path from 'path'
 
 import { type MutantStatus, normalizeFileName, schema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { ExitClass } from '@systemfsoftware/stryker-js-plugin-api/evaluate'
 import { calculateMutationTestMetrics } from 'mutation-testing-metrics'
 import { randomFillSync } from 'node:crypto'
 
@@ -14,7 +15,7 @@ import type { ModeSignal, OutputMode } from './output-mode.js'
  * here are pure over the report — no I/O side effects, no randomness except
  * inside `generateRunId`.
  */
-export const VERDICT_ENVELOPE_SCHEMA_VERSION = '1.0'
+export const VERDICT_ENVELOPE_SCHEMA_VERSION = '1.1'
 
 /**
  * The statuses a `verdict.mutants` entry (and a `mutant` stream line, U7) is
@@ -71,6 +72,18 @@ export interface VerdictCounts {
 }
 
 /**
+ * What one evaluator decided. `verdict` is `null` for "nothing to report"
+ * — no breaking threshold configured, or a no-mutant run — which is distinct
+ * from a passing gate. The name is the contribution name the plugin declared
+ * so a machine consumer can say which evaluator failed without opening the
+ * report.
+ */
+export interface VerdictEvaluatorVerdict {
+  readonly name: string
+  readonly verdict: ExitClass | null
+}
+
+/**
  * The full verdict document. `score` and `reportFile` are `null` for a run
  * with zero mutants (AE3): there is no score to report and no report file was
  * written. `mutants` is bounded to `ACTIONABLE_STATUSES` (R20) — see that
@@ -86,6 +99,7 @@ export interface VerdictEnvelope {
   readonly counts: VerdictCounts
   readonly reportFile: string | null
   readonly mutants: readonly VerdictMutant[]
+  readonly evaluatorVerdicts: readonly VerdictEvaluatorVerdict[]
 }
 
 const CROCKFORD_BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -170,6 +184,7 @@ export function buildVerdictEnvelope(
   signal: ModeSignal,
   runId: string,
   basePath: string,
+  evaluatorVerdicts: readonly VerdictEvaluatorVerdict[] = [],
 ): VerdictEnvelope {
   const { jsonReporterFileName } = embeddedConfig(report)
   const metrics = calculateMutationTestMetrics(report)
@@ -220,5 +235,6 @@ export function buildVerdictEnvelope(
     },
     reportFile,
     mutants,
+    evaluatorVerdicts,
   }
 }

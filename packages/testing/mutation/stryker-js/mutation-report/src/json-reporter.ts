@@ -15,6 +15,7 @@ import * as Effect from 'effect/Effect'
 
 import { buildJsonReport } from './json-kernel.js'
 import { writeOutputFile } from './output-file.js'
+import type { ProvidedStrykerOptions } from './provided-options.js'
 
 function noopLogger(): Logger {
   return {
@@ -34,12 +35,11 @@ function noopLogger(): Logger {
 }
 
 export const makeJsonReporter = (params: {
-  readonly options?: StrykerOptions
+  readonly options?: ProvidedStrykerOptions
   readonly log?: Logger
 }): ReporterService => {
   const options = params.options
   const log = params.log ?? noopLogger()
-
   return {
     onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
 

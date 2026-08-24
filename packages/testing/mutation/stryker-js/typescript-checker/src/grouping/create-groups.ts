@@ -1,6 +1,4 @@
-import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
-
-import { toPosixFileName } from '../posix-file-name.js'
+import { type Mutant, normalizeFileName } from '@systemfsoftware/stryker-js-plugin-api/core'
 
 import { getAllParentReferencesIncludingSelf, type TSFileNode } from './ts-file-node.js'
 
@@ -56,7 +54,7 @@ function addRangeOfNodesToSet(
 }
 
 function findNode(fileName: string, nodes: ReadonlyMap<string, TSFileNode>) {
-  const node = nodes.get(toPosixFileName(fileName))
+  const node = nodes.get(normalizeFileName(fileName))
   if (node == null) {
     throw new Error(`Node not in graph: ${fileName}`)
   }

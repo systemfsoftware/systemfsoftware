@@ -30,8 +30,7 @@ import { readOriginal } from '../project/project-file.js'
 import type { RunEventSink } from '../run-event.js'
 import type { RunOutcome } from '../run-stages/stage-results.js'
 import { strykerVersion } from '../stryker-package.js'
-
-import { buildVerdictEnvelope } from '../verdict-envelope.js'
+import { buildVerdictEnvelope, type VerdictEvaluatorVerdict } from '../verdict-envelope.js'
 import {
   checkStatusToMutantStatus,
   determineLanguage,
@@ -174,8 +173,13 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       const uniqueFileNames = results
         .map(({ fileName }) => fileName)
         .filter((value, index, array) => array.indexOf(value) === index)
-      const entries = yield* Effect.forEach(uniqueFileNames, (fileName) =>
-        toFileResult(fileName).pipe(Effect.map((result) => [fileName, result] as const)))
+      // Distinct files, joined by name afterwards, so order does not matter and
+      // `Effect.forEach`'s sequential default only serialised the reads.
+      const entries = yield* Effect.forEach(
+        uniqueFileNames,
+        (fileName) => toFileResult(fileName).pipe(Effect.map((result) => [fileName, result] as const)),
+        { concurrency: 'unbounded' },
+      )
       const fileResultsByName: Record<string, schema.FileResult> = Object.fromEntries(entries)
 
       return results.reduce<schema.FileResultDictionary>((acc, mutantResult) => {
@@ -203,8 +207,11 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
         .filter((value, index, array) => array.indexOf(value) === index)
         .filter((value): value is string => value !== undefined)
       const mapped = uniqueTestFileNames.map((fileName) => normalizeReportFileName(input.basePath, fileName))
-      const entries = yield* Effect.forEach(uniqueTestFileNames, (fileName, index) =>
-        toTestFile(fileName).pipe(Effect.map((file) => [mapped[index] ?? '', file] as const)))
+      const entries = yield* Effect.forEach(
+        uniqueTestFileNames,
+        (fileName, index) => toTestFile(fileName).pipe(Effect.map((file) => [mapped[index] ?? '', file] as const)),
+        { concurrency: 'unbounded' },
+      )
       const testFilesByName: Record<string, schema.TestFile> = Object.fromEntries(entries)
 
       return [...input.testCoverage.testsById.values()].reduce<schema.TestFileDefinitionDictionary>(
@@ -326,54 +333,63 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
     return verdict
   }
 
-  const emitVerdict = (report: schema.MutationTestResult): void => {
+  const emitVerdict = (
+    report: schema.MutationTestResult,
+    evaluatorVerdicts: readonly VerdictEvaluatorVerdict[],
+  ): void => {
     input.runEventSink({
       kind: 'verdict',
-      ...buildVerdictEnvelope(report, input.resolvedMode.mode, input.resolvedMode.signal, input.runId, input.basePath),
+      ...buildVerdictEnvelope(
+        report,
+        input.resolvedMode.mode,
+        input.resolvedMode.signal,
+        input.runId,
+        input.basePath,
+        evaluatorVerdicts,
+      ),
     })
   }
 
   const runEvaluators = (
     report: schema.MutationTestResult,
-  ): Effect.Effect<readonly ExitClass[], unknown, Scope.Scope> =>
+  ): Effect.Effect<readonly VerdictEvaluatorVerdict[], unknown, Scope.Scope> =>
     Effect.gen(function*() {
       const contributions = yield* createAll(input.pluginsByKind, PluginKind.Evaluator)
-      const evaluated = yield* Effect.forEach(
-        contributions,
-        (contribution) =>
-          Effect.gen(function*() {
-            const context = yield* Layer.build(contribution.layer)
-            return yield* Context.get(context, Evaluator).evaluate(report)
-          }),
-      )
-      return evaluated.filter((value): value is ExitClass => value !== null)
+      return yield* Effect.forEach(contributions, (contribution) =>
+        Effect.gen(function*() {
+          const context = yield* Layer.build(contribution.layer)
+          const verdict = yield* Context.get(context, Evaluator).evaluate(report)
+          return { name: contribution.name, verdict } satisfies VerdictEvaluatorVerdict
+        }))
     }).pipe(
       Effect.provideService(RunConfiguration, input.options),
       Effect.provideService(SandboxDirectory, input.sandboxDirectory),
     )
-
   const reportAll: MutationReportingService['reportAll'] = (results) =>
     Effect.gen(function*() {
       const report = yield* mutationTestReport(results)
       const metrics = calculateMutationTestMetrics(report)
       yield* input.reporter.onMutationTestReportReady(report, metrics)
-      if (input.options.incremental) {
-        const fs = yield* FileSystem.FileSystem
-        const pathService = yield* Path.Path
-        const dir = pathService.dirname(input.options.incrementalFile)
-        yield* fs.makeDirectory(dir, { recursive: true })
-        yield* fs.writeFileString(input.options.incrementalFile, JSON.stringify(report, null, 2))
-      }
       // The run's verdict is the most severe class anyone reported: the score
       // against its own breaking threshold, plus whatever each evaluator
       // plugin decided. One rule, one function — the process exit code is
       // derived from the same precedence at the CLI edge.
       const evaluatorVerdicts = yield* runEvaluators(report)
       const scoreVerdict = determineExitCode(metrics)
+      const evaluatorClasses = evaluatorVerdicts
+        .map((entry) => entry.verdict)
+        .filter((value): value is ExitClass => value !== null)
       const verdict = highestExitClass(
-        scoreVerdict === null ? evaluatorVerdicts : [scoreVerdict, ...evaluatorVerdicts],
+        scoreVerdict === null ? evaluatorClasses : [scoreVerdict, ...evaluatorClasses],
       )
-      emitVerdict(report)
+      emitVerdict(report, evaluatorVerdicts)
+      if (input.options.incremental && verdict === null) {
+        const fs = yield* FileSystem.FileSystem
+        const pathService = yield* Path.Path
+        const dir = pathService.dirname(input.options.incrementalFile)
+        yield* fs.makeDirectory(dir, { recursive: true })
+        yield* fs.writeFileString(input.options.incrementalFile, JSON.stringify(report, null, 2))
+      }
       return { results, verdict } satisfies RunOutcome
     })
 

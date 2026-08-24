@@ -1,11 +1,11 @@
 import type { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import {
+  type DryRunOptions,
   type DryRunResult,
   DryRunStatus,
   type MutantRunOptions,
   type MutantRunResult,
   MutantRunStatus,
-  type TestRunnerService,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import * as Cause from 'effect/Cause'
 import * as Duration from 'effect/Duration'
@@ -13,7 +13,7 @@ import * as Effect from 'effect/Effect'
 import * as Ref from 'effect/Ref'
 
 import { OutOfMemoryError } from '../worker-pool/worker-pool.schema.js'
-
+import type { PooledTestRunner, PooledTestRunnerError } from './child-process-test-runner-proxy.js'
 /**
  * The engine's adjustments to a test runner, as functions on the port.
  *
@@ -21,8 +21,7 @@ import { OutOfMemoryError } from '../worker-pool/worker-pool.schema.js'
  * state is an effect. The stateless ones are plain functions, and the
  * difference is visible in the type rather than hidden in a constructor.
  */
-export type TestRunnerCombinator = (inner: TestRunnerService) => TestRunnerService
-
+export type TestRunnerCombinator = (inner: PooledTestRunner) => PooledTestRunner
 /**
  * Report a run that outlives its timeout as a timed-out result.
  *
@@ -111,7 +110,7 @@ export const withRetry: TestRunnerCombinator = (inner) => {
 export const withMaxReuse = (
   options: Pick<StrykerOptions, 'maxTestRunnerReuse'>,
   retire: Effect.Effect<void>,
-): (inner: TestRunnerService) => Effect.Effect<TestRunnerService> =>
+): (inner: PooledTestRunner) => Effect.Effect<PooledTestRunner> =>
 (inner) =>
   Effect.gen(function*() {
     const restartAfter = options.maxTestRunnerReuse ?? 0
@@ -121,9 +120,9 @@ export const withMaxReuse = (
 
     const runs = yield* Ref.make(0)
 
-    return {
+    const wrapped: PooledTestRunner = {
       ...inner,
-      mutantRun: (runOptions: MutantRunOptions) =>
+      mutantRun: (runOptions: MutantRunOptions): Effect.Effect<MutantRunResult, PooledTestRunnerError> =>
         Effect.gen(function*() {
           const count = yield* Ref.updateAndGet(runs, (n) => n + 1)
           if (count > restartAfter) {
@@ -133,6 +132,7 @@ export const withMaxReuse = (
           return yield* inner.mutantRun(runOptions)
         }),
     }
+    return wrapped
   })
 
 /** What the test environment currently holds, which is what decides a reload. */
@@ -147,18 +147,17 @@ type EnvironmentState = 'pristine' | 'loaded' | 'loaded-static-mutant'
  */
 export const withEnvironmentReload = (
   retire: Effect.Effect<void>,
-): (inner: TestRunnerService) => Effect.Effect<TestRunnerService> =>
+): (inner: PooledTestRunner) => Effect.Effect<PooledTestRunner> =>
 (inner) =>
   Effect.gen(function*() {
     const state = yield* Ref.make<EnvironmentState>('pristine')
 
-    return {
+    const wrapped: PooledTestRunner = {
       ...inner,
 
-      dryRun: (options: Parameters<TestRunnerService['dryRun']>[0]) =>
-        Ref.set(state, 'loaded').pipe(Effect.andThen(inner.dryRun(options))),
+      dryRun: (options: DryRunOptions) => Ref.set(state, 'loaded').pipe(Effect.andThen(inner.dryRun(options))),
 
-      mutantRun: (options: MutantRunOptions) =>
+      mutantRun: (options: MutantRunOptions): Effect.Effect<MutantRunResult, PooledTestRunnerError> =>
         Effect.gen(function*() {
           const current = yield* Ref.get(state)
           const canReload = (yield* inner.capabilities).reloadEnvironment
@@ -184,4 +183,5 @@ export const withEnvironmentReload = (
           return result
         }),
     }
+    return wrapped
   })

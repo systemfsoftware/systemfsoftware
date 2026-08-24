@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/stryker-js-mutation-run`
 
-> **Location:** `packages/stryker-js/mutation-run/` — ours, published from this repo.
+> **Location:** `packages/testing/mutation/stryker-js/mutation-run/` — ours, published from this repo.
 
 Ported from `@stryker-mutator/core`. The contribution gate lives in `@systemfsoftware/stryker-test-contribution`. The base preset turns it on.
 
@@ -13,6 +13,6 @@ Deltas from root:
 - **A variant earns its place from a branch some caller takes.** Three callers branch: the exit classifier on whether the user must change something, the run broke, or the engine broke; the config reader on absent-versus-present-but-unreadable, because it keeps searching for the first and stops on the second; the plugin loader on the same distinction, because swallowing a load failure hides a plugin's own syntax error behind "not found". A failure nothing distinguishes carries a `cause` rather than earning a tag.
 - **Never flatten a cause into a message.** The replaced `StrykerError` interpolated `errorToString(innerError)` into its own message at construction, so every caller downstream received prose where a value had been. Keep the cause on a `cause` member.
 
-🛑 Rebuild (`pnpm build`) after any source change — an unbuilt edit tests the previous version (rationale: `packages/stryker-js/AGENTS.md`).
+🛑 Rebuild (`pnpm build`) after any source change — an unbuilt edit tests the previous version (rationale: `packages/testing/mutation/stryker-js/AGENTS.md`).
 
 🛑 Keep the worker subpath exports (`./checker-worker`, `./child-process-proxy-worker`, `./child-process-test-runner-worker`); worker entrypoints resolve through them.

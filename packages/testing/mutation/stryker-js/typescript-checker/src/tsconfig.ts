@@ -2,9 +2,9 @@ import { readFileSync } from 'fs'
 import path from 'path'
 
 import { parse } from '@std/jsonc'
+import { normalizeFileName } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { Result, Schema as S } from 'effect'
 
-import { toPosixFileName } from './posix-file-name.js'
 import { type TsConfig, TsConfigParseError, TsConfigSchema } from './tsconfig.schema.js'
 
 // Override some compiler options that have to do with code quality. When mutating, we're not interested in the resulting code quality
@@ -128,6 +128,6 @@ export function retrieveReferencedProjects(config: TsConfig, fromDirName: string
     if (!path.basename(resolved).endsWith('.json')) {
       resolved = path.join(resolved, 'tsconfig.json')
     }
-    return toPosixFileName(resolved)
+    return normalizeFileName(resolved)
   })
 }

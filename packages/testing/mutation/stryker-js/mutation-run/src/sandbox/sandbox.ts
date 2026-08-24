@@ -243,7 +243,11 @@ export const makeSandbox = (
           sandboxFile(name, file, workingDirectory, backupDirectory, basePath, options, logger),
           (target) => [name, target] as const,
         ),
-      { discard: false },
+      // Each entry writes a distinct target path, so these are independent.
+      // `Effect.forEach` is sequential by default; without this the sandbox
+      // pays the sum of per-file copy latencies instead of the maximum, which
+      // is seconds on a large checkout. Result order is preserved regardless.
+      { concurrency: 'unbounded', discard: false },
     )
 
     const fileMap = toFileMap(entries)

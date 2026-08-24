@@ -6,7 +6,6 @@ import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import * as Effect from 'effect/Effect'
 import * as Scope from 'effect/Scope'
 
-import type { LoggingServerAddress } from '../logging/index.js'
 import { makeChildProcessProxy } from '../worker-pool/child-process-proxy.js'
 import type { IdGenerator } from '../worker-pool/id-generator.js'
 import { ChildProcessCrashedError } from '../worker-pool/worker-pool.schema.js'
@@ -23,7 +22,6 @@ export const makeCheckerChildProcess = (params: {
   readonly options: StrykerOptions
   readonly fileDescriptions: FileDescriptions
   readonly pluginModulePaths: readonly string[]
-  readonly loggingServerAddress: LoggingServerAddress
   readonly workingDirectory: string
   readonly logger: Logger
   readonly execArgv: readonly string[]
@@ -33,7 +31,6 @@ export const makeCheckerChildProcess = (params: {
     const shape = yield* makeChildProcessProxy<CheckerWorkerShape>({
       modulePath: new URL('./checker-worker.mjs', import.meta.url).pathname,
       namedExport: 'CheckerWorker',
-      loggingServerAddress: params.loggingServerAddress,
       options: params.options,
       fileDescriptions: params.fileDescriptions,
       pluginModulePaths: [...params.pluginModulePaths],

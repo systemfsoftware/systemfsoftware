@@ -1,8 +1,12 @@
 import { readFileSync } from 'fs'
 import path from 'path'
 
-import type { Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import {
+  type Mutant,
+  normalizeFileName,
+  type StrykerOptions,
+  StrykerOptionsSchema,
+} from '@systemfsoftware/stryker-js-plugin-api/core'
 import { Predicate, Result } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as S from 'effect/Schema'
@@ -17,7 +21,6 @@ import {
 } from 'typescript/unstable/sync'
 import { getSourceMappingURL } from './declaration-source-mapping.js'
 import { makeTSFileNode, type TSFileNode } from './grouping/ts-file-node.js'
-import { toPosixFileName } from './posix-file-name.js'
 import type { HybridFileSystem } from './project/hybrid-file-system.js'
 import { determineBuildModeEnabled, overrideOptions, parseTsConfig, retrieveReferencedProjects } from './tsconfig.js'
 import { guardTSVersion } from './typescript-version.js'
@@ -52,8 +55,8 @@ export function makeTypescriptCompiler(
     throw new Error('Invalid StrykerOptions')
   }
   const strykerOptions: StrykerOptions = options
-  const tsconfigFile = toPosixFileName(
-    path.resolve(toPosixFileName(strykerOptions.tsconfigFile)),
+  const tsconfigFile = normalizeFileName(
+    path.resolve(normalizeFileName(strykerOptions.tsconfigFile)),
   )
   const allTSConfigFiles = new Set<string>([tsconfigFile])
   let api: API | undefined
@@ -199,7 +202,7 @@ export function makeTypescriptCompiler(
       return undefined
     }
     const baseDir = path.dirname(sourceFileName)
-    const resolved = toPosixFileName(path.resolve(baseDir, cleaned))
+    const resolved = normalizeFileName(path.resolve(baseDir, cleaned))
 
     const candidates = getResolutionCandidates(resolved)
     for (const candidate of candidates) {
@@ -227,7 +230,7 @@ export function makeTypescriptCompiler(
       return dependencyFileName
     }
 
-    const sourceMapFileName = toPosixFileName(
+    const sourceMapFileName = normalizeFileName(
       path.resolve(path.dirname(dependencyFileName), sourceMappingURL),
     )
     const sourceMapContent = fs.fileSystem.readFile?.(sourceMapFileName)
@@ -250,7 +253,7 @@ export function makeTypescriptCompiler(
       if (sourcePath === undefined) {
         return dependencyFileName
       }
-      return toPosixFileName(
+      return normalizeFileName(
         path.resolve(path.dirname(sourceMapFileName), sourcePath),
       )
     }
@@ -267,7 +270,7 @@ export function makeTypescriptCompiler(
         ) {
           continue
         }
-        const normalized = toPosixFileName(fileName)
+        const normalized = normalizeFileName(fileName)
         sourceFiles.set(normalized, {
           fileName: normalized,
           imports: new Set(),
@@ -355,7 +358,7 @@ export function makeTypescriptCompiler(
     }
 
     const mutatedFileNames = [
-      ...new Set(mutants.map((m) => toPosixFileName(m.fileName))),
+      ...new Set(mutants.map((m) => normalizeFileName(m.fileName))),
     ]
 
     const changedFiles = [
