@@ -15,9 +15,11 @@ pnpm add -D @systemfsoftware/effect-schema-refutation-vite
 ```ts
 import { inlineRefutationCoverage } from '@systemfsoftware/effect-schema-refutation-vite'
 import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
+import { defineConfig } from 'vitest/config'
 
-plugins: ;
-;[inlineSchemaTests(), inlineRefutationCoverage()]
+export default defineConfig({
+  plugins: [inlineSchemaTests(), inlineRefutationCoverage()],
+})
 ```
 
 Each plugin generates its own test file, so the two compose without either overwriting the other's.
