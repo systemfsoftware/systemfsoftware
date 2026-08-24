@@ -57,11 +57,19 @@ const runBuildCommandIn = (
     const binDirs = binDirectoriesFrom(workingDirectory, pathService)
     const newPath = [...binDirs, inheritedPath].join(separator)
 
-    const childCommand = ChildProcess.make(command).pipe(
-      ChildProcess.setCwd(workingDirectory),
-      ChildProcess.setEnv({ PATH: newPath }),
-    )
-
+    // `buildCommand` is a command line from a person's config ("npm run build"),
+    // so it runs through a shell for the same reason the command test runner
+    // does: spawned directly, the whole string becomes the program name.
+    //
+    // `extendEnv` matters as much as the PATH built above: without it the child
+    // receives that PATH and nothing else, losing HOME, NODE_OPTIONS and every
+    // other variable a build reads.
+    const childCommand = ChildProcess.make(command, {
+      shell: true,
+      cwd: workingDirectory,
+      env: { PATH: newPath },
+      extendEnv: true,
+    })
     const result = yield* Effect.scoped(
       Effect.gen(function*() {
         const handle = yield* spawner.spawn(childCommand)
@@ -101,6 +109,11 @@ const findNodeModulesList = (
         nodeModulesList.push(dir)
         continue
       }
+      // This walks a tree nobody here owns, where an entry that cannot be read -
+      // a directory without permission, a dangling symlink, a socket - is a fact
+      // about the project rather than a fault. Such an entry is simply not a
+      // `node_modules` to symlink, so it is skipped by design; the run does not
+      // depend on having seen it.
       const entries = yield* fsService
         .readDirectory(pathService.join(basePath, dir))
         .pipe(Effect.orElseSucceed(() => [] as readonly string[]))
@@ -129,6 +142,15 @@ const symlinkJunction = (
     yield* fsService.symlink(to, from)
   })
 
+/**
+ * Move the contents of `from` into `to`, merging rather than replacing, which is
+ * what restoring a backup over a working tree needs.
+ *
+ * Nothing here is swallowed. Every failure this can hit - an unreadable
+ * directory, a stat that faults, a file that will not move - means the caller's
+ * files are not all back, and the only caller is the `--inPlace` restore, where
+ * that is the user's own source tree.
+ */
 const moveDirectoryRecursive = (
   from: string,
   to: string,
@@ -136,37 +158,27 @@ const moveDirectoryRecursive = (
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
     const pathService = yield* Path.Path
-    const fromExists = yield* fs.exists(from).pipe(Effect.orElseSucceed(() => false))
-    if (!fromExists) {
+    if (!(yield* fs.exists(from))) {
       return
     }
-    const toExists = yield* fs.exists(to).pipe(Effect.orElseSucceed(() => false))
-    if (!toExists) {
-      yield* fs.makeDirectory(to, { recursive: true })
-    }
-    const files = yield* fs.readDirectory(from).pipe(Effect.orElseSucceed(() => [] as readonly string[]))
-    for (const file of files) {
+    yield* fs.makeDirectory(to, { recursive: true })
+    for (const file of yield* fs.readDirectory(from)) {
       const fromFileName = pathService.join(from, file)
       const toFileName = pathService.join(to, file)
-      const stat = yield* fs.stat(fromFileName).pipe(Effect.orElseSucceed(() => null))
-      if (stat === null) {
-        continue
-      }
+      const stat = yield* fs.stat(fromFileName)
       if (stat.type === 'Directory') {
         yield* moveDirectoryRecursive(fromFileName, toFileName)
       } else {
+        // `rename` is the move. It fails across devices (EXDEV), and there a
+        // copy-then-delete is the only move available - as bytes, never through
+        // a string, because a string round-trip corrupts every file in the
+        // project that is not text.
         yield* fs.rename(fromFileName, toFileName).pipe(
-          Effect.catch(() =>
-            Effect.gen(function*() {
-              const content = yield* fs.readFileString(fromFileName).pipe(Effect.orElseSucceed(() => ''))
-              yield* fs.writeFileString(toFileName, content)
-              yield* fs.remove(fromFileName)
-            })
-          ),
+          Effect.catch(() => fs.copyFile(fromFileName, toFileName).pipe(Effect.andThen(fs.remove(fromFileName)))),
         )
       }
     }
-    yield* fs.remove(from, { recursive: true }).pipe(Effect.orElseSucceed(() => undefined))
+    yield* fs.remove(from, { recursive: true, force: true })
   })
 const sandboxFile = (
   name: string,
@@ -222,17 +234,18 @@ export const makeSandbox = (
         Effect.gen(function*() {
           const fs = yield* FileSystem.FileSystem
           const p = yield* Path.Path
-          const exists = yield* fs.exists(capturedBackup).pipe(Effect.orElseSucceed(() => false))
-          if (!exists) {
+          if (!(yield* fs.exists(capturedBackup))) {
             return
           }
           capturedLog.info(`Resetting your original files from ${p.relative(capturedBase, capturedBackup)}.`)
-          yield* moveDirectoryRecursive(capturedBackup, capturedWorking).pipe(
-            Effect.catch((cause) =>
-              Effect.sync(() => capturedLog.warn(`Failed to restore backup from ${capturedBackup}`, cause))
-            ),
-          )
-        })
+          yield* moveDirectoryRecursive(capturedBackup, capturedWorking)
+          // A failed restore is not a warning. This runs under `--inPlace`, so
+          // the files that did not come back are the user's own sources, still
+          // carrying this run's mutations. Warning and exiting 0 tells them the
+          // run was fine while their working tree is wrong, so the failure has
+          // to end the program - the backup is still on disk, named in the line
+          // above, and that is what makes it recoverable by hand.
+        }).pipe(Effect.orDie)
       )
     }
 

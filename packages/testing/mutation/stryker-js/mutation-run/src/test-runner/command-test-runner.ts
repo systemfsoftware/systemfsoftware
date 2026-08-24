@@ -92,14 +92,26 @@ const runCommand = (
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const startedAt = yield* Clock.currentTimeMillis
 
-    const command = ChildProcess.make(config.options.commandRunner.command).pipe(
-      ChildProcess.setCwd(config.workingDir),
-      activeMutantId === undefined
-        ? (self) => self
-        : ChildProcess.setEnv({
-          [INSTRUMENTER_CONSTANTS.ACTIVE_MUTANT_ENV_VARIABLE]: activeMutantId,
-        }),
-    )
+    // Two things this command needs that are easy to lose:
+    //
+    // `commandRunner.command` is a command line a person wrote in their config
+    // ("npm test", and often flags after it), never an executable path, so it
+    // runs through a shell. Spawned directly, the whole string becomes the
+    // program name and every run dies with ENOENT before a single test runs.
+    //
+    // `extendEnv` keeps the parent environment. Setting the mutant variable
+    // without it hands the child that one variable and nothing else - no `PATH`,
+    // so the command cannot be found, exits non-zero, and every mutant is
+    // reported killed by a test suite that never ran. The dry run has no
+    // variable to set, so it passes and the score comes out a confident 100.
+    const command = ChildProcess.make(config.options.commandRunner.command, {
+      shell: true,
+      cwd: config.workingDir,
+      ...(activeMutantId === undefined ? {} : {
+        env: { [INSTRUMENTER_CONSTANTS.ACTIVE_MUTANT_ENV_VARIABLE]: activeMutantId },
+        extendEnv: true,
+      }),
+    })
 
     // `all` interleaves stdout and stderr the way the old listener pair did by
     // pushing both into one buffer, but ordered by the platform rather than by

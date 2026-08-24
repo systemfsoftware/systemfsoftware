@@ -19,6 +19,7 @@ import * as Path from 'effect/Path'
 import * as Pool from 'effect/Pool'
 import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
+import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 import { createRequire } from 'node:module'
 import { checkPlans, groupPlans } from '../checker/checker-facade.js'
 import { createCheckerFactory } from '../checker/checker-factory.js'
@@ -33,6 +34,8 @@ import type { SandboxHandle } from '../sandbox/sandbox.js'
 import { StrykerError } from '../stryker-error.schema.js'
 import { makeChildProcessTestRunner } from '../test-runner/child-process-test-runner-proxy.js'
 import type { PooledTestRunner } from '../test-runner/child-process-test-runner-proxy.js'
+import { isCommandRunner } from '../test-runner/command-test-runner.js'
+import { buildTestRunner } from '../test-runner/index.js'
 import { humanReadableElapsed } from '../timer.js'
 import { IdGenerator } from '../worker-pool/id-generator.js'
 import { ChildProcessCrashedError, OutOfMemoryError } from '../worker-pool/worker-pool.schema.js'
@@ -44,6 +47,14 @@ const buildCoveredPlans = (
   rawMutants: readonly Mutant[],
   testCoverage: TestCoverage,
   sandbox: SandboxHandle,
+  /**
+   * When coverage analysis is `off` no coverage is collected at all, so an empty
+   * test set means "nothing was measured", never "no test reaches this mutant".
+   * Every mutant is run against the whole suite instead of being reported as
+   * uncovered — otherwise turning analysis off scores every run zero without
+   * testing anything.
+   */
+  coverageAnalysisOff: boolean,
 ): { coveredPlans: MutantRunPlan[]; noCoverage: MutantResult[] } => {
   const noCoverage: MutantResult[] = []
   const coveredPlans: MutantRunPlan[] = []
@@ -55,6 +66,20 @@ const buildCoveredPlans = (
     } else if (hasStaticCoverage(testCoverage, mutant.id)) {
       const allIds = [...testCoverage.testsById.values()].map((t) => t.id)
       testIds = allIds.length > 0 ? allIds : undefined
+    }
+    if (coverageAnalysisOff) {
+      // No filter: the whole suite runs against this mutant, which is what
+      // `coverageAnalysis: 'off'` means. The command runner also cannot filter.
+      const runOptions: MutantRunOptions = {
+        activeMutant: mutant,
+        sandboxFileName: sandbox.sandboxFileFor(mutant.fileName),
+        mutantActivation: 'runtime' as const,
+        reloadEnvironment: false,
+        timeout: 5000,
+        disableBail: false,
+      }
+      coveredPlans.push({ plan: PlanKind.Run, mutant, runOptions, netTime: 0 })
+      continue
     }
     if (testIds === undefined || testIds.length === 0) {
       const result = {
@@ -97,7 +122,15 @@ const voidReporter: ReporterService = {
 }
 export const mutationTestStage: MutationTestStage<
   unknown,
-  MutationTestLogger | RunEnvironment | Scope.Scope | IdGenerator | FileSystem.FileSystem | Path.Path
+  | MutationTestLogger
+  | RunEnvironment
+  | Scope.Scope
+  | IdGenerator
+  | FileSystem.FileSystem
+  | Path.Path
+  // `buildTestRunner` reaches for the spawner when the run selects the
+  // in-process `command` runner, so the stage carries that requirement now.
+  | ChildProcessSpawner.ChildProcessSpawner
 > = (prev) =>
   Effect.gen(function*() {
     const log = yield* MutationTestLogger
@@ -152,15 +185,31 @@ export const mutationTestStage: MutationTestStage<
         size: prev.concurrency.checkers,
       })
       : undefined
+    // The pool must acquire through `buildTestRunner`, the same door the dry run
+    // uses. Acquiring the child-process runner directly ignores the configured
+    // `testRunner`, so a run that selected the in-process `command` runner still
+    // spawned workers and asked them to load a plugin named `command`, which
+    // does not exist - the dry run passed and every mutant then failed.
+    const testRunnerContext = {
+      options: prev.options,
+      fileDescriptions: prev.project.fileDescriptions,
+      sandboxWorkingDirectory: prev.sandbox.workingDirectory,
+      pluginModulePaths: [...prev.loadedPlugins.pluginModulePaths],
+      idGenerator,
+      retire: Effect.void,
+    }
     const testRunnerPool = yield* Pool.make({
-      acquire: makeChildProcessTestRunner({
-        options: prev.options,
-        fileDescriptions: prev.project.fileDescriptions,
-        sandboxWorkingDirectory: prev.sandbox.workingDirectory,
-        pluginModulePaths: [...prev.loadedPlugins.pluginModulePaths],
-        logger: log,
-        idGenerator,
-      }),
+      acquire: buildTestRunner(
+        testRunnerContext,
+        makeChildProcessTestRunner({
+          options: prev.options,
+          fileDescriptions: prev.project.fileDescriptions,
+          sandboxWorkingDirectory: prev.sandbox.workingDirectory,
+          pluginModulePaths: [...prev.loadedPlugins.pluginModulePaths],
+          logger: log,
+          idGenerator,
+        }),
+      ),
       size: prev.concurrency.testRunners,
     })
     const reporting: MutationReportingService = {
@@ -187,6 +236,11 @@ export const mutationTestStage: MutationTestStage<
       prev.mutants,
       prev.testCoverage,
       prev.sandbox,
+      // The `command` runner shells out once and reads an exit code, so it
+      // reports a single synthetic test and no coverage at all. Filtering by
+      // test is meaningless there and measured coverage is always empty, which
+      // would make every mutant NoCoverage and every score zero.
+      prev.options.coverageAnalysis === 'off' || isCommandRunner(prev.options.testRunner),
     )
     const sortedPlans = [...coveredPlans].sort(reloadEnvironmentLast)
     // Publish the plan so progress total is known before any mutant is tested

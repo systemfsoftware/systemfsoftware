@@ -59,23 +59,24 @@ export const TemporaryDirectoryLive = (
             log.debug('Not removing the temp dir because an error occurred')
             return
           }
-          if (tmp) {
-            log.debug('Deleting stryker temp directory %s', tmp)
-            yield* fs.remove(tmp, { recursive: true }).pipe(
-              Effect.catch(() => Effect.sync(() => log.info(`Failed to delete stryker temp directory ${tmp}`))),
-            )
-            const lingering = yield* fs.readDirectory(options.tempDirName).pipe(
-              Effect.orElseSucceed(() => [] as readonly string[]),
-            )
-            if (lingering.length === 0) {
-              yield* fs.remove(options.tempDirName).pipe(
-                Effect.catch((e) =>
-                  Effect.sync(() => log.debug(`Failed to clean temp ${path.basename(options.tempDirName)}`, e))
-                ),
-              )
+          log.debug('Deleting stryker temp directory %s', tmp)
+          // `force` makes an already-absent path a non-event, which is the only
+          // failure here that is not a fault. Everything else - a refusal, a
+          // busy handle - leaves the next run reading this run's sandboxes and
+          // scoring against stale code, so it is a defect rather than something
+          // to log and walk past.
+          yield* fs.remove(tmp, { recursive: true, force: true })
+          // Take the parent only when this run's sandbox was the last thing in
+          // it, so a concurrent run's sandboxes never go with it. Recursive is
+          // safe precisely because the directory was just observed empty - and
+          // required, because removing a directory without it fails EISDIR.
+          if (yield* fs.exists(parent)) {
+            const siblings = yield* fs.readDirectory(parent)
+            if (siblings.length === 0) {
+              yield* fs.remove(parent, { recursive: true, force: true })
             }
           }
-        })
+        }).pipe(Effect.orDie)
       )
 
       return { path: tmp }
