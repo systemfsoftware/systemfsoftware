@@ -25,6 +25,7 @@
       "./config/base": "./dist/config/base.mjs",
       "./config/config-resolution": "./dist/config/config-resolution.mjs",
       "./config/fork-schema": "./dist/config/fork-schema.mjs",
+      "./errors": "./dist/errors.mjs",
       "./exit-classification": "./dist/exit-classification.mjs",
       "./mutants/incremental-differ": "./dist/mutants/incremental-differ.mjs",
       "./output-mode": "./dist/output-mode.mjs",
@@ -64,6 +65,10 @@
     "./config/fork-schema": {
       "@systemfsoftware/source": "./src/config/fork-schema.ts",
       "default": "./dist/config/fork-schema.mjs"
+    },
+    "./errors": {
+      "@systemfsoftware/source": "./src/errors.ts",
+      "default": "./dist/errors.mjs"
     },
     "./exit-classification": {
       "@systemfsoftware/source": "./src/exit-classification.ts",

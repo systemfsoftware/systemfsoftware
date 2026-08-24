@@ -8,6 +8,7 @@ import * as CliError from 'effect/unstable/cli/CliError'
 import { CliRequest } from './cli-request.schema.js'
 import type { OutputModeProbe } from './output-mode-probe.js'
 import type { RunEventStreamPort } from './run-event-stream.js'
+import type { SignalObserver } from './signal-observer.js'
 
 /**
  * The mutation-testing entry the CLI calls once options are parsed. Injectable
@@ -41,4 +42,6 @@ export interface RunStrykerCliInput {
   readonly mode: ResolvedMode
   readonly runMutationTest: StrykerRun | undefined
   readonly argv: readonly string[]
+  /** The terminating signal, observed at the process edge (`signal-observer.ts`). */
+  readonly lastSignal: SignalObserver
 }

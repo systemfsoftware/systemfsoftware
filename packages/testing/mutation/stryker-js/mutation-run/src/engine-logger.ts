@@ -32,12 +32,12 @@ const isEnabled = (messageLevel: StrykerLogLevel, threshold: StrykerLogLevel): b
   return levelOrder[messageLevel] >= levelOrder[threshold]
 }
 
-const writeStderr = (line: string): void => {
-  // Always stderr, never stdout — stdout carries the NDJSON stream in machine
-  // mode and must stay parseable. A mode-gated logger has a failure mode where
-  // a mis-detected mode corrupts the stream, while always-stderr has none and
-  // is one rule rather than a conditional; a human terminal shows both streams.
-  process.stderr.write(line + '\n')
+const writeStderr = (sink: (line: string) => void, line: string): void => {
+  // The host owns the descriptor: in machine mode stdout is the NDJSON
+  // channel and must stay parseable, so the host points the sink at stderr;
+  // in human mode the prose is the output, so the sink is stdout. The
+  // engine never chooses the descriptor itself.
+  sink(line + '\n')
 }
 
 const format = (message: string, args: readonly unknown[]): string => util.format(message, ...args)
@@ -72,7 +72,10 @@ const make = Effect.gen(function*() {
 
 export const layer = Layer.effect(EngineLogLevel)(make)
 
-export const makeEngineLogger = (service: EngineLogLevel['Service']): Logger => {
+export const makeEngineLogger = (
+  service: EngineLogLevel['Service'],
+  sink: (line: string) => void,
+): Logger => {
   const should = (level: StrykerLogLevel): boolean => isEnabled(level, service.currentUnsafe())
   return {
     isTraceEnabled: () => should('trace'),
@@ -82,22 +85,22 @@ export const makeEngineLogger = (service: EngineLogLevel['Service']): Logger => 
     isErrorEnabled: () => should('error'),
     isFatalEnabled: () => should('fatal'),
     trace: (message: string, ...args: readonly unknown[]) => {
-      if (should('trace')) writeStderr(format(message, args))
+      if (should('trace')) writeStderr(sink, format(message, args))
     },
     debug: (message: string, ...args: readonly unknown[]) => {
-      if (should('debug')) writeStderr(format(message, args))
+      if (should('debug')) writeStderr(sink, format(message, args))
     },
     info: (message: string, ...args: readonly unknown[]) => {
-      if (should('info')) writeStderr(format(message, args))
+      if (should('info')) writeStderr(sink, format(message, args))
     },
     warn: (message: string, ...args: readonly unknown[]) => {
-      if (should('warn')) writeStderr(format(message, args))
+      if (should('warn')) writeStderr(sink, format(message, args))
     },
     error: (message: string, ...args: readonly unknown[]) => {
-      if (should('error')) writeStderr(format(message, args))
+      if (should('error')) writeStderr(sink, format(message, args))
     },
     fatal: (message: string, ...args: readonly unknown[]) => {
-      if (should('fatal')) writeStderr(format(message, args))
+      if (should('fatal')) writeStderr(sink, format(message, args))
     },
   }
 }

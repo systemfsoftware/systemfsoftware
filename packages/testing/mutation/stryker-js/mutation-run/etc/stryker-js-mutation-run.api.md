@@ -75,7 +75,9 @@ export class RunEnvironment extends RunEnvironment_base {}
 
 // @public
 export interface RunEnvironmentShape {
+    readonly allowConsoleColors: boolean;
     readonly basePath: string;
+    readonly logSink: (line: string) => void;
     readonly reporterPluginModules: readonly string[];
     // Warning: (ae-forgotten-export) The symbol "ResolvedMode" needs to be exported by the entry point index.d.mts
     readonly resolvedMode: ResolvedMode;
@@ -86,7 +88,15 @@ export interface RunEnvironmentShape {
 }
 
 // @public
-export const runMutationTest: <E, R>(stages: MutationRunStages<E, R>, cliOptions: PartialStrykerOptions, targetMutatePatterns?: string[]) => Effect$1.Effect<readonly MutantResult[], E, R | RunEnvironment>;
+export const runMutationTest: <E, R>(stages: MutationRunStages<E, R>, cliOptions: PartialStrykerOptions, targetMutatePatterns?: string[]) => Effect$1.Effect<RunOutcome, E, R | RunEnvironment>;
+
+// @public
+export interface RunOutcome {
+    // (undocumented)
+    readonly results: readonly MutantResult[];
+    // (undocumented)
+    readonly verdict: ExitClass | null;
+}
 
 // @public
 export const shouldKeepTempDir: (exit: Exit.Exit<unknown, unknown>, cleanTempDir: 'always' | boolean) => boolean;

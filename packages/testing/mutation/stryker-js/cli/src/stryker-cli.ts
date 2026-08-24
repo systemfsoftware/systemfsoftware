@@ -26,6 +26,7 @@ import type { CliRequest } from './cli-request.schema.js'
 import { runStrykerCli } from './cli-run.js'
 import { machineConsoleLayer } from './console-capture.js'
 import { emitLLMSManifest } from './llms-manifest.js'
+import type { SignalObserver } from './signal-observer.js'
 import { STREAM_SCHEMA_VERSION } from './stream-protocol.js'
 
 function createSplitter(separator: string) {
@@ -545,6 +546,7 @@ export function strykerCliEffect(
   runMutationTest: StrykerRun | undefined,
   detectMode: DetectModeCapability,
   createRunEventStream: CreateRunEventStreamCapability,
+  lastSignal: SignalObserver,
 ): Effect.Effect<number, never, never> {
   return Effect.gen(function*() {
     // One resolved mode decides the Console layer and the stream, from the
@@ -569,7 +571,7 @@ export function strykerCliEffect(
     )
     const outcome = yield* Effect.result(
       runStrykerCli(
-        { program: cliEffect, requestRef, mode, runMutationTest, argv },
+        { program: cliEffect, requestRef, mode, runMutationTest, argv, lastSignal },
         createRunEventStream,
       ),
     )

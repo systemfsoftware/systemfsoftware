@@ -76,4 +76,4 @@ export interface RunOutcome {
 export type PrepareStage<E, R> = (args: PrepareExecutorArgs) => Effect.Effect<PrepareDone, E, R>
 export type InstrumentStage<E, R> = (prev: PrepareDone) => Effect.Effect<InstrumentDone, E, R>
 export type DryRunStage<E, R> = (prev: InstrumentDone) => Effect.Effect<DryRunDone, E, R>
-export type MutationTestStage<E, R> = (prev: DryRunDone) => Effect.Effect<readonly MutantResult[], E, R>
+export type MutationTestStage<E, R> = (prev: DryRunDone) => Effect.Effect<RunOutcome, E, R>

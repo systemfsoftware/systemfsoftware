@@ -3,13 +3,13 @@ import { readFileSync } from 'node:fs'
 import { resolve as resolvePath } from 'node:path'
 
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import {
-  type ConfigFileInvalidError,
-  type ConfigFileNotFoundError,
-  type ConfigFileUnreadableError,
-  readConfig,
-} from '@systemfsoftware/stryker-js-mutation-run/config/config-resolution'
+import { readConfig } from '@systemfsoftware/stryker-js-mutation-run/config/config-resolution'
 import { forkCoreSchema } from '@systemfsoftware/stryker-js-mutation-run/config/fork-schema'
+import type {
+  ConfigFileInvalidError,
+  ConfigFileNotFoundError,
+  ConfigFileUnreadableError,
+} from '@systemfsoftware/stryker-js-mutation-run/errors'
 import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
 import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 import type { Mutant, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'

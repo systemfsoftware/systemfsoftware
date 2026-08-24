@@ -5,7 +5,13 @@ import * as Exit from 'effect/Exit'
 
 import { RunEnvironment, type RunEnvironmentShape } from './run-environment.js'
 import type { RunPhase } from './run-event.js'
-import type { DryRunStage, InstrumentStage, MutationTestStage, PrepareStage } from './run-stages/stage-results.js'
+import type {
+  DryRunStage,
+  InstrumentStage,
+  MutationTestStage,
+  PrepareStage,
+  RunOutcome,
+} from './run-stages/stage-results.js'
 
 /**
  * The four stages, as values.
@@ -40,15 +46,17 @@ export interface MutationRunStages<E, R> {
  * the run's `Exit`, which a finalizer can read without a mutable flag and
  * without the error having to travel through a second channel to be observed.
  *
- * Returns the results. It does not decide the process exit code, log the
- * failure, or render anything: those are the host's, and a library that does
- * them is a library you cannot embed.
+ * Returns the results and the run's verdict - the most severe class the score
+ * and every evaluator reported. It does not decide the process exit code, log
+ * the failure, or render anything: those are the host's, and a library that
+ * does them is a library you cannot embed. The host maps the verdict to a
+ * code; dropping it here is what made a failing score exit 0.
  */
 export const runMutationTest = <E, R>(
   stages: MutationRunStages<E, R>,
   cliOptions: PartialStrykerOptions,
   targetMutatePatterns?: string[],
-): Effect.Effect<readonly MutantResult[], E, R | RunEnvironment> =>
+): Effect.Effect<RunOutcome, E, R | RunEnvironment> =>
   Effect.gen(function*() {
     const env = yield* RunEnvironment
 

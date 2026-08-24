@@ -28,7 +28,12 @@ import { forMutant, hasStaticCoverage } from '../mutants/test-coverage.js'
 import type { TestCoverage } from '../mutants/test-coverage.js'
 import { makeMutationReportingService } from '../reporting/mutation-reporting.js'
 import type { MutationReportingService } from '../reporting/mutation-reporting.js'
-import { checkStatusToMutantStatus, mapRunResult, toSchemaLocation } from '../reporting/mutation-reporting.kernel.js'
+import {
+  checkStatusToMutantStatus,
+  mapRunResult,
+  normalizeReportFileName,
+  toSchemaLocation,
+} from '../reporting/mutation-reporting.kernel.js'
 import { RunEnvironment } from '../run-environment.js'
 import type { SandboxHandle } from '../sandbox/sandbox.js'
 import { StrykerError } from '../stryker-error.schema.js'
@@ -37,6 +42,7 @@ import type { PooledTestRunner } from '../test-runner/child-process-test-runner-
 import { isCommandRunner } from '../test-runner/command-test-runner.js'
 import { buildTestRunner } from '../test-runner/index.js'
 import { humanReadableElapsed } from '../timer.js'
+import { isActionableStatus } from '../verdict-envelope.js'
 import { IdGenerator } from '../worker-pool/id-generator.js'
 import { ChildProcessCrashedError, OutOfMemoryError } from '../worker-pool/worker-pool.schema.js'
 import type { DryRunDone, MutationTestStage } from './stage-results.js'
@@ -135,14 +141,16 @@ export const mutationTestStage: MutationTestStage<
   Effect.gen(function*() {
     const log = yield* MutationTestLogger
     const env = yield* RunEnvironment
+    // Both early exits are successful runs that tested nothing, so neither has a
+    // verdict to report.
     if (prev.options.dryRunOnly) {
       log.info('The dry-run has been completed successfully. No mutations have been executed.')
-      return [] as readonly MutantResult[]
+      return { results: [], verdict: null }
     }
     if (prev.dryRunResult.tests.length === 0 && prev.options.allowEmpty) {
       const now = yield* Clock.currentTimeMillis
       log.info('Done in %s.', humanReadableElapsed(prev.timer, now))
-      return [] as readonly MutantResult[]
+      return { results: [], verdict: null }
     }
     const reporterService: ReporterService = yield* Effect.gen(function*() {
       if (prev.options.reporters.length === 0) {
@@ -301,7 +309,28 @@ export const mutationTestStage: MutationTestStage<
         Effect.map((chunk) => [...chunk]),
       )
     const allResults: MutantResult[] = [...noCoverageResults, ...runResults]
+    // R20: one stream line per mutant a consumer can act on, carrying the whole
+    // survivor re-run matching key so an agent never has to open the report to
+    // address it. Killed, Ignored and CompileError stay counts-only - the same
+    // filter the verdict envelope applies, so the stream and the terminal line
+    // agree on which mutants are named.
+    const plannedTotal = allPlansForReporter.length + noCoverageResults.length
+    let completed = 0
     for (const result of allResults) {
+      completed += 1
+      if (isActionableStatus(result.status)) {
+        env.runEventSink({
+          kind: 'mutant',
+          id: result.id,
+          status: result.status,
+          file: normalizeReportFileName(env.basePath, result.fileName),
+          location: toSchemaLocation(result.location),
+          mutator: result.mutatorName,
+          replacement: result.replacement ?? null,
+          completed,
+          total: plannedTotal,
+        })
+      }
       yield* reporterService.onMutantTested(result).pipe(Effect.catchCause((cause) =>
         Effect.sync(() => {
           log.warn('Reporter failed handling onMutantTested', cause)
@@ -337,5 +366,8 @@ export const mutationTestStage: MutationTestStage<
     ))
     const doneNow = yield* Clock.currentTimeMillis
     log.info('Done in %s.', humanReadableElapsed(prev.timer, doneNow))
-    return outcome.results
+    // The verdict travels with the results, as `RunOutcome` says it does:
+    // returning only the results dropped the score-versus-break decision on the
+    // floor, so a run under its own breaking threshold still exited 0.
+    return outcome
   })

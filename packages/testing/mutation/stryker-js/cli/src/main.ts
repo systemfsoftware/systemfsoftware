@@ -10,11 +10,16 @@ import { strykerEngines } from '@systemfsoftware/stryker-js-mutation-run/stryker
 
 import { OutputModeProbe, OutputModeProbeLive } from './output-mode-probe.js'
 import { RunEventStreamLive, RunEventStreamPort } from './run-event-stream.js'
+import { observeTerminatingSignal } from './signal-observer.js'
 import { strykerCliEffect } from './stryker-cli.js'
 
 const EXIT_CODE_RUN_NEVER_REACHED_ITS_FINALIZER = 1
 
 process.title = 'stryker'
+
+// Installed before the program starts: a signal that arrives during startup
+// still has to reach the teardown below.
+const lastSignal = observeTerminatingSignal()
 
 function isSupportedNodeVersion(version: string): boolean {
   const withoutV = version.startsWith('v') ? version.slice(1) : version
@@ -50,6 +55,7 @@ const program = Effect.gen(function*() {
     undefined,
     outputMode.detectMode,
     runEvents.createRunEventStream,
+    lastSignal,
   )
 }).pipe(
   // stdout carries the NDJSON protocol and nothing else. Effect's built-in
@@ -65,8 +71,13 @@ NodeRuntime.runMain(program, {
   teardown: (exit: Exit.Exit<unknown, unknown>, onExit) => {
     if (Exit.isSuccess(exit) && typeof exit.value === 'number') {
       onExit(exit.value)
-    } else {
-      onExit(EXIT_CODE_RUN_NEVER_REACHED_ITS_FINALIZER)
+      return
     }
+    // A signal interrupts the run's fiber, so its exit is a failure however the
+    // finalizer ended - the classed code it resolved reached the terminal event
+    // and would die here. The shell is owed `128 + n` for the signal that
+    // stopped us, which is the same number the terminal event carries.
+    const signal = lastSignal()
+    onExit(signal === null ? EXIT_CODE_RUN_NEVER_REACHED_ITS_FINALIZER : 128 + signal)
   },
 })

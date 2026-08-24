@@ -42,6 +42,19 @@ export interface RunEnvironmentShape {
 
   /** The module specifiers whose `strykerPlugins` this run loads. */
   readonly reporterPluginModules: readonly string[]
+
+  /**
+   * Where the engine's log lines go. The host owns the descriptor: machine
+   * mode keeps stdout exclusively for the NDJSON stream so the sink is
+   * stderr, human mode's prose is the output so the sink is stdout.
+   */
+  readonly logSink: (line: string) => void
+
+  /**
+   * Whether console output may be colourised. Resolved once at the edge via
+   * `isColorEnabled` so the engine never probes `NO_COLOR` itself.
+   */
+  readonly allowConsoleColors: boolean
 }
 
 /**

@@ -46,8 +46,11 @@ export const defaultStages: MutationRunStages<unknown, DefaultStagesContext> = {
   dryRun: dryRunStage,
   mutationTest: mutationTestStage,
 }
-const provideLogger = <A>(tag: Context.Service<A, Logger>): Layer.Layer<A, never, EngineLogLevel> =>
-  Layer.effect(tag, Effect.map(EngineLogLevel, makeEngineLogger))
+const provideLogger = <A>(
+  tag: Context.Service<A, Logger>,
+  sink: (line: string) => void,
+): Layer.Layer<A, never, EngineLogLevel> =>
+  Layer.effect(tag, Effect.map(EngineLogLevel, (level) => makeEngineLogger(level, sink)))
 export const makeRunLayer = (
   env: RunEnvironmentShape,
 ): Layer.Layer<
@@ -66,10 +69,10 @@ export const makeRunLayer = (
 > =>
   Layer.mergeAll(
     Layer.succeed(RunEnvironment, env),
-    provideLogger(PrepareLogger),
-    provideLogger(InstrumentLogger),
-    provideLogger(DryRunLogger),
-    provideLogger(MutationTestLogger),
+    provideLogger(PrepareLogger, env.logSink),
+    provideLogger(InstrumentLogger, env.logSink),
+    provideLogger(DryRunLogger, env.logSink),
+    provideLogger(MutationTestLogger, env.logSink),
     NodeFileSystem.layer,
     NodePath.layer,
     idGeneratorLayer,

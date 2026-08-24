@@ -98,8 +98,12 @@ export const prepareStage: PrepareStage<
     const options = {
       ...configured,
       reporters: selectReporters(configured.reporters, env.resolvedMode.mode),
+      allowConsoleColors: env.allowConsoleColors,
+      clearTextReporter: {
+        ...configured.clearTextReporter,
+        allowColor: env.allowConsoleColors,
+      },
     }
-    yield* Effect.flatMap(EngineLogLevel, (level) => level.set(options.logLevel))
 
     const descriptors: readonly string[] = [...options.plugins, ...options.appendPlugins, ...env.reporterPluginModules]
 

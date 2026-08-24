@@ -21,20 +21,16 @@ import type {
   ConfigFileInvalidError,
   ConfigFileNotFoundError,
   ConfigFileUnreadableError,
-} from '@systemfsoftware/stryker-js-mutation-run/config/config-resolution'
+} from '@systemfsoftware/stryker-js-mutation-run/errors'
 import type { SchemaError } from 'effect/Schema'
 import { isExitClass, resolveCliExitCode } from './cli-exit-code.kernel.js'
 import { emitMachineModeOutput } from './cli-machine-output.js'
 import type { CreateRunEventStreamCapability, RunStrykerCliInput, StrykerRun } from './cli-ports.js'
 import type { CliRequest } from './cli-request.schema.js'
 import { runSurvivorsAdmission } from './cli-survivors-admission.js'
+import { isColorEnabled } from './output-mode.js'
 import type { RunEventStream } from './run-event-stream.js'
 import { SurvivorsRejection } from './survivors-admission.workflow.js'
-
-const SIGNAL_NUMBERS: Readonly<Partial<Record<NodeJS.Signals, number>>> = Object.freeze({
-  SIGINT: 2,
-  SIGTERM: 15,
-})
 
 const defaultRunMutationTest = (hostOptions: RunEnvironmentShape): StrykerRun => (options) =>
   Effect.scoped(runMutationTest(defaultStages, options)).pipe(Effect.provide(makeRunLayer(hostOptions)))
@@ -55,6 +51,14 @@ function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironme
     reporterPluginModules: [
       import.meta.resolve('@systemfsoftware/stryker-js-mutation-report/stryker-plugins'),
     ],
+    logSink: (line: string): void => {
+      if (mode.mode === 'human') {
+        process.stdout.write(line)
+      } else {
+        process.stderr.write(line)
+      }
+    },
+    allowConsoleColors: isColorEnabled(mode, process.env['NO_COLOR']),
   }
 }
 
@@ -82,7 +86,6 @@ export const runStrykerCli = (
     const basePath = hostOptions.basePath
 
     let currentFiber: Fiber.Fiber<unknown, unknown> | null = null
-    let lastSignal: number | null = null
 
     const verdictOf = (value: unknown): readonly ExitClass[] => {
       if (!Predicate.hasProperty(value, 'verdict')) {
@@ -96,7 +99,7 @@ export const runStrykerCli = (
     }
 
     const resolveClassedExitCode = (exit: Exit.Exit<unknown, unknown>): number => {
-      const signal = lastSignal
+      const signal = input.lastSignal()
       if (signal !== null) {
         return 128 + signal
       }
@@ -106,8 +109,9 @@ export const runStrykerCli = (
       return resolveExitCode(verdictOf(exit.value), null)
     }
 
-    const onSignal = (signal: NodeJS.Signals): void => {
-      lastSignal = SIGNAL_NUMBERS[signal] ?? null
+    // The signal itself is observed at the process edge and read back through
+    // `input.lastSignal`; this handler exists to stop the run, not to decode it.
+    const onSignal = (): void => {
       process.removeListener('SIGINT', onSignal)
       process.removeListener('SIGTERM', onSignal)
       if (currentFiber !== null) {
@@ -148,7 +152,11 @@ export const runStrykerCli = (
           yield* stream.open
           yield* input.program
           const request = yield* Ref.get(input.requestRef)
-          yield* Option.match(request, {
+          // The dispatched value is the run's outcome, and its verdict is what
+          // `resolveClassedExitCode` reads. Yielding without returning it made
+          // this block evaluate to `undefined`, so a run under its own breaking
+          // threshold reported a score and still exited 0.
+          return yield* Option.match(request, {
             onNone: () => Effect.void,
             onSome: (cliRequest) => dispatch(cliRequest),
           })
