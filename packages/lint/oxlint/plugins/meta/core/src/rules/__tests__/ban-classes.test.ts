@@ -269,6 +269,19 @@ ruleTester.run('ban-classes', banClasses, {
       filename: PROD,
     },
     {
+      // Same reasoning as the `declare module` case, one nesting level out: a
+      // file-scope `declare class` carries the ambient flag on itself and has no
+      // ambient module ancestor, so a walk that starts at the parent misses it
+      // and reports a declaration that emits nothing.
+      name: 'Should_Pass_When_ClassIsAmbient_AtFileScope',
+      code: `
+        declare class LegacyEmitter extends EventTarget {
+          public emit(event: string): void
+        }
+      `,
+      filename: PROD,
+    },
+    {
       name: 'Should_Pass_When_ClassExpression_ExtendsSanctionedBase',
       code: `
         import { Schema } from 'effect'

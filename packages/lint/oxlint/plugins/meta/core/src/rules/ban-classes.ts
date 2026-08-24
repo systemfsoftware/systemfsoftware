@@ -148,9 +148,13 @@ export const banClasses = defineRule({
      *
      * A `namespace Foo { class Bar {} }` without `declare` DOES emit a runtime
      * class, so the ambient flag is read from the ancestor rather than assumed
-     * from its being a module at all.
+     * from its being a module at all. A `declare class` at file scope carries
+     * the flag on itself and has no ambient ancestor to find, so the node's own
+     * flag is read before the walk starts.
      */
     const isAmbientDeclaration = (node: ESTree.Class): boolean => {
+      const self: { declare?: unknown } = node
+      if (self.declare === true) return true
       let current: unknown = node.parent
       while (current !== undefined && current !== null && typeof current === 'object') {
         const candidate: { type?: unknown; declare?: unknown; parent?: unknown } = current
