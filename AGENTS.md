@@ -95,6 +95,3 @@ Directories and the root doctrine file `CONCEPTS.md`; the packages inside them a
 ## Boundaries
 
 - **REPO-P1** — ask before merging to `main`, publishing, deploying, destructive operations, or handling credentials. Unmechanizable: a hook able to decide it would already be the approval.
-
-```
-```
