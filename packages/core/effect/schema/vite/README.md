@@ -1,6 +1,6 @@
 # @systemfsoftware/effect-schema-vite
 
-Vite plugin that auto-discovers Effect Schema exports and injects round-trip property tests via @systemfsoftware/effect-schema-law.
+Vite plugin that automatically discovers exported Effect `Schema` declarations and injects round-trip codec law property tests using `@systemfsoftware/effect-schema-law`.
 
 ## Install
 
@@ -8,18 +8,29 @@ Vite plugin that auto-discovers Effect Schema exports and injects round-trip pro
 pnpm add -D @systemfsoftware/effect-schema-vite @systemfsoftware/effect-schema-law effect vite vitest
 ```
 
-`@systemfsoftware/effect-schema-law`, `effect`, `vite` and `vitest` are peer dependencies: this package declares them and does not install them, so one copy is shared with the rest of your project. No version is pinned here — the ranges the package accepts are in its manifest, and a version repeated in prose goes stale without anything noticing.
+## Usage
 
-## Entry points
+Add the plugin to your `vitest.config.ts`:
 
-- `@systemfsoftware/effect-schema-vite`
+```ts
+import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
+import { defineConfig } from 'vitest/config'
+
+export default defineConfig({
+  plugins: [inlineSchemaTests()],
+})
+```
+
+The plugin scans exported schemas in `src/` (configurable via `dir`) and writes a generated `src/schema-laws.test.ts` suite asserting round-trip identity and encode stability.
 
 ## API
 
 The public surface is generated from the source and versioned with the package: [`etc/effect-schema-vite.api.md`](./etc/effect-schema-vite.api.md).
 
-Options: `InlineSchemaTestsOptions` — `dir` (default `"src"`).
+### Options
 
-## License
+`InlineSchemaTestsOptions`:
+
+- `dir` (string, default `"src"`): Root source directory to scan for schema exports.
 
 Apache-2.0. Part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/core/effect/schema/vite#readme).

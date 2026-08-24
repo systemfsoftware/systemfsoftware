@@ -1,11 +1,9 @@
 # @systemfsoftware/effect-schema-law
 
-Two entries for testing [Effect](https://effect.website) `Schema` — codec laws and refusal adequacy — in one package.
+Property-test codec laws and refusal adequacy for [Effect](https://effect.website) `Schema`.
 
-- `.` → `ruleOfSchemas` — the codec laws every well-formed schema must obey.
-- `./refutation` → `refutes`, `scanObligations`, `obligationsOf`, `adequacyReport`, and the weakening/obligation types — the refusal half the generated laws cannot reach.
-
-`@systemfsoftware/effect-schema-bounded-union` stays separate: it peers on `effect` alone, while this package peers on `effect`, `vitest`, and `@effect/vitest`.
+- **Codec Laws (`@systemfsoftware/effect-schema-law`)** — Generates property tests for round-trip identity and encode stability.
+- **Refusal Adequacy (`@systemfsoftware/effect-schema-law/refutation`)** — Asserts that every custom constraint or refinement rejects invalid input.
 
 ## `.` — codec laws
 

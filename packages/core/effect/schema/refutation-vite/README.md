@@ -1,6 +1,6 @@
 # @systemfsoftware/effect-schema-refutation-vite
 
-Vite plugin that asserts every obligation reachable from an exported Effect Schema is refuted — the obligation-coverage half of `effect-schema-vite`.
+Vite plugin that asserts every custom obligation and refinement reachable from an exported Effect `Schema` is tested for rejection.
 
 ## Install
 
@@ -8,33 +8,31 @@ Vite plugin that asserts every obligation reachable from an exported Effect Sche
 pnpm add -D @systemfsoftware/effect-schema-refutation-vite @systemfsoftware/effect-schema-law effect vite vitest
 ```
 
-`@systemfsoftware/effect-schema-law`, `effect`, `vite` and `vitest` are peer dependencies: this package declares them and does not install them, so one copy is shared with the rest of your project.
+## Usage
 
-This plugin is installed **alongside**, not instead of, `@systemfsoftware/effect-schema-vite`. The two plugins write different generated files and compose in your Vitest config:
+Add `inlineRefutationCoverage` to your Vitest configuration, typically alongside `@systemfsoftware/effect-schema-vite`:
 
 ```ts
-// vitest.config.ts
 import { inlineRefutationCoverage } from '@systemfsoftware/effect-schema-refutation-vite'
 import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
+import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   plugins: [inlineSchemaTests(), inlineRefutationCoverage()],
 })
 ```
 
-`inlineSchemaTests` writes `src/schema-laws.test.ts` (round-trip laws). `inlineRefutationCoverage` writes `src/schema-refutations.test.ts` (obligation coverage) — two plugins rewriting one path would collide and lose one suite, so they each own their file.
-
-The generated `schema-refutations.test.ts` imports `obligationsOf` from `@systemfsoftware/effect-schema-law/refutation` and `AST` from `effect/SchemaAST`, and asserts that every constraint reachable from an exported schema is refuted by some `refutes` call — so a refinement nobody refuses fails the suite by name.
-
-## Entry points
-
-- `@systemfsoftware/effect-schema-refutation-vite`
+`inlineSchemaTests` generates `src/schema-laws.test.ts` for round-trip identity laws. `inlineRefutationCoverage` generates `src/schema-refutations.test.ts` to assert that every reachable refinement in exported schemas has a corresponding `refutes` check.
 
 ## API
 
-The public surface is generated from the source and versioned with the package: [`etc/effect-schema-refutation-vite.api.md`](./etc/effect-schema-refutation-vite.api.md).
+The public surface is generated from source and tracked in [`etc/effect-schema-refutation-vite.api.md`](./etc/effect-schema-refutation-vite.api.md).
 
-Options: `InlineRefutationCoverageOptions` — `dir` (default `"src"`).
+### Options
+
+`InlineRefutationCoverageOptions`:
+
+- `dir` (string, default `"src"`): Root source directory to scan for schema exports.
 
 ## License
 
