@@ -1,4 +1,4 @@
-import * as weaponRegex from 'weapon-regex'
+import { RegExpParser, visitRegExpAST } from '@eslint-community/regexpp'
 
 /**
  * The mutations of a regular expression pattern.
@@ -31,7 +31,68 @@ export function mutateRegexPattern(pattern: string, flags: string | undefined): 
     return []
   }
   try {
-    return weaponRegex.mutate(pattern, flags, { mutationLevels: [1] }).map((mutant) => mutant.pattern)
+    const f = flags ?? ''
+    const parser = new RegExpParser()
+    const ast = parser.parsePattern(pattern, undefined, undefined, {
+      unicode: f.includes('u'),
+      unicodeSets: f.includes('v'),
+    })
+    const bol: Array<{ start: number; end: number; text: string }> = []
+    const eol: Array<{ start: number; end: number; text: string }> = []
+    const rest: Array<{ start: number; end: number; text: string; priority: number }> = []
+
+    visitRegExpAST(ast, {
+      onAssertionEnter(node) {
+        if (node.kind === 'start') {
+          const splice = { start: node.start, end: node.end, text: '' }
+          const mutated = pattern.slice(0, splice.start) + splice.text + pattern.slice(splice.end)
+          if (mutated.length === 0) {
+            return
+          }
+          bol.push(splice)
+        } else if (node.kind === 'end') {
+          const splice = { start: node.start, end: node.end, text: '' }
+          const mutated = pattern.slice(0, splice.start) + splice.text + pattern.slice(splice.end)
+          if (mutated.length === 0) {
+            return
+          }
+          eol.push(splice)
+        } else if (node.kind === 'lookahead' || node.kind === 'lookbehind') {
+          const offset = node.kind === 'lookahead' ? 2 : 3
+          const pos = node.start + offset
+          const text = node.negate ? '=' : '!'
+          rest.push({ start: pos, end: pos + 1, text, priority: 1 })
+        }
+      },
+      onCharacterClassEnter(node) {
+        const pos = node.start + 1
+        if (node.negate) {
+          rest.push({ start: pos, end: pos + 1, text: '', priority: 1 })
+        } else {
+          rest.push({ start: pos, end: pos, text: '^', priority: 1 })
+        }
+      },
+      onCharacterSetEnter(node) {
+        if (node.kind === 'digit' || node.kind === 'space' || node.kind === 'word') {
+          const pos = node.start + 1
+          const cur = node.raw[1] ?? ''
+          const toggled = cur === cur.toUpperCase() ? cur.toLowerCase() : cur.toUpperCase()
+          rest.push({ start: pos, end: pos + 1, text: toggled, priority: 2 })
+        } else if (node.kind === 'property') {
+          const pos = node.start + 1
+          const cur = node.raw[1] ?? ''
+          const toggled = cur === 'p' ? 'P' : 'p'
+          rest.push({ start: pos, end: pos + 1, text: toggled, priority: 2 })
+        }
+      },
+      onQuantifierEnter(node) {
+        rest.push({ start: node.start, end: node.end, text: node.element.raw, priority: 0 })
+      },
+    })
+
+    rest.sort((a, b) => a.start - b.start || a.priority - b.priority)
+    const all = [...bol, ...eol, ...rest]
+    return all.map((s) => pattern.slice(0, s.start) + s.text + pattern.slice(s.end))
   } catch {
     return []
   }

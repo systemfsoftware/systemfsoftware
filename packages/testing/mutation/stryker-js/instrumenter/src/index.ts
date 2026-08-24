@@ -1,4 +1,3 @@
-export * from './create-instrumenter.js'
 export * from './disable-type-checks.js'
 export * from './file.js'
 export * from './frameworks/index.js'
