@@ -12,7 +12,7 @@ import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
 import * as Scope from 'effect/Scope'
-import { setEngineLogLevel } from '../run-layers.js'
+import { EngineLogLevel } from '../engine-logger.js'
 
 import { readConfig } from '../config/config-reader.js'
 import { forkCoreSchema } from '../config/fork-schema.js'
@@ -27,7 +27,7 @@ import { makeTimer } from '../timer.js'
 
 import { selectReporters } from '../reporting/reporter-selection.kernel.js'
 import type { PrepareDone, PrepareStage } from './stage-results.js'
-import { PrepareFailedError } from './stage.schema.js'
+import { StageError } from './stage.schema.js'
 
 export class PrepareLogger extends Context.Service<PrepareLogger, Logger>()('PrepareLogger') {}
 
@@ -78,8 +78,8 @@ const buildMergedSchema = (
 }
 
 export const prepareStage: PrepareStage<
-  PrepareFailedError,
-  PrepareLogger | RunEnvironment | FileSystem.FileSystem | Path.Path | Scope.Scope
+  StageError,
+  PrepareLogger | RunEnvironment | FileSystem.FileSystem | Path.Path | Scope.Scope | EngineLogLevel
 > = (args: PrepareExecutorArgs) =>
   Effect.gen(function*() {
     yield* Scope.Scope
@@ -90,7 +90,7 @@ export const prepareStage: PrepareStage<
     const coreSchema: ValidationSchemaDocument = forkCoreSchema
 
     const configured = yield* readConfig(args.cliOptions, log, coreSchema, env.basePath).pipe(
-      Effect.mapError((cause) => new PrepareFailedError({ reason: 'Failed to read config', cause })),
+      Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to read config', cause })),
     )
     // Narrowed once, here, before any plugin is composed: the reporter set the
     // rest of the run sees is already the one this output mode permits, so the
@@ -99,12 +99,12 @@ export const prepareStage: PrepareStage<
       ...configured,
       reporters: selectReporters(configured.reporters, env.resolvedMode.mode),
     }
-    yield* Effect.sync(() => setEngineLogLevel(options.logLevel))
+    yield* Effect.flatMap(EngineLogLevel, (level) => level.set(options.logLevel))
 
     const descriptors: readonly string[] = [...options.plugins, ...options.appendPlugins, ...env.reporterPluginModules]
 
     const loaded = yield* loadPlugins(descriptors, log, env.basePath).pipe(
-      Effect.mapError((cause) => new PrepareFailedError({ reason: 'Failed to load plugins', cause })),
+      Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to load plugins', cause })),
     )
 
     const mergedSchema = buildMergedSchema(coreSchema, loaded.schemaContributions)
@@ -112,21 +112,22 @@ export const prepareStage: PrepareStage<
       const record: Record<string, unknown> = { ...options }
       yield* validateOptions(record, mergedSchema, log, true).pipe(
         Effect.mapError(
-          (cause) => new PrepareFailedError({ reason: 'Failed to revalidate options with plugin schema', cause }),
+          (cause) =>
+            new StageError({ stage: 'prepare', reason: 'Failed to revalidate options with plugin schema', cause }),
         ),
       )
     }
 
     const project = yield* readProject(options, log, args.targetMutatePatterns, env.basePath).pipe(
-      Effect.mapError((cause) => new PrepareFailedError({ reason: 'Failed to read project', cause })),
+      Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to read project', cause })),
     )
 
     if (project.files.size === 0) {
-      return yield* new PrepareFailedError({ reason: 'No input files found.' })
+      return yield* new StageError({ stage: 'prepare', reason: 'No input files found.' })
     }
 
     const contributions = yield* createAll(loaded.pluginsByKind, PluginKind.Ignore).pipe(
-      Effect.mapError((cause) => new PrepareFailedError({ reason: 'Failed to create ignorers', cause })),
+      Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to create ignorers', cause })),
     )
 
     const ignorers: readonly IgnorerService[] = yield* Effect.forEach(contributions, (contribution) =>
@@ -138,7 +139,7 @@ export const prepareStage: PrepareStage<
         Effect.provideService(SandboxDirectory, env.basePath),
       )).pipe(
         Effect.mapError((cause) =>
-          new PrepareFailedError({ reason: 'Failed to build ignorers', cause })
+          new StageError({ stage: 'prepare', reason: 'Failed to build ignorers', cause })
         ),
       )
 
@@ -147,7 +148,9 @@ export const prepareStage: PrepareStage<
       const service = yield* Effect.service(TemporaryDirectory).pipe(Effect.provide(live))
       return service.path
     }).pipe(
-      Effect.mapError((cause) => new PrepareFailedError({ reason: 'Failed to create temporary directory', cause })),
+      Effect.mapError((cause) =>
+        new StageError({ stage: 'prepare', reason: 'Failed to create temporary directory', cause })
+      ),
     )
 
     const allContributions: readonly AnyPluginContribution[] = (() => {

@@ -4,10 +4,10 @@ import type { HelpRendered } from '@systemfsoftware/stryker-js-mutation-run/run-
 import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 import { buildVerdictEnvelope } from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as S from 'effect/Schema'
 import * as CliError from 'effect/unstable/cli/CliError'
-
 import { buildErrorEnvelope } from './cli-error-envelope.js'
 import { failureValue } from './cli-failure-text.kernel.js'
 import { readCapturedConsole } from './console-capture.js'
@@ -62,38 +62,38 @@ export function emitMachineModeOutput(
   code: number,
   argv: readonly string[],
   basePath: string,
-): void {
-  const captured = readCapturedConsole()
-  // A clean help request fails the effect (the runner rethrows the ShowHelp)
-  // while exiting 0 and carrying the rendered document in the capture: it is
-  // the help terminal event, not an error.
-  const value = failureValue(exit)
-  const helpShaped = Exit.isFailure(exit) && S.is(CliError.ShowHelp)(value) && value.errors.length === 0
-  if (helpShaped) {
-    const document: HelpRendered = {
-      kind: 'help',
-      schemaVersion: STREAM_SCHEMA_VERSION,
-      code: 0,
-      help: captured,
+): Effect.Effect<void, never, never> {
+  return Effect.gen(function*() {
+    const captured = readCapturedConsole()
+    const value = failureValue(exit)
+    const helpShaped = Exit.isFailure(exit) && S.is(CliError.ShowHelp)(value) && value.errors.length === 0
+    if (helpShaped) {
+      const document: HelpRendered = {
+        kind: 'help',
+        schemaVersion: STREAM_SCHEMA_VERSION,
+        code: 0,
+        help: captured,
+      }
+      stream.sink(document)
+      return
     }
-    stream.sink(document)
-    return
-  }
-  if (Exit.isFailure(exit)) {
-    stream.sink({ kind: 'error', ...buildErrorEnvelope(exit, code, captured, argv) })
-    return
-  }
-  if (captured.length > 0) {
-    const document: HelpRendered = {
-      kind: 'help',
-      schemaVersion: STREAM_SCHEMA_VERSION,
-      code: 0,
-      help: captured,
+    if (Exit.isFailure(exit)) {
+      stream.sink({ kind: 'error', ...buildErrorEnvelope(exit, code, captured, argv) })
+      return
     }
-    stream.sink(document)
-    return
-  }
-  if (stream.isOpen()) {
-    emitNullScoreVerdict(stream, mode, defaultOptions.thresholds, {}, basePath)
-  }
+    if (captured.length > 0) {
+      const document: HelpRendered = {
+        kind: 'help',
+        schemaVersion: STREAM_SCHEMA_VERSION,
+        code: 0,
+        help: captured,
+      }
+      stream.sink(document)
+      return
+    }
+    if (stream.isOpen()) {
+      const defaults = yield* defaultOptions
+      emitNullScoreVerdict(stream, mode, defaults.thresholds, {}, basePath)
+    }
+  })
 }

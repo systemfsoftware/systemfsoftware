@@ -55,7 +55,8 @@ export function readProject(
 
   return Effect.gen(function*() {
     const inputFileNames = yield* resolveInputFileNames(ignoreRules, basePath)
-    const logAboutUselessPatterns = !isDeepStrictEqual(mutatePatterns, defaultOptions.mutate)
+    const defaults = yield* defaultOptions
+    const logAboutUselessPatterns = !isDeepStrictEqual(mutatePatterns, defaults.mutate)
     if (logAboutUselessPatterns) {
       for (const pattern of mutatePatterns) {
         if (pattern.startsWith(IGNORE_PATTERN_CHARACTER)) {

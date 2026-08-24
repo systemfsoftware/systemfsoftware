@@ -12,12 +12,12 @@ import { RunEnvironment } from '../run-environment.js'
 import { makeSandbox } from '../sandbox/sandbox.js'
 import { makeConcurrency } from '../worker-pool/concurrency-token-provider.js'
 import type { InstrumentDone, InstrumentStage } from './stage-results.js'
-import { InstrumentFailedError } from './stage.schema.js'
+import { StageError } from './stage.schema.js'
 
 export class InstrumentLogger extends Context.Service<InstrumentLogger, Logger>()('InstrumentLogger') {}
 
 export const instrumentStage: InstrumentStage<
-  InstrumentFailedError,
+  StageError,
   | InstrumentLogger
   | FileSystem.FileSystem
   | Path.Path
@@ -33,7 +33,7 @@ export const instrumentStage: InstrumentStage<
       toInstrumenterFile(file), {
       concurrency: 'unbounded',
     }).pipe(Effect.mapError((cause) =>
-      new InstrumentFailedError({ reason: 'Failed to read files to mutate', cause })
+      new StageError({ stage: 'instrument', reason: 'Failed to read files to mutate', cause })
     ))
 
     const instrumentResult = yield* instrument(filesToMutate, {
@@ -41,8 +41,9 @@ export const instrumentStage: InstrumentStage<
       ...prev.options.mutator,
       plugins: prev.options.mutator.plugins === null ? null : [...prev.options.mutator.plugins],
       excludedMutations: [...prev.options.mutator.excludedMutations],
-    }).pipe(Effect.mapError((cause) => new InstrumentFailedError({ reason: 'Instrumenter failed', cause })))
-
+    }).pipe(Effect.mapError((cause) =>
+      new StageError({ stage: 'instrument', reason: 'Instrumenter failed', cause })
+    ))
     const instrumentedProject = withInstrumentedFiles(prev.project, instrumentResult.files)
 
     const basePath = env.basePath
@@ -55,8 +56,9 @@ export const instrumentStage: InstrumentStage<
       workingDirectory,
       backupDirectory,
       basePath,
-    }).pipe(Effect.mapError((cause) => new InstrumentFailedError({ reason: 'Sandbox initialization failed', cause })))
-
+    }).pipe(Effect.mapError((cause) =>
+      new StageError({ stage: 'instrument', reason: 'Sandbox initialization failed', cause })
+    ))
     const concurrency = yield* makeConcurrency(prev.options, logger)
 
     return {

@@ -1,8 +1,10 @@
+import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChildProcessSpawner'
+import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
+import * as NodePath from '@effect/platform-node-shared/NodePath'
 import * as NodeStdio from '@effect/platform-node/NodeStdio'
-import { ChildProcessSpawnerLive } from '@systemfsoftware/stryker-js-mutation-run'
-import { defaultOptions } from '@systemfsoftware/stryker-js-mutation-run/config/config-resolution'
 import type { ManifestRendered } from '@systemfsoftware/stryker-js-mutation-run/run-event'
 import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
+import { RENDERED_OPTION_DEFAULTS } from '@systemfsoftware/stryker-js-plugin-api/core'
 import type { LogLevel, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Console from 'effect/Console'
 import * as Effect from 'effect/Effect'
@@ -182,7 +184,7 @@ const runOptions = {
   coverageAnalysis: Flag.choice('coverageAnalysis', ['perTest', 'all', 'off'])
     .pipe(
       Flag.withDescription(
-        `The coverage analysis strategy you want to use. Default value: "${defaultOptions.coverageAnalysis}"`,
+        `The coverage analysis strategy you want to use. Default value: "${RENDERED_OPTION_DEFAULTS.coverageAnalysis}"`,
       ),
       optional,
     ),
@@ -275,14 +277,14 @@ const runOptions = {
   logLevel: Flag.choice('logLevel', LOG_LEVELS)
     .pipe(
       Flag.withDescription(
-        `Set the log level for the console. Possible values: fatal, error, warn, info, debug, trace and off. Default is "${defaultOptions.logLevel}"`,
+        `Set the log level for the console. Possible values: fatal, error, warn, info, debug, trace and off. Default is "${RENDERED_OPTION_DEFAULTS.logLevel}"`,
       ),
       optional,
     ),
   fileLogLevel: Flag.choice('fileLogLevel', LOG_LEVELS)
     .pipe(
       Flag.withDescription(
-        `Set the log level for the "stryker.log" file. Possible values: fatal, error, warn, info, debug, trace and off. Default is "${defaultOptions.fileLogLevel}"`,
+        `Set the log level for the "stryker.log" file. Possible values: fatal, error, warn, info, debug, trace and off. Default is "${RENDERED_OPTION_DEFAULTS.fileLogLevel}"`,
       ),
       optional,
     ),
@@ -301,7 +303,7 @@ const runOptions = {
   cleanTempDir: Flag.string('cleanTempDir')
     .pipe(
       Flag.withDescription(
-        `Choose whether or not to clean the temp dir (which is "${defaultOptions.tempDirName}" inside the current working directory by default) after a run.\n- false: Never delete the temp dir;\n- true: Delete the tmp dir after a successful run;\n- always: Always delete the temp dir, regardless of whether the run was successful.`,
+        `Choose whether or not to clean the temp dir (which is "${RENDERED_OPTION_DEFAULTS.tempDirName}" inside the current working directory by default) after a run.\n- false: Never delete the temp dir;\n- true: Delete the tmp dir after a successful run;\n- always: Always delete the temp dir, regardless of whether the run was successful.`,
       ),
       Flag.map(parseCleanDirOption),
       optional,
@@ -527,7 +529,9 @@ const cliLayer = Layer.mergeAll(
   // `Stdio.layerTest` drains those sinks to nowhere, which swallowed every
   // framework-rendered document and left the process with nothing to show.
   NodeStdio.layer,
-  ChildProcessSpawnerLive,
+  NodeChildProcessSpawner.layer.pipe(
+    Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+  ),
 )
 /**
  * The transport entry: builds the command tree, resolves the mode once at

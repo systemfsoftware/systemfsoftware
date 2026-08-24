@@ -343,9 +343,11 @@ export function validateOptions(
   )
 }
 
-export function createDefaultOptions(): StrykerOptions {
-  const decoded = S.decodeEffect(StrykerOptionsSchema)({})
-  return Effect.runSync(decoded.pipe(Effect.orDie))
+export function createDefaultOptions(): Effect.Effect<StrykerOptions> {
+  return S.decodeEffect(StrykerOptionsSchema)({}).pipe(Effect.orDie)
 }
 
-export const defaultOptions: Immutable<StrykerOptions> = deepFreeze(createDefaultOptions())
+export const defaultOptions: Effect.Effect<Immutable<StrykerOptions>, never, never> = Effect.map(
+  createDefaultOptions(),
+  (opts) => deepFreeze(opts),
+)

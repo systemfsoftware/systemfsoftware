@@ -1,5 +1,6 @@
 import { Effect } from 'effect'
 import * as S from 'effect/Schema'
+import { RENDERED_OPTION_DEFAULTS } from './rendered-option-defaults.js'
 
 /**
  * The Stryker option set, declared as ONE Effect Schema.
@@ -130,7 +131,7 @@ export const StrykerOptionsSchema = S.StructWithRest(
       ]),
     ),
     commandRunner: defaulted(CommandRunnerOptionsSchema, {}),
-    coverageAnalysis: defaulted(CoverageAnalysisMode, 'perTest'),
+    coverageAnalysis: defaulted(CoverageAnalysisMode, RENDERED_OPTION_DEFAULTS.coverageAnalysis),
     clearTextReporter: defaulted(ClearTextReporterOptions, {}),
     dryRunOnly: defaulted(S.Boolean, false),
     ignorePatterns: defaulted(S.Array(S.String), []),
@@ -138,9 +139,9 @@ export const StrykerOptionsSchema = S.StructWithRest(
     incremental: defaulted(S.Boolean, false),
     incrementalFile: defaulted(S.String, 'reports/stryker-incremental.json'),
     force: defaulted(S.Boolean, false),
-    fileLogLevel: defaulted(LogLevel, 'off'),
+    fileLogLevel: defaulted(LogLevel, RENDERED_OPTION_DEFAULTS.fileLogLevel),
     inPlace: defaulted(S.Boolean, false),
-    logLevel: defaulted(LogLevel, 'info'),
+    logLevel: defaulted(LogLevel, RENDERED_OPTION_DEFAULTS.logLevel),
     maxConcurrentTestRunners: defaulted(S.Finite, 9007199254740991),
     maxTestRunnerReuse: defaulted(S.Finite, 0),
     mutate: defaulted(S.Array(S.String), [
@@ -156,7 +157,7 @@ export const StrykerOptionsSchema = S.StructWithRest(
     jsonReporter: defaulted(JsonReporterOptions, {}),
     disableTypeChecks: defaulted(S.Union([S.Boolean, S.String]), true),
     symlinkNodeModules: defaulted(S.Boolean, true),
-    tempDirName: defaulted(S.String, '.stryker-tmp'),
+    tempDirName: defaulted(S.String, RENDERED_OPTION_DEFAULTS.tempDirName),
     cleanTempDir: defaulted(S.Literals(['always', false, true]), true),
     testRunner: defaulted(S.String, 'command'),
     testRunnerNodeArgs: defaulted(S.Array(S.String), []),

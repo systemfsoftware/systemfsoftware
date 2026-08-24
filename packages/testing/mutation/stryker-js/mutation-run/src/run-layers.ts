@@ -6,10 +6,11 @@ import * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
 
 import { NodeFileSystem, NodePath } from '@effect/platform-node'
+import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChildProcessSpawner'
 
 import * as Scope from 'effect/Scope'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
-import { engineConsoleLogger, engineLogLevelHolder } from './engine-logger.js'
+import { EngineLogLevel, layer as engineLogLevelLayer, makeEngineLogger } from './engine-logger.js'
 import { RunEnvironment, type RunEnvironmentShape } from './run-environment.js'
 import { DryRunLogger } from './run-stages/dry-run-stage.js'
 import { dryRunStage } from './run-stages/dry-run-stage.js'
@@ -18,22 +19,13 @@ import { instrumentStage } from './run-stages/instrument-stage.js'
 import { MutationTestLogger } from './run-stages/mutation-test-stage.js'
 import { mutationTestStage } from './run-stages/mutation-test-stage.js'
 import { PrepareLogger, prepareStage } from './run-stages/prepare-stage.js'
-import { PrepareFailedError } from './run-stages/stage.schema.js'
-import { InstrumentFailedError } from './run-stages/stage.schema.js'
-import { DryRunFailedError, DryRunNoTestsError } from './run-stages/stage.schema.js'
+import { StageError } from './run-stages/stage.schema.js'
 import type { MutationRunStages } from './stryker.js'
-import { ChildProcessSpawnerLive } from './worker-pool/child-process-proxy.js'
-import type { IdGenerator } from './worker-pool/id-generator.js'
-import { makeIdGenerator } from './worker-pool/id-generator.js'
+import { IdGenerator, layer as idGeneratorLayer } from './worker-pool/id-generator.js'
 import { ChildProcessCrashedError, OutOfMemoryError } from './worker-pool/worker-pool.schema.js'
 
-export const IdGeneratorService = Context.Service<IdGenerator>('IdGenerator')
-
 type DefaultStagesError =
-  | PrepareFailedError
-  | InstrumentFailedError
-  | DryRunFailedError
-  | DryRunNoTestsError
+  | StageError
   | ChildProcessCrashedError
   | OutOfMemoryError
 type DefaultStagesContext =
@@ -47,16 +39,15 @@ type DefaultStagesContext =
   | Scope.Scope
   | IdGenerator
   | ChildProcessSpawner.ChildProcessSpawner
+  | EngineLogLevel
 export const defaultStages: MutationRunStages<unknown, DefaultStagesContext> = {
   prepare: prepareStage,
   instrument: instrumentStage,
   dryRun: dryRunStage,
   mutationTest: mutationTestStage,
 }
-const provideLogger = <A>(tag: Context.Service<A, Logger>): Layer.Layer<A> => Layer.succeed(tag, engineConsoleLogger)
-export const setEngineLogLevel = (level: typeof engineLogLevelHolder.current): void => {
-  engineLogLevelHolder.current = level
-}
+const provideLogger = <A>(tag: Context.Service<A, Logger>): Layer.Layer<A, never, EngineLogLevel> =>
+  Layer.effect(tag, Effect.map(EngineLogLevel, makeEngineLogger))
 export const makeRunLayer = (
   env: RunEnvironmentShape,
 ): Layer.Layer<
@@ -68,7 +59,8 @@ export const makeRunLayer = (
   | FileSystem.FileSystem
   | Path.Path
   | IdGenerator
-  | ChildProcessSpawner.ChildProcessSpawner,
+  | ChildProcessSpawner.ChildProcessSpawner
+  | EngineLogLevel,
   never,
   never
 > =>
@@ -80,6 +72,8 @@ export const makeRunLayer = (
     provideLogger(MutationTestLogger),
     NodeFileSystem.layer,
     NodePath.layer,
-    Layer.effect(IdGeneratorService, makeIdGenerator),
-    ChildProcessSpawnerLive,
-  )
+    idGeneratorLayer,
+    NodeChildProcessSpawner.layer.pipe(
+      Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+    ),
+  ).pipe(Layer.provideMerge(engineLogLevelLayer))

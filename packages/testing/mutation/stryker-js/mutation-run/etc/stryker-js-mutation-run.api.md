@@ -33,9 +33,6 @@ import * as Scope from 'effect/Scope';
 import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { TestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner';
 
-// @public (undocumented)
-export const ChildProcessSpawnerLive: Layer.Layer<ChildProcessSpawner.ChildProcessSpawner, never, never>;
-
 // Warning: (ae-forgotten-export) The symbol "DefaultStagesContext" needs to be exported by the entry point index.d.mts
 //
 // @public (undocumented)
@@ -46,9 +43,10 @@ export const defaultStages: MutationRunStages<unknown, DefaultStagesContext>;
 // Warning: (ae-forgotten-export) The symbol "DryRunLogger" needs to be exported by the entry point index.d.mts
 // Warning: (ae-forgotten-export) The symbol "MutationTestLogger" needs to be exported by the entry point index.d.mts
 // Warning: (ae-forgotten-export) The symbol "IdGenerator" needs to be exported by the entry point index.d.mts
+// Warning: (ae-forgotten-export) The symbol "EngineLogLevel" needs to be exported by the entry point index.d.mts
 //
 // @public (undocumented)
-export const makeRunLayer: (env: RunEnvironmentShape) => Layer.Layer<RunEnvironment | PrepareLogger | InstrumentLogger | DryRunLogger | MutationTestLogger | FileSystem.FileSystem | Path.Path | IdGenerator | ChildProcessSpawner.ChildProcessSpawner, never, never>;
+export const makeRunLayer: (env: RunEnvironmentShape) => Layer.Layer<RunEnvironment | PrepareLogger | InstrumentLogger | DryRunLogger | MutationTestLogger | FileSystem.FileSystem | Path.Path | IdGenerator | ChildProcessSpawner.ChildProcessSpawner | EngineLogLevel, never, never>;
 
 // @public
 export interface MutationRunStages<E, R> {

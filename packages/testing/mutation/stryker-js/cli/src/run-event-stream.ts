@@ -62,16 +62,20 @@ interface Emit {
 /**
  * The push adapter from the run's synchronous sink to the callback mailbox.
  * `Queue.offer`/`Queue.end` on an unbounded queue never block or fail, so the
- * sync sink can drive them with `Effect.runSync`. Defined at module scope,
- * outside any Effect expression.
+ * sync sink can drive them with `Effect.runSyncWith(ctx)` using the context
+ * captured where the sink is constructed. Takes the queue and the captured
+ * context, keeping the adapter pure with respect to its environment.
  */
-function queueEmit(queue: Queue.Queue<RunEvent, Cause.Done<void>>): Emit {
+function queueEmit(
+  queue: Queue.Queue<RunEvent, Cause.Done<void>>,
+  ctx: Context.Context<never>,
+): Emit {
   return {
     single: (event) => {
-      Effect.runSync(Queue.offer(queue, event))
+      Effect.runSyncWith(ctx)(Queue.offer(queue, event))
     },
     end: () => {
-      Effect.runSync(Queue.end(queue))
+      Effect.runSyncWith(ctx)(Queue.end(queue))
     },
   }
 }
@@ -149,7 +153,7 @@ const makeRunEventStream = (
   Effect.gen(function*() {
     const runId = generateRunId()
     const startedAt = yield* Clock.currentTimeMillis
-
+    const ctx = yield* Effect.context<never>()
     // The stream's live state. Shared between core's push path and the drain
     // fiber by design — single-threaded JS makes the cells safe, and the
     // module-state implementation this replaces worked the same way.
@@ -185,7 +189,7 @@ const makeRunEventStream = (
     const eventStream = Stream.callback<RunEvent>(
       (queue) =>
         Effect.sync(() => {
-          state.emit = queueEmit(queue)
+          state.emit = queueEmit(queue, ctx)
         }).pipe(Effect.andThen(Deferred.succeed(registered, undefined))),
     )
 

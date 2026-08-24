@@ -105,7 +105,8 @@ function globPluginModules(
     const plugins = pluginNames
       .filter((pluginName: string) => !IGNORED_PACKAGES.includes(pluginName) && regexp.test(pluginName))
       .map((pluginName: string) => `${org.length > 0 ? `${org}/` : ''}${pluginName}`)
-    if (plugins.length === 0 && !defaultOptions.plugins.includes(pluginExpression)) {
+    const defaults = yield* defaultOptions
+    if (plugins.length === 0 && !defaults.plugins.includes(pluginExpression)) {
       log.warn('Expression "%s" not resulted in plugins to load.', pluginExpression)
     }
     for (const plugin of plugins) {

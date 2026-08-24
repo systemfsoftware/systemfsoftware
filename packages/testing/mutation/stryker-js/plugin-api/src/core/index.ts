@@ -10,10 +10,12 @@ export * from './MutationRange.js'
 export * from './normalize-file-name.js'
 export type { Position } from './Position.js'
 export * from './property-path.js'
+export * from './rendered-option-defaults.js'
 export * from './ReportTypes.js'
 export * from './stryker-report-bug-url.js'
 export * from './StrykerCoreSchema.js'
 export * from './StrykerOptions.schema.js'
+
 /**
  * Re-export all members from "mutation-testing-report-schema" under the `schema` key
  */

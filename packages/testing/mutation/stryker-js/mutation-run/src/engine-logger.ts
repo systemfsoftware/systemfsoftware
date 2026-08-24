@@ -1,4 +1,8 @@
 import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import * as Context from 'effect/Context'
+import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
+import * as Ref from 'effect/Ref'
 import util from 'node:util'
 
 export const StrykerLogLevel = {
@@ -28,15 +32,6 @@ const isEnabled = (messageLevel: StrykerLogLevel, threshold: StrykerLogLevel): b
   return levelOrder[messageLevel] >= levelOrder[threshold]
 }
 
-// Mutable holder for the current threshold. Starts at 'info' (the schema default)
-// and is updated by the prepare stage once the real options are known. All
-// stage loggers read it dynamically, so a single holder covers all four.
-export const engineLogLevelHolder: { current: StrykerLogLevel } = { current: 'info' }
-
-export const setEngineLogLevel = (level: StrykerLogLevel): void => {
-  engineLogLevelHolder.current = level
-}
-
 const writeStderr = (line: string): void => {
   // Always stderr, never stdout — stdout carries the NDJSON stream in machine
   // mode and must stay parseable. A mode-gated logger has a failure mode where
@@ -47,8 +42,38 @@ const writeStderr = (line: string): void => {
 
 const format = (message: string, args: readonly unknown[]): string => util.format(message, ...args)
 
-export const engineConsoleLogger: Logger = (() => {
-  const should = (level: StrykerLogLevel): boolean => isEnabled(level, engineLogLevelHolder.current)
+/**
+ * The run's log threshold.
+ *
+ * `get`/`set` are the Effect surface. `currentUnsafe` exists because the
+ * `Logger` port is synchronous — `isInfoEnabled(): boolean`, not
+ * `Effect<boolean>` — so a logger method cannot yield. Reading the cell
+ * directly (`Ref.getUnsafe`, effect/Ref.ts:747) is what that contract allows;
+ * interpreting an Effect per log line would open a fresh edge inside a
+ * callback, which is the shape this engine exists without.
+ */
+export class EngineLogLevel extends Context.Service<
+  EngineLogLevel,
+  {
+    readonly get: Effect.Effect<StrykerLogLevel, never, never>
+    readonly set: (level: StrykerLogLevel) => Effect.Effect<void, never, never>
+    readonly currentUnsafe: () => StrykerLogLevel
+  }
+>()('@systemfsoftware/stryker-js-mutation-run/EngineLogLevel') {}
+
+const make = Effect.gen(function*() {
+  const ref = yield* Ref.make<StrykerLogLevel>('info')
+  return EngineLogLevel.of({
+    get: Ref.get(ref),
+    set: (level: StrykerLogLevel) => Ref.set(ref, level),
+    currentUnsafe: () => Ref.getUnsafe(ref),
+  })
+})
+
+export const layer = Layer.effect(EngineLogLevel)(make)
+
+export const makeEngineLogger = (service: EngineLogLevel['Service']): Logger => {
+  const should = (level: StrykerLogLevel): boolean => isEnabled(level, service.currentUnsafe())
   return {
     isTraceEnabled: () => should('trace'),
     isDebugEnabled: () => should('debug'),
@@ -75,4 +100,4 @@ export const engineConsoleLogger: Logger = (() => {
       if (should('fatal')) writeStderr(format(message, args))
     },
   }
-})()
+}

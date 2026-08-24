@@ -165,7 +165,7 @@ export const runStrykerCli = (
         const exit = yield* Effect.exit(restore(program))
         const code = resolveClassedExitCode(exit)
         if (input.mode.mode === 'machine') {
-          emitMachineModeOutput(stream, input.mode, exit, code, input.argv, basePath)
+          yield* emitMachineModeOutput(stream, input.mode, exit, code, input.argv, basePath)
         }
         yield* stream.closeAndDrain
         return code

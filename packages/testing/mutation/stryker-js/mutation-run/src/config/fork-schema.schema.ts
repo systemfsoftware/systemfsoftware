@@ -30,6 +30,17 @@ export const extendsPropertySchema = S.optionalKey(
  * property, so leaving them here would put `dashboard` and `eventReporter`
  * into the resolved options of runs whose config never mentioned them.
  * Dropping the fields removes the defaults with them.
+ *
+ * The `S.Record(S.String, S.Unknown)` rest (`S.Record` at `repos/effect/packages/effect/src/Schema.ts:3948`,
+ * `S.String` at `repos/effect/packages/effect/src/Schema.ts:3133`, `S.Unknown` at
+ * `repos/effect/packages/effect/src/Schema.ts:3083`, `S.StructWithRest` at
+ * `repos/effect/packages/effect/src/Schema.ts:4182`, `S.Struct` at `repos/effect/packages/effect/src/Schema.ts:3568`,
+ * `S.optionalKey` at `repos/effect/packages/effect/src/Schema.ts:2431`) is genuinely
+ * open: plugin-defined options, custom `ignorers`/`reporters`, and future keys
+ * must pass through without forking the schema per consumer. Values stay
+ * `S.Unknown` because the fork validates known keys via `StrykerOptionsSchema`
+ * fields and leaves unknown keys to the later `validateOptions` / `markExcessOptions`
+ * path rather than rejecting them here and changing the accepted surface.
  */
 export const forkOptionsSchema = S.StructWithRest(
   S.Struct({

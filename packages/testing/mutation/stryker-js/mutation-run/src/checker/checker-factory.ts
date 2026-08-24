@@ -3,7 +3,7 @@ import type { LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api
 import * as Effect from 'effect/Effect'
 import * as Scope from 'effect/Scope'
 
-import type { IdGenerator } from '../worker-pool/id-generator.js'
+import type { IdGeneratorShape } from '../worker-pool/id-generator.js'
 
 import { makeCheckerChildProcess } from './checker-child-process-proxy.js'
 import type { CheckerResourceService } from './checker-resource.js'
@@ -13,7 +13,7 @@ export const createCheckerFactory = (
   fileDescriptions: FileDescriptions,
   pluginModulePaths: readonly string[],
   getLogger: LoggerFactoryMethod,
-  idGenerator: IdGenerator,
+  idGenerator: IdGeneratorShape,
   workingDirectory: string,
 ): Effect.Effect<CheckerResourceService, unknown, Scope.Scope> =>
   makeCheckerChildProcess({

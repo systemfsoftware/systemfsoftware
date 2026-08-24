@@ -13,6 +13,7 @@ import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
+import * as ManagedRuntime from 'effect/ManagedRuntime'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as S from 'effect/Schema'
@@ -53,13 +54,24 @@ const noopLogger: Logger = {
 }
 
 const makeCheckerWorker = () => {
+  class CheckerNotFoundError extends S.TaggedError<CheckerNotFoundError>(
+    '~systemfsoftware/stryker-js/mutation-run/CheckerWorker/CheckerNotFoundError',
+  )('CheckerNotFoundError', {
+    checkerName: S.String,
+  }) {
+    override get message(): string {
+      return `Checker ${this.checkerName} does not exist!`
+    }
+  }
+
   let innerCheckers: HashMap.HashMap<string, Checker['Service']> | undefined = undefined
+  const runtime = ManagedRuntime.make(Layer.merge(NodeFileSystem.layer, NodePath.layer))
 
   const init = async (...args: unknown[]): Promise<void> => {
     if (innerCheckers !== undefined) {
       for (const [name, checker] of HashMap.toEntries(innerCheckers)) {
         try {
-          await Effect.runPromise(checker.init)
+          await runtime.runPromise(checker.init)
         } catch (error: unknown) {
           throw new StrykerError({
             message: `An error occurred during initialization of the "${name}" checker`,
@@ -77,7 +89,7 @@ const makeCheckerWorker = () => {
     }
     let options: StrykerOptions
     try {
-      options = await Effect.runPromise(S.decodeUnknownEffect(StrykerOptionsSchema)(args[0]))
+      options = await runtime.runPromise(S.decodeUnknownEffect(StrykerOptionsSchema)(args[0]))
     } catch (cause: unknown) {
       throw new StrykerError({
         message: 'CheckerWorker init received invalid StrykerOptions',
@@ -86,11 +98,7 @@ const makeCheckerWorker = () => {
     }
     let pluginsByKind
     try {
-      const loaded = await Effect.runPromise(
-        loadPlugins(options.plugins, noopLogger, process.cwd()).pipe(
-          Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)),
-        ),
-      )
+      const loaded = await runtime.runPromise(loadPlugins(options.plugins, noopLogger, process.cwd()))
       pluginsByKind = loaded.pluginsByKind
     } catch (cause: unknown) {
       throw new StrykerError({
@@ -98,7 +106,7 @@ const makeCheckerWorker = () => {
         cause,
       })
     }
-    const built = await Effect.runPromise(
+    const built = await runtime.runPromise(
       Effect.gen(function*() {
         let map = HashMap.empty<string, Checker['Service']>()
         for (const name of options.checkers) {
@@ -112,7 +120,7 @@ const makeCheckerWorker = () => {
     innerCheckers = built
     for (const [name, checker] of HashMap.toEntries(built)) {
       try {
-        await Effect.runPromise(checker.init)
+        await runtime.runPromise(checker.init)
       } catch (error: unknown) {
         throw new StrykerError({
           message: `An error occurred during initialization of the "${name}" checker`,
@@ -134,10 +142,10 @@ const makeCheckerWorker = () => {
     }
     const maybeChecker = HashMap.get(innerCheckers, checkerName)
     if (Option.isNone(maybeChecker)) {
-      throw new Error(`Checker ${checkerName} does not exist!`)
+      throw new CheckerNotFoundError({ checkerName })
     }
     const checker = maybeChecker.value
-    const resultMap = await Effect.runPromise(checker.check([...mutants]))
+    const resultMap = await runtime.runPromise(checker.check([...mutants]))
     return Object.fromEntries(resultMap.entries())
   }
 
@@ -153,10 +161,10 @@ const makeCheckerWorker = () => {
     }
     const maybeChecker = HashMap.get(innerCheckers, checkerName)
     if (Option.isNone(maybeChecker)) {
-      throw new Error(`Checker ${checkerName} does not exist!`)
+      throw new CheckerNotFoundError({ checkerName })
     }
     const checker = maybeChecker.value
-    return Effect.runPromise(checker.group([...mutants]))
+    return runtime.runPromise(checker.group([...mutants]))
   }
 
   return {

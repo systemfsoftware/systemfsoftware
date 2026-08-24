@@ -17,7 +17,7 @@ import type { FileDescriptions, StrykerOptions } from '@systemfsoftware/stryker-
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 
-import type { IdGenerator } from './id-generator.js'
+import type { IdGeneratorShape } from './id-generator.js'
 import { DELIMITER } from './ipc-framing.js'
 import { ChildProcessSpawner, net, nodeSpawn, resolveWorkerMainPath } from './ipc-transport.js'
 import { ChildProcessCrashedError, OutOfMemoryError } from './worker-pool.schema.js'
@@ -58,61 +58,6 @@ export interface ChildProcessProxyShape<T> {
   readonly pid: number
 }
 
-const spawnFn = (command: ChildProcess.Command) =>
-  Effect.gen(function*() {
-    if (!ChildProcess.isStandardCommand(command)) {
-      return yield* Effect.die(new Error('Only StandardCommand is supported'))
-    }
-    const cwd = command.options.cwd
-    const envOption = command.options.env
-    const extendEnv = command.options.extendEnv
-    const env = extendEnv && envOption !== undefined ? { ...process.env, ...envOption } : envOption ?? process.env
-    const child = nodeSpawn(command.command, [...command.args], { cwd, env, stdio: 'pipe' })
-    const exitDeferred = Deferred.makeUnsafe<readonly [number | null, NodeJS.Signals | null]>()
-    child.on('exit', (code, signal) => {
-      Deferred.doneUnsafe(exitDeferred, Effect.succeed([code, signal] as const))
-    })
-    child.on('error', (cause) => {
-      Deferred.doneUnsafe(exitDeferred, Effect.succeed([null, null] as const))
-      void cause
-    })
-    const scope = yield* Scope.Scope
-    const handle = ChildProcessSpawner.makeHandle({
-      pid: ChildProcessSpawner.ProcessId(child.pid ?? 0),
-      exitCode: Effect.map(Deferred.await(exitDeferred), ([code]) => ChildProcessSpawner.ExitCode(code ?? 0)),
-      isRunning: Effect.sync(() => child.exitCode === null && child.signalCode === null),
-      kill: () =>
-        Effect.sync(() => {
-          child.kill('SIGTERM')
-        }),
-      stdin: Sink.drain,
-      stdout: Stream.empty,
-      stderr: Stream.empty,
-      all: Stream.empty,
-      getInputFd: () => Sink.drain,
-      getOutputFd: () => Stream.empty,
-      unref: Effect.sync(() => {
-        child.unref()
-        return Effect.sync(() => {
-          child.ref()
-        })
-      }),
-    })
-    yield* Scope.addFinalizer(
-      scope,
-      Effect.ignore(handle.kill()).pipe(Effect.timeoutOrElse({
-        duration: DISPOSE_TIMEOUT_MS,
-        orElse: () => Effect.void,
-      })),
-    )
-    return handle
-  })
-
-const spawner = ChildProcessSpawner.make(spawnFn)
-export const ChildProcessSpawnerLive = Layer.succeed(
-  ChildProcessSpawner.ChildProcessSpawner,
-  spawner,
-)
 /** Every way acquiring a worker can fail before it is usable. */
 export type ChildProcessProxyError =
   | WorkerSocketNotTcpError
@@ -129,7 +74,7 @@ export const makeChildProcessProxy = <T>(params: {
   workingDirectory: string
   logger: Logger
   execArgv: readonly string[]
-  idGenerator: IdGenerator
+  idGenerator: IdGeneratorShape
 }): Effect.Effect<ChildProcessProxyShape<T>, ChildProcessProxyError, Scope.Scope> =>
   Effect.gen(function*() {
     const stdoutRef = yield* Ref.make('')
@@ -334,9 +279,49 @@ export const makeChildProcessProxy = <T>(params: {
           pid: ChildProcessSpawner.ProcessId(child.pid ?? 0),
           exitCode: Effect.map(Deferred.await(exitDeferred), ([code]) => ChildProcessSpawner.ExitCode(code ?? 0)),
           isRunning: Effect.sync(() => child.exitCode === null && child.signalCode === null),
-          kill: () =>
-            Effect.sync(() => {
-              child.kill('SIGTERM')
+          // The reference kill path, mirrored: a process group first so a worker's
+          // own children die with it, falling back to the bare pid when the group
+          // call fails, then escalating to SIGKILL once the child has been given
+          // DISPOSE_TIMEOUT_MS to exit on its own
+          // (repos/effect/packages/platform/node-shared/src/NodeChildProcessSpawner.ts:380,405,433,502-504).
+          // The spawn stays local rather than adopting NodeChildProcessSpawner.layer
+          // because that handle's `exitCode` fails with the prose
+          // "Process interrupted due to receipt of signal: '<sig>'" (ibid. 536-543),
+          // so the signal ChildProcessCrashedError carries as a typed field would
+          // have to be recovered by parsing an error message.
+          kill: (options?: ChildProcess.KillOptions) =>
+            Effect.suspend(() => {
+              const pid = child.pid
+              if (pid === undefined || child.exitCode !== null || child.signalCode !== null) {
+                return Effect.void
+              }
+              const signal = options?.killSignal ?? 'SIGTERM'
+              const forceAfter = options?.forceKillAfter ?? DISPOSE_TIMEOUT_MS
+              const signalGroup = Effect.try(() => {
+                process.kill(-pid, signal)
+              }).pipe(Effect.catch(() =>
+                Effect.sync(() => {
+                  child.kill(signal)
+                })
+              ))
+              return signalGroup.pipe(
+                Effect.andThen(
+                  Deferred.await(exitDeferred).pipe(
+                    Effect.timeoutOrElse({
+                      duration: forceAfter,
+                      orElse: () =>
+                        Effect.sync(() => {
+                          try {
+                            process.kill(-pid, 'SIGKILL')
+                          } catch {
+                            child.kill('SIGKILL')
+                          }
+                        }),
+                    }),
+                  ),
+                ),
+                Effect.asVoid,
+              )
             }),
           stdin: Sink.drain,
           stdout: Stream.empty,
@@ -351,13 +336,10 @@ export const makeChildProcessProxy = <T>(params: {
             })
           }),
         })
-        yield* Scope.addFinalizer(
-          scope,
-          Effect.ignore(handle.kill()).pipe(Effect.timeoutOrElse({
-            duration: DISPOSE_TIMEOUT_MS,
-            orElse: () => Effect.void,
-          })),
-        )
+        // `handle.kill` already group-signals, awaits the exit and escalates to
+        // SIGKILL, so wrapping it in a second timeout would cut the escalation off
+        // before it runs.
+        yield* Scope.addFinalizer(scope, Effect.ignore(handle.kill()))
         return handle
       })
     const localSpawner = ChildProcessSpawner.make(localSpawnFn)
@@ -563,6 +545,7 @@ if (import.meta.vitest !== undefined) {
     noop(): Promise<unknown>
     oom(): Promise<unknown>
     killSelf(): Promise<unknown>
+    ignoreSigterm(): Promise<unknown>
   }
 
   // Touch the private marker so `in-source-test-targets-private` is satisfied.
@@ -612,6 +595,28 @@ if (import.meta.vitest !== undefined) {
       await Effect.runPromise(shape.dispose.pipe(Effect.orDie))
       await Effect.runPromise(Scope.close(scope, Exit.succeed(undefined)))
     }
+  })
+
+  it('Should_KillTheChild_When_ItIgnoresTheFirstSignal', async () => {
+    const modulePath = new URL('./test-echo-worker.mjs', import.meta.url).pathname
+    const { shape, scope } = await Effect.runPromise(makeTestProxy(modulePath, 'TestEchoWorker'))
+    const pid = shape.pid
+    expect(pid).toBeGreaterThan(0)
+    await Effect.runPromise(shape.proxy.ignoreSigterm())
+    // The child now swallows SIGTERM, so a dispose that only signalled once would
+    // return while the process kept running. `process.kill(pid, 0)` throws ESRCH
+    // once it is really gone, which is what makes the escalation observable.
+    await Effect.runPromise(shape.dispose.pipe(Effect.orDie))
+    await Effect.runPromise(Scope.close(scope, Exit.succeed(undefined)))
+    const alive = (() => {
+      try {
+        process.kill(pid, 0)
+        return true
+      } catch {
+        return false
+      }
+    })()
+    expect(alive).toBe(false)
   })
 
   it('Should_RejectAndRemainUsable_When_MethodThrows', async () => {

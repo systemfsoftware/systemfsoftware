@@ -3,7 +3,7 @@ import type { MutantRunOptions } from '@systemfsoftware/stryker-js-plugin-api/te
 import * as Effect from 'effect/Effect'
 import * as Scope from 'effect/Scope'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
-import type { IdGenerator } from '../worker-pool/id-generator.js'
+import type { IdGeneratorShape } from '../worker-pool/id-generator.js'
 import type { PooledTestRunner } from './child-process-test-runner-proxy.js'
 import {
   commandRunnerCapabilities,
@@ -20,7 +20,7 @@ export interface TestRunnerBuildContext {
   readonly fileDescriptions: FileDescriptions
   readonly sandboxWorkingDirectory: string
   readonly pluginModulePaths: readonly string[]
-  readonly idGenerator: IdGenerator
+  readonly idGenerator: IdGeneratorShape
   /**
    * Retire this runner's worker. Supplied by whoever owns the worker's
    * lifetime — the pool — so a combinator never restarts a process the pool

@@ -2,6 +2,8 @@ import path from 'path'
 
 import { type MutantStatus, normalizeFileName, schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { ExitClass } from '@systemfsoftware/stryker-js-plugin-api/evaluate'
+import * as Option from 'effect/Option'
+import * as S from 'effect/Schema'
 import { calculateMutationTestMetrics } from 'mutation-testing-metrics'
 import { randomFillSync } from 'node:crypto'
 
@@ -112,7 +114,7 @@ const CROCKFORD_BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
  */
 export function generateRunId(): string {
   const bytes = new Uint8Array(16)
-  const now = Date.now()
+  const now = new Date().getTime()
   bytes[0] = (now / 0x10000000000) % 0x100
   bytes[1] = (now / 0x100000000) % 0x100
   bytes[2] = (now / 0x1000000) % 0x100
@@ -140,42 +142,45 @@ export function generateRunId(): string {
 
 /**
  * The resolved options the report helper embeds as `report.config` (it writes
- * `config: this.options`). Read through `in`-narrowing because the report
- * schema types `config` as `{}`, while the embedded value is our own resolved
- * options with their index signature.
+ * `config: this.options`). Decoded through a schema so the schema is the
+ * single source of the shape — the prior `in`-narrowing chain is deleted.
+ * The report schema types `config` as `{}`, while the runtime value is the full
+ * resolved `StrykerOptions` with its index signature; `StructWithRest` allows
+ * the extra keys.
  */
 function embeddedConfig(
   report: schema.MutationTestResult,
 ): {
   readonly jsonReporterFileName: string | undefined
 } {
-  const config = report.config
-  let jsonReporterFileName: string | undefined
-  if (typeof config === 'object' && config !== null) {
-    if (
-      'jsonReporter' in config &&
-      typeof config.jsonReporter === 'object' &&
-      config.jsonReporter !== null &&
-      'fileName' in config.jsonReporter &&
-      typeof config.jsonReporter.fileName === 'string'
-    ) {
-      jsonReporterFileName = config.jsonReporter.fileName
-    }
+  const JsonReporterSchema = S.Struct({
+    fileName: S.String,
+  })
+  const EmbeddedConfigSchema = S.StructWithRest(
+    S.Struct({
+      jsonReporter: S.optional(JsonReporterSchema),
+    }),
+    [S.Record(S.String, S.Unknown)],
+  )
+  const decoded = S.decodeUnknownOption(EmbeddedConfigSchema)(report.config)
+  if (Option.isNone(decoded)) {
+    return { jsonReporterFileName: undefined }
   }
-  return { jsonReporterFileName }
+  return { jsonReporterFileName: decoded.value.jsonReporter?.fileName }
 }
 
 function breakThreshold(thresholds: schema.Thresholds): number | null {
-  if ('break' in thresholds) {
-    const breakValue = thresholds.break
-    if (typeof breakValue === 'number') {
-      return breakValue
-    }
-    if (breakValue === null) {
-      return null
-    }
+  const ThresholdsBreakSchema = S.StructWithRest(
+    S.Struct({
+      break: S.optional(S.Union([S.Number, S.Null])),
+    }),
+    [S.Record(S.String, S.Unknown)],
+  )
+  const decoded = S.decodeUnknownOption(ThresholdsBreakSchema)(thresholds)
+  if (Option.isNone(decoded)) {
+    return null
   }
-  return null
+  return decoded.value.break ?? null
 }
 
 export function buildVerdictEnvelope(

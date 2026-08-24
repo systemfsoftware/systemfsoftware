@@ -15,7 +15,7 @@ import * as Match from 'effect/Match'
 import type * as Scope from 'effect/Scope'
 
 import { type ChildProcessProxyError, makeChildProcessProxy } from '../worker-pool/child-process-proxy.js'
-import type { IdGenerator } from '../worker-pool/id-generator.js'
+import type { IdGeneratorShape } from '../worker-pool/id-generator.js'
 import type { ChildProcessCrashedError, OutOfMemoryError } from '../worker-pool/worker-pool.schema.js'
 import type { WorkerMethodError } from '../worker-pool/worker-protocol.schema.js'
 type TestRunnerWorkerShape = {
@@ -35,7 +35,7 @@ export interface ChildProcessTestRunnerParams {
   readonly sandboxWorkingDirectory: string
   readonly pluginModulePaths: readonly string[]
   readonly logger: Logger
-  readonly idGenerator: IdGenerator
+  readonly idGenerator: IdGeneratorShape
 }
 
 /** How a call on a pooled worker can fail. */

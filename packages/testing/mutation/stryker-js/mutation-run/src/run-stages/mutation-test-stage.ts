@@ -29,13 +29,12 @@ import { makeMutationReportingService } from '../reporting/mutation-reporting.js
 import type { MutationReportingService } from '../reporting/mutation-reporting.js'
 import { checkStatusToMutantStatus, mapRunResult, toSchemaLocation } from '../reporting/mutation-reporting.kernel.js'
 import { RunEnvironment } from '../run-environment.js'
-import { IdGeneratorService } from '../run-layers.js'
 import type { SandboxHandle } from '../sandbox/sandbox.js'
 import { StrykerError } from '../stryker-error.schema.js'
 import { makeChildProcessTestRunner } from '../test-runner/child-process-test-runner-proxy.js'
 import type { PooledTestRunner } from '../test-runner/child-process-test-runner-proxy.js'
 import { humanReadableElapsed } from '../timer.js'
-import type { IdGenerator } from '../worker-pool/id-generator.js'
+import { IdGenerator } from '../worker-pool/id-generator.js'
 import { ChildProcessCrashedError, OutOfMemoryError } from '../worker-pool/worker-pool.schema.js'
 import type { DryRunDone, MutationTestStage } from './stage-results.js'
 export class MutationTestLogger extends Context.Service<MutationTestLogger, Logger>()('MutationTestLogger') {}
@@ -138,7 +137,7 @@ export const mutationTestStage: MutationTestStage<
       }
       return maybeReporter.value
     })
-    const idGenerator = yield* IdGeneratorService
+    const idGenerator = yield* IdGenerator
     const hasCheckers = prev.options.checkers.length > 0
     const checkerPool: Pool.Pool<CheckerResourceService, unknown> | undefined = hasCheckers
       ? yield* Pool.make({

@@ -24,6 +24,13 @@ export const TestEchoWorker = {
   killSelf() {
     return new Promise(() => {})
   },
+  // Installs a SIGTERM handler that does nothing, so the worker survives the
+  // first signal a dispose sends. Pins the escalation: without a follow-up
+  // SIGKILL this child outlives the run.
+  ignoreSigterm() {
+    process.on('SIGTERM', () => {})
+    return true
+  },
 }
 
 /**

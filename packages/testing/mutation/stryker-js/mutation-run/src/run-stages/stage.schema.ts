@@ -2,41 +2,34 @@ import * as S from 'effect/Schema'
 
 import { ExitClass } from '../exit-classification.js'
 
-export class PrepareFailedError extends S.TaggedError<PrepareFailedError>()(
-  'PrepareFailedError',
-  {
-    reason: S.String,
-    cause: S.optional(S.Unknown),
-  },
-) {
-  readonly exitClass = ExitClass.ConfigError
-}
+const TypeId = '~stryker/mutation-run/StageError' as const
 
-export class InstrumentFailedError extends S.TaggedError<InstrumentFailedError>()(
-  'InstrumentFailedError',
-  {
-    reason: S.String,
-    cause: S.optional(S.Unknown),
-  },
-) {
-  readonly exitClass = ExitClass.RuntimeError
-}
+export class StageError extends S.TaggedError<StageError>(TypeId)('StageError', {
+  stage: S.Literals(['prepare', 'instrument', 'dryRun', 'dryRunNoTests']),
+  reason: S.String,
+  cause: S.optional(S.Defect()),
+  command: S.optional(S.String),
+}) {
+  readonly [TypeId] = TypeId
 
-export class DryRunNoTestsError extends S.TaggedError<DryRunNoTestsError>()(
-  'DryRunNoTestsError',
-  {
-    reason: S.String,
-  },
-) {
-  readonly exitClass = ExitClass.ConfigError
-}
+  get exitClass(): ExitClass {
+    switch (this.stage) {
+      case 'prepare':
+      case 'dryRunNoTests':
+        return ExitClass.ConfigError
+      case 'instrument':
+      case 'dryRun':
+        return ExitClass.RuntimeError
+    }
+  }
 
-export class DryRunFailedError extends S.TaggedError<DryRunFailedError>()(
-  'DryRunFailedError',
-  {
-    reason: S.String,
-    cause: S.optional(S.Unknown),
-  },
-) {
-  readonly exitClass = ExitClass.RuntimeError
+  override get message(): string {
+    const label = this.stage === 'prepare'
+      ? 'Prepare'
+      : this.stage === 'instrument'
+      ? 'Instrument'
+      : 'Dry run'
+    const base = `${label} failed: ${this.reason}`
+    return this.command ? `${base} (command: ${this.command})` : base
+  }
 }

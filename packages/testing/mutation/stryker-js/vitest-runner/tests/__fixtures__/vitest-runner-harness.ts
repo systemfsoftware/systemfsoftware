@@ -53,6 +53,7 @@ export const runnerContext = (
 ): Effect.Effect<RunnerContext, never, Scope> =>
   Effect.acquireRelease(
     Effect.gen(function*() {
+      const ctx = yield* Effect.context<never>()
       const sandbox = new TempTestDirectorySandbox(project)
       yield* Effect.promise(() => sandbox.init())
       const options = createStrykerOptions()
@@ -73,11 +74,12 @@ export const runnerContext = (
       const context = yield* Layer.build(layer)
       const service = Context.get(context, TestRunner)
       const sut = {
-        init: () => Effect.runPromise(service.init),
-        dryRun: (opts: Parameters<TestRunner['Service']['dryRun']>[0]) => Effect.runPromise(service.dryRun(opts)),
+        init: () => Effect.runPromiseWith(ctx)(service.init),
+        dryRun: (opts: Parameters<TestRunner['Service']['dryRun']>[0]) =>
+          Effect.runPromiseWith(ctx)(service.dryRun(opts)),
         mutantRun: (opts: Parameters<TestRunner['Service']['mutantRun']>[0]) =>
-          Effect.runPromise(service.mutantRun(opts)),
-        dispose: () => Effect.runPromise(service.dispose),
+          Effect.runPromiseWith(ctx)(service.mutantRun(opts)),
+        dispose: () => Effect.runPromiseWith(ctx)(service.dispose),
       }
       return { sut: sut, options, sandbox }
     }),
@@ -100,6 +102,7 @@ export const twoRunnersContext = (
 ): Effect.Effect<TwoRunnersContext, unknown, Scope> =>
   Effect.acquireRelease(
     Effect.gen(function*() {
+      const ctx = yield* Effect.context<never>()
       const sandbox1 = new TempTestDirectorySandbox(project)
       yield* Effect.promise(() => sandbox1.init())
       const sandbox2 = new TempTestDirectorySandbox(project)
@@ -133,20 +136,20 @@ export const twoRunnersContext = (
       yield* Effect.promise(() => fs.promises.access(setupFile2))
       const runner1: RunnerContext = {
         sut: {
-          init: () => Effect.runPromise(service1.init),
-          dryRun: (opts) => Effect.runPromise(service1.dryRun(opts)),
-          mutantRun: (opts) => Effect.runPromise(service1.mutantRun(opts)),
-          dispose: () => Effect.runPromise(service1.dispose),
+          init: () => Effect.runPromiseWith(ctx)(service1.init),
+          dryRun: (opts) => Effect.runPromiseWith(ctx)(service1.dryRun(opts)),
+          mutantRun: (opts) => Effect.runPromiseWith(ctx)(service1.mutantRun(opts)),
+          dispose: () => Effect.runPromiseWith(ctx)(service1.dispose),
         },
         options: options1,
         sandbox: sandbox1,
       }
       const runner2: RunnerContext = {
         sut: {
-          init: () => Effect.runPromise(service2.init),
-          dryRun: (opts) => Effect.runPromise(service2.dryRun(opts)),
-          mutantRun: (opts) => Effect.runPromise(service2.mutantRun(opts)),
-          dispose: () => Effect.runPromise(service2.dispose),
+          init: () => Effect.runPromiseWith(ctx)(service2.init),
+          dryRun: (opts) => Effect.runPromiseWith(ctx)(service2.dryRun(opts)),
+          mutantRun: (opts) => Effect.runPromiseWith(ctx)(service2.mutantRun(opts)),
+          dispose: () => Effect.runPromiseWith(ctx)(service2.dispose),
         },
         options: options2,
         sandbox: sandbox2,

@@ -6,9 +6,9 @@ import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Match from 'effect/Match'
 import * as Path from 'effect/Path'
+import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-
-import { ConfigDocumentSchema } from './config-document.schema.js'
+import { ConfigDocumentSchema, ImportedModuleSchema } from './config-document.schema.js'
 import { SUPPORTED_CONFIG_FILE_NAMES } from './config-file-formats.js'
 import { mergeRecords } from './config-merge.workflow.js'
 import { ConfigFileInvalidError, ConfigFileNotFoundError, ConfigFileUnreadableError } from './config-reader.schema.js'
@@ -50,10 +50,13 @@ function exists(fileName: string): Effect.Effect<boolean, ConfigFileUnreadableEr
     )
   })
 }
-
 function findConfigFile(
   configFileName: unknown,
 ): Effect.Effect<string | undefined, ConfigFileNotFoundError | ConfigFileUnreadableError, FileSystem.FileSystem> {
+  // CLI plumbing, not config document validation: `configFile` is `string | undefined`
+  // from `PartialStrykerOptions` (the CLI option). This branch decides
+  // "explicit file vs. auto-search", not whether a document is valid.
+  // A schema decode (`S.String`) would be pedantic here and change nothing.
   if (typeof configFileName === 'string') {
     return exists(configFileName).pipe(
       Effect.flatMap((doesExist) =>
@@ -90,14 +93,11 @@ function readJsonConfig(
       try: () => JSON.parse(fileContent) as unknown,
       catch: (cause) => new ConfigFileInvalidError({ file: configFile, cause }),
     })
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return yield* new ConfigFileInvalidError({
-        file: configFile,
-        cause: 'Config must be a JSON object',
-      })
-    }
-    const recordSchema = S.Record(S.String, S.Unknown)
-    return yield* S.decodeUnknownEffect(recordSchema)(parsed).pipe(
+    // Hand-written `null`/`typeof`/`Array.isArray` record check replaced by
+    // `ConfigDocumentSchema` decode: `S.Record(S.String, S.Unknown)` at
+    // `repos/effect/packages/effect/src/Schema.ts:3948` decides object-ness and
+    // is the single boundary for JSON config documents.
+    return yield* S.decodeUnknownEffect(ConfigDocumentSchema)(parsed).pipe(
       Effect.mapError((cause) => new ConfigFileInvalidError({ file: configFile, cause })),
     )
   })
@@ -123,43 +123,60 @@ function importJSConfig(
 ): Effect.Effect<Record<string, unknown>, ConfigFileUnreadableError | ConfigFileInvalidError, Path.Path> {
   return Effect.gen(function*() {
     const importedModule = yield* importJSConfigModule(configFile, basePath)
-    const hasDefaultExport = importedModule !== null && typeof importedModule === 'object' &&
-      'default' in importedModule
-    if (hasDefaultExport) {
-      const maybeOptions: unknown = Reflect.get(importedModule, 'default')
-      if (typeof maybeOptions !== 'object' || maybeOptions === null) {
-        if (typeof maybeOptions === 'function') {
-          log.fatal(
-            `Invalid config file. Exporting a function is no longer supported. Please export an object with your configuration instead, or use a "stryker.conf.json" file.\n${CONFIG_SYNTAX_HELP}`,
-          )
-        } else {
-          log.fatal(
-            `Invalid config file. It must export an object, found a "${typeof maybeOptions}"!\n${CONFIG_SYNTAX_HELP}`,
-          )
-        }
-        return yield* new ConfigFileInvalidError({
-          file: configFile,
-          cause: 'Default export of config file must be an object!',
-        })
-      }
-      const keys = Object.keys(maybeOptions)
-      if (keys.length === 0) {
-        log.warn(`Stryker options were empty. Did you forget to export options from ${configFile}?`)
-      }
-      const decoded = yield* S.decodeUnknownEffect(ConfigDocumentSchema)(maybeOptions).pipe(
-        Effect.mapError((cause) => new ConfigFileInvalidError({ file: configFile, cause })),
+    // `'default' in` narrowing replaced by `ImportedModuleSchema` decode
+    // (`S.Struct` at `repos/effect/packages/effect/src/Schema.ts:3568`,
+    // `S.optional` at `repos/effect/packages/effect/src/Schema.ts:2498`).
+    // A decode failure (e.g. namespace not an object) is treated as missing
+    // default so the named-export hint is still produced.
+    const decodedResult = S.decodeUnknownResult(ImportedModuleSchema)(importedModule)
+    if (Result.isFailure(decodedResult)) {
+      log.fatal(
+        `Invalid config file. It is missing a default export. ${
+          describeNamedExports(importedModule)
+        }\n${CONFIG_SYNTAX_HELP}`,
       )
-      return { ...decoded }
+      return yield* new ConfigFileInvalidError({ file: configFile, cause: decodedResult.failure })
     }
-    log.fatal(
-      `Invalid config file. It is missing a default export. ${
-        describeNamedExports(importedModule)
-      }\n${CONFIG_SYNTAX_HELP}`,
+    const decodedModule = decodedResult.success
+    const maybeOptions = decodedModule.default
+    if (maybeOptions === undefined) {
+      log.fatal(
+        `Invalid config file. It is missing a default export. ${
+          describeNamedExports(importedModule)
+        }\n${CONFIG_SYNTAX_HELP}`,
+      )
+      return yield* new ConfigFileInvalidError({
+        file: configFile,
+        cause: 'Config file must have a default export!',
+      })
+    }
+    // Tailored fatal for function vs non-object: `ImportedModuleSchema` keeps
+    // `default` as `S.Unknown` so this distinction survives. Decoding `default`
+    // as `S.Record` would collapse both to a generic schema error and lose the
+    // "Exporting a function is no longer supported" hint.
+    if (typeof maybeOptions !== 'object' || maybeOptions === null) {
+      if (typeof maybeOptions === 'function') {
+        log.fatal(
+          `Invalid config file. Exporting a function is no longer supported. Please export an object with your configuration instead, or use a "stryker.conf.json" file.\n${CONFIG_SYNTAX_HELP}`,
+        )
+      } else {
+        log.fatal(
+          `Invalid config file. It must export an object, found a "${typeof maybeOptions}"!\n${CONFIG_SYNTAX_HELP}`,
+        )
+      }
+      return yield* new ConfigFileInvalidError({
+        file: configFile,
+        cause: 'Default export of config file must be an object!',
+      })
+    }
+    const keys = Object.keys(maybeOptions)
+    if (keys.length === 0) {
+      log.warn(`Stryker options were empty. Did you forget to export options from ${configFile}?`)
+    }
+    const decoded = yield* S.decodeUnknownEffect(ConfigDocumentSchema)(maybeOptions).pipe(
+      Effect.mapError((cause) => new ConfigFileInvalidError({ file: configFile, cause })),
     )
-    return yield* new ConfigFileInvalidError({
-      file: configFile,
-      cause: 'Config file must have a default export!',
-    })
+    return { ...decoded }
   })
 }
 
@@ -186,6 +203,10 @@ function loadOptionsFromConfigFile(
         const child = ext === '.json'
           ? yield* readJsonConfig(configFile)
           : yield* importJSConfig(configFile, log, basePath)
+        // Cheap presence test to avoid async `resolveExtends` when no `extends`
+        // key is present. Validation of `extends` value (must be string) happens
+        // inside `resolveExtends` via schema; this `in` check is just a fast
+        // path, not a shape predicate a schema would decide.
         if (!('extends' in child)) {
           return child
         }
@@ -223,6 +244,8 @@ export function readConfig(
 }
 
 function describeNamedExports(importedModule: unknown): string {
+  // Introspection for the "missing default export" hint, not validation:
+  // lists named exports so the operator knows what the module did export.
   const namedExports: string[] = typeof importedModule === 'object' && importedModule !== null
     ? Object.keys(importedModule)
     : []

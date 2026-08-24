@@ -13,13 +13,12 @@ import * as Scope from 'effect/Scope'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 import fs from 'node:fs'
 import { testCoverageFrom } from '../mutants/test-coverage.js'
-import { IdGeneratorService } from '../run-layers.js'
 import { makeChildProcessTestRunner } from '../test-runner/child-process-test-runner-proxy.js'
 import { buildTestRunner } from '../test-runner/index.js'
 import { elapsedMs, humanReadableElapsed, markTimer } from '../timer.js'
-import type { IdGenerator } from '../worker-pool/id-generator.js'
+import { IdGenerator } from '../worker-pool/id-generator.js'
 import type { DryRunDone, DryRunStage, InstrumentDone } from './stage-results.js'
-import { DryRunFailedError, DryRunNoTestsError } from './stage.schema.js'
+import { StageError } from './stage.schema.js'
 const INITIAL_TEST_RUN_MARKER = 'Initial test run'
 
 export class DryRunLogger extends Context.Service<DryRunLogger, Logger>()('DryRunLogger') {}
@@ -41,12 +40,12 @@ const noopReporter: ReporterService = {
 }
 
 export const dryRunStage: DryRunStage<
-  DryRunFailedError | DryRunNoTestsError,
+  StageError,
   DryRunLogger | Scope.Scope | IdGenerator | ChildProcessSpawner.ChildProcessSpawner
 > = (prev) =>
   Effect.gen(function*() {
     const log = yield* DryRunLogger
-    const idGenerator = yield* IdGeneratorService
+    const idGenerator = yield* IdGenerator
 
     const reporterService: ReporterService = yield* Effect.gen(function*() {
       if (prev.options.reporters.length === 0) {
@@ -54,7 +53,8 @@ export const dryRunStage: DryRunStage<
       }
       const layerOpt = prev.plugins.layer
       if (Option.isNone(layerOpt)) {
-        return yield* new DryRunFailedError({
+        return yield* new StageError({
+          stage: 'dryRun',
           reason: `Reporters [${
             prev.options.reporters.join(', ')
           }] configured but no plugin layer is available (no plugins loaded)`,
@@ -66,7 +66,8 @@ export const dryRunStage: DryRunStage<
       )
       const maybeReporter = Context.getOption(ctx, Reporter)
       if (Option.isNone(maybeReporter)) {
-        return yield* new DryRunFailedError({
+        return yield* new StageError({
+          stage: 'dryRun',
           reason: `Reporter service not found in plugin context; configured reporters: ${
             prev.options.reporters.join(', ')
           }`,
@@ -110,21 +111,21 @@ export const dryRunStage: DryRunStage<
             files,
             ...(testFiles !== undefined ? { testFiles } : {}),
           })
-          .pipe(Effect.mapError((cause) => new DryRunFailedError({ reason: 'Dry run failed', cause })))
+          .pipe(Effect.mapError((cause) => new StageError({ stage: 'dryRun', reason: 'Dry run failed', cause })))
         const nowAfter = yield* Clock.currentTimeMillis
         const gross = elapsedMs(timerWithMark, nowAfter, INITIAL_TEST_RUN_MARKER)
         const capabilities = yield* runner.capabilities.pipe(
           Effect.mapError((cause) =>
-            new DryRunFailedError({ reason: 'Failed to get test runner capabilities', cause })
+            new StageError({ stage: 'dryRun', reason: 'Failed to get test runner capabilities', cause })
           ),
         )
         return { rawResult, capabilities, gross }
       }),
     ).pipe(Effect.mapError((cause) => {
-      if (cause instanceof DryRunFailedError || cause instanceof DryRunNoTestsError) {
+      if (cause instanceof StageError) {
         return cause
       }
-      return new DryRunFailedError({ reason: 'Dry run failed to start test runner', cause })
+      return new StageError({ stage: 'dryRun', reason: 'Dry run failed to start test runner', cause })
     }))
 
     if (rawResult.status === DryRunStatus.Complete) {
@@ -133,7 +134,8 @@ export const dryRunStage: DryRunStage<
       }
 
       if (rawResult.tests.length === 0 && !prev.options.allowEmpty) {
-        return yield* new DryRunNoTestsError({
+        return yield* new StageError({
+          stage: 'dryRunNoTests',
           reason: 'No tests were executed. Stryker will exit prematurely. Please check your configuration.',
         })
       }
@@ -147,30 +149,31 @@ export const dryRunStage: DryRunStage<
           message += `\n\t${test.name}\n\t\t${test.failureMessage}`
         }
         log.error(message)
-        return yield* new DryRunFailedError({ reason: 'There were failed tests in the initial test run.' })
+        return yield* new StageError({ stage: 'dryRun', reason: 'There were failed tests in the initial test run.' })
       }
 
-      for (const test of rawResult.tests) {
-        if (test.fileName !== undefined) {
-          test.fileName = prev.sandbox.originalFileFor(test.fileName)
-        }
-      }
+      const tests = rawResult.tests.map((test) =>
+        test.fileName !== undefined
+          ? { ...test, fileName: prev.sandbox.originalFileFor(test.fileName) }
+          : test
+      )
+      const dryRunResult = { ...rawResult, tests }
 
-      const net = rawResult.tests.reduce((total, test) => total + test.timeSpentMs, 0)
+      const net = tests.reduce((total, test) => total + test.timeSpentMs, 0)
       const overhead = gross - net < 0 ? 0 : gross - net
       const timing = { net, overhead }
 
-      const testCoverage = testCoverageFrom(rawResult, log)
+      const testCoverage = testCoverageFrom(dryRunResult, log)
 
       yield* reporterService
-        .onDryRunCompleted({ result: rawResult, timing, capabilities })
+        .onDryRunCompleted({ result: dryRunResult, timing, capabilities })
         .pipe(Effect.ignoreCause)
 
-      if (rawResult.tests.length === 0) {
+      if (tests.length === 0) {
         log.info('No tests were found')
       } else {
         log.info(
-          `Initial test run succeeded. Ran ${rawResult.tests.length} tests in ${
+          `Initial test run succeeded. Ran ${tests.length} tests in ${
             humanReadableElapsed(timerWithMark, yield* Clock.currentTimeMillis, INITIAL_TEST_RUN_MARKER)
           } (net ${timing.net} ms, overhead ${timing.overhead} ms).`,
         )
@@ -178,7 +181,7 @@ export const dryRunStage: DryRunStage<
 
       return {
         ...prev,
-        dryRunResult: rawResult,
+        dryRunResult,
         testCoverage,
         timeOverheadMS: overhead,
       } satisfies DryRunDone
@@ -186,9 +189,9 @@ export const dryRunStage: DryRunStage<
 
     if (rawResult.status === DryRunStatus.Error) {
       log.error(`One or more tests resulted in an error:\n\t${rawResult.errorMessage}`)
-      return yield* new DryRunFailedError({ reason: rawResult.errorMessage })
+      return yield* new StageError({ stage: 'dryRun', reason: rawResult.errorMessage })
     }
 
     log.error('Initial test run timed out!')
-    return yield* new DryRunFailedError({ reason: rawResult.reason ?? 'Initial test run timed out' })
+    return yield* new StageError({ stage: 'dryRun', reason: rawResult.reason ?? 'Initial test run timed out' })
   })

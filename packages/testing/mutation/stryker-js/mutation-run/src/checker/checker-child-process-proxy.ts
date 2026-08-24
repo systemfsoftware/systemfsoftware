@@ -7,7 +7,7 @@ import * as Effect from 'effect/Effect'
 import * as Scope from 'effect/Scope'
 
 import { makeChildProcessProxy } from '../worker-pool/child-process-proxy.js'
-import type { IdGenerator } from '../worker-pool/id-generator.js'
+import type { IdGeneratorShape } from '../worker-pool/id-generator.js'
 import { ChildProcessCrashedError } from '../worker-pool/worker-pool.schema.js'
 import type { WorkerMethodError } from '../worker-pool/worker-protocol.schema.js'
 import type { CheckerResourceService } from './checker-resource.js'
@@ -25,7 +25,7 @@ export const makeCheckerChildProcess = (params: {
   readonly workingDirectory: string
   readonly logger: Logger
   readonly execArgv: readonly string[]
-  readonly idGenerator: IdGenerator
+  readonly idGenerator: IdGeneratorShape
 }): Effect.Effect<CheckerResourceService, unknown, Scope.Scope> =>
   Effect.gen(function*() {
     const shape = yield* makeChildProcessProxy<CheckerWorkerShape>({

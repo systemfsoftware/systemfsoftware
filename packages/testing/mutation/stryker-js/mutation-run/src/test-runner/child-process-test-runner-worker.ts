@@ -15,6 +15,7 @@ import type {
 import { DryRunStatus, MutantRunStatus, TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
+import * as ManagedRuntime from 'effect/ManagedRuntime'
 import * as S from 'effect/Schema'
 import { StrykerError } from '../stryker-error.schema.js'
 
@@ -40,6 +41,7 @@ const noopLogger: Logger = {
 
 const makeChildProcessTestRunnerWorker = () => {
   let underlying: TestRunner['Service'] | undefined = undefined
+  const runtime = ManagedRuntime.make(Layer.merge(NodeFileSystem.layer, NodePath.layer))
 
   const capabilities = async (): Promise<TestRunnerCapabilities> => {
     if (underlying === undefined) {
@@ -48,12 +50,12 @@ const makeChildProcessTestRunnerWorker = () => {
         cause: undefined,
       })
     }
-    return Effect.runPromise(underlying.capabilities)
+    return runtime.runPromise(underlying.capabilities)
   }
 
   const init = async (...args: unknown[]): Promise<void> => {
     if (underlying !== undefined) {
-      await Effect.runPromise(underlying.init)
+      await runtime.runPromise(underlying.init)
       return
     }
     if (args.length === 0) {
@@ -64,7 +66,7 @@ const makeChildProcessTestRunnerWorker = () => {
     }
     let options: StrykerOptions
     try {
-      options = await Effect.runPromise(S.decodeUnknownEffect(StrykerOptionsSchema)(args[0]))
+      options = await runtime.runPromise(S.decodeUnknownEffect(StrykerOptionsSchema)(args[0]))
     } catch (cause: unknown) {
       throw new StrykerError({
         message: 'ChildProcessTestRunnerWorker init received invalid StrykerOptions',
@@ -73,11 +75,7 @@ const makeChildProcessTestRunnerWorker = () => {
     }
     let pluginsByKind
     try {
-      const loaded = await Effect.runPromise(
-        loadPlugins(options.plugins, noopLogger, process.cwd()).pipe(
-          Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)),
-        ),
-      )
+      const loaded = await runtime.runPromise(loadPlugins(options.plugins, noopLogger, process.cwd()))
       pluginsByKind = loaded.pluginsByKind
     } catch (cause: unknown) {
       throw new StrykerError({
@@ -85,7 +83,7 @@ const makeChildProcessTestRunnerWorker = () => {
         cause,
       })
     }
-    const built = await Effect.runPromise(
+    const built = await runtime.runPromise(
       Effect.gen(function*() {
         const contribution = yield* create(pluginsByKind, PluginKind.TestRunner, options.testRunner)
         const runner = yield* Effect.gen(function*() {
@@ -100,14 +98,15 @@ const makeChildProcessTestRunnerWorker = () => {
       ),
     )
     underlying = built
-    await Effect.runPromise(built.init)
+    await runtime.runPromise(built.init)
   }
 
   const dispose = async (): Promise<void> => {
     if (underlying === undefined) {
       return
     }
-    await Effect.runPromise(underlying.dispose)
+    await runtime.runPromise(underlying.dispose)
+    await runtime.dispose()
   }
 
   const dryRun = async (options: DryRunOptions): Promise<DryRunResult> => {
@@ -117,9 +116,9 @@ const makeChildProcessTestRunnerWorker = () => {
         cause: undefined,
       })
     }
-    const result = await Effect.runPromise(underlying.dryRun(options))
+    const result = await runtime.runPromise(underlying.dryRun(options))
     if (result.status === DryRunStatus.Complete && !result.mutantCoverage && options.coverageAnalysis !== 'off') {
-      const decoded = await Effect.runPromise(
+      const decoded = await runtime.runPromise(
         S.decodeUnknownEffect(S.optional(MutantCoverageSchema))(globalThis.__mutantCoverage__).pipe(
           Effect.orElseSucceed(() => undefined),
         ),
@@ -141,7 +140,7 @@ const makeChildProcessTestRunnerWorker = () => {
         cause: undefined,
       })
     }
-    const result = await Effect.runPromise(underlying.mutantRun(options))
+    const result = await runtime.runPromise(underlying.mutantRun(options))
     if (result.status === MutantRunStatus.Error) {
       result.errorMessage = errorToString(result.errorMessage)
     }

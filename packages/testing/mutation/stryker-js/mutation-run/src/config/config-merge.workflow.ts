@@ -8,10 +8,18 @@
  * merge the property test covers.
  *
  * Values are `unknown` after `ConfigDocumentSchema` decoding at the read
- * boundary; no `as` casts are used and `isErrnoException` is the guard for
- * errno shapes elsewhere.
+ * boundary (`S.Record(S.String, S.Unknown)` at `repos/effect/packages/effect/src/Schema.ts:3948`);
+ * no `as` casts are used and `isErrnoException` is the guard for errno shapes elsewhere.
+ * `Record<string, unknown>` is genuinely open because the merged documents are
+ * the open config records validated downstream — their values are heterogeneous
+ * and `unknown` is the only honest encoded type before `validateOptions`.
+ *
+ * The `typeof` / `Array.isArray` / `null` branches below are merge semantics
+ * (scalar vs. object vs. array replacement), not hand-written shape predicates
+ * that a schema would decide: the decision is "how to combine" not "whether the
+ * input is valid". Validation already happened at the read boundary via
+ * `S.Record` / `ConfigDocumentSchema`.
  */
-
 export function mergeRecords(
   base: object,
   overrides: object,
