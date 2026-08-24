@@ -29,7 +29,12 @@
   dont: answer a question about audience, reach or consumers by naming who inside this tree consumes the thing
   harm: every relationship this file names points inward — vendored input, owned packages, in-repo consumers — so an agent asked who consumes a thing answers from the tree and scopes the design to the tree. On 2026-08-16 three consecutive framings in one session did exactly that, concluding the audience was this repo and then a sibling checkout, with REPO-W7 in context throughout — W7 forbids the repo as a warrant but names no audience to reason from, so the agent returns to the only one this file describes. A CI job, a git hook and a repo-local lint rule reach an adopter as zero bits, so a discipline carried only by those is a house rule dressed as a library's
   check: review — for each design decision, whether its warrant names something an adopter outside this checkout can observe, and whether each instrument it leans on is one that ships to them
-```
+- id: REPO-A6
+  title: Prefer stdlib primitives over hand-rolled
+  do: use `jsr:@std/*` for encoding/bytes/path and Effect-native for async when `from "effect"` is in scope — `btoa`/`Buffer base64`/`charCodeAt..toString(16)` → `jsr:@std/encoding`, `new Promise+setTimeout`/`clearTimeout`/`for+setTimeout` → `Effect.sleep`/`Schedule` or `jsr:@std/async`, `Uint8Array` loops → `jsr:@std/bytes`, `+ "/"`/`split("/")` → `jsr:@std/path`; precedence is `Effect > @std/* > hand-rolled`
+  dont: hand-roll a loop the stdlib already owns
+  harm: hand-rolled correctness is untested and drifts from the stdlib's tested implementation, and the agent pays review cost for code that already ships in any checkout that installs the rule package
+  check: `omp ttsr list` shows `no-hand-rolled-std` with `interruptMode: tool-only`; manual regex against fixtures proves discriminator, `omp ttsr test --file` in any checkout after `omp plugin link` proves gate
 
 ## Safety
 
@@ -95,3 +100,4 @@ Directories and the root doctrine file `CONCEPTS.md`; the packages inside them a
 ## Boundaries
 
 - **REPO-P1** — ask before merging to `main`, publishing, deploying, destructive operations, or handling credentials. Unmechanizable: a hook able to decide it would already be the approval.
+```
