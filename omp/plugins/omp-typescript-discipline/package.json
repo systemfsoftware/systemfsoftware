@@ -8,6 +8,9 @@
   "files": [
     "rules"
   ],
+  "scripts": {
+    "check": "deno task check"
+  },
   "publishConfig": {
     "exports": {
       "./package.json": "./package.json"

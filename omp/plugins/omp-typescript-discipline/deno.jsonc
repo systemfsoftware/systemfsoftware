@@ -1,0 +1,13 @@
+{
+  // Deno workspace for omp-typescript-discipline — only the discipline checks.
+  // Deno discovers it by walking up from each script, so invocations need no --config flag.
+  "imports": {
+    "@std/path": "jsr:@std/path@^1.1.6",
+  },
+  "nodeModulesDir": "none",
+  "tasks": {
+    "check:no-effect": "deno run --allow-read=package.json scripts/checks/check-no-effect-dependency.ts",
+    "check:no-ts": "deno run --allow-read=. scripts/checks/check-no-typescript-files.ts",
+    "check": "deno task check:no-effect && deno task check:no-ts",
+  },
+}
