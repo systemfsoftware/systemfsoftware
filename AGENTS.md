@@ -29,6 +29,7 @@
   dont: answer a question about audience, reach or consumers by naming who inside this tree consumes the thing
   harm: every relationship this file names points inward — vendored input, owned packages, in-repo consumers — so an agent asked who consumes a thing answers from the tree and scopes the design to the tree. On 2026-08-16 three consecutive framings in one session did exactly that, concluding the audience was this repo and then a sibling checkout, with REPO-W7 in context throughout — W7 forbids the repo as a warrant but names no audience to reason from, so the agent returns to the only one this file describes. A CI job, a git hook and a repo-local lint rule reach an adopter as zero bits, so a discipline carried only by those is a house rule dressed as a library's
   check: review — for each design decision, whether its warrant names something an adopter outside this checkout can observe, and whether each instrument it leans on is one that ships to them
+```
 
 ## Safety
 
@@ -94,4 +95,6 @@ Directories and the root doctrine file `CONCEPTS.md`; the packages inside them a
 ## Boundaries
 
 - **REPO-P1** — ask before merging to `main`, publishing, deploying, destructive operations, or handling credentials. Unmechanizable: a hook able to decide it would already be the approval.
+
+```
 ```
