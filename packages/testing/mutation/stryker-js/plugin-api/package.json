@@ -74,20 +74,5 @@
       "./test-runner": "./dist/test-runner/index.mjs",
       "./package.json": "./package.json"
     }
-  },
-  "inlinedDependencies": {
-    "@effect/vitest": "4.0.0-rc.111",
-    "@jridgewell/sourcemap-codec": "1.5.5",
-    "@vitest/expect": "4.1.10",
-    "@vitest/pretty-format": "4.1.10",
-    "@vitest/runner": "4.1.10",
-    "@vitest/snapshot": "4.1.10",
-    "@vitest/spy": "4.1.10",
-    "@vitest/utils": "4.1.10",
-    "chai": "6.2.2",
-    "magic-string": "0.30.21",
-    "pathe": "2.0.3",
-    "tinyrainbow": "3.1.1",
-    "vitest": "4.1.10"
   }
 }

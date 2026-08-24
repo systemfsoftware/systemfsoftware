@@ -23,7 +23,9 @@
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "mutation": "stryker run",
-    "mutation:full": "stryker run --force"
+    "mutation:full": "stryker run --force",
+    "api:check": "echo 'no API report for CLI (dts: false)' && exit 0",
+    "api:update": "echo 'no API report for CLI (dts: false)' && exit 0"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",

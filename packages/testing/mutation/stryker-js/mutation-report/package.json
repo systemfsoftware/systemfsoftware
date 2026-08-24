@@ -67,7 +67,7 @@
     },
     "./package.json": "./package.json"
   },
-  "inlinedDependencies": {
-    "effect": "4.0.0-rc.111"
+  "peerDependencies": {
+    "effect": "catalog:peers"
   }
 }

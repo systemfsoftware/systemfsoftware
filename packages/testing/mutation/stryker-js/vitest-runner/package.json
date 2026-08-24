@@ -48,6 +48,7 @@
     "@systemfsoftware/stryker-js-plugin-api": "workspace:^"
   },
   "peerDependencies": {
+    "effect": "catalog:peers",
     "vitest": ">=2.0.0"
   },
   "devDependencies": {
@@ -73,8 +74,5 @@
       "./stryker-setup": "./dist/stryker-setup.mjs",
       "./package.json": "./package.json"
     }
-  },
-  "inlinedDependencies": {
-    "effect": "4.0.0-rc.111"
   }
 }

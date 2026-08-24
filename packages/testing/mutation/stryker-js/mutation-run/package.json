@@ -145,20 +145,5 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "license": "Apache-2.0",
-  "inlinedDependencies": {
-    "@jridgewell/sourcemap-codec": "1.5.5",
-    "@vitest/expect": "4.1.10",
-    "@vitest/pretty-format": "4.1.10",
-    "@vitest/runner": "4.1.10",
-    "@vitest/snapshot": "4.1.10",
-    "@vitest/spy": "4.1.10",
-    "@vitest/utils": "4.1.10",
-    "chai": "6.2.2",
-    "expect-type": "1.4.0",
-    "magic-string": "0.30.21",
-    "tinyrainbow": "3.1.1",
-    "vite": "8.2.1",
-    "vitest": "4.1.10"
-  }
+  "license": "Apache-2.0"
 }

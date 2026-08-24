@@ -27,7 +27,6 @@
 "@systemfsoftware/oxlint-plugin-test-placement": none
 "@systemfsoftware/rx-effect": none
 "@systemfsoftware/storybook-gherkin": none
-"@systemfsoftware/stryker-js-mutation-report": none
 "@systemfsoftware/stryker-plugins": none
 "@systemfsoftware/tsconfig": none
 ---

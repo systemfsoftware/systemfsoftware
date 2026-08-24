@@ -103,3 +103,5 @@ packages:
   - omp/plugins/*
 config:
   confirm-modules-purge: false
+configDependencies:
+  "@eslint-community/regexpp": 4.12.2
