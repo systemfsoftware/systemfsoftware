@@ -1,9 +1,8 @@
 import babel from '@babel/core'
 
-import { deepCloneNode } from '../util/index.js'
+import { deepCloneNode } from '../babel/clone.js'
 
 import { type MutatorContext, type NodeMutator } from './node-mutator.js'
-import { registerMutator } from './registry.js'
 
 const { types } = babel
 
@@ -34,5 +33,3 @@ function isSupported(operator: string): operator is keyof typeof UnaryOperator {
 function isPlusOrMinus(operator: string): operator is '-' | '+' {
   return operator === '-' || operator === '+'
 }
-
-registerMutator(unaryOperatorMutator)

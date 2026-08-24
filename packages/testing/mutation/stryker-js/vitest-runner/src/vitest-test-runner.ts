@@ -4,6 +4,7 @@ import {
   MutantCoverage,
   StrykerOptions,
 } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { errorToString, normalizeFileName } from '@systemfsoftware/stryker-js-plugin-api/core'
 import {
   determineHitLimitReached,
   DryRunResult,
@@ -13,7 +14,7 @@ import {
   toMutantRunResult,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { TestRunnerFailed } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
-import { errorToString, escapeRegExp, normalizeFileName, testFilesProvided } from '@systemfsoftware/stryker-js-util'
+import { testFilesProvided } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
@@ -22,8 +23,10 @@ import * as S from 'effect/Schema'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
-
+import type { RunnerTestSuite } from 'vitest'
+import type { Vitest } from 'vitest/node'
 import { readSandboxSelfAliases, sandboxSelfPlugin } from './sandbox-self-aliases.js'
+import { VitestSectionSchema } from './vitest-runner-options.schema.js'
 import {
   collectTestsFromSuite,
   convertTestToTestResult,
@@ -31,11 +34,14 @@ import {
   isErrorCodeError,
   normalizeCoverage,
   VITEST_ERROR_CODES,
-} from './vitest-helpers.js'
-import { VitestSectionSchema } from './vitest-runner-options.schema.js'
-
-import type { Vitest } from 'vitest/node'
+} from './vitest-task-mapping.js'
 import { resolveVitest, type VitestResolver } from './vitest-wrapper.js'
+
+const isRunnerTestSuite = (value: unknown): value is RunnerTestSuite =>
+  typeof value === 'object' &&
+  value !== null &&
+  'tasks' in value &&
+  Array.isArray(Reflect.get(value, 'tasks'))
 
 type StrykerNamespace = '__stryker__' | '__stryker2__'
 const STRYKER_SETUP = fileURLToPath(
@@ -164,6 +170,16 @@ export interface VitestRunnerLayerInput {
    */
   readonly globalNamespace?: StrykerNamespace
   readonly resolveVitestFor?: VitestResolver
+  /**
+   * Where the sandbox setup file is copied FROM.
+   *
+   * Defaults to `stryker-setup.mjs` beside this module's own emitted file,
+   * which is the only correct answer for an installed package. A test that
+   * imports this module from `src/` has no such sibling — the emitted `.mjs`
+   * lives in `dist/` — so it passes the path instead of the product carrying
+   * a branch for a layout only the test produces.
+   */
+  readonly setupFilePath?: string
 }
 
 export const makeVitestRunnerLayer = (input: VitestRunnerLayerInput): Layer.Layer<TestRunner> =>
@@ -178,7 +194,7 @@ export const makeVitestRunnerLayer = (input: VitestRunnerLayerInput): Layer.Laye
           return yield* new TestRunnerFailed({
             runnerName: 'vitest',
             phase: 'dryRun',
-            cause: new Error('VitestTestRunner is not initialized; call init() before running tests'),
+            cause: new Error('Vitest runner is not initialized; call init() before running tests'),
           })
         }
         return state.ctx
@@ -203,7 +219,7 @@ export const makeVitestRunnerLayer = (input: VitestRunnerLayerInput): Layer.Laye
         const localSetupFile = path.resolve(projectRoot, `stryker-setup-${process.pid}.js`)
         yield* Ref.update(stateRef, (s) => ({ ...s, localSetupFile }))
         yield* Effect.tryPromise({
-          try: () => fs.promises.copyFile(STRYKER_SETUP, localSetupFile),
+          try: () => fs.promises.copyFile(input.setupFilePath ?? STRYKER_SETUP, localSetupFile),
           catch: (cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause }),
         })
         const resolver = input.resolveVitestFor ?? resolveVitest
@@ -222,9 +238,7 @@ export const makeVitestRunnerLayer = (input: VitestRunnerLayerInput): Layer.Laye
               {
                 config: options.vitest.configFile,
                 coverage: { enabled: false },
-                // @ts-expect-error poolOptions is not in CliOptions but Vitest forwards it to the pool
-                poolOptions: { threads: { maxThreads: 1, minThreads: 1 } },
-                singleThread: false,
+                maxWorkers: 1,
                 maxConcurrency: 1,
                 watch: false,
                 root: projectRoot,
@@ -352,7 +366,7 @@ export const makeVitestRunnerLayer = (input: VitestRunnerLayerInput): Layer.Laye
           let pattern: RegExp | undefined
           if ((filter.testIds ?? []).length > 0) {
             const parsedTests = (filter.testIds ?? []).map(fromTestId)
-            const regexTestNameFilter = parsedTests.map(({ test: name }) => escapeRegExp(name)).join('|')
+            const regexTestNameFilter = parsedTests.map(({ test: name }) => RegExp.escape(name)).join('|')
             pattern = new RegExp(regexTestNameFilter)
             testFilesToRun = parsedTests.map(({ file }) => path.resolve(input.sandboxDirectory, file))
           }
@@ -362,16 +376,14 @@ export const makeVitestRunnerLayer = (input: VitestRunnerLayerInput): Layer.Laye
             catch: (cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'dryRun', cause }),
           }).pipe(
             Effect.catchIf(
-              (error) => isErrorCodeError(error.cause) && error.cause.code === VITEST_ERROR_CODES.FILES_NOT_FOUND,
+              (error: TestRunnerFailed) =>
+                isErrorCodeError(error.cause) && error.cause.code === VITEST_ERROR_CODES.FILES_NOT_FOUND,
               () => Effect.void,
             ),
           )
           const allFiles = experimentalStateGetFiles(ctx)
           const tests = allFiles
-            .flatMap((file) => {
-              // @ts-expect-error File is compatible with RunnerTestSuite at runtime
-              return collectTestsFromSuite(file)
-            })
+            .flatMap((file) => (isRunnerTestSuite(file) ? collectTestsFromSuite(file) : []))
             .filter((test) => test.result !== undefined)
           let failure = false
           const testResults = tests.map((test) => {
@@ -465,15 +477,4 @@ function mergeCoverage(to: CoverageData, from: CoverageData): void {
       to[mutantId] = hitCount
     }
   }
-}
-
-export class VitestTestRunner {
-  public static inject = [] as const
-  constructor(_a: unknown, _b: unknown, _c: unknown, _d: unknown, _e: unknown = resolveVitest) {
-    throw new Error('VitestTestRunner class is removed. Use makeVitestRunnerLayer instead.')
-  }
-}
-
-export function createVitestTestRunnerFactory(_namespace?: StrykerNamespace): (injector: unknown) => never {
-  throw new Error('createVitestTestRunnerFactory is removed. Use makeVitestRunnerLayer and declarePlugin instead.')
 }

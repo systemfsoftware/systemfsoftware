@@ -2,7 +2,6 @@ import babel from '@babel/core'
 import * as weaponRegex from 'weapon-regex'
 
 import { type MutatorContext, type NodeMutator } from './node-mutator.js'
-import { registerMutator } from './registry.js'
 
 const { types } = babel
 
@@ -57,5 +56,3 @@ function mutatePattern(pattern: string, flags: string | undefined): string[] {
     return []
   }
 }
-
-registerMutator(regexMutator)

@@ -1,54 +1,57 @@
 import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
 
-import { toPosixFileName } from '../tsconfig-helpers.js'
+import { toPosixFileName } from '../posix-file-name.js'
 
-// This class exists so we can have a two-way dependency graph.
-// The two-way dependency graph is used to search for mutants related to typescript errors.
-export class TSFileNode {
-  constructor(
-    public fileName: string,
-    public parents: TSFileNode[],
-    public children: TSFileNode[],
-  ) {}
+export interface TSFileNode {
+  readonly fileName: string
+  readonly parents: readonly TSFileNode[]
+  readonly children: readonly TSFileNode[]
+}
 
-  public getAllParentReferencesIncludingSelf(
-    allParentReferences: Set<TSFileNode> = new Set<TSFileNode>(),
-  ): Set<TSFileNode> {
-    allParentReferences.add(this)
-    this.parents.forEach((parent) => {
-      if (!allParentReferences.has(parent)) {
-        parent.getAllParentReferencesIncludingSelf(allParentReferences)
-      }
-    })
-    return allParentReferences
-  }
+export function makeTSFileNode(fileName: string): TSFileNode {
+  return { fileName, parents: [], children: [] }
+}
 
-  public getAllChildReferencesIncludingSelf(
-    allChildReferences: Set<TSFileNode> = new Set<TSFileNode>(),
-  ): Set<TSFileNode> {
-    allChildReferences.add(this)
-    this.children.forEach((child) => {
-      if (!allChildReferences.has(child)) {
-        child.getAllChildReferencesIncludingSelf(allChildReferences)
-      }
-    })
-    return allChildReferences
-  }
-
-  public getMutantsWithReferenceToChildrenOrSelf(
-    mutants: Mutant[],
-    nodesChecked: string[] = [],
-  ): Mutant[] {
-    if (nodesChecked.includes(this.fileName)) {
-      return []
+export function getAllParentReferencesIncludingSelf(
+  node: TSFileNode,
+  allParentReferences: Set<TSFileNode> = new Set<TSFileNode>(),
+): Set<TSFileNode> {
+  allParentReferences.add(node)
+  for (const parent of node.parents) {
+    if (!allParentReferences.has(parent)) {
+      getAllParentReferencesIncludingSelf(parent, allParentReferences)
     }
-
-    nodesChecked.push(this.fileName)
-
-    const relatedMutants = mutants.filter(
-      (m) => toPosixFileName(m.fileName) === this.fileName,
-    )
-    const childResult = this.children.flatMap((c) => c.getMutantsWithReferenceToChildrenOrSelf(mutants, nodesChecked))
-    return [...relatedMutants, ...childResult]
   }
+  return allParentReferences
+}
+
+export function getAllChildReferencesIncludingSelf(
+  node: TSFileNode,
+  allChildReferences: Set<TSFileNode> = new Set<TSFileNode>(),
+): Set<TSFileNode> {
+  allChildReferences.add(node)
+  for (const child of node.children) {
+    if (!allChildReferences.has(child)) {
+      getAllChildReferencesIncludingSelf(child, allChildReferences)
+    }
+  }
+  return allChildReferences
+}
+
+export function getMutantsWithReferenceToChildrenOrSelf(
+  node: TSFileNode,
+  mutants: Mutant[],
+  nodesChecked: string[] = [],
+): Mutant[] {
+  if (nodesChecked.includes(node.fileName)) {
+    return []
+  }
+
+  nodesChecked.push(node.fileName)
+
+  const relatedMutants = mutants.filter(
+    (m) => toPosixFileName(m.fileName) === node.fileName,
+  )
+  const childResult = node.children.flatMap((c) => getMutantsWithReferenceToChildrenOrSelf(c, mutants, nodesChecked))
+  return [...relatedMutants, ...childResult]
 }

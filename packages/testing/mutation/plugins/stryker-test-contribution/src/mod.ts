@@ -1,12 +1,12 @@
-import { declareClassPlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { declarePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 
-import { TestContributionEvaluator } from './test-contribution-evaluator.js'
+import { testContributionEvaluatorLayer } from './test-contribution-evaluator.js'
 
 export const strykerPlugins = [
-  declareClassPlugin(PluginKind.Evaluator, 'test-contribution', TestContributionEvaluator),
+  declarePlugin(PluginKind.Evaluator, 'test-contribution', testContributionEvaluatorLayer),
 ]
 
-export { TestContributionEvaluator } from './test-contribution-evaluator.js'
+export { makeTestContributionEvaluatorService, testContributionEvaluatorLayer } from './test-contribution-evaluator.js'
 export {
   contributionByTestFile,
   defaultRequireTestContributionSuffixes,

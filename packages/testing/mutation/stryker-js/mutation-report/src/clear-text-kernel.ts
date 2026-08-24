@@ -3,7 +3,7 @@ import type { MutationTestMetricsResult } from '@systemfsoftware/stryker-js-plug
 import * as Predicate from 'effect/Predicate'
 
 import { ansi } from './ansi.js'
-import { ClearTextScoreTable } from './clear-text-score-table.js'
+import { drawClearTextScoreTable } from './clear-text-score-table.js'
 import { getEmojiForStatus, plural } from './render-text.js'
 
 function sourceLocation(fileName: string, position: Position, allowColor: boolean): string {
@@ -140,7 +140,7 @@ function scoreTable(metrics: MutationTestMetricsResult, options: StrykerOptions)
         (x) => x.metrics.mutationScore !== 100,
       ))
   if (!shouldDraw) return undefined
-  return new ClearTextScoreTable(metrics.systemUnderTestMetrics, options).draw()
+  return drawClearTextScoreTable(metrics.systemUnderTestMetrics, options)
 }
 
 export function renderClearText(

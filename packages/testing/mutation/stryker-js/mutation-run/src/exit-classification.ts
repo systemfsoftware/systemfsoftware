@@ -3,12 +3,9 @@
  * teardown, by the precedence `signal > 4 > 3 > 2 > 1 > 0`; verdict gates
  * record a pending class instead of writing `process.exitCode` directly.
  */
-export enum ExitClass {
-  VerdictFail = 1,
-  ConfigError = 2,
-  RuntimeError = 3,
-  InternalError = 4,
-}
+import { ExitClass } from '@systemfsoftware/stryker-js-plugin-api/evaluate'
+
+export { ExitClass }
 
 /**
  * Whether a finished run's score fails its own breaking threshold.
@@ -52,11 +49,26 @@ export function resolveExitCode(
   if (signal !== null) {
     return 128 + signal
   }
-  let code = 0
+  return highestExitClass(pending) ?? 0
+}
+
+/**
+ * The most severe class among those reported, or `null` when none was.
+ *
+ * Separate from `resolveExitCode` because callers need two different things
+ * from the same precedence rule. The process needs a NUMBER, where "nothing
+ * reported" is `0`. A run's outcome needs the CLASS, where "nothing reported"
+ * is absence — and `0` is not an `ExitClass`, so a caller wanting the class
+ * from `resolveExitCode` had to map the number back onto the enum and invent a
+ * meaning for `0`. Deriving both from this one function keeps a single
+ * definition of "most severe" instead of two that can disagree.
+ */
+export function highestExitClass(pending: Iterable<ExitClass>): ExitClass | null {
+  let highest: ExitClass | null = null
   for (const exitClass of pending) {
-    if (exitClass > code) {
-      code = exitClass
+    if (highest === null || exitClass > highest) {
+      highest = exitClass
     }
   }
-  return code
+  return highest
 }

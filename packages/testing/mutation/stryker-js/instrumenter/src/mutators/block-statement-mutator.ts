@@ -2,7 +2,6 @@ import babel from '@babel/core'
 import * as Predicate from 'effect/Predicate'
 
 import { type MutatorContext, type NodeMutator } from './node-mutator.js'
-import { registerMutator } from './registry.js'
 
 const { types } = babel
 
@@ -90,5 +89,3 @@ function hasSuperInChildren(node: object): boolean {
   }
   return false
 }
-
-registerMutator(blockStatementMutator)

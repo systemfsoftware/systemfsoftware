@@ -1,13 +1,21 @@
-import { declareValuePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Ignorer } from '@systemfsoftware/stryker-js-plugin-api/ignore'
+import { declarePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import * as Layer from 'effect/Layer'
+import * as Option from 'effect/Option'
+
 import { ancestorsOf, type IgnorerPath } from '../AncestorPath.js'
 import { decideInSourceTestIgnore, IN_SOURCE_TEST_IGNORED, isInSourceTestGuard } from './InSourceTestIgnore.js'
 
 export const strykerPlugins = [
-  declareValuePlugin(PluginKind.Ignore, 'in-source-vitest-block', {
-    shouldIgnore(path: IgnorerPath): string | undefined {
-      return decideInSourceTestIgnore(ancestorsOf(path))
-    },
-  }),
+  declarePlugin(
+    PluginKind.Ignore,
+    'in-source-vitest-block',
+    Layer.succeed(Ignorer, {
+      // The decision returns a reason or nothing; `Option` is how the port
+      // states that difference, so absence cannot be read as a reason.
+      shouldIgnore: (path: IgnorerPath) => Option.fromUndefinedOr(decideInSourceTestIgnore(ancestorsOf(path))),
+    }),
+  ),
 ]
 
 // Public-surface decision: tests reach the decision function through the

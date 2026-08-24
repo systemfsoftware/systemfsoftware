@@ -6,7 +6,7 @@ import type * as LogLevel from 'effect/LogLevel'
 import net from 'node:net'
 
 import { isStrykerLevelEnabled, strykerLevelToEffect, type StrykerLogLevel } from './log-level.js'
-import { LoggingEvent } from './logging-event.js'
+import { type LoggingEvent, serializeLoggingEvent } from './logging-event.js'
 import type { LoggingServerAddress } from './logging-server.js'
 import { DELIMITER } from './logging-server.js'
 
@@ -49,8 +49,17 @@ const makeForwardingLogger = (socket: net.Socket): Logger.Logger<unknown, void> 
     // `All`/`None` are never emitted as message levels, so they are dropped.
     const strykerLevel = effectLevelToStryker(level)
     if (strykerLevel === undefined) return
-    const event = LoggingEvent.create('worker', strykerLevel, [message])
-    const frame = JSON.stringify(event.serialize()) + DELIMITER
+    // `options.date` is the instant Effect's runtime stamped this entry with,
+    // so the frame carries the run's clock rather than a second reading of the
+    // wall clock taken here.
+    const event: LoggingEvent = {
+      startTime: options.date,
+      categoryName: 'worker',
+      data: [message],
+      level: strykerLevel,
+      pid: process.pid,
+    }
+    const frame = JSON.stringify(serializeLoggingEvent(event)) + DELIMITER
     socket.write(frame)
   })
 }
@@ -123,7 +132,7 @@ export const makeLoggingClientLayer = (
               // path so we don't frame `off`/`below-threshold` events.
               const msgLevel = strykerLevelToEffect(event.level)
               if (msgLevel === 'None') return
-              socket.write(JSON.stringify(event.serialize()) + DELIMITER)
+              socket.write(JSON.stringify(serializeLoggingEvent(event)) + DELIMITER)
             }).pipe(Effect.withSpan('logging.client.send')),
           isEnabled: (level: StrykerLogLevel): Effect.Effect<boolean> => Effect.succeed(isStrykerLevelEnabled(level)),
           logger: forwardingLogger,

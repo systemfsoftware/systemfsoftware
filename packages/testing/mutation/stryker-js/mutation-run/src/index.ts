@@ -1,2 +1,5 @@
+export { LoggingServerNotTcpError } from './logging/logging-server.schema.js'
+export { defaultStages, makeRunLayer } from './run-layers.js'
 export { RunEnvironment, type RunEnvironmentShape } from './RunEnvironment.js'
 export { type MutationRunStages, runMutationTest, shouldKeepTempDir } from './stryker.js'
+export { ChildProcessSpawnerLive } from './worker-pool/child-process-proxy.js'

@@ -1,138 +1,164 @@
-import { frameworkPluginsFileUrl } from '@systemfsoftware/stryker-js-instrumenter'
-import { type PartialStrykerOptions, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { type BaseContext, commonTokens, type Injector, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { deepFreeze } from '@systemfsoftware/stryker-js-util'
-import * as S from 'effect/Schema'
-import { execaCommand } from 'execa'
+import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Ignorer, type IgnorerService } from '@systemfsoftware/stryker-js-plugin-api/ignore'
+import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { composePlugins, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import type { AnyPluginContribution } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { RunConfiguration } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { SandboxDirectory } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import * as Context from 'effect/Context'
+import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
+import * as HashMap from 'effect/HashMap'
+import * as Layer from 'effect/Layer'
+import * as Path from 'effect/Path'
+import * as Scope from 'effect/Scope'
+
+import { readConfig } from '../config/config-reader.js'
 import { forkCoreSchema } from '../config/fork-schema.js'
+import type { ValidationSchemaDocument } from '../config/options-validator.js'
+import { validateOptions } from '../config/options-validator.js'
+import { createAll } from '../plugins/plugin-creator.js'
+import { loadPlugins } from '../plugins/plugin-loader.js'
+import { readProject } from '../project/project-reader.js'
+import { RunEnvironment } from '../RunEnvironment.js'
+import { TemporaryDirectory, TemporaryDirectoryLive } from '../sandbox/temporary-directory.js'
+import { makeTimer } from '../timer.js'
 
-import { ConfigReader } from '../config/config-reader.js'
-import { MetaSchemaBuilder, OptionsValidator } from '../config/index.js'
-import { ConfigError } from '../errors.js'
-import type { ResolvedMode } from '../output-mode.js'
-import { injectionTokens, PluginCreator } from '../plugins/index.js'
-import { PluginLoader } from '../plugins/plugin-loader.js'
-import { BroadcastReporter } from '../reporting/broadcast-reporter.js'
-import type { RunEventSink } from '../run-event.js'
-import { TemporaryDirectory } from '../sandbox/temporary-directory.js'
-import { Timer } from '../timer.js'
-import { UnexpectedExitHandler } from '../unexpected-exit-handler.js'
+import type { PrepareDone, PrepareStage } from './stage-results.js'
+import { PrepareFailedError } from './stage.schema.js'
 
-import { FileSystem, ProjectReader } from '../project/index.js'
-
-import { type Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
-import { LoggingBackend, type LoggingServerAddress } from '../logging/index.js'
-import { type MutantInstrumenterContext } from './index.js'
-
-export interface PrepareExecutorContext extends BaseContext {
-  [injectionTokens.loggingServerAddress]: LoggingServerAddress
-  /** Always provided; `undefined` is the absence of an override. */
-  [injectionTokens.reporterOverride]?: Reporter | undefined
-  [injectionTokens.reporterPluginModules]: string[]
-  [injectionTokens.runEventSink]: RunEventSink
-  [injectionTokens.runId]: string
-  [injectionTokens.resolvedMode]: ResolvedMode
-  [injectionTokens.progressEnabled]: boolean
-  [injectionTokens.clearTextEnabled]: boolean
-  [injectionTokens.runStartedAt]: number
-}
+export class PrepareLogger extends Context.Service<PrepareLogger, Logger>()('PrepareLogger') {}
 
 export interface PrepareExecutorArgs {
   cliOptions: PartialStrykerOptions
   targetMutatePatterns: string[] | undefined
 }
 
-export class PrepareExecutor {
-  public static readonly inject = tokens(
-    commonTokens.injector,
-    injectionTokens.loggingSink,
-    injectionTokens.reporterPluginModules,
-  )
-  constructor(
-    private readonly injector: Injector<PrepareExecutorContext>,
-    private readonly loggingBackend: LoggingBackend,
-    private readonly reporterPluginModules: readonly string[],
-  ) {}
-
-  public async execute({
-    cliOptions,
-    targetMutatePatterns,
-  }: PrepareExecutorArgs): Promise<Injector<MutantInstrumenterContext>> {
-    // greedy initialize, so the time starts immediately
-    const timer = new Timer()
-
-    // Already configure the logger, so next classes can use them
-    this.loggingBackend.configure(cliOptions)
-
-    // Read the config file
-    const configReaderInjector = this.injector
-      .provideValue(injectionTokens.validationSchema, forkCoreSchema)
-      .provideClass(injectionTokens.optionsValidator, OptionsValidator)
-    const configReader = configReaderInjector.injectClass(ConfigReader)
-    const options: StrykerOptions = await configReader.readConfig(cliOptions)
-
-    // Load plugins
-    const pluginLoader = configReaderInjector.injectClass(PluginLoader)
-    const pluginDescriptors = [
-      ...options.plugins,
-      frameworkPluginsFileUrl,
-      ...this.reporterPluginModules,
-      ...options.appendPlugins,
-    ]
-    const loadedPlugins = await pluginLoader.load(pluginDescriptors)
-
-    // Revalidate the options with plugin schema additions
-    const metaSchemaBuilder = configReaderInjector.injectClass(MetaSchemaBuilder)
-    const metaSchema = metaSchemaBuilder.buildMetaSchema(
-      loadedPlugins.schemaContributions,
-    )
-    const optionsValidatorInjector = configReaderInjector.provideValue(
-      injectionTokens.validationSchema,
-      // The merged schema is consumed as data by the validator: the same
-      // opaque `Record<string, unknown>` contract `forkCoreSchema` provides,
-      // not the ajv-typed view the builder returns.
-      S.decodeUnknownSync(S.Record(S.String, S.Unknown))(metaSchema),
-    )
-    const validator: OptionsValidator = optionsValidatorInjector.injectClass(OptionsValidator)
-    validator.validate(options, true)
-
-    // Done reading config, deep freeze it so it won't change unexpectedly
-    deepFreeze(options)
-
-    // Final logging configuration, update the logging configuration with the latest results
-    this.loggingBackend.configure(options)
-
-    // Resolve input files
-    const projectFileReaderInjector = optionsValidatorInjector
-      .provideValue(commonTokens.options, options)
-      .provideClass(injectionTokens.temporaryDirectory, TemporaryDirectory)
-      .provideClass(injectionTokens.fs, FileSystem)
-      .provideValue(injectionTokens.pluginsByKind, loadedPlugins.pluginsByKind)
-    const project = await projectFileReaderInjector
-      .injectClass(ProjectReader)
-      .read(targetMutatePatterns)
-
-    if (project.isEmpty) {
-      throw new ConfigError('No input files found.')
-    } else {
-      // Done preparing, finish up and return
-      await projectFileReaderInjector
-        .resolve(injectionTokens.temporaryDirectory)
-        .initialize()
-      return projectFileReaderInjector
-        .provideValue(injectionTokens.project, project)
-        .provideValue(commonTokens.fileDescriptions, project.fileDescriptions)
-        .provideClass(injectionTokens.pluginCreator, PluginCreator)
-        .provideClass(injectionTokens.reporter, BroadcastReporter)
-        .provideValue(injectionTokens.timer, timer)
-        .provideValue(injectionTokens.project, project)
-        .provideValue(injectionTokens.execa, execaCommand)
-        .provideValue(injectionTokens.process, process)
-        .provideClass(injectionTokens.unexpectedExitRegistry, UnexpectedExitHandler)
-        .provideValue(
-          injectionTokens.pluginModulePaths,
-          loadedPlugins.pluginModulePaths,
-        )
+const buildMergedSchema = (
+  core: ValidationSchemaDocument,
+  contributions: readonly Record<string, unknown>[],
+): ValidationSchemaDocument => {
+  if (contributions.length === 0) {
+    return core
+  }
+  const merged: Record<string, unknown> = { ...core }
+  const corePropsValue = merged['properties']
+  const corePropsRecord: Record<string, unknown> = {}
+  if (typeof corePropsValue === 'object' && corePropsValue !== null) {
+    for (const [k, v] of Object.entries(corePropsValue)) {
+      corePropsRecord[k] = v
     }
   }
+  for (const contrib of contributions) {
+    const props = contrib['properties']
+    if (typeof props === 'object' && props !== null) {
+      for (const [k, v] of Object.entries(props)) {
+        corePropsRecord[k] = v
+      }
+    }
+    const defs = contrib['definitions']
+    if (typeof defs === 'object' && defs !== null) {
+      const existingDefs = merged['definitions']
+      const defsRecord: Record<string, unknown> = {}
+      if (typeof existingDefs === 'object' && existingDefs !== null) {
+        for (const [k, v] of Object.entries(existingDefs)) {
+          defsRecord[k] = v
+        }
+      }
+      for (const [k, v] of Object.entries(defs)) {
+        defsRecord[k] = v
+      }
+      merged['definitions'] = defsRecord
+    }
+  }
+  merged['properties'] = corePropsRecord
+  return merged
 }
+
+export const prepareStage: PrepareStage<
+  PrepareFailedError,
+  PrepareLogger | RunEnvironment | FileSystem.FileSystem | Path.Path | Scope.Scope
+> = (args: PrepareExecutorArgs) =>
+  Effect.gen(function*() {
+    yield* Scope.Scope
+    const log = yield* PrepareLogger
+    const env = yield* RunEnvironment
+    const timer = yield* makeTimer
+
+    const coreSchema: ValidationSchemaDocument = forkCoreSchema
+
+    const options = yield* readConfig(args.cliOptions, log, coreSchema, env.basePath).pipe(
+      Effect.mapError((cause) => new PrepareFailedError({ reason: 'Failed to read config', cause })),
+    )
+
+    const descriptors: readonly string[] = [...options.plugins, ...options.appendPlugins, ...env.reporterPluginModules]
+
+    const loaded = yield* loadPlugins(descriptors, log, env.basePath).pipe(
+      Effect.mapError((cause) => new PrepareFailedError({ reason: 'Failed to load plugins', cause })),
+    )
+
+    const mergedSchema = buildMergedSchema(coreSchema, loaded.schemaContributions)
+    if (loaded.schemaContributions.length > 0) {
+      const record: Record<string, unknown> = { ...options }
+      yield* validateOptions(record, mergedSchema, log, true).pipe(
+        Effect.mapError(
+          (cause) => new PrepareFailedError({ reason: 'Failed to revalidate options with plugin schema', cause }),
+        ),
+      )
+    }
+
+    const project = yield* readProject(options, log, args.targetMutatePatterns, env.basePath).pipe(
+      Effect.mapError((cause) => new PrepareFailedError({ reason: 'Failed to read project', cause })),
+    )
+
+    if (project.files.size === 0) {
+      return yield* new PrepareFailedError({ reason: 'No input files found.' })
+    }
+
+    const contributions = yield* createAll(loaded.pluginsByKind, PluginKind.Ignore).pipe(
+      Effect.mapError((cause) => new PrepareFailedError({ reason: 'Failed to create ignorers', cause })),
+    )
+
+    const ignorers: readonly IgnorerService[] = yield* Effect.forEach(contributions, (contribution) =>
+      Effect.gen(function*() {
+        const ctx = yield* Layer.build(contribution.layer)
+        return Context.get(ctx, Ignorer)
+      }).pipe(
+        Effect.provideService(RunConfiguration, options),
+        Effect.provideService(SandboxDirectory, env.basePath),
+      )).pipe(
+        Effect.mapError((cause) =>
+          new PrepareFailedError({ reason: 'Failed to build ignorers', cause })
+        ),
+      )
+
+    const temporaryDirectoryPath = yield* Effect.gen(function*() {
+      const live = TemporaryDirectoryLive(options, log)
+      const service = yield* Effect.service(TemporaryDirectory).pipe(Effect.provide(live))
+      return service.path
+    }).pipe(
+      Effect.mapError((cause) => new PrepareFailedError({ reason: 'Failed to create temporary directory', cause })),
+    )
+
+    const allContributions: readonly AnyPluginContribution[] = (() => {
+      const out: Array<AnyPluginContribution> = []
+      for (const arr of HashMap.values(loaded.pluginsByKind)) {
+        for (const c of arr) {
+          out.push(c)
+        }
+      }
+      return out
+    })()
+
+    const plugins = composePlugins(allContributions)
+
+    return {
+      project,
+      plugins,
+      loadedPlugins: loaded,
+      ignorers,
+      options,
+      timer,
+      temporaryDirectoryPath,
+    } satisfies PrepareDone
+  })

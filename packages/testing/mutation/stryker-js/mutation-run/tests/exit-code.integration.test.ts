@@ -11,8 +11,11 @@ import { type LogLevel } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 
-import { ExitClass, resolveExitCode } from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
-
+import {
+  ExitClass,
+  resolveExitCode,
+  verdictExitClass,
+} from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
 const Feature = makeFeature({ it, layer })
 
 Feature('Resolving the process exit code')
@@ -117,6 +120,50 @@ Feature('Resolving the process exit code')
         ),
         Then('the signal wins over every pending class')((s) => {
           expect(resolveExitCode(s.args.pending, s.args.signal)).toBe(143)
+        }),
+      ),
+    )
+
+    scenario(
+      'Should_ResolveVerdictFail_When_EvaluatorReturnsVerdictFailWhileScorePasses',
+      Gherkin.Do.pipe(
+        Given('a passing score and an evaluator returning VerdictFail')(
+          'pending',
+          () => {
+            const scoreVerdict = verdictExitClass(80, 60)
+            const evaluatorVerdicts: readonly ExitClass[] = [ExitClass.VerdictFail]
+            const pending = new Set<ExitClass>(
+              [scoreVerdict, ...evaluatorVerdicts].filter(
+                (value): value is ExitClass => value !== null,
+              ),
+            )
+            return Effect.succeed(pending)
+          },
+        ),
+        Then('the code is 1')((s) => {
+          expect(resolveExitCode(s.pending, null)).toBe(1)
+        }),
+      ),
+    )
+
+    scenario(
+      'Should_StayZero_When_EvaluatorReturnsNullWhileScorePasses',
+      Gherkin.Do.pipe(
+        Given('a passing score and an evaluator returning null')(
+          'pending',
+          () => {
+            const scoreVerdict = verdictExitClass(80, 60)
+            const evaluatorVerdicts: readonly (ExitClass | null)[] = [null]
+            const pending = new Set<ExitClass>(
+              [scoreVerdict, ...evaluatorVerdicts].filter(
+                (value): value is ExitClass => value !== null,
+              ),
+            )
+            return Effect.succeed(pending)
+          },
+        ),
+        Then('the code is 0')((s) => {
+          expect(resolveExitCode(s.pending, null)).toBe(0)
         }),
       ),
     )

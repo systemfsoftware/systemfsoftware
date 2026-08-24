@@ -1,5 +1,4 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import type { VitestTestRunner } from '@systemfsoftware/stryker-js-vitest-runner'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 import { expectKilled, expectTimeout } from './__fixtures__/assertions.js'
@@ -16,7 +15,7 @@ Feature('Recovering from a mutant that loops forever')
         Given('a runner on the infinite-loop project')('runner', () => runnerContext('infinite-loop')),
         When('the runner is initialized and the looping mutant is run')('result', (s) =>
           Effect.promise(async () => {
-            const sut: VitestTestRunner = s.runner.sut
+            const sut = s.runner.sut
             await sut.init()
             return sut.mutantRun(
               createMutantRunOptions({
@@ -41,7 +40,7 @@ Feature('Recovering from a mutant that loops forever')
           'firstRun',
           (s) =>
             Effect.promise(async () => {
-              const sut: VitestTestRunner = s.runner.sut
+              const sut = s.runner.sut
               await sut.init()
               return sut.mutantRun(
                 createMutantRunOptions({

@@ -14,7 +14,7 @@ import type { WorkerMethodError } from '../worker-pool/worker-protocol.schema.js
 import type { CheckerResourceService } from './checker-resource.js'
 
 type CheckerWorkerShape = {
-  init(...args: unknown[]): Promise<void>
+  init(options: StrykerOptions): Promise<void>
   check(...args: unknown[]): Promise<Record<string, CheckResult>>
   group(...args: unknown[]): Promise<readonly (readonly string[])[]>
 }
@@ -42,6 +42,16 @@ export const makeCheckerChildProcess = (params: {
       execArgv: [...params.execArgv],
       idGenerator: params.idGenerator,
     })
+    yield* shape.proxy.init(params.options).pipe(
+      Effect.catchTag('WorkerMethodError', (error: WorkerMethodError) =>
+        Effect.fail(
+          new ChildProcessCrashedError({
+            pid: 0,
+            exit: { _tag: 'Code', code: 1 },
+            cause: error.message,
+          }),
+        )),
+    )
     return {
       check: (checkerName, mutants) =>
         shape.proxy.check(checkerName, [...mutants]).pipe(

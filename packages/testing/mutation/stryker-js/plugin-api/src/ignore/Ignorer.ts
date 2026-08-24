@@ -1,3 +1,4 @@
+import * as Context from 'effect/Context'
 import type * as Option from 'effect/Option'
 
 /**
@@ -30,15 +31,17 @@ export interface NodePath {
 /**
  * Decides whether a mutant at `path` should be excused from the population.
  *
- * This stays a plain synchronous function while its siblings became
- * `Context.Service` ports. A predicate that returns a reason string or nothing
- * has no I/O and no clock, so there is nothing for the engine to time out,
- * retry, or interrupt — lifting it to `Effect` would force every call site
- * to run an Effect for a pure value and buy no capability. The `Option`
- * return makes absence explicit: `Option.none()` means "do not ignore" and
- * `Option.some(reason)` carries the reason, whereas `string | undefined`
- * leaves `undefined` indistinguishable from a member that was never set.
+ * Now a `Context.Service` like every other port, so a plugin contributes it as
+ * a `Layer` and the engine extracts it with `Context.get`. The previous plain
+ * value could not be extracted from a `Layer` without a `Tag`, which is why
+ * the ignorer path was a no-op. The `Option` return makes absence explicit:
+ * `Option.none()` means "do not ignore" and `Option.some(reason)` carries the
+ * reason.
  */
-export interface Ignorer {
+export interface IgnorerService {
   shouldIgnore(path: NodePath): Option.Option<string>
 }
+
+export class Ignorer extends Context.Service<Ignorer, IgnorerService>()(
+  '@systemfsoftware/stryker-js-plugin-api/ignore/Ignorer',
+) {}

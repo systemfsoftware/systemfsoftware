@@ -1,7 +1,6 @@
 import babel from '@babel/core'
 
 import { type MutatorContext, type NodeMutator } from './node-mutator.js'
-import { registerMutator } from './registry.js'
 
 const { types: t } = babel
 
@@ -33,5 +32,3 @@ export const equalityOperatorMutator: NodeMutator = {
     }
   },
 }
-
-registerMutator(equalityOperatorMutator)

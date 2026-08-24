@@ -2,8 +2,8 @@ import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { Result } from 'effect'
 import type { Diagnostic } from 'typescript/unstable/sync'
 
-import { TSFileNode } from '../grouping/ts-file-node.js'
-import { toPosixFileName } from '../tsconfig-helpers.js'
+import { getMutantsWithReferenceToChildrenOrSelf, type TSFileNode } from '../grouping/ts-file-node.js'
+import { toPosixFileName } from '../posix-file-name.js'
 
 import { DiagnosticInUnrelatedFileError, DiagnosticWithoutFileError } from './check-kernel.schema.js'
 
@@ -57,7 +57,7 @@ export function classifyDiagnostics(
       )
     }
 
-    const related = node.getMutantsWithReferenceToChildrenOrSelf([...mutants])
+    const related = getMutantsWithReferenceToChildrenOrSelf(node, [...mutants])
 
     if (related.length === 0) {
       for (const m of mutants) {

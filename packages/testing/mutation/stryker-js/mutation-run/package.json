@@ -25,7 +25,6 @@
       "./config/base": "./dist/config/base.mjs",
       "./config/config-resolution": "./dist/config/config-resolution.mjs",
       "./config/fork-schema": "./dist/config/fork-schema.mjs",
-      "./errors": "./dist/errors.mjs",
       "./exit-classification": "./dist/exit-classification.mjs",
       "./mutants/incremental-differ": "./dist/mutants/incremental-differ.mjs",
       "./output-mode": "./dist/output-mode.mjs",
@@ -65,10 +64,6 @@
     "./config/fork-schema": {
       "@systemfsoftware/source": "./src/config/fork-schema.ts",
       "default": "./dist/config/fork-schema.mjs"
-    },
-    "./errors": {
-      "@systemfsoftware/source": "./src/errors.ts",
-      "default": "./dist/errors.mjs"
     },
     "./exit-classification": {
       "@systemfsoftware/source": "./src/exit-classification.ts",
@@ -116,18 +111,13 @@
     "mutation:full": "stryker run --force"
   },
   "dependencies": {
+    "@effect/platform-node": "catalog:",
     "@systemfsoftware/stryker-js-instrumenter": "workspace:^",
     "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
-    "@systemfsoftware/stryker-js-util": "workspace:^",
     "diff-match-patch": "1.0.5",
-    "execa": "~9.6.0",
     "minimatch": "~10.2.4",
     "mutation-testing-metrics": "3.7.3",
-    "mutation-testing-report-schema": "3.7.3",
-    "npm-run-path": "~6.0.0",
-    "rxjs": "~7.8.1",
-    "tree-kill": "~1.2.2",
-    "typed-inject": "~5.0.0"
+    "mutation-testing-report-schema": "3.7.3"
   },
   "peerDependencies": {
     "effect": "catalog:peers"
@@ -143,7 +133,6 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/diff-match-patch": "1.0.36",
-    "@types/json-schema": "7.0.15",
     "@types/node": "catalog:",
     "effect": "catalog:",
     "glob": "13.0.6",
@@ -158,6 +147,18 @@
   },
   "license": "Apache-2.0",
   "inlinedDependencies": {
-    "@jsr/std__jsonc": "1.0.2"
+    "@jridgewell/sourcemap-codec": "1.5.5",
+    "@vitest/expect": "4.1.10",
+    "@vitest/pretty-format": "4.1.10",
+    "@vitest/runner": "4.1.10",
+    "@vitest/snapshot": "4.1.10",
+    "@vitest/spy": "4.1.10",
+    "@vitest/utils": "4.1.10",
+    "chai": "6.2.2",
+    "expect-type": "1.4.0",
+    "magic-string": "0.30.21",
+    "tinyrainbow": "3.1.1",
+    "vite": "8.2.1",
+    "vitest": "4.1.10"
   }
 }

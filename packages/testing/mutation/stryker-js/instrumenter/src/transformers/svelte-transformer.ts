@@ -1,9 +1,11 @@
-import { notEmpty } from '@systemfsoftware/stryker-js-util'
+import * as Predicate from 'effect/Predicate'
 
 import { types } from '@babel/core'
 
+import { placeHeader } from '../babel/instrumentation-header.js'
 import { AstFormat } from '../syntax/index.js'
-import { placeHeader } from '../util/syntax-helpers.js'
+
+import { hasPlacedMutants } from './mutant-collector.js'
 
 import { type AstTransformer } from './transformer.js'
 
@@ -15,20 +17,23 @@ export const transformSvelte: AstTransformer<AstFormat.Svelte> = (
   mutantCollector,
   context,
 ) => {
+  const warnings: string[] = []
   const { root, originFileName } = svelte
   ;[root.moduleScript, ...root.additionalScripts]
-    .filter(notEmpty)
+    .filter(Predicate.isNotNullish)
     .forEach((script) => {
-      context.transform(script.ast, mutantCollector, {
-        ...context,
-        options: {
-          ...context.options,
-          noHeader: true,
-        },
-      })
+      warnings.push(
+        ...context.transform(script.ast, mutantCollector, {
+          ...context,
+          options: {
+            ...context.options,
+            noHeader: true,
+          },
+        }),
+      )
     })
 
-  if (mutantCollector.hasPlacedMutants(originFileName)) {
+  if (hasPlacedMutants(mutantCollector, originFileName)) {
     // We need to place the instrumentation header inside the `<script context="module">` script
     // If there already is a module script, place it there. If not, we need to add it.
 
@@ -54,4 +59,5 @@ export const transformSvelte: AstTransformer<AstFormat.Svelte> = (
     }
     placeHeader(root.moduleScript.ast.root)
   }
+  return warnings
 }

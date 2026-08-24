@@ -1,4 +1,4 @@
-import { notEmpty } from '@systemfsoftware/stryker-js-util'
+import * as Predicate from 'effect/Predicate'
 
 import { type SvelteAst } from '../syntax/index.js'
 
@@ -9,7 +9,7 @@ export const print: Printer<SvelteAst> = ({ root, rawContent }, context) => {
   let outputText = ''
 
   const sortedScripts = [root.moduleScript, ...root.additionalScripts]
-    .filter(notEmpty)
+    .filter(Predicate.isNotNullish)
     .sort((a, b) => a.range.start - b.range.start)
   for (const script of sortedScripts) {
     if (script.isExpression) {

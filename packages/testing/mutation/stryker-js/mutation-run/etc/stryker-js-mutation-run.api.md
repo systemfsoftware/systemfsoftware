@@ -4,50 +4,108 @@
 
 ```ts
 
-import { BaseContext } from '@systemfsoftware/stryker-js-plugin-api/plugin';
-import { createInjector } from 'typed-inject';
-import { Disposable as Disposable_2 } from 'typed-inject';
-import { Injector } from 'typed-inject';
+import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner';
+import { CompleteDryRunResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner';
+import { ComposedPlugins } from '@systemfsoftware/stryker-js-plugin-api/plugin';
+import * as Context$1 from 'effect/Context';
+import { CoverageData } from '@systemfsoftware/stryker-js-plugin-api/core';
+import * as Effect$1 from 'effect/Effect';
+import * as Exit from 'effect/Exit';
+import { FileDescription } from '@systemfsoftware/stryker-js-plugin-api/core';
+import { FileDescriptions } from '@systemfsoftware/stryker-js-plugin-api/core';
+import * as FileSystem from 'effect/FileSystem';
+import * as HashMap from 'effect/HashMap';
+import { IgnorerService } from '@systemfsoftware/stryker-js-plugin-api/ignore';
+import * as Layer from 'effect/Layer';
+import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging';
+import { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { MutantStatus } from '@systemfsoftware/stryker-js-plugin-api/core';
+import { MutateDescription } from '@systemfsoftware/stryker-js-plugin-api/core';
+import { MutationTestResult } from 'mutation-testing-report-schema';
 import { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core';
-import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report';
-import { Schema } from 'effect';
+import * as Path from 'effect/Path';
+import { PluginContribution } from '@systemfsoftware/stryker-js-plugin-api/plugin';
+import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
+import * as S from 'effect/Schema';
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core';
+import * as Scope from 'effect/Scope';
+import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core';
+import { TestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner';
+import { YieldableError } from 'effect/Cause';
 
+// @public (undocumented)
+export const ChildProcessSpawnerLive: Layer.Layer<ChildProcessSpawner.ChildProcessSpawner, never, never>;
+
+// Warning: (ae-forgotten-export) The symbol "DefaultStagesContext" needs to be exported by the entry point index.d.mts
+//
+// @public (undocumented)
+export const defaultStages: MutationRunStages<unknown, DefaultStagesContext>;
+
+// Warning: (ae-forgotten-export) The symbol "LoggingServerNotTcpError_base" needs to be exported by the entry point index.d.mts
+//
 // @public
-class Stryker {
-    constructor(cliOptions: PartialStrykerOptions, hostOptions: StrykerHostOptions, injectorFactory?: typeof createInjector);
-    // Warning: (ae-forgotten-export) The symbol "MutationRunContext" needs to be exported by the entry point index.d.mts
-    // Warning: (ae-forgotten-export) The symbol "PrepareExecutorArgs" needs to be exported by the entry point index.d.mts
-    //
-    // @internal
-    static run(mutationRunInjector: Injector<MutationRunContext>, args: PrepareExecutorArgs): Promise<MutantResult[]>;
+export class LoggingServerNotTcpError extends LoggingServerNotTcpError_base {
     // (undocumented)
-    runMutationTest(): Promise<MutantResult[]>;
+    readonly exitClass = ExitClass.InternalError;
 }
-export { Stryker }
-export default Stryker;
+
+// Warning: (ae-forgotten-export) The symbol "PrepareLogger" needs to be exported by the entry point index.d.mts
+// Warning: (ae-forgotten-export) The symbol "InstrumentLogger" needs to be exported by the entry point index.d.mts
+// Warning: (ae-forgotten-export) The symbol "DryRunLogger" needs to be exported by the entry point index.d.mts
+// Warning: (ae-forgotten-export) The symbol "MutationTestLogger" needs to be exported by the entry point index.d.mts
+// Warning: (ae-forgotten-export) The symbol "LoggingServerAddressService" needs to be exported by the entry point index.d.mts
+// Warning: (ae-forgotten-export) The symbol "IdGenerator" needs to be exported by the entry point index.d.mts
+//
+// @public (undocumented)
+export const makeRunLayer: (env: RunEnvironmentShape) => Layer.Layer<RunEnvironment | PrepareLogger | InstrumentLogger | DryRunLogger | MutationTestLogger | FileSystem.FileSystem | Path.Path | LoggingServerAddressService | IdGenerator | ChildProcessSpawner.ChildProcessSpawner, LoggingServerNotTcpError, never>;
 
 // @public
-export interface StrykerHostOptions {
+export interface MutationRunStages<E, R> {
+    // Warning: (ae-forgotten-export) The symbol "DryRunStage" needs to be exported by the entry point index.d.mts
+    //
+    // (undocumented)
+    readonly dryRun: DryRunStage<E, R>;
+    // Warning: (ae-forgotten-export) The symbol "InstrumentStage" needs to be exported by the entry point index.d.mts
+    //
+    // (undocumented)
+    readonly instrument: InstrumentStage<E, R>;
+    // Warning: (ae-forgotten-export) The symbol "MutationTestStage" needs to be exported by the entry point index.d.mts
+    //
+    // (undocumented)
+    readonly mutationTest: MutationTestStage<E, R>;
+    // Warning: (ae-forgotten-export) The symbol "PrepareStage" needs to be exported by the entry point index.d.mts
+    //
+    // (undocumented)
+    readonly prepare: PrepareStage<E, R>;
+}
+
+// Warning: (ae-forgotten-export) The symbol "RunEnvironment_base" needs to be exported by the entry point index.d.mts
+//
+// @public
+export class RunEnvironment extends RunEnvironment_base {}
+
+// @public
+export interface RunEnvironmentShape {
+    readonly basePath: string;
     // (undocumented)
     readonly clearTextEnabled: boolean;
-    readonly loggerConsoleOut: NodeJS.WriteStream;
     // (undocumented)
     readonly progressEnabled: boolean;
-    readonly reporterPluginModules: string[];
+    readonly reporterPluginModules: readonly string[];
     // Warning: (ae-forgotten-export) The symbol "ResolvedMode" needs to be exported by the entry point index.d.mts
     readonly resolvedMode: ResolvedMode;
     // Warning: (ae-forgotten-export) The symbol "RunEventSink" needs to be exported by the entry point index.d.mts
-    //
-    // (undocumented)
     readonly runEventSink: RunEventSink;
     readonly runId: string;
     readonly runStartedAt: number;
-    // (undocumented)
-    readonly showColors: boolean;
 }
+
+// @public
+export const runMutationTest: <E, R>(stages: MutationRunStages<E, R>, cliOptions: PartialStrykerOptions, targetMutatePatterns?: string[]) => Effect$1.Effect<readonly MutantResult[], E, R | RunEnvironment>;
+
+// @public
+export const shouldKeepTempDir: (exit: Exit.Exit<unknown, unknown>, cleanTempDir: 'always' | boolean) => boolean;
 
 // (No @packageDocumentation comment for this package)
 

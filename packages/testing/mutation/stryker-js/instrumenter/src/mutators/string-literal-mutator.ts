@@ -1,7 +1,6 @@
 import babel from '@babel/core'
 
 import { type MutatorContext, type NodeMutator } from './node-mutator.js'
-import { registerMutator } from './registry.js'
 
 const { types } = babel
 
@@ -74,5 +73,3 @@ function isSymbolCall(parent: babel.types.Node): boolean {
 function isImportCall(parent: babel.types.Node): boolean {
   return types.isCallExpression(parent) && types.isImport(parent.callee)
 }
-
-registerMutator(stringLiteralMutator)

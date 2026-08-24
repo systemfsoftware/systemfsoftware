@@ -7,7 +7,9 @@ export const transformHtml: AstTransformer<AstFormat.Html> = (
   mutantCollector,
   context,
 ) => {
+  const warnings: string[] = []
   root.scripts.forEach((ast) => {
-    context.transform(ast, mutantCollector, context)
+    warnings.push(...context.transform(ast, mutantCollector, context))
   })
+  return warnings
 }

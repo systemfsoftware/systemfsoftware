@@ -1,10 +1,9 @@
 import type { types } from '@babel/core'
 import babel from '@babel/core'
 
-import { deepCloneNode } from '../util/index.js'
+import { deepCloneNode } from '../babel/clone.js'
 
 import { type MutatorContext, type NodeMutator } from './node-mutator.js'
-import { registerMutator } from './registry.js'
 
 const { types: t } = babel
 
@@ -48,5 +47,3 @@ function isSupported(
 
   return true
 }
-
-registerMutator(arithmeticOperatorMutator)

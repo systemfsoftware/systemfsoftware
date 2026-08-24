@@ -1,7 +1,6 @@
 import path from 'path'
 
-import { type MutantStatus, schema } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { normalizeFileName } from '@systemfsoftware/stryker-js-util'
+import { type MutantStatus, normalizeFileName, schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { calculateMutationTestMetrics } from 'mutation-testing-metrics'
 import { randomFillSync } from 'node:crypto'
 
@@ -170,6 +169,7 @@ export function buildVerdictEnvelope(
   mode: OutputMode,
   signal: ModeSignal,
   runId: string,
+  basePath: string,
 ): VerdictEnvelope {
   const { jsonReporterFileName } = embeddedConfig(report)
   const metrics = calculateMutationTestMetrics(report)
@@ -179,7 +179,7 @@ export function buildVerdictEnvelope(
     ? metrics.mutationScore
     : null
   const reportFile = hasMutants && jsonReporterFileName !== undefined
-    ? normalizeFileName(path.relative(process.cwd(), jsonReporterFileName))
+    ? normalizeFileName(path.relative(basePath, jsonReporterFileName))
     : null
   const mutants: VerdictMutant[] = []
   for (const [file, fileResult] of Object.entries(report.files)) {

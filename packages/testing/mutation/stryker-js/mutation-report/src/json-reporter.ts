@@ -1,4 +1,5 @@
 import path from 'path'
+import { pathToFileURL } from 'url'
 
 import type { schema, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import type { MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core'
@@ -12,9 +13,8 @@ import type {
 import { ReporterFailed } from '@systemfsoftware/stryker-js-plugin-api/report'
 import * as Effect from 'effect/Effect'
 
-import { pathToFileURL } from 'url'
 import { buildJsonReport } from './json-kernel.js'
-import { reporterUtil } from './reporter-util.js'
+import { writeOutputFile } from './output-file.js'
 
 function noopLogger(): Logger {
   return {
@@ -33,41 +33,40 @@ function noopLogger(): Logger {
   }
 }
 
-export class JsonReporter implements ReporterService {
-  constructor(
-    private readonly options?: StrykerOptions,
-    private readonly log: Logger = noopLogger(),
-  ) {
-    if (this.options !== undefined) {
-      reporterUtil.removeFileSync(path.resolve(path.normalize(this.options.jsonReporter.fileName)))
-    }
+export const makeJsonReporter = (params: {
+  readonly options?: StrykerOptions
+  readonly log?: Logger
+}): ReporterService => {
+  const options = params.options
+  const log = params.log ?? noopLogger()
+
+  return {
+    onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
+
+    onMutationTestingPlanReady: (_event: MutationTestingPlanReadyEvent) => Effect.void,
+
+    onMutantTested: (_result: MutantResult) => Effect.void,
+
+    onMutationTestReportReady: (
+      report: schema.MutationTestResult,
+      _metrics: MutationTestMetricsResult,
+    ) =>
+      Effect.tryPromise({
+        try: async () => {
+          if (options === undefined) return
+          const filePath = path.normalize(options.jsonReporter.fileName)
+          log.debug(`Using relative path ${filePath}`)
+          await writeOutputFile(
+            path.resolve(filePath),
+            buildJsonReport(report),
+          )
+          log.info(
+            `Your report can be found at: ${pathToFileURL(filePath).href}`,
+          )
+        },
+        catch: (cause) => new ReporterFailed({ reporterName: 'json', event: 'onMutationTestReportReady', cause }),
+      }),
+
+    wrapUp: Effect.void,
   }
-
-  public readonly onDryRunCompleted = (_event: DryRunCompletedEvent) => Effect.void
-
-  public readonly onMutationTestingPlanReady = (_event: MutationTestingPlanReadyEvent) => Effect.void
-
-  public readonly onMutantTested = (_result: MutantResult) => Effect.void
-
-  public readonly onMutationTestReportReady = (
-    report: schema.MutationTestResult,
-    _metrics: MutationTestMetricsResult,
-  ) =>
-    Effect.tryPromise({
-      try: async () => {
-        if (this.options === undefined) return
-        const filePath = path.normalize(this.options.jsonReporter.fileName)
-        this.log.debug(`Using relative path ${filePath}`)
-        await reporterUtil.writeFile(
-          path.resolve(filePath),
-          buildJsonReport(report),
-        )
-        this.log.info(
-          `Your report can be found at: ${pathToFileURL(filePath).href}`,
-        )
-      },
-      catch: (cause) => new ReporterFailed({ reporterName: 'json', event: 'onMutationTestReportReady', cause }),
-    })
-
-  public readonly wrapUp = Effect.void
 }

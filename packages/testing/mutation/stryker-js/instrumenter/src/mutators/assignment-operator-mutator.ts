@@ -1,10 +1,9 @@
 import type { types as t } from '@babel/core'
 
-import { deepCloneNode } from '../util/index.js'
+import { deepCloneNode } from '../babel/clone.js'
 
 import babel from '@babel/core'
 import { type MutatorContext, type NodeMutator } from './node-mutator.js'
-import { registerMutator } from './registry.js'
 
 const { types } = babel
 
@@ -52,5 +51,3 @@ function isSupported(node: t.AssignmentExpression): boolean {
 
   return true
 }
-
-registerMutator(assignmentOperatorMutator)

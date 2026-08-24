@@ -1,4 +1,7 @@
-import { declareValuePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Ignorer } from '@systemfsoftware/stryker-js-plugin-api/ignore'
+import { declarePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import * as Layer from 'effect/Layer'
+import * as Option from 'effect/Option'
 import {
   ANNOTATION_OBJECT_IGNORED,
   ANNOTATION_TEXT_IGNORED,
@@ -18,13 +21,19 @@ interface IgnorerPath {
 }
 
 export const strykerPlugins = [
-  declareValuePlugin(PluginKind.Ignore, 'effect-schema-declarations', {
-    shouldIgnore(path: IgnorerPath): string | undefined {
-      const parent = path.parentPath
-      const grandparent = parent?.parentPath
-      return decideSchemaDeclarationIgnore(path.node, parent?.node, grandparent?.node, grandparent?.parentPath?.node)
-    },
-  }),
+  declarePlugin(
+    PluginKind.Ignore,
+    'effect-schema-declarations',
+    Layer.succeed(Ignorer, {
+      shouldIgnore: (path: IgnorerPath) => {
+        const parent = path.parentPath
+        const grandparent = parent?.parentPath
+        return Option.fromUndefinedOr(
+          decideSchemaDeclarationIgnore(path.node, parent?.node, grandparent?.node, grandparent?.parentPath?.node),
+        )
+      },
+    }),
+  ),
 ]
 
 // Public-surface decision: tests reach the decision function through the

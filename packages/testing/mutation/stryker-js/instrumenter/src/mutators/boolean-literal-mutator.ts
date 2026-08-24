@@ -1,9 +1,8 @@
 import babel from '@babel/core'
 
-import { deepCloneNode } from '../util/index.js'
+import { deepCloneNode } from '../babel/clone.js'
 
 import { type MutatorContext, type NodeMutator } from './node-mutator.js'
-import { registerMutator } from './registry.js'
 
 const { types } = babel
 
@@ -19,5 +18,3 @@ export const booleanLiteralMutator: NodeMutator = {
     }
   },
 }
-
-registerMutator(booleanLiteralMutator)

@@ -22,7 +22,7 @@ export const WorkerReplySuccessSchema = S.Struct({
   kind: S.Literal('reply'),
   id: S.Int,
   success: S.Literal(true),
-  value: S.Unknown,
+  value: S.optional(S.Unknown),
 })
 export type WorkerReplySuccess = typeof WorkerReplySuccessSchema.Type
 
@@ -66,7 +66,7 @@ export class WorkerConnectTimeoutError extends S.TaggedError<WorkerConnectTimeou
   'WorkerConnectTimeoutError',
   {
     modulePath: S.String,
-    waitedMs: S.Number,
+    waitedMs: S.Finite,
   },
 ) {}
 

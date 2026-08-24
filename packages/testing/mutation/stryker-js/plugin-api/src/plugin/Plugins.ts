@@ -4,7 +4,7 @@ import * as Option from 'effect/Option'
 
 import { Checker } from '../check/index.js'
 import { Evaluator } from '../evaluate/index.js'
-import type { Ignorer } from '../ignore/index.js'
+import { Ignorer } from '../ignore/index.js'
 import { Reporter } from '../report/index.js'
 import { TestRunner } from '../test-runner/index.js'
 
@@ -15,11 +15,9 @@ import type { SandboxDirectory } from './SandboxDirectory.js'
 /**
  * Maps each `PluginKind` to the port it contributes.
  *
- * Ports are `Context.Service` classes (except `Ignorer`, which stays a plain
- * synchronous predicate — lifting it to `Effect` would force every call site
- * to run an Effect for a pure value). A `Layer` that provides one is the whole
- * construction recipe, so a declaration says what a plugin offers and never how
- * it was built.
+ * Every port is a `Context.Service` class. A `Layer` that provides one is the
+ * whole construction recipe, so a declaration says what a plugin offers and never
+ * how it was built.
  */
 export interface PluginInterfaces {
   [PluginKind.Checker]: Checker
@@ -123,16 +121,17 @@ export interface Shadowing {
  * handleable case for an unchecked assertion — so the caller states what it does
  * with "no plugins" instead.
  */
+export type MergedPluginServices = Checker & Evaluator & Ignorer & Reporter & TestRunner
+
 export interface ComposedPlugins {
-  readonly layer: Option.Option<Layer.Layer<PluginInterfaces[PluginKind], never, unknown>>
+  readonly layer: Option.Option<Layer.Layer<MergedPluginServices, never, PluginEnvironment>>
   readonly shadowings: readonly Shadowing[]
 }
 
 /** The `(kind, name)` identity of a contribution. Plugins differing in either coordinate are distinct. */
-function contributionKey(contribution: PluginContribution<PluginKind>): string {
+function contributionKey(contribution: AnyPluginContribution): string {
   return `${contribution.kind}:${contribution.name}`
 }
-
 /**
  * Fold a contribution list to a last-wins map and the shadowings it applied.
  *
@@ -147,12 +146,12 @@ function contributionKey(contribution: PluginContribution<PluginKind>): string {
  * accident from import order" into something the engine can report.
  */
 function foldContributions(
-  contributions: readonly PluginContribution<PluginKind>[],
+  contributions: readonly AnyPluginContribution[],
 ): {
-  readonly resolved: ReadonlyMap<string, PluginContribution<PluginKind>>
+  readonly resolved: ReadonlyMap<string, AnyPluginContribution>
   readonly shadowings: readonly Shadowing[]
 } {
-  const resolved = new Map<string, PluginContribution<PluginKind>>()
+  const resolved = new Map<string, AnyPluginContribution>()
   const shadowings: Array<Shadowing> = []
   const lastSeen = new Map<string, number>()
 
@@ -193,17 +192,17 @@ function foldContributions(
  * empty list therefore returns `Option.none()` rather than a synthesised layer.
  */
 export function composePlugins(
-  contributions: readonly PluginContribution<PluginKind>[],
+  contributions: readonly AnyPluginContribution[],
 ): ComposedPlugins {
   const { resolved, shadowings } = foldContributions(contributions)
-  const layers: readonly Layer.Layer<PluginInterfaces[PluginKind], never, unknown>[] = [...resolved.values()]
-    .map((contribution) => contribution.layer)
-  return {
-    layer: layers.length === 0
-      ? Option.none()
-      : Option.some(layers.reduce((merged, next) => Layer.merge(merged, next))),
-    shadowings,
+  const layers: readonly Layer.Layer<MergedPluginServices, never, PluginEnvironment>[] = [...resolved.values()].map(
+    (contribution) => contribution.layer,
+  )
+  if (layers.length === 0) {
+    return { layer: Option.none(), shadowings }
   }
+  const merged = layers.reduce((acc, next) => Layer.merge(acc, next))
+  return { layer: Option.some(merged), shadowings }
 }
 
 if (import.meta.vitest !== void 0) {
@@ -212,13 +211,11 @@ if (import.meta.vitest !== void 0) {
   // the published module graph. A static import would ship it.
   const { describe, it } = await import('@effect/vitest')
   const { FastCheck: fc } = await import('effect/testing')
-  const Context = await import('effect/Context')
   const Effect = await import('effect/Effect')
   const LayerDynamic = await import('effect/Layer')
   const Option = await import('effect/Option')
   const { DryRunStatus } = await import('../test-runner/DryRunStatus.js')
   const { MutantRunStatus } = await import('../test-runner/MutantRunResult.js')
-
   const checkerLayer = LayerDynamic.succeed(Checker, {
     init: Effect.void,
     check: () => Effect.succeed(new Map()),
@@ -242,11 +239,10 @@ if (import.meta.vitest !== void 0) {
   })
 
   const evaluatorLayer = LayerDynamic.succeed(Evaluator, {
-    evaluate: () => Effect.void,
+    evaluate: () => Effect.succeed(null),
   })
 
-  const ignorerTag = Context.Service<Ignorer>('test/Ignorer')
-  const ignorerLayer = LayerDynamic.succeed(ignorerTag, {
+  const ignorerLayer = LayerDynamic.succeed(Ignorer, {
     shouldIgnore: () => Option.none(),
   })
 

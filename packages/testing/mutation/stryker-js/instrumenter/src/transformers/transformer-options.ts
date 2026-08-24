@@ -1,7 +1,7 @@
-import { type Ignorer } from '@systemfsoftware/stryker-js-plugin-api/ignore'
+import { type IgnorerService } from '@systemfsoftware/stryker-js-plugin-api/ignore'
 
 import { type MutatorOptions } from '../mutators/index.js'
 
 export interface TransformerOptions extends MutatorOptions {
-  ignorers: Ignorer[]
+  ignorers: IgnorerService[]
 }

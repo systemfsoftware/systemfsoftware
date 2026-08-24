@@ -4,12 +4,15 @@
 
 ```ts
 
-import { ClassPlugin } from '@systemfsoftware/stryker-js-plugin-api/plugin';
+import * as Effect from 'effect/Effect';
 import { Evaluator } from '@systemfsoftware/stryker-js-plugin-api/evaluate';
-import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging';
+import { EvaluatorFailed } from '@systemfsoftware/stryker-js-plugin-api/evaluate';
+import { ExitClass } from '@systemfsoftware/stryker-js-plugin-api/evaluate';
+import * as Layer from 'effect/Layer';
+import { PluginContribution } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
+import { RunConfiguration } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core';
-import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core';
 
 // Warning: (ae-forgotten-export) The symbol "ReportView" needs to be exported by the entry point index.d.ts
 //
@@ -23,16 +26,17 @@ export const defaultRequireTestContributionSuffixes: readonly ['.workflow.proper
 export const judgeTestContribution: (report: ReportView, everyKillerRecorded: boolean, suffixes?: readonly string[]) => TestContributionVerdict;
 
 // @public (undocumented)
-export const strykerPlugins: ClassPlugin<PluginKind.Evaluator, ["options", "logger"]>[];
+export const makeTestContributionEvaluatorService: (options: {
+    readonly disableBail: boolean;
+}) => {
+    readonly evaluate: (report: schema.MutationTestResult) => Effect.Effect<ExitClass | null, EvaluatorFailed>;
+};
 
 // @public (undocumented)
-export class TestContributionEvaluator implements Evaluator {
-    constructor(options: StrykerOptions, log: Logger);
-    // (undocumented)
-    evaluate(report: schema.MutationTestResult): void;
-    // (undocumented)
-    static readonly inject: ["options", "logger"];
-}
+export const strykerPlugins: PluginContribution<PluginKind.Evaluator>[];
+
+// @public (undocumented)
+export const testContributionEvaluatorLayer: Layer.Layer<Evaluator, never, RunConfiguration>;
 
 // @public (undocumented)
 export interface TestContributionInput {

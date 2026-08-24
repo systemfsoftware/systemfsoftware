@@ -1,10 +1,9 @@
 import path from 'path'
 
 import { NodePath } from '@babel/core'
-import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { propertyPath, strykerReportBugUrl } from '@systemfsoftware/stryker-js-util'
+import { propertyPath, type StrykerOptions, strykerReportBugUrl } from '@systemfsoftware/stryker-js-plugin-api/core'
 
-import { Mutant } from '../mutant.js'
+import type { Mutant } from '../mutant.js'
 
 import { type MutantPlacer } from './mutant-placer.js'
 

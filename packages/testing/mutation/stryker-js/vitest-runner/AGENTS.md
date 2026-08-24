@@ -2,7 +2,7 @@
 
 > **Location:** `packages/stryker-js/vitest-runner/` — Vitest test-runner plugin for Stryker.
 
-Ported from `@stryker-mutator/vitest-runner` v9.6.1 (commit `e1abfbe`). The tsconfig reproduces the original's strictness so the ported source typechecks unmodified; its idioms (`@ts-expect-error` across the vitest 4.0/4.1 hook split, non-null assertions on `this.ctx`) are kept deliberately (CONSTITUTION §V.6).
+Ported from `@stryker-mutator/vitest-runner` v9.6.1 (commit `e1abfbe`). The tsconfig reproduces the original's strictness so the ported source typechecks unmodified; the package carries no type-suppression comments and no non-null assertions.
 
 Deltas from root:
 
@@ -12,4 +12,4 @@ Deltas from root:
 
 🛑 `src/vitest-test-runner.ts` resolves `stryker-setup.mjs` next to its own emitted module and copies it into the sandbox, so the integration specs need a fresh `dist/`. `turbo.json` in this package makes `test` depend on its own `build`, so run `pnpm turbo test --filter=@systemfsoftware/stryker-js-vitest-runner`; a bare `pnpm --filter … test` tests the previous build.
 
-🛑 `src/stryker-setup.ts` must import nothing local — it is copied into the sandbox alone. That is why `collectTestName`/`toRawTestId` are duplicated there instead of imported from `src/test-helpers.ts`.
+🛑 `src/stryker-setup.ts` must import nothing local — it is copied into the sandbox alone. That is why `collectTestName`/`toRawTestId` are duplicated there instead of imported from `src/test-identity.ts`.

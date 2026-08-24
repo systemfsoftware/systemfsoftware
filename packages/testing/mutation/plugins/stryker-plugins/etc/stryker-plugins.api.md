@@ -4,11 +4,11 @@
 
 ```ts
 
+import { PluginContribution } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
-import { ValuePlugin } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 
 // @public (undocumented)
-export const strykerPlugins: ValuePlugin<PluginKind.Ignore>[];
+export const strykerPlugins: PluginContribution<PluginKind.Ignore>[];
 
 // (No @packageDocumentation comment for this package)
 

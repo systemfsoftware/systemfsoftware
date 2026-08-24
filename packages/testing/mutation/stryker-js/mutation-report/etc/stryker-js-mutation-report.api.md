@@ -6,95 +6,173 @@
 
 import { DryRunCompletedEvent } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging';
+import { Metrics } from '@systemfsoftware/stryker-js-plugin-api/report';
+import { MetricsResult } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core';
+import { MutationScoreThresholds } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { MutationTestingPlanReadyEvent } from '@systemfsoftware/stryker-js-plugin-api/report';
-import { MutationTestMetricsResult } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { PluginContribution } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
-import { ReporterFailed } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { ReporterService } from '@systemfsoftware/stryker-js-plugin-api/report';
+import { RunTiming } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core';
+import { TestRunnerCapabilities } from '@systemfsoftware/stryker-js-plugin-api/test-runner';
+import { Timer } from '@systemfsoftware/stryker-js-mutation-run/timer';
 
 // @public (undocumented)
-export class ClearTextReporter implements ReporterService {
-    constructor(options?: StrykerOptions | undefined, log?: Logger, out?: NodeJS.WritableStream);
-    // Warning: (ae-forgotten-export) The symbol "Effect" needs to be exported by the entry point index.d.mts
-    //
-    // (undocumented)
-    readonly onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect<void, never, never>;
-    // (undocumented)
-    readonly onMutantTested: (_result: MutantResult) => Effect<void, never, never>;
-    // (undocumented)
-    readonly onMutationTestingPlanReady: (_event: MutationTestingPlanReadyEvent) => Effect<void, never, never>;
-    // (undocumented)
-    readonly onMutationTestReportReady: (report: schema.MutationTestResult, metrics: MutationTestMetricsResult) => Effect<void, ReporterFailed, never>;
-    // (undocumented)
-    readonly wrapUp: Effect<void, never, never>;
-}
+export type Column = {
+    readonly kind: 'single';
+    readonly header: string;
+    readonly isFirstColumn: boolean;
+    readonly netWidth: number;
+    readonly valueFactory: TableCellValueFactory;
+    readonly rows: MetricsResult<Metrics>;
+} | {
+    readonly kind: 'file';
+    readonly header: string;
+    readonly isFirstColumn: true;
+    readonly netWidth: number;
+    readonly valueFactory: TableCellValueFactory;
+    readonly rows: MetricsResult<Metrics>;
+} | {
+    readonly kind: 'mutationScore';
+    readonly header: string;
+    readonly isFirstColumn: false;
+    readonly netWidth: number;
+    readonly valueFactory: TableCellValueFactory;
+    readonly rows: MetricsResult<Metrics>;
+    readonly thresholds: MutationScoreThresholds;
+    readonly scoreType: 'total' | 'covered';
+    readonly allowColor: boolean;
+} | {
+    readonly kind: 'group';
+    readonly header: string;
+    readonly isFirstColumn: boolean;
+    readonly netWidth: number;
+    readonly columns: readonly Column[];
+};
 
 // @public (undocumented)
-export class HtmlReporter implements ReporterService {
-    constructor(options?: StrykerOptions | undefined, log?: Logger);
-    // (undocumented)
-    readonly onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect<void, never, never>;
-    // (undocumented)
-    readonly onMutantTested: (_result: MutantResult) => Effect<void, never, never>;
-    // (undocumented)
-    readonly onMutationTestingPlanReady: (_event: MutationTestingPlanReadyEvent) => Effect<void, never, never>;
-    // (undocumented)
-    readonly onMutationTestReportReady: (report: schema.MutationTestResult, _metrics: MutationTestMetricsResult) => Effect<void, ReporterFailed, never>;
-    // (undocumented)
-    readonly wrapUp: Effect<void, never, never>;
-}
+export const drawClearTextScoreTable: (metricsResult: MetricsResult<Metrics>, options: StrykerOptions) => string;
 
 // @public (undocumented)
-export class JsonReporter implements ReporterService {
-    constructor(options?: StrykerOptions | undefined, log?: Logger);
-    // (undocumented)
-    readonly onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect<void, never, never>;
-    // (undocumented)
-    readonly onMutantTested: (_result: MutantResult) => Effect<void, never, never>;
-    // (undocumented)
-    readonly onMutationTestingPlanReady: (_event: MutationTestingPlanReadyEvent) => Effect<void, never, never>;
-    // (undocumented)
-    readonly onMutationTestReportReady: (report: schema.MutationTestResult, _metrics: MutationTestMetricsResult) => Effect<void, ReporterFailed, never>;
-    // (undocumented)
-    readonly wrapUp: Effect<void, never, never>;
-}
+export const emptyTally: (timer: Timer) => ProgressTally;
 
 // @public (undocumented)
-export class ProgressBarReporter implements ReporterService {
-    // (undocumented)
-    readonly onDryRunCompleted: (event: DryRunCompletedEvent) => Effect<void, ReporterFailed, never>;
-    // (undocumented)
-    readonly onMutantTested: (result: MutantResult) => Effect<void, ReporterFailed, never>;
-    // (undocumented)
-    readonly onMutationTestingPlanReady: (event: MutationTestingPlanReadyEvent) => Effect<void, ReporterFailed, never>;
-    // (undocumented)
-    readonly onMutationTestReportReady: (_report: schema.MutationTestResult, _metrics: MutationTestMetricsResult) => Effect<void, never, never>;
-    // (undocumented)
-    readonly wrapUp: Effect<void, never, never>;
-}
+export function filterActionable(result: MutantResult): boolean;
 
 // @public (undocumented)
-export class ProgressStreamReporter implements ReporterService {
-    // Warning: (ae-forgotten-export) The symbol "RunEventSink" needs to be exported by the entry point index.d.mts
-    constructor(runEventSink?: RunEventSink);
-    // (undocumented)
-    readonly onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect<void, never, never>;
-    // (undocumented)
-    readonly onMutantTested: (result: MutantResult) => Effect<void, ReporterFailed, never>;
-    // (undocumented)
-    readonly onMutationTestingPlanReady: (event: MutationTestingPlanReadyEvent) => Effect<void, ReporterFailed, never>;
-    // (undocumented)
-    readonly onMutationTestReportReady: (_report: schema.MutationTestResult, _metrics: MutationTestMetricsResult) => Effect<void, never, never>;
-    // (undocumented)
-    readonly wrapUp: Effect<void, never, never>;
-}
+export const getElapsedTime: (tally: ProgressTally, now: number) => string;
+
+// @public (undocumented)
+export const getEtc: (tally: ProgressTally, now: number) => string;
+
+// @public (undocumented)
+export const handleDryRunCompleted: (tally: ProgressTally, event: DryRunCompletedEvent) => ProgressTally;
+
+// @public (undocumented)
+export const handleMutantTested: (tally: ProgressTally, result: MutantResult) => {
+    readonly tally: ProgressTally;
+    readonly ticks: number;
+};
+
+// @public (undocumented)
+export const handleMutationTestingPlanReady: (tally: ProgressTally, event: MutationTestingPlanReadyEvent, timer: Timer) => ProgressTally;
+
+// @public (undocumented)
+export const isComplete: (state: ProgressBarState) => boolean;
+
+// @public (undocumented)
+export const makeClearTextReporter: (params: {
+    readonly options?: StrykerOptions;
+    readonly log?: Logger;
+    readonly out?: NodeJS.WritableStream;
+}) => ReporterService;
+
+// @public (undocumented)
+export const makeEmptyTimer: () => Timer;
+
+// @public (undocumented)
+export const makeHtmlReporter: (params: {
+    readonly options?: StrykerOptions;
+    readonly log?: Logger;
+}) => ReporterService;
+
+// @public (undocumented)
+export const makeJsonReporter: (params: {
+    readonly options?: StrykerOptions;
+    readonly log?: Logger;
+}) => ReporterService;
+
+// Warning: (ae-forgotten-export) The symbol "Effect" needs to be exported by the entry point index.d.mts
+//
+// @public (undocumented)
+export const makeProgressBarReporter: (params?: {
+    readonly out?: NodeJS.WritableStream;
+    readonly barFormat?: string;
+    readonly barOptions?: {
+        readonly complete: string;
+        readonly incomplete: string;
+        readonly width: number;
+    };
+}) => Effect<ReporterService>;
+
+// @public (undocumented)
+export const makeProgressBarState: (format: string, options: {
+    readonly complete: string;
+    readonly incomplete: string;
+    readonly total: number;
+    readonly width: number;
+}) => ProgressBarState;
+
+// @public (undocumented)
+export const makeProgressStreamReporter: (runEventSink?: RunEventSink) => Effect<ReporterService>;
+
+// @public (undocumented)
+export type ProgressBarState = {
+    readonly format: string;
+    readonly total: number;
+    readonly curr: number;
+    readonly width: number;
+    readonly complete: string;
+    readonly incomplete: string;
+};
+
+// @public (undocumented)
+export type ProgressTally = {
+    readonly survived: number;
+    readonly timedOut: number;
+    readonly tested: number;
+    readonly mutants: number;
+    readonly total: number;
+    readonly ticks: number;
+    readonly ticksByMutantId: ReadonlyMap<string, number>;
+    readonly timing: RunTiming;
+    readonly capabilities: TestRunnerCapabilities;
+    readonly timer: Timer;
+};
+
+// @public (undocumented)
+export const renderProgressBar: (state: ProgressBarState, data: Readonly<Record<string, string | number>>) => string;
+
+// Warning: (ae-forgotten-export) The symbol "RunEvent" needs to be exported by the entry point index.d.mts
+//
+// @public (undocumented)
+export type RunEventSink = (event: RunEvent) => void;
 
 // @public (undocumented)
 export const strykerPlugins: PluginContribution<PluginKind.Reporter>[];
+
+// @public (undocumented)
+export const tickProgressBar: (state: ProgressBarState, ticks: number) => ProgressBarState;
+
+// @public (undocumented)
+export function toRunEvent(result: MutantResult, completed: number, total: number): RunEvent;
+
+// Warnings were encountered during analysis:
+//
+// dist/index-BgAeIn0i.d.mts:21:3 - (ae-forgotten-export) The symbol "TableCellValueFactory" needs to be exported by the entry point index.d.mts
 
 // (No @packageDocumentation comment for this package)
 

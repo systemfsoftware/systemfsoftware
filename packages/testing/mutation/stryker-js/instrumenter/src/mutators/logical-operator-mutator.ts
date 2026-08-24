@@ -1,8 +1,7 @@
-import { deepCloneNode } from '../util/index.js'
+import { deepCloneNode } from '../babel/clone.js'
 
 import babel from '@babel/core'
 import { type MutatorContext, type NodeMutator } from './node-mutator.js'
-import { registerMutator } from './registry.js'
 
 const { types } = babel
 
@@ -30,5 +29,3 @@ export const logicalOperatorMutator: NodeMutator = {
 function isSupported(operator: string): operator is keyof typeof logicalOperatorReplacements {
   return Object.keys(logicalOperatorReplacements).includes(operator)
 }
-
-registerMutator(logicalOperatorMutator)

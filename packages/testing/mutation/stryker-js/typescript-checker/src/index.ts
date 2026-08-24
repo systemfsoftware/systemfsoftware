@@ -7,9 +7,9 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as S from 'effect/Schema'
 
-import { HybridFileSystem } from './project/hybrid-file-system.js'
+import { makeHybridFileSystem } from './project/hybrid-file-system.js'
 import { makeCheckerService } from './typescript-checker.js'
-import { TypescriptCompiler } from './typescript-compiler.js'
+import { makeTypescriptCompiler } from './typescript-compiler.js'
 
 export const strykerPlugins = [
   declarePlugin(
@@ -19,15 +19,13 @@ export const strykerPlugins = [
       Checker,
       Effect.gen(function*() {
         const options = yield* RunConfiguration
-        const fs = new HybridFileSystem()
-        const compiler = new TypescriptCompiler(options, fs)
+        const fs = yield* makeHybridFileSystem
+        const compiler = makeTypescriptCompiler(options, fs)
         return makeCheckerService({ options, compiler })
       }),
     ),
   ),
 ]
-
-export { TypescriptChecker } from './typescript-checker.js'
 
 const rawSchema: unknown = JSON.parse(
   readFileSync(new URL('../schema/typescript-checker-options.json', import.meta.url), 'utf-8'),

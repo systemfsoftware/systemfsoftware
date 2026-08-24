@@ -32,9 +32,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
-    "@systemfsoftware/stryker-js-util": "workspace:^",
     "effect": "catalog:",
-    "semver": "catalog:stryker",
     "typescript": "catalog:"
   },
   "devDependencies": {
@@ -45,11 +43,9 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
-    "@types/semver": "^7.5.8",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typed-inject": "~5.0.0",
     "vitest": "catalog:"
   },
   "inlinedDependencies": {

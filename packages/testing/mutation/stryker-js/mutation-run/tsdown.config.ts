@@ -10,7 +10,6 @@ export default defineConfig({
     'config/config-resolution': './src/config/config-resolution.ts',
     'config/fork-schema': './src/config/fork-schema.ts',
     'plugins': './src/plugins/index.ts',
-    errors: './src/errors.ts',
     'mutants/incremental-differ': './src/mutants/incremental-differ.ts',
     'output-mode': './src/output-mode.ts',
     'verdict-envelope': './src/verdict-envelope.ts',

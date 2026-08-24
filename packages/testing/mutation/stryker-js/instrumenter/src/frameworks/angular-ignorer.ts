@@ -1,7 +1,7 @@
 import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'
 
-import { type Ignorer, type NodePath } from '@systemfsoftware/stryker-js-plugin-api/ignore'
+import { type IgnorerService, type NodePath } from '@systemfsoftware/stryker-js-plugin-api/ignore'
 
 const ANGULAR_SIGNAL_IO_FUNCTIONS = Object.freeze(['input', 'model', 'output'])
 
@@ -18,96 +18,98 @@ const INPUT_MODEL_OUTPUT_CONFIG_MSG =
 const SIGNAL_QUERY_OPTIONS_MSG =
   'Angular signal query options object cannot be mutated as that causes issues with the Angular compiler.'
 
-export class AngularIgnorer implements Ignorer {
-  public shouldIgnore(path: NodePath): Option.Option<string> {
-    if (this.isInputModelOrOutputConfigurationObject(path)) {
-      return Option.some(INPUT_MODEL_OUTPUT_CONFIG_MSG)
-    }
-    if (this.isSignalQueryOptionsObject(path)) {
-      return Option.some(SIGNAL_QUERY_OPTIONS_MSG)
-    }
-    return Option.none()
+export function shouldIgnore(path: NodePath): Option.Option<string> {
+  if (isInputModelOrOutputConfigurationObject(path)) {
+    return Option.some(INPUT_MODEL_OUTPUT_CONFIG_MSG)
   }
-
-  #isClassFieldLike(path: NodePath): boolean {
-    return path.isClassProperty() || path.isClassPrivateProperty() || path.isClassAccessorProperty()
+  if (isSignalQueryOptionsObject(path)) {
+    return Option.some(SIGNAL_QUERY_OPTIONS_MSG)
   }
+  return Option.none()
+}
 
-  private isInputModelOrOutputConfigurationObject(path: NodePath): boolean {
-    const parent = path.parentPath
-    const grandParent = parent?.parentPath
-    if (
-      !path.isObjectExpression() ||
-      parent === null ||
-      parent === undefined ||
-      !parent.isCallExpression() ||
-      grandParent === null ||
-      grandParent === undefined ||
-      !grandParent.isClassProperty()
-    ) {
-      return false
-    }
+export const angularIgnorer: IgnorerService = {
+  shouldIgnore,
+}
 
-    const callExpression = parent
-    const objectExpression = path
-    const callNode = callExpression.node
-    if (!Predicate.hasProperty(callNode, 'callee') || !Predicate.hasProperty(callNode, 'arguments')) {
-      return false
-    }
-    const callee = callNode['callee']
-    const args = callNode['arguments']
-    if (!Array.isArray(args)) {
-      return false
-    }
+function isClassFieldLike(path: NodePath): boolean {
+  return path.isClassProperty() || path.isClassPrivateProperty() || path.isClassAccessorProperty()
+}
 
-    const isRequiredSignalIOFunction = isMemberExpressionWithIdentifier(callee, ANGULAR_SIGNAL_IO_FUNCTIONS, 'required')
-    const isSignalIOFunction = isIdentifierIn(callee, ANGULAR_SIGNAL_IO_FUNCTIONS)
-    const isOutput = isIdentifierWithName(callee, 'output')
-
-    if (isRequiredSignalIOFunction || isOutput) {
-      return args.length >= 1 && args[0] === objectExpression.node
-    }
-
-    if (isSignalIOFunction) {
-      return args.length >= 2 && args[1] === objectExpression.node
-    }
-
+function isInputModelOrOutputConfigurationObject(path: NodePath): boolean {
+  const parent = path.parentPath
+  const grandParent = parent?.parentPath
+  if (
+    !path.isObjectExpression() ||
+    parent === null ||
+    parent === undefined ||
+    !parent.isCallExpression() ||
+    grandParent === null ||
+    grandParent === undefined ||
+    !grandParent.isClassProperty()
+  ) {
     return false
   }
 
-  private isSignalQueryOptionsObject(path: NodePath): boolean {
-    const parent = path.parentPath
-    const grandParent = parent?.parentPath
-    if (
-      !path.isObjectExpression() ||
-      parent === null ||
-      parent === undefined ||
-      !parent.isCallExpression() ||
-      grandParent === null ||
-      grandParent === undefined ||
-      !this.#isClassFieldLike(grandParent)
-    ) {
-      return false
-    }
+  const callExpression = parent
+  const objectExpression = path
+  const callNode = callExpression.node
+  if (!Predicate.hasProperty(callNode, 'callee') || !Predicate.hasProperty(callNode, 'arguments')) {
+    return false
+  }
+  const callee = callNode['callee']
+  const args = callNode['arguments']
+  if (!Array.isArray(args)) {
+    return false
+  }
 
-    const callExpression = parent
-    const objectExpression = path
-    const callNode = callExpression.node
-    if (!Predicate.hasProperty(callNode, 'callee') || !Predicate.hasProperty(callNode, 'arguments')) {
-      return false
-    }
-    const callee = callNode['callee']
-    const args = callNode['arguments']
-    if (!Array.isArray(args)) {
-      return false
-    }
-    const isQueryFn = isIdentifierIn(callee, ANGULAR_SIGNAL_QUERY_FUNCTIONS)
-    const isRequiredQueryFn = isMemberExpressionWithIdentifier(callee, ANGULAR_SIGNAL_QUERY_FUNCTIONS, 'required')
-    if (!isQueryFn && !isRequiredQueryFn) {
-      return false
-    }
+  const isRequiredSignalIOFunction = isMemberExpressionWithIdentifier(callee, ANGULAR_SIGNAL_IO_FUNCTIONS, 'required')
+  const isSignalIOFunction = isIdentifierIn(callee, ANGULAR_SIGNAL_IO_FUNCTIONS)
+  const isOutput = isIdentifierWithName(callee, 'output')
+
+  if (isRequiredSignalIOFunction || isOutput) {
+    return args.length >= 1 && args[0] === objectExpression.node
+  }
+
+  if (isSignalIOFunction) {
     return args.length >= 2 && args[1] === objectExpression.node
   }
+
+  return false
+}
+
+function isSignalQueryOptionsObject(path: NodePath): boolean {
+  const parent = path.parentPath
+  const grandParent = parent?.parentPath
+  if (
+    !path.isObjectExpression() ||
+    parent === null ||
+    parent === undefined ||
+    !parent.isCallExpression() ||
+    grandParent === null ||
+    grandParent === undefined ||
+    !isClassFieldLike(grandParent)
+  ) {
+    return false
+  }
+
+  const callExpression = parent
+  const objectExpression = path
+  const callNode = callExpression.node
+  if (!Predicate.hasProperty(callNode, 'callee') || !Predicate.hasProperty(callNode, 'arguments')) {
+    return false
+  }
+  const callee = callNode['callee']
+  const args = callNode['arguments']
+  if (!Array.isArray(args)) {
+    return false
+  }
+  const isQueryFn = isIdentifierIn(callee, ANGULAR_SIGNAL_QUERY_FUNCTIONS)
+  const isRequiredQueryFn = isMemberExpressionWithIdentifier(callee, ANGULAR_SIGNAL_QUERY_FUNCTIONS, 'required')
+  if (!isQueryFn && !isRequiredQueryFn) {
+    return false
+  }
+  return args.length >= 2 && args[1] === objectExpression.node
 }
 
 function isIdentifierWithName(node: unknown, name: string): boolean {

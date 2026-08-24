@@ -1,13 +1,14 @@
-import { Effect } from 'effect'
+import { fileURLToPath } from 'node:url'
+
+import { Context, Effect } from 'effect'
+import * as Layer from 'effect/Layer'
 import type { Scope } from 'effect/Scope'
 
-import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-
 import type { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { createVitestTestRunnerFactory, VitestTestRunner } from '../../dist/index.mjs'
+import { TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import { makeVitestRunnerLayer } from '../../src/vitest-test-runner.js'
 import {
   createStrykerOptions,
-  createTestInjector,
   createVitestRunnerOptions,
   type VitestRunnerOptions,
   type VitestRunnerOptionsWithStrykerOptions,
@@ -15,57 +16,77 @@ import {
 
 import { TempTestDirectorySandbox } from './temp-test-directory-sandbox.js'
 
-/**
- * The options document with its read-only core view made writable: the specs
- * reconfigure the runner before init (e.g. `disableBail`, `vitest.related`).
- */
 type MutableStrykerOptions = { -readonly [K in keyof StrykerOptions]: StrykerOptions[K] }
 
 export type MutableRunnerOptions = MutableStrykerOptions & { vitest: VitestRunnerOptions }
 
 export interface RunnerContext {
-  readonly sut: VitestTestRunner
+  readonly sut: {
+    readonly init: () => Promise<void>
+    readonly dryRun: (
+      ...args: Parameters<TestRunner['Service']['dryRun']>
+    ) => Promise<
+      Awaited<
+        ReturnType<TestRunner['Service']['dryRun']> extends Effect.Effect<infer A, unknown, unknown> ? Promise<A>
+          : never
+      >
+    >
+    readonly mutantRun: (
+      ...args: Parameters<TestRunner['Service']['mutantRun']>
+    ) => Promise<
+      Awaited<
+        ReturnType<TestRunner['Service']['mutantRun']> extends Effect.Effect<infer A, unknown, unknown> ? Promise<A>
+          : never
+      >
+    >
+    readonly dispose: () => Promise<void>
+  }
   readonly options: VitestRunnerOptionsWithStrykerOptions
   readonly sandbox: TempTestDirectorySandbox
 }
 
-/**
- * A Stryker runner bound to a fresh copy of a `testResources` project. The
- * sandbox is copied (a fixture cannot be loaded twice in one process) and the
- * runner's project root is anchored to the copy, mirroring the sandbox
- * injection a real mutation run performs.
- */
 export const runnerContext = (
   project: string,
   configure?: (options: MutableRunnerOptions) => void,
 ): Effect.Effect<RunnerContext, never, Scope> =>
   Effect.acquireRelease(
-    Effect.promise(async () => {
+    Effect.gen(function*() {
       const sandbox = new TempTestDirectorySandbox(project)
-      await sandbox.init()
+      yield* Effect.promise(() => sandbox.init())
       const options = createStrykerOptions()
       options.vitest = createVitestRunnerOptions({ related: false })
-      // The runner snapshots options at construction (`this.options` is a
-      // decode of the input), so scenario configuration must land before the
-      // runner exists.
       if (configure !== undefined) {
         configure(options)
       }
-      const sut = createTestInjector(options)
-        .provideValue(commonTokens.sandboxDirectory, sandbox.tmpDir)
-        .injectFunction(createVitestTestRunnerFactory('__stryker2__'))
-      return { sut, options, sandbox }
+      const layer = makeVitestRunnerLayer({
+        options,
+        sandboxDirectory: sandbox.tmpDir,
+        globalNamespace: '__stryker2__',
+        // This suite imports the runner from `src/`, where the emitted
+        // `stryker-setup.mjs` sibling does not exist — it is built into
+        // `dist/`. Naming it here keeps the product's own default correct for
+        // an installed package instead of teaching it about this layout.
+        setupFilePath: fileURLToPath(new URL('../../dist/stryker-setup.mjs', import.meta.url)),
+      })
+      const context = yield* Layer.build(layer)
+      const service = Context.get(context, TestRunner)
+      const sut = {
+        init: () => Effect.runPromise(service.init),
+        dryRun: (opts: Parameters<TestRunner['Service']['dryRun']>[0]) => Effect.runPromise(service.dryRun(opts)),
+        mutantRun: (opts: Parameters<TestRunner['Service']['mutantRun']>[0]) =>
+          Effect.runPromise(service.mutantRun(opts)),
+        dispose: () => Effect.runPromise(service.dispose),
+      }
+      return { sut: sut, options, sandbox }
     }),
     ({ sut, sandbox }) =>
-      Effect.promise(async () => {
-        await sut.dispose()
-        await sandbox.dispose()
+      Effect.gen(function*() {
+        yield* Effect.promise(() => sut.dispose())
+        yield* Effect.promise(() => sandbox.dispose())
       }),
   )
 
-export const initRunner = (
-  context: RunnerContext,
-): Effect.Effect<RunnerContext> =>
+export const initRunner = (context: RunnerContext): Effect.Effect<RunnerContext> =>
   Effect.promise(async () => {
     await context.sut.init()
     return context

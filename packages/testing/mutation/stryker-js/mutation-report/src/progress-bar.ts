@@ -1,9 +1,55 @@
+export type ProgressBarState = {
+  readonly format: string
+  readonly total: number
+  readonly curr: number
+  readonly width: number
+  readonly complete: string
+  readonly incomplete: string
+}
+
+export const makeProgressBarState = (
+  format: string,
+  options: {
+    readonly complete: string
+    readonly incomplete: string
+    readonly total: number
+    readonly width: number
+  },
+): ProgressBarState => ({
+  format,
+  total: options.total,
+  curr: 0,
+  width: options.width,
+  complete: options.complete,
+  incomplete: options.incomplete,
+})
+
+export const tickProgressBar = (
+  state: ProgressBarState,
+  ticks: number,
+): ProgressBarState => ({
+  ...state,
+  curr: state.curr + ticks,
+})
+
+export const renderProgressBar = (
+  state: ProgressBarState,
+  data: Readonly<Record<string, string | number>>,
+): string =>
+  formatBar(state.format, state.curr, state.total, data, {
+    width: state.width,
+    complete: state.complete,
+    incomplete: state.incomplete,
+  })
+
+export const isComplete = (state: ProgressBarState): boolean => state.curr >= state.total
+
 function formatBar(
   format: string,
   curr: number,
   total: number,
-  data: Record<string, string | number>,
-  options: { width: number; complete: string; incomplete: string },
+  data: Readonly<Record<string, string | number>>,
+  options: { readonly width: number; readonly complete: string; readonly incomplete: string },
 ): string {
   const ratio = total === 0 ? 0 : Math.min(curr / total, 1)
   const filled = Math.floor(ratio * options.width)
@@ -17,44 +63,3 @@ function formatBar(
   }
   return out
 }
-
-export class ProgressBar {
-  public total: number
-  private curr = 0
-  private readonly stream: NodeJS.WritableStream
-  private readonly format: string
-  private readonly width: number
-  private readonly complete: string
-  private readonly incomplete: string
-
-  constructor(
-    format: string,
-    options: { complete: string; incomplete: string; stream: NodeJS.WritableStream; total: number; width: number },
-  ) {
-    this.format = format
-    this.total = options.total
-    this.width = options.width
-    this.complete = options.complete
-    this.incomplete = options.incomplete
-    this.stream = options.stream
-  }
-
-  public tick(ticks: number, data: Record<string, string | number>): void {
-    this.curr += ticks
-    this.render(data)
-  }
-
-  public render(data: Record<string, string | number>): void {
-    const line = formatBar(this.format, this.curr, this.total, data, {
-      width: this.width,
-      complete: this.complete,
-      incomplete: this.incomplete,
-    })
-    this.stream.write(`\r${line}`)
-    if (this.curr >= this.total) {
-      this.stream.write('\n')
-    }
-  }
-}
-
-export const progressBarWrapper = { ProgressBar }

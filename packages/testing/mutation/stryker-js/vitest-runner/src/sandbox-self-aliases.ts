@@ -1,4 +1,3 @@
-import { escapeRegExp } from '@systemfsoftware/stryker-js-util'
 import { Option } from 'effect'
 import * as S from 'effect/Schema'
 import fs from 'fs'
@@ -53,7 +52,7 @@ export const sandboxSelfAliases = (
       continue
     }
     aliases.push({
-      find: new RegExp(`^${escapeRegExp(spec)}$`),
+      find: new RegExp(`^${RegExp.escape(spec)}$`),
       replacement: path.resolve(projectRoot, target),
     })
   }

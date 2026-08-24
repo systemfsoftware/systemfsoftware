@@ -31,9 +31,7 @@
     "@systemfsoftware/stryker-js-mutation-report": "workspace:^",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
     "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
-    "@systemfsoftware/stryker-js-util": "workspace:^",
-    "effect": "catalog:",
-    "semver": "catalog:stryker"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
@@ -47,7 +45,6 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
-    "@types/semver": "7.7.1",
     "@vitest/coverage-v8": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",

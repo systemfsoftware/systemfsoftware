@@ -1,8 +1,8 @@
 import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
 
-import { toPosixFileName } from '../tsconfig-helpers.js'
+import { toPosixFileName } from '../posix-file-name.js'
 
-import { TSFileNode } from './ts-file-node.js'
+import { getAllParentReferencesIncludingSelf, type TSFileNode } from './ts-file-node.js'
 
 /**
  * To speed up the type-checking we want to check multiple mutants at once.
@@ -15,7 +15,7 @@ import { TSFileNode } from './ts-file-node.js'
  */
 export function createGroups(
   mutants: Mutant[],
-  nodes: Map<string, TSFileNode>,
+  nodes: ReadonlyMap<string, TSFileNode>,
 ): string[][] {
   const groups: string[][] = []
   const mutantsToGroup = new Set(mutants)
@@ -36,7 +36,7 @@ export function createGroups(
         mutantsToGroup.delete(currentMutant)
         addRangeOfNodesToSet(
           nodesToIgnore,
-          currentNode.getAllParentReferencesIncludingSelf(),
+          getAllParentReferencesIncludingSelf(currentNode),
         )
       }
     }
@@ -55,7 +55,7 @@ function addRangeOfNodesToSet(
   }
 }
 
-function findNode(fileName: string, nodes: Map<string, TSFileNode>) {
+function findNode(fileName: string, nodes: ReadonlyMap<string, TSFileNode>) {
   const node = nodes.get(toPosixFileName(fileName))
   if (node == null) {
     throw new Error(`Node not in graph: ${fileName}`)
@@ -67,7 +67,7 @@ function parentsHaveOverlapWith(
   currentNode: TSFileNode,
   groupNodes: Set<TSFileNode>,
 ) {
-  for (const parentNode of currentNode.getAllParentReferencesIncludingSelf()) {
+  for (const parentNode of getAllParentReferencesIncludingSelf(currentNode)) {
     if (groupNodes.has(parentNode)) {
       return true
     }

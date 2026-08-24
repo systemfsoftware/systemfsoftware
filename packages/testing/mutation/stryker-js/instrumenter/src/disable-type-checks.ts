@@ -1,5 +1,5 @@
 import type { types } from '@babel/core'
-import { notEmpty } from '@systemfsoftware/stryker-js-util'
+import * as Predicate from 'effect/Predicate'
 
 import { type File } from './file.js'
 
@@ -119,7 +119,7 @@ function disableTypeCheckingInHtml(ast: HtmlAst): string {
 
 function disableTypeCheckingInSvelte(ast: SvelteAst): string {
   const sortedScripts = [ast.root.moduleScript, ...ast.root.additionalScripts]
-    .filter(notEmpty)
+    .filter(Predicate.isNotNullish)
     .sort((a, b) => a.range.start - b.range.start)
   let currentIndex = 0
   let html = ''
@@ -142,7 +142,7 @@ function removeTSDirectives(
 ): string {
   const directiveRanges = comments
     ?.map(tryParseTSDirective)
-    .filter(notEmpty)
+    .filter(Predicate.isNotNullish)
     .sort((a, b) => a.startPos - b.startPos)
   if (directiveRanges) {
     let currentIndex = 0

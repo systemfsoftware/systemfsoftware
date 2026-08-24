@@ -1,5 +1,8 @@
 import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { type KnownKeys } from '@systemfsoftware/stryker-js-util'
+
+type KnownKeys<T> = keyof {
+  [P in keyof T as string extends P ? never : number extends P ? never : P]: T[P]
+}
 
 /**
  * The warning-option record: `warnings` accepts `true`/`false` or this

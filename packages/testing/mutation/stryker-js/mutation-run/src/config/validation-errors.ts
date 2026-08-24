@@ -31,13 +31,11 @@ const phrase = (expectation: string): string => {
 /**
  * Renders a decode failure as one message per offending option.
  *
- * This replaced roughly two hundred lines that existed to make a JSON Schema
- * engine's error objects readable: they deduplicated errors shadowing each other
- * on one path, merged the several type errors a union produced for one option,
- * and rebuilt the option's path by hand. The schema issue already carries the
- * expectation and the path, so what remains is naming the option and keeping the
- * phrasing the CLI contract pins — an operator is told which option is wrong and
- * what it must be, not how the value was decoded.
+ * A schema issue already carries its expectation and its path, so rendering
+ * one is a formatting decision over data the issue supplies — no
+ * deduplication, no merging, no path reconstruction. The function names the
+ * option and keeps the phrasing the CLI contract pins: an operator is told
+ * which option is wrong and what it must be.
  *
  * An issue is an expectation line followed by its indented `at [...]` path. If
  * that shape ever changes, each line arrives as its own message: the phrasing

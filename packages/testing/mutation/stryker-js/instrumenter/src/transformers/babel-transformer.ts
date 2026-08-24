@@ -1,21 +1,18 @@
 import babel, { type NodePath, type types } from '@babel/core'
 
+import { createBabelFile } from '../babel/babel-file.js'
+import { placeHeaderIfNeeded } from '../babel/instrumentation-header.js'
+import { isImportDeclaration, isTypeNode } from '../babel/type-guards.js'
 import { allMutantPlacers, type MutantPlacer, throwPlacementError } from '../mutant-placers/index.js'
-import { type Mutable, Mutant } from '../mutant.js'
+import { applyMutant, type Mutable, type Mutant } from '../mutant.js'
 import { allMutators } from '../mutators/index.js'
 import type { MutatorContext } from '../mutators/node-mutator.js'
 import { type ScriptFormat } from '../syntax/index.js'
-import { createBabelFile } from '../util/babel-file.js'
-import {
-  isImportDeclaration,
-  isTypeNode,
-  locationIncluded,
-  locationOverlaps,
-  placeHeaderIfNeeded,
-} from '../util/syntax-helpers.js'
+import { locationIncluded, locationOverlaps } from '../syntax/location.js'
 
-import { DirectiveBookkeeper } from './directive-bookkeeper.js'
-import { IgnorerBookkeeper } from './ignorer-bookkeeper.js'
+import { findIgnoreReason, processStrykerDirectives, rootRule, type Rule } from './directive-bookkeeper.js'
+import { createIgnorerBookkeeper, currentIgnoreMessage, enterNode, leaveNode } from './ignorer-bookkeeper.js'
+import { collect } from './mutant-collector.js'
 
 import { type AstTransformer } from './index.js'
 
@@ -31,7 +28,7 @@ type PlacementMap = Map<types.Node, MutantsPlacement<types.Node>>
 export const transformBabel: AstTransformer<ScriptFormat> = (
   { root, originFileName, rawContent, offset },
   mutantCollector,
-  { options, mutateDescription, logger },
+  { options, mutateDescription },
   mutators = allMutators,
   mutantPlacers = allMutantPlacers,
 ) => {
@@ -39,17 +36,27 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
 
   const placementMap: PlacementMap = new Map()
 
-  const directiveBookkeeper = new DirectiveBookkeeper(logger, mutators, originFileName)
+  let directiveRule: Rule = rootRule
+  const allMutatorNames = mutators.map((m) => m.name.toLowerCase())
 
-  const ignorerBookkeeper = new IgnorerBookkeeper(options.ignorers)
+  let ignorerState = createIgnorerBookkeeper(options.ignorers)
+
+  const warnings: string[] = []
 
   traverse(file.ast, {
     enter(path) {
-      directiveBookkeeper.processStrykerDirectives(path.node)
+      const result = processStrykerDirectives(
+        directiveRule,
+        path.node,
+        allMutatorNames,
+        originFileName,
+      )
+      directiveRule = result.rule
+      warnings.push(...result.warnings)
       if (shouldSkip(path)) {
         path.skip()
       } else {
-        ignorerBookkeeper.enterNode(path)
+        ignorerState = enterNode(ignorerState, path)
         addToPlacementMapIfPossible(path)
         if (shouldMutate(path)) {
           const mutantsToPlace = collectMutants(path)
@@ -61,7 +68,7 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
                 throw new Error('Placement not found for node')
               }
               const { appliedMutants } = placement
-              mutantsToPlace.forEach((mutant) => appliedMutants.set(mutant, mutant.applied(placementPath.node)))
+              mutantsToPlace.forEach((mutant) => appliedMutants.set(mutant, applyMutant(mutant, placementPath.node)))
             } else {
               throw new Error(
                 `Mutants cannot be placed. This shouldn't happen! Unplaced mutants: ${
@@ -75,11 +82,13 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
     },
     exit(path) {
       placeMutantsIfNeeded(path)
-      ignorerBookkeeper.leaveNode(path)
+      ignorerState = leaveNode(ignorerState, path)
     },
   })
 
   placeHeaderIfNeeded(mutantCollector, originFileName, options, root)
+
+  return warnings
 
   function addToPlacementMapIfPossible(path: NodePath): void {
     const placer = mutantPlacers.find((p) => p.canPlace(path))
@@ -127,7 +136,7 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
   }
 
   function collectMutants(path: NodePath): Mutant[] {
-    return [...mutate(path)].map((mutable) => mutantCollector.collect(originFileName, path.node, mutable, offset))
+    return [...mutate(path)].map((mutable) => collect(mutantCollector, originFileName, path.node, mutable, offset))
       .filter((mutant) => !mutant.ignoreReason)
   }
 
@@ -135,10 +144,9 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
     const context = toMutatorContext(path)
     for (const mutator of mutators) {
       for (const replacement of mutator.mutate(path.node, context)) {
-        const ignoreReason =
-          directiveBookkeeper.findIgnoreReason(getNodeLocation(path.node).start.line, mutator.name) ??
-            findExcludedMutatorIgnoreReason(mutator.name) ??
-            ignorerBookkeeper.currentIgnoreMessage
+        const ignoreReason = findIgnoreReason(directiveRule, mutator.name, getNodeLocation(path.node).start.line) ??
+          findExcludedMutatorIgnoreReason(mutator.name) ??
+          currentIgnoreMessage(ignorerState)
         yield {
           replacement,
           mutatorName: mutator.name,

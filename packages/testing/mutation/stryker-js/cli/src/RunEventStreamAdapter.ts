@@ -95,7 +95,7 @@ const drainOf = (stdio: Stdio.Stdio, framed: Stream.Stream<string>): Effect.Effe
  * zero, and the controls to open, inspect and close the stream.
  */
 export interface RunEventStream {
-  /** The sink core receives through `injectionTokens.runEventSink`. */
+  /** The sink core receives through the run event sink. */
   readonly sink: RunEventSink
   /**
    * The id the `stream` header and the `verdict` envelope share, minted when

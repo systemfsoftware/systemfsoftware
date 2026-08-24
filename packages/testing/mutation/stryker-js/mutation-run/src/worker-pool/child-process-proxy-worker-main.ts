@@ -1,10 +1,42 @@
 import { Schema as S } from 'effect'
+import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
+import * as Option from 'effect/Option'
 import net from 'node:net'
 
 import { WorkerCallSchema, WorkerMethodError } from './worker-protocol.schema.js'
 
 const DELIMITER = '\n'
+
+const stringField = (value: object, key: string): string | undefined => {
+  if (!(key in value)) return undefined
+  const field: unknown = Reflect.get(value, key)
+  return typeof field === 'string' && field.length > 0 ? field : undefined
+}
+
+const tagOf = (value: object): string | undefined => {
+  const tag: unknown = '_tag' in value ? Reflect.get(value, '_tag') : undefined
+  if (typeof tag === 'string' && tag.length > 0) return tag
+  return value instanceof Error && value.name.length > 0 ? value.name : undefined
+}
+
+const causeText = (cause: unknown, depth: number): string | undefined => {
+  if (depth > 4 || cause === undefined || cause === null) return undefined
+  if (typeof cause === 'string') return cause.length > 0 ? cause : undefined
+  if (typeof cause !== 'object') return undefined
+  const own = stringField(cause, 'reason') ?? stringField(cause, 'message') ??
+    (cause instanceof Error && cause.message.length > 0 ? cause.message : tagOf(cause))
+  const nested = 'cause' in cause ? causeText(Reflect.get(cause, 'cause'), depth + 1) : undefined
+  if (own === undefined) return nested
+  return nested === undefined ? own : `${own}: ${nested}`
+}
+
+const messageOf = (cause: unknown): string => {
+  const text = causeText(cause, 0)
+  if (text !== undefined && text.length > 0) return text
+  if (cause instanceof Error && cause.stack !== undefined && cause.stack.length > 0) return cause.stack
+  return Cause.pretty(Cause.fail(cause))
+}
 
 const getIpcPort = (): number => {
   const fromArg = process.argv[4] ?? process.argv[3] ?? process.argv[2]
@@ -53,9 +85,9 @@ const main = Effect.gen(function*() {
     try: () => loadSubject(modulePath, namedExport),
     catch: (cause) =>
       new WorkerMethodError({
-        message: cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : 'unknown',
+        message: messageOf(cause),
         name: 'LoadError',
-        stack: undefined,
+        stack: cause instanceof Error ? cause.stack : undefined,
       }),
   }).pipe(Effect.orElseSucceed(() => ({})))
 
@@ -68,7 +100,7 @@ const main = Effect.gen(function*() {
     sock.on('error', (cause) => {
       resume(Effect.fail(cause))
     })
-    return Effect.sync(() => sock)
+    return Effect.succeed(sock)
   })
 
   socket.setEncoding('utf-8')
@@ -94,18 +126,31 @@ const main = Effect.gen(function*() {
         try: () => Promise.resolve(Reflect.apply(member, subject, call.args)),
         catch: (cause) =>
           new WorkerMethodError({
-            message: cause instanceof Error ? cause.message : typeof cause === 'string' ? cause : 'unknown error',
+            message: messageOf(cause),
             name: cause instanceof Error ? cause.name : undefined,
             stack: cause instanceof Error ? cause.stack : undefined,
           }),
       })
       const successReply = { kind: 'reply' as const, id: call.id, success: true as const, value: result }
-      socket.write(JSON.stringify(successReply) + DELIMITER)
+      const successJson = JSON.stringify(successReply)
+      socket.write(successJson + DELIMITER)
     }).pipe(
       Effect.catchCause((cause) =>
         Effect.sync(() => {
-          void cause
-          const err = new WorkerMethodError({ message: 'Worker method failed', name: 'WorkerError', stack: undefined })
+          // Reply with the failure that actually happened. The typed path above
+          // already built a `WorkerMethodError` carrying the subject's own
+          // message, name and stack; replacing it here with a fixed string
+          // deleted the only description of the fault that ever crosses the
+          // socket, so the parent reported "Worker method failed" for every
+          // cause and no log anywhere held the real one.
+          const failure = Cause.findErrorOption(cause)
+          const err = Option.isSome(failure) && failure.value instanceof WorkerMethodError
+            ? failure.value
+            : new WorkerMethodError({
+              message: Cause.pretty(cause),
+              name: 'WorkerError',
+              stack: undefined,
+            })
           const reply = { kind: 'reply' as const, id: call.id, success: false as const, error: err }
           socket.write(JSON.stringify(reply) + DELIMITER)
         })

@@ -1,211 +1,190 @@
 import type { types } from '@babel/core'
 
-import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
-
 import { type NodeMutator } from '../mutators/node-mutator.js'
 
 const WILDCARD = 'all'
 const DEFAULT_REASON = 'Ignored using a comment'
 
-type IgnoreReason = string | undefined
+const strykerCommentDirectiveRegex = /^\s?Stryker (disable|restore)(?: (next-line))? ([a-zA-Z, ]+)(?::(.+)?)?/
 
-interface Rule {
-  findIgnoreReason(mutatorName: string, line: number): IgnoreReason
-}
-
-class IgnoreRule implements Rule {
-  constructor(
-    public mutatorNames: string[],
-    public line: number | undefined,
-    public ignoreReason: IgnoreReason,
-    public previousRule: Rule,
-  ) {}
-
-  private matches(mutatorName: string, line: number): boolean {
-    const lineMatches = () => this.line === undefined || this.line === line
-    const mutatorMatches = () =>
-      this.mutatorNames.includes(mutatorName) ||
-      this.mutatorNames.includes(WILDCARD)
-    return lineMatches() && mutatorMatches()
+export type Rule =
+  | { readonly kind: 'Root' }
+  | {
+    readonly kind: 'Ignore'
+    readonly mutatorNames: readonly string[]
+    readonly line: number | undefined
+    readonly ignoreReason: string
+    readonly previous: Rule
+  }
+  | {
+    readonly kind: 'Restore'
+    readonly mutatorNames: readonly string[]
+    readonly line: number | undefined
+    readonly previous: Rule
   }
 
-  public findIgnoreReason(mutatorName: string, line: number): IgnoreReason {
-    if (this.matches(mutatorName, line)) {
-      return this.ignoreReason
-    }
-    return this.previousRule.findIgnoreReason(mutatorName, line)
-  }
-}
+export const rootRule: Rule = { kind: 'Root' }
 
-class RestoreRule extends IgnoreRule {
-  constructor(
-    mutatorNames: string[],
-    line: number | undefined,
-    previousRule: Rule,
-  ) {
-    super(mutatorNames, line, undefined, previousRule)
-  }
-}
-
-const rootRule: Rule = {
-  findIgnoreReason() {
-    return undefined
-  },
-}
-
-/**
- * Responsible for the bookkeeping of "// Stryker" directives like "disable" and "restore".
- */
-export class DirectiveBookkeeper {
-  // https://regex101.com/r/nWLLLm/1
-  private readonly strykerCommentDirectiveRegex =
-    /^\s?Stryker (disable|restore)(?: (next-line))? ([a-zA-Z, ]+)(?::(.+)?)?/
-
-  private currentIgnoreRule = rootRule
-  private readonly allMutatorNames: string[]
-
-  constructor(
-    private readonly logger: Logger,
-    private readonly allMutators: readonly NodeMutator[],
-    private readonly originFileName: string,
-  ) {
-    this.allMutatorNames = this.allMutators.map((x) => x.name.toLowerCase())
-  }
-
-  public processStrykerDirectives({ loc, leadingComments }: types.Node): void {
-    if (!leadingComments) {
-      return
-    }
-    for (const comment of leadingComments) {
-      const matchResult = this.strykerCommentDirectiveRegex.exec(comment.value)
-      if (!matchResult) {
-        continue
+export function findIgnoreReason(
+  rule: Rule,
+  mutatorName: string,
+  line: number,
+): string | undefined {
+  const lower = mutatorName.toLowerCase()
+  let current: Rule = rule
+  while (true) {
+    switch (current.kind) {
+      case 'Root':
+        return undefined
+      case 'Ignore': {
+        const lineMatches = current.line === undefined || current.line === line
+        const mutatorMatches = current.mutatorNames.includes(lower) ||
+          current.mutatorNames.includes(WILDCARD)
+        if (lineMatches && mutatorMatches) {
+          return current.ignoreReason
+        }
+        current = current.previous
+        break
       }
-      const directiveType = matchResult[1]
-      const scope = matchResult[2]
-      const mutators = matchResult[3]
-      const optionalReason = matchResult[4]
-      if (directiveType === undefined || mutators === undefined) {
-        throw new Error('Stryker directive without directive type or mutators')
+      case 'Restore': {
+        const lineMatches = current.line === undefined || current.line === line
+        const mutatorMatches = current.mutatorNames.includes(lower) ||
+          current.mutatorNames.includes(WILDCARD)
+        if (lineMatches && mutatorMatches) {
+          return undefined
+        }
+        current = current.previous
+        break
       }
-      let mutatorNames = mutators.split(',').map((mutator) => mutator.trim())
-      this.warnAboutUnusedDirective(
-        mutatorNames,
-        directiveType,
-        scope,
-        comment,
-      )
-      mutatorNames = mutatorNames.map((mutator) => mutator.toLowerCase())
-      const reason = (optionalReason ?? DEFAULT_REASON).trim()
-      this.applyDirective(directiveType, scope, mutatorNames, reason, loc)
     }
   }
+}
 
-  private applyDirective(
-    directiveType: string,
-    scope: string | undefined,
-    mutatorNames: string[],
-    reason: string,
-    loc: types.SourceLocation | null | undefined,
-  ): void {
-    switch (directiveType) {
-      case 'disable':
-        this.applyDisable(scope, mutatorNames, reason, loc)
-        break
-      case 'restore':
-        this.applyRestore(scope, mutatorNames, loc)
-        break
+export function processStrykerDirectives(
+  rule: Rule,
+  node: types.Node,
+  allMutatorNames: readonly string[],
+  originFileName: string,
+): { rule: Rule; warnings: readonly string[] } {
+  const leadingComments = (node as { leadingComments?: readonly types.Comment[] | null }).leadingComments
+  if (!leadingComments) {
+    return { rule, warnings: [] }
+  }
+  let current: Rule = rule
+  const warnings: string[] = []
+  for (const comment of leadingComments) {
+    const matchResult = strykerCommentDirectiveRegex.exec(comment.value)
+    if (!matchResult) {
+      continue
     }
-  }
-
-  private applyDisable(
-    scope: string | undefined,
-    mutatorNames: string[],
-    reason: string,
-    loc: types.SourceLocation | null | undefined,
-  ): void {
-    switch (scope) {
-      case 'next-line':
-        this.currentIgnoreRule = new IgnoreRule(
-          mutatorNames,
-          this.getLine(loc),
-          reason,
-          this.currentIgnoreRule,
-        )
-        break
-      case undefined:
-      default:
-        this.currentIgnoreRule = new IgnoreRule(
-          mutatorNames,
-          undefined,
-          reason,
-          this.currentIgnoreRule,
-        )
-        break
+    const directiveType = matchResult[1]
+    const scope = matchResult[2]
+    const mutators = matchResult[3]
+    const optionalReason = matchResult[4]
+    if (directiveType === undefined || mutators === undefined) {
+      throw new Error('Stryker directive without directive type or mutators')
     }
-  }
-
-  private applyRestore(
-    scope: string | undefined,
-    mutatorNames: string[],
-    loc: types.SourceLocation | null | undefined,
-  ): void {
-    switch (scope) {
-      case 'next-line':
-        this.currentIgnoreRule = new RestoreRule(
-          mutatorNames,
-          this.getLine(loc),
-          this.currentIgnoreRule,
-        )
-        break
-      case undefined:
-      default:
-        this.currentIgnoreRule = new RestoreRule(
-          mutatorNames,
-          undefined,
-          this.currentIgnoreRule,
-        )
-        break
-    }
-  }
-
-  private getLine(loc: types.SourceLocation | null | undefined): number {
-    if (loc === undefined || loc === null || loc.start === null || loc.start === undefined) {
-      throw new Error('Babel node without location')
-    }
-    return loc.start.line
-  }
-
-  public findIgnoreReason(
-    line: number,
-    mutatorName: string,
-  ): string | undefined {
-    mutatorName = mutatorName.toLowerCase()
-    return this.currentIgnoreRule.findIgnoreReason(mutatorName, line)
-  }
-
-  private warnAboutUnusedDirective(
-    mutators: string[],
-    directiveType: string,
-    scope: string | undefined,
-    comment: types.Comment,
-  ) {
-    for (const mutator of mutators) {
+    let mutatorNames = mutators.split(',').map((mutator) => mutator.trim())
+    for (const mutator of mutatorNames) {
       if (mutator === WILDCARD) continue
-      if (!this.allMutatorNames.includes(mutator.toLowerCase())) {
+      if (!allMutatorNames.includes(mutator.toLowerCase())) {
         const commentLoc = comment.loc
         if (
-          commentLoc === undefined || commentLoc === null || commentLoc.start === null || commentLoc.start === undefined
+          commentLoc === undefined ||
+          commentLoc === null ||
+          commentLoc.start === null ||
+          commentLoc.start === undefined
         ) {
           throw new Error('Comment without location')
         }
-        this.logger.warn(
-          // Scope can be global and therefore undefined
+        warnings.push(
           `Unused 'Stryker ${
             scope ? directiveType + ' ' + scope : directiveType
-          }' directive. Mutator with name '${mutator}' not found. Directive found at: ${this.originFileName}:${commentLoc.start.line}:${commentLoc.start.column}.`,
+          }' directive. Mutator with name '${mutator}' not found. Directive found at: ${originFileName}:${commentLoc.start.line}:${commentLoc.start.column}.`,
         )
       }
     }
+    mutatorNames = mutatorNames.map((mutator) => mutator.toLowerCase())
+    const reason = (optionalReason ?? DEFAULT_REASON).trim()
+    current = applyDirective(current, directiveType, scope, mutatorNames, reason, node.loc)
   }
+  return { rule: current, warnings }
+}
+
+function applyDirective(
+  rule: Rule,
+  directiveType: string,
+  scope: string | undefined,
+  mutatorNames: string[],
+  reason: string,
+  loc: types.SourceLocation | null | undefined,
+): Rule {
+  switch (directiveType) {
+    case 'disable':
+      return applyDisable(rule, scope, mutatorNames, reason, loc)
+    case 'restore':
+      return applyRestore(rule, scope, mutatorNames, loc)
+    default:
+      return rule
+  }
+}
+
+function applyDisable(
+  rule: Rule,
+  scope: string | undefined,
+  mutatorNames: string[],
+  reason: string,
+  loc: types.SourceLocation | null | undefined,
+): Rule {
+  switch (scope) {
+    case 'next-line':
+      return {
+        kind: 'Ignore',
+        mutatorNames,
+        line: getLine(loc),
+        ignoreReason: reason,
+        previous: rule,
+      }
+    case undefined:
+    default:
+      return {
+        kind: 'Ignore',
+        mutatorNames,
+        line: undefined,
+        ignoreReason: reason,
+        previous: rule,
+      }
+  }
+}
+
+function applyRestore(
+  rule: Rule,
+  scope: string | undefined,
+  mutatorNames: string[],
+  loc: types.SourceLocation | null | undefined,
+): Rule {
+  switch (scope) {
+    case 'next-line':
+      return {
+        kind: 'Restore',
+        mutatorNames,
+        line: getLine(loc),
+        previous: rule,
+      }
+    case undefined:
+    default:
+      return {
+        kind: 'Restore',
+        mutatorNames,
+        line: undefined,
+        previous: rule,
+      }
+  }
+}
+
+function getLine(loc: types.SourceLocation | null | undefined): number {
+  if (loc === undefined || loc === null || loc.start === null || loc.start === undefined) {
+    throw new Error('Babel node without location')
+  }
+  return loc.start.line
 }

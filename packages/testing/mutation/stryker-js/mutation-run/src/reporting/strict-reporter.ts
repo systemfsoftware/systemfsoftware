@@ -1,3 +1,3 @@
-import { type Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
+import type { ReporterService } from '@systemfsoftware/stryker-js-plugin-api/report'
 
-export type StrictReporter = Required<Reporter>
+export type StrictReporter = ReporterService

@@ -31,39 +31,40 @@ function noopLogger(): Logger {
   }
 }
 
-export class ClearTextReporter implements ReporterService {
-  private readonly out: NodeJS.WritableStream
-  constructor(
-    private readonly options?: StrykerOptions,
-    private readonly log: Logger = noopLogger(),
-    out: NodeJS.WritableStream = process.stdout,
-  ) {
-    this.out = out
+export const makeClearTextReporter = (params: {
+  readonly options?: StrykerOptions
+  readonly log?: Logger
+  readonly out?: NodeJS.WritableStream
+}): ReporterService => {
+  const options = params.options
+  const log = params.log ?? noopLogger()
+  const out = params.out ?? process.stdout
+
+  return {
+    onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
+
+    onMutationTestingPlanReady: (_event: MutationTestingPlanReadyEvent) => Effect.void,
+
+    onMutantTested: (_result: MutantResult) => Effect.void,
+
+    onMutationTestReportReady: (
+      report: schema.MutationTestResult,
+      metrics: MutationTestMetricsResult,
+    ) =>
+      Effect.try({
+        try: () => {
+          if (options === undefined) return
+          const { stdout, debug } = renderClearText(report, metrics, options)
+          for (const line of stdout) {
+            out.write(`${line}${os.EOL}`)
+          }
+          for (const line of debug) {
+            log.debug(line)
+          }
+        },
+        catch: (cause) => new ReporterFailed({ reporterName: 'clear-text', event: 'onMutationTestReportReady', cause }),
+      }),
+
+    wrapUp: Effect.void,
   }
-
-  public readonly onDryRunCompleted = (_event: DryRunCompletedEvent) => Effect.void
-
-  public readonly onMutationTestingPlanReady = (_event: MutationTestingPlanReadyEvent) => Effect.void
-
-  public readonly onMutantTested = (_result: MutantResult) => Effect.void
-
-  public readonly onMutationTestReportReady = (
-    report: schema.MutationTestResult,
-    metrics: MutationTestMetricsResult,
-  ) =>
-    Effect.try({
-      try: () => {
-        if (this.options === undefined) return
-        const { stdout, debug } = renderClearText(report, metrics, this.options)
-        for (const line of stdout) {
-          this.out.write(`${line}${os.EOL}`)
-        }
-        for (const line of debug) {
-          this.log.debug(line)
-        }
-      },
-      catch: (cause) => new ReporterFailed({ reporterName: 'clear-text', event: 'onMutationTestReportReady', cause }),
-    })
-
-  public readonly wrapUp = Effect.void
 }

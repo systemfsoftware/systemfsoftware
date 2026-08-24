@@ -1,9 +1,9 @@
 import type { BaseNode, Program } from 'estree'
 
-import { notEmpty } from '@systemfsoftware/stryker-js-util'
+import * as Predicate from 'effect/Predicate'
 
 import { AstFormat, type SvelteAst, type SvelteRootNode, type TemplateScript } from '../syntax/index.js'
-import { PositionConverter } from '../util/index.js'
+import { computeLineStarts, positionFromOffset } from '../syntax/position-converter.js'
 
 import { type ParserContext } from './parser-context.js'
 import { SvelteVersionNotSupported, SvelteWalkerNotFound } from './svelte-parser.schema.js'
@@ -182,7 +182,7 @@ export async function parse(
     walk = svelteCompilerModule['walk']
   }
 
-  const positionConverter = new PositionConverter(text)
+  const lineStarts = computeLineStarts(text)
   const { replacedCode, scriptMap } = await replaceScripts(text)
   const svelteAst: unknown = svelteParse(replacedCode, { filename: fileName })
 
@@ -295,7 +295,7 @@ export async function parse(
     return {
       ast: {
         ...parsed,
-        offset: positionConverter.positionFromOffset(start),
+        offset: positionFromOffset(lineStarts, start),
       },
       range: { start, end },
       isExpression,
@@ -338,7 +338,7 @@ function remapScriptLocations(
   remappedScriptRanges: TemplateScriptRange[]
 } {
   const scriptRanges = [moduleScriptRange, ...templateRanges]
-    .filter(notEmpty)
+    .filter(Predicate.isNotNullish)
     .sort((a, b) => a.start - b.start)
   let offset = 0
   let newModuleScriptRange: TemplateScriptRange | undefined

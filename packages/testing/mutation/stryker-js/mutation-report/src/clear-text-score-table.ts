@@ -22,253 +22,282 @@ const determineContentWidth = (
   row: MetricsResult<Metrics>,
   valueFactory: TableCellValueFactory,
   ancestorCount = 0,
-): number => {
-  return Math.max(
+): number =>
+  Math.max(
     valueFactory(row, ancestorCount).length,
     ...row.childResults.map((child) => determineContentWidth(child, valueFactory, ancestorCount + 1)),
   )
+
+export type Column =
+  | {
+    readonly kind: 'single'
+    readonly header: string
+    readonly isFirstColumn: boolean
+    readonly netWidth: number
+    readonly valueFactory: TableCellValueFactory
+    readonly rows: MetricsResult<Metrics>
+  }
+  | {
+    readonly kind: 'file'
+    readonly header: string
+    readonly isFirstColumn: true
+    readonly netWidth: number
+    readonly valueFactory: TableCellValueFactory
+    readonly rows: MetricsResult<Metrics>
+  }
+  | {
+    readonly kind: 'mutationScore'
+    readonly header: string
+    readonly isFirstColumn: false
+    readonly netWidth: number
+    readonly valueFactory: TableCellValueFactory
+    readonly rows: MetricsResult<Metrics>
+    readonly thresholds: MutationScoreThresholds
+    readonly scoreType: 'total' | 'covered'
+    readonly allowColor: boolean
+  }
+  | {
+    readonly kind: 'group'
+    readonly header: string
+    readonly isFirstColumn: boolean
+    readonly netWidth: number
+    readonly columns: readonly Column[]
+  }
+
+const columnWidth = (column: Column): number => column.netWidth + (column.isFirstColumn ? 1 : 2)
+
+const padColumn = (column: Column, input = ''): string => {
+  if (column.kind === 'file') {
+    return `${input}${spaces(columnWidth(column) - stringWidth(input))}`
+  }
+  return `${spaces(column.netWidth - stringWidth(input))}${column.isFirstColumn ? '' : ' '}${input} `
 }
 
-abstract class Column {
-  constructor(
-    protected readonly header: string,
-    public netWidth: number,
-    public readonly isFirstColumn: boolean,
-  ) {}
+const drawLine = (column: Column): string => repeat('-', columnWidth(column))
 
-  protected pad(input = ''): string {
-    return `${spaces(this.netWidth - stringWidth(input))}${this.isFirstColumn ? '' : ' '}${input} `
+const drawHeader = (column: Column): string => padColumn(column, column.header)
+
+const colorFor = (column: Column, score: MetricsResult<Metrics>): (input: string) => string => {
+  if (column.kind === 'mutationScore') {
+    const scoreToUse = column.scoreType === 'total'
+      ? score.metrics.mutationScore
+      : score.metrics.mutationScoreBasedOnCoveredCode
+    if (!column.allowColor) return (input: string) => input
+    if (Number.isNaN(scoreToUse)) return ansi.grey
+    if (scoreToUse >= column.thresholds.high) return ansi.green
+    if (scoreToUse >= column.thresholds.low) return ansi.yellow
+    return ansi.red
   }
-
-  public drawLine(): string {
-    return repeat('-', this.width)
-  }
-
-  public drawHeader() {
-    return this.pad(this.header)
-  }
-
-  abstract drawTableCell(score: MetricsResult<Metrics>, ancestorCount: number): string
-
-  get width() {
-    return this.netWidth + (this.isFirstColumn ? 1 : 2)
-  }
+  return (input: string) => input
 }
 
-class SingleColumn extends Column {
-  constructor(
-    header: string,
-    isFirstColumn: boolean,
-    public valueFactory: TableCellValueFactory,
-    public rows: MetricsResult<Metrics>,
-  ) {
-    const maxContentSize = determineContentWidth(rows, valueFactory)
-    super(header, Math.max(maxContentSize, stringWidth(header)), isFirstColumn)
-  }
-
-  public drawTableCell(score: MetricsResult<Metrics>, ancestorCount: number): string {
-    return this.color(score)(this.pad(this.valueFactory(score, ancestorCount)))
-  }
-
-  protected color(_score: MetricsResult<Metrics>) {
-    return (input: string) => input
-  }
-}
-
-class MutationScoreColumn extends SingleColumn {
-  constructor(
-    rows: MetricsResult<Metrics>,
-    private readonly thresholds: MutationScoreThresholds,
-    private readonly scoreType: 'total' | 'covered',
-    private readonly allowColor: boolean,
-  ) {
-    super(
-      scoreType,
-      false,
-      (row) => {
-        const score = scoreType === 'total'
-          ? row.metrics.mutationScore
-          : row.metrics.mutationScoreBasedOnCoveredCode
-        return Number.isNaN(score) ? 'n/a' : score.toFixed(2)
-      },
-      rows,
-    )
-  }
-  protected override color(metricsResult: MetricsResult<Metrics>) {
-    const {
-      mutationScore: score,
-      mutationScoreBasedOnCoveredCode: coveredScore,
-    } = metricsResult.metrics
-    const scoreToUse = this.scoreType === 'total' ? score : coveredScore
-    if (!this.allowColor) {
-      return (input: string) => input
-    }
-    if (Number.isNaN(scoreToUse)) {
-      return ansi.grey
-    } else if (scoreToUse >= this.thresholds.high) {
-      return ansi.green
-    } else if (scoreToUse >= this.thresholds.low) {
-      return ansi.yellow
-    } else {
-      return ansi.red
+const drawTableCell = (
+  column: Column,
+  score: MetricsResult<Metrics>,
+  ancestorCount: number,
+): string => {
+  switch (column.kind) {
+    case 'group':
+      return column.columns.map((c) => drawTableCell(c, score, ancestorCount)).join('|')
+    case 'single':
+    case 'file':
+    case 'mutationScore': {
+      const raw = column.valueFactory(score, ancestorCount)
+      const padded = padColumn(column, raw)
+      return colorFor(column, score)(padded)
     }
   }
 }
 
-class FileColumn extends SingleColumn {
-  constructor(rows: MetricsResult<Metrics>) {
-    super(
-      'File',
-      true,
-      (row, ancestorCount) =>
-        spaces(ancestorCount) +
-        (ancestorCount === 0 ? FILES_ROOT_NAME : row.name),
-      rows,
-    )
-  }
-  protected override pad(input: string): string {
-    return `${input}${spaces(this.width - stringWidth(input))}`
+const drawColumnHeaders = (column: Column): string => {
+  if (column.kind !== 'group') return drawHeader(column)
+  return column.columns.map((c) => drawHeader(c)).join('|')
+}
+
+const drawColumnLines = (column: Column): string => {
+  if (column.kind !== 'group') return drawLine(column)
+  return column.columns.map((c) => drawLine(c)).join('|')
+}
+
+const makeSingleColumn = (
+  header: string,
+  isFirstColumn: boolean,
+  valueFactory: TableCellValueFactory,
+  rows: MetricsResult<Metrics>,
+): Column => {
+  const maxContentSize = determineContentWidth(rows, valueFactory)
+  return {
+    kind: 'single',
+    header,
+    isFirstColumn,
+    netWidth: Math.max(maxContentSize, stringWidth(header)),
+    valueFactory,
+    rows,
   }
 }
 
-class GroupColumn extends Column {
-  columns: SingleColumn[]
-  constructor(groupName: string, ...columns: SingleColumn[]) {
-    const firstColumn = columns[0]
-    if (firstColumn === undefined) throw new Error('a group column needs at least one column')
-    const { isFirstColumn } = firstColumn
-    const columnsWidth = columns.reduce((acc, cur) => acc + cur.width, 0) -
-      (isFirstColumn ? 1 : 2)
-    const groupNameWidth = stringWidth(groupName)
-    super(groupName, Math.max(groupNameWidth, columnsWidth), isFirstColumn)
-    this.columns = columns
-    if (this.netWidth > columnsWidth + 1) {
-      firstColumn.netWidth += this.netWidth - columnsWidth - 1
-    }
-  }
-
-  drawColumnHeaders() {
-    return this.columns.map((column) => column.drawHeader()).join('|')
-  }
-
-  drawColumnLines() {
-    return this.columns.map((column) => column.drawLine()).join('|')
-  }
-
-  drawTableCell(score: MetricsResult<Metrics>, ancestorCount: number): string {
-    return this.columns
-      .map((column) => column.drawTableCell(score, ancestorCount))
-      .join('|')
+const makeFileColumn = (rows: MetricsResult<Metrics>): Column => {
+  const valueFactory: TableCellValueFactory = (row, ancestorCount) =>
+    spaces(ancestorCount) + (ancestorCount === 0 ? FILES_ROOT_NAME : row.name)
+  const maxContentSize = determineContentWidth(rows, valueFactory)
+  return {
+    kind: 'file',
+    header: 'File',
+    isFirstColumn: true,
+    netWidth: Math.max(maxContentSize, stringWidth('File')),
+    valueFactory,
+    rows,
   }
 }
 
-export class ClearTextScoreTable {
-  private readonly columns: GroupColumn[]
+const makeMutationScoreColumn = (
+  rows: MetricsResult<Metrics>,
+  thresholds: MutationScoreThresholds,
+  scoreType: 'total' | 'covered',
+  allowColor: boolean,
+): Column => {
+  const valueFactory: TableCellValueFactory = (row) => {
+    const score = scoreType === 'total' ? row.metrics.mutationScore : row.metrics.mutationScoreBasedOnCoveredCode
+    return Number.isNaN(score) ? 'n/a' : score.toFixed(2)
+  }
+  const maxContentSize = determineContentWidth(rows, valueFactory)
+  return {
+    kind: 'mutationScore',
+    header: scoreType,
+    isFirstColumn: false,
+    netWidth: Math.max(maxContentSize, stringWidth(scoreType)),
+    valueFactory,
+    rows,
+    thresholds,
+    scoreType,
+    allowColor,
+  }
+}
 
-  constructor(
-    private readonly metricsResult: MetricsResult<Metrics>,
-    private readonly options: StrykerOptions,
-  ) {
-    const allowColor = options.clearTextReporter.allowColor
-    this.columns = [
-      new GroupColumn('', new FileColumn(metricsResult)),
-      new GroupColumn(
-        '% Mutation score',
-        new MutationScoreColumn(metricsResult, options.thresholds, 'total', allowColor),
-        new MutationScoreColumn(metricsResult, options.thresholds, 'covered', allowColor),
+const makeGroupColumn = (groupName: string, ...columns: readonly Column[]): Column => {
+  if (columns.length === 0) throw new Error('a group column needs at least one column')
+  const first = columns[0]
+  if (first === undefined) throw new Error('a group column needs at least one column')
+  const isFirstColumn = first.isFirstColumn
+  const columnsWidth = columns.reduce((acc, cur) => acc + columnWidth(cur), 0) - (isFirstColumn ? 1 : 2)
+  const groupNameWidth = stringWidth(groupName)
+  const netWidth = Math.max(groupNameWidth, columnsWidth)
+  let nextColumns: readonly Column[] = columns
+  if (netWidth > columnsWidth + 1) {
+    const delta = netWidth - columnsWidth - 1
+    const updatedFirst: Column = { ...first, netWidth: first.netWidth + delta }
+    nextColumns = [updatedFirst, ...columns.slice(1)]
+  }
+  return {
+    kind: 'group',
+    header: groupName,
+    isFirstColumn,
+    netWidth,
+    columns: nextColumns,
+  }
+}
+
+const createColumns = (
+  metricsResult: MetricsResult<Metrics>,
+  options: StrykerOptions,
+): readonly Column[] => {
+  const allowColor = options.clearTextReporter.allowColor
+  return [
+    makeGroupColumn('', makeFileColumn(metricsResult)),
+    makeGroupColumn(
+      '% Mutation score',
+      makeMutationScoreColumn(metricsResult, options.thresholds, 'total', allowColor),
+      makeMutationScoreColumn(metricsResult, options.thresholds, 'covered', allowColor),
+    ),
+    makeGroupColumn(
+      '',
+      makeSingleColumn(
+        `${options.clearTextReporter.allowEmojis ? '✅' : '#'} killed`,
+        false,
+        (row) => row.metrics.killed.toString(),
+        metricsResult,
       ),
-      new GroupColumn(
-        '',
-        new SingleColumn(
-          `${options.clearTextReporter.allowEmojis ? '✅' : '#'} killed`,
-          false,
-          (row) => row.metrics.killed.toString(),
-          metricsResult,
-        ),
+    ),
+    makeGroupColumn(
+      '',
+      makeSingleColumn(
+        `${options.clearTextReporter.allowEmojis ? '⌛️' : '#'} timeout`,
+        false,
+        (row) => row.metrics.timeout.toString(),
+        metricsResult,
       ),
-      new GroupColumn(
-        '',
-        new SingleColumn(
-          `${options.clearTextReporter.allowEmojis ? '⌛️' : '#'} timeout`,
-          false,
-          (row) => row.metrics.timeout.toString(),
-          metricsResult,
-        ),
+    ),
+    makeGroupColumn(
+      '',
+      makeSingleColumn(
+        `${options.clearTextReporter.allowEmojis ? '👽' : '#'} survived`,
+        false,
+        (row) => row.metrics.survived.toString(),
+        metricsResult,
       ),
-      new GroupColumn(
-        '',
-        new SingleColumn(
-          `${options.clearTextReporter.allowEmojis ? '👽' : '#'} survived`,
-          false,
-          (row) => row.metrics.survived.toString(),
-          metricsResult,
-        ),
+    ),
+    makeGroupColumn(
+      '',
+      makeSingleColumn(
+        `${options.clearTextReporter.allowEmojis ? '🙈' : '#'} no cov`,
+        false,
+        (row) => row.metrics.noCoverage.toString(),
+        metricsResult,
       ),
-      new GroupColumn(
-        '',
-        new SingleColumn(
-          `${options.clearTextReporter.allowEmojis ? '🙈' : '#'} no cov`,
-          false,
-          (row) => row.metrics.noCoverage.toString(),
-          metricsResult,
-        ),
+    ),
+    makeGroupColumn(
+      '',
+      makeSingleColumn(
+        `${options.clearTextReporter.allowEmojis ? '💥' : '#'} errors`,
+        false,
+        (row) => (row.metrics.runtimeErrors + row.metrics.compileErrors).toString(),
+        metricsResult,
       ),
-      new GroupColumn(
-        '',
-        new SingleColumn(
-          `${options.clearTextReporter.allowEmojis ? '💥' : '#'} errors`,
-          false,
-          (row) => (row.metrics.runtimeErrors + row.metrics.compileErrors).toString(),
-          metricsResult,
-        ),
-      ),
-    ]
-  }
+    ),
+  ]
+}
 
-  private drawGroupHeader() {
-    return this.drawRow((column) => column.drawHeader())
-  }
+const drawRow = (
+  columns: readonly Column[],
+  toDraw: (col: Column) => string,
+): string => `${columns.map(toDraw).join('|')}|`
 
-  private drawGroupLine() {
-    return this.drawRow((column) => column.drawLine())
-  }
-  private drawLine() {
-    return this.drawRow((column) => column.drawColumnLines())
-  }
+const drawGroupHeader = (columns: readonly Column[]): string => drawRow(columns, (c) => drawHeader(c))
 
-  private drawColumnHeader() {
-    return this.drawRow((c) => c.drawColumnHeaders())
-  }
+const drawGroupLine = (columns: readonly Column[]): string => drawRow(columns, (c) => drawLine(c))
 
-  private drawRow(toDraw: (col: GroupColumn) => string) {
-    return this.columns.map(toDraw).join('|') + '|'
-  }
+const drawLineRow = (columns: readonly Column[]): string => drawRow(columns, (c) => drawColumnLines(c))
 
-  private drawTableBody(
-    current = this.metricsResult,
-    ancestorCount = 0,
-  ): string[] {
-    const rows: string[] = []
-    if (
-      !this.options.clearTextReporter.skipFull ||
-      current.metrics.mutationScore !== 100
-    ) {
-      rows.push(this.drawRow((c) => c.drawTableCell(current, ancestorCount)))
-    }
-    rows.push(
-      ...current.childResults.flatMap((child) => this.drawTableBody(child, ancestorCount + 1)),
-    )
-    return rows
-  }
+const drawColumnHeader = (columns: readonly Column[]): string => drawRow(columns, (c) => drawColumnHeaders(c))
 
-  public draw(): string {
-    return [
-      this.drawGroupLine(),
-      this.drawGroupHeader(),
-      this.drawColumnHeader(),
-      this.drawLine(),
-      this.drawTableBody().join(os.EOL),
-      this.drawLine(),
-    ].join(os.EOL)
+const drawTableBody = (
+  columns: readonly Column[],
+  metricsResult: MetricsResult<Metrics>,
+  options: StrykerOptions,
+  current: MetricsResult<Metrics> = metricsResult,
+  ancestorCount = 0,
+): readonly string[] => {
+  const rows: string[] = []
+  if (!options.clearTextReporter.skipFull || current.metrics.mutationScore !== 100) {
+    rows.push(drawRow(columns, (c) => drawTableCell(c, current, ancestorCount)))
   }
+  for (const child of current.childResults) {
+    rows.push(...drawTableBody(columns, metricsResult, options, child, ancestorCount + 1))
+  }
+  return rows
+}
+
+export const drawClearTextScoreTable = (
+  metricsResult: MetricsResult<Metrics>,
+  options: StrykerOptions,
+): string => {
+  const columns = createColumns(metricsResult, options)
+  return [
+    drawGroupLine(columns),
+    drawGroupHeader(columns),
+    drawColumnHeader(columns),
+    drawLineRow(columns),
+    drawTableBody(columns, metricsResult, options).join(os.EOL),
+    drawLineRow(columns),
+  ].join(os.EOL)
 }

@@ -1,43 +1,60 @@
 import type { NodePath as BabelNodePath, types } from '@babel/core'
 import * as Option from 'effect/Option'
 
-import type { Ignorer } from '@systemfsoftware/stryker-js-plugin-api/ignore'
+import type { IgnorerService } from '@systemfsoftware/stryker-js-plugin-api/ignore'
 import type { NodePath } from '@systemfsoftware/stryker-js-plugin-api/ignore'
 
-/**
- * Responsible for keeping track of the active ignore message and node using the configured ignore-plugins.
- */
-export class IgnorerBookkeeper {
-  private readonly ignorers: readonly Ignorer[]
-  private activeIgnored?: { node: types.Node; message: string } | undefined
+export interface IgnorerBookkeeper {
+  readonly ignorers: readonly IgnorerService[]
+  readonly activeIgnored: { readonly node: types.Node; readonly message: string } | undefined
+}
 
-  public get currentIgnoreMessage(): string | undefined {
-    return this.activeIgnored?.message
+export function createIgnorerBookkeeper(
+  ignorers: readonly IgnorerService[],
+): IgnorerBookkeeper {
+  return {
+    ignorers,
+    activeIgnored: undefined,
   }
+}
 
-  constructor(ignorers: readonly Ignorer[]) {
-    this.ignorers = ignorers
+export function currentIgnoreMessage(
+  bookkeeper: IgnorerBookkeeper,
+): string | undefined {
+  return bookkeeper.activeIgnored?.message
+}
+
+export function enterNode(
+  bookkeeper: IgnorerBookkeeper,
+  path: BabelNodePath,
+): IgnorerBookkeeper {
+  if (bookkeeper.activeIgnored !== undefined) {
+    return bookkeeper
   }
-
-  public enterNode(path: BabelNodePath): void {
-    if (this.activeIgnored !== undefined) {
-      return
-    }
-    const view = toIgnorerPath(path)
-    for (const ignorer of this.ignorers) {
-      const result = ignorer.shouldIgnore(view)
-      if (Option.isSome(result)) {
-        this.activeIgnored = { node: path.node, message: result.value }
-        break
+  const view = toIgnorerPath(path)
+  for (const ignorer of bookkeeper.ignorers) {
+    const result = ignorer.shouldIgnore(view)
+    if (Option.isSome(result)) {
+      return {
+        ...bookkeeper,
+        activeIgnored: { node: path.node, message: result.value },
       }
     }
   }
+  return bookkeeper
+}
 
-  public leaveNode(path: BabelNodePath): void {
-    if (this.activeIgnored?.node === path.node) {
-      this.activeIgnored = undefined
+export function leaveNode(
+  bookkeeper: IgnorerBookkeeper,
+  path: BabelNodePath,
+): IgnorerBookkeeper {
+  if (bookkeeper.activeIgnored?.node === path.node) {
+    return {
+      ...bookkeeper,
+      activeIgnored: undefined,
     }
   }
+  return bookkeeper
 }
 
 function toIgnorerPath(path: BabelNodePath): NodePath {

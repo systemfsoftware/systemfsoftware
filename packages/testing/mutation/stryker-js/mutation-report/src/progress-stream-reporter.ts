@@ -8,6 +8,7 @@ import type {
 } from '@systemfsoftware/stryker-js-plugin-api/report'
 import { ReporterFailed } from '@systemfsoftware/stryker-js-plugin-api/report'
 import * as Effect from 'effect/Effect'
+import * as Ref from 'effect/Ref'
 
 type RunEvent =
   | { kind: 'plan'; total: number }
@@ -53,50 +54,61 @@ export function toRunEvent(
   }
 }
 
-export class ProgressStreamReporter implements ReporterService {
-  private total = 0
-  private completed = 0
+export const makeProgressStreamReporter = (
+  runEventSink: RunEventSink = () => {},
+): Effect.Effect<ReporterService> =>
+  Effect.gen(function*() {
+    const totalRef = yield* Ref.make(0)
+    const completedRef = yield* Ref.make(0)
 
-  constructor(private readonly runEventSink: RunEventSink = () => {}) {}
+    const reporter: ReporterService = {
+      onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
 
-  public readonly onDryRunCompleted = (_event: DryRunCompletedEvent) => Effect.void
+      onMutationTestingPlanReady: (event: MutationTestingPlanReadyEvent) =>
+        Effect.gen(function*() {
+          const total = event.mutantPlans.length
+          yield* Ref.set(totalRef, total)
+          yield* Effect.try({
+            try: () => {
+              runEventSink({ kind: 'plan', total })
+            },
+            catch: (cause) =>
+              new ReporterFailed({ reporterName: 'progress-stream', event: 'onMutationTestingPlanReady', cause }),
+          })
+        }),
 
-  public readonly onMutationTestingPlanReady = (event: MutationTestingPlanReadyEvent) =>
-    Effect.try({
-      try: () => {
-        this.total = event.mutantPlans.length
-        this.runEventSink({ kind: 'plan', total: this.total })
-      },
-      catch: (cause) =>
-        new ReporterFailed({ reporterName: 'progress-stream', event: 'onMutationTestingPlanReady', cause }),
-    })
+      onMutantTested: (result: MutantResult) =>
+        Effect.gen(function*() {
+          const completed = yield* Ref.updateAndGet(completedRef, (n) => n + 1)
+          if (!isActionableStatus(result.status)) {
+            return
+          }
+          const total = yield* Ref.get(totalRef)
+          yield* Effect.try({
+            try: () => {
+              runEventSink({
+                kind: 'mutant',
+                id: result.id,
+                status: result.status,
+                file: result.fileName,
+                location: result.location,
+                mutator: result.mutatorName,
+                replacement: result.replacement ?? null,
+                completed,
+                total,
+              })
+            },
+            catch: (cause) => new ReporterFailed({ reporterName: 'progress-stream', event: 'onMutantTested', cause }),
+          })
+        }),
 
-  public readonly onMutantTested = (result: MutantResult) =>
-    Effect.try({
-      try: () => {
-        this.completed += 1
-        if (!isActionableStatus(result.status)) {
-          return
-        }
-        this.runEventSink({
-          kind: 'mutant',
-          id: result.id,
-          status: result.status,
-          file: result.fileName,
-          location: result.location,
-          mutator: result.mutatorName,
-          replacement: result.replacement ?? null,
-          completed: this.completed,
-          total: this.total,
-        })
-      },
-      catch: (cause) => new ReporterFailed({ reporterName: 'progress-stream', event: 'onMutantTested', cause }),
-    })
+      onMutationTestReportReady: (
+        _report: schema.MutationTestResult,
+        _metrics: MutationTestMetricsResult,
+      ) => Effect.void,
 
-  public readonly onMutationTestReportReady = (
-    _report: schema.MutationTestResult,
-    _metrics: MutationTestMetricsResult,
-  ) => Effect.void
+      wrapUp: Effect.void,
+    }
 
-  public readonly wrapUp = Effect.void
-}
+    return reporter
+  })

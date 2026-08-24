@@ -1,9 +1,8 @@
 import babel from '@babel/core'
 
-import { deepCloneNode } from '../util/index.js'
+import { deepCloneNode } from '../babel/clone.js'
 
 import { type MutatorContext, type NodeMutator } from './node-mutator.js'
-import { registerMutator } from './registry.js'
 
 const booleanOperators = Object.freeze(['!=', '!==', '&&', '<', '<=', '==', '===', '>', '>=', '||'])
 
@@ -78,5 +77,3 @@ function isBooleanExpression(node: babel.types.Node): boolean {
   }
   return false
 }
-
-registerMutator(conditionalExpressionMutator)

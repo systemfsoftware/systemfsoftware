@@ -3,250 +3,296 @@ import {
   type Mutant,
   type MutantResult,
   type MutantRunPlan,
-  type MutantTestPlan,
   PlanKind,
-  type StrykerOptions,
 } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
-import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { type CompleteDryRunResult, type TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
-import { type I } from '@systemfsoftware/stryker-js-util'
-import { bufferTime, concat, EMPTY, from, lastValueFrom, merge, mergeMap, Observable, partition } from 'rxjs'
-import { map, shareReplay, tap, toArray } from 'rxjs/operators'
-
-import { CheckerFacade } from '../checker/index.js'
-import { isEarlyResult, MutantTestPlanner } from '../mutants/index.js'
-import { injectionTokens } from '../plugins/index.js'
-import { MutationTestReportHelper } from '../reporting/mutation-test-report-helper.js'
-import { type StrictReporter } from '../reporting/strict-reporter.js'
-import { Timer } from '../timer.js'
-import { ConcurrencyTokenProvider, Pool } from '../worker-pool/index.js'
-
-import { type DryRunContext } from './3-dry-run-executor.js'
-
-export interface MutationTestContext extends DryRunContext {
-  [injectionTokens.testRunnerPool]: I<Pool<TestRunner>>
-  [injectionTokens.timeOverheadMS]: number
-  [injectionTokens.mutationTestReportHelper]: MutationTestReportHelper
-  [injectionTokens.mutantTestPlanner]: MutantTestPlanner
-  [injectionTokens.dryRunResult]: I<CompleteDryRunResult>
+import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Reporter, type ReporterService } from '@systemfsoftware/stryker-js-plugin-api/report'
+import type { MutantRunOptions } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import * as Clock from 'effect/Clock'
+import * as Context from 'effect/Context'
+import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
+import * as Layer from 'effect/Layer'
+import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
+import * as Pool from 'effect/Pool'
+import * as Scope from 'effect/Scope'
+import * as Stream from 'effect/Stream'
+import { createRequire } from 'node:module'
+import { checkPlans, groupPlans } from '../checker/checker-facade.js'
+import { createCheckerFactory } from '../checker/checker-factory.js'
+import type { CheckerResourceService } from '../checker/checker-resource.js'
+import { LoggingServerAddressService } from '../logging/logging-server.js'
+import { forMutant, hasStaticCoverage } from '../mutants/test-coverage.js'
+import type { TestCoverage } from '../mutants/test-coverage.js'
+import { makeMutationReportingService } from '../reporting/mutation-reporting.js'
+import type { MutationReportingService } from '../reporting/mutation-reporting.js'
+import { checkStatusToMutantStatus, mapRunResult, toSchemaLocation } from '../reporting/mutation-reporting.kernel.js'
+import { IdGeneratorService } from '../run-layers.js'
+import { RunEnvironment } from '../RunEnvironment.js'
+import type { SandboxHandle } from '../sandbox/sandbox.js'
+import { StrykerError } from '../stryker-error.schema.js'
+import { makeChildProcessTestRunner } from '../test-runner/child-process-test-runner-proxy.js'
+import type { PooledTestRunner } from '../test-runner/child-process-test-runner-proxy.js'
+import { humanReadableElapsed } from '../timer.js'
+import type { IdGenerator } from '../worker-pool/id-generator.js'
+import { ChildProcessCrashedError, OutOfMemoryError } from '../worker-pool/worker-pool.schema.js'
+import type { DryRunDone, MutationTestStage } from './stage-results.js'
+export class MutationTestLogger extends Context.Service<MutationTestLogger, Logger>()('MutationTestLogger') {}
+export class CheckerPool extends Context.Service<CheckerPool, Pool.Pool<CheckerResourceService>>()('CheckerPool') {}
+export class TestRunnerPool extends Context.Service<TestRunnerPool, Pool.Pool<PooledTestRunner>>()('TestRunnerPool') {}
+const buildCoveredPlans = (
+  rawMutants: readonly Mutant[],
+  testCoverage: TestCoverage,
+  sandbox: SandboxHandle,
+): { coveredPlans: MutantRunPlan[]; noCoverage: MutantResult[] } => {
+  const noCoverage: MutantResult[] = []
+  const coveredPlans: MutantRunPlan[] = []
+  for (const mutant of rawMutants) {
+    const testsForMutant = forMutant(testCoverage, mutant.id)
+    let testIds: readonly string[] | undefined
+    if (testsForMutant !== undefined && testsForMutant.size > 0) {
+      testIds = [...testsForMutant].map((t) => t.id)
+    } else if (hasStaticCoverage(testCoverage, mutant.id)) {
+      const allIds = [...testCoverage.testsById.values()].map((t) => t.id)
+      testIds = allIds.length > 0 ? allIds : undefined
+    }
+    if (testIds === undefined || testIds.length === 0) {
+      const result = {
+        id: mutant.id,
+        mutatorName: mutant.mutatorName,
+        fileName: mutant.fileName,
+        location: mutant.location,
+        status: 'NoCoverage' as const,
+        replacement: mutant.replacement,
+      } as MutantResult
+      noCoverage.push(result)
+      continue
+    }
+    const runOptions: MutantRunOptions = {
+      activeMutant: mutant,
+      sandboxFileName: sandbox.sandboxFileFor(mutant.fileName),
+      mutantActivation: 'runtime' as const,
+      reloadEnvironment: false,
+      timeout: 5000,
+      disableBail: false,
+      testFilter: [...testIds],
+    }
+    const plan: MutantRunPlan = { plan: PlanKind.Run, mutant, runOptions, netTime: 0 }
+    coveredPlans.push(plan)
+  }
+  return { coveredPlans, noCoverage }
 }
-
-const CHECK_BUFFER_MS = 10_000
-
-/**
- * Sorting the tests just before running them can yield a significant performance boost,
- * because it can reduce the number of times a test runner process needs to be recreated.
- * However, we need to buffer the results in order to be able to sort them.
- *
- * This value is very low, since it would halt the test execution otherwise.
- * @see https://github.com/stryker-mutator/stryker-js/issues/3462
- */
-const BUFFER_FOR_SORTING_MS = 0
-
-export class MutationTestExecutor {
-  public static inject = tokens(
-    injectionTokens.reporter,
-    injectionTokens.testRunnerPool,
-    injectionTokens.checkerPool,
-    injectionTokens.mutants,
-    injectionTokens.mutantTestPlanner,
-    injectionTokens.mutationTestReportHelper,
-    commonTokens.logger,
-    commonTokens.options,
-    injectionTokens.timer,
-    injectionTokens.concurrencyTokenProvider,
-    injectionTokens.dryRunResult,
-  )
-
-  constructor(
-    private readonly reporter: StrictReporter,
-    private readonly testRunnerPool: I<Pool<TestRunner>>,
-    private readonly checkerPool: I<Pool<I<CheckerFacade>>>,
-    private readonly mutants: readonly Mutant[],
-    private readonly planner: MutantTestPlanner,
-    private readonly mutationTestReportHelper: I<MutationTestReportHelper>,
-    private readonly log: Logger,
-    private readonly options: StrykerOptions,
-    private readonly timer: I<Timer>,
-    private readonly concurrencyTokenProvider: I<ConcurrencyTokenProvider>,
-    private readonly dryRunResult: CompleteDryRunResult,
-  ) {}
-
-  public async execute(): Promise<MutantResult[]> {
-    if (this.options.dryRunOnly) {
-      this.log.info(
-        'The dry-run has been completed successfully. No mutations have been executed.',
-      )
-      return []
-    }
-
-    if (this.dryRunResult.tests.length === 0 && this.options.allowEmpty) {
-      this.logDone()
-      return []
-    }
-
-    const mutantTestPlans = await this.planner.makePlan(this.mutants)
-    const { earlyResult$, runMutant$ } = this.executeEarlyResult(
-      from(mutantTestPlans),
-    )
-    const { passedMutant$, checkResult$ } = this.executeCheck(runMutant$)
-    const { coveredMutant$, noCoverageResult$ } = this.executeNoCoverage(passedMutant$)
-    const testRunnerResult$ = this.executeRunInTestRunner(coveredMutant$)
-    const results = await lastValueFrom(
-      merge(
-        testRunnerResult$,
-        checkResult$,
-        noCoverageResult$,
-        earlyResult$,
-      ).pipe(toArray()),
-    )
-    await this.mutationTestReportHelper.reportAll(results)
-    await this.reporter.wrapUp()
-    this.logDone()
-    return results
-  }
-
-  private executeEarlyResult(input$: Observable<MutantTestPlan>) {
-    const [earlyResultMutants$, runMutant$] = partition(
-      input$.pipe(shareReplay()),
-      isEarlyResult,
-    )
-    const earlyResult$ = earlyResultMutants$.pipe(
-      map(({ mutant }) => this.mutationTestReportHelper.reportMutantStatus(mutant, mutant.status)),
-    )
-    return { earlyResult$, runMutant$ }
-  }
-
-  private executeNoCoverage(input$: Observable<MutantRunPlan>) {
-    const [noCoverageMatchedMutant$, coveredMutant$] = partition(
-      input$.pipe(shareReplay()),
-      ({ runOptions }) => runOptions.testFilter?.length === 0,
-    )
-    const noCoverageResult$ = noCoverageMatchedMutant$.pipe(
-      map(({ mutant }) => this.mutationTestReportHelper.reportMutantStatus(mutant, 'NoCoverage')),
-    )
-    return { noCoverageResult$, coveredMutant$ }
-  }
-
-  private executeRunInTestRunner(
-    input$: Observable<MutantRunPlan>,
-  ): Observable<MutantResult> {
-    const sortedPlan$ = input$.pipe(
-      bufferTime(BUFFER_FOR_SORTING_MS),
-      mergeMap((plans) => plans.sort(reloadEnvironmentLast)),
-    )
-    return this.testRunnerPool.schedule(
-      sortedPlan$,
-      async (testRunner, { mutant, runOptions }) => {
-        const result = await testRunner.mutantRun(runOptions)
-        return this.mutationTestReportHelper.reportMutantRunResult(
-          mutant,
-          result,
-        )
-      },
-    )
-  }
-
-  private logDone() {
-    this.log.info('Done in %s.', this.timer.humanReadableElapsed())
-  }
-
-  /**
-   * Checks mutants against all configured checkers (if any) and returns steams for failed checks and passed checks respectively
-   * @param input$ The mutant run plans to check
-   */
-  public executeCheck(input$: Observable<MutantRunPlan>): {
-    checkResult$: Observable<MutantResult>
-    passedMutant$: Observable<MutantRunPlan>
-  } {
-    let checkResult$: Observable<MutantResult> = EMPTY
-    let passedMutant$ = input$
-    for (const checkerName of this.options.checkers) {
-      // Use this checker
-      const [checkFailedResult$, checkPassedResult$] = partition(
-        this.executeSingleChecker(checkerName, passedMutant$).pipe(
-          shareReplay(),
-        ),
-        isEarlyResult,
-      )
-
-      // Prepare for the next one
-      passedMutant$ = checkPassedResult$
-      checkResult$ = concat(
-        checkResult$,
-        checkFailedResult$.pipe(map(({ mutant }) => mutant)),
-      )
-    }
-    return {
-      checkResult$,
-      passedMutant$: passedMutant$.pipe(
-        tap({
-          complete: () => {
-            this.checkerPool
-              .dispose()
-              .then(() => {
-                this.concurrencyTokenProvider.freeCheckers()
-              })
-              .catch((error) => {
-                this.log.error(
-                  'An error occurred while disposing checkers: %s',
-                  error,
-                )
-              })
-          },
-        }),
-      ),
-    }
-  }
-
-  /**
-   * Executes the check task for one checker
-   * @param checkerName The name of the checker to execute
-   * @param input$ The mutants tasks to check
-   * @returns An observable stream with early results (check failed) and passed results
-   */
-  private executeSingleChecker(
-    checkerName: string,
-    input$: Observable<MutantRunPlan>,
-  ): Observable<MutantTestPlan> {
-    const group$ = this.checkerPool
-      .schedule(input$.pipe(bufferTime(CHECK_BUFFER_MS)), (checker, mutants) => checker.group(checkerName, mutants))
-      .pipe(mergeMap((mutantGroups) => mutantGroups))
-    const checkTask$ = this.checkerPool
-      .schedule(group$, (checker, group) => checker.check(checkerName, group))
-      .pipe(
-        mergeMap((mutantGroupResults) => mutantGroupResults),
-        map(([mutantRunPlan, checkResult]) =>
-          checkResult.status === CheckStatus.Passed
-            ? mutantRunPlan
-            : {
-              plan: PlanKind.EarlyResult as const,
-              mutant: this.mutationTestReportHelper.reportCheckFailed(
-                mutantRunPlan.mutant,
-                checkResult,
-              ),
-            }
-        ),
-      )
-    return checkTask$
-  }
-}
-
-/**
- * Sorting function that sorts mutant run plans that reload environments last.
- * This can yield a significant performance boost, because it reduces the times a test runner process needs to restart.
- * @see https://github.com/stryker-mutator/stryker-js/issues/3462
- */
 function reloadEnvironmentLast(a: MutantRunPlan, b: MutantRunPlan): number {
-  if (a.plan === PlanKind.Run && b.plan === PlanKind.Run) {
-    if (a.runOptions.reloadEnvironment && !b.runOptions.reloadEnvironment) {
-      return 1
-    }
-    if (!a.runOptions.reloadEnvironment && b.runOptions.reloadEnvironment) {
-      return -1
-    }
-    return 0
-  }
-  return 0
+  const aReload = a.runOptions.reloadEnvironment
+  const bReload = b.runOptions.reloadEnvironment
+  if (aReload === bReload) return 0
+  return aReload ? 1 : -1
 }
+const voidReporter: ReporterService = {
+  onDryRunCompleted: () => Effect.void,
+  onMutationTestingPlanReady: () => Effect.void,
+  onMutantTested: () => Effect.void,
+  onMutationTestReportReady: () => Effect.void,
+  wrapUp: Effect.void,
+}
+export const mutationTestStage: MutationTestStage<
+  unknown,
+  | MutationTestLogger
+  | RunEnvironment
+  | Scope.Scope
+  | LoggingServerAddressService
+  | IdGenerator
+  | FileSystem.FileSystem
+  | Path.Path
+> = (prev) =>
+  Effect.gen(function*() {
+    const log = yield* MutationTestLogger
+    const env = yield* RunEnvironment
+    if (prev.options.dryRunOnly) {
+      log.info('The dry-run has been completed successfully. No mutations have been executed.')
+      return [] as readonly MutantResult[]
+    }
+    if (prev.dryRunResult.tests.length === 0 && prev.options.allowEmpty) {
+      const now = yield* Clock.currentTimeMillis
+      log.info('Done in %s.', humanReadableElapsed(prev.timer, now))
+      return [] as readonly MutantResult[]
+    }
+    const reporterService: ReporterService = yield* Effect.gen(function*() {
+      if (prev.options.reporters.length === 0) {
+        return voidReporter
+      }
+      const layerOpt = prev.plugins.layer
+      if (Option.isNone(layerOpt)) {
+        return yield* new StrykerError({
+          message: `Reporters [${
+            prev.options.reporters.join(', ')
+          }] configured but no plugin layer is available (no plugins loaded)`,
+        })
+      }
+      const ctx = yield* Layer.build(layerOpt.value).pipe(
+        Effect.provideService(RunConfiguration, prev.options),
+        Effect.provideService(SandboxDirectory, prev.temporaryDirectoryPath),
+      )
+      const maybeReporter = Context.getOption(ctx, Reporter)
+      if (Option.isNone(maybeReporter)) {
+        return yield* new StrykerError({
+          message: `Reporter service not found in plugin context; configured reporters: ${
+            prev.options.reporters.join(', ')
+          }`,
+        })
+      }
+      return maybeReporter.value
+    })
+    const loggingServerAddress = yield* LoggingServerAddressService
+    const idGenerator = yield* IdGeneratorService
+    const hasCheckers = prev.options.checkers.length > 0
+    const checkerPool: Pool.Pool<CheckerResourceService, unknown> | undefined = hasCheckers
+      ? yield* Pool.make({
+        acquire: createCheckerFactory(
+          prev.options,
+          prev.project.fileDescriptions,
+          loggingServerAddress,
+          prev.loadedPlugins.pluginModulePaths,
+          () => log,
+          idGenerator,
+          prev.sandbox.workingDirectory,
+        ),
+        size: prev.concurrency.checkers,
+      })
+      : undefined
+    const testRunnerPool = yield* Pool.make({
+      acquire: makeChildProcessTestRunner({
+        options: prev.options,
+        fileDescriptions: prev.project.fileDescriptions,
+        sandboxWorkingDirectory: prev.sandbox.workingDirectory,
+        loggingServerAddress,
+        pluginModulePaths: [...prev.loadedPlugins.pluginModulePaths],
+        logger: log,
+        idGenerator,
+      }),
+      size: prev.concurrency.testRunners,
+    })
+    const reporting: MutationReportingService = {
+      reportCheckFailure: (mutant, result) => {
+        const location = toSchemaLocation(mutant.location)
+        const status = checkStatusToMutantStatus(result.status)
+        const mapped = {
+          id: mutant.id,
+          mutatorName: mutant.mutatorName,
+          fileName: mutant.fileName,
+          location,
+          status,
+          replacement: mutant.replacement,
+        } as MutantResult
+        return reporterService.onMutantTested(mapped).pipe(Effect.as(mapped))
+      },
+      reportMutantRunResult: (mutant, result) => {
+        const mapped = mapRunResult(mutant, result)
+        return reporterService.onMutantTested(mapped).pipe(Effect.as(mapped))
+      },
+      reportAll: (results) => Effect.succeed({ results, verdict: null }),
+    }
+    const { coveredPlans, noCoverage: noCoverageResults } = buildCoveredPlans(
+      prev.mutants,
+      prev.testCoverage,
+      prev.sandbox,
+    )
+    const sortedPlans = [...coveredPlans].sort(reloadEnvironmentLast)
+    // Publish the plan so progress total is known before any mutant is tested
+    const allPlansForReporter = [...sortedPlans] as readonly MutantRunPlan[]
+    yield* reporterService.onMutationTestingPlanReady({ mutantPlans: allPlansForReporter }).pipe(Effect.ignoreCause)
+    env.runEventSink({ kind: 'plan', total: allPlansForReporter.length + noCoverageResults.length })
+    let passedPlans: readonly MutantRunPlan[] = sortedPlans
+    if (hasCheckers && checkerPool !== undefined) {
+      for (const checkerName of prev.options.checkers) {
+        const checked = yield* Effect.scoped(Effect.flatMap(Pool.get(checkerPool), (checker) =>
+          checkPlans(checker, checkerName, passedPlans).pipe(Effect.catchTags({
+            OutOfMemoryError: (error) =>
+              Effect.flatMap(Pool.invalidate(checkerPool, checker), () =>
+                Effect.fail(error)),
+            ChildProcessCrashedError: (error) =>
+              Effect.flatMap(Pool.invalidate(checkerPool, checker), () =>
+                Effect.fail(error)),
+          }))))
+        const kept: MutantRunPlan[] = []
+        for (const [plan, result] of checked) {
+          if (result.status === CheckStatus.Passed) {
+            kept.push(plan)
+            continue
+          }
+          yield* reporting.reportCheckFailure(plan.mutant, result)
+        }
+        passedPlans = kept
+      }
+    }
+    const lastChecker = prev.options.checkers.at(-1)
+    const executionOrder: readonly MutantRunPlan[] = lastChecker === undefined || checkerPool === undefined
+      ? passedPlans
+      : (yield* Effect.scoped(Effect.flatMap(Pool.get(checkerPool), (checker) =>
+        groupPlans(checker, lastChecker, passedPlans).pipe(Effect.catchTags({
+          OutOfMemoryError: (error) =>
+            Effect.flatMap(Pool.invalidate(checkerPool, checker), () =>
+              Effect.fail(error)),
+          ChildProcessCrashedError: (error) =>
+            Effect.flatMap(Pool.invalidate(checkerPool, checker), () =>
+              Effect.fail(error)),
+        }))))).flat()
+    const testRunnerStream = Stream.fromIterable(executionOrder)
+    const runResults: MutantResult[] = yield* Stream.mapEffect(testRunnerStream, (plan) =>
+      Effect.scoped(Effect.gen(function*() {
+        const pool = testRunnerPool
+        const runner = yield* Pool.get(pool)
+        const result = yield* runner.mutantRun(plan.runOptions).pipe(Effect.catchTags({
+          OutOfMemoryError: (error) =>
+            Effect.flatMap(Pool.invalidate(pool, runner), () =>
+              Effect.fail(error)),
+          ChildProcessCrashedError: (error) =>
+            Effect.flatMap(Pool.invalidate(pool, runner), () =>
+              Effect.fail(error)),
+        }))
+        return yield* reporting.reportMutantRunResult(plan.mutant, result)
+      })), { concurrency: Math.max(1, prev.concurrency.testRunners) }).pipe(
+        Stream.runCollect,
+        Effect.map((chunk) => [...chunk]),
+      )
+    const allResults: MutantResult[] = [...noCoverageResults, ...runResults]
+    for (const result of allResults) {
+      yield* reporterService.onMutantTested(result).pipe(Effect.catchCause((cause) =>
+        Effect.sync(() => {
+          log.warn('Reporter failed handling onMutantTested', cause)
+        })
+      ))
+    }
+    const realReporting = makeMutationReportingService({
+      reporter: reporterService,
+      options: prev.options,
+      project: prev.project,
+      log,
+      testCoverage: prev.testCoverage,
+      requireFromCwd: (id) => {
+        try {
+          const requireFn = createRequire(import.meta.url)
+          return requireFn(`${id}/package.json`) as unknown
+        } catch {
+          return undefined
+        }
+      },
+      runEventSink: env.runEventSink,
+      runId: env.runId,
+      resolvedMode: env.resolvedMode,
+      pluginsByKind: prev.loadedPlugins.pluginsByKind,
+      sandboxDirectory: prev.sandbox.workingDirectory,
+      basePath: env.basePath,
+    })
+    const outcome = yield* realReporting.reportAll(allResults)
+    yield* reporterService.wrapUp.pipe(Effect.catchCause((cause) =>
+      Effect.sync(() => {
+        log.warn('Reporter failed handling wrapUp', cause)
+      })
+    ))
+    const doneNow = yield* Clock.currentTimeMillis
+    log.info('Done in %s.', humanReadableElapsed(prev.timer, doneNow))
+    return outcome.results
+  })

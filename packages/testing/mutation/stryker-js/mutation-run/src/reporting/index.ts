@@ -1,5 +1,2 @@
-import { BroadcastReporter } from './broadcast-reporter.js'
-import { type StrictReporter } from './strict-reporter.js'
-
-export { BroadcastReporter }
-export type { StrictReporter }
+export type { ReporterService as StrictReporter } from '@systemfsoftware/stryker-js-plugin-api/report'
+export { broadcastReporter } from './broadcast-reporter.js'

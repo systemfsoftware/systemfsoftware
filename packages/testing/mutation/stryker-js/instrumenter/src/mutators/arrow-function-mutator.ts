@@ -1,7 +1,6 @@
 import babel from '@babel/core'
 
 import { type MutatorContext, type NodeMutator } from './node-mutator.js'
-import { registerMutator } from './registry.js'
 
 const { types } = babel
 
@@ -18,5 +17,3 @@ export const arrowFunctionMutator: NodeMutator = {
     }
   },
 }
-
-registerMutator(arrowFunctionMutator)

@@ -19,7 +19,6 @@ Those are peer dependencies: this package declares them but does not install the
 - `@systemfsoftware/stryker-js-mutation-run/config/base`
 - `@systemfsoftware/stryker-js-mutation-run/config/config-resolution`
 - `@systemfsoftware/stryker-js-mutation-run/config/fork-schema`
-- `@systemfsoftware/stryker-js-mutation-run/errors`
 - `@systemfsoftware/stryker-js-mutation-run/exit-classification`
 - `@systemfsoftware/stryker-js-mutation-run/mutants/incremental-differ`
 - `@systemfsoftware/stryker-js-mutation-run/output-mode`

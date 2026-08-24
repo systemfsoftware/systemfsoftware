@@ -1,4 +1,9 @@
+import { NodeFileSystem } from '@effect/platform-node'
+import { NodePath } from '@effect/platform-node'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { errorToString } from '@systemfsoftware/stryker-js-plugin-api/core'
+import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { PluginKind, RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import type {
   DryRunOptions,
@@ -8,68 +13,111 @@ import type {
   TestRunnerCapabilities,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { DryRunStatus, MutantRunStatus, TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
-import { errorToString } from '@systemfsoftware/stryker-js-util'
-import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as S from 'effect/Schema'
-import type * as Scope from 'effect/Scope'
+import { StrykerError } from '../stryker-error.schema.js'
 
-import type { PluginCreator } from '../plugins/index.js'
-import { PluginNotFoundError } from '../plugins/plugin-loader.schema.js'
+import { create } from '../plugins/plugin-creator.js'
+import { loadPlugins } from '../plugins/plugin-loader.js'
 
 import { MutantCoverageSchema } from './mutant-coverage.schema.js'
 
-export class ChildProcessTestRunnerWorker {
-  private readonly underlying: TestRunner['Service']
+const noopLogger: Logger = {
+  isTraceEnabled: () => false,
+  isDebugEnabled: () => false,
+  isInfoEnabled: () => false,
+  isWarnEnabled: () => false,
+  isErrorEnabled: () => false,
+  isFatalEnabled: () => false,
+  trace: () => {},
+  debug: () => {},
+  info: () => {},
+  warn: () => {},
+  error: () => {},
+  fatal: () => {},
+}
 
-  constructor(underlying: TestRunner['Service']) {
-    this.underlying = underlying
+const makeChildProcessTestRunnerWorker = () => {
+  let underlying: TestRunner['Service'] | undefined = undefined
+
+  const capabilities = async (): Promise<TestRunnerCapabilities> => {
+    if (underlying === undefined) {
+      throw new StrykerError({
+        message: 'ChildProcessTestRunnerWorker not initialized: call init before capabilities',
+        cause: undefined,
+      })
+    }
+    return Effect.runPromise(underlying.capabilities)
   }
 
-  /**
-   * Build the worker around the test runner the run configured.
-   *
-   * `options.testRunner` names a `PluginKind.TestRunner` contribution, the
-   * contribution carries a `Layer`, and building that layer in this scope is
-   * what produces the runner. The layer asks for the plugin environment, which
-   * this process supplies from what it has: the options arrived over the IPC
-   * channel, and the sandbox is its own working directory because the parent
-   * spawned it there.
-   *
-   * A missing or unbuildable runner fails. It must not resolve to something
-   * whose `mutantRun` answers `status: Error`, because `Error` is neither killed
-   * nor survived — every mutant would drop out of the score with nothing
-   * reporting a reason.
-   */
-  static make(
-    options: StrykerOptions,
-    pluginCreator: PluginCreator,
-  ): Effect.Effect<ChildProcessTestRunnerWorker, PluginNotFoundError, Scope.Scope> {
-    return Effect.gen(function*() {
-      const contribution = yield* pluginCreator.create(PluginKind.TestRunner, options.testRunner)
-      const context = yield* Layer.build(contribution.layer)
-      return new ChildProcessTestRunnerWorker(Context.get(context, TestRunner))
-    }).pipe(
-      Effect.provideService(RunConfiguration, options),
-      Effect.provideService(SandboxDirectory, process.cwd()),
+  const init = async (...args: unknown[]): Promise<void> => {
+    if (underlying !== undefined) {
+      await Effect.runPromise(underlying.init)
+      return
+    }
+    if (args.length === 0) {
+      throw new StrykerError({
+        message: 'ChildProcessTestRunnerWorker not initialized: init requires StrykerOptions',
+        cause: undefined,
+      })
+    }
+    let options: StrykerOptions
+    try {
+      options = await Effect.runPromise(S.decodeUnknownEffect(StrykerOptionsSchema)(args[0]))
+    } catch (cause: unknown) {
+      throw new StrykerError({
+        message: 'ChildProcessTestRunnerWorker init received invalid StrykerOptions',
+        cause,
+      })
+    }
+    let pluginsByKind
+    try {
+      const loaded = await Effect.runPromise(
+        loadPlugins(options.plugins, noopLogger, process.cwd()).pipe(
+          Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer)),
+        ),
+      )
+      pluginsByKind = loaded.pluginsByKind
+    } catch (cause: unknown) {
+      throw new StrykerError({
+        message: 'ChildProcessTestRunnerWorker failed to load plugins',
+        cause,
+      })
+    }
+    const built = await Effect.runPromise(
+      Effect.gen(function*() {
+        const contribution = yield* create(pluginsByKind, PluginKind.TestRunner, options.testRunner)
+        const runner = yield* Effect.gen(function*() {
+          const r = yield* TestRunner
+          return r
+        }).pipe(Effect.provide(contribution.layer))
+        return runner
+      }).pipe(
+        Effect.provide(
+          Layer.merge(Layer.succeed(RunConfiguration, options), Layer.succeed(SandboxDirectory, process.cwd())),
+        ),
+      ),
     )
+    underlying = built
+    await Effect.runPromise(built.init)
   }
 
-  async capabilities(): Promise<TestRunnerCapabilities> {
-    return Effect.runPromise(this.underlying.capabilities)
+  const dispose = async (): Promise<void> => {
+    if (underlying === undefined) {
+      return
+    }
+    await Effect.runPromise(underlying.dispose)
   }
 
-  async init(): Promise<void> {
-    await Effect.runPromise(this.underlying.init)
-  }
-
-  async dispose(): Promise<void> {
-    await Effect.runPromise(this.underlying.dispose)
-  }
-
-  async dryRun(options: DryRunOptions): Promise<DryRunResult> {
-    const result = await Effect.runPromise(this.underlying.dryRun(options))
+  const dryRun = async (options: DryRunOptions): Promise<DryRunResult> => {
+    if (underlying === undefined) {
+      throw new StrykerError({
+        message: 'ChildProcessTestRunnerWorker not initialized: call init before dryRun',
+        cause: undefined,
+      })
+    }
+    const result = await Effect.runPromise(underlying.dryRun(options))
     if (result.status === DryRunStatus.Complete && !result.mutantCoverage && options.coverageAnalysis !== 'off') {
       const decoded = await Effect.runPromise(
         S.decodeUnknownEffect(S.optional(MutantCoverageSchema))(globalThis.__mutantCoverage__).pipe(
@@ -86,11 +134,27 @@ export class ChildProcessTestRunnerWorker {
     return result
   }
 
-  async mutantRun(options: MutantRunOptions): Promise<MutantRunResult> {
-    const result = await Effect.runPromise(this.underlying.mutantRun(options))
+  const mutantRun = async (options: MutantRunOptions): Promise<MutantRunResult> => {
+    if (underlying === undefined) {
+      throw new StrykerError({
+        message: 'ChildProcessTestRunnerWorker not initialized: call init before mutantRun',
+        cause: undefined,
+      })
+    }
+    const result = await Effect.runPromise(underlying.mutantRun(options))
     if (result.status === MutantRunStatus.Error) {
       result.errorMessage = errorToString(result.errorMessage)
     }
     return result
   }
+
+  return {
+    capabilities,
+    init,
+    dispose,
+    dryRun,
+    mutantRun,
+  }
 }
+
+export const ChildProcessTestRunnerWorker = makeChildProcessTestRunnerWorker()

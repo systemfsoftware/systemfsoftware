@@ -3,40 +3,46 @@ import { readFileSync } from 'node:fs'
 import { resolve as resolvePath } from 'node:path'
 
 import { Cell } from '@systemfsoftware/effect-cell-types'
+import {
+  defaultStages,
+  makeRunLayer,
+  type RunEnvironmentShape,
+  runMutationTest,
+} from '@systemfsoftware/stryker-js-mutation-run'
+import { LoggingServerNotTcpError } from '@systemfsoftware/stryker-js-mutation-run'
+import {
+  ConfigError,
+  ConfigFileInvalidError,
+  ConfigFileNotFoundError,
+  ConfigFileUnreadableError,
+  defaultOptions,
+  readConfig,
+} from '@systemfsoftware/stryker-js-mutation-run/config/config-resolution'
+import { forkCoreSchema } from '@systemfsoftware/stryker-js-mutation-run/config/fork-schema'
+import { ExitClass, resolveExitCode } from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
+import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
+import type { HelpRendered } from '@systemfsoftware/stryker-js-mutation-run/run-event'
+import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
+import { buildVerdictEnvelope } from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
 import type { Mutant, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { noopLogger } from '@systemfsoftware/stryker-js-util'
+import { noopLogger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
+import * as FileSystem from 'effect/FileSystem'
 import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
+import * as Predicate from 'effect/Predicate'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import * as CliError from 'effect/unstable/cli/CliError'
 
-import { Stryker, type StrykerHostOptions } from '@systemfsoftware/stryker-js-mutation-run'
-import {
-  ConfigReader,
-  defaultOptions,
-  OptionsValidator,
-} from '@systemfsoftware/stryker-js-mutation-run/config/config-resolution'
-import { forkCoreSchema } from '@systemfsoftware/stryker-js-mutation-run/config/fork-schema'
-import { ConfigError, retrieveCause } from '@systemfsoftware/stryker-js-mutation-run/errors'
-import {
-  ExitClass,
-  getPendingExitClasses,
-  resolveExitCode,
-} from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
-import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
-import type { HelpRendered } from '@systemfsoftware/stryker-js-mutation-run/run-event'
-import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
-import { buildVerdictEnvelope } from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
-
-import { isColorEnabled, isProgressEnabled } from './OutputMode.js'
+import { isProgressEnabled } from './OutputMode.js'
 import type { OutputModeProbe } from './OutputModeAdapter.js'
 import { machineConsoleLayer, readCapturedConsole } from './OutputModeConsoleState.js'
 import type { RunEventStream, RunEventStreamPort } from './RunEventStreamAdapter.js'
@@ -62,14 +68,15 @@ import { SURVIVORS_REJECT_EXIT_CLASS } from './SurvivorsExit.js'
  * The mutation-testing entry the CLI calls once options are parsed. Injectable
  * so tests capture the parsed options without starting a real mutation run.
  */
-export type StrykerRun = (options: PartialStrykerOptions) => Promise<unknown>
-
+export type StrykerRun = (options: PartialStrykerOptions) => Effect.Effect<unknown, unknown, never>
 /**
- * The default run: binds the host-resolved run options (the sink, the mode,
- * the timing) to a fresh `Stryker` and runs mutation testing.
+ * The default run: the assembled stages, provided with the environment layer the
+ * host resolved. It returns the Effect rather than running it, so the run stays
+ * on the CLI's single interpretation edge and its failures stay typed instead of
+ * arriving as defects through a promise.
  */
-const defaultRunMutationTest = (hostOptions: StrykerHostOptions): StrykerRun => (options) =>
-  new Stryker(options, hostOptions).runMutationTest()
+const defaultRunMutationTest = (hostOptions: RunEnvironmentShape): StrykerRun => (options) =>
+  Effect.scoped(runMutationTest(defaultStages, options)).pipe(Effect.provide(makeRunLayer(hostOptions)))
 
 /**
  * The mode probe the CLI resolves its mode with (U3): a single detection of
@@ -89,16 +96,15 @@ import { CliRequest } from './cli-request.schema.js'
 
 /**
  * The frame the handler hands the executor: the already-run `@effect/cli`
- * program, the parsed request, the resolved mode, the optional run, the exit
- * recorder — and the raw argument tokens, which the error envelope names the
- * offending argument from when the framework reports one it does not know.
+ * program, the parsed request, the resolved mode, the optional run — and the
+ * raw argument tokens, which the error envelope names the offending argument
+ * from when the framework reports one it does not know.
  */
 export interface RunStrykerCliInput {
   readonly program: Effect.Effect<void, CliError.CliError, never>
   readonly requestRef: Ref.Ref<Option.Option<CliRequest>>
   readonly mode: ResolvedMode
   readonly runMutationTest: StrykerRun | undefined
-  readonly recordExitCode: (code: number) => void
   readonly argv: readonly string[]
 }
 /**
@@ -126,21 +132,15 @@ const resolveAbsolutePath: ResolveAbsolutePath = (file) => resolvePath(file)
  * for the NDJSON stream, so the logging backend is pointed at stderr; human
  * mode keeps the stdout sink. The fix is the descriptor, never the log level.
  */
-function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): StrykerHostOptions {
+function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironmentShape {
   return {
-    loggerConsoleOut: mode.mode === 'machine' ? process.stderr : process.stdout,
-    showColors: isColorEnabled(mode, process.env['NO_COLOR']),
     runEventSink: stream.sink,
     runId: stream.runId,
     resolvedMode: mode,
     progressEnabled: isProgressEnabled(mode),
     clearTextEnabled: mode.mode === 'human',
     runStartedAt: stream.startedAt,
-    // The host names the reporter registry. Since U6 it lives in the
-    // mutation-report package's own `stryker-plugins` subpath. The resolved
-    // URL is required (not the bare specifier) because tsdown mangles export
-    // names inside shared chunks — only the generated entry wrapper for a
-    // declared subpath re-exports `strykerPlugins` under its real name.
+    basePath: resolvePath(process.cwd()),
     reporterPluginModules: [
       import.meta.resolve('@systemfsoftware/stryker-js-mutation-report/stryker-plugins'),
     ],
@@ -180,9 +180,9 @@ interface AdmissionPhases extends Cell.Phases {
    * stops the run instead of being classified as a mismatch by the decider.
    */
   readonly decodeError: S.SchemaError
-  readonly readError: never
+  readonly readError: ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError
   readonly writeError: SurvivorsRejection
-  readonly readContext: never
+  readonly readContext: FileSystem.FileSystem | Path.Path
   readonly writeContext: never
 }
 
@@ -208,10 +208,11 @@ const survivorsAdmissionDescription = (
   stream: RunEventStream,
   mode: ResolvedMode,
   runContext: Ref.Ref<AdmissionRunContext | undefined>,
+  basePath: string,
 ): Cell.WriteDone<AdmissionPhases> =>
   pipe(
     Cell.read<AdmissionPhases>((cliOptions) =>
-      Effect.promise(() => resolveSurvivorsRunOptions(cliOptions)).pipe(
+      resolveSurvivorsRunOptions(cliOptions, basePath).pipe(
         Effect.flatMap((resolvedOptions) => {
           const priorReportPath = priorReportPathOf(resolvedOptions)
           const read = readPriorReport(priorReportPath)
@@ -275,19 +276,19 @@ const survivorsAdmissionDescription = (
             Match.value(decision).pipe(
               Match.tag(
                 'NoSurvivors',
-                () => Effect.sync(() => emitEmptySurvivorsVerdict(stream, mode, resolvedOptions)),
+                () => Effect.sync(() => emitEmptySurvivorsVerdict(stream, mode, resolvedOptions, basePath)),
               ),
               Match.tag('Admitted', (admitted) => {
                 const restricted: SurvivorsRunOptions = {
                   ...resolvedOptions,
                   survivors: admitted.survivors,
-                  mutate: survivorMutateSpans(admitted.survivors),
+                  mutate: survivorMutateSpans(admitted.survivors, basePath),
                   survivorsPriorReport: priorReportPath,
                   // The differ would otherwise reuse the prior run's survived
                   // verdicts.
                   incremental: false,
                 }
-                return Effect.promise(() => runMutationTest(restricted))
+                return runMutationTest(restricted).pipe(Effect.orDie)
               }),
               Match.orElse(() => Effect.die('unreachable admission decision variant')),
             ),
@@ -315,11 +316,21 @@ function runSurvivorsAdmission(
   stream: RunEventStream,
   mode: ResolvedMode,
   cliOptions: PartialStrykerOptions,
-): Effect.Effect<unknown, S.SchemaError | SurvivorsRejection, never> {
+  basePath: string,
+): Effect.Effect<
+  unknown,
+  | S.SchemaError
+  | SurvivorsRejection
+  | ConfigFileNotFoundError
+  | ConfigFileUnreadableError
+  | ConfigFileInvalidError
+  | LoggingServerNotTcpError,
+  FileSystem.FileSystem | Path.Path
+> {
   return Effect.gen(function*() {
     const admissionContext = yield* Ref.make<AdmissionRunContext | undefined>(undefined)
     return yield* Cell.apply(
-      survivorsAdmissionDescription(runMutationTest, stream, mode, admissionContext),
+      survivorsAdmissionDescription(runMutationTest, stream, mode, admissionContext, basePath),
       cliOptions,
     )
   })
@@ -333,12 +344,13 @@ function runSurvivorsAdmission(
  */
 function resolveSurvivorsRunOptions(
   cliOptions: PartialStrykerOptions,
-): Promise<StrykerOptions> {
-  const configReader = new ConfigReader(
-    noopLogger,
-    new OptionsValidator(forkCoreSchema, noopLogger),
-  )
-  return configReader.readConfig(cliOptions)
+  basePath: string,
+): Effect.Effect<
+  StrykerOptions,
+  ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError,
+  FileSystem.FileSystem | Path.Path
+> {
+  return readConfig(cliOptions, noopLogger, forkCoreSchema, basePath)
 }
 
 /**
@@ -440,16 +452,17 @@ function emitNullScoreVerdict(
   mode: ResolvedMode,
   thresholds: schema.Thresholds,
   config: object,
+  basePath: string,
 ): void {
   const report: schema.MutationTestResult = {
     schemaVersion: '1.0',
     files: {},
     thresholds,
-    projectRoot: process.cwd(),
+    projectRoot: basePath,
     config,
     framework: { name: 'StrykerJS', version: strykerVersion },
   }
-  const envelope = buildVerdictEnvelope(report, mode.mode, mode.signal, stream.runId)
+  const envelope = buildVerdictEnvelope(report, mode.mode, mode.signal, stream.runId, basePath)
   stream.sink({ kind: 'verdict', ...envelope })
 }
 
@@ -462,8 +475,9 @@ function emitEmptySurvivorsVerdict(
   stream: RunEventStream,
   mode: ResolvedMode,
   resolved: StrykerOptions,
+  basePath: string,
 ): void {
-  emitNullScoreVerdict(stream, mode, resolved.thresholds, resolved)
+  emitNullScoreVerdict(stream, mode, resolved.thresholds, resolved, basePath)
 }
 
 export interface ErrorEnvelope {
@@ -490,7 +504,7 @@ function remediationFor(exit: Exit.Exit<unknown, unknown>, code: number): string
     if (CliError.isCliError(value)) {
       return 're-run with --help to see the full usage'
     }
-    if (value instanceof ConfigError) {
+    if (S.is(ConfigError)(value)) {
       return `check the config file: ${value.message}`
     }
     if (S.is(SurvivorsRejection)(value)) {
@@ -498,6 +512,91 @@ function remediationFor(exit: Exit.Exit<unknown, unknown>, code: number): string
     }
   }
   return 'see --reportFile or the verdict envelope on stdout'
+}
+
+/**
+ * The reason a domain error carries, when it carries one.
+ *
+ * Every stage error in this engine is an `S.TaggedError` whose payload field is
+ * `reason` — `DryRunNoTestsError`, `DryRunFailedError`, `PrepareFailedError`
+ * and friends. Those classes extend `Error`, but nothing assigns `.message`, so
+ * reading `.message` off one yields the empty string and the operator is told
+ * a run failed with no indication of why. Read the field the errors actually
+ * populate, and fall back only when it is absent.
+ */
+function reasonOf(value: object): string | undefined {
+  if (!('reason' in value)) {
+    return undefined
+  }
+  const reason: unknown = Reflect.get(value, 'reason')
+  if (typeof reason !== 'string' || reason.length === 0) {
+    return undefined
+  }
+  // Several of these errors wrap the failure that actually happened — a
+  // spawn error, a module that would not load. `reason` alone names the stage
+  // and not the fault, so "Dry run failed to start test runner" with the cause
+  // withheld tells an operator no more than the empty string did.
+  const detail = causeTextOf(value)
+  return detail === undefined ? reason : `${reason}: ${detail}`
+}
+
+/**
+ * The human-readable text of a domain error's wrapped `cause`, if it has one.
+ *
+ * Recurses, because these errors nest: a stage error wraps a
+ * `TestRunnerFailed`, which wraps the spawn or import failure that actually
+ * happened. Stopping at the first layer reports a tag name — "TestRunnerFailed"
+ * — and leaves the operator to guess. Each layer contributes only what it
+ * knows, so the reader gets the chain down to the real fault.
+ */
+function causeTextOf(value: object, depth = 0): string | undefined {
+  if (depth > 4 || !('cause' in value)) {
+    return undefined
+  }
+  const cause: unknown = Reflect.get(value, 'cause')
+  return causeText(cause, depth + 1)
+}
+
+/** A non-empty string property of an object, whether own or inherited. */
+function stringField(value: object, key: string): string | undefined {
+  if (!(key in value)) {
+    return undefined
+  }
+  const field: unknown = Reflect.get(value, key)
+  return typeof field === 'string' && field.length > 0 ? field : undefined
+}
+
+function causeText(cause: unknown, depth: number): string | undefined {
+  if (depth > 4 || cause === undefined || cause === null) {
+    return undefined
+  }
+  if (typeof cause === 'string') {
+    return cause.length > 0 ? cause : undefined
+  }
+  if (typeof cause !== 'object') {
+    return undefined
+  }
+  // A domain error names its fault in `reason`; a worker error that crossed the
+  // socket arrives as plain JSON, so it is not an `Error` and its text is in a
+  // `message` KEY rather than the prototype's property. Read both before
+  // falling back to the discriminant, which names the class and not the fault.
+  const own = stringField(cause, 'reason') ??
+    stringField(cause, 'message') ??
+    (cause instanceof Error && cause.message.length > 0 ? cause.message : tagOf(cause))
+  const nested = causeTextOf(cause, depth)
+  if (own === undefined) {
+    return nested
+  }
+  return nested === undefined ? own : `${own}: ${nested}`
+}
+
+/** A tagged error's discriminant, which is the only name some of them carry. */
+function tagOf(value: object): string | undefined {
+  const tag: unknown = '_tag' in value ? Reflect.get(value, '_tag') : undefined
+  if (typeof tag === 'string' && tag.length > 0) {
+    return tag
+  }
+  return value instanceof Error && value.name.length > 0 ? value.name : undefined
 }
 
 /**
@@ -512,7 +611,13 @@ function describeFailure(exit: Exit.Exit<unknown, unknown>): string {
       if (S.is(SurvivorsRejection)(value)) {
         return value.remediation
       }
-      if (value instanceof Error) {
+      if (typeof value === 'object' && value !== null) {
+        const reason = reasonOf(value)
+        if (reason !== undefined) {
+          return reason
+        }
+      }
+      if (value instanceof Error && value.message.length > 0) {
         return value.message
       }
       if (
@@ -524,7 +629,7 @@ function describeFailure(exit: Exit.Exit<unknown, unknown>): string {
       ) {
         return String(value)
       }
-      return Object.prototype.toString.call(value)
+      return Cause.pretty(exit.cause)
     }
     return Cause.pretty(exit.cause)
   }
@@ -622,6 +727,7 @@ function emitMachineModeOutput(
   exit: Exit.Exit<unknown, unknown>,
   code: number,
   argv: readonly string[],
+  basePath: string,
 ): void {
   const captured = readCapturedConsole()
   // A clean help request fails the effect (the runner rethrows the ShowHelp)
@@ -654,10 +760,7 @@ function emitMachineModeOutput(
     return
   }
   if (stream.isOpen()) {
-    // The run succeeded without a verdict and without a terminal line. The
-    // finalizer never sees the finished run's resolved options, so the
-    // framework defaults stand in for the thresholds it would have used.
-    emitNullScoreVerdict(stream, mode, defaultOptions.thresholds, {})
+    emitNullScoreVerdict(stream, mode, defaultOptions.thresholds, {}, basePath)
   }
 }
 
@@ -674,7 +777,7 @@ function carriesConfigError(cause: Cause.Cause<unknown>): boolean {
       ? reason.defect
       : undefined
     if (
-      candidate !== undefined && (candidate instanceof ConfigError || retrieveCause(candidate) instanceof ConfigError)
+      candidate !== undefined && S.is(ConfigError)(candidate)
     ) {
       return true
     }
@@ -718,7 +821,7 @@ function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
     if (S.is(SurvivorsRejection)(value)) {
       return SURVIVORS_REJECT_EXIT_CLASS
     }
-    if (value instanceof S.SchemaError) {
+    if (S.isSchemaError(value)) {
       return SURVIVORS_REJECT_EXIT_CLASS
     }
   }
@@ -747,13 +850,20 @@ export const runStrykerCli = (
 ): Effect.Effect<number, never, never> =>
   Effect.gen(function*() {
     const stream = yield* createRunEventStream(input.mode)
-    const runMutationTest = input.runMutationTest ?? defaultRunMutationTest(hostOptionsOf(input.mode, stream))
+    const hostOptions = hostOptionsOf(input.mode, stream)
+    const runMutationTest = input.runMutationTest ?? defaultRunMutationTest(hostOptions)
+    const basePath = hostOptions.basePath
 
     // The signal and last-signal cells both the signal handler and the
     // finalizer write and read across fiber boundaries. Function-local: the
     // stream and every cell die with the run.
     let currentFiber: Fiber.Fiber<unknown, unknown> | null = null
     let lastSignal: number | null = null
+
+    const verdictOf = (value: unknown): readonly ExitClass[] =>
+      Predicate.hasProperty(value, 'verdict') && typeof value.verdict === 'number'
+        ? [value.verdict]
+        : []
 
     const resolveClassedExitCode = (exit: Exit.Exit<unknown, unknown>): number => {
       const signal = lastSignal
@@ -766,7 +876,7 @@ export const runStrykerCli = (
         // run must never exit 0.
         return resolveCliExitCode(exit)
       }
-      return resolveExitCode(getPendingExitClasses(), null)
+      return resolveExitCode(verdictOf(exit.value), null)
     }
 
     const onSignal = (signal: NodeJS.Signals): void => {
@@ -778,12 +888,25 @@ export const runStrykerCli = (
       }
     }
 
-    const dispatch = (request: CliRequest): Effect.Effect<unknown, S.SchemaError | SurvivorsRejection, never> =>
+    const dispatch = (
+      request: CliRequest,
+    ): Effect.Effect<
+      unknown,
+      | S.SchemaError
+      | SurvivorsRejection
+      | ConfigFileNotFoundError
+      | ConfigFileUnreadableError
+      | ConfigFileInvalidError
+      | LoggingServerNotTcpError,
+      never
+    > =>
       Match.value(request).pipe(
         Match.tag('run', (runRequest) =>
           runRequest.survivors
-            ? runSurvivorsAdmission(runMutationTest, stream, input.mode, runRequest.options)
-            : Effect.promise(() => runMutationTest(runRequest.options))),
+            ? runSurvivorsAdmission(runMutationTest, stream, input.mode, runRequest.options, basePath).pipe(
+              Effect.provide(makeRunLayer(hostOptions)),
+            )
+            : runMutationTest(runRequest.options).pipe(Effect.orDie)),
         Match.tag('llms', (llmsRequest) =>
           Effect.sync(() => {
             // Requesting `--llms` IS the machine signal, so the command
@@ -838,9 +961,8 @@ export const runStrykerCli = (
       Effect.gen(function*() {
         const exit = yield* Effect.exit(restore(program))
         const code = resolveClassedExitCode(exit)
-        input.recordExitCode(code)
         if (input.mode.mode === 'machine') {
-          emitMachineModeOutput(stream, input.mode, exit, code, input.argv)
+          emitMachineModeOutput(stream, input.mode, exit, code, input.argv, basePath)
         }
         yield* stream.closeAndDrain
         return code

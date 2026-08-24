@@ -11,79 +11,107 @@ import type {
 } from '@systemfsoftware/stryker-js-plugin-api/report'
 import type { TestRunnerCapabilities } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
-import { Timer } from './timer.js'
+import { type Timer } from '@systemfsoftware/stryker-js-mutation-run/timer'
 
-export abstract class ProgressKeeper {
-  private timer!: Timer
-  private timing!: RunTiming
-  private capabilities!: TestRunnerCapabilities
-  private ticksByMutantId = new Map<string, number>()
+export type ProgressTally = {
+  readonly survived: number
+  readonly timedOut: number
+  readonly tested: number
+  readonly mutants: number
+  readonly total: number
+  readonly ticks: number
+  readonly ticksByMutantId: ReadonlyMap<string, number>
+  readonly timing: RunTiming
+  readonly capabilities: TestRunnerCapabilities
+  readonly timer: Timer
+}
 
-  protected progress = {
-    survived: 0,
-    timedOut: 0,
-    tested: 0,
-    mutants: 0,
-    total: 0,
-    ticks: 0,
-  }
+export const emptyTally = (timer: Timer): ProgressTally => ({
+  survived: 0,
+  timedOut: 0,
+  tested: 0,
+  mutants: 0,
+  total: 0,
+  ticks: 0,
+  ticksByMutantId: new Map<string, number>(),
+  timing: { net: 0, overhead: 0 },
+  capabilities: { reloadEnvironment: false },
+  timer,
+})
 
-  protected handleDryRunCompleted({ timing, capabilities }: DryRunCompletedEvent): void {
-    this.timing = timing
-    this.capabilities = capabilities
-  }
+export const makeEmptyTimer = (): Timer => ({
+  startedAt: 0,
+  markers: new Map<string, number>(),
+})
 
-  protected handleMutationTestingPlanReady({ mutantPlans }: MutationTestingPlanReadyEvent): void {
-    this.timer = new Timer()
-    this.ticksByMutantId = new Map(
-      mutantPlans.filter(isRunPlan).map(({ netTime, mutant, runOptions }) => {
-        let ticks = netTime
-        if (
-          this.capabilities.reloadEnvironment === false &&
-          runOptions.reloadEnvironment
-        ) {
-          ticks += this.timing.overhead
-        }
-        return [mutant.id, ticks] as const
-      }),
-    )
-    this.progress.mutants = this.ticksByMutantId.size
-    this.progress.total = [...this.ticksByMutantId.values()].reduce(
-      (acc, n) => acc + n,
-      0,
-    )
-  }
+export const handleDryRunCompleted = (
+  tally: ProgressTally,
+  event: DryRunCompletedEvent,
+): ProgressTally => ({
+  ...tally,
+  timing: event.timing,
+  capabilities: event.capabilities,
+})
 
-  protected handleMutantTested(result: MutantResult): number {
-    const ticks = this.ticksByMutantId.get(result.id)
-    if (ticks !== undefined) {
-      this.progress.tested += 1
-      this.progress.ticks += ticks
-      if (result.status === 'Survived') {
-        this.progress.survived += 1
-      }
-      if (result.status === 'Timeout') {
-        this.progress.timedOut += 1
-      }
+export const handleMutationTestingPlanReady = (
+  tally: ProgressTally,
+  event: MutationTestingPlanReadyEvent,
+  timer: Timer,
+): ProgressTally => {
+  const map = new Map<string, number>()
+  for (const plan of event.mutantPlans) {
+    if (!isRunPlan(plan)) continue
+    let ticks = plan.netTime
+    if (
+      tally.capabilities.reloadEnvironment === false &&
+      plan.runOptions.reloadEnvironment
+    ) {
+      ticks += tally.timing.overhead
     }
-    return ticks ?? 0
+    map.set(plan.mutant.id, ticks)
   }
+  const total = [...map.values()].reduce((acc, n) => acc + n, 0)
+  return {
+    ...tally,
+    timer,
+    ticksByMutantId: map,
+    mutants: map.size,
+    total,
+  }
+}
 
-  protected getElapsedTime(): string {
-    return formatTime(this.timer.elapsedSeconds())
+export const handleMutantTested = (
+  tally: ProgressTally,
+  result: MutantResult,
+): { readonly tally: ProgressTally; readonly ticks: number } => {
+  const ticks = tally.ticksByMutantId.get(result.id)
+  if (ticks === undefined) {
+    return { tally, ticks: 0 }
   }
+  const next: ProgressTally = {
+    ...tally,
+    tested: tally.tested + 1,
+    ticks: tally.ticks + ticks,
+    survived: result.status === 'Survived' ? tally.survived + 1 : tally.survived,
+    timedOut: result.status === 'Timeout' ? tally.timedOut + 1 : tally.timedOut,
+  }
+  return { tally: next, ticks }
+}
 
-  protected getEtc(): string {
-    const totalSecondsLeft = Math.floor(
-      (this.timer.elapsedSeconds() / this.progress.ticks) *
-        (this.progress.total - this.progress.ticks),
-    )
-    if (Number.isFinite(totalSecondsLeft) && totalSecondsLeft > 0) {
-      return formatTime(totalSecondsLeft)
-    } else {
-      return 'n/a'
-    }
+export const getElapsedTime = (tally: ProgressTally, now: number): string => {
+  const elapsed = Math.floor((now - tally.timer.startedAt) / 1000)
+  return formatTime(elapsed)
+}
+
+export const getEtc = (tally: ProgressTally, now: number): string => {
+  const elapsed = Math.floor((now - tally.timer.startedAt) / 1000)
+  const totalSecondsLeft = Math.floor(
+    (elapsed / tally.ticks) * (tally.total - tally.ticks),
+  )
+  if (Number.isFinite(totalSecondsLeft) && totalSecondsLeft > 0) {
+    return formatTime(totalSecondsLeft)
   }
+  return 'n/a'
 }
 
 function formatTime(timeInSeconds: number): string {

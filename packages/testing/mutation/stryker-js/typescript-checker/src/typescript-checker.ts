@@ -4,8 +4,8 @@ import { Checker } from '@systemfsoftware/stryker-js-plugin-api/check'
 import { CheckerFailed } from '@systemfsoftware/stryker-js-plugin-api/check'
 import { CheckStatus } from '@systemfsoftware/stryker-js-plugin-api/check'
 import type { CheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
-import type { Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { strykerReportBugUrl } from '@systemfsoftware/stryker-js-util'
+import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { strykerReportBugUrl } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { Predicate, Result } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
@@ -15,10 +15,8 @@ import type { Diagnostic } from 'typescript/unstable/sync'
 import { createGroups } from './grouping/create-groups.js'
 import type { TSFileNode } from './grouping/ts-file-node.js'
 import { classifyDiagnostics, partitionMutantsForGrouping } from './kernel/check-kernel.js'
-import { createDiagnosticsMap, createResultMap } from './kernel/result-helpers.js'
-import { HybridFileSystem } from './project/hybrid-file-system.js'
-import { toPosixFileName } from './tsconfig-helpers.js'
-import { TypescriptCompiler } from './typescript-compiler.js'
+import { toPosixFileName } from './posix-file-name.js'
+import type { TypescriptCompiler } from './typescript-compiler.js'
 
 interface CheckerDeps {
   readonly options: unknown
@@ -164,20 +162,18 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
       }
     }),
 
-    check: (mutants) =>
-      Effect.gen(function*() {
+    check: (mutants) => {
+      const result = new Map<string, CheckResult>()
+      for (const mutant of mutants) {
+        result.set(mutant.id, { status: CheckStatus.Passed })
+      }
+      const firstMutant = mutants[0]
+      if (!firstMutant || !compiler.nodes.get(toPosixFileName(firstMutant.fileName))) {
+        return Effect.succeed(result)
+      }
+      const errorsMap = new Map<string, Diagnostic[]>()
+      return Effect.gen(function*() {
         yield* Effect.logDebug('typescript checker check', { count: mutants.length })
-        const result = createResultMap()
-        for (const mutant of mutants) {
-          result.set(mutant.id, { status: CheckStatus.Passed })
-        }
-
-        const firstMutant = mutants[0]
-        if (!firstMutant || !compiler.nodes.get(toPosixFileName(firstMutant.fileName))) {
-          return result
-        }
-
-        const errorsMap = createDiagnosticsMap()
         yield* checkErrors(mutants, errorsMap, compiler.nodes)
 
         for (const [id, errors] of errorsMap.entries()) {
@@ -188,7 +184,8 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
         }
 
         return result
-      }),
+      })
+    },
 
     group: (mutants) => {
       const prioritize = getPrioritize(options)
@@ -209,44 +206,5 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
       }
       return Effect.succeed(groups)
     },
-  }
-}
-
-// Backwards-compatible factory used by legacy tests that construct the checker
-// via `new TypescriptChecker(...)`. Prefer the declared plugin layer.
-export class TypescriptChecker {
-  private readonly service: Checker['Service']
-
-  constructor(
-    _logger: unknown,
-    options: unknown,
-    compiler?: TypescriptCompiler,
-  ) {
-    const fs = new HybridFileSystem()
-    const comp = compiler ?? new TypescriptCompiler(options, fs)
-    this.service = makeCheckerService({
-      options,
-      compiler: comp,
-    })
-  }
-
-  public init(): Promise<void> {
-    return Effect.runPromise(this.service.init)
-  }
-
-  public check(mutants: Mutant[]): Promise<Record<string, CheckResult>> {
-    return Effect.runPromise(
-      this.service.check(mutants).pipe(
-        Effect.map((m) => Object.fromEntries(m.entries())),
-      ),
-    )
-  }
-
-  public group(mutants: Mutant[]): Promise<string[][]> {
-    return Effect.runPromise(
-      this.service.group(mutants).pipe(
-        Effect.map((groups) => groups.map((g) => [...g])),
-      ),
-    )
   }
 }

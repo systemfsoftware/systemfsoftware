@@ -8,7 +8,7 @@ import {
   TestStatus,
   toMutantRunResult,
 } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
-import { testFilesProvided } from '@systemfsoftware/stryker-js-util'
+import { testFilesProvided } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import * as Clock from 'effect/Clock'
 import * as Effect from 'effect/Effect'
 import * as Stream from 'effect/Stream'

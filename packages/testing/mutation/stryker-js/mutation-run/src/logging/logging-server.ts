@@ -10,7 +10,7 @@ import * as Stream from 'effect/Stream'
 import net from 'node:net'
 
 import { strykerLevelToEffect, StrykerLogLevel } from './log-level.js'
-import { LoggingEvent } from './logging-event.js'
+import { deserializeLoggingEvent, formatLoggingEvent, type LoggingEvent } from './logging-event.js'
 import { SerializedLoggingEventSchema } from './logging-event.schema.js'
 import { LoggingServerNotTcpError } from './logging-server.schema.js'
 
@@ -46,7 +46,7 @@ export class LoggingServerAddressService extends Context.Service<LoggingServerAd
  */
 const serverLogger: Logger.Logger<unknown, void> = Logger.withConsoleLog(Logger.formatSimple)
 
-const formatDecodedEvent = (event: LoggingEvent): string => event.format()
+const formatDecodedEvent = (event: LoggingEvent): string => formatLoggingEvent(event)
 
 const emitWithEffectLevel = (event: LoggingEvent): Effect.Effect<void> => {
   if (event.level === StrykerLogLevel.Off) {
@@ -134,7 +134,7 @@ const emitFrame = (raw: string): Effect.Effect<void> =>
       return Effect.logWarning('Dropping a worker log frame that failed wire-schema validation')
     }
 
-    return emitWithEffectLevel(LoggingEvent.deserialize(decoded.success))
+    return emitWithEffectLevel(deserializeLoggingEvent(decoded.success))
   })
 
 /**

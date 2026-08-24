@@ -1,12 +1,18 @@
 import { Schema as S } from 'effect'
 
+import { ExitClass } from '../exit-classification.js'
+
 /**
  * Error returned when a tsconfig file fails to parse, or parses to a value that
  * does not match the shape this package consumes.
  */
 export class TsConfigParseError extends S.TaggedError<TsConfigParseError>()(
   'TsConfigParseError',
-  { file: S.String, reason: S.String },
+  {
+    file: S.String,
+    reason: S.String,
+    exitClass: S.Literal(ExitClass.ConfigError),
+  },
 ) {}
 
 const JsonRecord = S.Record(S.String, S.Unknown)

@@ -2,6 +2,7 @@ import { Schema as S } from 'effect'
 import * as Deferred from 'effect/Deferred'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import * as Layer from 'effect/Layer'
 import type { PlatformError } from 'effect/PlatformError'
 import * as Ref from 'effect/Ref'
 import * as Scope from 'effect/Scope'
@@ -16,7 +17,7 @@ import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 
 import type { LoggingServerAddress } from '../logging/index.js'
 
-import { IdGenerator } from './id-generator.js'
+import type { IdGenerator } from './id-generator.js'
 import { ChildProcessSpawner, net, nodeSpawn, resolveWorkerMainPath } from './ipc-transport.js'
 import { ChildProcessCrashedError, OutOfMemoryError } from './worker-pool.schema.js'
 import {
@@ -39,9 +40,13 @@ const CONNECT_TIMEOUT_MS = 5000
 // module-level binding.
 const _privateIpcMarker = 'ipc-private'
 
+type _IsPromiseFunction<T> = T extends (...args: infer _A) => Promise<infer _R> ? true : false
+
 export type Proxied<T> = {
-  [K in keyof T as T[K] extends (...args: unknown[]) => unknown ? K : never]: T[K] extends (...args: infer A) => infer R
-    ? (...args: A) => Effect.Effect<Awaited<R>, WorkerMethodError | ChildProcessCrashedError | OutOfMemoryError>
+  [K in keyof T as _IsPromiseFunction<T[K]> extends true ? K : never]: T[K] extends (
+    ...args: infer A
+  ) => Promise<infer R>
+    ? (...args: A) => Effect.Effect<R, WorkerMethodError | ChildProcessCrashedError | OutOfMemoryError, never>
     : never
 }
 
@@ -100,6 +105,10 @@ const spawnFn = (command: ChildProcess.Command) =>
   })
 
 const spawner = ChildProcessSpawner.make(spawnFn)
+export const ChildProcessSpawnerLive = Layer.succeed(
+  ChildProcessSpawner.ChildProcessSpawner,
+  spawner,
+)
 /** Every way acquiring a worker can fail before it is usable. */
 export type ChildProcessProxyError =
   | WorkerSocketNotTcpError
@@ -130,7 +139,7 @@ export const makeChildProcessProxy = <T>(params: {
     const serverRef = yield* Ref.make<net.Server | undefined>(undefined)
     const connectedDeferred = yield* Deferred.make<void, never>()
 
-    const workerId = params.idGenerator.next().toString()
+    const workerId = (yield* params.idGenerator.next).toString()
     const workerMainPath = resolveWorkerMainPath()
     const needsStripTypes = workerMainPath.endsWith('.ts')
 
@@ -158,28 +167,37 @@ export const makeChildProcessProxy = <T>(params: {
                   const decoded = yield* S.decodeUnknownEffect(WorkerReplySchema)(parsed).pipe(
                     Effect.orElseSucceed(() => undefined),
                   )
-                  if (decoded === undefined) return
-                  const pending = yield* Ref.get(pendingRef)
-                  const d = pending[decoded.id]
-                  if (d === undefined) return
+                  if (decoded === undefined) {
+                    return
+                  }
+                  const d = yield* Ref.modify(pendingRef, (pending) => {
+                    const defer = pending[decoded.id]
+                    if (defer === undefined) {
+                      return [undefined, pending] as const
+                    }
+                    const next = { ...pending }
+                    delete next[decoded.id]
+                    return [defer, next] as const
+                  })
+                  if (d === undefined) {
+                    const current = yield* Ref.get(pendingRef)
+                    return
+                  }
                   if (decoded.success) {
                     Deferred.doneUnsafe(d, Effect.succeed(decoded.value))
                   } else {
                     Deferred.doneUnsafe(d, Effect.fail(decoded.error))
                   }
-                  const next = { ...pending }
-                  delete next[decoded.id]
-                  yield* Ref.set(pendingRef, next)
                 }),
               )
             }
           })
           Effect.runSync(Ref.set(socketRef, socket))
-          Deferred.doneUnsafe(connectedDeferred, Effect.succeed(undefined))
+          Deferred.doneUnsafe(connectedDeferred, Effect.void)
           socket.on('close', () => {
             void Effect.runPromise(
               Effect.gen(function*() {
-                const pending = yield* Ref.get(pendingRef)
+                const pending = yield* Ref.getAndSet(pendingRef, {})
                 const ids = Object.keys(pending)
                 if (ids.length === 0) return
                 const stdout = yield* Ref.get(stdoutRef)
@@ -195,7 +213,6 @@ export const makeChildProcessProxy = <T>(params: {
                   const d = pending[n]
                   if (d !== undefined) Deferred.doneUnsafe(d, Effect.fail(err))
                 }
-                yield* Ref.set(pendingRef, {})
               }),
             )
           })
@@ -257,15 +274,16 @@ export const makeChildProcessProxy = <T>(params: {
     })
 
     const handle = yield* Effect.provideService(command, ChildProcessSpawner.ChildProcessSpawner, spawner)
-
     yield* Deferred.await(connectedDeferred).pipe(
       Effect.timeoutOrElse({
         duration: CONNECT_TIMEOUT_MS,
         orElse: () =>
-          new WorkerConnectTimeoutError({
-            modulePath: params.modulePath,
-            waitedMs: CONNECT_TIMEOUT_MS,
-          }),
+          Effect.fail(
+            new WorkerConnectTimeoutError({
+              modulePath: params.modulePath,
+              waitedMs: CONNECT_TIMEOUT_MS,
+            }),
+          ),
       }),
     )
 
@@ -277,7 +295,7 @@ export const makeChildProcessProxy = <T>(params: {
           const combined = stdout + stderr
           const isOom = combined.includes('JavaScript heap out of memory') ||
             combined.includes('FatalProcessOutOfMemory')
-          const pending = yield* Ref.get(pendingRef)
+          const pending = yield* Ref.getAndSet(pendingRef, {})
           const ids = Object.keys(pending)
           if (ids.length === 0) return
           const pid = Number(handle.pid)
@@ -287,7 +305,6 @@ export const makeChildProcessProxy = <T>(params: {
               const d = pending[Number(k)]
               if (d !== undefined) Deferred.doneUnsafe(d, Effect.fail(err))
             }
-            yield* Ref.set(pendingRef, {})
           } else {
             const numericCode = Number(code)
             if (numericCode !== 0) {
@@ -300,7 +317,9 @@ export const makeChildProcessProxy = <T>(params: {
                 const d = pending[Number(k)]
                 if (d !== undefined) Deferred.doneUnsafe(d, Effect.fail(err))
               }
-              yield* Ref.set(pendingRef, {})
+            } else {
+              // Child exited zero with no pending to fail — restore the empty map
+              // (getAndSet already cleared it, so nothing to do)
             }
           }
         })).pipe(Effect.ignore),
@@ -325,22 +344,20 @@ export const makeChildProcessProxy = <T>(params: {
         if (typeof propertyKey !== 'string') return undefined
         return (...args: readonly unknown[]) =>
           Effect.gen(function*() {
-            const current = yield* Ref.get(idRef)
-            yield* Ref.set(idRef, current + 1)
-            const callId = current
+            const callId = yield* Ref.modify(idRef, (n) => [n, n + 1] as const)
             const deferred = yield* Deferred.make<
               unknown,
               WorkerMethodError | ChildProcessCrashedError | OutOfMemoryError
             >()
-            const pending = yield* Ref.get(pendingRef)
-            const nextPending = { ...pending, [callId]: deferred }
-            yield* Ref.set(pendingRef, nextPending)
+            yield* Ref.update(pendingRef, (p) => ({ ...p, [callId]: deferred }))
+            const afterAdd = yield* Ref.get(pendingRef)
             const sock = yield* Ref.get(socketRef)
             if (sock === undefined || sock.destroyed || !sock.writable) {
-              const cur = yield* Ref.get(pendingRef)
-              const cleaned = { ...cur }
-              delete cleaned[callId]
-              yield* Ref.set(pendingRef, cleaned)
+              yield* Ref.update(pendingRef, (p) => {
+                const cleaned = { ...p }
+                delete cleaned[callId]
+                return cleaned
+              })
               return yield* new WorkerMethodError({
                 message: 'IPC socket not connected',
                 name: 'IPCError',
@@ -368,7 +385,7 @@ export const makeChildProcessProxy = <T>(params: {
     const typedProxy = yield* S.decodeUnknownEffect(declared)(rawProxy).pipe(Effect.orDie)
 
     const dispose: Effect.Effect<void> = Effect.gen(function*() {
-      const pending = yield* Ref.get(pendingRef)
+      const pending = yield* Ref.getAndSet(pendingRef, {})
       const ids = Object.keys(pending)
       if (ids.length > 0) {
         for (const k of ids) {
@@ -380,7 +397,6 @@ export const makeChildProcessProxy = <T>(params: {
             )
           }
         }
-        yield* Ref.set(pendingRef, {})
       }
       const sock = yield* Ref.get(socketRef)
       if (sock !== undefined && !sock.destroyed) sock.destroy()
@@ -407,37 +423,6 @@ export const makeChildProcessProxy = <T>(params: {
     }
   })
 
-export class ChildProcessProxy<T> {
-  public readonly proxy: Proxied<T>
-  public readonly dispose: Effect.Effect<void>
-  private readonly shape: ChildProcessProxyShape<T>
-  private constructor(shape: ChildProcessProxyShape<T>) {
-    this.proxy = shape.proxy
-    this.dispose = shape.dispose
-    this.shape = shape
-  }
-  public get stdout(): string {
-    return this.shape.stdout
-  }
-  public get stderr(): string {
-    return this.shape.stderr
-  }
-  public static create<T>(
-    _modulePath: string,
-    _loggingServerAddress: LoggingServerAddress,
-    _options: StrykerOptions,
-    _fileDescriptions: FileDescriptions,
-    _pluginModulePaths: readonly string[],
-    _workingDirectory: string,
-    _injectableClass: { readonly name: string },
-    _execArgv: readonly string[],
-    _getLogger: (name: string) => Logger,
-    _idGenerator: IdGenerator,
-  ): ChildProcessProxy<T> {
-    throw new Error('ChildProcessProxy.create is deprecated: use makeChildProcessProxy as Effect and provide Scope')
-  }
-}
-
 if (import.meta.vitest !== undefined) {
   // vitest is dev-only, not present in production; dynamic import inside the
   // guard is intentional so the module can be imported without vitest installed.
@@ -445,7 +430,7 @@ if (import.meta.vitest !== undefined) {
   // id-generator and schema are workspace sources, static import would create a
   // circular dependency at module load; dynamic import inside the guard keeps
   // them test-only.
-  const { IdGenerator: TestIdGenerator } = await import('./id-generator.js')
+  const { makeIdGenerator: makeTestIdGenerator } = await import('./id-generator.js')
   const { WorkerMethodError } = await import('./worker-protocol.schema.js')
 
   interface EchoWorker {
@@ -475,8 +460,8 @@ if (import.meta.vitest !== undefined) {
   const makeTestProxy = (modulePath: string, namedExport: string) =>
     Effect.gen(function*() {
       const scope = yield* Scope.make()
-      const idGenerator = new TestIdGenerator()
-      const options = yield* S.decodeUnknownEffect(StrykerOptionsSchema)({})
+      const idGenerator = yield* makeTestIdGenerator
+      const options = yield* S.decodeEffect(StrykerOptionsSchema)({})
       const shape = yield* makeChildProcessProxy<EchoWorker>({
         modulePath,
         namedExport,
@@ -537,6 +522,32 @@ if (import.meta.vitest !== undefined) {
       )
       expect(results[0]).toBe(2)
       expect(results[1]).toBe(4)
+    } finally {
+      await Effect.runPromise(shape.dispose.pipe(Effect.orDie))
+      await Effect.runPromise(Scope.close(scope, Exit.succeed(undefined)))
+    }
+  })
+
+  it('Should_FailWithNamedError_When_ExportCarriesMethodsOnItsPrototype', async () => {
+    // The regression this pins: every worker in this engine was once a class, and
+    // the proxy resolves a method with `Reflect.get(subject, name)`. Methods on a
+    // prototype are not own properties, so the lookup found `undefined` and the
+    // call vanished with no diagnostic. The contract is a NAMED failure, so the
+    // operator learns which method was missing instead of watching a run hang.
+    const modulePath = new URL('./test-echo-worker.mjs', import.meta.url).pathname
+    const { shape, scope } = await Effect.runPromise(makeTestProxy(modulePath, 'TestEchoWorkerPrototype'))
+    try {
+      const failure = await Effect.runPromise(
+        shape.proxy.echo(21).pipe(
+          Effect.catchTag('WorkerMethodError', (error) => Effect.succeed(error)),
+        ),
+      )
+      if (!(failure instanceof WorkerMethodError)) {
+        throw new Error(`expected a WorkerMethodError, got ${String(failure)}`)
+      }
+      // The method name is the whole point: a bare "call failed" would leave the
+      // operator exactly where the silent `undefined` left them.
+      expect(failure.message).toContain('echo')
     } finally {
       await Effect.runPromise(shape.dispose.pipe(Effect.orDie))
       await Effect.runPromise(Scope.close(scope, Exit.succeed(undefined)))

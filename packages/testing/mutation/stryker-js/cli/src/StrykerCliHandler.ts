@@ -1,4 +1,8 @@
 import * as NodeStdio from '@effect/platform-node/NodeStdio'
+import { ChildProcessSpawnerLive } from '@systemfsoftware/stryker-js-mutation-run'
+import { defaultOptions } from '@systemfsoftware/stryker-js-mutation-run/config/config-resolution'
+import type { ManifestRendered } from '@systemfsoftware/stryker-js-mutation-run/run-event'
+import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
 import type { LogLevel, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Console from 'effect/Console'
 import * as Effect from 'effect/Effect'
@@ -15,12 +19,6 @@ import * as CliError from 'effect/unstable/cli/CliError'
 import * as Command from 'effect/unstable/cli/Command'
 import * as Flag from 'effect/unstable/cli/Flag'
 import * as GlobalFlag from 'effect/unstable/cli/GlobalFlag'
-import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
-
-import { defaultOptions } from '@systemfsoftware/stryker-js-mutation-run/config/config-resolution'
-import type { ManifestRendered } from '@systemfsoftware/stryker-js-mutation-run/run-event'
-import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
-
 import type { CliRequest } from './cli-request.schema.js'
 import { emitLLMSManifest } from './LlmsManifest.js'
 import { STREAM_SCHEMA_VERSION } from './StreamProtocol.js'
@@ -533,12 +531,8 @@ const cliLayer = Layer.mergeAll(
   // `Stdio.layerTest` drains those sinks to nowhere, which swallowed every
   // framework-rendered document and left the process with nothing to show.
   NodeStdio.layer,
-  Layer.succeed(
-    ChildProcessSpawner.ChildProcessSpawner,
-    ChildProcessSpawner.make(() => Effect.die('no child processes')),
-  ),
+  ChildProcessSpawnerLive,
 )
-
 /**
  * The transport entry: builds the command tree, resolves the mode once at
  * the edge (never a second probe), provides the CLI and Console layers the
@@ -549,7 +543,6 @@ const cliLayer = Layer.mergeAll(
 export function strykerCliEffect(
   argv: string[],
   runMutationTest: StrykerRun | undefined,
-  recordExitCode: (code: number) => void,
   detectMode: DetectModeCapability,
   createRunEventStream: CreateRunEventStreamCapability,
 ): Effect.Effect<number, never, never> {
@@ -576,7 +569,7 @@ export function strykerCliEffect(
     )
     const outcome = yield* Effect.result(
       runStrykerCli(
-        { program: cliEffect, requestRef, mode, runMutationTest, recordExitCode, argv },
+        { program: cliEffect, requestRef, mode, runMutationTest, argv },
         createRunEventStream,
       ),
     )

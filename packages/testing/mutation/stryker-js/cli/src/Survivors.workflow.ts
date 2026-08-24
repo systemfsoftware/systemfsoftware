@@ -147,12 +147,15 @@ function sortKeys(value: unknown): unknown {
  * which carries exactly these fields, is sufficient input to reconstruct a
  * survivor with no access to the report file.
  */
-export function survivorIdentifyingKey(input: {
-  readonly file: string
-  readonly location: schema.Location
-  readonly mutatorName: string
-  readonly replacement: string | undefined
-}): string {
+export function survivorIdentifyingKey(
+  input: {
+    readonly file: string
+    readonly location: schema.Location
+    readonly mutatorName: string
+    readonly replacement: string | undefined
+  },
+  basePath: string,
+): string {
   const {
     file,
     location: { start, end },
@@ -160,7 +163,7 @@ export function survivorIdentifyingKey(input: {
     replacement,
   } = input
   return `${
-    toRelativeNormalizedFileName(file)
+    toRelativeNormalizedFileName(basePath, file)
   }@${start.line}:${start.column}-${end.line}:${end.column}\n${mutatorName}: ${replacement}`
 }
 
@@ -220,11 +223,11 @@ export function extractSurvivors(
  * ranges: the report's 1-based lines with the internal 0-based columns,
  * relative file names, deduplicated in first-seen order.
  */
-export function survivorMutateSpans(survivors: readonly Mutant[]): string[] {
+export function survivorMutateSpans(survivors: readonly Mutant[], basePath: string): string[] {
   const spans: string[] = []
   const seen = new Set<string>()
   for (const survivor of survivors) {
-    const file = toRelativeNormalizedFileName(survivor.fileName)
+    const file = toRelativeNormalizedFileName(basePath, survivor.fileName)
     const { start, end } = survivor.location
     const span = `${file}:${start.line + 1}:${start.column}-${end.line + 1}:${end.column}`
     if (!seen.has(span)) {
@@ -685,11 +688,14 @@ if (import.meta.vitest !== void 0) {
       '∀k_OneFieldVariant_≡DifferentKey',
       [keyInputArb],
       ([base]) =>
-        survivorIdentifyingKey({ ...base, file: nextKeyFile(base.file) }) !== survivorIdentifyingKey(base) &&
-        survivorIdentifyingKey({ ...base, location: shiftedLocation(base.location) }) !==
-          survivorIdentifyingKey(base) &&
-        survivorIdentifyingKey({ ...base, mutatorName: `${base.mutatorName}x` }) !== survivorIdentifyingKey(base) &&
-        survivorIdentifyingKey({ ...base, replacement: `${base.replacement ?? ''}x` }) !== survivorIdentifyingKey(base),
+        survivorIdentifyingKey({ ...base, file: nextKeyFile(base.file) }, ABS_WORK_ROOT) !==
+          survivorIdentifyingKey(base, ABS_WORK_ROOT) &&
+        survivorIdentifyingKey({ ...base, location: shiftedLocation(base.location) }, ABS_WORK_ROOT) !==
+          survivorIdentifyingKey(base, ABS_WORK_ROOT) &&
+        survivorIdentifyingKey({ ...base, mutatorName: `${base.mutatorName}x` }, ABS_WORK_ROOT) !==
+          survivorIdentifyingKey(base, ABS_WORK_ROOT) &&
+        survivorIdentifyingKey({ ...base, replacement: `${base.replacement ?? ''}x` }, ABS_WORK_ROOT) !==
+          survivorIdentifyingKey(base, ABS_WORK_ROOT),
     )
   })
 
@@ -748,11 +754,11 @@ if (import.meta.vitest !== void 0) {
     it.prop('∀s_Spans_≡DeduplicatedFirstSeen', [survivorListArb], ([survivors]) => {
       const spanOf = (mutant: Mutant): string => {
         const { start, end } = mutant.location
-        return `${toRelativeNormalizedFileName(mutant.fileName)}:${start.line + 1}:${start.column}-${
+        return `${toRelativeNormalizedFileName(ABS_WORK_ROOT, mutant.fileName)}:${start.line + 1}:${start.column}-${
           end.line + 1
         }:${end.column}`
       }
-      const output = survivorMutateSpans(survivors)
+      const output = survivorMutateSpans(survivors, ABS_WORK_ROOT)
       const inputSpans = survivors.map(spanOf)
       const firstIndexOf = (span: string): number => inputSpans.indexOf(span)
       const noDuplicates = new Set(output).size === output.length
@@ -771,13 +777,13 @@ if (import.meta.vitest !== void 0) {
     })
 
     it.prop('∀s_SpanNumbers_≡OneBasedLinesZeroBasedColumns', [survivorListArb], ([survivors]) => {
-      const relName = (file: string): string => toRelativeNormalizedFileName(file)
+      const relName = (file: string): string => toRelativeNormalizedFileName(ABS_WORK_ROOT, file)
       const numberFrom = (value: string): number => Number(value)
       const spanOf = (mutant: Mutant): string => {
         const { start, end } = mutant.location
         return `${relName(mutant.fileName)}:${start.line + 1}:${start.column}-${end.line + 1}:${end.column}`
       }
-      const output = survivorMutateSpans(survivors)
+      const output = survivorMutateSpans(survivors, ABS_WORK_ROOT)
       const inputSpans = survivors.map(spanOf)
       return output.every((span) => {
         const match = /^(.+):(\d+):(\d+)-(\d+):(\d+)$/.exec(span)

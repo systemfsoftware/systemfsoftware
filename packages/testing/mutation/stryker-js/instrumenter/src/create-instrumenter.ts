@@ -1,7 +1,11 @@
-import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import { instrument } from './instrumenter.js'
 
-import { Instrumenter } from './instrumenter.js'
+export { instrument }
 
-export function createInstrumenter(logger: Logger): Instrumenter {
-  return new Instrumenter(logger)
+/**
+ * Migration helper retaining the previous factory name.
+ * New code should import `instrument` directly.
+ */
+export function createInstrumenter() {
+  return { instrument }
 }

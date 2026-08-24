@@ -1,5 +1,5 @@
+import { generate } from '../babel/babel-generator.js'
 import { type TSAst, type TsxAst } from '../syntax/index.js'
-import { generate } from '../util/babel-generator.js'
 
 import { type Printer } from './index.js'
 
