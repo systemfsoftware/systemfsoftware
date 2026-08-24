@@ -47,6 +47,7 @@
   },
   "dependencies": {
     "@oxc-project/types": "catalog:",
+    "@systemfsoftware/effect-schema-discovery": "workspace:^",
     "oxc-parser": "catalog:"
   },
   "devDependencies": {

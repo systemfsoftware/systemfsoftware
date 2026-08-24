@@ -1,3 +1,4 @@
+/// <reference types="vitest/import-meta" />
 import { it } from '@effect/vitest'
 import { Exit, Schema as S } from 'effect'
 import * as AST from 'effect/SchemaAST'
@@ -126,7 +127,6 @@ if (import.meta.vitest !== void 0) {
   // purpose — an arbitrary built by one `effect/testing` instance and sampled by another
   // yields values the schema rejects, which silently inverts every adequacy verdict.
   const { it } = await import('@effect/vitest')
-  const { ruleOfSchemas } = await import('./RuleOfSchemas.js')
   const fc = FastCheck
 
   const properSubset = fc.subarray([...ALPHABET], { minLength: 1, maxLength: ALPHABET.length - 1 })
@@ -227,5 +227,4 @@ if (import.meta.vitest !== void 0) {
   )
 
   refutes(Hexish, { NonHex: fc.stringMatching(/^[^0-9a-f]$/) })
-  ruleOfSchemas('Hexish', Hexish)
 }

@@ -1,6 +1,6 @@
 /// <reference types="vitest/import-meta" />
 import { Schema as S } from 'effect'
-import { FastCheck } from 'effect/testing'
+import type { FastCheck } from 'effect/testing'
 
 export const boundedUnion = <
   Base extends readonly [S.ConstraintCodec<unknown, unknown>, ...readonly S.ConstraintCodec<unknown, unknown>[]],
@@ -60,7 +60,7 @@ if (import.meta.vitest !== void 0) {
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
-  const { Match } = await import('effect')
+  const { Exit, Match } = await import('effect')
   const { Schema: S } = await import('effect')
   const { FastCheck: fc } = await import('effect/testing')
 
@@ -144,11 +144,15 @@ if (import.meta.vitest !== void 0) {
   const SAMPLE_SIZE = 200
 
   /**
-   * Seeds per sampling property. Breadth across seeds is what replaces the one
-   * recorded seed the deleted snapshots pinned, and each seed costs
-   * `SAMPLE_SIZE` generated values; 25 buys that breadth while keeping the file
-   * under a fifth of a second.
+   * Each sampling property draws `SEEDS * SAMPLE_SIZE` values from a recursive
+   * schema, which is CPU-bound and does not share a core well. Measured on the
+   * same commit: 612ms for the file's slowest property run alone, 45.7s for the
+   * same property inside a full parallel gate — a 74x spread. The timeout has to
+   * cover the contended cost, because a bound set near the isolated cost hands
+   * the verdict to whichever sibling tasks happen to run alongside, and a red
+   * from that is indistinguishable from a real one.
    */
+  const SAMPLE_TIMEOUT_MS = 120_000
 
   const VARIANT_COUNT = BASE.length + RECUR.length
 
@@ -242,7 +246,7 @@ if (import.meta.vitest !== void 0) {
     '∀s_ExprDeepest_=DepthCap',
     [fc.integer()],
     ([seed]) => deepestOf(sampleAt(seed)) === DEPTH_CAP,
-    { fastCheck: { numRuns: SEEDS } },
+    { timeout: SAMPLE_TIMEOUT_MS, fastCheck: { numRuns: SEEDS } },
   )
 
   /**
@@ -257,7 +261,7 @@ if (import.meta.vitest !== void 0) {
     '∀s_ExprComposition_⊇AllTags',
     [fc.integer()],
     ([seed]) => distinctTagsOf(sampleAt(seed)) === VARIANT_COUNT,
-    { fastCheck: { numRuns: SEEDS } },
+    { timeout: SAMPLE_TIMEOUT_MS, fastCheck: { numRuns: SEEDS } },
   )
 
   /**
@@ -272,6 +276,28 @@ if (import.meta.vitest !== void 0) {
     '∀s_ExprBranches_≤ShareTolerance',
     [fc.integer()],
     ([seed]) => widestBranchDriftOf(sampleAt(seed)) <= SHARE_TOLERANCE,
-    { fastCheck: { numRuns: SEEDS } },
+    { timeout: SAMPLE_TIMEOUT_MS, fastCheck: { numRuns: SEEDS } },
+  )
+
+  /**
+   * The cap bounds generation and nothing else. Everything above draws values
+   * *from* the schema, so every one of them is bounded by construction and all
+   * four stay green if `maxDepth` leaks into decoding. This one builds input the
+   * generator can never produce — a chain far deeper than `DEPTH_CAP` — and
+   * requires the codec to accept it, which is the promise a runtime dependency
+   * makes to a consumer decoding real input at a boundary.
+   */
+  const encodedChain = (depth: number): unknown =>
+    depth <= 1
+      ? { _tag: 'Lit', value: 1 }
+      : { _tag: 'Binary', op: '+', left: encodedChain(depth - 1), right: { _tag: 'Lit', value: 1 } }
+
+  it.prop(
+    '∀d_DeeperThanCap_=Depth',
+    [fc.integer({ min: DEPTH_CAP + 1, max: DEPTH_CAP + 20 })],
+    ([depth]) => {
+      const decoded = S.decodeUnknownExit(Expr)(encodedChain(depth))
+      return Exit.isSuccess(decoded) && nestingDepth(decoded.value) === depth
+    },
   )
 }

@@ -3,7 +3,7 @@ import { IntensityConfig, MaxChildren } from '@systemfsoftware/effect-daemon-spe
 import { LeaderLockInfraError, LeaderLockNotAcquired } from '@systemfsoftware/effect-daemon-spec'
 import { LockPrimitiveError } from '@systemfsoftware/effect-daemon-spec'
 import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
-import { scanObligations } from '@systemfsoftware/effect-schema-law'
+import { scanObligations } from '@systemfsoftware/effect-schema-law/refutation'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 

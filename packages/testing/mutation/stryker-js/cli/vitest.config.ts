@@ -1,9 +1,10 @@
+import { inlineRefutationCoverage } from '@systemfsoftware/effect-schema-refutation-vite'
 import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
 import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
 export default defineConfig({
   ...sharedConfig,
-  plugins: [inlineSchemaTests()],
+  plugins: [inlineSchemaTests(), inlineRefutationCoverage()],
   test: {
     ...sharedConfig.test,
     // KTD5: the container lane lives in `tests` under its own config

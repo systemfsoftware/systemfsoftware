@@ -1,6 +1,6 @@
+/// <reference types="vitest/import-meta" />
 import { Schema as S } from 'effect'
 import * as AST from 'effect/SchemaAST'
-import { FastCheck } from 'effect/testing'
 
 /**
  * One weakening of an Effect schema, produced by `armsOf`. Each arm identifies
@@ -286,24 +286,6 @@ const walk = (
     )
   }
 }
-
-/**
- * The fast-check arbitrary for the encoded side of a schema, drawn via
- * `throw`-style failure isolation: a schema whose arbitrary construction
- * throws is reported as a thrown error rather than a silent `None`. U2's
- * fallback chain consumes this alongside the type-side arbitrary.
- */
-export const safeEncodedArbitrary = (
-  schema: S.ConstraintDecoder<unknown>,
-): FastCheck.Arbitrary<unknown> => S.toArbitrary(S.toEncoded(schema))(FastCheck)
-
-/**
- * The fast-check arbitrary for the type side of a schema. Safe the same way
- * `safeEncodedArbitrary` is — never returns a placeholder for a thrown
- * arbitrary.
- */
-export const safeTypeArbitrary = (schema: S.ConstraintDecoder<unknown>): FastCheck.Arbitrary<unknown> =>
-  S.toArbitrary(schema)(FastCheck)
 
 /** Recipe depth cap for the in-source law below. */
 const RECIPE_MAX_DEPTH = 3

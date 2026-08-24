@@ -9,7 +9,13 @@ import {
   SCHEMA_TEST_DETAIL,
   testFileInSrcDetail,
 } from './no-test-file-in-src.config.js'
-import { PROPERTY_SUFFIX, SCHEMA_LAWS_BASENAME, SCHEMA_SUFFIX, WORKFLOW_TEST_BASENAME } from './path.config.js'
+import {
+  PROPERTY_SUFFIX,
+  SCHEMA_LAWS_BASENAME,
+  SCHEMA_REFUTATIONS_BASENAME,
+  SCHEMA_SUFFIX,
+  WORKFLOW_TEST_BASENAME,
+} from './path.config.js'
 import { basenameOf, isInConfiguredTestDir, isTestFile, isUnderSrc } from './path.js'
 
 export type MessageIds = 'testFileInSrc' | 'schemaTestInSrc' | 'propertyTestOutsideTestsDir'
@@ -28,7 +34,7 @@ export const noTestFileInSrc = defineRule({
     const basename = basenameOf(context.filename)
     if (!isUnderSrc(context.filename)) return {}
     if (!isTestFile(basename)) return {}
-    if (basename === SCHEMA_LAWS_BASENAME) return {}
+    if (basename === SCHEMA_LAWS_BASENAME || basename === SCHEMA_REFUTATIONS_BASENAME) return {}
     const isPropertyTest = basename.endsWith(PROPERTY_SUFFIX)
     const isSchemaTest = basename.endsWith(SCHEMA_SUFFIX)
     const colocated = isInConfiguredTestDir(context.filename, sanctionedDirs)
