@@ -1,8 +1,10 @@
 {
   "extends": "@systemfsoftware/tsconfig/node",
-  "compilerOptions": {
-    "target": "es2024",
-    "lib": ["esnext"]
-  },
-  "include": ["oxlint.config.ts", "tsdown.config.ts", "vitest.config.ts", "global-setup.ts"]
+  "include": [
+    "oxlint.config.ts",
+    "tsdown.config.ts",
+    "vitest.config.ts",
+    "global-setup.ts",
+    "tests/__fixtures__/vitest-cli-context.d.ts"
+  ]
 }

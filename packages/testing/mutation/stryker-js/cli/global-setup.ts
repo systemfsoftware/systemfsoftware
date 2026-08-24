@@ -9,12 +9,6 @@ import { promisify } from 'node:util'
 import { GenericContainer, getContainerRuntimeClient, type StartedTestContainer } from 'testcontainers'
 import type { TestProject } from 'vitest/node'
 
-declare module 'vitest' {
-  interface ProvidedContext {
-    strykerContainerId: string
-  }
-}
-
 const execFileAsync = promisify(execFile)
 
 // Manifest-list digest (not the amd64 platform digest) for tag 22-alpine, resolved 2026-08-10.
@@ -130,16 +124,17 @@ export function setup(project: TestProject): Promise<void> {
         yield* Effect.promise(() =>
           execFileAsync(
             'pnpm',
-            ['--filter', workspacePackage, 'exec', 'pnpm', 'pack', '--pack-destination', packDir],
-            {
-              cwd: CLI_DIR,
-              // Pack read-only: the lane packs a tree turbo already built, so a
-              // packed package's `prepare` hook (`stryker-js-cli` carries one)
-              // would clean-and-rebuild its `dist` mid-gate — a window in which
-              // concurrent tasks can observe a missing `dist`. `pnpm pack` takes
-              // no `--ignore-scripts` flag; the env var is the supported form.
-              env: { ...process.env, npm_config_ignore_scripts: 'true' },
-            },
+            [
+              '--filter',
+              workspacePackage,
+              'exec',
+              'pnpm',
+              'pack',
+              '--config.ignore-scripts=true',
+              '--pack-destination',
+              packDir,
+            ],
+            { cwd: CLI_DIR },
           )
         )
       }
