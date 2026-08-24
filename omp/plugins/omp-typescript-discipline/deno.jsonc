@@ -1,6 +1,4 @@
 {
-  // Deno workspace for omp-typescript-discipline — only the discipline checks.
-  // Deno discovers it by walking up from each script, so invocations need no --config flag.
   "imports": {
     "@std/path": "jsr:@std/path@^1.1.6",
   },
