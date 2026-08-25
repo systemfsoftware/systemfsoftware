@@ -46,9 +46,10 @@ function verdictOf(command: CliDispatchCommand): Verdict {
     return { kind: 'help' }
   }
   const hasHelp = argv.some((arg) => arg === '--help' || arg === '-h' || arg === 'help')
+  const hasVersion = argv.some((arg) => arg === '--version' || arg === '-v' || arg === 'version')
   const hasLlms = argv.some((arg) => arg === '--llms' || arg === 'llms')
   const hasSurvivors = argv.some((arg) => arg === '--survivors' || arg === 'survivors')
-  if (hasHelp) {
+  if (hasHelp || hasVersion) {
     return { kind: 'help' }
   }
   if (hasLlms) {
