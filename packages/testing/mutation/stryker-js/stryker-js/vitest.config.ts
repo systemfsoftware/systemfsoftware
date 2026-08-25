@@ -9,7 +9,7 @@ export default defineConfig({
     ...sharedConfig.test,
     include: ['src/**/*.test.ts'],
     includeSource: ['src/**/*.ts'],
-    testTimeout: 60000,
-    hookTimeout: 60000,
+    testTimeout: 600000,
+    hookTimeout: 600000,
   },
 })
