@@ -28,9 +28,3 @@ export const prepareWorkflow = Workflow.make(
 
 export { DryRunCommand, DryRunDecision, DryRunError, dryRunWorkflow } from './DryRun.workflow.js'
 export { InstrumentCommand, InstrumentDecision, InstrumentError, instrumentWorkflow } from './Instrument.workflow.js'
-export {
-  MutationTestCommand,
-  MutationTestDecision,
-  MutationTestError,
-  mutationTestWorkflow,
-} from './MutationTest.workflow.js'
