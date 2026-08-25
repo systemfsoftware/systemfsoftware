@@ -67,6 +67,7 @@ import { makeMutationReportingService } from './Reporter.js'
 import { toSchemaLocation } from './Reporter.js'
 import { normalizeReportFileName } from './Reporter.js'
 import { selectReporters } from './Reporter.js'
+import { ansi } from './Reporter.workflow.js'
 import { StageError } from './Run.schema.js'
 import {
   DryRunCommand,
@@ -472,7 +473,11 @@ export const prepareLayer = (services: Context.Context<StageServices>): Cell.Wri
           const mutateCount = MutableHashMap.size(project.filesToMutate)
           const summary = `Found ${mutateCount} of ${MutableHashMap.size(project.files)} file(s) to be mutated.`
           if (env.resolvedMode.mode === 'human') {
-            yield* Console.log(summary)
+            if (env.allowConsoleColors) {
+              yield* Console.log(ansi.green(summary))
+            } else {
+              yield* Console.log(summary)
+            }
           } else {
             yield* Effect.logInfo(summary)
           }
