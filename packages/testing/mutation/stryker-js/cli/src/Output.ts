@@ -947,6 +947,9 @@ export function emitNullScoreVerdict(
       mode: envelope.mode,
       signal: envelope.signal,
       score: envelope.score,
+      thresholds: envelope.thresholds,
+      reportFile: envelope.reportFile,
+      mutants: envelope.mutants,
     }),
   )
 }

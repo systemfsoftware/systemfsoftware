@@ -68,12 +68,32 @@ export class Heartbeat extends S.TaggedClass<Heartbeat>()('tick', {
   total: Wire.nullOr(Wire.number),
 }) {}
 
+const VerdictThresholds = Wire.wire({
+  high: Wire.number,
+  low: Wire.number,
+  break: Wire.nullOr(Wire.number),
+})
+export type VerdictThresholds = typeof VerdictThresholds.Type
+
+const VerdictMutant = S.Struct({
+  id: Wire.string,
+  file: Wire.string,
+  location: Location,
+  mutator: Wire.string,
+  replacement: Wire.nullOr(Wire.string),
+  status: MutantStatus,
+})
+export type VerdictMutant = typeof VerdictMutant.Type
+
 export class VerdictReached extends S.TaggedClass<VerdictReached>()('verdict', {
   schemaVersion: Wire.string,
   runId: Wire.string,
   mode: OutputMode,
   signal: ModeSignal,
   score: Wire.nullOr(Wire.number),
+  thresholds: VerdictThresholds,
+  reportFile: Wire.nullOr(Wire.string),
+  mutants: S.Array(VerdictMutant),
 }) {}
 
 export class RunFailed extends S.TaggedClass<RunFailed>()('error', {
@@ -174,6 +194,9 @@ if (import.meta.vitest !== void 0) {
       mode: 'human',
       signal: 'flag',
       score: Number.POSITIVE_INFINITY,
+      thresholds: { high: 100, low: 80, break: null },
+      reportFile: null,
+      mutants: [],
     }),
   })
 
