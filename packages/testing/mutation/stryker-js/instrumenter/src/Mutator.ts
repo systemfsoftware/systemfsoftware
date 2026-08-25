@@ -633,11 +633,10 @@ const baseReplacements: Record<string, string | null> = {
 
 const noReverseReplacements = ['getUTCDate', 'setUTCDate']
 
-const replacements: Record<string, string | null> = { ...baseReplacements }
-for (const key of Object.keys(baseReplacements)) {
-  const value = baseReplacements[key]
-  if (value !== null && value !== undefined && !noReverseReplacements.includes(key)) {
-    replacements[value] = key
+const replacements = new Map<string, string | null>(Object.entries(baseReplacements))
+for (const [key, value] of Object.entries(baseReplacements)) {
+  if (value !== null && !noReverseReplacements.includes(key)) {
+    replacements.set(value, key)
   }
 }
 
@@ -654,7 +653,7 @@ export const methodExpressionMutator: Mutator = function*(node, _context: Mutato
     return
   }
 
-  const newName = replacements[callee.property.name]
+  const newName = replacements.get(callee.property.name)
   if (newName === undefined) {
     return
   }
