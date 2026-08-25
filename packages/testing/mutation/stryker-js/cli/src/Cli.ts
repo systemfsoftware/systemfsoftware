@@ -1216,7 +1216,37 @@ export function strykerCliEffect(
                     return result.success
                   })()
                 })),
-              Match.tag('HelpDecision', () => Effect.succeed(0)),
+              Match.tag('HelpDecision', () =>
+                Effect.gen(function*() {
+                  const mode = yield* detectMode
+                  const requestRef = yield* Ref.make<Option.Option<CliRequest>>(Option.none())
+                  const command = makeStrykerCommand(requestRef)
+                  const cliEffect = Command.runWith(command, { version: strykerVersion })(argv).pipe(
+                    Effect.provide(
+                      Layer.mergeAll(
+                        (() => {
+                          if (mode.mode === 'machine') {
+                            return machineConsoleLayer
+                          }
+                          return Layer.empty
+                        })(),
+                        cliLayer,
+                      ),
+                    ),
+                  )
+                  const result = yield* Effect.result(
+                    runStrykerCli(
+                      { program: cliEffect, requestRef, mode, runMutationTest, argv, lastSignal },
+                      createRunEventStream,
+                    ),
+                  )
+                  return (() => {
+                    if (Result.isFailure(result)) {
+                      return result.failure
+                    }
+                    return result.success
+                  })()
+                })),
               Match.exhaustive,
             ),
         })
