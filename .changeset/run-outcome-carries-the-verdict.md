@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/stryker-js-mutation-run": major
+"@systemfsoftware/stryker-js-platform-node": major
 ---
 
 A run hands back its verdict alongside the results instead of the results alone.

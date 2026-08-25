@@ -1,15 +1,10 @@
-import {
-  declarePlugin,
-  PluginKind,
-  RunConfiguration,
-  SandboxDirectory,
-} from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { declarePlugin, RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as S from 'effect/Schema'
 
-import { VitestRunnerOptionsSchema } from './vitest-runner-options.schema.js'
-import { makeVitestRunnerLayer } from './vitest-test-runner.js'
+import { makeVitestRunnerLayer } from './Runner.js'
+import { VitestRunnerOptionsSchema } from './Runner.schema.js'
 
 /**
  * The `vitest` test runner, as the plugin the engine loads.
@@ -20,7 +15,7 @@ import { makeVitestRunnerLayer } from './vitest-test-runner.js'
  */
 export const strykerPlugins = [
   declarePlugin(
-    PluginKind.TestRunner,
+    'TestRunner',
     'vitest',
     Layer.unwrap(
       Effect.gen(function*() {

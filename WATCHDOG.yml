@@ -1,0 +1,3 @@
+advisors:
+  - name: default
+    model: xai-oauth/grok-4.6:minimal

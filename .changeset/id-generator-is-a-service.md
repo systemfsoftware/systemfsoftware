@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/stryker-js-mutation-run": major
+"@systemfsoftware/stryker-js-platform-node": major
 ---
 
 `IdGeneratorService` is removed. The identifier generator is now the

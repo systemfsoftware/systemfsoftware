@@ -4,7 +4,7 @@
  * run is judged and told apart under bail.
  */
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { schema } from '@systemfsoftware/stryker-js/Mutant'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 

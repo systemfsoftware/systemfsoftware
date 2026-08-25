@@ -103,3 +103,5 @@ packages:
   - omp/plugins/*
 config:
   confirm-modules-purge: false
+configDependencies:
+  ts-morph: 24.0.0

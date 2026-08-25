@@ -1,21 +1,20 @@
 import { readFileSync } from 'fs'
 
-import { Checker } from '@systemfsoftware/stryker-js-plugin-api/check'
-import { declarePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { RunConfiguration } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Checker } from '@systemfsoftware/stryker-js/Checker'
+import { declarePlugin } from '@systemfsoftware/stryker-js/Plugin'
+import { RunConfiguration } from '@systemfsoftware/stryker-js/Plugin'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
 import * as S from 'effect/Schema'
 
-import { makeHybridFileSystem } from './project/hybrid-file-system.js'
-import { makeCheckerService } from './typescript-checker.js'
-import { makeTypescriptCompiler } from './typescript-compiler.js'
+import { makeCheckerService } from './Checker.js'
+import { makeHybridFileSystem, makeTypescriptCompiler } from './Compiler.js'
 
 export const strykerPlugins = [
   declarePlugin(
-    PluginKind.Checker,
+    'Checker',
     'typescript',
     Layer.effect(
       Checker,

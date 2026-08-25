@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/stryker-js-mutation-report": major
+"@systemfsoftware/stryker-js-html-reporter": major
 ---
 
 Reporters are constructed by a factory and provided as a layer.

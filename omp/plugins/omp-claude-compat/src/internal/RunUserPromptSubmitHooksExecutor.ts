@@ -45,8 +45,6 @@ interface SubmitPhases extends Cell.Phases {
   readonly decodeError: never
   readonly readError: PlatformError
   readonly writeError: never
-  readonly readContext: ChildProcessSpawner | RunHookScriptExecutorDeps
-  readonly writeContext: never
 }
 
 /** @internal */
@@ -55,11 +53,10 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
   event: HookPrompt,
   ctx: HookSession,
 ) {
+  const services = yield* Effect.context<ChildProcessSpawner | RunHookScriptExecutorDeps>()
   const entries = settings.hooks.UserPromptSubmit
   const cwd = ctx.cwd
   const hostBound = isHostBound(event.text)
-  // Left undrained for a host-bound prompt: an async note is one-shot, so it
-  // has to survive this command and reach the next model-bound prompt.
   const pending = Match.value(hostBound).pipe(
     Match.when(true, (): readonly string[] => []),
     Match.when(false, () => drainAsyncHookContext()),
@@ -82,7 +79,9 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
    * failed hooks, or accumulates the trimmed stdout.
    */
   const submitDescription = pipe(
-    Cell.read<SubmitPhases>(({ hook, input }) => runHookScript(hook, input, cwd, 'UserPromptSubmit')),
+    Cell.read<SubmitPhases>(({ hook, input }) =>
+      Effect.provideContext(runHookScript(hook, input, cwd, 'UserPromptSubmit'), services)
+    ),
     Cell.decode<SubmitPhases>((raw) =>
       Result.succeed(
         new SubmitVerdictCommand({

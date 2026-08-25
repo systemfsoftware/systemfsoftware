@@ -35,8 +35,6 @@ export interface Bag extends Cell.Phases {
   readonly decodeError: number
   readonly readError: never
   readonly writeError: never
-  readonly readContext: never
-  readonly writeContext: never
 }
 
 /**

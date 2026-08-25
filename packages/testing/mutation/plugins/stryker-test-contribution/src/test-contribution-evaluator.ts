@@ -1,12 +1,12 @@
-import { Evaluator, EvaluatorFailed } from '@systemfsoftware/stryker-js-plugin-api/evaluate'
-import { ExitClass } from '@systemfsoftware/stryker-js-plugin-api/evaluate'
-import { RunConfiguration } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Evaluator, EvaluatorFailed } from '@systemfsoftware/stryker-js/Evaluator'
+import type { ExitClass } from '@systemfsoftware/stryker-js/Evaluator'
+import { RunConfiguration } from '@systemfsoftware/stryker-js/Plugin'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 
 import { judgeTestContribution } from './test-contribution.js'
 
-import type { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import type { schema } from '@systemfsoftware/stryker-js/Mutant'
 
 export const makeTestContributionEvaluatorService = (options: {
   readonly disableBail: boolean
@@ -27,7 +27,7 @@ export const makeTestContributionEvaluatorService = (options: {
       yield* Effect.logInfo(
         '(sharpen or delete them, or remove the test-contribution plugin from `plugins` to prevent this error in the future)',
       )
-      return ExitClass.VerdictFail
+      return 'VerdictFail'
     }),
 })
 

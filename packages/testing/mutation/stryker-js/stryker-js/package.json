@@ -1,0 +1,123 @@
+{
+  "name": "@systemfsoftware/stryker-js",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/testing/mutation/stryker-js/stryker-js"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/testing/mutation/stryker-js/stryker-js#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "The mutation-testing language — concept modules, no platform.",
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
+    "attw": "attw --pack .",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+  },
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "effect": "catalog:",
+    "mutation-testing-report-schema": "3.7.3"
+  },
+  "devDependencies": {
+    "@systemfsoftware/all": "workspace:^",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-workflow": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "oxlint-tsgolint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./Checker": "./dist/Checker.mjs",
+      "./Evaluator": "./dist/Evaluator.mjs",
+      "./ExitClass": "./dist/ExitClass.mjs",
+      "./Ignorer": "./dist/Ignorer.mjs",
+      "./Mutant": "./dist/Mutant.mjs",
+      "./output-file": "./dist/output-file.mjs",
+      "./Plugin": "./dist/Plugin.mjs",
+      "./provided-options": "./dist/provided-options.mjs",
+      "./Reporter": "./dist/Reporter.mjs",
+      "./Run": "./dist/Run.mjs",
+      "./Schema": "./dist/Schema.mjs",
+      "./TestRunner": "./dist/TestRunner.mjs",
+      "./package.json": "./package.json"
+    }
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./Checker": {
+      "@systemfsoftware/source": "./src/Checker.ts",
+      "default": "./dist/Checker.mjs"
+    },
+    "./Evaluator": {
+      "@systemfsoftware/source": "./src/Evaluator.ts",
+      "default": "./dist/Evaluator.mjs"
+    },
+    "./ExitClass": {
+      "@systemfsoftware/source": "./src/ExitClass.ts",
+      "default": "./dist/ExitClass.mjs"
+    },
+    "./Ignorer": {
+      "@systemfsoftware/source": "./src/Ignorer.ts",
+      "default": "./dist/Ignorer.mjs"
+    },
+    "./Mutant": {
+      "@systemfsoftware/source": "./src/Mutant.ts",
+      "default": "./dist/Mutant.mjs"
+    },
+    "./output-file": {
+      "@systemfsoftware/source": "./src/output-file.ts",
+      "default": "./dist/output-file.mjs"
+    },
+    "./Plugin": {
+      "@systemfsoftware/source": "./src/Plugin.ts",
+      "default": "./dist/Plugin.mjs"
+    },
+    "./provided-options": {
+      "@systemfsoftware/source": "./src/provided-options.ts",
+      "default": "./dist/provided-options.mjs"
+    },
+    "./Reporter": {
+      "@systemfsoftware/source": "./src/Reporter.ts",
+      "default": "./dist/Reporter.mjs"
+    },
+    "./Run": {
+      "@systemfsoftware/source": "./src/Run.ts",
+      "default": "./dist/Run.mjs"
+    },
+    "./Schema": {
+      "@systemfsoftware/source": "./src/Schema.ts",
+      "default": "./dist/Schema.mjs"
+    },
+    "./TestRunner": {
+      "@systemfsoftware/source": "./src/TestRunner.ts",
+      "default": "./dist/TestRunner.mjs"
+    },
+    "./package.json": "./package.json"
+  }
+}

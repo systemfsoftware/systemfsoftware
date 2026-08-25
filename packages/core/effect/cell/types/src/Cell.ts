@@ -24,8 +24,6 @@ export interface Phases {
   readonly decodeError: unknown
   readonly readError: unknown
   readonly writeError: unknown
-  readonly readContext: unknown
-  readonly writeContext: unknown
 }
 
 /**
@@ -33,10 +31,19 @@ export interface Phases {
  * that interior is not type-visible, so no I/O count is claimed or enforced here. A step that
  * mutates in order to report — bumping a counter and returning the resulting rate — is one
  * such product, and belongs here rather than in a layer of its own.
+ *
+ * The context channel is pinned `never`: a phase requires nothing. Services are resolved by
+ * whoever builds the description and handed to the phase as ordinary parameters, which is
+ * the same edge that already gathers the read's inputs. The alternative — a `readContext`
+ * member on the bag — let an author write `never` for a body that reaches for a service, and
+ * nothing checked the claim: under a stage generic over `Phases` the compiler cannot see the
+ * lambda's requirement at all, so the description compiled and the missing service surfaced
+ * only where it was finally applied, or nowhere. Pinning it makes the lie unrepresentable
+ * instead of merely discouraged, and leaves `apply`'s derived `R` honestly `never`.
  */
 export type ReadPhase<P extends Phases> = (
   command: P['command'],
-) => Effect.Effect<P['raw'], P['readError'], P['readContext']>
+) => Effect.Effect<P['raw'], P['readError'], never>
 
 /** Validation. Its `Left` is fatal: it reaches the derived error channel and no write runs. */
 export type DecodePhase<P extends Phases> = (
@@ -78,7 +85,7 @@ export type EncodePhase<P extends Phases> = (
 export type WritePhase<P extends Phases> = (
   output: P['output'],
   raw: P['raw'],
-) => Effect.Effect<P['response'], P['writeError'], P['writeContext']>
+) => Effect.Effect<P['response'], P['writeError'], never>
 
 // ---------------------------------------------------------------------------
 // the phase records — the description value is an ordered sequence of these

@@ -31,12 +31,14 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/stryker-js": "workspace:^",
     "effect": "catalog:",
     "typescript": "catalog:"
   },
   "devDependencies": {
     "@std/jsonc": "catalog:",
+    "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",

@@ -1,5 +1,5 @@
-import { Ignorer } from '@systemfsoftware/stryker-js-plugin-api/ignore'
-import { declarePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Ignorer } from '@systemfsoftware/stryker-js/Ignorer'
+import { declarePlugin } from '@systemfsoftware/stryker-js/Plugin'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 
@@ -8,7 +8,7 @@ import { decideWorkflowMakeBoundaryIgnore, NOT_INSIDE_WORKFLOW_MAKE } from './Ma
 
 export const strykerPlugins = [
   declarePlugin(
-    PluginKind.Ignore,
+    'Ignore',
     'workflow-make-boundary',
     Layer.succeed(Ignorer, {
       shouldIgnore: (path: IgnorerPath) =>

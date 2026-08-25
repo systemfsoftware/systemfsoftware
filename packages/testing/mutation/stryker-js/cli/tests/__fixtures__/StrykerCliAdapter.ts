@@ -31,16 +31,18 @@ export const layerStrykerCli: Layer.Layer<StrykerCli> = Layer.effect(
       }))
     ),
     ({ client, container }) => {
-      const exec = (command: readonly string[], options?: ExecOptions) =>
-        Effect.map(
-          Effect.promise(() =>
-            client.container.exec(container, [...command], {
-              workingDir: options?.cwd ?? WORKDIR,
-              ...(options?.env === undefined ? {} : { env: options.env }),
-            })
-          ),
+      const exec = (command: readonly string[], options?: ExecOptions) => {
+        const execOptions: { workingDir: string; env?: Record<string, string> } = {
+          workingDir: options?.cwd ?? WORKDIR,
+        }
+        if (options?.env !== undefined) {
+          execOptions.env = options.env
+        }
+        return Effect.map(
+          Effect.promise(() => client.container.exec(container, [...command], execOptions)),
           (result) => ({ exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr }),
         )
+      }
 
       return {
         run: (args: readonly string[], options?: ExecOptions) => exec([CLI_BIN, ...args], options),

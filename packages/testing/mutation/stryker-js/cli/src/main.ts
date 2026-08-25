@@ -1,17 +1,16 @@
 #!/usr/bin/env node
 import * as NodeRuntime from '@effect/platform-node/NodeRuntime'
 import * as NodeStdio from '@effect/platform-node/NodeStdio'
+import { strykerEngines } from '@systemfsoftware/stryker-js-platform-node'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Logger from 'effect/Logger'
 
-import { strykerEngines } from '@systemfsoftware/stryker-js-mutation-run'
-
-import { OutputModeProbe, OutputModeProbeLive } from './output-mode-probe.js'
-import { RunEventStreamLive, RunEventStreamPort } from './run-event-stream.js'
-import { observeTerminatingSignal } from './signal-observer.js'
-import { strykerCliEffect } from './stryker-cli.js'
+import { observeTerminatingSignal } from './Cli.js'
+import { strykerCliEffect } from './Cli.js'
+import { OutputModeProbe, OutputModeProbeLive } from './Output.js'
+import { RunEventStreamLive, RunEventStreamPort } from './Output.js'
 
 const EXIT_CODE_RUN_NEVER_REACHED_ITS_FINALIZER = 1
 
@@ -22,9 +21,20 @@ process.title = 'stryker'
 const lastSignal = observeTerminatingSignal()
 
 function isSupportedNodeVersion(version: string): boolean {
-  const withoutV = version.startsWith('v') ? version.slice(1) : version
-  const dashBase = withoutV.split('-')[0] ?? withoutV
-  const base = dashBase.split('+')[0] ?? dashBase
+  let withoutV = version
+  if (version.startsWith('v')) {
+    withoutV = version.slice(1)
+  }
+  const dashBaseRaw = withoutV.split('-')[0]
+  let dashBase = withoutV
+  if (dashBaseRaw !== undefined) {
+    dashBase = dashBaseRaw
+  }
+  const baseRaw = dashBase.split('+')[0]
+  let base = dashBase
+  if (baseRaw !== undefined) {
+    base = baseRaw
+  }
   const parts = base.split('.').map((p) => Number.parseInt(p, 10))
   const major = parts[0] ?? 0
   const minor = parts[1] ?? 0
@@ -78,6 +88,10 @@ NodeRuntime.runMain(program, {
     // and would die here. The shell is owed `128 + n` for the signal that
     // stopped us, which is the same number the terminal event carries.
     const signal = lastSignal()
-    onExit(signal === null ? EXIT_CODE_RUN_NEVER_REACHED_ITS_FINALIZER : 128 + signal)
+    if (signal === null) {
+      onExit(EXIT_CODE_RUN_NEVER_REACHED_ITS_FINALIZER)
+    } else {
+      onExit(128 + signal)
+    }
   },
 })

@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/stryker-js-mutation-report": major
+"@systemfsoftware/stryker-js-html-reporter": major
 "@systemfsoftware/stryker-js-vitest-runner": major
 ---
 

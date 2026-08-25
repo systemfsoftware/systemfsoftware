@@ -14,14 +14,26 @@ import { Effect } from 'effect'
 
 import * as S from 'effect/Schema'
 import { expect } from 'vitest'
+const checkExpect = expect
 import { ManifestSchema, type StreamLine, StreamLineSchema } from './__fixtures__/cli-contract.schema.js'
 import { CLI_BIN, fixtureDir, WORKDIR } from './__fixtures__/stryker-cli-env.js'
 import { type CliResult, layerStrykerCli, StrykerCli } from './__fixtures__/StrykerCliAdapter.js'
 
 function isSupportedNodeVersion(version: string, range: string): boolean {
-  const withoutV = version.startsWith('v') ? version.slice(1) : version
-  const dashBase = withoutV.split('-')[0] ?? withoutV
-  const base = dashBase.split('+')[0] ?? dashBase
+  let withoutV = version
+  if (version.startsWith('v')) {
+    withoutV = version.slice(1)
+  }
+  let dashBase = withoutV
+  const dashBaseRaw = withoutV.split('-')[0]
+  if (dashBaseRaw !== undefined) {
+    dashBase = dashBaseRaw
+  }
+  let base = dashBase
+  const baseRaw = dashBase.split('+')[0]
+  if (baseRaw !== undefined) {
+    base = baseRaw
+  }
   const parts = base.split('.').map((p) => Number.parseInt(p, 10))
   const major = parts[0] ?? 0
   const minor = parts[1] ?? 0
@@ -58,8 +70,8 @@ const parseStream = (stdout: string): readonly StreamLine[] =>
     .filter((line) => line.trim().startsWith('{'))
     .map((line) => decodeStreamLine(line))
 
-/** `expect.any` is typed `any` by vitest; the matcher's shape is untyped by design. */
-const anyNumberMatcher: unknown = expect.any(Number)
+/** `checkExpect.any` is typed `any` by vitest; the matcher's shape is untyped by design. */
+const anyNumberMatcher: unknown = checkExpect.any(Number)
 
 const invoke = (
   fixture: string,
@@ -70,7 +82,12 @@ const invoke = (
     const cli = yield* StrykerCli
     const result = yield* cli.run(args, {
       cwd: fixtureDir(fixture),
-      ...(env === undefined ? {} : { env }),
+      ...((() => {
+        if (env === undefined) {
+          return {}
+        }
+        return { env }
+      })()),
     })
     return { ...result, lines: parseStream(result.stdout) }
   })
@@ -98,7 +115,7 @@ interface CorePurityProbe {
   readonly cliVersion: CliResult
 }
 
-const CORE_PACKAGE_MANIFEST = `${WORKDIR}/node_modules/@systemfsoftware/stryker-js-mutation-run/package.json`
+const CORE_PACKAGE_MANIFEST = `${WORKDIR}/node_modules/@systemfsoftware/stryker-js-platform-node/package.json`
 
 /**
  * U9: core's imports used to run `guardMinimalNodeVersion()` at module scope,
@@ -125,7 +142,7 @@ const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never,
     ).filter((entry) => entry !== './package.json')
     const imports: CoreEntryImport[] = []
     for (const entry of entries) {
-      const specifier = `@systemfsoftware/stryker-js-mutation-run${entry.slice(1)}`
+      const specifier = `@systemfsoftware/stryker-js-platform-node${entry.slice(1)}`
       // The specifier travels in the environment so a future entry's spelling
       // can never break the shell quoting of the probe command itself.
       const probe = yield* cli.sh('node --input-type=module -e "await import(process.env.CORE_ENTRY)"', {
@@ -179,10 +196,10 @@ Feature('Driving the mutation tester from an agent harness')
         ),
         When('the harness runs the mutation test')('observed', (s) => invoke(s.fixture, ['run'])),
         Then('the very first line names the schema version and says the output is for a machine')((s) => {
-          expect(s.observed.lines[0]).toMatchObject({ kind: 'stream', schemaVersion: '1.0', mode: 'machine' })
+          checkExpect(s.observed.lines[0]).toMatchObject({ kind: 'stream', schemaVersion: '1.0', mode: 'machine' })
         }),
         Then('the closing line repeats the run id the header opened with')((s) => {
-          expect(s.observed.lines[0]?.['runId']).toEqual(terminal(s.observed)['runId'])
+          checkExpect(s.observed.lines[0]?.['runId']).toEqual(terminal(s.observed)['runId'])
         }),
       ),
     )
@@ -198,7 +215,7 @@ Feature('Driving the mutation tester from an agent harness')
         Then('preparation, instrumentation, the trial run and the mutation testing are announced in that order')(
           (s) => {
             const stages = s.observed.lines.filter((line) => line.kind === 'phase').map((line) => line['phase'])
-            expect(stages).toEqual(['prepare', 'instrument', 'dry-run', 'mutation-test'])
+            checkExpect(stages).toEqual(['prepare', 'instrument', 'dry-run', 'mutation-test'])
           },
         ),
         Then('each stage says how long the run had been going when it began')((s) => {
@@ -206,7 +223,7 @@ Feature('Driving the mutation tester from an agent harness')
             .filter((line) => line.kind === 'phase')
             .map((line) => line['elapsedMs'])
             .filter((ms): ms is number => ms !== undefined)
-          expect(elapsed).toEqual([...elapsed].sort((left, right) => left - right))
+          checkExpect(elapsed).toEqual([...elapsed].sort((left, right) => left - right))
         }),
       ),
     )
@@ -220,12 +237,12 @@ Feature('Driving the mutation tester from an agent harness')
         ),
         When('the harness runs the mutation test')('observed', (s) => invoke(s.fixture, ['run'])),
         Then('exactly one line announces that two mutants will be tested')((s) => {
-          expect(s.observed.lines.filter((line) => line.kind === 'plan')).toEqual([{ kind: 'plan', total: 2 }])
+          checkExpect(s.observed.lines.filter((line) => line.kind === 'plan')).toEqual([{ kind: 'plan', total: 2 }])
         }),
         Then('that announcement comes after every stage and before the closing line')((s) => {
           const kinds = kindsOf(s.observed)
-          expect(kinds.indexOf('plan')).toBeGreaterThan(kinds.lastIndexOf('phase'))
-          expect(kinds.indexOf('plan')).toBeLessThan(kinds.length - 1)
+          checkExpect(kinds.indexOf('plan')).toBeGreaterThan(kinds.lastIndexOf('phase'))
+          checkExpect(kinds.indexOf('plan')).toBeLessThan(kinds.length - 1)
         }),
       ),
     )
@@ -239,7 +256,7 @@ Feature('Driving the mutation tester from an agent harness')
         ),
         When('the harness runs the mutation test')('observed', (s) => invoke(s.fixture, ['run'])),
         Then('one closing line reports the outcome and it is the last thing written')((s) => {
-          expect(kindsOf(s.observed).filter((kind) => TERMINAL_KINDS.includes(kind))).toEqual(['verdict'])
+          checkExpect(kindsOf(s.observed).filter((kind) => TERMINAL_KINDS.includes(kind))).toEqual(['verdict'])
         }),
       ),
     )
@@ -253,10 +270,10 @@ Feature('Driving the mutation tester from an agent harness')
         ),
         When('the harness runs the mutation test')('observed', (s) => invoke(s.fixture, ['run'])),
         Then('the command succeeds')((s) => {
-          expect(s.observed.exitCode).toBe(0)
+          checkExpect(s.observed.exitCode).toBe(0)
         }),
         Then('the closing line scores the run at a hundred and counts both mutants killed')((s) => {
-          expect(terminal(s.observed)).toMatchObject({
+          checkExpect(terminal(s.observed)).toMatchObject({
             kind: 'verdict',
             score: 100,
             counts: {
@@ -272,8 +289,8 @@ Feature('Driving the mutation tester from an agent harness')
           })
         }),
         Then('no mutant is singled out, because none survived')((s) => {
-          expect(kindsOf(s.observed)).not.toContain('mutant')
-          expect(terminal(s.observed)['mutants']).toEqual([])
+          checkExpect(kindsOf(s.observed)).not.toContain('mutant')
+          checkExpect(terminal(s.observed)['mutants']).toEqual([])
         }),
       ),
     )
@@ -287,10 +304,10 @@ Feature('Driving the mutation tester from an agent harness')
         ),
         When('the harness runs the mutation test')('observed', (s) => invoke(s.fixture, ['run'])),
         Then('the closing line reports the score limits that only the shipped settings carry')((s) => {
-          expect(terminal(s.observed)['thresholds']).toEqual({ high: 100, low: 80, break: 100 })
+          checkExpect(terminal(s.observed)['thresholds']).toEqual({ high: 100, low: 80, break: 100 })
         }),
         Then('the closing line names the report path that only the shipped settings carry')((s) => {
-          expect(terminal(s.observed)['reportFile']).toBe('reports/mutation-report.json')
+          checkExpect(terminal(s.observed)['reportFile']).toBe('reports/mutation-report.json')
         }),
       ),
     )
@@ -304,10 +321,14 @@ Feature('Driving the mutation tester from an agent harness')
         ),
         When('the harness runs the mutation test')('observed', (s) => invoke(s.fixture, ['run'])),
         Then('the command reports that the score was too low')((s) => {
-          expect(s.observed.exitCode).toBe(1)
+          checkExpect(s.observed.exitCode).toBe(1)
         }),
         Then('the closing line scores the run at fifty, with two killed and two left alive')((s) => {
-          expect(terminal(s.observed)).toMatchObject({ kind: 'verdict', score: 50, counts: { killed: 2, survived: 2 } })
+          checkExpect(terminal(s.observed)).toMatchObject({
+            kind: 'verdict',
+            score: 50,
+            counts: { killed: 2, survived: 2 },
+          })
         }),
       ),
     )
@@ -322,23 +343,23 @@ Feature('Driving the mutation tester from an agent harness')
         When('the harness runs the mutation test')('observed', (s) => invoke(s.fixture, ['run'])),
         Then('one line per survivor names the change that was made and where it was made')((s) => {
           const survivors = s.observed.lines.filter((line) => line.kind === 'mutant')
-          expect(survivors).toHaveLength(2)
-          expect(survivors.map((line) => line['status'])).toEqual(['Survived', 'Survived'])
-          expect(byMutatorName(survivors).map((line) => [line['mutator'], line['replacement']])).toEqual([
+          checkExpect(survivors).toHaveLength(2)
+          checkExpect(survivors.map((line) => line['status'])).toEqual(['Survived', 'Survived'])
+          checkExpect(byMutatorName(survivors).map((line) => [line['mutator'], line['replacement']])).toEqual([
             ['ArithmeticOperator', 'a + b'],
             ['ArrowFunction', '() => undefined'],
           ])
           for (const survivor of survivors) {
-            expect(survivor['total']).toBe(4)
-            expect(survivor['completed'] ?? NaN).toBeGreaterThan(0)
-            expect(survivor['location']).toMatchObject({
+            checkExpect(survivor['total']).toBe(4)
+            checkExpect(survivor['completed'] ?? NaN).toBeGreaterThan(0)
+            checkExpect(survivor['location']).toMatchObject({
               start: { line: anyNumberMatcher, column: anyNumberMatcher },
               end: { line: anyNumberMatcher, column: anyNumberMatcher },
             })
           }
         }),
         Then('the closing line lists the same survivors against a path relative to the project')((s) => {
-          expect(byMutatorName(terminal(s.observed)['mutants'] ?? [])).toMatchObject([
+          checkExpect(byMutatorName(terminal(s.observed)['mutants'] ?? [])).toMatchObject([
             { status: 'Survived', file: 'src/calculator.js', mutator: 'ArithmeticOperator' },
             { status: 'Survived', file: 'src/calculator.js', mutator: 'ArrowFunction' },
           ])
@@ -355,18 +376,18 @@ Feature('Driving the mutation tester from an agent harness')
         ),
         When('the harness runs the mutation test')('observed', (s) => invoke(s.fixture, ['run'])),
         Then('the command reports that the settings were wrong')((s) => {
-          expect(s.observed.exitCode).toBe(2)
+          checkExpect(s.observed.exitCode).toBe(2)
         }),
         Then('the closing line quotes the rejected setting and points the reader at the settings file')((s) => {
-          expect(terminal(s.observed)).toMatchObject({ kind: 'error', code: 2 })
-          expect(terminal(s.observed)['error']).toContain('Config option "concurrency" must match pattern')
-          expect(terminal(s.observed)['remediation']).toContain('check the config file')
+          checkExpect(terminal(s.observed)).toMatchObject({ kind: 'error', code: 2 })
+          checkExpect(terminal(s.observed)['error']).toContain('Config option "concurrency" must match pattern')
+          checkExpect(terminal(s.observed)['remediation']).toContain('check the config file')
         }),
         Then('the run never got past preparation, so nothing was planned or scored')((s) => {
-          expect(s.observed.lines.filter((line) => line.kind === 'phase').map((line) => line['phase']))
+          checkExpect(s.observed.lines.filter((line) => line.kind === 'phase').map((line) => line['phase']))
             .toEqual(['prepare'])
-          expect(kindsOf(s.observed)).not.toContain('plan')
-          expect(kindsOf(s.observed)).not.toContain('verdict')
+          checkExpect(kindsOf(s.observed)).not.toContain('plan')
+          checkExpect(kindsOf(s.observed)).not.toContain('verdict')
         }),
       ),
     )
@@ -380,10 +401,10 @@ Feature('Driving the mutation tester from an agent harness')
           (s) => invoke(s.fixture, ['run', '--nope']),
         ),
         Then('the command reports that the settings were wrong')((s) => {
-          expect(s.observed.exitCode).toBe(2)
+          checkExpect(s.observed.exitCode).toBe(2)
         }),
         Then('the closing line names what it did not recognise and sends the reader to the usage text')((s) => {
-          expect(terminal(s.observed)).toMatchObject({
+          checkExpect(terminal(s.observed)).toMatchObject({
             kind: 'error',
             code: 2,
             error: "Received unknown argument: '--nope'",
@@ -411,11 +432,11 @@ Feature('Driving the mutation tester from an agent harness')
             (s) => invoke(s.fixture, row.args),
           ),
           Then('the command reports that the settings were wrong instead of running')((s) => {
-            expect(s.observed.exitCode).toBe(2)
+            checkExpect(s.observed.exitCode).toBe(2)
           }),
           Then('the closing line reports the request as something it does not recognise')((s) => {
-            expect(terminal(s.observed)).toMatchObject({ kind: 'error', code: 2 })
-            expect(terminal(s.observed)['error']).toContain(row.unrecognised)
+            checkExpect(terminal(s.observed)).toMatchObject({ kind: 'error', code: 2 })
+            checkExpect(terminal(s.observed)['error']).toContain(row.unrecognised)
           }),
         ),
     )
@@ -432,21 +453,21 @@ Feature('Driving the mutation tester from an agent harness')
           (s) => invoke(s.fixture, ['--llms']),
         ),
         Then('the command succeeds')((s) => {
-          expect(s.observed.exitCode).toBe(0)
+          checkExpect(s.observed.exitCode).toBe(0)
         }),
         Then('the description names the tool and the command that runs mutation testing')((s) => {
-          expect(terminal(s.observed)).toMatchObject({ kind: 'manifest', code: 0 })
+          checkExpect(terminal(s.observed)).toMatchObject({ kind: 'manifest', code: 0 })
           const described = S.decodeUnknownSync(S.fromJsonString(ManifestSchema))(
             terminal(s.observed)['manifest'] ?? '',
           )
-          expect(described.tool).toBe('stryker')
-          expect(described.commands[0]?.subcommands).toContainEqual(
+          checkExpect(described.tool).toBe('stryker')
+          checkExpect(described.commands[0]?.subcommands).toContainEqual(
             expect.objectContaining({ name: 'run', description: 'Run mutation testing' }),
           )
         }),
         Then('nothing was mutated on the way')((s) => {
-          expect(kindsOf(s.observed)).not.toContain('verdict')
-          expect(kindsOf(s.observed)).not.toContain('plan')
+          checkExpect(kindsOf(s.observed)).not.toContain('verdict')
+          checkExpect(kindsOf(s.observed)).not.toContain('plan')
         }),
       ),
     )
@@ -465,12 +486,12 @@ Feature('Driving the mutation tester from an agent harness')
           ),
           When('the harness invokes the tool that way')('observed', (s) => invoke(s.fixture, row.args)),
           Then('the command succeeds rather than treating it as a mistake')((s) => {
-            expect(s.observed.exitCode).toBe(0)
+            checkExpect(s.observed.exitCode).toBe(0)
           }),
           Then('the closing line carries the usage text and no score')((s) => {
-            expect(terminal(s.observed)).toMatchObject({ kind: 'help', code: 0 })
-            expect(terminal(s.observed)['help']).toContain('USAGE')
-            expect(kindsOf(s.observed)).not.toContain('verdict')
+            checkExpect(terminal(s.observed)).toMatchObject({ kind: 'help', code: 0 })
+            checkExpect(terminal(s.observed)['help']).toContain('USAGE')
+            checkExpect(kindsOf(s.observed)).not.toContain('verdict')
           }),
         ),
     )
@@ -484,7 +505,7 @@ Feature('Driving the mutation tester from an agent harness')
         ),
         When('the harness runs the mutation test')('observed', (s) => invoke(s.fixture, ['run'])),
         Then('progress is reported more than once during the run')((s) => {
-          expect(s.observed.lines.filter((line) => line.kind === 'tick').length).toBeGreaterThan(1)
+          checkExpect(s.observed.lines.filter((line) => line.kind === 'tick').length).toBeGreaterThan(1)
         }),
         Then('each report comes about ten seconds after the one before it')((s) => {
           const elapsed = s.observed.lines
@@ -492,19 +513,19 @@ Feature('Driving the mutation tester from an agent harness')
             .map((line) => line['elapsedMs'])
             .filter((ms): ms is number => ms !== undefined)
           for (const [index, value] of elapsed.entries()) {
-            expect(value).toBeGreaterThanOrEqual((index + 1) * 10_000)
-            expect(value).toBeLessThan((index + 1) * 10_000 + 5_000)
+            checkExpect(value).toBeGreaterThanOrEqual((index + 1) * 10_000)
+            checkExpect(value).toBeLessThan((index + 1) * 10_000 + 5_000)
           }
         }),
         Then('progress only moves forward, never past the announced total, and stops at the score')((s) => {
           const ticks = s.observed.lines.filter((line) => line.kind === 'tick')
           const done = ticks.map((line) => line['completed']).filter((n): n is number => n !== undefined)
-          expect(done).toEqual([...done].sort((left, right) => left - right))
-          for (const tick of ticks) expect(tick['total']).toBe(18)
-          expect(done.at(-1) ?? NaN).toBeLessThanOrEqual(18)
+          checkExpect(done).toEqual([...done].sort((left, right) => left - right))
+          for (const tick of ticks) checkExpect(tick['total']).toBe(18)
+          checkExpect(done.at(-1) ?? NaN).toBeLessThanOrEqual(18)
           const kinds = kindsOf(s.observed)
-          expect(kinds.indexOf('tick')).toBeGreaterThan(kinds.indexOf('plan'))
-          expect(kinds.lastIndexOf('tick')).toBeLessThan(kinds.indexOf('verdict'))
+          checkExpect(kinds.indexOf('tick')).toBeGreaterThan(kinds.indexOf('plan'))
+          checkExpect(kinds.lastIndexOf('tick')).toBeLessThan(kinds.indexOf('verdict'))
         }),
       ),
     )
@@ -521,17 +542,17 @@ Feature('Driving the mutation tester from an agent harness')
           (s) => invoke(s.fixture, ['run'], { STRYKER_MODE: 'human' }),
         ),
         Then('the command still succeeds')((s) => {
-          expect(s.observed.exitCode).toBe(0)
+          checkExpect(s.observed.exitCode).toBe(0)
         }),
         Then('the output reads as progress prose')((s) => {
-          expect(s.observed.stdout).toContain('file(s) to be mutated')
+          checkExpect(s.observed.stdout).toContain('file(s) to be mutated')
         }),
         Then('not one machine-readable line is written')((s) => {
-          expect(s.observed.lines).toEqual([])
+          checkExpect(s.observed.lines).toEqual([])
         }),
         Then('the prose still carries colour codes today, with nothing on the far end able to read them')((s) => {
           const escape = String.fromCharCode(27)
-          expect(s.observed.stdout).toContain(`${escape}[`)
+          checkExpect(s.observed.stdout).toContain(`${escape}[`)
         }),
       ),
     )
@@ -549,10 +570,10 @@ Feature('Driving the mutation tester from an agent harness')
         ),
         Then('not one colour code reaches either descriptor')((s) => {
           const escape = String.fromCharCode(27)
-          expect(s.observed.stdout + s.observed.stderr).not.toContain(`${escape}[`)
+          checkExpect(s.observed.stdout + s.observed.stderr).not.toContain(`${escape}[`)
         }),
         Then('the run still succeeds')((s) => {
-          expect(s.observed.exitCode).toBe(0)
+          checkExpect(s.observed.exitCode).toBe(0)
         }),
       ),
     )
@@ -569,14 +590,14 @@ Feature('Driving the mutation tester from an agent harness')
           (s) => invoke(s.fixture, ['--version']),
         ),
         Then('the closing line carries the version it reported')((s) => {
-          expect(terminal(s.observed)).toMatchObject({ kind: 'help', code: 0 })
-          expect(String(terminal(s.observed)['help'])).toMatch(/^\d+\.\d+\.\d+/)
+          checkExpect(terminal(s.observed)).toMatchObject({ kind: 'help', code: 0 })
+          checkExpect(String(terminal(s.observed)['help'])).toMatch(/^\d+\.\d+\.\d+/)
         }),
         Then('no stage of a run was ever announced')((s) => {
-          expect(kindsOf(s.observed)).toEqual(['stream', 'help'])
+          checkExpect(kindsOf(s.observed)).toEqual(['stream', 'help'])
         }),
         Then('the tool reports that it succeeded')((s) => {
-          expect(s.observed.exitCode).toBe(0)
+          checkExpect(s.observed.exitCode).toBe(0)
         }),
       ),
     )
@@ -597,13 +618,13 @@ Feature('Driving the mutation tester from an agent harness')
             ),
         ),
         Then('the run reports the interruption as its closing line')((s) => {
-          expect(terminal(s.observed)).toMatchObject({ kind: 'error', code: 130 })
+          checkExpect(terminal(s.observed)).toMatchObject({ kind: 'error', code: 130 })
         }),
         Then('the closing line tells the caller a signal ended the run')((s) => {
-          expect(String(terminal(s.observed)['remediation'])).toContain('signal')
+          checkExpect(String(terminal(s.observed)['remediation'])).toContain('signal')
         }),
         Then('the run hands its caller the status a signal leaves behind')((s) => {
-          expect(s.observed.stdout).toContain('@@130')
+          checkExpect(s.observed.stdout).toContain('@@130')
         }),
       ),
     )
@@ -624,10 +645,10 @@ Feature('Driving the mutation tester from an agent harness')
             ),
         ),
         Then('the run reaches its own ending rather than hanging on the closed pipe')((s) => {
-          expect(s.observed.stdout).toContain('@@')
+          checkExpect(s.observed.stdout).toContain('@@')
         }),
         Then('the status reported belongs to the run and not to the reader')((s) => {
-          expect(s.observed.stdout).toContain('@@0')
+          checkExpect(s.observed.stdout).toContain('@@0')
         }),
       ),
     )
@@ -644,11 +665,11 @@ Feature('Driving the mutation tester from an agent harness')
           (s) => invoke(s.fixture, ['run', '--survivors']),
         ),
         Then('the refusal names the missing report and what to do about it')((s) => {
-          expect(terminal(s.observed)).toMatchObject({ kind: 'error', code: 2 })
-          expect(String(terminal(s.observed)['error'])).toContain('previous run')
+          checkExpect(terminal(s.observed)).toMatchObject({ kind: 'error', code: 2 })
+          checkExpect(String(terminal(s.observed)['error'])).toContain('previous run')
         }),
         Then('the tool reports the refusal as a configuration fault')((s) => {
-          expect(s.observed.exitCode).toBe(2)
+          checkExpect(s.observed.exitCode).toBe(2)
         }),
       ),
     )
@@ -662,14 +683,14 @@ Feature('Driving the mutation tester from an agent harness')
         ),
         When('the harness runs the mutation test')('observed', (s) => invoke(s.fixture, ['run'])),
         Then('the verdict reports a score of nothing')((s) => {
-          expect(terminal(s.observed)).toMatchObject({ kind: 'verdict', score: 0 })
+          checkExpect(terminal(s.observed)).toMatchObject({ kind: 'verdict', score: 0 })
         }),
         Then('the surviving mutant is named in the verdict')((s) => {
           const survivors = terminal(s.observed)['mutants'] ?? []
-          expect(survivors.map((mutant) => mutant['status'])).toEqual(['Survived'])
+          checkExpect(survivors.map((mutant) => mutant['status'])).toEqual(['Survived'])
         }),
         Then('a score of nothing still clears a threshold that demands nothing')((s) => {
-          expect(s.observed.exitCode).toBe(0)
+          checkExpect(s.observed.exitCode).toBe(0)
         }),
       ),
     )
@@ -687,8 +708,8 @@ Feature('Driving the mutation tester from an agent harness')
         ),
         Then('every declared entry is read from the installed manifest rather than a fixed list')((s) => {
           const declared = s.probe.entries.map((entry) => entry.entry)
-          expect(declared.length).toBeGreaterThan(0)
-          expect(declared).toEqual(
+          checkExpect(declared.length).toBeGreaterThan(0)
+          checkExpect(declared).toEqual(
             expect.arrayContaining([
               '.',
               './config/base',
@@ -697,23 +718,23 @@ Feature('Driving the mutation tester from an agent harness')
               './internal/child-process-test-runner-worker',
             ]),
           )
-          expect(declared).not.toContain('./package.json')
+          checkExpect(declared).not.toContain('./package.json')
         }),
         Then('importing each declared entry exits cleanly and writes nothing to either descriptor')((s) => {
           for (const entry of s.probe.entries) {
-            expect(entry).toMatchObject({ exitCode: 0, stdout: '', stderr: '' })
+            checkExpect(entry).toMatchObject({ exitCode: 0, stdout: '', stderr: '' })
           }
         }),
         Then('the tool alone refuses the node versions the core package no longer guards')((s) => {
-          expect(s.probe.nodeVersion).toMatch(/^v\d+\.\d+\.\d+/)
-          expect(s.probe.enginesFloor).not.toBe('')
+          checkExpect(s.probe.nodeVersion).toMatch(/^v\d+\.\d+\.\d+/)
+          checkExpect(s.probe.enginesFloor).not.toBe('')
           if (s.probe.nodeUnsupported) {
-            expect(s.probe.cliVersion.exitCode).not.toBe(0)
-            expect(s.probe.cliVersion.stdout).toBe('')
-            expect(s.probe.cliVersion.stderr).toContain('Node.js version')
+            checkExpect(s.probe.cliVersion.exitCode).not.toBe(0)
+            checkExpect(s.probe.cliVersion.stdout).toBe('')
+            checkExpect(s.probe.cliVersion.stderr).toContain('Node.js version')
           } else {
-            expect(s.probe.cliVersion.exitCode).toBe(0)
-            expect(s.probe.cliVersion.stderr).toBe('')
+            checkExpect(s.probe.cliVersion.exitCode).toBe(0)
+            checkExpect(s.probe.cliVersion.stderr).toBe('')
           }
         }),
       ),

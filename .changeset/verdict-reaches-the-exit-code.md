@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/stryker-js-mutation-run": major
+"@systemfsoftware/stryker-js-platform-node": major
 "@systemfsoftware/stryker-js-cli": minor
 ---
 

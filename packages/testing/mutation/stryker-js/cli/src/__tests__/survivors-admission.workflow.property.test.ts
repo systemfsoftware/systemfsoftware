@@ -1,24 +1,26 @@
+import { sha256 } from '@noble/hashes/sha256'
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils'
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { schema } from '@systemfsoftware/stryker-js/Mutant'
+import * as Equivalence from 'effect/Equivalence'
 import * as Exit from 'effect/Exit'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
-import { createHash } from 'node:crypto'
-import { isDeepStrictEqual } from 'node:util'
 
+import { SURVIVORS_RUN_FIRST_REMEDIATION } from '../Survivors.js'
+import { extractSurvivors, type HashContent, priorSourceHashes, sourceContentHash } from '../Survivors.js'
 import {
   admitSurvivorsRun,
   AdmitSurvivorsRunCommand,
+  Admitted,
+  NoSurvivors,
   PriorReportFacts,
   SurvivorsAdmission,
   SurvivorsRejection,
-} from '../survivors-admission.workflow.js'
-import { SURVIVORS_RUN_FIRST_REMEDIATION } from '../survivors-bookkeeping.js'
-import { type HashContent, priorSourceHashes, sourceContentHash } from '../survivors-hashing.js'
-import { extractSurvivors } from '../survivors-mutants.js'
-const sha256Hex: HashContent = (content) => createHash('sha256').update(content, 'utf-8').digest('hex')
+} from '../Survivors.workflow.js'
+const sha256Hex: HashContent = (content) => bytesToHex(sha256(utf8ToBytes(content)))
+const stringArrayEquivalence = Equivalence.Array(Equivalence.String)
 
 const absPath = (file: string): string => `/work/${file}`
 
@@ -161,7 +163,18 @@ const commandWithoutPriorReport = (report: schema.MutationTestResult): AdmitSurv
     priorReport: undefined,
   })
 
-const fingerprint = (mutant: Mutant): string =>
+const fingerprint = (
+  mutant: {
+    readonly id: string
+    readonly fileName: string
+    readonly mutatorName: string
+    readonly replacement: string
+    readonly location: {
+      readonly start: { readonly line: number; readonly column: number }
+      readonly end: { readonly line: number; readonly column: number }
+    }
+  },
+): string =>
   JSON.stringify([
     mutant.id,
     mutant.fileName,
@@ -173,9 +186,12 @@ const fingerprint = (mutant: Mutant): string =>
     mutant.location.end.column,
   ])
 
-const rejectionOf = (
-  result: Result.Result<unknown, SurvivorsRejection>,
-): SurvivorsRejection | undefined => (Result.isFailure(result) ? result.failure : undefined)
+const rejectionOf = (result: Result.Result<unknown, SurvivorsRejection>): SurvivorsRejection | undefined => {
+  if (Result.isFailure(result)) {
+    return result.failure
+  }
+  return undefined
+}
 
 describe('admitSurvivorsRun', () => {
   it.prop(
@@ -185,7 +201,10 @@ describe('admitSurvivorsRun', () => {
       const rejection = rejectionOf(
         admitSurvivorsRun(commandWithoutPriorReport(report)),
       )
-      return rejection?.reason === 'no-report' &&
+      if (rejection === undefined) {
+        return false
+      }
+      return rejection.reason === 'no-report' &&
         rejection.remediation.includes('No prior mutation report found')
     },
   )
@@ -195,7 +214,10 @@ describe('admitSurvivorsRun', () => {
     [survivorsProducedReportArb],
     ([report]) => {
       const rejection = rejectionOf(admitSurvivorsRun(matchingCommand(report)))
-      return rejection?.reason === 'mismatch' &&
+      if (rejection === undefined) {
+        return false
+      }
+      return rejection.reason === 'mismatch' &&
         rejection.remediation.includes('itself produced by a --survivors run')
     },
   )
@@ -205,7 +227,10 @@ describe('admitSurvivorsRun', () => {
     [reportWithoutSurvivorsArb],
     ([report]) => {
       const drifted = admitSurvivorsRun(driftedCommand(report))
-      return Result.isSuccess(drifted) && drifted.success._tag === 'NoSurvivors'
+      if (!Result.isSuccess(drifted)) {
+        return false
+      }
+      return S.is(NoSurvivors)(drifted.success)
     },
   )
 
@@ -214,7 +239,10 @@ describe('admitSurvivorsRun', () => {
     [reportWithSurvivorsArb],
     ([report]) => {
       const rejection = rejectionOf(admitSurvivorsRun(driftedCommand(report)))
-      return rejection?.reason === 'mismatch' &&
+      if (rejection === undefined) {
+        return false
+      }
+      return rejection.reason === 'mismatch' &&
         rejection.remediation.includes('does not match the current run')
     },
   )
@@ -224,10 +252,15 @@ describe('admitSurvivorsRun', () => {
     [reportWithSurvivorsArb],
     ([report]) => {
       const admission = admitSurvivorsRun(matchingCommand(report))
-      if (!Result.isSuccess(admission) || admission.success._tag !== 'Admitted') return false
+      if (!Result.isSuccess(admission)) {
+        return false
+      }
+      if (!S.is(Admitted)(admission.success)) {
+        return false
+      }
       const expected = extractSurvivors(report, absPath)
       return expected.length > 0 &&
-        isDeepStrictEqual(
+        stringArrayEquivalence(
           admission.success.survivors.map(fingerprint),
           expected.map(fingerprint),
         )
@@ -255,8 +288,10 @@ describe('admitSurvivorsRun', () => {
     [frameworklessReportArb],
     ([report]) => {
       const rejection = rejectionOf(admitSurvivorsRun(matchingCommand(report)))
-      return rejection?.reason === 'mismatch' &&
-        rejection._tag === 'SurvivorsRejection'
+      if (rejection === undefined) {
+        return false
+      }
+      return rejection.reason === 'mismatch' && S.is(SurvivorsRejection)(rejection)
     },
   )
 
@@ -264,8 +299,13 @@ describe('admitSurvivorsRun', () => {
     '∀i_EveryRejection_≡CarriesTheRejectionTag',
     [reportWithSurvivorsArb],
     ([report]) =>
-      rejectionOf(admitSurvivorsRun(commandWithoutPriorReport(report)))?._tag ===
-        'SurvivorsRejection',
+      (() => {
+        const r = rejectionOf(admitSurvivorsRun(commandWithoutPriorReport(report)))
+        if (r === undefined) {
+          return false
+        }
+        return S.is(SurvivorsRejection)(r)
+      })(),
   )
 
   it.prop(
@@ -325,6 +365,30 @@ describe('admitSurvivorsRun', () => {
         crossRealmBrand in admitted.success &&
         crossRealmBrand in empty.success &&
         crossRealmBrand in rejected.failure
+    },
+  )
+})
+
+describe('sourceContentHash', () => {
+  it.prop(
+    '∀c_Empty_≡FipsVector',
+    [fc.constant('')],
+    ([content]) =>
+      sourceContentHash(content, sha256Hex) === 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+  )
+
+  it.prop(
+    '∀c_Content_≡Deterministic',
+    [fc.string({ maxLength: 16 })],
+    ([content]) => sourceContentHash(content, sha256Hex) === sourceContentHash(content, sha256Hex),
+  )
+
+  it.prop(
+    '∀a,b_Content_≠Distinct',
+    [fc.string({ maxLength: 16 }), fc.string({ maxLength: 16 })],
+    ([a, b]) => {
+      fc.pre(a !== b)
+      return sourceContentHash(a, sha256Hex) !== sourceContentHash(b, sha256Hex)
     },
   )
 })

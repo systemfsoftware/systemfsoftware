@@ -1,6 +1,6 @@
 # @systemfsoftware/stryker-js-instrumenter
 
-A source-code fork of the upstream StrykerJS instrumenter package, pinned at 9.6.1.
+Parses source files, applies their configured mutators, and produces the mutant set for a mutation run.
 
 ## Install
 
@@ -15,10 +15,6 @@ pnpm add @systemfsoftware/stryker-js-instrumenter
 ## Use
 
 The instrumenter is used internally by the Stryker mutation testing framework to instrument source files with mutant coverage and switching logic.
-
-## API
-
-The public surface is generated from the source and versioned with the package: [`etc/stryker-js-instrumenter.api.md`](./etc/stryker-js-instrumenter.api.md).
 
 ## License
 

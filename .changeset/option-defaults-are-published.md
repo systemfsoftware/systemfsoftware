@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/stryker-js-plugin-api": minor
+"@systemfsoftware/stryker-js": minor
 ---
 
 `RENDERED_OPTION_DEFAULTS` is exported from the `core` entry point. It carries

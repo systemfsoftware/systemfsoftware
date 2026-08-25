@@ -1,9 +1,7 @@
+import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import { type StrykerOptions, StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
+import type { DryRunOptions, MutantRunOptions } from '@systemfsoftware/stryker-js/TestRunner'
 import * as S from 'effect/Schema'
-import { vi } from 'vitest'
-
-import { type Mutant, type StrykerOptions, StrykerOptionsSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
-import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
-import type { DryRunOptions, MutantRunOptions } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
 export interface VitestRunnerOptions {
   dir?: string
@@ -26,24 +24,6 @@ export function createVitestRunnerOptions(
     ...overrides,
   }
 }
-
-export function createLogger(): Logger {
-  return {
-    debug: vi.fn<(message: string, ...args: readonly unknown[]) => void>(),
-    error: vi.fn<(message: string, ...args: readonly unknown[]) => void>(),
-    fatal: vi.fn<(message: string, ...args: readonly unknown[]) => void>(),
-    info: vi.fn<(message: string, ...args: readonly unknown[]) => void>(),
-    isDebugEnabled: () => false,
-    isErrorEnabled: () => false,
-    isFatalEnabled: () => false,
-    isInfoEnabled: () => false,
-    isTraceEnabled: () => false,
-    isWarnEnabled: () => false,
-    trace: vi.fn<(message: string, ...args: readonly unknown[]) => void>(),
-    warn: vi.fn<(message: string, ...args: readonly unknown[]) => void>(),
-  }
-}
-
 export function createStrykerOptions(
   overrides?: Partial<VitestRunnerOptionsWithStrykerOptions>,
 ): VitestRunnerOptionsWithStrykerOptions {
@@ -55,7 +35,7 @@ export function createStrykerOptions(
 }
 
 export function createMutant(overrides?: Partial<Mutant>): Mutant {
-  return {
+  return new Mutant({
     id: '42',
     fileName: 'file',
     mutatorName: 'foobarMutator',
@@ -65,7 +45,7 @@ export function createMutant(overrides?: Partial<Mutant>): Mutant {
     },
     replacement: 'replacement',
     ...overrides,
-  }
+  })
 }
 
 export function createDryRunOptions(

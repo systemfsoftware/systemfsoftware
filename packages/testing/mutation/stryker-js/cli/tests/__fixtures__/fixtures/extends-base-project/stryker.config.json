@@ -1,5 +1,5 @@
 {
-  "extends": "@systemfsoftware/stryker-js-mutation-run/config/base",
+  "extends": "./base.json",
   "testRunner": "command",
   "coverageAnalysis": "off",
   "reporters": [

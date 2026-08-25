@@ -7,9 +7,9 @@ import { Context, Effect } from 'effect'
 import * as Layer from 'effect/Layer'
 import type { Scope } from 'effect/Scope'
 
-import type { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { TestRunner } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
-import { makeVitestRunnerLayer } from '../../src/vitest-test-runner.js'
+import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import { TestRunner } from '@systemfsoftware/stryker-js/TestRunner'
+import { makeVitestRunnerLayer } from '../../src/Runner.js'
 import {
   createStrykerOptions,
   createVitestRunnerOptions,
