@@ -101,6 +101,22 @@ const twoLayers = Cell.write(
 )
 
 /**
+ * A write that reports on its own layer's read as well as on the encoded output. The raw
+ * arrives as the write's second argument, which is the whole point of the argument: a layer
+ * whose write persists or reports what the read gathered needs no `let` beside the
+ * description to carry it, and so needs no runtime guard for a value the fold already has.
+ */
+const writeRecordingRaw: Cell.WritePhase<Bag> = (output, raw) =>
+  Effect.flatMap(Ledger, (ledger) => ledger.append(`${output.line}<-${raw.bytes}`)).pipe(
+    Effect.as(output.line),
+  )
+
+const layerReportingItsRaw = Cell.write(
+  Cell.encode(Cell.decide(Cell.decode(Cell.read<Bag>(read), decode), decide), encode),
+  writeRecordingRaw,
+)
+
+/**
  * A second layer that reads back what the first layer wrote. This is the shape a call site
  * whose real order writes before it decides takes, so the ordering it depends on has to be
  * observable: run the layers concurrently and this read sees an empty ledger instead.
@@ -170,6 +186,25 @@ Feature('Applying a phase description')
         Then('the run succeeds and its response carries the decision')((s) => {
           expect(s.exit).toStrictEqual(Exit.succeed('admitted:4'))
         }),
+      ),
+    )
+
+    scenario(
+      "A write receives the raw its own layer's read gathered",
+      Gherkin.Do.pipe(
+        When('a description whose write reports its raw is applied')(
+          'exit',
+          () => Effect.exit(Cell.apply(layerReportingItsRaw, { id: 'abcd' })),
+        ),
+        Then('the run succeeds with the response the write returned')((s) => {
+          expect(s.exit).toStrictEqual(Exit.succeed('admitted:4'))
+        }),
+        And('the write recorded the encoded output together with the raw')(() =>
+          Effect.flatMap(Ledger, (ledger) =>
+            Effect.map(ledger.lines, (lines) => {
+              expect(lines).toEqual(['admitted:4<-abcd'])
+            }))
+        ),
       ),
     )
 

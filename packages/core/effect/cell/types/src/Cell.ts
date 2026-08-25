@@ -63,8 +63,21 @@ export type EncodePhase<P extends Phases> = (
   outcome: Result.Result<P['decision'], P['decisionError']>,
 ) => P['output']
 
+/**
+ * The write. It receives the encoded `output` and, as a second argument, the `raw` its own
+ * layer's read gathered.
+ *
+ * `raw` is there because a write is frequently the point that persists or reports what the
+ * read found, while the decision in between deliberately narrows to what it needed. Without
+ * this argument such a write has no channel for it and the layer smuggles the value through
+ * a closure — a `let` beside the description, assigned in the read and consulted in the
+ * write, which then needs a runtime guard for a value the fold has already produced. The
+ * argument is second, and a write that does not want it declares one parameter: a unary
+ * function satisfies this type, so every write written before it existed is unchanged.
+ */
 export type WritePhase<P extends Phases> = (
   output: P['output'],
+  raw: P['raw'],
 ) => Effect.Effect<P['response'], P['writeError'], P['writeContext']>
 
 // ---------------------------------------------------------------------------
@@ -343,10 +356,21 @@ const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
     }
 
     let value: FoldValue<P> = command
+    // What the read gathered, kept so the terminal write receives it as well as the
+    // encoded output. Before a read has run there is nothing gathered and the command is
+    // the only thing the layer has seen, which is what a read-less layer's write is handed.
+    let raw: FoldValue<P> = command
     for (const phase of phases.slice(0, -1)) {
       switch (phase.convention) {
         case 'effect':
-          value = yield* phase.run(value)
+          // `effect` covers both impure phases and their arities differ, so the branch
+          // narrows on the phase name rather than calling through the union.
+          if (phase.name === 'read') {
+            value = yield* phase.run(value)
+            raw = value
+            break
+          }
+          value = yield* phase.run(value, raw)
           break
         case 'either-fail':
           value = yield* Result.match(phase.run(value), {
@@ -379,7 +403,7 @@ const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
     // The guard above certified that the last phase is a write; yielding its effect
     // directly is what makes the derived success channel the layer's `response` — the
     // fold's loop cannot see that, so the terminal write is peeled out of it.
-    return yield* last.run(value)
+    return yield* last.run(value, raw)
   })
 
 /**

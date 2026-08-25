@@ -274,3 +274,24 @@ describe('the description value is a foldable record', () => {
     expect<Cell.Phase<Shape>['convention']>().type.toBe<Cell.Convention>()
   })
 })
+
+describe('what the write receives', () => {
+  it('Should_HandTheWriteTheRaw_When_ItDeclaresASecondParameter', () => {
+    expect<Parameters<Cell.WritePhase<Shape>>>().type.toBe<[output: Output, raw: Raw]>()
+  })
+
+  // The reason the argument is second and not first. A write authored before the raw
+  // channel existed declares one parameter, and TypeScript admits a shorter function
+  // wherever a longer signature is expected — so this assertion is what says the addition
+  // is not a break for any write already written.
+  it('Should_StillAdmitAUnaryWrite_When_TheWriteIgnoresTheRaw', () => {
+    expect<(output: Output) => Effect<void, never, never>>().type.toBeAssignableTo<
+      Cell.WritePhase<Shape>
+    >()
+  })
+
+  it('Should_RefuseTheWrite_When_ItsSecondParameterIsNotTheRaw', () => {
+    expect<(output: Output, raw: Decoded) => Effect<void, never, never>>().type.not
+      .toBeAssignableTo<Cell.WritePhase<Shape>>()
+  })
+})
