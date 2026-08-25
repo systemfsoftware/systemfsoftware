@@ -6,7 +6,7 @@ export default defineConfig({
   // emitted chunk AND keep a resolvable subpath. Two call shapes depend on the
   // `internal/` prefix here and break silently without it - `Checker.ts` and
   // `TestRunner.ts` build `new URL('./internal/<name>.mjs', import.meta.url)`,
-  // and `Worker.ts` calls `require.resolve` on the published
+  // and `Worker.ts` calls `import.meta.resolve` on the published
   // `./internal/child-process-proxy-worker-main` subpath. Excluding them from
   // `exports` makes that resolve throw, and the source fallback then hands Node
   // a `.ts` file it cannot execute, so the worker never connects.

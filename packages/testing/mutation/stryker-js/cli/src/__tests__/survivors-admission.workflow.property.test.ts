@@ -378,6 +378,20 @@ describe('sourceContentHash', () => {
   )
 
   it.prop(
+    '∀c_Abc_≡FipsVector',
+    [fc.constant('abc')],
+    ([content]) =>
+      sourceContentHash(content, sha256Hex) === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+  )
+
+  it.prop(
+    '∀c_NonAscii_≡Utf8Vector',
+    [fc.constant('✓')],
+    ([content]) =>
+      sourceContentHash(content, sha256Hex) === '1dabba21cdad44541f6b15796f8d22978fc7ea10c46aeceeeeb66c23b3ac7604',
+  )
+
+  it.prop(
     '∀c_Content_≡Deterministic',
     [fc.string({ maxLength: 16 })],
     ([content]) => sourceContentHash(content, sha256Hex) === sourceContentHash(content, sha256Hex),

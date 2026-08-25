@@ -24,6 +24,7 @@ import {
   ChildProcessCrashedError,
   OutOfMemoryError,
   WorkerConnectTimeoutError,
+  WorkerFrameTooLargeError,
   WorkerMethodError,
   WorkerSocketListenFailed,
   WorkerSocketNotTcpError,
@@ -31,6 +32,18 @@ import {
 
 export const DELIMITER = '\n'
 
+/**
+ * Maximum bytes for one `\n`-delimited JSON frame on the worker IPC socket.
+ *
+ * Both parent and child import this single constant so the wire cannot
+ * disagree. Value is 16 MiB — the largest legitimate frame is a
+ * `CompleteDryRunResult` with `mutantCoverage.perTest` for a large project:
+ * ~10k tests × ~200 B + ~2 MiB coverage + ~30 % JSON overhead ≈ 5–6 MiB,
+ * plus a large `failureMessage` stack (hundreds of KB). 16 MiB gives
+ * >2× headroom over that estimate while staying orders of magnitude below
+ * V8's ~1 GiB string limit that the unbounded `buffer += chunk` would hit.
+ */
+export const MAX_FRAME_BYTES = 16 * 1024 * 1024
 // IPC args/return values cross the process boundary as JSON — recursive JSON value
 const JsonValue: Wire.Minted<unknown, unknown> = Wire.suspend(() =>
   Wire.union(
@@ -100,25 +113,37 @@ export const layer = Layer.effect(IdGenerator)(makeIdGenerator)
 // Concurrency
 // ---------------------------------------------------------------------------
 
-export const computeTotalConcurrency = (
+export const getAvailableParallelism = (): number => {
+  if (typeof globalThis.navigator === 'undefined') return 4
+  const hc = globalThis.navigator.hardwareConcurrency
+  if (typeof hc !== 'number') return 4
+  return hc
+}
+
+export const computeTotalConcurrencyDetails = (
   concurrencyOption: number | string | undefined,
   availableParallelism: number,
-): number => {
+): { readonly total: number; readonly isPercentage: boolean } => {
   if (typeof concurrencyOption === 'string') {
     const percentageMatch = concurrencyOption.match(/^(100|[1-9]?[0-9])%$/)
     if (percentageMatch?.[1] !== undefined) {
       const percentage = Number.parseInt(percentageMatch[1], 10)
-      return Math.max(1, Math.round((availableParallelism * percentage) / 100))
+      return { total: Math.max(1, Math.round((availableParallelism * percentage) / 100)), isPercentage: true }
     }
   }
   if (typeof concurrencyOption === 'number') {
-    return concurrencyOption
+    return { total: concurrencyOption, isPercentage: false }
   }
   if (availableParallelism > 4) {
-    return availableParallelism - 1
+    return { total: availableParallelism - 1, isPercentage: false }
   }
-  return availableParallelism
+  return { total: availableParallelism, isPercentage: false }
 }
+
+export const computeTotalConcurrency = (
+  concurrencyOption: number | string | undefined,
+  availableParallelism: number,
+): number => computeTotalConcurrencyDetails(concurrencyOption, availableParallelism).total
 
 export const splitConcurrency = (
   total: number,
@@ -145,22 +170,12 @@ export const makeConcurrency = (
   options: Pick<StrykerOptions, 'checkers' | 'concurrency'>,
 ): Effect.Effect<{ testRunners: number; checkers: number }> =>
   Effect.gen(function*() {
-    const availableParallelism = yield* Effect.sync(() => {
-      if (typeof globalThis.navigator === 'undefined') return 4
-      const hc = globalThis.navigator.hardwareConcurrency
-      if (typeof hc !== 'number') return 4
-      return hc
-    })
-    const total = computeTotalConcurrency(options.concurrency, availableParallelism)
-    if (typeof options.concurrency === 'string') {
-      const percentageMatch = options.concurrency.match(/^(100|[1-9]?[0-9])%$/)
-      if (percentageMatch?.[1] !== undefined) {
-        const pct = Number(percentageMatch[1])
-        const computed = Math.max(1, Math.round((availableParallelism * pct) / 100))
-        yield* Effect.logDebug(
-          `Computed concurrency ${computed} from "${options.concurrency}" based on ${availableParallelism} available parallelism.`,
-        )
-      }
+    const availableParallelism = yield* Effect.sync(getAvailableParallelism)
+    const { total, isPercentage } = computeTotalConcurrencyDetails(options.concurrency, availableParallelism)
+    if (isPercentage) {
+      yield* Effect.logDebug(
+        `Computed concurrency ${total} from "${options.concurrency}" based on ${availableParallelism} available parallelism.`,
+      )
     }
     const result = splitConcurrency(total, options.checkers.length)
     if (options.checkers.length > 0) {
@@ -250,7 +265,13 @@ export const makeChildProcessProxy = <T>(params: {
     const stdoutQueue = yield* Queue.unbounded<string>()
     const stderrQueue = yield* Queue.unbounded<string>()
     const pendingRef = yield* Ref.make<
-      Record<number, Deferred.Deferred<unknown, WorkerMethodError | ChildProcessCrashedError | OutOfMemoryError>>
+      Record<
+        number,
+        Deferred.Deferred<
+          unknown,
+          WorkerMethodError | ChildProcessCrashedError | OutOfMemoryError | WorkerFrameTooLargeError
+        >
+      >
     >({})
     const idRef = yield* Ref.make(0)
     const socketRef = yield* Ref.make<Socket.Socket | undefined>(undefined)
@@ -378,6 +399,24 @@ export const makeChildProcessProxy = <T>(params: {
             Effect.gen(function*() {
               yield* Effect.void
               buffer += chunk
+              if (buffer.length > MAX_FRAME_BYTES) {
+                const error = new WorkerFrameTooLargeError({
+                  byteLength: buffer.length,
+                  limit: MAX_FRAME_BYTES,
+                })
+                const pending = yield* Ref.getAndSet(pendingRef, {})
+                for (const k of Object.keys(pending)) {
+                  const d = pending[Number(k)]
+                  if (d !== undefined) yield* Deferred.fail(d, error).pipe(Effect.ignore)
+                }
+                yield* writer(new Socket.CloseEvent(1009, `Frame too large: ${buffer.length} > ${MAX_FRAME_BYTES}`))
+                  .pipe(
+                    Effect.ignore,
+                    Effect.orDie,
+                  )
+                buffer = ''
+                return yield* Effect.fail(error)
+              }
               let idx = buffer.indexOf(DELIMITER)
               while (idx !== -1) {
                 const raw = buffer.slice(0, idx)
@@ -424,7 +463,6 @@ export const makeChildProcessProxy = <T>(params: {
             .pipe(
               Effect.catchCause(() =>
                 Effect.gen(function*() {
-                  yield* Effect.logWarning(`IPC socket error for worker ${workerId}`).pipe(Effect.ignore)
                   yield* drainPendingOnSocketClose.pipe(Effect.ignore)
                 })
               ),
@@ -545,7 +583,10 @@ export const makeChildProcessProxy = <T>(params: {
       string,
       (
         ...args: readonly unknown[]
-      ) => Effect.Effect<unknown, WorkerMethodError | ChildProcessCrashedError | OutOfMemoryError>
+      ) => Effect.Effect<
+        unknown,
+        WorkerMethodError | ChildProcessCrashedError | OutOfMemoryError | WorkerFrameTooLargeError
+      >
     > = {}
 
     const handler: ProxyHandler<
@@ -553,7 +594,10 @@ export const makeChildProcessProxy = <T>(params: {
         string,
         (
           ...args: readonly unknown[]
-        ) => Effect.Effect<unknown, WorkerMethodError | ChildProcessCrashedError | OutOfMemoryError>
+        ) => Effect.Effect<
+          unknown,
+          WorkerMethodError | ChildProcessCrashedError | OutOfMemoryError | WorkerFrameTooLargeError
+        >
       >
     > = {
       get: (_t, propertyKey) => {
@@ -563,7 +607,7 @@ export const makeChildProcessProxy = <T>(params: {
             const callId = yield* Ref.modify(idRef, (n) => [n, n + 1] as const)
             const deferred = yield* Deferred.make<
               unknown,
-              WorkerMethodError | ChildProcessCrashedError | OutOfMemoryError
+              WorkerMethodError | ChildProcessCrashedError | OutOfMemoryError | WorkerFrameTooLargeError
             >()
             yield* Ref.update(pendingRef, (p) => ({ ...p, [callId]: deferred }))
             const sock = yield* Ref.get(socketRef)
@@ -581,6 +625,17 @@ export const makeChildProcessProxy = <T>(params: {
               })
             }
             const frame = JSON.stringify({ kind: 'call', id: callId, method: propertyKey, args: [...args] }) + DELIMITER
+            if (frame.length > MAX_FRAME_BYTES) {
+              yield* Ref.update(pendingRef, (p) => {
+                const cleaned = { ...p }
+                delete cleaned[callId]
+                return cleaned
+              })
+              return yield* new WorkerFrameTooLargeError({
+                byteLength: frame.length,
+                limit: MAX_FRAME_BYTES,
+              })
+            }
             yield* writer(frame).pipe(
               Effect.catch(() => Effect.void),
             )

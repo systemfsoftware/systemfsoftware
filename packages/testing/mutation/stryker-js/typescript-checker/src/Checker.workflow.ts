@@ -1,3 +1,4 @@
+/// <reference types="vitest/import-meta" />
 /**
  * Checker — pure check decision.
  *
@@ -168,3 +169,29 @@ const buildResult = (
 }
 
 export const checkMutants = Workflow.make(CheckMutantsInput, (input: CheckMutantsInput) => buildResult(input))
+
+if (import.meta.vitest !== void 0) {
+  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
+  const { FastCheck: fc } = await import('effect/testing')
+
+  refutes(CheckMutantsInput, {
+    CheckMutantsInputNonFinite: fc.constant({
+      _tag: 'CheckMutantsInput',
+      mutants: [
+        {
+          _tag: 'Mutant',
+          id: '1',
+          fileName: 'file.ts',
+          mutatorName: 'm',
+          replacement: 'r',
+          location: {
+            start: { line: Number.POSITIVE_INFINITY, column: 0 },
+            end: { line: 1, column: 0 },
+          },
+        },
+      ],
+      diagnostics: [],
+      nodes: {},
+    }),
+  })
+}

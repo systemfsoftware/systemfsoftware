@@ -11,11 +11,12 @@ import { Schema as S } from 'effect'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as Option from 'effect/Option'
+import * as Socket from 'effect/unstable/socket/Socket'
 
 import { causeText } from '@systemfsoftware/stryker-js/Mutant'
 
-import { DELIMITER, WorkerCallSchema } from './Worker.js'
-import { WorkerMethodError } from './Worker.schema.js'
+import { DELIMITER, MAX_FRAME_BYTES, WorkerCallSchema } from './Worker.js'
+import { WorkerFrameTooLargeError, WorkerMethodError } from './Worker.schema.js'
 
 const messageOf = (cause: unknown): string => {
   const text = causeText(cause, 0)
@@ -95,7 +96,6 @@ const main = Effect.gen(function*() {
     Effect.gen(function*() {
       const writer = yield* socket.writer
       let buffer = ''
-
       const handleCall = (call: { id: number; method: string; args: readonly unknown[] }) =>
         Effect.gen(function*() {
           let member: unknown
@@ -109,7 +109,16 @@ const main = Effect.gen(function*() {
               stack: undefined,
             })
             const reply = { kind: 'reply' as const, id: call.id, success: false as const, error: err }
-            yield* writer(JSON.stringify(reply) + DELIMITER).pipe(Effect.ignore)
+            const frame = JSON.stringify(reply) + DELIMITER
+            if (frame.length > MAX_FRAME_BYTES) {
+              const tooLarge = new WorkerFrameTooLargeError({ byteLength: frame.length, limit: MAX_FRAME_BYTES })
+              yield* writer(new Socket.CloseEvent(1009, `Frame too large: ${frame.length} > ${MAX_FRAME_BYTES}`)).pipe(
+                Effect.ignore,
+                Effect.orDie,
+              )
+              return yield* Effect.fail(tooLarge)
+            }
+            yield* writer(frame).pipe(Effect.ignore)
             return
           }
           const result: unknown = yield* Effect.tryPromise({
@@ -122,7 +131,17 @@ const main = Effect.gen(function*() {
               }),
           })
           const successReply = { kind: 'reply' as const, id: call.id, success: true as const, value: result }
-          yield* writer(JSON.stringify(successReply) + DELIMITER).pipe(Effect.ignore)
+          const successFrame = JSON.stringify(successReply) + DELIMITER
+          if (successFrame.length > MAX_FRAME_BYTES) {
+            const tooLarge = new WorkerFrameTooLargeError({ byteLength: successFrame.length, limit: MAX_FRAME_BYTES })
+            yield* writer(new Socket.CloseEvent(1009, `Frame too large: ${successFrame.length} > ${MAX_FRAME_BYTES}`))
+              .pipe(
+                Effect.ignore,
+                Effect.orDie,
+              )
+            return yield* Effect.fail(tooLarge)
+          }
+          yield* writer(successFrame).pipe(Effect.ignore)
         }).pipe(
           Effect.catchCause((cause) =>
             Effect.gen(function*() {
@@ -130,6 +149,8 @@ const main = Effect.gen(function*() {
               let err: WorkerMethodError
               if (Option.isSome(failure) && failure.value instanceof WorkerMethodError) {
                 err = failure.value
+              } else if (Option.isSome(failure) && failure.value instanceof WorkerFrameTooLargeError) {
+                return yield* Effect.fail(failure.value)
               } else {
                 err = new WorkerMethodError({
                   message: Cause.pretty(cause),
@@ -138,7 +159,17 @@ const main = Effect.gen(function*() {
                 })
               }
               const reply = { kind: 'reply' as const, id: call.id, success: false as const, error: err }
-              yield* writer(JSON.stringify(reply) + DELIMITER).pipe(Effect.ignore)
+              const frame = JSON.stringify(reply) + DELIMITER
+              if (frame.length > MAX_FRAME_BYTES) {
+                const tooLarge = new WorkerFrameTooLargeError({ byteLength: frame.length, limit: MAX_FRAME_BYTES })
+                yield* writer(new Socket.CloseEvent(1009, `Frame too large: ${frame.length} > ${MAX_FRAME_BYTES}`))
+                  .pipe(
+                    Effect.ignore,
+                    Effect.orDie,
+                  )
+                return yield* Effect.fail(tooLarge)
+              }
+              yield* writer(frame).pipe(Effect.ignore)
             })
           ),
         )
@@ -146,6 +177,15 @@ const main = Effect.gen(function*() {
       const onChunk = (chunk: string) =>
         Effect.gen(function*() {
           buffer += chunk
+          if (buffer.length > MAX_FRAME_BYTES) {
+            const error = new WorkerFrameTooLargeError({ byteLength: buffer.length, limit: MAX_FRAME_BYTES })
+            yield* writer(new Socket.CloseEvent(1009, `Frame too large: ${buffer.length} > ${MAX_FRAME_BYTES}`)).pipe(
+              Effect.ignore,
+              Effect.orDie,
+            )
+            buffer = ''
+            return yield* Effect.fail(error)
+          }
           let idx = buffer.indexOf(DELIMITER)
           while (idx !== -1) {
             const raw = buffer.slice(0, idx)

@@ -1,3 +1,4 @@
+/// <reference types="vitest/import-meta" />
 import { Wire } from '@systemfsoftware/effect-cell-types'
 import * as S from 'effect/Schema'
 
@@ -130,3 +131,63 @@ export class RunReadError extends S.TaggedError<RunReadError>()('RunReadError', 
 export class RunWriteError extends S.TaggedError<RunWriteError>()('RunWriteError', {
   message: S.String,
 }) {}
+
+if (import.meta.vitest !== void 0) {
+  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
+  const { FastCheck: fc } = await import('effect/testing')
+
+  refutes(PlanKnown, {
+    PlanKnownNonFinite: fc.constant({ _tag: 'plan', total: Number.POSITIVE_INFINITY }),
+  })
+
+  refutes(MutantTested, {
+    MutantTestedNonFinite: fc.constant({
+      _tag: 'mutant',
+      id: 'id',
+      status: 'Killed',
+      file: 'file.ts',
+      location: {
+        start: { line: Number.POSITIVE_INFINITY, column: 0 },
+        end: { line: 1, column: 0 },
+      },
+      mutator: 'm',
+      replacement: null,
+      completed: 1,
+      total: 1,
+    }),
+  })
+
+  refutes(Heartbeat, {
+    HeartbeatNonFinite: fc.constant({
+      _tag: 'tick',
+      elapsedMs: Number.POSITIVE_INFINITY,
+      completed: 0,
+      total: null,
+    }),
+  })
+
+  refutes(VerdictReached, {
+    VerdictReachedNonFinite: fc.constant({
+      _tag: 'verdict',
+      schemaVersion: '1',
+      runId: 'r',
+      mode: 'human',
+      signal: 'flag',
+      score: Number.POSITIVE_INFINITY,
+    }),
+  })
+
+  refutes(RunFailed, {
+    RunFailedNonFinite: fc.constant({
+      _tag: 'error',
+      schemaVersion: '1',
+      code: Number.POSITIVE_INFINITY,
+      error: 'e',
+      remediation: 'r',
+    }),
+  })
+
+  refutes(RunOutput, {
+    RunOutputNonFinite: fc.constant({ _tag: 'RunOutput', verdictJson: '{}', exitCode: Number.POSITIVE_INFINITY }),
+  })
+}

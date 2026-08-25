@@ -2216,6 +2216,15 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../../../core/effect/schema/law
+      '@systemfsoftware/effect-schema-refutation-vite':
+        specifier: workspace:^
+        version: link:../../../../core/effect/schema/refutation-vite
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../../../core/effect/schema/vite
       '@systemfsoftware/oxlint-plugin-cell-vocabulary':
         specifier: workspace:^
         version: link:../../../../lint/oxlint/plugins/cells/cell-vocabulary
@@ -2277,6 +2286,15 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../../specs/gherkin/effect
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../../../core/effect/schema/law
+      '@systemfsoftware/effect-schema-refutation-vite':
+        specifier: workspace:^
+        version: link:../../../../core/effect/schema/refutation-vite
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../../../core/effect/schema/vite
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../../lint/oxlint/config

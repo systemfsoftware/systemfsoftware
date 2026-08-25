@@ -103,7 +103,6 @@ Feature('Resolving the process exit code').body(({ scenario }) => {
       }),
     ),
   )
-
   scenario(
     'Should_ResolveVerdictFail_When_EvaluatorReturnsVerdictFailWhileScorePasses',
     Gherkin.Do.pipe(
@@ -133,6 +132,38 @@ Feature('Resolving the process exit code').body(({ scenario }) => {
           [scoreVerdict, ...evaluatorVerdicts].filter(
             (value): value is ExitClass => value !== null,
           ),
+        )
+        return Effect.succeed(pending)
+      }),
+      Then('the code is 0')((s: { pending: Set<ExitClass> }) => {
+        expect(resolveExitCode(s.pending, null)).toBe(0)
+      }),
+    ),
+  )
+
+  scenario(
+    'Should_ResolveVerdictFail_When_ScoreIsBelowThreshold',
+    Gherkin.Do.pipe(
+      Given('a score below its breaking threshold')('pending', () => {
+        const scoreVerdict = verdictExitClass(59, 60)
+        const pending = new Set<ExitClass>(
+          [scoreVerdict].filter((value): value is ExitClass => value !== null),
+        )
+        return Effect.succeed(pending)
+      }),
+      Then('the code is 1')((s: { pending: Set<ExitClass> }) => {
+        expect(resolveExitCode(s.pending, null)).toBe(1)
+      }),
+    ),
+  )
+
+  scenario(
+    'Should_StayZero_When_ScoreEqualsThreshold',
+    Gherkin.Do.pipe(
+      Given('a score exactly equal to its breaking threshold')('pending', () => {
+        const scoreVerdict = verdictExitClass(60, 60)
+        const pending = new Set<ExitClass>(
+          [scoreVerdict].filter((value): value is ExitClass => value !== null),
         )
         return Effect.succeed(pending)
       }),

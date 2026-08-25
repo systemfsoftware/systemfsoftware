@@ -94,13 +94,11 @@ const { entries: objectEntries, fromEntries: objectFromEntries } = Object
 /**
  * The sha256-hex digest capability the admission comparison needs. Supplied by
  * the caller so this kernel stays runtime-module-free; the shell wires
- * `createHash('sha256').update(content, 'utf-8').digest('hex')`.
+ * `bytesToHex(sha256(utf8ToBytes(content)))`.
  */
 export type HashContent = (content: string) => string
 
 /**
- * The content hash of one source file.
- *
  * Thin by design: the digest is the caller's capability, and naming the call
  * keeps every hashing site in the admission path reading the same way.
  */
@@ -495,14 +493,16 @@ function readSourceFile(file: string): Effect.Effect<string, ConfigFileUnreadabl
 function currentSourceHashesFor(
   files: readonly string[],
 ): Effect.Effect<Record<string, string>, ConfigFileUnreadableError, FileSystem.FileSystem> {
-  return Effect.gen(function*() {
-    const hashes: Record<string, string> = {}
-    for (const file of files) {
-      const content = yield* readSourceFile(file)
-      hashes[file] = sourceContentHash(content, hashContent)
-    }
-    return hashes
-  })
+  return Effect.map(
+    Effect.forEach(
+      files,
+      (file) => Effect.map(readSourceFile(file), (content) => [file, sourceContentHash(content, hashContent)] as const),
+      {
+        concurrency: 'unbounded',
+      },
+    ),
+    (pairs) => Object.fromEntries(pairs),
+  )
 }
 
 type SurvivorsRunOptions = PartialStrykerOptions & {

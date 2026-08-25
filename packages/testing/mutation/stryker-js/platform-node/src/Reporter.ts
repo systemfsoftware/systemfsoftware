@@ -72,7 +72,7 @@ import {
 } from './Reporter.workflow.js'
 import type { RunOutcome } from './Run.js'
 import { strykerVersion } from './stryker-package.js'
-import { buildVerdictEnvelope } from './verdict-envelope.js'
+import { buildVerdictEnvelope, isActionableStatus } from './verdict-envelope.js'
 const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
 type ProvidedStrykerOptions = StrykerOptions
 const writeOutputFile = (
@@ -549,17 +549,6 @@ export type RunEvent =
   }
 
 export type RunEventSink = (event: RunEvent) => void
-
-const ACTIONABLE_STATUSES: Record<string, true> = {
-  Survived: true,
-  NoCoverage: true,
-  Timeout: true,
-  RuntimeError: true,
-}
-
-function isActionableStatus(status: string): boolean {
-  return ACTIONABLE_STATUSES[status] === true
-}
 
 export function filterActionable(result: MutantResult): boolean {
   return isActionableStatus(result.status)
@@ -1243,9 +1232,14 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
     Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem
       const pathService = yield* Path.Path
+      const pairs = yield* Effect.forEach(
+        MANIFEST_SPECIFIERS,
+        (specifier) =>
+          Effect.map(readManifestVersion(fs, pathService, specifier), (version) => [specifier, version] as const),
+        { concurrency: 'unbounded' },
+      )
       const found: schema.Dependencies = {}
-      for (const specifier of MANIFEST_SPECIFIERS) {
-        const version = yield* readManifestVersion(fs, pathService, specifier)
+      for (const [specifier, version] of pairs) {
         if (Option.isSome(version)) {
           found[specifier] = version.value
         }

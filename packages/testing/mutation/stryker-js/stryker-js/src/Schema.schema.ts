@@ -1,3 +1,4 @@
+/// <reference types="vitest/import-meta" />
 import { Wire } from '@systemfsoftware/effect-cell-types'
 import { Effect } from 'effect'
 import * as S from 'effect/Schema'
@@ -223,4 +224,14 @@ export type PartialStrykerOptions = DeepOptional<StrykerOptions>
 type DeepOptional<T> = {
   -readonly [P in keyof T]?: T[P] extends Record<string, unknown> ? DeepOptional<T[P]> | undefined
     : T[P]
+}
+
+if (import.meta.vitest !== void 0) {
+  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
+  const { FastCheck: fc } = await import('effect/testing')
+
+  refutes(StrykerOptionsSchema, {
+    StrykerOptionsConcurrencyGteOne: fc.constant({ concurrency: 0 }),
+    StrykerOptionsConcurrencyPattern: fc.constant({ concurrency: '101%' }),
+  })
 }

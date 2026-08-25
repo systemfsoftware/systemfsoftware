@@ -33,15 +33,14 @@ import {
 import { makeChildProcessProxy } from './Worker.js'
 import type { IdGeneratorShape } from './Worker.js'
 import { ChildProcessCrashedError } from './Worker.schema.js'
-import type { ChildProcessCrashedError as ChildProcessCrashedErrorType, OutOfMemoryError } from './Worker.schema.js'
+import type {
+  ChildProcessCrashedError as ChildProcessCrashedErrorType,
+  OutOfMemoryError,
+  WorkerFrameTooLargeError,
+} from './Worker.schema.js'
 import type { WorkerMethodError } from './Worker.schema.js'
 
-// ---------------------------------------------------------------------------
-// Port
-// ---------------------------------------------------------------------------
-
-/** How a pooled checker can fail: its worker crashed, either way round. */
-export type CheckerCrash = ChildProcessCrashedErrorType | OutOfMemoryError
+export type CheckerCrash = ChildProcessCrashedErrorType | OutOfMemoryError | WorkerFrameTooLargeError
 
 /**
  * A checker held by the pool.

@@ -39,6 +39,7 @@ import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Pool from 'effect/Pool'
+import * as Predicate from 'effect/Predicate'
 import * as Queue from 'effect/Queue'
 import * as Result from 'effect/Result'
 import * as Scope from 'effect/Scope'
@@ -143,31 +144,6 @@ export interface RunOutcome {
   readonly verdict: ExitClass | null
 }
 
-/**
- * One `Phases` type shared by all four stages of the run.
- *
- * KNOWN DEFECT: the four stages do not have one shape. Each reads a different payload and
- * decodes a different command, so `raw`, `decoded` and `decision` are widened to `unknown`
- * here and every stage casts back to its own type. `command` and `response` are unions for
- * the same reason: each stage is applied with the previous stage's response, so what a
- * command is depends on which stage is running. The casts are structural, not incidental —
- * they are the price of one `Phases` serving four stages. The fix is a `Phases` per stage,
- * which makes every one of these members concrete and every cast in this file unnecessary;
- * it is not attempted alongside the module consolidation.
- */
-export interface MutationRunPhases extends Cell.Phases {
-  readonly command: PrepareExecutorArgs | PrepareDone | InstrumentDone | DryRunDone
-  readonly raw: unknown
-  readonly decoded: unknown
-  readonly decision: unknown
-  readonly decisionError: unknown
-  readonly output: unknown
-  readonly response: PrepareDone | InstrumentDone | DryRunDone | RunOutcome
-  readonly decodeError: StageError
-  readonly readError: StageError
-  readonly writeError: StageError
-}
-
 export interface PrepareExecutorArgs {
   cliOptions: PartialStrykerOptions
   targetMutatePatterns: string[] | undefined
@@ -175,9 +151,7 @@ export interface PrepareExecutorArgs {
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value)
-
+const isRecord = Predicate.isObject
 const buildMergedSchema = (
   core: ValidationSchemaDocument,
   contributions: readonly Record<string, unknown>[],
@@ -341,14 +315,39 @@ const noopReporter: ReporterService = {
   wrapUp: Effect.void,
 }
 
-const voidReporter: ReporterService = {
-  onDryRunCompleted: () => Effect.void,
-  onMutationTestingPlanReady: () => Effect.void,
-  onMutantTested: () => Effect.void,
-  onMutationTestReportReady: () => Effect.void,
-  wrapUp: Effect.void,
-}
-
+const resolveReporterService = <E>(
+  reporters: readonly string[],
+  layerOpt: ComposedPlugins['layer'],
+  options: StrykerOptions,
+  directory: string,
+  makeError: (message: string) => E,
+): Effect.Effect<ReporterService, E, Scope.Scope> =>
+  Effect.gen(function*() {
+    if (reporters.length === 0) {
+      return noopReporter
+    }
+    if (Option.isNone(layerOpt)) {
+      return yield* Effect.fail(
+        makeError(
+          `Reporters [${reporters.join(', ')}] configured but no plugin layer is available (no plugins loaded)`,
+        ),
+      )
+    }
+    const ctx = yield* Layer.build(layerOpt.value).pipe(
+      Effect.provideService(RunConfiguration, options),
+      Effect.provideService(SandboxDirectory, directory),
+      Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+    )
+    const maybeReporter = Context.getOption(ctx, Reporter)
+    if (Option.isNone(maybeReporter)) {
+      return yield* Effect.fail(
+        makeError(
+          `Reporter service not found in plugin context; configured reporters: ${reporters.join(', ')}`,
+        ),
+      )
+    }
+    return maybeReporter.value
+  })
 // ── Layer builders ───────────────────────────────────────────────────────
 
 export interface PrepareRaw {
@@ -721,36 +720,13 @@ export const dryRunLayer = (services: Context.Context<StageServices>): Cell.Writ
           yield* Scope.Scope
           const idGenerator = yield* IdGenerator
 
-          const reporterService: ReporterService = yield* Effect.gen(function*() {
-            if (cmd.options.reporters.length === 0) {
-              return noopReporter
-            }
-            const layerOpt = cmd.plugins.layer
-            if (Option.isNone(layerOpt)) {
-              return yield* new StageError({
-                stage: 'dryRun',
-                reason: `Reporters [${
-                  cmd.options.reporters.join(', ')
-                }] configured but no plugin layer is available (no plugins loaded)`,
-              })
-            }
-            const ctx = yield* Layer.build(layerOpt.value).pipe(
-              Effect.provideService(RunConfiguration, cmd.options),
-              Effect.provideService(SandboxDirectory, cmd.temporaryDirectoryPath),
-              Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
-            )
-            const maybeReporter = Context.getOption(ctx, Reporter)
-            if (Option.isNone(maybeReporter)) {
-              return yield* new StageError({
-                stage: 'dryRun',
-                reason: `Reporter service not found in plugin context; configured reporters: ${
-                  cmd.options.reporters.join(', ')
-                }`,
-              })
-            }
-            return maybeReporter.value
-          })
-
+          const reporterService: ReporterService = yield* resolveReporterService(
+            cmd.options.reporters,
+            cmd.plugins.layer,
+            cmd.options,
+            cmd.temporaryDirectoryPath,
+            (message) => new StageError({ stage: 'dryRun', reason: message }),
+          )
           const { files, testFiles } = buildDryRunFiles(cmd)
           const dryRunTimeout = cmd.options.dryRunTimeoutMinutes * 60 * 1000
 
@@ -960,43 +936,23 @@ export const mutationTestLayer = (
           yield* Scope.Scope
           const env = yield* RunEnvironment
           if (prev.options.dryRunOnly) {
-            const raw: MutationTestRaw = { prev, reporterService: voidReporter }
+            const raw: MutationTestRaw = { prev, reporterService: noopReporter }
             return raw
           }
           if (prev.dryRunResult.tests.length === 0 && prev.options.allowEmpty) {
             const now = yield* Clock.currentTimeMillis
             const elapsed = Duration.millis(now - env.runStartedAt)
             yield* Effect.logInfo(`Done in ${Duration.format(elapsed)}.`)
-            const raw: MutationTestRaw = { prev, reporterService: voidReporter }
+            const raw: MutationTestRaw = { prev, reporterService: noopReporter }
             return raw
           }
-          const reporterService = yield* Effect.gen(function*() {
-            if (prev.options.reporters.length === 0) {
-              return voidReporter
-            }
-            const layerOpt = prev.plugins.layer
-            if (Option.isNone(layerOpt)) {
-              return yield* new StrykerError({
-                message: `Reporters [${
-                  prev.options.reporters.join(', ')
-                }] configured but no plugin layer is available (no plugins loaded)`,
-              })
-            }
-            const ctx = yield* Layer.build(layerOpt.value).pipe(
-              Effect.provideService(RunConfiguration, prev.options),
-              Effect.provideService(SandboxDirectory, prev.temporaryDirectoryPath),
-              Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
-            )
-            const maybeReporter = Context.getOption(ctx, Reporter)
-            if (Option.isNone(maybeReporter)) {
-              return yield* new StrykerError({
-                message: `Reporter service not found in plugin context; configured reporters: ${
-                  prev.options.reporters.join(', ')
-                }`,
-              })
-            }
-            return maybeReporter.value
-          })
+          const reporterService = yield* resolveReporterService(
+            prev.options.reporters,
+            prev.plugins.layer,
+            prev.options,
+            prev.temporaryDirectoryPath,
+            (message) => new StrykerError({ message }),
+          )
           const raw: MutationTestRaw = { prev, reporterService }
           return raw
         }).pipe(Effect.provideContext(services)),

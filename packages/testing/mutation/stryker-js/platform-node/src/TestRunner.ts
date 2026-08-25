@@ -36,12 +36,11 @@ import * as Stream from 'effect/Stream'
 import * as ChildProcess from 'effect/unstable/process/ChildProcess'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 
+import { CommandRunnerUnsupportedOption } from './TestRunner.schema.js'
 import { type ChildProcessProxyError, makeChildProcessProxy } from './Worker.js'
 import type { IdGeneratorShape } from './Worker.js'
 import { ChildProcessCrashedError, OutOfMemoryError } from './Worker.schema.js'
-import type { WorkerMethodError } from './Worker.schema.js'
-
-import { CommandRunnerUnsupportedOption } from './TestRunner.schema.js'
+import type { WorkerFrameTooLargeError, WorkerMethodError } from './Worker.schema.js'
 
 // ---------------------------------------------------------------------------
 // Pooled runner — the child-process port
@@ -55,8 +54,7 @@ type TestRunnerWorkerShape = {
   mutantRun(options: MutantRunOptions): Promise<MutantRunResult>
 }
 
-type WorkerFailure = WorkerMethodError | ChildProcessCrashedError | OutOfMemoryError
-
+type WorkerFailure = WorkerMethodError | ChildProcessCrashedError | OutOfMemoryError | WorkerFrameTooLargeError
 /** What one worker needs to be spawned. */
 export interface ChildProcessTestRunnerParams {
   readonly options: StrykerOptions
@@ -67,7 +65,11 @@ export interface ChildProcessTestRunnerParams {
 }
 
 /** How a call on a pooled worker can fail. */
-export type PooledTestRunnerError = TestRunnerFailed | ChildProcessCrashedError | OutOfMemoryError
+export type PooledTestRunnerError =
+  | TestRunnerFailed
+  | ChildProcessCrashedError
+  | OutOfMemoryError
+  | WorkerFrameTooLargeError
 
 /**
  * A test runner in a child process, whose calls can fail the way a child process
@@ -94,6 +96,7 @@ const toRunnerFailure =
       Match.tag('WorkerMethodError', (e) => new TestRunnerFailed({ runnerName, phase, cause: e.message })),
       Match.tag('ChildProcessCrashedError', (e): PooledTestRunnerError => e),
       Match.tag('OutOfMemoryError', (e): PooledTestRunnerError => e),
+      Match.tag('WorkerFrameTooLargeError', (e): PooledTestRunnerError => e),
       Match.exhaustive,
     )
 

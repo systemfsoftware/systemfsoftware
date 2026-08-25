@@ -36,6 +36,7 @@ import { MergeCommand, mergeConfigsWorkflow } from './Config.workflow.js'
 import { IGNORE_PATTERN_CHARACTER, MUTATION_RANGE_REGEX } from './Project.workflow.js'
 import { StrykerError } from './stryker-error.schema.js'
 import { isCommandRunner } from './TestRunner.js'
+import { getAvailableParallelism } from './Worker.js'
 
 /**
  * Config-file names the rebuild removed, mapped to their remediation.
@@ -803,12 +804,7 @@ function migrateMaxConcurrentTestRunners(
       'DEPRECATED. Use of "maxConcurrentTestRunners" is deprecated. Please use "concurrency" instead.',
     )
     const concurrency = rawOptions['concurrency']
-    const availableParallelism = yield* Effect.sync(() => {
-      if (typeof globalThis.navigator === 'undefined') return 4
-      const hc = globalThis.navigator.hardwareConcurrency
-      if (typeof hc !== 'number') return 4
-      return hc
-    })
+    const availableParallelism = yield* Effect.sync(getAvailableParallelism)
     if (concurrency === undefined && maxConcurrent < availableParallelism - 1) {
       rawOptions['concurrency'] = maxConcurrent
     }

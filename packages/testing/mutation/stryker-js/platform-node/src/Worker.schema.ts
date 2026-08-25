@@ -93,8 +93,22 @@ export class ChildProcessCrashedError extends S.TaggedError<ChildProcessCrashedE
 }
 
 /**
- * The child process ran out of memory.
+ * An IPC frame exceeded the maximum allowed size before a delimiter was seen.
+ *
+ * Distinct from a crash or OOM: the peer violated the framing contract and the
+ * socket is closed to prevent unbounded string accumulation. Callers observe
+ * this rather than a generic {@link ChildProcessCrashedError} so the cause is
+ * distinguishable from an ordinary worker death.
  */
+export class WorkerFrameTooLargeError extends S.TaggedError<WorkerFrameTooLargeError>()(
+  'WorkerFrameTooLargeError',
+  {
+    byteLength: Wire.integer,
+    limit: Wire.integer,
+  },
+) {
+  readonly exitClass = 'InternalError' as const
+}
 export class OutOfMemoryError extends S.TaggedError<OutOfMemoryError>()('OutOfMemoryError', {
   pid: ProcessId,
   exitCode: Wire.integer,
