@@ -1,0 +1,14 @@
+{
+  "extends": "../../../../../stryker.config.base.json",
+  "mutate": [
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "!src/**/*.property.test.ts",
+    "!src/**/*.d.ts",
+    "!src/**/__tests__/**"
+  ],
+  "ignorers": [
+    "effect-schema-declarations",
+    "workflow-make-boundary"
+  ]
+}
