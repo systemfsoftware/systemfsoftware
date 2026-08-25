@@ -1,8 +1,8 @@
 import fs from 'fs'
 import { fileURLToPath, URL } from 'url'
 
-import { deepFreeze } from '@systemfsoftware/stryker-js-util'
 import * as S from 'effect/Schema'
+import { deepFreeze } from './config/config-freeze.js'
 
 import { PackageJsonSchema } from './stryker-package.schema.js'
 

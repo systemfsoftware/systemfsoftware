@@ -1,9 +1,19 @@
 /**
- * Surface-only re-export of the three configuration entry points the CLI
- * imports from core: `ConfigReader`, `defaultOptions`, `OptionsValidator`.
- * Wildcard-barrel entries are inadmissible (the plan's U7 ruling), so this
- * module enumerates the symbols explicitly. Each symbol is re-exported from
- * its source module — no local definitions, no behavior.
+ * Resolving a run's configuration: reading it from disk, validating it against
+ * the option schema, and the failures either can produce.
+ *
+ * A published entry point, so what it exports is what an embedder can reach.
  */
-export { ConfigReader } from './config-reader.js'
-export { defaultOptions, OptionsValidator } from './options-validator.js'
+export { CONFIG_SYNTAX_HELP, readConfig } from './config-reader.js'
+export {
+  ConfigError,
+  ConfigFileInvalidError,
+  ConfigFileNotFoundError,
+  ConfigFileUnreadableError,
+} from './config-reader.schema.js'
+export {
+  createDefaultOptions,
+  defaultOptions,
+  validateOptions,
+  type ValidationSchemaDocument,
+} from './options-validator.js'

@@ -1,3 +1,4 @@
+// node:path here parses file extensions - pure and platform-invariant, no I/O (REPO-A2).
 import path from 'path'
 
 import { type Ast, type AstByFormat, AstFormat } from '../syntax/index.js'

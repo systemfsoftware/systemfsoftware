@@ -4,22 +4,31 @@
  * report metrics, carries only the actionable statuses as per-mutant
  * entries, reads the report file name from the embedded config, and stays
  * under the 64 KB scanner limit even for an all-killed 2164-mutant report.
- * Run ids are unique across calls.
+ * Run ids are unique across calls. The envelope also carries every
+ * evaluator's verdict keyed by name, with `null` preserved so "nothing to
+ * report" is distinguishable from "passed".
  */
+import { NodePath } from '@effect/platform-node'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { ExitClass } from '@systemfsoftware/stryker-js-plugin-api/evaluate'
 import { Effect } from 'effect'
+import * as Path from 'effect/Path'
 import { expect } from 'vitest'
 
 import {
   buildVerdictEnvelope,
   generateRunId,
   VERDICT_ENVELOPE_SCHEMA_VERSION,
-} from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
+} from '@systemfsoftware/stryker-js-mutation-run'
 
 const Feature = makeFeature({ it, layer })
 
+const pathService = Effect.runSync(Path.Path.pipe(Effect.provide(NodePath.layer)))
+
 const RUN_ID = '01HZJ4QW2TB6N7P8K9M3X5Y7ZA'
+
+const BASE_PATH = '/project'
 
 const mutantOf = (
   id: string,
@@ -37,7 +46,7 @@ const mutantOf = (
 const reportOf = (
   mutants: schema.MutantResult[],
   config: Record<string, unknown> | undefined = {
-    jsonReporter: { fileName: 'reports/mutation/mutation.json' },
+    jsonReporter: { fileName: `${BASE_PATH}/reports/mutation/mutation.json` },
     disableBail: false,
   },
 ) => ({
@@ -84,10 +93,12 @@ Feature('Building the machine-mode verdict envelope')
           )),
         When('the verdict envelope is built')(
           'envelope',
-          (s) => Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID)),
+          (s) =>
+            Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, [], pathService)),
         ),
         Then('every named field is present and the actionable mutants are listed')((s) => {
           expect(s.envelope.schemaVersion).toBe(VERDICT_ENVELOPE_SCHEMA_VERSION)
+          expect(s.envelope.schemaVersion).toBe('1.1')
           expect(s.envelope.runId).toBe(RUN_ID)
           expect(s.envelope.mode).toBe('machine')
           expect(s.envelope.signal).toBe('tty')
@@ -106,6 +117,7 @@ Feature('Building the machine-mode verdict envelope')
           expect(s.envelope.reportFile).toBe('reports/mutation/mutation.json')
           expect(s.envelope.mutants).toHaveLength(2)
           expect(s.envelope.mutants.map((mutant) => mutant.id)).toEqual(['1', '3'])
+          expect(s.envelope.evaluatorVerdicts).toEqual([])
         }),
       ),
     )
@@ -123,7 +135,8 @@ Feature('Building the machine-mode verdict envelope')
           )),
         When('the verdict envelope is built')(
           'envelope',
-          (s) => Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'agent', RUN_ID)),
+          (s) =>
+            Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'agent', RUN_ID, BASE_PATH, [], pathService)),
         ),
         Then('each mutant entry carries file, location, mutator, replacement and status')((s) => {
           expect(s.envelope.mutants).toEqual([
@@ -152,6 +165,7 @@ Feature('Building the machine-mode verdict envelope')
               status: 'NoCoverage',
             },
           ])
+          expect(s.envelope.evaluatorVerdicts).toEqual([])
         }),
       ),
     )
@@ -169,7 +183,8 @@ Feature('Building the machine-mode verdict envelope')
           )),
         When('the verdict envelope is built')(
           'envelope',
-          (s) => Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID)),
+          (s) =>
+            Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, [], pathService)),
         ),
         Then('only the survivor is listed and every mutant is counted')((s) => {
           expect(s.envelope.mutants).toEqual([
@@ -196,6 +211,7 @@ Feature('Building the machine-mode verdict envelope')
               countedTotal.ignored +
               countedTotal.pending,
           ).toBe(3)
+          expect(s.envelope.evaluatorVerdicts).toEqual([])
         }),
       ),
     )
@@ -213,11 +229,13 @@ Feature('Building the machine-mode verdict envelope')
           )),
         When('the verdict envelope is built')(
           'envelope',
-          (s) => Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID)),
+          (s) =>
+            Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, [], pathService)),
         ),
         Then('the mutants array is present and empty')((s) => {
           expect(s.envelope.mutants).toEqual([])
           expect(s.envelope.counts.killed).toBe(3)
+          expect(s.envelope.evaluatorVerdicts).toEqual([])
         }),
       ),
     )
@@ -228,15 +246,17 @@ Feature('Building the machine-mode verdict envelope')
         Given('a report whose embedded config names a custom file')('report', () =>
           Effect.succeed(
             reportOf([mutantOf('1', 'Killed', LOCATION_A)], {
-              jsonReporter: { fileName: 'custom/report.json' },
+              jsonReporter: { fileName: `${BASE_PATH}/custom/report.json` },
             }),
           )),
         When('the verdict envelope is built')(
           'envelope',
-          (s) => Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'flag', RUN_ID)),
+          (s) =>
+            Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'flag', RUN_ID, BASE_PATH, [], pathService)),
         ),
         Then('the configured file name rides along')((s) => {
           expect(s.envelope.reportFile).toBe('custom/report.json')
+          expect(s.envelope.evaluatorVerdicts).toEqual([])
         }),
       ),
     )
@@ -247,7 +267,8 @@ Feature('Building the machine-mode verdict envelope')
         Given('an empty report')('report', () => Effect.succeed(reportOf([]))),
         When('the verdict envelope is built')(
           'envelope',
-          (s) => Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID)),
+          (s) =>
+            Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, [], pathService)),
         ),
         Then('there is no score, no report file and no mutants')((s) => {
           expect(s.envelope.score).toBeNull()
@@ -255,6 +276,7 @@ Feature('Building the machine-mode verdict envelope')
           expect(s.envelope.mutants).toEqual([])
           expect(s.envelope.counts.killed).toBe(0)
           expect(s.envelope.counts.survived).toBe(0)
+          expect(s.envelope.evaluatorVerdicts).toEqual([])
         }),
       ),
     )
@@ -268,11 +290,13 @@ Feature('Building the machine-mode verdict envelope')
         ),
         When('the verdict envelope is built')(
           'envelope',
-          (s) => Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID)),
+          (s) =>
+            Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, [], pathService)),
         ),
         Then('there is nothing to score')((s) => {
           expect(s.envelope.score).toBeNull()
           expect(s.envelope.counts.compileErrors).toBe(1)
+          expect(s.envelope.evaluatorVerdicts).toEqual([])
         }),
       ),
     )
@@ -290,11 +314,71 @@ Feature('Building the machine-mode verdict envelope')
           })),
         When('the envelope is serialized')(
           'line',
-          (s) => Effect.sync(() => JSON.stringify(buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID))),
+          (s) =>
+            Effect.sync(() =>
+              JSON.stringify(buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, [], pathService))
+            ),
         ),
         Then('the line stays under the 64 KB scanner limit')((s) => {
           expect(s.line).toBeDefined()
           expect(Buffer.byteLength(s.line)).toBeLessThan(64 * 1024)
+        }),
+      ),
+    )
+
+    scenario(
+      'Should_CarryEvaluatorVerdicts_When_EvaluatorsReturnMixedResults',
+      Gherkin.Do.pipe(
+        Given('a report')('report', () => Effect.succeed(reportOf([mutantOf('1', 'Killed', LOCATION_A)]))),
+        When('the verdict envelope is built with evaluator verdicts')(
+          'envelope',
+          (s) =>
+            Effect.sync(() =>
+              buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, [
+                { name: 'gate-a', verdict: null },
+                { name: 'gate-b', verdict: ExitClass.VerdictFail },
+              ], pathService)
+            ),
+        ),
+        Then('the envelope lists each evaluator by name with its verdict including null')((s) => {
+          expect(s.envelope.evaluatorVerdicts).toEqual([
+            { name: 'gate-a', verdict: null },
+            { name: 'gate-b', verdict: ExitClass.VerdictFail },
+          ])
+          expect(s.envelope.schemaVersion).toBe('1.1')
+        }),
+      ),
+    )
+
+    scenario(
+      'Should_PreserveEvaluatorIdentity_When_MultipleEvaluatorsReport',
+      Gherkin.Do.pipe(
+        Given('a report with a survivor')(
+          'report',
+          () => Effect.succeed(reportOf([mutantOf('1', 'Survived', LOCATION_A, { replacement: '-' })])),
+        ),
+        When('the envelope is built with those verdicts')(
+          'envelope',
+          (s) =>
+            Effect.sync(() =>
+              buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, [
+                { name: 'coverage-gate', verdict: null },
+                { name: 'threshold-gate', verdict: ExitClass.VerdictFail },
+                { name: 'custom-gate', verdict: ExitClass.ConfigError },
+              ], pathService)
+            ),
+        ),
+        Then('every evaluator entry carries its contribution name')((s) => {
+          expect(s.envelope.evaluatorVerdicts.map((entry) => entry.name)).toEqual([
+            'coverage-gate',
+            'threshold-gate',
+            'custom-gate',
+          ])
+          expect(s.envelope.evaluatorVerdicts.map((entry) => entry.verdict)).toEqual([
+            null,
+            ExitClass.VerdictFail,
+            ExitClass.ConfigError,
+          ])
         }),
       ),
     )

@@ -2,9 +2,7 @@ import fs from 'fs'
 import path from 'path'
 
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { TestStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
-import { createVitestTestRunnerFactory } from '@systemfsoftware/stryker-js-vitest-runner'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 
@@ -15,17 +13,9 @@ import {
   expectSurvived,
   expectTestResults,
 } from './__fixtures__/assertions.js'
-import {
-  createDryRunOptions,
-  createMutant,
-  createMutantRunOptions,
-  createStrykerOptions,
-  createTestInjector,
-  createVitestRunnerOptions,
-} from './__fixtures__/factories.js'
+import { createDryRunOptions, createMutant, createMutantRunOptions } from './__fixtures__/factories.js'
 import { TempTestDirectorySandbox } from './__fixtures__/temp-test-directory-sandbox.js'
-import { runnerContext } from './__fixtures__/vitest-runner-harness.js'
-
+import { runnerContext, twoRunnersContext } from './__fixtures__/vitest-runner-harness.js'
 const Feature = makeFeature({ it, layer })
 
 const test1 = 'tests/add.spec.ts#add should be able to add two numbers'
@@ -667,43 +657,12 @@ Feature('Driving the Vitest runner through the Stryker interface')
     scenario(
       'two runners in one process write distinct setup files and dispose only their own',
       Gherkin.Do.pipe(
-        Given('two runners on separate simple-project sandboxes')('runners', () =>
-          Effect.promise(async () => {
-            const sandbox1 = new TempTestDirectorySandbox('simple-project')
-            await sandbox1.init()
-            const options1 = createStrykerOptions()
-            options1.vitest = createVitestRunnerOptions({ related: false })
-            const sut1 = createTestInjector(options1)
-              .provideValue(commonTokens.sandboxDirectory, sandbox1.tmpDir)
-              .injectFunction(createVitestTestRunnerFactory('__stryker2__'))
-            const sandbox2 = new TempTestDirectorySandbox('simple-project')
-            await sandbox2.init()
-            const sut2 = createTestInjector(options1)
-              .provideValue(commonTokens.sandboxDirectory, sandbox2.tmpDir)
-              .injectFunction(createVitestTestRunnerFactory('__stryker2__'))
-            await sut1.init()
-            await sut2.init()
-            const setupFile1 = path.resolve(
-              sandbox1.tmpDir,
-              `stryker-setup-${process.pid}.js`,
-            )
-            const setupFile2 = path.resolve(
-              sandbox2.tmpDir,
-              `stryker-setup-${process.pid}.js`,
-            )
-            return { sandbox1, sandbox2, sut1, sut2, setupFile1, setupFile2 }
-          })),
-        When('the second runner is disposed')('disposed', (s) =>
-          Effect.promise(async () => {
-            await s.runners.sut2.dispose()
-          })),
+        Given('two runners on separate simple-project sandboxes')('runners', () => twoRunnersContext('simple-project')),
+        When('the second runner is disposed')('disposed', (s) => Effect.promise(() => s.runners.runner2.sut.dispose())),
         Then('the first setup file still exists and the second is gone')((s) =>
-          Effect.promise(async () => {
-            await fs.promises.access(s.runners.setupFile1)
-            await expect(fs.promises.access(s.runners.setupFile2)).rejects.toThrow('ENOENT')
-            await s.runners.sut1.dispose()
-            await s.runners.sandbox1.dispose()
-            await s.runners.sandbox2.dispose()
+          Effect.gen(function*() {
+            yield* Effect.promise(() => fs.promises.access(s.runners.setupFile1))
+            yield* Effect.promise(() => expect(fs.promises.access(s.runners.setupFile2)).rejects.toThrow('ENOENT'))
           })
         ),
       ),

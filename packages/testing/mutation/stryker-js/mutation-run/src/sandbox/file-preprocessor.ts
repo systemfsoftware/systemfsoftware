@@ -1,10 +1,15 @@
-import { Project } from '../project/project.js'
+import type * as Effect from 'effect/Effect'
+import type * as FileSystem from 'effect/FileSystem'
+import type * as Path from 'effect/Path'
+import type { PlatformError } from 'effect/PlatformError'
+
+import type { Project } from '../project/project.js'
 
 /**
- * A preprocessor changes files before writing them to the sandbox.
- * Stuff like rewriting references tsconfig.json files or adding // @ts-nocheck
- * This is a private api that we might want to open up in the future.
+ * A preprocessor refines files before they are written to the sandbox.
+ * It rewrites references in tsconfig files or inserts `// @ts-nocheck`.
+ * The surface is private and may be published later.
  */
-export interface FilePreprocessor {
-  preprocess(files: Project): Promise<void>
-}
+export type FilePreprocessor = (
+  project: Project,
+) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path>

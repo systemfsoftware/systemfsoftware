@@ -1,35 +1,30 @@
-import { type Disposable } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-
-import { injectionTokens } from './plugins/index.js'
+import * as Context from 'effect/Context'
+import * as Effect from 'effect/Effect'
+import * as Layer from 'effect/Layer'
 
 export type ExitHandler = () => void
 
-/**
- * Runs registered cleanup handlers when the process exits. Signal handling
- * was deliberately removed: SIGINT/SIGTERM are owned by the runMain bootstrap
- * (fiber interruption + `128 + n` at teardown), and a synchronous
- * `process.exit` in a signal handler raced the runtime and killed finalizers.
- * The `exit` event still fires for both `process.exit` and a drained loop.
- */
-export class UnexpectedExitHandler implements Disposable {
-  private readonly unexpectedExitHandlers: ExitHandler[] = []
+export class UnexpectedExitHandler extends Context.Service<
+  UnexpectedExitHandler,
+  { readonly registerHandler: (handler: ExitHandler) => Effect.Effect<void> }
+>()(
+  '@systemfsoftware/stryker-js-mutation-run/UnexpectedExitHandler',
+) {}
 
-  public static readonly inject = [injectionTokens.process] as const
-  constructor(
-    private readonly process: Pick<NodeJS.Process, 'off' | 'on'>,
-  ) {
-    process.on('exit', this.handleExit)
-  }
-
-  private readonly handleExit = () => {
-    this.unexpectedExitHandlers.forEach((handler) => handler())
-  }
-
-  public registerHandler(handler: ExitHandler): void {
-    this.unexpectedExitHandlers.push(handler)
-  }
-
-  public dispose(): void {
-    this.process.off('exit', this.handleExit)
-  }
-}
+export const makeUnexpectedExitHandlerLayer = (
+  process: Pick<NodeJS.Process, 'on' | 'off'>,
+): Layer.Layer<UnexpectedExitHandler> =>
+  Layer.effect(
+    UnexpectedExitHandler,
+    Effect.gen(function*() {
+      const handlers: ExitHandler[] = []
+      const handleExit = () => {
+        for (const handler of handlers) handler()
+      }
+      process.on('exit', handleExit)
+      yield* Effect.addFinalizer(() => Effect.sync(() => process.off('exit', handleExit)))
+      return {
+        registerHandler: (handler: ExitHandler) => Effect.sync(() => handlers.push(handler)).pipe(Effect.asVoid),
+      }
+    }),
+  )

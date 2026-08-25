@@ -1,20 +1,18 @@
 import babel, { type NodePath, type types } from '@babel/core'
 
+import { createBabelFile } from '../babel/babel-file.js'
+import { placeHeaderIfNeeded } from '../babel/instrumentation-header.js'
+import { isImportDeclaration, isTypeNode } from '../babel/type-guards.js'
 import { allMutantPlacers, type MutantPlacer, throwPlacementError } from '../mutant-placers/index.js'
-import { type Mutable, Mutant } from '../mutant.js'
+import { applyMutant, type Mutable, type Mutant } from '../mutant.js'
 import { allMutators } from '../mutators/index.js'
+import type { MutatorContext } from '../mutators/mutator.js'
 import { type ScriptFormat } from '../syntax/index.js'
-import { createBabelFile } from '../util/babel-file.js'
-import {
-  isImportDeclaration,
-  isTypeNode,
-  locationIncluded,
-  locationOverlaps,
-  placeHeaderIfNeeded,
-} from '../util/syntax-helpers.js'
+import { locationIncluded, locationOverlaps } from '../syntax/location.js'
 
-import { DirectiveBookkeeper } from './directive-bookkeeper.js'
-import { IgnorerBookkeeper } from './ignorer-bookkeeper.js'
+import { findIgnoreReason, processStrykerDirectives, rootRule, type Rule } from './directive-bookkeeper.js'
+import { createIgnorerBookkeeper, currentIgnoreMessage, enterNode, leaveNode } from './ignorer-bookkeeper.js'
+import { collect } from './mutant-collector.js'
 
 import { type AstTransformer } from './index.js'
 
@@ -30,51 +28,40 @@ type PlacementMap = Map<types.Node, MutantsPlacement<types.Node>>
 export const transformBabel: AstTransformer<ScriptFormat> = (
   { root, originFileName, rawContent, offset },
   mutantCollector,
-  { options, mutateDescription, logger },
+  { options, mutateDescription },
   mutators = allMutators,
   mutantPlacers = allMutantPlacers,
 ) => {
-  // Wrap the AST in a `new File`, so `nodePath.buildCodeFrameError` works
-  // https://github.com/babel/babel/issues/11889
   const file = createBabelFile(originFileName, rawContent, root)
 
-  // Create a placementMap for the mutation switching bookkeeping
   const placementMap: PlacementMap = new Map()
 
-  // Create the bookkeeper responsible for the // Stryker ... directives
-  const directiveBookkeeper = new DirectiveBookkeeper(
-    logger,
-    mutators,
-    originFileName,
-  )
+  let directiveRule: Rule = rootRule
+  const mutatorEntries = Object.entries(mutators)
+  const allMutatorNames = mutatorEntries.map(([name]) => name.toLowerCase())
 
-  // The ignorer bookkeeper is responsible for keeping track of the ignored node and the reason why it is ignored
-  const ignorerBookkeeper = new IgnorerBookkeeper(options.ignorers)
+  let ignorerState = createIgnorerBookkeeper(options.ignorers)
 
-  // Now start the actual traversing of the AST
-  //
-  // On the way down:
-  // * Treat the tree as immutable.
-  // * Identify the nodes that can be used to place mutants on in the placement map.
-  // * Generate the mutants on each node.
-  //    * When a node generated mutants, do a short walk back up and register them in the placement map
-  //    * Call the `applied` method using the placement node, that way the mutant will capture the AST with mutation all the way to the placement node
-  //
-  // On the way up:
-  // * If this node has mutants in the placementMap, place them in the AST.
-  //
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+  const warnings: string[] = []
+
   traverse(file.ast, {
     enter(path) {
-      directiveBookkeeper.processStrykerDirectives(path.node)
+      const result = processStrykerDirectives(
+        directiveRule,
+        path.node,
+        allMutatorNames,
+        originFileName,
+      )
+      directiveRule = result.rule
+      warnings.push(...result.warnings)
       if (shouldSkip(path)) {
         path.skip()
       } else {
-        ignorerBookkeeper.enterNode(path)
+        ignorerState = enterNode(ignorerState, path)
         addToPlacementMapIfPossible(path)
         if (shouldMutate(path)) {
           const mutantsToPlace = collectMutants(path)
-          if (mutantsToPlace.length) {
+          if (mutantsToPlace.length > 0) {
             const placementPath = path.find((ancestor) => placementMap.has(ancestor.node))
             if (placementPath) {
               const placement = placementMap.get(placementPath.node)
@@ -82,7 +69,7 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
                 throw new Error('Placement not found for node')
               }
               const { appliedMutants } = placement
-              mutantsToPlace.forEach((mutant) => appliedMutants.set(mutant, mutant.applied(placementPath.node)))
+              mutantsToPlace.forEach((mutant) => appliedMutants.set(mutant, applyMutant(mutant, placementPath.node)))
             } else {
               throw new Error(
                 `Mutants cannot be placed. This shouldn't happen! Unplaced mutants: ${
@@ -96,38 +83,33 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
     },
     exit(path) {
       placeMutantsIfNeeded(path)
-      ignorerBookkeeper.leaveNode(path)
+      ignorerState = leaveNode(ignorerState, path)
     },
   })
 
   placeHeaderIfNeeded(mutantCollector, originFileName, options, root)
 
-  /**
-   * If this node can be used to place mutants on, add to the placement map
-   */
-  function addToPlacementMapIfPossible(path: NodePath) {
+  return warnings
+
+  function addToPlacementMapIfPossible(path: NodePath): void {
     const placer = mutantPlacers.find((p) => p.canPlace(path))
-    if (placer) {
+    if (placer !== undefined) {
       placementMap.set(path.node, { appliedMutants: new Map(), placer })
     }
   }
-  /**
-   * Don't traverse import declarations, decorators and nodes that don't have overlap with the selected mutation ranges
-   */
-  function shouldSkip(path: NodePath) {
+
+  function shouldSkip(path: NodePath): boolean {
     return (
       isTypeNode(path) ||
       isImportDeclaration(path) ||
       path.isDecorator() ||
       !mutateDescription ||
       (Array.isArray(mutateDescription) &&
-        mutateDescription.every(
-          (range) => !locationOverlaps(range, getNodeLocation(path.node)),
-        ))
+        mutateDescription.every((range) => !locationOverlaps(range, getNodeLocation(path.node))))
     )
   }
 
-  function shouldMutate(path: NodePath) {
+  function shouldMutate(path: NodePath): boolean {
     return (
       mutateDescription === true ||
       (Array.isArray(mutateDescription) &&
@@ -135,12 +117,9 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
     )
   }
 
-  /**
-   * Place mutants that are assigned to the current node path (on exit)
-   */
-  function placeMutantsIfNeeded(path: NodePath) {
+  function placeMutantsIfNeeded(path: NodePath): void {
     const mutantsPlacement = placementMap.get(path.node)
-    if (mutantsPlacement?.appliedMutants.size) {
+    if (mutantsPlacement !== undefined && mutantsPlacement.appliedMutants.size > 0) {
       try {
         mutantsPlacement.placer.place(path, mutantsPlacement.appliedMutants)
         path.skip()
@@ -157,39 +136,27 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
     }
   }
 
-  /**
-   * Collect the mutants for the current node and return the non-ignored.
-   */
-  function collectMutants(path: NodePath) {
-    return [...mutate(path)]
-      .map((mutable) => mutantCollector.collect(originFileName, path.node, mutable, offset))
+  function collectMutants(path: NodePath): Mutant[] {
+    return [...mutate(path)].map((mutable) => collect(mutantCollector, originFileName, path.node, mutable, offset))
       .filter((mutant) => !mutant.ignoreReason)
   }
 
-  /**
-   * Generate mutants for the current node.
-   * @yields {Mutable} A mutable describing the mutant to be placed
-   */
-  function* mutate(node: NodePath): Iterable<Mutable> {
-    for (const mutator of mutators) {
-      for (const replacement of mutator.mutate(node)) {
-        const ignoreReason = directiveBookkeeper.findIgnoreReason(
-          getNodeLocation(node.node).start.line,
-          mutator.name,
-        ) ??
-          findExcludedMutatorIgnoreReason(mutator.name) ??
-          ignorerBookkeeper.currentIgnoreMessage
+  function* mutate(path: NodePath): Iterable<Mutable> {
+    const context = toMutatorContext(path)
+    for (const [mutatorName, mutate] of mutatorEntries) {
+      for (const replacement of mutate(path.node, context)) {
+        const ignoreReason = findIgnoreReason(directiveRule, mutatorName, getNodeLocation(path.node).start.line) ??
+          findExcludedMutatorIgnoreReason(mutatorName) ??
+          currentIgnoreMessage(ignorerState)
         yield {
           replacement,
-          mutatorName: mutator.name,
+          mutatorName,
           ...(ignoreReason === undefined ? {} : { ignoreReason }),
         }
       }
     }
 
-    function findExcludedMutatorIgnoreReason(
-      mutatorName: string,
-    ): string | undefined {
+    function findExcludedMutatorIgnoreReason(mutatorName: string): string | undefined {
       if (options.excludedMutations.includes(mutatorName)) {
         return `Ignored because of excluded mutation "${mutatorName}"`
       } else {
@@ -199,12 +166,26 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
   }
 }
 
+function toMutatorContext(path: NodePath): MutatorContext {
+  const ancestors: types.Node[] = []
+  let current: NodePath | null | undefined = path.parentPath
+  while (current !== null && current !== undefined) {
+    ancestors.push(current.node)
+    current = current.parentPath
+  }
+  return {
+    parent: ancestors[0],
+    grandParent: ancestors[1],
+    ancestors,
+  }
+}
+
 function getNodeLocation(
   node: types.Node,
 ): { start: { line: number; column: number }; end: { line: number; column: number } } {
   const loc = node.loc
   if (
-    loc === undefined || loc === null || loc.start === null || loc.start === undefined || loc.end === null ||
+    loc === null || loc === undefined || loc.start === null || loc.start === undefined || loc.end === null ||
     loc.end === undefined
   ) {
     throw new Error('Babel node without location')

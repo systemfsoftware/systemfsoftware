@@ -3,9 +3,7 @@ import { vi } from 'vitest'
 
 import { type Mutant, type StrykerOptions, StrykerOptionsSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
-import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import type { DryRunOptions, MutantRunOptions } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
-import { createInjector } from 'typed-inject'
 
 export interface VitestRunnerOptions {
   dir?: string
@@ -17,10 +15,7 @@ export interface VitestRunnerOptionsWithStrykerOptions extends StrykerOptions {
   vitest: VitestRunnerOptions
 }
 
-// Decoding `{}` through the schema applies every decoding default the
-// declaration carries — nested section defaults included — so the options
-// factory returns a complete StrykerOptions instead of hand-copying ~45
-// schema defaults that rot.
+// Fixture: constructing the default options document where throwing is the assertion — no Effect channel exists.
 const fillStrykerDefaults = (): StrykerOptions => S.decodeSync(StrykerOptionsSchema)({})
 
 export function createVitestRunnerOptions(
@@ -58,14 +53,6 @@ export function createStrykerOptions(
     ...overrides,
   }
 }
-
-export const createTestInjector = (
-  options: VitestRunnerOptionsWithStrykerOptions,
-  logger: Logger = createLogger(),
-) =>
-  createInjector()
-    .provideValue(commonTokens.options, options)
-    .provideValue(commonTokens.logger, logger)
 
 export function createMutant(overrides?: Partial<Mutant>): Mutant {
   return {

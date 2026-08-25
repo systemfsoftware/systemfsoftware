@@ -1,37 +1,25 @@
 import babel from '@babel/core'
 
-import { deepCloneNode } from '../util/index.js'
+import { deepCloneNode } from '../babel/clone.js'
 
-import { type NodeMutator } from './index.js'
+import type { Mutator, MutatorContext } from './mutator.js'
 
 const { types } = babel
 
-enum UnaryOperator {
-  '+' = '-',
-  '-' = '+',
-  '~' = '',
-}
+const UnaryOperator = {
+  '+': '-',
+  '-': '+',
+  '~': '',
+} as const
 
-export const unaryOperatorMutator: NodeMutator = {
-  name: 'UnaryOperator',
-
-  *mutate(path) {
-    if (
-      path.isUnaryExpression() &&
-      isSupported(path.node.operator) &&
-      path.node.prefix
-    ) {
-      const mutatedOperator = UnaryOperator[path.node.operator]
-      const replacement = isPlusOrMinus(mutatedOperator)
-        ? types.unaryExpression(
-          mutatedOperator,
-          deepCloneNode(path.node.argument),
-        )
-        : deepCloneNode(path.node.argument)
-
-      yield replacement
-    }
-  },
+export const unaryOperatorMutator: Mutator = function*(node, _context: MutatorContext) {
+  if (types.isUnaryExpression(node) && isSupported(node.operator) && node.prefix) {
+    const mutatedOperator = UnaryOperator[node.operator]
+    const replacement = isPlusOrMinus(mutatedOperator)
+      ? types.unaryExpression(mutatedOperator, deepCloneNode(node.argument))
+      : deepCloneNode(node.argument)
+    yield replacement
+  }
 }
 
 function isSupported(operator: string): operator is keyof typeof UnaryOperator {

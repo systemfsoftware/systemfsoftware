@@ -1,196 +1,101 @@
-import { type MutantResult, type PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { createInjector, type Injector } from 'typed-inject'
+import type { MutantResult, PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import * as Clock from 'effect/Clock'
+import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 
-import { ConfigError, retrieveCause } from './errors.js'
-import { LoggingBackend, provideLogging, provideLoggingBackend } from './logging/index.js'
-import type { ResolvedMode } from './output-mode.js'
-import { injectionTokens } from './plugins/index.js'
-import type { RunEventSink, RunPhase } from './run-event.js'
-import {
-  DryRunExecutor,
-  MutantInstrumenterExecutor,
-  MutationTestExecutor,
-  PrepareExecutor,
-  type PrepareExecutorArgs,
-  type PrepareExecutorContext,
-} from './run-stages/index.js'
+import { RunEnvironment, type RunEnvironmentShape } from './run-environment.js'
+import type { RunPhase } from './run-event.js'
+import type {
+  DryRunStage,
+  InstrumentStage,
+  MutationTestStage,
+  PrepareStage,
+  RunOutcome,
+} from './run-stages/stage-results.js'
 
-type MutationRunContext = PrepareExecutorContext & {
-  [injectionTokens.loggingSink]: LoggingBackend
+/**
+ * The four stages, as values.
+ *
+ * The chain is one type: each stage's input is the previous stage's output, so
+ * mis-ordering them is a compile error rather than a runtime one.
+ *
+ * A caller supplies them, which is what makes a run testable without a sandbox,
+ * a child process or a plugin on disk — every dependency a stage needs arrives
+ * as an argument or a requirement in its own signature.
+ */
+export interface MutationRunStages<E, R> {
+  readonly prepare: PrepareStage<E, R>
+  readonly instrument: InstrumentStage<E, R>
+  readonly dryRun: DryRunStage<E, R>
+  readonly mutationTest: MutationTestStage<E, R>
 }
 
 /**
- * What the host (the CLI composition root) resolved once and hands to core
- * alongside the cli options: the log descriptor and its colour flag, the
- * run-event sink, and the run's identity and timing. Core receives these as
- * data — it never probes the terminal — and an unwired host is a compile
- * error, never a silent no-op (R2).
+ * Run mutation testing.
+ *
+ * Every phase event, and the elapsed time on it, comes from one sink and one
+ * clock zero, both read once from `RunEnvironment`. The `Reporter` port exposes
+ * no hook before the dry run, so `prepare` — the first observable moment of a
+ * run — can only be announced from here.
+ *
+ * There is no `try`/`catch` and no `finally`. The container version disposed a
+ * root injector in a `finally` and preserved the temp directory by reaching into
+ * a child injector from a `catch` to set `removeDuringDisposal = false` on a
+ * shared object. Both are scope concerns: a resource's lifetime belongs to the
+ * scope that acquired it, and whether to keep the sandbox is a decision about
+ * the run's `Exit`, which a finalizer can read without a mutable flag and
+ * without the error having to travel through a second channel to be observed.
+ *
+ * Returns the results and the run's verdict - the most severe class the score
+ * and every evaluator reported. It does not decide the process exit code, log
+ * the failure, or render anything: those are the host's, and a library that
+ * does them is a library you cannot embed. The host maps the verdict to a
+ * code; dropping it here is what made a failing score exit 0.
  */
-export interface StrykerHostOptions {
-  /** The writable the logging backend writes to (stderr in machine mode, stdout otherwise). */
-  readonly loggerConsoleOut: NodeJS.WriteStream
-  readonly showColors: boolean
-  readonly runEventSink: RunEventSink
-  /** The run id shared with the stream header and the verdict envelope. */
-  readonly runId: string
-  /** The mode resolved once at the edge, and the signal that decided it. */
-  readonly resolvedMode: ResolvedMode
-  readonly progressEnabled: boolean
-  readonly clearTextEnabled: boolean
-  /** The run's clock zero: `elapsedMs` values measure from here. */
-  readonly runStartedAt: number
-  /** The module specifiers whose `strykerPlugins` the run loads, resolved by the host (U4). */
-  readonly reporterPluginModules: string[]
-}
+export const runMutationTest = <E, R>(
+  stages: MutationRunStages<E, R>,
+  cliOptions: PartialStrykerOptions,
+  targetMutatePatterns?: string[],
+): Effect.Effect<RunOutcome, E, R | RunEnvironment> =>
+  Effect.gen(function*() {
+    const env = yield* RunEnvironment
 
-/**
- * The main Stryker class.
- * It provides a single `runMutationTest()` function which runs mutation testing:
- */
-export class Stryker {
-  /**
-   * @class
-   * @param cliOptions The cli options.
-   * @param hostOptions What the host resolved for this run, see {@link StrykerHostOptions}.
-   * @param injectorFactory The injector factory, for testing purposes only
-   */
-  constructor(
-    private readonly cliOptions: PartialStrykerOptions,
-    private readonly hostOptions: StrykerHostOptions,
-    private readonly injectorFactory = createInjector,
-  ) {}
-
-  public async runMutationTest(): Promise<MutantResult[]> {
-    const rootInjector = this.injectorFactory()
-    try {
-      // The log descriptor and the colour flag arrive already resolved
-      // (U13): machine mode keeps stdout exclusively for the NDJSON stream,
-      // so the host points the logging backend at stderr; human mode keeps
-      // the stdout sink. The fix is the descriptor, never the log level — a
-      // level change would hide the diagnostics the human path wants and
-      // would leave the descriptor wrong for the next caller.
-      const prepareInjector = provideLogging(
-        await provideLoggingBackend(
-          rootInjector,
-          this.hostOptions.loggerConsoleOut,
-          this.hostOptions.showColors,
-        ),
-      )
-        .provideValue(injectionTokens.reporterOverride, undefined)
-        .provideValue(injectionTokens.runEventSink, this.hostOptions.runEventSink)
-        .provideValue(injectionTokens.runId, this.hostOptions.runId)
-        .provideValue(injectionTokens.resolvedMode, this.hostOptions.resolvedMode)
-        .provideValue(
-          injectionTokens.progressEnabled,
-          this.hostOptions.progressEnabled,
-        )
-        .provideValue(
-          injectionTokens.clearTextEnabled,
-          this.hostOptions.clearTextEnabled,
-        )
-        .provideValue(injectionTokens.runStartedAt, this.hostOptions.runStartedAt)
-        .provideValue(
-          injectionTokens.reporterPluginModules,
-          this.hostOptions.reporterPluginModules,
-        )
-      return await Stryker.run(prepareInjector, {
-        cliOptions: this.cliOptions,
-        targetMutatePatterns: undefined,
+    const emitPhase = (phase: RunPhase): Effect.Effect<void> =>
+      Effect.gen(function*() {
+        const now = yield* Clock.currentTimeMillis
+        env.runEventSink({
+          kind: 'phase',
+          phase,
+          elapsedMs: now - env.runStartedAt,
+        })
       })
-    } finally {
-      await rootInjector.dispose()
-    }
-  }
+    yield* emitPhase('prepare')
+    const prepared = yield* stages.prepare({ cliOptions, targetMutatePatterns })
 
-  /**
-   * Does the actual mutation testing.
-   * Note: this is a public static method, so it can be reused from `StrykerServer`
-   * @internal
-   */
-  static async run(
-    mutationRunInjector: Injector<MutationRunContext>,
-    args: PrepareExecutorArgs,
-  ): Promise<MutantResult[]> {
-    // Resolved once, at the top: the phase pushes and their elapsed times
-    // share one sink and one clock zero.
-    const sink = mutationRunInjector.resolve(injectionTokens.runEventSink)
-    const runStartedAt = mutationRunInjector.resolve(injectionTokens.runStartedAt)
-    const emitPhase = (phase: RunPhase): void => {
-      sink({ kind: 'phase', phase, elapsedMs: Date.now() - runStartedAt })
-    }
-    try {
-      // 1. Prepare. Load Stryker configuration, load the input files
-      // U13 — phase events (R18, KTD14): the Reporter interface exposes no
-      // hook before the dry run, so the phases are pushed here, from the
-      // executor chain, immediately before each stage. `prepare` is the
-      // first observable moment of the run — the true start of the silent
-      // window R18 exists to cover. Whether an event renders is the host
-      // sink's decision, not core's.
-      emitPhase('prepare')
-      const prepareExecutor = mutationRunInjector.injectClass(PrepareExecutor)
-      const mutantInstrumenterInjector = await prepareExecutor.execute(args)
+    yield* emitPhase('instrument')
+    const instrumented = yield* stages.instrument(prepared)
 
-      try {
-        // 2. Mutate and instrument the files and write to the sandbox.
-        emitPhase('instrument')
-        const mutantInstrumenter = mutantInstrumenterInjector.injectClass(
-          MutantInstrumenterExecutor,
-        )
-        const dryRunExecutorInjector = await mutantInstrumenter.execute()
+    yield* emitPhase('dry-run')
+    const dryRun = yield* stages.dryRun(instrumented)
 
-        // 3. Perform a 'dry run' (initial test run). Runs the tests without active mutants and collects coverage.
-        emitPhase('dry-run')
-        const dryRunExecutor = dryRunExecutorInjector.injectClass(DryRunExecutor)
-        const mutationRunExecutorInjector = await dryRunExecutor.execute()
+    yield* emitPhase('mutation-test')
+    return yield* stages.mutationTest(dryRun)
+  })
 
-        // 4. Actual mutation testing. Will check every mutant and if valid run it in an available test runner.
-        emitPhase('mutation-test')
-        const mutationRunExecutor = mutationRunExecutorInjector.injectClass(MutationTestExecutor)
-        const mutantResults = await mutationRunExecutor.execute()
+/**
+ * Whether a finished run should leave its temp directory on disk.
+ *
+ * A pure decision over the run's outcome and one option, which is why it is
+ * here and not inside a `catch`: a failed run's temp directory is the only
+ * evidence left of what it was doing, and `cleanTempDir: 'always'` is the
+ * caller saying they want it gone regardless.
+ *
+ * `cleanTempDir` is `'always' | boolean` in the option domain, so the three
+ * cases are distinct and the literal is the one that overrides a failure.
+ */
+export const shouldKeepTempDir = (
+  exit: Exit.Exit<unknown, unknown>,
+  cleanTempDir: 'always' | boolean,
+): boolean => Exit.isFailure(exit) && cleanTempDir !== 'always'
 
-        return mutantResults
-      } catch (error) {
-        // `cleanTempDir` is `'always' | boolean` in the option domain; the
-        // plugin-api schema's decoded type currently collapses the string
-        // literal, so the "not 'always'" test is expressed against the
-        // boolean members of the domain instead of a literal comparison.
-        const cleanTempDir = mutantInstrumenterInjector.resolve(
-          commonTokens.options,
-        ).cleanTempDir
-        if (cleanTempDir === false || cleanTempDir === true) {
-          const log = mutationRunInjector.resolve(commonTokens.getLogger)(
-            Stryker.name,
-          )
-          log.debug('Not removing the temp dir because an error occurred')
-          mutantInstrumenterInjector.resolve(
-            injectionTokens.temporaryDirectory,
-          ).removeDuringDisposal = false
-        }
-        throw error
-      }
-    } catch (error) {
-      const log = mutationRunInjector.resolve(commonTokens.getLogger)(
-        Stryker.name,
-      )
-      const cause = retrieveCause(error)
-      if (cause instanceof ConfigError) {
-        log.error(cause.message)
-      } else {
-        log.error('Unexpected error occurred while running Stryker', error)
-        log.info(
-          'This might be a known problem with a solution documented in our troubleshooting guide.',
-        )
-        log.info(
-          'You can find it at https://stryker-mutator.io/docs/stryker-js/troubleshooting/',
-        )
-        if (!log.isTraceEnabled()) {
-          log.info(
-            'Still having trouble figuring out what went wrong? Try `npx stryker run --fileLogLevel trace --logLevel debug` to get some more info.',
-          )
-        }
-      }
-      throw cause
-    }
-  }
-}
+export type { RunEnvironmentShape }

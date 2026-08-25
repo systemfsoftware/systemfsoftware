@@ -2,52 +2,82 @@
 import * as NodeRuntime from '@effect/platform-node/NodeRuntime'
 import * as NodeStdio from '@effect/platform-node/NodeStdio'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
-import semver from 'semver'
+import * as Logger from 'effect/Logger'
 
-import { strykerEngines } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
+import { strykerEngines } from '@systemfsoftware/stryker-js-mutation-run'
 
-import { OutputModeProbe, OutputModeProbeLive } from './OutputModeAdapter.js'
-import { RunEventStreamLive, RunEventStreamPort } from './RunEventStreamAdapter.js'
-import { strykerCliEffect } from './StrykerCliHandler.js'
+import { OutputModeProbe, OutputModeProbeLive } from './output-mode-probe.js'
+import { RunEventStreamLive, RunEventStreamPort } from './run-event-stream.js'
+import { observeTerminatingSignal } from './signal-observer.js'
+import { strykerCliEffect } from './stryker-cli.js'
 
 const EXIT_CODE_RUN_NEVER_REACHED_ITS_FINALIZER = 1
 
 process.title = 'stryker'
 
-if (!semver.satisfies(process.version, strykerEngines.node)) {
+// Installed before the program starts: a signal that arrives during startup
+// still has to reach the teardown below.
+const lastSignal = observeTerminatingSignal()
+
+function isSupportedNodeVersion(version: string): boolean {
+  const withoutV = version.startsWith('v') ? version.slice(1) : version
+  const dashBase = withoutV.split('-')[0] ?? withoutV
+  const base = dashBase.split('+')[0] ?? dashBase
+  const parts = base.split('.').map((p) => Number.parseInt(p, 10))
+  const major = parts[0] ?? 0
+  const minor = parts[1] ?? 0
+  const patch = parts[2] ?? 0
+  if (Number.isNaN(major) || Number.isNaN(minor) || Number.isNaN(patch)) {
+    return false
+  }
+  if (major !== 20) {
+    return major > 20
+  }
+  if (minor !== 0) {
+    return minor > 0
+  }
+  return patch >= 0
+}
+
+if (!isSupportedNodeVersion(process.version)) {
   throw new Error(
     `Node.js version ${process.version} detected. StrykerJS requires version to match ${strykerEngines.node}. Please update your Node.js version or visit https://nodejs.org/ for additional instructions`,
   )
 }
 
-const resolvedExitCode: { current: number } = { current: EXIT_CODE_RUN_NEVER_REACHED_ITS_FINALIZER }
-
-// The composition root: resolve the two port layers once and pass the members
-// the CLI needs down as plain parameters (REPO-A2 — dependency
-// parameterization, not a requirement channel).
 const program = Effect.gen(function*() {
   const outputMode = yield* OutputModeProbe
   const runEvents = yield* RunEventStreamPort
   return yield* strykerCliEffect(
-    // v4's `Command.runWith` takes the arguments after the program name, not
-    // the full `process.argv` — argv[0] and argv[1] would parse as an unknown
-    // subcommand.
     process.argv.slice(2),
     undefined,
-    (code) => {
-      resolvedExitCode.current = code
-    },
     outputMode.detectMode,
     runEvents.createRunEventStream,
+    lastSignal,
   )
 }).pipe(
+  // stdout carries the NDJSON protocol and nothing else. Effect's built-in
+  // loggers write to stdout by default, which puts a log line in the middle of
+  // the stream and makes every consumer's parse fail on it. One reference,
+  // provided once at the only interpretation edge, moves them all to stderr.
+  Effect.provideService(Logger.LogToStderr, true),
   Effect.provide(Layer.merge(OutputModeProbeLive, RunEventStreamLive).pipe(Layer.provide(NodeStdio.layer))),
 )
 
 NodeRuntime.runMain(program, {
   disableErrorReporting: true,
-  teardown: (_exit, onExit) => {
-    onExit(resolvedExitCode.current)
+  teardown: (exit: Exit.Exit<unknown, unknown>, onExit) => {
+    if (Exit.isSuccess(exit) && typeof exit.value === 'number') {
+      onExit(exit.value)
+      return
+    }
+    // A signal interrupts the run's fiber, so its exit is a failure however the
+    // finalizer ended - the classed code it resolved reached the terminal event
+    // and would die here. The shell is owed `128 + n` for the signal that
+    // stopped us, which is the same number the terminal event carries.
+    const signal = lastSignal()
+    onExit(signal === null ? EXIT_CODE_RUN_NEVER_REACHED_ITS_FINALIZER : 128 + signal)
   },
 })

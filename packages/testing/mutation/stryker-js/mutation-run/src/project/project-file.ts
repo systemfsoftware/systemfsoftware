@@ -1,100 +1,148 @@
-import path from 'path'
+import type { File } from '@systemfsoftware/stryker-js-instrumenter'
+import type { FileDescription, MutateDescription } from '@systemfsoftware/stryker-js-plugin-api/core'
+import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
+import * as Path from 'effect/Path'
+import type { PlatformError } from 'effect/PlatformError'
 
-import { type File } from '@systemfsoftware/stryker-js-instrumenter'
-import { type FileDescription, type MutateDescription } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { type I, StrykerError } from '@systemfsoftware/stryker-js-util'
+export interface ProjectFile extends FileDescription {
+  readonly name: string
+  readonly mutate: MutateDescription
+  readonly content: string | undefined
+  readonly originalContent: string | undefined
+}
 
-import { FileSystem } from './file-system.js'
-
-/**
- * Represents a file inside the project under test.
- * Has utility methods to help with copying it to the sandbox, or backing it up (when `--inPlace` is active)
- *
- * Assumes utf-8 as encoding when reading/writing content.
- */
-export class ProjectFile implements FileDescription {
-  #currentContent: string | undefined
-  #originalContent: string | undefined
-  readonly #relativePath: string
-
-  constructor(
-    private readonly fs: I<FileSystem>,
-    private readonly name: string,
-    public mutate: MutateDescription,
-  ) {
-    this.#relativePath = path.relative(process.cwd(), this.name)
+export function makeProjectFile(
+  name: string,
+  mutate: MutateDescription,
+  content?: string,
+  originalContent?: string,
+): ProjectFile {
+  return {
+    name,
+    mutate,
+    content,
+    originalContent,
   }
+}
 
-  async #writeTo(to: string): Promise<void> {
-    if (this.#currentContent === undefined) {
-      await this.fs.copyFile(this.name, to)
-    } else {
-      await this.fs.writeFile(to, this.#currentContent, 'utf-8')
-    }
+export function withContent(file: ProjectFile, content: string): ProjectFile {
+  return { ...file, content }
+}
+
+export function withOriginalContent(file: ProjectFile, originalContent: string): ProjectFile {
+  return { ...file, originalContent }
+}
+
+export function hasChanges(file: ProjectFile): boolean {
+  return file.content !== undefined && file.content !== file.originalContent
+}
+
+function writeTo(
+  file: ProjectFile,
+  to: string,
+): Effect.Effect<void, PlatformError, FileSystem.FileSystem> {
+  if (file.content === undefined) {
+    return Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem
+      yield* fs.copyFile(file.name, to)
+    })
   }
+  const content = file.content
+  return Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    yield* fs.writeFileString(to, content)
+  })
+}
 
-  public setContent(content: string): void {
-    this.#currentContent = content
-  }
-
-  public async toInstrumenterFile(): Promise<File> {
+export function toInstrumenterFile(
+  file: ProjectFile,
+): Effect.Effect<File, PlatformError, FileSystem.FileSystem> {
+  return Effect.gen(function*() {
+    const content = yield* readContent(file)
     return {
-      content: await this.readContent(),
-      mutate: this.mutate,
-      name: this.name,
+      content,
+      mutate: file.mutate,
+      name: file.name,
     }
-  }
+  })
+}
 
-  public async readContent(): Promise<string> {
-    if (this.#currentContent === undefined) {
-      this.#currentContent = await this.readOriginal()
+export function readContent(
+  file: ProjectFile,
+): Effect.Effect<string, PlatformError, FileSystem.FileSystem> {
+  return Effect.gen(function*() {
+    if (file.content !== undefined) {
+      return file.content
     }
-    return this.#currentContent
-  }
-
-  public async readOriginal(): Promise<string> {
-    if (this.#originalContent === undefined) {
-      try {
-        this.#originalContent = await this.fs.readFile(this.name, 'utf-8')
-      } catch (e) {
-        throw new StrykerError(`Could not read file "${this.name}"`, e)
-      }
-      if (this.#currentContent === undefined) {
-        this.#currentContent = this.#originalContent
-      }
+    if (file.originalContent !== undefined) {
+      return file.originalContent
     }
-    return this.#originalContent
-  }
+    return yield* readOriginalContent(file)
+  })
+}
 
-  public async writeInPlace(): Promise<void> {
-    if (this.#currentContent !== undefined && this.hasChanges) {
-      await this.fs.writeFile(this.name, this.#currentContent, 'utf-8')
+function readOriginalContent(
+  file: ProjectFile,
+): Effect.Effect<string, PlatformError, FileSystem.FileSystem> {
+  return Effect.gen(function*() {
+    if (file.originalContent !== undefined) {
+      return file.originalContent
     }
-  }
+    const fs = yield* FileSystem.FileSystem
+    const content = yield* fs.readFileString(file.name)
+    return content
+  })
+}
 
-  public async writeToSandbox(sandboxDir: string): Promise<string> {
-    const folderName = path.join(sandboxDir, path.dirname(this.#relativePath))
-    const targetFileName = path.join(
-      folderName,
-      path.basename(this.#relativePath),
-    )
-    await this.fs.mkdir(path.dirname(targetFileName), { recursive: true })
-    await this.#writeTo(targetFileName)
+export function readOriginal(
+  file: ProjectFile,
+): Effect.Effect<string, PlatformError, FileSystem.FileSystem> {
+  return readOriginalContent(file)
+}
+
+export function writeInPlace(file: ProjectFile): Effect.Effect<void, PlatformError, FileSystem.FileSystem> {
+  return Effect.gen(function*() {
+    if (file.content !== undefined && hasChanges(file)) {
+      const fs = yield* FileSystem.FileSystem
+      yield* fs.writeFileString(file.name, file.content)
+    }
+  })
+}
+
+export function writeToSandbox(
+  file: ProjectFile,
+  sandboxDir: string,
+  basePath: string,
+): Effect.Effect<string, PlatformError, FileSystem.FileSystem | Path.Path> {
+  return Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const relative = path.relative(basePath, file.name)
+    const folderName = path.join(sandboxDir, path.dirname(relative))
+    const targetFileName = path.join(folderName, path.basename(relative))
+    yield* fs.makeDirectory(path.dirname(targetFileName), { recursive: true })
+    yield* writeTo(file, targetFileName)
     return targetFileName
-  }
+  })
+}
 
-  public async backupTo(backupDir: string): Promise<string> {
-    const backupFileName = path.join(backupDir, this.#relativePath)
-    await this.fs.mkdir(path.dirname(backupFileName), { recursive: true })
-    if (this.#originalContent === undefined) {
-      await this.fs.copyFile(this.name, backupFileName)
+export function backupTo(
+  file: ProjectFile,
+  backupDir: string,
+  basePath: string,
+): Effect.Effect<string, PlatformError, FileSystem.FileSystem | Path.Path> {
+  return Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const relative = path.relative(basePath, file.name)
+    const backupFileName = path.join(backupDir, relative)
+    yield* fs.makeDirectory(path.dirname(backupFileName), { recursive: true })
+    if (file.originalContent === undefined) {
+      yield* fs.copyFile(file.name, backupFileName)
     } else {
-      await this.fs.writeFile(backupFileName, this.#originalContent)
+      yield* fs.writeFileString(backupFileName, file.originalContent)
     }
     return backupFileName
-  }
-
-  public get hasChanges(): boolean {
-    return this.#currentContent !== this.#originalContent
-  }
+  })
 }

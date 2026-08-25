@@ -1,13 +1,12 @@
 import type { BaseNode, Program } from 'estree'
 
-import { notEmpty } from '@systemfsoftware/stryker-js-util'
-
-import { satisfies } from 'semver'
+import * as Predicate from 'effect/Predicate'
 
 import { AstFormat, type SvelteAst, type SvelteRootNode, type TemplateScript } from '../syntax/index.js'
-import { PositionConverter } from '../util/index.js'
+import { computeLineStarts, positionFromOffset } from '../syntax/position-converter.js'
 
 import { type ParserContext } from './parser-context.js'
+import { SvelteVersionNotSupported, SvelteWalkerNotFound } from './svelte-parser.schema.js'
 
 interface Range {
   start: number
@@ -27,7 +26,35 @@ interface ScriptTag {
 }
 
 type RangedProgram = Program & Range
-const MIN_SVELTE_VERSION = '>=3.30'
+
+function parseVersion(version: string): { major: number; minor: number } | undefined {
+  const match = /^(\d+)\.(\d+)(?:\.\d+)?/.exec(version)
+  if (!match) {
+    return undefined
+  }
+  const major = Number.parseInt(match[1] ?? '', 10)
+  const minor = Number.parseInt(match[2] ?? '', 10)
+  if (Number.isNaN(major) || Number.isNaN(minor)) {
+    return undefined
+  }
+  return { major, minor }
+}
+
+function isSupportedSvelteVersion(version: string): boolean {
+  const parsed = parseVersion(version)
+  if (parsed === undefined) {
+    return false
+  }
+  return parsed.major > 3 || (parsed.major === 3 && parsed.minor >= 30)
+}
+
+function isSvelteV5OrLater(version: string): boolean {
+  const parsed = parseVersion(version)
+  if (parsed === undefined) {
+    return false
+  }
+  return parsed.major >= 5
+}
 
 type WalkFn = (
   node: unknown,
@@ -120,17 +147,19 @@ export async function parse(
   } = await import('svelte/compiler')
   let walk: WalkFn
 
-  if (!satisfies(VERSION, MIN_SVELTE_VERSION)) {
-    throw new Error(
-      `Svelte version ${VERSION} not supported. Expected: ${MIN_SVELTE_VERSION} (processing file ${fileName})`,
-    )
+  if (!isSupportedSvelteVersion(VERSION)) {
+    throw new SvelteVersionNotSupported({
+      version: VERSION,
+      fileName,
+      cause: `Expected >=3.30`,
+    })
   }
   /*
     Allow instrumentation of Svelte 5 projects without dropping support for Svelte 4.
     Due to the way Svelte 5 is structured, we can no longer use the typings from Svelte 4, even though
     we use the legacy AST. The full Svelte 5 migration should update these typings to use the new AST.
   */
-  if (satisfies(VERSION, '>=5')) {
+  if (isSvelteV5OrLater(VERSION)) {
     const walkerModule: unknown = await import(
       import.meta.resolve('estree-walker', import.meta.resolve('svelte'))
     )
@@ -138,7 +167,7 @@ export async function parse(
       !isPlainRecord(walkerModule) ||
       !isWalkFunction(walkerModule['walk'])
     ) {
-      throw new Error('estree-walker module without walk export')
+      throw new SvelteWalkerNotFound({ fileName, cause: 'estree-walker module without walk export' })
     }
     walk = walkerModule['walk']
   } else {
@@ -148,12 +177,12 @@ export async function parse(
       !isPlainRecord(svelteCompilerModule) ||
       !isWalkFunction(svelteCompilerModule['walk'])
     ) {
-      throw new Error('svelte/compiler module without walk export')
+      throw new SvelteWalkerNotFound({ fileName, cause: 'svelte/compiler module without walk export' })
     }
     walk = svelteCompilerModule['walk']
   }
 
-  const positionConverter = new PositionConverter(text)
+  const lineStarts = computeLineStarts(text)
   const { replacedCode, scriptMap } = await replaceScripts(text)
   const svelteAst: unknown = svelteParse(replacedCode, { filename: fileName })
 
@@ -266,7 +295,7 @@ export async function parse(
     return {
       ast: {
         ...parsed,
-        offset: positionConverter.positionFromOffset(start),
+        offset: positionFromOffset(lineStarts, start),
       },
       range: { start, end },
       isExpression,
@@ -309,7 +338,7 @@ function remapScriptLocations(
   remappedScriptRanges: TemplateScriptRange[]
 } {
   const scriptRanges = [moduleScriptRange, ...templateRanges]
-    .filter(notEmpty)
+    .filter(Predicate.isNotNullish)
     .sort((a, b) => a.start - b.start)
   let offset = 0
   let newModuleScriptRange: TemplateScriptRange | undefined

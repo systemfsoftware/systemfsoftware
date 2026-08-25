@@ -234,6 +234,54 @@ ruleTester.run('ban-classes', banClasses, {
       filename: PROD,
     },
     {
+      // The dominant spelling in this repo, and the one the rule used to reject:
+      // a per-module namespace import binds the MEMBERS of `Context`, so the
+      // extends-expression supplies only `Service` and the namespace has to come
+      // from the specifier.
+      name: 'Should_Pass_When_ExtendsContextService_ViaDeepNamespaceImport',
+      code: `
+        import * as Context from 'effect/Context'
+        class SandboxDirectory extends Context.Service<SandboxDirectory, string>()('SandboxDirectory') {}
+      `,
+      filename: PROD,
+    },
+    {
+      name: 'Should_Pass_When_ExtendsTaggedError_ViaDeepNamespaceImportAliasedToS',
+      code: `
+        import * as S from 'effect/Schema'
+        class ParseFailed extends S.TaggedError<ParseFailed>()('ParseFailed', { file: S.String }) {}
+      `,
+      filename: PROD,
+    },
+    {
+      // A `declare module` augmentation emits nothing: no field, no constructor,
+      // no instance. None of the harms this rule prevents can occur there, and
+      // there is no alternative spelling to migrate it to.
+      name: 'Should_Pass_When_ClassIsAmbient_InsideDeclareModule',
+      code: `
+        declare module '@babel/core' {
+          export class File {
+            constructor(options: { filename?: string })
+            public ast: unknown
+          }
+        }
+      `,
+      filename: PROD,
+    },
+    {
+      // Same reasoning as the `declare module` case, one nesting level out: a
+      // file-scope `declare class` carries the ambient flag on itself and has no
+      // ambient module ancestor, so a walk that starts at the parent misses it
+      // and reports a declaration that emits nothing.
+      name: 'Should_Pass_When_ClassIsAmbient_AtFileScope',
+      code: `
+        declare class LegacyEmitter extends EventTarget {
+          public emit(event: string): void
+        }
+      `,
+      filename: PROD,
+    },
+    {
       name: 'Should_Pass_When_ClassExpression_ExtendsSanctionedBase',
       code: `
         import { Schema } from 'effect'
@@ -280,6 +328,42 @@ ruleTester.run('ban-classes', banClasses, {
     {
       name: 'Should_ReportViolation_When_ClassExtendsUnknownBase',
       code: `class Foo extends Bar {}`,
+      filename: PROD,
+      errors: [noSuperclassError('class Foo')],
+    },
+    {
+      // Keeps the ambient skip honest: a namespace WITHOUT `declare` emits a
+      // real runtime class, so it carries every harm the rule targets and must
+      // still be reported.
+      name: 'Should_ReportViolation_When_ClassInsideNonAmbientNamespace',
+      code: `
+        namespace Shapes {
+          export class Circle {}
+        }
+      `,
+      filename: PROD,
+      errors: [noSuperclassError('class Circle')],
+    },
+    {
+      // Keeps the deep-namespace fix honest: resolving the namespace from the
+      // specifier must not blanket-admit every member of an effect module.
+      name: 'Should_ReportViolation_When_DeepNamespaceImport_ExtendsUnsanctionedMember',
+      code: `
+        import * as Context from 'effect/Context'
+        class Foo extends Context.NotAThing<Foo>()('Foo') {}
+      `,
+      filename: PROD,
+      errors: [unsanctionedBaseError('class Foo', 'effect/Context.NotAThing')],
+    },
+    {
+      // The module check still binds: a namespace called `Context` from a
+      // non-effect package resolves to nothing, however sanctioned the member
+      // name looks.
+      name: 'Should_ReportViolation_When_DeepNamespaceImport_FromForeignModule',
+      code: `
+        import * as Context from 'other-pkg/Context'
+        class Foo extends Context.Service<Foo, string>()('Foo') {}
+      `,
       filename: PROD,
       errors: [noSuperclassError('class Foo')],
     },

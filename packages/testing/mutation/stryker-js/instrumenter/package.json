@@ -25,6 +25,7 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
     "attw": "attw --pack .",
+    "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "license": "Apache-2.0",
@@ -33,29 +34,29 @@
     "@babel/generator": "~7.29.0",
     "@babel/parser": "~7.29.0",
     "@babel/plugin-proposal-decorators": "~7.29.0",
-    "@babel/plugin-transform-explicit-resource-management": "^7.28.0",
+    "@babel/plugin-transform-explicit-resource-management": "~7.29.0",
     "@babel/preset-typescript": "~7.28.0",
+    "@eslint-community/regexpp": "4.12.2",
     "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
-    "@systemfsoftware/stryker-js-util": "workspace:^",
     "angular-html-parser": "~10.4.0",
-    "semver": "catalog:stryker",
-    "tslib": "catalog:stryker",
-    "weapon-regex": "~1.3.2"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/babel__core": "7.20.5",
     "@types/babel__generator": "7.27.0",
     "@types/estree": "1.0.8",
     "@types/node": "catalog:",
-    "@types/semver": "7.7.1",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "svelte": "5.55.1",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "engines": {
     "node": ">=20.0.0"
@@ -67,21 +68,12 @@
       "./package.json": "./package.json"
     }
   },
-  "inlinedDependencies": {
-    "@jridgewell/gen-mapping": "0.3.13",
-    "@jridgewell/remapping": "2.3.5",
-    "@jridgewell/resolve-uri": "3.1.2",
-    "@jridgewell/sourcemap-codec": "1.5.5",
-    "@jridgewell/trace-mapping": "0.3.31",
-    "@sveltejs/acorn-typescript": "1.0.13",
-    "acorn": "8.18.0",
-    "aria-query": "5.3.1",
-    "axobject-query": "4.1.0",
-    "esrap": "2.3.6",
-    "is-reference": "3.0.3",
-    "locate-character": "3.0.0",
-    "magic-string": "0.30.21",
-    "svelte": "5.55.1",
-    "zimmerframe": "1.1.4"
+  "peerDependencies": {
+    "svelte": ">=4.0.0"
+  },
+  "peerDependenciesMeta": {
+    "svelte": {
+      "optional": true
+    }
   }
 }

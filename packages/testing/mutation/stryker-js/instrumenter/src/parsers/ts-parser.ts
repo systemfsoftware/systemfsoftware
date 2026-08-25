@@ -1,3 +1,4 @@
+// node:module resolves Babel presets dynamically; no Effect equivalent.
 import { createRequire } from 'module'
 
 import babel from '@babel/core'

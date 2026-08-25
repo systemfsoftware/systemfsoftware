@@ -10,7 +10,7 @@
   ],
   "tempDirName": ".stryker-tmp",
   "checkers": [],
-  "plugins": [],
+  "plugins": null,
   "incremental": false,
   "ignorers": []
 }

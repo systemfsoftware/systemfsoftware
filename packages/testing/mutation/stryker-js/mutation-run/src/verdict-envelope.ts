@@ -1,9 +1,10 @@
-import path from 'path'
-
-import { type MutantStatus, schema } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { normalizeFileName } from '@systemfsoftware/stryker-js-util'
+import { type MutantStatus, normalizeFileName, schema } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { ExitClass } from '@systemfsoftware/stryker-js-plugin-api/evaluate'
+import * as Option from 'effect/Option'
+import type * as Path from 'effect/Path'
+import * as S from 'effect/Schema'
 import { calculateMutationTestMetrics } from 'mutation-testing-metrics'
-import { randomFillSync } from 'node:crypto'
+import { randomFillSync } from 'node:crypto' // node:crypto — no Effect core hashing/RNG service; keep
 
 import type { ModeSignal, OutputMode } from './output-mode.js'
 
@@ -15,7 +16,7 @@ import type { ModeSignal, OutputMode } from './output-mode.js'
  * here are pure over the report — no I/O side effects, no randomness except
  * inside `generateRunId`.
  */
-export const VERDICT_ENVELOPE_SCHEMA_VERSION = '1.0'
+export const VERDICT_ENVELOPE_SCHEMA_VERSION = '1.1'
 
 /**
  * The statuses a `verdict.mutants` entry (and a `mutant` stream line, U7) is
@@ -72,6 +73,18 @@ export interface VerdictCounts {
 }
 
 /**
+ * What one evaluator decided. `verdict` is `null` for "nothing to report"
+ * — no breaking threshold configured, or a no-mutant run — which is distinct
+ * from a passing gate. The name is the contribution name the plugin declared
+ * so a machine consumer can say which evaluator failed without opening the
+ * report.
+ */
+export interface VerdictEvaluatorVerdict {
+  readonly name: string
+  readonly verdict: ExitClass | null
+}
+
+/**
  * The full verdict document. `score` and `reportFile` are `null` for a run
  * with zero mutants (AE3): there is no score to report and no report file was
  * written. `mutants` is bounded to `ACTIONABLE_STATUSES` (R20) — see that
@@ -87,6 +100,7 @@ export interface VerdictEnvelope {
   readonly counts: VerdictCounts
   readonly reportFile: string | null
   readonly mutants: readonly VerdictMutant[]
+  readonly evaluatorVerdicts: readonly VerdictEvaluatorVerdict[]
 }
 
 const CROCKFORD_BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -99,7 +113,7 @@ const CROCKFORD_BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
  */
 export function generateRunId(): string {
   const bytes = new Uint8Array(16)
-  const now = Date.now()
+  const now = new Date().getTime()
   bytes[0] = (now / 0x10000000000) % 0x100
   bytes[1] = (now / 0x100000000) % 0x100
   bytes[2] = (now / 0x1000000) % 0x100
@@ -127,42 +141,45 @@ export function generateRunId(): string {
 
 /**
  * The resolved options the report helper embeds as `report.config` (it writes
- * `config: this.options`). Read through `in`-narrowing because the report
- * schema types `config` as `{}`, while the embedded value is our own resolved
- * options with their index signature.
+ * `config: this.options`). Decoded through a schema so the schema is the
+ * single source of the shape — the prior `in`-narrowing chain is deleted.
+ * The report schema types `config` as `{}`, while the runtime value is the full
+ * resolved `StrykerOptions` with its index signature; `StructWithRest` allows
+ * the extra keys.
  */
 function embeddedConfig(
   report: schema.MutationTestResult,
 ): {
   readonly jsonReporterFileName: string | undefined
 } {
-  const config = report.config
-  let jsonReporterFileName: string | undefined
-  if (typeof config === 'object' && config !== null) {
-    if (
-      'jsonReporter' in config &&
-      typeof config.jsonReporter === 'object' &&
-      config.jsonReporter !== null &&
-      'fileName' in config.jsonReporter &&
-      typeof config.jsonReporter.fileName === 'string'
-    ) {
-      jsonReporterFileName = config.jsonReporter.fileName
-    }
+  const JsonReporterSchema = S.Struct({
+    fileName: S.String,
+  })
+  const EmbeddedConfigSchema = S.StructWithRest(
+    S.Struct({
+      jsonReporter: S.optional(JsonReporterSchema),
+    }),
+    [S.Record(S.String, S.Unknown)],
+  )
+  const decoded = S.decodeUnknownOption(EmbeddedConfigSchema)(report.config)
+  if (Option.isNone(decoded)) {
+    return { jsonReporterFileName: undefined }
   }
-  return { jsonReporterFileName }
+  return { jsonReporterFileName: decoded.value.jsonReporter?.fileName }
 }
 
 function breakThreshold(thresholds: schema.Thresholds): number | null {
-  if ('break' in thresholds) {
-    const breakValue = thresholds.break
-    if (typeof breakValue === 'number') {
-      return breakValue
-    }
-    if (breakValue === null) {
-      return null
-    }
+  const ThresholdsBreakSchema = S.StructWithRest(
+    S.Struct({
+      break: S.optional(S.Union([S.Number, S.Null])),
+    }),
+    [S.Record(S.String, S.Unknown)],
+  )
+  const decoded = S.decodeUnknownOption(ThresholdsBreakSchema)(thresholds)
+  if (Option.isNone(decoded)) {
+    return null
   }
-  return null
+  return decoded.value.break ?? null
 }
 
 export function buildVerdictEnvelope(
@@ -170,6 +187,9 @@ export function buildVerdictEnvelope(
   mode: OutputMode,
   signal: ModeSignal,
   runId: string,
+  basePath: string,
+  evaluatorVerdicts: readonly VerdictEvaluatorVerdict[] = [],
+  pathService: Path.Path,
 ): VerdictEnvelope {
   const { jsonReporterFileName } = embeddedConfig(report)
   const metrics = calculateMutationTestMetrics(report)
@@ -179,7 +199,7 @@ export function buildVerdictEnvelope(
     ? metrics.mutationScore
     : null
   const reportFile = hasMutants && jsonReporterFileName !== undefined
-    ? normalizeFileName(path.relative(process.cwd(), jsonReporterFileName))
+    ? normalizeFileName(pathService.relative(basePath, jsonReporterFileName))
     : null
   const mutants: VerdictMutant[] = []
   for (const [file, fileResult] of Object.entries(report.files)) {
@@ -220,5 +240,6 @@ export function buildVerdictEnvelope(
     },
     reportFile,
     mutants,
+    evaluatorVerdicts,
   }
 }

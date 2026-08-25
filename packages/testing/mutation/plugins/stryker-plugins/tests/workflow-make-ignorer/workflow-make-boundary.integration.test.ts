@@ -409,10 +409,14 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
       Gherkin.Do.pipe(
         Given('the entrypoint plugin array')('plugins', () => Effect.sync(() => strykerPlugins)),
         When('the declared plugin is inspected')('plugin', (s) => Effect.sync(() => s.plugins[0])),
-        Then('it is an Ignore-kind plugin named workflow-make-boundary with a shouldIgnore surface')((s) =>
+        Then('it is an Ignore-kind plugin named workflow-make-boundary carrying a layer')((s) =>
           Effect.sync(() => {
             expect(s.plugin).toMatchObject({ kind: PluginKind.Ignore, name: 'workflow-make-boundary' })
-            expect(typeof s.plugin?.value.shouldIgnore).toBe('function')
+            // The contribution now carries a `Layer` rather than a bare value.
+            // That the layer actually provides `Ignorer` is proven where the
+            // engine composes it, since building it here would need fabricated
+            // `RunConfiguration` and `SandboxDirectory` services.
+            expect(s.plugin?.layer).toBeDefined()
           })
         ),
       ),

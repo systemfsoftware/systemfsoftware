@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/stryker-js-cli`
 
-> **Location:** `packages/stryker-js/cli/` — the stryker command-line interface, extracted out of `packages/stryker-js/core/`.
+> **Location:** `packages/testing/mutation/stryker-js/cli/` — the stryker command-line interface, extracted out of `packages/testing/mutation/stryker-js/core/`.
 
 ## Why this package exists
 
@@ -25,6 +25,6 @@ The `stryker` bin's home. Core (`@systemfsoftware/stryker-js-core`) is the mutat
 ## Verification
 
 - Types: `pnpm --filter @systemfsoftware/stryker-js-cli typecheck`
-- Tests: `pnpm --filter @systemfsoftware/stryker-js-cli test` (kernel property suites in-source; workflow property tests under `src/__tests__/`)
+- Tests: `pnpm --filter @systemfsoftware/stryker-js-cli test` (pure-decision property suites in-source; workflow property tests under `src/__tests__/`)
 - Contract lane: `pnpm --filter @systemfsoftware/stryker-js-cli test:contract` (Gherkin scenarios in real containers via testcontainers)
 - Lint: `pnpm --filter @systemfsoftware/stryker-js-cli lint`

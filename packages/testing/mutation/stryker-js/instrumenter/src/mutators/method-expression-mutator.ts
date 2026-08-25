@@ -1,97 +1,76 @@
 import babel from '@babel/core'
 
-import { deepCloneNode } from '../util/syntax-helpers.js'
+import { deepCloneNode } from '../babel/clone.js'
 
-import { type NodeMutator } from './node-mutator.js'
+import type { Mutator, MutatorContext } from './mutator.js'
 
 const { types } = babel
 
-const replacements = new Map([
-  ['charAt', null],
-  ['endsWith', 'startsWith'],
-  ['every', 'some'],
-  ['filter', null],
-  ['reverse', null],
-  ['slice', null],
-  ['sort', null],
-  ['substr', null],
-  ['substring', null],
-  ['toLocaleLowerCase', 'toLocaleUpperCase'],
-  ['toLowerCase', 'toUpperCase'],
-  ['trim', null],
-  ['trimEnd', 'trimStart'],
-  ['min', 'max'],
-  ['setDate', 'setTime'],
-  ['setFullYear', 'setMonth'],
-  ['setHours', 'setMinutes'],
-  ['setSeconds', 'setMilliseconds'],
-  ['setUTCDate', 'setTime'],
-  ['setUTCFullYear', 'setUTCMonth'],
-  ['setUTCHours', 'setUTCMinutes'],
-  ['setUTCSeconds', 'setUTCMilliseconds'],
-])
+const baseReplacements: Record<string, string | null> = {
+  charAt: null,
+  endsWith: 'startsWith',
+  every: 'some',
+  filter: null,
+  reverse: null,
+  slice: null,
+  sort: null,
+  substr: null,
+  substring: null,
+  toLocaleLowerCase: 'toLocaleUpperCase',
+  toLowerCase: 'toUpperCase',
+  trim: null,
+  trimEnd: 'trimStart',
+  min: 'max',
+  setDate: 'setTime',
+  setFullYear: 'setMonth',
+  setHours: 'setMinutes',
+  setSeconds: 'setMilliseconds',
+  setUTCDate: 'setTime',
+  setUTCFullYear: 'setUTCMonth',
+  setUTCHours: 'setUTCMinutes',
+  setUTCSeconds: 'setUTCMilliseconds',
+}
 
-const noReverseRemplacements = ['getUTCDate', 'setUTCDate']
+const noReverseReplacements = ['getUTCDate', 'setUTCDate']
 
-for (const [key, value] of Array.from(replacements)) {
-  if (value && !noReverseRemplacements.includes(key)) {
-    replacements.set(value, key)
+const replacements: Record<string, string | null> = { ...baseReplacements }
+for (const key of Object.keys(baseReplacements)) {
+  const value = baseReplacements[key]
+  if (value !== null && value !== undefined && !noReverseReplacements.includes(key)) {
+    replacements[value] = key
   }
 }
 
-export const methodExpressionMutator: NodeMutator = {
-  name: 'MethodExpression',
+export const methodExpressionMutator: Mutator = function*(node, _context: MutatorContext) {
+  if (!(types.isCallExpression(node) || types.isOptionalCallExpression(node))) {
+    return
+  }
 
-  *mutate(path) {
-    if (!(path.isCallExpression() || path.isOptionalCallExpression())) {
-      return
-    }
+  const { callee } = node
+  if (
+    !(types.isMemberExpression(callee) || types.isOptionalMemberExpression(callee)) ||
+    !types.isIdentifier(callee.property)
+  ) {
+    return
+  }
 
-    const { callee } = path.node
-    if (
-      !(
-        types.isMemberExpression(callee) ||
-        types.isOptionalMemberExpression(callee)
-      ) ||
-      !types.isIdentifier(callee.property)
-    ) {
-      return
-    }
+  const newName = replacements[callee.property.name]
+  if (newName === undefined) {
+    return
+  }
 
-    const newName = replacements.get(callee.property.name)
-    if (newName === undefined) {
-      return
-    }
+  if (newName === null) {
+    yield deepCloneNode(callee.object)
+    return
+  }
 
-    if (newName === null) {
-      // Remove the method expression. I.e. `foo.trim()` => `foo`
-      yield deepCloneNode(callee.object)
-      return
-    }
+  const nodeArguments = node.arguments.map((argumentNode) => deepCloneNode(argumentNode))
 
-    // Replace the method expression. I.e. `foo.toLowerCase()` => `foo.toUpperCase`
-    const nodeArguments = path.node.arguments.map((argumentNode) => deepCloneNode(argumentNode))
+  const mutatedCallee = types.isMemberExpression(callee)
+    ? types.memberExpression(deepCloneNode(callee.object), types.identifier(newName), false, callee.optional)
+    : types.optionalMemberExpression(deepCloneNode(callee.object), types.identifier(newName), false, callee.optional)
 
-    const mutatedCallee = types.isMemberExpression(callee)
-      ? types.memberExpression(
-        deepCloneNode(callee.object),
-        types.identifier(newName),
-        false,
-        callee.optional,
-      )
-      : types.optionalMemberExpression(
-        deepCloneNode(callee.object),
-        types.identifier(newName),
-        false,
-        callee.optional,
-      )
-
-    yield types.isCallExpression(path.node)
-      ? types.callExpression(mutatedCallee, nodeArguments)
-      : types.optionalCallExpression(
-        mutatedCallee,
-        nodeArguments,
-        path.node.optional,
-      )
-  },
+  yield types.isCallExpression(node)
+    ? types.callExpression(mutatedCallee, nodeArguments)
+    : types.optionalCallExpression(mutatedCallee, nodeArguments, node.optional)
 }

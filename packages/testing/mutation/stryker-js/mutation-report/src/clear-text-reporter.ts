@@ -1,256 +1,70 @@
 import os from 'os'
 
-import { type Position, schema, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
-import { commonTokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { type Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
-import chalk, { type Color } from 'chalk'
-import {
-  MetricsResult,
-  MutantModel,
-  type MutationTestMetricsResult,
-  TestFileModel,
-  type TestMetrics,
-  TestModel,
-  TestStatus,
-} from 'mutation-testing-metrics'
-import { tokens } from 'typed-inject'
+import type { schema, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
+import type { MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core'
+import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
+import type {
+  DryRunCompletedEvent,
+  MutationTestingPlanReadyEvent,
+  MutationTestMetricsResult,
+  ReporterService,
+} from '@systemfsoftware/stryker-js-plugin-api/report'
+import { ReporterFailed } from '@systemfsoftware/stryker-js-plugin-api/report'
+import * as Effect from 'effect/Effect'
 
-import { getEmojiForStatus, plural } from './render-text.js'
+import { renderClearText } from './clear-text-render.js'
+import type { ProvidedStrykerOptions } from './provided-options.js'
 
-import { ClearTextScoreTable } from './clear-text-score-table.js'
-
-export class ClearTextReporter implements Reporter {
-  public static inject = tokens(commonTokens.logger, commonTokens.options)
-  constructor(
-    private readonly log: Logger,
-    private readonly options: StrykerOptions,
-  ) {
-    this.configConsoleColor()
+function noopLogger(): Logger {
+  return {
+    isTraceEnabled: () => false,
+    isDebugEnabled: () => false,
+    isInfoEnabled: () => false,
+    isWarnEnabled: () => false,
+    isErrorEnabled: () => false,
+    isFatalEnabled: () => false,
+    trace: () => {},
+    debug: () => {},
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+    fatal: () => {},
   }
+}
 
-  private readonly out: NodeJS.WritableStream = process.stdout
+export const makeClearTextReporter = (params: {
+  readonly options?: ProvidedStrykerOptions
+  readonly log?: Logger
+  readonly out?: NodeJS.WritableStream
+}): ReporterService => {
+  const options = params.options
+  const log = params.log ?? noopLogger()
+  const out = params.out ?? process.stdout
+  return {
+    onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
 
-  private readonly writeLine = (output?: string) => {
-    this.out.write(`${output ?? ''}${os.EOL}`)
-  }
+    onMutationTestingPlanReady: (_event: MutationTestingPlanReadyEvent) => Effect.void,
 
-  private readonly writeDebugLine = (input: string) => {
-    this.log.debug(input)
-  }
+    onMutantTested: (_result: MutantResult) => Effect.void,
 
-  private configConsoleColor() {
-    if (!this.options.allowConsoleColors) {
-      chalk.level = 0 // All colors disabled
-    }
-  }
-
-  public onMutationTestReportReady(
-    _report: schema.MutationTestResult,
-    metrics: MutationTestMetricsResult,
-  ): void {
-    this.writeLine()
-
-    if (this.options.clearTextReporter.reportTests) {
-      this.reportTests(metrics)
-    }
-    if (this.options.clearTextReporter.reportMutants) {
-      this.reportMutants(metrics)
-    }
-    if (
-      this.options.clearTextReporter.reportScoreTable &&
-      (!this.options.clearTextReporter.skipFull ||
-        metrics.systemUnderTestMetrics.childResults.some(
-          (x) => x.metrics.mutationScore !== 100,
-        ))
-    ) {
-      this.writeLine(
-        new ClearTextScoreTable(
-          metrics.systemUnderTestMetrics,
-          this.options,
-        ).draw(),
-      )
-    }
-  }
-
-  private reportTests(metrics: MutationTestMetricsResult) {
-    function indent(depth: number) {
-      return Array.from({ length: depth }, () => '  ').join('')
-    }
-    const formatTestLine = (test: TestModel, state: string): string => {
-      return `${
-        this.color('grey', `${test.name}${test.location ? ` [line ${test.location.start.line}]` : ''}`)
-      } (${state})`
-    }
-
-    if (metrics.testMetrics) {
-      const reportTests = (
-        currentResult: MetricsResult<TestFileModel, TestMetrics>,
-        depth = 0,
-      ) => {
-        const nameParts: string[] = [currentResult.name]
-        while (!currentResult.file && currentResult.childResults.length === 1) {
-          // `length === 1` guarantees index 0, which the index signature cannot state.
-          const onlyChild = currentResult.childResults[0]
-          if (onlyChild === undefined) break
-          currentResult = onlyChild
-          nameParts.push(currentResult.name)
-        }
-        this.writeLine(`${indent(depth)}${nameParts.join('/')}`)
-        currentResult.file?.tests.forEach((test) => {
-          switch (test.status) {
-            case TestStatus.Killing:
-              this.writeLine(
-                `${indent(depth + 1)}${this.color('greenBright', '✓')} ${
-                  formatTestLine(test, `killed ${test.killedMutants?.length}`)
-                }`,
-              )
-              break
-            case TestStatus.Covering:
-              this.writeLine(
-                `${indent(depth + 1)}${this.color('blueBright', '~')} ${
-                  formatTestLine(test, `covered ${test.coveredMutants?.length}`)
-                }`,
-              )
-              break
-            case TestStatus.NotCovering:
-              this.writeLine(
-                `${indent(depth + 1)}${this.color('redBright', '✘')} ${formatTestLine(test, 'covered 0')}`,
-              )
-              break
+    onMutationTestReportReady: (
+      report: schema.MutationTestResult,
+      metrics: MutationTestMetricsResult,
+    ) =>
+      Effect.try({
+        try: () => {
+          if (options === undefined) return
+          const { stdout, debug } = renderClearText(report, metrics, options)
+          for (const line of stdout) {
+            out.write(`${line}${os.EOL}`)
           }
-        })
-        currentResult.childResults.forEach((childResult) => reportTests(childResult, depth + 1))
-      }
-      reportTests(metrics.testMetrics)
-    }
-  }
-
-  private reportMutants({
-    systemUnderTestMetrics,
-  }: MutationTestMetricsResult): void {
-    this.writeLine()
-    let totalTests = 0
-
-    const reportMutants = (metrics: MetricsResult[]) => {
-      metrics.forEach((child) => {
-        child.file?.mutants.forEach((result) => {
-          totalTests += result.testsCompleted ?? 0
-          switch (result.status) {
-            case 'Killed':
-            case 'Timeout':
-            case 'RuntimeError':
-            case 'CompileError':
-              this.reportMutantResult(result, this.writeDebugLine)
-              break
-            case 'Survived':
-            case 'NoCoverage':
-              this.reportMutantResult(result, this.writeLine)
-              break
-            case 'Ignored':
-            case 'Pending':
-              break
-            default:
+          for (const line of debug) {
+            log.debug(line)
           }
-        })
-        reportMutants(child.childResults)
-      })
-    }
-    reportMutants(systemUnderTestMetrics.childResults)
-    this.writeLine(
-      `Ran ${(totalTests / systemUnderTestMetrics.metrics.totalMutants).toFixed(2)} tests per mutant on average.`,
-    )
-  }
+        },
+        catch: (cause) => new ReporterFailed({ reporterName: 'clear-text', event: 'onMutationTestReportReady', cause }),
+      }),
 
-  private statusLabel(mutant: MutantModel): string {
-    const { status } = mutant
-    return this.options.clearTextReporter.allowEmojis
-      ? `${getEmojiForStatus(status)} ${status}`
-      : status.toString()
-  }
-
-  private reportMutantResult(
-    result: MutantModel,
-    logImplementation: (input: string) => void,
-  ): void {
-    logImplementation(`[${this.statusLabel(result)}] ${result.mutatorName}`)
-    logImplementation(
-      this.colorSourceFileAndLocation(result.fileName, result.location.start),
-    )
-
-    result
-      .getOriginalLines()
-      .split('\n')
-      .filter(Boolean)
-      .forEach((line) => {
-        logImplementation(chalk.red('-   ' + line))
-      })
-    result
-      .getMutatedLines()
-      .split('\n')
-      .filter(Boolean)
-      .forEach((line) => {
-        logImplementation(chalk.green('+   ' + line))
-      })
-    if (result.status === 'Survived') {
-      if (result.static) {
-        logImplementation('Ran all tests for this mutant.')
-      } else if (result.coveredByTests) {
-        this.logExecutedTests(result.coveredByTests, logImplementation)
-      }
-    } else if (result.status === 'Killed' && result.killedByTests?.length) {
-      const firstKiller = result.killedByTests[0]
-      if (firstKiller !== undefined) logImplementation(`Killed by: ${firstKiller.name}`)
-    } else if (
-      result.status === 'RuntimeError' ||
-      result.status === 'CompileError'
-    ) {
-      logImplementation(`Error message: ${result.statusReason}`)
-    }
-    logImplementation('')
-  }
-
-  private colorSourceFileAndLocation(
-    fileName: string,
-    position: Position,
-  ): string {
-    return [
-      this.color('cyan', fileName),
-      this.color('yellow', position.line),
-      this.color('yellow', position.column),
-    ].join(':')
-  }
-
-  private color(color: Color, ...text: unknown[]) {
-    if (this.options.clearTextReporter.allowColor) {
-      return chalk[color](...text)
-    }
-    return text.join('')
-  }
-
-  private logExecutedTests(
-    tests: TestModel[],
-    logImplementation: (input: string) => void,
-  ) {
-    if (!this.options.clearTextReporter.logTests) {
-      return
-    }
-
-    const testCount = Math.min(
-      this.options.clearTextReporter.maxTestsToLog,
-      tests.length,
-    )
-
-    if (testCount > 0) {
-      logImplementation('Tests ran:')
-      tests.slice(0, testCount).forEach((test) => {
-        logImplementation(`    ${test.name}`)
-      })
-      const diff = tests.length - this.options.clearTextReporter.maxTestsToLog
-      if (diff > 0) {
-        logImplementation(`  and ${diff} more test${plural(diff)}!`)
-      }
-      logImplementation('')
-    }
+    wrapUp: Effect.void,
   }
 }

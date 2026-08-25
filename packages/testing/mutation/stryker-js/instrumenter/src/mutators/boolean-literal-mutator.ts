@@ -1,24 +1,16 @@
 import babel from '@babel/core'
 
-import { deepCloneNode } from '../util/index.js'
+import { deepCloneNode } from '../babel/clone.js'
+
+import type { Mutator, MutatorContext } from './mutator.js'
 
 const { types } = babel
 
-import { type NodeMutator } from './index.js'
-
-export const booleanLiteralMutator: NodeMutator = {
-  name: 'BooleanLiteral',
-
-  *mutate(path) {
-    if (path.isBooleanLiteral()) {
-      yield types.booleanLiteral(!path.node.value)
-    }
-    if (
-      path.isUnaryExpression() &&
-      path.node.operator === '!' &&
-      path.node.prefix
-    ) {
-      yield deepCloneNode(path.node.argument)
-    }
-  },
+export const booleanLiteralMutator: Mutator = function*(node, _context: MutatorContext) {
+  if (types.isBooleanLiteral(node)) {
+    yield types.booleanLiteral(!node.value)
+  }
+  if (types.isUnaryExpression(node) && node.operator === '!' && node.prefix) {
+    yield deepCloneNode(node.argument)
+  }
 }

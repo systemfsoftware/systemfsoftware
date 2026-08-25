@@ -1,26 +1,18 @@
 import babel from '@babel/core'
 
-import { deepCloneNode } from '../util/index.js'
+import { deepCloneNode } from '../babel/clone.js'
 
-import { type NodeMutator } from './index.js'
+import type { Mutator, MutatorContext } from './mutator.js'
 
 const { types } = babel
 
-enum UpdateOperators {
-  '++' = '--',
-  '--' = '++',
-}
+const UpdateOperators = {
+  '++': '--',
+  '--': '++',
+} as const
 
-export const updateOperatorMutator: NodeMutator = {
-  name: 'UpdateOperator',
-
-  *mutate(path) {
-    if (path.isUpdateExpression()) {
-      yield types.updateExpression(
-        UpdateOperators[path.node.operator],
-        deepCloneNode(path.node.argument),
-        path.node.prefix,
-      )
-    }
-  },
+export const updateOperatorMutator: Mutator = function*(node, _context: MutatorContext) {
+  if (types.isUpdateExpression(node)) {
+    yield types.updateExpression(UpdateOperators[node.operator], deepCloneNode(node.argument), node.prefix)
+  }
 }

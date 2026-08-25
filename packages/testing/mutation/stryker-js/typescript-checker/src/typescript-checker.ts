@@ -1,230 +1,234 @@
 import { EOL } from 'os'
 
-import type { Checker, CheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
+import { Checker } from '@systemfsoftware/stryker-js-plugin-api/check'
+import { CheckerFailed } from '@systemfsoftware/stryker-js-plugin-api/check'
 import { CheckStatus } from '@systemfsoftware/stryker-js-plugin-api/check'
-import type { Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import type { Logger, LoggerFactoryMethod } from '@systemfsoftware/stryker-js-plugin-api/logging'
-import { commonTokens, Scope, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import type { Injector, PluginContext } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { split, strykerReportBugUrl } from '@systemfsoftware/stryker-js-util'
+import type { CheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
+import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { normalizeFileName, strykerReportBugUrl } from '@systemfsoftware/stryker-js-plugin-api/core'
+import { Predicate, Result } from 'effect'
+import * as Effect from 'effect/Effect'
+import * as Match from 'effect/Match'
 import { DiagnosticCategory } from 'typescript/unstable/sync'
 import type { Diagnostic } from 'typescript/unstable/sync'
 
+import { classifyDiagnostics, partitionMutantsForGrouping } from './diagnostics.js'
 import { createGroups } from './grouping/create-groups.js'
-import { TSFileNode } from './grouping/ts-file-node.js'
-import * as pluginTokens from './plugin-tokens.js'
-import { HybridFileSystem } from './project/hybrid-file-system.js'
-import { toPosixFileName } from './tsconfig-helpers.js'
-import type { TypescriptCheckerOptionsWithStrykerOptions } from './typescript-checker-options-with-stryker-options.js'
-import { TypescriptCompiler } from './typescript-compiler.js'
+import type { TSFileNode } from './grouping/ts-file-node.js'
+import type { TypeScriptCompiler } from './typescript-compiler.js'
 
-const typescriptCheckerLoggerFactory = Object.assign(
-  (
-    loggerFactory: LoggerFactoryMethod,
-    target: Function | undefined,
-  ): Logger => {
-    const targetName = target?.name ?? TypescriptChecker.name
-    const category = targetName === TypescriptChecker.name
-      ? TypescriptChecker.name
-      : `${TypescriptChecker.name}.${targetName}`
-    return loggerFactory(category)
-  },
-  {
-    inject: tokens(commonTokens.getLogger, commonTokens.target),
-  },
-)
+interface CheckerDeps {
+  readonly options: unknown
+  readonly compiler: TypeScriptCompiler['Service']
+}
 
-export const create = Object.assign(
-  (injector: Injector<PluginContext>): TypescriptChecker =>
-    injector
-      .provideFactory(
-        commonTokens.logger,
-        typescriptCheckerLoggerFactory,
-        Scope.Transient,
+const emptyCheckResultMap = (): Map<string, CheckResult> => new Map()
+const emptyDiagnosticMap = (): Map<string, Diagnostic[]> => new Map()
+
+function getPrioritize(options: unknown): boolean {
+  if (!Predicate.hasProperty(options, 'typescriptChecker')) {
+    return false
+  }
+  const tc = options['typescriptChecker']
+  if (typeof tc !== 'object' || tc === null) {
+    return false
+  }
+  if (!Predicate.hasProperty(tc, 'prioritizePerformanceOverAccuracy')) {
+    return false
+  }
+  const val = tc['prioritizePerformanceOverAccuracy']
+  return typeof val === 'boolean' ? val : false
+}
+
+export function makeCheckerService({ options, compiler }: CheckerDeps): Checker['Service'] {
+  const formatDiagnostic = (error: Diagnostic): Effect.Effect<string, never> =>
+    Effect.gen(function*() {
+      const severity = error.category === DiagnosticCategory.Error
+        ? 'error'
+        : error.category === DiagnosticCategory.Warning
+        ? 'warning'
+        : error.category === DiagnosticCategory.Suggestion
+        ? 'suggestion'
+        : 'message'
+
+      let location = ''
+      if (error.fileName) {
+        const lineAndCharacter = yield* compiler
+          .getLineAndCharacterOfPosition(error.fileName, error.pos)
+          .pipe(Effect.orElseSucceed(() => undefined))
+        const line = (lineAndCharacter?.line ?? 0) + 1
+        const character = (lineAndCharacter?.character ?? 0) + 1
+        location = `${error.fileName}(${line},${character}): `
+      }
+
+      return `${location}${severity} TS${error.code}: ${error.text}`
+    })
+
+  const createErrorText = (errors: readonly Diagnostic[]): Effect.Effect<string, never> =>
+    Effect.gen(function*() {
+      const parts = yield* Effect.forEach(errors, formatDiagnostic)
+      return parts.join(EOL)
+    })
+
+  const checkErrors = (
+    mutants: readonly Mutant[],
+    errorsMap: Map<string, Diagnostic[]>,
+    nodes: ReadonlyMap<string, TSFileNode>,
+  ): Effect.Effect<void, CheckerFailed> =>
+    Effect.gen(function*() {
+      const diagnostics = yield* compiler.check([...mutants]).pipe(
+        Effect.mapError(
+          (cause) =>
+            new CheckerFailed({
+              checkerName: 'typescript',
+              mutantIds: mutants.map((m) => m.id),
+              cause,
+            }),
+        ),
       )
-      .provideClass(pluginTokens.fs, HybridFileSystem)
-      .provideClass(pluginTokens.tsCompiler, TypescriptCompiler)
-      .injectClass(TypescriptChecker),
-  {
-    inject: tokens(commonTokens.injector),
-  },
-)
 
-export class TypescriptChecker implements Checker {
-  public static inject = tokens(
-    commonTokens.logger,
-    commonTokens.options,
-    pluginTokens.tsCompiler,
-  )
-
-  private readonly options: TypescriptCheckerOptionsWithStrykerOptions
-
-  constructor(
-    private readonly logger: Logger,
-    options: StrykerOptions,
-    private readonly tsCompiler: TypescriptCompiler,
-  ) {
-    this.options = options
-  }
-
-  public async init(): Promise<void> {
-    const errors = await this.tsCompiler.init()
-
-    if (errors.length) {
-      throw new Error(
-        `Typescript error(s) found in dry run compilation: ${this.createErrorText(errors)}`,
-      )
-    }
-  }
-
-  public async check(mutants: Mutant[]): Promise<Record<string, CheckResult>> {
-    const result: Record<string, CheckResult> = Object.fromEntries(
-      mutants.map((mutant) => [mutant.id, { status: CheckStatus.Passed }]),
-    )
-
-    // Check if this is the group with unrelated files and return check status passed if so
-    const firstMutant = mutants[0]
-    if (!firstMutant || !this.tsCompiler.nodes.get(toPosixFileName(firstMutant.fileName))) {
-      return result
-    }
-
-    const mutantErrorRelationMap = await this.checkErrors(
-      mutants,
-      {},
-      this.tsCompiler.nodes,
-    )
-    for (const [id, errors] of Object.entries(mutantErrorRelationMap)) {
-      result[id] = {
-        status: CheckStatus.CompileError,
-        reason: this.createErrorText(errors),
-      }
-    }
-
-    return result
-  }
-
-  public group(mutants: Mutant[]): Promise<string[][]> {
-    if (!this.options.typescriptChecker?.prioritizePerformanceOverAccuracy) {
-      return Promise.resolve(mutants.map((m) => [m.id]))
-    }
-    const { nodes } = this.tsCompiler
-    const [mutantsOutsideProject, mutantsInProject] = split(
-      mutants,
-      (m) => nodes.get(toPosixFileName(m.fileName)) == null,
-    )
-
-    const groups = createGroups(mutantsInProject, nodes)
-    if (mutantsOutsideProject.length) {
-      return Promise.resolve([
-        mutantsOutsideProject.map((m) => m.id),
-        ...groups,
-      ])
-    } else {
-      return Promise.resolve(groups)
-    }
-  }
-
-  private async checkErrors(
-    mutants: Mutant[],
-    errorsMap: Record<string, Diagnostic[]>,
-    nodes: Map<string, TSFileNode>,
-  ): Promise<Record<string, Diagnostic[]>> {
-    const errors = await this.tsCompiler.check(mutants)
-    const mutantsThatCouldNotBeTestedInGroups = new Set<Mutant>()
-
-    // If there is only a single mutant the error has to originate from the single mutant
-    if (errors.length && mutants.length === 1) {
-      const onlyMutant = mutants[0]
-      if (onlyMutant !== undefined) {
-        errorsMap[onlyMutant.id] = errors
-      }
-      return errorsMap
-    }
-
-    for (const error of errors) {
-      if (!error.fileName) {
-        throw new Error(
-          `Typescript error: '${error.text}' was reported without a corresponding file. This shouldn't happen. Please open an issue using this link: ${
-            strykerReportBugUrl(
-              `[BUG]: TypeScript checker reports compile error without a corresponding file: ${error.text}`,
-            )
-          }`,
+      const classified = classifyDiagnostics(diagnostics, mutants, nodes)
+      if (Result.isFailure(classified)) {
+        const failure = classified.failure
+        const message = Match.value(failure).pipe(
+          Match.tag('DiagnosticWithoutFileError', (f) =>
+            `Typescript error: '${f.text}' was reported without a corresponding file. This shouldn't happen. Please open an issue using this link: ${
+              strykerReportBugUrl(
+                `[BUG]: TypeScript checker reports compile error without a corresponding file: ${f.text}`,
+              )
+            }`),
+          Match.tag('DiagnosticInUnrelatedFileError', (f) =>
+            `Typescript error: '${f.text}' was reported in an unrelated file (${f.fileName}). This file is not part of your project, or referenced from your project. This shouldn't happen, please open an issue using this link: ${
+              strykerReportBugUrl(
+                `[BUG]: TypeScript checker reports compile error in an unrelated file: ${f.text}`,
+              )
+            }`),
+          Match.exhaustive,
         )
+        return yield* new CheckerFailed({
+          checkerName: 'typescript',
+          mutantIds: mutants.map((m) =>
+            m.id
+          ),
+          cause: new Error(message),
+        })
       }
-      const nodeErrorWasThrownIn = nodes.get(error.fileName)
-      if (!nodeErrorWasThrownIn) {
-        throw new Error(
-          `Typescript error: '${error.text}' was reported in an unrelated file (${error.fileName}). This file is not part of your project, or referenced from your project. This shouldn't happen, please open an issue using this link: ${
-            strykerReportBugUrl(
-              `[BUG]: TypeScript checker reports compile error in an unrelated file: ${error.text}`,
-            )
-          }`,
-        )
-      }
-      const mutantsRelatedToError = nodeErrorWasThrownIn.getMutantsWithReferenceToChildrenOrSelf(mutants)
 
-      if (mutantsRelatedToError.length === 0) {
-        // In rare cases there are no mutants related to the typescript error
-        // Having to test all mutants individually to know which mutant thrown the error
-        for (const mutant of mutants) {
-          mutantsThatCouldNotBeTestedInGroups.add(mutant)
+      const { definitive, needsRetest } = classified.success
+
+      for (const [id, errors] of definitive.entries()) {
+        const existing = errorsMap.get(id)
+        if (existing) {
+          existing.push(...errors)
+        } else {
+          errorsMap.set(id, [...errors])
         }
-      } else if (mutantsRelatedToError.length === 1) {
-        // There is only one mutant related to the typescript error so we can add it to the errorsRelatedToMutant
-        const onlyRelatedMutant = mutantsRelatedToError[0]
-        if (onlyRelatedMutant !== undefined) {
-          const mutantId = onlyRelatedMutant.id
-          if (errorsMap[mutantId]) {
-            errorsMap[mutantId].push(error)
-          } else {
-            errorsMap[mutantId] = [error]
+      }
+
+      if (needsRetest.length > 0) {
+        yield* compiler.check([]).pipe(
+          Effect.mapError(
+            (cause) =>
+              new CheckerFailed({
+                checkerName: 'typescript',
+                mutantIds: needsRetest.map((m) =>
+                  m.id
+                ),
+                cause,
+              }),
+          ),
+        )
+
+        for (const mutant of needsRetest) {
+          if (errorsMap.has(mutant.id)) {
+            continue
           }
-        }
-      } else {
-        // If there are more than one mutants related to the error we should check them individually
-        for (const mutant of mutantsRelatedToError) {
-          mutantsThatCouldNotBeTestedInGroups.add(mutant)
+          yield* checkErrors([mutant], errorsMap, nodes)
         }
       }
-    }
+    })
 
-    if (mutantsThatCouldNotBeTestedInGroups.size) {
-      // Because at this point the filesystem contains all the mutants from the group we need to reset back
-      // to the original state of the files to make it possible to test the first mutant
-      // if we wouldn't do this the first mutant would not be noticed by the compiler because it was already in the filesystem
-      await this.tsCompiler.check([])
-    }
-    for (const mutant of mutantsThatCouldNotBeTestedInGroups) {
-      if (errorsMap[mutant.id]) continue
-      await this.checkErrors([mutant], errorsMap, nodes)
-    }
+  return {
+    init: Effect.gen(function*() {
+      const errors = yield* compiler.init.pipe(
+        Effect.mapError(
+          (cause) =>
+            new CheckerFailed({
+              checkerName: 'typescript',
+              mutantIds: [],
+              cause,
+            }),
+        ),
+      )
+      if (errors.length > 0) {
+        const text = yield* createErrorText(errors)
+        return yield* new CheckerFailed({
+          checkerName: 'typescript',
+          mutantIds: [],
+          cause: new Error(`Typescript error(s) found in dry run compilation: ${text}`),
+        })
+      }
+    }),
 
-    return errorsMap
-  }
+    check: (mutants) =>
+      Effect.gen(function*() {
+        const nodes = yield* compiler.nodes.pipe(
+          Effect.mapError(
+            (cause) =>
+              new CheckerFailed({
+                checkerName: 'typescript',
+                mutantIds: mutants.map((m) => m.id),
+                cause,
+              }),
+          ),
+        )
+        const result = emptyCheckResultMap()
+        for (const mutant of mutants) {
+          result.set(mutant.id, { status: CheckStatus.Passed })
+        }
+        const firstMutant = mutants[0]
+        if (!firstMutant || !nodes.get(normalizeFileName(firstMutant.fileName))) {
+          return result
+        }
+        const errorsMap = emptyDiagnosticMap()
+        yield* checkErrors(mutants, errorsMap, nodes)
 
-  private createErrorText(errors: Diagnostic[]): string {
-    return errors
-      .map((error) => this.formatDiagnostic(error))
-      .join(EOL)
-  }
+        for (const [id, errors] of errorsMap.entries()) {
+          const text = yield* createErrorText(errors)
+          result.set(id, {
+            status: CheckStatus.CompileError,
+            reason: text,
+          })
+        }
 
-  private formatDiagnostic(error: Diagnostic): string {
-    const severity = error.category === DiagnosticCategory.Error
-      ? 'error'
-      : error.category === DiagnosticCategory.Warning
-      ? 'warning'
-      : error.category === DiagnosticCategory.Suggestion
-      ? 'suggestion'
-      : 'message'
+        return result
+      }),
 
-    let location = ''
-    if (error.fileName) {
-      const lineAndCharacter = this.tsCompiler.getLineAndCharacterOfPosition(error.fileName, error.pos)
-      const line = (lineAndCharacter?.line ?? 0) + 1
-      const character = (lineAndCharacter?.character ?? 0) + 1
-      location = `${error.fileName}(${line},${character}): `
-    }
+    group: (mutants) =>
+      Effect.gen(function*() {
+        const nodes = yield* compiler.nodes.pipe(
+          Effect.mapError(
+            (cause) =>
+              new CheckerFailed({
+                checkerName: 'typescript',
+                mutantIds: mutants.map((m) => m.id),
+                cause,
+              }),
+          ),
+        )
+        const prioritize = getPrioritize(options)
+        const { inside, outside } = partitionMutantsForGrouping(mutants, nodes, prioritize)
 
-    return `${location}${severity} TS${error.code}: ${error.text}`
+        if (inside.length === 0) {
+          return mutants.map((m) => [m.id])
+        }
+
+        const groups = createGroups([...inside], nodes)
+        if (outside.length > 0) {
+          const outsideGroup = outside.map((m) => m.id)
+          return [outsideGroup, ...groups]
+        }
+        return groups
+      }),
   }
 }

@@ -1,111 +1,52 @@
-import {
-  type ClassPlugin,
-  commonTokens,
-  type FactoryPlugin,
-  type InjectionToken,
-  type Injector,
-  type Plugin,
-  type PluginContext,
-  type PluginInterfaces,
-  PluginKind,
-  type Plugins,
-  tokens,
-  type ValuePlugin,
-} from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { type InjectableClass, type InjectableFunction } from 'typed-inject'
+import * as Effect from 'effect/Effect'
+import * as HashMap from 'effect/HashMap'
+import * as Option from 'effect/Option'
 
-import { ConfigError } from '../errors.js'
-import { injectionTokens } from './index.js'
+import type { AnyPluginContribution, ContributionOf } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 
-export class PluginCreator {
-  public static readonly inject = tokens(
-    injectionTokens.pluginsByKind,
-    commonTokens.injector,
-  )
-  constructor(
-    private readonly pluginsByKind: Map<PluginKind, Plugin<PluginKind>[]>,
-    private readonly injector: Injector<PluginContext>,
-  ) {}
+import { PluginNotFoundError } from './plugin-loader.schema.js'
 
-  public create<TPlugin extends keyof Plugins>(
-    kind: TPlugin,
-    name: string,
-  ): PluginInterfaces[TPlugin] {
-    return this.instantiate(this.findPlugin(kind, name))
-  }
-
-  public createAll<TPlugin extends keyof Plugins>(kind: TPlugin): PluginInterfaces[TPlugin][] {
-    const plugins = this.pluginsByKind.get(kind) ?? []
-    return plugins
-      .filter((plugin): plugin is Plugins[TPlugin] => isPluginOfKind(plugin, kind))
-      .map((plugin) => this.instantiate(plugin))
-  }
-
-  private instantiate<TPlugin extends keyof Plugins>(
-    plugin: Plugins[TPlugin],
-  ): PluginInterfaces[TPlugin] {
-    if (isFactoryPlugin(plugin)) {
-      return this.injector.injectFunction(
-        plugin.factory,
-      )
-    } else if (isClassPlugin(plugin)) {
-      return this.injector.injectClass(
-        plugin.injectableClass,
-      )
-    } else if (isValuePlugin(plugin)) {
-      return plugin.value
-    }
-    throw new Error(
-      'Plugin could not be created, missing "factory", "injectableClass" or "value" property.',
+function findPlugin<K extends PluginKind>(
+  pluginsByKind: HashMap.HashMap<PluginKind, readonly AnyPluginContribution[]>,
+  kind: K,
+  name: string,
+): Effect.Effect<ContributionOf<K>, PluginNotFoundError> {
+  const contributionsOption = HashMap.get(pluginsByKind, kind)
+  if (Option.isNone(contributionsOption)) {
+    return Effect.fail(
+      new PluginNotFoundError({ descriptor: `${kind}:${name} (no ${kind} plugins were loaded)` }),
     )
   }
-
-  private findPlugin<T extends keyof Plugins>(
-    kind: T,
-    name: string,
-  ): Plugins[T] {
-    const plugins = this.pluginsByKind.get(kind)
-    if (plugins) {
-      const pluginFound = plugins.find(
-        (plugin) => plugin.name.toLowerCase() === name.toLowerCase(),
-      )
-      if (pluginFound && isPluginOfKind(pluginFound, kind)) {
-        return pluginFound
-      } else {
-        // A missing plugin is a configuration problem: ConfigError keeps it on the config-error exit class (R2).
-        throw new ConfigError(
-          `Cannot find ${kind} plugin "${name}". Did you forget to install it? Loaded ${kind} plugins were: ${
-            new Intl.ListFormat('en').format(plugins.map((p) => `"${p.name}"`))
-          }`,
-        )
-      }
-    } else {
-      throw new ConfigError(
-        `Cannot find ${kind} plugin "${name}". In fact, no ${kind} plugins were loaded. Did you forget to install it?`,
-      )
-    }
+  const contributions = contributionsOption.value
+  const found = contributions.find(
+    (c): c is ContributionOf<K> => c.kind === kind && c.name.toLowerCase() === name.toLowerCase(),
+  )
+  if (found === undefined) {
+    return Effect.fail(
+      new PluginNotFoundError({
+        descriptor: `${kind}:${name} (available: ${contributions.map((c) => c.name).join(', ')})`,
+      }),
+    )
   }
+  return Effect.succeed(found)
 }
 
-function isPluginOfKind<T extends keyof Plugins>(
-  plugin: Plugin<PluginKind>,
-  kind: T,
-): plugin is Plugins[T] {
-  return plugin.kind === kind
+export function create<K extends PluginKind>(
+  pluginsByKind: HashMap.HashMap<PluginKind, readonly AnyPluginContribution[]>,
+  kind: K,
+  name: string,
+): Effect.Effect<ContributionOf<K>, PluginNotFoundError> {
+  return findPlugin(pluginsByKind, kind, name)
 }
 
-function isFactoryPlugin<TPluginKind extends PluginKind>(
-  plugin: Plugin<TPluginKind>,
-): plugin is FactoryPlugin<TPluginKind, InjectionToken<PluginContext>[]> {
-  return 'factory' in plugin
-}
-function isClassPlugin<TPluginKind extends PluginKind>(
-  plugin: Plugin<TPluginKind>,
-): plugin is ClassPlugin<TPluginKind, InjectionToken<PluginContext>[]> {
-  return 'injectableClass' in plugin
-}
-function isValuePlugin<TPluginKind extends PluginKind>(
-  plugin: Plugin<TPluginKind>,
-): plugin is ValuePlugin<TPluginKind> {
-  return 'value' in plugin
+export function createAll<K extends PluginKind>(
+  pluginsByKind: HashMap.HashMap<PluginKind, readonly AnyPluginContribution[]>,
+  kind: K,
+): Effect.Effect<readonly ContributionOf<K>[]> {
+  const contributions = HashMap.get(pluginsByKind, kind)
+  if (Option.isNone(contributions)) {
+    return Effect.succeed([])
+  }
+  return Effect.succeed(contributions.value.filter((c): c is ContributionOf<K> => c.kind === kind))
 }

@@ -1,146 +1,124 @@
-import fs from 'fs'
-import { createRequire } from 'module'
-import path from 'path'
-import { pathToFileURL } from 'url'
+import { createRequire } from 'node:module' // node:module — createRequire for specifier resolution, no Effect equivalent
+import { pathToFileURL } from 'node:url' // node:url — pathToFileURL, no Effect Path equivalent
 
 import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { Match } from 'effect'
+import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
+import * as Match from 'effect/Match'
+import * as Path from 'effect/Path'
+import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
-import { ConfigError } from '../errors.js'
-
 import { ConfigDocumentSchema, ImportedModuleSchema } from './config-document.schema.js'
+import { ConfigFileInvalidError, ConfigFileUnreadableError } from './config-reader.schema.js'
 import type { ExtendsStepState } from './extends-step.js'
 import { decideExtendsStep, initialExtendsStepState } from './extends-step.js'
 
-export async function readConfigFile(configFile: string): Promise<PartialStrykerOptions> {
-  const ext = path.extname(configFile).toLowerCase()
-  if (ext === '.json') {
-    let fileContent: string
-    try {
-      fileContent = await fs.promises.readFile(configFile, 'utf-8')
-    } catch (err) {
-      throw new ConfigError(
-        `Cannot read config file "${configFile}"`,
-        err,
+export function readConfigFile(
+  configFile: string,
+): Effect.Effect<
+  PartialStrykerOptions,
+  ConfigFileUnreadableError | ConfigFileInvalidError,
+  FileSystem.FileSystem | Path.Path
+> {
+  return Effect.gen(function*() {
+    const pathService = yield* Path.Path
+    const ext = pathService.extname(configFile).toLowerCase()
+    if (ext === '.json') {
+      const fs = yield* FileSystem.FileSystem
+      const fileContent = yield* fs.readFileString(configFile).pipe(
+        Effect.mapError((cause) => new ConfigFileUnreadableError({ file: configFile, cause })),
+      )
+      const parsed = yield* Effect.try({
+        try: () => JSON.parse(fileContent) as unknown,
+        catch: (cause) => new ConfigFileInvalidError({ file: configFile, cause }),
+      })
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+        return yield* new ConfigFileInvalidError({ file: configFile, cause: 'Config must be a JSON object' })
+      }
+      return yield* S.decodeUnknownEffect(ConfigDocumentSchema)(parsed).pipe(
+        Effect.mapError((cause) => new ConfigFileInvalidError({ file: configFile, cause })),
       )
     }
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(fileContent)
-    } catch (err) {
-      throw new ConfigError(
-        `Invalid config file "${configFile}". File contains invalid JSON`,
-        err,
-      )
+    const importResult = yield* Effect.tryPromise({
+      try: () => import(pathToFileURL(pathService.resolve(configFile)).toString()),
+      catch: (cause) => new ConfigFileUnreadableError({ file: configFile, cause }),
+    }).pipe(Effect.result)
+    if (Result.isFailure(importResult)) {
+      return yield* importResult.failure
     }
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new ConfigError(
-        `Invalid config file "${configFile}". Config must be a JSON object`,
-      )
+    const importedModule: unknown = importResult.success
+    const exported = yield* S.decodeUnknownEffect(ImportedModuleSchema)(importedModule).pipe(
+      Effect.mapError((cause) => new ConfigFileInvalidError({ file: configFile, cause })),
+      Effect.map((decoded) => decoded.default),
+    )
+    if (exported === undefined || exported === null || typeof exported !== 'object') {
+      return yield* new ConfigFileInvalidError({
+        file: configFile,
+        cause: 'Default export of config file must be an object!',
+      })
     }
-    return S.decodeUnknownSync(ConfigDocumentSchema)(parsed)
-  }
-  // Dynamic import: the module specifier is the runtime-resolved config path,
-  // not a literal known at author time, so static import cannot apply.
-  let importedModule: unknown
-  try {
-    importedModule = await import(
-      pathToFileURL(path.resolve(configFile)).toString()
+    return yield* S.decodeUnknownEffect(ConfigDocumentSchema)(exported).pipe(
+      Effect.mapError((cause) => new ConfigFileInvalidError({ file: configFile, cause })),
     )
-  } catch (err) {
-    throw new ConfigError(
-      `Invalid config file "${configFile}". Error during import`,
-      err,
-    )
-  }
-  const exported = S.decodeUnknownSync(ImportedModuleSchema)(importedModule).default
-  if (exported === undefined || exported === null || typeof exported !== 'object') {
-    throw new ConfigError(
-      `Invalid config file "${configFile}". Default export of config file must be an object!`,
-    )
-  }
-  return S.decodeUnknownSync(ConfigDocumentSchema)(exported)
+  })
+}
+function resolveExtendsSpecifier(
+  specifier: string,
+  configDir: string,
+): Effect.Effect<string, ConfigFileUnreadableError, Path.Path> {
+  return Effect.gen(function*() {
+    const pathService = yield* Path.Path
+    return yield* Effect.try({
+      try: () => {
+        const requireFrom = createRequire(pathService.join(configDir, 'noop.js'))
+        return requireFrom.resolve(specifier)
+      },
+      catch: (cause) => new ConfigFileUnreadableError({ file: specifier, cause }),
+    })
+  })
 }
 
-/**
- * The resolve act, split out of the deleted `resolveExtendsTarget`. Its
- * relative-path branch became the decision's `read` request; only this branch
- * survives, converting a bare specifier to an absolute path through node's
- * require resolver from the declaring config's directory — never the process
- * working directory (R10). The error message is the pre-split one, verbatim.
- */
-function resolveExtendsSpecifier(specifier: string, configDir: string): string {
-  const requireFrom = createRequire(path.join(configDir, 'noop.js'))
-  try {
-    return requireFrom.resolve(specifier)
-  } catch (err) {
-    throw new ConfigError(
-      `Cannot resolve extends target "${specifier}" from "${configDir}"`,
-      err,
-    )
-  }
-}
-
-/**
- * Interpret the `extends` decision at the shell boundary (R9, KTD2).
- *
- * Drives `decideExtendsStep` in a plain async loop. The entry document is
- * already read by the caller; each returned request names the act the shell
- * performs — read this absolute path, or resolve this specifier from the
- * declaring directory — and the document the act yields is fed back together
- * with the state the request carried. The shell holds no decision of its own:
- * it only dispatches on the request it received and maps a refusal to the
- * `ConfigError` the pre-split chain surfaced, byte for byte.
- */
-export async function resolveExtends(
+export function resolveExtends(
   configFile: string,
   document: PartialStrykerOptions,
-): Promise<PartialStrykerOptions> {
-  const absolute = path.resolve(configFile)
-  let state: ExtendsStepState = initialExtendsStepState
-  let file = absolute
-  let currentDocument = document
-  for (;;) {
-    const outcome = await Match.value(decideExtendsStep(state, currentDocument, file)).pipe(
-      Match.tag('done', (value) => ({ kind: 'done' as const, options: value.options })),
-      Match.tag('read', (value) =>
-        readConfigFile(value.path).then((nextDocument) => ({
-          kind: 'next' as const,
-          state: value.state,
-          file: value.path,
-          document: nextDocument,
-        }))),
-      Match.tag('resolve', (value) => {
-        let resolvedPath: string
-        try {
-          resolvedPath = resolveExtendsSpecifier(value.specifier, value.directory)
-        } catch (err) {
-          if (err instanceof ConfigError) throw err
-          const reason = err instanceof Error ? `. ${err.message}` : ''
-          throw new ConfigError(
-            `Cannot resolve extends target "${value.specifier}" from "${file}"${reason}`,
-            err,
-          )
-        }
-        return readConfigFile(resolvedPath).then((nextDocument) => ({
-          kind: 'next' as const,
-          state: value.state,
-          file: resolvedPath,
-          document: nextDocument,
-        }))
-      }),
-      Match.tag('refused', (value) => {
-        const message = value.reason === 'cycle'
-          ? `Config inheritance cycle detected at "${value.file}"`
-          : `Invalid config file "${value.file}". "extends" must be a string`
-        throw new ConfigError(message)
-      }),
-      Match.exhaustive,
-    )
-    if (outcome.kind === 'done') return outcome.options
-    state = outcome.state
-    file = outcome.file
-    currentDocument = outcome.document
-  }
+): Effect.Effect<
+  PartialStrykerOptions,
+  ConfigFileUnreadableError | ConfigFileInvalidError,
+  FileSystem.FileSystem | Path.Path
+> {
+  return Effect.gen(function*() {
+    const pathService = yield* Path.Path
+    const absolute = pathService.resolve(configFile)
+    const loop = (
+      state: ExtendsStepState,
+      file: string,
+      currentDocument: PartialStrykerOptions,
+    ): Effect.Effect<
+      PartialStrykerOptions,
+      ConfigFileUnreadableError | ConfigFileInvalidError,
+      FileSystem.FileSystem | Path.Path
+    > =>
+      Match.value(decideExtendsStep(state, currentDocument, file, pathService)).pipe(
+        Match.tag('done', (d) => Effect.succeed(d.options)),
+        Match.tag('read', (d) =>
+          readConfigFile(d.path).pipe(Effect.flatMap((nextDocument) => loop(d.state, d.path, nextDocument)))),
+        Match.tag('resolve', (d) =>
+          resolveExtendsSpecifier(d.specifier, d.directory).pipe(
+            Effect.flatMap((resolvedPath) =>
+              readConfigFile(resolvedPath).pipe(Effect.flatMap((nextDocument) =>
+                loop(d.state, resolvedPath, nextDocument)
+              ))
+            ),
+          )),
+        Match.tag('refused', (d) => {
+          const message = d.reason === 'cycle'
+            ? `Config inheritance cycle detected at "${d.file}"`
+            : `Invalid config file "${d.file}". "extends" must be a string`
+          return Effect.fail(new ConfigFileInvalidError({ file: d.file, cause: message }))
+        }),
+        Match.exhaustive,
+      )
+    return yield* loop(initialExtendsStepState, absolute, document)
+  })
 }

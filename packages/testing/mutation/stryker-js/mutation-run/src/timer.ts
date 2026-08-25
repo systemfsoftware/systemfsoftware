@@ -1,61 +1,60 @@
-/**
- * Published as the `./timer` subpath: the mutation-report package's
- * progress reporters construct a `Timer` from here (KTD7).
- */
-export class Timer {
-  private readonly start: Date
-  private readonly markers = new Map<string, Date>()
+/** A run's start instant and the markers its stages set. Internal. */
+import * as Clock from 'effect/Clock'
+import * as Effect from 'effect/Effect'
 
-  constructor(private readonly now = () => new Date()) {
-    this.start = this.now()
-  }
-  public humanReadableElapsed(sinceMarker?: string): string {
-    const elapsedSeconds = this.elapsedSeconds(sinceMarker)
-    return new Intl.ListFormat('en').format(
-      [
-        Timer.humanReadableElapsedMinutes(elapsedSeconds),
-        Timer.humanReadableElapsedSeconds(elapsedSeconds),
-      ].filter(Boolean),
-    )
-  }
+export interface Timer {
+  readonly startedAt: number
+  readonly markers: ReadonlyMap<string, number>
+}
 
-  public elapsedSeconds(sinceMarker?: string): number {
-    const elapsedMs = this.elapsedMs(sinceMarker)
-    return Math.floor(elapsedMs / 1000)
-  }
+export const makeTimer: Effect.Effect<Timer> = Effect.map(Clock.currentTimeMillis, (startedAt) => ({
+  startedAt,
+  markers: new Map<string, number>(),
+}))
 
-  public elapsedMs(sinceMarker?: string): number {
-    const marker = sinceMarker && this.markers.get(sinceMarker)
-    if (marker) {
-      return this.now().getTime() - marker.getTime()
-    } else {
-      return this.now().getTime() - this.start.getTime()
-    }
-  }
-
-  public mark(name: string): void {
-    this.markers.set(name, this.now())
-  }
-
-  private static humanReadableElapsedSeconds(elapsedSeconds: number) {
-    const restSeconds = elapsedSeconds % 60
-    return this.formatTime('second', restSeconds)
-  }
-
-  private static humanReadableElapsedMinutes(elapsedSeconds: number) {
-    const elapsedMinutes = Math.floor(elapsedSeconds / 60)
-    if (elapsedMinutes === 0) {
-      return ''
-    } else {
-      return this.formatTime('minute', elapsedMinutes)
-    }
-  }
-
-  private static formatTime(word: 'minute' | 'second', elapsed: number) {
-    return elapsed.toLocaleString('en', {
-      unit: word,
-      style: 'unit',
-      unitDisplay: 'long',
-    })
+export const markTimer = (timer: Timer, name: string, at: number): Timer => {
+  const next = new Map(timer.markers)
+  next.set(name, at)
+  return {
+    startedAt: timer.startedAt,
+    markers: next,
   }
 }
+
+export const elapsedMs = (timer: Timer, now: number, sinceMarker?: string): number => {
+  const marker = sinceMarker !== undefined ? timer.markers.get(sinceMarker) : undefined
+  if (marker !== undefined) {
+    return now - marker
+  }
+  return now - timer.startedAt
+}
+
+export const elapsedSeconds = (timer: Timer, now: number, sinceMarker?: string): number =>
+  Math.floor(elapsedMs(timer, now, sinceMarker) / 1000)
+
+export const humanReadableElapsed = (timer: Timer, now: number, sinceMarker?: string): string => {
+  const seconds = elapsedSeconds(timer, now, sinceMarker)
+  return new Intl.ListFormat('en').format(
+    [humanReadableElapsedMinutes(seconds), humanReadableElapsedSeconds(seconds)].filter(Boolean),
+  )
+}
+
+const humanReadableElapsedSeconds = (elapsedSecondsValue: number): string => {
+  const restSeconds = elapsedSecondsValue % 60
+  return formatTime('second', restSeconds)
+}
+
+const humanReadableElapsedMinutes = (elapsedSecondsValue: number): string => {
+  const elapsedMinutes = Math.floor(elapsedSecondsValue / 60)
+  if (elapsedMinutes === 0) {
+    return ''
+  }
+  return formatTime('minute', elapsedMinutes)
+}
+
+const formatTime = (word: 'minute' | 'second', elapsed: number): string =>
+  elapsed.toLocaleString('en', {
+    unit: word,
+    style: 'unit',
+    unitDisplay: 'long',
+  })

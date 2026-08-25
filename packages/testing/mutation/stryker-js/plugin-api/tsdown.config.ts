@@ -21,9 +21,18 @@ export default defineConfig({
   format: 'esm',
   dts: true,
   // The deliberate exception to the repo-wide `devExports: '@systemfsoftware/source'`: this
-  // `src/` is vendored at upstream's looser strictness, so advertising the source condition
-  // pulls it into a stricter consumer's program — `stryker-plugins` did that and got 43
-  // errors. Consumers get the built `.d.ts`. Same ruling as `../cli/tsconfig.json`.
+  // `src/` is held at a looser strictness than the rest of the workspace, so advertising the
+  // source condition pulls it into a stricter consumer's program — `stryker-plugins` did that
+  // and got 43 errors. Consumers get the built `.d.ts`. Same ruling as `../cli/tsconfig.json`.
   exports: { devExports: false },
-  clean: false,
+  // Stale chunks are published: `dist/` is what ships, and a chunk left from an
+  // earlier build stays in the tarball. This package shipped a megabyte of
+  // bundled test-runner internals that way, long after the code that pulled
+  // them in was gone.
+  clean: true,
+  // In-source `if (import.meta.vitest)` blocks are test code. Defining the flag
+  // away makes every such branch statically dead, so rolldown drops it along
+  // with its dynamic `import('vitest')`. Without this they ship — and because
+  // this package's sources are bundled into every dependent, they ship there too.
+  define: { 'import.meta.vitest': 'undefined' },
 })

@@ -1,13 +1,6 @@
-import { Project } from '../project/project.js'
+import * as Effect from 'effect/Effect'
 
 import { type FilePreprocessor } from './file-preprocessor.js'
 
-export class MultiPreprocessor implements FilePreprocessor {
-  constructor(private readonly preprocessors: FilePreprocessor[]) {}
-
-  public async preprocess(project: Project): Promise<void> {
-    for (const preprocessor of this.preprocessors) {
-      await preprocessor.preprocess(project)
-    }
-  }
-}
+export const combinePreprocessors = (preprocessors: readonly FilePreprocessor[]): FilePreprocessor => (project) =>
+  Effect.forEach(preprocessors, (pre) => pre(project), { discard: true })

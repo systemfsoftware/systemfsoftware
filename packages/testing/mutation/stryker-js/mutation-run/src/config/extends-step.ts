@@ -1,5 +1,5 @@
 /// <reference types="vitest/import-meta" />
-import path from 'path'
+import type * as Path from 'effect/Path'
 
 import * as Match from 'effect/Match'
 
@@ -166,6 +166,7 @@ export const decideExtendsStep = (
   state: ExtendsStepState,
   document: PartialStrykerOptions,
   file: string,
+  pathService: Path.Path,
 ): ExtendsStepDecision => {
   if (state.visited.includes(file)) {
     return { ...RefusedTag, reason: 'cycle', file }
@@ -189,12 +190,12 @@ export const decideExtendsStep = (
         Match.when(true, (): ExtendsStepDecision => ({
           ...ResolveTag,
           specifier: extendValue,
-          directory: path.dirname(file),
+          directory: pathService.dirname(file),
           state: nextState,
         })),
         Match.when(false, (): ExtendsStepDecision => ({
           ...ReadTag,
-          path: path.resolve(path.dirname(file), extendValue),
+          path: pathService.resolve(pathService.dirname(file), extendValue),
           state: nextState,
         })),
         Match.exhaustive,

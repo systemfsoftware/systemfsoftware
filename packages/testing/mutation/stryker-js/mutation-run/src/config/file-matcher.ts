@@ -1,36 +1,40 @@
-import path from 'path'
+import type * as Path from 'effect/Path'
 
-import { normalizeFileName } from '@systemfsoftware/stryker-js-util'
+import { normalizeFileName } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { minimatch } from 'minimatch'
 
-/**
- * A helper class for matching files using the `disableTypeChecks` setting.
- */
-export class FileMatcher {
-  private readonly pattern: boolean | string
+const DEFAULT_GLOB = '**/*.{js,ts,jsx,tsx,html,vue,mjs,mts,cts,cjs}'
 
-  constructor(
-    pattern: boolean | string,
-    private readonly allowHiddenFiles = true,
-  ) {
-    if (typeof pattern === 'string') {
-      this.pattern = normalizeFileName(path.resolve(pattern))
-    } else if (pattern) {
-      this.pattern = '**/*.{js,ts,jsx,tsx,html,vue,mjs,mts,cts,cjs}'
-    } else {
-      this.pattern = pattern
-    }
+function normalizePattern(pattern: boolean | string, pathService: Path.Path): boolean | string {
+  if (typeof pattern === 'string') {
+    return normalizeFileName(pathService.resolve(pattern))
   }
+  if (pattern) {
+    return DEFAULT_GLOB
+  }
+  return false
+}
 
-  public matches(fileName: string): boolean {
-    if (typeof this.pattern === 'string') {
-      return minimatch(
-        normalizeFileName(path.resolve(fileName)),
-        this.pattern,
-        { dot: this.allowHiddenFiles },
-      )
-    } else {
-      return this.pattern
-    }
+export function createFileMatcher(
+  pattern: boolean | string,
+  pathService: Path.Path,
+  allowHiddenFiles = true,
+): (fileName: string) => boolean {
+  const normalized = normalizePattern(pattern, pathService)
+  if (typeof normalized === 'string') {
+    return (fileName: string) =>
+      minimatch(normalizeFileName(pathService.resolve(fileName)), normalized, {
+        dot: allowHiddenFiles,
+      })
   }
+  return () => normalized
+}
+
+export function matchesFile(
+  pattern: boolean | string,
+  fileName: string,
+  pathService: Path.Path,
+  allowHiddenFiles = true,
+): boolean {
+  return createFileMatcher(pattern, pathService, allowHiddenFiles)(fileName)
 }

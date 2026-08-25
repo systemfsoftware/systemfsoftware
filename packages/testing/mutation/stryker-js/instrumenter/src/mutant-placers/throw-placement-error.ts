@@ -1,10 +1,11 @@
+// node:path builds a relative path for a diagnostic message; threading Path.Path
+// through every placer into a `never`-returning formatter is pure churn (REPO-A2).
 import path from 'path'
 
 import { NodePath } from '@babel/core'
-import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import { propertyPath } from '@systemfsoftware/stryker-js-util'
+import { propertyPath, type StrykerOptions, strykerReportBugUrl } from '@systemfsoftware/stryker-js-plugin-api/core'
 
-import { Mutant } from '../mutant.js'
+import type { Mutant } from '../mutant.js'
 
 import { type MutantPlacer } from './mutant-placer.js'
 
@@ -27,11 +28,7 @@ export function throwPlacementError(
         'mutator',
         'excludedMutations',
       )
-    }). Please report this issue at https://github.com/stryker-mutator/stryker-js/issues/new?assignees=&labels=%F0%9F%90%9B+Bug&template=bug_report.md&title=${
-      encodeURIComponent(
-        message,
-      )
-    }. Original error: ${error.stack}`
+    }). Please report this issue at ${strykerReportBugUrl(message)}. Original error: ${error.stack}`
   let builtError = new Error(errorMessage)
   try {
     // `buildCodeFrameError` is kind of flaky, see https://github.com/stryker-mutator/stryker-js/issues/2695

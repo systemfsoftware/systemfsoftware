@@ -1,13 +1,15 @@
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
-import emojiRegex from 'emoji-regex'
 
-const emojiRe = emojiRegex()
+const KNOWN_EMOJI: Record<string, true> = {
+  '✅': true,
+  '🙈': true,
+  '🤥': true,
+  '👽': true,
+  '⏰': true,
+  '⌛': true,
+  '💥': true,
+}
 
-/**
- * The presentation-only string helpers of the clear-text reporter. They are
- * separated from the framing helpers in the engine's `worker-pool/string-utils.ts`
- * (which the child-process proxy and its worker depend on).
- */
 export function plural(items: number): string {
   if (items > 1) {
     return 's'
@@ -37,9 +39,18 @@ export function getEmojiForStatus(status: schema.MutantStatus): string {
 }
 
 export function stringWidth(input: string): number {
-  let { length } = input
-  for (const match of input.matchAll(emojiRe)) {
-    length = length - match[0].length + 2
+  let width = 0
+  for (const char of input) {
+    if (KNOWN_EMOJI[char]) {
+      width += 2
+    } else {
+      const cp = char.codePointAt(0) ?? 0
+      if (cp > 0xffff) {
+        width += 2
+      } else {
+        width += 1
+      }
+    }
   }
-  return length
+  return width
 }

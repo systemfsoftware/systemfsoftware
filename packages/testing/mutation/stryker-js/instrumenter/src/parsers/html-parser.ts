@@ -7,7 +7,7 @@ import {
   type ScriptAst,
   type ScriptFormat,
 } from '../syntax/index.js'
-import { ParseError } from './parse-error.js'
+import { ParseFailed } from './parse-error.schema.js'
 import { type ParserContext } from './parser-context.js'
 
 const TSX_SCRIPT_TYPES = Object.freeze(['tsx', 'text/tsx'])
@@ -54,27 +54,48 @@ async function ngHtmlParser(
   if (errors.length !== 0) {
     const firstError = errors[0]
     if (firstError === undefined) {
-      throw new Error('HTML parser reported errors but first error is missing')
+      throw new ParseFailed({
+        fileName,
+        message: 'HTML parser reported errors but first error is missing',
+        location: { line: 0, column: 0 },
+        cause: errors,
+      })
     }
-    throw new ParseError(
-      firstError.msg,
+    throw new ParseFailed({
       fileName,
-      toSourceLocation(firstError.span.start),
-    )
+      message: firstError.msg,
+      location: toSourceLocation(firstError.span.start),
+      cause: firstError,
+    })
   }
   const scriptsAsPromised: Array<Promise<ScriptAst>> = []
-  ngParser.visitAll(
-    new (class extends ngParser.RecursiveVisitor {
-      public override visitElement(el: NGAst.Element, context: unknown): void {
-        const scriptFormat = getScriptType(el)
-        if (scriptFormat) {
-          scriptsAsPromised.push(parseScript(el, scriptFormat))
-        }
-        super.visitElement(el, context)
+  // `visitAll` takes the `Visitor` INTERFACE, not a class — `RecursiveVisitor`
+  // merely `implements Visitor` — and `visitAll` is itself exported, so the
+  // descent `RecursiveVisitor.visitElement` would have provided is one call. A
+  // plain object closing over `scriptsAsPromised` therefore does the whole job
+  // without inheriting a vendor base class.
+  const scriptCollector: NGAst.Visitor = {
+    visitElement: (el: NGAst.Element, context: unknown): void => {
+      const scriptFormat = getScriptType(el)
+      if (scriptFormat) {
+        scriptsAsPromised.push(parseScript(el, scriptFormat))
       }
-    })(),
-    rootNodes,
-  )
+      ngParser.visitAll(scriptCollector, el.children, context)
+    },
+    visitAttribute: () => undefined,
+    visitText: () => undefined,
+    visitComment: () => undefined,
+    visitDocType: () => undefined,
+    visitExpansion: () => undefined,
+    visitExpansionCase: () => undefined,
+    visitBlock: () => undefined,
+    visitBlockParameter: () => undefined,
+    visitLetDeclaration: () => undefined,
+    visitCdata: () => undefined,
+    visitComponent: () => undefined,
+    visitDirective: () => undefined,
+  }
+  ngParser.visitAll(scriptCollector, rootNodes)
   const scripts = await Promise.all(scriptsAsPromised)
   const root: HtmlRootNode = {
     scripts,

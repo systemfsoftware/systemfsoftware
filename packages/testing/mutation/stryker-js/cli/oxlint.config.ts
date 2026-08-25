@@ -14,6 +14,14 @@ export default defineConfig({
   ],
 
   rules: {
+    // Enabled per-package because the shared config deliberately leaves it out.
+    // It judges a class by the expression it extends, so `Context.Service`,
+    // `S.TaggedError` and `Schema` stay legal and nothing else does. It belongs to
+    // no oxlint category, which is why `correctness` never caught the ~40 classes
+    // with mutable fields and impure constructors this subsystem was graded F- for
+    // — including two whose instance methods were unreachable across the worker
+    // IPC boundary because the dispatcher reads properties off the export.
+    '@systemfsoftware/oxlint-plugin/ban-classes': 'error',
     ...cellVocabulary.configs.recommended.rules,
     ...effectEntrypoint.configs.recommended.rules,
     ...testPlacement.configs.recommended.rules,

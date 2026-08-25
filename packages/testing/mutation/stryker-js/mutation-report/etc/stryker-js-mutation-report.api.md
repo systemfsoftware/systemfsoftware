@@ -4,77 +4,178 @@
 
 ```ts
 
-import { ClassPlugin } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { DryRunCompletedEvent } from '@systemfsoftware/stryker-js-plugin-api/report';
-import { injectionTokens } from '@systemfsoftware/stryker-js-mutation-run/plugins';
-import { Injector } from 'typed-inject';
+import * as Effect from 'effect/Effect';
+import * as FileSystem from 'effect/FileSystem';
 import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging';
+import { Metrics } from '@systemfsoftware/stryker-js-plugin-api/report';
+import { MetricsResult } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core';
+import { MutationScoreThresholds } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { MutationTestingPlanReadyEvent } from '@systemfsoftware/stryker-js-plugin-api/report';
-import { MutationTestMetricsResult } from 'mutation-testing-metrics';
-import { PluginContext } from '@systemfsoftware/stryker-js-plugin-api/plugin';
+import * as Path from 'effect/Path';
+import { PluginContribution } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
-import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report';
-import { RunEventSink } from '@systemfsoftware/stryker-js-mutation-run/run-event';
+import { ReporterService } from '@systemfsoftware/stryker-js-plugin-api/report';
+import { RunConfiguration } from '@systemfsoftware/stryker-js-plugin-api/plugin';
+import { RunTiming } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core';
-import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core';
+import { TestRunnerCapabilities } from '@systemfsoftware/stryker-js-plugin-api/test-runner';
 
 // @public (undocumented)
-export class ClearTextReporter implements Reporter {
-    constructor(log: Logger, options: StrykerOptions);
-    // (undocumented)
-    static inject: ["logger", "options"];
-    // (undocumented)
-    onMutationTestReportReady(_report: schema.MutationTestResult, metrics: MutationTestMetricsResult): void;
-}
+export type Column = {
+    readonly kind: 'single';
+    readonly header: string;
+    readonly isFirstColumn: boolean;
+    readonly netWidth: number;
+    readonly valueFactory: TableCellValueFactory;
+    readonly rows: MetricsResult<Metrics>;
+} | {
+    readonly kind: 'file';
+    readonly header: string;
+    readonly isFirstColumn: true;
+    readonly netWidth: number;
+    readonly valueFactory: TableCellValueFactory;
+    readonly rows: MetricsResult<Metrics>;
+} | {
+    readonly kind: 'mutationScore';
+    readonly header: string;
+    readonly isFirstColumn: false;
+    readonly netWidth: number;
+    readonly valueFactory: TableCellValueFactory;
+    readonly rows: MetricsResult<Metrics>;
+    readonly thresholds: MutationScoreThresholds;
+    readonly scoreType: 'total' | 'covered';
+    readonly allowColor: boolean;
+} | {
+    readonly kind: 'group';
+    readonly header: string;
+    readonly isFirstColumn: boolean;
+    readonly netWidth: number;
+    readonly columns: readonly Column[];
+};
 
-// @public (undocumented)
-export class HtmlReporter implements Reporter {
-    constructor(options: StrykerOptions, log: Logger);
-    // (undocumented)
-    static readonly inject: ["options", "logger"];
-    // (undocumented)
-    onMutationTestReportReady(report: schema.MutationTestResult): void;
-    // (undocumented)
-    wrapUp(): Promise<void> | undefined;
-}
-
-// @public (undocumented)
-export class JsonReporter implements Reporter {
-    constructor(options: StrykerOptions, log: Logger);
-    // (undocumented)
-    static readonly inject: ["options", "logger"];
-    // (undocumented)
-    onMutationTestReportReady(report: schema.MutationTestResult): void;
-    // (undocumented)
-    wrapUp(): Promise<void> | undefined;
-}
-
-// Warning: (ae-forgotten-export) The symbol "ProgressKeeper" needs to be exported by the entry point index.d.mts
+// Warning: (ae-forgotten-export) The symbol "ProvidedStrykerOptions" needs to be exported by the entry point index.d.mts
 //
 // @public (undocumented)
-export class ProgressBarReporter extends ProgressKeeper {
-    // (undocumented)
-    onMutantTested(result: MutantResult): number;
-    // (undocumented)
-    onMutationTestingPlanReady(event: MutationTestingPlanReadyEvent): void;
-}
-
-// @public
-export class ProgressStreamReporter implements Reporter {
-    constructor(injector: Injector<PluginContext & {
-        [injectionTokens.runEventSink]: RunEventSink;
-    }>);
-    // (undocumented)
-    static readonly inject: ["$injector"];
-    // (undocumented)
-    onMutantTested(result: MutantResult): void;
-    // (undocumented)
-    onMutationTestingPlanReady(event: MutationTestingPlanReadyEvent): void;
-}
+export const drawClearTextScoreTable: (metricsResult: MetricsResult<Metrics>, options: ProvidedStrykerOptions) => string;
 
 // @public (undocumented)
-export const strykerPlugins: ClassPlugin<PluginKind.Reporter, []>[];
+export const emptyTally: (startedAt: number) => ProgressTally;
+
+// @public (undocumented)
+export function filterActionable(result: MutantResult): boolean;
+
+// @public (undocumented)
+export const getElapsedTime: (tally: ProgressTally, now: number) => string;
+
+// @public (undocumented)
+export const getEtc: (tally: ProgressTally, now: number) => string;
+
+// @public (undocumented)
+export const handleDryRunCompleted: (tally: ProgressTally, event: DryRunCompletedEvent) => ProgressTally;
+
+// @public (undocumented)
+export const handleMutantTested: (tally: ProgressTally, result: MutantResult) => {
+    readonly tally: ProgressTally;
+    readonly ticks: number;
+};
+
+// @public (undocumented)
+export const handleMutationTestingPlanReady: (tally: ProgressTally, event: MutationTestingPlanReadyEvent, startedAt: number) => ProgressTally;
+
+// @public (undocumented)
+export const isComplete: (state: ProgressBarState) => boolean;
+
+// @public (undocumented)
+export const makeClearTextReporter: (params: {
+    readonly options?: ProvidedStrykerOptions;
+    readonly log?: Logger;
+    readonly out?: NodeJS.WritableStream;
+}) => ReporterService;
+
+// @public (undocumented)
+export const makeHtmlReporter: (params: {
+    readonly options?: ProvidedStrykerOptions;
+    readonly log?: Logger;
+    readonly fs: FileSystem.FileSystem;
+    readonly path: Path.Path;
+}) => ReporterService;
+
+// @public (undocumented)
+export const makeJsonReporter: (params: {
+    readonly options?: ProvidedStrykerOptions;
+    readonly log?: Logger;
+    readonly fs: FileSystem.FileSystem;
+    readonly path: Path.Path;
+}) => ReporterService;
+
+// @public (undocumented)
+export const makeProgressBarReporter: (params?: {
+    readonly out?: NodeJS.WritableStream;
+    readonly barFormat?: string;
+    readonly barOptions?: {
+        readonly complete: string;
+        readonly incomplete: string;
+        readonly width: number;
+    };
+}) => Effect.Effect<ReporterService>;
+
+// @public (undocumented)
+export const makeProgressBarState: (format: string, options: {
+    readonly complete: string;
+    readonly incomplete: string;
+    readonly total: number;
+    readonly width: number;
+}) => ProgressBarState;
+
+// @public (undocumented)
+export const makeProgressStreamReporter: (runEventSink?: RunEventSink) => Effect.Effect<ReporterService>;
+
+// @public (undocumented)
+export type ProgressBarState = {
+    readonly format: string;
+    readonly total: number;
+    readonly curr: number;
+    readonly width: number;
+    readonly complete: string;
+    readonly incomplete: string;
+};
+
+// @public (undocumented)
+export type ProgressTally = {
+    readonly survived: number;
+    readonly timedOut: number;
+    readonly tested: number;
+    readonly mutants: number;
+    readonly total: number;
+    readonly ticks: number;
+    readonly ticksByMutantId: ReadonlyMap<string, number>;
+    readonly timing: RunTiming;
+    readonly capabilities: TestRunnerCapabilities;
+    readonly startedAt: number;
+};
+
+// @public (undocumented)
+export const renderProgressBar: (state: ProgressBarState, data: Readonly<Record<string, string | number>>) => string;
+
+// Warning: (ae-forgotten-export) The symbol "RunEvent" needs to be exported by the entry point index.d.mts
+//
+// @public (undocumented)
+export type RunEventSink = (event: RunEvent) => void;
+
+// @public (undocumented)
+export const strykerPlugins: PluginContribution<PluginKind.Reporter>[];
+
+// @public (undocumented)
+export const tickProgressBar: (state: ProgressBarState, ticks: number) => ProgressBarState;
+
+// @public (undocumented)
+export function toRunEvent(result: MutantResult, completed: number, total: number): RunEvent;
+
+// Warnings were encountered during analysis:
+//
+// dist/index-YpU0uGVo.d.mts:37:3 - (ae-forgotten-export) The symbol "TableCellValueFactory" needs to be exported by the entry point index.d.mts
 
 // (No @packageDocumentation comment for this package)
 

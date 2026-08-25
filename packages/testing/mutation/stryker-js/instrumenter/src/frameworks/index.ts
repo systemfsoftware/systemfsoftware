@@ -1,9 +1,7 @@
-import { declareClassPlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { angularIgnorer } from './angular-ignorer.js'
 
-import { AngularIgnorer } from './angular-ignorer.js'
+export { angularIgnorer }
 
-export const strykerPlugins = [
-  declareClassPlugin(PluginKind.Ignore, 'angular', AngularIgnorer),
-]
+export const strykerPlugins: readonly unknown[] = []
 
 export const frameworkPluginsFileUrl = import.meta.url

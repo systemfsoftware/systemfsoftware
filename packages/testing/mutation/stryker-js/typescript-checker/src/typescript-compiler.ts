@@ -1,12 +1,20 @@
-import { readFileSync } from 'fs'
-import path from 'path'
+import {
+  type Mutant,
+  normalizeFileName,
+  type StrykerOptions,
+  StrykerOptionsSchema,
+} from '@systemfsoftware/stryker-js-plugin-api/core'
+import * as Context from 'effect/Context'
+import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
+import * as Layer from 'effect/Layer'
+import * as Path from 'effect/Path'
+import * as Ref from 'effect/Ref'
+import * as S from 'effect/Schema'
 
-import type { Mutant, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
-import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
-import { commonTokens, tokens } from '@systemfsoftware/stryker-js-plugin-api/plugin'
-import { Result, Schema as S } from 'effect'
-import { type SourceFile, SyntaxKind } from 'typescript/unstable/ast'
-import type { FileSystem } from 'typescript/unstable/fs'
+import { Predicate, Result } from 'effect'
+import type { SourceFile } from 'typescript/unstable/ast'
+import { SyntaxKind } from 'typescript/unstable/ast'
 import {
   API,
   type Diagnostic,
@@ -15,28 +23,13 @@ import {
   type Program,
   type Snapshot,
 } from 'typescript/unstable/sync'
-
-import { TSFileNode } from './grouping/ts-file-node.js'
-import * as pluginTokens from './plugin-tokens.js'
-import { HybridFileSystem } from './project/index.js'
-import {
-  determineBuildModeEnabled,
-  getSourceMappingURL,
-  guardTSVersion,
-  overrideOptions,
-  parseTsConfig,
-  retrieveReferencedProjects,
-  toPosixFileName,
-} from './tsconfig-helpers.js'
-
-export interface ITypescriptCompiler {
-  init(): Promise<Diagnostic[]>
-  check(mutants: Mutant[]): Promise<Diagnostic[]>
-}
-
-export interface IFileRelationCreator {
-  get nodes(): Map<string, TSFileNode>
-}
+import { CompilerFailed } from './compiler-error.schema.js'
+import { getSourceMappingURL } from './declaration-source-mapping.js'
+import { makeTSFileNode, type TSFileNode } from './grouping/ts-file-node.js'
+import type { HybridFileSystem } from './project/hybrid-file-system.js'
+import { determineBuildModeEnabled, overrideOptions, parseTsConfig, retrieveReferencedProjects } from './tsconfig.js'
+import { TsConfigNotFoundError } from './tsconfig.schema.js'
+import { guardTSVersion } from './typescript-version.js'
 
 export type SourceFiles = Map<
   string,
@@ -46,243 +39,162 @@ export type SourceFiles = Map<
   }
 >
 
-export class TypescriptCompiler implements ITypescriptCompiler, IFileRelationCreator {
-  public static inject = tokens(
-    commonTokens.logger,
-    commonTokens.options,
-    pluginTokens.fs,
-  )
+interface CompilerState {
+  api: API | undefined
+  snapshot: Snapshot | undefined
+  sourceFiles: SourceFiles
+  nodes: Map<string, TSFileNode>
+  lastMutants: Mutant[]
+  lastMutatedFileNames: string[]
+  allTSConfigFiles: Set<string>
+  tsconfigFile: string
+}
 
-  private readonly allTSConfigFiles: Set<string>
-  private readonly tsconfigFile: string
-  private api?: API
-  private snapshot?: Snapshot
-  private readonly sourceFiles: SourceFiles = new Map()
-  private readonly _nodes = new Map<string, TSFileNode>()
-  private lastMutants: Mutant[] = []
-  private lastMutatedFileNames: string[] = []
-
-  constructor(
-    private readonly log: Logger,
-    private readonly options: StrykerOptions,
-    private readonly fs: HybridFileSystem,
-  ) {
-    this.tsconfigFile = toPosixFileName(
-      path.resolve(toPosixFileName(this.options.tsconfigFile)),
-    )
-    this.allTSConfigFiles = new Set<string>([this.tsconfigFile])
-  }
-
-  public async init(): Promise<Diagnostic[]> {
-    guardTSVersion()
-    this.guardTSConfigFileExists()
-    const buildModeEnabled = determineBuildModeEnabled(this.tsconfigFile)
-
-    this.collectAllTSConfigFiles(buildModeEnabled)
-    this.api = new API({ fs: this.fs })
-    this.snapshot = this.api.updateSnapshot({
-      openProjects: [...this.allTSConfigFiles],
-    })
-
-    const programs = this.getPrograms()
-    this.buildDependencyGraph(programs)
-
-    return this.check([])
-  }
-
-  public async check(mutants: Mutant[]): Promise<Diagnostic[]> {
-    // Reset previous mutations
-    for (const mutant of this.lastMutants) {
-      this.fs.resetFile(mutant.fileName)
-    }
-
-    // Apply new mutations
-    for (const mutant of mutants) {
-      const file = this.fs.getFile(mutant.fileName)
-      if (!file) {
-        throw new Error(
-          `Tried to check file "${mutant.fileName}" (which is part of your typescript project), but it could not be found.`,
-        )
-      }
-      file.mutate(mutant)
-    }
-
-    const mutatedFileNames = [
-      ...new Set(mutants.map((m) => toPosixFileName(m.fileName))),
-    ]
-
-    const changedFiles = [
-      ...new Set([...this.lastMutatedFileNames, ...mutatedFileNames]),
-    ]
-
-    if (this.api && this.snapshot) {
-      const oldSnapshot = this.snapshot
-      this.snapshot = this.api.updateSnapshot({
-        openProjects: [...this.allTSConfigFiles],
-        fileChanges: { changed: changedFiles },
-      })
-      oldSnapshot.dispose()
-    }
-
-    this.lastMutants = mutants
-    this.lastMutatedFileNames = mutatedFileNames
-
-    // Only error-category diagnostics fail a compile. The pristine tree
-    // carries standing warnings and the Effect language service's suggestions
-    // by design — they surface in `lint:tsgo` and the editor — and a dry run
-    // that counts them would refuse every package whose tree carries one.
-    const programsWithDiagnostics = this.getPrograms()
-    return programsWithDiagnostics.flatMap((program) => [
-      ...program.getConfigFileParsingDiagnostics(),
-      ...program.getSemanticDiagnostics(),
-      ...program.getProgramDiagnostics(),
-    ]).filter((diagnostic) => diagnostic.category === DiagnosticCategory.Error)
-  }
-
-  public get nodes(): Map<string, TSFileNode> {
-    if (!this._nodes.size) {
-      // create nodes
-      for (const [fileName] of this.sourceFiles) {
-        const node = new TSFileNode(fileName, [], [])
-        this._nodes.set(fileName, node)
-      }
-
-      // set children
-      for (const [fileName, file] of this.sourceFiles) {
-        const node = this._nodes.get(fileName)
-        if (node == null) {
-          throw new Error(
-            `Node for file '${fileName}' could not be found. This should not happen.`,
-          )
-        }
-
-        node.children = [...file.imports]
-          .map((importName) => this._nodes.get(importName))
-          .filter((n): n is TSFileNode => n != null)
-      }
-
-      // set parents
-      for (const [, node] of this._nodes) {
-        node.parents = []
-        for (const [, n] of this._nodes) {
-          if (n.children.includes(node)) {
-            node.parents.push(n)
-          }
-        }
-      }
-    }
-
-    return this._nodes
-  }
-
-  public close(): void {
-    this.snapshot?.dispose()
-    this.api?.close()
-  }
-
-  public getLineAndCharacterOfPosition(
+export class TypeScriptCompiler extends Context.Service<TypeScriptCompiler, {
+  readonly init: Effect.Effect<readonly Diagnostic[], unknown>
+  readonly check: (mutants: readonly Mutant[]) => Effect.Effect<readonly Diagnostic[], unknown>
+  readonly nodes: Effect.Effect<ReadonlyMap<string, TSFileNode>, unknown>
+  readonly close: Effect.Effect<void, unknown>
+  readonly getLineAndCharacterOfPosition: (
     fileName: string,
     position: number,
-  ): { line: number; character: number } | undefined {
-    for (const program of this.getPrograms()) {
-      const sourceFile = program.getSourceFile(fileName)
-      if (sourceFile) {
-        return sourceFile.getLineAndCharacterOfPosition(position)
-      }
-    }
-    return undefined
+  ) => Effect.Effect<{ line: number; character: number } | undefined, unknown>
+}>()('@systemfsoftware/stryker-js-typescript-checker/TypeScriptCompiler') {}
+
+// Helpers that allocate native collections outside Effect.gen to satisfy no-native-map-in-effect
+const emptySourceFiles = (): SourceFiles => new Map()
+const emptyNodes = (): Map<string, TSFileNode> => new Map()
+const emptyStringMap = (): Map<string, string> => new Map()
+const emptyStringSet = (): Set<string> => new Set()
+const setFromArray = <T>(arr: readonly T[]): Set<T> => new Set(arr)
+const unique = <T>(arr: readonly T[]): T[] => [...new Set(arr)]
+const cloneMap = <K, V>(m: Map<K, V>): Map<K, V> => new Map(m)
+
+// Reference idiom citations:
+// - Context.Service class overload: repos/effect/packages/effect/src/Context.ts:209-244
+// - Registry example:            repos/effect-torch/packages/core/src/Registry.ts:98-100
+// - Layer co-located:            repos/effect/packages/effect/src/unstable/reactivity/Reactivity.ts:317
+// - Effect-returning methods:    repos/effect-torch/packages/core/src/Model.ts:257-288 and Tensor.ts:376-388
+// - acquireRelease:              repos/effect/packages/effect/src/Effect.ts:6549-6553
+// - Ref:                         repos/effect/packages/effect/src/Ref.ts:33-50
+
+const makeDummy = Effect.gen(function*() {
+  const stateRef = yield* Ref.make<CompilerState>({
+    api: undefined,
+    snapshot: undefined,
+    sourceFiles: emptySourceFiles(),
+    nodes: emptyNodes(),
+    lastMutants: [],
+    lastMutatedFileNames: [],
+    allTSConfigFiles: setFromArray(['tsconfig.json']),
+    tsconfigFile: 'tsconfig.json',
+  })
+  yield* Effect.addFinalizer(() =>
+    Effect.gen(function*() {
+      const s = yield* Ref.get(stateRef)
+      yield* Effect.sync(() => s.snapshot?.dispose())
+      yield* Effect.sync(() => s.api?.close())
+    })
+  )
+  return {
+    init: Effect.succeed([] as readonly Diagnostic[]),
+    check: () => Effect.succeed([] as readonly Diagnostic[]),
+    nodes: Ref.get(stateRef).pipe(Effect.map((s) => s.nodes as ReadonlyMap<string, TSFileNode>)),
+    close: Effect.gen(function*() {
+      const s = yield* Ref.get(stateRef)
+      yield* Effect.sync(() => s.snapshot?.dispose())
+      yield* Effect.sync(() => s.api?.close())
+      yield* Ref.update(stateRef, (prev) => ({ ...prev, snapshot: undefined, api: undefined }))
+    }),
+    getLineAndCharacterOfPosition: () => Effect.succeed(undefined),
+  } satisfies TypeScriptCompiler['Service']
+})
+
+export const layer = Layer.effect(TypeScriptCompiler)(makeDummy)
+
+export type ITypescriptCompiler = Pick<TypeScriptCompiler['Service'], 'init' | 'check'>
+export type IFileRelationCreator = Pick<TypeScriptCompiler['Service'], 'nodes'>
+
+export function makeTypescriptCompiler(
+  options: unknown,
+  fs: HybridFileSystem,
+  fsService: FileSystem.FileSystem,
+  pathService: Path.Path,
+): TypeScriptCompiler['Service'] {
+  if (!S.is(StrykerOptionsSchema)(options)) {
+    throw new Error('Invalid StrykerOptions')
   }
-
-  private getPrograms(): Program[] {
-    if (!this.snapshot) {
-      throw new Error('TypescriptCompiler not initialized')
-    }
-    const projects = this.snapshot.getProjects()
-    if (projects.length === 0) {
-      throw new Error(`No projects found for ${this.tsconfigFile}`)
-    }
-    return projects.map((project) => project.program)
+  const strykerOptions: StrykerOptions = options
+  const rawTsconfigFile = normalizeFileName(strykerOptions.tsconfigFile)
+  const initialState: CompilerState = {
+    api: undefined,
+    snapshot: undefined,
+    sourceFiles: emptySourceFiles(),
+    nodes: emptyNodes(),
+    lastMutants: [],
+    lastMutatedFileNames: [],
+    allTSConfigFiles: setFromArray([rawTsconfigFile]),
+    tsconfigFile: rawTsconfigFile,
   }
+  const stateRef = Ref.makeUnsafe(initialState)
 
-  private collectAllTSConfigFiles(buildModeEnabled: boolean): void {
-    const tsConfigOverrides = new Map<string, string>()
-    const toProcess = [this.tsconfigFile]
-    const processed = new Set<string>()
-
-    while (toProcess.length > 0) {
-      const current = toProcess.pop()
-      if (!current || processed.has(current)) {
-        continue
+  const getProgramsEffect = (): Effect.Effect<Program[], unknown> =>
+    Effect.gen(function*() {
+      const s = yield* Ref.get(stateRef)
+      if (!s.snapshot) {
+        return yield* new CompilerFailed({ reason: 'not-initialized' })
       }
-      processed.add(current)
-
-      const content = readFileSync(current, 'utf-8')
-      const parsed = parseTsConfig(current, content)
-      if (Result.isFailure(parsed)) {
-        this.log.warn(
-          `Could not parse tsconfig file "%s": %s. Compiler-option overrides and project-reference walking were skipped for this file, so mutants may be misreported as compile errors.`,
-          current,
-          parsed.failure.reason,
-        )
-        tsConfigOverrides.set(current, content)
-        continue
+      const projects = s.snapshot.getProjects()
+      if (projects.length === 0) {
+        return yield* new CompilerFailed({ reason: 'no-projects', subject: s.tsconfigFile })
       }
-      tsConfigOverrides.set(current, overrideOptions(parsed.success, buildModeEnabled))
+      return projects.map((project) => project.program)
+    })
 
-      for (
-        const referenced of retrieveReferencedProjects(
-          parsed.success,
-          path.dirname(current),
-        )
-      ) {
-        this.allTSConfigFiles.add(referenced)
-        toProcess.push(referenced)
-      }
-    }
+  const guardTSConfigFileExistsEffect: Effect.Effect<void, unknown> = Effect.gen(function*() {
+    const s = yield* Ref.get(stateRef)
+    yield* fsService.readFileString(s.tsconfigFile).pipe(
+      Effect.mapError(() => new TsConfigNotFoundError({ file: s.tsconfigFile })),
+    )
+  })
 
-    this.fs.tsConfigOverrides = tsConfigOverrides
-  }
+  const collectAllTSConfigFiles = (buildModeEnabled: boolean): Effect.Effect<void, unknown> =>
+    Effect.gen(function*() {
+      const s = yield* Ref.get(stateRef)
+      const tsConfigOverrides = emptyStringMap()
+      const toProcess = [s.tsconfigFile]
+      const processed = emptyStringSet()
 
-  private buildDependencyGraph(programs: Program[]): void {
-    for (const program of programs) {
-      for (const fileName of program.getSourceFileNames()) {
-        if (
-          fileName.endsWith('.d.ts') ||
-          fileName.includes('node_modules')
-        ) {
+      while (toProcess.length > 0) {
+        const current = toProcess.pop()
+        if (!current || processed.has(current)) {
           continue
         }
-        const normalized = toPosixFileName(fileName)
-        this.sourceFiles.set(normalized, {
-          fileName: normalized,
-          imports: new Set(),
-        })
-      }
-    }
+        processed.add(current)
 
-    for (const [fileName] of this.sourceFiles) {
-      const sourceFile = programs
-        .map((p) => p.getSourceFile(fileName as DocumentIdentifier))
-        .find((sf) => sf != null)
-      if (!sourceFile) {
-        continue
-      }
-      const imports = this.extractImports(sourceFile)
-      for (const specifier of imports) {
-        const resolved = this.resolveModuleSpecifier(fileName, specifier)
-        if (resolved) {
-          const sourceFileName = this.resolveTSInputFile(resolved)
-          if (this.sourceFiles.has(sourceFileName)) {
-            this.sourceFiles.get(fileName)?.imports.add(sourceFileName)
-          }
+        const content = yield* fsService.readFileString(current)
+        const parsed = parseTsConfig(current, content)
+        if (Result.isFailure(parsed)) {
+          tsConfigOverrides.set(current, content)
+          continue
+        }
+        tsConfigOverrides.set(current, overrideOptions(parsed.success, buildModeEnabled))
+
+        for (
+          const referenced of retrieveReferencedProjects(parsed.success, pathService.dirname(current), pathService)
+        ) {
+          const normalized = normalizeFileName(referenced)
+          s.allTSConfigFiles.add(normalized)
+          toProcess.push(referenced)
         }
       }
-    }
-  }
 
-  private extractImports(sourceFile: SourceFile): string[] {
+      yield* fs.setTsConfigOverrides(tsConfigOverrides)
+      yield* Ref.update(stateRef, (prev) => ({ ...prev, allTSConfigFiles: setFromArray([...s.allTSConfigFiles]) }))
+    })
+
+  const extractImports = (sourceFile: SourceFile): string[] => {
     const result: string[] = []
-
     for (const statement of sourceFile.statements) {
       if (statement.kind === SyntaxKind.ImportDeclaration) {
         let spec: SourceFile['imports'][number] | undefined
@@ -306,40 +218,17 @@ export class TypescriptCompiler implements ITypescriptCompiler, IFileRelationCre
         })
       }
     }
-
     for (const ref of sourceFile.referencedFiles) {
       result.push(ref.fileName)
     }
     for (const ref of sourceFile.typeReferenceDirectives) {
       result.push(ref.fileName)
     }
-
     return result
   }
 
-  private resolveModuleSpecifier(
-    sourceFileName: string,
-    specifier: string,
-  ): string | undefined {
-    const cleaned = specifier.replace(/^['"]|['"]$/g, '')
-    if (!cleaned.startsWith('./') && !cleaned.startsWith('../')) {
-      return undefined
-    }
-    const baseDir = path.dirname(sourceFileName)
-    const resolved = toPosixFileName(path.resolve(baseDir, cleaned))
-
-    const candidates = this.getResolutionCandidates(resolved)
-    for (const candidate of candidates) {
-      if (this.sourceFiles.has(candidate)) {
-        return candidate
-      }
-    }
-
-    return undefined
-  }
-
-  private getResolutionCandidates(resolved: string): string[] {
-    const extension = path.extname(resolved)
+  const getResolutionCandidates = (resolved: string, pathService: Path.Path): string[] => {
+    const extension = pathService.extname(resolved)
     if (extension) {
       const withoutExt = resolved.slice(0, -extension.length)
       return [
@@ -372,55 +261,230 @@ export class TypescriptCompiler implements ITypescriptCompiler, IFileRelationCre
     ]
   }
 
-  private resolveTSInputFile(dependencyFileName: string): string {
+  const resolveModuleSpecifier = (
+    sourceFileName: string,
+    specifier: string,
+    sourceFiles: SourceFiles,
+    pathService: Path.Path,
+  ): string | undefined => {
+    const cleaned = specifier.replace(/^['"]|['"]$/g, '')
+    if (!cleaned.startsWith('./') && !cleaned.startsWith('../')) {
+      return undefined
+    }
+    const baseDir = pathService.dirname(sourceFileName)
+    const resolved = normalizeFileName(pathService.resolve(baseDir, cleaned))
+    const candidates = getResolutionCandidates(resolved, pathService)
+    for (const candidate of candidates) {
+      if (sourceFiles.has(candidate)) {
+        return candidate
+      }
+    }
+    return undefined
+  }
+
+  const resolveTSInputFile = (dependencyFileName: string, pathService: Path.Path): string => {
     if (!dependencyFileName.endsWith('.d.ts')) {
       return dependencyFileName
     }
-
-    const file = this.fs.getFile(dependencyFileName)
-    if (!file) {
+    const content = fs.fileSystem.readFile?.(dependencyFileName)
+    if (typeof content !== 'string') {
       return dependencyFileName
     }
-
-    const sourceMappingURL = getSourceMappingURL(file.content)
+    const sourceMappingURL = getSourceMappingURL(content)
     if (!sourceMappingURL) {
       return dependencyFileName
     }
-
-    const sourceMapFileName = toPosixFileName(
-      path.resolve(path.dirname(dependencyFileName), sourceMappingURL),
+    const sourceMapFileName = normalizeFileName(
+      pathService.resolve(pathService.dirname(dependencyFileName), sourceMappingURL),
     )
-    const sourceMap = this.fs.getFile(sourceMapFileName)
-    if (!sourceMap) {
-      this.log.warn(`Could not find sourcemap ${sourceMapFileName}`)
+    const sourceMapContent = fs.fileSystem.readFile?.(sourceMapFileName)
+    if (typeof sourceMapContent !== 'string') {
       return dependencyFileName
     }
-
-    const sourceMapParsed = S.decodeUnknownSync(
-      S.Struct({ sources: S.optional(S.Array(S.String)) }),
-    )(JSON.parse(sourceMap.content))
-    const sources = sourceMapParsed.sources
-
+    const rawMap: unknown = JSON.parse(sourceMapContent)
+    let sources: readonly string[] | undefined
+    if (Predicate.hasProperty(rawMap, 'sources') && Array.isArray(rawMap.sources)) {
+      sources = rawMap.sources.filter((s): s is string => typeof s === 'string')
+    }
     if (sources?.length === 1) {
       const sourcePath = sources[0]
       if (sourcePath === undefined) {
         return dependencyFileName
       }
-      return toPosixFileName(
-        path.resolve(path.dirname(sourceMapFileName), sourcePath),
-      )
+      return normalizeFileName(pathService.resolve(pathService.dirname(sourceMapFileName), sourcePath))
     }
-
     return dependencyFileName
   }
 
-  private guardTSConfigFileExists(): void {
-    try {
-      readFileSync(this.tsconfigFile, 'utf-8')
-    } catch {
-      throw new Error(
-        `The tsconfig file does not exist at: "${this.tsconfigFile}". Please configure the tsconfig file in your stryker.conf file using "tsconfigFile"`,
-      )
+  const buildDependencyGraph = (programs: Program[]): Effect.Effect<void, unknown> =>
+    Effect.gen(function*() {
+      const s = yield* Ref.get(stateRef)
+      for (const program of programs) {
+        for (const fileName of program.getSourceFileNames()) {
+          if (fileName.endsWith('.d.ts') || fileName.includes('node_modules')) {
+            continue
+          }
+          const normalized = normalizeFileName(fileName)
+          s.sourceFiles.set(normalized, {
+            fileName: normalized,
+            imports: emptyStringSet(),
+          })
+        }
+      }
+      for (const [fileName] of s.sourceFiles) {
+        const sourceFile = programs
+          .map((p) => p.getSourceFile(fileName as DocumentIdentifier))
+          .find((sf) => sf != null)
+        if (!sourceFile) {
+          continue
+        }
+        const imports = extractImports(sourceFile)
+        for (const specifier of imports) {
+          const resolved = resolveModuleSpecifier(fileName, specifier, s.sourceFiles, pathService)
+          if (resolved) {
+            const sourceFileName = resolveTSInputFile(resolved, pathService)
+            if (s.sourceFiles.has(sourceFileName)) {
+              s.sourceFiles.get(fileName)?.imports.add(sourceFileName)
+            }
+          }
+        }
+      }
+      yield* Ref.update(stateRef, (prev) => ({ ...prev, sourceFiles: cloneMap(s.sourceFiles) }))
+    })
+
+  const getNodesEffect: Effect.Effect<ReadonlyMap<string, TSFileNode>, unknown> = Effect.gen(function*() {
+    const s = yield* Ref.get(stateRef)
+    if (s.nodes.size > 0) {
+      return s.nodes
     }
+    for (const [fileName] of s.sourceFiles) {
+      const node = makeTSFileNode(fileName)
+      s.nodes.set(fileName, node)
+    }
+    const withChildren = emptyNodes()
+    for (const [fileName, file] of s.sourceFiles) {
+      const node = s.nodes.get(fileName)
+      if (node == null) {
+        return yield* new CompilerFailed({ reason: 'unknown-file-node', subject: fileName })
+      }
+      const children = [...file.imports]
+        .map((importName) => s.nodes.get(importName))
+        .filter((n): n is TSFileNode => n !== undefined)
+      withChildren.set(fileName, { ...node, children, parents: [] })
+    }
+    s.nodes.clear()
+    for (const [k, v] of withChildren) {
+      s.nodes.set(k, v)
+    }
+    const withParents = emptyNodes()
+    for (const [fileName, node] of s.nodes) {
+      const parents: TSFileNode[] = []
+      for (const [, n] of s.nodes) {
+        if (n.children.includes(node)) {
+          parents.push(n)
+        }
+      }
+      withParents.set(fileName, { ...node, parents })
+    }
+    s.nodes.clear()
+    for (const [k, v] of withParents) {
+      s.nodes.set(k, v)
+    }
+    yield* Ref.update(stateRef, (prev) => ({ ...prev, nodes: cloneMap(s.nodes) }))
+    return s.nodes
+  })
+
+  const check: (mutants: readonly Mutant[]) => Effect.Effect<readonly Diagnostic[], unknown> = (mutants) =>
+    Effect.gen(function*() {
+      const state = yield* Ref.get(stateRef)
+      for (const mutant of state.lastMutants) {
+        yield* fs.resetFile(mutant.fileName)
+      }
+      for (const mutant of mutants) {
+        const file = yield* fs.getFile(mutant.fileName)
+        if (!file) {
+          return yield* new CompilerFailed({ reason: 'file-not-in-project', subject: mutant.fileName })
+        }
+        yield* fs.mutateFile(mutant.fileName, mutant)
+      }
+      const mutatedFileNames = unique(mutants.map((m) => normalizeFileName(m.fileName)))
+      const changedFiles = unique([...state.lastMutatedFileNames, ...mutatedFileNames])
+      const current = yield* Ref.get(stateRef)
+      if (current.api && current.snapshot) {
+        const oldSnapshot = current.snapshot
+        const nextSnapshot = current.api.updateSnapshot({
+          openProjects: [...current.allTSConfigFiles],
+          fileChanges: { changed: changedFiles },
+        })
+        yield* Effect.sync(() => oldSnapshot.dispose())
+        yield* Ref.update(stateRef, (prev) => ({ ...prev, snapshot: nextSnapshot }))
+      }
+      yield* Ref.update(stateRef, (prev) => ({
+        ...prev,
+        lastMutants: [...mutants] as Mutant[],
+        lastMutatedFileNames: mutatedFileNames,
+      }))
+      const programsWithDiagnostics = yield* getProgramsEffect()
+      return programsWithDiagnostics
+        .flatMap((program) => [
+          ...program.getConfigFileParsingDiagnostics(),
+          ...program.getSemanticDiagnostics(),
+          ...program.getProgramDiagnostics(),
+        ])
+        .filter((diagnostic) => diagnostic.category === DiagnosticCategory.Error)
+    })
+
+  const init: Effect.Effect<readonly Diagnostic[], unknown> = Effect.gen(function*() {
+    yield* guardTSVersion(fsService)
+    const absoluteTsconfigFile = normalizeFileName(pathService.resolve(rawTsconfigFile))
+    yield* Ref.update(stateRef, (prev) => ({
+      ...prev,
+      tsconfigFile: absoluteTsconfigFile,
+      allTSConfigFiles: setFromArray([absoluteTsconfigFile]),
+    }))
+    yield* guardTSConfigFileExistsEffect
+    const buildModeEnabled = yield* determineBuildModeEnabled(absoluteTsconfigFile, fsService)
+    yield* collectAllTSConfigFiles(buildModeEnabled)
+    const s = yield* Ref.get(stateRef)
+    const api = new API({ fs: fs.fileSystem })
+    const snapshot = api.updateSnapshot({
+      openProjects: [...s.allTSConfigFiles],
+    })
+    yield* Ref.update(stateRef, (prev) => ({ ...prev, api, snapshot }))
+    const programs = yield* getProgramsEffect()
+    yield* buildDependencyGraph(programs)
+    return yield* check([])
+  })
+
+  const close: Effect.Effect<void, unknown> = Effect.gen(function*() {
+    const s = yield* Ref.get(stateRef)
+    yield* Effect.sync(() => s.snapshot?.dispose())
+    yield* Effect.sync(() => s.api?.close())
+    yield* Ref.update(stateRef, (prev) => ({ ...prev, snapshot: undefined, api: undefined }))
+  })
+
+  const getLineAndCharacterOfPosition = (
+    fileName: string,
+    position: number,
+  ): Effect.Effect<{ line: number; character: number } | undefined, unknown> =>
+    Effect.gen(function*() {
+      const programs = yield* getProgramsEffect()
+      for (const program of programs) {
+        const sourceFile = program.getSourceFile(fileName)
+        if (sourceFile) {
+          return sourceFile.getLineAndCharacterOfPosition(position)
+        }
+      }
+      return undefined
+    })
+
+  const nodes: Effect.Effect<ReadonlyMap<string, TSFileNode>, unknown> = getNodesEffect
+
+  return {
+    init,
+    check,
+    nodes,
+    close,
+    getLineAndCharacterOfPosition,
   }
 }

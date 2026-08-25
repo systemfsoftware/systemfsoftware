@@ -45,15 +45,14 @@
     "coverageAnalysis": "perTest"
   },
   "dependencies": {
-    "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
-    "@systemfsoftware/stryker-js-util": "workspace:^",
-    "semver": "catalog:stryker",
-    "tslib": "catalog:stryker"
+    "@systemfsoftware/stryker-js-plugin-api": "workspace:^"
   },
   "peerDependencies": {
+    "effect": "catalog:peers",
     "vitest": ">=2.0.0"
   },
   "devDependencies": {
+    "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
@@ -61,13 +60,11 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
-    "@types/semver": "7.7.1",
     "@vitest/browser-playwright": "catalog:",
     "effect": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typed-inject": "~5.0.0",
     "typescript": "catalog:",
     "vitest": "^4.1.10"
   },
@@ -78,8 +75,5 @@
       "./stryker-setup": "./dist/stryker-setup.mjs",
       "./package.json": "./package.json"
     }
-  },
-  "inlinedDependencies": {
-    "effect": "4.0.0-rc.111"
   }
 }

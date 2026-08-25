@@ -1,15 +1,18 @@
-import { createRequire } from 'module'
+import { createRequire } from 'node:module'
 
-/**
- * Wrapper around the 'import' expression (for testability)
- * Resolves bare specifiers relative to cwd so plugins in the
- * consumer's node_modules can be found even when the importing
- * module lives at a different path in the monorepo.
- */
-export function importModule(moduleName: string): Promise<unknown> {
-  if (moduleName.startsWith('.') || moduleName.startsWith('/') || moduleName.startsWith('file://')) {
-    return import(moduleName)
-  }
-  const req = createRequire(process.cwd() + '/noop.js')
-  return import(req.resolve(moduleName))
+import * as Effect from 'effect/Effect'
+
+import { StrykerError } from '../stryker-error.schema.js'
+
+export function importModule(moduleName: string, basePath: string): Effect.Effect<unknown, StrykerError> {
+  return Effect.tryPromise({
+    try: () => {
+      if (moduleName.startsWith('.') || moduleName.startsWith('/') || moduleName.startsWith('file://')) {
+        return import(moduleName)
+      }
+      const req = createRequire(`${basePath}/noop.js`)
+      return import(req.resolve(moduleName))
+    },
+    catch: (cause) => new StrykerError({ message: `Failed to import module "${moduleName}"`, cause }),
+  })
 }

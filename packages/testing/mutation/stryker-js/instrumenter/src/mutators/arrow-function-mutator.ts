@@ -1,22 +1,15 @@
 import babel from '@babel/core'
 
+import type { Mutator, MutatorContext } from './mutator.js'
+
 const { types } = babel
 
-import { type NodeMutator } from './index.js'
-
-export const arrowFunctionMutator: NodeMutator = {
-  name: 'ArrowFunction',
-
-  *mutate(path) {
-    if (
-      path.isArrowFunctionExpression() &&
-      !types.isBlockStatement(path.node.body) &&
-      !(
-        types.isIdentifier(path.node.body) &&
-        path.node.body.name === 'undefined'
-      )
-    ) {
-      yield types.arrowFunctionExpression([], types.identifier('undefined'))
-    }
-  },
+export const arrowFunctionMutator: Mutator = function*(node, _context: MutatorContext) {
+  if (
+    types.isArrowFunctionExpression(node) &&
+    !types.isBlockStatement(node.body) &&
+    !(types.isIdentifier(node.body) && node.body.name === 'undefined')
+  ) {
+    yield types.arrowFunctionExpression([], types.identifier('undefined'))
+  }
 }

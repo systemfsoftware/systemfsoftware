@@ -1,6 +1,6 @@
 import babel, { type types } from '@babel/core'
 
-import { mutantTestExpression, mutationCoverageSequenceExpression } from '../util/index.js'
+import { mutantTestExpression, mutationCoverageSequenceExpression } from './mutant-expression.js'
 
 import { type MutantPlacer, nodeOfKind } from './mutant-placer.js'
 

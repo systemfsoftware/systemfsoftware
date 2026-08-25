@@ -13,11 +13,35 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import { Effect } from 'effect'
 
 import * as S from 'effect/Schema'
-import semver from 'semver'
 import { expect } from 'vitest'
 import { ManifestSchema, type StreamLine, StreamLineSchema } from './__fixtures__/cli-contract.schema.js'
 import { CLI_BIN, fixtureDir, WORKDIR } from './__fixtures__/stryker-cli-env.js'
 import { type CliResult, layerStrykerCli, StrykerCli } from './__fixtures__/StrykerCliAdapter.js'
+
+function isSupportedNodeVersion(version: string, range: string): boolean {
+  const withoutV = version.startsWith('v') ? version.slice(1) : version
+  const dashBase = withoutV.split('-')[0] ?? withoutV
+  const base = dashBase.split('+')[0] ?? dashBase
+  const parts = base.split('.').map((p) => Number.parseInt(p, 10))
+  const major = parts[0] ?? 0
+  const minor = parts[1] ?? 0
+  const patch = parts[2] ?? 0
+  if (Number.isNaN(major) || Number.isNaN(minor) || Number.isNaN(patch)) {
+    return false
+  }
+  const rangeClean = range.replace(/^>=/, '')
+  const rangeParts = rangeClean.split('.').map((p) => Number.parseInt(p, 10))
+  const reqMajor = rangeParts[0] ?? 0
+  const reqMinor = rangeParts[1] ?? 0
+  const reqPatch = rangeParts[2] ?? 0
+  if (major !== reqMajor) {
+    return major > reqMajor
+  }
+  if (minor !== reqMinor) {
+    return minor > reqMinor
+  }
+  return patch >= reqPatch
+}
 
 interface Observed {
   readonly exitCode: number
@@ -115,7 +139,7 @@ const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never,
     return {
       nodeVersion,
       enginesFloor,
-      nodeUnsupported: !semver.satisfies(nodeVersion, enginesFloor),
+      nodeUnsupported: !isSupportedNodeVersion(nodeVersion, enginesFloor),
       entries: imports,
       cliVersion: yield* cli.run(['--version'], options),
     }
@@ -665,7 +689,13 @@ Feature('Driving the mutation tester from an agent harness')
           const declared = s.probe.entries.map((entry) => entry.entry)
           expect(declared.length).toBeGreaterThan(0)
           expect(declared).toEqual(
-            expect.arrayContaining(['.', './errors', './run-event', './exit-classification']),
+            expect.arrayContaining([
+              '.',
+              './config/base',
+              './internal/checker-worker',
+              './internal/child-process-proxy-worker-main',
+              './internal/child-process-test-runner-worker',
+            ]),
           )
           expect(declared).not.toContain('./package.json')
         }),

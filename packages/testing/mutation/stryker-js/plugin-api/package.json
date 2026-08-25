@@ -17,6 +17,7 @@
     "clean": "rimraf dist",
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
     "attw": "attw --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
@@ -34,20 +35,20 @@
   ],
   "dependencies": {
     "effect": "catalog:",
-    "mutation-testing-metrics": "3.7.3",
-    "mutation-testing-report-schema": "3.7.3",
-    "tslib": "catalog:stryker",
-    "typed-inject": "~5.0.0"
+    "mutation-testing-report-schema": "3.7.3"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "exports": {
     "./check": "./dist/check/index.mjs",

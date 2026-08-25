@@ -1,49 +1,49 @@
 import type { Mutant, Position } from '@systemfsoftware/stryker-js-plugin-api/core'
 
-export class ScriptFile {
-  private readonly originalContent: string
+export interface ScriptFile {
+  readonly fileName: string
+  readonly originalContent: string
+  readonly content: string
+  readonly modifiedTime: Date
+}
 
-  constructor(
-    public content: string,
-    public fileName: string,
-    public modifiedTime = new Date(),
-  ) {
-    this.originalContent = content
-  }
+export function makeScriptFile(
+  content: string,
+  fileName: string,
+  modifiedTime = new Date(),
+): ScriptFile {
+  return { content, fileName, originalContent: content, modifiedTime }
+}
 
-  public write(content: string): void {
-    this.content = content
-    this.touch()
-  }
+export function withContent(file: ScriptFile, content: string): ScriptFile {
+  return { ...file, content, modifiedTime: new Date() }
+}
 
-  public mutate(mutant: Pick<Mutant, 'location' | 'replacement'>): void {
-    const start = this.getOffset(mutant.location.start)
-    const end = this.getOffset(mutant.location.end)
-    this.content = `${this.originalContent.slice(0, start)}${mutant.replacement}${this.originalContent.slice(end)}`
-    this.touch()
-  }
+export function mutateScriptFile(
+  file: ScriptFile,
+  mutant: Pick<Mutant, 'location' | 'replacement'>,
+): ScriptFile {
+  const start = getOffset(file, mutant.location.start)
+  const end = getOffset(file, mutant.location.end)
+  const content = `${file.originalContent.slice(0, start)}${mutant.replacement}${file.originalContent.slice(end)}`
+  return { ...file, content, modifiedTime: new Date() }
+}
 
-  private getOffset(pos: Position): number {
-    const lines = this.originalContent.split('\n')
-    const lineCount = Math.min(pos.line, lines.length)
-    let offset = 0
-    for (let i = 0; i < lineCount; i++) {
-      const line = lines[i]
-      if (line === undefined) {
-        break
-      }
-      offset += line.length + 1 // +1 for the newline character
+export function resetScriptFile(file: ScriptFile): ScriptFile {
+  return { ...file, content: file.originalContent, modifiedTime: new Date() }
+}
+
+function getOffset(file: ScriptFile, pos: Position): number {
+  const lines = file.originalContent.split('\n')
+  const lineCount = Math.min(pos.line, lines.length)
+  let offset = 0
+  for (let i = 0; i < lineCount; i++) {
+    const line = lines[i]
+    if (line === undefined) {
+      break
     }
-    offset += pos.column
-    return offset
+    offset += line.length + 1
   }
-
-  public resetMutant(): void {
-    this.content = this.originalContent
-    this.touch()
-  }
-
-  private touch(): void {
-    this.modifiedTime = new Date()
-  }
+  offset += pos.column
+  return offset
 }

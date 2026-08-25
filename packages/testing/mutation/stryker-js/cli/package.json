@@ -8,7 +8,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/testing/mutation/stryker-js/cli#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "The stryker command-line interface — terminal framing, run-event stream, and exit handling for the @systemfsoftware Stryker fork.",
+  "description": "The stryker command-line interface \u2014 terminal framing, run-event stream, and exit handling for the @systemfsoftware Stryker fork.",
   "type": "module",
   "files": [
     "dist"
@@ -23,7 +23,9 @@
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "mutation": "stryker run",
-    "mutation:full": "stryker run --force"
+    "mutation:full": "stryker run --force",
+    "api:check": "echo 'no API report for CLI (dts: false)' && exit 0",
+    "api:update": "echo 'no API report for CLI (dts: false)' && exit 0"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -32,9 +34,7 @@
     "@systemfsoftware/stryker-js-mutation-report": "workspace:^",
     "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
     "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
-    "@systemfsoftware/stryker-js-util": "workspace:^",
-    "effect": "catalog:",
-    "semver": "catalog:stryker"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
@@ -49,7 +49,6 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
-    "@types/semver": "7.7.1",
     "@vitest/coverage-v8": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",

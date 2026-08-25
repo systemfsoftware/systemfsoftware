@@ -1,8 +1,9 @@
-import { escapeRegExp } from '@systemfsoftware/stryker-js-util'
 import { Option } from 'effect'
+import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
+import * as Path from 'effect/Path'
+import type * as PathType from 'effect/Path'
 import * as S from 'effect/Schema'
-import fs from 'fs'
-import path from 'path'
 
 import { ExportEntry, PackageManifest } from './sandbox-self-aliases.schema.js'
 
@@ -39,6 +40,7 @@ const specifierForExport = (
 export const sandboxSelfAliases = (
   manifest: PackageManifest,
   projectRoot: string,
+  pathService: PathType.Path,
 ): readonly SandboxAlias[] => {
   const name = manifest.name
   const exports = manifest.exports
@@ -53,31 +55,36 @@ export const sandboxSelfAliases = (
       continue
     }
     aliases.push({
-      find: new RegExp(`^${escapeRegExp(spec)}$`),
-      replacement: path.resolve(projectRoot, target),
+      find: new RegExp(`^${RegExp.escape(spec)}$`),
+      replacement: pathService.resolve(projectRoot, target),
     })
   }
   return aliases
 }
 
-export const readSandboxSelfAliases = (projectRoot: string): readonly SandboxAlias[] => {
-  let raw: string
-  try {
-    raw = fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8')
-  } catch {
-    return []
-  }
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(raw)
-  } catch {
-    return []
-  }
-  return Option.match(S.decodeUnknownOption(PackageManifest)(parsed), {
-    onNone: () => [],
-    onSome: (manifest) => sandboxSelfAliases(manifest, projectRoot),
+export const readSandboxSelfAliases = (
+  projectRoot: string,
+): Effect.Effect<readonly SandboxAlias[], never, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const pathService = yield* Path.Path
+    const raw = yield* fs.readFileString(pathService.join(projectRoot, 'package.json')).pipe(
+      Effect.orElseSucceed(() => null as string | null),
+    )
+    if (raw === null) {
+      return [] as readonly SandboxAlias[]
+    }
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      return [] as readonly SandboxAlias[]
+    }
+    return Option.match(S.decodeUnknownOption(PackageManifest)(parsed), {
+      onNone: () => [] as readonly SandboxAlias[],
+      onSome: (manifest) => sandboxSelfAliases(manifest, projectRoot, pathService),
+    })
   })
-}
 
 /**
  * Vite records a package specifier as a bare dep. Vitest related-mode then
@@ -85,8 +92,7 @@ export const readSandboxSelfAliases = (projectRoot: string): readonly SandboxAli
  * zero tests. Returning the sandbox source path from `resolveId` makes the
  * dep a real filesystem path related-mode can walk.
  */
-export const sandboxSelfPlugin = (projectRoot: string) => {
-  const aliases = readSandboxSelfAliases(projectRoot)
+export const sandboxSelfPlugin = (aliases: readonly SandboxAlias[]) => {
   return {
     name: 'stryker-sandbox-self-exports',
     enforce: 'pre' as const,
