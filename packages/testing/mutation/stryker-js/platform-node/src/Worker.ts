@@ -468,7 +468,7 @@ export const makeChildProcessProxy = <T>(params: {
               ),
               Effect.ensuring(drainPendingOnSocketClose.pipe(Effect.ignore)),
             )
-        }),
+        }, Effect.scoped),
       ),
     )
     const fromSource = workerMainPath.endsWith('.ts')
