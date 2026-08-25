@@ -2,7 +2,9 @@ import { declarePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-ap
 import { RunConfiguration } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { Reporter } from '@systemfsoftware/stryker-js-plugin-api/report'
 import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
+import * as Path from 'effect/Path'
 
 import { makeClearTextReporter } from './clear-text-reporter.js'
 import { makeHtmlReporter } from './html-reporter.js'
@@ -24,7 +26,6 @@ export {
   handleDryRunCompleted,
   handleMutantTested,
   handleMutationTestingPlanReady,
-  makeEmptyTimer,
 } from './progress-keeper.js'
 export type { ProgressTally } from './progress-keeper.js'
 export { makeProgressBarReporter } from './progress-reporter.js'
@@ -41,12 +42,28 @@ export const strykerPlugins = [
   declarePlugin(
     PluginKind.Reporter,
     'html',
-    Layer.effect(Reporter, Effect.map(RunConfiguration, (options) => makeHtmlReporter({ options }))),
+    Layer.effect(
+      Reporter,
+      Effect.gen(function*() {
+        const options = yield* RunConfiguration
+        const fs = yield* FileSystem.FileSystem
+        const path = yield* Path.Path
+        return makeHtmlReporter({ options, fs, path })
+      }),
+    ),
   ),
   declarePlugin(
     PluginKind.Reporter,
     'json',
-    Layer.effect(Reporter, Effect.map(RunConfiguration, (options) => makeJsonReporter({ options }))),
+    Layer.effect(
+      Reporter,
+      Effect.gen(function*() {
+        const options = yield* RunConfiguration
+        const fs = yield* FileSystem.FileSystem
+        const path = yield* Path.Path
+        return makeJsonReporter({ options, fs, path })
+      }),
+    ),
   ),
   declarePlugin(PluginKind.Reporter, 'progress-stream', Layer.effect(Reporter, makeProgressStreamReporter())),
 ]

@@ -28,15 +28,139 @@ import { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/co
 import * as Path from 'effect/Path';
 import { PluginContribution } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
+import * as S from 'effect/Schema';
+import { Schema } from 'effect';
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core';
 import * as Scope from 'effect/Scope';
 import { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { TestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner';
+import { YieldableError } from 'effect/Cause';
+
+// @public
+export const ACTIONABLE_STATUSES: readonly ['Survived', 'NoCoverage', 'Timeout', 'RuntimeError'];
+
+// @public (undocumented)
+export function buildVerdictEnvelope(report: schema.MutationTestResult, mode: OutputMode, signal: ModeSignal, runId: string, basePath: string, evaluatorVerdicts: readonly VerdictEvaluatorVerdict[] | undefined, pathService: Path.Path): VerdictEnvelope;
+
+// Warning: (ae-forgotten-export) The symbol "ChildProcessCrashedError_base" needs to be exported by the entry point index.d.mts
+//
+// @public
+export class ChildProcessCrashedError extends ChildProcessCrashedError_base {
+    // (undocumented)
+    readonly exitClass = ExitClass.InternalError;
+}
+
+// @public (undocumented)
+export const CONFIG_SYNTAX_HELP: string;
+
+// Warning: (ae-forgotten-export) The symbol "ConfigError_base" needs to be exported by the entry point index.d.mts
+//
+// @public (undocumented)
+export class ConfigError extends ConfigError_base {
+    // (undocumented)
+    readonly exitClass = ExitClass.ConfigError;
+}
+
+// Warning: (ae-forgotten-export) The symbol "ConfigFileInvalidError_base" needs to be exported by the entry point index.d.mts
+//
+// @public
+export class ConfigFileInvalidError extends ConfigFileInvalidError_base {
+    // (undocumented)
+    readonly exitClass = ExitClass.ConfigError;
+}
+
+// Warning: (ae-forgotten-export) The symbol "ConfigFileNotFoundError_base" needs to be exported by the entry point index.d.mts
+//
+// @public
+export class ConfigFileNotFoundError extends ConfigFileNotFoundError_base {
+    // (undocumented)
+    readonly exitClass = ExitClass.ConfigError;
+}
+
+// Warning: (ae-forgotten-export) The symbol "ConfigFileUnreadableError_base" needs to be exported by the entry point index.d.mts
+//
+// @public
+export class ConfigFileUnreadableError extends ConfigFileUnreadableError_base {
+    // (undocumented)
+    readonly exitClass = ExitClass.ConfigError;
+}
+
+// @public (undocumented)
+export function createDefaultOptions(): Effect$1.Effect<StrykerOptions>;
+
+// Warning: (ae-forgotten-export) The symbol "Immutable" needs to be exported by the entry point index.d.mts
+//
+// @public (undocumented)
+export const defaultOptions: Effect$1.Effect<Immutable<StrykerOptions>, never, never>;
 
 // Warning: (ae-forgotten-export) The symbol "DefaultStagesContext" needs to be exported by the entry point index.d.mts
 //
 // @public (undocumented)
 export const defaultStages: MutationRunStages<unknown, DefaultStagesContext>;
+
+export { ExitClass }
+
+// @public
+export const forkCoreSchema: Record<string, unknown>;
+
+// @public
+export function generateRunId(): string;
+
+// @public
+export interface Heartbeat {
+    // (undocumented)
+    readonly completed: number;
+    // (undocumented)
+    readonly elapsedMs: number;
+    // (undocumented)
+    readonly kind: 'tick';
+    // (undocumented)
+    readonly total: number | null;
+}
+
+// @public
+export interface HelpRendered {
+    // (undocumented)
+    readonly code: 0;
+    // (undocumented)
+    readonly help: string;
+    // (undocumented)
+    readonly kind: 'help';
+    // (undocumented)
+    readonly schemaVersion: string;
+}
+
+// @public
+export function highestExitClass(pending: Iterable<ExitClass>): ExitClass | null;
+
+// @public (undocumented)
+export const incrementalDiff: (input: Readonly<{
+    logger: Logger;
+    options: StrykerOptions;
+    fileDescriptions: FileDescriptions;
+    currentMutants: readonly Mutant[];
+    testCoverage: TestCoverage;
+    incrementalReport: schema.MutationTestResult;
+    currentRelativeFiles: ReadonlyMap<string, string>;
+    basePath: string;
+}>, pathService: Path.Path) => IncrementalDiffResult;
+
+// @public (undocumented)
+export interface IncrementalDiffResult {
+    // (undocumented)
+    readonly mutants: readonly Mutant[];
+    // Warning: (ae-forgotten-export) The symbol "DiffStatistics" needs to be exported by the entry point index.d.mts
+    //
+    // (undocumented)
+    readonly mutantStatistics: DiffStatistics;
+    // (undocumented)
+    readonly testCoverage: TestCoverage;
+    // (undocumented)
+    readonly testStatistics: DiffStatistics;
+}
+
+// @public
+export function isActionableStatus(status: MutantStatus): boolean;
 
 // Warning: (ae-forgotten-export) The symbol "PrepareLogger" needs to be exported by the entry point index.d.mts
 // Warning: (ae-forgotten-export) The symbol "InstrumentLogger" needs to be exported by the entry point index.d.mts
@@ -47,6 +171,43 @@ export const defaultStages: MutationRunStages<unknown, DefaultStagesContext>;
 //
 // @public (undocumented)
 export const makeRunLayer: (env: RunEnvironmentShape) => Layer.Layer<RunEnvironment | PrepareLogger | InstrumentLogger | DryRunLogger | MutationTestLogger | FileSystem.FileSystem | Path.Path | IdGenerator | ChildProcessSpawner.ChildProcessSpawner | EngineLogLevel, never, never>;
+
+// @public
+export interface ManifestRendered {
+    // (undocumented)
+    readonly code: 0;
+    // (undocumented)
+    readonly kind: 'manifest';
+    // (undocumented)
+    readonly manifest: string;
+    // (undocumented)
+    readonly schemaVersion: string;
+}
+
+// @public (undocumented)
+export type ModeSignal = 'flag' | 'env' | 'tty' | 'agent' | 'tool';
+
+// @public
+export interface MutantTested {
+    // (undocumented)
+    readonly completed: number;
+    // (undocumented)
+    readonly file: string;
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly kind: 'mutant';
+    // (undocumented)
+    readonly location: schema.Location;
+    // (undocumented)
+    readonly mutator: string;
+    // (undocumented)
+    readonly replacement: string | null;
+    // (undocumented)
+    readonly status: MutantStatus;
+    // (undocumented)
+    readonly total: number;
+}
 
 // @public
 export interface MutationRunStages<E, R> {
@@ -68,6 +229,51 @@ export interface MutationRunStages<E, R> {
     readonly prepare: PrepareStage<E, R>;
 }
 
+// Warning: (ae-forgotten-export) The symbol "OutOfMemoryError_base" needs to be exported by the entry point index.d.mts
+//
+// @public
+export class OutOfMemoryError extends OutOfMemoryError_base {
+    // (undocumented)
+    readonly exitClass = ExitClass.RuntimeError;
+}
+
+// @public
+export type OutputMode = 'human' | 'machine';
+
+// @public
+export interface PhaseEntered {
+    // (undocumented)
+    readonly elapsedMs: number;
+    // (undocumented)
+    readonly kind: 'phase';
+    // (undocumented)
+    readonly phase: RunPhase;
+}
+
+// @public
+export interface PlanKnown {
+    // (undocumented)
+    readonly kind: 'plan';
+    // (undocumented)
+    readonly total: number;
+}
+
+// @public (undocumented)
+export function readConfig(cliOptions: PartialStrykerOptions, log: Logger, schema: ValidationSchemaDocument, basePath: string): Effect$1.Effect<StrykerOptions, ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError, FileSystem.FileSystem | Path.Path>;
+
+// @public (undocumented)
+export interface ResolvedMode {
+    // (undocumented)
+    readonly mode: OutputMode;
+    // (undocumented)
+    readonly signal: ModeSignal;
+    // (undocumented)
+    readonly stdoutIsTTY: boolean;
+}
+
+// @public
+export function resolveExitCode(pending: Iterable<ExitClass>, signal: number | null): number;
+
 // Warning: (ae-forgotten-export) The symbol "RunEnvironment_base" needs to be exported by the entry point index.d.mts
 //
 // @public
@@ -79,12 +285,30 @@ export interface RunEnvironmentShape {
     readonly basePath: string;
     readonly logSink: (line: string) => void;
     readonly reporterPluginModules: readonly string[];
-    // Warning: (ae-forgotten-export) The symbol "ResolvedMode" needs to be exported by the entry point index.d.mts
     readonly resolvedMode: ResolvedMode;
-    // Warning: (ae-forgotten-export) The symbol "RunEventSink" needs to be exported by the entry point index.d.mts
     readonly runEventSink: RunEventSink;
     readonly runId: string;
     readonly runStartedAt: number;
+}
+
+// @public (undocumented)
+export type RunEvent = RunStarted | PhaseEntered | PlanKnown | MutantTested | Heartbeat | RunTerminalEvent;
+
+// @public
+export type RunEventSink = (event: RunEvent) => void;
+
+// @public
+export interface RunFailed {
+    // (undocumented)
+    readonly code: number;
+    // (undocumented)
+    readonly error: string;
+    // (undocumented)
+    readonly kind: 'error';
+    // (undocumented)
+    readonly remediation: string;
+    // (undocumented)
+    readonly schemaVersion: string;
 }
 
 // @public
@@ -99,7 +323,159 @@ export interface RunOutcome {
 }
 
 // @public
+export type RunPhase = 'prepare' | 'instrument' | 'dry-run' | 'mutation-test';
+
+// @public
+export interface RunStarted {
+    // (undocumented)
+    readonly kind: 'stream';
+    // (undocumented)
+    readonly mode: OutputMode;
+    // (undocumented)
+    readonly runId: string;
+    // (undocumented)
+    readonly schemaVersion: string;
+    // (undocumented)
+    readonly signal: ModeSignal;
+}
+
+// @public
+export type RunTerminalEvent = VerdictReached | RunFailed | HelpRendered | ManifestRendered;
+
+// @public
 export const shouldKeepTempDir: (exit: Exit.Exit<unknown, unknown>, cleanTempDir: 'always' | boolean) => boolean;
+
+// Warning: (ae-forgotten-export) The symbol "StageError_base" needs to be exported by the entry point index.d.mts
+//
+// @public (undocumented)
+export class StageError extends StageError_base {
+    // Warning: (ae-forgotten-export) The symbol "TypeId" needs to be exported by the entry point index.d.mts
+    //
+    // (undocumented)
+    readonly [TypeId]: "~stryker/mutation-run/StageError";
+    // (undocumented)
+    get exitClass(): ExitClass;
+    // (undocumented)
+    get message(): string;
+}
+
+// @public (undocumented)
+export const strykerEngines: {
+    readonly node: string;
+};
+
+// Warning: (ae-forgotten-export) The symbol "StrykerError_base" needs to be exported by the entry point index.d.mts
+//
+// @public (undocumented)
+export class StrykerError extends StrykerError_base {}
+
+// @public (undocumented)
+export const strykerVersion: string;
+
+// @public (undocumented)
+export const toRelativeNormalizedFileName: (fileName: string | undefined, basePath: string, pathService: Path.Path) => string;
+
+// @public (undocumented)
+export function validateOptions(options: Record<string, unknown>, schema: ValidationSchemaDocument, log: Logger, mark?: boolean): Effect$1.Effect<StrykerOptions, ConfigError, Path.Path>;
+
+// @public (undocumented)
+export type ValidationSchemaDocument = {
+    readonly properties?: unknown;
+    readonly [key: string]: unknown;
+};
+
+// @public
+export const VERDICT_ENVELOPE_SCHEMA_VERSION = "1.1";
+
+// @public (undocumented)
+export interface VerdictCounts {
+    // (undocumented)
+    readonly compileErrors: number;
+    // (undocumented)
+    readonly ignored: number;
+    // (undocumented)
+    readonly killed: number;
+    // (undocumented)
+    readonly noCoverage: number;
+    // (undocumented)
+    readonly pending: number;
+    // (undocumented)
+    readonly runtimeErrors: number;
+    // (undocumented)
+    readonly survived: number;
+    // (undocumented)
+    readonly timeout: number;
+}
+
+// @public
+export interface VerdictEnvelope {
+    // (undocumented)
+    readonly counts: VerdictCounts;
+    // (undocumented)
+    readonly evaluatorVerdicts: readonly VerdictEvaluatorVerdict[];
+    // (undocumented)
+    readonly mode: OutputMode;
+    // (undocumented)
+    readonly mutants: readonly VerdictMutant[];
+    // (undocumented)
+    readonly reportFile: string | null;
+    // (undocumented)
+    readonly runId: string;
+    // (undocumented)
+    readonly schemaVersion: string;
+    // (undocumented)
+    readonly score: number | null;
+    // (undocumented)
+    readonly signal: ModeSignal;
+    // (undocumented)
+    readonly thresholds: VerdictThresholds;
+}
+
+// @public
+export interface VerdictEvaluatorVerdict {
+    // (undocumented)
+    readonly name: string;
+    // (undocumented)
+    readonly verdict: ExitClass | null;
+}
+
+// @public
+export function verdictExitClass(score: number | null, breakingThreshold: number | null): ExitClass | null;
+
+// @public
+export interface VerdictMutant {
+    // (undocumented)
+    readonly file: string;
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly location: schema.Location;
+    // (undocumented)
+    readonly mutator: string;
+    // (undocumented)
+    readonly replacement: string | null;
+    // (undocumented)
+    readonly status: MutantStatus;
+}
+
+// @public (undocumented)
+export type VerdictReached = VerdictEnvelope & {
+    readonly kind: 'verdict';
+};
+
+// @public
+export interface VerdictThresholds {
+    // (undocumented)
+    readonly break: number | null;
+    // (undocumented)
+    readonly high: number;
+    // (undocumented)
+    readonly low: number;
+}
+
+// Warnings were encountered during analysis:
+//
+// dist/index.d.mts:727:3 - (ae-forgotten-export) The symbol "TestCoverage" needs to be exported by the entry point index.d.mts
 
 // (No @packageDocumentation comment for this package)
 

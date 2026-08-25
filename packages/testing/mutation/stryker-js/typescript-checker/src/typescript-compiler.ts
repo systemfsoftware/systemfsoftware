@@ -1,6 +1,3 @@
-import { readFileSync } from 'fs'
-import path from 'path'
-
 import {
   type Mutant,
   normalizeFileName,
@@ -9,7 +6,9 @@ import {
 } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
+import * as Path from 'effect/Path'
 import * as Ref from 'effect/Ref'
 import * as S from 'effect/Schema'
 
@@ -29,6 +28,7 @@ import { getSourceMappingURL } from './declaration-source-mapping.js'
 import { makeTSFileNode, type TSFileNode } from './grouping/ts-file-node.js'
 import type { HybridFileSystem } from './project/hybrid-file-system.js'
 import { determineBuildModeEnabled, overrideOptions, parseTsConfig, retrieveReferencedProjects } from './tsconfig.js'
+import { TsConfigNotFoundError } from './tsconfig.schema.js'
 import { guardTSVersion } from './typescript-version.js'
 
 export type SourceFiles = Map<
@@ -118,12 +118,14 @@ export type IFileRelationCreator = Pick<TypeScriptCompiler['Service'], 'nodes'>
 export function makeTypescriptCompiler(
   options: unknown,
   fs: HybridFileSystem,
+  fsService: FileSystem.FileSystem,
+  pathService: Path.Path,
 ): TypeScriptCompiler['Service'] {
   if (!S.is(StrykerOptionsSchema)(options)) {
     throw new Error('Invalid StrykerOptions')
   }
   const strykerOptions: StrykerOptions = options
-  const tsconfigFile = normalizeFileName(path.resolve(normalizeFileName(strykerOptions.tsconfigFile)))
+  const rawTsconfigFile = normalizeFileName(strykerOptions.tsconfigFile)
   const initialState: CompilerState = {
     api: undefined,
     snapshot: undefined,
@@ -131,8 +133,8 @@ export function makeTypescriptCompiler(
     nodes: emptyNodes(),
     lastMutants: [],
     lastMutatedFileNames: [],
-    allTSConfigFiles: setFromArray([tsconfigFile]),
-    tsconfigFile,
+    allTSConfigFiles: setFromArray([rawTsconfigFile]),
+    tsconfigFile: rawTsconfigFile,
   }
   const stateRef = Ref.makeUnsafe(initialState)
 
@@ -149,21 +151,18 @@ export function makeTypescriptCompiler(
       return projects.map((project) => project.program)
     })
 
-  const guardTSConfigFileExistsEffect = Effect.try(() => {
-    try {
-      readFileSync(tsconfigFile, 'utf-8')
-    } catch {
-      throw new Error(
-        `The tsconfig file does not exist at: "${tsconfigFile}". Please configure the tsconfig file in your stryker.conf file using "tsconfigFile"`,
-      )
-    }
+  const guardTSConfigFileExistsEffect: Effect.Effect<void, unknown> = Effect.gen(function*() {
+    const s = yield* Ref.get(stateRef)
+    yield* fsService.readFileString(s.tsconfigFile).pipe(
+      Effect.mapError(() => new TsConfigNotFoundError({ file: s.tsconfigFile })),
+    )
   })
 
   const collectAllTSConfigFiles = (buildModeEnabled: boolean): Effect.Effect<void, unknown> =>
     Effect.gen(function*() {
       const s = yield* Ref.get(stateRef)
       const tsConfigOverrides = emptyStringMap()
-      const toProcess = [tsconfigFile]
+      const toProcess = [s.tsconfigFile]
       const processed = emptyStringSet()
 
       while (toProcess.length > 0) {
@@ -173,7 +172,7 @@ export function makeTypescriptCompiler(
         }
         processed.add(current)
 
-        const content = readFileSync(current, 'utf-8')
+        const content = yield* fsService.readFileString(current)
         const parsed = parseTsConfig(current, content)
         if (Result.isFailure(parsed)) {
           tsConfigOverrides.set(current, content)
@@ -181,7 +180,9 @@ export function makeTypescriptCompiler(
         }
         tsConfigOverrides.set(current, overrideOptions(parsed.success, buildModeEnabled))
 
-        for (const referenced of retrieveReferencedProjects(parsed.success, path.dirname(current))) {
+        for (
+          const referenced of retrieveReferencedProjects(parsed.success, pathService.dirname(current), pathService)
+        ) {
           const normalized = normalizeFileName(referenced)
           s.allTSConfigFiles.add(normalized)
           toProcess.push(referenced)
@@ -226,8 +227,8 @@ export function makeTypescriptCompiler(
     return result
   }
 
-  const getResolutionCandidates = (resolved: string): string[] => {
-    const extension = path.extname(resolved)
+  const getResolutionCandidates = (resolved: string, pathService: Path.Path): string[] => {
+    const extension = pathService.extname(resolved)
     if (extension) {
       const withoutExt = resolved.slice(0, -extension.length)
       return [
@@ -264,14 +265,15 @@ export function makeTypescriptCompiler(
     sourceFileName: string,
     specifier: string,
     sourceFiles: SourceFiles,
+    pathService: Path.Path,
   ): string | undefined => {
     const cleaned = specifier.replace(/^['"]|['"]$/g, '')
     if (!cleaned.startsWith('./') && !cleaned.startsWith('../')) {
       return undefined
     }
-    const baseDir = path.dirname(sourceFileName)
-    const resolved = normalizeFileName(path.resolve(baseDir, cleaned))
-    const candidates = getResolutionCandidates(resolved)
+    const baseDir = pathService.dirname(sourceFileName)
+    const resolved = normalizeFileName(pathService.resolve(baseDir, cleaned))
+    const candidates = getResolutionCandidates(resolved, pathService)
     for (const candidate of candidates) {
       if (sourceFiles.has(candidate)) {
         return candidate
@@ -280,7 +282,7 @@ export function makeTypescriptCompiler(
     return undefined
   }
 
-  const resolveTSInputFile = (dependencyFileName: string): string => {
+  const resolveTSInputFile = (dependencyFileName: string, pathService: Path.Path): string => {
     if (!dependencyFileName.endsWith('.d.ts')) {
       return dependencyFileName
     }
@@ -292,7 +294,9 @@ export function makeTypescriptCompiler(
     if (!sourceMappingURL) {
       return dependencyFileName
     }
-    const sourceMapFileName = normalizeFileName(path.resolve(path.dirname(dependencyFileName), sourceMappingURL))
+    const sourceMapFileName = normalizeFileName(
+      pathService.resolve(pathService.dirname(dependencyFileName), sourceMappingURL),
+    )
     const sourceMapContent = fs.fileSystem.readFile?.(sourceMapFileName)
     if (typeof sourceMapContent !== 'string') {
       return dependencyFileName
@@ -307,7 +311,7 @@ export function makeTypescriptCompiler(
       if (sourcePath === undefined) {
         return dependencyFileName
       }
-      return normalizeFileName(path.resolve(path.dirname(sourceMapFileName), sourcePath))
+      return normalizeFileName(pathService.resolve(pathService.dirname(sourceMapFileName), sourcePath))
     }
     return dependencyFileName
   }
@@ -336,9 +340,9 @@ export function makeTypescriptCompiler(
         }
         const imports = extractImports(sourceFile)
         for (const specifier of imports) {
-          const resolved = resolveModuleSpecifier(fileName, specifier, s.sourceFiles)
+          const resolved = resolveModuleSpecifier(fileName, specifier, s.sourceFiles, pathService)
           if (resolved) {
-            const sourceFileName = resolveTSInputFile(resolved)
+            const sourceFileName = resolveTSInputFile(resolved, pathService)
             if (s.sourceFiles.has(sourceFileName)) {
               s.sourceFiles.get(fileName)?.imports.add(sourceFileName)
             }
@@ -431,9 +435,15 @@ export function makeTypescriptCompiler(
     })
 
   const init: Effect.Effect<readonly Diagnostic[], unknown> = Effect.gen(function*() {
-    yield* Effect.try(() => guardTSVersion())
+    yield* guardTSVersion(fsService)
+    const absoluteTsconfigFile = normalizeFileName(pathService.resolve(rawTsconfigFile))
+    yield* Ref.update(stateRef, (prev) => ({
+      ...prev,
+      tsconfigFile: absoluteTsconfigFile,
+      allTSConfigFiles: setFromArray([absoluteTsconfigFile]),
+    }))
     yield* guardTSConfigFileExistsEffect
-    const buildModeEnabled = determineBuildModeEnabled(tsconfigFile)
+    const buildModeEnabled = yield* determineBuildModeEnabled(absoluteTsconfigFile, fsService)
     yield* collectAllTSConfigFiles(buildModeEnabled)
     const s = yield* Ref.get(stateRef)
     const api = new API({ fs: fs.fileSystem })

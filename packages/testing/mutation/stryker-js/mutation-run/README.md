@@ -12,21 +12,29 @@ Those are peer dependencies: this package declares them but does not install the
 
 ## Entry points
 
-- `@systemfsoftware/stryker-js-mutation-run`
-- `@systemfsoftware/stryker-js-mutation-run/checker-worker`
-- `@systemfsoftware/stryker-js-mutation-run/child-process-proxy-worker-main`
-- `@systemfsoftware/stryker-js-mutation-run/child-process-test-runner-worker`
-- `@systemfsoftware/stryker-js-mutation-run/config/base`
-- `@systemfsoftware/stryker-js-mutation-run/config/config-resolution`
-- `@systemfsoftware/stryker-js-mutation-run/config/fork-schema`
-- `@systemfsoftware/stryker-js-mutation-run/exit-classification`
-- `@systemfsoftware/stryker-js-mutation-run/mutants/incremental-differ`
-- `@systemfsoftware/stryker-js-mutation-run/output-mode`
-- `@systemfsoftware/stryker-js-mutation-run/plugins`
-- `@systemfsoftware/stryker-js-mutation-run/run-event`
-- `@systemfsoftware/stryker-js-mutation-run/stryker-package`
-- `@systemfsoftware/stryker-js-mutation-run/timer`
-- `@systemfsoftware/stryker-js-mutation-run/verdict-envelope`
+Anything not listed here is internal and moves without notice.
+
+- `@systemfsoftware/stryker-js-mutation-run` — the engine, its failure
+  identities, and this package's version
+- `@systemfsoftware/stryker-js-mutation-run/config/base` — the preset a
+  `stryker.config.json` names in `extends`
+- `@systemfsoftware/stryker-js-mutation-run/config/config-resolution` — read and
+  validate a configuration
+- `@systemfsoftware/stryker-js-mutation-run/config/fork-schema` — the forked-run
+  configuration contract
+- `@systemfsoftware/stryker-js-mutation-run/run-event` — the event stream a run
+  emits
+- `@systemfsoftware/stryker-js-mutation-run/verdict-envelope` — a finished run's
+  verdict
+- `@systemfsoftware/stryker-js-mutation-run/exit-classification` — the classed
+  status a failure carries
+- `@systemfsoftware/stryker-js-mutation-run/output-mode` — the resolved output
+  mode and its colour decision
+
+Three further subpaths — `checker-worker`,
+`child-process-proxy-worker-main` and `child-process-test-runner-worker` — exist
+because the engine spawns them by resolved specifier. They are process entry
+points, not an API: importing one for a value is unsupported.
 
 ## API
 

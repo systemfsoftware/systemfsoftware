@@ -1,5 +1,3 @@
-import path from 'node:path'
-
 import { type CheckResult, CheckStatus, type PassedCheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
 import type {
   Location,
@@ -10,6 +8,7 @@ import type {
 } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { normalizeFileName } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type MutantRunResult, MutantRunStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+import type * as Path from 'effect/Path'
 
 import { toSchemaLocation } from './report-location.js'
 
@@ -83,8 +82,8 @@ export const mapRunResult = (mutant: MutantTestCoverage, result: MutantRunResult
   }
 }
 
-export const determineLanguage = (name: string): string => {
-  const ext = path.extname(name).toLowerCase()
+export const determineLanguage = (name: string, pathService: Path.Path): string => {
+  const ext = pathService.extname(name).toLowerCase()
   switch (ext) {
     case '.ts':
     case '.tsx': {
@@ -100,9 +99,13 @@ export const determineLanguage = (name: string): string => {
   }
 }
 
-export const normalizeReportFileName = (basePath: string, fileName: string | undefined): string => {
+export const normalizeReportFileName = (
+  basePath: string,
+  fileName: string | undefined,
+  pathService: Path.Path,
+): string => {
   if (fileName) {
-    return normalizeFileName(path.relative(basePath, fileName))
+    return normalizeFileName(pathService.relative(basePath, fileName))
   }
   return ''
 }

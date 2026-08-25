@@ -1,4 +1,5 @@
 import type { FileDescription, FileDescriptions, Location, Position } from '@systemfsoftware/stryker-js-plugin-api/core'
+import type * as Path from 'effect/Path'
 import * as Predicate from 'effect/Predicate'
 
 import { createFileMatcher } from '../config/file-matcher.js'
@@ -60,6 +61,7 @@ export function intersectFileDescriptions(first: FileDescription, second: FileDe
 export function filterMutatePattern(
   fileNames: Iterable<string>,
   mutatePattern: string,
+  pathService: Path.Path,
 ): Map<string, FileDescription> {
   const mutationRangeMatch = MUTATION_RANGE_REGEX.exec(mutatePattern)
   let mutate: FileDescription['mutate'] = true
@@ -77,7 +79,7 @@ export function filterMutatePattern(
       },
     ]
   }
-  const matches = createFileMatcher(mutatePattern, false)
+  const matches = createFileMatcher(mutatePattern, pathService, false)
   const inputFiles = new Map<string, FileDescription>()
   for (const fileName of fileNames) {
     if (matches(fileName)) {
@@ -91,17 +93,18 @@ export function resolveFileDescriptions(
   inputFileNames: string[],
   mutatePatterns: readonly string[],
   targetMutatePatterns: string[] | undefined,
+  pathService: Path.Path,
 ): FileDescriptions {
   const mutateInputFileMap = new Map<string, FileDescription>()
   inputFileNames.forEach((fileName) => mutateInputFileMap.set(fileName, { mutate: false }))
   for (const pattern of mutatePatterns) {
     if (pattern.startsWith(IGNORE_PATTERN_CHARACTER)) {
-      const files = filterMutatePattern(mutateInputFileMap.keys(), pattern.substring(1))
+      const files = filterMutatePattern(mutateInputFileMap.keys(), pattern.substring(1), pathService)
       for (const fileName of files.keys()) {
         mutateInputFileMap.set(fileName, { mutate: false })
       }
     } else {
-      const files = filterMutatePattern(inputFileNames, pattern)
+      const files = filterMutatePattern(inputFileNames, pattern, pathService)
       for (const [fileName, file] of files) {
         mutateInputFileMap.set(fileName, unionFileDescriptions(file, mutateInputFileMap.get(fileName)))
       }
@@ -110,7 +113,7 @@ export function resolveFileDescriptions(
   if (targetMutatePatterns) {
     const seen = new Map<string, FileDescription>()
     for (const pattern of targetMutatePatterns) {
-      const files = filterMutatePattern(mutateInputFileMap.keys(), pattern)
+      const files = filterMutatePattern(mutateInputFileMap.keys(), pattern, pathService)
       for (const [fileName, description] of files) {
         const current = mutateInputFileMap.get(fileName)
         if (current === undefined) continue
@@ -130,13 +133,17 @@ export function resolveFileDescriptions(
   return Object.fromEntries(mutateInputFileMap)
 }
 
-export function resolveTestFiles(inputFileNames: string[], testFilePatterns: readonly string[]): string[] {
+export function resolveTestFiles(
+  inputFileNames: string[],
+  testFilePatterns: readonly string[],
+  pathService: Path.Path,
+): string[] {
   if (testFilePatterns.length === 0) {
     return []
   }
   const resolvedTestFiles: string[] = []
   for (const pattern of testFilePatterns) {
-    const matches = createFileMatcher(pattern, false)
+    const matches = createFileMatcher(pattern, pathService, false)
     const matchedFiles = inputFileNames.filter((fileName) => matches(fileName))
     resolvedTestFiles.push(...matchedFiles)
   }

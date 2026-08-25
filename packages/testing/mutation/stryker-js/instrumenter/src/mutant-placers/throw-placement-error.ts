@@ -1,3 +1,5 @@
+// node:path builds a relative path for a diagnostic message; threading Path.Path
+// through every placer into a `never`-returning formatter is pure churn (REPO-A2).
 import path from 'path'
 
 import { NodePath } from '@babel/core'

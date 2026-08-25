@@ -9,9 +9,14 @@ import * as Queue from 'effect/Queue'
 import * as Stdio from 'effect/Stdio'
 import * as Stream from 'effect/Stream'
 
-import type { ModeSignal, OutputMode, ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
-import type { RunEvent, RunEventSink } from '@systemfsoftware/stryker-js-mutation-run/run-event'
-import { generateRunId } from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
+import {
+  generateRunId,
+  type ModeSignal,
+  type OutputMode,
+  type ResolvedMode,
+  type RunEvent,
+  type RunEventSink,
+} from '@systemfsoftware/stryker-js-mutation-run'
 
 import { STREAM_SCHEMA_VERSION, TICK_INTERVAL_MS } from './stream-protocol.js'
 

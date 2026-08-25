@@ -1,9 +1,8 @@
-import path from 'node:path'
-
 import type { disableTypeChecks } from '@systemfsoftware/stryker-js-instrumenter'
 import { type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import * as Effect from 'effect/Effect'
+import * as Path from 'effect/Path'
 
 import { StrykerError } from '../stryker-error.schema.js'
 
@@ -20,10 +19,11 @@ import { type FilePreprocessor } from './file-preprocessor.js'
 
 export const makeDisableTypeChecksPreprocessor =
   (log: Logger, options: StrykerOptions, impl: typeof disableTypeChecks): FilePreprocessor => (project) => {
-    const matches = createFileMatcher(options.disableTypeChecks)
     return Effect.gen(function*() {
+      const pathService = yield* Path.Path
+      const matches = createFileMatcher(options.disableTypeChecks, pathService)
       const updates = yield* Effect.forEach([...project.files.entries()], ([name, file]) => {
-        if (!matches(path.resolve(name))) {
+        if (!matches(pathService.resolve(name))) {
           return Effect.succeed<ProjectFile | undefined>(undefined)
         }
         return Effect.gen(function*() {

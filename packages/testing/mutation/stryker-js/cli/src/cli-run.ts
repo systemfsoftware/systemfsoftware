@@ -1,27 +1,27 @@
 import { resolve as resolvePath } from 'node:path'
 
+import { NodePath } from '@effect/platform-node'
 import {
+  type ConfigFileInvalidError,
+  type ConfigFileNotFoundError,
+  type ConfigFileUnreadableError,
   defaultStages,
+  type ExitClass,
   makeRunLayer,
+  type ResolvedMode,
+  resolveExitCode,
   type RunEnvironmentShape,
   runMutationTest,
 } from '@systemfsoftware/stryker-js-mutation-run'
-import { resolveExitCode } from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
-import type { ExitClass } from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
-import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
 import * as Predicate from 'effect/Predicate'
 import * as Ref from 'effect/Ref'
 
-import type {
-  ConfigFileInvalidError,
-  ConfigFileNotFoundError,
-  ConfigFileUnreadableError,
-} from '@systemfsoftware/stryker-js-mutation-run/errors'
 import type { SchemaError } from 'effect/Schema'
 import { isExitClass, resolveCliExitCode } from './cli-exit-code.js'
 import { emitMachineModeOutput } from './cli-machine-output.js'
@@ -84,6 +84,7 @@ export const runStrykerCli = (
     const hostOptions = hostOptionsOf(input.mode, stream)
     const runMutationTestImpl = input.runMutationTest ?? defaultRunMutationTest(hostOptions)
     const basePath = hostOptions.basePath
+    const pathService = yield* Path.Path.pipe(Effect.provide(NodePath.layer))
 
     let currentFiber: Fiber.Fiber<unknown, unknown> | null = null
 
@@ -173,7 +174,7 @@ export const runStrykerCli = (
         const exit = yield* Effect.exit(restore(program))
         const code = resolveClassedExitCode(exit)
         if (input.mode.mode === 'machine') {
-          yield* emitMachineModeOutput(stream, input.mode, exit, code, input.argv, basePath)
+          yield* emitMachineModeOutput(stream, input.mode, exit, code, input.argv, basePath, pathService)
         }
         yield* stream.closeAndDrain
         return code

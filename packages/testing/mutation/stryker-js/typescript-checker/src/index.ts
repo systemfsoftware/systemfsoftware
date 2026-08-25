@@ -4,7 +4,9 @@ import { Checker } from '@systemfsoftware/stryker-js-plugin-api/check'
 import { declarePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { RunConfiguration } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
+import * as Path from 'effect/Path'
 import * as S from 'effect/Schema'
 
 import { makeHybridFileSystem } from './project/hybrid-file-system.js'
@@ -19,8 +21,10 @@ export const strykerPlugins = [
       Checker,
       Effect.gen(function*() {
         const options = yield* RunConfiguration
-        const fs = yield* makeHybridFileSystem
-        const compiler = makeTypescriptCompiler(options, fs)
+        const fsService = yield* FileSystem.FileSystem
+        const pathService = yield* Path.Path
+        const fs = yield* makeHybridFileSystem(fsService)
+        const compiler = makeTypescriptCompiler(options, fs, fsService, pathService)
         return makeCheckerService({ options, compiler })
       }),
     ),

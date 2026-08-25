@@ -7,8 +7,7 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Predicate from 'effect/Predicate'
-import * as path from 'node:path'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url' // node:url — no Effect Path equivalent; keep
 
 import { isErrnoException, propertyPath } from '@systemfsoftware/stryker-js-plugin-api/core'
 import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
@@ -83,7 +82,7 @@ function resolvePluginModules(
           if (pluginExpression.includes('*')) {
             return yield* globPluginModules(pluginExpression, log)
           }
-          if (path.isAbsolute(pluginExpression) || pluginExpression.startsWith('.')) {
+          if (pathService.isAbsolute(pluginExpression) || pluginExpression.startsWith('.')) {
             return [pathToFileURL(pathService.resolve(pluginExpression)).toString()]
           }
           return [pluginExpression]
@@ -122,6 +121,7 @@ function readOrgDirectory(
 ): Effect.Effect<string[], PluginLoadFailedError, FileSystem.FileSystem | Path.Path> {
   return Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
     let names: HashSet.HashSet<string> = HashSet.empty()
     let directory = path.dirname(fileURLToPath(import.meta.url))
     for (;;) {

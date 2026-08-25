@@ -1,9 +1,9 @@
-import { readFileSync } from 'fs'
-import path from 'path'
-
 import { parse } from '@std/jsonc'
 import { normalizeFileName } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { Result, Schema as S } from 'effect'
+import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
+import type * as Path from 'effect/Path'
 
 import { type TsConfig, TsConfigParseError, TsConfigSchema } from './tsconfig.schema.js'
 
@@ -68,14 +68,18 @@ export function parseTsConfig(fileName: string, jsonText: string): Result.Result
  * Determines whether or not to use `--build` mode based on "references" being there in the config file
  * @param tsconfigFileName The tsconfig file to parse
  */
-export function determineBuildModeEnabled(tsconfigFileName: string): boolean {
-  const tsconfigFile = readFileSync(tsconfigFileName, 'utf-8')
-  const parsed = parseTsConfig(tsconfigFileName, tsconfigFile)
-  return Result.match(parsed, {
-    onFailure: () => false,
-    onSuccess: (config) => config.references !== undefined,
+export const determineBuildModeEnabled = (
+  tsconfigFileName: string,
+  fsService: FileSystem.FileSystem,
+): Effect.Effect<boolean, unknown> =>
+  Effect.gen(function*() {
+    const tsconfigFile = yield* fsService.readFileString(tsconfigFileName)
+    const parsed = parseTsConfig(tsconfigFileName, tsconfigFile)
+    return Result.match(parsed, {
+      onFailure: () => false,
+      onSuccess: (config) => config.references !== undefined,
+    })
   })
-}
 
 /**
  * Overrides some options to speed up compilation and disable some code quality checks we don't want during mutation testing
@@ -122,11 +126,15 @@ export function overrideOptions(config: TsConfig, useBuildMode: boolean): string
  * @param config The parsed config file
  * @param fromDirName The directory where to resolve from
  */
-export function retrieveReferencedProjects(config: TsConfig, fromDirName: string): string[] {
+export function retrieveReferencedProjects(
+  config: TsConfig,
+  fromDirName: string,
+  pathService: Path.Path,
+): string[] {
   return (config.references ?? []).map((reference) => {
-    let resolved = path.resolve(fromDirName, reference.path)
-    if (!path.basename(resolved).endsWith('.json')) {
-      resolved = path.join(resolved, 'tsconfig.json')
+    let resolved = pathService.resolve(fromDirName, reference.path)
+    if (!pathService.basename(resolved).endsWith('.json')) {
+      resolved = pathService.join(resolved, 'tsconfig.json')
     }
     return normalizeFileName(resolved)
   })

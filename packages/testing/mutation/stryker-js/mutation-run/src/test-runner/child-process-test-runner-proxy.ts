@@ -90,7 +90,7 @@ export const makeChildProcessTestRunner = (
 ): Effect.Effect<PooledTestRunner, ChildProcessProxyError | PooledTestRunnerError, Scope.Scope> =>
   Effect.gen(function*() {
     const { proxy } = yield* makeChildProcessProxy<TestRunnerWorkerShape>({
-      modulePath: new URL('./child-process-test-runner-worker.mjs', import.meta.url).pathname,
+      modulePath: new URL('./internal/child-process-test-runner-worker.mjs', import.meta.url).pathname,
       namedExport: 'ChildProcessTestRunnerWorker',
       options: params.options,
       fileDescriptions: params.fileDescriptions,

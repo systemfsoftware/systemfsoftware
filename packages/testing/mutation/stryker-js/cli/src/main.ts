@@ -6,7 +6,7 @@ import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Logger from 'effect/Logger'
 
-import { strykerEngines } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
+import { strykerEngines } from '@systemfsoftware/stryker-js-mutation-run'
 
 import { OutputModeProbe, OutputModeProbeLive } from './output-mode-probe.js'
 import { RunEventStreamLive, RunEventStreamPort } from './run-event-stream.js'

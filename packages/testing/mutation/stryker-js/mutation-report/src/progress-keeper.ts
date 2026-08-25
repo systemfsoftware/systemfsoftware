@@ -11,8 +11,6 @@ import type {
 } from '@systemfsoftware/stryker-js-plugin-api/report'
 import type { TestRunnerCapabilities } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 
-import { type Timer } from '@systemfsoftware/stryker-js-mutation-run/timer'
-
 export type ProgressTally = {
   readonly survived: number
   readonly timedOut: number
@@ -23,10 +21,10 @@ export type ProgressTally = {
   readonly ticksByMutantId: ReadonlyMap<string, number>
   readonly timing: RunTiming
   readonly capabilities: TestRunnerCapabilities
-  readonly timer: Timer
+  readonly startedAt: number
 }
 
-export const emptyTally = (timer: Timer): ProgressTally => ({
+export const emptyTally = (startedAt: number): ProgressTally => ({
   survived: 0,
   timedOut: 0,
   tested: 0,
@@ -36,12 +34,7 @@ export const emptyTally = (timer: Timer): ProgressTally => ({
   ticksByMutantId: new Map<string, number>(),
   timing: { net: 0, overhead: 0 },
   capabilities: { reloadEnvironment: false },
-  timer,
-})
-
-export const makeEmptyTimer = (): Timer => ({
-  startedAt: 0,
-  markers: new Map<string, number>(),
+  startedAt,
 })
 
 export const handleDryRunCompleted = (
@@ -56,7 +49,7 @@ export const handleDryRunCompleted = (
 export const handleMutationTestingPlanReady = (
   tally: ProgressTally,
   event: MutationTestingPlanReadyEvent,
-  timer: Timer,
+  startedAt: number,
 ): ProgressTally => {
   const map = new Map<string, number>()
   for (const plan of event.mutantPlans) {
@@ -73,7 +66,7 @@ export const handleMutationTestingPlanReady = (
   const total = [...map.values()].reduce((acc, n) => acc + n, 0)
   return {
     ...tally,
-    timer,
+    startedAt,
     ticksByMutantId: map,
     mutants: map.size,
     total,
@@ -99,12 +92,12 @@ export const handleMutantTested = (
 }
 
 export const getElapsedTime = (tally: ProgressTally, now: number): string => {
-  const elapsed = Math.floor((now - tally.timer.startedAt) / 1000)
+  const elapsed = Math.floor((now - tally.startedAt) / 1000)
   return formatTime(elapsed)
 }
 
 export const getEtc = (tally: ProgressTally, now: number): string => {
-  const elapsed = Math.floor((now - tally.timer.startedAt) / 1000)
+  const elapsed = Math.floor((now - tally.startedAt) / 1000)
   const totalSecondsLeft = Math.floor(
     (elapsed / tally.ticks) * (tally.total - tally.ticks),
   )

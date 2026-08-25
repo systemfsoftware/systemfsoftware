@@ -1,7 +1,14 @@
-import { promises as fs } from 'fs'
-import path from 'path'
-
-export async function writeOutputFile(fileName: string, content: string): Promise<void> {
-  await fs.mkdir(path.dirname(fileName), { recursive: true })
-  await fs.writeFile(fileName, content, 'utf8')
-}
+import * as Effect from 'effect/Effect'
+import type * as FileSystem from 'effect/FileSystem'
+import type * as Path from 'effect/Path'
+import type { PlatformError } from 'effect/PlatformError'
+export const writeOutputFile = (
+  fs: FileSystem.FileSystem,
+  path: Path.Path,
+  fileName: string,
+  content: string,
+): Effect.Effect<void, PlatformError, never> =>
+  Effect.gen(function*() {
+    yield* fs.makeDirectory(path.dirname(fileName), { recursive: true })
+    yield* fs.writeFileString(fileName, content)
+  })

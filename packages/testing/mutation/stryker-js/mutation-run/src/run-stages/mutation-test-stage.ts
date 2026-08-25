@@ -311,6 +311,7 @@ export const mutationTestStage: MutationTestStage<
     // filter the verdict envelope applies, so the stream and the terminal line
     // agree on which mutants are named.
     const plannedTotal = allPlansForReporter.length + noCoverageResults.length
+    const pathService = yield* Path.Path
     let completed = 0
     for (const result of allResults) {
       completed += 1
@@ -319,7 +320,7 @@ export const mutationTestStage: MutationTestStage<
           kind: 'mutant',
           id: result.id,
           status: result.status,
-          file: normalizeReportFileName(env.basePath, result.fileName),
+          file: normalizeReportFileName(env.basePath, result.fileName, pathService),
           location: toSchemaLocation(result.location),
           mutator: result.mutatorName,
           replacement: result.replacement ?? null,

@@ -16,7 +16,7 @@
  * `Omit` swaps each `S.Any` field for its real type — so the `_tag`
  * discriminants come from `S.TaggedStruct` rather than a hand-declared member.
  */
-import type { ManifestRendered } from '@systemfsoftware/stryker-js-mutation-run/run-event'
+import { type ManifestRendered } from '@systemfsoftware/stryker-js-mutation-run'
 import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as S from 'effect/Schema'
 

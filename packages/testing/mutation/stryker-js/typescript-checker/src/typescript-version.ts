@@ -1,22 +1,29 @@
-import { readFileSync } from 'fs'
-import { createRequire } from 'module'
+import { createRequire } from 'module' // node:module — resolve only, no Effect equivalent
 
 import { Predicate } from 'effect'
+import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
+
+import { UnsupportedTypeScriptVersionError } from './typescript-version.schema.js'
 
 let cachedTSVersion: string | undefined
 
-export function getTSVersion(): string {
-  if (cachedTSVersion === undefined) {
-    const require = createRequire(import.meta.url)
-    const raw: unknown = JSON.parse(readFileSync(require.resolve('typescript/package.json'), 'utf-8'))
+export const getTSVersion = (fsService: FileSystem.FileSystem): Effect.Effect<string, unknown> =>
+  Effect.gen(function*() {
+    if (cachedTSVersion !== undefined) {
+      return cachedTSVersion
+    }
+    const require = createRequire(import.meta.url) // node:module — resolve only
+    const pkgPath = require.resolve('typescript/package.json')
+    const text = yield* fsService.readFileString(pkgPath)
+    const raw: unknown = JSON.parse(text)
     let version = ''
     if (Predicate.hasProperty(raw, 'version') && typeof raw.version === 'string') {
       version = raw.version
     }
     cachedTSVersion = version
-  }
-  return cachedTSVersion
-}
+    return version
+  })
 
 /**
  * Whether a TypeScript version satisfies the supported floor `>=7.0.0`.
@@ -46,10 +53,10 @@ export function isSupportedTypescriptVersion(version: string): boolean {
   return patch >= 0
 }
 
-export function guardTSVersion(version = getTSVersion()): void {
-  if (!isSupportedTypescriptVersion(version)) {
-    throw new Error(
-      `@systemfsoftware/stryker-js-typescript-checker only supports typescript@7.0.0 or higher. Found typescript@${version}`,
-    )
-  }
-}
+export const guardTSVersion = (fsService: FileSystem.FileSystem): Effect.Effect<void, unknown> =>
+  Effect.gen(function*() {
+    const version = yield* getTSVersion(fsService)
+    if (!isSupportedTypescriptVersion(version)) {
+      return yield* new UnsupportedTypeScriptVersionError({ version })
+    }
+  })

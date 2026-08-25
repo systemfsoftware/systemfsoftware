@@ -1,3 +1,4 @@
+import { NodeFileSystem, NodePath } from '@effect/platform-node'
 import { type CheckResult, type PassedCheckResult } from '@systemfsoftware/stryker-js-plugin-api/check'
 import {
   type MutantResult,
@@ -126,10 +127,13 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
     }
   }
 
-  const toFileResult = (fileName: string): Effect.Effect<schema.FileResult, unknown, FileSystem.FileSystem> =>
+  const toFileResult = (
+    fileName: string,
+  ): Effect.Effect<schema.FileResult, unknown, FileSystem.FileSystem | Path.Path> =>
     Effect.gen(function*() {
+      const pathService = yield* Path.Path
       const fileResult: schema.FileResult = {
-        language: determineLanguage(fileName),
+        language: determineLanguage(fileName, pathService),
         mutants: [],
         source: '',
       }
@@ -167,8 +171,9 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
   const toFileResults = (
     results: readonly MutantResult[],
     remapTestIds: (ids: string[] | undefined) => string[] | undefined,
-  ): Effect.Effect<schema.FileResultDictionary, unknown, FileSystem.FileSystem> =>
+  ): Effect.Effect<schema.FileResultDictionary, unknown, FileSystem.FileSystem | Path.Path> =>
     Effect.gen(function*() {
+      const pathService = yield* Path.Path
       const uniqueFileNames = results
         .map(({ fileName }) => fileName)
         .filter((value, index, array) => array.indexOf(value) === index)
@@ -182,7 +187,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       const fileResultsByName: Record<string, schema.FileResult> = Object.fromEntries(entries)
 
       return results.reduce<schema.FileResultDictionary>((acc, mutantResult) => {
-        const reportFileName = normalizeReportFileName(input.basePath, mutantResult.fileName)
+        const reportFileName = normalizeReportFileName(input.basePath, mutantResult.fileName, pathService)
         let fileResult = acc[reportFileName]
         if (fileResult === undefined) {
           const prepared = fileResultsByName[mutantResult.fileName]
@@ -199,13 +204,16 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
 
   const toTestFiles = (
     remapTestId: (id: string) => string,
-  ): Effect.Effect<schema.TestFileDefinitionDictionary, unknown, FileSystem.FileSystem> =>
+  ): Effect.Effect<schema.TestFileDefinitionDictionary, unknown, FileSystem.FileSystem | Path.Path> =>
     Effect.gen(function*() {
+      const pathService = yield* Path.Path
       const uniqueTestFileNames = [...input.testCoverage.testsById.values()]
         .map(({ fileName }) => fileName)
         .filter((value, index, array) => array.indexOf(value) === index)
         .filter((value): value is string => value !== undefined)
-      const mapped = uniqueTestFileNames.map((fileName) => normalizeReportFileName(input.basePath, fileName))
+      const mapped = uniqueTestFileNames.map((fileName) =>
+        normalizeReportFileName(input.basePath, fileName, pathService)
+      )
       const entries = yield* Effect.forEach(
         uniqueTestFileNames,
         (fileName, index) => toTestFile(fileName).pipe(Effect.map((file) => [mapped[index] ?? '', file] as const)),
@@ -216,7 +224,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       return [...input.testCoverage.testsById.values()].reduce<schema.TestFileDefinitionDictionary>(
         (acc, testResult) => {
           const test = toTestDefinition(testResult, remapTestId)
-          const reportFileName = normalizeReportFileName(input.basePath, testResult.fileName)
+          const reportFileName = normalizeReportFileName(input.basePath, testResult.fileName, pathService)
           let testFile = acc[reportFileName]
           if (testFile === undefined) {
             const prepared = testFilesByName[reportFileName]
@@ -235,7 +243,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
 
   const mutationTestReport = (
     results: readonly MutantResult[],
-  ): Effect.Effect<schema.MutationTestResult, unknown, FileSystem.FileSystem> =>
+  ): Effect.Effect<schema.MutationTestResult, unknown, FileSystem.FileSystem | Path.Path> =>
     Effect.gen(function*() {
       const testIdMap: Record<string, string> = Object.fromEntries(
         [...input.testCoverage.testsById.values()].map((test, index) => [test.id, index.toString()] as const),
@@ -335,6 +343,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
   const emitVerdict = (
     report: schema.MutationTestResult,
     evaluatorVerdicts: readonly VerdictEvaluatorVerdict[],
+    pathService: Path.Path,
   ): void => {
     input.runEventSink({
       kind: 'verdict',
@@ -345,6 +354,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
         input.runId,
         input.basePath,
         evaluatorVerdicts,
+        pathService,
       ),
     })
   }
@@ -363,9 +373,11 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
     }).pipe(
       Effect.provideService(RunConfiguration, input.options),
       Effect.provideService(SandboxDirectory, input.sandboxDirectory),
+      Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
     )
   const reportAll: MutationReportingService['reportAll'] = (results) =>
     Effect.gen(function*() {
+      const pathService = yield* Path.Path
       const report = yield* mutationTestReport(results)
       const metrics = calculateMutationTestMetrics(report)
       yield* input.reporter.onMutationTestReportReady(report, metrics)
@@ -381,10 +393,9 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       const verdict = highestExitClass(
         scoreVerdict === null ? evaluatorClasses : [scoreVerdict, ...evaluatorClasses],
       )
-      emitVerdict(report, evaluatorVerdicts)
+      emitVerdict(report, evaluatorVerdicts, pathService)
       if (input.options.incremental && verdict === null) {
         const fs = yield* FileSystem.FileSystem
-        const pathService = yield* Path.Path
         const dir = pathService.dirname(input.options.incrementalFile)
         yield* fs.makeDirectory(dir, { recursive: true })
         yield* fs.writeFileString(input.options.incrementalFile, JSON.stringify(report, null, 2))

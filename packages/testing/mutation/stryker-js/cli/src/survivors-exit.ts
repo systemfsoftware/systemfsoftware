@@ -1,4 +1,4 @@
-import { ExitClass } from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
+import { ExitClass } from '@systemfsoftware/stryker-js-mutation-run'
 
 /** The exit class a rejected survivors run exits with (R6: exit 2). */
 export const SURVIVORS_REJECT_EXIT_CLASS: ExitClass = ExitClass.ConfigError
@@ -11,7 +11,7 @@ if (import.meta.vitest !== void 0) {
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
   const { describe, it } = await import('@systemfsoftware/effect-gherkin-spec')
-  const { ExitClass } = await import('@systemfsoftware/stryker-js-mutation-run/exit-classification')
+  const { ExitClass } = await import('@systemfsoftware/stryker-js-mutation-run')
   const { FastCheck: fc } = await import('effect/testing')
 
   /**

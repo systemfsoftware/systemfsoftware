@@ -2,7 +2,7 @@ import * as Context from 'effect/Context'
 import * as Layer from 'effect/Layer'
 import * as Result from 'effect/Result'
 
-import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
+import { type ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run'
 
 import { resolveMode, TOOL_VARIABLES } from './output-mode.js'
 

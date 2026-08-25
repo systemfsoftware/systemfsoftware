@@ -1,23 +1,22 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
+  // Two doors, and neither is a random internal file. `index` is the whole
+  // programmatic API - run the engine, read its config, observe its events and
+  // verdict, classify its exit. `config/base` exists only because a
+  // `stryker.config.json` names it by string in `extends`, which cannot travel
+  // through the JS entry.
+  //
+  // The `internal/` entries are not an API: the engine spawns them by resolved
+  // path, so they must be emitted and must resolve, but no one imports them for
+  // a value and the prefix says so - the convention @effect/vitest ships as
+  // `./internal/*`.
   entry: {
     index: './src/index.ts',
-    'child-process-proxy-worker-main': './src/worker-pool/child-process-proxy-worker-main.ts',
-    'checker-worker': './src/checker/checker-worker.ts',
-    'child-process-test-runner-worker': './src/test-runner/child-process-test-runner-worker.ts',
     'config/base': './src/config/base-preset.ts',
-    'config/config-resolution': './src/config/config-resolution.ts',
-    'config/fork-schema': './src/config/fork-schema.ts',
-    'plugins': './src/plugins/index.ts',
-    'mutants/incremental-differ': './src/mutants/incremental-differ.ts',
-    'output-mode': './src/output-mode.ts',
-    'verdict-envelope': './src/verdict-envelope.ts',
-    'run-event': './src/run-event.ts',
-    'stryker-package': './src/stryker-package.ts',
-    'exit-classification': './src/exit-classification.ts',
-    'errors': './src/errors.ts',
-    'timer': './src/timer.ts',
+    'internal/checker-worker': './src/checker/checker-worker.ts',
+    'internal/child-process-proxy-worker-main': './src/worker-pool/child-process-proxy-worker-main.ts',
+    'internal/child-process-test-runner-worker': './src/test-runner/child-process-test-runner-worker.ts',
   },
   format: 'esm',
   dts: true,

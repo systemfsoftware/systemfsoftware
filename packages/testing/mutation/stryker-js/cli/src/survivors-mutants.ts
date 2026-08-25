@@ -1,7 +1,9 @@
 import type { Mutant } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 
-import { toRelativeNormalizedFileName } from '@systemfsoftware/stryker-js-mutation-run/mutants/incremental-differ'
+import { toRelativeNormalizedFileName } from '@systemfsoftware/stryker-js-mutation-run'
+import * as Effect from 'effect/Effect'
+import * as Path from 'effect/Path'
 
 import type { PriorReportDocument, PriorReportMutant } from './survivors-report.js'
 
@@ -29,6 +31,7 @@ export function survivorIdentifyingKey(
     readonly replacement: string | undefined
   },
   basePath: string,
+  pathService: Path.Path,
 ): string {
   const {
     file,
@@ -37,7 +40,7 @@ export function survivorIdentifyingKey(
     replacement,
   } = input
   return `${
-    toRelativeNormalizedFileName(basePath, file)
+    toRelativeNormalizedFileName(file, basePath, pathService)
   }@${start.line}:${start.column}-${end.line}:${end.column}\n${mutatorName}: ${replacement}`
 }
 
@@ -97,11 +100,11 @@ export function extractSurvivors(
  * ranges: the report's 1-based lines with the internal 0-based columns,
  * relative file names, deduplicated in first-seen order.
  */
-export function survivorMutateSpans(survivors: readonly Mutant[], basePath: string): string[] {
+export function survivorMutateSpans(survivors: readonly Mutant[], basePath: string, pathService: Path.Path): string[] {
   const spans: string[] = []
   const seen = new Set<string>()
   for (const survivor of survivors) {
-    const file = toRelativeNormalizedFileName(basePath, survivor.fileName)
+    const file = toRelativeNormalizedFileName(survivor.fileName, basePath, pathService)
     const { start, end } = survivor.location
     const span = `${file}:${start.line + 1}:${start.column}-${end.line + 1}:${end.column}`
     if (!seen.has(span)) {
@@ -118,6 +121,7 @@ export function survivorMutateSpans(survivors: readonly Mutant[], basePath: stri
 const _privateObjectEntriesMarker = objectEntries
 
 if (import.meta.vitest !== void 0) {
+  const pathService = Effect.runSync(Path.Path.pipe(Effect.provide(Path.layer)))
   const { describe, it } = await import('@systemfsoftware/effect-gherkin-spec')
   const { FastCheck: fc } = await import('effect/testing')
 
@@ -202,14 +206,14 @@ if (import.meta.vitest !== void 0) {
       '∀k_OneFieldVariant_≡DifferentKey',
       [keyInputArb],
       ([base]) =>
-        survivorIdentifyingKey({ ...base, file: nextKeyFile(base.file) }, ABS_WORK_ROOT) !==
-          survivorIdentifyingKey(base, ABS_WORK_ROOT) &&
-        survivorIdentifyingKey({ ...base, location: shiftedLocation(base.location) }, ABS_WORK_ROOT) !==
-          survivorIdentifyingKey(base, ABS_WORK_ROOT) &&
-        survivorIdentifyingKey({ ...base, mutatorName: `${base.mutatorName}x` }, ABS_WORK_ROOT) !==
-          survivorIdentifyingKey(base, ABS_WORK_ROOT) &&
-        survivorIdentifyingKey({ ...base, replacement: `${base.replacement ?? ''}x` }, ABS_WORK_ROOT) !==
-          survivorIdentifyingKey(base, ABS_WORK_ROOT),
+        survivorIdentifyingKey({ ...base, file: nextKeyFile(base.file) }, ABS_WORK_ROOT, pathService) !==
+          survivorIdentifyingKey(base, ABS_WORK_ROOT, pathService) &&
+        survivorIdentifyingKey({ ...base, location: shiftedLocation(base.location) }, ABS_WORK_ROOT, pathService) !==
+          survivorIdentifyingKey(base, ABS_WORK_ROOT, pathService) &&
+        survivorIdentifyingKey({ ...base, mutatorName: `${base.mutatorName}x` }, ABS_WORK_ROOT, pathService) !==
+          survivorIdentifyingKey(base, ABS_WORK_ROOT, pathService) &&
+        survivorIdentifyingKey({ ...base, replacement: `${base.replacement ?? ''}x` }, ABS_WORK_ROOT, pathService) !==
+          survivorIdentifyingKey(base, ABS_WORK_ROOT, pathService),
     )
   })
 
@@ -268,11 +272,11 @@ if (import.meta.vitest !== void 0) {
     it.prop('∀s_Spans_≡DeduplicatedFirstSeen', [survivorListArb], ([survivors]) => {
       const spanOf = (mutant: Mutant): string => {
         const { start, end } = mutant.location
-        return `${toRelativeNormalizedFileName(ABS_WORK_ROOT, mutant.fileName)}:${start.line + 1}:${start.column}-${
-          end.line + 1
-        }:${end.column}`
+        return `${toRelativeNormalizedFileName(mutant.fileName, ABS_WORK_ROOT, pathService)}:${
+          start.line + 1
+        }:${start.column}-${end.line + 1}:${end.column}`
       }
-      const output = survivorMutateSpans(survivors, ABS_WORK_ROOT)
+      const output = survivorMutateSpans(survivors, ABS_WORK_ROOT, pathService)
       const inputSpans = survivors.map(spanOf)
       const firstIndexOf = (span: string): number => inputSpans.indexOf(span)
       const noDuplicates = new Set(output).size === output.length
@@ -291,13 +295,13 @@ if (import.meta.vitest !== void 0) {
     })
 
     it.prop('∀s_SpanNumbers_≡OneBasedLinesZeroBasedColumns', [survivorListArb], ([survivors]) => {
-      const relName = (file: string): string => toRelativeNormalizedFileName(ABS_WORK_ROOT, file)
+      const relName = (file: string): string => toRelativeNormalizedFileName(file, ABS_WORK_ROOT, pathService)
       const numberFrom = (value: string): number => Number(value)
       const spanOf = (mutant: Mutant): string => {
         const { start, end } = mutant.location
         return `${relName(mutant.fileName)}:${start.line + 1}:${start.column}-${end.line + 1}:${end.column}`
       }
-      const output = survivorMutateSpans(survivors, ABS_WORK_ROOT)
+      const output = survivorMutateSpans(survivors, ABS_WORK_ROOT, pathService)
       const inputSpans = survivors.map(spanOf)
       return output.every((span) => {
         const match = /^(.+):(\d+):(\d+)-(\d+):(\d+)$/.exec(span)

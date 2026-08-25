@@ -10,7 +10,7 @@
  * requires the TCP handshake.
  *
  * The entry is resolved by `require.resolve` on the package's own published
- * subpath `@systemfsoftware/stryker-js-mutation-run/child-process-proxy-worker-main`
+ * subpath `@systemfsoftware/stryker-js-mutation-run/internal/child-process-proxy-worker-main`
  * — the same specifier the parent resolves at runtime. The subpath IS the
  * contract, so renaming the entry file moves this resolution with it and there
  * is no bundle-scanning pattern left to go stale. The gate then asserts the
@@ -87,7 +87,7 @@ type Announcement =
  * exported resolver. Asserts the result is the BUILT artifact under `dist/`.
  */
 
-const WORKER_MAIN_SPECIFIER = '@systemfsoftware/stryker-js-mutation-run/child-process-proxy-worker-main'
+const WORKER_MAIN_SPECIFIER = '@systemfsoftware/stryker-js-mutation-run/internal/child-process-proxy-worker-main'
 
 const resolveBuiltEntry = (): string => {
   // Resolve the worker entry through the package's own `exports` map, which is

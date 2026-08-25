@@ -1,3 +1,4 @@
+import { NodeFileSystem, NodePath } from '@effect/platform-node'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { Reporter, type ReporterService } from '@systemfsoftware/stryker-js-plugin-api/report'
@@ -6,12 +7,12 @@ import { TestStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import type { FailedTestResult } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
+
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Scope from 'effect/Scope'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
-import fs from 'node:fs'
 import { testCoverageFrom } from '../mutants/test-coverage.js'
 import { makeChildProcessTestRunner } from '../test-runner/child-process-test-runner-proxy.js'
 import { buildTestRunner } from '../test-runner/index.js'
@@ -63,6 +64,7 @@ export const dryRunStage: DryRunStage<
       const ctx = yield* Layer.build(layerOpt.value).pipe(
         Effect.provideService(RunConfiguration, prev.options),
         Effect.provideService(SandboxDirectory, prev.temporaryDirectoryPath),
+        Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
       )
       const maybeReporter = Context.getOption(ctx, Reporter)
       if (Option.isNone(maybeReporter)) {

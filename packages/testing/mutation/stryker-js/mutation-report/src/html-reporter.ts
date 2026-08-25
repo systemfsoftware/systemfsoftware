@@ -1,6 +1,7 @@
-import fs from 'fs'
-import path from 'path'
+// node:url — no Effect Path equivalent for file URL conversion
 import { pathToFileURL } from 'url'
+// node:module — require.resolve for bundled script lookup
+import { createRequire } from 'module'
 
 import type { schema, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import type { MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core'
@@ -13,7 +14,8 @@ import type {
 } from '@systemfsoftware/stryker-js-plugin-api/report'
 import { ReporterFailed } from '@systemfsoftware/stryker-js-plugin-api/report'
 import * as Effect from 'effect/Effect'
-import { createRequire } from 'module'
+import * as FileSystem from 'effect/FileSystem'
+import * as Path from 'effect/Path'
 
 import { buildReportHtml } from './html-document.js'
 import { writeOutputFile } from './output-file.js'
@@ -39,9 +41,13 @@ function noopLogger(): Logger {
 export const makeHtmlReporter = (params: {
   readonly options?: ProvidedStrykerOptions
   readonly log?: Logger
+  readonly fs: FileSystem.FileSystem
+  readonly path: Path.Path
 }): ReporterService => {
   const options = params.options
   const log = params.log ?? noopLogger()
+  const fs = params.fs
+  const path = params.path
 
   return {
     onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
@@ -54,23 +60,23 @@ export const makeHtmlReporter = (params: {
       report: schema.MutationTestResult,
       _metrics: MutationTestMetricsResult,
     ) =>
-      Effect.tryPromise({
-        try: async () => {
-          if (options === undefined) return
-          log.debug(`Using file "${options.htmlReporter.fileName}"`)
-          const require = createRequire(import.meta.url)
-          const scriptContent = await fs.promises.readFile(
-            require.resolve('mutation-testing-elements/dist/mutation-test-elements.js'),
-            'utf-8',
-          )
-          const html = buildReportHtml(report, scriptContent)
-          await writeOutputFile(options.htmlReporter.fileName, html)
-          log.info(
-            `Your report can be found at: ${pathToFileURL(path.resolve(options.htmlReporter.fileName)).href}`,
-          )
-        },
-        catch: (cause) => new ReporterFailed({ reporterName: 'html', event: 'onMutationTestReportReady', cause }),
-      }),
+      Effect.gen(function*() {
+        if (options === undefined) return
+        log.debug(`Using file "${options.htmlReporter.fileName}"`)
+        const require = createRequire(import.meta.url)
+        const scriptPath = require.resolve('mutation-testing-elements/dist/mutation-test-elements.js')
+        const scriptContent = yield* fs.readFileString(scriptPath)
+        const html = buildReportHtml(report, scriptContent)
+        yield* writeOutputFile(fs, path, options.htmlReporter.fileName, html)
+        log.info(
+          `Your report can be found at: ${pathToFileURL(path.resolve(options.htmlReporter.fileName)).href}`,
+        )
+      }).pipe(
+        Effect.catchCause(
+          (cause) =>
+            Effect.fail(new ReporterFailed({ reporterName: 'html', event: 'onMutationTestReportReady', cause })),
+        ),
+      ),
 
     wrapUp: Effect.void,
   }

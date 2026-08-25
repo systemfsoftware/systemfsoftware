@@ -12,6 +12,20 @@ export class TsConfigParseError extends S.TaggedError<TsConfigParseError>()(
   },
 ) {}
 
+/**
+ * The configured tsconfig file could not be read from disk.
+ */
+export class TsConfigNotFoundError extends S.TaggedError<TsConfigNotFoundError>()(
+  'TsConfigNotFoundError',
+  {
+    file: S.String,
+  },
+) {
+  override get message(): string {
+    return `The tsconfig file does not exist at: "${this.file}". Please configure the tsconfig file in your stryker.conf file using "tsconfigFile"`
+  }
+}
+
 const JsonRecord = S.Record(S.String, S.Unknown)
 
 export const TsConfigSchema = S.StructWithRest(

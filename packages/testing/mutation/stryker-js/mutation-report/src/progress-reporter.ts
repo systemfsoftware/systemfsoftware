@@ -10,8 +10,6 @@ import { ReporterFailed } from '@systemfsoftware/stryker-js-plugin-api/report'
 import * as Clock from 'effect/Clock'
 import * as Effect from 'effect/Effect'
 import * as Ref from 'effect/Ref'
-
-import { makeTimer } from '@systemfsoftware/stryker-js-mutation-run/timer'
 import {
   isComplete,
   makeProgressBarState,
@@ -26,7 +24,6 @@ import {
   handleDryRunCompleted,
   handleMutantTested,
   handleMutationTestingPlanReady,
-  makeEmptyTimer,
   type ProgressTally,
 } from './progress-keeper.js'
 
@@ -44,8 +41,7 @@ export const makeProgressBarReporter = (params: {
     const barFormat = params.barFormat ??
       'Mutation testing  [:bar] :percent (elapsed: :et, remaining: :etc) :tested/:mutants Mutants tested (:survived survived, :timedOut timed out)'
     const barOptions = params.barOptions ?? { complete: '=', incomplete: ' ', width: 50 }
-    const initialTimer = makeEmptyTimer()
-    const tallyRef = yield* Ref.make<ProgressTally>(emptyTally(initialTimer))
+    const tallyRef = yield* Ref.make<ProgressTally>(emptyTally(0))
     const barRef = yield* Ref.make<ProgressBarState | undefined>(undefined)
 
     const reporter: ReporterService = {
@@ -57,8 +53,8 @@ export const makeProgressBarReporter = (params: {
         ),
       onMutationTestingPlanReady: (event: MutationTestingPlanReadyEvent) =>
         Effect.gen(function*() {
-          const timer = yield* makeTimer
-          yield* Ref.update(tallyRef, (tally) => handleMutationTestingPlanReady(tally, event, timer))
+          const startedAt = yield* Clock.currentTimeMillis
+          yield* Ref.update(tallyRef, (tally) => handleMutationTestingPlanReady(tally, event, startedAt))
           const tally = yield* Ref.get(tallyRef)
           const barState = makeProgressBarState(barFormat, {
             complete: barOptions.complete,

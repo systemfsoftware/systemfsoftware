@@ -1,13 +1,13 @@
-import path from 'node:path'
+import type * as Path from 'effect/Path'
 
 import { normalizeFileName } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { minimatch } from 'minimatch'
 
 const DEFAULT_GLOB = '**/*.{js,ts,jsx,tsx,html,vue,mjs,mts,cts,cjs}'
 
-function normalizePattern(pattern: boolean | string): boolean | string {
+function normalizePattern(pattern: boolean | string, pathService: Path.Path): boolean | string {
   if (typeof pattern === 'string') {
-    return normalizeFileName(path.resolve(pattern))
+    return normalizeFileName(pathService.resolve(pattern))
   }
   if (pattern) {
     return DEFAULT_GLOB
@@ -17,12 +17,13 @@ function normalizePattern(pattern: boolean | string): boolean | string {
 
 export function createFileMatcher(
   pattern: boolean | string,
+  pathService: Path.Path,
   allowHiddenFiles = true,
 ): (fileName: string) => boolean {
-  const normalized = normalizePattern(pattern)
+  const normalized = normalizePattern(pattern, pathService)
   if (typeof normalized === 'string') {
     return (fileName: string) =>
-      minimatch(normalizeFileName(path.resolve(fileName)), normalized, {
+      minimatch(normalizeFileName(pathService.resolve(fileName)), normalized, {
         dot: allowHiddenFiles,
       })
   }
@@ -32,7 +33,8 @@ export function createFileMatcher(
 export function matchesFile(
   pattern: boolean | string,
   fileName: string,
+  pathService: Path.Path,
   allowHiddenFiles = true,
 ): boolean {
-  return createFileMatcher(pattern, allowHiddenFiles)(fileName)
+  return createFileMatcher(pattern, pathService, allowHiddenFiles)(fileName)
 }

@@ -1,8 +1,10 @@
 /// <reference types="vitest/importMeta" />
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
 
 import { Checker } from '../check/index.js'
 import { Evaluator } from '../evaluate/index.js'
@@ -41,8 +43,7 @@ type PluginContributionTag = typeof pluginContributionTag
  * accept a layer requiring anything at all, which no engine can discharge — so
  * building it would need a cast at the one place that must not have one.
  */
-export type PluginEnvironment = RunConfiguration | SandboxDirectory
-
+export type PluginEnvironment = RunConfiguration | SandboxDirectory | FileSystem.FileSystem | Path.Path
 /**
  * A plugin declares what it contributes, and the contribution carries the
  * `Layer` that provides the port.

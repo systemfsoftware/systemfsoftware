@@ -29,7 +29,7 @@ export const makeCheckerChildProcess = (params: {
 }): Effect.Effect<CheckerResourceService, unknown, Scope.Scope> =>
   Effect.gen(function*() {
     const shape = yield* makeChildProcessProxy<CheckerWorkerShape>({
-      modulePath: new URL('./checker-worker.mjs', import.meta.url).pathname,
+      modulePath: new URL('./internal/checker-worker.mjs', import.meta.url).pathname,
       namedExport: 'CheckerWorker',
       options: params.options,
       fileDescriptions: params.fileDescriptions,

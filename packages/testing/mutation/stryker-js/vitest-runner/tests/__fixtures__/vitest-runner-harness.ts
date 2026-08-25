@@ -2,6 +2,7 @@ import fs from 'fs'
 import { fileURLToPath } from 'node:url'
 import path from 'path'
 
+import { NodeFileSystem, NodePath } from '@effect/platform-node'
 import { Context, Effect } from 'effect'
 import * as Layer from 'effect/Layer'
 import type { Scope } from 'effect/Scope'
@@ -71,7 +72,9 @@ export const runnerContext = (
         // an installed package instead of teaching it about this layout.
         setupFilePath: fileURLToPath(new URL('../../dist/stryker-setup.mjs', import.meta.url)),
       })
-      const context = yield* Layer.build(layer)
+      const context = yield* Layer.build(layer).pipe(
+        Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+      )
       const service = Context.get(context, TestRunner)
       const sut = {
         init: () => Effect.runPromiseWith(ctx)(service.init),
@@ -124,9 +127,13 @@ export const twoRunnersContext = (
         globalNamespace: '__stryker2__',
         setupFilePath,
       })
-      const context1 = yield* Layer.build(layer1)
+      const context1 = yield* Layer.build(layer1).pipe(
+        Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+      )
       const service1 = Context.get(context1, TestRunner)
-      const context2 = yield* Layer.build(layer2)
+      const context2 = yield* Layer.build(layer2).pipe(
+        Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+      )
       const service2 = Context.get(context2, TestRunner)
       yield* service1.init
       yield* service2.init

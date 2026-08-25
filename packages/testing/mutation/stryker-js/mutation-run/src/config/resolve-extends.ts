@@ -1,6 +1,5 @@
-import { createRequire } from 'node:module'
-import path from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { createRequire } from 'node:module' // node:module — createRequire for specifier resolution, no Effect equivalent
+import { pathToFileURL } from 'node:url' // node:url — pathToFileURL, no Effect Path equivalent
 
 import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Effect from 'effect/Effect'
@@ -42,7 +41,7 @@ export function readConfigFile(
       )
     }
     const importResult = yield* Effect.tryPromise({
-      try: () => import(pathToFileURL(path.resolve(configFile)).toString()),
+      try: () => import(pathToFileURL(pathService.resolve(configFile)).toString()),
       catch: (cause) => new ConfigFileUnreadableError({ file: configFile, cause }),
     }).pipe(Effect.result)
     if (Result.isFailure(importResult)) {
@@ -67,13 +66,16 @@ export function readConfigFile(
 function resolveExtendsSpecifier(
   specifier: string,
   configDir: string,
-): Effect.Effect<string, ConfigFileUnreadableError> {
-  return Effect.try({
-    try: () => {
-      const requireFrom = createRequire(path.join(configDir, 'noop.js'))
-      return requireFrom.resolve(specifier)
-    },
-    catch: (cause) => new ConfigFileUnreadableError({ file: specifier, cause }),
+): Effect.Effect<string, ConfigFileUnreadableError, Path.Path> {
+  return Effect.gen(function*() {
+    const pathService = yield* Path.Path
+    return yield* Effect.try({
+      try: () => {
+        const requireFrom = createRequire(pathService.join(configDir, 'noop.js'))
+        return requireFrom.resolve(specifier)
+      },
+      catch: (cause) => new ConfigFileUnreadableError({ file: specifier, cause }),
+    })
   })
 }
 
@@ -97,7 +99,7 @@ export function resolveExtends(
       ConfigFileUnreadableError | ConfigFileInvalidError,
       FileSystem.FileSystem | Path.Path
     > =>
-      Match.value(decideExtendsStep(state, currentDocument, file)).pipe(
+      Match.value(decideExtendsStep(state, currentDocument, file, pathService)).pipe(
         Match.tag('done', (d) => Effect.succeed(d.options)),
         Match.tag('read', (d) =>
           readConfigFile(d.path).pipe(Effect.flatMap((nextDocument) => loop(d.state, d.path, nextDocument)))),

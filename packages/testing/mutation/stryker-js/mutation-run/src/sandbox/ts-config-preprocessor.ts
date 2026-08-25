@@ -1,12 +1,10 @@
-import path from 'node:path'
-
 import { parse } from '@std/jsonc'
 import { errorToString, normalizeFileName, type StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { Schema as S } from 'effect'
 import * as Effect from 'effect/Effect'
 import type * as FileSystem from 'effect/FileSystem'
-import type * as Path from 'effect/Path'
+import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 import * as Result from 'effect/Result'
 
@@ -71,9 +69,13 @@ export const makeTSConfigPreprocessor =
     }
     const touched = new Set<string>()
 
-    const tryRewriteReference = (reference: string, originTSConfigFileName: string): string | false => {
-      const fileName = path.resolve(path.dirname(originTSConfigFileName), reference)
-      const relativeToSandbox = path.relative(basePath, fileName)
+    const tryRewriteReference = (
+      reference: string,
+      originTSConfigFileName: string,
+      pathService: Path.Path,
+    ): string | false => {
+      const fileName = pathService.resolve(pathService.dirname(originTSConfigFileName), reference)
+      const relativeToSandbox = pathService.relative(basePath, fileName)
       if (relativeToSandbox.startsWith('..')) {
         return ['..', '..', normalizeFileName(reference)].join('/')
       }
@@ -84,13 +86,14 @@ export const makeTSConfigPreprocessor =
       config: TSConfig,
       tsconfigFileName: string,
       prop: 'exclude' | 'files' | 'include',
+      pathService: Path.Path,
     ): void => {
       const value = config[prop]
       if (Array.isArray(value)) {
         for (let i = 0; i < value.length; i++) {
           const entry = value[i]
           if (typeof entry === 'string') {
-            const rewritten = tryRewriteReference(entry, tsconfigFileName)
+            const rewritten = tryRewriteReference(entry, tsconfigFileName, pathService)
             if (rewritten) {
               value[i] = rewritten
             }
@@ -101,6 +104,7 @@ export const makeTSConfigPreprocessor =
 
     const rewriteTSConfigFile = (
       tsconfigFileName: string,
+      pathService: Path.Path,
     ): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> => {
       if (touched.has(tsconfigFileName)) {
         return Effect.void
@@ -118,16 +122,16 @@ export const makeTSConfigPreprocessor =
               const config = parsed.success
               return Effect.all(
                 [
-                  rewriteExtends(config, tsconfigFileName),
-                  rewriteProjectReferences(config, tsconfigFileName),
+                  rewriteExtends(config, tsconfigFileName, pathService),
+                  rewriteProjectReferences(config, tsconfigFileName, pathService),
                 ],
                 { discard: true },
               ).pipe(
                 Effect.flatMap(() =>
                   Effect.sync(() => {
-                    rewriteFileArrayProperty(config, tsconfigFileName, 'include')
-                    rewriteFileArrayProperty(config, tsconfigFileName, 'exclude')
-                    rewriteFileArrayProperty(config, tsconfigFileName, 'files')
+                    rewriteFileArrayProperty(config, tsconfigFileName, 'include', pathService)
+                    rewriteFileArrayProperty(config, tsconfigFileName, 'exclude', pathService)
+                    rewriteFileArrayProperty(config, tsconfigFileName, 'files', pathService)
                     Object.assign(tsconfigFile, { content: JSON.stringify(config, null, 2) })
                   })
                 ),
@@ -147,32 +151,38 @@ export const makeTSConfigPreprocessor =
       config: TSConfig,
       extend: string,
       tsconfigFileName: string,
+      pathService: Path.Path,
     ): Effect.Effect<string, PlatformError, FileSystem.FileSystem | Path.Path> => {
-      const rewritten = tryRewriteReference(extend, tsconfigFileName)
+      const rewritten = tryRewriteReference(extend, tsconfigFileName, pathService)
       if (rewritten) {
         return Effect.succeed(rewritten)
       }
-      return rewriteTSConfigFile(path.resolve(path.dirname(tsconfigFileName), extend)).pipe(Effect.as(extend))
+      return rewriteTSConfigFile(
+        pathService.resolve(pathService.dirname(tsconfigFileName), extend),
+        pathService,
+      ).pipe(Effect.as(extend))
     }
 
     const rewriteExtends = (
       config: TSConfig,
       tsconfigFileName: string,
+      pathService: Path.Path,
     ): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> => {
       const extend = config.extends
       if (typeof extend === 'string') {
-        return Effect.flatMap(rewriteExtendsEntry(config, extend, tsconfigFileName), (rewritten) => {
+        return Effect.flatMap(rewriteExtendsEntry(config, extend, tsconfigFileName, pathService), (rewritten) => {
           config.extends = rewritten
           return Effect.void
         })
       }
       if (S.is(ExtendsArraySchema)(extend)) {
-        return Effect.forEach(extend, (entry) => rewriteExtendsEntry(config, entry, tsconfigFileName)).pipe(
-          Effect.flatMap((rewritten) => {
-            config.extends = rewritten
-            return Effect.void
-          }),
-        )
+        return Effect.forEach(extend, (entry) => rewriteExtendsEntry(config, entry, tsconfigFileName, pathService))
+          .pipe(
+            Effect.flatMap((rewritten) => {
+              config.extends = rewritten
+              return Effect.void
+            }),
+          )
       }
       return Effect.void
     }
@@ -180,22 +190,26 @@ export const makeTSConfigPreprocessor =
     const rewriteProjectReferences = (
       config: TSConfig,
       originTSConfigFileName: string,
+      pathService: Path.Path,
     ): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> => {
       const references = config.references
       if (!references) {
         return Effect.void
       }
       return Effect.forEach(references, (ref) => {
-        const rewritten = tryRewriteReference(ref.path, originTSConfigFileName)
+        const rewritten = tryRewriteReference(ref.path, originTSConfigFileName, pathService)
         if (rewritten) {
           ref.path = rewritten
           return Effect.void
         }
         const refPath = ref.path.endsWith('.json') ? ref.path : `${ref.path}/tsconfig.json`
-        const refFileName = path.resolve(path.dirname(originTSConfigFileName), refPath)
-        return rewriteTSConfigFile(refFileName)
+        const refFileName = pathService.resolve(pathService.dirname(originTSConfigFileName), refPath)
+        return rewriteTSConfigFile(refFileName, pathService)
       }).pipe(Effect.asVoid)
     }
 
-    return rewriteTSConfigFile(path.resolve(options.tsconfigFile))
+    return Effect.gen(function*() {
+      const pathService = yield* Path.Path
+      return yield* rewriteTSConfigFile(pathService.resolve(options.tsconfigFile), pathService)
+    })
   }

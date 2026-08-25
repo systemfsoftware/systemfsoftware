@@ -1,5 +1,3 @@
-import path from 'node:path'
-
 import {
   type FileDescriptions,
   type Location,
@@ -13,6 +11,7 @@ import { normalizeFileName } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import { type TestResult, TestStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { diff_match_patch as DiffMatchPatch } from 'diff-match-patch'
+import type * as Path from 'effect/Path'
 import * as Predicate from 'effect/Predicate'
 import { type TestDefinition } from 'mutation-testing-report-schema'
 
@@ -34,10 +33,11 @@ export interface IncrementalDiffResult {
 const toMutateDescriptionMap = (
   fileDescriptions: FileDescriptions,
   basePath: string,
+  pathService: Path.Path,
 ): ReadonlyMap<string, MutateDescription> =>
   new Map(
     Object.entries(fileDescriptions).map(([name, description]) => [
-      toRelativeNormalizedFileName(basePath, name),
+      toRelativeNormalizedFileName(name, basePath, pathService),
       description.mutate,
     ]),
   )
@@ -64,8 +64,9 @@ export const incrementalDiff = (
     currentRelativeFiles: ReadonlyMap<string, string>
     basePath: string
   }>,
+  pathService: Path.Path,
 ): IncrementalDiffResult => {
-  const mutateMap = toMutateDescriptionMap(input.fileDescriptions, input.basePath)
+  const mutateMap = toMutateDescriptionMap(input.fileDescriptions, input.basePath, pathService)
   const { files, testFiles } = input.incrementalReport
   let mutantStatistics = emptyDiffStatistics()
   let testStatistics = emptyDiffStatistics()
@@ -81,7 +82,7 @@ export const incrementalDiff = (
   const oldTestKeys = new Set([...oldTestsById.values()].map(({ key }) => key))
   const newTestKeys = new Set(
     [...currentCoverage.testsById].map(([, test]) =>
-      testToIdentifyingKey(test, toRelativeNormalizedFileName(input.basePath, test.fileName))
+      testToIdentifyingKey(test, toRelativeNormalizedFileName(test.fileName, input.basePath, pathService))
     ),
   )
 
@@ -112,7 +113,7 @@ export const incrementalDiff = (
         name,
         ...(location?.start === undefined ? {} : { startPosition: location.start }),
         timeSpentMs: 0,
-        fileName: path.resolve(relativeFileName),
+        fileName: pathService.resolve(relativeFileName),
       }
       testInfoByKey.set(testKey, {
         test,
@@ -125,7 +126,7 @@ export const incrementalDiff = (
   let reusedMutantCount = 0
   const currentMutantKeys = new Set<string>()
   const mutants = input.currentMutants.map((mutant) => {
-    const relativeFileName = toRelativeNormalizedFileName(input.basePath, mutant.fileName)
+    const relativeFileName = toRelativeNormalizedFileName(mutant.fileName, input.basePath, pathService)
     const mutantKey = mutantToIdentifyingKey(mutant, relativeFileName)
     currentMutantKeys.add(mutantKey)
     if (!mutant.status && !input.options.force) {
@@ -175,7 +176,7 @@ export const incrementalDiff = (
       const reusedMutant = {
         ...oldResult,
         id: mutantKey,
-        fileName: path.resolve(oldResult.relativeFileName),
+        fileName: pathService.resolve(oldResult.relativeFileName),
         replacement: oldResult.replacement ?? oldResult.mutatorName,
         coveredBy,
         killedBy,
@@ -220,7 +221,7 @@ export const incrementalDiff = (
   function collectReusableMutantsByKey(log: Logger) {
     return new Map(
       Object.entries(files).flatMap(([fileName, oldFile]) => {
-        const relativeFileName = toRelativeNormalizedFileName(input.basePath, fileName)
+        const relativeFileName = toRelativeNormalizedFileName(fileName, input.basePath, pathService)
         const currentFileSource = input.currentRelativeFiles.get(relativeFileName)
         if (currentFileSource) {
           log.trace('Diffing %s', relativeFileName)
@@ -253,7 +254,7 @@ export const incrementalDiff = (
     const byKey = new Map<string, TestInfo>()
 
     for (const [fileName, oldTestFile] of Object.entries(testFiles ?? {})) {
-      const relativeFileName = toRelativeNormalizedFileName(input.basePath, fileName)
+      const relativeFileName = toRelativeNormalizedFileName(fileName, input.basePath, pathService)
       const currentFileSource = input.currentRelativeFiles.get(relativeFileName)
       if (currentFileSource === undefined && fileName !== '') {
         log.debug('Test file removed: %s', relativeFileName)
@@ -312,7 +313,7 @@ export const incrementalDiff = (
   function collectCurrentTestInfo() {
     const byTestKey = new Map<string, { relativeFileName: string; test: TestResult }>()
     for (const testResult of currentCoverage.testsById.values()) {
-      const relativeFileName = toRelativeNormalizedFileName(input.basePath, testResult.fileName)
+      const relativeFileName = toRelativeNormalizedFileName(testResult.fileName, input.basePath, pathService)
       const key = testToIdentifyingKey(testResult, relativeFileName)
       const info = { relativeFileName, test: testResult, key }
       byTestKey.set(key, info)
@@ -374,7 +375,10 @@ export const incrementalDiff = (
     const result = new Map<string, DiffAction>()
     if (newCoveringTests) {
       for (const newTest of newCoveringTests) {
-        const key = testToIdentifyingKey(newTest, toRelativeNormalizedFileName(input.basePath, newTest.fileName))
+        const key = testToIdentifyingKey(
+          newTest,
+          toRelativeNormalizedFileName(newTest.fileName, input.basePath, pathService),
+        )
         result.set(key, oldCoveringTestKeys?.has(key) ? 'same' : 'added')
       }
     }
@@ -406,59 +410,77 @@ function performFileDiff<T extends { location: Location }>(
   newCode: string,
   items: T[],
 ): { results: T[]; removeCount: number } {
-  const diffMatchPatch = new DiffMatchPatch()
-  const oldSourceNormalized = oldCode.replace(/\r\n/g, '\n')
-  const currentSrcNormalized = newCode.replace(/\r\n/g, '\n')
-  const diffChanges = diffMatchPatch.diff_main(oldSourceNormalized, currentSrcNormalized)
-
-  const toDo = new Set(items.map((m) => ({ ...m, location: deepClone(m.location) })))
-  const added = 1
-  const removed = -1
-  const done: T[] = []
-  const currentPosition: Position = { column: 0, line: 0 }
+  const diffs = new DiffMatchPatch().diff_main(oldCode, newCode)
   let removeCount = 0
-  for (const [change, text] of diffChanges) {
-    if (toDo.size === 0) {
-      break
+  const results: T[] = []
+  let oldOffset: Position = { line: 0, column: 0 }
+  let newOffset: Position = { line: 0, column: 0 }
+  let currentOldLocation: Location | undefined
+  let currentItems: T[] = [...items].sort((a, b) => {
+    if (a.location.start.line !== b.location.start.line) {
+      return a.location.start.line - b.location.start.line
     }
-    const offset = calculateOffset(text)
-    if (change === added) {
-      for (const test of toDo) {
-        const { location } = test
-        if (gte(currentPosition, location.start) && gte(location.end, currentPosition)) {
+    return a.location.start.column - b.location.start.column
+  })
+  for (const [op, text] of diffs) {
+    const textOffset = calculateOffset(text)
+    const nextOldOffset = positionMove(oldOffset, textOffset)
+    const nextNewOffset = positionMove(newOffset, textOffset)
+    if (op === 0) {
+      const diff = positionMove(newOffset, negate(oldOffset))
+      let i = 0
+      for (; i < currentItems.length; i++) {
+        const item = currentItems[i]
+        if (item === undefined) {
+          continue
+        }
+        if (gte(item.location.start, nextOldOffset)) {
+          break
+        }
+        if (locationIncluded(item.location, { start: oldOffset, end: nextOldOffset })) {
+          const newLocation = locationAdd(item.location, diff, currentOldLocation === undefined)
+          results.push({ ...item, location: newLocation })
+          currentOldLocation = item.location
+        } else if (gte(item.location.start, oldOffset)) {
           removeCount++
-          toDo.delete(test)
-        } else {
-          locationAdd(location, offset, currentPosition.line === location.start.line)
         }
       }
-      positionMove(currentPosition, offset)
-    } else if (change === removed) {
-      for (const item of toDo) {
-        const {
-          location: { start },
-        } = item
-        const endOffset = positionMove({ ...currentPosition }, offset)
-        if (gte(endOffset, start)) {
+      currentItems = currentItems.slice(i)
+      oldOffset = nextOldOffset
+      newOffset = nextNewOffset
+    } else if (op === -1) {
+      let i = 0
+      for (; i < currentItems.length; i++) {
+        const item = currentItems[i]
+        if (item === undefined) {
+          continue
+        }
+        if (gte(item.location.start, nextOldOffset)) {
+          break
+        }
+        if (gte(item.location.start, oldOffset)) {
           removeCount++
-          toDo.delete(item)
-        } else {
-          locationAdd(item.location, negate(offset), currentPosition.line === start.line)
         }
       }
+      currentItems = currentItems.slice(i)
+      oldOffset = nextOldOffset
     } else {
-      positionMove(currentPosition, offset)
-      for (const item of toDo) {
-        const { end } = item.location
-        if (gte(currentPosition, end)) {
-          toDo.delete(item)
-          done.push(item)
-        }
+      newOffset = nextNewOffset
+      currentOldLocation = undefined
+    }
+  }
+  for (const item of currentItems) {
+    if (gte(item.location.start, oldOffset)) {
+      if (locationIncluded(item.location, { start: oldOffset, end: { line: Number.MAX_SAFE_INTEGER, column: 0 } })) {
+        const diff = positionMove(newOffset, negate(oldOffset))
+        const newLocation = locationAdd(item.location, diff, currentOldLocation === undefined)
+        results.push({ ...item, location: newLocation })
+      } else {
+        removeCount++
       }
     }
   }
-  done.push(...toDo)
-  return { results: done, removeCount }
+  return { results, removeCount }
 }
 
 function gte(a: Position, b: Position) {
@@ -466,9 +488,7 @@ function gte(a: Position, b: Position) {
 }
 
 function locationIncluded(haystack: Location, needle: Location) {
-  const startIncluded = gte(needle.start, haystack.start)
-  const endIncluded = gte(haystack.end, needle.end)
-  return startIncluded && endIncluded
+  return gte(needle.start, haystack.start) && gte(haystack.end, needle.end)
 }
 
 function deepClone(loc: Location): Location {
@@ -494,48 +514,66 @@ function testToIdentifyingKey(
   }: Pick<schema.TestDefinition, 'location' | 'name'> & Pick<TestResult, 'startPosition'>,
   relativeFileName: string | undefined,
 ) {
-  const effectiveStart = startPosition ?? location?.start ?? { line: 0, column: 0 }
-  return `${relativeFileName}@${effectiveStart.line}:${effectiveStart.column}\n${name}`
+  if (location?.start) {
+    return `${relativeFileName}@${location.start.line}:${location.start.column}\n${name}`
+  }
+  if (startPosition) {
+    return `${relativeFileName}@${startPosition.line}:${startPosition.column}\n${name}`
+  }
+  return `${relativeFileName}\n${name}`
 }
 
-export const toRelativeNormalizedFileName = (basePath: string, fileName: string | undefined): string =>
-  normalizeFileName(path.relative(basePath, fileName ?? ''))
+export const toRelativeNormalizedFileName = (
+  fileName: string | undefined,
+  basePath: string,
+  pathService: Path.Path,
+): string => normalizeFileName(pathService.relative(basePath, fileName ?? ''))
 
 function calculateOffset(text: string): Position {
-  const pos: Position = { line: 0, column: 0 }
-  for (const char of text) {
-    if (char === '\n') {
-      pos.line++
-      pos.column = 0
-    } else {
-      pos.column++
+  let line = 0
+  let column = 0
+  let lastNewlineIndex = -1
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] === '\n') {
+      line++
+      lastNewlineIndex = i
     }
   }
-  return pos
+  if (lastNewlineIndex === -1) {
+    column = text.length
+  } else {
+    column = text.length - lastNewlineIndex - 1
+  }
+  return { line, column }
 }
 
 function positionMove(pos: Position, diff: Position): Position {
-  pos.line += diff.line
   if (diff.line === 0) {
-    pos.column += diff.column
-  } else {
-    pos.column = diff.column
+    return { line: pos.line, column: pos.column + diff.column }
   }
-  return pos
+  return { line: pos.line + diff.line, column: diff.column }
 }
 
 function locationAdd(
   { start, end }: Location,
   { line, column }: Position,
   currentLine: boolean,
-) {
-  start.line += line
-  if (currentLine) {
-    start.column += column
-  }
-  end.line += line
+): Location {
   if (line === 0 && currentLine) {
-    end.column += column
+    return {
+      start: { line: start.line + line, column: start.column + column },
+      end: { line: end.line + line, column: end.column + column },
+    }
+  }
+  if (line === 0) {
+    return {
+      start,
+      end: { line: end.line + line, column: end.column + column },
+    }
+  }
+  return {
+    start: { line: start.line + line, column: start.column },
+    end: { line: end.line + line, column: end.column },
   }
 }
 
@@ -544,85 +582,49 @@ function negate({ line, column }: Position): Position {
 }
 
 interface TestInfo {
-  relativeFileName: string
-  test: TestDefinition
   key: string
+  test: TestDefinition
+  relativeFileName: string
 }
 
 type DiffAction = 'added' | 'removed' | 'same'
 
 function closeLocations(testFile: schema.TestFile): LocatedTest[] {
-  const locatedTests: LocatedTest[] = []
-  const openEndedTests: OpenEndedTest[] = []
-
-  for (const test of testFile.tests) {
-    if (testHasLocation(test)) {
-      if (isClosed(test)) {
-        locatedTests.push(test)
-      } else {
-        openEndedTests.push(test)
-      }
+  const fallback = testFile.tests
+  const located: LocatedTest[] = []
+  for (const test of fallback) {
+    if (!testHasLocation(test)) {
+      continue
+    }
+    if (isClosed(test)) {
+      located.push(test)
     } else {
-      locatedTests.push({
-        ...test,
-        location: {
-          start: { line: 0, column: 0 },
-          end: { line: Number.POSITIVE_INFINITY, column: 0 },
-        },
-      })
+      const beginnings = fallback.filter(testHasLocation).map((t) => t.location.start).sort((a, b) =>
+        a.line - b.line || a.column - b.column
+      )
+      const unique = uniqueStartPositions(beginnings)
+      const idx = unique.findIndex((pos) =>
+        pos.line === test.location.start.line && pos.column === test.location.start.column
+      )
+      const next = unique[idx + 1]
+      const end = next ? { line: next.line, column: next.column } : { line: Number.MAX_SAFE_INTEGER, column: 0 }
+      located.push({ ...test, location: { start: test.location.start, end } })
     }
   }
-
-  if (openEndedTests.length) {
-    openEndedTests.sort((a, b) => a.location.start.line - b.location.start.line)
-    const openEndedTestSet = new Set(openEndedTests)
-    const startPositions = uniqueStartPositions(openEndedTests)
-
-    let currentPositionIndex = 0
-    for (const test of openEndedTestSet) {
-      if (eqPosition(test.location.start, startPositions[currentPositionIndex])) {
-        currentPositionIndex++
-      }
-      const nextPosition = startPositions[currentPositionIndex]
-      if (nextPosition) {
-        locatedTests.push({
-          ...test,
-          location: {
-            start: test.location.start,
-            end: nextPosition,
-          },
-        })
-        openEndedTestSet.delete(test)
-      }
-    }
-
-    for (const lastTest of openEndedTestSet) {
-      locatedTests.push({
-        ...lastTest,
-        location: {
-          start: lastTest.location.start,
-          end: { line: Number.POSITIVE_INFINITY, column: 0 },
-        },
-      })
-    }
-  }
-
-  return locatedTests
+  return located
 }
 
-function uniqueStartPositions(sortedTests: OpenEndedTest[]) {
-  let current: Position | undefined
-  const startPositions = sortedTests.reduce<Position[]>(
-    (collector, { location: { start } }) => {
-      if (!current || current.line !== start.line || current.column !== start.column) {
-        current = start
-        collector.push(current)
-      }
-      return collector
-    },
-    [],
-  )
-  return startPositions
+function uniqueStartPositions(sortedStarts: readonly Position[]): Position[] {
+  const seen = new Set<string>()
+  const result: Position[] = []
+  for (const start of sortedStarts) {
+    const key = `${start.line}:${start.column}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      result.push(start)
+    }
+  }
+  return result
 }
 
 function testHasLocation(test: schema.TestDefinition): test is OpenEndedTest {

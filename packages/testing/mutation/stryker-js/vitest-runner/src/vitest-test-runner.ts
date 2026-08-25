@@ -16,13 +16,13 @@ import {
 import { TestRunnerFailed } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { testFilesProvided } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
 import * as Ref from 'effect/Ref'
 import * as S from 'effect/Schema'
-import fs from 'fs'
-import path from 'path'
-import { fileURLToPath } from 'url'
+import { fileURLToPath } from 'url' // node:url — STRYKER_SETUP worker locator
 import type { RunnerTestSuite } from 'vitest'
 import type { Vitest } from 'vitest/node'
 import { readSandboxSelfAliases, sandboxSelfPlugin } from './sandbox-self-aliases.js'
@@ -182,11 +182,15 @@ export interface VitestRunnerLayerInput {
   readonly setupFilePath?: string
 }
 
-export const makeVitestRunnerLayer = (input: VitestRunnerLayerInput): Layer.Layer<TestRunner> =>
+export const makeVitestRunnerLayer = (
+  input: VitestRunnerLayerInput,
+): Layer.Layer<TestRunner, never, FileSystem.FileSystem | Path.Path> =>
   Layer.effect(
     TestRunner,
     Effect.gen(function*() {
       const stateRef = yield* Ref.make<RunnerState>({ ctx: undefined, localSetupFile: undefined })
+      const fsService = yield* FileSystem.FileSystem
+      const pathService = yield* Path.Path
       const getState = Ref.get(stateRef)
       const requireCtx = Effect.gen(function*() {
         const state = yield* getState
@@ -216,12 +220,11 @@ export const makeVitestRunnerLayer = (input: VitestRunnerLayerInput): Layer.Laye
           process.env.VITEST = '1'
         })
         const projectRoot = input.sandboxDirectory
-        const localSetupFile = path.resolve(projectRoot, `stryker-setup-${process.pid}.js`)
+        const localSetupFile = pathService.resolve(projectRoot, `stryker-setup-${process.pid}.js`)
         yield* Ref.update(stateRef, (s) => ({ ...s, localSetupFile }))
-        yield* Effect.tryPromise({
-          try: () => fs.promises.copyFile(input.setupFilePath ?? STRYKER_SETUP, localSetupFile),
-          catch: (cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause }),
-        })
+        yield* fsService.copyFile(input.setupFilePath ?? STRYKER_SETUP, localSetupFile).pipe(
+          Effect.mapError((cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause })),
+        )
         const resolver = input.resolveVitestFor ?? resolveVitest
         const { createVitest, version } = yield* Effect.tryPromise({
           try: () => resolver(projectRoot),
@@ -229,8 +232,13 @@ export const makeVitestRunnerLayer = (input: VitestRunnerLayerInput): Layer.Laye
         })
         const namespace = input.globalNamespace ?? INSTRUMENTER_CONSTANTS.NAMESPACE
         const scanDir = typeof options.vitest.dir === 'string'
-          ? path.resolve(projectRoot, options.vitest.dir)
+          ? pathService.resolve(projectRoot, options.vitest.dir)
           : undefined
+        const aliases = yield* readSandboxSelfAliases(projectRoot).pipe(
+          Effect.provideService(FileSystem.FileSystem, fsService),
+          Effect.provideService(Path.Path, pathService),
+        )
+        const plugin = sandboxSelfPlugin(aliases)
         const ctx = yield* Effect.tryPromise({
           try: () =>
             createVitest(
@@ -248,10 +256,10 @@ export const makeVitestRunnerLayer = (input: VitestRunnerLayerInput): Layer.Laye
               },
               {
                 resolve: {
-                  alias: [...readSandboxSelfAliases(projectRoot)],
+                  alias: [...aliases],
                   conditions: ['@systemfsoftware/source', 'import'],
                 },
-                plugins: [sandboxSelfPlugin(projectRoot)],
+                plugins: [plugin],
               },
             ),
           catch: (cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause }),
@@ -316,7 +324,7 @@ export const makeVitestRunnerLayer = (input: VitestRunnerLayerInput): Layer.Laye
               Effect.orElseSucceed(() => ({ mutantCoverage: undefined })),
             )
             if (decoded.mutantCoverage !== undefined) {
-              const normalized = normalizeCoverage(decoded.mutantCoverage, input.sandboxDirectory)
+              const normalized = normalizeCoverage(decoded.mutantCoverage, input.sandboxDirectory, pathService)
               const validated = yield* S.decodeEffect(MutantCoverageShapeSchema)(normalized).pipe(
                 Effect.mapError((cause) => new CoverageDecodeFailed({ cause })),
                 Effect.map(() => normalized),
@@ -368,7 +376,7 @@ export const makeVitestRunnerLayer = (input: VitestRunnerLayerInput): Layer.Laye
             const parsedTests = (filter.testIds ?? []).map(fromTestId)
             const regexTestNameFilter = parsedTests.map(({ test: name }) => RegExp.escape(name)).join('|')
             pattern = new RegExp(regexTestNameFilter)
-            testFilesToRun = parsedTests.map(({ file }) => path.resolve(input.sandboxDirectory, file))
+            testFilesToRun = parsedTests.map(({ file }) => pathService.resolve(input.sandboxDirectory, file))
           }
           applyRunFilterToConfig(ctx, { related, testNamePattern: pattern })
           yield* Effect.tryPromise({
@@ -387,7 +395,7 @@ export const makeVitestRunnerLayer = (input: VitestRunnerLayerInput): Layer.Laye
             .filter((test) => test.result !== undefined)
           let failure = false
           const testResults = tests.map((test) => {
-            const testResult = convertTestToTestResult(test, input.sandboxDirectory)
+            const testResult = convertTestToTestResult(test, input.sandboxDirectory, pathService)
             failure ||= testResult.status === TestStatus.Failed
             return testResult
           })
@@ -453,9 +461,13 @@ export const makeVitestRunnerLayer = (input: VitestRunnerLayerInput): Layer.Laye
         if (state.ctx !== undefined) {
           const localSetupFile = state.localSetupFile
           if (localSetupFile !== undefined) {
-            state.ctx.onClose(async () => {
-              await fs.promises.rm(localSetupFile, { force: true })
-            })
+            state.ctx.onClose(() =>
+              Effect.runPromise(
+                fsService.remove(localSetupFile, { recursive: true, force: true }).pipe(
+                  Effect.orElseSucceed(() => undefined),
+                ),
+              )
+            )
           }
           const currentCtx = state.ctx
           yield* Effect.tryPromise({

@@ -1,4 +1,4 @@
-import { isDeepStrictEqual } from 'node:util'
+import { isDeepStrictEqual } from 'node:util' // node:util — isDeepStrictEqual, no Effect core equivalent
 
 import type { StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import type { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
@@ -56,6 +56,7 @@ export function readProject(
   ]
 
   return Effect.gen(function*() {
+    const pathService = yield* Path.Path
     const inputFileNames = yield* resolveInputFileNames(ignoreRules, basePath)
     const defaults = yield* defaultOptions
     const logAboutUselessPatterns = !isDeepStrictEqual(mutatePatterns, defaults.mutate)
@@ -63,22 +64,27 @@ export function readProject(
       for (const pattern of mutatePatterns) {
         if (pattern.startsWith(IGNORE_PATTERN_CHARACTER)) {
           const inner = pattern.substring(1)
-          const filtered = filterMutatePattern(inputFileNames, inner)
+          const filtered = filterMutatePattern(inputFileNames, inner, pathService)
           if (filtered.size === 0) {
             log.warn(`Glob pattern "${pattern}" did not exclude any files.`)
           }
         } else {
-          const filtered = filterMutatePattern(inputFileNames, pattern)
+          const filtered = filterMutatePattern(inputFileNames, pattern, pathService)
           if (filtered.size === 0) {
             log.warn(`Glob pattern "${pattern}" did not result in any files.`)
           }
         }
       }
     }
-    const fileDescriptions = resolveFileDescriptions(inputFileNames, [...mutatePatterns], targetMutatePatterns)
-    const resolvedTestFiles = resolveTestFiles(inputFileNames, [...testFilePatterns])
+    const fileDescriptions = resolveFileDescriptions(
+      inputFileNames,
+      [...mutatePatterns],
+      targetMutatePatterns,
+      pathService,
+    )
+    const resolvedTestFiles = resolveTestFiles(inputFileNames, [...testFilePatterns], pathService)
     for (const pattern of testFilePatterns) {
-      const matched = resolveTestFiles(inputFileNames, [pattern])
+      const matched = resolveTestFiles(inputFileNames, [pattern], pathService)
       if (matched.length === 0) {
         log.warn(`Glob pattern "${pattern}" did not match any test files.`)
       }

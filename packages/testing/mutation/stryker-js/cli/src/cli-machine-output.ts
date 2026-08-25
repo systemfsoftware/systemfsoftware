@@ -1,11 +1,14 @@
-import { defaultOptions } from '@systemfsoftware/stryker-js-mutation-run/config/config-resolution'
-import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
-import type { HelpRendered } from '@systemfsoftware/stryker-js-mutation-run/run-event'
-import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
-import { buildVerdictEnvelope } from '@systemfsoftware/stryker-js-mutation-run/verdict-envelope'
+import {
+  buildVerdictEnvelope,
+  defaultOptions,
+  type HelpRendered,
+  type ResolvedMode,
+  strykerVersion,
+} from '@systemfsoftware/stryker-js-mutation-run'
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import * as Path from 'effect/Path'
 import * as S from 'effect/Schema'
 import * as CliError from 'effect/unstable/cli/CliError'
 import { buildErrorEnvelope } from './cli-error-envelope.js'
@@ -29,6 +32,7 @@ export function emitNullScoreVerdict(
   thresholds: schema.Thresholds,
   config: object,
   basePath: string,
+  pathService: Path.Path,
 ): void {
   const report: schema.MutationTestResult = {
     schemaVersion: '1.0',
@@ -38,7 +42,7 @@ export function emitNullScoreVerdict(
     config,
     framework: { name: 'StrykerJS', version: strykerVersion },
   }
-  const envelope = buildVerdictEnvelope(report, mode.mode, mode.signal, stream.runId, basePath)
+  const envelope = buildVerdictEnvelope(report, mode.mode, mode.signal, stream.runId, basePath, [], pathService)
   stream.sink({ kind: 'verdict', ...envelope })
 }
 
@@ -62,6 +66,7 @@ export function emitMachineModeOutput(
   code: number,
   argv: readonly string[],
   basePath: string,
+  pathService: Path.Path,
 ): Effect.Effect<void, never, never> {
   return Effect.gen(function*() {
     const captured = readCapturedConsole()
@@ -93,7 +98,7 @@ export function emitMachineModeOutput(
     }
     if (stream.isOpen()) {
       const defaults = yield* defaultOptions
-      emitNullScoreVerdict(stream, mode, defaults.thresholds, {}, basePath)
+      emitNullScoreVerdict(stream, mode, defaults.thresholds, {}, basePath, pathService)
     }
   })
 }

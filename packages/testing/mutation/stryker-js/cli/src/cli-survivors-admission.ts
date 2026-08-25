@@ -3,15 +3,15 @@ import { readFileSync } from 'node:fs'
 import { resolve as resolvePath } from 'node:path'
 
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { readConfig } from '@systemfsoftware/stryker-js-mutation-run/config/config-resolution'
-import { forkCoreSchema } from '@systemfsoftware/stryker-js-mutation-run/config/fork-schema'
-import type {
-  ConfigFileInvalidError,
-  ConfigFileNotFoundError,
-  ConfigFileUnreadableError,
-} from '@systemfsoftware/stryker-js-mutation-run/errors'
-import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
-import { strykerVersion } from '@systemfsoftware/stryker-js-mutation-run/stryker-package'
+import {
+  type ConfigFileInvalidError,
+  type ConfigFileNotFoundError,
+  type ConfigFileUnreadableError,
+  forkCoreSchema,
+  readConfig,
+  type ResolvedMode,
+  strykerVersion,
+} from '@systemfsoftware/stryker-js-mutation-run'
 import type { Mutant, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { noopLogger } from '@systemfsoftware/stryker-js-plugin-api/logging'
 import * as Effect from 'effect/Effect'
@@ -84,6 +84,7 @@ interface AdmissionPhases extends Cell.Phases {
 interface AdmissionRunContext {
   readonly resolvedOptions: StrykerOptions
   readonly priorReportPath: string
+  readonly pathService: Path.Path
 }
 
 /**
@@ -106,21 +107,22 @@ const survivorsAdmissionDescription = (
 ): Cell.WriteDone<AdmissionPhases> =>
   pipe(
     Cell.read<AdmissionPhases>((cliOptions) =>
-      resolveSurvivorsRunOptions(cliOptions, basePath).pipe(
-        Effect.flatMap((resolvedOptions) => {
-          const priorReportPath = priorReportPathOf(resolvedOptions)
-          const read = readPriorReport(priorReportPath)
-          return Ref.set(runContext, { resolvedOptions, priorReportPath }).pipe(
-            Effect.as({
-              resolvedOptions,
-              priorReportRaw: read.raw,
-              priorReportFound: read.found,
-              priorReportPath,
-              sourceContentHashes: currentSourceHashesFor(priorReportFileKeys(read.raw)),
-            }),
-          )
-        }),
-      )
+      Effect.flatMap(Path.Path, (pathService) =>
+        resolveSurvivorsRunOptions(cliOptions, basePath).pipe(
+          Effect.flatMap((resolvedOptions) => {
+            const priorReportPath = priorReportPathOf(resolvedOptions)
+            const read = readPriorReport(priorReportPath)
+            return Ref.set(runContext, { resolvedOptions, priorReportPath, pathService }).pipe(
+              Effect.as({
+                resolvedOptions,
+                priorReportRaw: read.raw,
+                priorReportFound: read.found,
+                priorReportPath,
+                sourceContentHashes: currentSourceHashesFor(priorReportFileKeys(read.raw)),
+              }),
+            )
+          }),
+        ))
     ),
     Cell.decode<AdmissionPhases>(({ resolvedOptions, priorReportRaw, priorReportFound, sourceContentHashes }) => {
       if (!priorReportFound) {
@@ -155,7 +157,7 @@ const survivorsAdmissionDescription = (
         if (context === undefined) {
           return Effect.die('the survivors admission read must run before its write')
         }
-        const { resolvedOptions, priorReportPath } = context
+        const { resolvedOptions, priorReportPath, pathService } = context
         return Result.match(outcome, {
           onSuccess: (decision) =>
             Match.value(decision).pipe(
@@ -163,14 +165,21 @@ const survivorsAdmissionDescription = (
                 'NoSurvivors',
                 () =>
                   Effect.sync(() =>
-                    emitNullScoreVerdict(stream, mode, resolvedOptions.thresholds, resolvedOptions, basePath)
+                    emitNullScoreVerdict(
+                      stream,
+                      mode,
+                      resolvedOptions.thresholds,
+                      resolvedOptions,
+                      basePath,
+                      pathService,
+                    )
                   ),
               ),
               Match.tag('Admitted', (admitted) => {
                 const restricted: SurvivorsRunOptions = {
                   ...resolvedOptions,
                   survivors: admitted.survivors,
-                  mutate: survivorMutateSpans(admitted.survivors, basePath),
+                  mutate: survivorMutateSpans(admitted.survivors, basePath, pathService),
                   survivorsPriorReport: priorReportPath,
                   incremental: false,
                 }

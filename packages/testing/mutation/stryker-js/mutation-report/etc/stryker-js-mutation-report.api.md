@@ -6,12 +6,14 @@
 
 import { DryRunCompletedEvent } from '@systemfsoftware/stryker-js-plugin-api/report';
 import * as Effect from 'effect/Effect';
+import * as FileSystem from 'effect/FileSystem';
 import { Logger } from '@systemfsoftware/stryker-js-plugin-api/logging';
 import { Metrics } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { MetricsResult } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { MutantResult } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { MutationScoreThresholds } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { MutationTestingPlanReadyEvent } from '@systemfsoftware/stryker-js-plugin-api/report';
+import * as Path from 'effect/Path';
 import { PluginContribution } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
 import { ReporterService } from '@systemfsoftware/stryker-js-plugin-api/report';
@@ -19,7 +21,6 @@ import { RunConfiguration } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { RunTiming } from '@systemfsoftware/stryker-js-plugin-api/report';
 import { schema } from '@systemfsoftware/stryker-js-plugin-api/core';
 import { TestRunnerCapabilities } from '@systemfsoftware/stryker-js-plugin-api/test-runner';
-import { Timer } from '@systemfsoftware/stryker-js-mutation-run/timer';
 
 // @public (undocumented)
 export type Column = {
@@ -60,7 +61,7 @@ export type Column = {
 export const drawClearTextScoreTable: (metricsResult: MetricsResult<Metrics>, options: ProvidedStrykerOptions) => string;
 
 // @public (undocumented)
-export const emptyTally: (timer: Timer) => ProgressTally;
+export const emptyTally: (startedAt: number) => ProgressTally;
 
 // @public (undocumented)
 export function filterActionable(result: MutantResult): boolean;
@@ -81,7 +82,7 @@ export const handleMutantTested: (tally: ProgressTally, result: MutantResult) =>
 };
 
 // @public (undocumented)
-export const handleMutationTestingPlanReady: (tally: ProgressTally, event: MutationTestingPlanReadyEvent, timer: Timer) => ProgressTally;
+export const handleMutationTestingPlanReady: (tally: ProgressTally, event: MutationTestingPlanReadyEvent, startedAt: number) => ProgressTally;
 
 // @public (undocumented)
 export const isComplete: (state: ProgressBarState) => boolean;
@@ -94,18 +95,19 @@ export const makeClearTextReporter: (params: {
 }) => ReporterService;
 
 // @public (undocumented)
-export const makeEmptyTimer: () => Timer;
-
-// @public (undocumented)
 export const makeHtmlReporter: (params: {
     readonly options?: ProvidedStrykerOptions;
     readonly log?: Logger;
+    readonly fs: FileSystem.FileSystem;
+    readonly path: Path.Path;
 }) => ReporterService;
 
 // @public (undocumented)
 export const makeJsonReporter: (params: {
     readonly options?: ProvidedStrykerOptions;
     readonly log?: Logger;
+    readonly fs: FileSystem.FileSystem;
+    readonly path: Path.Path;
 }) => ReporterService;
 
 // @public (undocumented)
@@ -151,7 +153,7 @@ export type ProgressTally = {
     readonly ticksByMutantId: ReadonlyMap<string, number>;
     readonly timing: RunTiming;
     readonly capabilities: TestRunnerCapabilities;
-    readonly timer: Timer;
+    readonly startedAt: number;
 };
 
 // @public (undocumented)
@@ -173,7 +175,7 @@ export function toRunEvent(result: MutantResult, completed: number, total: numbe
 
 // Warnings were encountered during analysis:
 //
-// dist/index-CChXdh6B.d.mts:36:3 - (ae-forgotten-export) The symbol "TableCellValueFactory" needs to be exported by the entry point index.d.mts
+// dist/index-YpU0uGVo.d.mts:37:3 - (ae-forgotten-export) The symbol "TableCellValueFactory" needs to be exported by the entry point index.d.mts
 
 // (No @packageDocumentation comment for this package)
 

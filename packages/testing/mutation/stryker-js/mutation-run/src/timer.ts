@@ -1,7 +1,4 @@
-/**
- * Published as the `./timer` subpath: the mutation-report package's
- * progress reporters construct a `Timer` from here (KTD7).
- */
+/** A run's start instant and the markers its stages set. Internal. */
 import * as Clock from 'effect/Clock'
 import * as Effect from 'effect/Effect'
 

@@ -32,7 +32,12 @@ const buildChecker = (
     Effect.provide(
       contribution.layer.pipe(
         Layer.provide(
-          Layer.merge(Layer.succeed(RunConfiguration, options), Layer.succeed(SandboxDirectory, process.cwd())),
+          Layer.mergeAll(
+            Layer.succeed(RunConfiguration, options),
+            Layer.succeed(SandboxDirectory, process.cwd()),
+            NodeFileSystem.layer,
+            NodePath.layer,
+          ),
         ),
       ),
     ),

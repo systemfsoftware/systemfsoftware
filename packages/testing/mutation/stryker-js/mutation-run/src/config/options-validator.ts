@@ -1,5 +1,5 @@
-import os from 'node:os'
-import path from 'node:path'
+import * as Path from 'effect/Path'
+import os from 'node:os' // node:os — availableParallelism, no Effect core equivalent
 
 import { type StrykerOptions, StrykerOptionsSchema } from '@systemfsoftware/stryker-js-plugin-api/core'
 import { type Logger } from '@systemfsoftware/stryker-js-plugin-api/logging'
@@ -145,7 +145,11 @@ function removeJestEnableBail(rawOptions: Record<string, unknown>, log: Logger):
   rawOptions['jest'] = jestRecord
 }
 
-function removeHtmlReporterBaseDir(rawOptions: Record<string, unknown>, log: Logger): void {
+function removeHtmlReporterBaseDir(
+  rawOptions: Record<string, unknown>,
+  log: Logger,
+  pathService: Path.Path,
+): void {
   const htmlReporter = rawOptions['htmlReporter']
   if (typeof htmlReporter !== 'object' || htmlReporter === null) return
   const reporter = recordOf(htmlReporter)
@@ -158,7 +162,7 @@ function removeHtmlReporterBaseDir(rawOptions: Record<string, unknown>, log: Log
   )
   const baseDirText = typeof baseDir === 'string' ? baseDir : JSON.stringify(baseDir) ?? ''
   if (!reporter['fileName']) {
-    reporter['fileName'] = path.join(baseDirText, 'index.html')
+    reporter['fileName'] = pathService.join(baseDirText, 'index.html')
   }
   delete reporter['baseDir']
   rawOptions['htmlReporter'] = reporter
@@ -179,14 +183,18 @@ function migrateMaxConcurrentTestRunners(
   }
 }
 
-function removeDeprecatedOptions(rawOptions: Record<string, unknown>, log: Logger): void {
+function removeDeprecatedOptions(
+  rawOptions: Record<string, unknown>,
+  log: Logger,
+  pathService: Path.Path,
+): void {
   removeStringMutator(rawOptions, log)
   removeMutatorName(rawOptions, log)
   removeTestFramework(rawOptions, log)
   removeTranspilers(rawOptions, log)
   rewriteFiles(rawOptions, log)
   removeJestEnableBail(rawOptions, log)
-  removeHtmlReporterBaseDir(rawOptions, log)
+  removeHtmlReporterBaseDir(rawOptions, log, pathService)
   migrateMaxConcurrentTestRunners(rawOptions, log)
 }
 
@@ -330,17 +338,18 @@ export function validateOptions(
   schema: ValidationSchemaDocument,
   log: Logger,
   mark = false,
-): Effect.Effect<StrykerOptions, ConfigError> {
-  removeDeprecatedOptions(options, log)
-  return validateRemovedSurface(options, log).pipe(
-    Effect.flatMap(() => schemaValidate(options, log)),
-    Effect.flatMap((typed) =>
-      customValidation(typed, log).pipe(
-        Effect.tap(() => (mark ? Effect.sync(() => markOptions(typed, schema, log)) : Effect.void)),
-        Effect.as(typed),
-      )
-    ),
-  )
+): Effect.Effect<StrykerOptions, ConfigError, Path.Path> {
+  return Effect.gen(function*() {
+    const pathService = yield* Path.Path
+    removeDeprecatedOptions(options, log, pathService)
+    yield* validateRemovedSurface(options, log)
+    const typed = yield* schemaValidate(options, log)
+    yield* customValidation(typed, log)
+    if (mark) {
+      yield* Effect.sync(() => markOptions(typed, schema, log))
+    }
+    return typed
+  })
 }
 
 export function createDefaultOptions(): Effect.Effect<StrykerOptions> {

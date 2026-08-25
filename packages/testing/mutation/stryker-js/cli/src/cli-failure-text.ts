@@ -5,7 +5,7 @@ import * as Option from 'effect/Option'
 import * as S from 'effect/Schema'
 import * as CliError from 'effect/unstable/cli/CliError'
 
-import { ExitClass } from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
+import { ExitClass } from '@systemfsoftware/stryker-js-mutation-run'
 import { collectExitClasses, exitClassOf } from './cli-exit-code.js'
 import { SurvivorsRejection } from './survivors-admission.workflow.js'
 

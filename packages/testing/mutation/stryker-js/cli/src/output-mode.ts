@@ -1,7 +1,7 @@
 import * as Result from 'effect/Result'
 import * as CliError from 'effect/unstable/cli/CliError'
 
-import type { ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run/output-mode'
+import { type ResolvedMode } from '@systemfsoftware/stryker-js-mutation-run'
 
 /**
  * The known tool variables. Narrow per the plan — exactly

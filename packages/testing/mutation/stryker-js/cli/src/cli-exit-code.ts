@@ -1,4 +1,4 @@
-import { ExitClass, highestExitClass } from '@systemfsoftware/stryker-js-mutation-run/exit-classification'
+import { ExitClass, highestExitClass } from '@systemfsoftware/stryker-js-mutation-run'
 import * as Cause from 'effect/Cause'
 import * as Exit from 'effect/Exit'
 import * as Option from 'effect/Option'
