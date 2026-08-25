@@ -332,7 +332,7 @@ function readIncrementalReport(
     const contents: string | undefined = yield* fs.readFileString(incrementalFile).pipe(
       Effect.catchTag('PlatformError', (error) =>
         Match.value(error.reason).pipe(
-          Match.when('NotFound', () =>
+          Match.tag('NotFound', () =>
             Effect.logInfo(
               `No incremental result file found at ${incrementalFile}, a full mutation testing run will be performed.`,
             ).pipe(Effect.as<string | undefined>(undefined))),
