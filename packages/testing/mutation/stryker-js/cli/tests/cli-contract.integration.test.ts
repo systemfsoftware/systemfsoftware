@@ -689,7 +689,13 @@ Feature('Driving the mutation tester from an agent harness')
           const declared = s.probe.entries.map((entry) => entry.entry)
           expect(declared.length).toBeGreaterThan(0)
           expect(declared).toEqual(
-            expect.arrayContaining(['.', './errors', './run-event', './exit-classification']),
+            expect.arrayContaining([
+              '.',
+              './config/base',
+              './internal/checker-worker',
+              './internal/child-process-proxy-worker-main',
+              './internal/child-process-test-runner-worker',
+            ]),
           )
           expect(declared).not.toContain('./package.json')
         }),
