@@ -234,40 +234,43 @@ export function remediationFor(exit: Exit.Exit<unknown, unknown>, code: number):
 }
 
 export function describeFailure(exit: Exit.Exit<unknown, unknown>): string {
-  if (Exit.isFailure(exit)) {
-    const value = failureValue(exit)
-    if (value !== undefined) {
-      if (S.is(SurvivorsRejection)(value)) {
-        return value.remediation
-      }
-      if (typeof value === 'object' && value !== null) {
-        const reason = reasonOf(value)
-        if (reason !== undefined) {
-          return reason
-        }
-      }
-      if (value instanceof Error && value.message.length > 0) {
-        return value.message
-      }
-      if (
-        typeof value === 'string' ||
-        typeof value === 'number' ||
-        typeof value === 'boolean' ||
-        typeof value === 'bigint' ||
-        typeof value === 'symbol'
-      ) {
-        return String(value)
-      }
-      const rendered = Cause.pretty(exit.cause)
-      if (rendered.length > 0) {
-        return rendered
-      }
-    } else {
-      const rendered = Cause.pretty(exit.cause)
-      if (rendered.length > 0) {
-        return rendered
+  if (!Exit.isFailure(exit)) {
+    return 'Unknown failure'
+  }
+  const value = failureValue(exit)
+  if (value !== undefined) {
+    if (S.is(SurvivorsRejection)(value)) {
+      return value.remediation
+    }
+    if (typeof value === 'object' && value !== null) {
+      const reason = reasonOf(value)
+      if (reason !== undefined) {
+        return reason
       }
     }
+    if (value instanceof Error && value.message.length > 0) {
+      return value.message
+    }
+    if (
+      typeof value === 'string' ||
+      typeof value === 'number' ||
+      typeof value === 'boolean' ||
+      typeof value === 'bigint' ||
+      typeof value === 'symbol'
+    ) {
+      return String(value)
+    }
+  }
+  const classes = collectExitClasses(exit)
+  if (classes.includes('ConfigError')) {
+    const detail = firstConfigErrorDetail(exit)
+    if (detail !== undefined) {
+      return detail
+    }
+  }
+  const rendered = Cause.pretty(exit.cause)
+  if (rendered.length > 0) {
+    return rendered
   }
   return 'Unknown failure'
 }

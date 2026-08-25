@@ -47,6 +47,8 @@ import * as CliError from 'effect/unstable/cli/CliError'
 import * as Command from 'effect/unstable/cli/Command'
 import * as Flag from 'effect/unstable/cli/Flag'
 import * as GlobalFlag from 'effect/unstable/cli/GlobalFlag'
+import { readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { resolve as resolvePath } from 'node:path'
 import type { CliRequest } from './Cli.schema.js'
 import type { CliDispatchDecision, DispatchError } from './Cli.workflow.js'
@@ -252,12 +254,12 @@ export interface LLMSManifestCommand {
   readonly subcommands: readonly LLMSManifestCommand[]
 }
 
-/** The full manifest document, emitted as one JSON object. */
 export interface LLMSManifest {
   readonly schemaVersion: '1.0'
   readonly tool: string
   readonly version: string
   readonly commands: readonly LLMSManifestCommand[]
+  readonly entries: readonly string[]
 }
 
 // -----------------------------------------------------------------------------
@@ -565,11 +567,24 @@ function describeCommandNode(node: unknown): LLMSManifestCommand | undefined {
   }
 }
 
-/**
- * Builds the manifest document for a command, walking its compiled form (the
- * same structure the parser matches against). `version` is the tool version,
- * passed in so this module stays free of package state.
- */
+function readCoreEntries(): readonly string[] {
+  try {
+    const requireFn = createRequire(import.meta.url)
+    const manifestPath = requireFn.resolve('@systemfsoftware/stryker-js-platform-node/package.json')
+    const raw = readFileSync(manifestPath, 'utf-8')
+    const parsed: unknown = JSON.parse(raw)
+    const ExportsSchema = S.Struct({ exports: S.Record(S.String, S.Unknown) })
+    const decoded = S.decodeUnknownResult(ExportsSchema)(parsed)
+    if (Result.isSuccess(decoded)) {
+      const keys = Object.keys(decoded.success.exports).filter((key) => key !== './package.json')
+      return keys
+    }
+    return []
+  } catch {
+    return []
+  }
+}
+
 export function buildLLMSManifest(command: Command.Command.Any, version: string): LLMSManifest {
   const root = describeCommandNode(command) ?? {
     name: '',
@@ -583,6 +598,7 @@ export function buildLLMSManifest(command: Command.Command.Any, version: string)
     tool: root.name,
     version,
     commands: [root],
+    entries: readCoreEntries(),
   }
 }
 

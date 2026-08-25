@@ -12,6 +12,7 @@ export default defineConfig({
   // a `.ts` file it cannot execute, so the worker never connects.
   entry: {
     index: './src/index.ts',
+    'config/base': './src/config/base.ts',
     'internal/checker-worker': './src/Checker.worker.ts',
     'internal/child-process-proxy-worker-main': './src/WorkerMain.ts',
     'internal/child-process-test-runner-worker': './src/child-process-test-runner-worker.ts',

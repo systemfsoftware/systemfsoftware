@@ -60,6 +60,7 @@
     "provenance": true,
     "exports": {
       ".": "./dist/index.mjs",
+      "./config/base": "./dist/config/base.mjs",
       "./internal/checker-worker": "./dist/internal/checker-worker.mjs",
       "./internal/child-process-proxy-worker-main": "./dist/internal/child-process-proxy-worker-main.mjs",
       "./internal/child-process-test-runner-worker": "./dist/internal/child-process-test-runner-worker.mjs",
@@ -70,6 +71,10 @@
     ".": {
       "@systemfsoftware/source": "./src/index.ts",
       "default": "./dist/index.mjs"
+    },
+    "./config/base": {
+      "@systemfsoftware/source": "./src/config/base.ts",
+      "default": "./dist/config/base.mjs"
     },
     "./internal/checker-worker": {
       "@systemfsoftware/source": "./src/Checker.worker.ts",

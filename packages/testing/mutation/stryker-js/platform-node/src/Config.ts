@@ -1197,7 +1197,12 @@ const configReaderDescription = (
         onSuccess: (result) => {
           const decoded = S.decodeUnknownResult(StrykerOptionsSchema)(result.merged)
           if (Result.isFailure(decoded)) {
-            throw decoded.failure
+            const describedErrors = describeErrors(decoded.failure)
+            let headline = 'Please correct these configuration errors and try again.'
+            if (describedErrors.length === 1) {
+              headline = 'Please correct this configuration error and try again.'
+            }
+            throw new ConfigError({ message: `${headline} ${describedErrors.join(' ')}` })
           }
           return decoded.success
         },

@@ -202,6 +202,9 @@ const makeRunEventStream = (
     let terminalSeen = false
     const framed = Stream.merge(queueStream, tickStream, { haltStrategy: 'either' }).pipe(
       Stream.filter((event) => {
+        if (state.mode !== 'machine') {
+          return false
+        }
         if (terminalSeen) {
           return false
         }

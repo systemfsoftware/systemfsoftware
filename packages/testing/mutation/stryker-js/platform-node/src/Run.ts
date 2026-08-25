@@ -27,6 +27,7 @@ import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/str
 import type { CompleteDryRunResult, TestRunnerCapabilities } from '@systemfsoftware/stryker-js/TestRunner'
 import type * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
+import * as Console from 'effect/Console'
 import * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
@@ -408,12 +409,19 @@ export const prepareLayer = (services: Context.Context<StageServices>): Cell.Wri
           const cmd = toPrepareExecutorArgs(command)
           yield* Scope.Scope
           const env = yield* RunEnvironment
+          const queue = yield* RunEvents
           const coreSchema: ValidationSchemaDocument = forkCoreSchema
           const configured = yield* readConfig(
             cmd.cliOptions,
             env.basePath,
           ).pipe(
             Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to read config', cause })),
+            Effect.tapCause(() =>
+              Effect.gen(function*() {
+                const now = yield* Clock.currentTimeMillis
+                yield* Queue.offer(queue, new PhaseEntered({ phase: 'prepare', elapsedMs: now - env.runStartedAt }))
+              }).pipe(Effect.ignore)
+            ),
           )
           const resolvedReporters = selectReporters([...configured.reporters], env.resolvedMode.mode)
           const options: PrepareDone['options'] = {
@@ -461,6 +469,13 @@ export const prepareLayer = (services: Context.Context<StageServices>): Cell.Wri
           const project = yield* readProject(options, cmd.targetMutatePatterns, env.basePath).pipe(
             Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to read project', cause })),
           )
+          const mutateCount = MutableHashMap.size(project.filesToMutate)
+          const summary = `Found ${mutateCount} of ${MutableHashMap.size(project.files)} file(s) to be mutated.`
+          if (env.resolvedMode.mode === 'human') {
+            yield* Console.log(summary)
+          } else {
+            yield* Effect.logInfo(summary)
+          }
           const contributions = yield* createAll(loaded.pluginsByKind, 'Ignore').pipe(
             Effect.mapError((cause) =>
               new StageError({ stage: 'prepare', reason: 'Failed to create ignorers', cause })
