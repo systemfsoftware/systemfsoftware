@@ -361,6 +361,10 @@
   dir: omp/plugins/omp-typescript-discipline
   intents:
     - omp-typescript-discipline-plugin
+"@systemfsoftware/omp-typescript-discipline@1.0.1":
+  dir: omp/plugins/omp-typescript-discipline
+  intents:
+    - no-hand-rolled-std-ttsr
 "@systemfsoftware/oxlint-config@0.1.0":
   dir: packages/lint/oxlint/config
   intents:
