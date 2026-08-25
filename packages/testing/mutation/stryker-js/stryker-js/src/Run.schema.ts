@@ -85,6 +85,18 @@ const VerdictMutant = S.Struct({
 })
 export type VerdictMutant = typeof VerdictMutant.Type
 
+const VerdictCounts = Wire.wire({
+  killed: Wire.number,
+  timeout: Wire.number,
+  survived: Wire.number,
+  noCoverage: Wire.number,
+  runtimeErrors: Wire.number,
+  compileErrors: Wire.number,
+  ignored: Wire.number,
+  pending: Wire.number,
+})
+export type VerdictCounts = typeof VerdictCounts.Type
+
 export class VerdictReached extends S.TaggedClass<VerdictReached>()('verdict', {
   schemaVersion: Wire.string,
   runId: Wire.string,
@@ -93,6 +105,7 @@ export class VerdictReached extends S.TaggedClass<VerdictReached>()('verdict', {
   score: Wire.nullOr(Wire.number),
   thresholds: VerdictThresholds,
   reportFile: Wire.nullOr(Wire.string),
+  counts: VerdictCounts,
   mutants: S.Array(VerdictMutant),
 }) {}
 
@@ -196,6 +209,16 @@ if (import.meta.vitest !== void 0) {
       score: Number.POSITIVE_INFINITY,
       thresholds: { high: 100, low: 80, break: null },
       reportFile: null,
+      counts: {
+        killed: 0,
+        timeout: 0,
+        survived: 0,
+        noCoverage: 0,
+        runtimeErrors: 0,
+        compileErrors: 0,
+        ignored: 0,
+        pending: 0,
+      },
       mutants: [],
     }),
   })

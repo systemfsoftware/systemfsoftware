@@ -1304,6 +1304,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
           score: envelope.score,
           thresholds: envelope.thresholds,
           reportFile: envelope.reportFile,
+          counts: envelope.counts,
           mutants: envelope.mutants,
         }),
       )

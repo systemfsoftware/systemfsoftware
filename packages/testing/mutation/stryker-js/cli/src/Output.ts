@@ -185,6 +185,7 @@ const makeRunEventStream = (
     )
 
     const tickStream = Stream.tick(TICK_INTERVAL_MS).pipe(
+      Stream.drop(1),
       Stream.filter(() => state.mode === 'machine' && state.headerWritten && !state.terminalWritten),
       Stream.mapEffect(() =>
         Effect.gen(function*() {
@@ -949,6 +950,7 @@ export function emitNullScoreVerdict(
       score: envelope.score,
       thresholds: envelope.thresholds,
       reportFile: envelope.reportFile,
+      counts: envelope.counts,
       mutants: envelope.mutants,
     }),
   )
