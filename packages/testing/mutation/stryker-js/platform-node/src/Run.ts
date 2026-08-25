@@ -58,7 +58,7 @@ import type { ResolvedMode } from './output-mode.js'
 import { createAll } from './Plugins.js'
 import { loadPlugins } from './Plugins.js'
 import type { LoadedPlugins } from './Plugins.js'
-import { toInstrumenterFile } from './Project.js'
+import { FILE_CONCURRENCY, toInstrumenterFile } from './Project.js'
 import { withInstrumentedFiles } from './Project.js'
 import type { Project } from './Project.js'
 import { readProject } from './Project.js'
@@ -582,7 +582,7 @@ export const instrumentLayer = (
 
           const filesToMutate = yield* Effect.forEach([...MutableHashMap.values(cmd.project.filesToMutate)], (file) =>
             toInstrumenterFile(file), {
-            concurrency: 'unbounded',
+            concurrency: FILE_CONCURRENCY,
           }).pipe(
             Effect.mapError((cause) =>
               new StageError({ stage: 'instrument', reason: 'Failed to read files to mutate', cause })

@@ -37,6 +37,7 @@ import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawne
 import { createFileMatcher, isWarningEnabled, optionsPath } from './Config.js'
 import {
   backupTo,
+  FILE_CONCURRENCY,
   hasChanges,
   readContent,
   toInstrumenterFile,
@@ -122,7 +123,7 @@ const makeDisableTypeChecksPreprocessor =
           }
           return undefined
         })
-      }, { concurrency: 'unbounded' })
+      }, { concurrency: FILE_CONCURRENCY })
       for (const updated of updates) {
         if (updated !== undefined) {
           const key = updated.name
@@ -716,7 +717,7 @@ export const makeSandbox = (
                     (target): readonly [string, string] => [original, target],
                   )
                 },
-                { concurrency: 'unbounded', discard: false },
+                { concurrency: FILE_CONCURRENCY, discard: false },
               )
 
               const fileMap = toFileMap(entries)

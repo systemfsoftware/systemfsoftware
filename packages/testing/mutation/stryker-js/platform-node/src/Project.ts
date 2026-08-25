@@ -32,6 +32,8 @@ import {
 
 /** `JSON.parse` hands back `any`; the annotation is what forces a decode downstream. */
 const parseJson = (text: string): unknown => JSON.parse(text)
+
+export const FILE_CONCURRENCY = 24
 const stringArrayEquivalence = Equivalence.Array(Equivalence.String)
 export interface ProjectFile extends FileDescription {
   readonly name: string

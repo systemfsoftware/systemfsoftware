@@ -63,7 +63,7 @@ import { JsonDocument, JsonReportCommand, JsonReportError, makeJsonDocument } fr
 import type { TestCoverage } from './Mutants.js'
 import type { ResolvedMode } from './output-mode.js'
 import type { Project } from './Project.js'
-import { readOriginal } from './Project.js'
+import { FILE_CONCURRENCY, readOriginal } from './Project.js'
 import {
   ClearTextDocument,
   ClearTextReportCommand,
@@ -1084,7 +1084,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       const entries = yield* Effect.forEach(
         uniqueFileNames,
         (fileName) => toFileResult(fileName).pipe(Effect.map((result) => [fileName, result] as const)),
-        { concurrency: 'unbounded' },
+        { concurrency: FILE_CONCURRENCY },
       )
       const fileResultsByName: Record<string, schema.FileResult> = Object.fromEntries(entries)
 
@@ -1119,7 +1119,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       const entries = yield* Effect.forEach(
         uniqueTestFileNames,
         (fileName, index) => toTestFile(fileName).pipe(Effect.map((file) => [mapped[index] ?? '', file] as const)),
-        { concurrency: 'unbounded' },
+        { concurrency: FILE_CONCURRENCY },
       )
       const testFilesByName: Record<string, schema.TestFile> = Object.fromEntries(entries)
 
@@ -1236,7 +1236,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
         MANIFEST_SPECIFIERS,
         (specifier) =>
           Effect.map(readManifestVersion(fs, pathService, specifier), (version) => [specifier, version] as const),
-        { concurrency: 'unbounded' },
+        { concurrency: FILE_CONCURRENCY },
       )
       const found: schema.Dependencies = {}
       for (const [specifier, version] of pairs) {

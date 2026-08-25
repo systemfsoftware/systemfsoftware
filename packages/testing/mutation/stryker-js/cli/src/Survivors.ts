@@ -497,9 +497,7 @@ function currentSourceHashesFor(
     Effect.forEach(
       files,
       (file) => Effect.map(readSourceFile(file), (content) => [file, sourceContentHash(content, hashContent)] as const),
-      {
-        concurrency: 'unbounded',
-      },
+      { concurrency: 24 },
     ),
     (pairs) => Object.fromEntries(pairs),
   )
