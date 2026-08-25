@@ -112,6 +112,25 @@ const isTerminalEvent = (event: RunEvent): boolean =>
     Match.orElse(() => false),
   )
 
+const wireKind = (event: RunEvent): string =>
+  Match.value(event).pipe(
+    Match.tag('stream', () => 'stream'),
+    Match.tag('phase', () => 'phase'),
+    Match.tag('plan', () => 'plan'),
+    Match.tag('mutant', () => 'mutant'),
+    Match.tag('tick', () => 'tick'),
+    Match.tag('verdict', () => 'verdict'),
+    Match.tag('error', () => 'error'),
+    Match.tag('help', () => 'help'),
+    Match.tag('manifest', () => 'manifest'),
+    Match.exhaustive,
+  )
+
+const toWireLine = (event: RunEvent): string => {
+  const fields = Object.fromEntries(Object.entries(event).filter(([key]) => key !== '_tag'))
+  return JSON.stringify({ kind: wireKind(event), ...fields })
+}
+
 const drainOf = (stdio: Stdio.Stdio, framed: Stream.Stream<string>): Effect.Effect<void, never, never> =>
   Stream.run(framed, stdio.stdout({ endOnDone: true })).pipe(Effect.ignore)
 
@@ -190,7 +209,7 @@ const makeRunEventStream = (
         }
         return true
       }),
-      Stream.map((event) => `${JSON.stringify(event)}\n`),
+      Stream.map((event) => `${toWireLine(event)}\n`),
     )
 
     const drain: Effect.Effect<void, never, never> = drainOf(stdio, framed)
