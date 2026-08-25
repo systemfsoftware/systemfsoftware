@@ -605,9 +605,7 @@ export async function parseSvelte(
     we use the legacy AST. The full Svelte 5 migration should update these typings to use the new AST.
   */
   if (isSvelteV5OrLater(VERSION)) {
-    const walkerModule: unknown = await import(
-      import.meta.resolve('estree-walker', import.meta.resolve('svelte'))
-    )
+    const walkerModule: unknown = await import(import.meta.resolve('estree-walker'))
     if (
       !isPlainRecord(walkerModule) ||
       !isWalkFunction(walkerModule['walk'])

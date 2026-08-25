@@ -6,7 +6,8 @@
  * The pure merge decision lives in `Config.workflow.ts` so `Workflow.make`
  * stays behind its gate; schemas live in `Config.schema.ts`.
  */
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { createRequire } from 'node:module'
+import { pathToFileURL } from 'node:url'
 
 import { Cell, Wire } from '@systemfsoftware/effect-cell-types'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
@@ -350,7 +351,7 @@ export function importModule(moduleName: string, basePath: string): Effect.Effec
       if (moduleName.startsWith('.') || moduleName.startsWith('/') || moduleName.startsWith('file://')) {
         return import(moduleName)
       }
-      return import(import.meta.resolve(moduleName, pathToFileURL(`${basePath}/noop.js`).toString()))
+      return import(createRequire(`${basePath}/noop.js`).resolve(moduleName))
     },
     catch: (cause) => new StrykerError({ message: `Failed to import module "${moduleName}"`, cause }),
   })
@@ -559,11 +560,7 @@ function resolveExtendsSpecifier(
     const pathService = yield* Path.Path
     return yield* Effect.try({
       try: () => {
-        const resolvedUrl = import.meta.resolve(
-          specifier,
-          pathToFileURL(pathService.join(configDir, 'noop.js')).toString(),
-        )
-        return fileURLToPath(resolvedUrl)
+        return createRequire(pathService.join(configDir, 'noop.js')).resolve(specifier)
       },
       catch: (cause) => new ConfigFileUnreadableError({ file: specifier, cause }),
     })
