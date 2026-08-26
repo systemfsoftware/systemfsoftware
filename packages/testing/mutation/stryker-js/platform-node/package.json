@@ -19,8 +19,8 @@
     "build": "tsdown",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint --format=${f:-default}",
     "attw": "attw --pack .",
-    "mutation": "NODE_OPTIONS=--max-old-space-size=8192 stryker run",
-    "mutation:full": "NODE_OPTIONS=--max-old-space-size=8192 stryker run --force"
+    "mutation": "stryker run",
+    "mutation:full": "stryker run --force"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",

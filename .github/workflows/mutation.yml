@@ -109,6 +109,8 @@ jobs:
         id: mutation
         continue-on-error: true
         timeout-minutes: 60
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
         run: corepack pnpm turbo mutation --filter=./${{ matrix.package }}
 
       - name: Require a mutation report
