@@ -27,9 +27,7 @@
     "typecheck": "tsc --noEmit --incremental",
     "attw": "attw --pack .",
     "test": "vitest run",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "mutation": "stryker run",
-    "mutation:full": "stryker run --force"
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -47,7 +45,6 @@
     "@systemfsoftware/effect-schema-refutation-vite": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
-    "@systemfsoftware/stryker-plugins": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",

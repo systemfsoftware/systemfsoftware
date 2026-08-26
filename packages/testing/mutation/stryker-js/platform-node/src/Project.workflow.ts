@@ -6,6 +6,7 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
 export const ALWAYS_IGNORE = Object.freeze([
+  'node_modules',
   '.git',
   '*.tsbuildinfo',
   '/stryker.log',

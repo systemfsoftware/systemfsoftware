@@ -133,9 +133,6 @@
         "CI",
         "AGENT"
       ],
-      "passThroughEnv": [
-        "NODE_OPTIONS"
-      ],
       "cache": true
     },
     "lint": {

@@ -1,7 +1,11 @@
 {
   "extends": "../../../../../stryker.config.base.json",
   "mutate": [
-    "src/**/*.workflow.ts"
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "!src/**/*.property.test.ts",
+    "!src/**/*.d.ts",
+    "!src/**/__tests__/**"
   ],
   "disableBail": true,
   "plugins": [

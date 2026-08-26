@@ -454,3 +454,28 @@ export function readProject(
     return makeProject(decision.fileDescriptions, incrementalReport, [...decision.testFiles])
   })
 }
+
+if (import.meta.vitest !== void 0) {
+  const { expect, it } = await import('@effect/vitest')
+  const { NodeFileSystem, NodePath } = await import('@effect/platform-node')
+  const { Layer } = await import('effect')
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+
+  const platform = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)
+
+  it.effect('Should_ExcludeInstalledDependencies_When_TheProjectCarriesANodeModulesTree', () =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem
+      const base = mkdtempSync(`${tmpdir()}/stryker-project-read-`)
+      yield* fs.makeDirectory(`${base}/src`, { recursive: true })
+      yield* fs.writeFileString(`${base}/src/subject.ts`, 'export const subject = 1\n')
+      yield* fs.makeDirectory(`${base}/node_modules/some-dep/src`, { recursive: true })
+      yield* fs.writeFileString(`${base}/node_modules/some-dep/src/dep.ts`, 'export const dep = 2\n')
+
+      const names = yield* resolveInputFileNames(ALWAYS_IGNORE, base)
+
+      expect(names.some((name) => name.endsWith('src/subject.ts'))).toBe(true)
+      expect(names.filter((name) => name.includes('node_modules'))).toEqual([])
+    }).pipe(Effect.provide(platform)))
+}

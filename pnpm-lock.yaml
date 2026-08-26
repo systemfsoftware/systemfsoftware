@@ -2064,9 +2064,6 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../../lint/oxlint/config
-      '@systemfsoftware/stryker-plugins':
-        specifier: workspace:^
-        version: link:../../plugins/stryker-plugins
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../toolchain/tsconfig
@@ -2149,9 +2146,6 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../../specs/gherkin/effect
-      '@systemfsoftware/stryker-plugins':
-        specifier: workspace:^
-        version: link:../../plugins/stryker-plugins
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../toolchain/tsconfig
@@ -2283,9 +2277,6 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../../lint/oxlint/config
-      '@systemfsoftware/stryker-plugins':
-        specifier: workspace:^
-        version: link:../../plugins/stryker-plugins
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../toolchain/tsconfig
@@ -2335,9 +2326,6 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../../lint/oxlint/config
-      '@systemfsoftware/stryker-plugins':
-        specifier: workspace:^
-        version: link:../../plugins/stryker-plugins
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../toolchain/tsconfig

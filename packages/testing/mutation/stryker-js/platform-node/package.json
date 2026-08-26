@@ -18,9 +18,7 @@
     "test": "vitest run",
     "build": "tsdown",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint --format=${f:-default}",
-    "attw": "attw --pack .",
-    "mutation": "stryker run",
-    "mutation:full": "stryker run --force"
+    "attw": "attw --pack ."
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -42,7 +40,6 @@
     "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
-    "@systemfsoftware/stryker-plugins": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/diff-match-patch": "1.0.36",
