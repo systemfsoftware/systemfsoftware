@@ -21,6 +21,7 @@ const COMPILER_OPTIONS_OVERRIDES: Readonly<Record<string, unknown>> = Object.fre
   allowUnreachableCode: true,
   noUnusedLocals: false,
   noUnusedParameters: false,
+  skipLibCheck: true,
 })
 
 // When we're running in 'single-project' mode, we can safely disable emit
