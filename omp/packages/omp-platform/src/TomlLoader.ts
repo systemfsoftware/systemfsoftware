@@ -20,7 +20,7 @@ export class ProjectConfig extends Context.Service<
   {
     readonly load: (cwd: string) => Effect.Effect<TomlConfig, PlatformError, never>
   }
->()('@systemfsoftware/omp-platform/ProjectConfig') {}
+>()('@systemfsoftware/omp-platform/TomlLoader/ProjectConfig') {}
 
 /**
  * Private per-key merge for the layered config.
