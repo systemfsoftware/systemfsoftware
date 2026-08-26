@@ -1,4 +1,4 @@
-import { Context, Effect, Option, Schema as S, type Scope } from 'effect'
+import { Effect, Option, Schema as S } from 'effect'
 import type { HookSettings } from '../HookSettings.schema.js'
 import { sessionIds } from '../wire/Session.js'
 import { normalizeToolInput } from '../wire/ToolInput.js'
@@ -7,13 +7,6 @@ import { blockAsFeedback, type FeedbackOnlyResult } from './HookFeedback.js'
 import { asToolInput, EMPTY_TOOL_INPUT } from './HookPayload.js'
 import type { HookSession, HookToolResult } from './HookSession.js'
 import { runHooksForEvent } from './RunHooksForEventExecutor.js'
-
-/** @internal */
-export class RunPostToolUseFailureHooksExecutorDeps
-  extends Context.Service<RunPostToolUseFailureHooksExecutorDeps, Scope.Scope>()(
-    'RunPostToolUseFailureHooksExecutorDeps',
-  )
-{}
 
 const asTextBlocks = S.decodeUnknownOption(S.Array(S.Struct({ text: S.optional(S.String) })))
 const asPlainText = S.decodeUnknownOption(S.String)

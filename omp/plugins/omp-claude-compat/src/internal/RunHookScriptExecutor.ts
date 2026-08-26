@@ -1,4 +1,4 @@
-import { Context, Effect, Schema as S, type Scope, Stream } from 'effect'
+import { Effect, Schema as S, Scope, Stream } from 'effect'
 import * as ChildProcess from 'effect/unstable/process/ChildProcess'
 import { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { detachIn } from '../Deadline.js'
@@ -40,11 +40,6 @@ const SHELL_INVOCATION = {
 const encodeHookPayload = S.encodeSync(S.fromJsonString(ToolInputRecord))
 
 /** @internal */
-export class RunHookScriptExecutorDeps extends Context.Service<RunHookScriptExecutorDeps, Scope.Scope>()(
-  'RunHookScriptExecutorDeps',
-) {}
-
-/** @internal */
 export const runHookScript = Effect.fn('runHookScript')(function*(
   hook: CommandHook,
   input: Record<string, unknown>,
@@ -81,7 +76,7 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
 
   // Detached whole: the stdout/stderr drain travels with the child, so
   // abandoning the wait never leaves it writing into a pipe nobody reads.
-  const hookScope = yield* RunHookScriptExecutorDeps
+  const hookScope = yield* Scope.Scope
   const run = Effect.scoped(
     Effect.uninterruptibleMask((restore) =>
       Effect.gen(function*() {

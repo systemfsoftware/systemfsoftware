@@ -1,14 +1,7 @@
-import { Context, Effect, type Scope } from 'effect'
+import { Effect } from 'effect'
 import type { HookSettings } from '../HookSettings.schema.js'
 import type { HookSession } from './HookSession.js'
 import { runSessionStartHooks } from './RunSessionStartHooksExecutor.js'
-
-/** @internal */
-export class RunSessionSwitchHooksExecutorDeps
-  extends Context.Service<RunSessionSwitchHooksExecutorDeps, Scope.Scope>()(
-    'RunSessionSwitchHooksExecutorDeps',
-  )
-{}
 
 /** @internal */
 export const runSessionSwitchHooks = Effect.fn('runSessionSwitchHooks')(function*(

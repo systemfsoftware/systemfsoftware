@@ -1,6 +1,6 @@
 import type { InputEventResult } from '@oh-my-pi/pi-coding-agent'
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { Context, Effect, Exit, Match, Option, pipe, Result, type Scope } from 'effect'
+import { Effect, Exit, Match, Option, pipe, Result, type Scope } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { drainAsyncHookContext } from '../AsyncHookOutput.js'
@@ -17,13 +17,7 @@ import {
 import { isHostBound } from '../PromptDestination.js'
 import { sessionIds } from '../wire/Session.js'
 import type { HookPrompt, HookSession } from './HookSession.js'
-import { runHookScript, type RunHookScriptExecutorDeps } from './RunHookScriptExecutor.js'
-
-/** @internal */
-export class RunUserPromptSubmitHooksExecutorDeps extends Context.Service<
-  RunUserPromptSubmitHooksExecutorDeps,
-  Scope.Scope
->()('RunUserPromptSubmitHooksExecutorDeps') {}
+import { runHookScript } from './RunHookScriptExecutor.js'
 
 /**
  * The per-hook prompt-submission chain, in one bag so the phase order is
@@ -45,7 +39,7 @@ interface SubmitPhases extends Cell.Phases {
   readonly decodeError: never
   readonly readError: PlatformError
   readonly writeError: never
-  readonly readContext: ChildProcessSpawner | RunHookScriptExecutorDeps
+  readonly readContext: ChildProcessSpawner | Scope.Scope
   readonly writeContext: never
 }
 

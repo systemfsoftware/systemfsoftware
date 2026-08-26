@@ -8,28 +8,14 @@ import { Effect, type Scope } from 'effect'
 import type { FileSystem } from 'effect/FileSystem'
 import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { ClaudeSettings } from './ClaudeSettings.js'
-import { CollectSettingsGapsExecutorDeps } from './internal/CollectSettingsGapsExecutor.js'
 import type { HookPrompt, HookSession, HookToolCall } from './internal/HookSession.js'
-import { LoadSettingsExecutorDeps } from './internal/LoadSettingsExecutor.js'
-import { RunHookScriptExecutorDeps } from './internal/RunHookScriptExecutor.js'
-import { RunHooksForEventExecutorDeps } from './internal/RunHooksForEventExecutor.js'
 import { runLifecycleHooks } from './internal/RunLifecycleHooksExecutor.js'
-import { RunLifecycleHooksExecutorDeps } from './internal/RunLifecycleHooksExecutor.js'
-import { RunPostToolUseFailureHooksExecutorDeps } from './internal/RunPostToolUseFailureHooksExecutor.js'
-import { RunPostToolUseHooksExecutorDeps } from './internal/RunPostToolUseHooksExecutor.js'
-import { RunPreCompactHooksExecutorDeps } from './internal/RunPreCompactHooksExecutor.js'
 import { runPreCompactHooks } from './internal/RunPreCompactHooksExecutor.js'
-import { RunPreToolUseHooksExecutorDeps } from './internal/RunPreToolUseHooksExecutor.js'
 import { runPreToolUseHooks } from './internal/RunPreToolUseHooksExecutor.js'
-import { RunSessionStartHooksExecutorDeps } from './internal/RunSessionStartHooksExecutor.js'
 import { runSessionStartHooks } from './internal/RunSessionStartHooksExecutor.js'
-import { RunSessionSwitchHooksExecutorDeps } from './internal/RunSessionSwitchHooksExecutor.js'
 import { runSessionSwitchHooks } from './internal/RunSessionSwitchHooksExecutor.js'
-import { RunToolResultHooksExecutorDeps } from './internal/RunToolResultHooksExecutor.js'
 import { runToolResultHooks } from './internal/RunToolResultHooksExecutor.js'
-import { RunUserPromptSubmitHooksExecutorDeps } from './internal/RunUserPromptSubmitHooksExecutor.js'
 import { runUserPromptSubmitHooks } from './internal/RunUserPromptSubmitHooksExecutor.js'
-import { SuperviseForkExecutorDeps } from './internal/SuperviseForkExecutor.js'
 
 export type HookDispatchResult =
   | ToolCallEventResult
@@ -38,25 +24,7 @@ export type HookDispatchResult =
   | { readonly cancel: boolean }
   | undefined
 
-export type HookDispatchContext =
-  | FileSystem
-  | ChildProcessSpawner
-  | Scope.Scope
-  | ClaudeSettings
-  | LoadSettingsExecutorDeps
-  | CollectSettingsGapsExecutorDeps
-  | RunHookScriptExecutorDeps
-  | RunHooksForEventExecutorDeps
-  | RunPreToolUseHooksExecutorDeps
-  | RunPostToolUseHooksExecutorDeps
-  | RunPostToolUseFailureHooksExecutorDeps
-  | RunToolResultHooksExecutorDeps
-  | RunPreCompactHooksExecutorDeps
-  | RunUserPromptSubmitHooksExecutorDeps
-  | RunSessionStartHooksExecutorDeps
-  | RunSessionSwitchHooksExecutorDeps
-  | RunLifecycleHooksExecutorDeps
-  | SuperviseForkExecutorDeps
+export type HookDispatchContext = FileSystem | ChildProcessSpawner | Scope.Scope | ClaudeSettings
 
 
 export const onToolCall = (event: HookToolCall, ctx: HookSession) =>

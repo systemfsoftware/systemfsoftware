@@ -1,5 +1,5 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { Context, Effect, Exit, Match, Option, pipe, Result, type Scope } from 'effect'
+import { Effect, Exit, Match, Option, pipe, Result, type Scope } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { Blocked, Continue } from '../HookDispatcher.schema.js'
@@ -20,13 +20,8 @@ import { matchesPermissionRule } from '../wire/PermissionRule.js'
 import type { HooksForEventResult } from './HookFeedback.js'
 import { asToolInput, EMPTY_TOOL_INPUT } from './HookPayload.js'
 import type { HookSession } from './HookSession.js'
-import { runHookScript, type RunHookScriptExecutorDeps } from './RunHookScriptExecutor.js'
+import { runHookScript } from './RunHookScriptExecutor.js'
 import { superviseFork } from './SuperviseForkExecutor.js'
-
-/** @internal */
-export class RunHooksForEventExecutorDeps extends Context.Service<RunHooksForEventExecutorDeps, Scope.Scope>()(
-  'RunHooksForEventExecutorDeps',
-) {}
 
 const AGGREGATE_CEILING_MS = 26_000
 
@@ -50,7 +45,7 @@ interface HookVerdictPhases extends Cell.Phases {
   readonly decodeError: never
   readonly readError: PlatformError
   readonly writeError: never
-  readonly readContext: ChildProcessSpawner | RunHookScriptExecutorDeps
+  readonly readContext: ChildProcessSpawner | Scope.Scope
   readonly writeContext: never
 }
 const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(function*(

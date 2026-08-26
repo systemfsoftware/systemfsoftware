@@ -1,4 +1,4 @@
-import { Array as Arr, Context, Effect, type Scope } from 'effect'
+import { Array as Arr, Effect } from 'effect'
 import { sessionIds } from '../wire/Session.js'
 
 import { matcherUnreadable } from '../HookSettings.js'
@@ -6,11 +6,6 @@ import type { CommandHook, HookEntry } from '../HookSettings.schema.js'
 import type { HookSession } from './HookSession.js'
 import { runHookScript } from './RunHookScriptExecutor.js'
 import { superviseFork } from './SuperviseForkExecutor.js'
-
-/** @internal */
-export class RunLifecycleHooksExecutorDeps extends Context.Service<RunLifecycleHooksExecutorDeps, Scope.Scope>()(
-  'RunLifecycleHooksExecutorDeps',
-) {}
 
 /** @internal */
 export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(

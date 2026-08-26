@@ -1,13 +1,8 @@
-import { Cause, Context, Effect, Exit, type Scope } from 'effect'
+import { Cause, Effect, Exit } from 'effect'
 import { recordAsyncHookContext } from '../AsyncHookOutput.js'
 import type { HookResult } from '../HookDispatcher.schema.js'
 import { parseHookOutput } from '../HookOutput.js'
 import type { HookSession } from './HookSession.js'
-
-/** @internal */
-export class SuperviseForkExecutorDeps extends Context.Service<SuperviseForkExecutorDeps, Scope.Scope>()(
-  'SuperviseForkExecutorDeps',
-) {}
 
 /**
  * Nothing awaits a forked hook, so an unhandled failure here reaches no one:

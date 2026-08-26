@@ -1,13 +1,8 @@
-import { Context, Effect, Exit, Schema as S, type Scope } from 'effect'
+import { Effect, Exit, Schema as S } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import { mergeSettings, parseSettings } from '../HookSettings.js'
 import { loadPluginHookSources } from './PluginHookSources.js'
 import { MANAGED_SETTINGS_PATH } from './SettingsPaths.js'
-
-/** @internal */
-export class LoadSettingsExecutorDeps extends Context.Service<LoadSettingsExecutorDeps, Scope.Scope>()(
-  'LoadSettingsExecutorDeps',
-) {}
 
 const loadSettingsFile = Effect.fn('loadSettingsFile')(function*(path: string) {
   const fs = yield* FileSystem

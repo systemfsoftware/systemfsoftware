@@ -1,4 +1,4 @@
-import { Context, Effect, Option, type Scope } from 'effect'
+import { Effect, Option } from 'effect'
 import type { HookSettings } from '../HookSettings.schema.js'
 import { extractShellCommand } from '../wire/ContextMode.js'
 import { editTargetPaths } from '../wire/EditTarget.js'
@@ -9,11 +9,6 @@ import type { HooksForEventResult } from './HookFeedback.js'
 import { asToolInput, EMPTY_TOOL_INPUT } from './HookPayload.js'
 import type { HookSession, HookToolCall } from './HookSession.js'
 import { runHooksForEvent } from './RunHooksForEventExecutor.js'
-
-/** @internal */
-export class RunPreToolUseHooksExecutorDeps extends Context.Service<RunPreToolUseHooksExecutorDeps, Scope.Scope>()(
-  'RunPreToolUseHooksExecutorDeps',
-) {}
 
 /** @internal */
 export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(

@@ -1,4 +1,4 @@
-import { Context, Effect, Option, type Scope } from 'effect'
+import { Effect, Option } from 'effect'
 import type { HookSettings } from '../HookSettings.schema.js'
 import { editTargetPaths } from '../wire/EditTarget.js'
 import { sessionIds } from '../wire/Session.js'
@@ -8,11 +8,6 @@ import { blockAsFeedback, type FeedbackOnlyResult } from './HookFeedback.js'
 import { asToolInput, EMPTY_TOOL_INPUT } from './HookPayload.js'
 import type { HookSession, HookToolResult } from './HookSession.js'
 import { runHooksForEvent } from './RunHooksForEventExecutor.js'
-
-/** @internal */
-export class RunPostToolUseHooksExecutorDeps extends Context.Service<RunPostToolUseHooksExecutorDeps, Scope.Scope>()(
-  'RunPostToolUseHooksExecutorDeps',
-) {}
 
 /** @internal */
 export const runPostToolUseHooks = Effect.fn('runPostToolUseHooks')(function*(

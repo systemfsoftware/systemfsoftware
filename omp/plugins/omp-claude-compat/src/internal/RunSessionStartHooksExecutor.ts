@@ -1,15 +1,10 @@
-import { Context, Effect, type Scope } from 'effect'
+import { Effect } from 'effect'
 import type { HookSettings } from '../HookSettings.schema.js'
 import { matchesMatcher } from '../wire/Matcher.js'
 import { sessionIds } from '../wire/Session.js'
 import type { HookSession } from './HookSession.js'
 import { runHookScript } from './RunHookScriptExecutor.js'
 import { superviseFork } from './SuperviseForkExecutor.js'
-
-/** @internal */
-export class RunSessionStartHooksExecutorDeps extends Context.Service<RunSessionStartHooksExecutorDeps, Scope.Scope>()(
-  'RunSessionStartHooksExecutorDeps',
-) {}
 
 /** @internal */
 export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(

@@ -1,13 +1,8 @@
-import { Context, Effect, type Scope } from 'effect'
+import { Effect } from 'effect'
 import type { HookSettings } from '../HookSettings.schema.js'
 import { sessionIds } from '../wire/Session.js'
 import type { HookSession } from './HookSession.js'
 import { runHooksForEvent } from './RunHooksForEventExecutor.js'
-
-/** @internal */
-export class RunPreCompactHooksExecutorDeps extends Context.Service<RunPreCompactHooksExecutorDeps, Scope.Scope>()(
-  'RunPreCompactHooksExecutorDeps',
-) {}
 
 /**
  * The matcher this event documents is `trigger` (manual vs auto), which OMP's

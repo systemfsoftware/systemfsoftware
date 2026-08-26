@@ -1,14 +1,9 @@
-import { Context, Effect, Exit, Schema as S, type Scope } from 'effect'
+import { Effect, Exit, Schema as S } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import { disabledCoverage, hookCoverage, parseSettings, unsupportedHookTypes } from '../HookSettings.js'
 import type { DisableSource, HookCoverageRow } from '../HookSettings.schema.js'
 import { loadPluginHookSources } from './PluginHookSources.js'
 import { MANAGED_SETTINGS_PATH } from './SettingsPaths.js'
-
-/** @internal */
-export class CollectSettingsGapsExecutorDeps extends Context.Service<CollectSettingsGapsExecutorDeps, Scope.Scope>()(
-  'CollectSettingsGapsExecutorDeps',
-) {}
 
 const dedupeByEvent = (rows: readonly HookCoverageRow[]): readonly HookCoverageRow[] =>
   rows.filter((row, index) => rows.findIndex((other) => other.event === row.event) === index)
