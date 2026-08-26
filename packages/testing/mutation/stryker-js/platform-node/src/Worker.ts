@@ -220,6 +220,9 @@ const DISPOSE_TIMEOUT_MS = 2000
 /** How long the parent waits for a spawned worker to connect back. */
 const CONNECT_TIMEOUT_MS = 5000
 
+/** How long the parent waits for a worker to answer one call. */
+const CALL_TIMEOUT_MS = 5 * 60 * 1000
+
 type _IsPromiseFunction<T> = T extends (...args: infer _A) => Promise<infer _R> ? true : false
 
 export type Proxied<T> = {
@@ -657,7 +660,27 @@ export const makeChildProcessProxy = <T>(params: {
               ),
             )
             yield* Effect.yieldNow
-            const result = yield* Deferred.await(deferred)
+            const result = yield* Deferred.await(deferred).pipe(
+              Effect.timeoutOrElse({
+                duration: CALL_TIMEOUT_MS,
+                orElse: () =>
+                  Effect.gen(function*() {
+                    yield* Ref.update(pendingRef, (p) => {
+                      const cleaned = { ...p }
+                      delete cleaned[callId]
+                      return cleaned
+                    })
+                    const captured = yield* Ref.get(stderrRef)
+                    return yield* new WorkerMethodError({
+                      message: `The worker did not answer "${
+                        String(propertyKey)
+                      }" within ${CALL_TIMEOUT_MS}ms. Captured worker output: ${captured.trimEnd()}`,
+                      name: 'WorkerCallTimeout',
+                      stack: undefined,
+                    })
+                  }),
+              }),
+            )
             return result
           })
       },
