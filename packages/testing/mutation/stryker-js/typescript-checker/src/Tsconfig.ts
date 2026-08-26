@@ -38,6 +38,7 @@ const LOW_EMIT_OPTIONS_FOR_PROJECT_REFERENCES: Readonly<Record<string, unknown>>
   noEmit: false,
   declarationMap: true,
   declaration: true,
+  composite: true,
 })
 
 /**
