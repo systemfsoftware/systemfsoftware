@@ -580,6 +580,10 @@
     - branching-density-exempts-two-argument-bodies
     - internal-surface-rules
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/oxlint-plugin@2.1.1":
+  dir: packages/lint/oxlint/plugins/meta/core
+  intents:
+    - ban-classes-resolves-namespace-imports
 "@systemfsoftware/rx-effect@0.6.0":
   dir: packages/rx-effect
   intents:
@@ -649,10 +653,31 @@
   dir: packages/testing/mutation/stryker-js/cli
   intents:
     - plugin-discovery-names-this-scope
+"@systemfsoftware/stryker-js-cli@3.2.0":
+  dir: packages/testing/mutation/stryker-js/cli
+  intents:
+    - cli-help-reads-the-schema
+    - failures-name-themselves
+    - human-mode-prints-for-humans
+    - mutants-actually-run
+    - shared-helpers-move-to-plugin-api
+    - stryker-drop-unimported-deps
+    - tricky-moments-punch
+    - verdict-reaches-the-exit-code
 "@systemfsoftware/stryker-js-instrumenter@0.2.0":
   dir: packages/testing/mutation/stryker-js/instrumenter
   intents:
     - self-hosted-instrumenter
+"@systemfsoftware/stryker-js-instrumenter@1.0.0":
+  dir: packages/testing/mutation/stryker-js/instrumenter
+  intents:
+    - instrumenter-errors-carry-messages
+    - regexpp-replaces-weapon-regex
+    - shared-helpers-move-to-plugin-api
+    - slick-camels-fail
+    - stryker-drop-unimported-deps
+    - stryker-instrumenter-bug-url
+    - tricky-moments-punch
 "@systemfsoftware/stryker-js-mutation-report@1.2.6":
   dir: packages/stryker-js/mutation-report
   intents:
@@ -667,6 +692,13 @@
   dir: packages/testing/mutation/stryker-js/mutation-report
   intents:
     - plugin-discovery-names-this-scope
+"@systemfsoftware/stryker-js-mutation-report@2.0.0":
+  dir: packages/testing/mutation/stryker-js/mutation-report
+  intents:
+    - grumpy-rules-behave
+    - only-the-api-is-a-door
+    - reporters-are-layers
+    - tricky-moments-punch
 "@systemfsoftware/stryker-js-mutation-run@2.0.0":
   dir: packages/stryker-js/mutation-run
   intents:
@@ -702,6 +734,27 @@
   dir: packages/testing/mutation/stryker-js/mutation-run
   intents:
     - plugin-discovery-names-this-scope
+"@systemfsoftware/stryker-js-mutation-run@5.0.0":
+  dir: packages/testing/mutation/stryker-js/mutation-run
+  intents:
+    - command-runner-actually-runs
+    - curly-plants-fold
+    - evaluator-answers-with-a-verdict
+    - failures-name-themselves
+    - human-mode-prints-for-humans
+    - id-generator-is-a-service
+    - inplace-restore-stops-guessing
+    - log-level-is-per-run
+    - mutants-actually-run
+    - only-the-api-is-a-door
+    - run-outcome-carries-the-verdict
+    - shared-helpers-move-to-plugin-api
+    - stage-failures-name-themselves
+    - stryker-drop-unimported-deps
+    - tricky-moments-punch
+    - verdict-reaches-the-exit-code
+    - worker-calls-no-longer-lose-their-replies
+    - workers-are-group-killed
 "@systemfsoftware/stryker-js-plugin-api@1.0.0":
   dir: packages/stryker-js/plugin-api
   intents:
@@ -726,6 +779,15 @@
   dir: packages/testing/mutation/stryker-js/plugin-api
   intents:
     - plugin-discovery-names-this-scope
+"@systemfsoftware/stryker-js-plugin-api@3.0.0":
+  dir: packages/testing/mutation/stryker-js/plugin-api
+  intents:
+    - evaluator-answers-with-a-verdict
+    - option-defaults-are-published
+    - shared-helpers-move-to-plugin-api
+    - stryker-drop-unimported-deps
+    - stryker-plugin-contract-effect
+    - tricky-moments-punch
 "@systemfsoftware/stryker-js-typescript-checker@1.3.0":
   dir: packages/stryker-js/typescript-checker
   intents:
@@ -746,6 +808,13 @@
   dir: packages/testing/mutation/stryker-js/typescript-checker
   intents:
     - plugin-discovery-names-this-scope
+"@systemfsoftware/stryker-js-typescript-checker@2.0.0":
+  dir: packages/testing/mutation/stryker-js/typescript-checker
+  intents:
+    - shared-helpers-move-to-plugin-api
+    - stryker-drop-unimported-deps
+    - tricky-moments-punch
+    - typescript-checker-returns-effects
 "@systemfsoftware/stryker-js-util@0.2.0":
   dir: packages/testing/mutation/stryker-js/util
   intents:
@@ -770,6 +839,14 @@
   dir: packages/testing/mutation/stryker-js/vitest-runner
   intents:
     - plugin-discovery-names-this-scope
+"@systemfsoftware/stryker-js-vitest-runner@1.0.0":
+  dir: packages/testing/mutation/stryker-js/vitest-runner
+  intents:
+    - grumpy-rules-behave
+    - shared-helpers-move-to-plugin-api
+    - stryker-drop-unimported-deps
+    - tricky-moments-punch
+    - vitest-runner-setup-file-path
 "@systemfsoftware/stryker-plugins@0.12.0":
   dir: packages/stryker-plugins
   intents:
@@ -802,6 +879,10 @@
   dir: packages/testing/mutation/plugins/stryker-test-contribution
   intents:
     - stryker-test-contribution-addon
+"@systemfsoftware/stryker-test-contribution@0.2.0":
+  dir: packages/testing/mutation/plugins/stryker-test-contribution
+  intents:
+    - evaluator-answers-with-a-verdict
 "@systemfsoftware/tsconfig@1.3.2":
   dir: packages/tsconfig
   intents:
