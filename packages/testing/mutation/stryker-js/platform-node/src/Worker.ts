@@ -305,7 +305,11 @@ export const makeChildProcessProxy = <T>(params: {
     yield* Effect.forkScoped(
       Effect.forever(
         Queue.take(stderrQueue).pipe(
-          Effect.flatMap((chunk) => Ref.update(stderrRef, (existing) => appendCapped(existing, chunk))),
+          Effect.flatMap((chunk) =>
+            Ref.update(stderrRef, (existing) => appendCapped(existing, chunk)).pipe(
+              Effect.andThen(() => Effect.logWarning(`worker stderr: ${chunk.trimEnd()}`)),
+            )
+          ),
         ),
       ),
     )
