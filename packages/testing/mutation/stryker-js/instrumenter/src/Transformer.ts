@@ -255,59 +255,6 @@ function getLine(loc: types.SourceLocation | null | undefined): number {
   return loc.start.line
 }
 
-export interface IgnorerBookkeeper {
-  readonly ignorers: readonly IgnorerService[]
-  readonly activeIgnored: { readonly node: types.Node; readonly message: string } | undefined
-}
-
-export function createIgnorerBookkeeper(
-  ignorers: readonly IgnorerService[],
-): IgnorerBookkeeper {
-  return {
-    ignorers,
-    activeIgnored: undefined,
-  }
-}
-
-export function currentIgnoreMessage(
-  bookkeeper: IgnorerBookkeeper,
-): string | undefined {
-  return bookkeeper.activeIgnored?.message
-}
-
-export function enterNode(
-  bookkeeper: IgnorerBookkeeper,
-  path: BabelNodePath,
-): IgnorerBookkeeper {
-  if (bookkeeper.activeIgnored !== undefined) {
-    return bookkeeper
-  }
-  const view = toIgnorerPath(path)
-  for (const ignorer of bookkeeper.ignorers) {
-    const result = ignorer.shouldIgnore(view)
-    if (Option.isSome(result)) {
-      return {
-        ...bookkeeper,
-        activeIgnored: { node: path.node, message: result.value },
-      }
-    }
-  }
-  return bookkeeper
-}
-
-export function leaveNode(
-  bookkeeper: IgnorerBookkeeper,
-  path: BabelNodePath,
-): IgnorerBookkeeper {
-  if (bookkeeper.activeIgnored?.node === path.node) {
-    return {
-      ...bookkeeper,
-      activeIgnored: undefined,
-    }
-  }
-  return bookkeeper
-}
-
 function toIgnorerPath(path: BabelNodePath): IgnorerNodePath {
   let parentResult: IgnorerNodePath | null = null
   if (path.parentPath !== null) {
@@ -809,11 +756,13 @@ const SIGNAL_QUERY_OPTIONS_MSG =
   'Angular signal query options object cannot be mutated as that causes issues with the Angular compiler.'
 
 export function shouldIgnore(path: IgnorerNodePath): Option.Option<string> {
-  if (isInputModelOrOutputConfigurationObject(path)) {
-    return Option.some(INPUT_MODEL_OUTPUT_CONFIG_MSG)
-  }
-  if (isSignalQueryOptionsObject(path)) {
-    return Option.some(SIGNAL_QUERY_OPTIONS_MSG)
+  for (let current: IgnorerNodePath | null | undefined = path; current; current = current.parentPath) {
+    if (isInputModelOrOutputConfigurationObject(current)) {
+      return Option.some(INPUT_MODEL_OUTPUT_CONFIG_MSG)
+    }
+    if (isSignalQueryOptionsObject(current)) {
+      return Option.some(SIGNAL_QUERY_OPTIONS_MSG)
+    }
   }
   return Option.none()
 }
@@ -945,7 +894,8 @@ export const frameworkPluginsFileUrl = import.meta.url
  */
 const parsedInstrumentationHeader = babel.parse(
   // `globalThis` implementation is based on core-js's implementation. See https://github.com/stryker-mutator/stryker-js/issues/4035
-  `function ${STRYKER_NAMESPACE_HELPER}(){
+  `// @ts-nocheck
+var ${STRYKER_NAMESPACE_HELPER} = function(){
   var g = typeof globalThis === 'object' && globalThis && globalThis.Math === Math && globalThis || new Function("return this")();
   var ns = g.${ID.NAMESPACE} || (g.${ID.NAMESPACE} = {});
   if (ns.${ID.ACTIVE_MUTANT} === undefined && g.process && g.process.env && g.process.env.${ID.ACTIVE_MUTANT_ENV_VARIABLE}) {
@@ -956,10 +906,10 @@ const parsedInstrumentationHeader = babel.parse(
   }
   ${STRYKER_NAMESPACE_HELPER} = retrieveNS;
   return retrieveNS();
-}
+};
 ${STRYKER_NAMESPACE_HELPER}();
 
-function ${COVER_MUTANT_HELPER}() {
+var ${COVER_MUTANT_HELPER} = function() {
   var ns = ${STRYKER_NAMESPACE_HELPER}();
   var cov = ns.${ID.MUTATION_COVERAGE_OBJECT} || (ns.${ID.MUTATION_COVERAGE_OBJECT} = { static: {}, perTest: {} });
   function cover() {
@@ -974,8 +924,8 @@ function ${COVER_MUTANT_HELPER}() {
   }
   ${COVER_MUTANT_HELPER} = cover;
   cover.apply(null, arguments);
-}
-function ${IS_MUTANT_ACTIVE_HELPER}(id) {
+};
+var ${IS_MUTANT_ACTIVE_HELPER} = function(id) {
   var ns = ${STRYKER_NAMESPACE_HELPER}();
   function isActive(id) {
     if (ns.${ID.ACTIVE_MUTANT} === id) {
@@ -1179,8 +1129,6 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
   const mutatorEntries = Object.entries(mutators)
   const allMutatorNames = mutatorEntries.map(([name]) => name.toLowerCase())
 
-  let ignorerState = createIgnorerBookkeeper(options.ignorers)
-
   const warnings: string[] = []
 
   traverse(file.ast, {
@@ -1196,7 +1144,6 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
       if (shouldSkip(path)) {
         path.skip()
       } else {
-        ignorerState = enterNode(ignorerState, path)
         addToPlacementMapIfPossible(path)
         if (shouldMutate(path)) {
           const mutantsToPlace = collectMutants(path)
@@ -1222,7 +1169,6 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
     },
     exit(path) {
       placeMutantsIfNeeded(path)
-      ignorerState = leaveNode(ignorerState, path)
     },
   })
 
@@ -1279,6 +1225,16 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
       }
     }
   }
+  function ignoreMessageFor(path: NodePath): string | undefined {
+    const view = toIgnorerPath(path)
+    for (const ignorer of options.ignorers) {
+      const result = ignorer.shouldIgnore(view)
+      if (Option.isSome(result)) {
+        return result.value
+      }
+    }
+    return undefined
+  }
 
   function collectMutants(path: NodePath): Mutant[] {
     return [...mutate(path)].map((mutable) => collect(mutantCollector, originFileName, path.node, mutable, offset))
@@ -1291,7 +1247,7 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
       for (const replacement of mutate(path.node, context)) {
         const ignoreReason = findIgnoreReason(directiveRule, mutatorName, getNodeLocation(path.node).start.line) ??
           findExcludedMutatorIgnoreReason(mutatorName) ??
-          currentIgnoreMessage(ignorerState)
+          ignoreMessageFor(path)
         const mutableEntry: Mutable = {
           replacement,
           mutatorName,
