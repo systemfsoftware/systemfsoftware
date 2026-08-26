@@ -5,6 +5,7 @@ import type { ContributionOf } from '@systemfsoftware/stryker-js/Plugin'
 import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
+import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
@@ -85,4 +86,13 @@ const MainLayer = RpcServer.layer(CheckerRpcs).pipe(
   Layer.provide(NodeWorkerRunner.layer),
 )
 
-Effect.runFork(Layer.launch(MainLayer))
+Effect.runFork(
+  Layer.launch(MainLayer).pipe(
+    Effect.tapCause((cause) =>
+      Effect.sync(() => {
+        process.stderr.write(`checker worker stopped: ${Cause.pretty(cause)}\n`)
+        process.exitCode = 1
+      })
+    ),
+  ),
+)

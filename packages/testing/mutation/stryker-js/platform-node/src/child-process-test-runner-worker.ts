@@ -91,4 +91,13 @@ const MainLayer = RpcServer.layer(TestRunnerRpcs).pipe(
   Layer.provide(NodeWorkerRunner.layer),
 )
 
-Effect.runFork(Layer.launch(MainLayer))
+Effect.runFork(
+  Layer.launch(MainLayer).pipe(
+    Effect.tapCause((cause) =>
+      Effect.sync(() => {
+        process.stderr.write(`test runner worker stopped: ${Cause.pretty(cause)}\n`)
+        process.exitCode = 1
+      })
+    ),
+  ),
+)
