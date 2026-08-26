@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/stryker-js-mutation-run",
-  "version": "4.1.0",
+  "version": "5.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
