@@ -1,11 +1,3 @@
-/**
- * Mutants capability — planning which tests run for each mutant, collecting
- * diff statistics for incremental runs, and tracking per-mutant test coverage.
- *
- * One module per capability, one workflow for its pure decisions: the planner
- * and the incremental differ both decide through `Mutants.workflow.ts`.
- */
-
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
@@ -21,9 +13,10 @@ import type { CompleteDryRunResult, TestResult } from '@systemfsoftware/stryker-
 
 import {
   IncrementalDiffCommand,
-  IncrementalDiffDecision,
-  IncrementalDiffError,
   incrementalDifferWorkflow,
+  PreviousFilesSchema,
+  PreviousTestFilesSchema,
+  toRelativeNormalizedFileName,
 } from './IncrementalDiff.workflow.js'
 import {
   HIT_LIMIT_FACTOR,
@@ -422,73 +415,57 @@ export const decidePlans = (
 
 export interface IncrementalDiffResult {
   readonly mutants: readonly Mutant[]
+  readonly remembered: readonly {
+    readonly mutantId: string
+    readonly status: string
+    readonly testsCompleted?: number | undefined
+  }[]
   readonly mutantStatistics: DiffStatistics
   readonly testStatistics: DiffStatistics
-  readonly testCoverage: TestCoverage
 }
 
-const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
-
-export const toRelativeNormalizedFileName = (fileName: string | undefined, basePath: string): string => {
-  const raw = fileName ?? ''
-  let relative: string
-  if (raw.startsWith(basePath)) {
-    relative = raw.slice(basePath.length).replace(/^\/+/, '')
-  } else {
-    relative = raw
+const previousFilesOf = (rawReport: unknown): S.Schema.Type<typeof PreviousFilesSchema> => {
+  if (typeof rawReport === 'object' && rawReport !== null && 'files' in rawReport) {
+    const files = rawReport.files
+    if (S.is(PreviousFilesSchema)(files)) return files
   }
-  return normalizeFileName(relative)
+  return {}
 }
 
-export interface IncrementalDifferRequest {
-  readonly basePath: string
-  readonly fileDescriptions: Record<string, unknown>
-  readonly currentMutants: readonly Mutant[]
-  readonly incrementalReport: unknown
-  readonly currentRelativeFiles: Record<string, string>
-  readonly testCoverage: TestCoverage
-  readonly force: boolean
+const previousTestFilesOf = (rawReport: unknown): S.Schema.Type<typeof PreviousTestFilesSchema> => {
+  if (typeof rawReport === 'object' && rawReport !== null && 'testFiles' in rawReport) {
+    const testFiles = rawReport.testFiles
+    if (S.is(PreviousTestFilesSchema)(testFiles)) return testFiles
+  }
+  return {}
+}
+const testIdsByRelativeFile = (testCoverage: TestCoverage, basePath: string): Record<string, string[]> => {
+  const byFile: Record<string, string[]> = {}
+  for (const result of MutableHashMap.values(testCoverage.testsById)) {
+    if (result.fileName === undefined) continue
+    const file = toRelativeNormalizedFileName(result.fileName, basePath)
+    byFile[file] = [...(byFile[file] ?? []), result.id]
+  }
+  return byFile
 }
 
-interface IncrementalDifferPhases extends Cell.Phases {
-  readonly command: IncrementalDifferRequest
-  readonly raw: IncrementalDifferRequest
-  readonly decoded: IncrementalDiffCommand
-  readonly decision: IncrementalDiffDecision
-  readonly decisionError: IncrementalDiffError
-  readonly output: Result.Result<IncrementalDiffDecision, IncrementalDiffError>
-  readonly response: Result.Result<IncrementalDiffDecision, IncrementalDiffError>
-  readonly decodeError: S.SchemaError
-  readonly readError: never
-  readonly writeError: never
+const coveringTestFilesByMutantId = (testCoverage: TestCoverage, basePath: string): Record<string, string[]> => {
+  const byMutant: Record<string, string[]> = {}
+  for (const mutantId of MutableHashMap.keys(testCoverage.testsByMutantId)) {
+    const testsOpt = MutableHashMap.get(testCoverage.testsByMutantId, mutantId)
+    if (Option.isNone(testsOpt)) continue
+    const fileMap: Record<string, true> = {}
+    for (const test of testsOpt.value) {
+      if (test.fileName === undefined) continue
+      fileMap[toRelativeNormalizedFileName(test.fileName, basePath)] = true
+    }
+    byMutant[mutantId] = Object.keys(fileMap)
+  }
+  return byMutant
 }
-
-const incrementalDifferDescription: Cell.WriteDone<IncrementalDifferPhases> = pipe(
-  Cell.read<IncrementalDifferPhases>((command) => Effect.succeed(command)),
-  Cell.decode<IncrementalDifferPhases>((raw) =>
-    S.decodeUnknownResult(IncrementalDiffCommand)({
-      basePath: raw.basePath,
-      fileDescriptions: raw.fileDescriptions,
-      currentMutants: [...raw.currentMutants],
-      incrementalReport: raw.incrementalReport,
-      currentRelativeFiles: raw.currentRelativeFiles,
-      testCoverage: raw.testCoverage,
-      force: raw.force,
-    })
-  ),
-  Cell.decide<IncrementalDifferPhases>(incrementalDifferWorkflow),
-  Cell.encode<IncrementalDifferPhases>((outcome) => outcome),
-  Cell.write<IncrementalDifferPhases>((output) => Effect.succeed(output)),
-)
-
-export const applyIncrementalDiff = (
-  request: IncrementalDifferRequest,
-): Effect.Effect<Result.Result<IncrementalDiffDecision, IncrementalDiffError>, S.SchemaError, never> =>
-  Cell.apply(incrementalDifferDescription, request)
 
 export const incrementalDiff = (
   input: Readonly<{
-    fileDescriptions: Record<string, unknown>
     currentMutants: readonly Mutant[]
     testCoverage: TestCoverage
     incrementalReport: unknown
@@ -499,46 +476,36 @@ export const incrementalDiff = (
 ): IncrementalDiffResult => {
   const command = IncrementalDiffCommand.make({
     basePath: input.basePath,
-    fileDescriptions: input.fileDescriptions,
     currentMutants: [...input.currentMutants],
-    incrementalReport: input.incrementalReport,
+    previousFiles: previousFilesOf(input.incrementalReport),
+    previousTestFiles: previousTestFilesOf(input.incrementalReport),
     currentRelativeFiles: input.currentRelativeFiles,
-    testCoverage: input.testCoverage,
+    testIdsByRelativeFile: testIdsByRelativeFile(input.testCoverage, input.basePath),
+    coveringTestFilesByMutantId: coveringTestFilesByMutantId(input.testCoverage, input.basePath),
     force: input.force ?? false,
   })
-  const result = Result.match(incrementalDifferWorkflow(command), {
-    onSuccess: (decision) => {
-      const mutantEntries: Iterable<readonly [string, DiffChanges]> = Object.entries(
-        decision.mutantStatistics.changesByFile,
-      )
-      const testEntries: Iterable<readonly [string, DiffChanges]> = Object.entries(
-        decision.testStatistics.changesByFile,
-      )
-      const rawCoverage: unknown = decision.testCoverage
-      const isTestCoverage = (_value: unknown): _value is TestCoverage => true
-      if (!isTestCoverage(rawCoverage)) {
-        throw new Error('Invalid test coverage shape')
-      }
-      const coverage: TestCoverage = rawCoverage
-      return {
-        mutants: decision.mutants,
-        mutantStatistics: {
-          changesByFile: MutableHashMap.fromIterable(mutantEntries),
-          total: decision.mutantStatistics.total,
-        },
-        testStatistics: {
-          changesByFile: MutableHashMap.fromIterable(testEntries),
-          total: decision.testStatistics.total,
-        },
-        testCoverage: coverage,
-      }
-    },
+  return Result.match(incrementalDifferWorkflow(command), {
+    onSuccess: (decision) => ({
+      mutants: decision.mutants,
+      remembered: decision.remembered,
+      mutantStatistics: {
+        changesByFile: MutableHashMap.fromIterable(
+          Object.entries(decision.mutantStatistics.changesByFile),
+        ),
+        total: decision.mutantStatistics.total,
+      },
+      testStatistics: {
+        changesByFile: MutableHashMap.fromIterable(
+          Object.entries(decision.testStatistics.changesByFile),
+        ),
+        total: decision.testStatistics.total,
+      },
+    }),
     onFailure: () => ({
       mutants: [...input.currentMutants],
+      remembered: [],
       mutantStatistics: { changesByFile: MutableHashMap.empty<string, DiffChanges>(), total: { added: 0, removed: 0 } },
       testStatistics: { changesByFile: MutableHashMap.empty<string, DiffChanges>(), total: { added: 0, removed: 0 } },
-      testCoverage: input.testCoverage,
     }),
   })
-  return result
 }

@@ -22,7 +22,7 @@ export * from './output-mode.js'
 export * from './verdict-envelope.js'
 
 // Diff sources for an incremental run.
-export * from './Mutants.js'
+export { toRelativeNormalizedFileName } from './IncrementalDiff.workflow.js'
 
 // The failure identities a caller can catch (the config-read failures already
 // arrive through ./config/config-resolution above).

@@ -1321,7 +1321,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       yield* input.reporter.onMutationTestReportReady(report, metrics)
       const verdict = yield* determineExitCode(metrics)
       yield* emitVerdict(report, pathService)
-      if (input.options.incremental && verdict === null) {
+      if (input.options.incremental) {
         const fs = yield* FileSystem.FileSystem
         const dir = pathService.dirname(input.options.incrementalFile)
         yield* fs.makeDirectory(dir, { recursive: true })

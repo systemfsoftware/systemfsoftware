@@ -53,17 +53,18 @@ import type { CheckerResourceService } from './Checker.js'
 import { checkPlans } from './Checker.js'
 import { groupPlans } from './Checker.js'
 import { forkCoreSchema, readConfig, validateOptions, type ValidationSchemaDocument } from './Config.js'
-import { decidePlans } from './Mutants.js'
+import { REMEMBERED_REASON, toRelativeNormalizedFileName } from './IncrementalDiff.workflow.js'
+import { decidePlans, incrementalDiff } from './Mutants.js'
 import type { TestCoverage } from './Mutants.js'
 import { testCoverageFrom } from './Mutants.js'
 import type { ResolvedMode } from './output-mode.js'
 import { createAll } from './Plugins.js'
 import { loadPlugins } from './Plugins.js'
 import type { LoadedPlugins } from './Plugins.js'
-import { FILE_CONCURRENCY, toInstrumenterFile } from './Project.js'
-import { withInstrumentedFiles } from './Project.js'
 import type { Project } from './Project.js'
 import { readProject } from './Project.js'
+import { FILE_CONCURRENCY, readOriginal, toInstrumenterFile } from './Project.js'
+import { withInstrumentedFiles } from './Project.js'
 import { makeMutationReportingService } from './Reporter.js'
 import { toSchemaLocation } from './Reporter.js'
 import { normalizeReportFileName } from './Reporter.js'
@@ -190,6 +191,43 @@ function buildDryRunFiles(prev: InstrumentDone): { files: string[]; testFiles: s
   }
   return { files, testFiles }
 }
+const readCurrentRelativeFiles = (
+  project: Project,
+  basePath: string,
+): Effect.Effect<Record<string, string>, unknown, FileSystem.FileSystem> =>
+  Effect.gen(function*() {
+    const files: Record<string, string> = {}
+    for (const name of MutableHashMap.keys(project.files)) {
+      const fileOpt = MutableHashMap.get(project.files, name)
+      if (Option.isNone(fileOpt)) continue
+      files[toRelativeNormalizedFileName(name, basePath)] = yield* readOriginal(fileOpt.value)
+    }
+    return files
+  })
+
+const rememberedResultsOf = (
+  mutants: readonly Mutant[],
+  remembered: readonly {
+    readonly mutantId: string
+    readonly status: string
+    readonly testsCompleted?: number | undefined
+  }[],
+): MutantResult[] => {
+  const settled: MutantResult[] = []
+  for (const entry of remembered) {
+    const mutant = mutants.find((candidate) => candidate.id === entry.mutantId)
+    if (mutant === undefined) continue
+    settled.push(
+      Object.assign({}, mutant, {
+        location: toSchemaLocation(mutant.location),
+        status: entry.status,
+        statusReason: REMEMBERED_REASON,
+        testsCompleted: entry.testsCompleted,
+      }),
+    )
+  }
+  return settled
+}
 
 /**
  * Split a decided plan list into the runs to execute and the results already settled.
@@ -208,7 +246,12 @@ const partitionPlans = (
       coveredPlans.push(plan)
       continue
     }
-    earlyResults.push(Object.assign({}, plan.mutant, { status: plan.mutant.status ?? 'Ignored' }))
+    earlyResults.push(
+      Object.assign({}, plan.mutant, {
+        location: toSchemaLocation(plan.mutant.location),
+        status: plan.mutant.status ?? 'Ignored',
+      }),
+    )
   }
   return { coveredPlans, earlyResults }
 }
@@ -1000,9 +1043,24 @@ export const mutationTestRun =
       for (const name of MutableHashMap.keys(prev.project.filesToMutate)) {
         sandboxFileByName[name] = prev.sandbox.sandboxFileFor(name)
       }
+      const currentRelativeFiles = yield* readCurrentRelativeFiles(prev.project, env.basePath)
+      const incremental = incrementalDiff({
+        currentMutants: prev.mutants,
+        testCoverage: prev.testCoverage,
+        incrementalReport: prev.project.incrementalReport,
+        currentRelativeFiles,
+        basePath: env.basePath,
+        force: prev.options.force,
+      })
+      const rememberedResults = rememberedResultsOf(prev.mutants, incremental.remembered)
+      if (rememberedResults.length > 0) {
+        yield* Effect.logInfo(
+          `Incremental mode: reusing ${rememberedResults.length} mutant result(s), running ${incremental.mutants.length} mutant(s).`,
+        )
+      }
       const { coveredPlans, earlyResults: noCoverageResults } = partitionPlans(
         yield* decidePlans(
-          prev.mutants,
+          incremental.mutants,
           prev.testCoverage,
           {
             disableBail: prev.options.disableBail,
@@ -1088,8 +1146,8 @@ export const mutationTestRun =
           ),
         { concurrency: Math.max(1, prev.concurrency.testRunners) },
       ).pipe(Stream.runCollect, Effect.map((chunk) => [...chunk]))
-      const allResults: MutantResult[] = [...noCoverageResults, ...runResults]
-      const plannedTotal = allPlansForReporter.length + noCoverageResults.length
+      const allResults: MutantResult[] = [...rememberedResults, ...noCoverageResults, ...runResults]
+      const plannedTotal = allPlansForReporter.length + noCoverageResults.length + rememberedResults.length
       const pathService = yield* Path.Path
       let completed = 0
       for (const result of allResults) {
