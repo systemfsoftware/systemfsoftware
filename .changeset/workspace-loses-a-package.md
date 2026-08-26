@@ -1,7 +1,6 @@
 ---
 "@systemfsoftware/all": none
 "@systemfsoftware/arethetypeswrong-cli": none
-"@systemfsoftware/arethetypeswrong-core": none
 "@systemfsoftware/effect-atom": none
 "@systemfsoftware/effect-atom-react": none
 "@systemfsoftware/effect-cell-types": none
