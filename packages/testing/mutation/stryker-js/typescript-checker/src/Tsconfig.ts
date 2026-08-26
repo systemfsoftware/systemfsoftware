@@ -131,10 +131,11 @@ export function overrideOptions(config: TsConfig, useBuildMode: boolean): string
     delete compilerOptions['outFile']
   }
 
-  return JSON.stringify({
-    ...config,
-    compilerOptions,
-  })
+  if (useBuildMode) {
+    return JSON.stringify({ ...config, compilerOptions })
+  }
+  const { references: _references, ...withoutReferences } = config
+  return JSON.stringify({ ...withoutReferences, compilerOptions })
 }
 
 /**
