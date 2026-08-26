@@ -26,7 +26,7 @@ export type HookDispatchResult =
 
 export type HookDispatchContext = FileSystem | ChildProcessSpawner | Scope.Scope | ClaudeSettings
 
-const settingsFor = (ctx: HookSession) => Effect.flatMap(ClaudeSettings, (port) => port.load(ctx.cwd))
+const settingsFor = (ctx: HookSession) => Effect.flatMap(ClaudeSettings, (port) => port.load(ctx.cwd, ctx.homeDir))
 
 export const onToolCall = (event: HookToolCall, ctx: HookSession) =>
   Effect.gen(function*() {
@@ -56,7 +56,7 @@ export const onPrompt = (event: HookPrompt, ctx: HookSession) =>
 
 export const onSessionStart = (reason: string, ctx: HookSession) =>
   Effect.gen(function*() {
-    const gaps = yield* (yield* ClaudeSettings).gaps(ctx.cwd)
+    const gaps = yield* (yield* ClaudeSettings).gaps(ctx.cwd, ctx.homeDir)
     const coverageLines = [
       ...gaps.coverage.unrecognized.map((row) => `  ${row.event}: ${row.reason}`),
       ...gaps.coverage.notCarried.map((row) => `  ${row.event}: not carried by this bridge — ${row.reason}`),

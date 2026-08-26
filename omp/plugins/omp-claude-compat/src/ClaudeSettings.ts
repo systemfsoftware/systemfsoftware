@@ -1,6 +1,5 @@
 import { Context, Effect, Layer } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
-import { homedir } from 'node:os'
 import type { HookSettings } from './HookSettings.schema.js'
 import { collectSettingsGapsWithPaths } from './internal/CollectSettingsGapsExecutor.js'
 import { loadSettingsWithPaths } from './internal/LoadSettingsExecutor.js'
@@ -22,15 +21,15 @@ export interface SettingsGaps {
 export class ClaudeSettings extends Context.Service<
   ClaudeSettings,
   {
-    readonly load: (cwd: string) => Effect.Effect<HookSettings | null, never, FileSystem>
-    readonly gaps: (cwd: string) => Effect.Effect<SettingsGaps, never, FileSystem>
+    readonly load: (cwd: string, homeDir: string) => Effect.Effect<HookSettings | null, never, FileSystem>
+    readonly gaps: (cwd: string, homeDir: string) => Effect.Effect<SettingsGaps, never, FileSystem>
   }
 >()('@systemfsoftware/omp-claude-compat/ClaudeSettings') {}
 
 export const ClaudeSettingsLive = Layer.succeed(
   ClaudeSettings,
   ClaudeSettings.of({
-    load: (cwd) => loadSettingsWithPaths(settingsPaths(homedir(), cwd)),
-    gaps: (cwd) => collectSettingsGapsWithPaths(settingsPaths(homedir(), cwd)),
+    load: (cwd, homeDir) => loadSettingsWithPaths(settingsPaths(homeDir, cwd), homeDir, cwd),
+    gaps: (cwd, homeDir) => collectSettingsGapsWithPaths(settingsPaths(homeDir, cwd), homeDir, cwd),
   }),
 )
