@@ -35,6 +35,7 @@ import * as Exit from 'effect/Exit'
 import * as FileSystem from 'effect/FileSystem'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
+import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
@@ -477,7 +478,9 @@ export const prepareLayer = (services: Context.Context<StageServices>): Cell.Wri
           } else {
             yield* Effect.logInfo(summary)
           }
+          const selectedIgnorers = HashSet.fromIterable(options.ignorers)
           const contributions = yield* createAll(loaded.pluginsByKind, 'Ignore').pipe(
+            Effect.map((all) => all.filter((contribution) => HashSet.has(selectedIgnorers, contribution.name))),
             Effect.mapError((cause) =>
               new StageError({ stage: 'prepare', reason: 'Failed to create ignorers', cause })
             ),
