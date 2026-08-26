@@ -204,24 +204,23 @@ export const makeCheckerChildProcess = (params: {
     const crashed = (cause: string): ChildProcessCrashedError =>
       new ChildProcessCrashedError({ pid: 0, exit: { _tag: 'Code', code: 1 }, cause })
 
-    const client = yield* RpcClient.make(CheckerRpcs).pipe(
-      Effect.provide(
-        RpcClient.layerProtocolWorker({ size: 1 }).pipe(
-          Layer.provide(
-            NodeWorker.layer(() =>
-              fork(entry, [], {
-                cwd: params.workingDirectory,
-                execArgv: [...params.execArgv],
-              })
-            ),
-          ),
-          Layer.provide(
-            RpcWorker.layerInitialMessage(StrykerOptionsSchema, Effect.succeed(params.options)),
-          ),
+    const workerLayer = RpcClient.layerProtocolWorker({ size: 1 }).pipe(
+      Layer.provide(
+        NodeWorker.layer(() =>
+          fork(entry, [], {
+            cwd: params.workingDirectory,
+            execArgv: [...params.execArgv],
+          })
         ),
       ),
+      Layer.provide(
+        RpcWorker.layerInitialMessage(StrykerOptionsSchema, Effect.succeed(params.options)),
+      ),
+    )
+    const workerContext = yield* Layer.build(workerLayer).pipe(
       Effect.mapError((error) => crashed(`Checker worker failed to start: ${error.message}`)),
     )
+    const client = yield* RpcClient.make(CheckerRpcs).pipe(Effect.provideContext(workerContext))
 
     return {
       check: (checkerName, mutants) =>

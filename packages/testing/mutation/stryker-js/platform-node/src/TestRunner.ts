@@ -122,26 +122,25 @@ export const makeChildProcessTestRunner = (
   Effect.gen(function*() {
     const runnerName = params.options.testRunner
     const entry = new URL('./internal/child-process-test-runner-worker.mjs', import.meta.url).pathname
-    const client = yield* RpcClient.make(TestRunnerRpcs).pipe(
-      Effect.provide(
-        RpcClient.layerProtocolWorker({ size: 1 }).pipe(
-          Layer.provide(
-            NodeWorker.layer(() =>
-              fork(entry, [], {
-                cwd: params.sandboxWorkingDirectory,
-                execArgv: [...params.options.testRunnerNodeArgs],
-              })
-            ),
-          ),
-          Layer.provide(
-            RpcWorker.layerInitialMessage(StrykerOptionsSchema, Effect.succeed(params.options)),
-          ),
+    const workerLayer = RpcClient.layerProtocolWorker({ size: 1 }).pipe(
+      Layer.provide(
+        NodeWorker.layer(() =>
+          fork(entry, [], {
+            cwd: params.sandboxWorkingDirectory,
+            execArgv: [...params.options.testRunnerNodeArgs],
+          })
         ),
       ),
+      Layer.provide(
+        RpcWorker.layerInitialMessage(StrykerOptionsSchema, Effect.succeed(params.options)),
+      ),
+    )
+    const workerContext = yield* Layer.build(workerLayer).pipe(
       Effect.mapError((error) =>
         new TestRunnerFailed({ runnerName, phase: 'init', cause: `Worker failed to start: ${error.message}` })
       ),
     )
+    const client = yield* RpcClient.make(TestRunnerRpcs).pipe(Effect.provideContext(workerContext))
 
     return {
       capabilities: client.capabilities().pipe(Effect.mapError(toRunnerFailure(runnerName, 'capabilities'))),
