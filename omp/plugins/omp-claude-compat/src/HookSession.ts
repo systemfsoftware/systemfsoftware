@@ -7,6 +7,7 @@ import type { InputEvent } from '@oh-my-pi/pi-coding-agent'
  */
 export interface HookSession {
   readonly cwd: string
+  readonly homeDir: string
   readonly sessionManager: { readonly getSessionId: () => string }
   readonly ui: { readonly notify: (message: string, type?: 'info' | 'warning' | 'error') => void }
 }

@@ -214,7 +214,14 @@ export function mergeSettings(sources: readonly SettingsSource[]): HookSettings 
   for (const source of sources) {
     if (disabledDownstream && !source.managed) continue
     for (const event of ALL_HOOK_EVENTS) {
-      hooks[event] = hooks[event].concat(Array.from(source.settings.hooks[event]))
+      const pluginRoot = source.pluginRoot
+      const entries = pluginRoot === undefined
+        ? source.settings.hooks[event]
+        : source.settings.hooks[event].map((entry) => ({
+          ...entry,
+          hooks: entry.hooks.map((hook) => hook.type === 'command' ? { ...hook, pluginRoot } : hook),
+        }))
+      hooks[event] = hooks[event].concat(entries)
     }
   }
 

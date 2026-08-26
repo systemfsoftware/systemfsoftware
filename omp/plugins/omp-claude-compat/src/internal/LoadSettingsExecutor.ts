@@ -1,7 +1,7 @@
 import { Context, Effect, Exit, Schema as S, type Scope } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import { mergeSettings, parseSettings } from '../HookSettings.js'
-import type { SettingsSource } from '../HookSettings.schema.js'
+import { loadPluginHookSources } from './PluginHookSources.js'
 import { MANAGED_SETTINGS_PATH } from './SettingsPaths.js'
 
 /** @internal */
@@ -23,13 +23,18 @@ const loadSettingsFile = Effect.fn('loadSettingsFile')(function*(path: string) {
 /** @internal */
 export const loadSettingsWithPaths = Effect.fn('loadSettingsWithPaths')(function*(
   paths: readonly string[],
+  homeDir: string,
+  cwd: string,
   managedPath: string = MANAGED_SETTINGS_PATH,
 ) {
-  const sources: SettingsSource[] = []
-  for (const p of paths) {
-    const s = yield* loadSettingsFile(p)
-    if (s !== null) sources.push({ settings: s, managed: p === managedPath })
-  }
-  if (sources.length === 0) return null
-  return mergeSettings(sources)
+  const [loaded, plugin] = yield* Effect.all([
+    Effect.forEach(
+      paths,
+      (p) => Effect.map(loadSettingsFile(p), (s) => s === null ? null : { settings: s, managed: p === managedPath }),
+      { concurrency: 'unbounded' },
+    ),
+    loadPluginHookSources(homeDir, cwd),
+  ], { concurrency: 'unbounded' })
+  const sources = [...loaded.filter((s) => s !== null), ...plugin.sources]
+  return sources.length === 0 ? null : mergeSettings(sources)
 })

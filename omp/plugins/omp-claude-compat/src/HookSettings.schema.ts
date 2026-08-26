@@ -11,6 +11,7 @@ const CommandHook = S.Struct({
   if: S.optional(S.String),
   statusMessage: S.optional(S.String),
   once: S.optional(S.Boolean),
+  pluginRoot: S.optional(S.String),
 })
 
 /**
@@ -116,4 +117,5 @@ export interface SettingsSource {
   readonly settings: HookSettings
   /** Read from the managed-settings path, which downstream files may not disable. */
   readonly managed: boolean
+  readonly pluginRoot?: string
 }

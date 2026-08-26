@@ -25,6 +25,7 @@ const testLayer = HookScopeLive.pipe(
 
 const makeCtx = (cwd: string): HookSession => ({
   cwd,
+  homeDir: cwd,
   sessionManager: { getSessionId: () => 'test-session' },
   ui: { notify: () => {} },
 })
