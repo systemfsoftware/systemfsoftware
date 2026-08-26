@@ -501,6 +501,8 @@ export const makeVitestRunnerLayer = (
                 return 1
               })(),
               onConsoleLog: () => false,
+              silent: true,
+              reporters: [],
             }, {
               resolve: { alias: [...aliases], conditions: ['@systemfsoftware/source', 'import'] },
               plugins: [plugin],

@@ -25,7 +25,6 @@ import { pipe } from 'effect/Function'
 import type * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
 import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
 import type * as schema from 'mutation-testing-report-schema/api'
 
 import { HtmlReportCommand, HtmlReportError } from './Reporter.schema.js'
@@ -65,7 +64,7 @@ export const makeHtmlReporter = (params: {
       })
     ),
     Cell.decode<HtmlReportPhases>((raw) =>
-      S.decodeUnknownResult(HtmlReportCommand)({ report: raw.report, scriptContent: raw.scriptContent })
+      Result.succeed(HtmlReportCommand.make({ report: raw.report, scriptContent: raw.scriptContent }))
     ),
     Cell.decide<HtmlReportPhases>(makeHtmlDocument),
     Cell.encode<HtmlReportPhases>((outcome) =>

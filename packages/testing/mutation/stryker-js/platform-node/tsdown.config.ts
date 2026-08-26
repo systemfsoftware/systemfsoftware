@@ -9,6 +9,7 @@ export default defineConfig({
   entry: {
     index: './src/index.ts',
     'config/base': './src/config/base.ts',
+    'builtin-reporters': './src/builtin-reporters.ts',
     'internal/checker-worker': './src/Checker.worker.ts',
     'internal/child-process-test-runner-worker': './src/child-process-test-runner-worker.ts',
   },

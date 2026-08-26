@@ -367,7 +367,7 @@ export const makeClearTextReporter = (params: {
 
 interface JsonReportPhases extends Cell.Phases {
   readonly command: void
-  readonly raw: { readonly report: unknown }
+  readonly raw: { readonly report: schema.MutationTestResult }
   readonly decoded: JsonReportCommand
   readonly decision: JsonDocument
   readonly decisionError: JsonReportError
@@ -391,10 +391,13 @@ export const makeJsonReporter = (params: {
 
   const jsonReportDescription: Cell.WriteDone<JsonReportPhases> = pipe(
     Cell.read<JsonReportPhases>(() => {
-      const raw: { readonly report: unknown } = { report: heldReport }
-      return Effect.succeed(raw)
+      const report = heldReport
+      if (report === undefined) {
+        return Effect.die(new Error('json reporter applied before onMutationTestReportReady'))
+      }
+      return Effect.succeed({ report })
     }),
-    Cell.decode<JsonReportPhases>((raw) => S.decodeUnknownResult(JsonReportCommand)({ report: raw.report })),
+    Cell.decode<JsonReportPhases>((raw) => Result.succeed(JsonReportCommand.make({ report: raw.report }))),
     Cell.decide<JsonReportPhases>(makeJsonDocument),
     Cell.encode<JsonReportPhases>((outcome) =>
       Result.match(outcome, {
