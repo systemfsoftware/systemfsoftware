@@ -127,13 +127,9 @@ const makeDisableTypeChecksPreprocessor =
       for (const updated of updates) {
         if (updated !== undefined) {
           const key = updated.name
-          const filesCandidate: unknown = project.files
-          if (filesCandidate instanceof Map) {
-            filesCandidate.set(key, updated)
-          }
-          const mutateCandidate: unknown = project.filesToMutate
-          if (mutateCandidate instanceof Map && mutateCandidate.has(key)) {
-            mutateCandidate.set(key, updated)
+          MutableHashMap.set(project.files, key, updated)
+          if (Option.isSome(MutableHashMap.get(project.filesToMutate, key))) {
+            MutableHashMap.set(project.filesToMutate, key, updated)
           }
         }
       }
@@ -695,7 +691,9 @@ export const makeSandbox = (
               }
               const { options, project, workingDirectory, backupDirectory, basePath } = inp
               const pathService = yield* Path.Path
-
+              yield* createPreprocessor(options, basePath)(project).pipe(
+                Effect.mapError((cause) => new StrykerError({ message: 'Sandbox preprocessor failed', cause })),
+              )
               const entries: Array<readonly [string, string]> = yield* Effect.forEach(
                 decision.entries,
                 (

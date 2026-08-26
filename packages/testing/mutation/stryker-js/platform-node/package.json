@@ -76,6 +76,7 @@
     "./package.json": "./package.json"
   },
   "inlinedDependencies": {
+    "@jsr/std__jsonc": "1.0.2",
     "mutation-testing-metrics": "3.7.3"
   }
 }
