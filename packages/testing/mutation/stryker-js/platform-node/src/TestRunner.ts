@@ -9,10 +9,15 @@
  * chunk).
  */
 
+import { fork } from 'node:child_process'
 import { URL } from 'node:url'
+
+import { NodeWorker } from '@effect/platform-node'
+import * as Layer from 'effect/Layer'
 
 import type { Policy } from '@systemfsoftware/effect-cell-types'
 import { type FileDescriptions, INSTRUMENTER_CONSTANTS } from '@systemfsoftware/stryker-js/Mutant'
+import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import {
   type CompleteDryRunResult,
@@ -35,26 +40,20 @@ import type * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import * as ChildProcess from 'effect/unstable/process/ChildProcess'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
+import * as RpcClient from 'effect/unstable/rpc/RpcClient'
+import type { RpcClientError } from 'effect/unstable/rpc/RpcClientError'
+import * as RpcWorker from 'effect/unstable/rpc/RpcWorker'
 
 import { CommandRunnerUnsupportedOption } from './TestRunner.schema.js'
-import { type ChildProcessProxyError, makeChildProcessProxy } from './Worker.js'
 import type { IdGeneratorShape } from './Worker.js'
 import { ChildProcessCrashedError, OutOfMemoryError } from './Worker.schema.js'
-import type { WorkerFrameTooLargeError, WorkerMethodError } from './Worker.schema.js'
+import type { WorkerFrameTooLargeError } from './Worker.schema.js'
+import { TestRunnerRpcs } from './WorkerProtocol.js'
 
 // ---------------------------------------------------------------------------
 // Pooled runner — the child-process port
 // ---------------------------------------------------------------------------
 
-type TestRunnerWorkerShape = {
-  capabilities(): Promise<TestRunnerCapabilities>
-  init(options: StrykerOptions): Promise<void>
-  dispose(): Promise<void>
-  dryRun(options: DryRunOptions): Promise<DryRunResult>
-  mutantRun(options: MutantRunOptions): Promise<MutantRunResult>
-}
-
-type WorkerFailure = WorkerMethodError | ChildProcessCrashedError | OutOfMemoryError | WorkerFrameTooLargeError
 /** What one worker needs to be spawned. */
 export interface ChildProcessTestRunnerParams {
   readonly options: StrykerOptions
@@ -91,13 +90,10 @@ export interface PooledTestRunner {
 
 const toRunnerFailure =
   (runnerName: string, phase: 'capabilities' | 'init' | 'dryRun' | 'mutantRun' | 'dispose') =>
-  (error: WorkerFailure): PooledTestRunnerError =>
+  (error: RpcClientError | TestRunnerFailed): PooledTestRunnerError =>
     Match.value(error).pipe(
-      Match.tag('WorkerMethodError', (e) => new TestRunnerFailed({ runnerName, phase, cause: e.message })),
-      Match.tag('ChildProcessCrashedError', (e): PooledTestRunnerError => e),
-      Match.tag('OutOfMemoryError', (e): PooledTestRunnerError => e),
-      Match.tag('WorkerFrameTooLargeError', (e): PooledTestRunnerError => e),
-      Match.exhaustive,
+      Match.tag('TestRunnerFailed', (e): PooledTestRunnerError => e),
+      Match.orElse((e) => new TestRunnerFailed({ runnerName, phase, cause: e.message })),
     )
 
 /**
@@ -120,28 +116,39 @@ export const makeChildProcessTestRunner = (
   params: ChildProcessTestRunnerParams,
 ): Effect.Effect<
   PooledTestRunner,
-  ChildProcessProxyError | PooledTestRunnerError,
+  PooledTestRunnerError,
   Scope.Scope | ChildProcessSpawner.ChildProcessSpawner
 > =>
   Effect.gen(function*() {
-    const { proxy } = yield* makeChildProcessProxy<TestRunnerWorkerShape>({
-      modulePath: new URL('./internal/child-process-test-runner-worker.mjs', import.meta.url).pathname,
-      namedExport: 'ChildProcessTestRunnerWorker',
-      options: params.options,
-      fileDescriptions: params.fileDescriptions,
-      pluginModulePaths: [...params.pluginModulePaths],
-      workingDirectory: params.sandboxWorkingDirectory,
-      execArgv: [...params.options.testRunnerNodeArgs],
-      idGenerator: params.idGenerator,
-    })
     const runnerName = params.options.testRunner
-    yield* proxy.init(params.options).pipe(Effect.mapError(toRunnerFailure(runnerName, 'init')))
+    const entry = new URL('./internal/child-process-test-runner-worker.mjs', import.meta.url).pathname
+    const client = yield* RpcClient.make(TestRunnerRpcs).pipe(
+      Effect.provide(
+        RpcClient.layerProtocolWorker({ size: 1 }).pipe(
+          Layer.provide(
+            NodeWorker.layer(() =>
+              fork(entry, [], {
+                cwd: params.sandboxWorkingDirectory,
+                execArgv: [...params.options.testRunnerNodeArgs],
+              })
+            ),
+          ),
+          Layer.provide(
+            RpcWorker.layerInitialMessage(StrykerOptionsSchema, Effect.succeed(params.options)),
+          ),
+        ),
+      ),
+      Effect.mapError((error) =>
+        new TestRunnerFailed({ runnerName, phase: 'init', cause: `Worker failed to start: ${error.message}` })
+      ),
+    )
 
     return {
-      capabilities: proxy.capabilities().pipe(Effect.mapError(toRunnerFailure(runnerName, 'capabilities'))),
+      capabilities: client.capabilities().pipe(Effect.mapError(toRunnerFailure(runnerName, 'capabilities'))),
       init: Effect.void,
-      dryRun: (options) => proxy.dryRun(options).pipe(Effect.mapError(toRunnerFailure(runnerName, 'dryRun'))),
-      mutantRun: (options) => proxy.mutantRun(options).pipe(Effect.mapError(toRunnerFailure(runnerName, 'mutantRun'))),
+      dryRun: (options) => client.dryRun({ options }).pipe(Effect.mapError(toRunnerFailure(runnerName, 'dryRun'))),
+      mutantRun: (options) =>
+        client.mutantRun({ options }).pipe(Effect.mapError(toRunnerFailure(runnerName, 'mutantRun'))),
     }
   })
 

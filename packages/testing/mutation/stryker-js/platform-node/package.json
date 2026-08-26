@@ -61,9 +61,6 @@
     "exports": {
       ".": "./dist/index.mjs",
       "./config/base": "./dist/config/base.mjs",
-      "./internal/checker-worker": "./dist/internal/checker-worker.mjs",
-      "./internal/child-process-proxy-worker-main": "./dist/internal/child-process-proxy-worker-main.mjs",
-      "./internal/child-process-test-runner-worker": "./dist/internal/child-process-test-runner-worker.mjs",
       "./package.json": "./package.json"
     }
   },
@@ -75,18 +72,6 @@
     "./config/base": {
       "@systemfsoftware/source": "./src/config/base.ts",
       "default": "./dist/config/base.mjs"
-    },
-    "./internal/checker-worker": {
-      "@systemfsoftware/source": "./src/Checker.worker.ts",
-      "default": "./dist/internal/checker-worker.mjs"
-    },
-    "./internal/child-process-proxy-worker-main": {
-      "@systemfsoftware/source": "./src/WorkerMain.ts",
-      "default": "./dist/internal/child-process-proxy-worker-main.mjs"
-    },
-    "./internal/child-process-test-runner-worker": {
-      "@systemfsoftware/source": "./src/child-process-test-runner-worker.ts",
-      "default": "./dist/internal/child-process-test-runner-worker.mjs"
     },
     "./package.json": "./package.json"
   },

@@ -7,14 +7,20 @@
  * the two and verifies the join.
  */
 
+import { fork } from 'node:child_process'
+import { URL } from 'node:url'
+
+import { NodeWorker } from '@effect/platform-node'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import type { CheckResult } from '@systemfsoftware/stryker-js/Checker'
 import type { FileDescriptions } from '@systemfsoftware/stryker-js/Mutant'
 import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import type { RunPlan as MutantRunPlan } from '@systemfsoftware/stryker-js/Mutant'
+import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
+import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
@@ -22,6 +28,8 @@ import * as Result from 'effect/Result'
 import * as Scope from 'effect/Scope'
 
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
+import * as RpcClient from 'effect/unstable/rpc/RpcClient'
+import * as RpcWorker from 'effect/unstable/rpc/RpcWorker'
 import {
   CheckerAnsweredUnrequested,
   CheckerCommand,
@@ -30,7 +38,6 @@ import {
   CheckerSkippedRequested,
   checkerWorkflow,
 } from './Checker.workflow.js'
-import { makeChildProcessProxy } from './Worker.js'
 import type { IdGeneratorShape } from './Worker.js'
 import { ChildProcessCrashedError } from './Worker.schema.js'
 import type {
@@ -38,7 +45,7 @@ import type {
   OutOfMemoryError,
   WorkerFrameTooLargeError,
 } from './Worker.schema.js'
-import type { WorkerMethodError } from './Worker.schema.js'
+import { CheckerRpcs } from './WorkerProtocol.js'
 
 export type CheckerCrash = ChildProcessCrashedErrorType | OutOfMemoryError | WorkerFrameTooLargeError
 
@@ -184,12 +191,6 @@ export const pairGroups = (
 // Child-process edge
 // ---------------------------------------------------------------------------
 
-type CheckerWorkerShape = {
-  init(options: StrykerOptions): Promise<void>
-  check(...args: unknown[]): Promise<Record<string, CheckResult>>
-  group(...args: unknown[]): Promise<readonly (readonly string[])[]>
-}
-
 export const makeCheckerChildProcess = (params: {
   readonly options: StrykerOptions
   readonly fileDescriptions: FileDescriptions
@@ -197,50 +198,39 @@ export const makeCheckerChildProcess = (params: {
   readonly workingDirectory: string
   readonly execArgv: readonly string[]
   readonly idGenerator: IdGeneratorShape
-}): Effect.Effect<CheckerResourceService, unknown, Scope.Scope | ChildProcessSpawner.ChildProcessSpawner> =>
+}): Effect.Effect<CheckerResourceService, CheckerCrash, Scope.Scope | ChildProcessSpawner.ChildProcessSpawner> =>
   Effect.gen(function*() {
-    const shape = yield* makeChildProcessProxy<CheckerWorkerShape>({
-      modulePath: new URL('./internal/checker-worker.mjs', import.meta.url).pathname,
-      namedExport: 'CheckerWorker',
-      options: params.options,
-      fileDescriptions: params.fileDescriptions,
-      pluginModulePaths: [...params.pluginModulePaths],
-      workingDirectory: params.workingDirectory,
-      execArgv: [...params.execArgv],
-      idGenerator: params.idGenerator,
-    })
-    yield* shape.proxy.init(params.options).pipe(
-      Effect.catchTag('WorkerMethodError', (error: WorkerMethodError) =>
-        Effect.fail(
-          new ChildProcessCrashedError({
-            pid: 0,
-            exit: { _tag: 'Code', code: 1 },
-            cause: error.message,
-          }),
-        )),
+    const entry = new URL('./internal/checker-worker.mjs', import.meta.url).pathname
+    const crashed = (cause: string): ChildProcessCrashedError =>
+      new ChildProcessCrashedError({ pid: 0, exit: { _tag: 'Code', code: 1 }, cause })
+
+    const client = yield* RpcClient.make(CheckerRpcs).pipe(
+      Effect.provide(
+        RpcClient.layerProtocolWorker({ size: 1 }).pipe(
+          Layer.provide(
+            NodeWorker.layer(() =>
+              fork(entry, [], {
+                cwd: params.workingDirectory,
+                execArgv: [...params.execArgv],
+              })
+            ),
+          ),
+          Layer.provide(
+            RpcWorker.layerInitialMessage(StrykerOptionsSchema, Effect.succeed(params.options)),
+          ),
+        ),
+      ),
+      Effect.mapError((error) => crashed(`Checker worker failed to start: ${error.message}`)),
     )
+
     return {
       check: (checkerName, mutants) =>
-        shape.proxy.check(checkerName, [...mutants]).pipe(
-          Effect.catchTag('WorkerMethodError', (error: WorkerMethodError) =>
-            Effect.fail(
-              new ChildProcessCrashedError({
-                pid: 0,
-                exit: { _tag: 'Code', code: 1 },
-                cause: error.message,
-              }),
-            )),
+        client.check({ checkerName, mutants: [...mutants] }).pipe(
+          Effect.mapError((error) => crashed(error.message)),
         ),
       group: (checkerName, mutants) =>
-        shape.proxy.group(checkerName, [...mutants]).pipe(
-          Effect.catchTag('WorkerMethodError', (error: WorkerMethodError) =>
-            Effect.fail(
-              new ChildProcessCrashedError({
-                pid: 0,
-                exit: { _tag: 'Code', code: 1 },
-                cause: error.message,
-              }),
-            )),
+        client.group({ checkerName, mutants: [...mutants] }).pipe(
+          Effect.mapError((error) => crashed(error.message)),
         ),
     }
   })

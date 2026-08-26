@@ -4,7 +4,21 @@ import type * as Effect from 'effect/Effect'
 import type { Mutant } from './Mutant.js'
 import type { TestRunnerFailed } from './TestRunner.schema.js'
 
-export { DryRunStatus, MutantRunStatus, TestRunnerFailed, TestStatus } from './TestRunner.schema.js'
+export {
+  CoverageAnalysisSchema,
+  DryRunOptionsSchema,
+  DryRunResultSchema,
+  DryRunStatus,
+  MutantActivationSchema,
+  MutantCoverageSchema,
+  MutantRunOptionsSchema,
+  MutantRunResultSchema,
+  MutantRunStatus,
+  TestResultSchema,
+  TestRunnerCapabilitiesSchema,
+  TestRunnerFailed,
+  TestStatus,
+} from './TestRunner.schema.js'
 
 export interface Position {
   readonly line: number

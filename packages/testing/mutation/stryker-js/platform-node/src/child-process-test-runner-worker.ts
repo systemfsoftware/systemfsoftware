@@ -1,149 +1,94 @@
-/**
- * Spawned worker entry point — runs a TestRunner in a child process.
- *
- * This file is NOT absorbed into `TestRunner.ts`. It is a process boundary:
- * the engine spawns it by file path (via `child-process-proxy`), not by
- * import. It must remain its own emitted chunk (`tsdown` entry
- * `child-process-test-runner-worker`) so the fork can load it independently.
- */
-import { NodeFileSystem } from '@effect/platform-node'
-import { NodePath } from '@effect/platform-node'
+import { NodeFileSystem, NodePath, NodeWorkerRunner } from '@effect/platform-node'
 import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
 import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
-import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import type {
   DryRunOptions,
   DryRunResult,
   MutantRunOptions,
   MutantRunResult,
-  TestRunnerCapabilities,
 } from '@systemfsoftware/stryker-js/TestRunner'
-import { TestRunner } from '@systemfsoftware/stryker-js/TestRunner'
+import { TestRunner, TestRunnerFailed } from '@systemfsoftware/stryker-js/TestRunner'
+import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
-import * as ManagedRuntime from 'effect/ManagedRuntime'
 import * as S from 'effect/Schema'
+import * as RpcServer from 'effect/unstable/rpc/RpcServer'
+import * as RpcWorker from 'effect/unstable/rpc/RpcWorker'
+
 import { create, loadPlugins } from './Plugins.js'
-import { StrykerError } from './stryker-error.schema.js'
 import { MutantCoverageSchema } from './TestRunner.schema.js'
+import { TestRunnerRpcs } from './WorkerProtocol.js'
 
-const makeChildProcessTestRunnerWorker = () => {
-  let underlying: TestRunner['Service'] | undefined = undefined
-  const runtime = ManagedRuntime.make(Layer.merge(NodeFileSystem.layer, NodePath.layer))
-
-  const capabilities = async (): Promise<TestRunnerCapabilities> => {
-    if (underlying === undefined) {
-      throw new StrykerError({
-        message: 'ChildProcessTestRunnerWorker not initialized: call init before capabilities',
-        cause: undefined,
-      })
-    }
-    return runtime.runPromise(underlying.capabilities)
-  }
-
-  const init = async (...args: unknown[]): Promise<void> => {
-    if (underlying !== undefined) {
-      await runtime.runPromise(underlying.init)
-      return
-    }
-    if (args.length === 0) {
-      throw new StrykerError({
-        message: 'ChildProcessTestRunnerWorker not initialized: init requires StrykerOptions',
-        cause: undefined,
-      })
-    }
-    let options: StrykerOptions
-    try {
-      options = await runtime.runPromise(S.decodeUnknownEffect(StrykerOptionsSchema)(args[0]))
-    } catch (cause: unknown) {
-      throw new StrykerError({
-        message: 'ChildProcessTestRunnerWorker init received invalid StrykerOptions',
-        cause,
-      })
-    }
-    let pluginsByKind
-    try {
-      const loaded = await runtime.runPromise(loadPlugins(options.plugins, process.cwd()))
-      pluginsByKind = loaded.pluginsByKind
-    } catch (cause: unknown) {
-      throw new StrykerError({
-        message: 'ChildProcessTestRunnerWorker failed to load plugins',
-        cause,
-      })
-    }
-    const built = await runtime.runPromise(
-      Effect.gen(function*() {
-        const contribution = yield* create(pluginsByKind, 'TestRunner', options.testRunner)
-        const runner = yield* Effect.gen(function*() {
-          const r = yield* TestRunner
-          return r
-        }).pipe(Effect.provide(contribution.layer))
-        return runner
-      }).pipe(
-        Effect.provide(
-          Layer.merge(Layer.succeed(RunConfiguration, options), Layer.succeed(SandboxDirectory, process.cwd())),
-        ),
-      ),
-    )
-    underlying = built
-    await runtime.runPromise(built.init)
-  }
-
-  const dispose = async (): Promise<void> => {
-    if (underlying === undefined) {
-      return
-    }
-    await runtime.runPromise(underlying.dispose)
-    await runtime.dispose()
-  }
-
-  const dryRun = async (options: DryRunOptions): Promise<DryRunResult> => {
-    if (underlying === undefined) {
-      throw new StrykerError({
-        message: 'ChildProcessTestRunnerWorker not initialized: call init before dryRun',
-        cause: undefined,
-      })
-    }
-    const result = await runtime.runPromise(underlying.dryRun(options))
-    if (result.status === 'complete' && !result.mutantCoverage && options.coverageAnalysis !== 'off') {
-      const decoded = await runtime.runPromise(
-        S.decodeUnknownEffect(S.optional(MutantCoverageSchema))(globalThis.__mutantCoverage__).pipe(
-          Effect.orElseSucceed(() => undefined),
-        ),
-      )
-      if (decoded !== undefined) {
-        const withCoverage: DryRunResult = { ...result, mutantCoverage: decoded }
-        return withCoverage
-      }
-    }
+const withCoverage = (
+  result: DryRunResult,
+  options: DryRunOptions,
+): Effect.Effect<DryRunResult> =>
+  Effect.gen(function*() {
     if (result.status === 'error') {
       return { ...result, errorMessage: errorToString(result.errorMessage) }
     }
-    return result
-  }
+    if (result.status !== 'complete') return result
+    if (result.mutantCoverage !== undefined) return result
+    if (options.coverageAnalysis === 'off') return result
+    const decoded = yield* S.decodeUnknownEffect(S.optional(MutantCoverageSchema))(
+      globalThis.__mutantCoverage__,
+    ).pipe(Effect.orElseSucceed(() => undefined))
+    if (decoded === undefined) return result
+    return { ...result, mutantCoverage: decoded }
+  })
 
-  const mutantRun = async (options: MutantRunOptions): Promise<MutantRunResult> => {
-    if (underlying === undefined) {
-      throw new StrykerError({
-        message: 'ChildProcessTestRunnerWorker not initialized: call init before mutantRun',
-        cause: undefined,
-      })
-    }
-    const result = await runtime.runPromise(underlying.mutantRun(options))
-    if (result.status === 'error') {
-      return { ...result, errorMessage: errorToString(result.errorMessage) }
-    }
-    return result
+const normalizeMutantRun = (result: MutantRunResult): MutantRunResult => {
+  if (result.status === 'error') {
+    return { ...result, errorMessage: errorToString(result.errorMessage) }
   }
-
-  return {
-    capabilities,
-    init,
-    dispose,
-    dryRun,
-    mutantRun,
-  }
+  return result
 }
 
-export const ChildProcessTestRunnerWorker = makeChildProcessTestRunnerWorker()
+const TestRunnerHandlers = TestRunnerRpcs.toLayer(
+  Effect.gen(function*() {
+    const options = yield* RpcWorker.initialMessage(StrykerOptionsSchema)
+    const runnerName = options.testRunner
+    const failed =
+      (phase: 'capabilities' | 'dryRun' | 'init' | 'mutantRun') =>
+      (cause: Cause.Cause<unknown>): Effect.Effect<never, TestRunnerFailed> =>
+        Effect.fail(new TestRunnerFailed({ cause: Cause.pretty(cause), phase, runnerName }))
+
+    const loaded = yield* loadPlugins(options.plugins, process.cwd()).pipe(
+      Effect.catchCause(failed('init')),
+    )
+    const underlying = yield* create(loaded.pluginsByKind, 'TestRunner', runnerName).pipe(
+      Effect.flatMap((contribution) => TestRunner.pipe(Effect.provide(contribution.layer))),
+      Effect.provide(
+        Layer.merge(Layer.succeed(RunConfiguration, options), Layer.succeed(SandboxDirectory, process.cwd())),
+      ),
+      Effect.catchCause(failed('init')),
+    )
+    yield* underlying.init.pipe(Effect.catchCause(failed('init')))
+    yield* Effect.addFinalizer(() => underlying.dispose.pipe(Effect.ignore))
+
+    return {
+      capabilities: () => underlying.capabilities.pipe(Effect.catchCause(failed('capabilities'))),
+
+      dryRun: ({ options: runOptions }: { readonly options: DryRunOptions }) =>
+        underlying.dryRun(runOptions).pipe(
+          Effect.flatMap((result) => withCoverage(result, runOptions)),
+          Effect.catchCause(failed('dryRun')),
+        ),
+
+      mutantRun: ({ options: runOptions }: { readonly options: MutantRunOptions }) =>
+        underlying.mutantRun(runOptions).pipe(
+          Effect.map(normalizeMutantRun),
+          Effect.catchCause(failed('mutantRun')),
+        ),
+    }
+  }),
+).pipe(Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)))
+
+const MainLayer = RpcServer.layer(TestRunnerRpcs).pipe(
+  Layer.provide(TestRunnerHandlers),
+  Layer.provide(RpcServer.layerProtocolWorkerRunner),
+  Layer.provide(NodeWorkerRunner.layer),
+)
+
+Effect.runFork(Layer.launch(MainLayer))

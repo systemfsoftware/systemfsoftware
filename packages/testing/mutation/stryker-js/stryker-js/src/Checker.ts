@@ -5,7 +5,7 @@ import type * as HashMap from 'effect/HashMap'
 import type { CheckerFailed } from './Checker.schema.js'
 import type { Mutant } from './Mutant.js'
 
-export { CheckerFailed, CheckStatus } from './Checker.schema.js'
+export { CheckerFailed, CheckResultSchema, CheckStatus } from './Checker.schema.js'
 
 export interface FailedCheckResult {
   readonly reason: string
