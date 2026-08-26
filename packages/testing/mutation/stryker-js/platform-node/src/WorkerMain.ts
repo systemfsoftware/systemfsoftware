@@ -195,18 +195,20 @@ const main = Effect.gen(function*() {
             let parsed: unknown
             try {
               parsed = JSON.parse(raw)
-            } catch {
-              continue
+            } catch (cause) {
+              return yield* Effect.die(new Error('Worker received an unparseable frame', { cause }))
             }
-            yield* Effect.forkChild(
-              Effect.gen(function*() {
-                const call = yield* S.decodeUnknownEffect(WorkerCallSchema)(parsed).pipe(
-                  Effect.orElseSucceed(() => undefined),
-                )
-                if (call === undefined) return
-                yield* handleCall(call)
-              }),
+            const call = yield* S.decodeUnknownEffect(WorkerCallSchema)(parsed).pipe(
+              Effect.tapError((cause) =>
+                Effect.sync(() => {
+                  process.stderr.write(
+                    `Worker rejected a call frame: ${new Error('undecodable frame', { cause }).stack ?? ''}\n`,
+                  )
+                })
+              ),
+              Effect.orDie,
             )
+            yield* Effect.forkChild(handleCall(call))
           }
         })
 
