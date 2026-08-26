@@ -3,6 +3,7 @@ import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import { ProjectConfigLive } from '@systemfsoftware/omp-platform'
 import { Effect, Layer, ManagedRuntime, Scope } from 'effect'
+import { ClaudeSettingsLive } from './ClaudeSettings.js'
 import { CollectSettingsGapsExecutorDeps } from './internal/CollectSettingsGapsExecutor.js'
 import { LoadSettingsExecutorDeps } from './internal/LoadSettingsExecutor.js'
 import { RunHookScriptExecutorDeps } from './internal/RunHookScriptExecutor.js'
@@ -21,6 +22,7 @@ import { SuperviseForkExecutorDeps } from './internal/SuperviseForkExecutor.js'
 /** Released when the runtime is disposed, which OMP triggers on SIGINT/SIGTERM. */
 export const HookScopeLive = Layer.mergeAll(
   Layer.effect(Scope.Scope, Effect.scope),
+  ClaudeSettingsLive,
   Layer.effect(LoadSettingsExecutorDeps, Effect.scope),
   Layer.effect(CollectSettingsGapsExecutorDeps, Effect.scope),
   Layer.effect(RunHookScriptExecutorDeps, Effect.scope),

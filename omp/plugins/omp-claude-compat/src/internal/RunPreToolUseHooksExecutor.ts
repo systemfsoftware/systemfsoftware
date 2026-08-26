@@ -1,13 +1,10 @@
-import {
-  denormalizeToolInput,
-  editTargetPaths,
-  extractShellCommand,
-  normalizeToolInput,
-  normalizeToolName,
-  sessionIds,
-} from '@systemfsoftware/omp-utils'
 import { Context, Effect, Option, type Scope } from 'effect'
 import type { HookSettings } from '../HookSettings.schema.js'
+import { extractShellCommand } from '../wire/ContextMode.js'
+import { editTargetPaths } from '../wire/EditTarget.js'
+import { sessionIds } from '../wire/Session.js'
+import { denormalizeToolInput, normalizeToolInput } from '../wire/ToolInput.js'
+import { normalizeToolName } from '../wire/ToolName.js'
 import type { HooksForEventResult } from './HookFeedback.js'
 import { asToolInput, EMPTY_TOOL_INPUT } from './HookPayload.js'
 import type { HookSession, HookToolCall } from './HookSession.js'

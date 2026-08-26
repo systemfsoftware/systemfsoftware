@@ -1,6 +1,6 @@
-import { sessionIds } from '@systemfsoftware/omp-utils'
 import { Context, Effect, type Scope } from 'effect'
 import type { HookSettings } from '../HookSettings.schema.js'
+import { sessionIds } from '../wire/Session.js'
 import type { HookSession } from './HookSession.js'
 import { runHooksForEvent } from './RunHooksForEventExecutor.js'
 

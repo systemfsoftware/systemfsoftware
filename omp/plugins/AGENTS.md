@@ -46,7 +46,7 @@ The cache-bust is what hides it. Each session really does get its own handler cl
 
 - id: PLG4
   title: NEVER warm a runtime inside the factory
-  do: warm after `session_start` via `warmRuntimeAfterStart` from `@systemfsoftware/omp-utils/runtime-lifecycle`
+  do: warm after `session_start` via `warmRuntimeAfterStart` from `@systemfsoftware/omp-platform/runtime-lifecycle`
   dont: await runtime construction, or statically import a platform-node layer, in the factory body
   harm: the host awaits the factory, so layer evaluation lands on the startup path — measured ~30s
   check: "`grep -n 'await import(' src/index.ts` accounts for every runtime-module import, each inside a callback; a top-level `import` of the runtime module is the violation"

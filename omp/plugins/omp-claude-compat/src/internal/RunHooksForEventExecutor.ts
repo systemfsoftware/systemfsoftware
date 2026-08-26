@@ -1,5 +1,4 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { matchesMatcher, matchesPermissionRule } from '@systemfsoftware/omp-utils'
 import { Context, Effect, Exit, Match, Option, pipe, Result, type Scope } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
@@ -16,6 +15,8 @@ import {
   SubmitVerdictCommand,
   Warning,
 } from '../HookVerdict.workflow.js'
+import { matchesMatcher } from '../wire/Matcher.js'
+import { matchesPermissionRule } from '../wire/PermissionRule.js'
 import type { HooksForEventResult } from './HookFeedback.js'
 import { asToolInput, EMPTY_TOOL_INPUT } from './HookPayload.js'
 import type { HookSession } from './HookSession.js'

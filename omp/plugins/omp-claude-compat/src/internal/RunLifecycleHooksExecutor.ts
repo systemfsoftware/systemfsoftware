@@ -1,5 +1,5 @@
-import { sessionIds } from '@systemfsoftware/omp-utils'
 import { Array as Arr, Context, Effect, type Scope } from 'effect'
+import { sessionIds } from '../wire/Session.js'
 
 import { matcherUnreadable } from '../HookSettings.js'
 import type { CommandHook, HookEntry } from '../HookSettings.schema.js'

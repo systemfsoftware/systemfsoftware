@@ -1,6 +1,7 @@
-import { matchesMatcher, sessionIds } from '@systemfsoftware/omp-utils'
 import { Context, Effect, type Scope } from 'effect'
 import type { HookSettings } from '../HookSettings.schema.js'
+import { matchesMatcher } from '../wire/Matcher.js'
+import { sessionIds } from '../wire/Session.js'
 import type { HookSession } from './HookSession.js'
 import { runHookScript } from './RunHookScriptExecutor.js'
 import { superviseFork } from './SuperviseForkExecutor.js'

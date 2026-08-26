@@ -19,7 +19,6 @@ export default defineConfig({
       /^@effect\//,
       /^@systemfsoftware\/effect-cell-types$/,
       /^@systemfsoftware\/omp-platform$/,
-      /^@systemfsoftware\/omp-utils$/,
       /^@std\/toml$/,
     ],
   },

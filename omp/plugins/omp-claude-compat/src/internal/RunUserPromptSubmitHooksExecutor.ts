@@ -1,6 +1,5 @@
 import type { InputEventResult } from '@oh-my-pi/pi-coding-agent'
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { sessionIds } from '@systemfsoftware/omp-utils'
 import { Context, Effect, Exit, Match, Option, pipe, Result, type Scope } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
@@ -16,6 +15,7 @@ import {
   SubmitVerdictCommand,
 } from '../HookVerdict.workflow.js'
 import { isHostBound } from '../PromptDestination.js'
+import { sessionIds } from '../wire/Session.js'
 import type { HookPrompt, HookSession } from './HookSession.js'
 import { runHookScript, type RunHookScriptExecutorDeps } from './RunHookScriptExecutor.js'
 
