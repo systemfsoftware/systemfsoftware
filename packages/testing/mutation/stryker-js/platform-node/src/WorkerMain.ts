@@ -118,7 +118,7 @@ const main = Effect.gen(function*() {
               )
               return yield* Effect.fail(tooLarge)
             }
-            yield* writer(frame).pipe(Effect.ignore)
+            yield* writer(frame).pipe(Effect.orDie)
             return
           }
           const result: unknown = yield* Effect.tryPromise({
@@ -141,7 +141,7 @@ const main = Effect.gen(function*() {
               )
             return yield* Effect.fail(tooLarge)
           }
-          yield* writer(successFrame).pipe(Effect.ignore)
+          yield* writer(successFrame).pipe(Effect.orDie)
         }).pipe(
           Effect.catchCause((cause) =>
             Effect.gen(function*() {
@@ -169,7 +169,7 @@ const main = Effect.gen(function*() {
                   )
                 return yield* Effect.fail(tooLarge)
               }
-              yield* writer(frame).pipe(Effect.ignore)
+              yield* writer(frame).pipe(Effect.orDie)
             })
           ),
         )

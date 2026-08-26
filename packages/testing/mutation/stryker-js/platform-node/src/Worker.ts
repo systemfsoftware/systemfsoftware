@@ -637,7 +637,20 @@ export const makeChildProcessProxy = <T>(params: {
               })
             }
             yield* writer(frame).pipe(
-              Effect.catch(() => Effect.void),
+              Effect.tapError(() =>
+                Ref.update(pendingRef, (p) => {
+                  const cleaned = { ...p }
+                  delete cleaned[callId]
+                  return cleaned
+                })
+              ),
+              Effect.mapError(() =>
+                new WorkerMethodError({
+                  message: `Failed to send "${String(propertyKey)}" to the worker`,
+                  name: 'IPCError',
+                  stack: undefined,
+                })
+              ),
             )
             yield* Effect.yieldNow
             const result = yield* Deferred.await(deferred)
