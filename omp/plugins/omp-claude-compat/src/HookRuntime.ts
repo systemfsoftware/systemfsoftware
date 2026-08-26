@@ -1,7 +1,7 @@
 import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChildProcessSpawner'
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
-import { TomlLoaderLive } from '@systemfsoftware/omp-utils'
+import { ProjectConfigLive } from '@systemfsoftware/omp-platform'
 import { Effect, Layer, ManagedRuntime, Scope } from 'effect'
 import { CollectSettingsGapsExecutorDeps } from './internal/CollectSettingsGapsExecutor.js'
 import { LoadSettingsExecutorDeps } from './internal/LoadSettingsExecutor.js'
@@ -43,7 +43,7 @@ const nodeLayer = NodeChildProcessSpawner.layer.pipe(
 )
 
 const appLayer = HookScopeLive.pipe(
-  Layer.provideMerge(TomlLoaderLive),
+  Layer.provideMerge(ProjectConfigLive),
   Layer.provideMerge(nodeLayer),
 )
 

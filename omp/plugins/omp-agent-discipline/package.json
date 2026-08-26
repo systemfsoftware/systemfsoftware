@@ -30,7 +30,7 @@
   },
   "optionalDependencies": {
     "@std/toml": "catalog:",
-    "@systemfsoftware/omp-utils": "workspace:^"
+    "@systemfsoftware/omp-platform": "workspace:^"
   },
   "peerDependencies": {
     "@effect/platform-node": "catalog:",
@@ -46,7 +46,7 @@
     "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
-    "@systemfsoftware/omp-utils": "workspace:^",
+    "@systemfsoftware/omp-platform": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",

@@ -1,4 +1,4 @@
-import { TomlLoader } from '@systemfsoftware/omp-utils'
+import { ProjectConfig } from '@systemfsoftware/omp-platform'
 import { Effect, Result } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import * as PathModule from 'effect/Path'
@@ -57,7 +57,7 @@ const extractRefs = Effect.fn('extractRefs')(function*(content: string, baseDir:
 export const loadReferencedContent = Effect.fn('loadReferencedContent')(function*(projectDir: string) {
   const fs = yield* FileSystem
   const path = yield* PathModule.Path
-  const tomlLoader = yield* TomlLoader
+  const tomlLoader = yield* ProjectConfig
 
   const claudeMdPaths = [
     path.resolve(projectDir, 'CLAUDE.md'),

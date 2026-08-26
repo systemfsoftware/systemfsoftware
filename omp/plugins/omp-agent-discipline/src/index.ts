@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
-import { warmRuntimeAfterStart } from '@systemfsoftware/omp-utils/runtime-lifecycle'
+import { warmRuntimeAfterStart } from '@systemfsoftware/omp-platform/runtime-lifecycle'
 import { runSafe } from './RunSafePolicy.js'
 
 export default async function agentDisciplineHandler(pi: ExtensionAPI): Promise<void> {

@@ -2,7 +2,7 @@
  * Executor cell — I/O shell for the dispatch-doctrine gate.
  *
  * One operation: `runDispatchDoctrineCheck` reads `dispatch_doctrine_skills`
- * from the merged TOML config through the shared `TomlLoader`, composes the
+ * from the merged TOML config through the shared `ProjectConfig`, composes the
  * pure decision (`decideDispatchDoctrine`, private) with the loaded state,
  * and returns both the skills list (the handler caches it for read-tracking)
  * and the gate result. Absent or empty skills disable the gate per R6.
@@ -18,8 +18,8 @@
  * single executor.
  */
 
-import { TomlLoader } from '@systemfsoftware/omp-utils'
-import type { TomlConfig } from '@systemfsoftware/omp-utils'
+import { ProjectConfig } from '@systemfsoftware/omp-platform'
+import type { TomlConfig } from '@systemfsoftware/omp-platform'
 import { Effect, Match } from 'effect'
 import type { PlatformError } from 'effect/PlatformError'
 
@@ -71,9 +71,9 @@ const gateResult = (verdict: DispatchDoctrineVerdict): DispatchGateResult =>
 
 const readDoctrineSkills = (
   cwd: string,
-): Effect.Effect<readonly string[], PlatformError, TomlLoader> =>
+): Effect.Effect<readonly string[], PlatformError, ProjectConfig> =>
   Effect.gen(function*() {
-    const loader = yield* TomlLoader
+    const loader = yield* ProjectConfig
     const config: TomlConfig = yield* loader.load(cwd)
     return config['dispatch_doctrine_skills'] ?? []
   })
@@ -91,7 +91,7 @@ export function runDispatchDoctrineCheck(
   cwd: string,
   toolName: string,
   doctrineLoaded: boolean,
-): Effect.Effect<DispatchDoctrineCheck, PlatformError, TomlLoader> {
+): Effect.Effect<DispatchDoctrineCheck, PlatformError, ProjectConfig> {
   return Effect.gen(function*() {
     const skills = yield* readDoctrineSkills(cwd)
     const cmd = new CheckDispatchCommand({

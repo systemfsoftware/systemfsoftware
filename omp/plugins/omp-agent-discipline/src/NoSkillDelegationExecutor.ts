@@ -1,5 +1,5 @@
-import { TomlLoader } from '@systemfsoftware/omp-utils'
-import type { TomlConfig } from '@systemfsoftware/omp-utils'
+import { ProjectConfig } from '@systemfsoftware/omp-platform'
+import type { TomlConfig } from '@systemfsoftware/omp-platform'
 import { Effect, Match } from 'effect'
 import * as Option from 'effect/Option'
 import type { PlatformError } from 'effect/PlatformError'
@@ -195,9 +195,9 @@ function blockResult(verdict: DelegationVerdict): BlockResult | undefined {
   )
 }
 
-function loadGuard(cwd: string): Effect.Effect<CompiledGuard | null, PlatformError, TomlLoader> {
+function loadGuard(cwd: string): Effect.Effect<CompiledGuard | null, PlatformError, ProjectConfig> {
   return Effect.gen(function*() {
-    const loader = yield* TomlLoader
+    const loader = yield* ProjectConfig
     const config: TomlConfig = yield* loader.load(cwd)
     const names = config['no_delegate_skills'] ?? []
     return compileGuard(names)
@@ -209,7 +209,7 @@ export function runNoSkillDelegation(
   toolName: string,
   subagentType: string,
   prompt: string,
-): Effect.Effect<NoSkillDelegationResult, PlatformError, TomlLoader> {
+): Effect.Effect<NoSkillDelegationResult, PlatformError, ProjectConfig> {
   return Effect.gen(function*() {
     const guard = yield* loadGuard(cwd)
     const cmd = new CheckDelegationCommand({ toolName, subagentType, prompt, guard })

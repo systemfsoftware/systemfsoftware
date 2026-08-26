@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
-import { warmRuntimeAfterStart } from '@systemfsoftware/omp-utils/runtime-lifecycle'
+import { warmRuntimeAfterStart } from '@systemfsoftware/omp-platform/runtime-lifecycle'
 
 import type { HookRunner } from './HookRunner.js'
 import type { HookRuntimeContext } from './HookRuntime.js'

@@ -2,7 +2,7 @@ import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { loadReferencedContent } from '@systemfsoftware/omp-claude-compat/inject'
-import { TomlLoader, TomlLoaderLive } from '@systemfsoftware/omp-utils'
+import { ProjectConfig, ProjectConfigLive } from '@systemfsoftware/omp-platform'
 import { Effect, Layer } from 'effect'
 import * as PathModule from 'effect/Path'
 import { expect } from 'vitest'
@@ -13,7 +13,7 @@ function makeFsLayer(contents: Record<string, string>) {
   const includingPath = MemoryFileSystem.layerWith(contents).pipe(
     Layer.provideMerge(PathModule.layer),
   )
-  return TomlLoaderLive.pipe(
+  return ProjectConfigLive.pipe(
     Layer.provideMerge(includingPath),
   )
 }
@@ -531,7 +531,7 @@ Feature('@-ref extraction, resolution, and injection').body(({ scenario }) => {
         'config',
         (s) =>
           Effect.gen(function*() {
-            const loader = yield* TomlLoader
+            const loader = yield* ProjectConfig
             return yield* loader.load(s.dir)
           }),
       ),

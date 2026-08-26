@@ -4,7 +4,7 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from '@oh-my-pi/pi-coding-agent'
-import type { TomlLoader } from '@systemfsoftware/omp-utils'
+import type { ProjectConfig } from '@systemfsoftware/omp-platform'
 import { Config, Effect, Result } from 'effect'
 import type { FileSystem } from 'effect/FileSystem'
 import type * as PathModule from 'effect/Path'
@@ -13,7 +13,7 @@ import { loadReferencedContent } from './InjectInstructionsExecutor.js'
 
 export const InjectInstructionsTask = (
   pi: ExtensionAPI,
-  runner: HookRunner<FileSystem | PathModule.Path | TomlLoader>,
+  runner: HookRunner<FileSystem | PathModule.Path | ProjectConfig>,
 ): void => {
   pi.on('before_agent_start', async (event: BeforeAgentStartEvent, _ctx: ExtensionContext) => {
     const injected = await runner.runSafe(

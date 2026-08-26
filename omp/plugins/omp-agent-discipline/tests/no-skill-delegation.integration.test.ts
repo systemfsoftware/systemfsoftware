@@ -2,7 +2,7 @@ import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { runNoSkillDelegation } from '@systemfsoftware/omp-agent-discipline/api'
-import { TomlLoaderLive } from '@systemfsoftware/omp-utils'
+import { ProjectConfigLive } from '@systemfsoftware/omp-platform'
 import { Effect, Layer } from 'effect'
 import * as PathModule from 'effect/Path'
 import { expect } from 'vitest'
@@ -15,7 +15,7 @@ function present<A>(value: A | null | undefined): A {
 const Feature = makeFeature({ it, layer })
 
 function seededLayer(contents: Record<string, string>) {
-  return TomlLoaderLive.pipe(
+  return ProjectConfigLive.pipe(
     Layer.provide(MemoryFileSystem.layerWith(contents)),
     Layer.provide(PathModule.layer),
   )
@@ -134,7 +134,7 @@ Feature('No-skill-delegation — executor integration')
       Gherkin.Do.pipe(
         Given('a filesystem with toml at /project-a but not /project-b')('dirs', () =>
           Effect.succeed({
-            layer: TomlLoaderLive.pipe(
+            layer: ProjectConfigLive.pipe(
               Layer.provide(MemoryFileSystem.layerWith({
                 '/project-a/systemfsoftware.toml': 'no_delegate_skills = ["ce-work"]',
               })),
