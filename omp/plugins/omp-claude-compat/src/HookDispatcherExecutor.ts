@@ -7,7 +7,6 @@ import type {
 import { Effect, type Scope } from 'effect'
 import type { FileSystem } from 'effect/FileSystem'
 import type { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
-import { homedir } from 'node:os'
 import { collectSettingsGapsWithPaths } from './internal/CollectSettingsGapsExecutor.js'
 import { CollectSettingsGapsExecutorDeps } from './internal/CollectSettingsGapsExecutor.js'
 import type { HookPrompt, HookSession, HookToolCall } from './internal/HookSession.js'
@@ -60,16 +59,19 @@ export type HookDispatchContext =
   | RunLifecycleHooksExecutorDeps
   | SuperviseForkExecutorDeps
 
+const loadSettings = (ctx: HookSession) =>
+  loadSettingsWithPaths(settingsPaths(ctx.homeDir, ctx.cwd), ctx.homeDir, ctx.cwd)
+
 export const onToolCall = (event: HookToolCall, ctx: HookSession) =>
   Effect.gen(function*() {
-    const settings = yield* loadSettingsWithPaths(settingsPaths(homedir(), ctx.cwd))
+    const settings = yield* loadSettings(ctx)
     if (!settings) return undefined
     return yield* runPreToolUseHooks(settings, event, ctx)
   })
 
 export const onToolResult = (event: ToolResultEvent, ctx: HookSession) =>
   Effect.gen(function*() {
-    const settings = yield* loadSettingsWithPaths(settingsPaths(homedir(), ctx.cwd))
+    const settings = yield* loadSettings(ctx)
     if (!settings) return undefined
     const result = yield* runToolResultHooks(settings, event, ctx)
     if (result.warning === undefined) return undefined
@@ -81,14 +83,14 @@ export const onToolResult = (event: ToolResultEvent, ctx: HookSession) =>
 
 export const onPrompt = (event: HookPrompt, ctx: HookSession) =>
   Effect.gen(function*() {
-    const settings = yield* loadSettingsWithPaths(settingsPaths(homedir(), ctx.cwd))
+    const settings = yield* loadSettings(ctx)
     if (!settings) return undefined
     return yield* runUserPromptSubmitHooks(settings, event, ctx)
   })
 
 export const onSessionStart = (reason: string, ctx: HookSession) =>
   Effect.gen(function*() {
-    const gaps = yield* collectSettingsGapsWithPaths(settingsPaths(homedir(), ctx.cwd))
+    const gaps = yield* collectSettingsGapsWithPaths(settingsPaths(ctx.homeDir, ctx.cwd), ctx.homeDir, ctx.cwd)
     const coverageLines = [
       ...gaps.coverage.unrecognized.map((row) => `  ${row.event}: ${row.reason}`),
       ...gaps.coverage.notCarried.map((row) => `  ${row.event}: not carried by this bridge — ${row.reason}`),
@@ -117,14 +119,14 @@ export const onSessionStart = (reason: string, ctx: HookSession) =>
         'error',
       )
     }
-    const settings = yield* loadSettingsWithPaths(settingsPaths(homedir(), ctx.cwd))
+    const settings = yield* loadSettings(ctx)
     if (!settings) return
     yield* runSessionStartHooks(settings, reason, ctx)
   })
 
 export const onSessionCompact = (ctx: HookSession) =>
   Effect.gen(function*() {
-    const settings = yield* loadSettingsWithPaths(settingsPaths(homedir(), ctx.cwd))
+    const settings = yield* loadSettings(ctx)
     if (!settings) return
     yield* runSessionStartHooks(settings, 'compact', ctx)
     yield* runLifecycleHooks(settings.hooks.PostCompact, ctx, 'PostCompact')
@@ -132,7 +134,7 @@ export const onSessionCompact = (ctx: HookSession) =>
 
 export const onPreCompact = (ctx: HookSession) =>
   Effect.gen(function*() {
-    const settings = yield* loadSettingsWithPaths(settingsPaths(homedir(), ctx.cwd))
+    const settings = yield* loadSettings(ctx)
     if (!settings) return undefined
     const result = yield* runPreCompactHooks(settings, ctx)
     if (result.block !== true) return undefined
@@ -145,21 +147,21 @@ export const onPreCompact = (ctx: HookSession) =>
 
 export const onSessionSwitch = (reason: string, ctx: HookSession) =>
   Effect.gen(function*() {
-    const settings = yield* loadSettingsWithPaths(settingsPaths(homedir(), ctx.cwd))
+    const settings = yield* loadSettings(ctx)
     if (!settings) return
     yield* runSessionSwitchHooks(settings, reason, ctx)
   })
 
 export const onSessionShutdown = (ctx: HookSession) =>
   Effect.gen(function*() {
-    const settings = yield* loadSettingsWithPaths(settingsPaths(homedir(), ctx.cwd))
+    const settings = yield* loadSettings(ctx)
     if (!settings) return
     yield* runLifecycleHooks(settings.hooks.SessionEnd, ctx, 'SessionEnd')
   })
 
 export const onSessionStop = (ctx: HookSession) =>
   Effect.gen(function*() {
-    const settings = yield* loadSettingsWithPaths(settingsPaths(homedir(), ctx.cwd))
+    const settings = yield* loadSettings(ctx)
     if (!settings) return
     yield* runLifecycleHooks(settings.hooks.Stop, ctx, 'Stop')
   })

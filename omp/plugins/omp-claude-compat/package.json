@@ -3,7 +3,7 @@
   "license": "Apache-2.0",
   "version": "2.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
-  "description": "OMP Claude Code compatibility: dispatch .claude/settings.json hooks + inject CLAUDE.md @-references",
+  "description": "OMP Claude Code compatibility: dispatch .claude/settings.json and enabled plugin hooks/hooks.json hooks + inject CLAUDE.md @-references",
   "type": "module",
   "exports": {
     ".": {

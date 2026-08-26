@@ -61,16 +61,23 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
   // interpreter, and running a bash hook under `sh` silently changes its
   // meaning wherever /bin/sh is not bash.
   const [shell, evalFlag] = SHELL_INVOCATION[hook.shell ?? 'sh']
+  const pluginRoot = hook.pluginRoot
+  const expand = (value: string) =>
+    pluginRoot === undefined ? value : value.split('${CLAUDE_PLUGIN_ROOT}').join(pluginRoot)
   const options = {
     cwd,
-    env: { OMP_PROJECT_DIR: cwd, CLAUDE_PROJECT_DIR: cwd },
+    env: {
+      OMP_PROJECT_DIR: cwd,
+      CLAUDE_PROJECT_DIR: cwd,
+      ...(pluginRoot === undefined ? {} : { CLAUDE_PLUGIN_ROOT: pluginRoot }),
+    },
     stdin: Stream.fromIterable([new TextEncoder().encode(stdinText)]),
     stdout: 'pipe' as const,
     stderr: 'pipe' as const,
   }
   const hookCommand = hook.args === undefined
-    ? ChildProcess.make(shell, [evalFlag, hook.command], options)
-    : ChildProcess.make(hook.command, hook.args, options)
+    ? ChildProcess.make(shell, [evalFlag, expand(hook.command)], options)
+    : ChildProcess.make(expand(hook.command), hook.args.map(expand), options)
 
   // Detached whole: the stdout/stderr drain travels with the child, so
   // abandoning the wait never leaves it writing into a pipe nobody reads.
