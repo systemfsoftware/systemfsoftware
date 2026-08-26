@@ -12,7 +12,22 @@ import type { Plugin, ResolvedConfig } from 'vite'
 export interface InlineRefutationCoverageOptions {
   /** Directory to scan for schema files, relative to Vite root. Default: `"src"`. */
   dir?: string
+  /**
+   * Deadline for the generated obligation scan, in milliseconds. Default:
+   * `600_000`.
+   *
+   * The scan is CPU-bound and sized by obligations x draws, so its wall time is
+   * set by the core it gets rather than the work it does. Measured 2026-08-25: a
+   * sweep taking 82s across 16 desktop cores exceeded 300s on a 4-vCPU runner,
+   * because the suite runs under a task runner at full concurrency with vitest
+   * keeping its own pool inside that. The deadline rides the generated `it` so a
+   * consumer never widens a package-wide `testTimeout` for a test it does not own.
+   */
+  timeoutMs?: number
 }
+
+/** @since 0.1.0 */
+export const DEFAULT_REFUTATION_TIMEOUT_MS = 600_000
 
 /**
  * The one test filename the placement taxonomy whitelists by name. The plugin
@@ -37,7 +52,11 @@ export const REFUTATION_FILE_BASENAME = 'schema-refutations.test.ts' as const
  *
  * @since 0.1.0
  */
-export const generateRefutationCoverage = (refutationFilePath: string, srcDir: string): string => {
+export const generateRefutationCoverage = (
+  refutationFilePath: string,
+  srcDir: string,
+  timeoutMs: number = DEFAULT_REFUTATION_TIMEOUT_MS,
+): string => {
   const schemas = findExportedSchemas(srcDir)
   if (schemas.length === 0) return '// no schemas found\nexport {}\n'
 
@@ -86,7 +105,7 @@ export const generateRefutationCoverage = (refutationFilePath: string, srcDir: s
     `  if (naked.length > 0) {`,
     "    throw new Error(`schema(s) reaching an obligation no refutes call discharges: ${naked.join(', ')}`)",
     `  }`,
-    `})`,
+    `}, ${timeoutMs})`,
   ].join('\n')
 }
 
@@ -126,7 +145,11 @@ export const inlineRefutationCoverage = (options?: InlineRefutationCoverageOptio
     transform(_code, id) {
       const refutationFile = id.split('?')[0]
       if (refutationFile === undefined || !refutationFile.endsWith(`/${REFUTATION_FILE_BASENAME}`)) return
-      return generateRefutationCoverage(refutationFile, resolve(config.root, options?.dir ?? 'src'))
+      return generateRefutationCoverage(
+        refutationFile,
+        resolve(config.root, options?.dir ?? 'src'),
+        options?.timeoutMs ?? DEFAULT_REFUTATION_TIMEOUT_MS,
+      )
     },
   }
 }

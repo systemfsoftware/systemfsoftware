@@ -7,7 +7,10 @@
 import { Plugin as Plugin_2 } from 'vite';
 
 // @public
-export const generateRefutationCoverage: (refutationFilePath: string, srcDir: string) => string;
+export const DEFAULT_REFUTATION_TIMEOUT_MS = 600000;
+
+// @public
+export const generateRefutationCoverage: (refutationFilePath: string, srcDir: string, timeoutMs?: number) => string;
 
 // @public
 export const inlineRefutationCoverage: (options?: InlineRefutationCoverageOptions) => Plugin_2;
@@ -15,6 +18,7 @@ export const inlineRefutationCoverage: (options?: InlineRefutationCoverageOption
 // @public
 export interface InlineRefutationCoverageOptions {
     dir?: string;
+    timeoutMs?: number;
 }
 
 // @public
