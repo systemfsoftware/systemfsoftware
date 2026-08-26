@@ -709,15 +709,8 @@ Feature('Driving the mutation tester from an agent harness')
         Then('every declared entry is read from the installed manifest rather than a fixed list')((s) => {
           const declared = s.probe.entries.map((entry) => entry.entry)
           checkExpect(declared.length).toBeGreaterThan(0)
-          checkExpect(declared).toEqual(
-            expect.arrayContaining([
-              '.',
-              './config/base',
-              './internal/checker-worker',
-              './internal/child-process-proxy-worker-main',
-              './internal/child-process-test-runner-worker',
-            ]),
-          )
+          checkExpect(declared).toEqual(expect.arrayContaining(['.', './config/base']))
+          checkExpect(declared.filter((entry) => entry.startsWith('./internal/'))).toEqual([])
           checkExpect(declared).not.toContain('./package.json')
         }),
         Then('importing each declared entry exits cleanly and writes nothing to either descriptor')((s) => {
