@@ -28,7 +28,6 @@
     "attw": "node ./dist/main.mjs --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "test": "vitest run",
-    "test:run": "vitest run --coverage",
     "test:contract": "vitest run --config vitest.contract.config.ts",
     "prepack": "pnpm build"
   },

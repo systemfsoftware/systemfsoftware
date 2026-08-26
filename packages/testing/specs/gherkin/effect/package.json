@@ -41,7 +41,6 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "test:run": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },

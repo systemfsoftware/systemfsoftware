@@ -44,7 +44,6 @@
     "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "test:run": "vitest run",
     "api:check": "api-extractor run && api-extractor run --config api-extractor.hex-schema.json",
     "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.hex-schema.json",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
