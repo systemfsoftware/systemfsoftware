@@ -5,14 +5,13 @@
 ```ts
 
 import * as Effect from 'effect/Effect';
-import { Evaluator } from '@systemfsoftware/stryker-js-plugin-api/evaluate';
-import { EvaluatorFailed } from '@systemfsoftware/stryker-js-plugin-api/evaluate';
-import { ExitClass } from '@systemfsoftware/stryker-js-plugin-api/evaluate';
+import { Evaluator } from '@systemfsoftware/stryker-js/Evaluator';
+import { EvaluatorFailed } from '@systemfsoftware/stryker-js/Evaluator';
+import { ExitClass } from '@systemfsoftware/stryker-js/Evaluator';
 import * as Layer from 'effect/Layer';
-import { PluginContribution } from '@systemfsoftware/stryker-js-plugin-api/plugin';
-import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
-import { RunConfiguration } from '@systemfsoftware/stryker-js-plugin-api/plugin';
-import { schema } from '@systemfsoftware/stryker-js-plugin-api/core';
+import { PluginContribution } from '@systemfsoftware/stryker-js/Plugin';
+import { RunConfiguration } from '@systemfsoftware/stryker-js/Plugin';
+import { schema } from '@systemfsoftware/stryker-js/Mutant';
 
 // Warning: (ae-forgotten-export) The symbol "ReportView" needs to be exported by the entry point index.d.ts
 //
@@ -33,7 +32,7 @@ export const makeTestContributionEvaluatorService: (options: {
 };
 
 // @public (undocumented)
-export const strykerPlugins: PluginContribution<PluginKind.Evaluator>[];
+export const strykerPlugins: PluginContribution<"Evaluator">[];
 
 // @public (undocumented)
 export const testContributionEvaluatorLayer: Layer.Layer<Evaluator, never, RunConfiguration>;

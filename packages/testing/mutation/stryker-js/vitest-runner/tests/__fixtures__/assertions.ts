@@ -3,17 +3,14 @@ import assert from 'assert'
 import {
   CompleteDryRunResult,
   DryRunResult,
-  DryRunStatus,
   ErrorDryRunResult,
   ErrorMutantRunResult,
   KilledMutantRunResult,
   MutantRunResult,
-  MutantRunStatus,
   SurvivedMutantRunResult,
   TestResult,
-  TestStatus,
   TimeoutMutantRunResult,
-} from '@systemfsoftware/stryker-js-plugin-api/test-runner'
+} from '@systemfsoftware/stryker-js/TestRunner'
 import { expect } from 'vitest'
 
 export function expectKilled(
@@ -21,15 +18,18 @@ export function expectKilled(
 ): asserts result is KilledMutantRunResult {
   assert.strictEqual(
     result.status,
-    MutantRunStatus.Killed,
-    result.status === MutantRunStatus.Error ? result.errorMessage : '',
+    'killed',
+    (() => {
+      if (result.status === 'error') return result.errorMessage
+      return ''
+    })(),
   )
 }
 
 export function expectTimeout(
   result: MutantRunResult,
 ): asserts result is TimeoutMutantRunResult {
-  assert.strictEqual(result.status, MutantRunStatus.Timeout)
+  assert.strictEqual(result.status, 'timeout')
 }
 
 export function expectCompleted(
@@ -37,10 +37,11 @@ export function expectCompleted(
 ): asserts runResult is CompleteDryRunResult {
   assert.strictEqual(
     runResult.status,
-    DryRunStatus.Complete,
-    runResult.status === DryRunStatus.Error
-      ? runResult.errorMessage
-      : 'Timeout occurred',
+    'complete',
+    (() => {
+      if (runResult.status === 'error') return runResult.errorMessage
+      return 'Timeout occurred'
+    })(),
   )
 }
 
@@ -54,7 +55,7 @@ export function expectErrored(
   runResult: DryRunResult | MutantRunResult,
 ): asserts runResult is ErrorDryRunResult | MutantRunResult
 export function expectErrored(runResult: DryRunResult | MutantRunResult): void {
-  assert.strictEqual(runResult.status, DryRunStatus.Error)
+  assert.strictEqual(runResult.status, 'error')
 }
 
 export function expectSurvived(
@@ -62,8 +63,11 @@ export function expectSurvived(
 ): asserts runResult is SurvivedMutantRunResult {
   assert.strictEqual(
     runResult.status,
-    MutantRunStatus.Survived,
-    runResult.status === MutantRunStatus.Error ? runResult.errorMessage : '',
+    'survived',
+    (() => {
+      if (runResult.status === 'error') return runResult.errorMessage
+      return ''
+    })(),
   )
 }
 
@@ -78,34 +82,31 @@ export function expectTestResults(
 ): void {
   expectCompleted(actual)
 
-  const actualPruned = pruneUnexpected(actual.tests, expectedTestResults)
-  actualPruned.forEach((test) => {
-    if (test.status === TestStatus.Failed && test.failureMessage) {
+  const actualPruned = pruneUnexpected([...actual.tests], expectedTestResults)
+  const mutablePruned = actualPruned.map((test) => ({ ...test }))
+  mutablePruned.forEach((test) => {
+    if (test.status === 'failed' && test.failureMessage !== undefined && test.failureMessage.length > 0) {
       const firstLineEnd = test.failureMessage.indexOf('\n')
       if (firstLineEnd !== -1) {
         test.failureMessage = test.failureMessage.substring(0, firstLineEnd)
       }
     }
   })
-  sortTestResults(actualPruned)
-  expectedTestResults.sort((a, b) => a.id.localeCompare(b.id))
-  expect(actualPruned).toEqual(expectedTestResults)
+  const sortedActual = sortTestResults(mutablePruned)
+  const sortedExpected = sortTestResults(expectedTestResults)
+  expect(sortedActual).toEqual(sortedExpected)
 }
-
-export function sortTestResults(tests: PartialTestResult[]) {
-  return tests.sort((a, b) => a.id.localeCompare(b.id))
+export function sortTestResults(tests: readonly PartialTestResult[]): PartialTestResult[] {
+  return [...tests].sort((a, b) => a.id.localeCompare(b.id))
 }
 
 /**
  * Recursively prune unexpected values from an actual result. This will allow for a much cleaner chai diffing experience.
  * Will not mutate any given input, instead build a new output.
- * @param actual Some actual result you want to prune
- * @param expected Some expected result you want to match to
- * @returns A new `actual` object with all unexpected values pruned.
  */
 function pruneUnexpected(
-  actual: TestResult[],
-  expected: PartialTestResult[],
+  actual: readonly TestResult[],
+  expected: readonly PartialTestResult[],
 ): PartialTestResult[] {
   return actual.map(({ id, ...actualTestData }) => {
     const expectedTest = expected.find((test) => test.id === id)

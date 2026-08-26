@@ -1,5 +1,6 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import type { Effect } from 'effect/Effect'
+import * as EffectModule from 'effect/Effect'
 import { pipe } from 'effect/Function'
 import type { Result } from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
@@ -37,8 +38,6 @@ interface Shape extends Cell.Phases {
   readonly decodeError: DecodeErr
   readonly readError: never
   readonly writeError: never
-  readonly readContext: never
-  readonly writeContext: never
 }
 
 declare const readPhase: Cell.ReadPhase<Shape>
@@ -166,34 +165,16 @@ interface Infallible extends Cell.Phases {
   readonly decodeError: never
   readonly readError: never
   readonly writeError: never
-  readonly readContext: never
-  readonly writeContext: never
 }
 
-// A bag whose read and write each require a different service.
 interface Db {
   readonly query: () => string
 }
 interface Bus {
   readonly emit: (line: string) => void
 }
-interface Requiring extends Cell.Phases {
-  readonly command: Cmd
-  readonly raw: Raw
-  readonly decoded: Decoded
-  readonly decision: Decision
-  readonly decisionError: Refusal
-  readonly output: Output
-  readonly response: void
-  readonly decodeError: DecodeErr
-  readonly readError: never
-  readonly writeError: never
-  readonly readContext: Db
-  readonly writeContext: Bus
-}
 
 declare const infallible: Cell.WriteDone<Infallible>
-declare const requiring: Cell.WriteDone<Requiring>
 declare const plain: Cell.WriteDone<Shape>
 declare const command: Cmd
 
@@ -206,8 +187,38 @@ describe('the channels the interpreter derives', () => {
     expect(Cell.apply(infallible, command)).type.toBe<Effect<boolean, never, never>>()
   })
 
-  it('Should_UnionBothServices_When_ReadAndWriteEachRequireOne', () => {
-    expect(Cell.apply(requiring, command)).type.toBe<Effect<void, DecodeErr, Bus | Db>>()
+  // The pin, from both sides. A phase body that reaches for a service is refused by the phase
+  // type itself, so it is refused under a generic stage too — which is what the bag members
+  // this replaced could not do, because inside a body generic over `Phases` the compiler
+  // cannot see what the lambda required.
+  it('Should_RejectReadPhase_When_BodyRequiresAService', () => {
+    expect<(command: Cmd) => Effect<Raw, never, Db>>().type.not.toBeAssignableTo<
+      Cell.ReadPhase<Shape>
+    >()
+  })
+
+  it('Should_RejectWritePhase_When_BodyRequiresAService', () => {
+    expect<(output: Output, raw: Raw) => Effect<void, never, Bus>>().type.not.toBeAssignableTo<
+      Cell.WritePhase<Shape>
+    >()
+  })
+
+  it('Should_YieldNever_When_ServiceIsClosedOverOutsideThePhase', () => {
+    const db: Db = { query: () => 'closed' }
+    const bus: Bus = { emit: () => {} }
+    const closedRead: Cell.ReadPhase<Shape> = (cmd) => EffectModule.succeed({ bytes: db.query() + cmd.id })
+    const closedWrite: Cell.WritePhase<Shape> = (output) => {
+      bus.emit(output.line)
+      return EffectModule.succeed(undefined)
+    }
+    const description = pipe(
+      Cell.read<Shape>(closedRead),
+      Cell.decode(decodePhase),
+      Cell.decide(decidePhase),
+      Cell.encode(encodePhase),
+      Cell.write(closedWrite),
+    )
+    expect(Cell.apply(description, command)).type.toBe<Effect<void, DecodeErr, never>>()
   })
 
   it('Should_RequireAWrittenDescription_When_Applying', () => {
@@ -272,5 +283,26 @@ describe('the description value is a foldable record', () => {
     // extend them.
     expect<Cell.Phase<Shape>['kind']>().type.toBe<'pure' | 'impure'>()
     expect<Cell.Phase<Shape>['convention']>().type.toBe<Cell.Convention>()
+  })
+})
+
+describe('what the write receives', () => {
+  it('Should_HandTheWriteTheRaw_When_ItDeclaresASecondParameter', () => {
+    expect<Parameters<Cell.WritePhase<Shape>>>().type.toBe<[output: Output, raw: Raw]>()
+  })
+
+  // The reason the argument is second and not first. A write authored before the raw
+  // channel existed declares one parameter, and TypeScript admits a shorter function
+  // wherever a longer signature is expected — so this assertion is what says the addition
+  // is not a break for any write already written.
+  it('Should_StillAdmitAUnaryWrite_When_TheWriteIgnoresTheRaw', () => {
+    expect<(output: Output) => Effect<void, never, never>>().type.toBeAssignableTo<
+      Cell.WritePhase<Shape>
+    >()
+  })
+
+  it('Should_RefuseTheWrite_When_ItsSecondParameterIsNotTheRaw', () => {
+    expect<(output: Output, raw: Decoded) => Effect<void, never, never>>().type.not
+      .toBeAssignableTo<Cell.WritePhase<Shape>>()
   })
 })

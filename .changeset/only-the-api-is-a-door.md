@@ -1,6 +1,6 @@
 ---
-"@systemfsoftware/stryker-js-mutation-run": major
-"@systemfsoftware/stryker-js-mutation-report": major
+"@systemfsoftware/stryker-js-platform-node": major
+"@systemfsoftware/stryker-js-html-reporter": major
 ---
 
 Five entry points that were never API are gone. Each existed because another

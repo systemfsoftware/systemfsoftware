@@ -25,7 +25,7 @@ jobs:
     name: abort on mid-run merge conflict
     needs: conflicts
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 25
     permissions:
       contents: read
       actions: write
@@ -88,7 +88,7 @@ jobs:
         package: ${{ fromJson(needs.discover.outputs.packages) }}
     name: Mutation (${{ matrix.package }})
     runs-on: ubuntu-latest
-    timeout-minutes: 70
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/install-deps
@@ -108,8 +108,8 @@ jobs:
       - name: Mutation
         id: mutation
         continue-on-error: true
-        timeout-minutes: 60
-        run: corepack pnpm turbo mutation --filter=./${{ matrix.package }}
+        timeout-minutes: 15
+        run: corepack pnpm turbo mutation --filter=./${{ matrix.package }} --log-order=stream --output-logs=full
 
       - name: Require a mutation report
         if: ${{ !cancelled() }}

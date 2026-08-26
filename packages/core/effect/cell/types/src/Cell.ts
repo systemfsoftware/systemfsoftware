@@ -24,8 +24,6 @@ export interface Phases {
   readonly decodeError: unknown
   readonly readError: unknown
   readonly writeError: unknown
-  readonly readContext: unknown
-  readonly writeContext: unknown
 }
 
 /**
@@ -33,10 +31,19 @@ export interface Phases {
  * that interior is not type-visible, so no I/O count is claimed or enforced here. A step that
  * mutates in order to report — bumping a counter and returning the resulting rate — is one
  * such product, and belongs here rather than in a layer of its own.
+ *
+ * The context channel is pinned `never`: a phase requires nothing. Services are resolved by
+ * whoever builds the description and handed to the phase as ordinary parameters, which is
+ * the same edge that already gathers the read's inputs. The alternative — a `readContext`
+ * member on the bag — let an author write `never` for a body that reaches for a service, and
+ * nothing checked the claim: under a stage generic over `Phases` the compiler cannot see the
+ * lambda's requirement at all, so the description compiled and the missing service surfaced
+ * only where it was finally applied, or nowhere. Pinning it makes the lie unrepresentable
+ * instead of merely discouraged, and leaves `apply`'s derived `R` honestly `never`.
  */
 export type ReadPhase<P extends Phases> = (
   command: P['command'],
-) => Effect.Effect<P['raw'], P['readError'], P['readContext']>
+) => Effect.Effect<P['raw'], P['readError'], never>
 
 /** Validation. Its `Left` is fatal: it reaches the derived error channel and no write runs. */
 export type DecodePhase<P extends Phases> = (
@@ -63,9 +70,22 @@ export type EncodePhase<P extends Phases> = (
   outcome: Result.Result<P['decision'], P['decisionError']>,
 ) => P['output']
 
+/**
+ * The write. It receives the encoded `output` and, as a second argument, the `raw` its own
+ * layer's read gathered.
+ *
+ * `raw` is there because a write is frequently the point that persists or reports what the
+ * read found, while the decision in between deliberately narrows to what it needed. Without
+ * this argument such a write has no channel for it and the layer smuggles the value through
+ * a closure — a `let` beside the description, assigned in the read and consulted in the
+ * write, which then needs a runtime guard for a value the fold has already produced. The
+ * argument is second, and a write that does not want it declares one parameter: a unary
+ * function satisfies this type, so every write written before it existed is unchanged.
+ */
 export type WritePhase<P extends Phases> = (
   output: P['output'],
-) => Effect.Effect<P['response'], P['writeError'], P['writeContext']>
+  raw: P['raw'],
+) => Effect.Effect<P['response'], P['writeError'], never>
 
 // ---------------------------------------------------------------------------
 // the phase records — the description value is an ordered sequence of these
@@ -343,10 +363,21 @@ const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
     }
 
     let value: FoldValue<P> = command
+    // What the read gathered, kept so the terminal write receives it as well as the
+    // encoded output. Before a read has run there is nothing gathered and the command is
+    // the only thing the layer has seen, which is what a read-less layer's write is handed.
+    let raw: FoldValue<P> = command
     for (const phase of phases.slice(0, -1)) {
       switch (phase.convention) {
         case 'effect':
-          value = yield* phase.run(value)
+          // `effect` covers both impure phases and their arities differ, so the branch
+          // narrows on the phase name rather than calling through the union.
+          if (phase.name === 'read') {
+            value = yield* phase.run(value)
+            raw = value
+            break
+          }
+          value = yield* phase.run(value, raw)
           break
         case 'either-fail':
           value = yield* Result.match(phase.run(value), {
@@ -379,7 +410,7 @@ const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
     // The guard above certified that the last phase is a write; yielding its effect
     // directly is what makes the derived success channel the layer's `response` — the
     // fold's loop cannot see that, so the terminal write is peeled out of it.
-    return yield* last.run(value)
+    return yield* last.run(value, raw)
   })
 
 /**

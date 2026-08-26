@@ -19,9 +19,9 @@ const NODE_IMAGE = 'node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e
 // single test is collected.
 const WORKSPACE_PACKAGES = [
   '@systemfsoftware/stryker-js-cli',
-  '@systemfsoftware/stryker-js-mutation-run',
-  '@systemfsoftware/stryker-js-mutation-report',
-  '@systemfsoftware/stryker-js-plugin-api',
+  '@systemfsoftware/stryker-js',
+  '@systemfsoftware/stryker-js-platform-node',
+  '@systemfsoftware/stryker-js-html-reporter',
   '@systemfsoftware/stryker-js-instrumenter',
   '@systemfsoftware/effect-cell-types',
 ] as const
@@ -41,8 +41,18 @@ const DOCKER_SOCKET = '/var/run/docker.sock'
 
 const podmanSockets = (): readonly string[] => {
   const uid = process.getuid?.()
-  const runtimeDir = process.env['XDG_RUNTIME_DIR'] ?? (uid === undefined ? undefined : `/run/user/${uid}`)
-  const rootless = runtimeDir === undefined ? [] : [join(runtimeDir, 'podman', 'podman.sock')]
+  let runtimeDir: string | undefined = process.env['XDG_RUNTIME_DIR']
+  if (runtimeDir === undefined) {
+    if (uid !== undefined) {
+      runtimeDir = `/run/user/${uid}`
+    }
+  }
+  let rootless: readonly string[]
+  if (runtimeDir === undefined) {
+    rootless = []
+  } else {
+    rootless = [join(runtimeDir, 'podman', 'podman.sock')]
+  }
   return [...rootless, '/run/podman/podman.sock']
 }
 

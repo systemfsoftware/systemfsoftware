@@ -4,8 +4,7 @@
 
 ```ts
 
-import { PluginContribution } from '@systemfsoftware/stryker-js-plugin-api/plugin';
-import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
+import { PluginContribution } from '@systemfsoftware/stryker-js/Plugin';
 
 // @public
 export const decideWorkflowMakeBoundaryIgnore: (node: unknown, ancestors: readonly unknown[]) => string | undefined;
@@ -14,7 +13,7 @@ export const decideWorkflowMakeBoundaryIgnore: (node: unknown, ancestors: readon
 export const NOT_INSIDE_WORKFLOW_MAKE: 'mutant is outside every Workflow.make decision body; only make bodies are the mutation population';
 
 // @public (undocumented)
-export const strykerPlugins: PluginContribution<PluginKind.Ignore>[];
+export const strykerPlugins: PluginContribution<"Ignore">[];
 
 // (No @packageDocumentation comment for this package)
 

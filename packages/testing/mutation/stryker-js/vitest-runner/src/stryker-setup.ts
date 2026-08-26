@@ -1,7 +1,8 @@
-import type { InstrumenterContext, MutantCoverage } from '@systemfsoftware/stryker-js-plugin-api/core'
+import type { InstrumenterContext, MutantCoverage } from '@systemfsoftware/stryker-js/Mutant'
 import { afterAll, afterEach, beforeAll, beforeEach, inject, RunnerTestCase, RunnerTestSuite } from 'vitest'
 
 // This file is copied to the sandbox dir, don't import anything local!
+// Runtime-copied artifact — copied verbatim into the sandbox at runtime; must remain standalone with no local imports.
 // See https://github.com/stryker-mutator/stryker-js/issues/5305
 
 const globalNamespace = inject('globalNamespace')
@@ -88,6 +89,6 @@ function collectTestName({
 }
 
 function toRawTestId(test: RunnerTestCase): string {
-  return `${test.file?.filepath ?? 'unknown.js'}#${collectTestName(test)}`
+  return `${test.file.filepath}#${collectTestName(test)}`
 }
 // Stryker restore all

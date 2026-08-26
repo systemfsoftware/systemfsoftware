@@ -49,8 +49,6 @@ interface HookVerdictPhases extends Cell.Phases {
   readonly decodeError: never
   readonly readError: PlatformError
   readonly writeError: never
-  readonly readContext: ChildProcessSpawner | RunHookScriptExecutorDeps
-  readonly writeContext: never
 }
 const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(function*(
   entries: readonly HookEntry[],
@@ -58,6 +56,7 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
   input: Record<string, unknown>,
   ctx: HookSession,
   event: string,
+  services: Context.Context<ChildProcessSpawner | RunHookScriptExecutorDeps>,
 ) {
   const cwd = ctx.cwd
   const ruleInput = Option.getOrElse(asToolInput(input['tool_input']), () => EMPTY_TOOL_INPUT)
@@ -78,7 +77,9 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
    * carries the input the previous write produced.
    */
   const hookVerdictDescription = pipe(
-    Cell.read<HookVerdictPhases>(({ hook, input }) => runHookScript(hook, input, cwd, event)),
+    Cell.read<HookVerdictPhases>(({ hook, input }) =>
+      Effect.provideContext(runHookScript(hook, input, cwd, event), services)
+    ),
     Cell.decode<HookVerdictPhases>((raw) =>
       Result.succeed(
         new SubmitVerdictCommand({
@@ -165,7 +166,8 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
   ctx: HookSession,
   event: string,
 ) {
-  return yield* runHooksForEventUnbounded(entries, matchValue, input, ctx, event).pipe(
+  const services = yield* Effect.context<ChildProcessSpawner | RunHookScriptExecutorDeps>()
+  return yield* runHooksForEventUnbounded(entries, matchValue, input, ctx, event, services).pipe(
     Effect.timeout(AGGREGATE_CEILING_MS),
     Effect.catchTag('TimeoutError', (): Effect.Effect<HooksForEventResult> => Effect.succeed({})),
   )

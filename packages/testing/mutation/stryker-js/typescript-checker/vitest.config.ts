@@ -1,15 +1,14 @@
+import { inlineRefutationCoverage } from '@systemfsoftware/effect-schema-refutation-vite'
+import { inlineSchemaTests } from '@systemfsoftware/effect-schema-vite'
 import { defineConfig, sharedConfig } from '@systemfsoftware/vitest-config'
 
 export default defineConfig({
   ...sharedConfig,
+  plugins: [inlineSchemaTests(), inlineRefutationCoverage()],
   test: {
     ...sharedConfig.test,
-    include: ['tests/**/*.integration.test.ts'],
-    exclude: [
-      '**/node_modules/**',
-      '**/.stryker-tmp/**',
-      '**/testResources/**',
-    ],
+    include: ['src/**/*.test.ts'],
+    exclude: ['**/node_modules/**', '**/.stryker-tmp/**', '**/testResources/**'],
     testTimeout: 30000,
     hookTimeout: 30000,
   },

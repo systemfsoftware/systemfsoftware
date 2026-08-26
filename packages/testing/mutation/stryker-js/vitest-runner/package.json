@@ -45,7 +45,8 @@
     "coverageAnalysis": "perTest"
   },
   "dependencies": {
-    "@systemfsoftware/stryker-js-plugin-api": "workspace:^"
+    "@systemfsoftware/stryker-js": "workspace:^",
+    "@systemfsoftware/effect-cell-types": "workspace:^"
   },
   "peerDependencies": {
     "effect": "catalog:peers",
@@ -54,6 +55,7 @@
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
+    "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",

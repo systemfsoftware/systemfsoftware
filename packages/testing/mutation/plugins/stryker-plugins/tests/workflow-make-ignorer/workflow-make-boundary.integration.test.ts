@@ -1,5 +1,4 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 
@@ -411,7 +410,7 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
         When('the declared plugin is inspected')('plugin', (s) => Effect.sync(() => s.plugins[0])),
         Then('it is an Ignore-kind plugin named workflow-make-boundary carrying a layer')((s) =>
           Effect.sync(() => {
-            expect(s.plugin).toMatchObject({ kind: PluginKind.Ignore, name: 'workflow-make-boundary' })
+            expect(s.plugin).toMatchObject({ kind: 'Ignore', name: 'workflow-make-boundary' })
             // The contribution now carries a `Layer` rather than a bare value.
             // That the layer actually provides `Ignorer` is proven where the
             // engine composes it, since building it here would need fabricated

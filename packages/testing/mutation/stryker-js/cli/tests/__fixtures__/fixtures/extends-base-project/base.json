@@ -1,0 +1,10 @@
+{
+  "thresholds": {
+    "high": 100,
+    "low": 80,
+    "break": 100
+  },
+  "jsonReporter": {
+    "fileName": "reports/mutation-report.json"
+  }
+}

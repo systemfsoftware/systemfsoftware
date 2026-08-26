@@ -1,0 +1,117 @@
+/**
+ * Worker — wire types and failure identities for the child-process pool.
+ *
+ * Holds the JSON IPC alphabet, the four ways the host side can fail before
+ * the worker is usable, and the two crash discriminants the engine branches on.
+ */
+
+import { Wire } from '@systemfsoftware/effect-cell-types'
+import { Schema as S } from 'effect'
+
+// ---------------------------------------------------------------------------
+// IPC — method call / reply
+// ---------------------------------------------------------------------------
+
+/**
+ * Method threw — the worker stayed up. Distinct from a crash: the pool
+ * retires a crashed worker but not one whose method rejected.
+ */
+export class WorkerMethodError extends S.TaggedError<WorkerMethodError>()('WorkerMethodError', {
+  message: Wire.string,
+  name: Wire.optional(Wire.string),
+  stack: Wire.optional(Wire.string),
+}) {}
+
+// Node net.AddressInfo | string | null — OS-provided socket address foreign to workspace
+const SocketAddress = Wire.mint(S.Unknown)
+
+/**
+ * The parent bound its IPC socket but the OS did not give it a TCP address.
+ */
+export class WorkerSocketNotTcpError extends S.TaggedError<WorkerSocketNotTcpError>()(
+  'WorkerSocketNotTcpError',
+  {
+    address: SocketAddress,
+  },
+) {}
+
+/**
+ * The worker process never connected back within the window.
+ */
+export class WorkerConnectTimeoutError extends S.TaggedError<WorkerConnectTimeoutError>()(
+  'WorkerConnectTimeoutError',
+  {
+    modulePath: Wire.string,
+    waitedMs: Wire.number,
+  },
+) {}
+
+// Node.js server listen error — OS-provided Error shape foreign to workspace
+const ListenCause = Wire.mint(S.Unknown)
+
+/**
+ * The parent could not bind its IPC socket.
+ */
+export class WorkerSocketListenFailed extends S.TaggedError<WorkerSocketListenFailed>()(
+  'WorkerSocketListenFailed',
+  {
+    cause: ListenCause,
+  },
+) {}
+
+// ---------------------------------------------------------------------------
+// Process exit — crash discriminants
+// ---------------------------------------------------------------------------
+
+/**
+ * A process identifier. `S.Int` rather than `S.Number` because the plain number
+ * domain admits `NaN` and the infinities, and a pid is none of those.
+ */
+const ProcessId = Wire.integer
+
+/**
+ * How a child process ended.
+ */
+const ChildExit = Wire.union(
+  Wire.wire({ _tag: Wire.literal('Code'), code: Wire.integer }),
+  Wire.wire({ _tag: Wire.literal('Signal'), signal: Wire.string }),
+)
+export type ChildExit = typeof ChildExit.Type
+
+/**
+ * The child process hosting a worker ended when it was not supposed to.
+ */
+export class ChildProcessCrashedError extends S.TaggedError<ChildProcessCrashedError>()(
+  'ChildProcessCrashedError',
+  {
+    pid: ProcessId,
+    exit: ChildExit,
+    cause: Wire.optional(Wire.string),
+  },
+) {
+  readonly exitClass = 'InternalError' as const
+}
+
+/**
+ * An IPC frame exceeded the maximum allowed size before a delimiter was seen.
+ *
+ * Distinct from a crash or OOM: the peer violated the framing contract and the
+ * socket is closed to prevent unbounded string accumulation. Callers observe
+ * this rather than a generic {@link ChildProcessCrashedError} so the cause is
+ * distinguishable from an ordinary worker death.
+ */
+export class WorkerFrameTooLargeError extends S.TaggedError<WorkerFrameTooLargeError>()(
+  'WorkerFrameTooLargeError',
+  {
+    byteLength: Wire.integer,
+    limit: Wire.integer,
+  },
+) {
+  readonly exitClass = 'InternalError' as const
+}
+export class OutOfMemoryError extends S.TaggedError<OutOfMemoryError>()('OutOfMemoryError', {
+  pid: ProcessId,
+  exitCode: Wire.integer,
+}) {
+  readonly exitClass = 'RuntimeError' as const
+}

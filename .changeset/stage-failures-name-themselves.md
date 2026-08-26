@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/stryker-js-mutation-run": major
+"@systemfsoftware/stryker-js-platform-node": major
 ---
 
 A failing run stage now says what failed. The five stage error types are one

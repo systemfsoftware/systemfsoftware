@@ -4,8 +4,8 @@
 
 # stryker
 
-The `stryker` command for the [System F Software][repo] StrykerJS fork — a
-mutation test runner whose output is meant to be read by a program.
+The `stryker` command for the [System F Software][repo] mutation engine —
+output meant to be read by a program.
 
 Every run writes one NDJSON event per line to stdout and exits with a code that
 says _which_ thing went wrong, so CI steps and coding agents can act on a run
@@ -37,7 +37,7 @@ $ npx stryker <command> [options]
 ```
 
 Mutation testing concepts, the supported mutators, and every `run` option are
-the upstream ones — see [stryker-mutator.io][upstream-docs]. `stryker --llms`
+the ones [stryker-mutator.io][docs] documents. `stryker --llms`
 prints the whole command surface as one JSON object, walked from the command
 descriptors rather than hand-maintained.
 
@@ -84,8 +84,9 @@ The highest pending class wins; a terminating signal outranks all of them.
 
 ## Related
 
-The mutation engine is [`@systemfsoftware/stryker-js-core`][core]. This package
-is the terminal-facing half and reaches it through an injected run-event sink;
+The mutation engine is [`@systemfsoftware/stryker-js-platform-node`][engine].
+This package is the terminal-facing half and reaches it through an injected
+run-event sink;
 it ships a command and exposes no importable API.
 
 ## License
@@ -99,5 +100,5 @@ Licensed under [Apache 2.0][license-url].
 [license-badge]: https://img.shields.io/badge/license-Apache_2.0-blue?style=flat-square
 [license-url]: https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE
 [repo]: https://github.com/systemfsoftware/systemfsoftware
-[core]: https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/stryker-js/core
-[upstream-docs]: https://stryker-mutator.io/docs/stryker-js/configuration/
+[engine]: https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/testing/mutation/stryker-js/platform-node
+[docs]: https://stryker-mutator.io/docs/stryker-js/configuration/

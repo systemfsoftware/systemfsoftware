@@ -1,18 +1,24 @@
-import base from '@systemfsoftware/oxlint-config/base'
+import all from '@systemfsoftware/all'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
-  extends: [base],
-  ignorePatterns: ['**/testResources/**'],
-
-  rules: {
-    // Enabled per-package because the shared config deliberately leaves it out.
-    // It judges a class by the expression it extends, so `Context.Service`,
-    // `S.TaggedError` and `Schema` stay legal and nothing else does. It belongs to
-    // no oxlint category, which is why `correctness` never caught the ~40 classes
-    // with mutable fields and impure constructors this subsystem was graded F- for
-    // — including two whose instance methods were unreachable across the worker
-    // IPC boundary because the dispatcher reads properties off the export.
-    '@systemfsoftware/oxlint-plugin/ban-classes': 'error',
-  },
+  ...all,
+  ignorePatterns: [...(all.ignorePatterns ?? []), '**/testResources/**'],
+  overrides: [
+    ...(all.overrides ?? []),
+    {
+      // The Gherkin DSL's `Then`/`Given`/`When` create `it` blocks at runtime
+      // via `makeFeature({ it, layer })` → `scenario` → `Then`. The vitest
+      // plugin's static analysis cannot follow this indirection and reports
+      // `expect` inside `Then` as standalone. Teach the rule that these
+      // Gherkin steps are test blocks.
+      files: ['tests/**/*.integration.test.ts'],
+      rules: {
+        'vitest/no-standalone-expect': [
+          'error',
+          { additionalTestBlockFunctions: ['Then', 'Given', 'When', 'And'] },
+        ],
+      },
+    },
+  ],
 })

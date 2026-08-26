@@ -55,7 +55,6 @@
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "test:run": "vitest run --coverage",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
@@ -71,7 +70,7 @@
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
-    "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
+    "@systemfsoftware/stryker-js": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
@@ -84,7 +83,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@systemfsoftware/stryker-js-plugin-api": "workspace:^",
+    "@systemfsoftware/stryker-js": "workspace:^",
     "effect": "catalog:peers",
     "typescript": ">=5.0.0"
   },

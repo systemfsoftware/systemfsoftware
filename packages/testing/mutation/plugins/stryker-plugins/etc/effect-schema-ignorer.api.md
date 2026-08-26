@@ -4,8 +4,7 @@
 
 ```ts
 
-import { PluginContribution } from '@systemfsoftware/stryker-js-plugin-api/plugin';
-import { PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin';
+import { PluginContribution } from '@systemfsoftware/stryker-js/Plugin';
 
 // @public (undocumented)
 export const ANNOTATION_OBJECT_IGNORED: 'annotations object holding only documentation is a declaration, not behaviour';
@@ -29,7 +28,7 @@ export const decideSchemaDeclarationIgnore: (node: unknown, parent: unknown, gra
 export const OPTIONAL_DEFAULT_IGNORED: 'optionalWith default value is config, not behaviour';
 
 // @public (undocumented)
-export const strykerPlugins: PluginContribution<PluginKind.Ignore>[];
+export const strykerPlugins: PluginContribution<"Ignore">[];
 
 // @public (undocumented)
 export const SYMBOL_DESCRIPTION_IGNORED: 'Symbol.for() brand description is identity-only data, not behaviour';

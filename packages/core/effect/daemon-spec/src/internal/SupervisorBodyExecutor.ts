@@ -72,8 +72,6 @@ interface RestartPhases extends Cell.Phases {
   readonly decodeError: never
   readonly readError: never
   readonly writeError: never
-  readonly readContext: never
-  readonly writeContext: never
 }
 
 /**

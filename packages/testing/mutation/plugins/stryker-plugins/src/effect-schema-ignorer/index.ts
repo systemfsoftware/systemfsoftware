@@ -1,5 +1,5 @@
-import { Ignorer } from '@systemfsoftware/stryker-js-plugin-api/ignore'
-import { declarePlugin, PluginKind } from '@systemfsoftware/stryker-js-plugin-api/plugin'
+import { Ignorer } from '@systemfsoftware/stryker-js/Ignorer'
+import { declarePlugin } from '@systemfsoftware/stryker-js/Plugin'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import {
@@ -22,15 +22,24 @@ interface IgnorerPath {
 
 export const strykerPlugins = [
   declarePlugin(
-    PluginKind.Ignore,
+    'Ignore',
     'effect-schema-declarations',
     Layer.succeed(Ignorer, {
       shouldIgnore: (path: IgnorerPath) => {
-        const parent = path.parentPath
-        const grandparent = parent?.parentPath
-        return Option.fromUndefinedOr(
-          decideSchemaDeclarationIgnore(path.node, parent?.node, grandparent?.node, grandparent?.parentPath?.node),
-        )
+        for (let current: IgnorerPath | null | undefined = path; current; current = current.parentPath) {
+          const parent = current.parentPath
+          const grandparent = parent?.parentPath
+          const reason = decideSchemaDeclarationIgnore(
+            current.node,
+            parent?.node,
+            grandparent?.node,
+            grandparent?.parentPath?.node,
+          )
+          if (reason !== undefined) {
+            return Option.some(reason)
+          }
+        }
+        return Option.none()
       },
     }),
   ),
