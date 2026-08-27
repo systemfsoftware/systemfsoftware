@@ -55,7 +55,7 @@ lane B: key = prefix-B-<commit>
 # cross-warming only through ordered prefix restore, never through shared primaries
 ```
 
-A restored-but-smaller artifact set is never *poison* — turbo entries are hash-keyed, so a partial snapshot yields hits for what it contains and misses for the rest. The harm is exclusively the dropped save, so fallback restore chains across lane prefixes are safe and desirable.
+A restored-but-smaller artifact set is never _poison_ — turbo entries are hash-keyed, so a partial snapshot yields hits for what it contains and misses for the rest. The harm is exclusively the dropped save, so fallback restore chains across lane prefixes are safe and desirable.
 
 ## Verification
 
@@ -72,7 +72,7 @@ Code smells that reproduce this class:
 
 - Two `actions/cache` steps with identical `key:` anywhere in one workflow's job graph — grep every reusable workflow for duplicated key templates before adding a lane.
 - A cache-path directory written by jobs whose task sets differ, keyed only by commit identity (sha, lockfile hash) with no lane dimension.
-- Treating "first save wins" as benign because saves are "the same data" — equivalence must hold of the write *sets*, not the intent.
+- Treating "first save wins" as benign because saves are "the same data" — equivalence must hold of the write _sets_, not the intent.
 
 ## Secondary lesson: a permanently warm cache masks hanging tests
 
