@@ -461,3 +461,23 @@ export const groupPlans = (
   )
   return Cell.apply(description, { checker, checkerName, plans })
 }
+
+export const checkGroupedPlans = (
+  checker: CheckerResourceService,
+  checkerName: string,
+  plans: readonly MutantRunPlan[],
+): Effect.Effect<
+  readonly (readonly [MutantRunPlan, CheckResult])[],
+  CheckerCrash | CheckerContractBroken
+> =>
+  Effect.gen(function*() {
+    const groups = yield* groupPlans(checker, checkerName, plans)
+    const pairs: (readonly [MutantRunPlan, CheckResult])[] = []
+    for (const group of groups) {
+      const checked = yield* checkPlans(checker, checkerName, group)
+      for (const pair of checked) {
+        pairs.push(pair)
+      }
+    }
+    return pairs
+  })
