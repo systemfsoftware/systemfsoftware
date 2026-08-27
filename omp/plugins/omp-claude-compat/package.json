@@ -60,7 +60,8 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@systemfsoftware/vitest-config": "workspace:^"
   },
   "omp": {
     "extensions": [
