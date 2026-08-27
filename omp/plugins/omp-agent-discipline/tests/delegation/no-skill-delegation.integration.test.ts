@@ -1,4 +1,4 @@
-import { runNoSkillDelegation } from '@systemfsoftware/agent-discipline'
+import { runNoSkillDelegation } from '../../src/delegation/mod.js'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { HarnessPolicyLive } from '@systemfsoftware/effect-harness-policy'

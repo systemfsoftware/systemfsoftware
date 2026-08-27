@@ -14,7 +14,7 @@ import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { expect } from 'vitest'
 
-import { DOCTRINE_KERNEL } from '@systemfsoftware/agent-discipline'
+import { DOCTRINE_KERNEL } from '../../src/doctrine/mod.js'
 
 const Feature = makeFeature({ it, layer })
 

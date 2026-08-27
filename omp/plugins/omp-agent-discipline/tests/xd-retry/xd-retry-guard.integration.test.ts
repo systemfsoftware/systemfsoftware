@@ -81,7 +81,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const { XdRetryGuardExtension, __resetXdRetryStateForTesting } = await import(
-            '@systemfsoftware/agent-discipline'
+            '../../src/xd-retry/mod.js'
           )
           __resetXdRetryStateForTesting()
           const g = createMockGuard()
@@ -112,7 +112,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const { XdRetryGuardExtension, __resetXdRetryStateForTesting } = await import(
-            '@systemfsoftware/agent-discipline'
+            '../../src/xd-retry/mod.js'
           )
           __resetXdRetryStateForTesting()
           const g = createMockGuard()
@@ -138,7 +138,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const { XdRetryGuardExtension, __resetXdRetryStateForTesting } = await import(
-            '@systemfsoftware/agent-discipline'
+            '../../src/xd-retry/mod.js'
           )
           __resetXdRetryStateForTesting()
           const g = createMockGuard()
@@ -171,7 +171,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const { XdRetryGuardExtension, __resetXdRetryStateForTesting } = await import(
-            '@systemfsoftware/agent-discipline'
+            '../../src/xd-retry/mod.js'
           )
           __resetXdRetryStateForTesting()
           const g = createMockGuard()
@@ -205,7 +205,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const { XdRetryGuardExtension, __resetXdRetryStateForTesting } = await import(
-            '@systemfsoftware/agent-discipline'
+            '../../src/xd-retry/mod.js'
           )
           __resetXdRetryStateForTesting()
           const g = createMockGuard()
@@ -238,7 +238,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const { XdRetryGuardExtension, __resetXdRetryStateForTesting } = await import(
-            '@systemfsoftware/agent-discipline'
+            '../../src/xd-retry/mod.js'
           )
           __resetXdRetryStateForTesting()
           const g = createMockGuard()
@@ -272,7 +272,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const { XdRetryGuardExtension, __resetXdRetryStateForTesting } = await import(
-            '@systemfsoftware/agent-discipline'
+            '../../src/xd-retry/mod.js'
           )
           __resetXdRetryStateForTesting()
           const g = createMockGuard()
@@ -306,7 +306,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const { XdRetryGuardExtension, __resetXdRetryStateForTesting } = await import(
-            '@systemfsoftware/agent-discipline'
+            '../../src/xd-retry/mod.js'
           )
           __resetXdRetryStateForTesting()
           const g = createMockGuard()
@@ -340,7 +340,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const { XdRetryGuardExtension, __resetXdRetryStateForTesting } = await import(
-            '@systemfsoftware/agent-discipline'
+            '../../src/xd-retry/mod.js'
           )
           __resetXdRetryStateForTesting()
           const g = createMockGuard()
@@ -386,7 +386,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const { XdRetryGuardExtension, __resetXdRetryStateForTesting } = await import(
-            '@systemfsoftware/agent-discipline'
+            '../../src/xd-retry/mod.js'
           )
           __resetXdRetryStateForTesting()
           const g = createMockGuard()
@@ -414,7 +414,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const { XdRetryGuardExtension, __resetXdRetryStateForTesting } = await import(
-            '@systemfsoftware/agent-discipline'
+            '../../src/xd-retry/mod.js'
           )
           __resetXdRetryStateForTesting()
           const g = createMockGuard()
@@ -444,7 +444,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
         Effect.promise(async () => {
           vi.resetModules()
           const { XdRetryGuardExtension, __resetXdRetryStateForTesting } = await import(
-            '@systemfsoftware/agent-discipline'
+            '../../src/xd-retry/mod.js'
           )
           __resetXdRetryStateForTesting()
           const g = createMockGuard()

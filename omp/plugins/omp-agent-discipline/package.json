@@ -26,7 +26,6 @@
   },
   "optionalDependencies": {
     "@std/toml": "catalog:",
-    "@systemfsoftware/agent-discipline": "workspace:^",
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-harness-policy": "workspace:^",
     "@systemfsoftware/omp-runtime": "workspace:^"
@@ -40,14 +39,13 @@
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:",
-    "@systemfsoftware/agent-discipline": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-refutation-vite": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
-    "@systemfsoftware/effect-harness-policy": "workspace:^",
     "@systemfsoftware/omp-runtime": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
