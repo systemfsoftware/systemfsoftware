@@ -4,9 +4,9 @@ Read this file when a check fails, not before.
 
 ## Architecture
 
-- **`check:ci` is the single definition of the gate.** `package.json#scripts.check:ci` defines what runs; `.github/workflows/reusable-checks.yml` invokes it. CI workflows enumerate no check steps.
+- **`check:ci` and `check:contract` are the two definitions of the gate.** `package.json#scripts.check:ci` defines the container-free gate, `package.json#scripts.check:contract` defines the integration/contract gate; `.github/workflows/reusable-checks.yml` invokes the former, `.github/workflows/reusable-contract.yml` invokes the latter. CI workflows enumerate no check steps. Gate: `pnpm check:ci` / `pnpm check:contract` exit codes.
 - **`Release` is push-triggered and phase is derived from repository state.** Every phase hangs off `push` to `main`; nothing hangs off a pull-request event, because merging the Release PR with branch deletion destroys `refs/pull/<n>/merge` and GitHub cancels the queued run with zero jobs. `scripts/tools/plan-release.mjs` reads durable state instead and prints `phase=`:
-  1. `publish` — some `name@v<version>` tag is absent from `origin`. Runs `the gate (pnpm check:ci)`, builds, publishes via npm OIDC trusted publishing with provenance, tags, and creates a GitHub Release per package from `.changeset/changelogs/`.
+  1. `publish` — some `name@v<version>` tag is absent from `origin`. Runs both gates (`pnpm check:ci` + `pnpm check:contract`), builds, publishes via npm OIDC trusted publishing with provenance, tags, and creates a GitHub Release per package from `.changeset/changelogs/`.
   2. `version` — nothing owed, but pending `.changeset/` intents exist. `pnpm version -r` consumes them and opens a Release PR (`changeset-release/main`). The job dispatches CI for the branch via `gh workflow run ci.yml --ref changeset-release/main` so required checks start automatically.
   3. `none` — neither.
 
@@ -19,8 +19,9 @@ Read this file when a check fails, not before.
 ## Local Reproduction
 
 ```bash
-pnpm check:local   # uncommitted diffs: turbo gate + dprint check + commitlint
-pnpm check:ci      # exactly what CI runs (--continue reports all failing tasks)
+pnpm check:local      # uncommitted diffs: turbo gate + dprint check + commitlint
+pnpm check:ci         # exactly what CI's fast runner runs
+pnpm check:contract   # exactly what CI's contract runner runs (needs container runtime)
 ```
 
 ## Failure Runbook
