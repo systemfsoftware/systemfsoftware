@@ -135,7 +135,7 @@ Before ending a session:
 
 ## Escalation
 
-- **Constitution conflict**: `CONSTITUTION.md` is already in context — reread it there, not from disk. If letter and purpose diverge, purpose governs (`CONST-G1`).
+- **Constitution conflict**: `CONSTITUTION.md` is already in context — reread it there, not from disk.
 - **Unclear requirements**: Ask the user.
 - **Verification failure**: Record via memory, flag for review, do not bypass.
 - **Scope ambiguity**: Re-read this file and the Definition of Done.

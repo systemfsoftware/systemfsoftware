@@ -1,6 +1,6 @@
 # Constitution — Articles
 
-Retrieved, not resident. `CONSTITUTION.md` is supreme and always in context; these four articles are its craft law, delivered when the work reaches the artifact each one governs. Everything in `CONSTITUTION.md` binds here unchanged — the Preamble on how to read a rule, the Application on how a principle is invoked and enforced, and Article V on conduct.
+Retrieved, not resident. `CONSTITUTION.md` is supreme and always in context; these four articles are its craft law, delivered when the work reaches the artifact each one governs. Article V (conduct) in `CONSTITUTION.md` binds here unchanged.
 
 Deliver this file on **write or edit** of a source file, never on read: an agent that greps, or works from a plan, never fires a read trigger. The trigger condition is the law's; the mechanism that fires it — a path-scoped rule, a pre-tool gate — is the consuming harness's, and belongs in that repo's `AGENTS.md`, never here.
 
