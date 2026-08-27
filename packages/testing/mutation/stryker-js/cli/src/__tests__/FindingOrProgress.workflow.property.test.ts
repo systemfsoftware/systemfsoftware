@@ -8,6 +8,7 @@ import {
   Finding,
   FindingOrProgressCommand,
   findingOrProgressDecision,
+  MachineOnly,
 } from '../FindingOrProgress.workflow.js'
 
 const optionalInt = fc.oneof(fc.constant(undefined), fc.integer({ min: 0, max: 1_000_000 }))
@@ -73,5 +74,25 @@ describe('findingOrProgressDecision', () => {
       return false
     }
     return result.success.line.startsWith('score ') && result.success.line !== 'verdict'
+  })
+
+  it.prop('∀c_Plan_≡ProgressPlanLine', [commandArb], ([sample]) => {
+    const result = findingOrProgressDecision(toCommand(sample, 'plan', false))
+    return Result.isSuccess(result) && result.success.line.startsWith('plan ')
+  })
+
+  it.prop('∀c_Phase_≡ProgressPhaseLine', [commandArb], ([sample]) => {
+    const result = findingOrProgressDecision(toCommand(sample, 'phase', false))
+    return Result.isSuccess(result) && result.success.line.startsWith('phase ')
+  })
+
+  it.prop('∀c_Error_≡ProgressErrorLine', [commandArb], ([sample]) => {
+    const result = findingOrProgressDecision(toCommand(sample, 'error', false))
+    return Result.isSuccess(result) && result.success.line.startsWith('error ')
+  })
+
+  it.prop('∀c_StreamKind_≡MachineOnly', [commandArb], ([sample]) => {
+    const result = findingOrProgressDecision(toCommand(sample, 'stream', false))
+    return Result.isFailure(result) && S.is(MachineOnly)(result.failure)
   })
 })

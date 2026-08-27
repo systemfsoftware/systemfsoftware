@@ -21,6 +21,15 @@ describe('cliOperationDecision', () => {
     return Result.isSuccess(result) && S.is(HelpDecision)(result.success)
   })
 
+  it.prop(
+    '∀h_HelpOrVersionToken_≡Help',
+    [fc.constantFrom('--help', '-h', 'help', '--version', '-v', 'version'), extraArb],
+    ([token, tail]) => {
+      const result = cliOperationDecision(CliDispatchCommand.make({ argv: [token, ...tail] }))
+      return Result.isSuccess(result) && S.is(HelpDecision)(result.success)
+    },
+  )
+
   it.prop('∀t_HelpFlag_≡Help', [extraArb], ([tail]) => {
     const result = cliOperationDecision(CliDispatchCommand.make({ argv: ['run', '--help', ...tail] }))
     return Result.isSuccess(result) && S.is(HelpDecision)(result.success)
@@ -28,6 +37,11 @@ describe('cliOperationDecision', () => {
 
   it.prop('∀t_Llms_≡Manifest', [extraArb], ([tail]) => {
     const result = cliOperationDecision(CliDispatchCommand.make({ argv: ['--llms', ...tail] }))
+    return Result.isSuccess(result) && S.is(ManifestDecision)(result.success)
+  })
+
+  it.prop('∀t_LlmsCommand_≡Manifest', [extraArb], ([tail]) => {
+    const result = cliOperationDecision(CliDispatchCommand.make({ argv: ['llms', ...tail] }))
     return Result.isSuccess(result) && S.is(ManifestDecision)(result.success)
   })
 
@@ -42,6 +56,11 @@ describe('cliOperationDecision', () => {
   })
 
   it.prop('∀f_UnknownLongOption_≡DispatchError', [fc.stringMatching(/^--x[a-z]{2,8}$/)], ([flag]) => {
+    const result = cliOperationDecision(CliDispatchCommand.make({ argv: [flag] }))
+    return Result.isFailure(result) && S.is(DispatchError)(result.failure)
+  })
+
+  it.prop('∀f_UnknownShortOption_≡DispatchError', [fc.stringMatching(/^-[a-gi-uw-z]$/)], ([flag]) => {
     const result = cliOperationDecision(CliDispatchCommand.make({ argv: [flag] }))
     return Result.isFailure(result) && S.is(DispatchError)(result.failure)
   })
