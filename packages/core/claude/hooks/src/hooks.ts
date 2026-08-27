@@ -13,6 +13,7 @@ import { Cell } from '@systemfsoftware/effect-cell-types'
 import {
   Array as Arr,
   Cause,
+  Context,
   Duration,
   Effect,
   Exit,
@@ -431,8 +432,6 @@ interface HookVerdictPhases extends Cell.Phases {
   readonly decodeError: never
   readonly readError: PlatformError
   readonly writeError: never
-  readonly readContext: ChildProcessSpawner | Scope.Scope
-  readonly writeContext: never
 }
 const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(function*(
   entries: readonly HookEntry[],
@@ -442,6 +441,7 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
   event: string,
 ) {
   const cwd = ctx.cwd
+  const services = yield* Effect.context<ChildProcessSpawner | Scope.Scope>()
   const ruleInput = Option.getOrElse(asToolInput(input['tool_input']), () => EMPTY_TOOL_INPUT)
   let warning: string | undefined
   let currentInput = input
@@ -460,7 +460,9 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
    * carries the input the previous write produced.
    */
   const hookVerdictDescription = pipe(
-    Cell.read<HookVerdictPhases>(({ hook, input }) => runHookScript(hook, input, cwd, event)),
+    Cell.read<HookVerdictPhases>(({ hook, input }) =>
+      Effect.provideContext(runHookScript(hook, input, cwd, event), services)
+    ),
     Cell.decode<HookVerdictPhases>((raw) =>
       Result.succeed(
         new SubmitVerdictCommand({
@@ -810,8 +812,6 @@ interface SubmitPhases extends Cell.Phases {
   readonly decodeError: never
   readonly readError: PlatformError
   readonly writeError: never
-  readonly readContext: ChildProcessSpawner | Scope.Scope
-  readonly writeContext: never
 }
 
 export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(function*(
@@ -821,6 +821,7 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
 ) {
   const entries = settings.hooks.UserPromptSubmit
   const cwd = ctx.cwd
+  const services = yield* Effect.context<ChildProcessSpawner | Scope.Scope>()
   const hostBound = isHostBound(event.text)
   // Left undrained for a host-bound prompt: an async note is one-shot, so it
   // has to survive this command and reach the next model-bound prompt.
@@ -846,7 +847,9 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
    * failed hooks, or accumulates the trimmed stdout.
    */
   const submitDescription = pipe(
-    Cell.read<SubmitPhases>(({ hook, input }) => runHookScript(hook, input, cwd, 'UserPromptSubmit')),
+    Cell.read<SubmitPhases>(({ hook, input }) =>
+      Effect.provideContext(runHookScript(hook, input, cwd, 'UserPromptSubmit'), services)
+    ),
     Cell.decode<SubmitPhases>((raw) =>
       Result.succeed(
         new SubmitVerdictCommand({
@@ -950,17 +953,16 @@ interface SettingsAdmitPhases<Response> extends Cell.Phases {
   readonly decodeError: never
   readonly readError: never
   readonly writeError: PlatformError
-  readonly readContext: HookDispatchContext
-  readonly writeContext: HookDispatchContext
 }
 
 const admitSettings = <Response>(
   write: (settings: HookSettings) => Effect.Effect<Response, PlatformError, HookDispatchContext>,
   empty: Response,
+  services: Context.Context<HookDispatchContext>,
 ) => {
   let loaded: Option.Option<HookSettings> = Option.none()
   return pipe(
-    Cell.read<SettingsAdmitPhases<Response>>((ctx) => settingsFor(ctx)),
+    Cell.read<SettingsAdmitPhases<Response>>((ctx) => Effect.provideContext(settingsFor(ctx), services)),
     Cell.decode<SettingsAdmitPhases<Response>>((settings) => {
       loaded = Option.fromNullishOr(settings)
       return Result.succeed(admitPresent(Option.isSome(loaded)))
@@ -970,35 +972,43 @@ const admitSettings = <Response>(
     Cell.write<SettingsAdmitPhases<Response>>((decision) =>
       Match.value(decision).pipe(
         Match.tag('SkipHooks', () => Effect.succeed(empty)),
-        Match.tag('RunHooks', () => write(Option.getOrThrow(loaded))),
+        Match.tag('RunHooks', () => Effect.provideContext(write(Option.getOrThrow(loaded)), services)),
         Match.exhaustive,
       )
     ),
   )
 }
 
+const dispatchAdmit = <Response>(
+  write: (settings: HookSettings) => Effect.Effect<Response, PlatformError, HookDispatchContext>,
+  empty: Response,
+  ctx: HookSession,
+) =>
+  Effect.flatMap(
+    Effect.context<HookDispatchContext>(),
+    (services) => Cell.apply(admitSettings(write, empty, services), ctx),
+  )
+
 export const onToolCall = (event: HookToolCall, ctx: HookSession) =>
-  Cell.apply(admitSettings((settings) => runPreToolUseHooks(settings, event, ctx), undefined), ctx)
+  dispatchAdmit((settings) => runPreToolUseHooks(settings, event, ctx), undefined, ctx)
 
 export const onToolResult = (event: ToolResultEvent, ctx: HookSession) =>
-  Cell.apply(
-    admitSettings(
-      (settings) =>
-        Effect.gen(function*() {
-          const result = yield* runToolResultHooks(settings, event, ctx)
-          if (result.warning === undefined) return undefined
-          return {
-            content: [...event.content, { type: 'text' as const, text: result.warning }],
-            isError: event.isError,
-          }
-        }),
-      undefined,
-    ),
+  dispatchAdmit(
+    (settings) =>
+      Effect.gen(function*() {
+        const result = yield* runToolResultHooks(settings, event, ctx)
+        if (result.warning === undefined) return undefined
+        return {
+          content: [...event.content, { type: 'text' as const, text: result.warning }],
+          isError: event.isError,
+        }
+      }),
+    undefined,
     ctx,
   )
 
 export const onPrompt = (event: HookPrompt, ctx: HookSession) =>
-  Cell.apply(admitSettings((settings) => runUserPromptSubmitHooks(settings, event, ctx), undefined), ctx)
+  dispatchAdmit((settings) => runUserPromptSubmitHooks(settings, event, ctx), undefined, ctx)
 
 export const onSessionStart = (reason: string, ctx: HookSession) =>
   Effect.gen(function*() {
@@ -1031,57 +1041,44 @@ export const onSessionStart = (reason: string, ctx: HookSession) =>
         'error',
       )
     }
-    return yield* Cell.apply(
-      admitSettings((settings) => runSessionStartHooks(settings, reason, ctx), undefined),
-      ctx,
-    )
+    return yield* dispatchAdmit((settings) => runSessionStartHooks(settings, reason, ctx), undefined, ctx)
   })
 
 export const onSessionCompact = (ctx: HookSession) =>
-  Cell.apply(
-    admitSettings(
-      (settings) =>
-        Effect.gen(function*() {
-          yield* runSessionStartHooks(settings, 'compact', ctx)
-          yield* runLifecycleHooks(settings.hooks.PostCompact, ctx, 'PostCompact')
-        }),
-      undefined,
-    ),
+  dispatchAdmit(
+    (settings) =>
+      Effect.gen(function*() {
+        yield* runSessionStartHooks(settings, 'compact', ctx)
+        yield* runLifecycleHooks(settings.hooks.PostCompact, ctx, 'PostCompact')
+      }),
+    undefined,
     ctx,
   )
 
 export const onPreCompact = (ctx: HookSession) =>
-  Cell.apply(
-    admitSettings(
-      (settings) =>
-        Effect.gen(function*() {
-          const result = yield* runPreCompactHooks(settings, ctx)
-          if (result.block !== true) return undefined
-          ctx.ui.notify(
-            `Compaction cancelled by a PreCompact hook: ${result.reason ?? 'no reason given'}`,
-            'warning',
-          )
-          return { cancel: true as const }
-        }),
-      undefined,
-    ),
+  dispatchAdmit(
+    (settings) =>
+      Effect.gen(function*() {
+        const result = yield* runPreCompactHooks(settings, ctx)
+        if (result.block !== true) return undefined
+        ctx.ui.notify(
+          `Compaction cancelled by a PreCompact hook: ${result.reason ?? 'no reason given'}`,
+          'warning',
+        )
+        return { cancel: true as const }
+      }),
+    undefined,
     ctx,
   )
 
 export const onSessionSwitch = (reason: string, ctx: HookSession) =>
-  Cell.apply(admitSettings((settings) => runSessionSwitchHooks(settings, reason, ctx), undefined), ctx)
+  dispatchAdmit((settings) => runSessionSwitchHooks(settings, reason, ctx), undefined, ctx)
 
 export const onSessionShutdown = (ctx: HookSession) =>
-  Cell.apply(
-    admitSettings((settings) => runLifecycleHooks(settings.hooks.SessionEnd, ctx, 'SessionEnd'), undefined),
-    ctx,
-  )
+  dispatchAdmit((settings) => runLifecycleHooks(settings.hooks.SessionEnd, ctx, 'SessionEnd'), undefined, ctx)
 
 export const onSessionStop = (ctx: HookSession) =>
-  Cell.apply(
-    admitSettings((settings) => runLifecycleHooks(settings.hooks.Stop, ctx, 'Stop'), undefined),
-    ctx,
-  )
+  dispatchAdmit((settings) => runLifecycleHooks(settings.hooks.Stop, ctx, 'Stop'), undefined, ctx)
 
 // ── HookDispatcherHandler ──
 const HANDLER_CEILING_MS = 28_000

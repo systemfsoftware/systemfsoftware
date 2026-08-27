@@ -566,11 +566,12 @@ const ClaudeSettingsLiveBase = Layer.effect(
   ClaudeSettings,
   Effect.gen(function*() {
     const sources = yield* ClaudeSettingsSources
+    const fs = yield* FileSystem
+    const fsServices = yield* Effect.context<FileSystem>()
     const capturedDescribe = sources.describe
     const readSettingsTextsCaptured = (cwd: string, homeDir: string) =>
       Effect.gen(function*() {
-        const fs = yield* FileSystem
-        const { paths, pluginSources } = yield* capturedDescribe(cwd, homeDir)
+        const { paths, pluginSources } = yield* Effect.provideContext(capturedDescribe(cwd, homeDir), fsServices)
         const texts = yield* Effect.forEach(
           paths,
           (path) =>
