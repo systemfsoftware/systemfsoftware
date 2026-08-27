@@ -43,6 +43,7 @@ import * as Path from 'effect/Path'
 import * as Pool from 'effect/Pool'
 import * as Predicate from 'effect/Predicate'
 import * as Queue from 'effect/Queue'
+import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
@@ -1126,6 +1127,37 @@ export const mutationTestRun =
         )).flat()
       }
       const testRunnerStream = Stream.fromIterable(executionOrder)
+      const plannedTotal = allPlansForReporter.length + noCoverageResults.length + rememberedResults.length
+      const pathService = yield* Path.Path
+      const progressQueue = yield* RunEvents
+      const completedRef = yield* Ref.make(0)
+      const offerFinished = (result: MutantResult) =>
+        Effect.gen(function*() {
+          const rawStatus: string = result.status
+          if (!isMutantStatus(rawStatus)) {
+            return
+          }
+          const completed = yield* Ref.updateAndGet(completedRef, (n) => n + 1)
+          yield* Queue.offer(
+            progressQueue,
+            new MutantTested({
+              id: result.id,
+              status: rawStatus,
+              file: normalizeReportFileName(env.basePath, result.fileName, pathService),
+              location: toSchemaLocation(result.location),
+              mutator: result.mutatorName,
+              replacement: result.replacement,
+              completed,
+              total: plannedTotal,
+            }),
+          )
+        })
+      for (const result of [...rememberedResults, ...noCoverageResults]) {
+        yield* offerFinished(result)
+        yield* reporterService.onMutantTested(result).pipe(
+          Effect.catchCause((cause) => Effect.logWarning('Reporter failed handling onMutantTested', cause)),
+        )
+      }
       const runResults: MutantResult[] = yield* Stream.mapEffect(
         testRunnerStream,
         (plan) =>
@@ -1140,38 +1172,14 @@ export const mutationTestRun =
                     Effect.flatMap(Pool.invalidate(pool, runner), () => Effect.fail(error)),
                 }),
               )
-              return yield* reporting.reportMutantRunResult(toReportedMutant(plan.mutant), result)
+              const reported = yield* reporting.reportMutantRunResult(toReportedMutant(plan.mutant), result)
+              yield* offerFinished(reported)
+              return reported
             }),
           ),
         { concurrency: Math.max(1, prev.concurrency.testRunners) },
       ).pipe(Stream.runCollect, Effect.map((chunk) => [...chunk]))
       const allResults: MutantResult[] = [...rememberedResults, ...noCoverageResults, ...runResults]
-      const plannedTotal = allPlansForReporter.length + noCoverageResults.length + rememberedResults.length
-      const pathService = yield* Path.Path
-      let completed = 0
-      for (const result of allResults) {
-        completed += 1
-        const rawStatus: string = result.status
-        if (isMutantStatus(rawStatus)) {
-          const queue3 = yield* RunEvents
-          yield* Queue.offer(
-            queue3,
-            new MutantTested({
-              id: result.id,
-              status: rawStatus,
-              file: normalizeReportFileName(env.basePath, result.fileName, pathService),
-              location: toSchemaLocation(result.location),
-              mutator: result.mutatorName,
-              replacement: result.replacement,
-              completed,
-              total: plannedTotal,
-            }),
-          )
-        }
-        yield* reporterService.onMutantTested(result).pipe(
-          Effect.catchCause((cause) => Effect.logWarning('Reporter failed handling onMutantTested', cause)),
-        )
-      }
       const outcomeResult = yield* reporting.reportAll(allResults)
       yield* reporterService.wrapUp.pipe(
         Effect.catchCause((cause) => Effect.logWarning('Reporter failed handling wrapUp', cause)),

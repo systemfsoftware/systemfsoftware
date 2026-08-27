@@ -36,6 +36,7 @@ import * as Stdio from 'effect/Stdio'
 import * as Stream from 'effect/Stream'
 import * as CliError from 'effect/unstable/cli/CliError'
 import { buildErrorEnvelope, failureValue, readCapturedConsole } from './Envelope.js'
+import { FindingOrProgressCommand, findingOrProgressDecision } from './FindingOrProgress.workflow.js'
 import { ModeConflictError, ResolveModeCommand, resolveModeWorkflow, TOOL_VARIABLES } from './Output.workflow.js'
 import type { FormatFlags, ModeInput, ToolVariable } from './Output.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
@@ -133,12 +134,35 @@ const toWireLine = (event: RunEvent): string => {
 
 export type FramedDrain = (framed: Stream.Stream<string>) => Effect.Effect<void, never, never>
 
-const ACTIONABLE_FINDING: Record<string, true> = {
-  Survived: true,
-  NoCoverage: true,
-  Timeout: true,
-  RuntimeError: true,
-}
+const gatherFindingOrProgress = (event: RunEvent, alreadyClosed: boolean): FindingOrProgressCommand =>
+  Match.value(event).pipe(
+    Match.tag('plan', (e) => FindingOrProgressCommand.make({ kind: 'plan', alreadyClosed, total: e.total })),
+    Match.tag('phase', (e) => FindingOrProgressCommand.make({ kind: 'phase', alreadyClosed, phase: e.phase })),
+    Match.tag(
+      'tick',
+      (e) =>
+        FindingOrProgressCommand.make({
+          kind: 'tick',
+          alreadyClosed,
+          completed: e.completed,
+          total: e.total,
+          elapsedMs: e.elapsedMs,
+        }),
+    ),
+    Match.tag(
+      'verdict',
+      (e) =>
+        FindingOrProgressCommand.make({
+          kind: 'verdict',
+          alreadyClosed,
+          score: e.score,
+          killed: e.counts.killed,
+          survived: e.counts.survived,
+        }),
+    ),
+    Match.tag('error', (e) => FindingOrProgressCommand.make({ kind: 'error', alreadyClosed, error: e.error })),
+    Match.orElse(() => FindingOrProgressCommand.make({ kind: wireKind(event), alreadyClosed })),
+  )
 
 const writeStderr = (stdio: Stdio.Stdio, line: string): Effect.Effect<void, never, never> =>
   Stream.run(Stream.succeed(`${line}\n`), stdio.stderr({ endOnDone: false })).pipe(Effect.ignore)
@@ -216,23 +240,16 @@ export const makeRunEventStream = (
 
     let terminalSeen = false
     const observed = Stream.merge(queueStream, tickStream, { haltStrategy: 'either' }).pipe(
-      Stream.tap((event) =>
-        Match.value(event).pipe(
-          Match.tag('plan', (e) => writeStderr(stdio, `plan ${e.total} mutants`)),
-          Match.tag('phase', (e) => writeStderr(stdio, `phase ${e.phase}`)),
-          Match.tag('tick', (e) => writeStderr(stdio, `${e.completed}/${e.total ?? '?'} elapsed ${e.elapsedMs}ms`)),
-          Match.tag('mutant', (e) => {
-            if (ACTIONABLE_FINDING[e.status] !== true || state.findingsPrinted >= 20) {
-              return Effect.void
-            }
-            state.findingsPrinted += 1
-            return writeStderr(stdio, `${e.status} ${e.file} ${e.mutator}`)
-          }),
-          Match.tag('verdict', () => writeStderr(stdio, 'verdict')),
-          Match.tag('error', (e) => writeStderr(stdio, `error ${e.error}`)),
-          Match.orElse(() => Effect.void),
-        )
-      ),
+      Stream.tap((event) => {
+        const decision = findingOrProgressDecision(gatherFindingOrProgress(event, state.terminalWritten))
+        if (isTerminalEvent(event)) {
+          state.terminalWritten = true
+        }
+        if (Result.isSuccess(decision)) {
+          return writeStderr(stdio, decision.success.line)
+        }
+        return Effect.void
+      }),
     )
     const framed = observed.pipe(
       Stream.filter((event) => {
