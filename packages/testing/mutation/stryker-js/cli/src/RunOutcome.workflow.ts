@@ -112,16 +112,24 @@ function classify(
   return RunFailed.make({ code: 1, diagnostic: command.diagnostic })
 }
 
+function succeedRun(ok: RunOk): Result.Result<RunOk, RunOutcomeError> {
+  return Result.succeed(ok)
+}
+
+function failRun(error: RunOutcomeError): Result.Result<RunOk, RunOutcomeError> {
+  return Result.fail(error)
+}
+
 export function runOutcomeDecision(
   command: RunOutcomeCommand,
 ): Result.Result<RunOk, RunOutcomeError> {
   return Match.value(classify(command)).pipe(
-    Match.tag('RunOk', (ok) => Result.succeed(ok)),
-    Match.tag('RunInterrupted', (error) => Result.fail(error)),
-    Match.tag('RunParseFailed', (error) => Result.fail(error)),
-    Match.tag('RunSurvivorsRejected', (error) => Result.fail(error)),
-    Match.tag('RunConfigFailed', (error) => Result.fail(error)),
-    Match.tag('RunFailed', (error) => Result.fail(error)),
+    Match.tag('RunOk', succeedRun),
+    Match.tag('RunInterrupted', failRun),
+    Match.tag('RunParseFailed', failRun),
+    Match.tag('RunSurvivorsRejected', failRun),
+    Match.tag('RunConfigFailed', failRun),
+    Match.tag('RunFailed', failRun),
     Match.exhaustive,
   )
 }
