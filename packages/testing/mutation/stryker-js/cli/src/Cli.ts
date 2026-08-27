@@ -52,7 +52,7 @@ import { createRequire } from 'node:module'
 import { resolve as resolvePath } from 'node:path'
 import type { CliRequest } from './Cli.schema.js'
 import type { CliDispatchDecision, DispatchError } from './Cli.workflow.js'
-import { CliDispatchCommand, dispatchWorkflow } from './Cli.workflow.js'
+import { CliDispatchCommand, cliOperationWorkflow } from './Cli.workflow.js'
 import {
   buildErrorEnvelope,
   collectExitClasses,
@@ -1103,7 +1103,7 @@ const cliLayer = Layer.mergeAll(
 )
 interface DispatchPhases extends Cell.Phases {
   readonly command: readonly string[]
-  readonly raw: { readonly argv: readonly string[]; readonly hasConfig: boolean }
+  readonly raw: { readonly argv: readonly string[] }
   readonly decoded: CliDispatchCommand
   readonly decision: CliDispatchDecision
   readonly decisionError: DispatchError
@@ -1130,9 +1130,9 @@ export function strykerCliEffect(
 ): Effect.Effect<number, never, never> {
   return Effect.gen(function*() {
     const dispatchDescription: Cell.WriteDone<DispatchPhases> = pipe(
-      Cell.read<DispatchPhases>((command) => Effect.succeed({ argv: [...command], hasConfig: false })),
+      Cell.read<DispatchPhases>((command) => Effect.succeed({ argv: [...command] })),
       Cell.decode<DispatchPhases>((raw) => S.decodeUnknownResult(CliDispatchCommand)(raw)),
-      Cell.decide<DispatchPhases>(dispatchWorkflow),
+      Cell.decide<DispatchPhases>(cliOperationWorkflow),
       Cell.encode<DispatchPhases>((outcome) => outcome),
       Cell.write<DispatchPhases>((outcome) =>
         Result.match(outcome, {

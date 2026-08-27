@@ -1,12 +1,10 @@
+import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
-import { Workflow } from '@systemfsoftware/effect-cell-types'
-
 export class CliDispatchCommand extends S.Class<CliDispatchCommand>('CliDispatchCommand')({
   argv: S.Array(S.String),
-  hasConfig: S.Boolean,
 }) {}
 
 export class RunDecision extends S.TaggedClass<RunDecision>()('RunDecision', {
@@ -33,14 +31,15 @@ export class DispatchError extends S.TaggedError<DispatchError>()('DispatchError
   arg: S.optional(S.String),
 }) {}
 
-type Verdict =
+type CliOperation =
   | { readonly kind: 'run' }
   | { readonly kind: 'survivors' }
   | { readonly kind: 'manifest' }
   | { readonly kind: 'help' }
-  | { readonly kind: 'error'; readonly message: string; readonly arg: string | undefined }
+  | { readonly kind: 'unknown-argument'; readonly arg: string }
+  | { readonly kind: 'unknown-command'; readonly arg: string }
 
-function verdictOf(command: CliDispatchCommand): Verdict {
+function cliOperation(command: CliDispatchCommand): CliOperation {
   const argv = command.argv
   if (argv.length === 0) {
     return { kind: 'help' }
@@ -63,20 +62,30 @@ function verdictOf(command: CliDispatchCommand): Verdict {
     return { kind: 'run' }
   }
   if (first.startsWith('-')) {
-    return { kind: 'error', message: `Unknown argument: '${first}'`, arg: first }
+    return { kind: 'unknown-argument', arg: first }
   }
-  return { kind: 'error', message: `Unknown command: '${first}'`, arg: first }
+  return { kind: 'unknown-command', arg: first }
 }
 
-export function dispatchDecision(command: CliDispatchCommand): Result.Result<CliDispatchDecision, DispatchError> {
-  return Match.value(verdictOf(command)).pipe(
-    Match.when({ kind: 'run' }, () => Result.succeed(RunDecision.make({ argv: [...command.argv] }))),
-    Match.when({ kind: 'survivors' }, () => Result.succeed(SurvivorsDecision.make({ argv: [...command.argv] }))),
-    Match.when({ kind: 'manifest' }, () => Result.succeed(ManifestDecision.make({ argv: [...command.argv] }))),
-    Match.when({ kind: 'help' }, () => Result.succeed(HelpDecision.make({ argv: [...command.argv] }))),
-    Match.when({ kind: 'error' }, (v) => Result.fail(DispatchError.make({ message: v.message, arg: v.arg }))),
+export function cliOperationDecision(
+  command: CliDispatchCommand,
+): Result.Result<CliDispatchDecision, DispatchError> {
+  const argv = [...command.argv]
+  return Match.value(cliOperation(command)).pipe(
+    Match.when({ kind: 'run' }, () => Result.succeed(RunDecision.make({ argv }))),
+    Match.when({ kind: 'survivors' }, () => Result.succeed(SurvivorsDecision.make({ argv }))),
+    Match.when({ kind: 'manifest' }, () => Result.succeed(ManifestDecision.make({ argv }))),
+    Match.when({ kind: 'help' }, () => Result.succeed(HelpDecision.make({ argv }))),
+    Match.when(
+      { kind: 'unknown-argument' },
+      (v) => Result.fail(DispatchError.make({ message: `Unknown argument: '${v.arg}'`, arg: v.arg })),
+    ),
+    Match.when(
+      { kind: 'unknown-command' },
+      (v) => Result.fail(DispatchError.make({ message: `Unknown command: '${v.arg}'`, arg: v.arg })),
+    ),
     Match.exhaustive,
   )
 }
 
-export const dispatchWorkflow = Workflow.make(CliDispatchCommand, dispatchDecision)
+export const cliOperationWorkflow = Workflow.make(CliDispatchCommand, cliOperationDecision)
