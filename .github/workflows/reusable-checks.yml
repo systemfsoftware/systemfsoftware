@@ -34,8 +34,9 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ github.sha }}
+          key: turbo-${{ runner.os }}-checks-${{ github.sha }}
           restore-keys: |
+            turbo-${{ runner.os }}-checks-
             turbo-${{ runner.os }}-
       # atom-react tests run in Vitest browser mode (playwright chromium).
       - name: Cache Playwright browsers
