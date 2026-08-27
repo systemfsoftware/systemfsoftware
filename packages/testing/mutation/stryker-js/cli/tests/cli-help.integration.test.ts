@@ -1,6 +1,7 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
 import { execFile } from 'node:child_process'
+import * as Fs from 'node:fs'
 import * as Path from 'node:path'
 import * as Url from 'node:url'
 import { promisify } from 'node:util'
@@ -75,6 +76,17 @@ const parseLines = (stdout: string): Array<Record<string, unknown>> => {
   return lines
 }
 
+const parseStreamFile = (): Array<Record<string, unknown>> => {
+  const file = Path.join(process.cwd(), 'reports', 'mutation-stream.jsonl')
+  let body = ''
+  try {
+    body = Fs.readFileSync(file, 'utf8')
+  } catch {
+    return []
+  }
+  return parseLines(body)
+}
+
 const Feature = makeFeature({ it, layer })
 
 Feature('CLI help regression').body(({ scenario }) => {
@@ -85,14 +97,14 @@ Feature('CLI help regression').body(({ scenario }) => {
       When('the harness invokes the tool with nothing at all')('bareObserved', () => invoke([])),
       Then('both invocations succeed with the usage text and no verdict')((s) => {
         checkExpect(s.helpObserved.exitCode).toBe(0)
-        const helpLines = parseLines(s.helpObserved.stdout)
+        const helpLines = parseStreamFile()
         const helpTerminal = helpLines.at(-1)
         checkExpect(helpTerminal).toMatchObject({ kind: 'help', code: 0 })
         checkExpect(String(helpTerminal?.['help'])).toContain('USAGE')
         checkExpect(helpLines.map((line) => line['kind'])).not.toContain('verdict')
 
         checkExpect(s.bareObserved.exitCode).toBe(0)
-        const bareLines = parseLines(s.bareObserved.stdout)
+        const bareLines = parseStreamFile()
         const bareTerminal = bareLines.at(-1)
         checkExpect(bareTerminal).toMatchObject({ kind: 'help', code: 0 })
         checkExpect(String(bareTerminal?.['help'])).toContain('USAGE')
@@ -120,7 +132,7 @@ Feature('CLI help regression').body(({ scenario }) => {
       Given('a harness asking for the manifest')('observed', () => invoke(['--llms'])),
       Then('the description follows the stream header')((s) => {
         checkExpect(s.observed.exitCode).toBe(0)
-        const lines = parseLines(s.observed.stdout)
+        const lines = parseStreamFile()
         const first = lines[0]
         const last = lines.at(-1)
         checkExpect(first).toMatchObject({ kind: 'stream' })

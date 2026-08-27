@@ -301,7 +301,8 @@ Feature('Driving the mutation tester from an agent harness')
           })
         }),
         Then('no mutant is singled out, because none survived')((s) => {
-          checkExpect(kindsOf(s.observed)).not.toContain('mutant')
+          const named = s.observed.lines.filter((line) => line.kind === 'mutant')
+          checkExpect(named.map((line) => line['status'])).toEqual(['Killed', 'Killed'])
           checkExpect(terminal(s.observed)['mutants']).toEqual([])
         }),
       ),
@@ -354,7 +355,7 @@ Feature('Driving the mutation tester from an agent harness')
         ),
         When('the harness runs the mutation test')('observed', (s) => invoke(s.fixture, ['run'])),
         Then('one line per survivor names the change that was made and where it was made')((s) => {
-          const survivors = s.observed.lines.filter((line) => line.kind === 'mutant')
+          const survivors = s.observed.lines.filter((line) => line.kind === 'mutant' && line['status'] === 'Survived')
           checkExpect(survivors).toHaveLength(2)
           checkExpect(survivors.map((line) => line['status'])).toEqual(['Survived', 'Survived'])
           checkExpect(byMutatorName(survivors).map((line) => [line['mutator'], line['replacement']])).toEqual([
