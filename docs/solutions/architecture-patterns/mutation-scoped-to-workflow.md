@@ -28,10 +28,12 @@ Mechanism: a single Deno guard enumerates tracked configs derived from the index
 
 ## Relationship to `label-routed-rules-are-unfalsifiable`
 
-That document retires suffix-routed lint rules because they cannot fire on the mislabelled file. This document does not reintroduce a suffix as a lint selector; it scopes a test surface. The marker is still asserted by the author, but the failure it prevents — diluted mutation signal — is measured by the gate's own enumeration of positives, not by whether a per-file rule was routed. Where a suffix boundary must hold at build time, route on the type or the manifest instead (see that document's key table).
+## Scope
+
+The invariant covers decision-hosting packages — those that carry a `Workflow` (daemon-spec, cli, claude-compat, and the mutation subsystem itself). Rule-authoring packages under `lint/oxlint` mutate `Rule` surfaces, not decisions, and are excluded from this gate. A package with neither surface carries no config rather than a broad glob that finds nothing.
 
 ## Prevention
 
-Keep the enumeration derived: configs are discovered from tracked files, not from a manually maintained list. Keep the exclusion closed: fixtures and vendored history are not workspace configs. Keep the check cheap and blocking: a synchronous Deno pass over a dozen JSON files, evaluated before the task graph fans out.
+Keep the enumeration derived: configs are discovered from tracked files, not from a manually maintained list. Keep the exclusion closed: fixtures, vendored history, and rule-plugin trees are not decision configs. Keep the check cheap and blocking: a synchronous Deno pass over the remaining JSON files, evaluated before the task graph fans out.
 
 Precedence: this invariant supersedes any prior convention that left `mutate` as a per-package freeform glob. If a package has no decision, it carries no mutation config rather than a broad one that happens to be empty of mutants.
