@@ -27,13 +27,7 @@ Feature('Dispatch-doctrine — drift guard')
           'path',
           () => {
             const here = path.dirname(fileURLToPath(import.meta.url))
-            const candidates = [
-              path.resolve(here, '../skills/task-decomposition/SKILL.md'),
-              path.resolve(here, '../../../../../omp/plugins/omp-agent-discipline/skills/task-decomposition/SKILL.md'),
-            ]
-            const first = candidates[0]
-            if (first === undefined) throw new Error('no skill candidates')
-            const skillPath = candidates.find((p) => fs.existsSync(p)) ?? first
+            const skillPath = path.resolve(here, '../../skills/task-decomposition/SKILL.md')
             if (!fs.existsSync(skillPath)) {
               throw new Error('skill file missing: ' + skillPath)
             }
