@@ -210,7 +210,7 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
-  omp/packages/omp-utils:
+  omp/packages/harness-toml:
     dependencies:
       '@std/toml':
         specifier: 'catalog:'
@@ -225,15 +225,42 @@ importers:
       '@systemfsoftware/effect-memfs':
         specifier: workspace:^
         version: link:../../../packages/core/effect/filesystem/memfs
-      '@systemfsoftware/effect-schema-law':
+      '@systemfsoftware/oxlint-config':
         specifier: workspace:^
-        version: link:../../../packages/core/effect/schema/law
-      '@systemfsoftware/effect-schema-refutation-vite':
+        version: link:../../../packages/lint/oxlint/config
+      '@systemfsoftware/tsconfig':
         specifier: workspace:^
-        version: link:../../../packages/core/effect/schema/refutation-vite
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../../packages/core/effect/schema/vite
+        version: link:../../../packages/toolchain/tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  omp/packages/omp-runtime:
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(vitest@4.1.10)
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../packages/lint/oxlint/config
@@ -285,6 +312,9 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../../../packages/core/effect/schema/law
+      '@systemfsoftware/effect-schema-refutation-vite':
+        specifier: workspace:^
+        version: link:../../../packages/core/effect/schema/refutation-vite
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../../../packages/core/effect/schema/vite
@@ -297,6 +327,9 @@ importers:
       '@systemfsoftware/tsdown-config':
         specifier: workspace:^
         version: link:../../../packages/toolchain/tsdown-config
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../../packages/toolchain/vitest-config
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
@@ -319,12 +352,15 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
     optionalDependencies:
-      '@std/toml':
-        specifier: 'catalog:'
-        version: '@jsr/std__toml@1.0.11'
-      '@systemfsoftware/omp-utils':
+      '@systemfsoftware/effect-cell-types':
         specifier: workspace:^
-        version: link:../../packages/omp-utils
+        version: link:../../../packages/core/effect/cell/types
+      '@systemfsoftware/harness-toml':
+        specifier: workspace:^
+        version: link:../../packages/harness-toml
+      '@systemfsoftware/omp-runtime':
+        specifier: workspace:^
+        version: link:../../packages/omp-runtime
 
   omp/plugins/omp-claude-compat:
     devDependencies:
@@ -364,15 +400,15 @@ importers:
       '@systemfsoftware/oxlint-plugin-cell-vocabulary':
         specifier: workspace:^
         version: link:../../../packages/lint/oxlint/plugins/cells/cell-vocabulary
-      '@systemfsoftware/stryker-plugins':
-        specifier: workspace:^
-        version: link:../../../packages/testing/mutation/plugins/stryker-plugins
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../packages/toolchain/tsconfig
       '@systemfsoftware/tsdown-config':
         specifier: workspace:^
         version: link:../../../packages/toolchain/tsdown-config
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../../packages/toolchain/vitest-config
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
@@ -401,15 +437,15 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
     optionalDependencies:
-      '@std/toml':
-        specifier: 'catalog:'
-        version: '@jsr/std__toml@1.0.11'
       '@systemfsoftware/effect-cell-types':
         specifier: workspace:^
         version: link:../../../packages/core/effect/cell/types
-      '@systemfsoftware/omp-utils':
+      '@systemfsoftware/harness-toml':
         specifier: workspace:^
-        version: link:../../packages/omp-utils
+        version: link:../../packages/harness-toml
+      '@systemfsoftware/omp-runtime':
+        specifier: workspace:^
+        version: link:../../packages/omp-runtime
 
   omp/plugins/omp-typescript-discipline:
     devDependencies:
@@ -3869,6 +3905,7 @@ packages:
   '@oh-my-pi/pi-coding-agent@17.0.5':
     resolution: {integrity: sha512-SdDYSuc1+zdoufN7xV6pResZXYEN0gpt1mjz7TwQH8LZroRpkA7JiLE48fQp0t3bJYMIKpuTjAXp1bZw2Qep4A==}
     engines: {bun: '>=1.3.14'}
+    hasBin: true
 
   '@oh-my-pi/pi-mnemopi@17.0.5':
     resolution: {integrity: sha512-mR0NMvMWI8x35y00cdGwfaC8LFV7W1MHjS09VclHJE/NVdGo1Cn4OxhOXHDt+ayqfHch3RqWfhPrnzV31zSMog==}
@@ -7774,6 +7811,7 @@ packages:
 
   tree-kill@1.2.2:
     resolution: {integrity: sha512-L0Orpi8qGpRG//Nd+H90vFB+3iHnue1zSSGmNOOCh1GLJ7rUKVwV2HvijphGQS2UmhUZewS9VgvxYIdgr+fG1A==}
+    hasBin: true
 
   triple-beam@1.4.1:
     resolution: {integrity: sha512-aZbgViZrg1QNcG+LULa7nhZpJTZSLm/mXnHXnbAbjmN5aSa0y7V+wvv6+4WaBtpISJzThKy+PIPxc1Nq1EJ9mg==}

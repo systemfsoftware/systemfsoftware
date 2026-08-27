@@ -10,10 +10,6 @@
       "@systemfsoftware/source": "./src/index.ts",
       "default": "./dist/index.js"
     },
-    "./api": {
-      "@systemfsoftware/source": "./src/api.ts",
-      "default": "./dist/api.js"
-    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -25,12 +21,15 @@
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "attw": "attw --pack .",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
+    "mutation": "stryker run",
+    "mutation:full": "stryker run --force",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "optionalDependencies": {
-    "@std/toml": "catalog:",
-    "@systemfsoftware/omp-utils": "workspace:^"
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/harness-toml": "workspace:^",
+    "@systemfsoftware/omp-runtime": "workspace:^"
   },
   "peerDependencies": {
     "@effect/platform-node": "catalog:",
@@ -43,10 +42,13 @@
     "@oh-my-pi/pi-coding-agent": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-refutation-vite": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
-    "@systemfsoftware/omp-utils": "workspace:^",
+    "@systemfsoftware/harness-toml": "workspace:^",
+    "@systemfsoftware/omp-runtime": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
@@ -56,7 +58,8 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@systemfsoftware/vitest-config": "workspace:^"
   },
   "omp": {
     "extensions": [
@@ -66,7 +69,6 @@
   "publishConfig": {
     "exports": {
       ".": "./dist/index.js",
-      "./api": "./dist/api.js",
       "./package.json": "./package.json"
     },
     "provenance": true

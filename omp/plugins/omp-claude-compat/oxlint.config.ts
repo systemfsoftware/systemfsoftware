@@ -16,4 +16,13 @@ export default defineConfig({
   rules: {
     ...cellVocabulary.configs.recommended.rules,
   },
+  overrides: [
+    {
+      files: ['tests/**'],
+      rules: {
+        '@systemfsoftware/effect-dmmf/tests-import-public-api': 'off',
+        '@systemfsoftware/effect-dmmf/behaviour-one-feature-per-file': 'off',
+      },
+    },
+  ],
 })

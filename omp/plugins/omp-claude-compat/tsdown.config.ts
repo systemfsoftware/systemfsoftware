@@ -2,7 +2,7 @@ import { eagerEntryBudget } from '@systemfsoftware/tsdown-config/eager-entry-bud
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-  entry: { index: './src/index.ts', api: './src/api.ts', inject: './src/inject.ts' },
+  entry: { index: './src/index.ts' },
 
   format: 'esm',
   dts: false,
@@ -17,9 +17,9 @@ export default defineConfig({
       /^effect$/,
       /^effect\//,
       /^@effect\//,
-      /^@systemfsoftware\/effect-cell-types$/,
-      /^@systemfsoftware\/omp-utils$/,
-      /^@std\/toml$/,
+      /^@systemfsoftware\/effect-cell-types(\/|$)/,
+      /^@systemfsoftware\/harness-toml(\/|$)/,
+      /^@systemfsoftware\/omp-runtime(\/|$)/,
     ],
   },
   plugins: [eagerEntryBudget()],

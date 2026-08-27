@@ -1,24 +1,25 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
-import { warmRuntimeAfterStart } from '@systemfsoftware/omp-utils/runtime-lifecycle'
-import { runSafe } from './RunSafePolicy.js'
 
 export default async function agentDisciplineHandler(pi: ExtensionAPI): Promise<void> {
-  // Handlers are deferred behind dynamic imports so the entry's static
-  // closure stays under the eager-entry budget (the host taxes the static
-  // graph on every startup; effect and the executors are heavy). Each
-  // handler is registered sequentially, in order: DispatchDoctrineExtension
-  // MUST register FIRST — the runner's emitToolCall short-circuits on the
-  // first { block: true }, so a not-loaded doctrine block must beat a
-  // no-skill-delegation block when both would fire on the same dispatch
-  // (KTD1, R7).
-  const { DispatchDoctrineExtension } = await import('./DispatchDoctrineHandler.js')
+  const { lazyRunSafe, warmRuntimeAfterStart } = await import('@systemfsoftware/omp-runtime')
+  const runSafe = lazyRunSafe(() => import('./runtime.js'))
+  const { DispatchDoctrineExtension } = await import('./doctrine/mod.js')
   DispatchDoctrineExtension(pi, runSafe)
-  const { NoSkillDelegationExtension } = await import('./NoSkillDelegationHandler.js')
+  const { NoSkillDelegationExtension } = await import('./delegation/mod.js')
   NoSkillDelegationExtension(pi, runSafe)
-  const { XdRetryGuardExtension } = await import('./XdRetryGuardMiddleware.js')
+  const { XdRetryGuardExtension } = await import('./xd-retry/mod.js')
   XdRetryGuardExtension(pi)
-  warmRuntimeAfterStart(
-    (warm) => pi.on('session_start', (_event, ctx) => warm(ctx)),
-    () => import('./Runtime.js'),
-  )
+  pi.on('session_start', async (_event, ctx) => {
+    try {
+      const { warmHarnessPolicy } = await import('./runtime.js')
+      await runSafe(warmHarnessPolicy(ctx.cwd))
+    } catch (error) {
+      try {
+        pi.logger.warn('[omp-agent-discipline] warmHarnessPolicy failed', { error, cwd: ctx.cwd })
+      } catch {
+        // logger must never throw
+      }
+    }
+  })
+  warmRuntimeAfterStart((warm) => pi.on('session_start', (_event, ctx) => warm(ctx)), () => import('./runtime.js'))
 }

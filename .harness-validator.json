@@ -6,7 +6,7 @@
   "stale_ref_allowlist": {
     "reports/stryker-incremental.json": "Per-package path, deliberately written package-relative in the root mutation-evidence rule. It exists as packages/<pkg>/reports/stryker-incremental.json only after a mutation run, so no repo-root file can ever resolve it.",
     "src/schema-laws.test.ts": "A file in the DOWNSTREAM CONSUMER's project, not this repo. effect-schema-vite generates it in the consuming app via its transform hook; the basename is load-bearing and documented for that reason.",
-    "src/index.ts": "Generic per-plugin barrel referenced collectively in omp/AGENTS.md prose, not one file. Each omp plugin has its own; no single path resolves.",
+    "src/index.ts": "A plugin-relative path inside the PLG4 check command in omp/plugins/AGENTS.md, run from each plugin directory. Each omp plugin has its own; no repo-root path resolves.",
     "omp/CLAUDE.md": "A hypothetical in a troubleshooting table describing what to do IF someone adds this file. Its absence is the correct state the row defends.",
     "tasks/generate-json-schema-to-ts.js": "UPSTREAM's generator path, named in plugin-api/AGENTS.md to describe how upstream produces src-generated/ before this fork committed the output instead. It has never existed in this repo and must not.",
     "./dist/src/core/index.js": "The target of upstream's deleted core.d.ts shim. plugin-api/AGENTS.md names it to state that the tsdown build no longer produces this layout — the path's absence IS the documented fact.",
