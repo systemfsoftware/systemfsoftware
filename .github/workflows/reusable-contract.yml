@@ -24,8 +24,10 @@ jobs:
         uses: actions/cache@v6
         with:
           path: .turbo/cache
-          key: turbo-${{ runner.os }}-${{ github.sha }}
+          key: turbo-${{ runner.os }}-contract-${{ github.sha }}
           restore-keys: |
+            turbo-${{ runner.os }}-contract-
+            turbo-${{ runner.os }}-checks-
             turbo-${{ runner.os }}-
       - name: Gate — contract / integration tests
         run: corepack pnpm check:contract
