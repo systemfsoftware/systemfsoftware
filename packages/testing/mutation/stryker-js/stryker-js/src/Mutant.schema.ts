@@ -29,4 +29,3 @@ export class Mutant extends S.TaggedClass<Mutant>()('Mutant', {
 export type Position = S.Schema.Type<typeof PositionSchema>
 
 export type Location = S.Schema.Type<typeof LocationSchema>
-

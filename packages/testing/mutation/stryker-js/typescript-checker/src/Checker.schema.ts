@@ -40,4 +40,3 @@ export class CompilerFailed extends S.TaggedError<CompilerFailed>()('CompilerFai
     }
   }
 }
-

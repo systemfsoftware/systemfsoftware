@@ -232,4 +232,3 @@ type DeepOptional<T> = {
   -readonly [P in keyof T]?: T[P] extends Record<string, unknown> ? DeepOptional<T[P]> | undefined
     : T[P]
 }
-

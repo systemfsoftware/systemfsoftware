@@ -170,4 +170,3 @@ const buildResult = (
 }
 
 export const checkMutants = Workflow.make(CheckMutantsInput, (input: CheckMutantsInput) => buildResult(input))
-

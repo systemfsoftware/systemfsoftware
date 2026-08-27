@@ -309,5 +309,4 @@ if (import.meta.vitest !== void 0) {
       return raw === undefined || raw.trim() === '' ? stated.includes(ev) : stated === raw
     },
   )
-
 }
