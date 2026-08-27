@@ -9,8 +9,6 @@ const isAgent = process.env['AGENT'] !== undefined
 // writes "1", so testing against either value classifies the other as local.
 export const isCI = !isAgent && typeof process.env['CI'] === 'string' && process.env['CI'].length > 0
 
-const isGithubActions = process.env['GITHUB_ACTIONS'] !== undefined
-
 const sharedTestTimeout = isCI ? 30_000 : isAgent ? 15_000 : 8_000
 
 /**
@@ -26,11 +24,6 @@ export const sharedConfig = {
     testTimeout: sharedTestTimeout,
     silent: isAgent ? 'passed-only' : false,
     ...(isAgent ? { bail: 1 } : {}),
-
-    reporters: isGithubActions
-      ? ['default', 'github-actions']
-      : ['default', ['json', { outputFile: './reports/vitest-output.json' }]],
-
     coverage: {
       enabled: isCI || process.env['COVERAGE'] === 'true',
       provider: 'v8',

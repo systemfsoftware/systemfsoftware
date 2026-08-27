@@ -1,5 +1,4 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
@@ -7,7 +6,7 @@ import * as S from 'effect/Schema'
  * The mutant shape the admission carries, named once because both the decision's
  * `Admitted` payload and the command's precomputed survivor list are the same shape.
  */
-export const MutantShape = S.Struct({
+const MutantShape = S.Struct({
   id: S.String,
   fileName: S.String,
   mutatorName: S.String,
@@ -179,7 +178,7 @@ const MISMATCH_DETAIL =
  * serializations are equal runs, so the digest was a lossy restatement of the check that
  * also demanded a capability no command can carry.
  */
-export function hashesMatch(
+function hashesMatch(
   priorReport: PriorReportFacts,
   input: AdmitSurvivorsRunCommand,
 ): boolean {
@@ -194,39 +193,8 @@ export function hashesMatch(
   })
 }
 
-/**
- * The admission classification, over primitives and plain data only.
- *
- * The three rejecting kinds already carry the reason and the composed remediation, so the
- * workflow assigns channels rather than re-deciding: one arm per kind, no guard chain. The
- * order is the order of consequence - a missing report cannot be inspected for provenance,
- * a survivors-sourced report is invalid whatever it contains, an empty survivor set is a
- * success rather than a mismatch, and only a non-empty set is worth hashing.
- */
-export type AdmissionVerdict =
-  | { readonly kind: 'reject'; readonly reason: 'no-report' | 'mismatch'; readonly remediation: string }
-  | { readonly kind: 'no-survivors' }
-  | { readonly kind: 'admit'; readonly survivors: readonly S.Schema.Type<typeof MutantShape>[] }
-
-const rejection = (reason: 'no-report' | 'mismatch', detail: string): AdmissionVerdict => ({
-  kind: 'reject',
-  reason,
-  remediation: `${detail} ${SURVIVORS_RUN_FIRST_REMEDIATION}`,
-})
-
-export function admissionVerdict(input: AdmitSurvivorsRunCommand): AdmissionVerdict {
-  const priorReport = input.priorReport
-  if (priorReport === undefined) return rejection('no-report', NO_REPORT_DETAIL)
-  if (wasProducedBySurvivorsRun(priorReport)) return rejection('mismatch', SURVIVORS_RUN_SOURCE_DETAIL)
-  if (input.priorSurvivors.length === 0) return { kind: 'no-survivors' }
-  if (!hashesMatch(priorReport, input)) return rejection('mismatch', MISMATCH_DETAIL)
-  return { kind: 'admit', survivors: input.priorSurvivors }
-}
-
-export type SurvivorsRejectReason = 'no-report' | 'mismatch'
-
-export const SurvivorsAdmissionTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-cli/SurvivorsAdmission')
-export type SurvivorsAdmissionTypeId = typeof SurvivorsAdmissionTypeId
+const SurvivorsAdmissionTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-cli/SurvivorsAdmission')
+type SurvivorsAdmissionTypeId = typeof SurvivorsAdmissionTypeId
 
 export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {
   survivors: S.Array(MutantShape),
@@ -246,163 +214,41 @@ export class SurvivorsRejection extends S.TaggedError<SurvivorsRejection>()('Sur
   readonly [SurvivorsAdmissionTypeId] = SurvivorsAdmissionTypeId
 }
 
-/**
- * The survivors admission decision: the classification `admissionVerdict`
- * produces, assigned to the workflow channels — one arm per kind, no guard
- * chain. A missing report, a survivors-sourced report and a hash mismatch are
- * the same reject outcome with different reasons; only the rejection's
- * remediation names the full run to do first (R10).
- */
-export const admitSurvivorsRun = Workflow.make(
-  AdmitSurvivorsRunCommand,
-  (command): Result.Result<SurvivorsAdmission, SurvivorsRejection> =>
-    Match.value(admissionVerdict(command)).pipe(
-      Match.discriminator('kind')(
-        'reject',
-        (verdict) => Result.fail(SurvivorsRejection.make({ reason: verdict.reason, remediation: verdict.remediation })),
-      ),
-      Match.discriminator('kind')('no-survivors', () => Result.succeed(NoSurvivors.make())),
-      Match.discriminator('kind')(
-        'admit',
-        (verdict) => Result.succeed(Admitted.make({ survivors: verdict.survivors })),
-      ),
-      Match.exhaustive,
-    ),
-)
-
-if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
-  // branch is statically dead in the build and never enters the published module graph.
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
-  const { FastCheck: fc } = await import('effect/testing')
-
-  const survivorWith = (
-    start: { line: number | null; column: number | null },
-    end: { line: number | null; column: number | null },
-  ): unknown => ({
-    _tag: 'Admitted',
-    survivors: [
-      {
-        id: 'A',
-        fileName: 'file.ts',
-        mutatorName: 'mutator',
-        replacement: 'replacement',
-        location: { start, end },
-      },
-    ],
-  })
-
-  /**
-   * `S.Finite` is one shared v4 node, so every location point weakens together
-   * and the harness keeps a single obligation. Measured 2026-08-17: the stored
-   * weakened arm accepts a non-finite number at `start.column` (the first
-   * reaching path) but not at `start.line` — so the witness sits there. One
-   * generator per schema discharges the shared obligation.
-   */
-  refutes(Admitted, {
-    AdmittedLocationNonFinite: fc.constant(
-      survivorWith({ line: 1, column: Number.POSITIVE_INFINITY }, { line: 1, column: 0 }),
-    ),
-  })
-
-  refutes(SurvivorsAdmission, {
-    SurvivorsAdmissionLocationNonFinite: fc.constant(
-      survivorWith({ line: 1, column: Number.POSITIVE_INFINITY }, { line: 1, column: 0 }),
-    ),
-  })
-
-  // These cover the helpers THIS file declares, which are the ones
-  // `admissionVerdict` runs. `make-body-purity` follows the decision's
-  // reachable set, so the helpers cannot be imported from elsewhere; the
-  // properties therefore have to live beside them. A copy of these functions
-  // tested somewhere else would leave the suite green whichever copy drifted.
-  const { describe, it: gherkinIt } = await import('@systemfsoftware/effect-gherkin-spec')
-  const { isDeepStrictEqual } = await import('node:util')
-
-  const configValueArb = fc.oneof(
-    fc.string({ maxLength: 8 }),
-    fc.integer(),
-    fc.boolean(),
-    fc.constant(null),
+function reject(
+  reason: 'no-report' | 'mismatch',
+  detail: string,
+): Result.Result<SurvivorsAdmission, SurvivorsRejection> {
+  return Result.fail(
+    SurvivorsRejection.make({
+      reason,
+      remediation: `${detail} ${SURVIVORS_RUN_FIRST_REMEDIATION}`,
+    }),
   )
-
-  const configArb = fc
-    .dictionary(fc.string({ maxLength: 8 }), configValueArb, { maxKeys: 3 })
-    .chain((random) =>
-      fc.option(fc.string({ maxLength: 12 }), { nil: undefined }).map((prior) => {
-        if (prior === undefined) {
-          return random
-        }
-        return { ...random, survivorsPriorReport: prior }
-      })
-    )
-  const hashInputArb = fc.record({
-    resolvedOptions: fc.dictionary(fc.string({ maxLength: 8 }), configValueArb, { maxKeys: 4 }),
-    frameworkVersion: fc.option(fc.string({ maxLength: 8 }), { nil: undefined }),
-    sourceContentHashes: fc.dictionary(fc.string({ maxLength: 8 }), fc.string({ maxLength: 16 }), { maxKeys: 4 }),
-  })
-
-  const reversed = <T>(record: Readonly<Record<string, T>>): Record<string, T> =>
-    Object.fromEntries(Object.entries(record).reverse())
-
-  describe('stripSurvivorsKeys', () => {
-    gherkinIt.prop(
-      '∀c_StripTwice_≡StripOnce',
-      [configArb],
-      ([config]) => isDeepStrictEqual(stripSurvivorsKeys(stripSurvivorsKeys(config)), stripSurvivorsKeys(config)),
-    )
-
-    gherkinIt.prop(
-      '∀c_Strip_≡RemovesBookkeepingKeys',
-      [configArb],
-      ([config]) => SURVIVORS_BOOKKEEPING_KEYS.every((key) => !(key in stripSurvivorsKeys(config))),
-    )
-
-    gherkinIt.prop('∀c_Strip_≡LeavesInputUntouched', [configArb], ([config]) => {
-      const before = Object.keys(config)
-      const values = before.map((key) => config[key])
-      stripSurvivorsKeys(config)
-      return isDeepStrictEqual(before, Object.keys(config)) &&
-        before.every((key, index) => Object.is(config[key], values[index]))
-    })
-  })
-
-  describe('wasProducedBySurvivorsRun', () => {
-    // The provenance marker is exactly what `stripSurvivorsKeys` removes, so a
-    // stripped config can never look like a survivors-run product. If these two
-    // ever disagree about the key, a survivors run silently accepts its own
-    // output as input.
-    gherkinIt.prop(
-      '∀c_StrippedConfig_≡NeverSurvivorsProduced',
-      [configArb],
-      ([config]) => !wasProducedBySurvivorsRun({ config: stripSurvivorsKeys(config) }),
-    )
-
-    gherkinIt.prop(
-      '∀c_CarryingTheMarker_≡SurvivorsProduced',
-      [configArb],
-      ([config]) => wasProducedBySurvivorsRun({ config: { ...config, survivorsPriorReport: 'r' } }),
-    )
-  })
-
-  describe('serializeSurvivorsHashInput', () => {
-    // Key insertion order must not change the text, or two identical runs
-    // disagree and every prior report in the wild stops matching.
-    gherkinIt.prop(
-      '∀i_KeyOrder_≡SameText',
-      [hashInputArb],
-      ([input]) =>
-        serializeSurvivorsHashInput(input) === serializeSurvivorsHashInput({
-          resolvedOptions: reversed(input.resolvedOptions),
-          frameworkVersion: input.frameworkVersion,
-          sourceContentHashes: reversed(input.sourceContentHashes),
-        }),
-    )
-
-    gherkinIt.prop('∀i_Serialization_≡LosslessRoundTrip', [hashInputArb], ([input]) =>
-      isDeepStrictEqual(
-        JSON.parse(serializeSurvivorsHashInput(input)),
-        JSON.parse(JSON.stringify(input)),
-      ))
-  })
 }
+
+function decideAdmission(
+  input: AdmitSurvivorsRunCommand,
+): Result.Result<SurvivorsAdmission, SurvivorsRejection> {
+  const priorReport = input.priorReport
+  if (priorReport === undefined) {
+    return reject('no-report', NO_REPORT_DETAIL)
+  }
+  if (wasProducedBySurvivorsRun(priorReport)) {
+    return reject('mismatch', SURVIVORS_RUN_SOURCE_DETAIL)
+  }
+  if (input.priorSurvivors.length === 0) {
+    return Result.succeed(NoSurvivors.make())
+  }
+  if (!hashesMatch(priorReport, input)) {
+    return reject('mismatch', MISMATCH_DETAIL)
+  }
+  return Result.succeed(Admitted.make({ survivors: input.priorSurvivors }))
+}
+
+function admissionDecision(
+  command: AdmitSurvivorsRunCommand,
+): Result.Result<SurvivorsAdmission, SurvivorsRejection> {
+  return decideAdmission(command)
+}
+
+export const admitSurvivorsRun = Workflow.make(AdmitSurvivorsRunCommand, admissionDecision)

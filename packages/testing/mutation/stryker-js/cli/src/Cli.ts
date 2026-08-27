@@ -1,16 +1,7 @@
-/**
- * Cli — the command surface and dispatch.
- *
- * The command tree, option parsing, run execution, exit classification,
- * failure text, error envelope, console capture, llms manifest, and signal
- * observation. The pure dispatch decision lives in Cli.workflow.ts; request
- * declarations in Cli.schema.ts.
- */
 import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChildProcessSpawner'
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import * as NodeStdio from '@effect/platform-node/NodeStdio'
-import { Cell } from '@systemfsoftware/effect-cell-types'
 import { makeRunLayer, runMutationTest, strykerVersion } from '@systemfsoftware/stryker-js-platform-node'
 import type {
   ConfigFileInvalidError,
@@ -19,7 +10,6 @@ import type {
   ResolvedMode,
   RunEnvironmentShape,
 } from '@systemfsoftware/stryker-js-platform-node'
-import { EXIT_CODE, type ExitClass, highestExitClass, resolveExitCode } from '@systemfsoftware/stryker-js/ExitClass'
 import { ManifestRendered, type RunEvent, RunEvents } from '@systemfsoftware/stryker-js/Run'
 import { RENDERED_OPTION_DEFAULTS } from '@systemfsoftware/stryker-js/Schema'
 import type { LogLevel, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
@@ -29,12 +19,10 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import * as FileSystem from 'effect/FileSystem'
-import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
-import * as Predicate from 'effect/Predicate'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
@@ -51,10 +39,9 @@ import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { resolve as resolvePath } from 'node:path'
 import type { CliRequest } from './Cli.schema.js'
-import type { CliDispatchDecision, DispatchError } from './Cli.workflow.js'
-import { CliDispatchCommand, dispatchWorkflow } from './Cli.workflow.js'
 import {
   buildErrorEnvelope,
+  classifyRunOutcome,
   collectExitClasses,
   describeFailure,
   type ErrorEnvelope,
@@ -65,13 +52,13 @@ import {
   readCapturedConsole,
   remediationFor,
   resetCapturedConsole,
+  runOutcomeCode,
   unrecognizedArgumentOf,
 } from './Envelope.js'
 import { emitMachineModeOutput, isColorEnabled } from './Output.js'
 import type { OutputModeProbe, RunEventStream, RunEventStreamPort } from './Output.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 import type { StrykerRun } from './StrykerRun.js'
-import { SURVIVORS_REJECT_EXIT_CLASS } from './Survivors.js'
 import { runSurvivorsAdmission } from './Survivors.js'
 import { SurvivorsRejection } from './Survivors.workflow.js'
 
@@ -93,40 +80,7 @@ export {
 export { STREAM_SCHEMA_VERSION }
 
 export function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
-  if (Exit.isSuccess(exit)) {
-    return 0
-  }
-  if (Cause.hasInterruptsOnly(exit.cause)) {
-    return 1
-  }
-  const failure = Cause.findErrorOption(exit.cause)
-  if (Option.isSome(failure)) {
-    const value = failure.value
-    if (S.is(CliError.ShowHelp)(value)) {
-      // An explicit help request (bare `stryker`, `--help`) rendered the
-      // usage document into the capture buffer and exits 0; a parse failure
-      // the runner wrapped into ShowHelp exits 2.
-      if (value.errors.length > 0) {
-        return 2
-      }
-      return 0
-    }
-    if (CliError.isCliError(value)) {
-      return 2
-    }
-    if (S.is(SurvivorsRejection)(value)) {
-      return EXIT_CODE[SURVIVORS_REJECT_EXIT_CLASS]
-    }
-    if (S.isSchemaError(value)) {
-      return EXIT_CODE[SURVIVORS_REJECT_EXIT_CLASS]
-    }
-  }
-  const classes = collectExitClasses(exit)
-  const highest = highestExitClass(classes)
-  if (highest !== null) {
-    return EXIT_CODE[highest]
-  }
-  return 1
+  return runOutcomeCode(classifyRunOutcome(exit, null, []))
 }
 
 /**
@@ -1101,26 +1055,6 @@ const cliLayer = Layer.mergeAll(
     Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
   ),
 )
-interface DispatchPhases extends Cell.Phases {
-  readonly command: readonly string[]
-  readonly raw: { readonly argv: readonly string[]; readonly hasConfig: boolean }
-  readonly decoded: CliDispatchCommand
-  readonly decision: CliDispatchDecision
-  readonly decisionError: DispatchError
-  readonly output: Result.Result<CliDispatchDecision, DispatchError>
-  readonly response: number
-  readonly decodeError: S.SchemaError
-  readonly readError: never
-  readonly writeError: unknown
-}
-
-/**
- * The transport entry: builds the command tree, resolves the mode once at
- * the edge (never a second probe), provides the CLI and Console layers the
- * framework renders through, delegates the whole run to the executor cell and
- * returns the classed exit code it computes. The executor is the I/O
- * sandwich; this function only frames it.
- */
 export function strykerCliEffect(
   argv: string[],
   runMutationTest: StrykerRun | undefined,
@@ -1129,148 +1063,29 @@ export function strykerCliEffect(
   lastSignal: SignalObserver,
 ): Effect.Effect<number, never, never> {
   return Effect.gen(function*() {
-    const dispatchDescription: Cell.WriteDone<DispatchPhases> = pipe(
-      Cell.read<DispatchPhases>((command) => Effect.succeed({ argv: [...command], hasConfig: false })),
-      Cell.decode<DispatchPhases>((raw) => S.decodeUnknownResult(CliDispatchCommand)(raw)),
-      Cell.decide<DispatchPhases>(dispatchWorkflow),
-      Cell.encode<DispatchPhases>((outcome) => outcome),
-      Cell.write<DispatchPhases>((outcome) =>
-        Result.match(outcome, {
-          onFailure: () => Effect.succeed(2),
-          onSuccess: (decision) =>
-            Match.value(decision).pipe(
-              Match.tag('RunDecision', () =>
-                Effect.gen(function*() {
-                  const mode = yield* detectMode
-                  const requestRef = yield* Ref.make<Option.Option<CliRequest>>(Option.none())
-                  const command = makeStrykerCommand(requestRef)
-                  const cliEffect = Command.runWith(command, { version: strykerVersion })(argv).pipe(
-                    Effect.provide(
-                      Layer.mergeAll(
-                        (() => {
-                          if (mode.mode === 'machine') {
-                            return machineConsoleLayer
-                          }
-                          return Layer.empty
-                        })(),
-                        cliLayer,
-                      ),
-                    ),
-                  )
-                  const result = yield* Effect.result(
-                    runStrykerCli(
-                      { program: cliEffect, requestRef, mode, runMutationTest, argv, lastSignal },
-                      createRunEventStream,
-                    ),
-                  )
-                  return (() => {
-                    if (Result.isFailure(result)) {
-                      return result.failure
-                    }
-                    return result.success
-                  })()
-                })),
-              Match.tag('SurvivorsDecision', () =>
-                Effect.gen(function*() {
-                  const mode = yield* detectMode
-                  const requestRef = yield* Ref.make<Option.Option<CliRequest>>(Option.none())
-                  const command = makeStrykerCommand(requestRef)
-                  const cliEffect = Command.runWith(command, { version: strykerVersion })(argv).pipe(
-                    Effect.provide(
-                      Layer.mergeAll(
-                        (() => {
-                          if (mode.mode === 'machine') {
-                            return machineConsoleLayer
-                          }
-                          return Layer.empty
-                        })(),
-                        cliLayer,
-                      ),
-                    ),
-                  )
-                  const result = yield* Effect.result(
-                    runStrykerCli(
-                      { program: cliEffect, requestRef, mode, runMutationTest, argv, lastSignal },
-                      createRunEventStream,
-                    ),
-                  )
-                  return (() => {
-                    if (Result.isFailure(result)) {
-                      return result.failure
-                    }
-                    return result.success
-                  })()
-                })),
-              Match.tag('ManifestDecision', () =>
-                Effect.gen(function*() {
-                  const mode = yield* detectMode
-                  const requestRef = yield* Ref.make<Option.Option<CliRequest>>(Option.none())
-                  const command = makeStrykerCommand(requestRef)
-                  const cliEffect = Command.runWith(command, { version: strykerVersion })(argv).pipe(
-                    Effect.provide(
-                      Layer.mergeAll(
-                        (() => {
-                          if (mode.mode === 'machine') {
-                            return machineConsoleLayer
-                          }
-                          return Layer.empty
-                        })(),
-                        cliLayer,
-                      ),
-                    ),
-                  )
-                  const result = yield* Effect.result(
-                    runStrykerCli(
-                      { program: cliEffect, requestRef, mode, runMutationTest, argv, lastSignal },
-                      createRunEventStream,
-                    ),
-                  )
-                  return (() => {
-                    if (Result.isFailure(result)) {
-                      return result.failure
-                    }
-                    return result.success
-                  })()
-                })),
-              Match.tag('HelpDecision', () =>
-                Effect.gen(function*() {
-                  const mode = yield* detectMode
-                  const requestRef = yield* Ref.make<Option.Option<CliRequest>>(Option.none())
-                  const command = makeStrykerCommand(requestRef)
-                  const cliEffect = Command.runWith(command, { version: strykerVersion })(argv).pipe(
-                    Effect.provide(
-                      Layer.mergeAll(
-                        (() => {
-                          if (mode.mode === 'machine') {
-                            return machineConsoleLayer
-                          }
-                          return Layer.empty
-                        })(),
-                        cliLayer,
-                      ),
-                    ),
-                  )
-                  const result = yield* Effect.result(
-                    runStrykerCli(
-                      { program: cliEffect, requestRef, mode, runMutationTest, argv, lastSignal },
-                      createRunEventStream,
-                    ),
-                  )
-                  return (() => {
-                    if (Result.isFailure(result)) {
-                      return result.failure
-                    }
-                    return result.success
-                  })()
-                })),
-              Match.exhaustive,
-            ),
-        })
+    const mode = yield* detectMode
+    const requestRef = yield* Ref.make<Option.Option<CliRequest>>(Option.none())
+    const command = makeStrykerCommand(requestRef)
+    const consoleLayer = (() => {
+      if (mode.mode === 'machine') {
+        return machineConsoleLayer
+      }
+      return Layer.empty
+    })()
+    const cliEffect = Command.runWith(command, { version: strykerVersion })(argv).pipe(
+      Effect.provide(Layer.mergeAll(consoleLayer, cliLayer)),
+    )
+    const result = yield* Effect.result(
+      runStrykerCli(
+        { program: cliEffect, requestRef, mode, runMutationTest, argv, lastSignal },
+        createRunEventStream,
       ),
     )
-    const applied = yield* Cell.apply(dispatchDescription, argv).pipe(Effect.orElseSucceed(() => 2))
-    return applied
-  })
+    if (Result.isFailure(result)) {
+      return result.failure
+    }
+    return result.success
+  }).pipe(Effect.orElseSucceed(() => 2))
 }
 
 const defaultRunMutationTest =
@@ -1306,28 +1121,6 @@ export const runStrykerCli = (
     const pathService = yield* Path.Path.pipe(Effect.provide(NodePath.layer))
 
     let currentFiber: Fiber.Fiber<unknown, unknown> | null = null
-
-    const verdictOf = (value: unknown): readonly ExitClass[] => {
-      if (!Predicate.hasProperty(value, 'verdict')) {
-        return []
-      }
-      const candidate = value.verdict
-      if (!isExitClass(candidate)) {
-        return []
-      }
-      return [candidate]
-    }
-
-    const resolveClassedExitCode = (exit: Exit.Exit<unknown, unknown>): number => {
-      const signal = input.lastSignal()
-      if (signal !== null) {
-        return 128 + signal
-      }
-      if (Exit.isFailure(exit)) {
-        return resolveCliExitCode(exit)
-      }
-      return resolveExitCode(verdictOf(exit.value), null)
-    }
 
     const onSignal = (): void => {
       process.removeListener('SIGINT', onSignal)
@@ -1395,9 +1188,10 @@ export const runStrykerCli = (
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function*() {
         const exit = yield* Effect.exit(restore(program))
-        const code = resolveClassedExitCode(exit)
+        const outcome = classifyRunOutcome(exit, input.lastSignal(), input.argv)
+        const code = runOutcomeCode(outcome)
         if (input.mode.mode === 'machine') {
-          yield* emitMachineModeOutput(stream, input.mode, exit, code, input.argv, basePath, pathService)
+          yield* emitMachineModeOutput(stream, input.mode, outcome, basePath, pathService)
         }
         yield* stream.closeAndDrain
         return code
