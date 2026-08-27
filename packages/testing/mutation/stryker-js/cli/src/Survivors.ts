@@ -461,7 +461,7 @@ function readPriorReport(
         // The file is a report document when it parses, and its own raw text when it does
         // not — the caller's key walk tolerates both, so a malformed baseline degrades to
         // "no keys" instead of failing the run.
-        raw: Result.match(S.decodeUnknownResult(S.fromJsonString(S.Unknown))(text), {
+        raw: Result.match(S.decodeResult(S.fromJsonString(S.Unknown))(text), {
           onFailure: () => text,
           onSuccess: (value) => value,
         }),

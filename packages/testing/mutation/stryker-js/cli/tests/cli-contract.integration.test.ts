@@ -150,7 +150,7 @@ const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never,
       options,
     )
     const entries = (
-      yield* S.decodeUnknownEffect(S.fromJsonString(S.Array(S.String)))(manifestResult.stdout).pipe(Effect.orDie)
+      yield* S.decodeEffect(S.fromJsonString(S.Array(S.String)))(manifestResult.stdout).pipe(Effect.orDie)
     ).filter((entry) => entry !== './package.json')
     const imports: CoreEntryImport[] = []
     for (const entry of entries) {
@@ -470,7 +470,7 @@ Feature('Driving the mutation tester from an agent harness')
         }),
         Then('the description names the tool and the command that runs mutation testing')((s) => {
           checkExpect(terminal(s.observed)).toMatchObject({ kind: 'manifest', code: 0 })
-          const described = S.decodeUnknownSync(S.fromJsonString(ManifestSchema))(
+          const described = S.decodeSync(S.fromJsonString(ManifestSchema))(
             terminal(s.observed)['manifest'] ?? '',
           )
           checkExpect(described.tool).toBe('stryker')
