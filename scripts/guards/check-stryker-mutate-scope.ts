@@ -50,6 +50,7 @@ export const isWorkspaceStrykerConfig = (path: string): boolean => {
   if (path.startsWith('repos/')) return false
   if (path.includes('__fixtures__') || path.includes('/fixtures/')) return false
   if (path.includes('node_modules/')) return false
+  if (path.startsWith('packages/lint/oxlint/')) return false
   return true
 }
 
