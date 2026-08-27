@@ -22,15 +22,15 @@ declare const forgedByIntersection: S.ConstraintDecoder<Vendor.Invoice> & Wire.M
 declare const forgedByAlias: Wire.Minted<Vendor.Invoice, unknown>
 interface ForgedByInterface extends S.ConstraintDecoder<Vendor.Invoice>, Wire.Mark {}
 declare const forgedByInterface: ForgedByInterface
-// The phantom lifted off a legitimate member by inference, never naming `Mark` at all.
-type StolenMark = typeof Wire.string extends S.Schema<string> & infer M ? M : never
+const minted = Wire.mint(S.String)
+type StolenMark = typeof minted extends S.Schema<string> & infer M ? M : never
 declare const forgedByInference: S.ConstraintDecoder<Vendor.Invoice> & StolenMark
 
 describe('the mark', () => {
   it('Should_BeAbsentFromTheDecodedValue_When_TheSchemaIsMinted', () => {
     // The mark rides the schema. A consumer's domain type must not grow a marker property,
     // because a brand on the value forces nothing and pollutes every signature that carries it.
-    expect<S.Schema.Type<typeof Wire.string>>().type.toBe<string>()
+    expect<S.Schema.Type<typeof minted>>().type.toBe<string>()
   })
 
   it('Should_PreserveTheConcreteSchemaType_When_Minting', () => {
@@ -45,10 +45,10 @@ describe('the mark', () => {
 describe('a wire declaration', () => {
   it('Should_Accept_When_EveryMemberIsMinted', () => {
     expect(Wire.wire).type.toBeCallableWith({
-      id: Wire.string,
-      amount_due: Wire.nullOr(Wire.number),
-      currency: Wire.string,
-      status: Wire.literal('draft', 'open', 'paid'),
+      id: Wire.mint(S.String),
+      amount_due: Wire.mint(S.NullOr(Wire.mint(S.Finite))),
+      currency: Wire.mint(S.String),
+      status: Wire.mint(S.Literals(['draft', 'open', 'paid'])),
     })
   })
 
@@ -68,7 +68,7 @@ describe('a wire declaration', () => {
   })
 
   it('Should_Accept_When_TheMemberIsAnotherWireDeclaration', () => {
-    const inner = Wire.wire({ id: Wire.string })
+    const inner = Wire.wire({ id: Wire.mint(S.String) })
     expect(Wire.wire).type.toBeCallableWith({ inner })
   })
 
@@ -114,110 +114,6 @@ describe('forging the mark', () => {
     // The route that names nothing from this module but a primitive, and so is invisible to any
     // rule keyed on a call site or an identifier. This is the reason the module's claim is scoped
     // to the accidental case: intersection donates the phantom, and no phantom can refuse that.
-    expect(Wire.wire).type.toBeCallableWith({ invoice: Object.assign(vendorSchema, Wire.string) })
-  })
-})
-
-describe('the combinators', () => {
-  // Closure is the property that makes the alphabet hold: a combinator that accepted an unmarked
-  // member would launder a vendor type into a marked result in one call. The module claims this
-  // of *every* combinator, so every combinator is named here — a claim covering more ground than
-  // its assertions is a claim that fails silently when a maintainer widens one parameter.
-
-  it('Should_CarryTheMark_When_ThePrimitiveIsTakenFromTheAlphabet', () => {
-    expect(Wire.boolean).type.toBeAssignableTo<Wire.AnyMinted>()
-  })
-
-  it('Should_PreserveTheMark_When_TheLiteralSetIsBuilt', () => {
-    expect(Wire.literal('draft', 'open')).type.toBeAssignableTo<Wire.AnyMinted>()
-  })
-
-  it('Should_PreserveTheMark_When_WideningToNull', () => {
-    expect(Wire.nullOr(Wire.string)).type.toBeAssignableTo<Wire.AnyMinted>()
-  })
-
-  it('Should_PreserveTheMark_When_WideningToUndefined', () => {
-    expect(Wire.undefinedOr(Wire.string)).type.toBeAssignableTo<Wire.AnyMinted>()
-  })
-
-  it('Should_PreserveTheMark_When_WideningToNullish', () => {
-    expect(Wire.nullishOr(Wire.string)).type.toBeAssignableTo<Wire.AnyMinted>()
-  })
-
-  it('Should_PreserveTheMark_When_WrappingInAnArray', () => {
-    expect(Wire.array(Wire.string)).type.toBeAssignableTo<Wire.AnyMinted>()
-  })
-
-  it('Should_PreserveTheMark_When_TheFieldIsOptional', () => {
-    // A property signature rather than a schema, so it lands in the field union, not `AnyMinted`.
-    expect(Wire.optional(Wire.string)).type.toBeAssignableTo<Wire.MintedField>()
-  })
-
-  it('Should_PreserveTheMark_When_BuildingAnOpenMap', () => {
-    expect(Wire.record(Wire.string, Wire.number)).type.toBeAssignableTo<Wire.AnyMinted>()
-  })
-
-  it('Should_PreserveTheMark_When_BuildingAUnion', () => {
-    expect(Wire.union(Wire.string, Wire.number)).type.toBeAssignableTo<Wire.AnyMinted>()
-  })
-
-  it('Should_PreserveTheMark_When_BuildingATuple', () => {
-    expect(Wire.tuple(Wire.string, Wire.number)).type.toBeAssignableTo<Wire.AnyMinted>()
-  })
-
-  it('Should_PreserveTheMark_When_Suspended', () => {
-    expect(Wire.suspend(() => Wire.string)).type.toBeAssignableTo<Wire.AnyMinted>()
-  })
-
-  it('Should_PreserveTheMark_When_Refined', () => {
-    // Effect's own `.pipe(S.check(S.isMinLength(1)))` strips the mark; this is why the alphabet
-    // carries a refinement of its own, so a validated member never has to be minted to exist.
-    expect(Wire.refine(Wire.string, (a) => a.length > 0)).type.toBeAssignableTo<Wire.AnyMinted>()
-  })
-
-  it('Should_PreserveTheDecodedType_When_Refined', () => {
-    // Assignability to `AnyMinted` is satisfied vacuously by `any`, so it cannot on its own show
-    // that a refined member kept its type. Naming the decoded type is what makes the claim
-    // falsifiable: a refinement that widened to `any` would pass the assertion above and fail here.
-    const refined = Wire.refine(Wire.string, (a) => a.length > 0)
-    expect<S.Schema.Type<typeof refined>>().type.toBe<string>()
-  })
-
-  it('Should_PreserveTheMark_When_Nested', () => {
-    expect(Wire.array(Wire.nullOr(Wire.integer))).type.toBeAssignableTo<Wire.AnyMinted>()
-  })
-
-  it('Should_Reject_When_TheUnmarkedMemberIsWidened', () => {
-    expect(Wire.nullOr).type.not.toBeCallableWith(vendorSchema)
-    expect(Wire.undefinedOr).type.not.toBeCallableWith(vendorSchema)
-    expect(Wire.nullishOr).type.not.toBeCallableWith(vendorSchema)
-  })
-
-  it('Should_Reject_When_TheUnmarkedMemberIsWrappedInAnArray', () => {
-    expect(Wire.array).type.not.toBeCallableWith(vendorSchema)
-  })
-
-  it('Should_Reject_When_TheUnmarkedMemberIsMadeOptional', () => {
-    expect(Wire.optional).type.not.toBeCallableWith(vendorSchema)
-  })
-
-  it('Should_Reject_When_TheUnmarkedMemberIsAMapValue', () => {
-    expect(Wire.record).type.not.toBeCallableWith(Wire.string, vendorSchema)
-  })
-
-  it('Should_Reject_When_TheUnmarkedMemberJoinsAUnion', () => {
-    expect(Wire.union).type.not.toBeCallableWith(Wire.string, vendorSchema)
-  })
-
-  it('Should_Reject_When_TheUnmarkedMemberJoinsATuple', () => {
-    expect(Wire.tuple).type.not.toBeCallableWith(Wire.string, vendorSchema)
-  })
-
-  it('Should_Reject_When_TheUnmarkedMemberIsSuspended', () => {
-    expect(Wire.suspend).type.not.toBeCallableWith(() => vendorSchema)
-  })
-
-  it('Should_Reject_When_TheUnmarkedMemberIsRefined', () => {
-    expect(Wire.refine).type.not.toBeCallableWith(vendorSchema, () => true)
+    expect(Wire.wire).type.toBeCallableWith({ invoice: Object.assign(vendorSchema, minted) })
   })
 })
