@@ -80,11 +80,7 @@ export function cliOperationDecision(
       { kind: 'unknown-argument' },
       (v) => Result.fail(DispatchError.make({ message: `Unknown argument: '${v.arg}'`, arg: v.arg })),
     ),
-    Match.when(
-      { kind: 'unknown-command' },
-      (v) => Result.fail(DispatchError.make({ message: `Unknown command: '${v.arg}'`, arg: v.arg })),
-    ),
-    Match.exhaustive,
+    Match.orElse((v) => Result.fail(DispatchError.make({ message: `Unknown command: '${v.arg}'`, arg: v.arg }))),
   )
 }
 

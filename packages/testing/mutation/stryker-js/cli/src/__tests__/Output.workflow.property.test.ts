@@ -1,16 +1,21 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
 import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
 
-import { ModeConflictError, modeDecision, ResolveModeCommand } from '../Output.workflow.js'
+import { modeDecision, ResolveModeCommand } from '../Output.workflow.js'
 
 const ttyArb = fc.boolean()
 
 describe('modeDecision', () => {
   it.prop('∀t_BothFlags_≡Conflict', [ttyArb], ([stdoutIsTTY]) => {
     const result = modeDecision(ResolveModeCommand.make({ stdoutIsTTY, text: true, json: true }))
-    return Result.isFailure(result) && S.is(ModeConflictError)(result.failure)
+    return (
+      Result.isFailure(result) &&
+      result.failure.option === 'json' &&
+      result.failure.value === 'text' &&
+      result.failure.expected ===
+        'the "--format text" and "--json" flags are mutually exclusive — use one or the other'
+    )
   })
 
   it.prop('∀t_TextFlag_≡HumanFlag', [ttyArb], ([stdoutIsTTY]) => {
