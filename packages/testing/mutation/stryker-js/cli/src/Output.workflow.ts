@@ -142,7 +142,11 @@ export function modeDecision(
       { kind: 'machineTool' },
       () => Result.succeed({ mode: 'machine' as const, signal: 'tool' as const, stdoutIsTTY: true }),
     ),
-    Match.orElse(() => Result.succeed({ mode: 'human' as const, signal: 'tty' as const, stdoutIsTTY: true })),
+    Match.when(
+      { kind: 'human' },
+      () => Result.succeed({ mode: 'human' as const, signal: 'tty' as const, stdoutIsTTY: true }),
+    ),
+    Match.exhaustive,
   )
 }
 
