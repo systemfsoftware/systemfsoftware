@@ -1,3 +1,4 @@
+import { DUMP_SCHEMA_VERSION } from "@ttsc/graph";
 import { loadGraph } from "@ttsc/graph";
 import { TestProject } from "@ttsc/testing";
 import assert from "node:assert/strict";
@@ -19,7 +20,7 @@ import {
  * version-first, full-shape boundary.
  *
  * 1. Build one valid current dump and install a real executable fake producer.
- * 2. Return invalid JSON, schema v5, and malformed schema-v6 bodies.
+ * 2. Return invalid JSON, schema v5, and malformed current-schema bodies.
  * 3. Require one owned diagnostic, non-zero exit, and no server for each.
  * 4. Return the valid dump and prove the viewer serves until explicitly stopped.
  */
@@ -58,7 +59,13 @@ export const test_ttscgraph_view_validates_dump_before_reduction =
       dumpFile,
       output: JSON.stringify(stale),
       pattern:
-        /dump is schema v5, this client reads v6[\s\S]*Install a matching `ttsc`[\s\S]*TTSC_GRAPH_BINARY/u,
+        // The client version comes from the constant that defines it. Spelled
+        // here, this case failed the day the schema moved for the one reason it
+        // was never written to detect.
+        new RegExp(
+          `dump is schema v5, this client reads v${String(DUMP_SCHEMA_VERSION)}[\\s\\S]*Install a matching \`ttsc\`[\\s\\S]*TTSC_GRAPH_BINARY`,
+          "u",
+        ),
       producer: producer.binary,
       project,
     });
@@ -68,7 +75,10 @@ export const test_ttscgraph_view_validates_dump_before_reduction =
     verifyRejectedDump({
       dumpFile,
       output: JSON.stringify(malformed),
-      pattern: /dump output does not match schema v6:[\s\S]*nodes/u,
+      pattern: new RegExp(
+        `dump output does not match schema v${String(DUMP_SCHEMA_VERSION)}:[\\s\\S]*nodes`,
+        "u",
+      ),
       producer: producer.binary,
       project,
     });

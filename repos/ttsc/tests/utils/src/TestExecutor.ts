@@ -1,4 +1,5 @@
 import { DynamicExecutor } from "@nestia/e2e";
+import fs from "node:fs";
 
 /**
  * Shared feature-test runner used by the package-shaped test projects.
@@ -34,6 +35,24 @@ export namespace TestExecutor {
       (include.length ? include.some((str) => name.includes(str)) : true) &&
       (exclude.length ? exclude.every((str) => !name.includes(str)) : true);
     const started = Date.now();
+    // A suite that stops early must not read as a passing one. Nothing here
+    // holds the event loop open by itself: a scenario awaiting a reply that
+    // never comes, over a channel nothing else references, lets the process
+    // exit with a success code and most of the suite unrun, which is exactly
+    // as green as a real pass in CI.
+    let finished = false;
+    process.on("exit", (code) => {
+      if (!finished && code === 0) {
+        // Written synchronously: the process is already exiting, and an async
+        // write to a pipe (which is how CI captures this) can be dropped before
+        // it flushes, leaving a failed run with no reason attached.
+        fs.writeSync(
+          2,
+          "The runner exited before finishing. Every case after the last one printed above was never run.\n",
+        );
+        process.exitCode = 1;
+      }
+    });
 
     const executions: DynamicExecutor.IReport["executions"] = [];
     for (const location of locations) {
@@ -83,6 +102,7 @@ export namespace TestExecutor {
       Math.max(0, Date.now() - started).toLocaleString(),
       "ms",
     );
+    finished = true;
     if (exceptions.length) process.exit(1);
   };
 

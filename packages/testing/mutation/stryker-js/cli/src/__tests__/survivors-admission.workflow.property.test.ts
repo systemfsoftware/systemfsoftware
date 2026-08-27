@@ -346,7 +346,7 @@ describe('admitSurvivorsRun', () => {
     [reportWithSurvivorsArb],
     ([report]) =>
       Exit.isSuccess(
-        S.decodeUnknownExit(SurvivorsAdmission)({
+        S.decodeExit(SurvivorsAdmission)({
           _tag: 'Admitted',
           survivors: extractSurvivors(report, absPath),
         }),

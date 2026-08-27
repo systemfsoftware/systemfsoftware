@@ -57,6 +57,15 @@ type DumpDecorator struct {
   Arguments []DumpDecoratorArgument `json:"arguments"`
 }
 
+// DumpDocTag is one documentation tag TypeScript does not recognize, carried on
+// the declaration it was written on. `name` is the tag without its `@` and
+// `text` is everything after it, joined into one line. Neither is interpreted:
+// which part of a text names a thing belongs to whichever convention wrote it.
+type DumpDocTag struct {
+  Name string `json:"name"`
+  Text string `json:"text,omitempty"`
+}
+
 // DumpEnumMember is one member of an enum on the wire: the name a caller writes
 // and the value it carries. `value` is omitted for a member the checker could
 // not fold to a constant — the name still stands, and the name is what a caller
@@ -89,19 +98,25 @@ type DumpNode struct {
   // and stopped early when the head itself contained a brace — a type-literal
   // parameter, an object return type, a destructured parameter. Neither is a
   // guess the consumer can win, so the producer renders it here.
-  Signature      string             `json:"signature,omitempty"`
-  File           string             `json:"file"`
-  External       bool               `json:"external"`
-  Ignored        bool               `json:"ignored,omitempty"`
-  Exported       bool               `json:"exported,omitempty"`
-  Closure        bool               `json:"closure,omitempty"`
-  Modifiers      []string           `json:"modifiers,omitempty"`
-  Literals       []string           `json:"literals,omitempty"`
-  EnumMembers    []DumpEnumMember   `json:"enumMembers,omitempty"`
-  ObjectMembers  []DumpObjectMember `json:"objectMembers,omitempty"`
-  Evidence       *DumpEvidence      `json:"evidence,omitempty"`
-  Implementation *DumpEvidence      `json:"implementation,omitempty"`
-  Decorators     []DumpDecorator    `json:"decorators,omitempty"`
+  Signature     string             `json:"signature,omitempty"`
+  File          string             `json:"file"`
+  External      bool               `json:"external"`
+  Ignored       bool               `json:"ignored,omitempty"`
+  Exported      bool               `json:"exported,omitempty"`
+  Closure       bool               `json:"closure,omitempty"`
+  Modifiers     []string           `json:"modifiers,omitempty"`
+  Literals      []string           `json:"literals,omitempty"`
+  EnumMembers   []DumpEnumMember   `json:"enumMembers,omitempty"`
+  ObjectMembers []DumpObjectMember `json:"objectMembers,omitempty"`
+  // Parent is the artifact containing this one, and is empty for every
+  // declaration: a declaration's containment is synthesized by the TypeScript
+  // memory layer, and two producers of one relation would put two answers in
+  // the graph.
+  Parent         string          `json:"parent,omitempty"`
+  Evidence       *DumpEvidence   `json:"evidence,omitempty"`
+  Implementation *DumpEvidence   `json:"implementation,omitempty"`
+  Decorators     []DumpDecorator `json:"decorators,omitempty"`
+  DocTags        []DumpDocTag    `json:"docTags,omitempty"`
 }
 
 // DumpEdge is the wire shape of a graph edge. Lowercase json keys are the
@@ -233,6 +248,13 @@ func newDumpFacts(g *Graph, project string, ignored map[string]bool, sources map
     decByNode[d.Target] = append(decByNode[d.Target], DumpDecorator{Name: d.Name, Arguments: args})
   }
 
+  // Documentation tags ride on their target node the same way, grouped before
+  // relativization for the same reason.
+  tagsByNode := make(map[string][]DumpDocTag, len(g.DocTags))
+  for _, t := range g.DocTags {
+    tagsByNode[t.Target] = append(tagsByNode[t.Target], DumpDocTag{Name: t.Name, Text: t.Text})
+  }
+
   nodes := make([]DumpNode, 0, len(g.Nodes))
   for _, n := range g.Nodes {
     name, qualified := nodeNames(n)
@@ -240,6 +262,28 @@ func newDumpFacts(g *Graph, project string, ignored map[string]bool, sources map
     // other node is named by a symbol.
     if n.Kind == NodeModule {
       name, qualified = ctx.rel(name), ""
+    }
+    // An artifact's id IS the address a citation names, so it is emitted
+    // verbatim: relativizing it would rewrite `prisma:Sale.price`, which carries
+    // no path on purpose, and `POST:/orders`, which has no file at all. Its name
+    // is the readable heading the plugin reported, and its span is the single
+    // line where that heading starts — never the section's content.
+    if IsArtifactKind(n.Kind) {
+      artifact := DumpNode{
+        ID:     n.ID,
+        Kind:   string(n.Kind),
+        Name:   n.Simple,
+        File:   ctx.rel(n.File),
+        Parent: n.ArtifactParent,
+      }
+      if artifact.Name == "" {
+        artifact.Name = n.Name
+      }
+      if n.ArtifactLine > 0 {
+        artifact.Evidence = &DumpEvidence{StartLine: n.ArtifactLine}
+      }
+      nodes = append(nodes, artifact)
+      continue
     }
     nodes = append(nodes, DumpNode{
       ID:            ctx.relID(n.ID),
@@ -261,6 +305,7 @@ func newDumpFacts(g *Graph, project string, ignored map[string]bool, sources map
       Evidence:       withoutFile(ctx.evidence(n.File, n.Pos, n.End)),
       Implementation: ctx.evidence(n.ImplementationFile, n.ImplementationPos, n.ImplementationEnd),
       Decorators:     decByNode[n.ID],
+      DocTags:        tagsByNode[n.ID],
     })
   }
   sort.Slice(nodes, func(i, j int) bool { return nodes[i].ID < nodes[j].ID })
@@ -398,6 +443,8 @@ func wireEdgeKind(kind EdgeKind, origin string) string {
     return "accesses"
   case EdgeTypeRef:
     return "type_ref"
+  case EdgeDocRef:
+    return "doc_ref"
   case EdgeHeritage:
     if origin == "extends" {
       return "extends"

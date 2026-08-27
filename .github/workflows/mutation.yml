@@ -109,14 +109,15 @@ jobs:
         id: mutation
         continue-on-error: true
         timeout-minutes: 15
-        run: corepack pnpm turbo mutation --filter=./${{ matrix.package }} --log-order=stream --output-logs=full
+        run: corepack pnpm turbo mutation --filter=./${{ matrix.package }} --log-order=stream --output-logs=errors-only
 
       - name: Require a mutation report
         if: ${{ !cancelled() }}
         run: |
           report='${{ matrix.package }}/reports/mutation-report.json'
+          stream='${{ matrix.package }}/reports/mutation-stream.jsonl'
           if [ ! -f "$report" ]; then
-            echo "::error title=Mutation produced no report::${{ matrix.package }}: stryker exited '${{ steps.mutation.outcome }}' without writing $report — infrastructure failure (missing binary, crashed run or timeout), not a score outcome."
+            echo "::error title=Mutation produced no report::${{ matrix.package }}: stryker exited '${{ steps.mutation.outcome }}' without writing $report — infrastructure failure (missing binary, crashed run or timeout), not a score outcome. Stream artifact: $stream"
             exit 1
           fi
 
@@ -147,6 +148,7 @@ jobs:
           path: |
             ${{ matrix.package }}/reports/mutation-part.json
             ${{ matrix.package }}/reports/mutation-report.json
+            ${{ matrix.package }}/reports/mutation-stream.jsonl
           if-no-files-found: ignore
           retention-days: 1
 

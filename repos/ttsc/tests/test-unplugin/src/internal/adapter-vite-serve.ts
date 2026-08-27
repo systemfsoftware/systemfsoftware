@@ -169,8 +169,11 @@ export async function startViteServer(
     root: fixture.app,
     // `watch: null` disables the server's own chokidar watcher: these
     // scenarios assert the adapter's filesystem poll (which must work exactly
-    // where chokidar does not look), and on Windows a chokidar instance can
-    // outlive `server.close()` and keep the test runner process alive.
+    // where chokidar does not look), and a chokidar instance can outlive
+    // `server.close()` and hold the test runner process open. A scenario that
+    // asserts what the adapter hands to Vite's watch graph therefore drives
+    // the adapter's own hooks instead, through
+    // {@link collectServeWatchRegistrations}.
     server: { hmr: false, middlewareMode: true, watch: null },
   });
 }
@@ -263,4 +266,66 @@ export async function buildFixture(
     ? output.flatMap((entry: any) => entry.output)
     : output.output;
   return TestUnpluginProject.collectRollupOutputCode(chunks);
+}
+
+/**
+ * Drive the Vite adapter's own hooks over the fixture, with no dev server.
+ *
+ * The watcher-presence branch is a decision the adapter makes from the resolved
+ * config, so a scenario that asserts it needs a resolved config and a transform
+ * context, not a running server. Starting a server with Vite's chokidar watcher
+ * would assert the same branch through a file-watch backend that can outlive
+ * `server.close()` and hold the test runner process open, which is why every
+ * server scenario in this file keeps `watch: null`.
+ *
+ * `configureServer` is deliberately not called: without an attached server the
+ * missing-input poll routes nothing, so every derived watch input reaches
+ * `this.addWatchFile` and the returned list is exactly what the adapter hands
+ * to Vite's watch graph.
+ */
+export async function collectServeWatchRegistrations(
+  fixture: IViteServeCandidateFixture,
+  options: { watching: boolean },
+): Promise<string[]> {
+  const plugin = await loadViteAdapterPlugin();
+  const invoke = invokeVitePluginHook;
+  invoke(
+    plugin.configResolved,
+    {},
+    {
+      command: "serve",
+      resolve: { alias: [] },
+      server: options.watching ? { watch: {} } : { watch: null },
+    },
+  );
+  await invoke(plugin.buildStart, {});
+  const watched: string[] = [];
+  await invoke(
+    plugin.transform,
+    { addWatchFile: (file: string) => watched.push(file) },
+    fs.readFileSync(fixture.mainFile, "utf8"),
+    fixture.mainFile,
+  );
+  return watched;
+}
+
+/** Resolve the ttsc plugin object out of the Vite adapter's factory result. */
+export async function loadViteAdapterPlugin(): Promise<any> {
+  const unpluginVite = await TestUnpluginRuntime.loadUnpluginAdapter("vite");
+  const plugin: any = [unpluginVite()]
+    .flat()
+    .find((entry: any) => entry?.name === "ttsc-unplugin");
+  assert.ok(plugin, "the vite adapter must expose the ttsc plugin object");
+  return plugin;
+}
+
+/** Apply one unplugin hook, tolerating both the bare and object hook forms. */
+export function invokeVitePluginHook(
+  hook: any,
+  context: object,
+  ...args: unknown[]
+): unknown {
+  return typeof hook === "function"
+    ? hook.apply(context, args)
+    : hook?.handler?.apply(context, args);
 }

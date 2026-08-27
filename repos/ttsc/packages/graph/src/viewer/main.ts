@@ -1,10 +1,20 @@
 // Vanilla 3D code-graph viewer bundled into @ttsc/graph by esbuild and served by
-// `ttsc-graph view`. Mirrors website/src/components/graph/GraphViewer3D.tsx, but
-// standalone (no React): fetch the reduced graph the CLI serves, render it on
-// three.js + three-forcegraph, and let the user orbit it.
+// `ttsc-graph view`. Mirrors website/src/components/graph/TtscWebsiteGraphViewer3D.tsx,
+// but standalone (no React): fetch the reduced graph the CLI serves, render it on
+// three.js + three-forcegraph, and let the user orbit it. The display vocabulary
+// and the legend live in ./legend, which this module has no side effects to hide
+// from a test.
 import * as THREE from "three";
 import ThreeForceGraph from "three-forcegraph";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+
+import {
+  LINK_COLORS,
+  NODE_COLORS,
+  UNKNOWN_LINK_COLOR,
+  UNKNOWN_NODE_COLOR,
+  renderLegend,
+} from "./legend";
 
 interface GNode {
   id: string;
@@ -27,22 +37,6 @@ interface Payload {
   links: GLink[];
 }
 
-const NODE_COLORS: Record<string, string> = {
-  class: "#36e2ee",
-  interface: "#6ea8ff",
-  function: "#3fb950",
-  method: "#2bb673",
-  type: "#f5b042",
-  enum: "#c792ea",
-  variable: "#8b97a8",
-};
-
-const LINK_COLORS: Record<string, string> = {
-  "value-call": "#3fb950",
-  "type-ref": "#f5b042",
-  heritage: "#6ea8ff",
-};
-
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
@@ -56,6 +50,10 @@ function setText(id: string, text: string): void {
 }
 
 async function main(): Promise<void> {
+  // Before the fetch, so a graph that fails to load still shows the legend the
+  // static markup used to guarantee.
+  renderLegend(document);
+
   const container = document.getElementById("graph");
   if (!container) return;
 
@@ -103,8 +101,8 @@ async function main(): Promise<void> {
     .nodeResolution(12)
     .nodeOpacity(0.95)
     .nodeVal((node) => 1 + Math.sqrt(node.degree))
-    .nodeColor((node) => NODE_COLORS[node.kind] ?? "#8b97a8")
-    .linkColor((link) => LINK_COLORS[link.kind] ?? "#ffffff55")
+    .nodeColor((node) => NODE_COLORS[node.kind] ?? UNKNOWN_NODE_COLOR)
+    .linkColor((link) => LINK_COLORS[link.kind] ?? UNKNOWN_LINK_COLOR)
     .linkOpacity(0.4)
     .linkWidth(0)
     .warmupTicks(20)

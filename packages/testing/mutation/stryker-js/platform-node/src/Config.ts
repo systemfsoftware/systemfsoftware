@@ -1002,7 +1002,7 @@ export const defaultOptions: Effect.Effect<Immutable<StrykerOptions>, never, nev
 
 // ── config-reader ───────────────────────────────────────────────────
 
-const cliOptionsRecord = Wire.record(Wire.string, Wire.mint(S.Unknown)) // plugin sections are foreign by design
+const cliOptionsRecord = Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown))) // plugin sections are foreign by design
 
 export const CONFIG_SYNTAX_HELP = `
 Example of how a config file should look:

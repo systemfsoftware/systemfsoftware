@@ -77,7 +77,12 @@ func loadStripConfigMapWithReporters(pluginConfig map[string]any, cwd, tsconfigP
     }
     configFilePath = resolveStripConfigFilePath(cf, cwd, tsconfigPath)
   } else {
-    discovered, err := findStripConfigFile(cwd, tsconfigPath)
+    discovered, probed, err := findStripConfigFile(cwd, tsconfigPath)
+    // Report the rejected candidates before the error check and before the
+    // defaults path below: a search that ended empty examined them just the
+    // same, and falling back to the built-in defaults is exactly the state a
+    // config appearing later would change.
+    driver.ReportRejectedConfigCandidates(probed, hashReporter, realpathReporter)
     if err != nil {
       return nil, err
     }
@@ -106,36 +111,32 @@ func loadStripConfigMapWithReporters(pluginConfig map[string]any, cwd, tsconfigP
 // tsconfig is set) and returns the first directory that contains exactly one
 // strip.config.* file. Multiple candidates in the same directory is an error.
 // Returns "" (no error) when the filesystem root is reached without a match.
-func findStripConfigFile(cwd, tsconfigPath string) (string, error) {
-  dir := stripDiscoveryBaseDir(cwd, tsconfigPath)
-  for {
-    matches := make([]string, 0, 1)
-    for _, name := range stripConfigFilenames {
-      candidate := filepath.Join(dir, name)
-      if stat, err := os.Stat(candidate); err == nil && !stat.IsDir() {
-        matches = append(matches, candidate)
-      }
+//
+// The second return value is every candidate the walk examined and rejected,
+// each carrying whether it was absent or a directory wearing the name. Those
+// decide the result as much as the file it returned: one created
+// nearer the entry wins the next search, and one created beside the match makes
+// that directory ambiguous. Without them a persistent consumer keeps applying
+// the rules of a config a cold run would no longer choose — or keeps stripping
+// under the built-in defaults after a real config appeared
+// (samchon/ttsc#1271).
+func findStripConfigFile(cwd, tsconfigPath string) (string, []driver.ConfigCandidate, error) {
+  discovery := driver.DiscoverConfigFile(stripDiscoveryBaseDir(cwd, tsconfigPath), stripConfigFilenames)
+  if len(discovery.Matches) > 1 {
+    names := make([]string, 0, len(discovery.Matches))
+    for _, match := range discovery.Matches {
+      names = append(names, filepath.Base(match))
     }
-    if len(matches) > 1 {
-      names := make([]string, 0, len(matches))
-      for _, m := range matches {
-        names = append(names, filepath.Base(m))
-      }
-      return "", fmt.Errorf(
-        "@ttsc/strip: multiple strip config files found in %s (%s); "+
-          "set \"configFile\" explicitly in the tsconfig plugin entry",
-        dir, strings.Join(names, ", "),
-      )
-    }
-    if len(matches) == 1 {
-      return matches[0], nil
-    }
-    parent := filepath.Dir(dir)
-    if parent == dir {
-      return "", nil
-    }
-    dir = parent
+    return "", discovery.Probed, fmt.Errorf(
+      "@ttsc/strip: multiple strip config files found in %s (%s); "+
+        "set \"configFile\" explicitly in the tsconfig plugin entry",
+      discovery.Directory, strings.Join(names, ", "),
+    )
   }
+  if len(discovery.Matches) == 1 {
+    return discovery.Matches[0], discovery.Probed, nil
+  }
+  return "", discovery.Probed, nil
 }
 
 // stripDiscoveryBaseDir returns the directory from which auto-discovery walks
@@ -305,7 +306,8 @@ func parseStripJSONConfigFile(location string, body []byte) (any, error) {
 // loadStripScriptConfigFile to evaluate a .js/.cjs/.mjs strip config and
 // serialize the result to stdout as JSON.
 const stripScriptLoaderSource = `
-const { createRequire, isBuiltin, registerHooks } = require("node:module");
+const nodeModule = require("node:module");
+const { createRequire, isBuiltin, registerHooks } = nodeModule;
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -501,6 +503,33 @@ registerHooks({
   },
 });
 
+// The hook above never sees a require() made from inside a CommonJS module the
+// ESM loader evaluated, which on Node 22 is every require the config makes:
+// module.registerHooks observes the import() of that module and nothing within
+// it. A config's own dependencies would then be reported without the candidates
+// that decide them, so a spelling appearing later could change what the config
+// resolves to with nothing in the envelope to notice it (samchon/ttsc#1280).
+// Wrapping the CommonJS resolver records the same two observations the hook
+// does, on the graph the hook cannot reach.
+const nextResolveFilename = nodeModule._resolveFilename;
+nodeModule._resolveFilename = function resolveFilename(request, parent, isMain, options) {
+  // _resolveFilename is an internal entry point anything may call, so a
+  // non-string request arrives here as readily as a specifier does. Reading it
+  // would replace Node's own argument error with a TypeError from this loader.
+  if (typeof request !== "string") {
+    return nextResolveFilename.call(this, request, parent, isMain, options);
+  }
+  const parentFile = parent && typeof parent.filename === "string" ? parent.filename : undefined;
+  const parentURL = parentFile === undefined ? undefined : pathToFileURL(parentFile).href;
+  recordResolutionCandidates(request, parentURL, undefined);
+  const resolved = nextResolveFilename.call(this, request, parent, isMain, options);
+  if (path.isAbsolute(resolved)) {
+    recordResolutionCandidates(request, parentURL, pathToFileURL(resolved).href);
+    recordFile(resolved);
+  }
+  return resolved;
+};
+
 (async () => {
   const mod = await import(pathToFileURL(process.argv[1]).href);
   let current = mod;
@@ -609,11 +638,11 @@ func decodeStripConfigLoaderOutput(output []byte) (stripLoadedConfig, error) {
 // `"./strip.config.ts"`) produced by json.Marshal.
 func stripTypeScriptLoaderSource(importLiteral string) string {
   return fmt.Sprintf(`// @ts-nocheck
-import { createRequire, isBuiltin, registerHooks } from "node:module";
+import Module, { createRequire, isBuiltin, registerHooks } from "node:module";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const inputs = new Set<string>();
 const hashes = new Map<string, string | null>();
@@ -819,6 +848,49 @@ registerHooks({
     return resolved;
   },
 });
+
+// The hook above never sees a require() made from inside a CommonJS module the
+// ESM loader evaluated, which on Node 22 is every require the config makes:
+// module.registerHooks observes the import() of that module and nothing within
+// it. A config's own dependencies would then be reported without the candidates
+// that decide them, so a spelling appearing later could change what the config
+// resolves to with nothing in the envelope to notice it (samchon/ttsc#1280).
+// Wrapping the CommonJS resolver records the same two observations the hook
+// does, on the graph the hook cannot reach.
+const moduleInternals = Module as unknown as {
+  _resolveFilename(
+    request: string,
+    parent: { filename?: string | null } | null | undefined,
+    isMain: boolean,
+    options?: unknown,
+  ): string;
+};
+const nextResolveFilename = moduleInternals._resolveFilename;
+moduleInternals._resolveFilename = function resolveFilename(
+  this: unknown,
+  request: string,
+  parent: { filename?: string | null } | null | undefined,
+  isMain: boolean,
+  options?: unknown,
+): string {
+  // _resolveFilename is an internal entry point anything may call, so a
+  // non-string request arrives here as readily as a specifier does. Reading it
+  // would replace Node's own argument error with a TypeError from this loader.
+  if (typeof request !== "string") {
+    return nextResolveFilename.call(this, request, parent, isMain, options);
+  }
+  const parentURL =
+    typeof parent?.filename === "string"
+      ? pathToFileURL(parent.filename).href
+      : undefined;
+  recordResolutionCandidates(request, parentURL, undefined);
+  const resolved = nextResolveFilename.call(this, request, parent, isMain, options);
+  if (path.isAbsolute(resolved)) {
+    recordResolutionCandidates(request, parentURL, pathToFileURL(resolved).href);
+    recordFile(resolved);
+  }
+  return resolved;
+};
 
 declare const process: {
   exitCode?: number;

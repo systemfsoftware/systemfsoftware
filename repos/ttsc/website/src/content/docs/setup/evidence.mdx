@@ -2,7 +2,7 @@ import { Tabs } from "nextra/components";
 
 # Evidence Graph
 
-`@ttsc/evidence` makes every requirement you configure demand an explicit acknowledgement from the code, test, or document that claims to satisfy it. A requirement nothing acknowledges fails the build, by name.
+`@ttsc/evidence` makes every specification you configure demand an explicit acknowledgement from the code, test, or document that claims to satisfy it. A specification nothing acknowledges fails the build, by name.
 
 It is a rule contributor to `@ttsc/lint`, not a top-level `ttsc` plugin, so it needs the lint engine and the compiler that hosts it. Wire [Lint & Format](/docs/setup/lint) first if your build does not run `ttsc` yet.
 
@@ -128,7 +128,7 @@ That guarantee holds only over what the claim selects. A section in a file the g
 
 ## Turn on the file rules
 
-`evidence/graph` is the graph. Three file rules protect the conditions it depends on:
+`evidence/graph` is the graph. Four file rules protect the conditions it depends on:
 
 ```ts
 rules: {
@@ -136,12 +136,14 @@ rules: {
   "evidence/documented": "error",
   "evidence/singular": "error",
   "evidence/todo": "error",
+  "evidence/review": "error",
 }
 ```
 
 - `evidence/documented` requires a JSDoc block on every selected export, because a block is the only place a citation can live.
 - `evidence/singular` keeps one public identity per file, named after the file.
 - `evidence/todo` fails the build on every remaining JSDoc `@todo`, so a stub cannot be mistaken for finished work.
+- `evidence/review` requires an `@evidenceReview` beside every acknowledgement. A false tag removes the error, not the problem, and the review is what resolves it.
 
 Start with `evidence/graph` alone and add the others once the graph is green.
 

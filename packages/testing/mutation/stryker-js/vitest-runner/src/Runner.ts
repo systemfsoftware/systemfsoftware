@@ -502,7 +502,7 @@ export const makeVitestRunnerLayer = (
               })(),
               onConsoleLog: () => false,
               silent: true,
-              reporters: [],
+              reporters: [{ onInit(_vitest: Vitest) {} }],
             }, {
               resolve: { alias: [...aliases], conditions: ['@systemfsoftware/source', 'import'] },
               plugins: [plugin],

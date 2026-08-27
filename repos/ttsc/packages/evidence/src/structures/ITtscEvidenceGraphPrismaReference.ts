@@ -23,14 +23,25 @@ export interface ITtscEvidenceGraphPrismaReference extends ITtscEvidenceGraphRef
    *
    * The value names one directory, never a glob. It may sit inside the project
    * (`prisma`), above it (`../../prisma`), or on an absolute path
-   * (`/srv/schema`, `C:/schema`). A drive-relative Windows path such as
-   * `C:prisma` is refused, because it resolves against whatever directory that
-   * drive currently sits on rather than against a stable base.
+   * (`/srv/schema`, `C:/schema`), and it may be a symbolic link or a Windows
+   * junction to a directory, or sit inside one, which is read through. A
+   * drive-relative Windows path such as `C:prisma` is refused, because it
+   * resolves against whatever directory that drive currently sits on rather
+   * than against a stable base.
    *
    * A Prisma target carries no path, so a declared root changes which files
    * belong to the schema set and where a diagnostic points, never how a model
-   * is cited. Diagnostics name the resolved base, and the resolved patterns are
-   * published to the `ttsc` host as watched inputs.
+   * is cited. A diagnostic that asks you to correct this property quotes the
+   * spelling you declared, while a file location beside it is spelled the way
+   * you would open the file. The resolved patterns are published to the `ttsc`
+   * host as watched inputs.
+   *
+   * One schema file reached through two roots is one file, parsed once, and
+   * both populations are served by that one result — which is the layout a
+   * package manager produces when a package is installed and also rooted at its
+   * workspace source. A location printed for such a file is one of the two
+   * spellings rather than each population's own, and it opens the same file
+   * either way.
    */
   root?: string;
 

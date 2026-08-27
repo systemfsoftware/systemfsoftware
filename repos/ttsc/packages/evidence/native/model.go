@@ -66,6 +66,11 @@ type claimSpec struct {
   // the resolved Base because the two are produced at different times: the
   // spelling decodes from options alone, while the resolution needs a project
   // identity the decoder never sees.
+  //
+  // `Base.Declared` holds the same spelling once a project identity exists, and
+  // the two are not interchangeable. Read this one before resolution, which is
+  // what `ProjectInputs` does to publish a topology without touching the
+  // filesystem, and read the base's after it, which is what a diagnostic does.
   Root  string
   Base  populationBase
   Files globSet
@@ -112,6 +117,31 @@ type referencePolicy struct {
   // an `@evidenceReview` whose fingerprint matches the cited scope's current
   // content, so a review expires when the thing it reviewed moves.
   RequireReview bool
+  // Checklist moves the obligation from the reference to each selected claim
+  // host: every host answers every unit, rather than the population being
+  // discharged once by whichever host got there first.
+  //
+  // It is not a peer of the cardinality options even though it decodes beside
+  // them. Those tighten a count inside the existing per-reference obligation;
+  // this one gives the obligation a host dimension, which is why the duplicate
+  // and conflict keys below it become per host and why `UniqueEvidence` and
+  // `SingleEvidencePerSymbol` are refused alongside it rather than composed
+  // with it.
+  //
+  // It also takes the subtree away from a positive citation. A citation answers
+  // the item it names and nothing beneath it, and a target naming no item at all
+  // is refused outright as an aggregate.
+  //
+  // Both halves are needed, and only measuring shows why. Refusing the
+  // unselected ancestor alone left the default Markdown selector, where the file
+  // is itself an item, discharging every heading from one `@evidence
+  // docs/rules.md` — the option was a no-op in the first configuration an
+  // adopter writes, silently. Any selector admitting an ancestor beside a
+  // descendant opens the same hole.
+  //
+  // `@evidenceExclude` keeps the cascade, because "none of this applies here" is
+  // one decision however many items it covers.
+  Checklist bool
 }
 
 // evidenceReview is one verification statement bound to its host and target.
@@ -123,15 +153,10 @@ type referencePolicy struct {
 // its review spell one address, and resolving twice would let a review answer a
 // scope its citation does not name.
 type evidenceReview struct {
-  // HostID is the source-position identity, kept only so a carrier with no
-  // semantic identity can still be matched. It must not be the primary key: a
-  // merged identity's halves sit at different positions and therefore carry
-  // different HostIDs, so matching on it alone refuses a review written on
-  // `namespace I` for a citation on `interface I` — placement the graph
-  // elsewhere calls not worth a diagnostic, and which `evidence/review` accepts.
-  HostID string
-  // SemanticHostIDs are the selected graph identities this review is written on,
-  // which is what a citation is matched by.
+  // SemanticHostIDs are the ledger keys this review is written on. They are
+  // normally selected graph identities; an unattached Prisma review uses its
+  // synthetic file identity so the declaration-side position fallback can meet
+  // it. A citation is matched by these keys.
   SemanticHostIDs []string
   // Reviews names which acknowledgement this review answers for. It is part of
   // the match, never inferred: verifying a citation and verifying an exclusion
@@ -275,8 +300,9 @@ type evidenceDeclaration struct {
   ID     string
   HostID string
   // SemanticHostIDs names the selected graph identities that physically host
-  // this declaration. HostID remains the source-position identity used only
-  // for same-block duplicate detection; policy cardinality must not confuse a
+  // this declaration. HostID remains the source-position identity used for
+  // same-block duplicate detection and as the review lookup fallback for a
+  // valid carrier with no semantic host. Policy cardinality must not confuse a
   // declaration position with the public symbol identity it represents.
   SemanticHostIDs []string
   Type            artifactKind
@@ -304,12 +330,19 @@ func (declaration *evidenceDeclaration) valid() bool {
 type artifactInventory struct {
   // Address is the population-relative identity used for units and
   // declarations. It differs from Path when a configured root moves the
-  // address space while diagnostics remain project-relative.
+  // address space while a diagnostic keeps naming the file the way a reader
+  // opens it.
   Address string
-  // Path is the location a diagnostic names: project-relative, ascending with
-  // `..` when the file sits above the project root. It is not the key this
-  // inventory is filed under — that key carries the population base as well,
-  // because one file reached through two roots owns two sets of targets.
+  // Path is the source a diagnostic names. For a file it is spelled the way a
+  // reader opens it: project-relative, ascending with `..` when the file sits
+  // above the project root, and absolute when no relative spelling exists. A
+  // Swagger document is its configured source instead, which may be a URL, and
+  // the diagnostics for that kind print it through `displaySwaggerSource` rather
+  // than from here.
+  //
+  // It is not the key this inventory is filed under — that key carries the
+  // population base as well, because one file reached through two roots owns two
+  // sets of targets.
   Path         string
   Type         artifactKind
   Units        []*evidenceUnit

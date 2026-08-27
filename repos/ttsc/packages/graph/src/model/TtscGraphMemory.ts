@@ -3,6 +3,7 @@ import { ITtscGraphEdge } from "../structures/ITtscGraphEdge";
 import { ITtscGraphEvidence } from "../structures/ITtscGraphEvidence";
 import { ITtscGraphNode } from "../structures/ITtscGraphNode";
 import { ITtscGraphSpan } from "../structures/ITtscGraphSpan";
+import { isArtifactNodeKind } from "../structures/TtscGraphArtifactNodeKind";
 import { TtscGraphEdgeKind } from "../structures/TtscGraphEdgeKind";
 import { ttscGraphNodeIdPath } from "./TtscGraphNodeId";
 import { TtscGraphSourceReader } from "./TtscGraphSourceReader";
@@ -24,6 +25,7 @@ export class TtscGraphMemory {
   private readonly inEdges: Map<string, ITtscGraphEdge[]>;
   private readonly byNameIndex: Map<string, ITtscGraphNode[]>;
   private readonly bySymbolIndex: Map<string, ITtscGraphNode[]>;
+  private readonly byDocTagTarget: Map<string, ITtscGraphNode[]>;
 
   /** The absolute project root the dump was built for. */
   readonly project: string;
@@ -48,6 +50,7 @@ export class TtscGraphMemory {
     this.byId = new Map(nodes.map((n) => [n.id, n]));
     this.byNameIndex = new Map();
     this.bySymbolIndex = new Map();
+    this.byDocTagTarget = new Map();
     for (const node of nodes) {
       const bucket = this.byNameIndex.get(node.name);
       if (bucket) bucket.push(node);
@@ -57,6 +60,16 @@ export class TtscGraphMemory {
         if (node.qualifiedName !== undefined) {
           push(this.bySymbolIndex, node.qualifiedName, node);
         }
+      }
+      for (const target of docTagTargetsOf(node)) {
+        const carriers = this.byDocTagTarget.get(target);
+        // The membership check is redundant today — `docTagTargetsOf`
+        // deduplicates within a node and this loop visits each node once — and
+        // it is kept because the cost is a scan of a list that holds the
+        // carriers of one address, while the failure it prevents is a
+        // declaration reported twice as implementing one specification.
+        if (carriers === undefined) this.byDocTagTarget.set(target, [node]);
+        else if (!carriers.includes(node)) carriers.push(node);
       }
     }
     this.outEdges = new Map();
@@ -102,6 +115,100 @@ export class TtscGraphMemory {
   exported(): ITtscGraphNode[] {
     return this.nodes.filter((n) => n.exported && !n.external);
   }
+
+  /**
+   * Every declaration whose documentation names this address — the reverse of
+   * the citation question.
+   *
+   * The forward direction costs a reader one file: the tag sits above the
+   * declaration they already found. The reverse direction is what an index is
+   * for, because the declarations implementing one specification are scattered
+   * across every file that implements it, and finding them otherwise means
+   * searching the whole repository.
+   *
+   * The address is exact and is spelled as {@link documentationTarget} decides,
+   * so a caller passes that function's output rather than a raw query. Which
+   * part of a tag's text names a thing belongs to whatever convention wrote the
+   * tag, so this is a selection rule of the consuming layer rather than a fact
+   * the producer claims.
+   */
+  citing(target: string): readonly ITtscGraphNode[] {
+    return this.byDocTagTarget.get(target) ?? [];
+  }
+}
+
+/**
+ * The address each of a node's documentation tags names, deduplicated.
+ *
+ * A braced inline link is one token including its braces (`{@link ISale}`),
+ * because that is how the author wrote the target and how a reader searching
+ * for it will spell it. Splitting on whitespace alone would key it under
+ * `{@link`, which is every link in the project.
+ */
+function docTagTargetsOf(node: ITtscGraphNode): string[] {
+  if (node.docTags === undefined) return [];
+  const targets: string[] = [];
+  for (const tag of node.docTags) {
+    const token = documentationTarget(tag.text);
+    if (token !== undefined && !targets.includes(token)) targets.push(token);
+  }
+  return targets;
+}
+
+/**
+ * The address a documentation tag's text opens with, or undefined when its
+ * first token is ordinary prose.
+ *
+ * Every unrecognized tag arrives here, and most of them are not citations:
+ * TypeScript has no AST kind for `@remarks`, `@example`, `@todo`, `@internal`,
+ * or `@default` either, so their first word reaches this function exactly as a
+ * citation target does. Indexing those turned `@todo Add caching here` into a
+ * carrier of the address `Add`, and a query opening with that word answered
+ * with it — above every real name match, and labelled a certain citation.
+ *
+ * So a token qualifies only when it carries a separator that prose does not: a
+ * path or anchor (`docs/pricing.md#sale`), a namespaced or method-prefixed
+ * address (`POST:/orders`, `prisma:Sale`), an inline link, or a URL. An English
+ * word carries none of these, and neither does a bare number, so `@default 4`
+ * and `@todo Add caching` index nothing while every address form in use does.
+ *
+ * This is a selection rule, not a claim about the source. It lives here rather
+ * than in the producer for that reason: the graph reports the tag as written
+ * and this decides only what the ranked operations will match on, which is the
+ * layer whose audit already declares its selection heuristic. A convention
+ * whose addresses look like prose is simply not indexed; nothing is lost from
+ * the tag itself, which `details` still returns in full.
+ */
+export function documentationTarget(
+  text: string | undefined,
+): string | undefined {
+  const token = leadingToken(text);
+  if (token === undefined) return undefined;
+  if (token.startsWith("{")) return token;
+  // A separator anywhere but the last position: a trailing one is sentence
+  // punctuation ("Uses the cache." ends in a dot and names nothing), while an
+  // interior one is what every address form spells.
+  return /[/#:][^\s]/u.test(token) || /\.[^\s.]/u.test(token)
+    ? token
+    : undefined;
+}
+
+/**
+ * The first whitespace-delimited token, or the whole brace group it opens.
+ *
+ * An unclosed brace group is not a token: `{@link ISale` with the brace
+ * forgotten would otherwise fall through to the whitespace split and index the
+ * address `{@link`, which every link in the project shares.
+ */
+export function leadingToken(text: string | undefined): string | undefined {
+  const trimmed = text?.trim();
+  if (trimmed === undefined || trimmed === "") return undefined;
+  if (trimmed.startsWith("{")) {
+    const close = trimmed.indexOf("}");
+    return close > 0 ? trimmed.slice(0, close + 1) : undefined;
+  }
+  const stop = trimmed.search(/\s/u);
+  return stop < 0 ? trimmed : trimmed.slice(0, stop);
 }
 
 /** Append value to the slice stored at key, creating the slice on first use. */
@@ -136,7 +243,7 @@ function ownerKey(node: ITtscGraphNode): string | undefined {
   return owner === "" ? undefined : owner;
 }
 
-/** A file's id and node name from its schema-v6 path coordinate. */
+/** A file's id and node name from its dump path coordinate. */
 function fileNodeId(file: string): string {
   return file;
 }
@@ -255,7 +362,7 @@ function synthesize(dump: ITtscGraphDump): {
     });
   };
   for (const node of nodes) {
-    if (node.external) continue;
+    if (node.external || isArtifactNodeKind(node.kind)) continue;
     addFileNode(node.file);
   }
   for (const file of moduleFiles) addFileNode(file);
@@ -269,6 +376,15 @@ function synthesize(dump: ITtscGraphDump): {
   // legacy subpath.
   const structural: ITtscGraphEdge[] = [];
   for (const node of nodes) {
+    // An artifact is contained by the artifact its producer named, and by
+    // nothing when that producer named none. It is never contained by a `file`
+    // node: a document is already its own node, a Prisma address carries no
+    // path on purpose, and an API operation has no file at all.
+    if (isArtifactNodeKind(node.kind)) {
+      if (node.parent !== undefined && node.parent !== "")
+        structural.push({ from: node.parent, to: node.id, kind: "contains" });
+      continue;
+    }
     if (node.external || node.file === "") continue;
     const parent = owner(node);
     const container = parent ? parent.id : fileNodeId(node.file);

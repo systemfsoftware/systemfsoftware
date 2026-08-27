@@ -24,6 +24,18 @@ const (
   // imports from. A barrel declares nothing, so this is the only node it has,
   // and it is the node a package.json entry path resolves to.
   NodeModule NodeKind = "module"
+  // The artifact kinds. These are not declarations and they are not this
+  // Program's facts: a plugin materialized them from a Markdown document, a
+  // Prisma schema, or an API document, and the graph indexes what it was handed
+  // without interpreting any of it. Their ids are the address a citation names
+  // rather than the `path#name:kind` grammar, which is why a consumer parsing an
+  // id gates on the kind first.
+  NodeMarkdownDocument NodeKind = "markdown_document"
+  NodeMarkdownSection  NodeKind = "markdown_section"
+  NodePrismaModel      NodeKind = "prisma_model"
+  NodePrismaColumn     NodeKind = "prisma_column"
+  NodePrismaRelation   NodeKind = "prisma_relation"
+  NodeSwaggerOperation NodeKind = "swagger_operation"
 )
 
 // Node is one declared symbol. Its ID is position-invariant, built from the file
@@ -39,10 +51,22 @@ type Node struct {
   // (`"a.b"` → Name `C.a.b`), so the simple/qualified boundary cannot be
   // recovered from Name by splitting on a dot. Recording it here keeps the dump
   // split exact instead of guessing.
-  Simple   string
-  Kind     NodeKind
-  File     string
-  External bool
+  Simple string
+  Kind   NodeKind
+  File   string
+  // ArtifactLine is the 1-based line a published artifact starts on, and is 0
+  // for every declaration — a declaration carries a real span, resolved from the
+  // compiler, and does not need this. It exists because an artifact has no AST
+  // position to take a span from: the plugin that parsed the document reports
+  // where the heading is, and that single number is the whole span an index
+  // carries. The section's content is read from the file when someone needs it,
+  // exactly as a function body is.
+  ArtifactLine int
+  // ArtifactParent is the id of the artifact containing this one — a section's
+  // document or enclosing section, a column's model. Empty for every
+  // declaration, whose containment the TypeScript memory layer synthesizes.
+  ArtifactParent string
+  External       bool
   // Exported marks a node that is part of its module's export surface, resolved
   // through the checker's export table so a re-export (`export { Foo } from`) or
   // a barrel (`export *`) counts, not only an inline `export` modifier. It is
@@ -163,12 +187,43 @@ const (
   // type it mentions (a parameter, return, property, or alias type). It is not a
   // runtime call, so an impact query can filter value edges from type edges.
   EdgeTypeRef EdgeKind = "type-ref"
+  // EdgeDocRef is a reference from a declaration to a symbol its own
+  // documentation names through an inline link. The checker resolves the name
+  // and counts it as a use — an import that exists only to support one survives
+  // `noUnusedLocals` — so the relationship is a compiler fact like every other
+  // edge here, and it was the one class of resolved reference the graph held no
+  // edge for.
+  //
+  // It is its own kind rather than a type-ref because it is not a type
+  // position: a link may name a function, and a consumer filtering type edges
+  // from value edges would be told a documentation mention is one or the other
+  // when it is neither. The tag around the link decides nothing; a link under
+  // `@evidence`, under `@see`, or in ordinary prose is one relation.
+  EdgeDocRef EdgeKind = "doc-ref"
   // EdgeExports runs from a module to a declaration its export table resolves
   // to, through re-exports and barrels. It records which surface a symbol is
   // public on, which the Exported flag cannot: a package's front door and its
   // legacy subpath both export, and only the edge says which one did.
   EdgeExports EdgeKind = "exports"
 )
+
+// EdgeKinds returns every kind Build can put on an edge, in declaration order.
+//
+// A consumer that reports per-kind numbers needs the whole vocabulary rather
+// than the subset a particular project happens to contain: counting only what
+// was seen makes the reported shape depend on the project measured, and a
+// family that dropped to zero disappears instead of reading zero.
+func EdgeKinds() []EdgeKind {
+  return []EdgeKind{
+    EdgeHeritage,
+    EdgeMemberRelation,
+    EdgeValueCall,
+    EdgeValueAccess,
+    EdgeTypeRef,
+    EdgeDocRef,
+    EdgeExports,
+  }
+}
 
 // Edge is a directed, checker-resolved relationship from one node to another,
 // both referenced by Node.ID. File, Pos, and End bound the source expression
@@ -204,6 +259,26 @@ type Graph struct {
   // re-parsing source. It is dump-only metadata, separate from Edges so the
   // existing checker-resolved relationships are untouched.
   Decorators []*Decorator
+  // DocTags holds the documentation tags TypeScript does not recognize, written
+  // on the workspace's declarations and captured verbatim so the JSON dump can
+  // attach them to each target node. A convention that attaches a declaration to
+  // something outside the type system — a specification section, an API
+  // operation, a reference document — writes it here and nowhere the graph could
+  // otherwise see. Dump-only metadata, separate from Edges for the same reason
+  // Decorators is.
+  DocTags []*DocTag
+  // docTagPositions deduplicates DocTags by where each tag is written, so a
+  // declaration presented to putDeclaredNode more than once contributes its tags
+  // once. Build-only, like bodyNodes.
+  docTagPositions map[docTagKey]struct{}
+  // docHosts are the declarations the node pass found documentation on, paired
+  // with the node it attributed them to and keyed by their file. The edge pass
+  // resolves documentation links from this set rather than from a walk of its
+  // own, so both halves of a citation cover the same declarations, and it asks
+  // per file so a project's whole documented population is never rescanned for
+  // each one. Build-only.
+  docHosts         map[string][]docHost
+  docHostPositions map[docTagKey]struct{}
   // bodyNodes tracks whether a callable node's display span is the overload
   // implementation rather than an overload signature. It is build-only metadata
   // and intentionally stays out of JSON dumps.

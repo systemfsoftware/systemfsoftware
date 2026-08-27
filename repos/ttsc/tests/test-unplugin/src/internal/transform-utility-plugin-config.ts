@@ -48,7 +48,10 @@ function aliasFor(root: string): Record<string, string> {
  * real utility plugin package is resolvable from the temporary project without
  * a full install. Mirrors the seeding the per-plugin suites use.
  */
-function seedUtilityPlugin(root: string, name: "banner" | "strip"): void {
+export function seedUtilityPlugin(
+  root: string,
+  name: "banner" | "paths" | "strip",
+): void {
   const linkDir = path.join(root, "node_modules", "@ttsc");
   fs.mkdirSync(linkDir, { recursive: true });
   const target = path.join(TestProject.WORKSPACE_ROOT, "packages", name);
@@ -796,13 +799,421 @@ function restoreEnv(key: string, value: string | undefined): void {
   else process.env[key] = value;
 }
 
+/**
+ * Asserts the same-byte link retarget is rejected with notifications unusable.
+ *
+ * {@link assertPersistentUtilityConfigLinkRetargetInvalidatesTransform} closes
+ * the exact-input watcher, which leaves the generation on the narrow path and
+ * proves that path's metadata manifest. A watcher that _failed_ takes the other
+ * branch: validation falls back to the complete snapshot, whose out-of-walk
+ * comparison records realpaths for graph members only. A universal host input
+ * is not a graph member, so a retarget to a byte-identical file would be
+ * invisible there unless the fallback proves the universal manifest too.
+ */
+async function assertUnnotifiedUtilityConfigLinkRetargetInvalidatesTransform() {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const root = createUtilityPluginProject({
+    plugin: "banner",
+    pluginEntry: { configFile: "./config/banner.config.cjs" },
+    source: 'export const value: string = "kept";\n',
+  });
+  const configDirectory = path.join(root, "config");
+  const selectionRoot = TestProject.tmpdir("ttsc-banner-unnotified-link-");
+  const oldTarget = path.join(selectionRoot, "old-selection");
+  const newTarget = path.join(selectionRoot, "new-selection");
+  const link = path.join(selectionRoot, "selection-link");
+  fs.mkdirSync(configDirectory, { recursive: true });
+  fs.mkdirSync(oldTarget, { recursive: true });
+  fs.mkdirSync(newTarget, { recursive: true });
+  // Byte-identical selections: only the physical identity of the selected file
+  // differs, so a content comparison alone cannot see the retarget.
+  const selectionSource = 'module.exports = require("./value.cjs");\n';
+  fs.writeFileSync(
+    path.join(oldTarget, "selection.cjs"),
+    selectionSource,
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(newTarget, "selection.cjs"),
+    selectionSource,
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(oldTarget, "value.cjs"),
+    'module.exports = { text: "OLD LINK TARGET" };\n',
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(newTarget, "value.cjs"),
+    'module.exports = { text: "NEW LINK TARGET" };\n',
+    "utf8",
+  );
+  fs.symlinkSync(
+    oldTarget,
+    link,
+    process.platform === "win32" ? "junction" : "dir",
+  );
+  fs.writeFileSync(
+    path.join(configDirectory, "banner.config.cjs"),
+    [
+      `const selected = require(${JSON.stringify(path.join(link, "selection.cjs"))});`,
+      "module.exports = () => selected;",
+      "",
+    ].join("\n"),
+    "utf8",
+  );
+
+  const file = TestUnpluginProject.mainFile(root);
+  const source = TestUnpluginProject.mainSource(root);
+  const failures: (() => void)[] = [];
+  const cache = createTtscTransformCache({
+    watch: (_directory: string, _listener: unknown, onError: () => void) => {
+      failures.push(onError);
+      return { close: () => undefined };
+    },
+  });
+  const first = await transformTtsc(
+    file,
+    source,
+    resolveOptions(),
+    undefined,
+    cache,
+  );
+  assert.ok(first);
+  assert.match(first.code, /OLD LINK TARGET/);
+  const firstGeneration = [...cache.values()][0];
+  assert.equal(
+    (await firstGeneration!).projectSnapshotComplete,
+    true,
+    "an unprovable generation would recompile for the wrong reason below",
+  );
+
+  // Every watcher stops reporting, so validation can only use recorded state.
+  assert.ok(failures.length > 0, "the seam must have registered a watcher");
+  for (const fail of failures) {
+    fail();
+  }
+  fs.rmSync(link, { force: true, recursive: true });
+  fs.symlinkSync(
+    newTarget,
+    link,
+    process.platform === "win32" ? "junction" : "dir",
+  );
+  const second = await transformTtsc(
+    file,
+    source,
+    resolveOptions(),
+    undefined,
+    cache,
+  );
+  assert.ok(second);
+  assert.notEqual(
+    [...cache.values()][0],
+    firstGeneration,
+    "a same-byte retarget of a universal host input must replace the generation",
+  );
+  assert.match(second.code, /NEW LINK TARGET/);
+  assert.doesNotMatch(second.code, /OLD LINK TARGET/);
+}
+
+/**
+ * Materialize a project two directories below its plugin config.
+ *
+ * The layout a monorepo produces: the config sits at the workspace root and the
+ * package that compiles is nested below it, so discovery finds the config by
+ * walking up through a directory that belongs to neither.
+ *
+ * The middle directory is what makes a scenario built on this fixture prove
+ * anything. A config created inside the project root is caught by the adapter's
+ * own project-membership snapshot no matter what the plugin reports, so only a
+ * config appearing _outside_ that walk isolates the probe reporting.
+ */
+function createNestedUtilityPluginProject(props: {
+  plugin: "banner" | "strip";
+  outerConfig?: string;
+  source: string;
+}): { middle: string; root: string } {
+  const outer = TestProject.tmpdir(`ttsc-${props.plugin}-outer-`);
+  const middle = path.join(outer, "packages");
+  const root = path.join(middle, "app");
+  fs.mkdirSync(path.join(root, "src"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "package.json"),
+    JSON.stringify({ private: true, type: "commonjs" }, null, 2),
+    "utf8",
+  );
+  fs.writeFileSync(
+    path.join(root, "tsconfig.json"),
+    JSON.stringify(
+      {
+        compilerOptions: {
+          module: "commonjs",
+          outDir: "dist",
+          plugins: [{ transform: `@ttsc/${props.plugin}` }],
+          rootDir: "src",
+          strict: true,
+          target: "ES2022",
+        },
+        include: ["src"],
+      },
+      null,
+      2,
+    ),
+    "utf8",
+  );
+  fs.writeFileSync(path.join(root, "src", "main.ts"), props.source, "utf8");
+  if (props.outerConfig !== undefined) {
+    fs.writeFileSync(
+      path.join(outer, `${props.plugin}.config.json`),
+      props.outerConfig,
+      "utf8",
+    );
+  }
+  seedUtilityPlugin(root, props.plugin);
+  return { middle, root };
+}
+
+/**
+ * Asserts samchon/ttsc#1271: a banner config appearing nearer the project than
+ * the one discovery settled on replaces the generation.
+ *
+ * Discovery walks upward and stops at the first directory that answers, so
+ * every candidate it probed on the way is a path that can change the answer.
+ * Reporting only the file it found leaves a cached generation unable to notice
+ * a nearer one, and a cold build then disagrees with the warm one about which
+ * config the project has.
+ */
+async function assertPersistentBannerConfigSupersessionInvalidatesTransform() {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const { middle, root } = createNestedUtilityPluginProject({
+    outerConfig: JSON.stringify({ text: "OUTER BANNER" }),
+    plugin: "banner",
+    source: 'export const value: string = "kept";\n',
+  });
+  const file = path.join(root, "src", "main.ts");
+  const source = fs.readFileSync(file, "utf8");
+  const cache = createTtscTransformCache();
+  const first = await transformTtsc(
+    file,
+    source,
+    resolveOptions(),
+    undefined,
+    cache,
+  );
+  assert.ok(first);
+  assert.match(first.code, /OUTER BANNER/);
+  const nearer = path.join(middle, "banner.config.json");
+  const cached = (await [...cache.values()][0]!) as {
+    result?: { hostInputs?: string[] };
+  };
+  // The declaration itself, not only its effect: the path has to be in the
+  // envelope for a consumer to watch it at all, and asserting the effect alone
+  // cannot tell an invalidation apart from a generation that was never
+  // reusable.
+  assert.ok(
+    cached.result?.hostInputs?.some(
+      (input) => path.resolve(input) === path.resolve(nearer),
+    ),
+    `the superseding candidate is missing from the envelope: ${JSON.stringify(cached.result?.hostInputs ?? [])}`,
+  );
+
+  fs.writeFileSync(nearer, JSON.stringify({ text: "NEARER BANNER" }), "utf8");
+  const second = await transformTtsc(
+    file,
+    source,
+    resolveOptions(),
+    undefined,
+    cache,
+  );
+  assert.ok(second);
+  assert.match(second.code, /NEARER BANNER/);
+  assert.doesNotMatch(second.code, /OUTER BANNER/);
+}
+
+/**
+ * Asserts an unrelated file in a probed directory does not invalidate anything.
+ *
+ * The twin of the supersession case. The probes make a set of paths matter that
+ * did not before, and a generation that woke for any neighbour of them would
+ * trade one defect for a worse one: the config directories are ordinary
+ * directories with ordinary traffic.
+ */
+async function assertUnrelatedFileInAProbedDirectoryKeepsTheGeneration() {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const { middle, root } = createNestedUtilityPluginProject({
+    outerConfig: JSON.stringify({ text: "OUTER BANNER" }),
+    plugin: "banner",
+    source: 'export const value: string = "kept";\n',
+  });
+  const file = path.join(root, "src", "main.ts");
+  const source = fs.readFileSync(file, "utf8");
+  const cache = createTtscTransformCache();
+  const first = await transformTtsc(
+    file,
+    source,
+    resolveOptions(),
+    undefined,
+    cache,
+  );
+  assert.ok(first);
+  const firstGeneration = [...cache.values()][0];
+
+  fs.writeFileSync(
+    path.join(middle, "unrelated.json"),
+    JSON.stringify({ text: "IGNORED" }),
+    "utf8",
+  );
+  const second = await transformTtsc(
+    file,
+    source,
+    resolveOptions(),
+    undefined,
+    cache,
+  );
+
+  assert.ok(second);
+  assert.equal(
+    [...cache.values()][0],
+    firstGeneration,
+    "a neighbour of a probed candidate must not replace the generation",
+  );
+  assert.match(second.code, /OUTER BANNER/);
+}
+
+/**
+ * Asserts a directory wearing a config file's name leaves the generation
+ * reusable.
+ *
+ * The discovery walk rejects such a directory as a config, but it is not the
+ * same observation as an absent path: the host-input contract records an
+ * existing directory by a fixed directory-kind digest and its physical path.
+ * The producer's digest and the consumer's are two independently maintained
+ * constants, and the moment they disagree — or the walk reports the directory
+ * as absent — every consumer compares a nil against a digest its own filesystem
+ * keeps producing. That is not an invalidation but a permanent one: the
+ * generation is refused on every delivery for the rest of its life, which is
+ * the shape samchon/ttsc#1245 was filed for.
+ *
+ * 1. Compile a package whose config directory also carries a _directory_ named
+ *    `banner.config.ts`.
+ * 2. Assert that path reached the envelope, so the case is about how it was
+ *    recorded rather than about it being dropped.
+ * 3. Deliver again and assert the generation object is the same one.
+ */
+async function assertDirectoryShapedConfigCandidateKeepsTheGeneration() {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const { middle, root } = createNestedUtilityPluginProject({
+    outerConfig: JSON.stringify({ text: "OUTER BANNER" }),
+    plugin: "banner",
+    source: 'export const value: string = "kept";\n',
+  });
+  // Beside the config the walk settles on, so the search reaches it, rejects
+  // it, and reports it from the directory it stopped in.
+  const directory = path.join(path.dirname(middle), "banner.config.ts");
+  fs.mkdirSync(directory, { recursive: true });
+
+  const file = path.join(root, "src", "main.ts");
+  const source = fs.readFileSync(file, "utf8");
+  const cache = createTtscTransformCache();
+  const first = await transformTtsc(
+    file,
+    source,
+    resolveOptions(),
+    undefined,
+    cache,
+  );
+  assert.ok(first);
+  assert.match(first.code, /OUTER BANNER/);
+  const firstGeneration = [...cache.values()][0];
+  const cached = (await firstGeneration!) as {
+    result?: { hostInputs?: string[] };
+  };
+  assert.ok(
+    cached.result?.hostInputs?.some(
+      (input) => path.resolve(input) === path.resolve(directory),
+    ),
+    `the directory-shaped candidate is missing from the envelope: ${JSON.stringify(cached.result?.hostInputs ?? [])}`,
+  );
+
+  const second = await transformTtsc(
+    file,
+    source,
+    resolveOptions(),
+    undefined,
+    cache,
+  );
+  assert.ok(second);
+  assert.equal(
+    [...cache.values()][0],
+    firstGeneration,
+    "a directory wearing a config name must not make the generation unreusable",
+  );
+  assert.match(second.code, /OUTER BANNER/);
+}
+
+/**
+ * Asserts the same rule where the search found nothing at all.
+ *
+ * `@ttsc/strip` falls back to its built-in defaults when no config exists
+ * anywhere up the tree, which is the state a config appearing later changes.
+ * The defaults strip `console.log`; the config planted here strips
+ * `logger.trace` instead, so each direction of the assertion distinguishes "the
+ * new config took effect" from "the defaults kept running".
+ */
+async function assertPersistentStripDefaultsYieldToAnAppearingConfig() {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const { middle, root } = createNestedUtilityPluginProject({
+    plugin: "strip",
+    source: STRIP_SOURCE,
+  });
+  const file = path.join(root, "src", "main.ts");
+  const source = fs.readFileSync(file, "utf8");
+  const cache = createTtscTransformCache();
+  const first = await transformTtsc(
+    file,
+    source,
+    resolveOptions(),
+    undefined,
+    cache,
+  );
+  assert.ok(first);
+  assert.doesNotMatch(first.code, /console\.log\("kept"\)/);
+  assert.match(first.code, /logger\.trace\("drop"\)/);
+
+  fs.writeFileSync(
+    path.join(middle, "strip.config.json"),
+    STRIP_CONFIG,
+    "utf8",
+  );
+  const second = await transformTtsc(
+    file,
+    source,
+    resolveOptions(),
+    undefined,
+    cache,
+  );
+  assert.ok(second);
+  assert.doesNotMatch(second.code, /logger\.trace\("drop"\)/);
+  assert.match(second.code, /console\.log\("kept"\)/);
+}
+
 export {
   assertAliasOverlayDiscoversProjectBannerConfig,
   assertAliasOverlayHonorsProjectStripConfig,
   assertAliasOverlayIgnoresStripConfigPlantedInTempDir,
   assertAliasOverlayMatchesNoAliasStripOutput,
   assertAliasOverlayResolvesRelativeConfigFile,
+  assertDirectoryShapedConfigCandidateKeepsTheGeneration,
   assertPersistentBannerConfigEditInvalidatesTransform,
+  assertPersistentBannerConfigSupersessionInvalidatesTransform,
+  assertPersistentStripDefaultsYieldToAnAppearingConfig,
   assertPersistentUtilityConfigDependencyEditInvalidatesTransform,
   assertPersistentUtilityConfigLinkRetargetInvalidatesTransform,
+  assertUnnotifiedUtilityConfigLinkRetargetInvalidatesTransform,
+  assertUnrelatedFileInAProbedDirectoryKeepsTheGeneration,
 };

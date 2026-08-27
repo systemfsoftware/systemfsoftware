@@ -55,7 +55,37 @@ func BuildFiles(prog *driver.Program, selected []string, baseNodes map[string]*N
     collectDeclarations(g, file)
   }
   g.addEdges(prog, selectedFiles, selected != nil)
+  g.releaseBuildState()
   return g
+}
+
+// releaseBuildState drops the scratch the build needed, once the edge pass has
+// finished with it.
+//
+// Every map cleared here is documented build-only, and each holds pointers into
+// the compiler AST or into the preceding generation”'s nodes: resolved is keyed
+// by *shimast.Node, docHosts holds one per documented declaration, and baseNodes
+// is the whole prior endpoint index. A consumer that retains the returned Graph
+// therefore pinned all of it for as long as it held the graph — and
+// internal/graphsymbols retains one for the lifetime of an editor session
+// between invalidations, closing the Program while the maps that reference its
+// AST live on. Clearing them here rather than at that consumer is what keeps the
+// decision with the producer, which is the only side that knows which fields are
+// scratch.
+//
+// ExportedTargets and ImplementationSources are deliberately not cleared: the
+// shard expansion path in cmd/ttscgraph/serve_shards.go reads both after this
+// returns, and Nodes/Edges/Decorators/DocTags are the graph itself.
+func (g *Graph) releaseBuildState() {
+  g.docTagPositions = nil
+  g.docHosts = nil
+  g.docHostPositions = nil
+  g.bodyNodes = nil
+  g.seen = nil
+  g.resolved = nil
+  g.edgeEvidenceFiles = nil
+  g.baseNodes = nil
+  g.selectedFiles = nil
 }
 
 // SourceTexts maps every program source to the resident checker text.
@@ -454,6 +484,11 @@ func collectMembers(g *Graph, path string, statement *shimast.Node) {
 
 func putDeclaredNode(g *Graph, path, name string, kind NodeKind, declaration *shimast.Node) {
   id := nodeID(path, name, kind)
+  // Tags belong to the identity, not to whichever declaration of it wins the
+  // display span below. An overload run documented on its first signature and
+  // implemented underneath returns early from the node branch, so collecting
+  // there would drop exactly the declaration authors write documentation on.
+  collectDocTags(g, id, declaration)
   hasBody := declarationHasImplementation(declaration, kind)
   if _, exists := g.Nodes[id]; exists {
     if !hasBody || g.bodyNodes[id] {

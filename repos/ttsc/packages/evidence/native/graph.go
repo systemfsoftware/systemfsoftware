@@ -68,6 +68,13 @@ func (graphRule) Check(ctx *rule.ProjectContext) {
     root,
     claimPopulationConfig(config, artifactPrisma),
   )
+  problems = append(
+    problems,
+    typeScriptBaseProblems(
+      claimPopulationConfig(config, artifactTypeScript),
+      typescript,
+    )...,
+  )
   problems = append(problems, markdownClaimProblems...)
   problems = append(problems, prismaClaimProblems...)
   // Governance is judged against the configuration as declared, before
@@ -163,8 +170,14 @@ func claimPopulationConfig(
 //
 // TypeScript, Prisma, and Markdown are the three claim-capable artifact kinds.
 // A healthy zero-file match is empty and therefore inactive, including when a
-// typo caused it. Unhealthy or unreadable populations stay active because
-// failed input cannot prove the selected population is empty.
+// typo caused it. An unhealthy population stays active because failed input
+// cannot prove the selected population is empty.
+//
+// Health is the whole test, and a declared root that is not a directory is one
+// of the things it now answers for every kind rather than for two of them.
+// Asking baseDirectoryProblem again here kept a TypeScript claim alive
+// on a fact this function then had no way to report, which is how a bad root
+// came to be answered with a glob diagnostic.
 func activeGraphConfig(
   config graphConfig,
   markdown map[string]*artifactInventory,
@@ -193,14 +206,19 @@ func claimIsInactive(
   claim claimSpec,
   inventories map[string]*artifactInventory,
 ) bool {
+  // The default arm is unreachable: decodeClaim refuses a reference-only kind
+  // and any kind problem returns from Check before activation runs. It stays as
+  // the place a fourth claim-capable kind announces itself, and such a kind
+  // owes this switch a case and a population loader that records its failures —
+  // without both it would go active and empty with nothing to say, which is the
+  // shape this function's own history is about.
   switch claim.Type {
   case artifactMarkdown, artifactPrisma, artifactTypeScript:
   default:
     return false
   }
   paths := matchingInventoryPaths(inventories, claim.Base, claim.Files)
-  if !populationIsHealthy(inventories, claim.Base, paths) ||
-    unreadableBaseProblem(claim.Base, claim.Type) != "" {
+  if !populationIsHealthy(inventories, claim.Base, paths) {
     return false
   }
   for _, path := range paths {
@@ -256,13 +274,17 @@ func materializeClaimStates(
         )
       }
     }
-    if len(paths) == 0 && state.Healthy {
-      problems = append(
-        problems,
-        claimLabel(claim)+" matched no "+string(claim.Type)+" files for "+describePopulation(claim.Base, claim.Files)+". Fix the globs or the root they resolve against; '*' stays within one segment, '**' crosses segments, and a bare directory is not recursive.",
-      )
-    }
+    // No claim-side empty-match diagnostic belongs here. A claim arrives
+    // already active, which means it either selected a host — so it matched a
+    // path — or its population is unhealthy, and an unhealthy one is reported
+    // at its own cause by the loader that failed. The message removed from this
+    // spot told the author to fix globs that were fine, and the only state that
+    // ever reached it was a TypeScript root that did not resolve, which now
+    // says so itself.
     hostsByID := map[string]bool{}
+    declaredByID := map[string]bool{}
+    reviewed := map[*evidenceReview]bool{}
+    insideCarrier := map[string]bool{}
     for _, path := range paths {
       for _, unit := range inventories[path].Units {
         if unit.Hidden != "" ||
@@ -273,16 +295,51 @@ func materializeClaimStates(
         hostsByID[unit.ID] = true
         state.Hosts = append(state.Hosts, unit)
       }
-      state.Declarations = append(
-        state.Declarations,
-        inventories[path].Declarations...,
-      )
+      // One physical file can occupy two of this claim's paths. A hard link is
+      // a second directory entry for one file and a single walk enumerates
+      // both, and the Prisma loader then gives both inventories the same
+      // declaration object rather than a copy each, because one citation is one
+      // obligation wherever it is read from. Appending each list would count
+      // that citation twice, and every duplicate and conflict rule downstream
+      // would then name a repair the author cannot perform: the two are one
+      // tag, on one line. The hosts just above are collapsed for the same
+      // reason.
+      for _, declaration := range inventories[path].Declarations {
+        if declaredByID[declaration.ID] {
+          continue
+        }
+        declaredByID[declaration.ID] = true
+        state.Declarations = append(state.Declarations, declaration)
+      }
       // Reviews travel beside declarations and never among them. They carry no
       // obligation of their own; they are looked up by host and target when a
-      // reference demands one.
-      state.Reviews = append(state.Reviews, inventories[path].Reviews...)
-      if len(claim.ExclusionCarriers.Patterns) != 0 && !carrierPaths[path] {
+      // reference demands one. They are collapsed by object rather than by ID
+      // because a review has no identity of its own, and the duplication being
+      // removed is exactly one object reached twice. No message depends on it:
+      // `newReviewLedger` keeps the first review for a key and a repeat of the
+      // same object changes nothing it answers. What this keeps is the list
+      // being the union its name says it is, so a later reader that counts
+      // reviews rather than looking one up is not counting names of files.
+      for _, review := range inventories[path].Reviews {
+        if reviewed[review] {
+          continue
+        }
+        reviewed[review] = true
+        state.Reviews = append(state.Reviews, review)
+      }
+      if carrierPaths[path] {
         for _, declaration := range inventories[path].Declarations {
+          insideCarrier[declaration.ID] = true
+        }
+      }
+    }
+    // A declaration is outside the carriers only when no path carrying it is a
+    // carrier. Deciding that per path would put one tag in two places at once
+    // for a file the claim selects under two names, and report the placement of
+    // whichever name it read second.
+    if len(claim.ExclusionCarriers.Patterns) != 0 {
+      for _, declaration := range state.Declarations {
+        if !insideCarrier[declaration.ID] {
           state.OutsideCarrier[declaration.ID] = true
         }
       }
@@ -552,7 +609,7 @@ func evaluateEvidenceGraph(
     if !declaration.valid() {
       problems = append(
         problems,
-        "Malformed @"+string(declaration.Tag)+" declaration at "+declaration.location()+" for "+context+": target and non-empty reason are mandatory. Write '@"+string(declaration.Tag)+" <target> <reason>'.+untrueTagWarning",
+        "Malformed @"+string(declaration.Tag)+" declaration at "+declaration.location()+" for "+context+": target and non-empty reason are mandatory. Write '@"+string(declaration.Tag)+" <target> <reason>'."+untrueTagWarning,
       )
       continue
     }
@@ -646,6 +703,21 @@ func evaluateEvidenceGraph(
   // carrier globs its message must name.
   outsideCarrier := map[string][]string{}
   outsideCarrierGlobs := map[string]string{}
+  // A checklist tag speaking for no selected host is a non-participation
+  // finding: within its reference it answers nothing, and whether that earns a
+  // diagnostic depends on every other obligation the same declaration can
+  // discharge. The eligibility comment below promises exactly that for every
+  // overlap — an ineligible overlap must not reject a tag already owned
+  // elsewhere — so the finding is recorded here and judged after the walk,
+  // when `answers` can say whether anything consumed the tag.
+  unhosted := map[string][]string{}
+  unhostedSelections := map[string]symbolSet{}
+  // answers marks a declaration that wrote at least one acknowledgement
+  // ledger, or was refused as an aggregate, which is that citation's own
+  // diagnostic. A tag the noEvidenceExclude policy refused answers nothing
+  // and is deliberately absent, so it can still be reported as unhosted
+  // where another reference is a checklist.
+  answers := map[string]bool{}
   for _, state := range states {
     if len(state.Paths) == 0 {
       continue
@@ -667,12 +739,26 @@ func evaluateEvidenceGraph(
       }
       single := reference.Spec.Policy.SingleEvidencePerSymbol
       unique := reference.Spec.Policy.UniqueEvidence
-      // An empty population owes nothing and normally ends the reference
-      // here. A healthy empty one still judges hosts under
-      // singleEvidencePerSymbol, because every selected host then truthfully
-      // cites zero units rather than the one it owes.
-      if len(reference.Units) == 0 &&
-        (!single || !state.Healthy || !reference.Healthy || len(reference.Paths) == 0) {
+      checklist := reference.Spec.Policy.Checklist
+      // An empty population ends the reference, for every policy alike.
+      //
+      // singleEvidencePerSymbol used to be excepted, on the argument that each
+      // selected host then truthfully cites zero units rather than the one it
+      // owes. The count is true and the conclusion does not follow: the
+      // materializer has already reported why the population is empty, and this
+      // added one message per host asking each of them to cite a unit that does
+      // not exist — a repair the population makes impossible, scaled by host
+      // count. It is the same derived finding the loader-failure path refuses
+      // to produce, and it was refused there for the same reason.
+      //
+      // The exception was also conditional on len(Paths) != 0, so the identical
+      // empty population was judged or skipped depending on whether any file
+      // happened to match, which no argument ever covered.
+      //
+      // Nothing else is lost by leaving early. Every diagnostic below reaches a
+      // declaration through reference.UnitsByScope, which an empty population
+      // leaves empty, so each one already skips every declaration it visits.
+      if len(reference.Units) == 0 {
         continue
       }
       acknowledged := map[string]bool{}
@@ -681,12 +767,34 @@ func evaluateEvidenceGraph(
       evidenceByHostAndScope := map[string]map[string]*evidenceDeclaration{}
       selectedHosts := map[string]*evidenceUnit{}
       evidenceUnitsByHost := map[string]map[string]bool{}
-      if single || unique {
+      if single || unique || checklist {
         for _, host := range state.Hosts {
           selectedHosts[host.ID] = host
           if single {
             evidenceUnitsByHost[host.ID] = map[string]bool{}
           }
+        }
+      }
+      // A checklist gives the obligation a host dimension, so every map below
+      // that answers "was this unit acknowledged" becomes "was it acknowledged
+      // *here*". The ordinary maps keep their global keys: outside a checklist
+      // one acknowledgement anywhere in the claim is the whole obligation, and
+      // that is the behavior every reference written before this option had.
+      acknowledgedByHost := map[string]map[string]bool{}
+      // aggregateByHost records the units a refused aggregate citation reached
+      // on a host. They are not acknowledged, and they are not reported missing
+      // either: the aggregate diagnostic already names them and names the one
+      // repair that answers both, so listing them again on the host would be
+      // the descendant duplication the diagnostics rule forbids.
+      aggregateByHost := map[string]map[string]bool{}
+      selectedUnitIDs := map[string]bool{}
+      if checklist {
+        for _, unit := range reference.Units {
+          selectedUnitIDs[unit.ID] = true
+        }
+        for _, host := range state.Hosts {
+          acknowledgedByHost[host.ID] = map[string]bool{}
+          aggregateByHost[host.ID] = map[string]bool{}
         }
       }
       evidenceHostsByUnit := map[string]map[string]bool{}
@@ -747,6 +855,72 @@ func evaluateEvidenceGraph(
           )
           continue
         }
+        // Which acknowledgement ledgers this declaration writes into. The
+        // single empty key outside a checklist is the historical global
+        // bookkeeping; a checklist writes one entry per selected host the
+        // declaration speaks for.
+        keyHosts := []string{""}
+        if checklist {
+          keyHosts = nil
+          for _, hostID := range declaration.SemanticHostIDs {
+            if selectedHosts[hostID] != nil {
+              keyHosts = append(keyHosts, hostID)
+            }
+          }
+          if len(keyHosts) == 0 {
+            // Under a checklist every acknowledgement is one host's answer, so
+            // a tag that speaks for no selected host answers nothing here.
+            //
+            // Spreading it across the claim instead was tried and withdrawn.
+            // The reach it bought is the gathered exclusion ledger that
+            // `evidenceExcludeCarriers` exists for, and paying for it here
+            // meant deciding "no selected host" is the same statement as "no
+            // host owes this", which two ordinary Markdown shapes satisfy by
+            // accident: a heading whose title yields no anchor, and a path
+            // containing whitespace. Both report a selectable kind while naming
+            // no unit, so one tag discharged every item for every host in the
+            // claim and reported nothing. The obligation this option states is
+            // per host, so the answer belongs on a host.
+            //
+            // Recorded rather than reported, because "answers nothing here" is
+            // not yet "answers nothing". Carrier eligibility is wider than the
+            // host gate, so the same tag may be an ordinary sibling
+            // reference's gathered exclusion or an overlapping claim's own
+            // answer, and a hard diagnostic here left that valid configuration
+            // no placement to exist in. The end-of-run block reports the tag
+            // once nothing has consumed it.
+            unhosted[declaration.ID] = appendUniqueString(
+              unhosted[declaration.ID],
+              claimLabel(state.Spec)+" "+referenceLabel(reference.Spec),
+            )
+            if unhostedSelections[declaration.ID] == nil {
+              unhostedSelections[declaration.ID] = symbolSet{}
+            }
+            for symbol := range state.Spec.Symbols {
+              unhostedSelections[declaration.ID][symbol] = true
+            }
+            continue
+          }
+        }
+        answers[declaration.ID] = true
+        if checklist &&
+          declaration.Tag == tagEvidence &&
+          !selectedUnitIDs[scopeID] {
+          targets := make([]string, 0, len(covered))
+          for _, unit := range covered {
+            targets = append(targets, "'"+unit.Target+"'")
+          }
+          problems = append(
+            problems,
+            "Aggregate @evidence target '"+scopesByID[scopeID].Target+"' at "+declaration.location()+" in "+claimLabel(state.Spec)+" "+referenceLabel(reference.Spec)+": this reference is a checklist, so a citation answers for the item it names, and this target names a scope containing "+decimal(len(covered))+" item(s) ("+strings.Join(targets, ", ")+") rather than one of them. Cite each item this host answers for, or write @evidenceExclude on this scope when none of it applies here."+untrueTagWarning,
+          )
+          for _, unit := range covered {
+            for _, hostID := range keyHosts {
+              aggregateByHost[hostID][unit.ID] = true
+            }
+          }
+          continue
+        }
         if reference.Spec.Policy.RequireReview {
           if reviewScopes == nil {
             // Withdrawn units are absent from Population by construction, and
@@ -786,6 +960,13 @@ func evaluateEvidenceGraph(
             byScope[scopeID] = declaration
           }
         }
+        // These two count the whole selected subtree, which is the aggregate
+        // behavior a checklist takes away from a positive tag. They stay on
+        // `covered` rather than on `answered` because `rejectChecklistConflicts`
+        // refuses both options beside `checklist` at decode, and a reference
+        // carrying a decode problem never reaches evaluation. Relaxing that
+        // refusal would restore the cascade here silently, so move this to
+        // `answered` in the same change.
         if declaration.Tag == tagEvidence && (single || unique) {
           for _, hostID := range declaration.SemanticHostIDs {
             if selectedHosts[hostID] == nil {
@@ -815,30 +996,62 @@ func evaluateEvidenceGraph(
         var conflictingDeclaration *evidenceDeclaration
         var duplicateExclusionUnit *evidenceUnit
         var firstExclusion *evidenceDeclaration
-        for _, unit := range covered {
+        // A checklist citation answers for the item it names and for nothing
+        // beneath it, so it acknowledges the scope alone rather than the scope's
+        // selected subtree.
+        //
+        // Refusing only the unselected ancestor is not enough, and measuring it
+        // is the only way that shows: with the default Markdown selector the
+        // file is itself an item, so one `@evidence docs/rules.md` resolved to a
+        // selected unit, cascaded through the whole document, and discharged
+        // every heading on that host. The option was a no-op in the first
+        // configuration an adopter writes. The same hole opens for any selector
+        // admitting an ancestor and a descendant together, such as `h1` beside
+        // `h2`.
+        //
+        // `@evidenceExclude` keeps the subtree, because "none of this applies
+        // here" is one decision however many items it covers, and so does every
+        // reference that is not a checklist.
+        answered := covered
+        if checklist && declaration.Tag == tagEvidence {
+          answered = []*evidenceUnit{scopesByID[scopeID]}
+        }
+        for _, unit := range answered {
           acknowledged[unit.ID] = true
-          if declaration.Tag == tagEvidence {
-            if first := exclusionByUnit[unit.ID]; first != nil && conflictingUnit == nil {
+          // Outside a checklist keyHosts is one empty string, so the key is the
+          // unit and this reads exactly as it did before the host dimension
+          // existed. Under a checklist two hosts excluding one item, and one
+          // host citing an item another excludes, are the expected state rather
+          // than a duplicate and a conflict — which is only true because the
+          // key carries the host.
+          for _, hostID := range keyHosts {
+            key := hostID + "\x00" + unit.ID
+            if acknowledgedByHost[hostID] != nil {
+              acknowledgedByHost[hostID][unit.ID] = true
+            }
+            if declaration.Tag == tagEvidence {
+              if first := exclusionByUnit[key]; first != nil && conflictingUnit == nil {
+                conflictingUnit = unit
+                conflictingDeclaration = first
+              }
+              if evidenceByUnit[key] == nil {
+                evidenceByUnit[key] = declaration
+              }
+              continue
+            }
+            if first := evidenceByUnit[key]; first != nil && conflictingUnit == nil {
               conflictingUnit = unit
               conflictingDeclaration = first
             }
-            if evidenceByUnit[unit.ID] == nil {
-              evidenceByUnit[unit.ID] = declaration
+            if first := exclusionByUnit[key]; first != nil {
+              if duplicateExclusionUnit == nil {
+                duplicateExclusionUnit = unit
+                firstExclusion = first
+              }
+              continue
             }
-            continue
+            exclusionByUnit[key] = declaration
           }
-          if first := evidenceByUnit[unit.ID]; first != nil && conflictingUnit == nil {
-            conflictingUnit = unit
-            conflictingDeclaration = first
-          }
-          if first := exclusionByUnit[unit.ID]; first != nil {
-            if duplicateExclusionUnit == nil {
-              duplicateExclusionUnit = unit
-              firstExclusion = first
-            }
-            continue
-          }
-          exclusionByUnit[unit.ID] = declaration
         }
         if conflictingUnit != nil {
           evidence := declaration
@@ -859,7 +1072,10 @@ func evaluateEvidenceGraph(
           )
         }
       }
-      if !state.Healthy || !reference.Healthy || len(reference.Paths) == 0 {
+      // Health alone gates the per-host policies. The path count that used to
+      // sit here answered the empty-population question a second time, and a
+      // reference with units has matched a path by construction.
+      if !state.Healthy || !reference.Healthy {
         continue
       }
       if single {
@@ -874,8 +1090,40 @@ func evaluateEvidenceGraph(
           )
         }
       }
+      // A checklist answers coverage per host, and that answer subsumes the
+      // population-wide one: an item no host acknowledged is reported on every
+      // host that owes it. With no selected host there is nobody to report it
+      // on, so the population-wide question is the only one left and stays.
+      perHostCoverage := checklist && len(state.Hosts) != 0
+      if perHostCoverage {
+        for _, host := range state.Hosts {
+          missing := make([]string, 0, len(reference.Units))
+          for _, unit := range reference.Units {
+            if acknowledgedByHost[host.ID][unit.ID] ||
+              aggregateByHost[host.ID][unit.ID] {
+              continue
+            }
+            missing = append(missing, "'"+unit.Target+"'")
+          }
+          if len(missing) == 0 {
+            continue
+          }
+          // Doing the work is named before either tag, for the reason the
+          // population-wide repair below names it first: a repair offering only
+          // the two tags frames an unmet item as a question of which tag to
+          // write.
+          repair := "Do what each item requires and cite it with @evidence on this host, or write @evidenceExclude for an item that does not apply here." + untrueTagWarning
+          if reference.Spec.Policy.NoExclude {
+            repair = "Do what each item requires and cite it with @evidence on this host; this reference forbids @evidenceExclude." + untrueTagWarning
+          }
+          problems = append(
+            problems,
+            "Evidence host "+host.Readable+" at "+host.location()+" in "+claimLabel(state.Spec)+" "+referenceLabel(reference.Spec)+" has not acknowledged "+decimal(len(missing))+" of "+decimal(len(reference.Units))+" checklist item(s): "+strings.Join(missing, ", ")+". "+repair,
+          )
+        }
+      }
       for _, unit := range reference.Units {
-        if !acknowledged[unit.ID] {
+        if !acknowledged[unit.ID] && !perHostCoverage {
           // Building the host is named first because the other two hide it. A
           // repair offering only the two tags frames the whole problem as which
           // tag to write, and an unbuilt unit then leaves as an exclusion.
@@ -900,10 +1148,27 @@ func evaluateEvidenceGraph(
     }
   }
   for _, id := range declarationIDs {
-    if resolved[id] == "" || participates[id] {
+    if resolved[id] == "" {
       continue
     }
     declaration := declarations[id]
+    // The unhosted report sits outside the participation guard, because the
+    // checklist claim that recorded it also marked this declaration as
+    // participating the moment it admitted the tag as eligible. Participation
+    // says some claim owns the tag; only `answers` says an obligation
+    // consumed it, and `uncertain` withholds the report when a failed loader
+    // makes consumption unknowable, the way the ghost-finding guard below
+    // withholds its own.
+    if obligations := unhosted[id]; len(obligations) != 0 &&
+      !answers[id] && !uncertain[id] {
+      problems = append(
+        problems,
+        "Unhosted @"+string(declaration.Tag)+" at "+declaration.location()+" for "+strings.Join(obligations, "; ")+", target '"+displayTarget(declaration.Target)+"': a checklist acknowledgement answers for one selected host of its claim, and this declaration sits on no selected host and discharges no other obligation. Move the tag onto a host of a selected kind ("+unhostedSelections[id].names()+") in a claim that owes it."+untrueTagWarning,
+      )
+    }
+    if participates[id] {
+      continue
+    }
     context := declarationObligationContext(owners[id])
     if obligations := outsideCarrier[id]; len(obligations) != 0 {
       problems = append(
@@ -1023,12 +1288,19 @@ func reviewProblems(
 //
 // Two properties are load-bearing and neither is obvious.
 //
-// The key is a *semantic* host identity, never `HostID`. `HostID` is a source
-// position, so the two halves of a merged identity carry different ones: keying on
-// it refused a review written on `namespace I` for a citation on `interface I`,
+// The index side reads every ledger key from the review's SemanticHostIDs. On
+// graph hosts these are semantic identities, so the two halves of a merged
+// identity share a key. Indexing by their distinct source positions instead
+// refused a review written on `namespace I` for a citation on `interface I`,
 // which is placement the graph elsewhere calls not worth a diagnostic and which
-// `evidence/review` accepts. The two rules then disagreed about the same file.
-// `model.go` says as much where it defines the field.
+// `evidence/review` accepts. An unattached Prisma review has no graph identity,
+// so it stores its synthetic file-position key in SemanticHostIDs instead.
+//
+// The lookup side normally reads the declaration's SemanticHostIDs. The
+// declaration from that Prisma run is asymmetric: it leaves them empty and
+// carries the file position in HostID, so `find` falls back there. Only lookup
+// needs a separate source-position field; the review-side fallback described no
+// producer. `model.go` states both field contracts.
 //
 // It is built once per claim rather than scanned per citation. A linear search
 // over every review, for every declaration, for every reference, is cubic in the
@@ -1045,7 +1317,7 @@ func newReviewLedger(reviews []*evidenceReview) *reviewLedger {
     if review == nil {
       continue
     }
-    for _, hostID := range reviewLedgerHostIDs(review) {
+    for _, hostID := range review.SemanticHostIDs {
       key := reviewLedgerKey(hostID, review.Reviews, review.Target)
       if ledger.byHostAndTarget[key] == nil {
         ledger.byHostAndTarget[key] = review
@@ -1055,22 +1327,12 @@ func newReviewLedger(reviews []*evidenceReview) *reviewLedger {
   return ledger
 }
 
-// reviewLedgerHostIDs is every identity a review answers on.
-//
-// The position identity is kept as a fallback for a carrier that has no semantic
-// host at all, such as an unattached Prisma documentation run, whose declarations
-// are keyed the same way.
-func reviewLedgerHostIDs(review *evidenceReview) []string {
-  if len(review.SemanticHostIDs) != 0 {
-    return review.SemanticHostIDs
-  }
-  if review.HostID == "" {
-    return nil
-  }
-  return []string{review.HostID}
-}
-
 // find locates the review bound to one declaration's identity and target.
+//
+// The position fallback is declaration-only. A Prisma file-level exclusion is
+// a valid carrier without a semantic graph host, while the review parsed from
+// the same unattached run carries the file position as a synthetic ledger key.
+// Dropping this fallback makes that exclusion impossible to review.
 func (ledger *reviewLedger) find(
   declaration *evidenceDeclaration,
 ) *evidenceReview {
@@ -1179,7 +1441,7 @@ func materializeEntryReference(
   if failure := loader.failure(entry); failure != "" {
     state.Healthy = false
     return state, []string{
-      claimLabel(claim) + " " + referenceLabel(reference) + " could not read TypeScript entry '" + entry + "': " + failure + ". Fix filesystem access or the package installation; coverage cannot be evaluated from a partial entry graph.",
+      claimLabel(claim) + " " + referenceLabel(reference) + " could not read TypeScript entry '" + entry + "': " + causeReason(failure) + ". Fix filesystem access or the package installation; coverage cannot be evaluated from a partial entry graph.",
     }
   }
   if len(state.Units) == 0 {
@@ -1305,7 +1567,7 @@ func materializePackageGlobReference(
   if walkProblem != "" {
     state.Healthy = false
     return state, []string{
-      claimLabel(claim) + " " + referenceLabel(reference) + " could not inspect TypeScript package '" + reference.Package + "': " + walkProblem + ". Fix filesystem access or reinstall the package; coverage cannot be evaluated from a partial population.",
+      claimLabel(claim) + " " + referenceLabel(reference) + " could not inspect TypeScript package '" + reference.Package + "': " + causeReason(walkProblem) + ". Fix filesystem access or reinstall the package; coverage cannot be evaluated from a partial population.",
     }
   }
   problems := []string{}
@@ -1318,7 +1580,7 @@ func materializePackageGlobReference(
       state.Healthy = false
       problems = append(
         problems,
-        claimLabel(claim)+" "+referenceLabel(reference)+" could not read TypeScript source '"+candidate+"': "+loader.failure(candidate)+". Fix filesystem access or reinstall the package; coverage cannot be evaluated from a partial population.",
+        claimLabel(claim)+" "+referenceLabel(reference)+" could not read TypeScript source '"+candidate+"': "+causeReason(loader.failure(candidate))+". Fix filesystem access or reinstall the package; coverage cannot be evaluated from a partial population.",
       )
       continue
     }

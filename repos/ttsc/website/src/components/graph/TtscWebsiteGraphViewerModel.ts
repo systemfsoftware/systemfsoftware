@@ -10,8 +10,23 @@ type ViewerNode = ITtscWebsiteGraphViewer.Node;
 // Display constants (shared by the scene, the sidebar chips, and the legend)
 // ---------------------------------------------------------------------------
 
-/** Node kinds in display order; chips and legends iterate this order. */
+/**
+ * Node kinds in display order; chips and legends iterate this order.
+ *
+ * Total over the kinds a dump can carry (`TtscGraphDumpNodeKind`). This decides
+ * position, not membership: `kindsIn` appends any present kind the list omits,
+ * so `module` always had a chip — it simply came last, in the unknown-kind
+ * fallback colour, which was the same string as `variable` and therefore read
+ * as a variable rather than as something unrecognized.
+ */
 const NODE_KIND_ORDER: readonly string[] = [
+  "module",
+  "markdown_document",
+  "markdown_section",
+  "prisma_model",
+  "prisma_column",
+  "prisma_relation",
+  "swagger_operation",
   "class",
   "interface",
   "function",
@@ -22,6 +37,13 @@ const NODE_KIND_ORDER: readonly string[] = [
 ];
 
 const NODE_COLORS: Record<string, string> = {
+  markdown_document: "#9d174d",
+  markdown_section: "#a21caf",
+  prisma_model: "#4338ca",
+  prisma_column: "#5b21b6",
+  prisma_relation: "#6d28d9",
+  swagger_operation: "#854d0e",
+  module: "#be123c",
   class: "#3178c6",
   interface: "#2563eb",
   function: "#15803d",
@@ -31,16 +53,42 @@ const NODE_COLORS: Record<string, string> = {
   variable: "#64748b",
 };
 
+// One definition of the edge families: the edge colour, the legend, and the
+// sidebar filter rows all read this map. `exports` is neutral because it is a
+// structural relation rather than a use, and it is darker than the slate the
+// scene falls back to for an unknown kind so the two stay distinct.
 const LINK_COLORS: Record<string, string> = {
   "value-call": "#15803d",
   "type-ref": "#b45309",
+  "doc-ref": "#9333ea",
   heritage: "#2563eb",
+  exports: "#475569",
 };
+
+/**
+ * What an unrecognized node kind is drawn in.
+ *
+ * It has to differ from every value in NODE_COLORS, or "I do not know this
+ * kind" and "this is a variable" are the same picture. Four call sites used to
+ * spell this literal themselves, and it was `variable`'s own colour.
+ */
+const UNKNOWN_NODE_COLOR = "#334155";
+
+/**
+ * What an unrecognized edge kind is drawn in.
+ *
+ * The scene and the detail panel used to spell two different literals for this
+ * one concept, so the same unknown edge had two colours depending on where it
+ * was read.
+ */
+const UNKNOWN_LINK_COLOR = "#94a3b8";
 
 const LINK_KIND_LABEL: Record<string, string> = {
   "value-call": "value-call (runtime use)",
   "type-ref": "type-ref",
+  "doc-ref": "doc-ref (documentation link)",
   heritage: "heritage (extends / implements / overrides)",
+  exports: "exports (module surface)",
 };
 
 // ---------------------------------------------------------------------------
@@ -334,6 +382,8 @@ function edgeSummary(links: ViewerLink[], id: string): EdgeSummaryRow[] {
 
 const TtscWebsiteGraphViewerModel = {
   LINK_COLORS,
+  UNKNOWN_LINK_COLOR,
+  UNKNOWN_NODE_COLOR,
   LINK_KIND_LABEL,
   NODE_COLORS,
   buildFileTree,

@@ -4,22 +4,33 @@
 
 [![GitHub license](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/samchon/ttsc/blob/master/LICENSE) [![NPM Version](https://img.shields.io/npm/v/@ttsc/evidence.svg)](https://www.npmjs.com/package/@ttsc/evidence) [![NPM Downloads](https://img.shields.io/npm/dm/@ttsc/evidence.svg)](https://www.npmjs.com/package/@ttsc/evidence) [![Build Status](https://github.com/samchon/ttsc/actions/workflows/build.yml/badge.svg)](https://github.com/samchon/ttsc/actions/workflows/build.yml) [![Guide Documents](https://img.shields.io/badge/Guide-Documents-forestgreen)](https://ttsc.dev/docs/evidence) [![Discord Badge](https://img.shields.io/badge/discord-samchon-d91965?style=flat&labelColor=5866f2&logo=discord&logoColor=white&link=https://discord.gg/E94XhzrUCZ)](https://discord.gg/E94XhzrUCZ)
 
-Evidence Graph, your spec as a compile error no coding agent can skip.
+A coding agent can claim it followed every requirement while silently skipping some. Finding those omissions means rereading the specification, implementation, and tests until another review round finds nothing new.
+
+Evidence Graph replaces that loop with compile-time obligations. You declare which artifacts owe which specification units. The agent cites each unit from the code, test, schema, or document that satisfies it and states why. An unanswered unit is a compile error.
+
+Evidence Graph can also require the agent to state how each function follows project-wide principles. "No hard coding" and "Fix root causes" then become explicit obligations on every selected function.
 
 ```tsx
 /**
- * @evidence docs/discount.md#coupon-stacking
- *           States the per-issuer stacking limit
- *           this section defines, in the buyer's words.
- * @evidence POST:/orders/{orderId}/coupons
- *           Explains the rejection this endpoint returns
- *           for an over-stacked coupon set.
+ * @evidence docs/discount.md#coupon-stacking States the per-issuer stacking limit this section defines, in the buyer's words.
+ * @evidence POST:/orders/{orderId}/coupons Explains the rejection this endpoint returns for an over-stacked coupon set.
  * @evidence {@link hooks.useCouponStacking} Renders the limit this hook resolves.
+ * @evidence docs/principles.md#no-hard-coding Renders limits from props instead of branching on known issuer names.
+ * @evidenceExclude docs/principles.md#fix-root-causes-not-symptoms No failure to fix.
  */
 export function CouponStackingNotice(props: IProps): JSX.Element;
 ```
 
-`@evidence <target> <reason>` names one unit of the spec and why this declaration answers for it. A target is a document section, an API operation, a database schema model, or a TypeScript symbol as an inline link.
+`@evidence <target> <reason>` is the agent's explicit claim about what this code implements and why. `@evidenceExclude` records why an obligation does not apply.
+
+A target is one of four kinds:
+
+- **Markdown**: a file, or a section of one.
+- **Prisma**: a model, a column, or a relation.
+- **Swagger**: an operation, method and path together.
+- **TypeScript**: a type, a function, or a property, written as an inline link.
+
+Leave one obligation unanswered and the build stops.
 
 ```bash
 $ npx ttsc
@@ -27,40 +38,29 @@ error TS16411: [evidence/graph] Missing acknowledgement for 'docs/discount.md#co
   (Markdown H2 'Coupon Stacking' at docs/discount.md:3)
   in Claim 1 reference 1 (markdown, symbols: h2, h3).
 
-  Cite the artifact that answers for this unit with @evidence on a selected
-  typescript host, building that artifact first when none does, or write
-  @evidenceExclude on an eligible carrier when nothing here owes it. Never
-  leave an untrue tag standing just to pass this check; it removes the error,
-  not the problem.
-
-error TS16411: [evidence/graph] Missing acknowledgement for 'POST:/orders/{orderId}/coupons'
-  (Swagger operation 'POST /orders/{orderId}/coupons' at api/openapi.json)
-  in Claim 1 reference 2 (swagger operations).
-
-  Cite the artifact that answers for this unit with @evidence on a selected
-  typescript host, building that artifact first when none does, or write
-  @evidenceExclude on an eligible carrier when nothing here owes it. Never
-  leave an untrue tag standing just to pass this check; it removes the error,
-  not the problem.
-
-error TS16411: [evidence/graph] Missing acknowledgement for 'useCouponStacking'
-  (TypeScript function 'useCouponStacking' at src/lib/coupons/hooks.ts:12)
-  in Claim 1 reference 3 (typescript, symbols: function).
-
-  Cite the artifact that answers for this unit with @evidence on a selected
-  typescript host, building that artifact first when none does, or write
-  @evidenceExclude on an eligible carrier when nothing here owes it. Never
-  leave an untrue tag standing just to pass this check; it removes the error,
-  not the problem.
+...
 
 Found 3 errors.
 ```
 
-Without those tags, the build fails once per obligation, because one reference never covers another.
+Missing obligations appear in the same build as type errors. The error list is the agent's task list.
 
-An AI coding agent has to clear them to finish, and clearing them means citing each target and writing down why its code answers for it. Coverage reaches 100% on its own, as the residue of the errors it closed.
+## Benchmark
 
 ![Coverage and token spend across all four subjects](https://raw.githubusercontent.com/samchon/ttsc/gh-pages/benchmark/png/evidence-summary.png)
+
+One agent built each subject twice. Same inputs, same engine, same model; only this plugin differs.
+
+- **Plain**: omissions are invisible, so review hunts them.
+  - Read everything, fix every finding, restart until a round finds nothing.
+  - The loop until dry eats 90–95% of all tokens.
+  - Coverage still lands at 51.6–85.5%, falling as the subject grows.
+- **Evidence**: omissions are compile errors, so review reads the tag list.
+  - One pass, judging whether each reason is true.
+  - Review takes 15–41% of the tokens.
+  - Coverage lands at 100% on every subject.
+
+[The benchmark guide](https://ttsc.dev/docs/benchmark/evidence) breaks each run down by phase, and [`samchon/evidence-benchmark-results`](https://github.com/samchon/evidence-benchmark-results) keeps the raw sessions.
 
 ## Setup
 
@@ -71,7 +71,7 @@ npm install -D typescript ttsc @ttsc/lint
 npm install -D @ttsc/evidence
 ```
 
-This is a rule contributor to [`@ttsc/lint`](https://github.com/samchon/ttsc/tree/master/packages/lint) 0.22 or newer, so it runs on [`ttsc`](https://github.com/samchon/ttsc) rather than on stock `tsc` with ESLint.
+This is a rule contributor to [`@ttsc/lint`](https://github.com/samchon/ttsc/tree/master/packages/lint), so it runs on [`ttsc`](https://github.com/samchon/ttsc) rather than on stock `tsc` with ESLint.
 
 ### Configure
 
@@ -97,188 +97,126 @@ const graph: ITtscEvidenceGraphConfig = {
 
 export default {
   plugins: { evidence },
-  rules: { "evidence/graph": ["error", graph] },
+  rules: {
+    "evidence/graph": ["error", graph],
+    "evidence/review": "error",
+  },
 } satisfies ITtscLintConfig;
 ```
 
-One sentence: the components under `src` implement the docs, so every H2 and H3 under `docs` must be cited by a component. Violations arrive in the same stream as type errors, so there is no CI job to add.
+One claim: the components under `src` implement the docs, so every H2 and H3 under `docs` must be cited by a component. Run `npx ttsc` and the error count is the backlog.
 
-### Rules
+[The rule reference](https://ttsc.dev/docs/evidence/rules) has four more rules beside `evidence/graph`, and [the claim reference](https://ttsc.dev/docs/evidence/claims) has every claim option.
 
-| Rule | Takes | What it does |
-| --- | --- | --- |
-| `evidence/graph` | [`ITtscEvidenceGraphConfig`](https://github.com/samchon/ttsc/blob/master/packages/evidence/src/structures/ITtscEvidenceGraphConfig.ts) | The graph itself. Project-scoped, so its entry declares no `files`. |
-| `evidence/documented` | [`ITtscEvidenceDocumentedConfig`](https://github.com/samchon/ttsc/blob/master/packages/evidence/src/structures/ITtscEvidenceDocumentedConfig.ts) | Requires a JSDoc block on every selected export, since a block is the only place a citation can live. Members count, so a class field, a method, a parameter property, and an interface member each need their own. `symbol` narrows the kinds; it defaults to all three. |
-| `evidence/singular` | nothing | Keeps one public identity per file, named after the file. |
-| `evidence/todo` | nothing | Fails on every remaining JSDoc `@todo`, with its own text. |
-| `evidence/review` | nothing | Requires an `@evidenceReview` beside every `@evidence` and an `@evidenceExcludeReview` beside every `@evidenceExclude`, naming the same target and stating what was checked. |
+### Tags
 
-Each takes `"error"`, `"warning"`, or `"off"`.
+The configuration is written once. The tags are written forever: `@evidence` cites, `@evidenceReview` verifies, and `@evidenceExclude` declines. [The tag reference](https://ttsc.dev/docs/evidence/tags) has the full grammar.
 
-## Claims and references
-
-A claim is the population that owes a citation, a reference is what it owes, and every claim and reference pair is its own 100% obligation. Listing two references means both must be satisfied, and a citation toward one never counts toward the other. They all join the same `claims` array.
-
-| Kind | Units | Claim | Reference | Cites in |
-| --- | --- | --- | --- | --- |
-| Markdown | file, H1 to H4 sections | yes | yes | an HTML comment |
-| Prisma | model, column, relation | yes | yes | a `///` comment |
-| TypeScript | types, functions, properties | yes | yes | JSDoc |
-| Swagger / OpenAPI | each operation under `paths` | no | yes | nothing, it cannot host a tag |
-
-Every population takes glob patterns in `files`, resolved against the `ttsc` project root. Add `root` to resolve against another directory instead, inside the project, above it, or absolute, which is how several packages in a monorepo share one requirements set and write the same citation.
-
-### Documents
+A false tag removes the error, not the problem. `@evidenceReview` resolves it:
 
 ```ts
-{
-  type: "markdown",
-  files: ["docs/requirements/**/*.md"],
-  reference: {
-    type: "markdown",
-    files: ["docs/meetings/**/*.md"],
-    symbol: ["h2", "h3"],
-  },
-}
+/**
+ * @evidence docs/discount.md#coupon-stacking States the per-issuer limit.
+ * @evidenceReview docs/discount.md#coupon-stacking #a1b2c3d4e5f6
+ *                 Verified against policy section 3.
+ */
 ```
 
-Markdown grounds Markdown, so a decision taken in a meeting and never written into the requirements fails the build. Deleting a requirement breaks every document that leaned on it, which is what stops a ghost spec from outliving its own source.
+- Reviews match the same declaration and target.
+- The fingerprint expires when the cited content changes.
+
+The compiler handles omissions. Humans handle falsehoods.
+
+## Spec-Driven Development
+
+Requirements are the handoff: whether a human or an AI wrote them, a human must review them last. That reviewed layer is the source of truth, the evidence the AI builds everything else from.
+
+Each arrow is one claim from `lint.config.ts`, pointing at the evidence it cites.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://ttsc.dev/evidence/documents-dark.svg"><img alt="Idea notes grounding Requirements and Specifications, which ground Implementation and Test" src="https://ttsc.dev/evidence/documents-light.svg" width="100%"></picture>
+
+- Hand over the requirements, and the agent writes the rest.
+- Hand over raw idea notes, and it writes the requirements too.
+
+The compiler checks everything below: a dropped idea or a skipped requirement is a compile error, so nothing vanishes on the way down.
+
+Even requirements cite their evidence, in comments, so the rendered document stays clean.
+
+Backend, frontend, and even novels below are this same shape, drawn in detail.
+
+### Start with principles
+
+Spec-Driven Development does not require a complete document hierarchy. `docs/principles.md` can be only headings:
 
 ```md
-## Coupon Stacking {#coupon-stacking}
-
-<!-- @evidence docs/meetings/2026-01-12.md#discount-policy Carries the limit agreed in that meeting. -->
+## No hard coding
+## No monkey patching
+## Use the conventional solution
+## Fix root causes, not symptoms
 ```
 
-A citation sits in an HTML comment, so rendered prose stays clean, and a heading declares its own anchor with the `{#id}` suffix. A section citation sits under its heading; a whole-file citation sits at the top.
-
-### Database schema
+Make them a checklist:
 
 ```ts
 {
-  type: "prisma",
-  files: ["prisma/schema/**/*.prisma"],
-  symbol: "model",
+  name: "every function answers every engineering principle",
+  type: "typescript",
+  files: ["src/**/*.ts"],
+  symbol: "function",
   reference: {
     type: "markdown",
-    files: ["docs/requirements/**/*.md"],
+    files: ["docs/principles.md"],
     symbol: "h2",
+    checklist: true,
+    requireReview: true,
   },
 }
 ```
 
-Every model justifies itself against a requirement, so a table nobody asked for has nothing to cite. Reverse the pair to make a provider owe the model it reads.
+`checklist` changes the denominator from principles to functions times principles. Every selected function must answer every principle, as `CouponStackingNotice` does above.
 
-```prisma
-/// @evidence docs/requirements/pricing.md#discount-policy Discount columns exist for this policy.
-model Sale {
-  /// @evidence docs/requirements/pricing.md#coupon-stacking The stacking limit is stored here.
-  coupon_limit Int
-}
-```
+One missing answer fails the build. Adding a principle creates a new obligation on every selected function, and `requireReview` expires every affected review when that principle changes.
 
-A model is addressed as `prisma:Sale` and a member as `prisma:Sale.price`, never through the file it sits in, so moving a model between files cannot break a citation. Every matched file is parsed as one schema.
+### Backend
 
-### API operations
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://ttsc.dev/evidence/backend-dark.svg"><img alt="Requirements and Specifications grounding DB schema, API operation, API schema and Test" src="https://ttsc.dev/evidence/backend-light.svg" width="100%"></picture>
 
-```ts
-{
-  type: "typescript",
-  files: ["src/controllers/**/*.ts"],
-  reference: {
-    type: "swagger",
-    file: "https://raw.githubusercontent.com/samchon/shopping/refs/heads/master/packages/api/swagger.json",
-  },
-}
-```
+> Real config: [`api/lint.config.ts`](https://github.com/samchon/ttsc/blob/master/benchmarks/evidence/template/evidence/packages/api/lint.config.ts) and [`backend/test/lint.config.ts`](https://github.com/samchon/ttsc/blob/master/benchmarks/evidence/template/evidence/packages/backend/test/lint.config.ts)
 
-Each operation under `paths` is one obligation, so an operation the spec adds and nobody implemented is a compile error on the next build. The singular `file` names one local path or one `http:` URL, never a glob; use a `reference` array for several documents.
+The DB schema is Prisma, the rest is TypeScript, and one graph spans both:
 
-An operation is cited as `POST:/orders`, one whitespace-free token, so the method and the path stay one target. Swagger grounds a claim and never makes one, because an operation has nowhere to host a tag.
+- The DB schema cites the documents; no table without a documented reason.
+- Operations and API schemas cite the DB layer and the documents behind it.
+- Tests cite the operations; an untested operation is an open obligation.
 
-### Symbols
+### Frontend
 
-```ts
-{
-  type: "typescript",
-  files: ["src/lib/*/hooks.ts"],
-  symbol: "function",
-  reference: {
-    type: "typescript",
-    package: "@ORGANIZATION/PROJECT-api",
-    files: ["src/functional/**/*.ts"],
-    symbol: ["function"],
-  },
-}
-```
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://ttsc.dev/evidence/frontend-dark.svg"><img alt="Requirements and Specifications grounding Swagger, Hooks, Screens and Journeys" src="https://ttsc.dev/evidence/frontend-light.svg" width="100%"></picture>
 
-`files` selects modules and the population is what those modules publish, so a barrel carries in the surface it forwards. A `package` population is read from disk rather than from the program, because a symbol nothing imports is absent from the program and is exactly the one an obligation needs to name.
+> Real config: [`frontend/lint.config.ts`](https://github.com/samchon/ttsc/blob/master/benchmarks/evidence/template/evidence/packages/frontend/lint.config.ts)
 
-A unit is addressed the way a consumer reaches it, so `export * as functional` nests a segment and `export { A as B }` answers to `B`. Only TypeScript may cite TypeScript: `{@link}` resolves through the citing module's own imports, and no document has an import scope to resolve in.
+The source layer is the backend's own Swagger output: a graph can start from what another project publishes.
 
-### Symbol selectors
+- Hooks cite the operations they call.
+- Screens cite the hooks they render.
+- Journeys cite the screens they walk through.
 
-`symbol` picks which units a reference materializes, and on a claim it restricts which declarations may host a tag.
+Screens and journeys also cite the documents, so every screen traces back to a requirement.
 
-| Kind | Values | Default on a claim | Default on a reference |
-| --- | --- | --- | --- |
-| Markdown | `file`, `h1`, `h2`, `h3`, `h4` | all five | all five |
-| Prisma | `model`, `column`, `relation` | all three | `model` |
-| TypeScript | `type`, `function`, `property` | all three | `type` |
-| Swagger | none, every operation is selected | not applicable | every operation |
+### Novels
 
-Units keep their hierarchy, so a target acknowledges itself and every selected descendant: citing a heading covers its subsections, an interface or a class covers the members it declares, and `prisma:Sale` covers the columns beneath it. An ancestor stays addressable even when its own kind is not selected.
+<picture><source media="(prefers-color-scheme: dark)" srcset="https://ttsc.dev/evidence/novel-dark.svg"><img alt="Principles and Settings grounding Storylines, Scenarios and Manuscripts" src="https://ttsc.dev/evidence/novel-light.svg" width="100%"></picture>
 
-A class is a `type`, its methods are `function`, and its fields are `property`. A member written as a callable joins the methods instead: `handler = () => {}` and `charge: () => void` are both `function`. An interface and an object-shaped type alias are classified by the same rule, so `run(): void` on either is a `function` just as a class method is, and an overload run is one unit. The test is on how the member is written, not on what its type resolves to, because this rule reads no type checker, so `charge: Handler` stays a `property` even where `Handler` is an alias of `() => void`.
+> Real config: [`napoleon-imperator/lint.config.ts`](https://github.com/samchon/novels/blob/master/packages/napoleon-imperator/lint.config.ts)
 
-A class member that is `private` or `protected` materializes no unit, whichever syntax declared it. A constructor parameter carrying any property modifier declares a field, and it classifies exactly as the same field written in the class body would, so a `private` or `protected` one materializes nothing just as the body form does not. The property modifiers are TypeScript's own five: `public`, `protected`, `private`, `readonly`, and `override`. The last is the one to know about, because its meaning is about the base class rather than about the field, so it does not read as a field declaration. On a class extending one that declares `rate`, `constructor(override rate: number)` is a public instance field and a selected `property` unit.
+The graph reads no meaning, only obligations and citations, so it works on any text. Humans review only the settings (characters, world rules, history), and the novel follows. The principles are universal literary fundamentals, not something written per work.
 
-A declaration whose documentation carries `@internal`, `@hidden`, or `@ignore` leaves the population entirely. It owes nothing and can carry nothing, and citing one is reported rather than silently ignored.
+- Every layer cites the principles for its literary purpose.
+- Every layer cites the settings for facts, rules, and knowledge.
+- Scenarios and manuscripts cite storylines for cause and consequence.
+- A manuscript cites the scenario it executes, exactly.
 
-### Exclusions
-
-```md
-<!-- @evidenceExclude docs/requirements/pricing.md#coupon-stacking
-     This release ships a single coupon. Stacking waits for the settlement policy. -->
-```
-
-`@evidenceExclude <target> <reason>` records that a claim intentionally does not use a scope. It follows the same hierarchy as `@evidence`, affects only the claim it is written in, and one obligation may exclude a scope only once.
-
-It is the only acknowledgement that settles an obligation without anything being built, so it exists to be vetoed. "Not applicable" is a conclusion rather than a reason.
-
-```ts
-{
-  type: "typescript",
-  files: ["src/components/**/*.tsx", "src/components/EXCLUSIONS.ts"],
-  evidenceExcludeCarriers: ["src/components/EXCLUSIONS.ts"],
-  symbol: "function",
-  reference: { type: "markdown", files: ["docs/**/*.md"], symbol: "h2" },
-}
-```
-
-`evidenceExcludeCarriers` confines them to a named ledger. Scattered through the population, reading every exclusion means reading the population; gathered in one file it means opening one file. An exclusion written anywhere else is reported where it sits and discharges nothing.
-
-### Strict references
-
-Ordinary coverage is permissive, which is right for a document several modules honor and too weak for a proof obligation, where one exclusion or one host citing everything discharges the whole population. Four properties tighten a single reference, and they never pool across references.
-
-```ts
-{
-  type: "typescript",
-  package: "@ORGANIZATION/PROJECT-api",
-  files: ["src/functional/**/*.ts"],
-  symbol: ["function"],
-  noEvidenceExclude: true,
-  singleEvidencePerSymbol: true,
-}
-```
-
-- `noEvidenceExclude` refuses exclusions, so the target still owes positive evidence. A published accessor no hook consumes is an omission rather than a decision.
-- `uniqueEvidence` allows at most one host per unit, so one host is answerable for it rather than several.
-- `singleEvidencePerSymbol` requires exactly one unit from every selected host, so a host citing nothing and a host citing everything both fail.
-- `requireReview` makes every acknowledgement owe a matching review carrying a fingerprint of the cited content, so the review fails again once that content changes. A citation is answered by `@evidenceReview` and an exclusion by `@evidenceExcludeReview`; neither answers the other. Every reference kind accepts it, because each bridge digests a unit's content where that content is understood.
-
-Counting is by identity rather than by text. Repeated tags for one unit count once, an overload set stays one host, and citing a parent of two selected units counts as two.
+Editing a setting expires every review on it, so a revision leaves no stale scene behind. [`samchon/novels`](https://github.com/samchon/novels) runs this graph on 25 principles, 350 setting commitments, and 742 scenes.
 
 ## Sponsors
 

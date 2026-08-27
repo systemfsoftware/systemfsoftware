@@ -23,7 +23,6 @@ import type * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
-import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
@@ -31,13 +30,12 @@ import * as Match from 'effect/Match'
 import * as Path from 'effect/Path'
 import * as Queue from 'effect/Queue'
 import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
 import * as Stdio from 'effect/Stdio'
 import * as Stream from 'effect/Stream'
 import * as CliError from 'effect/unstable/cli/CliError'
-import { buildErrorEnvelope, failureValue, readCapturedConsole } from './Envelope.js'
-import { ModeConflictError, ResolveModeCommand, resolveModeWorkflow, TOOL_VARIABLES } from './Output.workflow.js'
-import type { FormatFlags, ModeInput, ToolVariable } from './Output.workflow.js'
+import { readCapturedConsole, shapeEnvelope } from './Envelope.js'
+import { ModeConflictError, ResolveModeCommand, resolveModeWorkflow } from './Output.workflow.js'
+import type { RunOk, RunOutcomeError } from './RunOutcome.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 /**
  * The wire protocol constants of the machine-mode NDJSON run-event stream.
@@ -131,6 +129,53 @@ const toWireLine = (event: RunEvent): string => {
   return JSON.stringify({ kind: wireKind(event), ...fields })
 }
 
+export type FramedDrain = (framed: Stream.Stream<string>) => Effect.Effect<void, never, never>
+
+function numberText(value: number | null | undefined, fallback: string): string {
+  if (typeof value === 'number') {
+    return String(value)
+  }
+  return fallback
+}
+
+function phaseLine(phase: unknown): string {
+  if (typeof phase === 'string') {
+    return `phase ${phase}`
+  }
+  return 'phase '
+}
+
+const stderrProgressLine = (event: RunEvent, alreadyClosed: boolean): string | undefined => {
+  if (alreadyClosed) {
+    return undefined
+  }
+  return Match.value(event).pipe(
+    Match.tag('plan', (e) => `plan ${numberText(e.total, '0')} mutants`),
+    Match.tag('phase', (e) => phaseLine(e.phase)),
+    Match.tag(
+      'tick',
+      (e) => `${numberText(e.completed, '0')}/${numberText(e.total, '?')} elapsed ${numberText(e.elapsedMs, '0')}ms`,
+    ),
+    Match.tag(
+      'verdict',
+      (e) =>
+        `score ${numberText(e.score, 'n/a')} killed ${numberText(e.counts.killed, '0')} survived ${
+          numberText(e.counts.survived, '0')
+        }`,
+    ),
+    Match.tag('error', (e) => {
+      if (typeof e.error === 'string') {
+        return `error ${e.error}`
+      }
+      return 'error '
+    }),
+    Match.orElse(() => undefined),
+  )
+}
+
+const writeStderr = (stdio: Stdio.Stdio, line: string): Effect.Effect<void, never, never> =>
+  Stream.run(Stream.succeed(`${line}\n`), stdio.stderr({ endOnDone: false })).pipe(Effect.ignore)
+
 const drainOf = (stdio: Stdio.Stdio, framed: Stream.Stream<string>): Effect.Effect<void, never, never> =>
   Stream.run(framed, stdio.stdout({ endOnDone: true })).pipe(Effect.ignore)
 
@@ -144,9 +189,10 @@ export interface RunEventStream {
   readonly closeAndDrain: Effect.Effect<void, never, never>
 }
 
-const makeRunEventStream = (
+export const makeRunEventStream = (
   stdio: Stdio.Stdio,
   resolved: ResolvedMode,
+  drainFramed: FramedDrain = drainOf.bind(null, stdio),
 ): Effect.Effect<RunEventStream, never, never> =>
   Effect.gen(function*() {
     const runId = generateRunId()
@@ -160,12 +206,14 @@ const makeRunEventStream = (
       headerWritten: boolean
       terminalWritten: boolean
       progress: Progress
+      findingsPrinted: number
     } = {
       mode: resolved.mode,
       signal: resolved.signal,
       headerWritten: false,
       terminalWritten: false,
       progress: { completed: 0, total: null },
+      findingsPrinted: 0,
     }
 
     const queueStream = Stream.fromQueue(queue).pipe(
@@ -186,7 +234,7 @@ const makeRunEventStream = (
 
     const tickStream = Stream.tick(TICK_INTERVAL_MS).pipe(
       Stream.drop(1),
-      Stream.filter(() => state.mode === 'machine' && state.headerWritten && !state.terminalWritten),
+      Stream.filter(() => state.headerWritten && !state.terminalWritten),
       Stream.mapEffect(() =>
         Effect.gen(function*() {
           const now = yield* Clock.currentTimeMillis
@@ -200,7 +248,19 @@ const makeRunEventStream = (
     )
 
     let terminalSeen = false
-    const framed = Stream.merge(queueStream, tickStream, { haltStrategy: 'either' }).pipe(
+    const observed = Stream.merge(queueStream, tickStream, { haltStrategy: 'either' }).pipe(
+      Stream.tap((event) => {
+        const line = stderrProgressLine(event, state.terminalWritten)
+        if (isTerminalEvent(event)) {
+          state.terminalWritten = true
+        }
+        if (line === undefined) {
+          return Effect.void
+        }
+        return writeStderr(stdio, line)
+      }),
+    )
+    const framed = observed.pipe(
       Stream.filter((event) => {
         if (state.mode !== 'machine') {
           return false
@@ -216,7 +276,7 @@ const makeRunEventStream = (
       Stream.map((event) => `${toWireLine(event)}\n`),
     )
 
-    const drain: Effect.Effect<void, never, never> = drainOf(stdio, framed)
+    const drain: Effect.Effect<void, never, never> = drainFramed(framed)
 
     let drainFiber: Fiber.Fiber<void, never> | null = null
 
@@ -234,17 +294,19 @@ const makeRunEventStream = (
       },
       open: Effect.gen(function*() {
         if (drainFiber === null) {
-          if (state.mode === 'machine' && !state.headerWritten) {
+          if (!state.headerWritten) {
             state.headerWritten = true
-            yield* Queue.offer(
-              queue,
-              RunStarted.make({
-                schemaVersion: STREAM_SCHEMA_VERSION,
-                runId,
-                mode: state.mode,
-                signal: state.signal,
-              }),
-            )
+            if (state.mode === 'machine') {
+              yield* Queue.offer(
+                queue,
+                RunStarted.make({
+                  schemaVersion: STREAM_SCHEMA_VERSION,
+                  runId,
+                  mode: state.mode,
+                  signal: state.signal,
+                }),
+              )
+            }
           }
           drainFiber = yield* Effect.forkDetach(drain)
         }
@@ -275,7 +337,21 @@ export const RunEventStreamLive: Layer.Layer<RunEventStreamPortTag, never, Stdio
     })),
 )
 
-export { type FormatFlags, type ModeInput, TOOL_VARIABLES, type ToolVariable }
+export const TOOL_VARIABLES = ['CLAUDECODE', 'CODEX_SANDBOX'] as const
+
+export type ToolVariable = (typeof TOOL_VARIABLES)[number]
+
+export interface FormatFlags {
+  readonly text?: boolean
+  readonly json?: boolean
+}
+
+export interface ModeInput extends FormatFlags {
+  readonly envMode?: string
+  readonly stdoutIsTTY: boolean
+  readonly agent?: string
+  readonly toolVars?: Readonly<Partial<Record<ToolVariable, string | undefined>>>
+}
 
 /**
  * Resolves the output mode by R4 precedence. Pure — reads nothing, so it is
@@ -329,7 +405,7 @@ export function resolveMode(input: ModeInput): Result.Result<ResolvedMode, CliEr
         option: conflict.option,
         value: conflict.value,
         expected: conflict.expected,
-        kind: conflict.kind,
+        kind: 'flag',
       }),
     )
   }
@@ -774,8 +850,8 @@ if (import.meta.vitest !== void 0) {
  * `process.env`, and the pure decision (`resolveModeWorkflow`) stays downstream of
  * these reads.
  *
- * The tool-variable probe is derived from the pure decision's `TOOL_VARIABLES`
- * constant, so the known-variable list has exactly one declaration.
+ * The tool-variable probe copies `TOOL_VARIABLES` from the environment onto
+ * the command. The workflow interprets those fields; it does not read env.
  *
  * Probe I/O is `Cell.read` and the public resolve is `Cell.apply` — the
  * sandwich `Cell.read/decode/decide(Workflow.make)/encode/write`.
@@ -905,7 +981,7 @@ export const detectModeWithProbe = (flags: FormatFlags = {}): Effect.Effect<Reso
           option: error.option,
           value: error.value,
           expected: error.expected,
-          kind: error.kind,
+          kind: 'flag',
         }),
     ),
   )
@@ -975,54 +1051,50 @@ export function emitNullScoreVerdict(
 export function emitMachineModeOutput(
   stream: RunEventStream,
   mode: ResolvedMode,
-  exit: Exit.Exit<unknown, unknown>,
-  code: number,
-  argv: readonly string[],
+  outcome: Result.Result<RunOk, RunOutcomeError>,
   basePath: string,
   pathService: Path.Path,
 ): Effect.Effect<void, never, never> {
   return Effect.gen(function*() {
     const captured = readCapturedConsole()
-    const value = failureValue(exit)
-    const helpShaped = Exit.isFailure(exit) && S.is(CliError.ShowHelp)(value) && value.errors.length === 0
-    if (helpShaped) {
-      yield* Queue.offer(
-        stream.queue,
-        HelpRendered.make({
-          schemaVersion: STREAM_SCHEMA_VERSION,
-          code: 0,
-          help: captured,
-        }),
-      )
+    if (Result.isSuccess(outcome)) {
+      if (outcome.success.help) {
+        yield* Queue.offer(
+          stream.queue,
+          HelpRendered.make({
+            schemaVersion: STREAM_SCHEMA_VERSION,
+            code: 0,
+            help: captured,
+          }),
+        )
+        return
+      }
+      if (captured.length > 0) {
+        yield* Queue.offer(
+          stream.queue,
+          HelpRendered.make({
+            schemaVersion: STREAM_SCHEMA_VERSION,
+            code: 0,
+            help: captured,
+          }),
+        )
+        return
+      }
+      if (stream.isOpen()) {
+        const defaults = yield* defaultOptions
+        yield* emitNullScoreVerdict(stream, mode, defaults.thresholds, {}, basePath, pathService)
+      }
       return
     }
-    if (Exit.isFailure(exit)) {
-      const envelope = buildErrorEnvelope(exit, code, captured, argv)
-      yield* Queue.offer(
-        stream.queue,
-        RunFailed.make({
-          schemaVersion: envelope.schemaVersion,
-          code: envelope.code,
-          error: envelope.error,
-          remediation: envelope.remediation,
-        }),
-      )
-      return
-    }
-    if (captured.length > 0) {
-      yield* Queue.offer(
-        stream.queue,
-        HelpRendered.make({
-          schemaVersion: STREAM_SCHEMA_VERSION,
-          code: 0,
-          help: captured,
-        }),
-      )
-      return
-    }
-    if (stream.isOpen()) {
-      const defaults = yield* defaultOptions
-      yield* emitNullScoreVerdict(stream, mode, defaults.thresholds, {}, basePath, pathService)
-    }
+    const envelope = shapeEnvelope(outcome.failure, captured)
+    yield* Queue.offer(
+      stream.queue,
+      RunFailed.make({
+        schemaVersion: envelope.schemaVersion,
+        code: envelope.code,
+        error: envelope.error,
+        remediation: envelope.remediation,
+      }),
+    )
   })
 }

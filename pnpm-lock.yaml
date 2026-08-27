@@ -2213,9 +2213,6 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../../../../core/effect/schema/law
-      '@systemfsoftware/effect-schema-refutation-vite':
-        specifier: workspace:^
-        version: link:../../../../core/effect/schema/refutation-vite
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../../../../core/effect/schema/vite

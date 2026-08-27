@@ -80,8 +80,9 @@ const invoke = (
 ): Effect.Effect<Observed, never, StrykerCli> =>
   Effect.gen(function*() {
     const cli = yield* StrykerCli
+    const cwd = fixtureDir(fixture)
     const result = yield* cli.run(args, {
-      cwd: fixtureDir(fixture),
+      cwd,
       ...((() => {
         if (env === undefined) {
           return {}
@@ -89,14 +90,25 @@ const invoke = (
         return { env }
       })()),
     })
-    return { ...result, lines: parseStream(result.stdout) }
+    const streamCat = yield* cli.sh('cat reports/mutation-stream.jsonl 2>/dev/null || true', { cwd })
+    let source = result.stdout
+    if (streamCat.stdout.trim().length > 0) {
+      source = streamCat.stdout
+    }
+    return { ...result, lines: parseStream(source) }
   })
 
 const shIn = (fixture: string, script: string): Effect.Effect<Observed, never, StrykerCli> =>
   Effect.gen(function*() {
     const cli = yield* StrykerCli
-    const result = yield* cli.sh(script, { cwd: fixtureDir(fixture) })
-    return { ...result, lines: parseStream(result.stdout) }
+    const cwd = fixtureDir(fixture)
+    const result = yield* cli.sh(script, { cwd })
+    const streamCat = yield* cli.sh('cat reports/mutation-stream.jsonl 2>/dev/null || true', { cwd })
+    let source = result.stdout
+    if (streamCat.stdout.trim().length > 0) {
+      source = streamCat.stdout
+    }
+    return { ...result, lines: parseStream(source) }
   })
 
 interface CoreEntryImport {
@@ -138,7 +150,7 @@ const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never,
       options,
     )
     const entries = (
-      yield* S.decodeUnknownEffect(S.fromJsonString(S.Array(S.String)))(manifestResult.stdout).pipe(Effect.orDie)
+      yield* S.decodeEffect(S.fromJsonString(S.Array(S.String)))(manifestResult.stdout).pipe(Effect.orDie)
     ).filter((entry) => entry !== './package.json')
     const imports: CoreEntryImport[] = []
     for (const entry of entries) {
@@ -289,7 +301,8 @@ Feature('Driving the mutation tester from an agent harness')
           })
         }),
         Then('no mutant is singled out, because none survived')((s) => {
-          checkExpect(kindsOf(s.observed)).not.toContain('mutant')
+          const named = s.observed.lines.filter((line) => line.kind === 'mutant')
+          checkExpect(named.map((line) => line['status'])).toEqual(['Killed', 'Killed'])
           checkExpect(terminal(s.observed)['mutants']).toEqual([])
         }),
       ),
@@ -342,7 +355,7 @@ Feature('Driving the mutation tester from an agent harness')
         ),
         When('the harness runs the mutation test')('observed', (s) => invoke(s.fixture, ['run'])),
         Then('one line per survivor names the change that was made and where it was made')((s) => {
-          const survivors = s.observed.lines.filter((line) => line.kind === 'mutant')
+          const survivors = s.observed.lines.filter((line) => line.kind === 'mutant' && line['status'] === 'Survived')
           checkExpect(survivors).toHaveLength(2)
           checkExpect(survivors.map((line) => line['status'])).toEqual(['Survived', 'Survived'])
           checkExpect(byMutatorName(survivors).map((line) => [line['mutator'], line['replacement']])).toEqual([
@@ -457,7 +470,7 @@ Feature('Driving the mutation tester from an agent harness')
         }),
         Then('the description names the tool and the command that runs mutation testing')((s) => {
           checkExpect(terminal(s.observed)).toMatchObject({ kind: 'manifest', code: 0 })
-          const described = S.decodeUnknownSync(S.fromJsonString(ManifestSchema))(
+          const described = S.decodeSync(S.fromJsonString(ManifestSchema))(
             terminal(s.observed)['manifest'] ?? '',
           )
           checkExpect(described.tool).toBe('stryker')
