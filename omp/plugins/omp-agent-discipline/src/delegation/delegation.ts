@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Effect, Match, pipe, Result } from 'effect'
+import * as FileSystem from 'effect/FileSystem'
 import { decodeRecord, readString } from '../record.js'
 import { NoDelegateSkills } from './config.js'
 import {
@@ -20,7 +21,7 @@ export type BlockResult = {
 
 export type NoSkillDelegationResult = BlockResult | undefined
 
-export type DisciplineContext = NoDelegateSkills
+export type DisciplineContext = NoDelegateSkills | FileSystem.FileSystem
 
 export type RunSafe<R> = <A, E>(effect: Effect.Effect<A, E, R>) => Promise<A>
 
@@ -73,10 +74,10 @@ function blockResult(verdict: DelegationVerdict): BlockResult | undefined {
   )
 }
 
-function loadGuard(cwd: string): Effect.Effect<CompiledGuard | null, never, NoDelegateSkills> {
+function loadGuard(cwd: string): Effect.Effect<CompiledGuard | null, never, NoDelegateSkills | FileSystem.FileSystem> {
   return Effect.gen(function*() {
     const svc = yield* NoDelegateSkills
-    const names = svc.get(cwd)
+    const names = yield* svc.load(cwd)
     return compileGuard(names)
   })
 }
@@ -98,15 +99,14 @@ interface DelegationPhases extends Cell.Phases {
   readonly readError: never
   readonly writeError: never
 }
-
 export function runNoSkillDelegation(
   cwd: string,
   toolName: string,
   subagentType: string,
   prompt: string,
-): Effect.Effect<NoSkillDelegationResult, never, NoDelegateSkills> {
+): Effect.Effect<NoSkillDelegationResult, never, NoDelegateSkills | FileSystem.FileSystem> {
   return Effect.flatMap(
-    Effect.context<NoDelegateSkills>(),
+    Effect.context<DisciplineContext>(),
     (services) =>
       Cell.apply(
         pipe(

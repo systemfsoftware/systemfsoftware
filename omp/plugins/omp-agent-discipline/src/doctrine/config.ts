@@ -4,6 +4,7 @@ type DispatchDoctrineSkillsTag = { readonly _brand: 'DispatchDoctrineSkills' }
 
 const _cache = makeStringArrayCache<DispatchDoctrineSkillsTag>(
   'omp-agent-discipline/DispatchDoctrineSkills',
+  'dispatch_doctrine_skills',
   [],
 )
 

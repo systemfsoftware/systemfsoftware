@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from '@oh-my-pi/pi-coding-agent'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Effect, Match, pipe, Result } from 'effect'
+import * as FileSystem from 'effect/FileSystem'
 import { decodeRecord, readString } from '../record.js'
 import { DispatchDoctrineSkills } from './config.js'
 import {
@@ -17,7 +18,7 @@ export { DOCTRINE_KERNEL }
 
 export type DispatchGateResult = { readonly block: true; readonly reason: string } | undefined
 
-export type DisciplineContext = DispatchDoctrineSkills
+export type DisciplineContext = DispatchDoctrineSkills | FileSystem.FileSystem
 
 export type RunSafe<R> = <A, E>(effect: Effect.Effect<A, E, R>) => Promise<A>
 
@@ -28,10 +29,12 @@ const gateResult = (verdict: DispatchDoctrineVerdict): DispatchGateResult =>
     Match.exhaustive,
   )
 
-const readDoctrineSkills = (cwd: string): Effect.Effect<readonly string[], never, DispatchDoctrineSkills> =>
+const readDoctrineSkills = (
+  cwd: string,
+): Effect.Effect<readonly string[], never, DispatchDoctrineSkills | FileSystem.FileSystem> =>
   Effect.gen(function*() {
     const svc = yield* DispatchDoctrineSkills
-    return svc.get(cwd)
+    return yield* svc.load(cwd)
   })
 
 export type DispatchDoctrineCheck = {
@@ -56,10 +59,10 @@ export function runDispatchDoctrineCheck(
   cwd: string,
   toolName: string,
   doctrineLoaded: boolean,
-): Effect.Effect<DispatchDoctrineCheck, never, DispatchDoctrineSkills> {
+): Effect.Effect<DispatchDoctrineCheck, never, DispatchDoctrineSkills | FileSystem.FileSystem> {
   let skills: readonly string[] = []
   return Effect.flatMap(
-    Effect.context<DispatchDoctrineSkills>(),
+    Effect.context<DisciplineContext>(),
     (services) =>
       Cell.apply(
         pipe(
@@ -270,9 +273,5 @@ export const DispatchDoctrineExtension = (pi: ExtensionAPI, runSafe: RunSafe<Dis
       session_id: sessionId,
       tool: event.toolName,
     })
-  })
-
-  pi.on('session_start', (_event, ctx) => {
-    void warmSkills(runSafe, ctx.cwd)
   })
 }

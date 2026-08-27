@@ -22,7 +22,7 @@ function captureHandler(
 ): { handler: CapturedHandler; fakeLayer: Layer.Layer<ReferencedContent> } {
   const fakeLayer = Layer.succeed(
     ReferencedContent,
-    ReferencedContent.of({ load: () => Effect.succeed(injectedContent) }),
+    ReferencedContent.of({ load: (_cwd: string) => Effect.succeed(injectedContent) }),
   )
   let captured: CapturedHandler | undefined
   const pi = {
@@ -48,7 +48,10 @@ Feature('inject handler via ReferencedContent port').body(({ scenario }) => {
         'ctx',
         () => Effect.succeed(captureHandler('# canned rules\ncontent here')),
       ),
-      When('before_agent_start fires')('result', (s) => Effect.promise(() => s.ctx.handler(fakeEvent, {}))),
+      When('before_agent_start fires')(
+        'result',
+        (s) => Effect.promise(() => s.ctx.handler(fakeEvent, { cwd: '/test' })),
+      ),
       Then('result should append injected markdown to systemPrompt')((s) =>
         Effect.sync(() => {
           expect(s.result?.systemPrompt.join('\n')).toContain('content here')
@@ -62,7 +65,10 @@ Feature('inject handler via ReferencedContent port').body(({ scenario }) => {
     'Handler returns undefined when port yields empty string',
     Gherkin.Do.pipe(
       Given('a fake ReferencedContent that returns empty')('ctx', () => Effect.succeed(captureHandler(''))),
-      When('before_agent_start fires')('result', (s) => Effect.promise(() => s.ctx.handler(fakeEvent, {}))),
+      When('before_agent_start fires')(
+        'result',
+        (s) => Effect.promise(() => s.ctx.handler(fakeEvent, { cwd: '/test' })),
+      ),
       Then('result should be undefined')((s) =>
         Effect.sync(() => {
           expect(s.result).toBeUndefined()

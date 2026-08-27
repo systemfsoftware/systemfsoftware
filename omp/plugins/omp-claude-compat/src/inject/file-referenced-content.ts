@@ -25,10 +25,9 @@ export const FileReferencedContentLive = Layer.effect(
     const skipListService = yield* NoInjectRefs
 
     return ReferencedContent.of({
-      load: () =>
+      load: (cwd: string) =>
         Effect.gen(function*() {
-          const projectDir = process.env['CLAUDE_PROJECT_DIR'] ?? process.cwd()
-
+          const projectDir = cwd
           const claudeMdPaths = [
             path.resolve(projectDir, 'CLAUDE.md'),
             path.resolve(projectDir, '.claude', 'CLAUDE.md'),
@@ -76,7 +75,7 @@ export const FileReferencedContentLive = Layer.effect(
             }
           }
 
-          const skipList = skipListService.get(projectDir)
+          const skipList = yield* skipListService.load(projectDir).pipe(Effect.provideService(FileSystem, fs))
 
           const entries = yield* Effect.all(
             uniqueRefs.map((ref) =>

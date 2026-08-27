@@ -13,8 +13,12 @@ export default async function agentDisciplineHandler(pi: ExtensionAPI): Promise<
     try {
       const { warmHarnessPolicy } = await import('./runtime.js')
       await runSafe(warmHarnessPolicy(ctx.cwd))
-    } catch {
-      // fail-open: discipline defaults to no denylist
+    } catch (error) {
+      try {
+        pi.logger.warn('[omp-agent-discipline] warmHarnessPolicy failed', { error, cwd: ctx.cwd })
+      } catch {
+        // logger must never throw
+      }
     }
   })
   warmRuntimeAfterStart((warm) => pi.on('session_start', (_event, ctx) => warm(ctx)), () => import('./runtime.js'))

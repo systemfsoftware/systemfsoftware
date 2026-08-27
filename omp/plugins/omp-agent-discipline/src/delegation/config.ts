@@ -2,7 +2,11 @@ import { makeStringArrayCache } from '../config-cache.js'
 
 type NoDelegateSkillsTag = { readonly _brand: 'NoDelegateSkills' }
 
-const _cache = makeStringArrayCache<NoDelegateSkillsTag>('omp-agent-discipline/NoDelegateSkills', [])
+const _cache = makeStringArrayCache<NoDelegateSkillsTag>(
+  'omp-agent-discipline/NoDelegateSkills',
+  'no_delegate_skills',
+  [],
+)
 
 export const NoDelegateSkills = _cache.Service
 export type NoDelegateSkills = NoDelegateSkillsTag

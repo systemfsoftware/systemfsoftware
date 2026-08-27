@@ -11,11 +11,11 @@ export const InjectInstructionsTask = (
   pi: ExtensionAPI,
   runSafe: <A, E>(effect: Effect.Effect<A, E, ReferencedContent>) => Promise<A>,
 ): void => {
-  pi.on('before_agent_start', async (event: BeforeAgentStartEvent, _ctx: ExtensionContext) => {
+  pi.on('before_agent_start', async (event: BeforeAgentStartEvent, ctx: ExtensionContext) => {
     const injected = await runSafe(
       Effect.gen(function*() {
         const rc = yield* ReferencedContent
-        return yield* rc.load()
+        return yield* rc.load(ctx.cwd)
       }),
     )
     if (injected === '') return undefined

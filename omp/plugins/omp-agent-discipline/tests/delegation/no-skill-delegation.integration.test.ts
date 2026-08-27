@@ -1,5 +1,6 @@
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
 import { NoDelegateSkills } from '../../src/delegation/config.js'
@@ -17,10 +18,12 @@ function seededLayer(contents: Record<string, string>) {
   const malformed = toml.includes('invalid toml')
   const hasSkill = !malformed && toml.includes('ce-work')
   const skills: readonly string[] = malformed ? [] : hasSkill ? ['ce-work'] : []
-  return Layer.succeed(NoDelegateSkills, {
+  const fake = Layer.succeed(NoDelegateSkills, {
     get: (cwd: string) => (cwd === '/test' ? skills : []),
     set: () => {},
+    load: (cwd: string) => Effect.succeed(cwd === '/test' ? skills : []),
   })
+  return Layer.mergeAll(fake, MemoryFileSystem.layerWith({}))
 }
 
 function tomlConfig(skills: readonly string[]) {
@@ -136,10 +139,14 @@ Feature('No-skill-delegation — executor integration')
       Gherkin.Do.pipe(
         Given('a filesystem with toml at /project-a but not /project-b')('dirs', () =>
           Effect.succeed({
-            layer: Layer.succeed(NoDelegateSkills, {
-              get: (cwd: string) => (cwd === '/project-a' ? (['ce-work'] as const) : []),
-              set: () => {},
-            }),
+            layer: Layer.mergeAll(
+              Layer.succeed(NoDelegateSkills, {
+                get: (cwd: string) => (cwd === '/project-a' ? (['ce-work'] as const) : []),
+                set: () => {},
+                load: (cwd: string) => Effect.succeed(cwd === '/project-a' ? (['ce-work'] as const) : [] as const),
+              }),
+              MemoryFileSystem.layerWith({}),
+            ),
           })),
         When('runNoSkillDelegation is called for both directories')(
           'results',

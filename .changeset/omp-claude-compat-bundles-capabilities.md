@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/omp-claude-compat": none
+"@systemfsoftware/omp-claude-compat": major
 ---
 
-Reorganises how the plugin's capabilities are assembled. Every exported name, type and runtime behaviour is identical, so no release is warranted.
+Removed the "./api" and "./inject" subpath exports. The plugin still loads from its main entry; update imports that used the removed subpaths to import from the main entry instead.
