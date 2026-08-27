@@ -1,4 +1,4 @@
-## 5.0.0
+## 0.1.0
 
 ### Major Changes
 
@@ -17,7 +17,35 @@
   - The `testRunner` you configured is honoured; the mutation phase always used the
     child-process runner regardless.
 
-- Removed the public export LoggingServerNotTcpError from @systemfsoftware/stryker-js-mutation-run. The worker log server that could fail with this error no longer exists, so the error can no longer occur. If you imported this symbol, remove the import.
+- Three packages are renamed. `plugin-api` is now `@systemfsoftware/stryker-js`, the
+  language every plugin is written against. `mutation-run` is now
+  `@systemfsoftware/stryker-js-platform-node`, the Node host that runs a mutation
+  test. `mutation-report` is now `@systemfsoftware/stryker-js-html-reporter`.
+  Install the new names and change your imports.
+
+  Options types moved. `StrykerOptions`, `PartialStrykerOptions` and `LogLevel` are
+  imported from the `Schema` export; `Mutant`, `MutantStatus`, `Position` and
+  `Location` from the `Mutant` export. Point a config's `extends` at the language
+  package's `Schema` export.
+
+  `MutantStatus` accepts one spelling per outcome: `Killed`, `Survived`,
+  `NoCoverage`, `Timeout`, `CompileError`, `RuntimeError`, `Ignored` and `Pending`.
+  The lowercase and abbreviated forms — `killed`, `timedOut`, `noCoverage` and the
+  rest — are gone. A comparison against a removed spelling never matched the value
+  the reporter actually produced, so check any status comparison you wrote.
+
+  Statuses, plugin kinds, exit classes and AST formats are string literal unions
+  rather than enums, so read them as their string values. Member access such as
+  `ExitClass.VerdictFail` no longer resolves.
+
+  A plugin no longer receives a logger, and the logger port is gone. Plugins log
+  through Effect, and the host decides where that output goes.
+
+  The bundled base preset is gone. A config inherits from the language package's
+  `Schema` export and states the thresholds, reporters and plugins it wants; you no
+  longer silently inherit a package manager, a plugin list or a break threshold.
+
+- Removed the public export LoggingServerNotTcpError from @systemfsoftware/stryker-js-platform-node. The worker log server that could fail with this error no longer exists, so the error can no longer occur. If you imported this symbol, remove the import.
 
 - `IdGeneratorService` is removed. The identifier generator is now the
   `IdGenerator` service with its own layer, so a caller asks for the service
@@ -112,12 +140,16 @@
 
 ### Minor Changes
 
+- The shared base preset is importable again at `./config/base`, so a config file can inherit it with `"extends"` instead of restating every setting. The entry had stopped being published, which silently broke any config that inherited from it.
+
+  The command manifest now lists the entry points the installed package actually declares, rather than a list written by hand that could disagree with it.
+
 - An evaluator now answers with the verdict it reached instead of failing to
   report one.
 
   `Evaluator.evaluate` returns `ExitClass | null` on the success channel: the
   class the run should end in, or `null` for nothing to report. `ExitClass` is
-  exported from `@systemfsoftware/stryker-js-plugin-api/evaluate`. The error
+  exported from `@systemfsoftware/stryker-js/evaluate`. The error
   channel is for the evaluator itself breaking — a report it cannot read, a
   decision it cannot reach.
 
@@ -146,7 +178,74 @@
   Machine output is unchanged — standard output remains the newline-delimited
   stream and nothing else, with the engine's log lines on standard error.
 
+- Machine-readable mutation progress is a newline-delimited JSON file next to the HTML and JSON reports, not the console.
+
+  The console prints bounded progress prose: phase names, a count line, at most twenty surviving mutants, and a verdict. Killed mutants now advance that count. Child test runs during mutation no longer print per-test output or GitHub workflow commands.
+
+  If you parsed the console as JSON lines, read the stream file instead. A hard kill can leave that file without a closing verdict line.
+
+- cut over to effect v4 (4.0.0-rc.108): public surface derives from effect types; peers flip effect ^3→^4
+
+- Checker and test-runner workers now talk over Effect's own worker RPC, and every
+  call they exchange is a declared operation with a declared result.
+
+  Before, the parent and its workers spoke a protocol written by hand: messages were
+  newline-delimited JSON, arguments were typed as "any JSON value", and each method
+  was reached by name through a proxy. Nothing checked that a payload was one the far
+  end could serve, so a value it could not read was refused after it arrived, and a
+  call whose message never landed was waited on anyway.
+
+  The six operations that cross that boundary — a checker's `check` and `group`, a
+  runner's `capabilities`, `dryRun` and `mutantRun` — now each name what they take
+  and what they return, and the options a worker starts from are sent once when it
+  starts rather than as a first method call. A payload that does not fit is refused
+  where it is built, and a worker that cannot answer fails the call that was waiting.
+
+  The two worker entry points are no longer importable subpaths of this package.
+  They were only ever spawned as processes, and the paths resolved to TypeScript
+  sources that could not be executed.
+
 ### Patch Changes
+
+- A worker frame that cannot be delivered now fails the call instead of waiting forever.
+
+  Both sides of the worker connection discarded write failures. The parent discarded the
+  error from sending a call and then waited for a reply to a message that was never sent; a
+  worker discarded the error from sending its reply and returned as though it had answered.
+  Either one left the caller waiting on an answer that could not arrive, so a run stopped
+  making progress without failing, reporting, or timing out — it simply kept emitting
+  heartbeats.
+
+  A send that fails now fails the call that needed it, and a worker that cannot deliver a
+  reply stops rather than reporting success it did not send.
+
+- An ignore plugin you did not select no longer ignores your mutants.
+
+  `ignorers` in your config names which ignore plugins are active. It was read as
+  documentation: every ignore plugin reachable through `plugins` ran, whether or
+  not you named it. A shared plugin set therefore imposed its ignore rules on
+  every project that loaded it.
+
+  The consequence was silent and total wherever an unselected plugin's rule
+  matched broadly: mutants came back ignored, the score was reported as `null`,
+  and no mutant was ever tested — a run that looks like it worked and proves
+  nothing. `ignorers` is now the allowlist it claims to be.
+
+- A setting given a value it does not allow now says which setting and what it accepts, and stops the run before anything is instrumented. It used to surface the raw decode failure with an internal stack trace, point the reader at a report the run never wrote, and exit as though the run itself had failed rather than the configuration.
+
+  The message names the option and its accepted form, the remediation points at the config file, and the exit code is the one reserved for a configuration mistake.
+
+- A run no longer walks your installed dependencies before it starts.
+
+  The scan that collects a project's input files descended into `node_modules`. With a
+  package manager that stores dependencies as links, that tree holds every version of every
+  transitive dependency, so the scan did not come back: the run printed its opening line and
+  then only heartbeats, never reaching a phase, and eventually exhausted memory.
+
+  Dependency directories are skipped again, so a run reaches its first phase immediately
+  regardless of how much is installed.
+
+- New version is published through npm trusted publishing, so it carries a provenance attestation you can verify.
 
 - A failed run now says what failed.
 
@@ -156,6 +255,18 @@
   one beneath it, down to the fault that actually happened — including a failure
   raised inside a worker process, whose description used to be replaced with a
   fixed string before it reached you.
+
+- Asking for a run addressed to a person now gets prose. Every stage, the plan and the closing verdict were written as machine lines whatever the mode, so a reader got a stream of JSON and the count of files being mutated was reported to nobody at all.
+
+  A run addressed to a person reports how many of its files it is about to mutate and writes no machine lines; a run addressed to a program is unchanged.
+
+- Incremental mode (`incremental: true`) reuses previous results instead of re-running every mutant.
+
+  A run with an incremental file now remembers the outcome of every mutant whose source file and covering tests are unchanged, re-runs only what changed, and finishes in seconds instead of minutes. The incremental file is written on failed runs too, so a score under the threshold no longer discards the results just computed. Editing a test file re-runs exactly the mutants its tests cover.
+
+- A mutation run writes the JSON report the `json` reporter is configured to produce.
+
+  Vitest no longer reprints its full summary for every mutant.
 
 - Mutants are tested against your real test runner.
 
@@ -169,14 +280,30 @@
   If you have a recorded score from an earlier release, discard it and measure
   again.
 
+- An oversized message between the runner and a worker now fails the run with a
+  reason instead of exhausting memory. Each side of the connection reads frames
+  up to 16 MiB, which leaves headroom over the largest legitimate payload — a dry
+  run carrying per-test coverage — and a frame past the limit fails the calls
+  waiting on it rather than growing until the process dies.
+
+- Each of these packages now has a README, so its registry page says what the package is, how
+  to install it, and what to import or register — previously the page was blank. The lint
+  plugins show the configuration line that enables what they recommend.
+
+  `@systemfsoftware/stryker-js-html-reporter` also carries its licence text
+
+- Instrumented files written into the sandbox now get `// @ts-nocheck` when `disableTypeChecks` is on (the default).
+
+  A TypeScript checker dry-run no longer fails the mutation run because the coverage helpers do not type-check.
+
 - The shared helpers package is gone. Nothing installs it any more, and the
   handful of helpers worth sharing now live in the plugin contract next to the
   types they serve:
 
   - `strykerReportBugUrl`, `normalizeFileName`, `propertyPath`, `errorToString`
-    and `isErrnoException` from `@systemfsoftware/stryker-js-plugin-api/core`
-  - `noopLogger` from `@systemfsoftware/stryker-js-plugin-api/logging`
-  - `testFilesProvided` from `@systemfsoftware/stryker-js-plugin-api/test-runner`
+    and `isErrnoException` from `@systemfsoftware/stryker-js/core`
+  - `noopLogger` from `@systemfsoftware/stryker-js/logging`
+  - `testFilesProvided` from `@systemfsoftware/stryker-js/test-runner`
 
   If you imported any of those, change the specifier. Everything else it exported
   had no consumer and is removed: use `Predicate.isNotNullish` from Effect in place
@@ -187,6 +314,10 @@
   `tslib` is gone from all six. The mutation runner additionally stops installing `lodash.groupby`, `semver` and `source-map`, and the command line interface stops installing `@effect/platform-node-shared`. Nothing exported changes.
 
 - Published packages no longer carry build artifacts left over from earlier builds. One package was shipping about a megabyte of bundled test-runner internals this way.
+
+- The closing verdict line carries its findings again. It had shrunk to the score alone, so a consumer reading the stream could no longer see the score limits the run was held to, where the report was written, or which mutants survived — the survivors were reported while the run was in flight and then absent from the summary that closes it.
+
+  The verdict now states the thresholds, the report path, and every surviving mutant with its file, position, mutator and replacement.
 
 - A run no longer hangs before testing any mutant.
 
@@ -203,5 +334,5 @@
   left behind afterwards.
 
 - Updated dependencies:
-  - @systemfsoftware/stryker-js-instrumenter@1.0.0
-  - @systemfsoftware/stryker-js-plugin-api@3.0.0
+  - @systemfsoftware/effect-cell-types@5.0.0
+  - @systemfsoftware/stryker-js-instrumenter@2.0.0

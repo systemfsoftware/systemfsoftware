@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/omp-claude-compat",
   "license": "Apache-2.0",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "description": "OMP Claude Code compatibility: dispatch .claude/settings.json and enabled plugin hooks/hooks.json hooks + inject CLAUDE.md @-references",
   "type": "module",
@@ -52,6 +52,7 @@
     "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
@@ -60,8 +61,7 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/vitest-config": "workspace:^"
+    "vitest": "catalog:"
   },
   "omp": {
     "extensions": [

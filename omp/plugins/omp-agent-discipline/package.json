@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/omp-agent-discipline",
   "license": "Apache-2.0",
-  "version": "2.1.0",
+  "version": "3.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "description": "OMP agent discipline: mechanical enforcement of rules prose can't hold (xd:// retry guard, ...)",
   "type": "module",
@@ -41,8 +41,8 @@
     "@effect/vitest": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
-    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-refutation-vite": "workspace:^",
@@ -52,14 +52,14 @@
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/tsdown-config": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:",
-    "@systemfsoftware/vitest-config": "workspace:^"
+    "vitest": "catalog:"
   },
   "omp": {
     "extensions": [
