@@ -310,11 +310,19 @@ The JSON object the stryker CLI prints to stdout in machine mode: mutation score
 
 ### progress stream
 
-The newline-delimited JSON the stryker CLI writes to stdout in machine mode: a `stream` header first (schema version, run id, resolved mode, deciding signal), then `phase` lifecycle lines, a `plan` line naming the total, `mutant` lines filtered to the actionable statuses (`Survived`, `NoCoverage`, `Timeout`, `RuntimeError`), `tick` heartbeats on an interval, and always a terminal `verdict` or `error` line last. It replaces the deleted `progress-append-only` reporter as the non-TTY progress path, so an agent sees a many-minute run advancing rather than silence followed by a verdict. Human mode keeps the interactive progress bar on stdout instead.
+The newline-delimited JSON the stryker CLI writes to `reports/mutation-stream.jsonl`: a `stream` header first (schema version, run id, resolved mode, deciding signal), then `phase` lifecycle lines, a `plan` line naming the total, one `mutant` line for **every** completed status — `Killed` included, the actionable-only filter surviving only in the verdict envelope — `tick` heartbeats on an interval, and a terminal `verdict` or `error` line on a clean exit. One run per file, truncated at open; a hard kill can leave it without the terminal line, which is the accepted signal of a dead run rather than corruption. It moved off stdout when the file sink landed, so a human renderer owns the console and machines read the file.
 
 ### survivor re-run
 
 An explicit, opt-in stryker run that re-tests only mutants that survived a previous run, reading prior per-mutant status as input. Distinct from incremental mode: incremental is on by default and silently reuses verdicts whose inputs the differ proves unchanged, while a survivor re-run re-tests the named set and reports fresh results.
+
+### remembered
+
+A mutant verdict replayed from incremental state without re-executing the mutant — its source file, covering tests, and mutant key unchanged since the verdict was recorded. Replayed with `statusReason: 'Remembered'` and its kill attribution preserved; the differ is the only authority for remembered-ness, and a changed source or covering test demotes the mutant to a re-run. A verdict absent from stored state is never remembered — it runs — so a partial checkpoint degrades to first-run behavior for exactly the mutants it lacks.
+
+### partial results
+
+The per-mutant data a killed run leaves behind, read from its stream. Distinct from a report: partials are marked incomplete, never scored as final, and never turn a missing-report job green. A run that died before completing any mutant has no partials — that is zero progress, an infrastructure failure reported distinctly.
 
 ## Mutation attribution
 

@@ -46,6 +46,7 @@ import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as Scope from 'effect/Scope'
+import * as Semaphore from 'effect/Semaphore'
 import * as Stream from 'effect/Stream'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 
@@ -211,19 +212,28 @@ const rememberedResultsOf = (
     readonly mutantId: string
     readonly status: string
     readonly testsCompleted?: number | undefined
+    readonly coveredBy?: readonly string[] | undefined
+    readonly killedBy?: readonly string[] | undefined
   }[],
 ): MutantResult[] => {
   const settled: MutantResult[] = []
   for (const entry of remembered) {
     const mutant = mutants.find((candidate) => candidate.id === entry.mutantId)
     if (mutant === undefined) continue
+    const extra: { coveredBy?: string[]; killedBy?: string[] } = {}
+    if (entry.coveredBy !== undefined) {
+      extra.coveredBy = [...entry.coveredBy]
+    }
+    if (entry.killedBy !== undefined) {
+      extra.killedBy = [...entry.killedBy]
+    }
     settled.push(
       Object.assign({}, mutant, {
         location: toSchemaLocation(mutant.location),
         status: entry.status,
         statusReason: REMEMBERED_REASON,
         testsCompleted: entry.testsCompleted,
-      }),
+      }, extra),
     )
   }
   return settled
@@ -1158,6 +1168,16 @@ export const mutationTestRun =
           Effect.catchCause((cause) => Effect.logWarning('Reporter failed handling onMutantTested', cause)),
         )
       }
+      const completedMutants = yield* Ref.make<MutantResult[]>([...rememberedResults, ...noCoverageResults])
+      const checkpointGate = yield* Semaphore.make(1)
+      yield* reporting.checkpoint(yield* Ref.get(completedMutants))
+      const persist = (result: MutantResult) =>
+        checkpointGate.withPermits(1)(
+          Effect.gen(function*() {
+            const next = yield* Ref.updateAndGet(completedMutants, (prev) => [...prev, result])
+            yield* reporting.checkpoint(next)
+          }),
+        )
       const runResults: MutantResult[] = yield* Stream.mapEffect(
         testRunnerStream,
         (plan) =>
@@ -1174,6 +1194,7 @@ export const mutationTestRun =
               )
               const reported = yield* reporting.reportMutantRunResult(toReportedMutant(plan.mutant), result)
               yield* offerFinished(reported)
+              yield* persist(reported)
               return reported
             }),
           ),

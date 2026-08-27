@@ -419,6 +419,8 @@ export interface IncrementalDiffResult {
     readonly mutantId: string
     readonly status: string
     readonly testsCompleted?: number | undefined
+    readonly coveredBy?: readonly string[] | undefined
+    readonly killedBy?: readonly string[] | undefined
   }[]
   readonly mutantStatistics: DiffStatistics
   readonly testStatistics: DiffStatistics
