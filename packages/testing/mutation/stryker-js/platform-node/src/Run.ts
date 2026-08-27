@@ -868,13 +868,17 @@ export const dryRunLayer = (services: Context.Context<StageServices>): Cell.Writ
       // (`CompleteDryRunResult.status` is `'complete'`) and the command's schema spells
       // them capitalised, so without this mapping the command never validates.
       if (rawResult.status === 'complete') {
-        const failedTestCount = rawResult.tests.filter((test) => test.status === 'failed').length
+        const failedTests = rawResult.tests.filter((test) => test.status === 'failed')
+        const failedTestCount = failedTests.length
         return Result.succeed(
           new DryRunCommand({
             status: 'Complete',
             testCount: rawResult.tests.length,
             failedTestCount,
             allowEmpty,
+            failedTests: failedTests.slice(0, 5).map((test) =>
+              `- ${test.name} [${test.id}]: ${test.failureMessage.split('\n')[0]?.slice(0, 200) ?? 'no message'}`
+            ),
           }),
         )
       }

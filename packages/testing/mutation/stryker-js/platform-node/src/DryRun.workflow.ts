@@ -15,6 +15,7 @@ export class DryRunCommand extends S.TaggedClass<DryRunCommand>()('DryRunCommand
   allowEmpty: S.Boolean,
   errorMessage: S.optional(S.String),
   reason: S.optional(S.String),
+  failedTests: S.optional(S.Array(S.String)),
 }) {}
 
 export class DryRunDecision extends S.TaggedClass<DryRunDecision>()('DryRunDecision', {
@@ -35,7 +36,10 @@ const decideComplete = (command: DryRunCommand): Result.Result<DryRunDecision, D
     return Result.fail(
       new DryRunError({
         stage: 'dryRun',
-        reason: 'There were failed tests in the initial test run.',
+        reason: [
+          `There were failed tests in the initial test run (${command.failedTestCount} of ${command.testCount}):`,
+          ...(command.failedTests ?? ['(failed test names unavailable)']),
+        ].join('\n'),
       }),
     )
   }
