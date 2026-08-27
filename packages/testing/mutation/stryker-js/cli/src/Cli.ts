@@ -52,11 +52,11 @@ import {
   readCapturedConsole,
   remediationFor,
   resetCapturedConsole,
+  runOutcomeCode,
   unrecognizedArgumentOf,
 } from './Envelope.js'
 import { emitMachineModeOutput, isColorEnabled } from './Output.js'
 import type { OutputModeProbe, RunEventStream, RunEventStreamPort } from './Output.js'
-import { runOutcomeCode } from './RunOutcome.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 import type { StrykerRun } from './StrykerRun.js'
 import { runSurvivorsAdmission } from './Survivors.js'

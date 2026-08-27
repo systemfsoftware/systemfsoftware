@@ -120,7 +120,7 @@ function failRun(error: RunOutcomeError): Result.Result<RunOk, RunOutcomeError> 
   return Result.fail(error)
 }
 
-export function runOutcomeDecision(
+function runOutcomeDecision(
   command: RunOutcomeCommand,
 ): Result.Result<RunOk, RunOutcomeError> {
   return Match.value(classify(command)).pipe(
@@ -130,20 +130,6 @@ export function runOutcomeDecision(
     Match.tag('RunSurvivorsRejected', failRun),
     Match.tag('RunConfigFailed', failRun),
     Match.tag('RunFailed', failRun),
-    Match.exhaustive,
-  )
-}
-
-export const runOutcomeCode = (result: Result.Result<RunOk, RunOutcomeError>): number => {
-  if (Result.isSuccess(result)) {
-    return 0
-  }
-  return Match.value(result.failure).pipe(
-    Match.tag('RunInterrupted', (error) => error.code),
-    Match.tag('RunParseFailed', () => CONFIG_CODE),
-    Match.tag('RunSurvivorsRejected', () => CONFIG_CODE),
-    Match.tag('RunConfigFailed', () => CONFIG_CODE),
-    Match.tag('RunFailed', (error) => error.code),
     Match.exhaustive,
   )
 }

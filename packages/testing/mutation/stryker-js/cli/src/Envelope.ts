@@ -22,15 +22,25 @@ import * as Predicate from 'effect/Predicate'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import * as CliError from 'effect/unstable/cli/CliError'
-import {
-  type RunOk,
-  runOutcomeCode,
-  RunOutcomeCommand,
-  runOutcomeDecision,
-  type RunOutcomeError,
-} from './RunOutcome.workflow.js'
+import { type RunOk, RunOutcomeCommand, type RunOutcomeError, runOutcomeWorkflow } from './RunOutcome.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 import { SurvivorsRejection } from './Survivors.workflow.js'
+
+const CONFIG_CODE = 2
+
+export function runOutcomeCode(result: Result.Result<RunOk, RunOutcomeError>): number {
+  if (Result.isSuccess(result)) {
+    return 0
+  }
+  return Match.value(result.failure).pipe(
+    Match.tag('RunInterrupted', (error) => error.code),
+    Match.tag('RunParseFailed', () => CONFIG_CODE),
+    Match.tag('RunSurvivorsRejected', () => CONFIG_CODE),
+    Match.tag('RunConfigFailed', () => CONFIG_CODE),
+    Match.tag('RunFailed', (error) => error.code),
+    Match.exhaustive,
+  )
+}
 
 export function isExitClass(value: unknown): value is ExitClass {
   return S.is(ExitClass)(value)
@@ -508,7 +518,7 @@ export function classifyRunOutcome(
   signal: number | null,
   argv: readonly string[],
 ): Result.Result<RunOk, RunOutcomeError> {
-  return runOutcomeDecision(gatherRunOutcome(exit, signal, argv))
+  return runOutcomeWorkflow(gatherRunOutcome(exit, signal, argv))
 }
 
 export function buildErrorEnvelope(

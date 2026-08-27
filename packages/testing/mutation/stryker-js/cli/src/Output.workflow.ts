@@ -4,27 +4,7 @@ import * as S from 'effect/Schema'
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { type ResolvedMode } from '@systemfsoftware/stryker-js-platform-node'
 
-/**
- * The known tool variables. Narrow per the plan — exactly
- * `['CLAUDECODE', 'CODEX_SANDBOX']` — and load-bearing rather than a
- * fallback: they cover the PTY-allocating harnesses a stdin condition would
- * have rescued.
- */
-export const TOOL_VARIABLES = ['CLAUDECODE', 'CODEX_SANDBOX'] as const
-
-export type ToolVariable = (typeof TOOL_VARIABLES)[number]
-
-export interface FormatFlags {
-  readonly text?: boolean
-  readonly json?: boolean
-}
-
-export interface ModeInput extends FormatFlags {
-  readonly envMode?: string
-  readonly stdoutIsTTY: boolean
-  readonly agent?: string
-  readonly toolVars?: Readonly<Partial<Record<ToolVariable, string | undefined>>>
-}
+const TOOL_VARIABLES = ['CLAUDECODE', 'CODEX_SANDBOX'] as const
 
 /**
  * The command of the output-mode workflow: a schema class, because `Workflow.make`
@@ -49,7 +29,6 @@ export class ModeConflictError extends S.TaggedError<ModeConflictError>()('ModeC
   option: S.String,
   value: S.String,
   expected: S.String,
-  kind: S.Literal('flag'),
 }) {}
 
 const CONFLICT_EXPECTED = 'the "--format text" and "--json" flags are mutually exclusive — use one or the other'
@@ -61,7 +40,6 @@ function r4(command: ResolveModeCommand): Result.Result<ResolvedMode, ModeConfli
         option: 'json',
         value: 'text',
         expected: CONFLICT_EXPECTED,
-        kind: 'flag',
       }),
     )
   }
@@ -93,15 +71,10 @@ function r4(command: ResolveModeCommand): Result.Result<ResolvedMode, ModeConfli
   return Result.succeed({ mode: 'human', signal: 'tty', stdoutIsTTY: true })
 }
 
-export function modeDecision(
+function modeDecision(
   command: ResolveModeCommand,
 ): Result.Result<ResolvedMode, ModeConflictError> {
   return r4(command)
 }
 
-/**
- * The output-mode decision: the pure `modeDecision` wrapped as a workflow so
- * `Cell.decide` can demand it by type. Both channels are inhabited — `ResolvedMode`
- * on success and a tagged `ModeConflictError` on failure — so the brand is satisfied.
- */
 export const resolveModeWorkflow = Workflow.make(ResolveModeCommand, modeDecision)

@@ -34,8 +34,7 @@ import * as Stdio from 'effect/Stdio'
 import * as Stream from 'effect/Stream'
 import * as CliError from 'effect/unstable/cli/CliError'
 import { readCapturedConsole, shapeEnvelope } from './Envelope.js'
-import { ModeConflictError, ResolveModeCommand, resolveModeWorkflow, TOOL_VARIABLES } from './Output.workflow.js'
-import type { FormatFlags, ModeInput, ToolVariable } from './Output.workflow.js'
+import { ModeConflictError, ResolveModeCommand, resolveModeWorkflow } from './Output.workflow.js'
 import type { RunOk, RunOutcomeError } from './RunOutcome.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 /**
@@ -338,7 +337,21 @@ export const RunEventStreamLive: Layer.Layer<RunEventStreamPortTag, never, Stdio
     })),
 )
 
-export { type FormatFlags, type ModeInput, TOOL_VARIABLES, type ToolVariable }
+export const TOOL_VARIABLES = ['CLAUDECODE', 'CODEX_SANDBOX'] as const
+
+export type ToolVariable = (typeof TOOL_VARIABLES)[number]
+
+export interface FormatFlags {
+  readonly text?: boolean
+  readonly json?: boolean
+}
+
+export interface ModeInput extends FormatFlags {
+  readonly envMode?: string
+  readonly stdoutIsTTY: boolean
+  readonly agent?: string
+  readonly toolVars?: Readonly<Partial<Record<ToolVariable, string | undefined>>>
+}
 
 /**
  * Resolves the output mode by R4 precedence. Pure — reads nothing, so it is
@@ -392,7 +405,7 @@ export function resolveMode(input: ModeInput): Result.Result<ResolvedMode, CliEr
         option: conflict.option,
         value: conflict.value,
         expected: conflict.expected,
-        kind: conflict.kind,
+        kind: 'flag',
       }),
     )
   }
@@ -837,8 +850,8 @@ if (import.meta.vitest !== void 0) {
  * `process.env`, and the pure decision (`resolveModeWorkflow`) stays downstream of
  * these reads.
  *
- * The tool-variable probe is derived from the pure decision's `TOOL_VARIABLES`
- * constant, so the known-variable list has exactly one declaration.
+ * The tool-variable probe copies `TOOL_VARIABLES` from the environment onto
+ * the command. The workflow interprets those fields; it does not read env.
  *
  * Probe I/O is `Cell.read` and the public resolve is `Cell.apply` — the
  * sandwich `Cell.read/decode/decide(Workflow.make)/encode/write`.
@@ -968,7 +981,7 @@ export const detectModeWithProbe = (flags: FormatFlags = {}): Effect.Effect<Reso
           option: error.option,
           value: error.value,
           expected: error.expected,
-          kind: error.kind,
+          kind: 'flag',
         }),
     ),
   )

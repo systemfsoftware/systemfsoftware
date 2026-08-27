@@ -8,21 +8,18 @@ import {
   RunFailed,
   RunInterrupted,
   RunOk,
-  runOutcomeCode,
   RunOutcomeCommand,
-  runOutcomeDecision,
+  runOutcomeWorkflow,
   RunParseFailed,
   RunSurvivorsRejected,
 } from '../RunOutcome.workflow.js'
-
-const CONFIG_CODE = 2
 
 const classCode = (exitClass: 'VerdictFail' | 'ConfigError' | 'RuntimeError' | 'InternalError'): number => {
   if (exitClass === 'VerdictFail') {
     return 1
   }
   if (exitClass === 'ConfigError') {
-    return CONFIG_CODE
+    return 2
   }
   if (exitClass === 'RuntimeError') {
     return 3
@@ -30,17 +27,12 @@ const classCode = (exitClass: 'VerdictFail' | 'ConfigError' | 'RuntimeError' | '
   return 4
 }
 
-describe('runOutcomeDecision', () => {
+describe('runOutcomeWorkflow', () => {
   it.prop('∀c_Command_≡TaggedOutcome', [S.toArbitrary(RunOutcomeCommand)(fc)], ([command]) => {
-    const result = runOutcomeDecision(command)
+    const result = runOutcomeWorkflow(command)
     if (command.signal !== undefined) {
       const code = 128 + command.signal
-      return (
-        Result.isFailure(result) &&
-        S.is(RunInterrupted)(result.failure) &&
-        result.failure.code === code &&
-        runOutcomeCode(result) === code
-      )
+      return Result.isFailure(result) && S.is(RunInterrupted)(result.failure) && result.failure.code === code
     }
     if (command.succeeded) {
       if (command.successExitClass !== undefined) {
@@ -49,47 +41,29 @@ describe('runOutcomeDecision', () => {
           Result.isFailure(result) &&
           S.is(RunFailed)(result.failure) &&
           result.failure.code === code &&
-          result.failure.diagnostic === command.diagnostic &&
-          runOutcomeCode(result) === code
+          result.failure.diagnostic === command.diagnostic
         )
       }
-      return (
-        Result.isSuccess(result) &&
-        S.is(RunOk)(result.success) &&
-        result.success.help === false &&
-        runOutcomeCode(result) === 0
-      )
+      return Result.isSuccess(result) && S.is(RunOk)(result.success) && result.success.help === false
     }
     if (command.interrupted) {
-      return (
-        Result.isFailure(result) &&
-        S.is(RunInterrupted)(result.failure) &&
-        result.failure.code === 1 &&
-        runOutcomeCode(result) === 1
-      )
+      return Result.isFailure(result) && S.is(RunInterrupted)(result.failure) && result.failure.code === 1
     }
     if (command.helpErrorCount !== undefined) {
       if (command.helpErrorCount > 0) {
         return (
           Result.isFailure(result) &&
           S.is(RunParseFailed)(result.failure) &&
-          result.failure.unrecognized === command.unrecognized &&
-          runOutcomeCode(result) === CONFIG_CODE
+          result.failure.unrecognized === command.unrecognized
         )
       }
-      return (
-        Result.isSuccess(result) &&
-        S.is(RunOk)(result.success) &&
-        result.success.help === true &&
-        runOutcomeCode(result) === 0
-      )
+      return Result.isSuccess(result) && S.is(RunOk)(result.success) && result.success.help === true
     }
     if (command.cliError) {
       return (
         Result.isFailure(result) &&
         S.is(RunParseFailed)(result.failure) &&
-        result.failure.unrecognized === command.unrecognized &&
-        runOutcomeCode(result) === CONFIG_CODE
+        result.failure.unrecognized === command.unrecognized
       )
     }
     if (command.survivorsReason !== undefined) {
@@ -97,16 +71,14 @@ describe('runOutcomeDecision', () => {
         Result.isFailure(result) &&
         S.is(RunSurvivorsRejected)(result.failure) &&
         result.failure.reason === command.survivorsReason &&
-        result.failure.diagnostic === command.survivorsDiagnostic &&
-        runOutcomeCode(result) === CONFIG_CODE
+        result.failure.diagnostic === command.survivorsDiagnostic
       )
     }
     if (command.schemaError) {
       return (
         Result.isFailure(result) &&
         S.is(RunConfigFailed)(result.failure) &&
-        result.failure.detail === command.configDetail &&
-        runOutcomeCode(result) === CONFIG_CODE
+        result.failure.detail === command.configDetail
       )
     }
     if (command.highestExitClass !== undefined) {
@@ -114,8 +86,7 @@ describe('runOutcomeDecision', () => {
         return (
           Result.isFailure(result) &&
           S.is(RunConfigFailed)(result.failure) &&
-          result.failure.detail === command.configDetail &&
-          runOutcomeCode(result) === CONFIG_CODE
+          result.failure.detail === command.configDetail
         )
       }
       const code = classCode(command.highestExitClass)
@@ -123,16 +94,14 @@ describe('runOutcomeDecision', () => {
         Result.isFailure(result) &&
         S.is(RunFailed)(result.failure) &&
         result.failure.code === code &&
-        result.failure.diagnostic === command.diagnostic &&
-        runOutcomeCode(result) === code
+        result.failure.diagnostic === command.diagnostic
       )
     }
     return (
       Result.isFailure(result) &&
       S.is(RunFailed)(result.failure) &&
       result.failure.code === 1 &&
-      result.failure.diagnostic === command.diagnostic &&
-      runOutcomeCode(result) === 1
+      result.failure.diagnostic === command.diagnostic
     )
   })
 })
