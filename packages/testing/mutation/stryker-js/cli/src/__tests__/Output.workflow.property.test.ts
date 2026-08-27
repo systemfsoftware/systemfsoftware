@@ -3,13 +3,15 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
 
-import { modeDecision, ResolveModeCommand, TOOL_VARIABLES } from '../Output.workflow.js'
+import { modeDecision, ResolveModeCommand } from '../Output.workflow.js'
 
 const CONFLICT_EXPECTED = 'the "--format text" and "--json" flags are mutually exclusive — use one or the other'
 
+const TOOL_NAMES = ['CLAUDECODE', 'CODEX_SANDBOX'] as const
+
 const hasNonemptyTool = (command: ResolveModeCommand): boolean => {
   const toolVars = command.toolVars ?? {}
-  for (const variable of TOOL_VARIABLES) {
+  for (const variable of TOOL_NAMES) {
     const value = toolVars[variable]
     if (typeof value === 'string' && value.length > 0) {
       return true

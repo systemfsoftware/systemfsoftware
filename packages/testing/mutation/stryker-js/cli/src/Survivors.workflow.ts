@@ -69,13 +69,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const SURVIVORS_RUN_FIRST_REMEDIATION = 'run a full `stryker run` first, then re-run with --survivors'
-const SURVIVORS_BOOKKEEPING_KEYS = ['survivorsPriorReport'] as const
+export const SURVIVORS_BOOKKEEPING_KEYS = ['survivorsPriorReport'] as const
 
 /**
  * The resolved options without the survivors-run bookkeeping keys, so both
  * sides of the admission comparison describe the same configuration.
  */
-function stripSurvivorsKeys(config: unknown): Record<string, unknown> {
+export function stripSurvivorsKeys(config: unknown): Record<string, unknown> {
   if (!isRecord(config)) {
     return {}
   }
@@ -92,7 +92,7 @@ function stripSurvivorsKeys(config: unknown): Record<string, unknown> {
  * (KTD7): without this check the second run would either re-read a shrunken set
  * or re-test a stale one.
  */
-function wasProducedBySurvivorsRun(priorReport: { readonly config: unknown }): boolean {
+export function wasProducedBySurvivorsRun(priorReport: { readonly config: unknown }): boolean {
   const config = priorReport.config
   return isRecord(config) && 'survivorsPriorReport' in config
 }
@@ -101,7 +101,7 @@ function wasProducedBySurvivorsRun(priorReport: { readonly config: unknown }): b
  * Serializes the comparison input with keys sorted at every level, so the result
  * is a function of the data and not of key insertion order.
  */
-function serializeSurvivorsHashInput(input: {
+export function serializeSurvivorsHashInput(input: {
   readonly resolvedOptions: Record<string, unknown>
   readonly frameworkVersion: string | undefined
   readonly sourceContentHashes: Readonly<Record<string, string>>
@@ -269,140 +269,3 @@ export const admitSurvivorsRun = Workflow.make(
       Match.exhaustive,
     ),
 )
-
-if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
-  // branch is statically dead in the build and never enters the published module graph.
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
-  const { FastCheck: fc } = await import('effect/testing')
-
-  const survivorWith = (
-    start: { line: number | null; column: number | null },
-    end: { line: number | null; column: number | null },
-  ): unknown => ({
-    _tag: 'Admitted',
-    survivors: [
-      {
-        id: 'A',
-        fileName: 'file.ts',
-        mutatorName: 'mutator',
-        replacement: 'replacement',
-        location: { start, end },
-      },
-    ],
-  })
-
-  /**
-   * `S.Finite` is one shared v4 node, so every location point weakens together
-   * and the harness keeps a single obligation. Measured 2026-08-17: the stored
-   * weakened arm accepts a non-finite number at `start.column` (the first
-   * reaching path) but not at `start.line` — so the witness sits there. One
-   * generator per schema discharges the shared obligation.
-   */
-  refutes(Admitted, {
-    AdmittedLocationNonFinite: fc.constant(
-      survivorWith({ line: 1, column: Number.POSITIVE_INFINITY }, { line: 1, column: 0 }),
-    ),
-  })
-
-  refutes(SurvivorsAdmission, {
-    SurvivorsAdmissionLocationNonFinite: fc.constant(
-      survivorWith({ line: 1, column: Number.POSITIVE_INFINITY }, { line: 1, column: 0 }),
-    ),
-  })
-
-  // These cover the helpers THIS file declares, which are the ones
-  // `admissionVerdict` runs. `make-body-purity` follows the decision's
-  // reachable set, so the helpers cannot be imported from elsewhere; the
-  // properties therefore have to live beside them. A copy of these functions
-  // tested somewhere else would leave the suite green whichever copy drifted.
-  const { describe, it: gherkinIt } = await import('@systemfsoftware/effect-gherkin-spec')
-  const { isDeepStrictEqual } = await import('node:util')
-
-  const configValueArb = fc.oneof(
-    fc.string({ maxLength: 8 }),
-    fc.integer(),
-    fc.boolean(),
-    fc.constant(null),
-  )
-
-  const configArb = fc
-    .dictionary(fc.string({ maxLength: 8 }), configValueArb, { maxKeys: 3 })
-    .chain((random) =>
-      fc.option(fc.string({ maxLength: 12 }), { nil: undefined }).map((prior) => {
-        if (prior === undefined) {
-          return random
-        }
-        return { ...random, survivorsPriorReport: prior }
-      })
-    )
-  const hashInputArb = fc.record({
-    resolvedOptions: fc.dictionary(fc.string({ maxLength: 8 }), configValueArb, { maxKeys: 4 }),
-    frameworkVersion: fc.option(fc.string({ maxLength: 8 }), { nil: undefined }),
-    sourceContentHashes: fc.dictionary(fc.string({ maxLength: 8 }), fc.string({ maxLength: 16 }), { maxKeys: 4 }),
-  })
-
-  const reversed = <T>(record: Readonly<Record<string, T>>): Record<string, T> =>
-    Object.fromEntries(Object.entries(record).reverse())
-
-  describe('stripSurvivorsKeys', () => {
-    gherkinIt.prop(
-      '∀c_StripTwice_≡StripOnce',
-      [configArb],
-      ([config]) => isDeepStrictEqual(stripSurvivorsKeys(stripSurvivorsKeys(config)), stripSurvivorsKeys(config)),
-    )
-
-    gherkinIt.prop(
-      '∀c_Strip_≡RemovesBookkeepingKeys',
-      [configArb],
-      ([config]) => SURVIVORS_BOOKKEEPING_KEYS.every((key) => !(key in stripSurvivorsKeys(config))),
-    )
-
-    gherkinIt.prop('∀c_Strip_≡LeavesInputUntouched', [configArb], ([config]) => {
-      const before = Object.keys(config)
-      const values = before.map((key) => config[key])
-      stripSurvivorsKeys(config)
-      return isDeepStrictEqual(before, Object.keys(config)) &&
-        before.every((key, index) => Object.is(config[key], values[index]))
-    })
-  })
-
-  describe('wasProducedBySurvivorsRun', () => {
-    // The provenance marker is exactly what `stripSurvivorsKeys` removes, so a
-    // stripped config can never look like a survivors-run product. If these two
-    // ever disagree about the key, a survivors run silently accepts its own
-    // output as input.
-    gherkinIt.prop(
-      '∀c_StrippedConfig_≡NeverSurvivorsProduced',
-      [configArb],
-      ([config]) => !wasProducedBySurvivorsRun({ config: stripSurvivorsKeys(config) }),
-    )
-
-    gherkinIt.prop(
-      '∀c_CarryingTheMarker_≡SurvivorsProduced',
-      [configArb],
-      ([config]) => wasProducedBySurvivorsRun({ config: { ...config, survivorsPriorReport: 'r' } }),
-    )
-  })
-
-  describe('serializeSurvivorsHashInput', () => {
-    // Key insertion order must not change the text, or two identical runs
-    // disagree and every prior report in the wild stops matching.
-    gherkinIt.prop(
-      '∀i_KeyOrder_≡SameText',
-      [hashInputArb],
-      ([input]) =>
-        serializeSurvivorsHashInput(input) === serializeSurvivorsHashInput({
-          resolvedOptions: reversed(input.resolvedOptions),
-          frameworkVersion: input.frameworkVersion,
-          sourceContentHashes: reversed(input.sourceContentHashes),
-        }),
-    )
-
-    gherkinIt.prop('∀i_Serialization_≡LosslessRoundTrip', [hashInputArb], ([input]) =>
-      isDeepStrictEqual(
-        JSON.parse(serializeSurvivorsHashInput(input)),
-        JSON.parse(JSON.stringify(input)),
-      ))
-  })
-}

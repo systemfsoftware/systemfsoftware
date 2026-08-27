@@ -7,7 +7,7 @@
  * StreamVersion (leaf) and Survivors.workflow (leaf), never from Cli or Output
  * themselves.
  */
-import { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
+import { ExitClass, highestExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import { causeText } from '@systemfsoftware/stryker-js/Mutant'
 import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
@@ -16,9 +16,19 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Formatter from 'effect/Formatter'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Predicate from 'effect/Predicate'
+import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import * as CliError from 'effect/unstable/cli/CliError'
+import {
+  type RunOk,
+  runOutcomeCode,
+  RunOutcomeCommand,
+  runOutcomeDecision,
+  type RunOutcomeError,
+} from './RunOutcome.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 import { SurvivorsRejection } from './Survivors.workflow.js'
 
@@ -210,27 +220,7 @@ function firstConfigErrorDetail(exit: Exit.Exit<unknown, unknown>): string | und
 }
 
 export function remediationFor(exit: Exit.Exit<unknown, unknown>, code: number): string {
-  if (code > 128) {
-    return 'the run was interrupted by a signal; re-run it to continue'
-  }
-  const value = failureValue(exit)
-  if (value !== undefined) {
-    if (CliError.isCliError(value)) {
-      return 're-run with --help to see the full usage'
-    }
-    if (S.is(SurvivorsRejection)(value)) {
-      return value.remediation
-    }
-  }
-  const classes = collectExitClasses(exit)
-  if (classes.includes('ConfigError')) {
-    const detail = firstConfigErrorDetail(exit)
-    if (detail !== undefined) {
-      return `check the config file: ${detail}`
-    }
-    return 'check the config file'
-  }
-  return 'see --reportFile or the verdict envelope on stdout'
+  return buildErrorEnvelope(exit, code, '', []).remediation
 }
 
 export function describeFailure(exit: Exit.Exit<unknown, unknown>): string {
@@ -334,27 +324,209 @@ export interface ErrorEnvelope {
   readonly remediation: string
 }
 
+const SIGNAL_REMEDIATION = 'the run was interrupted by a signal; re-run it to continue'
+const PARSE_REMEDIATION = 're-run with --help to see the full usage'
+const DEFAULT_REMEDIATION = 'see --reportFile or the verdict envelope on stdout'
+
+function successExitClassOf(exit: Exit.Exit<unknown, unknown>): ExitClass | undefined {
+  if (!Exit.isSuccess(exit)) {
+    return undefined
+  }
+  const value = exit.value
+  if (!Predicate.hasProperty(value, 'verdict')) {
+    return undefined
+  }
+  const candidate = value.verdict
+  if (!isExitClass(candidate)) {
+    return undefined
+  }
+  return candidate
+}
+
+function helpErrorCountOf(value: unknown): number | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+  if (!S.is(CliError.ShowHelp)(value)) {
+    return undefined
+  }
+  return value.errors.length
+}
+
+function survivorsRejectionOf(value: unknown): SurvivorsRejection | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+  if (!S.is(SurvivorsRejection)(value)) {
+    return undefined
+  }
+  return value
+}
+
+function present<A>(value: A | null): A | undefined {
+  if (value === null) {
+    return undefined
+  }
+  return value
+}
+
+function survivorsReasonOf(
+  survivors: SurvivorsRejection | undefined,
+): 'no-report' | 'mismatch' | undefined {
+  if (survivors === undefined) {
+    return undefined
+  }
+  return survivors.reason
+}
+
+function survivorsDiagnosticOf(survivors: SurvivorsRejection | undefined): string | undefined {
+  if (survivors === undefined) {
+    return undefined
+  }
+  return survivors.remediation
+}
+
+function omitUnknownFailure(diagnostic: string): string | undefined {
+  if (diagnostic === 'Unknown failure') {
+    return undefined
+  }
+  return diagnostic
+}
+
+function signalFromCode(code: number): number | null {
+  if (code > 128) {
+    return code - 128
+  }
+  return null
+}
+
+function capturedOrUnknown(captured: string): string {
+  if (captured.length > 0) {
+    return captured
+  }
+  return 'Unknown failure'
+}
+
+export function gatherRunOutcome(
+  exit: Exit.Exit<unknown, unknown>,
+  signal: number | null,
+  argv: readonly string[],
+): RunOutcomeCommand {
+  const value = failureValue(exit)
+  const survivors = survivorsRejectionOf(value)
+  return RunOutcomeCommand.make({
+    succeeded: Exit.isSuccess(exit),
+    signal: present(signal),
+    interrupted: Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause),
+    helpErrorCount: helpErrorCountOf(value),
+    cliError: value !== undefined && CliError.isCliError(value),
+    unrecognized: unrecognizedArgumentOf(exit, argv),
+    survivorsReason: survivorsReasonOf(survivors),
+    survivorsDiagnostic: survivorsDiagnosticOf(survivors),
+    schemaError: value !== undefined && S.isSchemaError(value),
+    successExitClass: successExitClassOf(exit),
+    highestExitClass: present(highestExitClass(collectExitClasses(exit))),
+    configDetail: firstConfigErrorDetail(exit),
+    diagnostic: omitUnknownFailure(describeFailure(exit)),
+  })
+}
+
+function errorText(error: RunOutcomeError, captured: string): string {
+  return Match.value(error).pipe(
+    Match.tag('RunParseFailed', (failed) => {
+      if (failed.unrecognized !== undefined) {
+        return `Received unknown argument: '${failed.unrecognized}'`
+      }
+      return capturedOrUnknown(captured)
+    }),
+    Match.tag('RunSurvivorsRejected', (failed) => {
+      if (failed.diagnostic !== undefined) {
+        return failed.diagnostic
+      }
+      return 'Unknown failure'
+    }),
+    Match.tag('RunInterrupted', () => capturedOrUnknown(captured)),
+    Match.tag('RunConfigFailed', (failed) => {
+      if (captured.length > 0) {
+        return captured
+      }
+      if (failed.detail !== undefined) {
+        return failed.detail
+      }
+      return 'Unknown failure'
+    }),
+    Match.tag('RunFailed', (failed) => {
+      if (captured.length > 0) {
+        return captured
+      }
+      if (failed.diagnostic !== undefined) {
+        return failed.diagnostic
+      }
+      return 'Unknown failure'
+    }),
+    Match.exhaustive,
+  )
+}
+
+function remediationText(error: RunOutcomeError): string {
+  return Match.value(error).pipe(
+    Match.tag('RunInterrupted', (failed) => {
+      if (failed.code > 128) {
+        return SIGNAL_REMEDIATION
+      }
+      return DEFAULT_REMEDIATION
+    }),
+    Match.tag('RunParseFailed', () => PARSE_REMEDIATION),
+    Match.tag('RunSurvivorsRejected', (failed) => {
+      if (failed.diagnostic !== undefined) {
+        return failed.diagnostic
+      }
+      return DEFAULT_REMEDIATION
+    }),
+    Match.tag('RunConfigFailed', (failed) => {
+      if (failed.detail !== undefined) {
+        return `check the config file: ${failed.detail}`
+      }
+      return 'check the config file'
+    }),
+    Match.tag('RunFailed', () => DEFAULT_REMEDIATION),
+    Match.exhaustive,
+  )
+}
+
+export function shapeEnvelope(error: RunOutcomeError, captured: string): ErrorEnvelope {
+  return {
+    schemaVersion: STREAM_SCHEMA_VERSION,
+    code: runOutcomeCode(Result.fail(error)),
+    error: errorText(error, captured),
+    remediation: remediationText(error),
+  }
+}
+
+export function classifyRunOutcome(
+  exit: Exit.Exit<unknown, unknown>,
+  signal: number | null,
+  argv: readonly string[],
+): Result.Result<RunOk, RunOutcomeError> {
+  return runOutcomeDecision(gatherRunOutcome(exit, signal, argv))
+}
+
 export function buildErrorEnvelope(
   exit: Exit.Exit<unknown, unknown>,
   code: number,
   captured: string,
   argv: readonly string[],
 ): ErrorEnvelope {
-  const unrecognized = unrecognizedArgumentOf(exit, argv)
-  return {
-    schemaVersion: STREAM_SCHEMA_VERSION,
-    code,
-    error: (() => {
-      if (unrecognized !== undefined) {
-        return `Received unknown argument: '${unrecognized}'`
-      }
-      if (captured.length > 0) {
-        return captured
-      }
-      return describeFailure(exit)
-    })(),
-    remediation: remediationFor(exit, code),
+  const result = classifyRunOutcome(exit, signalFromCode(code), argv)
+  if (Result.isSuccess(result)) {
+    return {
+      schemaVersion: STREAM_SCHEMA_VERSION,
+      code,
+      error: capturedOrUnknown(captured),
+      remediation: DEFAULT_REMEDIATION,
+    }
   }
+  return shapeEnvelope(result.failure, captured)
 }
 
 // Console capture (U6)

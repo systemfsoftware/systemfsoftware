@@ -1,0 +1,138 @@
+import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+import { FastCheck as fc } from 'effect/testing'
+
+import {
+  RunConfigFailed,
+  RunFailed,
+  RunInterrupted,
+  RunOk,
+  runOutcomeCode,
+  RunOutcomeCommand,
+  runOutcomeDecision,
+  RunParseFailed,
+  RunSurvivorsRejected,
+} from '../RunOutcome.workflow.js'
+
+const CONFIG_CODE = 2
+
+const classCode = (exitClass: 'VerdictFail' | 'ConfigError' | 'RuntimeError' | 'InternalError'): number => {
+  if (exitClass === 'VerdictFail') {
+    return 1
+  }
+  if (exitClass === 'ConfigError') {
+    return CONFIG_CODE
+  }
+  if (exitClass === 'RuntimeError') {
+    return 3
+  }
+  return 4
+}
+
+describe('runOutcomeDecision', () => {
+  it.prop('∀c_Command_≡TaggedOutcome', [S.toArbitrary(RunOutcomeCommand)(fc)], ([command]) => {
+    const result = runOutcomeDecision(command)
+    if (command.signal !== undefined) {
+      const code = 128 + command.signal
+      return (
+        Result.isFailure(result) &&
+        S.is(RunInterrupted)(result.failure) &&
+        result.failure.code === code &&
+        runOutcomeCode(result) === code
+      )
+    }
+    if (command.succeeded) {
+      if (command.successExitClass !== undefined) {
+        const code = classCode(command.successExitClass)
+        return (
+          Result.isFailure(result) &&
+          S.is(RunFailed)(result.failure) &&
+          result.failure.code === code &&
+          result.failure.diagnostic === command.diagnostic &&
+          runOutcomeCode(result) === code
+        )
+      }
+      return (
+        Result.isSuccess(result) &&
+        S.is(RunOk)(result.success) &&
+        result.success.help === false &&
+        runOutcomeCode(result) === 0
+      )
+    }
+    if (command.interrupted) {
+      return (
+        Result.isFailure(result) &&
+        S.is(RunInterrupted)(result.failure) &&
+        result.failure.code === 1 &&
+        runOutcomeCode(result) === 1
+      )
+    }
+    if (command.helpErrorCount !== undefined) {
+      if (command.helpErrorCount > 0) {
+        return (
+          Result.isFailure(result) &&
+          S.is(RunParseFailed)(result.failure) &&
+          result.failure.unrecognized === command.unrecognized &&
+          runOutcomeCode(result) === CONFIG_CODE
+        )
+      }
+      return (
+        Result.isSuccess(result) &&
+        S.is(RunOk)(result.success) &&
+        result.success.help === true &&
+        runOutcomeCode(result) === 0
+      )
+    }
+    if (command.cliError) {
+      return (
+        Result.isFailure(result) &&
+        S.is(RunParseFailed)(result.failure) &&
+        result.failure.unrecognized === command.unrecognized &&
+        runOutcomeCode(result) === CONFIG_CODE
+      )
+    }
+    if (command.survivorsReason !== undefined) {
+      return (
+        Result.isFailure(result) &&
+        S.is(RunSurvivorsRejected)(result.failure) &&
+        result.failure.reason === command.survivorsReason &&
+        result.failure.diagnostic === command.survivorsDiagnostic &&
+        runOutcomeCode(result) === CONFIG_CODE
+      )
+    }
+    if (command.schemaError) {
+      return (
+        Result.isFailure(result) &&
+        S.is(RunConfigFailed)(result.failure) &&
+        result.failure.detail === command.configDetail &&
+        runOutcomeCode(result) === CONFIG_CODE
+      )
+    }
+    if (command.highestExitClass !== undefined) {
+      if (command.highestExitClass === 'ConfigError') {
+        return (
+          Result.isFailure(result) &&
+          S.is(RunConfigFailed)(result.failure) &&
+          result.failure.detail === command.configDetail &&
+          runOutcomeCode(result) === CONFIG_CODE
+        )
+      }
+      const code = classCode(command.highestExitClass)
+      return (
+        Result.isFailure(result) &&
+        S.is(RunFailed)(result.failure) &&
+        result.failure.code === code &&
+        result.failure.diagnostic === command.diagnostic &&
+        runOutcomeCode(result) === code
+      )
+    }
+    return (
+      Result.isFailure(result) &&
+      S.is(RunFailed)(result.failure) &&
+      result.failure.code === 1 &&
+      result.failure.diagnostic === command.diagnostic &&
+      runOutcomeCode(result) === 1
+    )
+  })
+})

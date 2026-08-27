@@ -23,7 +23,6 @@ import type * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
-import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
@@ -31,14 +30,13 @@ import * as Match from 'effect/Match'
 import * as Path from 'effect/Path'
 import * as Queue from 'effect/Queue'
 import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
 import * as Stdio from 'effect/Stdio'
 import * as Stream from 'effect/Stream'
 import * as CliError from 'effect/unstable/cli/CliError'
-import { buildErrorEnvelope, failureValue, readCapturedConsole } from './Envelope.js'
-import { FindingOrProgressCommand, findingOrProgressDecision } from './FindingOrProgress.workflow.js'
+import { readCapturedConsole, shapeEnvelope } from './Envelope.js'
 import { ModeConflictError, ResolveModeCommand, resolveModeWorkflow, TOOL_VARIABLES } from './Output.workflow.js'
 import type { FormatFlags, ModeInput, ToolVariable } from './Output.workflow.js'
+import type { RunOk, RunOutcomeError } from './RunOutcome.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 /**
  * The wire protocol constants of the machine-mode NDJSON run-event stream.
@@ -134,35 +132,47 @@ const toWireLine = (event: RunEvent): string => {
 
 export type FramedDrain = (framed: Stream.Stream<string>) => Effect.Effect<void, never, never>
 
-const gatherFindingOrProgress = (event: RunEvent, alreadyClosed: boolean): FindingOrProgressCommand =>
-  Match.value(event).pipe(
-    Match.tag('plan', (e) => FindingOrProgressCommand.make({ kind: 'plan', alreadyClosed, total: e.total })),
-    Match.tag('phase', (e) => FindingOrProgressCommand.make({ kind: 'phase', alreadyClosed, phase: e.phase })),
+function numberText(value: number | null | undefined, fallback: string): string {
+  if (typeof value === 'number') {
+    return String(value)
+  }
+  return fallback
+}
+
+function phaseLine(phase: unknown): string {
+  if (typeof phase === 'string') {
+    return `phase ${phase}`
+  }
+  return 'phase '
+}
+
+const stderrProgressLine = (event: RunEvent, alreadyClosed: boolean): string | undefined => {
+  if (alreadyClosed) {
+    return undefined
+  }
+  return Match.value(event).pipe(
+    Match.tag('plan', (e) => `plan ${numberText(e.total, '0')} mutants`),
+    Match.tag('phase', (e) => phaseLine(e.phase)),
     Match.tag(
       'tick',
-      (e) =>
-        FindingOrProgressCommand.make({
-          kind: 'tick',
-          alreadyClosed,
-          completed: e.completed,
-          total: e.total,
-          elapsedMs: e.elapsedMs,
-        }),
+      (e) => `${numberText(e.completed, '0')}/${numberText(e.total, '?')} elapsed ${numberText(e.elapsedMs, '0')}ms`,
     ),
     Match.tag(
       'verdict',
       (e) =>
-        FindingOrProgressCommand.make({
-          kind: 'verdict',
-          alreadyClosed,
-          score: e.score,
-          killed: e.counts.killed,
-          survived: e.counts.survived,
-        }),
+        `score ${numberText(e.score, 'n/a')} killed ${numberText(e.counts.killed, '0')} survived ${
+          numberText(e.counts.survived, '0')
+        }`,
     ),
-    Match.tag('error', (e) => FindingOrProgressCommand.make({ kind: 'error', alreadyClosed, error: e.error })),
-    Match.orElse(() => FindingOrProgressCommand.make({ kind: wireKind(event), alreadyClosed })),
+    Match.tag('error', (e) => {
+      if (typeof e.error === 'string') {
+        return `error ${e.error}`
+      }
+      return 'error '
+    }),
+    Match.orElse(() => undefined),
   )
+}
 
 const writeStderr = (stdio: Stdio.Stdio, line: string): Effect.Effect<void, never, never> =>
   Stream.run(Stream.succeed(`${line}\n`), stdio.stderr({ endOnDone: false })).pipe(Effect.ignore)
@@ -241,14 +251,14 @@ export const makeRunEventStream = (
     let terminalSeen = false
     const observed = Stream.merge(queueStream, tickStream, { haltStrategy: 'either' }).pipe(
       Stream.tap((event) => {
-        const decision = findingOrProgressDecision(gatherFindingOrProgress(event, state.terminalWritten))
+        const line = stderrProgressLine(event, state.terminalWritten)
         if (isTerminalEvent(event)) {
           state.terminalWritten = true
         }
-        if (Result.isSuccess(decision)) {
-          return writeStderr(stdio, decision.success.line)
+        if (line === undefined) {
+          return Effect.void
         }
-        return Effect.void
+        return writeStderr(stdio, line)
       }),
     )
     const framed = observed.pipe(
@@ -1028,54 +1038,50 @@ export function emitNullScoreVerdict(
 export function emitMachineModeOutput(
   stream: RunEventStream,
   mode: ResolvedMode,
-  exit: Exit.Exit<unknown, unknown>,
-  code: number,
-  argv: readonly string[],
+  outcome: Result.Result<RunOk, RunOutcomeError>,
   basePath: string,
   pathService: Path.Path,
 ): Effect.Effect<void, never, never> {
   return Effect.gen(function*() {
     const captured = readCapturedConsole()
-    const value = failureValue(exit)
-    const helpShaped = Exit.isFailure(exit) && S.is(CliError.ShowHelp)(value) && value.errors.length === 0
-    if (helpShaped) {
-      yield* Queue.offer(
-        stream.queue,
-        HelpRendered.make({
-          schemaVersion: STREAM_SCHEMA_VERSION,
-          code: 0,
-          help: captured,
-        }),
-      )
+    if (Result.isSuccess(outcome)) {
+      if (outcome.success.help) {
+        yield* Queue.offer(
+          stream.queue,
+          HelpRendered.make({
+            schemaVersion: STREAM_SCHEMA_VERSION,
+            code: 0,
+            help: captured,
+          }),
+        )
+        return
+      }
+      if (captured.length > 0) {
+        yield* Queue.offer(
+          stream.queue,
+          HelpRendered.make({
+            schemaVersion: STREAM_SCHEMA_VERSION,
+            code: 0,
+            help: captured,
+          }),
+        )
+        return
+      }
+      if (stream.isOpen()) {
+        const defaults = yield* defaultOptions
+        yield* emitNullScoreVerdict(stream, mode, defaults.thresholds, {}, basePath, pathService)
+      }
       return
     }
-    if (Exit.isFailure(exit)) {
-      const envelope = buildErrorEnvelope(exit, code, captured, argv)
-      yield* Queue.offer(
-        stream.queue,
-        RunFailed.make({
-          schemaVersion: envelope.schemaVersion,
-          code: envelope.code,
-          error: envelope.error,
-          remediation: envelope.remediation,
-        }),
-      )
-      return
-    }
-    if (captured.length > 0) {
-      yield* Queue.offer(
-        stream.queue,
-        HelpRendered.make({
-          schemaVersion: STREAM_SCHEMA_VERSION,
-          code: 0,
-          help: captured,
-        }),
-      )
-      return
-    }
-    if (stream.isOpen()) {
-      const defaults = yield* defaultOptions
-      yield* emitNullScoreVerdict(stream, mode, defaults.thresholds, {}, basePath, pathService)
-    }
+    const envelope = shapeEnvelope(outcome.failure, captured)
+    yield* Queue.offer(
+      stream.queue,
+      RunFailed.make({
+        schemaVersion: envelope.schemaVersion,
+        code: envelope.code,
+        error: envelope.error,
+        remediation: envelope.remediation,
+      }),
+    )
   })
 }
