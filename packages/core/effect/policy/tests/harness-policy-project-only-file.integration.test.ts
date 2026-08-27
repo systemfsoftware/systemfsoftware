@@ -13,16 +13,16 @@ import { Effect, Layer } from 'effect'
 import * as PathModule from 'effect/Path'
 import { expect } from 'vitest'
 
-import { ProjectConfig, ProjectConfigLive } from '@systemfsoftware/omp-platform'
+import { HarnessPolicy, HarnessPolicyLive } from '@systemfsoftware/effect-harness-policy'
 
 const Feature = makeFeature({ it, layer })
 
 const HOME = '/home/test'
 
-process.env['OMP_USER_CONFIG_HOME'] = HOME
+process.env['HARNESS_POLICY_HOME'] = HOME
 
 const buildLayer = (contents: Record<string, string>) =>
-  ProjectConfigLive.pipe(
+  HarnessPolicyLive.pipe(
     Layer.provide(MemoryFileSystem.layerWith(contents)),
     Layer.provide(PathModule.layer),
   )
@@ -39,7 +39,7 @@ Feature('ProjectConfig — project-only file with shape and parse tolerance').bo
       Given('a project at /test with a valid TOML file')('cwd', () => Effect.succeed('/test')),
       When('ProjectConfig.load is called')('config', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           return yield* loader.load(s.cwd)
         })),
       Then('both keys appear with their array values')((s) =>
@@ -57,7 +57,7 @@ Feature('ProjectConfig — project-only file with shape and parse tolerance').bo
       Given('a project at /empty with no TOML file')('cwd', () => Effect.succeed('/empty')),
       When('ProjectConfig.load is called')('config', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           return yield* loader.load(s.cwd)
         })),
       Then('the merged config is empty')((s) =>
@@ -79,7 +79,7 @@ Feature('ProjectConfig — project-only file with shape and parse tolerance').bo
       Given('a project at /test with a malformed TOML file')('cwd', () => Effect.succeed('/test')),
       When('ProjectConfig.load is called twice')('loads', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           const first = yield* loader.load(s.cwd)
           const second = yield* loader.load(s.cwd)
           return { first, second }
@@ -104,7 +104,7 @@ Feature('ProjectConfig — project-only file with shape and parse tolerance').bo
       Given('a project at /test with one plugin list')('cwd', () => Effect.succeed('/test')),
       When('ProjectConfig.load is called twice')('loads', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           const first = yield* loader.load(s.cwd)
           const second = yield* loader.load(s.cwd)
           return { first, second }
@@ -132,7 +132,7 @@ Feature('ProjectConfig — project-only file with shape and parse tolerance').bo
       ),
       When('ProjectConfig.load is called')('config', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           return yield* loader.load(s.cwd)
         })),
       Then('the merged config is empty')((s) =>

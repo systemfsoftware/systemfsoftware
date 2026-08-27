@@ -1,11 +1,11 @@
 # AGENTS.md — `omp/plugins/`
 
-> **Location:** `omp/plugins/` — packages the OMP host loads as extensions.
-> Root `AGENTS.md` is supreme; `omp/AGENTS.md` carries the cell taxonomy, commands, and
-> ACL/workflow gates. This file carries only what the **host's load model** makes true here,
-> which nothing in this repo's source can show you.
+> **Location:** `omp/plugins/` — packages the OMP host loads as extensions. This leaf carries only
+> what the **host's load model** makes true here, which nothing in this repo's source can show you.
 
 ## The load model (why every rule below exists)
+
+Plugin manifests, `pi.on` handlers, link/release flows → load `skill://omp-plugin-development` first.
 
 Verified against `@oh-my-pi/pi-coding-agent@17.0.5`:
 
@@ -17,8 +17,6 @@ Verified against `@oh-my-pi/pi-coding-agent@17.0.5`:
 | `session_shutdown` fires per session, including a subagent's                                       | `src/session/agent-session.ts:6867`, `src/task/executor.ts:1983`    | A subagent ending emits it **while the main session is still live**                                  |
 
 Factory body = per session. Module top level = per process. Confusing the two is the defect class this leaf exists to prevent.
-
-The cache-bust is what hides it. Each session really does get its own handler closures, so per-session wiring _looks_ correct — and the handler that disposes is never the handler that breaks. They are different module instances pointing at one runtime, so the stack trace leads to the session that threw and never to the module that owns the resource. Do not debug this from the trace; check what the cached module shares.
 
 ## Mandates
 
@@ -35,7 +33,7 @@ The cache-bust is what hides it. Each session really does get its own handler cl
   do: let a process-cached `ManagedRuntime` be disposed only by a process-level signal, or give it a refcount if a session must be able to release it
   dont: call `runtime.dispose()` from `session_shutdown`, `session_stop`, or any other per-session handler
   harm: "`dispose()` is terminal and the runtime is shared, so one subagent finishing poisons every live session — the main session's next keystroke throws `ManagedRuntime disposed`. This shipped."
-  check: "`grep -rn 'dispose' omp/plugins/*/src/*.handler.ts omp/plugins/*/src/index.ts` — review that no hit sits inside a per-session `pi.on(...)` callback"
+  check: "`grep -rn 'dispose' omp/plugins/*/src/*.ts` — review that no hit sits inside a per-session `pi.on(...)` callback"
 
 - id: PLG3
   title: Registration must complete before the factory's promise settles — order is load-bearing
@@ -44,23 +42,24 @@ The cache-bust is what hides it. Each session really does get its own handler cl
   harm: "unregistered handlers are silently never collected; a late-registered blocker loses because the runner short-circuits on the first `{ block: true }`"
   check: "run `node omp/scripts/smoke-plugin.mjs omp/plugins/<name>/dist/index.js` — every expected event name appears in the handler list"
 
-- id: PLG4
+  do: warm after `session_start` via `@systemfsoftware/omp-runtime` (`warmRuntimeAfterStart` / `lazyRunSafe`)
   title: NEVER warm a runtime inside the factory
-  do: warm after `session_start` via `warmRuntimeAfterStart` from `@systemfsoftware/omp-platform/runtime-lifecycle`
   dont: await runtime construction, or statically import a platform-node layer, in the factory body
   harm: the host awaits the factory, so layer evaluation lands on the startup path — measured ~30s
   check: "`grep -n 'await import(' src/index.ts` accounts for every runtime-module import, each inside a callback; a top-level `import` of the runtime module is the violation"
 ```
 
-## Verifying a lifecycle change
 
-Prose cannot catch PLG1/PLG2 — no lint in this repo sees the host's loader. Exercise the real
-dist through two sessions and assert the second survives the first's shutdown:
+## Failure Modes
+
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `error TS2769: No overload matches this call` on `pi.on(...)` | OMP installed a stricter `ExtensionHandler` overload than the source pinned | Type-narrow the handler locally; never change the pi.on signature |
+| Workflow tests pass but `pnpm check` reports `pure-core` mutations unkillable | A workflow swallowed a typed error into `null` (unfalsifiable code path) | Surface the error variant in the error channel; let the executor branch on it |
+## Verifying a lifecycle change
 
 ```bash
 pnpm turbo build --filter '@systemfsoftware/omp-claude-compat'
 # load dist/index.js twice under distinct ?mtime= tags, emit session_shutdown on
 # the second, then emit an event on the first — it must still answer.
 ```
-
-A change to signal handling, disposal, or warming is not done until that two-session run passes.

@@ -13,16 +13,16 @@ import { Effect, Layer } from 'effect'
 import * as PathModule from 'effect/Path'
 import { expect } from 'vitest'
 
-import { ProjectConfig, ProjectConfigLive } from '@systemfsoftware/omp-platform'
+import { HarnessPolicy, HarnessPolicyLive } from '@systemfsoftware/effect-harness-policy'
 
 const Feature = makeFeature({ it, layer })
 
 const HOME = '/home/test'
 
-process.env['OMP_USER_CONFIG_HOME'] = HOME
+process.env['HARNESS_POLICY_HOME'] = HOME
 
 const buildLayer = (contents: Record<string, string>) =>
-  ProjectConfigLive.pipe(
+  HarnessPolicyLive.pipe(
     Layer.provide(MemoryFileSystem.layerWith(contents)),
     Layer.provide(PathModule.layer),
   )
@@ -40,7 +40,7 @@ Feature('ProjectConfig — three-layer config with per-key override').body(({ sc
       Given('a project at /proj')('cwd', () => Effect.succeed('/proj')),
       When('ProjectConfig.load is called')('config', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           return yield* loader.load(s.cwd)
         })),
       Then('both layer keys appear in the merged config')((s) =>
@@ -66,7 +66,7 @@ Feature('ProjectConfig — three-layer config with per-key override').body(({ sc
       Given('user and project layers setting the same key')('cwd', () => Effect.succeed('/proj')),
       When('ProjectConfig.load is called')('config', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           return yield* loader.load(s.cwd)
         })),
       Then('the project value wins')((s) =>
@@ -89,7 +89,7 @@ Feature('ProjectConfig — three-layer config with per-key override').body(({ sc
       Given('project and local layers setting the same key')('cwd', () => Effect.succeed('/proj')),
       When('ProjectConfig.load is called')('config', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           return yield* loader.load(s.cwd)
         })),
       Then('the local value wins')((s) =>
@@ -112,7 +112,7 @@ Feature('ProjectConfig — three-layer config with per-key override').body(({ sc
       Given('user and local layers setting the same key')('cwd', () => Effect.succeed('/proj')),
       When('ProjectConfig.load is called')('config', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           return yield* loader.load(s.cwd)
         })),
       Then('the local value wins')((s) =>
@@ -130,7 +130,7 @@ Feature('ProjectConfig — three-layer config with per-key override').body(({ sc
       Given('no user, project, or local file')('cwd', () => Effect.succeed('/empty')),
       When('ProjectConfig.load is called')('config', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           return yield* loader.load(s.cwd)
         })),
       Then('the merged config is empty')((s) =>
@@ -152,7 +152,7 @@ Feature('ProjectConfig — three-layer config with per-key override').body(({ sc
       Given('only the user layer is present')('cwd', () => Effect.succeed('/proj')),
       When('ProjectConfig.load is called')('config', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           return yield* loader.load(s.cwd)
         })),
       Then('the user value is returned')((s) =>
@@ -175,7 +175,7 @@ Feature('ProjectConfig — three-layer config with per-key override').body(({ sc
       Given('user sets a three-element array and project overrides')('cwd', () => Effect.succeed('/proj')),
       When('ProjectConfig.load is called')('config', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           return yield* loader.load(s.cwd)
         })),
       Then('the project array replaces the user array whole')((s) =>
@@ -198,7 +198,7 @@ Feature('ProjectConfig — three-layer config with per-key override').body(({ sc
       Given('user layer is valid and project is malformed')('cwd', () => Effect.succeed('/proj')),
       When('ProjectConfig.load is called')('config', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           return yield* loader.load(s.cwd)
         })),
       Then('user keys still apply')((s) =>
@@ -221,7 +221,7 @@ Feature('ProjectConfig — three-layer config with per-key override').body(({ sc
       Given('user layer is malformed and project is valid')('cwd', () => Effect.succeed('/proj')),
       When('ProjectConfig.load is called')('config', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           return yield* loader.load(s.cwd)
         })),
       Then('project keys still apply')((s) =>
@@ -244,7 +244,7 @@ Feature('ProjectConfig — three-layer config with per-key override').body(({ sc
       Given('project is valid and local is malformed')('cwd', () => Effect.succeed('/proj')),
       When('ProjectConfig.load is called')('config', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           return yield* loader.load(s.cwd)
         })),
       Then('project still wins')((s) =>
@@ -268,7 +268,7 @@ Feature('ProjectConfig — three-layer config with per-key override').body(({ sc
       Given('a project with both layers')('cwd', () => Effect.succeed('/proj')),
       When('ProjectConfig.load is called twice')('result', (s) =>
         Effect.gen(function*() {
-          const loader = yield* ProjectConfig
+          const loader = yield* HarnessPolicy
           const first = yield* loader.load(s.cwd)
           const second = yield* loader.load(s.cwd)
           return { first, second }

@@ -88,7 +88,8 @@ packages:
   - packages/core/effect/schema/*
   - packages/core/effect/filesystem/*
   - packages/core/effect/rx/*
-  - packages/core/hex/*
+  - packages/core/claude/*
+  - packages/core/agent/*
   - packages/testing/specs/gherkin/*
   - packages/testing/mutation/stryker-js/*
   - packages/testing/mutation/plugins/*
