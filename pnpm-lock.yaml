@@ -354,9 +354,6 @@ importers:
       '@systemfsoftware/oxlint-plugin-cell-vocabulary':
         specifier: workspace:^
         version: link:../../../packages/lint/oxlint/plugins/cells/cell-vocabulary
-      '@systemfsoftware/stryker-plugins':
-        specifier: workspace:^
-        version: link:../../../packages/testing/mutation/plugins/stryker-plugins
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../packages/toolchain/tsconfig
@@ -531,6 +528,9 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../lint/oxlint/config
+      '@systemfsoftware/stryker-plugins':
+        specifier: workspace:^
+        version: link:../../../testing/mutation/plugins/stryker-plugins
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../toolchain/tsconfig
@@ -644,6 +644,9 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../lint/oxlint/config
+      '@systemfsoftware/stryker-plugins':
+        specifier: workspace:^
+        version: link:../../../testing/mutation/plugins/stryker-plugins
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../toolchain/tsconfig
