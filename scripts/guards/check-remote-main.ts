@@ -69,6 +69,10 @@ const decodePushLine = (raw: string): PushUpdate | DecodeFailure => {
   const localRef = fields[0] ?? ''
   const localSha = fields[1] ?? ''
   if (ZeroSha.allows(localSha)) return Delete.assert({ kind: 'Delete' })
+  if (localRef === 'HEAD' || localRef === '@') {
+    if (!CommitSha.allows(localSha)) return fail('not a sha')
+    return Update.assert({ kind: 'Update', name: RefName.assert(localRef), sha: CommitSha.assert(localSha) })
+  }
   if (!localRef.startsWith('refs/heads/')) return Ignore.assert({ kind: 'Ignore' })
   if (!RefName.allows(localRef)) return fail('not a ref')
   if (!CommitSha.allows(localSha)) return fail('not a sha')
