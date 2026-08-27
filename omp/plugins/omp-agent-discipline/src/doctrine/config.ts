@@ -1,25 +1,14 @@
-import { Context, Layer } from 'effect'
+import { makeStringArrayCache } from '../config-cache.js'
 
-export class DispatchDoctrineSkills extends Context.Service<
-  DispatchDoctrineSkills,
-  {
-    readonly get: (cwd: string) => readonly string[]
-    readonly set: (cwd: string, v: readonly string[]) => void
-  }
->()('omp-agent-discipline/DispatchDoctrineSkills') {}
+type DispatchDoctrineSkillsTag = { readonly _brand: 'DispatchDoctrineSkills' }
 
-const cache = new Map<string, readonly string[]>()
-
-export const DispatchDoctrineSkillsLive: Layer.Layer<DispatchDoctrineSkills> = Layer.succeed(
-  DispatchDoctrineSkills,
-  {
-    get: (cwd: string) => cache.get(cwd) ?? [],
-    set: (cwd: string, v: readonly string[]) => {
-      cache.set(cwd, v)
-    },
-  },
+const _cache = makeStringArrayCache<DispatchDoctrineSkillsTag>(
+  'omp-agent-discipline/DispatchDoctrineSkills',
+  [],
 )
 
-export const __resetDispatchDoctrineSkillsForTesting = (): void => {
-  cache.clear()
-}
+export const DispatchDoctrineSkills = _cache.Service
+export type DispatchDoctrineSkills = DispatchDoctrineSkillsTag
+export const DispatchDoctrineSkillsLive = _cache.Live
+
+export const __resetDispatchDoctrineSkillsForTesting = _cache.reset

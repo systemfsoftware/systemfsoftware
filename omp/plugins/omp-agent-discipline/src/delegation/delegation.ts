@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Effect, Match, pipe, Result } from 'effect'
+import { decodeRecord, readString } from '../record.js'
 import { NoDelegateSkills } from './config.js'
 import {
   CheckDelegationCommand,
@@ -125,19 +126,6 @@ export function runNoSkillDelegation(
         { cwd, toolName, subagentType, prompt },
       ),
   )
-}
-
-const isRecord = (input: unknown): input is Record<string, unknown> =>
-  typeof input === 'object' && input !== null && !Array.isArray(input)
-
-const decodeRecord = (input: unknown): Record<string, unknown> => (isRecord(input) ? input : {})
-
-function readString(input: Record<string, unknown>, ...keys: readonly string[]): string {
-  for (const key of keys) {
-    const value = input[key]
-    if (typeof value === 'string' && value.length > 0) return value
-  }
-  return ''
 }
 
 export const NoSkillDelegationExtension = (pi: ExtensionAPI, runSafe: RunSafe<DisciplineContext>): void => {

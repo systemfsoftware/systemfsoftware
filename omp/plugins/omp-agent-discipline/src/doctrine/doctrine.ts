@@ -1,6 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from '@oh-my-pi/pi-coding-agent'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Effect, Match, pipe, Result } from 'effect'
+import { decodeRecord, readString } from '../record.js'
 import { DispatchDoctrineSkills } from './config.js'
 import {
   CheckDispatchCommand,
@@ -93,8 +94,6 @@ export function runDispatchDoctrineCheck(
   )
 }
 
-export const dispatchDoctrinePure = { extractSpecShape, matchesDoctrineSkillPath } as const
-
 const FLAG_MAP_MAX = 50
 const PENDING_READS_MAX = 200
 
@@ -113,19 +112,6 @@ export const __resetDoctrineStateForTesting = (): void => {
 const readSessionId = (ctx: ExtensionContext): string => {
   const id = ctx.sessionManager.getSessionId()
   return typeof id === 'string' ? id : ''
-}
-
-const isRecord = (input: unknown): input is Record<string, unknown> =>
-  typeof input === 'object' && input !== null && !Array.isArray(input)
-
-const decodeRecord = (input: unknown): Record<string, unknown> => (isRecord(input) ? input : {})
-
-const readString = (input: Record<string, unknown>, ...keys: readonly string[]): string => {
-  for (const key of keys) {
-    const value = input[key]
-    if (typeof value === 'string' && value.length > 0) return value
-  }
-  return ''
 }
 
 const flipLoaded = (sessionId: string, activeDispatchSessionId: string): void => {

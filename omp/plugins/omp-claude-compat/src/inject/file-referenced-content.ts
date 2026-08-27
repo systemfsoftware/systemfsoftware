@@ -1,4 +1,4 @@
-import { Effect, Layer, Result } from 'effect'
+import { Effect, HashSet, Layer, Result } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import * as PathModule from 'effect/Path'
 import { NoInjectRefs } from './no-inject-refs.js'
@@ -34,12 +34,20 @@ export const FileReferencedContentLive = Layer.effect(
             path.resolve(projectDir, '.claude', 'CLAUDE.md'),
           ]
 
+          const claudeContents = yield* Effect.all(
+            claudeMdPaths.map((filePath) =>
+              Effect.result(fs.readFileString(filePath, 'utf-8')).pipe(
+                Effect.map((result) => ({ filePath, result })),
+              )
+            ),
+            { concurrency: 'unbounded' },
+          )
+
           const allRefs: Ref[] = []
-          for (const filePath of claudeMdPaths) {
-            const content = yield* Effect.result(fs.readFileString(filePath, 'utf-8'))
-            if (Result.isFailure(content)) continue
+          for (const { filePath, result } of claudeContents) {
+            if (Result.isFailure(result)) continue
             const baseDir = path.dirname(filePath)
-            for (const rawLine of content.success.split('\n')) {
+            for (const rawLine of result.success.split('\n')) {
               const ref = parseRefToken(rawLine, path)
               if (ref === null) continue
 
@@ -59,24 +67,33 @@ export const FileReferencedContentLive = Layer.effect(
             }
           }
 
-          const seenPaths: string[] = []
+          let seenPaths = HashSet.empty<string>()
           const uniqueRefs: Ref[] = []
           for (const ref of allRefs) {
-            if (!seenPaths.includes(ref.resolvedPath)) {
-              seenPaths.push(ref.resolvedPath)
+            if (!HashSet.has(seenPaths, ref.resolvedPath)) {
+              seenPaths = HashSet.add(seenPaths, ref.resolvedPath)
               uniqueRefs.push(ref)
             }
           }
 
           const skipList = skipListService.get(projectDir)
 
+          const entries = yield* Effect.all(
+            uniqueRefs.map((ref) =>
+              Effect.gen(function*() {
+                const relativePath = ref.resolvedPath.slice(projectDir.length + 1)
+                if (skipList.includes(relativePath)) return null
+                const refContent = yield* Effect.result(fs.readFileString(ref.resolvedPath, 'utf-8'))
+                if (Result.isFailure(refContent)) return null
+                return [ref.resolvedPath, refContent.success] as const
+              })
+            ),
+            { concurrency: 'unbounded' },
+          )
+
           const refContents: Record<string, string> = {}
-          for (const ref of uniqueRefs) {
-            const relativePath = ref.resolvedPath.slice(projectDir.length + 1)
-            if (skipList.includes(relativePath)) continue
-            const refContent = yield* Effect.result(fs.readFileString(ref.resolvedPath, 'utf-8'))
-            if (Result.isFailure(refContent)) continue
-            refContents[ref.resolvedPath] = refContent.success
+          for (const entry of entries) {
+            if (entry !== null) refContents[entry[0]] = entry[1]
           }
 
           return buildInjectedContent(projectDir, uniqueRefs, refContents, skipList)

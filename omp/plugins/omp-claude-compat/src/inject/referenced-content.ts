@@ -6,8 +6,6 @@ export class ReferencedContent
   )
 {}
 
-export const DEFAULT_NO_INJECT_REFS: readonly string[] = ['AGENTS.md']
-
 export interface Ref {
   readonly sourcePath: string
   readonly resolvedPath: string

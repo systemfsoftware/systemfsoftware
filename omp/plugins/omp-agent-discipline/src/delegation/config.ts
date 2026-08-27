@@ -1,22 +1,11 @@
-import { Context, Layer } from 'effect'
+import { makeStringArrayCache } from '../config-cache.js'
 
-export class NoDelegateSkills extends Context.Service<
-  NoDelegateSkills,
-  {
-    readonly get: (cwd: string) => readonly string[]
-    readonly set: (cwd: string, v: readonly string[]) => void
-  }
->()('omp-agent-discipline/NoDelegateSkills') {}
+type NoDelegateSkillsTag = { readonly _brand: 'NoDelegateSkills' }
 
-const cache = new Map<string, readonly string[]>()
+const _cache = makeStringArrayCache<NoDelegateSkillsTag>('omp-agent-discipline/NoDelegateSkills', [])
 
-export const NoDelegateSkillsLive: Layer.Layer<NoDelegateSkills> = Layer.succeed(NoDelegateSkills, {
-  get: (cwd: string) => cache.get(cwd) ?? [],
-  set: (cwd: string, v: readonly string[]) => {
-    cache.set(cwd, v)
-  },
-})
+export const NoDelegateSkills = _cache.Service
+export type NoDelegateSkills = NoDelegateSkillsTag
+export const NoDelegateSkillsLive = _cache.Live
 
-export const __resetNoDelegateSkillsForTesting = (): void => {
-  cache.clear()
-}
+export const __resetNoDelegateSkillsForTesting = _cache.reset
