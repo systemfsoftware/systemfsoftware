@@ -162,6 +162,12 @@
     - peer-ranges-accept-compatible-rc
     - workflow-command-takes-a-schema-class
     - workflow-tagged-bound-removed
+"@systemfsoftware/effect-cell-types@5.0.0":
+  dir: packages/core/effect/cell/types
+  intents:
+    - cell-phases-require-nothing
+    - cell-write-receives-its-raw
+    - wire-shrinks-to-its-invariant
 "@systemfsoftware/effect-daemon-spec@1.0.0":
   dir: packages/effect-daemon-spec
   intents:
@@ -281,6 +287,10 @@
   dir: packages/core/effect/schema/refutation-vite
   intents:
     - refutation-vite-package-debut
+"@systemfsoftware/effect-schema-refutation-vite@0.2.0":
+  dir: packages/core/effect/schema/refutation-vite
+  intents:
+    - refutation-scan-owns-its-deadline
 "@systemfsoftware/effect-schema-vite@1.5.2":
   dir: packages/effect-schema-vite
   intents:
@@ -341,6 +351,10 @@
   intents:
     - omp-test-api-subpath
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/omp-agent-discipline@3.0.0":
+  dir: omp/plugins/omp-agent-discipline
+  intents:
+    - omp-agent-discipline-bundles-capabilities
 "@systemfsoftware/omp-claude-compat@2.0.0":
   dir: omp/plugins/omp-claude-compat
   intents:
@@ -357,6 +371,11 @@
   intents:
     - omp-test-api-subpath
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/omp-claude-compat@3.0.0":
+  dir: omp/plugins/omp-claude-compat
+  intents:
+    - omp-claude-compat-bundles-capabilities
+    - plugin-hooks-json-run
 "@systemfsoftware/omp-typescript-discipline@1.0.0":
   dir: omp/plugins/omp-typescript-discipline
   intents:
@@ -664,6 +683,29 @@
     - stryker-drop-unimported-deps
     - tricky-moments-punch
     - verdict-reaches-the-exit-code
+"@systemfsoftware/stryker-js-cli@4.0.0":
+  dir: packages/testing/mutation/stryker-js/cli
+  intents:
+    - base-preset-is-published-again
+    - cli-request-is-a-type
+    - concept-modules-platform-node
+    - config-errors-name-the-setting
+    - help-prints-something
+    - human-mode-reads-as-prose
+    - json-report-is-written
+    - machine-stream-is-a-file
+    - verdict-carries-its-findings
+"@systemfsoftware/stryker-js-html-reporter@0.1.0":
+  dir: packages/testing/mutation/stryker-js/html-reporter
+  intents:
+    - concept-modules-platform-node
+    - debut-releases-gain-oidc
+    - grumpy-rules-behave
+    - json-report-is-written
+    - only-the-api-is-a-door
+    - package-landing-pages
+    - reporters-are-layers
+    - tricky-moments-punch
 "@systemfsoftware/stryker-js-instrumenter@0.2.0":
   dir: packages/testing/mutation/stryker-js/instrumenter
   intents:
@@ -678,6 +720,12 @@
     - stryker-drop-unimported-deps
     - stryker-instrumenter-bug-url
     - tricky-moments-punch
+"@systemfsoftware/stryker-js-instrumenter@2.0.0":
+  dir: packages/testing/mutation/stryker-js/instrumenter
+  intents:
+    - concept-modules-platform-node
+    - make-bodies-stay-in-the-population
+    - prototype-named-methods-instrument
 "@systemfsoftware/stryker-js-mutation-report@1.2.6":
   dir: packages/stryker-js/mutation-report
   intents:
@@ -755,6 +803,44 @@
     - verdict-reaches-the-exit-code
     - worker-calls-no-longer-lose-their-replies
     - workers-are-group-killed
+"@systemfsoftware/stryker-js-platform-node@0.1.0":
+  dir: packages/testing/mutation/stryker-js/platform-node
+  intents:
+    - a-dropped-worker-frame-fails-the-call
+    - an-ignorer-you-did-not-ask-for
+    - base-preset-is-published-again
+    - command-runner-actually-runs
+    - concept-modules-platform-node
+    - config-errors-name-the-setting
+    - crawl-skips-installed-dependencies
+    - curly-plants-fold
+    - debut-releases-gain-oidc
+    - evaluator-answers-with-a-verdict
+    - failures-name-themselves
+    - human-mode-prints-for-humans
+    - human-mode-reads-as-prose
+    - id-generator-is-a-service
+    - incremental-mode-reuses-results
+    - inplace-restore-stops-guessing
+    - json-report-is-written
+    - log-level-is-per-run
+    - machine-stream-is-a-file
+    - modern-ends-know
+    - mutants-actually-run
+    - only-the-api-is-a-door
+    - oversized-frames-fail-the-run
+    - package-landing-pages
+    - run-outcome-carries-the-verdict
+    - sandbox-files-carry-nocheck
+    - shared-helpers-move-to-plugin-api
+    - stage-failures-name-themselves
+    - stryker-drop-unimported-deps
+    - tricky-moments-punch
+    - verdict-carries-its-findings
+    - verdict-reaches-the-exit-code
+    - worker-calls-are-declared-not-guessed
+    - worker-calls-no-longer-lose-their-replies
+    - workers-are-group-killed
 "@systemfsoftware/stryker-js-plugin-api@1.0.0":
   dir: packages/stryker-js/plugin-api
   intents:
@@ -815,6 +901,12 @@
     - stryker-drop-unimported-deps
     - tricky-moments-punch
     - typescript-checker-returns-effects
+"@systemfsoftware/stryker-js-typescript-checker@3.0.0":
+  dir: packages/testing/mutation/stryker-js/typescript-checker
+  intents:
+    - a-dependency-declaration-is-not-a-mutant
+    - concept-modules-platform-node
+    - oversized-frames-fail-the-run
 "@systemfsoftware/stryker-js-util@0.2.0":
   dir: packages/testing/mutation/stryker-js/util
   intents:
@@ -847,6 +939,27 @@
     - stryker-drop-unimported-deps
     - tricky-moments-punch
     - vitest-runner-setup-file-path
+"@systemfsoftware/stryker-js-vitest-runner@2.0.0":
+  dir: packages/testing/mutation/stryker-js/vitest-runner
+  intents:
+    - concept-modules-platform-node
+    - json-report-is-written
+    - machine-stream-is-a-file
+"@systemfsoftware/stryker-js@0.1.0":
+  dir: packages/testing/mutation/stryker-js/stryker-js
+  intents:
+    - concept-modules-platform-node
+    - debut-releases-gain-oidc
+    - evaluator-answers-with-a-verdict
+    - option-defaults-are-published
+    - oversized-frames-fail-the-run
+    - package-landing-pages
+    - shared-helpers-move-to-plugin-api
+    - stryker-drop-unimported-deps
+    - stryker-plugin-contract-effect
+    - tricky-moments-punch
+    - verdict-carries-its-findings
+    - worker-calls-are-declared-not-guessed
 "@systemfsoftware/stryker-plugins@0.12.0":
   dir: packages/stryker-plugins
   intents:
@@ -875,6 +988,11 @@
   dir: packages/testing/mutation/plugins/stryker-plugins
   intents:
     - plugin-discovery-names-this-scope
+"@systemfsoftware/stryker-plugins@1.0.0":
+  dir: packages/testing/mutation/plugins/stryker-plugins
+  intents:
+    - concept-modules-platform-node
+    - make-bodies-stay-in-the-population
 "@systemfsoftware/stryker-test-contribution@0.1.0":
   dir: packages/testing/mutation/plugins/stryker-test-contribution
   intents:
@@ -883,6 +1001,10 @@
   dir: packages/testing/mutation/plugins/stryker-test-contribution
   intents:
     - evaluator-answers-with-a-verdict
+"@systemfsoftware/stryker-test-contribution@1.0.0":
+  dir: packages/testing/mutation/plugins/stryker-test-contribution
+  intents:
+    - concept-modules-platform-node
 "@systemfsoftware/tsconfig@1.3.2":
   dir: packages/tsconfig
   intents:

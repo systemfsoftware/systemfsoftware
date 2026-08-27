@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/stryker-js-vitest-runner",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
@@ -45,8 +45,8 @@
     "coverageAnalysis": "perTest"
   },
   "dependencies": {
-    "@systemfsoftware/stryker-js": "workspace:^",
-    "@systemfsoftware/effect-cell-types": "workspace:^"
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/stryker-js": "workspace:^"
   },
   "peerDependencies": {
     "effect": "catalog:peers",
