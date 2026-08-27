@@ -16,7 +16,7 @@ export namespace Policy {
 
 // @public (undocumented)
 export namespace Wire {
-    export { AnyMinted, Fields, Mark, Minted, MintedField, array, boolean, integer, literal, mint, nullOr, nullishOr, number, optional, record, refine, string, suspend, tuple, undefinedOr, union, wire };
+    export { AnyMinted, Fields, Mark, Minted, MintedField, mint, wire };
 }
 
 // @public (undocumented)

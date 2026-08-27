@@ -56,10 +56,10 @@ const IgnorerSchema = Wire.mint(S.Unknown)
 const AstSchema = Wire.mint(S.Unknown)
 
 const InstrumenterOptionsSchema = Wire.wire({
-  plugins: Wire.nullOr(Wire.array(PluginSchema)),
-  excludedMutations: Wire.array(Wire.string),
-  ignorers: Wire.array(IgnorerSchema),
-  noHeader: Wire.optional(Wire.boolean),
+  plugins: Wire.mint(S.NullOr(Wire.mint(S.Array(PluginSchema)))),
+  excludedMutations: Wire.mint(S.Array(Wire.mint(S.String))),
+  ignorers: Wire.mint(S.Array(IgnorerSchema)),
+  noHeader: Wire.mint(S.optional(Wire.mint(S.Boolean))),
 })
 
 export type InstrumenterOptions = typeof InstrumenterOptionsSchema.Type

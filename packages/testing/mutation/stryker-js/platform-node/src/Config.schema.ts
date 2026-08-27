@@ -56,7 +56,7 @@ export class ConfigError extends S.TaggedError<ConfigError>()('ConfigError', {
 }
 
 export class ReadConfigCommand extends S.TaggedClass<ReadConfigCommand>()('ReadConfigCommand', {
-  cliOptions: Wire.record(Wire.string, Wire.mint(S.Unknown)), // plugin sections are foreign by design
+  cliOptions: Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown))), // plugin sections are foreign by design
   basePath: S.String,
 }) {}
 
@@ -107,5 +107,5 @@ export const forkOptionsSchema = S.StructWithRest(
     survivorsPriorReport,
     extends: extendsPropertySchema,
   }),
-  [Wire.record(Wire.string, Wire.mint(S.Unknown))], // plugin sections are foreign by design
+  [Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown)))], // plugin sections are foreign by design
 )
