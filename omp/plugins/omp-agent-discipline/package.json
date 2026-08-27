@@ -30,6 +30,7 @@
   },
   "optionalDependencies": {
     "@std/toml": "catalog:",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/omp-platform": "workspace:^"
   },
   "peerDependencies": {
@@ -43,6 +44,7 @@
     "@oh-my-pi/pi-coding-agent": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",

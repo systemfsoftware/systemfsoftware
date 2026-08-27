@@ -11,22 +11,13 @@ import {
   UNRECOGNIZED_KEY_REASON,
   WRAPPED_SHADOW_REASON,
 } from './HookCatalog.js'
-import {
-  type DisableSource,
-  type HookCoverage,
-  type HookCoverageRow,
-  type HookEntry,
-  type HookSettings,
-  SettingsJSON,
-  type SettingsSource,
-} from './HookSettings.schema.js'
+import { type DisableSource, type HookCoverage, type HookCoverageRow, SettingsJSON } from './HookSettings.schema.js'
 
 export const parseSettings = S.decodeUnknownExit(SettingsJSON)
 
 // ── Settings analysis ──
 
 const ALL_HOOK_EVENTS: readonly BridgedEvent[] = BRIDGED_EVENTS
-type HookEvent = BridgedEvent
 
 const asRecord = S.decodeUnknownOption(S.Record(S.String, S.Unknown))
 
@@ -184,49 +175,7 @@ export function unsupportedHookTypes(json: unknown): readonly string[] {
   })
 }
 
-/**
- * Resolve one effective hook set. Claude Code protects managed hooks: a
- * `disableAllHooks` outside managed settings must not switch them off, and only
- * a managed one turns everything off. Disabling is settled here, so no caller
- * downstream has to re-check it.
- */
-export function mergeSettings(sources: readonly SettingsSource[]): HookSettings {
-  /**
-   * Annotation and `satisfies` guard opposite directions: a bridged event with
-   * no `HookGroups` field fails the annotation, a `HookGroups` field no longer
-   * bridged fails the `satisfies`. Either way the mismatch is a type error
-   * rather than an event whose hooks silently stop being merged.
-   */
-  const hooks: Record<HookEvent, HookEntry[]> = {
-    PreToolUse: [],
-    PostToolUse: [],
-    PostToolUseFailure: [],
-    UserPromptSubmit: [],
-    SessionStart: [],
-    SessionEnd: [],
-    Stop: [],
-    PreCompact: [],
-    PostCompact: [],
-  } satisfies Record<keyof HookSettings['hooks'], HookEntry[]>
-  if (sources.some((s) => s.managed && s.settings.disableAllHooks === true)) return { hooks }
-  const disabledDownstream = sources.some((s) => !s.managed && s.settings.disableAllHooks === true)
-
-  for (const source of sources) {
-    if (disabledDownstream && !source.managed) continue
-    for (const event of ALL_HOOK_EVENTS) {
-      const pluginRoot = source.pluginRoot
-      const entries = pluginRoot === undefined
-        ? source.settings.hooks[event]
-        : source.settings.hooks[event].map((entry) => ({
-          ...entry,
-          hooks: entry.hooks.map((hook) => hook.type === 'command' ? { ...hook, pluginRoot } : hook),
-        }))
-      hooks[event] = hooks[event].concat(entries)
-    }
-  }
-
-  return { hooks }
-}
+export { mergeSettings } from './MergeSettings.workflow.js'
 
 /** Whether this event's matcher cannot be read, so a matcher-scoped hook is skipped. */
 export function matcherUnreadable(event: string): boolean {
