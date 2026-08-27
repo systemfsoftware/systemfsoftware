@@ -69,7 +69,10 @@ export const onToolCall = (event: HookToolCall, ctx: HookSession) =>
     return yield* runPreToolUseHooks(settings, event, ctx)
   })
 
-export const onToolResult = (event: ToolResultEvent, ctx: HookSession) =>
+export const onToolResult: (
+  event: ToolResultEvent,
+  ctx: HookSession,
+) => Effect.Effect<ToolResultEventResult | undefined, unknown, HookDispatchContext> = (event, ctx) =>
   Effect.gen(function*() {
     const settings = yield* loadSettings(ctx)
     if (!settings) return undefined
@@ -78,9 +81,8 @@ export const onToolResult = (event: ToolResultEvent, ctx: HookSession) =>
     return {
       content: [...event.content, { type: 'text' as const, text: result.warning }],
       isError: event.isError,
-    }
+    } satisfies ToolResultEventResult
   })
-
 export const onPrompt = (event: HookPrompt, ctx: HookSession) =>
   Effect.gen(function*() {
     const settings = yield* loadSettings(ctx)
