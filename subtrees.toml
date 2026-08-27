@@ -34,11 +34,6 @@ url = "https://github.com/oxc-project/oxc"
 branch = "main"
 
 [[repos]]
-name = "cruster"
-url = "https://github.com/Effectful-Tech/cruster"
-tag_prefix = "v"
-
-[[repos]]
 name = "clanka"
 url = "https://github.com/Effectful-Tech/clanka"
 tag_prefix = "v"

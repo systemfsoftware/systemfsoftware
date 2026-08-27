@@ -1,5 +1,0 @@
-error: use standalone #[workflow] for durable orchestration; entities only support #[rpc] and #[rpc(persisted)]
-  --> tests/ui/persisted_method_requires_serde.rs:14:5
-   |
-14 |     async fn bad(&self, value: NotSerializable) -> Result<(), cruster::error::ClusterError> {
-   |     ^^^^^
