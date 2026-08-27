@@ -1,7 +1,7 @@
 {
   "extends": "../../../../../../stryker.config.base.json",
   "mutate": [
-    "src/rules/*.ts",
+    "src/**/*.workflow.ts",
     "!src/rules/**/*.test.ts",
     "!src/rules/*.config.ts"
   ],
