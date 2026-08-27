@@ -16,7 +16,6 @@ const _default: {
         'ban-data-taggederror': Rule;
         'no-manual-tag-member': Rule;
         'no-manual-tag-property': Rule;
-        'no-schema-law-duplicate': Rule;
         'schema-declaration-location': Rule;
         'schema-file-exports-schemas-only': Rule;
         'make-file-location': Rule;
