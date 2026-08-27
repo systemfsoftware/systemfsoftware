@@ -1,143 +1,103 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import * as Effect from 'effect/Effect'
-import { execFile } from 'node:child_process'
-import * as Fs from 'node:fs'
-import * as Path from 'node:path'
-import * as Url from 'node:url'
-import { promisify } from 'node:util'
+import { Effect } from 'effect'
+import * as S from 'effect/Schema'
 import { expect } from 'vitest'
+
+import { type StreamLine, StreamLineSchema } from './__fixtures__/cli-contract.schema.js'
+import { WORKDIR } from './__fixtures__/stryker-cli-env.js'
+import { layerStrykerCli, StrykerCli } from './__fixtures__/StrykerCliAdapter.js'
 
 const checkExpect = expect
 
-const execFileAsync = promisify(execFile)
+interface Observed {
+  readonly exitCode: number
+  readonly stdout: string
+  readonly stderr: string
+  readonly lines: readonly StreamLine[]
+}
 
-const cliPath = Path.resolve(
-  Path.dirname(Url.fileURLToPath(import.meta.url)),
-  '../dist/main.mjs',
-)
+const decodeStreamLine = S.decodeUnknownSync(S.fromJsonString(StreamLineSchema))
+
+const parseStream = (stdout: string): readonly StreamLine[] =>
+  stdout
+    .split('\n')
+    .filter((line) => line.trim().startsWith('{'))
+    .map((line) => decodeStreamLine(line))
 
 const invoke = (
   args: readonly string[],
-  env?: NodeJS.ProcessEnv,
-): Effect.Effect<{ stdout: string; stderr: string; exitCode: number }> =>
-  Effect.promise(() =>
-    ((): Promise<{ stdout: string; stderr: string; exitCode: number }> => {
-      let envOption: NodeJS.ProcessEnv | undefined
-      if (env !== undefined) {
-        envOption = { ...process.env, ...env }
-      } else {
-        envOption = process.env
-      }
-      return execFileAsync('node', [cliPath, ...args], { env: envOption })
-        .then((result) => ({ stdout: result.stdout, stderr: result.stderr, exitCode: 0 }))
-        .catch((caught: unknown) => {
-          let stdout = ''
-          let stderr = ''
-          let code: number | null = null
-          if (caught !== null && typeof caught === 'object' && 'stdout' in caught) {
-            const candidate = caught.stdout
-            if (typeof candidate === 'string') {
-              stdout = candidate
-            }
-          }
-          if (caught !== null && typeof caught === 'object' && 'stderr' in caught) {
-            const candidate = caught.stderr
-            if (typeof candidate === 'string') {
-              stderr = candidate
-            }
-          }
-          if (caught !== null && typeof caught === 'object' && 'code' in caught) {
-            const candidate = caught.code
-            if (typeof candidate === 'number') {
-              code = candidate
-            }
-          }
-          let exitCode = 1
-          if (code !== null) {
-            exitCode = code
-          }
-          return { stdout, stderr, exitCode }
-        })
-    })()
-  )
-
-const parseLines = (stdout: string): Array<Record<string, unknown>> => {
-  const lines: Array<Record<string, unknown>> = []
-  const rawLines = stdout.split('\n')
-  for (const line of rawLines) {
-    if (line.trim().startsWith('{')) {
-      const parsed: unknown = JSON.parse(line)
-      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        // @ts-expect-error: parsed is object narrowed to Record via runtime check
-        lines.push(parsed)
-      }
+  env?: Record<string, string>,
+): Effect.Effect<Observed, never, StrykerCli> =>
+  Effect.gen(function*() {
+    const cli = yield* StrykerCli
+    const cwd = WORKDIR
+    const result = yield* cli.run(args, {
+      cwd,
+      ...((() => {
+        if (env === undefined) {
+          return {}
+        }
+        return { env }
+      })()),
+    })
+    const streamCat = yield* cli.sh('cat reports/mutation-stream.jsonl 2>/dev/null || true', { cwd })
+    let source = result.stdout
+    if (streamCat.stdout.trim().length > 0) {
+      source = streamCat.stdout
     }
-  }
-  return lines
-}
-
-const parseStreamFile = (): Array<Record<string, unknown>> => {
-  const file = Path.join(process.cwd(), 'reports', 'mutation-stream.jsonl')
-  let body = ''
-  try {
-    body = Fs.readFileSync(file, 'utf8')
-  } catch {
-    return []
-  }
-  return parseLines(body)
-}
+    return { ...result, lines: parseStream(source) }
+  })
 
 const Feature = makeFeature({ it, layer })
 
-Feature('CLI help regression').body(({ scenario }) => {
-  scenario(
-    'Should_emit_help_When_bare_or_flag_in_machine_mode',
-    Gherkin.Do.pipe(
-      When('the harness asks for help')('helpObserved', () => invoke(['--help'])),
-      When('the harness invokes the tool with nothing at all')('bareObserved', () => invoke([])),
-      Then('both invocations succeed with the usage text and no verdict')((s) => {
-        checkExpect(s.helpObserved.exitCode).toBe(0)
-        const helpLines = parseStreamFile()
-        const helpTerminal = helpLines.at(-1)
-        checkExpect(helpTerminal).toMatchObject({ kind: 'help', code: 0 })
-        checkExpect(String(helpTerminal?.['help'])).toContain('USAGE')
-        checkExpect(helpLines.map((line) => line['kind'])).not.toContain('verdict')
+Feature('CLI help regression')
+  .withLayer(layerStrykerCli)
+  .liveClock()
+  .body(({ scenario }) => {
+    scenario(
+      'Should_emit_help_When_bare_or_flag_in_machine_mode',
+      Gherkin.Do.pipe(
+        When('the harness asks for help')('helpObserved', () => invoke(['--help'])),
+        When('the harness invokes the tool with nothing at all')('bareObserved', () => invoke([])),
+        Then('both invocations succeed with the usage text and no verdict')((s) => {
+          checkExpect(s.helpObserved.exitCode).toBe(0)
+          const helpTerminal = s.helpObserved.lines.at(-1)
+          checkExpect(helpTerminal).toMatchObject({ kind: 'help', code: 0 })
+          checkExpect(String(helpTerminal?.['help'])).toContain('USAGE')
+          checkExpect(s.helpObserved.lines.map((line) => line['kind'])).not.toContain('verdict')
 
-        checkExpect(s.bareObserved.exitCode).toBe(0)
-        const bareLines = parseStreamFile()
-        const bareTerminal = bareLines.at(-1)
-        checkExpect(bareTerminal).toMatchObject({ kind: 'help', code: 0 })
-        checkExpect(String(bareTerminal?.['help'])).toContain('USAGE')
-        checkExpect(bareLines.map((line) => line['kind'])).not.toContain('verdict')
-      }),
-    ),
-  )
+          checkExpect(s.bareObserved.exitCode).toBe(0)
+          const bareTerminal = s.bareObserved.lines.at(-1)
+          checkExpect(bareTerminal).toMatchObject({ kind: 'help', code: 0 })
+          checkExpect(String(bareTerminal?.['help'])).toContain('USAGE')
+          checkExpect(s.bareObserved.lines.map((line) => line['kind'])).not.toContain('verdict')
+        }),
+      ),
+    )
 
-  scenario(
-    'Should_print_prose_When_human_mode',
-    Gherkin.Do.pipe(
-      Given('a human-facing invocation')('observed', () => invoke(['--help'], { STRYKER_MODE: 'human' })),
-      Then('the output reads as prose and no machine line is written')((s) => {
-        checkExpect(s.observed.exitCode).toBe(0)
-        checkExpect(s.observed.stdout).toContain('USAGE')
-        const machineLines = parseLines(s.observed.stdout)
-        checkExpect(machineLines).toEqual([])
-      }),
-    ),
-  )
+    scenario(
+      'Should_print_prose_When_human_mode',
+      Gherkin.Do.pipe(
+        Given('a human-facing invocation')('observed', () => invoke(['--help'], { STRYKER_MODE: 'human' })),
+        Then('the output reads as prose and no machine line is written')((s) => {
+          checkExpect(s.observed.exitCode).toBe(0)
+          checkExpect(s.observed.stdout).toContain('USAGE')
+          checkExpect(s.observed.lines).toEqual([])
+        }),
+      ),
+    )
 
-  scenario(
-    'Should_keep_llms_When_invoked',
-    Gherkin.Do.pipe(
-      Given('a harness asking for the manifest')('observed', () => invoke(['--llms'])),
-      Then('the description follows the stream header')((s) => {
-        checkExpect(s.observed.exitCode).toBe(0)
-        const lines = parseStreamFile()
-        const first = lines[0]
-        const last = lines.at(-1)
-        checkExpect(first).toMatchObject({ kind: 'stream' })
-        checkExpect(last).toMatchObject({ kind: 'manifest', code: 0 })
-      }),
-    ),
-  )
-})
+    scenario(
+      'Should_keep_llms_When_invoked',
+      Gherkin.Do.pipe(
+        Given('a harness asking for the manifest')('observed', () => invoke(['--llms'])),
+        Then('the description follows the stream header')((s) => {
+          checkExpect(s.observed.exitCode).toBe(0)
+          const first = s.observed.lines[0]
+          const last = s.observed.lines.at(-1)
+          checkExpect(first).toMatchObject({ kind: 'stream' })
+          checkExpect(last).toMatchObject({ kind: 'manifest', code: 0 })
+        }),
+      ),
+    )
+  })
