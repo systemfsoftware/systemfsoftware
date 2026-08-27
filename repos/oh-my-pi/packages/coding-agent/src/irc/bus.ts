@@ -276,7 +276,7 @@ export class IrcBus {
 		if (liveness) {
 			const { registry, senderId } = liveness;
 			const hasRunningSender = (from?: string): boolean =>
-				registry.listVisibleTo(senderId).some(ref => ref.status === "running" && (!from || ref.id === from));
+				registry.listVisibleTo(senderId).some(ref => registry.isRunning(ref) && (!from || ref.id === from));
 			const check = filter.from ? () => hasRunningSender(filter.from) : () => hasRunningSender();
 			unsubscribeLiveness = registry.onChange(() => {
 				if (!check()) {
@@ -298,6 +298,18 @@ export class IrcBus {
 		if (opts?.peek) return [...mailbox];
 		this.#mailboxes.delete(agentId);
 		return mailbox;
+	}
+
+	/**
+	 * Consume the OLDEST pending message for `agentId` (optionally restricted
+	 * to `from`), leaving the rest of the mailbox intact. This is the exact
+	 * atomic step `wait` performs on entry, exposed for callers that must not
+	 * block: peeking with `inbox` and consuming afterwards would open a window
+	 * for a concurrent consumer of the same mailbox to take the message in
+	 * between, and a plain `inbox` drain would swallow the whole backlog.
+	 */
+	take(agentId: string, from?: string): IrcMessage | undefined {
+		return this.#takeFromMailbox(agentId, from);
 	}
 
 	unreadCount(agentId: string): number {

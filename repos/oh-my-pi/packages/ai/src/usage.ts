@@ -194,11 +194,27 @@ export interface ClientUsageReport {
 	installId: string;
 	/** Human-readable machine name for display surfaces. */
 	hostname?: string;
+	/** Application label for the process that burned the tokens (e.g. `omp`, `robomp`). */
+	app?: string;
 	entries: ObservedUsageEntry[];
+}
+
+/**
+ * Identity a client presents for usage attribution. Defaults to this
+ * process's install id / hostname / app label; the auth-gateway overrides it
+ * with the identity its caller sent so token burn lands on the originating
+ * machine and application instead of the gateway host.
+ */
+export interface ClientUsageIdentity {
+	installId: string;
+	hostname?: string;
+	app?: string;
 }
 
 /** Per-provider aggregate of one client's recorded usage. */
 export interface ClientProviderUsage {
+	/** Application label the usage was reported under; absent for legacy rows. */
+	app?: string;
 	provider: string;
 	requests: number;
 	inputTokens: number;
@@ -365,6 +381,16 @@ export interface CredentialRankingStrategy {
 	 * account-wide quotas can omit this and use all limits.
 	 */
 	scopeLimits?(report: UsageReport, context?: CredentialRankingContext): UsageLimit[];
+	/**
+	 * Restrict limits for the opt-in, non-destructive usage-reserve health
+	 * check ({@link AuthStorage.getModelUsageHealth}). Distinct from
+	 * {@link scopeLimits}, which gates credential-wide hard blocks: a provider
+	 * whose model/tier counters are trusted only at confirmed exhaustion for
+	 * hard-blocking can still expose them here so the reserve margin protects
+	 * the mapped quota before it hits the cap. Falls back to {@link scopeLimits}
+	 * when omitted.
+	 */
+	scopeLimitsForReserve?(report: UsageReport, context?: CredentialRankingContext): UsageLimit[];
 	/**
 	 * Return a provider-local backoff scope for the requested model. Providers
 	 * with backend-specific quotas use this so one exhausted model family does

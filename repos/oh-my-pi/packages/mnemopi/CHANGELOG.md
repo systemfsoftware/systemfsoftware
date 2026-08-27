@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [18.0.0] - 2026-08-22
+
+### Fixed
+
+- Fixed false-positive location extraction in episodic gists by properly enforcing capitalization constraints for proper nouns.
+- Improved episodic gist participant extraction with Unicode support to properly capture names in non-Latin scripts (e.g., Cyrillic, Greek).
+
+## [17.3.8] - 2026-08-19
+
+### Added
+
+- Added optional task metadata to the runtime LLM completion interface so hosts can tell an extraction call from a consolidation call and choose the matching prompt
+
+## [17.3.5] - 2026-08-16
+
+### Fixed
+
+- Fixed an issue where transient provider failures (such as Anthropic overload or rate limit errors) were incorrectly treated as empty responses; these failures are now retried automatically before falling back.
+
 ## [17.3.4] - 2026-08-14
 
 ### Fixed
