@@ -26,8 +26,3 @@ export const ClaudeEdits = S.Array(
 
 /** The tool-input payload as the hook boundary sees it: an opaque record. */
 export const ToolInputRecord = S.Record(S.String, S.Unknown)
-if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
-  // branch is statically dead in the build and never enters the published module graph.
-  const { FastCheck: fc } = await import('effect/testing')
-}

@@ -1,4 +1,3 @@
-/// <reference types="vitest/import-meta" />
 import { Wire } from '@systemfsoftware/effect-cell-types'
 import * as S from 'effect/Schema'
 
@@ -165,6 +164,3 @@ export class RunWriteError extends S.TaggedError<RunWriteError>()('RunWriteError
   message: S.String,
 }) {}
 
-if (import.meta.vitest !== void 0) {
-  const { FastCheck: fc } = await import('effect/testing')
-}

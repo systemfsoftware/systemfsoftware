@@ -1,4 +1,3 @@
-/// <reference types="vitest/import-meta" />
 /**
  * Checker — pure check decision.
  *
@@ -172,6 +171,3 @@ const buildResult = (
 
 export const checkMutants = Workflow.make(CheckMutantsInput, (input: CheckMutantsInput) => buildResult(input))
 
-if (import.meta.vitest !== void 0) {
-  const { FastCheck: fc } = await import('effect/testing')
-}

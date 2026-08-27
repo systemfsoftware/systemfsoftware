@@ -18,7 +18,6 @@ This package owns rules for the Effect Schema cell. It exists because those rule
   dont: key any rule here on where a file lives, beyond the suffix that identifies the artifact being linted
   harm: two packages ruling on placement is the live contradiction TP3 was written to prevent
   check: review — no rule here reports on a directory, only on file content; the reviewer confirms every context.report targets an AST node in the linted file, never the file's location
-
 ```
 
 - Types: `pnpm --filter @systemfsoftware/oxlint-plugin-effect-schema typecheck`

@@ -1,4 +1,3 @@
-/// <reference types="vitest/import-meta" />
 import * as S from 'effect/Schema'
 
 export const PositionSchema = S.Struct({
@@ -31,20 +30,3 @@ export type Position = S.Schema.Type<typeof PositionSchema>
 
 export type Location = S.Schema.Type<typeof LocationSchema>
 
-if (import.meta.vitest !== void 0) {
-  const { FastCheck: fc } = await import('effect/testing')
-
-  const validLocation = {
-    start: { line: 1, column: 0 },
-    end: { line: 1, column: 1 },
-  }
-
-  const mutantWith = (location: typeof validLocation): unknown => ({
-    _tag: 'Mutant',
-    id: '1',
-    fileName: 'file.ts',
-    mutatorName: 'ArithmeticOperator',
-    replacement: 'x',
-    location,
-  })
-}

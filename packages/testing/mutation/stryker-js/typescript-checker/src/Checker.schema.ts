@@ -1,4 +1,3 @@
-/// <reference types="vitest/import-meta" />
 /**
  * Checker — declarations for the TypeScript checker.
  *
@@ -42,6 +41,3 @@ export class CompilerFailed extends S.TaggedError<CompilerFailed>()('CompilerFai
   }
 }
 
-if (import.meta.vitest !== void 0) {
-  const { FastCheck: fc } = await import('effect/testing')
-}

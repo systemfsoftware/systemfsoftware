@@ -310,23 +310,4 @@ if (import.meta.vitest !== void 0) {
     },
   )
 
-  // The command's sole obligation: `code` is a finite exit status, so a non-finite one
-  // is the refusal class. A spawned process reports no exit code at all when it is
-  // signalled, so this is a wire shape the edge can really hand over.
-  //
-  // The witness is a valid instance encoded and then broken on one field, because the
-  // discrimination law requires a value the schema rejects for exactly this reason -
-  // a hand-written record that also got the nested `parsed` wire shape wrong would be
-  // rejected for that instead, and would discharge nothing.
-  const validWire = S.encodeUnknownSync(SubmitVerdictCommand)(
-    new SubmitVerdictCommand({
-      cmd: new InterpretHookCommand({
-        result: { code: 0, stdout: '', stderr: '' },
-        event: 'UserPromptSubmit',
-        parsed: Option.none(),
-      }),
-      code: 0,
-      stdout: '',
-    }),
-  )
 }

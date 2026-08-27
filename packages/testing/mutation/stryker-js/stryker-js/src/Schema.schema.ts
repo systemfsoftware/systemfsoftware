@@ -1,4 +1,3 @@
-/// <reference types="vitest/import-meta" />
 import { Wire } from '@systemfsoftware/effect-cell-types'
 import { Effect } from 'effect'
 import * as S from 'effect/Schema'
@@ -234,6 +233,3 @@ type DeepOptional<T> = {
     : T[P]
 }
 
-if (import.meta.vitest !== void 0) {
-  const { FastCheck: fc } = await import('effect/testing')
-}
