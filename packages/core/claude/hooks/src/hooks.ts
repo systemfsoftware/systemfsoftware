@@ -992,7 +992,10 @@ const dispatchAdmit = <Response>(
 export const onToolCall = (event: HookToolCall, ctx: HookSession) =>
   dispatchAdmit((settings) => runPreToolUseHooks(settings, event, ctx), undefined, ctx)
 
-export const onToolResult = (event: ToolResultEvent, ctx: HookSession) =>
+export const onToolResult: (
+  event: ToolResultEvent,
+  ctx: HookSession,
+) => Effect.Effect<ToolResultEventResult | undefined, unknown, HookDispatchContext> = (event, ctx) =>
   dispatchAdmit(
     (settings) =>
       Effect.gen(function*() {
@@ -1001,7 +1004,7 @@ export const onToolResult = (event: ToolResultEvent, ctx: HookSession) =>
         return {
           content: [...event.content, { type: 'text' as const, text: result.warning }],
           isError: event.isError,
-        }
+        } satisfies ToolResultEventResult
       }),
     undefined,
     ctx,
