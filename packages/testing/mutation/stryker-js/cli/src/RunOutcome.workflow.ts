@@ -22,7 +22,7 @@ export class RunOutcomeCommand extends S.TaggedClass<RunOutcomeCommand>()('RunOu
 
 const CONFIG_CODE = 2
 
-const classCode = (exitClass: typeof ExitClass.Type): number =>
+const classCode = (exitClass: ExitClass): number =>
   Match.value(exitClass).pipe(
     Match.when('VerdictFail', () => 1),
     Match.when('ConfigError', () => CONFIG_CODE),
@@ -36,7 +36,7 @@ export class RunOk extends S.TaggedClass<RunOk>()('RunOk', {
 }) {}
 
 export class RunInterrupted extends S.TaggedError<RunInterrupted>()('RunInterrupted', {
-  code: S.Number,
+  code: S.Finite,
 }) {}
 
 export class RunParseFailed extends S.TaggedError<RunParseFailed>()('RunParseFailed', {
@@ -53,7 +53,7 @@ export class RunConfigFailed extends S.TaggedError<RunConfigFailed>()('RunConfig
 }) {}
 
 export class RunFailed extends S.TaggedError<RunFailed>()('RunFailed', {
-  code: S.Number,
+  code: S.Finite,
   diagnostic: S.optional(S.String),
 }) {}
 
