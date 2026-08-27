@@ -1,5 +1,5 @@
 {
-  "extends": "../../../../stryker.config.base.json",
+  "extends": "../../../stryker.config.base.json",
   "mutate": [
     "src/**/*.workflow.ts",
     "!src/**/*.test.ts",
@@ -12,13 +12,6 @@
     "low": 100,
     "break": 100
   },
-  "ignorePatterns": [
-    "reports",
-    "coverage",
-    "dist"
-  ],
-  "ignorers": [
-    "effect-schema-declarations",
-    "workflow-make-boundary"
-  ]
+  "ignorePatterns": ["reports", "coverage", "dist"],
+  "ignorers": ["effect-schema-declarations", "workflow-make-boundary"]
 }

@@ -20,7 +20,6 @@ export default defineConfig({
       /^@systemfsoftware\/effect-cell-types(\/|$)/,
       /^@systemfsoftware\/effect-harness-policy(\/|$)/,
       /^@systemfsoftware\/omp-runtime(\/|$)/,
-      /^@systemfsoftware\/claude-/,
       /^@std\/toml(\/|$)/,
     ],
   },

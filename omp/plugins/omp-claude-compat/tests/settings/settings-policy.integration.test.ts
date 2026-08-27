@@ -1,4 +1,4 @@
-import { ClaudeSettings, ClaudeSettingsLiveUnbaked, ClaudeSettingsSources } from '@systemfsoftware/claude-settings'
+import { ClaudeSettings, ClaudeSettingsLiveUnbaked, ClaudeSettingsSources } from '../../src/settings/mod.js'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { Effect, Layer } from 'effect'

@@ -7,8 +7,8 @@ import type {
   ToolResultEvent,
   ToolResultEventResult,
 } from '@oh-my-pi/pi-coding-agent'
-import { ClaudeSettings, ifEvaluatingEvent, matcherUnreadable } from '@systemfsoftware/claude-settings'
-import type { CommandHook, HookEntry, HookSettings } from '@systemfsoftware/claude-settings'
+import { ClaudeSettings, ifEvaluatingEvent, matcherUnreadable } from '../settings/mod.js'
+import type { CommandHook, HookEntry, HookSettings } from '../settings/mod.js'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import {
   Array as Arr,

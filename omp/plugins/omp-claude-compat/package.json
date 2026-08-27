@@ -12,7 +12,9 @@
     },
     "./package.json": "./package.json"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "rimraf dist && tsdown",
     "clean": "rimraf dist",
@@ -28,9 +30,6 @@
   },
   "optionalDependencies": {
     "@std/toml": "catalog:",
-    "@systemfsoftware/claude-hooks": "workspace:^",
-    "@systemfsoftware/claude-inject": "workspace:^",
-    "@systemfsoftware/claude-settings": "workspace:^",
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-harness-policy": "workspace:^",
     "@systemfsoftware/omp-runtime": "workspace:^"
@@ -41,9 +40,6 @@
     "@effect/vitest": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
-    "@systemfsoftware/claude-hooks": "workspace:^",
-    "@systemfsoftware/claude-inject": "workspace:^",
-    "@systemfsoftware/claude-settings": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
@@ -66,7 +62,9 @@
     "vitest": "catalog:"
   },
   "omp": {
-    "extensions": ["./dist/index.js"]
+    "extensions": [
+      "./dist/index.js"
+    ]
   },
   "publishConfig": {
     "exports": {
