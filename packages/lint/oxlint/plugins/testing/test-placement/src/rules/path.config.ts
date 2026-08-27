@@ -20,13 +20,6 @@ export const INTEGRATION_SUFFIX = '.integration.test.ts' as const
 export const SCHEMA_LAWS_BASENAME = 'schema-laws.test.ts' as const
 
 /**
- * The one test file the taxonomy sanctions by name rather than by suffix: the
- * entry point the schema-refutations Vite plugin rewrites, whose generated
- * obligation-coverage assertion covers every exported schema.
- */
-export const SCHEMA_REFUTATIONS_BASENAME = 'schema-refutations.test.ts' as const
-
-/**
  * Forbidden outright. A schema's laws are generated, so a hand-written
  * `*.schema.test.ts` only ever restates coverage that already exists.
  */

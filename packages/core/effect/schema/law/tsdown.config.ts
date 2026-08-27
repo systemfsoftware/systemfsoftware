@@ -2,13 +2,12 @@ import { defineConfig } from 'tsdown'
 
 type ExportEntry = string | Record<string, string | undefined>
 
-const typesMap: Record<string, string> = {
+const apiExtractorRollups: Record<string, string> = {
   '.': './dist/effect-schema-law.d.ts',
-  './refutation': './dist/refutation.d.ts',
 }
 
-const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
-  for (const [subpath, types] of Object.entries(typesMap)) {
+const injectApiExtractorTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
+  for (const [subpath, types] of Object.entries(apiExtractorRollups)) {
     const entry = exports[subpath]
     if (typeof entry === 'string') {
       exports[subpath] = { types, default: entry }
@@ -22,12 +21,12 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
 }
 
 export default defineConfig({
-  entry: { index: './src/mod.ts', refutation: './src/refutation/mod.ts' },
+  entry: { index: './src/mod.ts' },
   format: 'esm',
   dts: true,
   exports: {
     devExports: '@systemfsoftware/source',
-    customExports: injectTypes,
+    customExports: injectApiExtractorTypes,
   },
   deps: { onlyBundle: false },
   tsconfig: './tsconfig.build.json',

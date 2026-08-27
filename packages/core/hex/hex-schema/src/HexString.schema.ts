@@ -32,7 +32,6 @@ if (import.meta.vitest !== void 0) {
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
   const { FastCheck: fc } = await import('effect/testing')
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
   const { expectTypeOf } = await import('vitest')
 
   /**
@@ -62,15 +61,6 @@ if (import.meta.vitest !== void 0) {
    * hex digit survives `toStrictHex` — this schema is case-insensitive where
    * `StrictHex` is not.
    */
-  const hexPart = fc.stringMatching(/^[0-9a-fA-F]*$/)
-  const outsider = fc.stringMatching(/^[^0-9a-fA-Fx]$/)
-
-  refutes(HexString, {
-    HexStringAlphabet: fc
-      .tuple(hexPart, outsider, hexPart)
-      .map(([head, out, tail]) => `${head}${out}${tail}`),
-  })
-
   /**
    * The brand exists only in the type, so only a type can state it. `tsc`
    * rejects a false `expectTypeOf`, which is the channel the mutation gate

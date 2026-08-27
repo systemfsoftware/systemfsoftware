@@ -12,7 +12,6 @@
 "@systemfsoftware/effect-schema-discovery": patch
 "@systemfsoftware/effect-schema-extensions": patch
 "@systemfsoftware/effect-schema-law": patch
-"@systemfsoftware/effect-schema-refutation-vite": patch
 "@systemfsoftware/effect-schema-vite": patch
 "@systemfsoftware/hex-schema": patch
 "@systemfsoftware/npm-package": patch

@@ -20,12 +20,8 @@ if (import.meta.vitest !== void 0) {
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
   const { FastCheck: fc } = await import('effect/testing')
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
   const { Exit } = await import('effect')
   const { expectTypeOf } = await import('vitest')
-
-  const bytePairs = fc.stringMatching(/^(?:[0-9a-f]{2})*$/)
-  const nibble = fc.stringMatching(/^[0-9a-f]$/)
 
   /**
    * The wire form is a *kind* contract, not a weakened one: no loosening of
@@ -34,14 +30,6 @@ if (import.meta.vitest !== void 0) {
    * stated directly.
    */
   it.prop('∀b_Uint8ArrayFromPrefixedHex_⊥', [fc.uint8Array()], ([bytes]) => !Exit.isSuccess(decode(bytes)))
-
-  refutes(Uint8ArrayFromPrefixedHex, {
-    ByteAlignment: fc
-      .tuple(bytePairs, nibble)
-      .map(([pairs, odd]) => `0x${pairs}${odd}`),
-    Uint8PrefixedHexPrefix: fc.stringMatching(/^(?:[0-9a-f]{2})+$/),
-    Uint8PrefixedHexCase: fc.stringMatching(/^(?:[A-F]{2})+$/).map((upper) => `0x${upper}`),
-  })
 
   expectTypeOf<S.Codec.Encoded<typeof Uint8ArrayFromPrefixedHex>>().toEqualTypeOf<`0x${string}`>()
 }

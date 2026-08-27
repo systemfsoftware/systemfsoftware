@@ -18,11 +18,7 @@ if (import.meta.vitest !== void 0) {
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
   const { FastCheck: fc } = await import('effect/testing')
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
   const { Exit } = await import('effect')
-
-  const hexPart = fc.stringMatching(/^[0-9a-f]*$/)
-  const outsider = fc.stringMatching(/^[^0-9a-f]$/)
 
   /**
    * `StrictHex` is the alphabet the rest of the package defers to — `PrefixedHex`
@@ -42,18 +38,4 @@ if (import.meta.vitest !== void 0) {
       return Exit.isSuccess(result) && result.value === hex
     },
   )
-
-  /**
-   * An unanchored pattern admits every string — drop `^` and a match remains at
-   * the tail, drop `$` and one remains at the head — so a character spliced
-   * anywhere in the body is refused only while both anchors stand.
-   *
-   * The outsider is the complement of the alphabet rather than a hand-picked set,
-   * so uppercase is in the domain by construction: this schema is lowercase-only,
-   * and that is the distinction `HexString` leans on when it lowercases before
-   * delegating here.
-   */
-  refutes(StrictHex, {
-    StrictHexAlphabet: fc.tuple(hexPart, outsider, hexPart).map(([head, out, tail]) => `${head}${out}${tail}`),
-  })
 }

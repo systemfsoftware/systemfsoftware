@@ -30,7 +30,6 @@ if (import.meta.vitest !== void 0) {
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
   const { FastCheck: fc } = await import('effect/testing')
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
   const { expectTypeOf } = await import('vitest')
 
   /**
@@ -50,20 +49,6 @@ if (import.meta.vitest !== void 0) {
     [fc.stringMatching(/^[0-9a-f]*[a-f][0-9a-f]*$/)],
     ([hex]) => hexToColon(hex).replaceAll(':', '') === hex.toUpperCase(),
   )
-
-  /**
-   * Rejection is unreachable from the generated laws: they draw from
-   * `ColonHex`'s own arbitrary, so every input already matches the pattern
-   * under test — "values built to match the pattern match the pattern".
-   * Widening `{1,2}` therefore survives.
-   *
-   * The generator is derived from the contract ("groups of one or two hex
-   * digits"), never from the pattern literal, so a three-nibble group must be
-   * refused however the regex is rewritten.
-   */
-  refutes(ColonHex, {
-    ColonHexTripleGroup: fc.stringMatching(/^[0-9A-Fa-f]{3}$/),
-  })
 
   /**
    * The law above strips the colons before comparing, so it cannot see where

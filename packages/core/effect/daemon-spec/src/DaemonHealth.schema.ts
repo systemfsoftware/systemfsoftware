@@ -38,16 +38,10 @@ export type ChildRef = {
 
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
   const { Exit } = await import('effect')
   const { FastCheck: fc } = await import('effect/testing')
 
   const negative = fc.integer({ min: -100, max: -1 })
-  const nonInteger = fc.integer({ min: 0, max: 98 }).map((n) => n + 0.5)
-
-  refutes(DynamicLimitExceeded, {
-    LimitNonInteger: nonInteger.map((limit) => ({ _tag: 'DynamicLimitExceeded', limit })),
-  })
 
   it.prop(
     '∀l_NegativeLimit_⊥',

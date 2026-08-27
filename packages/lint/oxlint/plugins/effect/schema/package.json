@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/lint/oxlint/plugins/effect/schema#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Oxlint rules for the Effect Schema cell: keep authored schema tests to the refusals the generated laws cannot reach.",
+  "description": "Oxlint rules for Effect Schema declarations: import path, tagged errors, and schema file shape.",
   "keywords": [
     "oxlint",
     "oxlint-plugin",

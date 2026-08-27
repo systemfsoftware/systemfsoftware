@@ -95,12 +95,3 @@ export interface HookPrompt {
   readonly source: InputEvent['source']
   readonly images?: InputEvent['images']
 }
-if (import.meta.vitest !== void 0) {
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
-  const { FastCheck: fc } = await import('effect/testing')
-  refutes(HookOutputFromStdout, {
-    HookOutputFromStdoutNotJson: fc.constant('not json'),
-    HookOutputFromStdoutEmpty: fc.constant(''),
-    HookOutputFromStdoutBadJson: fc.constant('{ invalid }'),
-  })
-}

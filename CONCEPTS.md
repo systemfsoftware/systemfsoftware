@@ -256,32 +256,6 @@ One of the pair of properties — round-trip identity and encode stability — r
 
 _Aliases:_ `ruleOfSchemas` pair, the round-trip laws
 
-### Rejection property
-
-A hand-authored property asserting that a schema **refuses** an input — the half of a schema's contract no generated law can reach. Its generator must be derived from the domain contract (what the type promises about its values) and never read back off the refinement literal, because a generator built from the literal reproduces the same circularity that makes generated laws blind.
-
-By design, refusal is the only thing such a test is meant to assert. The mechanical gate is narrower than the rule: it rejects the generated laws' own machinery — round-trip identity, equivalence, encoded-schema stability — rather than proving every remaining assertion is a refusal. The gap between the rule and its gate is held by review.
-
-### Schema weakening
-
-A schema built from another by dropping exactly one arm of its `SchemaAST` — a refinement's predicate, or one side of a transformation — leaving the rest intact. It is the schema-level analogue of an extreme mutation operator: it deletes a unit of the declaration rather than perturbing an expression inside one, which is what makes it able to express contracts a conventional mutator's operator catalogue cannot construct. The walk recurses through composites, rebuilding the enclosing tree around each weakened child, so an arm nested inside a struct field or a union member is reachable. Built in-process from the schema value, so it needs no source rewriting and no instrumenter.
-
-### Witness
-
-An input the weakened schema accepts and the original rejects. It is what promotes an arm to a refutation obligation, and it is existential — so sampling can establish it, which the containment claim it replaced could never do. Recording it is what lets a failure name the specific illegal value now getting through.
-
-### Refutation obligation
-
-A weakening for which a witness exists, and which therefore must be discriminated by some rejection property. The witness is what makes the set honest: a weakening that only loses accepted inputs belongs to the generated laws instead, so demanding a refusal for it would accuse a test of missing a fault another instrument already owns. An arm may be _mixed_ — simultaneously more permissive in one direction and less in another — and a witness still qualifies it, because the permissiveness it adds is real however much it also breaks.
-
-### Obligation node
-
-The `SchemaAST` node a weakening removes, and the identity an obligation is keyed by. Arms reached through different paths, or from different schemas, that remove the same node are one obligation — Effect shares nodes across composed schemas, so three schemas built on one refinement owe one refusal between them, not three. Keying by node rather than by path is also what makes discharge scope-free: a generator discharges a node wherever that node appears, regardless of which file it was declared in.
-
-### Refutation adequacy
-
-The criterion that every obligation node reachable from a schema is discharged by at least one declared refusal generator. It asks for coverage, never uniqueness — whether each node is defended, not whether a given test is its only defender. The distinction is load-bearing: a uniqueness criterion is test-suite minimization, whose fault-detection cost is measured, and it is the error the `soleKills > 0` gate made.
-
 ## Agent context injection
 
 ### Context file

@@ -1,4 +1,3 @@
-/// <reference types="vitest/import-meta" />
 /**
  * Checker — declarations for the TypeScript checker.
  *
@@ -40,28 +39,4 @@ export class CompilerFailed extends S.TaggedError<CompilerFailed>()('CompilerFai
         return `'${this.subject ?? 'a file'}' is part of your TypeScript project but could not be found on disk`
     }
   }
-}
-
-if (import.meta.vitest !== void 0) {
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
-  const { FastCheck: fc } = await import('effect/testing')
-
-  refutes(CheckMutantsCommand, {
-    CheckMutantsCommandNonFinite: fc.constant({
-      _tag: 'CheckMutantsCommand',
-      mutants: [
-        {
-          _tag: 'Mutant',
-          id: '1',
-          fileName: 'file.ts',
-          mutatorName: 'm',
-          replacement: 'r',
-          location: {
-            start: { line: Number.POSITIVE_INFINITY, column: 0 },
-            end: { line: 1, column: 0 },
-          },
-        },
-      ],
-    }),
-  })
 }

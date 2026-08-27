@@ -96,7 +96,6 @@ if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
   // branch is statically dead in the build and never enters the published module graph.
   const { it } = await import('@effect/vitest')
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
   const { expect } = await import('vitest')
   const { FastCheck: fc } = await import('effect/testing')
 
@@ -147,14 +146,9 @@ if (import.meta.vitest !== void 0) {
 
   /**
    * `indices: S.NonEmptyArray(S.Int)` puts both refinements on one array node under v4, so
-   * only integrality is attributable to a per-node weakening — the refutation harness
    * cannot explain an empty array as the failure of a single check, and a generator that
-   * emits one discriminates nothing. Integrality rides the refutation law; emptiness is
    * asserted directly against the decoder just below, which is the only honest split.
    */
-  refutes(RestartDecisionRestart, {
-    IndicesNonInteger: fc.constant({ _tag: 'Restart', indices: [1.5] }),
-  })
 
   it('Should_RefuseTheDecision_When_TheRestartCarriesNoIndices', () => {
     const decoded = S.decodeUnknownExit(RestartDecisionRestart)({ _tag: 'Restart', indices: [] })

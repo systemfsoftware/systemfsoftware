@@ -28,12 +28,8 @@ if (import.meta.vitest !== void 0) {
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
   const { FastCheck: fc } = await import('effect/testing')
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
   const { Exit } = await import('effect')
   const { expectTypeOf } = await import('vitest')
-
-  const hexBody = fc.stringMatching(/^[0-9a-f]*$/)
-  const outsider = fc.stringMatching(/^[^0-9a-f]$/)
 
   /**
    * The `0x` prefix is a *joint* contract with the body in v4's AST — no
@@ -43,13 +39,6 @@ if (import.meta.vitest !== void 0) {
    * the body obligation.
    */
   it.prop('∀b_PrefixedHexPrefix_⊥', [fc.stringMatching(/^[0-9a-f]+$/)], ([bare]) => !Exit.isSuccess(decode(bare)))
-
-  refutes(PrefixedHex, {
-    PrefixedHexCase: fc.stringMatching(/^[A-F]+$/).map((upper) => `0x${upper}`),
-    PrefixedHexAlphabet: fc
-      .tuple(hexBody, outsider, hexBody)
-      .map(([head, out, tail]) => `0x${head}${out}${tail}`),
-  })
 
   /**
    * The reason the package exists: a consumer whose API demands `0x${string}`

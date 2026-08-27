@@ -66,7 +66,6 @@ if (import.meta.vitest !== void 0) {
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
   const { it } = await import('@systemfsoftware/effect-gherkin-spec')
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
   const { Exit, Option, Result } = await import('effect')
   const { FastCheck: fc } = await import('effect/testing')
   const { RestartDecisionRestart } = await import('./RestartDecision.workflow.js')
@@ -150,9 +149,6 @@ if (import.meta.vitest !== void 0) {
   // The non-empty and integer constraints share one array node under v4, so an
   // empty array is a refusal no single-check weakening explains; the non-integer
   // class does discriminate, and the empty class is asserted as a refusal below.
-  refutes(RestartDecisionRestart, {
-    IndicesNonInteger: fc.constant({ _tag: 'Restart', indices: [1.5] }),
-  })
 
   it.prop(
     '∀r_IndicesEmpty_⊥',
@@ -167,32 +163,6 @@ if (import.meta.vitest !== void 0) {
     [widthPastCap],
     ([input]) => Exit.isFailure(Schema.decodeUnknownExit(DecideInput)(input)),
   )
-
-  refutes(DecideInput, {
-    DecideIndexPastWidth: fc.record({
-      strategy: fc.constantFrom('one_for_one'),
-      totalChildren: fc.integer({ min: 1, max: 100 }),
-      failedIndex: fc.integer({ min: 0, max: 99 }),
-      exitSuccess: fc.boolean(),
-      intensityExceeded: fc.boolean(),
-    }).map((d) => ({ ...d, failedIndex: d.totalChildren + (d.failedIndex % 5) })),
-    DecideWidthNonInteger: fc.record({
-      strategy: fc.constantFrom('one_for_one'),
-      totalChildren: fc.integer({ min: 1, max: 98 }).map((n) => n + 0.5),
-      failedIndex: fc.constant(0),
-      exitSuccess: fc.boolean(),
-      intensityExceeded: fc.boolean(),
-    }),
-    DecideIndexNonInteger: fc.integer({ min: 2, max: 100 }).chain((totalChildren) =>
-      fc.record({
-        strategy: fc.constantFrom('one_for_one'),
-        totalChildren: fc.constant(totalChildren),
-        failedIndex: fc.integer({ min: 0, max: totalChildren - 1 }).map((n) => n + 0.5),
-        exitSuccess: fc.boolean(),
-        intensityExceeded: fc.boolean(),
-      })
-    ),
-  })
 
   // A negative failedIndex shares the integer/bound node, so it cannot discriminate
   // under v8's per-node weakening; it is still a refusal contract.

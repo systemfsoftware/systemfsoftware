@@ -16,7 +16,7 @@ const ruleTester = new RuleTester({
   },
 })
 
-const FILENAME = 'src/__tests__/refutation.kernel.property.test.ts'
+const FILENAME = 'src/__tests__/example.property.test.ts'
 
 const EXPECTED_DATA = { name: VIOLATION_NAME, expected: EXPECTED, actual: ACTUAL, fix: FIX }
 
@@ -24,17 +24,14 @@ const oneReport = [{ messageId: 'nestedQuantification', data: EXPECTED_DATA }]
 
 const DISCHARGED_BY = `
 import { it } from '@effect/vitest'
-import { FastCheck as fc } from 'effect'
-import { dischargedBy, obligationsOf } from '../refutation.kernel.js'
-import { FixturePlainRecipe, makeRestrictiveSchema } from '../schema-recipe.observer.js'
+import { costly } from '../kernel.js'
 
-it.prop('r_EachWitness', [FixturePlainRecipe], ([recipe]) => {
-  const schema = makeRestrictiveSchema(recipe)
-  const obligations = obligationsOf(schema)
-  return [...obligations.entries()].every(([node, obligation]) => {
-    const credits = dischargedBy(schema, obligations, { W: fc.constant(obligation.witness) })
-    return (credits.get(node) ?? []).includes('W')
-  })
+it.prop('p', [gen], ([record]) => {
+  // nested loop
+  for (const key in record) {
+    if (!costly(key)) return false
+  }
+  return true
 })
 `
 
@@ -46,16 +43,9 @@ ruleTester.run('no-nested-quantification', noNestedQuantification, {
       code: `
 import { it } from '@effect/vitest'
 import { FastCheck as fc } from 'effect'
-import { dischargedBy, obligationsOf } from '../refutation.kernel.js'
 
-const REFUTABLE_SCHEMAS = [Hexish, Slug, Port] as const
-
-it.prop('r_EachWitness', [fc.constantFrom(...REFUTABLE_SCHEMAS)], ([schema]) => {
-  const obligations = obligationsOf(schema)
-  return [...obligations.entries()].every(([node, obligation]) => {
-    const credits = dischargedBy(schema, obligations, { W: fc.constant(obligation.witness) })
-    return (credits.get(node) ?? []).includes('W')
-  })
+it.prop('p', [fc.constant([1, 2, 3])], ([pool]) => {
+  return pool.length > 0
 })
 `,
     },
@@ -208,7 +198,7 @@ it.prop('p', [gen])
     {
       name: 'Should_StaySilent_When_FileIsExempt',
       filename: FILENAME,
-      options: [{ exempt: ['refutation.kernel.property.test.ts'] }],
+      options: [{ exempt: ['example.property.test.ts'] }],
       code: DISCHARGED_BY,
     },
   ],

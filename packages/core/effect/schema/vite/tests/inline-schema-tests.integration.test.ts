@@ -184,12 +184,8 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
       Then('the suite contains ruleOfSchemas calls')((s) => {
         expect(s.code).toContain('ruleOfSchemas')
       }),
-      Then('the suite names no refutation symbol and no refutation entry')((s) => {
-        expect(s.code).not.toContain('obligationsOf')
+      Then('the suite contains only ruleOfSchemas')((s) => {
         expect(s.code).not.toContain('REFUTED')
-        expect(s.code).not.toContain('EXPORTED')
-        expect(s.code).not.toContain('effect/SchemaAST')
-        expect(s.code).not.toContain('/refutation')
       }),
       Then('the suite imports ruleOfSchemas from the law package alone')((s) => {
         expect(s.code).toContain(`from '${LAW_PKG}'`)

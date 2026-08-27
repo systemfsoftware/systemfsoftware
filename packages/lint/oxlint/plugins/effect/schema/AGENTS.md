@@ -18,13 +18,6 @@ This package owns rules for the Effect Schema cell. It exists because those rule
   dont: key any rule here on where a file lives, beyond the suffix that identifies the artifact being linted
   harm: two packages ruling on placement is the live contradiction TP3 was written to prevent
   check: review — no rule here reports on a directory, only on file content; the reviewer confirms every context.report targets an AST node in the linted file, never the file's location
-
-- id: ES3
-  title: A schema property test states refusals, nothing else
-  do: keep `no-schema-law-duplicate` as the gate that holds `*.schema.property.test.ts` to rejection only
-  dont: relax it to admit a round-trip, equivalence, or encode-stability assertion
-  harm: those are exactly what the generated `ruleOfSchemas` pair already covers; re-asserting them is duplicate coverage that drifts, and it is the spam the suffix ban was introduced to stop
-  check: review — whether any assertion here restates a generated law; the reviewer confirms `GENERATED_LAW_NAMES` still holds exactly `ruleOfSchemas`, `equivalence` and `encodedSchema`, and that no test in this package re-asserts one
 ```
 
 - Types: `pnpm --filter @systemfsoftware/oxlint-plugin-effect-schema typecheck`
