@@ -168,6 +168,26 @@ export function Component({ value }: { value: string }) {
     expect(result.code).not.toContain("<button");
   });
 
+  it("skips node_modules by default", () => {
+    for (const options of [undefined, { reactCompiler: {} }]) {
+      const result = transformSync("node_modules/package/Component.tsx", fixture, options);
+
+      expect(result.errors).toEqual([]);
+      expect(result.code).not.toContain("react/compiler-runtime");
+      expect(result.code).not.toContain("_c(");
+    }
+  });
+
+  it("allows sources to include node_modules", () => {
+    const result = transformSync("node_modules/package/Component.tsx", fixture, {
+      reactCompiler: { sources: ["node_modules/package"] },
+    });
+
+    expect(result.errors).toEqual([]);
+    expect(result.code).toContain("react/compiler-runtime");
+    expect(result.code).toContain("_c(");
+  });
+
   it("keeps imports used by compiled computed keys", () => {
     const result = transformSync(
       "Box.tsx",
@@ -207,11 +227,7 @@ export function Component({ value }: { value: string }) {
     );
 
     expect(result.fatal).toBe(false);
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0]).toMatchObject({
-      severity: "Warning",
-      message: "React rule suppression prevents optimization",
-    });
+    expect(result.errors).toEqual([]);
     expect(result.code).not.toContain("react/compiler-runtime");
     expect(result.code).not.toContain("_c(");
   });
@@ -227,9 +243,7 @@ export function Component({ value }: { value: string }) {
     );
 
     expect(result.fatal).toBe(false);
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0].severity).toBe("Warning");
-    expect(result.errors[0].message).toBe("React rule suppression prevents optimization");
+    expect(result.errors).toEqual([]);
     expect(result.code).not.toContain("react/compiler-runtime");
   });
 
@@ -270,12 +284,7 @@ export function Component({ value }: { value: string }) {
     );
 
     expect(result.fatal).toBe(false);
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0]).toMatchObject({
-      severity: "Warning",
-      message: "Use of incompatible library",
-    });
-    expect(result.errors.some((error) => error.message.includes("Unexpected error"))).toBe(false);
+    expect(result.errors).toEqual([]);
     expect(result.code).toContain("react/compiler-runtime");
     expect(result.code).not.toContain("props: { text: string }");
     expect(result.code).not.toContain("<span");
@@ -313,9 +322,7 @@ export function Component({ value }: { value: string }) {
     );
 
     expect(result.fatal).toBe(false);
-    expect(result.errors).toHaveLength(1);
-    expect(result.errors[0].severity).toBe("Warning");
-    expect(result.errors[0].message).toBe("React rule suppression prevents optimization");
+    expect(result.errors).toEqual([]);
     expect(result.code).toContain("react/compiler-runtime");
     expect(result.code).not.toContain("props: { text: string }");
     expect(result.code).not.toContain("<span");
