@@ -14,12 +14,6 @@ export default defineConfig({
       'src/schema-refutations.test.ts',
     ],
     includeSource: ['src/**/*.ts'],
-    // The schema-law coverage scan samples obligations per exported schema; the
-    // wire-bridge codecs make that scan heavy (mirror of daemon-spec). Splitting the
-    // bridge's schemas into the modules that declare them added obligations, and the
-    // sweep then took 126s on a CI runner against a 120s budget - the budget was the
-    // only thing that failed, so it is the budget that moves.
-    testTimeout: 300_000,
   },
   resolve: {
     conditions: ['@systemfsoftware/source'],

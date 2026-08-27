@@ -2,7 +2,6 @@ import fs from 'fs'
 import path from 'path'
 
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { TestStatus } from '@systemfsoftware/stryker-js-plugin-api/test-runner'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 
@@ -48,37 +47,37 @@ Feature('Driving the Vitest runner through the Stryker interface')
               id: test1,
               fileName: specFile(s, 'tests/add.spec.ts'),
               name: 'add should be able to add two numbers',
-              status: TestStatus.Success,
+              status: 'success',
             },
             {
               id: test2,
               fileName: specFile(s, 'tests/add.spec.ts'),
               name: 'add should be able to add a negative number',
-              status: TestStatus.Success,
+              status: 'success',
             },
             {
               id: test3,
               fileName: specFile(s, 'tests/math.spec.ts'),
               name: 'math should be able negate a number',
-              status: TestStatus.Success,
+              status: 'success',
             },
             {
               id: test4,
               fileName: specFile(s, 'tests/math.spec.ts'),
               name: 'math should be able to add one to a number',
-              status: TestStatus.Success,
+              status: 'success',
             },
             {
               id: test5,
               fileName: specFile(s, 'tests/math.spec.ts'),
               name: 'math should be able to recognize a negative number',
-              status: TestStatus.Success,
+              status: 'success',
             },
             {
               id: test6,
               fileName: specFile(s, 'tests/pi.spec.ts'),
               name: 'pi should be 3.14',
-              status: TestStatus.Success,
+              status: 'success',
             },
           ])
         }),
@@ -521,7 +520,7 @@ Feature('Driving the Vitest runner through the Stryker interface')
           expectTestResults(s.result, [
             {
               id: 'packages/app/src/math.spec.js#math should be 5 for add(2, 3)',
-              status: TestStatus.Success,
+              status: 'success',
             },
           ])
         }),
@@ -584,12 +583,12 @@ Feature('Driving the Vitest runner through the Stryker interface')
           expectTestResults(s.result, [
             {
               id: 'tests/math-with-fixtures.spec.ts#math with fixtures should be able to add two numbers using fixture',
-              status: TestStatus.Success,
+              status: 'success',
             },
             {
               id:
                 'tests/math-with-fixtures.spec.ts#math with fixtures should be able to add negative numbers using fixture',
-              status: TestStatus.Success,
+              status: 'success',
             },
           ])
         }),

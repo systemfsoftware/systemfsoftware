@@ -40,6 +40,8 @@ class Ledger extends Context.Service<Ledger, {
   readonly lines: Effect.Effect<readonly string[]>
 }>()('Ledger') {}
 
+type LedgerService = Ledger['Service']
+
 /**
  * `append` suspends before it records. A real ledger is asynchronous, and without a
  * suspension point the layers are indistinguishable from concurrent ones: a fully
@@ -65,8 +67,6 @@ interface Bag extends Cell.Phases {
   readonly decodeError: Malformed
   readonly readError: Malformed
   readonly writeError: never
-  readonly readContext: Ledger
-  readonly writeContext: Ledger
 }
 
 const read: Cell.ReadPhase<Bag> = (command) => Effect.succeed({ bytes: command.id })
@@ -85,36 +85,61 @@ const encode: Cell.EncodePhase<Bag> = (outcome) => ({
   }),
 })
 
-const write: Cell.WritePhase<Bag> = (output) =>
-  Effect.flatMap(Ledger, (ledger) => ledger.append(output.line)).pipe(Effect.as(output.line))
+const makeWrite = (ledger: LedgerService): Cell.WritePhase<Bag> => (output) =>
+  ledger.append(output.line).pipe(Effect.as(output.line))
 
 const unreadable: Cell.ReadPhase<Bag> = () => Effect.fail({ kind: 'Malformed', bytes: 'second layer' })
 
-const oneLayer = Cell.write(
-  Cell.encode(Cell.decide(Cell.decode(Cell.read<Bag>(read), decode), decide), encode),
-  write,
-)
+const makeOneLayer = (ledger: LedgerService) =>
+  Cell.write(
+    Cell.encode(Cell.decide(Cell.decode(Cell.read<Bag>(read), decode), decide), encode),
+    makeWrite(ledger),
+  )
 
-const twoLayers = Cell.write(
-  Cell.encode(Cell.decide(Cell.decode(Cell.read(unreadable, oneLayer), decode), decide), encode),
-  write,
-)
+const makeTwoLayers = (ledger: LedgerService) =>
+  Cell.write(
+    Cell.encode(Cell.decide(Cell.decode(Cell.read(unreadable, makeOneLayer(ledger)), decode), decide), encode),
+    makeWrite(ledger),
+  )
+
+/**
+ * A write that reports on its own layer's read as well as on the encoded output. The raw
+ * arrives as the write's second argument, which is the whole point of the argument: a layer
+ * whose write persists or reports what the read gathered needs no `let` beside the
+ * description to carry it, and so needs no runtime guard for a value the fold already has.
+ */
+const makeWriteRecordingRaw = (ledger: LedgerService): Cell.WritePhase<Bag> => (output, raw) =>
+  ledger.append(`${output.line}<-${raw.bytes}`).pipe(Effect.as(output.line))
+
+const makeLayerReportingItsRaw = (ledger: LedgerService) =>
+  Cell.write(
+    Cell.encode(Cell.decide(Cell.decode(Cell.read<Bag>(read), decode), decide), encode),
+    makeWriteRecordingRaw(ledger),
+  )
 
 /**
  * A second layer that reads back what the first layer wrote. This is the shape a call site
  * whose real order writes before it decides takes, so the ordering it depends on has to be
  * observable: run the layers concurrently and this read sees an empty ledger instead.
  */
-const readsWhatWasWritten: Cell.ReadPhase<Bag> = () =>
-  Effect.flatMap(Ledger, (ledger) => Effect.map(ledger.lines, (lines) => ({ bytes: lines.join('|') })))
+const makeReadsWhatWasWritten = (ledger: LedgerService): Cell.ReadPhase<Bag> => () =>
+  Effect.map(ledger.lines, (lines) => ({ bytes: lines.join('|') }))
 
-const secondLayerReadsTheFirst = Cell.write(
-  Cell.encode(
-    Cell.decide(Cell.decode(Cell.read(readsWhatWasWritten, oneLayer), decode), decide),
-    encode,
-  ),
-  write,
-)
+const makeSecondLayerReadsTheFirst = (ledger: LedgerService) =>
+  Cell.write(
+    Cell.encode(
+      Cell.decide(Cell.decode(Cell.read(makeReadsWhatWasWritten(ledger), makeOneLayer(ledger)), decode), decide),
+      encode,
+    ),
+    makeWrite(ledger),
+  )
+
+/** Stub ledger for vocabulary folds — the fold never runs the effects. */
+const stubLedger: LedgerService = {
+  append: () => Effect.void,
+  lines: Effect.succeed([] as readonly string[]),
+}
+const oneLayer = makeOneLayer(stubLedger)
 
 /**
  * The vocabulary fold a consumer performs on the description value alone: phase names,
@@ -146,7 +171,7 @@ Feature('Applying a phase description')
       Gherkin.Do.pipe(
         When('a description is applied to a command its decision refuses')(
           'exit',
-          () => Effect.exit(Cell.apply(oneLayer, { id: 'abc' })),
+          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.apply(makeOneLayer(ledger), { id: 'abc' }))),
         ),
         Then('the run succeeds and its response carries the refusal')((s) => {
           expect(s.exit).toStrictEqual(Exit.succeed('refused:too short'))
@@ -165,7 +190,7 @@ Feature('Applying a phase description')
       Gherkin.Do.pipe(
         When('a description is applied to a command its decision admits')(
           'exit',
-          () => Effect.exit(Cell.apply(oneLayer, { id: 'abcd' })),
+          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.apply(makeOneLayer(ledger), { id: 'abcd' }))),
         ),
         Then('the run succeeds and its response carries the decision')((s) => {
           expect(s.exit).toStrictEqual(Exit.succeed('admitted:4'))
@@ -174,11 +199,34 @@ Feature('Applying a phase description')
     )
 
     scenario(
+      "A write receives the raw its own layer's read gathered",
+      Gherkin.Do.pipe(
+        When('a description whose write reports its raw is applied')(
+          'exit',
+          () =>
+            Effect.flatMap(
+              Ledger,
+              (ledger) => Effect.exit(Cell.apply(makeLayerReportingItsRaw(ledger), { id: 'abcd' })),
+            ),
+        ),
+        Then('the run succeeds with the response the write returned')((s) => {
+          expect(s.exit).toStrictEqual(Exit.succeed('admitted:4'))
+        }),
+        And('the write recorded the encoded output together with the raw')(() =>
+          Effect.flatMap(Ledger, (ledger) =>
+            Effect.map(ledger.lines, (lines) => {
+              expect(lines).toEqual(['admitted:4<-abcd'])
+            }))
+        ),
+      ),
+    )
+
+    scenario(
       'A malformed reading fails the run before anything is written',
       Gherkin.Do.pipe(
         When('a description is applied to a command its validation rejects')(
           'exit',
-          () => Effect.exit(Cell.apply(oneLayer, { id: 'bad' })),
+          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.apply(makeOneLayer(ledger), { id: 'bad' }))),
         ),
         Then('the run fails with the malformed report')((s) => {
           expect(s.exit).toStrictEqual(Exit.fail({ kind: 'Malformed', bytes: 'bad' }))
@@ -197,7 +245,7 @@ Feature('Applying a phase description')
       Gherkin.Do.pipe(
         Given('a description of two layers whose second layer cannot read')(
           'description',
-          () => Effect.succeed(twoLayers),
+          () => Effect.flatMap(Ledger, (ledger) => Effect.succeed(makeTwoLayers(ledger))),
         ),
         When('it is applied to a command the first layer admits')(
           'exit',
@@ -220,7 +268,7 @@ Feature('Applying a phase description')
       Gherkin.Do.pipe(
         Given('a description of two layers whose second layer reads the ledger')(
           'description',
-          () => Effect.succeed(secondLayerReadsTheFirst),
+          () => Effect.flatMap(Ledger, (ledger) => Effect.succeed(makeSecondLayerReadsTheFirst(ledger))),
         ),
         When('it is applied to a command the first layer admits')(
           'exit',

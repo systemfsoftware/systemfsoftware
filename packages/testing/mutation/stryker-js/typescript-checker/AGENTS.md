@@ -2,6 +2,6 @@
 
 > **Location:** `packages/testing/mutation/stryker-js/typescript-checker/` — TypeScript checker plugin for Stryker, TS7-native.
 
-Extends `@systemfsoftware/stryker-js-plugin-api` checker protocol, compiling projects directly with `typescript` against their own tsconfig (parsed via `@std/jsonc`). Built via tsdown, single entrypoint.
+Extends the `Checker` protocol exported by `@systemfsoftware/stryker-js` (see its `Checker` subpath), compiling projects directly with `typescript` against their own tsconfig (parsed via `@std/jsonc`). Built via tsdown, single entrypoint.
 
-🛑 Don't depend on `typescript` from the host project — peer dep resolved at runtime.
+🛑 The checker compiles against its own `typescript` dependency, not one the host project supplies — `guardTSVersion` enforces `>=7.0.0` at runtime.

@@ -1,7 +1,7 @@
 ---
-"@systemfsoftware/stryker-js-plugin-api": major
+"@systemfsoftware/stryker-js": major
 "@systemfsoftware/stryker-test-contribution": minor
-"@systemfsoftware/stryker-js-mutation-run": minor
+"@systemfsoftware/stryker-js-platform-node": minor
 ---
 
 An evaluator now answers with the verdict it reached instead of failing to
@@ -9,7 +9,7 @@ report one.
 
 `Evaluator.evaluate` returns `ExitClass | null` on the success channel: the
 class the run should end in, or `null` for nothing to report. `ExitClass` is
-exported from `@systemfsoftware/stryker-js-plugin-api/evaluate`. The error
+exported from `@systemfsoftware/stryker-js/evaluate`. The error
 channel is for the evaluator itself breaking — a report it cannot read, a
 decision it cannot reach.
 

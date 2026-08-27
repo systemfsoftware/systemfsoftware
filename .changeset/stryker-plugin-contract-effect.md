@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/stryker-js-plugin-api": major
+"@systemfsoftware/stryker-js": major
 ---
 
 Plugins are written against Effect instead of Promise.

@@ -42,8 +42,8 @@
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
-    "@systemfsoftware/stryker-js-mutation-run": "workspace:^",
-    "@systemfsoftware/stryker-js-plugin-api": "workspace:^"
+    "@systemfsoftware/stryker-js": "workspace:^",
+    "@systemfsoftware/stryker-js-platform-node": "workspace:^"
   },
   "peerDependencies": {
     "effect": "catalog:peers"

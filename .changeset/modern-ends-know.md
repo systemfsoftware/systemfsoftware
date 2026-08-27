@@ -12,7 +12,7 @@
 "@systemfsoftware/rx-effect": minor
 "@systemfsoftware/stryker-plugins": minor
 "@systemfsoftware/stryker-js-cli": minor
-"@systemfsoftware/stryker-js-mutation-run": minor
+"@systemfsoftware/stryker-js-platform-node": minor
 "@systemfsoftware/stryker-js-typescript-checker": minor
 "@systemfsoftware/effect-atom": minor
 "@systemfsoftware/effect-atom-react": minor

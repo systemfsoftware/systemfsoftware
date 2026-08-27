@@ -12,6 +12,20 @@ export default defineConfig({
     // — including two whose instance methods were unreachable across the worker
     // IPC boundary because the dispatcher reads properties off the export.
     '@systemfsoftware/oxlint-plugin/ban-classes': 'error',
-    'no-unused-vars': 'off',
   },
+  overrides: [
+    {
+      // The Gherkin DSL's `Then`/`Given`/`When` create `it` blocks at runtime via
+      // `makeFeature({ it, layer })`, which the vitest plugin's static analysis
+      // cannot follow, so it reads `expect` inside a step as standalone. The rule
+      // stays at `error`; it is only taught which functions are test blocks.
+      files: ['tests/**/*.test.ts'],
+      rules: {
+        'vitest/no-standalone-expect': [
+          'error',
+          { additionalTestBlockFunctions: ['Then', 'Given', 'When', 'And'] },
+        ],
+      },
+    },
+  ],
 })

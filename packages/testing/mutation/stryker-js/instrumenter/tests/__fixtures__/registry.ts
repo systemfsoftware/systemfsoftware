@@ -1,1 +1,1 @@
-export { allMutators } from '../../src/mutators/registry.js'
+export { allMutators } from '../../src/Mutator.js'

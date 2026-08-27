@@ -31,7 +31,6 @@
     "attw": "npm_config_ignore_scripts=true attw --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "test": "vitest run",
-    "test:run": "vitest run --coverage",
     "prepack": "pnpm build"
   },
   "type": "module",

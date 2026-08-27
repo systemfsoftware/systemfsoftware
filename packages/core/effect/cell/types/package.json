@@ -37,7 +37,6 @@
     "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run --passWithNoTests",
-    "test:run": "vitest run --passWithNoTests",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
