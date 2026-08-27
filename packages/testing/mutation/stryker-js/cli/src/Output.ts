@@ -201,7 +201,7 @@ export const makeRunEventStream = (
 
     const tickStream = Stream.tick(TICK_INTERVAL_MS).pipe(
       Stream.drop(1),
-      Stream.filter(() => state.mode === 'machine' && state.headerWritten && !state.terminalWritten),
+      Stream.filter(() => state.headerWritten && !state.terminalWritten),
       Stream.mapEffect(() =>
         Effect.gen(function*() {
           const now = yield* Clock.currentTimeMillis
@@ -215,19 +215,7 @@ export const makeRunEventStream = (
     )
 
     let terminalSeen = false
-    const framed = Stream.merge(queueStream, tickStream, { haltStrategy: 'either' }).pipe(
-      Stream.filter((event) => {
-        if (state.mode !== 'machine') {
-          return false
-        }
-        if (terminalSeen) {
-          return false
-        }
-        if (isTerminalEvent(event)) {
-          terminalSeen = true
-        }
-        return true
-      }),
+    const observed = Stream.merge(queueStream, tickStream, { haltStrategy: 'either' }).pipe(
       Stream.tap((event) =>
         Match.value(event).pipe(
           Match.tag('plan', (e) => writeStderr(stdio, `plan ${e.total} mutants`)),
@@ -245,6 +233,20 @@ export const makeRunEventStream = (
           Match.orElse(() => Effect.void),
         )
       ),
+    )
+    const framed = observed.pipe(
+      Stream.filter((event) => {
+        if (state.mode !== 'machine') {
+          return false
+        }
+        if (terminalSeen) {
+          return false
+        }
+        if (isTerminalEvent(event)) {
+          terminalSeen = true
+        }
+        return true
+      }),
       Stream.map((event) => `${toWireLine(event)}\n`),
     )
 
@@ -266,17 +268,19 @@ export const makeRunEventStream = (
       },
       open: Effect.gen(function*() {
         if (drainFiber === null) {
-          if (state.mode === 'machine' && !state.headerWritten) {
+          if (!state.headerWritten) {
             state.headerWritten = true
-            yield* Queue.offer(
-              queue,
-              RunStarted.make({
-                schemaVersion: STREAM_SCHEMA_VERSION,
-                runId,
-                mode: state.mode,
-                signal: state.signal,
-              }),
-            )
+            if (state.mode === 'machine') {
+              yield* Queue.offer(
+                queue,
+                RunStarted.make({
+                  schemaVersion: STREAM_SCHEMA_VERSION,
+                  runId,
+                  mode: state.mode,
+                  signal: state.signal,
+                }),
+              )
+            }
           }
           drainFiber = yield* Effect.forkDetach(drain)
         }
