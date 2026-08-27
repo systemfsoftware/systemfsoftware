@@ -60,7 +60,7 @@ The same holds across claims. Two claims referencing one document set are two ob
 | `symbol` | Which declaration kinds may host an `@evidence` tag. It does not restrict `@evidenceExclude`, whose carriers are wider. |
 | `reference` | One reference or an array of them. Must not be empty. |
 | `root` | Directory the `files` patterns resolve against. |
-| `evidenceExcludeCarriers` | Files allowed to host this claim's `@evidenceExclude`. |
+| `evidenceExcludeCarriers` | Files allowed to host this claim's `@evidenceExclude`. Refused beside a `checklist` reference. |
 | `name` | Label shown with this claim's diagnostics. It identifies nothing and relates nothing. |
 | `disabled` | Validates the shape and contributes nothing else: no populations, no obligations, no completion hints, no watched inputs. |
 
@@ -78,6 +78,7 @@ The same holds across claims. Two claims referencing one document set are two ob
 | `uniqueEvidence` | all | At most one claim host may cite each unit. |
 | `singleEvidencePerSymbol` | all | Each selected claim host must cite exactly one unit. |
 | `requireReview` | all | Every acknowledgement owes an unexpired review of its own kind. |
+| `checklist` | markdown | Every selected claim host must acknowledge every unit here. |
 
 ## Symbol selectors
 
@@ -179,9 +180,15 @@ A monorepo usually keeps one requirements set that several packages implement, a
 
 `root` is one directory, never a glob. It may sit inside the project (`docs`), above it (`../../docs`), or on an absolute path (`/srv/contracts`, `C:/contracts`). A Windows drive-relative path such as `C:docs` is refused, because it resolves against whatever directory that drive currently sits on.
 
+`root` may name a symbolic link or a Windows junction to a directory, or sit inside one, which is what a package manager installs for a linked workspace dependency. The population is read through it and the link changes nothing else. A citation target stays relative to the root and names nothing above it, a file location is still the path you open to reach the file, and the directory the link points at appears in neither. A linked directory inside the population is not descended into, while a linked file inside it is read like any other file.
+
+A diagnostic that asks you to correct `root` quotes the spelling you declared, normalized to forward slashes and with `.` and redundant segments removed, rather than a path it derived. A file location in the same message is derived instead: it is spelled the way you would open the file, which is project-relative wherever a relative spelling exists and absolute where none does, which on Windows means a root on another volume or a UNC share. One names the property to edit and the other names the path to read.
+
 **Moving the root moves the addresses with it.** Under the configuration above a section is cited as `requirements/pricing.md#discounts`, not through the citing package's distance from the documents. That is what lets two packages share one document set: they declare the same base and write the same citation, so adopting the set costs a `root` line and nothing else.
 
 Prisma and TypeScript targets carry no path, so a root there changes which files join the population and where a diagnostic points, never how a model or symbol is cited.
+
+One Prisma schema reached through two roots is one file. It is parsed once and both populations are served by that one result, so a package installed under `node_modules` and rooted again at its workspace source does not report the models it declares as declared twice. The location printed for such a file is one of its spellings rather than each population's own, and it opens the same file either way.
 
 Everything a rooted Markdown or Prisma population reads is published to the `ttsc` host as a watched dependency, so editing a document two directories up starts the next `ttsc --watch` cycle exactly as editing one inside the project does.
 
@@ -309,7 +316,7 @@ Four opt-in properties tighten a single reference:
 
 - **`noEvidenceExclude`** refuses `@evidenceExclude` here. The exclusion is reported where it is written and gives this reference no coverage, so its target still owes positive `@evidence`. Set it where non-applicability is not an answer the population accepts: a published operation is exercised by its test suite or the suite is incomplete, and "not applicable" is the sentence that hides the second case.
 - **`uniqueEvidence`** allows at most one claim host to cite each unit, so the unit has one host answerable for it rather than several.
-- **`singleEvidencePerSymbol`** requires exactly one distinct unit from every host the claim's `symbol` selector picks. A host with no `@evidence` counts as zero and fails, as does a host citing two units. One test proving one operation stays reviewable; the same function citing eight operations proves only that eight names appear in its JSDoc.
+- **`singleEvidencePerSymbol`** requires exactly one distinct unit from every host the claim's `symbol` selector picks. A host with no `@evidence` counts as zero and fails, as does a host citing two units. One test proving one operation stays reviewable; the same function citing eight operations proves only that eight names appear in its JSDoc. A reference whose population came back empty is reported as empty and judges no host, because there is no unit any host could have cited.
 - **`requireReview`** makes every acknowledgement here owe a matching [review tag](/docs/evidence/tags) naming the same target and carrying a fingerprint of the cited scope's content. When that content changes the fingerprint stops matching and the build fails again with the new value in the diagnostic. Expiry is the whole point: a review that cannot expire is written once and stays green forever, and on a second pass over a large citation set nothing tells you which reviews were written against content that has since moved. It claims no more than that, since the diagnostic states the expected value and nothing here judges whether prose is sincere.
 
 The fingerprint belongs to the address a citation names, not to the reference that asked for it: it covers the cited unit and its structural subtree, so one tag carries one fingerprint however many references it acknowledges. Every reference kind accepts the option. Swagger and Prisma used to refuse it, because their loaders reported unit identities and nothing else, and the whole-document digest they did report is one value shared by every unit in a document, so one endpoint's change would expire every review in it. Each bridge now digests a unit's content on the side that understands it: an operation's is its normalized definition, and a Prisma model's or member's is its parsed declaration without its documentation comment, which is where a review of it is written. Reordering the keys of a source document therefore changes nothing. Two dialects are a weaker promise: a Swagger 2.0 upgrade and an OpenAPI 3.1 document of the same endpoint agree only where they normalize to the same operation, and the 2.0 path emits properties the 3.1 path omits. An operation's digest also covers the component schemas it names, resolved through `$ref`, because that is where an endpoint's contract actually lives; a schema that refers to itself is followed once. A Prisma model's covers what the parser reports for the model itself, which includes `@@unique` and `@@map` and does not include `@@index`.
@@ -318,15 +325,43 @@ A citation written on an inner declarator now reaches the identity it names. Cov
 
 A variable's content is the declarator that names it, not the statement that wraps it. One `const`, `let`, or `var` statement declares every identity written after the keyword, so a fingerprint taken from the wrapper moved when a sibling changed, and a documentation block written on an inner declarator sat inside the very digest that excludes documentation. Both answers are now taken from the declarator alone, and a destructuring pattern's leaves share one because they share the initializer they take their values from. This moves every variable's fingerprint once: on upgrade, a review naming a variable (or naming a scope, such as a namespace, that contains one) expires and has to be rewritten with the value the diagnostic states.
 
-Counting is by identity, not by text. Repeated tags for one unit count once, merged declarations and overload sets remain one host, and an aggregate target contributes every selected descendant in its scope, so citing a parent of two selected units counts as two.
+Counting is by identity, not by text. Repeated tags for one unit count once, merged declarations and overload sets remain one host, and an aggregate target contributes every selected descendant in its scope, so citing a parent of two selected units counts as two. A `checklist` reference is the one place that last clause does not hold.
 
 The constraints belong to one reference and never pool. An exclusion the package reference above refuses may still satisfy a Markdown reference in the same claim, and two references over the same files stay independent.
 
-A population that failed to load establishes no cardinality at all: the loader failure is preserved rather than turned into a count. A healthy population that is merely empty is a complete denominator, so a host still truthfully cites zero units against it.
+A population that failed to load establishes no cardinality at all: the loader failure is preserved rather than turned into a count. A healthy population that is merely empty is a complete denominator, and the count of zero against it is true, but no per-host policy reports that count. The empty population is already an error naming itself, and a finding on each host beneath it would ask every one of them to cite a unit that does not exist.
+
+### Checklist documents
+
+The four properties above tighten a count inside the per-reference obligation. `checklist` does something else: it gives the obligation a host dimension, so every selected claim host answers every unit rather than the population being discharged once by whichever host got there first.
+
+```ts
+{
+  type: "markdown",
+  files: ["docs/principles.md"],
+  symbol: "h2",
+  checklist: true,
+  requireReview: true,
+}
+```
+
+Set it where a document is read down a column rather than consulted: development principles, review rules, a release gate. The denominator is the claim's complete selected host population, so a host carrying no tag owes every item instead of being absent from the count. Either tag answers an item, and `@evidenceExclude` is how a host records that an item does not apply to it. Pair the option with `noEvidenceExclude` to refuse that answer and demand positive evidence from every host.
+
+A positive citation answers the item it names and nothing beneath it. Citing a heading that is an item and also contains items stays legal and answers that one heading, while a target naming no item at all is reported as an aggregate; the items it covered are not listed again on that host, because that diagnostic already names them. Under the default selector the document itself is an item, so without both halves one `@evidence docs/rules.md` would cascade through every heading and tick every box. `@evidenceExclude` keeps the cascade, because "none of this applies here" is one reviewed decision however many items it covers.
+
+Every acknowledgement is one host's answer, so a tag standing on no selected host of this claim answers nothing here, and is reported where it sits once nothing else consumes it. Carrier eligibility is wider than the host gate, so the same tag may be an ordinary sibling reference's gathered exclusion or an overlapping claim's own answer, and only a tag that discharges no obligation anywhere is refused. The report covers a declaration whose kind the claim does not select and one whose position materialized no unit at all. `evidenceExcludeCarriers` is refused beside this option for the same reason: gathering exclusions into another file leaves every host outside it unable to record that an item does not apply. Duplicate and conflict detection moves to the host as well: two hosts excluding one item, and one host citing an item another host excludes, are the expected state of a checklist rather than a duplicate and a contradiction.
+
+`uniqueEvidence` and `singleEvidencePerSymbol` are refused beside it at configuration time. A checklist requires every host to cite every unit, which the first forbids the moment a claim has two hosts and the second forbids the moment the population has two units, and a graph with one host and one unit would satisfy all three by accident until the second file arrived.
+
+Pair it with `requireReview` for the property a checklist is usually wanted for. Each host's acknowledgement then carries the fingerprint of that item alone, so editing one item expires every host's answer to it and nothing else.
+
+Only a Markdown reference accepts it. Per-host coverage is not a statement the other populations support: it would ask every test to exercise every Swagger operation, or every file to cite every Prisma model.
 
 ## Exclusion carriers
 
 `noEvidenceExclude` decides whether a reference accepts an exclusion at all. Where it does, `evidenceExcludeCarriers` decides where that exclusion may be written.
+
+A `checklist` reference is refused beside these globs, because it makes every acknowledgement one host's own answer and confining exclusions to other files would leave every host outside them unable to record that an item does not apply. A checklist reference that also declares `noEvidenceExclude` accepts no exclusion to gather, so that combination is allowed.
 
 ```ts
 {
@@ -347,4 +382,4 @@ An exclusion is the one acknowledgement that reports an obligation discharged wi
 
 ## Next
 
-→ [Evidence Tags](/docs/evidence/tags) for the grammar that satisfies these obligations, or [Full-Stack Wiring](/docs/evidence/wiring) for a complete monorepo graph built from these pieces.
+→ [Evidence Tags](/docs/evidence/tags) for the grammar that satisfies these obligations, or [Examples](/docs/evidence/examples) for complete graphs built from these pieces.

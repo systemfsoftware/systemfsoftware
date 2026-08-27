@@ -37,8 +37,8 @@ One is the graph. The other four protect the conditions the graph depends on.
 The configured graph. It evaluates the whole declared graph once per Program and answers three separate questions.
 
 - **Resolution.** Does every declared target resolve to exactly one selected unit or structural ancestor?
-- **Host eligibility.** Does each `@evidence` sit on a symbol kind its claim selects, and each `@evidenceExclude` on an eligible carrier in a matching claim file?
-- **Coverage.** Does every selected reference unit have at least one acknowledgement in this claim, and does that acknowledgement satisfy whatever the reference's own policy demands?
+- **Host eligibility.** Does each `@evidence` sit on a symbol kind its claim selects, and each `@evidenceExclude` on an eligible carrier in a matching claim file? Under a [`checklist`](/docs/evidence/claims#checklist-documents) reference every acknowledgement answers for one selected host, so a tag sitting on no selected host answers nothing there and is reported where it sits once no other obligation consumes it.
+- **Coverage.** Does every selected reference unit have at least one acknowledgement in this claim, and does that acknowledgement satisfy whatever the reference's own policy demands? A [`checklist`](/docs/evidence/claims#checklist-documents) reference asks that question per host instead: every selected claim host owes every unit, so a unit somebody already cited still fails for every host that stayed silent.
 
 The rule is project-scoped, so its config entry must carry no `files` selector; the host rejects one that does. Scope a file rule in its own entry when you need to.
 
@@ -155,4 +155,4 @@ Match on the bracketed rule id rather than on the numeric code. A contributor ru
 
 ## Next
 
-→ [Full-Stack Wiring](/docs/evidence/wiring) puts `evidence/graph` on a real monorepo, alongside `evidence/singular` and a staged `evidence/todo`.
+→ [Examples](/docs/evidence/examples) puts `evidence/graph` on a real monorepo and a novel, alongside `evidence/singular` and a staged `evidence/todo`.

@@ -16,6 +16,11 @@
  * Every constraint is opt-in and its zero value is the historical behavior, so
  * a reference that declares none of them is the reference that existed before
  * they did.
+ *
+ * A Markdown reference declares one more, `checklist`, which is not a peer of
+ * these. They tighten a count inside the per-reference obligation; that one
+ * gives the obligation a host dimension, and it is documented on the Markdown
+ * reference because no other artifact kind is read item by item.
  */
 export interface ITtscEvidenceGraphReferenceBase<Type extends string> {
   /** Identifies the artifact kind this population materializes. */
@@ -65,6 +70,9 @@ export interface ITtscEvidenceGraphReferenceBase<Type extends string> {
    * citing two units does. Repeated tags for one unit count once, while an
    * aggregate target contributes every selected descendant in its scope: citing
    * a parent of two selected units counts as two.
+   *
+   * A reference whose population came back empty is reported as empty and
+   * judges no host, because there is no unit any host could have cited.
    *
    * Set it where one host answers for one thing. A test function that proves
    * one operation stays reviewable; the same function citing eight operations

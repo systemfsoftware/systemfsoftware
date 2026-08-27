@@ -20,7 +20,7 @@ const portableDumpTSConfig = `{
 }
 `
 
-// TestDumpCheckoutPathsAreStable verifies the whole schema-v6 consequence
+// TestDumpCheckoutPathsAreStable verifies the whole dump-identity consequence
 // surface, not only the path helper.
 //
 //  1. Build the same project plus sibling .ts/.d.ts under two checkout roots.
@@ -51,7 +51,7 @@ func TestDumpCheckoutPathsAreStable(t *testing.T) {
   assertPortableFixturePaths(t, first)
   if strings.Contains(string(firstJSON), filepath.ToSlash(firstCheckout)) ||
     strings.Contains(string(secondJSON), filepath.ToSlash(secondCheckout)) {
-    t.Fatal("a producer-local checkout path escaped into schema-v6 identity")
+    t.Fatal("a producer-local checkout path escaped into dump identity")
   }
 }
 

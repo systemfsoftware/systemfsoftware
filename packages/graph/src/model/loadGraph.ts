@@ -5,6 +5,7 @@ import { captureProcessOutput, ensureExecutable } from "../nativeExecutable";
 import { resolveGraphBinary } from "../resolveGraphBinary";
 import { ITtscGraphDump } from "../structures/ITtscGraphDump";
 import { TtscGraphMemory } from "./TtscGraphMemory";
+import { publishArtifacts } from "./publishedArtifacts";
 
 /**
  * The dump schema version this client reads.
@@ -18,8 +19,15 @@ import { TtscGraphMemory } from "./TtscGraphMemory";
  * protocol and has to hold it to the same number: the envelope's version and
  * the body's are independent, so a producer can speak this protocol and still
  * send a body from another schema.
+ *
+ * `scripts/assert-ttscgraph-release-candidate.cjs` reads this declaration out
+ * of this file with a regular expression, because it runs against a packaged
+ * binary in a workflow that has no reason to have built this package first.
+ * Rewriting the declaration — adding a type annotation, splitting the line —
+ * makes that script fail loudly rather than silently, and its message names
+ * this constant; update its pattern with any such change.
  */
-export const DUMP_SCHEMA_VERSION = 6;
+export const DUMP_SCHEMA_VERSION = 8;
 
 /**
  * Build the resident {@link TtscGraphMemory} for a project by running `ttscgraph
@@ -67,10 +75,26 @@ export function loadGraph(
   let stdout: string;
   let stderr: string;
   try {
-    result = spawnSync(binary, ["dump", "--cwd", cwd, "--tsconfig", tsconfig], {
-      stdio: ["ignore", capture.stdoutFd, capture.stderrFd],
-      windowsHide: true,
-    });
+    // Ask the project's lint install for the artifacts a citation can name
+    // before the dump runs, so the producer can resolve a documentation target
+    // into a relation rather than leaving it a token. A project with no lint
+    // install, or none that publishes, contributes no file and no claim.
+    const artifacts = publishArtifacts({ cwd, tsconfig });
+    result = spawnSync(
+      binary,
+      [
+        "dump",
+        "--cwd",
+        cwd,
+        "--tsconfig",
+        tsconfig,
+        ...(artifacts.file === null ? [] : ["--artifacts", artifacts.file]),
+      ],
+      {
+        stdio: ["ignore", capture.stdoutFd, capture.stderrFd],
+        windowsHide: true,
+      },
+    );
     stdout = capture.read("stdout");
     stderr = capture.read("stderr");
   } finally {

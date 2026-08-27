@@ -235,9 +235,11 @@ func RunLSPServe(in io.Reader, out io.Writer, args []string) int {
     return 2
   }
   residentPrograms = newResidentProgramCache()
+  residentRules = &residentRuleCache{}
   defer func() {
     residentPrograms.invalidate()
     residentPrograms = nil
+    residentRules = nil
   }()
   encoder := json.NewEncoder(out)
   // ReadString imposes no line-length limit: a request is small, but keeping the
@@ -276,6 +278,12 @@ func handleServeLSPLine(line string, base *lspCommandOptions, encoder *json.Enco
     return
   }
   if req.Invalidate {
+    // The Program only. The rule memo validates itself against the files it was
+    // loaded from, so it needs no help from a client — and dropping it here
+    // would re-evaluate the project's configuration on exactly the requests
+    // that carry this control, which is every request from a consumer that
+    // cannot localize a source change. That is the cost the memo exists to
+    // remove.
     residentPrograms.invalidate()
   }
   if len(req.Changed) > 0 {
@@ -309,6 +317,17 @@ func handleServeLSPLine(line string, base *lspCommandOptions, encoder *json.Enco
     encodeServeResult(encoder, result, code)
   case "lsp-hints":
     result, code := computeLSPHints(&opts)
+    encodeServeResult(encoder, result, code)
+  case "graph-nodes":
+    // Neither of these describes a document, so neither carries a uri. They
+    // describe the project, and they join the daemon for the reason the other
+    // read verbs did: a consumer that asks them again whenever a file it
+    // watches moves would otherwise pay a process, a plugin load, and a Program
+    // for every edit.
+    result, code := computeGraphNodes(&opts)
+    encodeServeResult(encoder, result, code)
+  case "project-inputs":
+    result, code := computeProjectInputs(&opts)
     encodeServeResult(encoder, result, code)
   case "lsp-command-ids":
     encodeServeResult(encoder, lspCommandIDs(), 0)

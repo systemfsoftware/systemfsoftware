@@ -139,15 +139,9 @@ func (s *graphSession) buildShardSnapshot(change *graphChange) (*serveGraphSnaps
 func (s *graphSession) buildFullShardSnapshot() (*serveGraphSnapshot, *serveGraphStore, error) {
   program := s.compiler.Program()
   built := graph.Build(program)
+  graph.ApplyArtifacts(built, s.artifacts)
   texts := graph.SourceTexts(program)
-  provenance := graph.NewProvenance(
-    serveProducer(),
-    fullSnapshotCapabilities,
-    s.configDigests,
-    s.roots,
-    texts,
-    s.diskDigests,
-  )
+  provenance := s.provenance(texts)
   identity, wireProvenance, wireSources, err := newServeGraphIdentity(s.cwd, s.tsconfig, provenance)
   if err != nil {
     return nil, nil, err
@@ -267,6 +261,15 @@ func (s *graphSession) buildIncrementalShardSnapshot(change *graphChange) (*serv
     }
     expandPriorImplementationSources(selected, prior)
   }
+
+  // The artifacts belong to every generation, not only the full one. A partial
+  // build re-resolves the outgoing facts of the files it selected, and a
+  // citation of an artifact is one of them: without this, editing a declaration
+  // that cites a document section rebuilds it with that edge missing, and the
+  // client's graph loses a relation the full snapshot had. The nodes are added
+  // again because a partial starts with only its selected files' nodes; they are
+  // the same nodes under the same ids, so the store replaces like with like.
+  graph.ApplyArtifacts(partial, s.artifacts)
 
   projectionFiles := maps.Clone(selected)
   for _, node := range partial.Nodes {
@@ -733,8 +736,14 @@ func validateServeGraphShardContents(key string, shard serveGraphShard) error {
     }
     return nil
   }
+  // The metadata shard carries the nodes no program source owns: external
+  // boundary leaves, and published artifacts. An artifact is not authored code
+  // and has no source to be owned by — a Markdown document, a Prisma schema, or
+  // nothing at all for an operation named by method and path — so the guard that
+  // keeps authored declarations out of this shard has to name it explicitly
+  // rather than treat "not external" as "authored".
   for _, node := range shard.Nodes {
-    if !node.External {
+    if !node.External && !graph.IsArtifactKind(graph.NodeKind(node.Kind)) {
       return fmt.Errorf("ttscgraph: metadata shard %s owns authored node %s", key, node.ID)
     }
   }
@@ -857,6 +866,19 @@ func partitionServeGraphFacts(
   for _, node := range facts.Nodes {
     if node.External {
       externalNodes[node.ID] = node
+      continue
+    }
+    // A published artifact is not owned by a program source: its file is a
+    // Markdown document, a Prisma schema, or nothing at all for an operation
+    // named only by method and path. It belongs to the metadata shard, which
+    // carries the facts no source owns — and which the client exempts from the
+    // ownership check for exactly that reason. Without this the projection
+    // rejected the node outright and the resident session failed to start for
+    // any project that publishes one.
+    if graph.IsArtifactKind(graph.NodeKind(node.Kind)) {
+      metadata := shards[metadataKey]
+      metadata.Nodes = append(metadata.Nodes, node)
+      shards[metadataKey] = metadata
       continue
     }
     physical, ok := relativeToPhysical[node.File]

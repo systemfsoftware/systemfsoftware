@@ -56,6 +56,27 @@ interface TtscProjectDirectorySnapshot {
 /** Generation-scoped directory watchers used to detect membership changes. */
 interface TtscProjectMutationTracker {
   close: () => void;
+  /**
+   * Absolute spellings whose creation, change or removal this tracker would
+   * report, when it watches exact names rather than whole directories.
+   *
+   * A validation that finds an input here needs no filesystem call of its own:
+   * the tracker is the evidence, and every path that leaves this set falls back
+   * to being proven by hand. Empty for a tracker that watches directories as a
+   * whole, which cannot answer for one name.
+   */
+  covered?: ReadonlySet<string>;
+  /**
+   * Wait until every event this tracker's watcher has already dispatched has
+   * been applied to it.
+   *
+   * An in-process watcher drains on the next macrotask turn, because its
+   * callbacks are already queued on this loop. A watcher living in the Windows
+   * broker drains by round-trip instead: the child replies after its own turn,
+   * and IPC preserves order, so the reply cannot overtake an event the child
+   * had already sent (samchon/ttsc#1272).
+   */
+  drain?: () => Promise<void>;
   failed: boolean;
   membershipChanged: boolean;
   settle?: Promise<void>;
@@ -99,14 +120,67 @@ export interface TtscCachedProjectTransform {
    */
   externalInputPaths?: string[];
   /**
+   * Metadata signature of each out-of-walk input, captured around the read that
+   * proved its {@link externalInputHashes} entry and recorded only once the
+   * observed filesystem's clock provably left the stamp's tick
+   * ({@link stampSeparable}). An input whose signature still holds carries the
+   * recorded content, so revalidation may skip the read.
+   *
+   * Keyed by lexical spelling rather than by physical identity, for the reason
+   * {@link TtscHostInputValidation} states: a symlink or junction spelling and
+   * its selected target deliberately share one identity but have different
+   * metadata, so an identity key would let the two overwrite each other's
+   * signature and force both to be re-read on every delivery.
+   */
+  externalInputSignatures?: Record<string, string>;
+  /**
    * SHA-256 hash of each project-relative input path at the time of the
    * transform.
    */
   inputHashes: Record<string, string>;
+  /**
+   * Metadata signature of each {@link inputHashes} entry whose hash was proven
+   * against an unracing read of the file on disk, in a tick the observed
+   * filesystem's clock had provably left ({@link stampSeparable}).
+   *
+   * The generation's own current file is absent at capture: its recorded hash
+   * comes from the bundler's in-memory source, so the walk that produced it
+   * compared nothing. A later delivery of a sibling does compare that file's
+   * disk bytes against the recorded hash, and may record a signature then.
+   */
+  inputSignatures?: Record<string, string>;
   /** Metadata snapshot of every directory in the stable generation walk. */
   projectDirectories?: TtscProjectDirectorySnapshot[];
   /** Live notification state for universal host-input changes. */
   hostInputMutationTracker?: TtscProjectMutationTracker;
+  /**
+   * Live notification state for the generation's absent resolution candidates
+   * and the directories that carry them.
+   *
+   * Separate from the universal-input tracker because it listens for a
+   * different thing. Every event that can make an absent candidate present is a
+   * rename — the file appearing, a component of the path being created,
+   * replaced, or retargeted — so a change event on one of these names is never
+   * evidence this tracker exists to collect. What it is, on a backend that
+   * reports a write below a directory as a change to that directory's own entry
+   * (Windows does), is a dev server's steady traffic: listening for every event
+   * would replace the generation each time a bundler wrote inside
+   * `node_modules`. The filter therefore drops noise without dropping proof.
+   * The one appearance it cannot see is a Windows junction retargeted in place
+   * through `FSCTL_SET_REPARSE_POINT`, which no mainstream tool does; every
+   * package manager replaces the entry instead, which is a rename.
+   */
+  candidateMutationTracker?: TtscProjectMutationTracker;
+  /**
+   * Universal descriptor/config inputs proven once at generation time, then by
+   * metadata.
+   *
+   * Recorded state of the generation, like the input hashes and the directory
+   * snapshot beside it, rather than state derived from the envelope: an entry
+   * carries the manifest that proved it, so nothing can present one
+   * generation's recorded inputs under another envelope's proof.
+   */
+  hostInputValidation?: TtscHostInputValidation;
   /** Live notification state for file/directory creation, deletion, and rename. */
   projectMutationTracker?: TtscProjectMutationTracker;
   /**
@@ -167,6 +241,25 @@ export interface TtscTransformFilesystemOperations {
   statBigInt(location: string): fs.BigIntStats;
   /** Override path parsing when the observed filesystem is not the host. */
   platform?: NodeJS.Platform;
+  /**
+   * Open one directory's change notification, or throw when the observed
+   * filesystem cannot provide one.
+   *
+   * Left undefined, generations watch the host filesystem: `fs.watch` on POSIX
+   * and an isolated broker process on Windows. An embedder observing another
+   * filesystem supplies its own; a generation whose watch cannot be opened
+   * keeps validating from recorded state instead of losing its cache.
+   *
+   * Supplying one replaces the Windows broker as well, so an embedder that
+   * wraps Node's own `fs.watch` there gives up the isolation that contains the
+   * native abort Node's Windows fs-event backend can raise when a watched
+   * temporary tree is deleted.
+   */
+  watch?(
+    directory: string,
+    listener: (eventType: string, filename: string | null) => void,
+    onError: () => void,
+  ): { close: () => void };
 }
 
 const DEFAULT_FILESYSTEM_OPERATIONS: TtscTransformFilesystemOperations =
@@ -234,6 +327,7 @@ export function createTtscTransformCache(
     statBigInt:
       operations.statBigInt ?? DEFAULT_FILESYSTEM_OPERATIONS.statBigInt,
     platform: operations.platform,
+    watch: operations.watch,
   });
   return cache;
 }
@@ -290,6 +384,24 @@ function clearTtscTransformCache(cache: TtscTransformCache): void {
 }
 
 /**
+ * What the generation already knows about one derived watch input, handed to
+ * the adapter so it does not rederive it per input per delivery.
+ *
+ * Both facts are generation state: the identity is the memoized
+ * {@link pathIdentityKey} of the input, and `missing` is the existence the
+ * generation recorded and every cache hit revalidates. An adapter that computes
+ * them itself pays a `realpath`, a case-sensitivity directory listing, and an
+ * `existsSync` for every input of every delivered module, which is O(modules x
+ * inputs) for one build (samchon/ttsc#1246).
+ */
+export interface TtscWatchInputEvidence {
+  /** Memoized filesystem identity of the input. */
+  identity: string;
+  /** Whether the generation recorded this input as absent. */
+  missing: boolean;
+}
+
+/**
  * Hooks the bundler adapter passes into {@link transformTtsc} so transform
  * side-channels (plugin-reported dependencies and host resolution candidates)
  * reach the bundler without leaking extra fields on the returned
@@ -308,7 +420,7 @@ export interface TtscTransformHooks {
    * persistent-cache invalidation. See {@link selectWatchInputs} for the exact
    * derivation.
    */
-  addWatchFile?: (file: string) => void;
+  addWatchFile?: (file: string, evidence?: TtscWatchInputEvidence) => void;
   /**
    * Invoked when the plugin declared the transformed file volatile (the
    * envelope's `volatile` list): its output depends on non-file inputs that no
@@ -412,12 +524,7 @@ export async function transformTtsc(
           projectRoot: cached.projectRoot,
           result: cached.result,
         });
-        notifyWatchInputs(hooks, {
-          file,
-          projectRoot: cached.projectRoot,
-          result: cached.result,
-          temporaryTsconfig: cached.temporaryTsconfig,
-        });
+        notifyWatchInputs(hooks, cached, file);
         markCachedSourceServed(cached, file);
         return createTransformResult(source, code);
       }
@@ -449,14 +556,14 @@ export async function transformTtsc(
     if (cache !== undefined && cache.get(key) !== generation) {
       continue;
     }
-    const { projectRoot, result, temporaryTsconfig } = cached;
+    const { projectRoot, result } = cached;
     reportSuccessDiagnostics(result);
     const code = selectOrEvict(cache, key, generation, {
       file,
       projectRoot,
       result,
     });
-    notifyWatchInputs(hooks, { file, projectRoot, result, temporaryTsconfig });
+    notifyWatchInputs(hooks, cached, file);
     markCachedSourceServed(cached, file);
     if (
       isVolatileFile(envelopeDerivation(cached), { file, projectRoot, result })
@@ -535,9 +642,11 @@ function disposeCachedTransform(cached: TtscCachedProjectTransform): void {
   const trackers = [
     cached.projectMutationTracker,
     cached.hostInputMutationTracker,
+    cached.candidateMutationTracker,
   ];
   cached.projectMutationTracker = undefined;
   cached.hostInputMutationTracker = undefined;
+  cached.candidateMutationTracker = undefined;
   for (const tracker of trackers) tracker?.close();
 }
 
@@ -586,8 +695,6 @@ interface TtscEnvelopeDerivation {
    * files, `undefined` until the first completeness predicate.
    */
   dependenciesComplete?: Set<string>;
-  /** Universal inputs validated once at generation time and then by metadata. */
-  hostInputValidation?: TtscHostInputValidation;
   /**
    * Lazily built identity -> output source index of the `typescript` map (first
    * match wins, mirroring the historical scan). `undefined` until the first
@@ -601,6 +708,14 @@ interface TtscEnvelopeDerivation {
   dependencyIndex?: Map<string, unknown>;
   /** Per-file memo of the final derived watch-input list. */
   readonly watchInputs: Map<string, string[]>;
+  /**
+   * Lazily built project-walk keys of the envelope's declared inputs, and
+   * whether that build already ran. A graph-free envelope declares no input
+   * set, so `undefined` after a completed build means "compare the whole walk";
+   * see {@link sameHashes}.
+   */
+  declaredInputKeys?: Set<string>;
+  declaredInputKeysBuilt?: boolean;
 }
 
 interface TtscHostInputValidation {
@@ -609,13 +724,32 @@ interface TtscHostInputValidation {
     string,
     {
       path: string;
+      /**
+       * Whether the recorded state of this input came from reading its bytes.
+       * An input that existed but could not be read records a missing state, so
+       * no signature may stand in for it: its metadata holds still while the
+       * bytes behind it appear.
+       */
+      readable: boolean;
       realpath: string | null;
-      signature: string;
+      /**
+       * The signature that may stand in for this entry's content comparison, or
+       * `undefined` when none may. A blocker keeps one regardless: it proves a
+       * kind and an identity rather than content.
+       */
+      signature: string | undefined;
       strict?: true;
     }
   >;
-  /** Identities omitted from the per-module dependency loop below. */
-  readonly identities: Set<string>;
+  /**
+   * Lexical spellings the manifest accounts for, omitted from the per-module
+   * dependency loop below.
+   *
+   * Spellings, not identities: a symlink and its target share one identity but
+   * are two inputs, and skipping the alias because the manifest proved the
+   * target would leave the alias's own retarget unvalidated.
+   */
+  readonly covered: Set<string>;
   /**
    * Missing paths grouped by the nearest directory whose listing proves them
    * absent.
@@ -636,6 +770,22 @@ interface TtscEnvelopeGraphIndexes {
   readonly configs: string[];
   /** Every realized/candidate graph path, keyed by filesystem identity. */
   readonly members: Set<string>;
+  /**
+   * Members the envelope reported only under `graph.candidates`, keyed by
+   * filesystem identity.
+   *
+   * A superseding candidate is by construction a path the compiler did not
+   * select, and usually one it never read at all: resolution stopped at the
+   * target that won, and the host enumerates the higher-priority spellings so
+   * that one appearing later can invalidate the generation. Such a path has no
+   * compile-time read to prove, so it carries the evidence a plugin-declared
+   * dependency path carries (the state recorded when the envelope was produced)
+   * instead of a compiler proof it can never have.
+   *
+   * A candidate that is also a realized input (an edge endpoint, a global, or a
+   * config) is absent from this set and keeps the realized standard.
+   */
+  readonly speculative: Set<string>;
   /** Compiler-time proof for graph members, keyed by filesystem identity. */
   readonly inputProofs: Map<
     string,
@@ -697,6 +847,7 @@ function envelopeGraphIndexes(
     globals: [],
     configs: [],
     members: new Set(),
+    speculative: new Set(),
     inputProofs: new Map(),
     inputProofConflicts: new Set(),
   };
@@ -731,24 +882,38 @@ function envelopeGraphIndexes(
     for (const input of [...built.globals, ...built.configs]) {
       built.members.add(derivationIdentity(state, input));
     }
-    for (const [source, candidates] of Object.entries(graph.candidates ?? {})) {
-      if (!Array.isArray(candidates)) {
-        continue;
-      }
-      const sourceIdentity = derivationIdentity(
-        state,
-        path.resolve(props.projectRoot, source),
+    const candidateEntries = Object.entries(graph.candidates ?? {}).filter(
+      (entry) => Array.isArray(entry[1]),
+    );
+    // Every candidate source is an importing file the compiler read, so fold
+    // the sources in before classifying any candidate. Otherwise one entry's
+    // candidate could be classified speculative before a later entry proves
+    // the same path is a realized source.
+    for (const [source] of candidateEntries) {
+      built.members.add(
+        derivationIdentity(state, path.resolve(props.projectRoot, source)),
       );
-      built.members.add(sourceIdentity);
+    }
+    const realized = new Set(built.members);
+    for (const [source, candidates] of candidateEntries) {
       built.candidates.push({
-        source: sourceIdentity,
+        source: derivationIdentity(
+          state,
+          path.resolve(props.projectRoot, source),
+        ),
         files: selectListedFiles(props.projectRoot, candidates),
       });
       for (const candidate of candidates) {
         if (typeof candidate !== "string" || candidate.length === 0) continue;
-        built.members.add(
-          derivationIdentity(state, path.resolve(props.projectRoot, candidate)),
+        const identity = derivationIdentity(
+          state,
+          path.resolve(props.projectRoot, candidate),
         );
+        // Edges, globals, configs, and every candidate source are folded in
+        // above, so a path absent from that set is one the envelope reported
+        // only as a candidate.
+        if (!realized.has(identity)) built.speculative.add(identity);
+        built.members.add(identity);
       }
     }
     for (const [input, hash] of Object.entries(graph.inputHashes ?? {})) {
@@ -858,19 +1023,31 @@ function collectDeclaredIdentities(
  */
 function notifyWatchInputs(
   hooks: TtscTransformHooks | undefined,
-  props: {
-    file: string;
-    projectRoot: string;
-    result: ITtscCompilerTransformation;
-    temporaryTsconfig?: string;
-  },
+  cached: TtscCachedProjectTransform,
+  file: string,
 ): void {
   const addWatchFile = hooks?.addWatchFile;
   if (addWatchFile === undefined) {
     return;
   }
-  for (const input of selectWatchInputs(props)) {
-    addWatchFile(input);
+  const state = envelopeDerivation(cached);
+  const external = cached.externalInputHashes ?? {};
+  for (const input of selectWatchInputs({
+    file,
+    projectRoot: cached.projectRoot,
+    result: cached.result,
+    temporaryTsconfig: cached.temporaryTsconfig,
+  })) {
+    // Hand the adapter the identity this generation already resolved and the
+    // existence state it already recorded. Both are memoized per generation,
+    // while an adapter deriving them itself pays a `realpath`, a directory
+    // listing, and an `existsSync` per input on every delivery of every module
+    // (samchon/ttsc#1246).
+    const identity = derivationIdentity(state, input);
+    addWatchFile(input, {
+      identity,
+      missing: external[identity] === MISSING_INPUT_STATE,
+    });
   }
 }
 
@@ -1360,7 +1537,13 @@ function matchesCachedSource(
     cached.projectMutationTracker !== undefined &&
     cached.hostInputMutationTracker !== undefined
   ) {
-    return matchesNarrowPersistentInputs(cached, file);
+    const narrow = matchesNarrowPersistentInputs(cached, file);
+    if (narrow !== undefined) {
+      return narrow;
+    }
+    // Notifications stopped proving membership after this generation was
+    // produced. Losing the proof is not evidence of a change, so fall through
+    // to the snapshot the entry still carries.
   }
   return matchesCompleteInputSnapshot(cached, currentKey, source);
 }
@@ -1370,28 +1553,30 @@ function matchesCachedSource(
  * affect that file. Project membership is validated once per event-loop turn,
  * so sibling module deliveries share one directory-metadata pass instead of
  * multiplying it by module count.
+ *
+ * Returns `undefined` when this narrow proof is unavailable — live
+ * notifications can no longer prove membership, or the generation carries no
+ * universal-input manifest. That is the absence of a proof, not evidence of a
+ * change, so the caller falls back to complete-snapshot validation instead of
+ * discarding the generation. A reported membership event, a changed universal
+ * input, or a changed derived input is evidence, and returns `false`.
  */
 function matchesNarrowPersistentInputs(
   cached: TtscCachedProjectTransform,
   file: string,
-): boolean {
-  if (!matchesProjectMembership(cached)) {
+): boolean | undefined {
+  if (reportsMembershipChange(cached)) {
     return false;
   }
-  const hostTracker = cached.hostInputMutationTracker;
-  if (
-    hostTracker === undefined ||
-    hostTracker.failed ||
-    hostTracker.membershipChanged
-  ) {
-    return false;
+  if (!notificationsProveMembership(cached)) {
+    return undefined;
   }
   const state = envelopeDerivation(cached);
-  const hostValidation = state.hostInputValidation;
-  if (
-    hostValidation === undefined ||
-    !matchesUniversalHostInputs(cached, hostValidation)
-  ) {
+  const hostValidation = cached.hostInputValidation;
+  if (hostValidation === undefined) {
+    return undefined;
+  }
+  if (!matchesUniversalHostInputs(cached, hostValidation)) {
     return false;
   }
   const inputs = selectWatchInputs({
@@ -1401,14 +1586,144 @@ function matchesNarrowPersistentInputs(
     temporaryTsconfig: cached.temporaryTsconfig,
   });
   for (const input of inputs) {
-    if (hostValidation.identities.has(derivationIdentity(state, input))) {
+    // Skip by spelling, not identity: the manifest proved this exact path, and
+    // an alias of the same physical file is a different input whose own
+    // retarget nothing else would see.
+    if (hostValidation.covered.has(path.resolve(input))) {
       continue;
     }
-    if (!matchesRecordedInput(cached, input)) {
+    if (!matchesProvenInput(cached, state, input)) {
       return false;
     }
   }
   return true;
+}
+
+/**
+ * Validate one derived input against the generation, skipping the content read
+ * while the recorded metadata signature still holds.
+ *
+ * Sibling deliveries of one generation share most of their derived inputs, and
+ * `graph.globals` is shared by every one of them, so re-reading and re-hashing
+ * the whole derived set per delivery multiplies one generation's proven bytes
+ * by the module count. The derived set is proven the same way the universal
+ * descriptor inputs are ({@link matchesUniversalHostInputs}), under the same
+ * rules: an unchanged signature stands in for the content comparison, and any
+ * signature change falls back to the full comparison. A signature is recorded
+ * only around a read nothing raced, only for a recorded state that came from
+ * reading the input rather than from failing to, and only while the observed
+ * filesystem's own clock has provably left the stamp's tick
+ * ({@link stampSeparable}), so a same-length rewrite inside that tick cannot
+ * hide behind an unchanged signature.
+ *
+ * The signature carries the physical identity of both the lexical path and its
+ * link target ({@link inputMetadataSignature}), so retargeting a symlink or
+ * junction moves it and the skipped realpath comparison cannot be evaded.
+ */
+function matchesProvenInput(
+  cached: TtscCachedProjectTransform,
+  state: TtscEnvelopeDerivation,
+  input: string,
+): boolean {
+  const slot = inputSignatureSlot(cached, state, input);
+  if (slot === undefined) {
+    return matchesRecordedInput(cached, input);
+  }
+  if (slot.recorded === MISSING_INPUT_STATE && notifiesAbsence(cached, input)) {
+    // The generation's watcher holds this exact name, and the caller already
+    // established that neither tracker failed and neither reported a change.
+    // The path is therefore still absent, proven by the same channel that
+    // proves project membership, and probing it again would only repeat what
+    // the notification already answered.
+    return true;
+  }
+  const filesystem = resultFilesystem(cached.result);
+  const before = inputMetadataEvidence(input, filesystem);
+  if (before !== undefined && slot.signatures[slot.key] === before.signature) {
+    return true;
+  }
+  if (!matchesRecordedInput(cached, input)) {
+    return false;
+  }
+  // A recorded `missing` state is the one comparison that succeeds without
+  // reading anything: an unreadable path still reports `missing`, so its
+  // metadata can hold still while the bytes behind it appear. Only content a
+  // read produced may be stood for.
+  const after =
+    slot.recorded === MISSING_INPUT_STATE
+      ? undefined
+      : inputMetadataSignature(input, filesystem);
+  if (after !== undefined && before?.signature === after && before.separable) {
+    slot.signatures[slot.key] = after;
+  } else {
+    delete slot.signatures[slot.key];
+  }
+  return true;
+}
+
+/**
+ * Report whether the generation's live watcher would announce a creation at
+ * this absent input's exact spelling.
+ *
+ * Losing the watcher is not evidence of anything, so a failed tracker sends the
+ * input back to being probed by hand, exactly as a failed tracker already sends
+ * the whole generation back to complete-snapshot validation.
+ */
+function notifiesAbsence(
+  cached: TtscCachedProjectTransform,
+  input: string,
+): boolean {
+  const tracker = cached.candidateMutationTracker;
+  return (
+    tracker !== undefined &&
+    !tracker.failed &&
+    tracker.covered?.has(path.resolve(input)) === true
+  );
+}
+
+/**
+ * Locate the signature manifest that owns one recorded input, mirroring
+ * {@link matchesRecordedInput}'s own preference for the out-of-walk spelling's
+ * snapshot over the walked project's.
+ *
+ * The manifest is returned whether or not it currently holds a signature for
+ * the input, so a content comparison that succeeds can record one. Without
+ * that, an input whose capture-time metadata was too recent to prove anything
+ * would keep its content read for the whole life of the generation, since
+ * nothing else ever revisits it. Returns `undefined` only for an input the
+ * generation recorded no hash for, which no signature could stand for.
+ */
+function inputSignatureSlot(
+  cached: TtscCachedProjectTransform,
+  state: TtscEnvelopeDerivation,
+  input: string,
+):
+  | { key: string; recorded: string; signatures: Record<string, string> }
+  | undefined {
+  const identity = derivationIdentity(state, input);
+  const external = cached.externalInputHashes ?? {};
+  if (Object.prototype.hasOwnProperty.call(external, identity)) {
+    // The recorded hash is identity-keyed because aliases of one physical file
+    // share its content; the signature is spelling-keyed because they do not
+    // share its metadata.
+    return {
+      key: path.resolve(input),
+      recorded: external[identity]!,
+      signatures: (cached.externalInputSignatures ??= {}),
+    };
+  }
+  const projectKey = toProjectKey(
+    cached.projectRoot,
+    input,
+    state.identityContext,
+  );
+  return Object.prototype.hasOwnProperty.call(cached.inputHashes, projectKey)
+    ? {
+        key: projectKey,
+        recorded: cached.inputHashes[projectKey]!,
+        signatures: (cached.inputSignatures ??= {}),
+      }
+    : undefined;
 }
 
 /**
@@ -1421,19 +1736,69 @@ function matchesUniversalHostInputs(
   cached: TtscCachedProjectTransform,
   validation: TtscHostInputValidation,
 ): boolean {
+  return (
+    matchesUniversalHostInputEntries(cached, validation) &&
+    matchesUniversalHostInputProbes(cached, validation)
+  );
+}
+
+/**
+ * Validate the universal inputs that exist, by metadata first and content only
+ * when that moved.
+ *
+ * Every rejection here is evidence of a change — a vanished path, a moved
+ * physical target, a strict blocker's metadata, differing content — so this
+ * half is safe for a validation path that must never discard a generation for
+ * want of a proof.
+ */
+function matchesUniversalHostInputEntries(
+  cached: TtscCachedProjectTransform,
+  validation: TtscHostInputValidation,
+): boolean {
   const filesystem = resultFilesystem(cached.result);
   for (const entry of validation.entries.values()) {
-    const signature = inputMetadataSignature(entry.path, filesystem);
-    if (signature === entry.signature) continue;
+    const evidence = inputMetadataEvidence(entry.path, filesystem);
+    if (
+      entry.signature !== undefined &&
+      evidence?.signature === entry.signature
+    )
+      continue;
     if (entry.strict === true) return false;
     if (hostInputRealpath(entry.path, filesystem) !== entry.realpath)
       return false;
     if (!matchesRecordedInput(cached, entry.path)) {
       return false;
     }
-    if (signature === undefined) return false;
-    entry.signature = signature;
+    if (evidence === undefined) return false;
+    // Re-earn the proof under the rules the capture applies: an entry whose
+    // recorded state came from reading nothing keeps its content comparison, a
+    // write racing the read that just proved it records nothing, and a stamp
+    // the filesystem's clock has not provably left records nothing either.
+    const after = inputMetadataSignature(entry.path, filesystem);
+    entry.signature =
+      entry.readable && evidence.separable && after === evidence.signature
+        ? evidence.signature
+        : undefined;
   }
+  return true;
+}
+
+/**
+ * Prove the universal inputs that were absent are still absent, through one
+ * exact listing of the nearest directory that can settle it.
+ *
+ * Unlike the entries half, this one rejects on an inability to prove: a
+ * directory that exists but cannot be listed certifies nothing about the
+ * candidates inside it. That is the right answer for the narrow path, which has
+ * no stronger proof to fall back to, but not for the whole-snapshot path, where
+ * the recorded `missing` markers are re-compared directly and losing a proof
+ * must not cost the cache.
+ */
+function matchesUniversalHostInputProbes(
+  cached: TtscCachedProjectTransform,
+  validation: TtscHostInputValidation,
+): boolean {
+  const filesystem = resultFilesystem(cached.result);
   for (const [directory, names] of validation.missing) {
     let entries: fs.Dirent[];
     try {
@@ -1479,7 +1844,7 @@ function captureUniversalHostInputValidation(
   const state = envelopeDerivation(cached);
   const validation: TtscHostInputValidation = {
     entries: new Map(),
-    identities: new Set(),
+    covered: new Set(),
     missing: new Map(),
   };
   for (const input of selectPersistentHostInputs({
@@ -1500,14 +1865,24 @@ function captureUniversalHostInputValidation(
     // Every persistent universal input must carry an evaluation-time
     // fingerprint. If a plugin/native host cannot provide one, keep the fresh
     // result but decline narrow long-lived reuse.
+    let readable = false;
     if (expected === undefined) {
       const current = path.resolve(currentFile);
       if (path.resolve(input) !== current) return undefined;
       // The current module may be supplied from an unsaved editor buffer. Its
       // generation snapshot is overlaid below from `currentSource`, so a disk
-      // fingerprint would be both unavailable and the wrong authority.
-    } else if (expected !== hostInputStateHash(input, filesystem)) {
-      return undefined;
+      // fingerprint would be both unavailable and the wrong authority. The
+      // recorded state is the bundler's, so a signature of the disk cannot
+      // stand for it however readable that disk is.
+    } else {
+      const current = hostInputStateHash(input, filesystem);
+      if (expected !== current) {
+        return undefined;
+      }
+      // A path both sides agree they could not read carries no bytes for a
+      // signature to stand for. It still belongs in the manifest, so the
+      // content comparison keeps running for it on every delivery.
+      readable = current !== null;
     }
     const absoluteInput = path.resolve(input);
     if (generationRealpaths !== undefined) {
@@ -1525,37 +1900,49 @@ function captureUniversalHostInputValidation(
         return undefined;
       }
     }
-    const identity = derivationIdentity(state, input);
-    validation.identities.add(identity);
-    const before = inputMetadataSignature(input, filesystem);
+    validation.covered.add(path.resolve(input));
+    const before = inputMetadataEvidence(input, filesystem);
     if (!matchesRecordedInput(cached, input)) return undefined;
     const after = inputMetadataSignature(input, filesystem);
-    if (before !== after) return undefined;
-    if (after !== undefined) {
+    if (before?.signature !== after) return undefined;
+    if (before !== undefined) {
       // Do not key this manifest by physical identity. A symlink/junction
       // spelling and its selected target deliberately share that identity,
       // but both lexical paths must survive so retargeting the alias is visible.
       validation.entries.set(path.resolve(input), {
         path: input,
+        readable,
         realpath: hostInputRealpath(input, filesystem),
-        signature: after,
+        // The signature stands in for content only when the read produced the
+        // recorded bytes and the filesystem's clock has provably left the
+        // stamp's tick; otherwise the content comparison keeps running until
+        // the re-earn path can prove both.
+        signature: readable && before.separable ? before.signature : undefined,
       });
       continue;
     }
     const probe = missingPathProbe(input, filesystem);
     if (probe.blocker !== undefined) {
-      const blockerIdentity = derivationIdentity(state, probe.blocker);
       const signature = inputMetadataSignature(probe.blocker, filesystem);
       if (signature === undefined) return undefined;
-      validation.identities.add(blockerIdentity);
+      // A blocker proves a kind and an identity, not content: it is the
+      // non-directory ancestor that makes everything below it unreachable, and
+      // it cannot stop being that without its metadata moving. So it keeps a
+      // usable signature whether or not anything read it, and exempt from the
+      // clock-separability rule content signatures need — a same-tick rewrite
+      // of its bytes leaves it exactly as blocking as before.
+      validation.covered.add(path.resolve(probe.blocker));
       validation.entries.set(path.resolve(probe.blocker), {
         path: probe.blocker,
+        readable: true,
         realpath: hostInputRealpath(probe.blocker, filesystem),
         signature,
         strict: true,
       });
       continue;
     }
+    // The probe below proves this exact spelling absent, so the per-module loop
+    // need not re-derive it either.
     let names = validation.missing.get(probe.directory);
     if (names === undefined) {
       names = new Set<string>();
@@ -1568,8 +1955,159 @@ function captureUniversalHostInputValidation(
       ),
     );
   }
-  state.hostInputValidation = validation;
+  cached.hostInputValidation = validation;
   return validation;
+}
+
+/**
+ * The recorded state of an input the generation read nothing from: absent, or
+ * present but unreadable. It is deliberately not a hash, so no signature may
+ * stand in for it: the metadata of an unreadable path holds still while the
+ * bytes behind it appear.
+ *
+ * A directory is not this state. It records the hash of a marker instead, which
+ * a signature may stand for, because the mode both halves of the signature
+ * carry cannot change without the path ceasing to be that directory.
+ */
+const MISSING_INPUT_STATE = "missing";
+
+/**
+ * The highest stamp each observed filesystem clock has provably minted, keyed
+ * by the operations object that observes it and, inside, by reporting device.
+ *
+ * A filesystem stamps a write once per clock tick, so two same-length writes
+ * inside one tick are indistinguishable by metadata alone. A signature may
+ * therefore stand for content only while a later write is guaranteed to move
+ * it, and that guarantee needs a reference instant the observed filesystem
+ * itself produced: once some stamp on the same device is strictly newer than an
+ * input's modification stamp, that input's tick is provably over, so any later
+ * write must mint a newer stamp and move the signature. That is git's
+ * racily-clean index rule, adapted to a read-only contract: where git compares
+ * entries against the index file's own timestamp, this floor accumulates every
+ * stamp the cache-owned operations report, seeded per generation by
+ * {@link mintFilesystemClockReference}.
+ *
+ * The process clock never participates: both sides of every comparison are
+ * stamps the same filesystem clock minted, at the same granularity, so a
+ * filesystem clock running behind (or ahead of) the host process changes
+ * nothing.
+ *
+ * Accumulating observed stamps is deliberately weaker than git's own reference,
+ * which is a single stamp git minted itself. A stamp this floor accepts may
+ * instead have been _set_ rather than minted, and a set stamp is dangerous only
+ * when it lands in the future: the floor is a maximum, so a restored past stamp
+ * never raises it. One future-dated file — a stamp-preserving extraction or
+ * copy from a machine whose clock ran ahead — pushes its device's floor past
+ * the present and reopens the same-tick window for every other input on that
+ * device until the clock catches up. A clock that jumps backwards strands the
+ * floor above the present the same way, a different hazard from the constant
+ * offset the paragraph above is about: an offset moves both operands together
+ * and changes nothing, a jump moves only the present.
+ *
+ * The minted probe is not enough on its own to replace observed stamps: it
+ * lands on the scratch volume, which is frequently not the inputs' volume (a
+ * project on `D:` with `TEMP` on `C:`), and a probe-only floor would then
+ * decline every _content_ signature, so every input carrying bytes would be
+ * re-read on every delivery. A strict blocker keeps its signature either way,
+ * because it proves a kind rather than content. Observed stamps keep the common
+ * case working; the probe covers the case they cannot, a tree whose files were
+ * all written inside one tick.
+ */
+const FILESYSTEM_CLOCK_FLOORS = new WeakMap<
+  TtscTransformFilesystemOperations,
+  Map<bigint, bigint>
+>();
+
+/** Return one observed filesystem's per-device clock floor, creating it. */
+function filesystemClockFloors(
+  filesystem: TtscTransformFilesystemOperations,
+): Map<bigint, bigint> {
+  let floors = FILESYSTEM_CLOCK_FLOORS.get(filesystem);
+  if (floors === undefined) {
+    floors = new Map();
+    FILESYSTEM_CLOCK_FLOORS.set(filesystem, floors);
+  }
+  return floors;
+}
+
+/** Raise a device's clock floor with the stamps one observation reported. */
+function observeFilesystemClock(
+  filesystem: TtscTransformFilesystemOperations,
+  stats: fs.BigIntStats,
+): void {
+  const floors = filesystemClockFloors(filesystem);
+  const stamp = stats.mtimeNs > stats.ctimeNs ? stats.mtimeNs : stats.ctimeNs;
+  const current = floors.get(stats.dev);
+  if (current === undefined || stamp > current) {
+    floors.set(stats.dev, stamp);
+  }
+}
+
+/**
+ * Report whether a later write to the observed path is guaranteed to move its
+ * modification stamp: the device's clock floor holds a stamp strictly newer, so
+ * the tick that minted the stamp is provably over. The floor was observed
+ * before the caller's content read began, which is the ordering the guarantee
+ * needs — a stamp minted before the read proves every post-read write lands in
+ * a newer tick.
+ */
+function stampSeparable(
+  filesystem: TtscTransformFilesystemOperations,
+  stats: fs.BigIntStats,
+): boolean {
+  const floor = filesystemClockFloors(filesystem).get(stats.dev);
+  return floor !== undefined && stats.mtimeNs < floor;
+}
+
+/**
+ * Mint a reference instant for this generation and feed it into the observed
+ * filesystem's clock floor.
+ *
+ * The scratch directory is a write the adapter already owns, deliberately
+ * outside the project root, so stamping a probe file there produces a
+ * freshly-minted "now" without touching the user's project — the analogue of
+ * git writing its index. The probe is observed through the cache-owned
+ * operations and keyed by the device those operations report, so it only ever
+ * separates stamps on the filesystem that actually minted it; when the scratch
+ * volume differs from the inputs' volume, or the observed filesystem cannot see
+ * the probe at all, nothing is proven and signature recording simply stays
+ * declined until passively observed stamps separate an input on their own.
+ *
+ * Relocating the scratch directory onto the inputs' volume would make the probe
+ * universal, but it would also move every compiler and plugin temporary write
+ * into the project's parent (frequently a monorepo root or a home directory)
+ * for those layouts. That is a product decision about where ttsc writes, not a
+ * property of this rule, so the cross-volume case degrades to more reads here
+ * rather than being bought with it.
+ */
+function mintFilesystemClockReference(
+  scratchDirectory: string,
+  filesystem: TtscTransformFilesystemOperations,
+): void {
+  try {
+    const probe = path.join(scratchDirectory, "clock-reference");
+    fs.writeFileSync(probe, "");
+    observeFilesystemClock(filesystem, filesystem.lstat(probe));
+  } catch {
+    // The absence of a reference declines signature recording; it never
+    // invalidates a generation.
+  }
+}
+
+/**
+ * One metadata observation: the signature plus whether the observed filesystem
+ * has provably moved past every write-mintable stamp inside it.
+ */
+interface TtscInputMetadataEvidence {
+  /** The joined metadata signature of the lexical path and its link target. */
+  signature: string;
+  /**
+   * Whether a later write is guaranteed to move this signature. Only a
+   * signature captured with this evidence may be recorded to stand in for a
+   * content comparison; without it, a same-length rewrite inside the stamp's
+   * own clock tick would leave the signature unchanged.
+   */
+  separable: boolean;
 }
 
 /** Metadata identity whose stability lets a generation reuse a content hash. */
@@ -1577,43 +2115,64 @@ function inputMetadataSignature(
   file: string,
   filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
 ): string | undefined {
+  return inputMetadataEvidence(file, filesystem)?.signature;
+}
+
+/** Observe one input's metadata signature and its clock separability. */
+function inputMetadataEvidence(
+  file: string,
+  filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
+): TtscInputMetadataEvidence | undefined {
   try {
     const link = filesystem.lstat(file);
+    observeFilesystemClock(filesystem, link);
     let target = link;
     if (link.isSymbolicLink()) {
       try {
         target = filesystem.statBigInt(file);
+        observeFilesystemClock(filesystem, target);
       } catch {
         // Keep a broken link in the existing-input manifest. Its own metadata
         // stays stable while the target is missing, and the first successful
         // stat after the target appears changes this signature. Treating it as
         // a plain missing path would watch/list only the link's parent, which
-        // cannot observe a target created in another directory.
-        return [
-          link.dev,
-          link.ino,
-          link.mode,
-          link.size,
-          link.mtimeNs,
-          link.ctimeNs,
-          "missing-target",
-        ].join(":");
+        // cannot observe a target created in another directory. It carries no
+        // readable bytes, so it never needs to be separable.
+        return {
+          signature: [
+            link.dev,
+            link.ino,
+            link.mode,
+            link.size,
+            link.mtimeNs,
+            link.ctimeNs,
+            "missing-target",
+          ].join(":"),
+          separable: false,
+        };
       }
     }
-    return [
-      link.dev,
-      link.ino,
-      link.mode,
-      link.size,
-      link.mtimeNs,
-      link.ctimeNs,
-      target.dev,
-      target.ino,
-      target.mode,
-      target.size,
-      target.mtimeNs,
-      target.ctimeNs,
-    ].join(":");
+    return {
+      signature: [
+        link.dev,
+        link.ino,
+        link.mode,
+        link.size,
+        link.mtimeNs,
+        link.ctimeNs,
+        target.dev,
+        target.ino,
+        target.mode,
+        target.size,
+        target.mtimeNs,
+        target.ctimeNs,
+      ].join(":"),
+      // Both halves must be separable: a write remints the target's stamp, a
+      // link retarget the link's own, and either one hiding inside its recorded
+      // tick would evade the skipped content and realpath comparisons.
+      separable:
+        stampSeparable(filesystem, link) && stampSeparable(filesystem, target),
+    };
   } catch {
     return undefined;
   }
@@ -1732,25 +2291,64 @@ function missingPathProbe(
   }
 }
 
-/** Fall back to the historical whole-envelope validation without a graph. */
+/**
+ * Prove one generation from its own recorded snapshot, with no help from live
+ * notifications.
+ *
+ * This is the fallback for a graph-free envelope and for a generation whose
+ * watchers could not be opened or have since failed: losing the notification
+ * proof must cost the narrow path, not the cache. The walk re-proves membership
+ * directly — the recorded directory signatures plus the recorded file-key
+ * universe — so a created, deleted, or renamed input still invalidates without
+ * any watcher.
+ */
 function matchesCompleteInputSnapshot(
   cached: TtscCachedProjectTransform,
   currentKey: string,
   source: string,
 ): boolean {
-  if (cached.projectSnapshotComplete !== true) {
+  if (
+    cached.projectSnapshotComplete !== true ||
+    cached.projectDirectories === undefined
+  ) {
     return false;
   }
+  // Universal descriptor/config inputs carry a physical-identity proof that no
+  // content comparison can replace: retargeting a symlinked input to a
+  // byte-identical file selects a different file, and its own transitive
+  // requires with it. Only the graph half of the out-of-walk snapshot records
+  // realpaths, so without this the fallback would quietly hold a lower standard
+  // than the narrow path it stands in for.
+  const state = envelopeDerivation(cached);
+  const hostValidation = cached.hostInputValidation;
+  if (
+    hostValidation === undefined ||
+    !matchesUniversalHostInputEntries(cached, hostValidation)
+  ) {
+    return false;
+  }
+  const declaredInputs = declaredProjectInputKeys(state, cached);
   const current = collectProjectInputSnapshot(
     cached.projectRoot,
-    envelopeDerivation(cached).identityContext,
+    state.identityContext,
     resultFilesystem(cached.result),
+    cached.inputSignatures === undefined
+      ? undefined
+      : { hashes: cached.inputHashes, signatures: cached.inputSignatures },
   );
-  if (!current.complete) {
+  if (!walkSnapshotComplete(current, declaredInputs)) {
+    return false;
+  }
+  if (
+    !sameProjectDirectories(
+      cached.projectDirectories,
+      current.projectDirectories,
+    )
+  ) {
     return false;
   }
   current.hashes[currentKey] = hashText(source);
-  if (!sameHashes(cached.inputHashes, current.hashes)) {
+  if (!sameHashes(cached.inputHashes, current.hashes, declaredInputs)) {
     return false;
   }
   // Re-hash the out-of-walk inputs the compiler reported for this generation
@@ -1761,11 +2359,49 @@ function matchesCompleteInputSnapshot(
   // edge requires editing an in-walk source, and a new global or config file
   // requires a tsconfig or package manifest change, both of which the project
   // walk above already detects.
-  const externalHashes = cached.externalInputHashes ?? {};
-  return (
-    sameHashes(externalHashes, collectCachedExternalInputHashes(cached)) &&
-    matchesExternalInputRealpaths(cached)
-  );
+  const externalCurrent = matchesCachedExternalInputs(cached);
+  if (!externalCurrent.matches || !matchesExternalInputRealpaths(cached)) {
+    return false;
+  }
+  adoptProvenSignatures(cached, {
+    currentKey,
+    external: externalCurrent.signatures,
+    project: current.provenSignatures,
+  });
+  return true;
+}
+
+/**
+ * Adopt the signatures captured while this walk proved every recorded input
+ * still carries its recorded content.
+ *
+ * Without this, a metadata-only change — a touch, or a rewrite of identical
+ * bytes — costs a re-read on every later delivery for the rest of the
+ * generation's life, because the recorded signature can never match again. The
+ * narrow path self-heals through {@link matchesProvenInput}; this is the same
+ * refresh for the path that proves the whole snapshot at once.
+ *
+ * The delivered file is the single exclusion: its recorded hash is the source
+ * the bundler supplied, so the disk bytes this walk read for it were compared
+ * against nothing.
+ */
+function adoptProvenSignatures(
+  cached: TtscCachedProjectTransform,
+  proven: {
+    currentKey: string;
+    external: Record<string, string>;
+    project: Record<string, string>;
+  },
+): void {
+  const projectSignatures = (cached.inputSignatures ??= {});
+  for (const [key, signature] of Object.entries(proven.project)) {
+    if (key === proven.currentKey) continue;
+    projectSignatures[key] = signature;
+  }
+  const externalSignatures = (cached.externalInputSignatures ??= {});
+  for (const [spelling, signature] of Object.entries(proven.external)) {
+    externalSignatures[spelling] = signature;
+  }
 }
 
 /** Re-check graph-owned physical identities in complete-snapshot fallback. */
@@ -1806,22 +2442,48 @@ function captureExternalInputSnapshot(
   complete: boolean;
   hashes: Record<string, string>;
   realpaths: Record<string, string | null>;
+  signatures: Record<string, string>;
 } {
   const state = envelopeDerivation(cached);
   const filesystem = resultFilesystem(cached.result);
   const graph = envelopeGraphIndexes(state, cached);
   const hashes: Record<string, string> = {};
   const realpaths: Record<string, string | null> = {};
+  const signatures: Record<string, string> = {};
   let complete = true;
+  // Sandwich every read between two metadata signatures. Only a signature that
+  // survived its own read, and whose stamp's tick the filesystem's clock has
+  // provably left ({@link stampSeparable}), may stand in for the content
+  // comparison; a write racing the capture, or a stamp a same-tick rewrite
+  // could still reproduce, leaves the input without one, so revalidation keeps
+  // re-reading it.
+  const record = (
+    input: string,
+    before: TtscInputMetadataEvidence | undefined,
+    after: string | undefined,
+  ): void => {
+    if (after !== undefined && before?.signature === after && before.separable)
+      signatures[path.resolve(input)] = after;
+  };
   for (const input of paths) {
     const identity = derivationIdentity(state, input);
-    if (graph.members.has(identity)) {
+    // A member the envelope reported only as a resolution candidate falls
+    // through to the recorded-state branch below, the same evidence a
+    // plugin-declared dependency path carries. Its absence still invalidates
+    // the generation when it appears, because `missing` is recorded state.
+    const speculativeOnly =
+      graph.speculative.has(identity) &&
+      !graph.inputProofs.has(identity) &&
+      !graph.inputProofConflicts.has(identity);
+    if (graph.members.has(identity) && !speculativeOnly) {
       const proof = graph.inputProofs.get(identity);
       if (proof === undefined || graph.inputProofConflicts.has(identity)) {
         complete = false;
         continue;
       }
+      const before = inputMetadataEvidence(input, filesystem);
       const currentHash = graphInputStateHash(input, filesystem);
+      const after = inputMetadataSignature(input, filesystem);
       if (
         currentHash !== proof.hash ||
         !sameHostInputRealpath(
@@ -1831,14 +2493,24 @@ function captureExternalInputSnapshot(
         )
       ) {
         complete = false;
+      } else if (currentHash !== null) {
+        // The recorded hash is the compiler's own proof, so a signature may
+        // only stand for it once the current bytes were shown to match it.
+        // A path with no readable content has no bytes to stand for: it can
+        // hold stable metadata while becoming readable, so it keeps the read.
+        record(input, before, after);
       }
-      hashes[identity] = proof.hash ?? "missing";
+      hashes[identity] = proof.hash ?? MISSING_INPUT_STATE;
       realpaths[identity] = proof.realpath;
       continue;
     }
-    hashes[identity] = hostInputStateHash(input, filesystem) ?? "missing";
+    const before = inputMetadataEvidence(input, filesystem);
+    const hash = hostInputStateHash(input, filesystem);
+    const after = inputMetadataSignature(input, filesystem);
+    hashes[identity] = hash ?? MISSING_INPUT_STATE;
+    if (hash !== null) record(input, before, after);
   }
-  return { complete, hashes, realpaths };
+  return { complete, hashes, realpaths, signatures };
 }
 
 /** Verify every graph member still has the state read by the compiler. */
@@ -1859,14 +2531,19 @@ function matchesCompilerGraphInputProofs(
   const state = envelopeDerivation(cached);
   const filesystem = resultFilesystem(cached.result);
   const graph = envelopeGraphIndexes(state, cached);
-  if (
-    graph.inputProofConflicts.size !== 0 ||
-    graph.inputProofs.size !== graph.members.size
-  ) {
+  if (graph.inputProofConflicts.size !== 0) {
     return false;
   }
   for (const identity of graph.members) {
     const proof = graph.inputProofs.get(identity);
+    // A speculative candidate has no compile-time read to prove. Requiring one
+    // would void every generation of every project whose resolution passes over
+    // a higher-priority spelling, which is every project with a dependency
+    // typed by a declaration file (samchon/ttsc#1245). It is validated instead
+    // against the state {@link captureExternalInputSnapshot} recorded for it.
+    if (proof === undefined && graph.speculative.has(identity)) {
+      continue;
+    }
     if (
       proof === undefined ||
       graphInputStateHash(proof.path, filesystem) !== proof.hash ||
@@ -1928,9 +2605,9 @@ function matchesRecordedInput(
     const current = graphInput
       ? graphInputStateHash(input, filesystem)
       : hostInputStateHash(input, filesystem);
-    return recorded === (current ?? "missing");
+    return recorded === (current ?? MISSING_INPUT_STATE);
   } catch {
-    return recorded === "missing";
+    return recorded === MISSING_INPUT_STATE;
   }
 }
 
@@ -1964,39 +2641,87 @@ function collectProjectInputSnapshot(
   projectRoot: string,
   identities: FilesystemPathIdentityContext,
   filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
+  proven?: {
+    hashes: Record<string, string>;
+    signatures: Record<string, string>;
+  },
 ): {
   complete: boolean;
+  directoryComplete: boolean;
   fileSignatures: Record<string, string>;
   hashes: Record<string, string>;
   projectDirectories: TtscProjectDirectorySnapshot[];
+  provenSignatures: Record<string, string>;
+  unstableFiles: Set<string>;
 } {
   const hashes: Record<string, string> = {};
   const fileSignatures: Record<string, string> = {};
+  const provenSignatures: Record<string, string> = {};
+  const unstableFiles = new Set<string>();
+  let attributed = true;
   const walked = walkProjectInputs(projectRoot, filesystem);
   let complete = walked.complete;
   for (const file of walked.files) {
     try {
-      const before = inputMetadataSignature(file, filesystem);
+      const before = inputMetadataEvidence(file, filesystem);
+      const key = toProjectKey(projectRoot, file, identities);
+      // A file whose signature still equals the one captured around the read
+      // that produced the recorded hash carries that content, so the whole
+      // project does not have to be re-read to prove one delivery. A signature
+      // that was already proven stays proven: its stamp has not moved since the
+      // clock provably left its tick.
+      if (
+        before !== undefined &&
+        proven !== undefined &&
+        proven.signatures[key] === before.signature &&
+        Object.prototype.hasOwnProperty.call(proven.hashes, key)
+      ) {
+        hashes[key] = proven.hashes[key]!;
+        fileSignatures[key] = before.signature;
+        provenSignatures[key] = before.signature;
+        continue;
+      }
       const contents = filesystem.readFile(file);
       const after = inputMetadataSignature(file, filesystem);
-      const key = toProjectKey(projectRoot, file, identities);
       hashes[key] = hashText(contents);
-      if (before === undefined || after === undefined || before !== after) {
+      if (
+        before === undefined ||
+        after === undefined ||
+        before.signature !== after
+      ) {
         complete = false;
+        unstableFiles.add(key);
       } else {
         fileSignatures[key] = after;
+        // Only a signature whose stamp's tick the filesystem's clock provably
+        // left before this read may later stand in for the content comparison
+        // ({@link stampSeparable}); the raw signature above still participates
+        // in the generation-time stability comparison.
+        if (before.separable) {
+          provenSignatures[key] = after;
+        }
       }
     } catch {
       // File watchers may observe a transform while another process is moving
       // or deleting files. The missing key invalidates older cache entries.
       complete = false;
+      try {
+        unstableFiles.add(toProjectKey(projectRoot, file, identities));
+      } catch {
+        // Without a key the failure cannot be attributed, so it keeps the
+        // whole snapshot incomplete rather than being scoped away.
+        attributed = false;
+      }
     }
   }
   return {
     complete,
+    directoryComplete: walked.complete && attributed,
     fileSignatures,
     hashes,
     projectDirectories: walked.directories,
+    provenSignatures,
+    unstableFiles,
   };
 }
 
@@ -2072,6 +2797,9 @@ function projectDirectorySignature(
 ): string | undefined {
   try {
     const stats = filesystem.statBigInt(directory);
+    // Directory stamps are minted by the same clock as file stamps, so every
+    // walk observation also raises the clock floor that separates them.
+    observeFilesystemClock(filesystem, stats);
     if (!stats.isDirectory()) {
       return undefined;
     }
@@ -2103,6 +2831,31 @@ function sameProjectDirectories(
   );
 }
 
+/**
+ * Open one directory's change notification through the cache-owned watch seam,
+ * falling back to the host's own `fs.watch`. Throws exactly where the
+ * underlying watch does, so callers classify a registration failure
+ * themselves.
+ */
+function openDirectoryWatch(
+  filesystem: TtscTransformFilesystemOperations,
+  directory: string,
+  listener: (eventType: string, filename: string | null) => void,
+  onError: () => void,
+): { close: () => void } {
+  if (filesystem.watch !== undefined) {
+    return filesystem.watch(directory, listener, onError);
+  }
+  const watcher = fs.watch(
+    directory,
+    { persistent: false },
+    (eventType, filename) =>
+      listener(eventType, filename === null ? null : String(filename)),
+  );
+  watcher.on("error", onError);
+  return { close: () => watcher.close() };
+}
+
 /** Watch every walked directory for membership changes after generation. */
 async function createProjectMutationTracker(
   directories: readonly TtscProjectDirectorySnapshot[],
@@ -2113,7 +2866,7 @@ async function createProjectMutationTracker(
     failed: false,
     membershipChanged: false,
   };
-  if (process.platform === "win32") {
+  if (process.platform === "win32" && filesystem.watch === undefined) {
     await registerWindowsProjectMutationTracker(
       tracker,
       directories.map((directory) => ({ directory: directory.path })),
@@ -2122,24 +2875,25 @@ async function createProjectMutationTracker(
     );
     return tracker;
   }
-  const watchers: fs.FSWatcher[] = [];
+  const watchers: { close: () => void }[] = [];
   tracker.close = () => {
     for (const watcher of watchers) watcher.close();
     watchers.length = 0;
   };
   for (const directory of directories) {
     try {
-      const watcher = fs.watch(
-        directory.path,
-        { persistent: false },
-        (eventType) => {
-          if (eventType === "rename") tracker.membershipChanged = true;
-        },
+      watchers.push(
+        openDirectoryWatch(
+          filesystem,
+          directory.path,
+          (eventType) => {
+            if (eventType === "rename") tracker.membershipChanged = true;
+          },
+          () => {
+            tracker.failed = true;
+          },
+        ),
       );
-      watcher.on("error", () => {
-        tracker.failed = true;
-      });
-      watchers.push(watcher);
     } catch {
       tracker.failed = true;
     }
@@ -2150,7 +2904,9 @@ async function createProjectMutationTracker(
 /** Watch exact universal inputs, or their nearest existing parent if missing. */
 async function createHostInputMutationTracker(
   inputs: readonly string[],
-  filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
+  filesystem: TtscTransformFilesystemOperations,
+  covered: ReadonlySet<string>,
+  events: "all" | "rename" = "all",
 ): Promise<TtscProjectMutationTracker> {
   const identities = createHostPathIdentityContext(filesystem);
   const namesByDirectory = new Map<
@@ -2184,19 +2940,26 @@ async function createHostInputMutationTracker(
   }));
   const tracker: TtscProjectMutationTracker = {
     close: () => undefined,
+    // Coverage is the caller's claim, and it is required rather than derived
+    // from the input list: an input is watched by its exact name here, but only
+    // the caller knows whether the path leading to it is watched as well, which
+    // is what a later validation needs before it trusts the watcher instead of
+    // probing the path again. Deriving it here would hand that claim to every
+    // future caller by default (samchon/ttsc#1261).
+    covered,
     failed: false,
     membershipChanged: false,
   };
-  if (process.platform === "win32") {
+  if (process.platform === "win32" && filesystem.watch === undefined) {
     await registerWindowsProjectMutationTracker(
       tracker,
       locations,
-      true,
+      events === "all",
       filesystem,
     );
     return tracker;
   }
-  const watchers: fs.FSWatcher[] = [];
+  const watchers: { close: () => void }[] = [];
   tracker.close = () => {
     for (const watcher of watchers) watcher.close();
     watchers.length = 0;
@@ -2205,23 +2968,27 @@ async function createHostInputMutationTracker(
     try {
       const names = new Set(location.names);
       const caseSensitive = identities.caseSensitive(location.directory);
-      const watcher = fs.watch(
-        location.directory,
-        { persistent: false },
-        (_eventType, filename) => {
-          const reported =
-            filename === null
-              ? null
-              : normalizeHostInputName(String(filename), caseSensitive);
-          if (reported === null || names.has(reported)) {
-            tracker.membershipChanged = true;
-          }
-        },
+      watchers.push(
+        openDirectoryWatch(
+          filesystem,
+          location.directory,
+          (eventType, filename) => {
+            if (events === "rename" && eventType !== "rename") {
+              return;
+            }
+            const reported =
+              filename === null
+                ? null
+                : normalizeHostInputName(filename, caseSensitive);
+            if (reported === null || names.has(reported)) {
+              tracker.membershipChanged = true;
+            }
+          },
+          () => {
+            tracker.failed = true;
+          },
+        ),
       );
-      watcher.on("error", () => {
-        tracker.failed = true;
-      });
-      watchers.push(watcher);
     } catch {
       tracker.failed = true;
     }
@@ -2231,7 +2998,12 @@ async function createHostInputMutationTracker(
 
 interface WindowsProjectMutationBroker {
   child: ChildProcess;
+  /** Round-trips awaiting the child's reply, by request id. */
+  drains: Map<number, () => void>;
+  /** The acknowledgement currently in flight, shared by every waiter. */
+  draining?: Promise<void>;
   nextId: number;
+  pendingDrains: number;
   pendingRegistrations: number;
   trackers: Map<
     number,
@@ -2284,6 +3056,7 @@ async function registerWindowsProjectMutationTracker(
     resolveReady = resolve;
   });
   broker.trackers.set(id, { ready: resolveReady, tracker });
+  tracker.drain = () => drainWindowsProjectMutationBroker(broker);
   tracker.close = () => {
     const active = broker.trackers.get(id);
     if (active === undefined) return;
@@ -2308,7 +3081,11 @@ async function registerWindowsProjectMutationTracker(
     await ready;
   } finally {
     broker.pendingRegistrations -= 1;
-    if (broker.pendingRegistrations === 0) {
+    // `ref`/`unref` is a flag rather than a counter, so this must not clear a
+    // reference an in-flight acknowledgement is holding: a delivery waiting on
+    // a reply over an unreferenced channel lets the loop empty and the process
+    // exit mid-build.
+    if (broker.pendingRegistrations === 0 && broker.pendingDrains === 0) {
       broker.child.unref();
       broker.child.channel?.unref();
     }
@@ -2325,7 +3102,9 @@ function getWindowsProjectMutationBroker(): WindowsProjectMutationBroker {
   });
   const broker: WindowsProjectMutationBroker = {
     child,
+    drains: new Map(),
     nextId: 1,
+    pendingDrains: 0,
     pendingRegistrations: 0,
     trackers: new Map(),
   };
@@ -2335,6 +3114,11 @@ function getWindowsProjectMutationBroker(): WindowsProjectMutationBroker {
       registration.ready();
     }
     broker.trackers.clear();
+    // A broker that died answers no round-trip. Release every waiter instead of
+    // stalling the deliveries behind them; their trackers are failed now, so
+    // validation falls back to proving the generation from its own state.
+    for (const release of broker.drains.values()) release();
+    broker.drains.clear();
     if (windowsProjectMutationBroker === broker) {
       windowsProjectMutationBroker = undefined;
     }
@@ -2344,11 +3128,20 @@ function getWindowsProjectMutationBroker(): WindowsProjectMutationBroker {
   child.on("message", (message: unknown) => {
     if (message === null || typeof message !== "object") return;
     const record = message as {
+      drained?: boolean;
       failed?: boolean;
       id?: number;
       ready?: boolean;
     };
     if (typeof record.id !== "number") return;
+    if (record.drained === true) {
+      // Every event the child had already sent arrived before this reply, since
+      // one IPC channel delivers in order.
+      const release = broker.drains.get(record.id);
+      broker.drains.delete(record.id);
+      release?.();
+      return;
+    }
     const registration = broker.trackers.get(record.id);
     if (registration === undefined) return;
     if (record.failed === true) registration.tracker.failed = true;
@@ -2361,10 +3154,78 @@ function getWindowsProjectMutationBroker(): WindowsProjectMutationBroker {
   return broker;
 }
 
+/**
+ * Ask the Windows broker to acknowledge, and resolve when it does.
+ *
+ * The child answers after a turn of its own loop, so a watch callback it had
+ * already queued has run, and the ordered IPC channel puts every message it
+ * sent before the reply ahead of the reply. That is the same proof an
+ * in-process watcher gets from a macrotask turn, rather than the fixed wait
+ * this replaces, which guessed at the crossing (samchon/ttsc#1272).
+ *
+ * A broker that never answers must not hold a delivery: the wait falls back to
+ * the previous fixed grace, after which validation proceeds against whatever
+ * the tracker knows, exactly as it did before.
+ */
+function drainWindowsProjectMutationBroker(
+  broker: WindowsProjectMutationBroker,
+): Promise<void> {
+  // Every tracker of a generation lives in one broker, so one acknowledgement
+  // answers for all of them. Sharing the in-flight round-trip keeps a settle to
+  // a single crossing.
+  broker.draining ??= startWindowsProjectMutationDrain(broker).finally(() => {
+    broker.draining = undefined;
+  });
+  return broker.draining;
+}
+
+function startWindowsProjectMutationDrain(
+  broker: WindowsProjectMutationBroker,
+): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const id = broker.nextId++;
+    let settled = false;
+    const release = (): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      broker.drains.delete(id);
+      broker.pendingDrains -= 1;
+      if (broker.pendingDrains === 0 && broker.pendingRegistrations === 0) {
+        broker.child.unref();
+        broker.child.channel?.unref();
+      }
+      resolve();
+    };
+    // Hold the channel open while the acknowledgement is outstanding. The
+    // broker is unreferenced between requests so it never keeps a host alive,
+    // and a reply is the only thing this promise can be resolved by: without
+    // the reference the loop can empty while a delivery waits here, and the
+    // process exits mid-build with nothing to report.
+    broker.pendingDrains += 1;
+    broker.child.ref();
+    broker.child.channel?.ref();
+    const timer = setTimeout(release, WINDOWS_MUTATION_DRAIN_FALLBACK_MS);
+    broker.drains.set(id, release);
+    if (broker.child.send?.({ id, op: "drain" }) !== true) {
+      release();
+    }
+  });
+}
+
+/** The wait a broker that stopped answering degrades to. */
+const WINDOWS_MUTATION_DRAIN_FALLBACK_MS = 10;
+
 const WINDOWS_WATCH_BROKER_SOURCE = [
   'const fs = require("node:fs");',
   "const groups = new Map();",
   'process.on("message", (message) => {',
+  '  if (message.op === "drain") {',
+  // Two turns, not one: the first lets the loop poll for watch completions the
+  // kernel had already queued, the second answers after their callbacks ran.
+  "    setImmediate(() => setImmediate(() => process.send?.({ drained: true, id: message.id })));",
+  "    return;",
+  "  }",
   '  if (message.op === "remove") {',
   "    close(message.id);",
   "    return;",
@@ -2398,20 +3259,63 @@ const WINDOWS_WATCH_BROKER_SOURCE = [
   "}",
 ].join("\n");
 
-/** Report whether live directory notifications preserve project membership. */
-function matchesProjectMembership(cached: TtscCachedProjectTransform): boolean {
-  const tracker = cached.projectMutationTracker;
+/**
+ * Report whether either live notification observed a membership event. This is
+ * positive evidence that the generation is stale, so it outranks the question
+ * of whether the notifications still work.
+ */
+function reportsMembershipChange(cached: TtscCachedProjectTransform): boolean {
   return (
-    tracker !== undefined &&
-    tracker.failed === false &&
-    tracker.membershipChanged === false
+    cached.projectMutationTracker?.membershipChanged === true ||
+    cached.hostInputMutationTracker?.membershipChanged === true ||
+    cached.candidateMutationTracker?.membershipChanged === true
   );
 }
 
 /**
- * Yield once before persistent validation so synchronous edits can reach the
- * directory watchers that guard membership. Concurrent sibling deliveries share
- * the same barrier.
+ * Report whether the live notifications can still prove membership. A watcher
+ * that failed to register, or that errored after the generation was produced,
+ * proves nothing either way — it never proves the generation stale.
+ */
+function notificationsProveMembership(
+  cached: TtscCachedProjectTransform,
+): boolean {
+  for (const tracker of [
+    cached.projectMutationTracker,
+    cached.hostInputMutationTracker,
+  ]) {
+    if (tracker === undefined || tracker.failed) {
+      return false;
+    }
+  }
+  // The candidate tracker is optional: a generation with no absent candidate
+  // opens none, and one that declined to watch them left the per-delivery probe
+  // in place. Only a tracker that exists and has failed withdraws the proof.
+  return cached.candidateMutationTracker?.failed !== true;
+}
+
+/**
+ * Yield to the loop the tracker's own watcher callbacks are queued on.
+ *
+ * Two turns for the same reason the broker takes two: the first gives the loop
+ * a poll phase for completions the kernel had already queued, the second runs
+ * after the callbacks they produced.
+ */
+function drainOnNextTurn(): Promise<void> {
+  return new Promise<void>((resolve) =>
+    setImmediate(() => setImmediate(resolve)),
+  );
+}
+
+/**
+ * Settle every notification the trackers' watchers have already dispatched,
+ * before persistent validation reads their verdict.
+ *
+ * A synchronous edit returns before its watch event is applied, so without this
+ * a delivery could validate against a tracker that has not been told yet. Each
+ * tracker drains through its own channel, which is a macrotask turn for a
+ * watcher on this loop and an ordered round-trip for one inside the Windows
+ * broker. Concurrent sibling deliveries share the barrier one of them started.
  */
 async function settleProjectMutationEvents(
   cached: TtscCachedProjectTransform,
@@ -2419,18 +3323,14 @@ async function settleProjectMutationEvents(
   const trackers = [
     cached.projectMutationTracker,
     cached.hostInputMutationTracker,
+    cached.candidateMutationTracker,
   ].filter(
     (tracker): tracker is TtscProjectMutationTracker => tracker !== undefined,
   );
   await Promise.all(
     trackers.map(async (tracker) => {
-      tracker.settle ??= new Promise<void>((resolve) => {
-        const settled = () => {
-          tracker.settle = undefined;
-          resolve();
-        };
-        if (process.platform === "win32") setTimeout(settled, 10);
-        else setImmediate(settled);
+      tracker.settle ??= (tracker.drain ?? drainOnNextTurn)().finally(() => {
+        tracker.settle = undefined;
       });
       await tracker.settle;
     }),
@@ -2511,29 +3411,74 @@ export function collectExternalInputHashes(
     if (identity in hashes) {
       continue;
     }
-    hashes[identity] = hostInputStateHash(file, filesystem) ?? "missing";
+    hashes[identity] =
+      hostInputStateHash(file, filesystem) ?? MISSING_INPUT_STATE;
   }
   return hashes;
 }
 
-/** Re-hash a cached mixed graph/dependency input set with its owning codec. */
-function collectCachedExternalInputHashes(
-  cached: TtscCachedProjectTransform,
-): Record<string, string> {
-  const hashes: Record<string, string> = {};
+/**
+ * Re-check a cached mixed graph/dependency input set with its owning codec,
+ * reusing the recorded hash of any input whose metadata signature still holds
+ * and reporting the signatures this pass captured.
+ *
+ * The caller adopts those signatures only once every input is proven unchanged,
+ * so a signature never outlives the content comparison that justified it.
+ */
+function matchesCachedExternalInputs(cached: TtscCachedProjectTransform): {
+  matches: boolean;
+  signatures: Record<string, string>;
+} {
+  const signatures: Record<string, string> = {};
+  let matches = true;
   const state = envelopeDerivation(cached);
   const graphRealpaths = cached.externalInputRealpaths ?? {};
   const filesystem = resultFilesystem(cached.result);
+  const recordedHashes = cached.externalInputHashes ?? {};
+  const recordedSignatures = cached.externalInputSignatures ?? {};
+  // Compare each spelling against the recorded state under its own name. Two
+  // spellings share one identity exactly when they selected one physical file
+  // at generation time, which is the state a retarget ends, so neither may
+  // answer for the other: skipping the second would leave a retargeted alias
+  // unvalidated, and comparing them only through a shared key would let
+  // whichever came first decide.
   for (const file of cached.externalInputPaths ??
     Object.keys(cached.externalInputHashes ?? {})) {
     const identity = derivationIdentity(state, file);
-    if (identity in hashes) continue;
-    hashes[identity] =
-      (Object.prototype.hasOwnProperty.call(graphRealpaths, identity)
-        ? graphInputStateHash(file, filesystem)
-        : hostInputStateHash(file, filesystem)) ?? "missing";
+    const spelling = path.resolve(file);
+    // Reuse the recorded hash of an out-of-walk input whose signature still
+    // equals the one captured around the read that proved it. The signature is
+    // keyed by this exact spelling, so an alias of the same physical file
+    // cannot answer for it.
+    const before = inputMetadataEvidence(file, filesystem);
+    if (
+      before !== undefined &&
+      Object.prototype.hasOwnProperty.call(recordedSignatures, spelling) &&
+      Object.prototype.hasOwnProperty.call(recordedHashes, identity) &&
+      before.signature === recordedSignatures[spelling]
+    ) {
+      continue;
+    }
+    const hash = Object.prototype.hasOwnProperty.call(graphRealpaths, identity)
+      ? graphInputStateHash(file, filesystem)
+      : hostInputStateHash(file, filesystem);
+    const after = inputMetadataSignature(file, filesystem);
+    if (
+      !Object.prototype.hasOwnProperty.call(recordedHashes, identity) ||
+      recordedHashes[identity] !== (hash ?? MISSING_INPUT_STATE)
+    ) {
+      matches = false;
+    }
+    if (
+      hash !== null &&
+      after !== undefined &&
+      before?.signature === after &&
+      before.separable
+    ) {
+      signatures[spelling] = after;
+    }
   }
-  return hashes;
+  return { matches, signatures };
 }
 
 /**
@@ -2641,6 +3586,175 @@ function selectExternalInputPaths(props: {
   return output;
 }
 
+/**
+ * The generation's resolution candidates that do not exist, so its host-input
+ * watcher can be told to announce their creation.
+ *
+ * A missing candidate is the one input class no proof can be memoized for: its
+ * metadata cannot be read, so the signature shortcut that stands in for every
+ * other input's comparison never applies, and every delivery that reaches it
+ * probes the filesystem again. Watching the name instead turns that repeated
+ * probe into one notification for the whole generation, using the same channel
+ * and the same failure rules the universal inputs already run under
+ * (samchon/ttsc#1261).
+ *
+ * Only absent candidates qualify. One that exists is validated by content and
+ * physical identity like any other input, and adding it here would replace the
+ * generation for a change that cannot affect a resolution the compiler already
+ * declined to take.
+ */
+function selectNotifiableAbsentInputs(props: {
+  filesystem: TtscTransformFilesystemOperations;
+  projectRoot: string;
+  result: ITtscCompilerTransformation;
+  temporaryTsconfig?: string;
+}): { candidates: string[]; watched: string[] } {
+  const empty = { candidates: [], watched: [] };
+  if (props.result.type === "exception") {
+    return empty;
+  }
+  const graph = props.result.graph;
+  if (graph === undefined) {
+    return empty;
+  }
+  const identities = createHostPathIdentityContext(props.filesystem);
+  const excluded =
+    props.temporaryTsconfig === undefined
+      ? undefined
+      : pathIdentityKey(props.temporaryTsconfig, identities);
+  const resolvedProjectRoot = path.resolve(props.projectRoot);
+  const output: string[] = [];
+  const watched: string[] = [];
+  const directories = new Set<string>();
+  // Two namespaces, deliberately not one set: candidates are the paths a
+  // delivery may stop probing, while the chain holds the directories that carry
+  // them. Sharing a set would let one silently answer for the other.
+  const seen = new Set<string>();
+  const chain = new Set<string>();
+  for (const candidates of Object.values(graph.candidates ?? {})) {
+    if (!Array.isArray(candidates)) {
+      continue;
+    }
+    for (const candidate of candidates) {
+      if (typeof candidate !== "string" || candidate.length === 0) {
+        continue;
+      }
+      const absolute = path.resolve(props.projectRoot, candidate);
+      const spelling = path.resolve(absolute);
+      if (
+        seen.has(spelling) ||
+        (excluded !== undefined &&
+          pathIdentityKey(absolute, identities) === excluded) ||
+        props.filesystem.exists(absolute)
+      ) {
+        continue;
+      }
+      seen.add(spelling);
+      // Collect the components of the lexical path, by the name each carries in
+      // its own parent. The watcher a missing path opens follows the spelling
+      // to a physical directory, so retargeting a link along the way moves the
+      // answer without touching what is watched: in a pnpm layout
+      // `node_modules/<pkg>` is exactly such a link, and reinstalling it makes
+      // a candidate appear behind a watch still looking at the old store
+      // directory. Watching `<pkg>` inside `node_modules` is what reports that.
+      //
+      // The collection stops at the project root, and a spelling that leaves
+      // the project subtree before reaching it is not claimed at all. Above
+      // that line the components are the machine's own layout rather than the
+      // project's, and watching those entries costs a generation whenever an
+      // unrelated process touches anything inside them; a candidate whose path
+      // runs outside the subtree therefore keeps the probe it always had rather
+      // than a proof this cannot complete.
+      const components: string[] = [];
+      let reachedProject = false;
+      for (
+        let child = path.dirname(spelling), parent = path.dirname(child);
+        parent !== child;
+        child = parent, parent = path.dirname(child)
+      ) {
+        if (insideProject(child, resolvedProjectRoot)) {
+          components.push(child);
+          continue;
+        }
+        // Compared through `path.relative` rather than by string, so a
+        // spelling that differs from the root only in case still counts as
+        // having arrived where the platform says it has.
+        reachedProject = path.relative(child, resolvedProjectRoot).length === 0;
+        break;
+      }
+      if (!reachedProject) {
+        continue;
+      }
+      output.push(absolute);
+      watched.push(absolute);
+      for (const component of components) {
+        if (chain.has(component)) break;
+        chain.add(component);
+        watched.push(component);
+        directories.add(path.dirname(component));
+      }
+      directories.add(path.dirname(spelling));
+    }
+  }
+  if (directories.size > NOTIFIABLE_ABSENCE_DIRECTORY_LIMIT) {
+    // Past this many distinct directories the watch registration is the more
+    // expensive half: a host that runs out of watch descriptors fails the
+    // tracker, and a failed tracker sends every delivery to complete-snapshot
+    // validation, which re-hashes the whole project. Declining to watch leaves
+    // the per-delivery probe in place, which is what this replaces and is far
+    // cheaper than that.
+    return empty;
+  }
+  output.sort();
+  watched.sort();
+  return { candidates: output, watched };
+}
+
+/**
+ * Report whether a directory lies strictly below the project root.
+ *
+ * The boundary of what a generation may watch on a candidate's behalf: what the
+ * project contains is its own layout, while the project root and everything
+ * above it belongs to the machine, which nobody retargets and which changes for
+ * reasons no generation should hear about.
+ */
+function insideProject(directory: string, projectRoot: string): boolean {
+  const relative = path.relative(
+    path.resolve(projectRoot),
+    path.resolve(directory),
+  );
+  // An empty result is the platform saying the two name the same directory,
+  // which it answers for spellings that differ only in case where the path
+  // module folds case. The root itself is not below itself, so the walk stops
+  // there rather than one level past it.
+  if (relative.length === 0) {
+    return false;
+  }
+  // `..` alone and `../` climb out, and an absolute answer means another drive
+  // or share entirely; a directory literally named `..x` does neither, which a
+  // plain prefix test would misread. The project walk's own containment check
+  // spells it the same way.
+  return (
+    relative !== ".." &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
+}
+
+/**
+ * Distinct directories the absent-candidate watch may open before it declines.
+ *
+ * Sized well below the inotify per-user default so a project's own walk keeps
+ * its share, and far above the distinct `node_modules` package directories a
+ * real dependency graph produces.
+ *
+ * Counted lexically, over the parents of every watched name. A missing subtree
+ * collapses onto the one watch its nearest existing ancestor carries, so the
+ * count is an upper bound on the watches actually opened rather than their
+ * number; the bound stays sound and is merely not tight.
+ */
+const NOTIFIABLE_ABSENCE_DIRECTORY_LIMIT = 512;
+
 function isIgnoredProjectDirectory(name: string): boolean {
   return (
     name === ".git" ||
@@ -2661,16 +3775,182 @@ function isIgnoredProjectDirectory(name: string): boolean {
   );
 }
 
+/**
+ * Compare two project-walk snapshots.
+ *
+ * `keys` narrows the comparison to the generation's declared inputs. The walk
+ * hashes every file under the project root, but only a file the compile
+ * actually consumed can change an output, and a project root is a working
+ * directory: a framework's generated types, a log, a coverage report, or a test
+ * artifact appears and changes there while a compile runs. Comparing those
+ * would declare the generation incoherent and cost a whole-project recompile
+ * for every remaining module (samchon/ttsc#1246). Files entering or leaving the
+ * project remain covered by the directory-membership snapshot, which is the one
+ * thing a content comparison cannot see. An envelope that declares no input set
+ * (a graph-free legacy host) passes `undefined` and keeps the whole-walk
+ * comparison.
+ */
 function sameHashes(
   left: Record<string, string>,
   right: Record<string, string>,
+  keys?: ReadonlySet<string>,
 ): boolean {
+  if (keys !== undefined) {
+    for (const key of keys) {
+      if (left[key] !== right[key]) return false;
+    }
+    return true;
+  }
   const leftKeys = Object.keys(left);
   const rightKeys = Object.keys(right);
   if (leftKeys.length !== rightKeys.length) {
     return false;
   }
   return leftKeys.every((key) => right[key] === left[key]);
+}
+
+/**
+ * Whether a project-walk snapshot is coherent for the inputs that matter.
+ *
+ * The walk reads every file under the project root, so a file nothing compiled
+ * (a log being appended, a coverage report being written, a generated artifact
+ * being replaced) can fail its own read sandwich while every input holds still.
+ * That is not evidence about the generation, and treating it as such costs a
+ * whole-project recompile per delivered module. A walk that could not enumerate
+ * a directory, or a file-level failure this snapshot could not attribute to a
+ * key, still taints everything: neither can be shown to leave the inputs
+ * alone.
+ */
+function walkSnapshotComplete(
+  snapshot: {
+    complete: boolean;
+    directoryComplete: boolean;
+    unstableFiles: Set<string>;
+  },
+  declared: ReadonlySet<string> | undefined,
+): boolean {
+  if (declared === undefined) {
+    return snapshot.complete;
+  }
+  if (!snapshot.directoryComplete) {
+    return false;
+  }
+  for (const key of snapshot.unstableFiles) {
+    if (declared.has(key)) return false;
+  }
+  return true;
+}
+
+/** {@link selectDeclaredProjectInputKeys} memoized per envelope generation. */
+function declaredProjectInputKeys(
+  state: TtscEnvelopeDerivation,
+  cached: TtscCachedProjectTransform,
+): Set<string> | undefined {
+  if (state.declaredInputKeysBuilt !== true) {
+    state.declaredInputKeys = selectDeclaredProjectInputKeys({
+      identities: state.identityContext,
+      projectRoot: cached.projectRoot,
+      result: cached.result,
+    });
+    state.declaredInputKeysBuilt = true;
+  }
+  return state.declaredInputKeys;
+}
+
+/**
+ * Project-walk keys of every input the envelope declares: the reference graph's
+ * edge endpoints, globals, config chain, and resolution candidates, plus the
+ * universal host inputs. Returns `undefined` for an envelope with no graph,
+ * which declares no input set and therefore keeps whole-walk comparison.
+ */
+function selectDeclaredProjectInputKeys(props: {
+  identities: FilesystemPathIdentityContext;
+  projectRoot: string;
+  result: ITtscCompilerTransformation;
+}): Set<string> | undefined {
+  if (props.result.type === "exception" || props.result.graph === undefined) {
+    return undefined;
+  }
+  const graph = props.result.graph;
+  const keys = new Set<string>();
+  const add = (entry: unknown): void => {
+    if (typeof entry !== "string" || entry.length === 0) return;
+    keys.add(
+      toProjectKey(
+        props.projectRoot,
+        path.resolve(props.projectRoot, entry),
+        props.identities,
+      ),
+    );
+  };
+  for (const [source, targets] of Object.entries(graph.edges ?? {})) {
+    add(source);
+    if (Array.isArray(targets)) for (const target of targets) add(target);
+  }
+  if (Array.isArray(graph.globals))
+    for (const input of graph.globals) add(input);
+  if (Array.isArray(graph.configs))
+    for (const input of graph.configs) add(input);
+  for (const [source, candidates] of Object.entries(graph.candidates ?? {})) {
+    add(source);
+    if (Array.isArray(candidates)) for (const entry of candidates) add(entry);
+  }
+  if (Array.isArray(props.result.hostInputs))
+    for (const input of props.result.hostInputs) add(input);
+  // Plugin-reported dependencies are inputs the graph never sees: a utility
+  // plugin's own config file is consulted by the plugin, not by the compiler.
+  for (const reported of Object.values(props.result.dependencies ?? {})) {
+    if (Array.isArray(reported)) for (const input of reported) add(input);
+  }
+  return keys;
+}
+
+/**
+ * Project roots already told they cannot reuse a compile, so a build reports
+ * the condition once instead of once per module.
+ */
+const REPORTED_UNREUSABLE_GENERATIONS = new Set<string>();
+
+/**
+ * Report, once per project root, that a generation cannot be reused.
+ *
+ * Every module of the build then recompiles the whole project, so the condition
+ * is the difference between one compile and one compile per module. It stayed
+ * invisible for the whole life of samchon/ttsc#970: consumers saw only a build
+ * that never finished, and each investigation had to rediscover the cause from
+ * outside. A named reason turns the next occurrence into a bug report instead
+ * of an archaeology session.
+ */
+function reportUnreusableGeneration(
+  cached: TtscCachedProjectTransform,
+  evidence: {
+    externalInputs: boolean;
+    graphProofs: boolean;
+    universalInputs: boolean;
+    walkStable: boolean;
+  },
+): void {
+  const missing = [
+    ...(evidence.walkStable ? [] : ["a stable project snapshot"]),
+    ...(evidence.graphProofs ? [] : ["compiler proofs for its graph inputs"]),
+    ...(evidence.externalInputs
+      ? []
+      : ["a complete out-of-walk input snapshot"]),
+    ...(evidence.universalInputs ? [] : ["a universal host-input manifest"]),
+  ];
+  const key = `${cached.projectRoot}\0${missing.join(",")}`;
+  if (REPORTED_UNREUSABLE_GENERATIONS.has(key)) {
+    return;
+  }
+  REPORTED_UNREUSABLE_GENERATIONS.add(key);
+  process.stderr.write(
+    `ttsc: the transform cache cannot reuse this project's compile, so every ` +
+      `module recompiles the whole project.\n` +
+      `  project: ${cached.projectRoot}\n` +
+      `  missing: ${missing.join("; ")}\n` +
+      `  Please report this at https://github.com/samchon/ttsc/issues with ` +
+      `this message.\n`,
+  );
 }
 
 function hashText(input: string | Buffer): string {
@@ -2695,6 +3975,9 @@ async function transformProject(props: {
   let tracker: TtscProjectMutationTracker | undefined;
   let retainTracker = false;
   let hostInputTracker: TtscProjectMutationTracker | undefined;
+  let candidateTracker: TtscProjectMutationTracker | undefined;
+  let retainHostInputTracker = false;
+  let retainCandidateTracker = false;
   try {
     const configured = createTransformTsconfig(props, scratchDirectory);
     const temporaryTsconfig =
@@ -2728,18 +4011,58 @@ async function transformProject(props: {
       }).transform(),
     );
     TRANSFORM_RESULT_FILESYSTEM.set(result, props.filesystem);
+    // Mint the generation's clock reference after the compile and before any
+    // signature-recording read below, so every input written before the
+    // compile sits in a provably finished tick when its signature is captured.
+    mintFilesystemClockReference(scratchDirectory, props.filesystem);
     const persistentHostInputs = selectPersistentHostInputs({
       filesystem: props.filesystem,
       projectRoot,
       result,
       temporaryTsconfig,
     });
+    // The generation's absent resolution candidates, which get a watcher of
+    // their own below; watching one is what lets a delivery stop probing it
+    // (samchon/ttsc#1261). The validation manifest stays built from the
+    // universal inputs alone, so nothing else about a candidate changes.
+    //
+    // Derived only where a tracker could carry it: a build-scoped adapter opens
+    // no watcher, so probing every candidate's existence here would be work
+    // whose answer nothing can read.
+    const notifiableAbsence = props.trackProjectMembership
+      ? selectNotifiableAbsentInputs({
+          filesystem: props.filesystem,
+          projectRoot,
+          result,
+          temporaryTsconfig,
+        })
+      : { candidates: [], watched: [] };
     hostInputTracker = props.trackProjectMembership
       ? await createHostInputMutationTracker(
           persistentHostInputs,
           props.filesystem,
+          // A universal input never reaches the per-input loop that consults a
+          // coverage claim: an absent one is proven by its directory listing
+          // instead, which re-resolves the spelling every delivery.
+          new Set(),
         )
       : undefined;
+    // The candidates and the directories carrying them get their own tracker,
+    // listening for renames alone. Every event that can make one of these
+    // paths appear is a rename — the file itself, or a component of the path
+    // being created, replaced, or retargeted — so nothing is given up, while a
+    // backend that reports a write below a directory as a change to that
+    // directory's entry (Windows does) would otherwise replace the generation
+    // every time a bundler wrote inside `node_modules`.
+    candidateTracker =
+      notifiableAbsence.watched.length !== 0
+        ? await createHostInputMutationTracker(
+            notifiableAbsence.watched,
+            props.filesystem,
+            new Set(notifiableAbsence.candidates),
+            "rename",
+          )
+        : undefined;
     const externalInputPaths = selectExternalInputPaths({
       filesystem: props.filesystem,
       projectRoot,
@@ -2751,24 +4074,47 @@ async function transformProject(props: {
       identities,
       props.filesystem,
     );
-    let stableProjectSnapshot =
-      before.complete &&
-      inputSnapshot.complete &&
-      sameHashes(before.hashes, inputSnapshot.hashes) &&
-      sameHashes(before.fileSignatures, inputSnapshot.fileSignatures) &&
+    // Whether the recorded snapshot describes one coherent state of the
+    // project. A membership event during the compile taints it exactly like an
+    // unstable walk pair; whether notifications can be *opened* is a separate
+    // fact, tracked below, because a generation with no watcher is still
+    // provable from its own recorded state.
+    const declaredInputs = selectDeclaredProjectInputKeys({
+      identities,
+      projectRoot,
+      result,
+    });
+    const walkStable =
+      walkSnapshotComplete(before, declaredInputs) &&
+      walkSnapshotComplete(inputSnapshot, declaredInputs) &&
+      sameHashes(before.hashes, inputSnapshot.hashes, declaredInputs) &&
+      sameHashes(
+        before.fileSignatures,
+        inputSnapshot.fileSignatures,
+        declaredInputs,
+      ) &&
       sameProjectDirectories(
         before.projectDirectories,
         inputSnapshot.projectDirectories,
       ) &&
-      tracker?.failed !== true &&
       tracker?.membershipChanged !== true &&
+      hostInputTracker?.membershipChanged !== true &&
+      candidateTracker?.membershipChanged !== true;
+    const notificationsAvailable =
+      tracker?.failed !== true &&
       hostInputTracker?.failed !== true &&
-      hostInputTracker?.membershipChanged !== true;
+      candidateTracker?.failed !== true;
     // Overlay the in-memory source only after proving the two on-disk snapshots
     // stable; an unsaved editor buffer must not look like a compile-time race.
-    inputSnapshot.hashes[
-      toProjectKey(projectRoot, props.currentFile, identities)
-    ] = hashText(props.currentSource);
+    const currentFileKey = toProjectKey(
+      projectRoot,
+      props.currentFile,
+      identities,
+    );
+    inputSnapshot.hashes[currentFileKey] = hashText(props.currentSource);
+    // That overlay makes this one key the only recorded hash a disk signature
+    // cannot stand for: the bytes it names came from the bundler, not the file.
+    delete inputSnapshot.provenSignatures[currentFileKey];
     const cached: TtscCachedProjectTransform = {
       // Capture the out-of-walk input hashes while the generation is fresh so
       // cache validation can re-check them; computed before dispose so the
@@ -2777,6 +4123,7 @@ async function transformProject(props: {
       externalInputRealpaths: {},
       externalInputPaths,
       inputHashes: inputSnapshot.hashes,
+      inputSignatures: inputSnapshot.provenSignatures,
       projectDirectories: inputSnapshot.projectDirectories,
       projectSnapshotComplete: false,
       projectRoot,
@@ -2793,23 +4140,51 @@ async function transformProject(props: {
     );
     cached.externalInputHashes = externalInputSnapshot.hashes;
     cached.externalInputRealpaths = externalInputSnapshot.realpaths;
-    stableProjectSnapshot =
-      stableProjectSnapshot &&
-      matchesCompilerGraphInputProofs(cached) &&
-      externalInputSnapshot.complete &&
+    cached.externalInputSignatures = externalInputSnapshot.signatures;
+    // Evaluate every half, rather than short-circuiting, so a generation that
+    // cannot be reused can say which evidence it lacked. The extra work runs
+    // only on the failing path, where the alternative is recompiling the whole
+    // project for every remaining module.
+    const graphProofs = matchesCompilerGraphInputProofs(cached);
+    const universalInputs =
       captureUniversalHostInputValidation(cached, props.currentFile) !==
-        undefined;
+      undefined;
+    const stableProjectSnapshot =
+      walkStable &&
+      graphProofs &&
+      externalInputSnapshot.complete &&
+      universalInputs;
+    // Only a caching host loses anything here: without a cache every delivery
+    // compiles by design, so an unprovable generation costs it nothing.
+    if (!stableProjectSnapshot && props.trackProjectMembership) {
+      reportUnreusableGeneration(cached, {
+        externalInputs: externalInputSnapshot.complete,
+        graphProofs,
+        universalInputs,
+        walkStable,
+      });
+    }
     cached.projectSnapshotComplete = stableProjectSnapshot;
-    if (stableProjectSnapshot && tracker !== undefined) {
+    // Attach notifications only while they can actually prove membership. A
+    // generation that could not open its watchers keeps its recorded snapshot
+    // and validates through it, rather than losing the cache entirely.
+    const notifying = stableProjectSnapshot && notificationsAvailable;
+    if (notifying && tracker !== undefined) {
       cached.projectMutationTracker = tracker;
     }
-    if (stableProjectSnapshot && hostInputTracker !== undefined) {
+    if (notifying && hostInputTracker !== undefined) {
       cached.hostInputMutationTracker = hostInputTracker;
     }
-    retainTracker =
-      stableProjectSnapshot &&
-      tracker !== undefined &&
-      hostInputTracker !== undefined;
+    if (notifying && candidateTracker !== undefined) {
+      cached.candidateMutationTracker = candidateTracker;
+    }
+    // Every tracker the generation published is retained, and every tracker it
+    // did not is closed below. Naming only two of the three would close a
+    // published candidate tracker the moment either of the others was absent,
+    // and that is the one tracker whose silence is read as evidence.
+    retainTracker = notifying && tracker !== undefined;
+    retainHostInputTracker = notifying && hostInputTracker !== undefined;
+    retainCandidateTracker = notifying && candidateTracker !== undefined;
     return cached;
   } finally {
     try {
@@ -2818,11 +4193,17 @@ async function transformProject(props: {
       }
     } finally {
       try {
-        if (!retainTracker && hostInputTracker !== undefined) {
+        if (!retainHostInputTracker && hostInputTracker !== undefined) {
           hostInputTracker.close();
         }
       } finally {
-        fs.rmSync(scratchDirectory, { force: true, recursive: true });
+        try {
+          if (!retainCandidateTracker && candidateTracker !== undefined) {
+            candidateTracker.close();
+          }
+        } finally {
+          fs.rmSync(scratchDirectory, { force: true, recursive: true });
+        }
       }
     }
   }

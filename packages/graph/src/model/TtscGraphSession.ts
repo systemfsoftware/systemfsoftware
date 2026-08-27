@@ -7,7 +7,14 @@ import { resolveGraphBinary } from "../resolveGraphBinary";
 import { ITtscGraphSnapshot } from "../structures/ITtscGraphSnapshot";
 import { TtscGraphMemory } from "./TtscGraphMemory";
 import { TtscGraphShardStore } from "./TtscGraphShardStore";
+import { TtscLintDaemon } from "./TtscLintDaemon";
 import { DUMP_SCHEMA_VERSION } from "./loadGraph";
+import {
+  type IPublishedArtifacts,
+  artifactsAreStale,
+  publishArtifacts,
+  publishArtifactsResident,
+} from "./publishedArtifacts";
 
 /**
  * The serve protocol version this client speaks.
@@ -69,6 +76,26 @@ export class TtscGraphSession {
   private queue: Promise<void> = Promise.resolve();
   private current: TtscGraphMemory | undefined;
   private shardStore = new TtscGraphShardStore();
+  /**
+   * The artifact answer the resident child was last handed, and the state of
+   * the inputs it came from.
+   *
+   * `undefined` only before a child exists. Once one does this is always an
+   * answer, including the answer that the project publishes nothing — which
+   * still carries inputs, so that adding a publisher is something a running
+   * session can notice.
+   */
+  private artifacts: IPublishedArtifacts | undefined;
+  /**
+   * One resident `@ttsc/lint` sidecar per plugin binary, opened lazily.
+   *
+   * A republish asks two verbs of every configured publisher, and a session
+   * republishes whenever a document moves. Held open, those questions cost a
+   * request each instead of a process, a plugin load and a configuration
+   * evaluation each. Keyed by binary because that is what a daemon is: the same
+   * binary answering for the same project.
+   */
+  private readonly daemons = new Map<string, TtscLintDaemon>();
   private closed = false;
 
   public constructor(options: TtscGraphSessionOptions) {
@@ -140,6 +167,12 @@ export class TtscGraphSession {
   public close(): void {
     if (this.closed) return;
     this.closed = true;
+    // The sidecars outlive nothing. A daemon is a child process this session
+    // opened, and a session that closed without stopping them would leave one
+    // resident Program per configured publisher alive for as long as the parent
+    // ran.
+    for (const daemon of this.daemons.values()) daemon.close();
+    this.daemons.clear();
     const error = new Error("@ttsc/graph: native session closed");
     if (this.child !== undefined) this.failChild(this.child, error);
     else this.failPending(error);
@@ -148,6 +181,7 @@ export class TtscGraphSession {
   private async refresh(signal?: AbortSignal): Promise<TtscGraphMemory> {
     // The protocol version and the envelope shape were both settled in onLine,
     // before this frame was ever routed here.
+    await this.republishArtifacts(signal);
     const response = await this.request(signal);
     this.assertResponseSemantics(response);
     if (response.error !== undefined) {
@@ -206,6 +240,58 @@ export class TtscGraphSession {
     throw error;
   }
 
+  /**
+   * Re-derive the artifact set when the documents or configuration behind it
+   * moved, before the request that would otherwise answer with the old one.
+   *
+   * A resident session is invalidated by the compiler's own build universe, and
+   * none of this is in it: the documents a rule reads are not Program inputs,
+   * which is the property that keeps a Markdown edit from costing a typecheck.
+   * The cost of that property is that nothing else notices the edit at all, so
+   * this is what notices it.
+   *
+   * Only the overlay is replaced. The child is not restarted and the Program is
+   * not reloaded — the native session compares the file it is handed against
+   * the one it applied, and re-projects the resident program when they differ.
+   *
+   * Asked of sidecars this session keeps open, and awaited rather than blocking
+   * the event loop. A republish still costs the rule a Program — the daemon is
+   * told to drop its warm one, because the sources a claim activates against
+   * have been edited too — but not a process, a plugin load and a configuration
+   * evaluation per verb. An already-cancelled request does not start one.
+   */
+  private async republishArtifacts(signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) return;
+    // A child yet to be spawned publishes on the way up, so there is nothing
+    // here to keep fresh until one does.
+    if (this.child === undefined || this.artifacts === undefined) return;
+    if (!artifactsAreStale(this.artifacts)) return;
+    const next = await publishArtifactsResident(
+      { cwd: this.cwd, tsconfig: this.tsconfig },
+      (plugin) => this.daemon(plugin),
+    );
+    // The new answer is taken whatever it says, including that the project now
+    // publishes nothing. Keeping the old set on a `null` would be guessing that
+    // the publisher failed rather than that it was removed, and guessing wrong
+    // in that direction is the unrecoverable one: a session that answers with
+    // artifacts from a plugin the user deleted keeps doing so until it is
+    // restarted, while a transient failure is repaired by the next edit.
+    this.artifacts = next;
+  }
+
+  /** The open sidecar for one plugin, opened on first use. */
+  private daemon(plugin: {
+    binary: string;
+    manifest: string;
+    projectContext?: string;
+  }): TtscLintDaemon {
+    const open = this.daemons.get(plugin.binary);
+    if (open !== undefined) return open;
+    const created = new TtscLintDaemon(plugin, this.cwd, this.tsconfig);
+    this.daemons.set(plugin.binary, created);
+    return created;
+  }
+
   private request(signal?: AbortSignal): Promise<ITtscGraphSnapshot> {
     if (signal?.aborted) throw cancelledError(signal);
     const child = this.ensureChild();
@@ -228,7 +314,19 @@ export class TtscGraphSession {
         return;
       }
       child.process.stdin.write(
-        `${JSON.stringify({ id, graphSnapshotVersion: GRAPH_SNAPSHOT_PROTOCOL_VERSION })}\n`,
+        `${JSON.stringify({
+          id,
+          graphSnapshotVersion: GRAPH_SNAPSHOT_PROTOCOL_VERSION,
+          // Empty when the project publishes nothing, which withdraws whatever
+          // the server holds: a publisher the user removed must stop being
+          // answered with, and omitting the field instead would say only that
+          // this client has no opinion. Omitted only before a child exists,
+          // which no request reaches.
+          artifacts:
+            this.artifacts === undefined
+              ? undefined
+              : (this.artifacts.file ?? ""),
+        })}\n`,
         (error) => {
           if (error === null || error === undefined) return;
           if (this.pending.get(id) !== pending) return;
@@ -256,9 +354,21 @@ export class TtscGraphSession {
     ) {
       return this.child;
     }
+    const artifacts = publishArtifacts({
+      cwd: this.cwd,
+      tsconfig: this.tsconfig,
+    });
+    this.artifacts = artifacts;
     const process = spawn(
       this.binary,
-      ["serve", "--cwd", this.cwd, "--tsconfig", this.tsconfig],
+      [
+        "serve",
+        "--cwd",
+        this.cwd,
+        "--tsconfig",
+        this.tsconfig,
+        ...(artifacts.file === null ? [] : ["--artifacts", artifacts.file]),
+      ],
       { stdio: ["pipe", "pipe", "pipe"], windowsHide: true },
     );
     const lines = readline.createInterface({ input: process.stdout });

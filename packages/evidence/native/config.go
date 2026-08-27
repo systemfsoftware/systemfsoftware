@@ -92,6 +92,7 @@ func decodeClaim(raw json.RawMessage, index int) (claimSpec, []string) {
   problems = append(problems, symbolProblems...)
   references, referenceProblems := decodeReferences(kind, object["reference"], path+".reference")
   problems = append(problems, referenceProblems...)
+  problems = append(problems, rejectChecklistCarriers(carriers, references, path)...)
   if len(problems) != 0 {
     return claimSpec{}, problems
   }
@@ -186,6 +187,7 @@ func decodeReference(
       "uniqueEvidence",
       "singleEvidencePerSymbol",
       "requireReview",
+      "checklist",
       "package",
       "root",
       "file",
@@ -204,7 +206,7 @@ func decodeReference(
   }
   root, rootProblems := decodeRoot(object["root"], kind, path+".root")
   problems = append(problems, rootProblems...)
-  policy, policyProblems := decodeReferencePolicy(object, path)
+  policy, policyProblems := decodeReferencePolicy(object, kind, path)
   problems = append(problems, policyProblems...)
   files := globSet{}
   source := ""
@@ -278,8 +280,13 @@ func decodeReference(
 // before a disabled claim is filtered. Each option is a flat boolean whose
 // false value means "not configured", so an omitted option and an explicit
 // false preserve the original behavior identically.
+//
+// The reference kind is read only by `checklist`, which the other four do not
+// need: they tighten a count that every artifact kind has, while a per-host
+// obligation is a statement about a document that is read item by item.
 func decodeReferencePolicy(
   object map[string]json.RawMessage,
+  kind artifactKind,
   path string,
 ) (referencePolicy, []string) {
   policy := referencePolicy{}
@@ -308,7 +315,104 @@ func decodeReferencePolicy(
   decodeFlag("uniqueEvidence", &policy.UniqueEvidence)
   decodeFlag("singleEvidencePerSymbol", &policy.SingleEvidencePerSymbol)
   decodeFlag("requireReview", &policy.RequireReview)
+  decodeFlag("checklist", &policy.Checklist)
+  problems = append(problems, rejectChecklistConflicts(policy, kind, path)...)
   return policy, problems
+}
+
+// rejectChecklistCarriers refuses a checklist beside gathered exclusion
+// carriers, which is the third combination no author can satisfy.
+//
+// The two state opposite intents. Carriers gather every exclusion a claim owns
+// into one file so a reviewer reads them by opening it; a checklist makes every
+// acknowledgement one host's own answer. Together they leave every host outside
+// the carrier globs with no way to say an item does not apply: the tag written
+// beside the host is refused as misplaced, and the tag written in the carrier
+// answers for no host. Measured, the two diagnostics name each other's file, so
+// an author following either repair is sent back to the other.
+//
+// Refused here rather than as coverage for the same reason the cardinality
+// pairs are: it is a property of the configuration, and a claim whose every
+// host happens to sit in a carrier file satisfies it by accident.
+func rejectChecklistCarriers(
+  carriers globSet,
+  references []referenceSpec,
+  path string,
+) []string {
+  if len(carriers.Patterns) == 0 {
+    return nil
+  }
+  for _, reference := range references {
+    // A reference refusing exclusions outright has nothing for the carriers to
+    // confine, so the impossibility this refuses does not arise there and the
+    // carriers are governing some other reference's exclusions, which is the
+    // ledger the property exists for. Refusing that pair would contradict the
+    // published guidance that `checklist` and `noEvidenceExclude` are the
+    // intended pairing.
+    if !reference.Policy.Checklist || reference.Policy.NoExclude {
+      continue
+    }
+    where := path + ".reference"
+    if len(references) > 1 {
+      where += "[" + decimal(reference.Index) + "]"
+    }
+    return []string{configurationProblem(
+      graphRuleName,
+      path+".evidenceExcludeCarriers",
+      "a checklist reference cannot be gathered into exclusion carriers: "+where+
+        " makes every acknowledgement one host's own answer, while these globs confine exclusions to other files, so no host outside them can record that an item does not apply. Drop the carriers, drop `checklist` from that reference, or give it `noEvidenceExclude` so it accepts no exclusion to gather.",
+    )}
+  }
+  return nil
+}
+
+// rejectChecklistConflicts refuses the two combinations no author can satisfy
+// and the artifact kinds a checklist is not a statement about.
+//
+// The kind refusal is silent when the kind itself failed to decode, the way
+// rejectForeignTypeScriptReference is: naming an artifact the author did not
+// successfully spell would send them to the wrong line.
+//
+// The two cardinality refusals are unsatisfiability, not preference. A
+// checklist makes every selected host cite every unit, so uniqueEvidence's
+// one-host-per-unit ceiling breaks the moment a claim has two hosts, and
+// singleEvidencePerSymbol's exactly-one-unit-per-host breaks the moment the
+// population has two units. Both are reported at decode rather than as
+// coverage failures, because a population of one unit and one host satisfies
+// them by accident and would let a contradictory configuration ship until the
+// day a second file arrives.
+func rejectChecklistConflicts(
+  policy referencePolicy,
+  kind artifactKind,
+  path string,
+) []string {
+  if !policy.Checklist {
+    return nil
+  }
+  if kind != artifactMarkdown && kind != "" {
+    return []string{configurationProblem(
+      graphRuleName,
+      path+".checklist",
+      "only a Markdown reference can be a checklist; a "+string(kind)+
+        " population has no reading order in which a host answers one item at a time. Drop the option, or move the items into a Markdown document this reference selects.",
+    )}
+  }
+  problems := []string{}
+  if policy.UniqueEvidence {
+    problems = append(problems, configurationProblem(
+      graphRuleName,
+      path+".checklist",
+      "checklist and uniqueEvidence cannot both hold: a checklist requires every selected host to cite every unit, while uniqueEvidence allows each unit at most one host, so any claim with two hosts fails both ways. Keep the one that states this obligation.",
+    ))
+  }
+  if policy.SingleEvidencePerSymbol {
+    problems = append(problems, configurationProblem(
+      graphRuleName,
+      path+".checklist",
+      "checklist and singleEvidencePerSymbol cannot both hold: a checklist requires every selected host to cite every unit, while singleEvidencePerSymbol allows each host exactly one, so any population with two units fails both ways. Keep the one that states this obligation.",
+    ))
+  }
+  return problems
 }
 
 // rejectForeignTypeScriptReference refuses a code population to a claim that
@@ -563,7 +667,7 @@ func normalizeSwaggerSource(value string) (string, string) {
   }
   parsed, err := url.Parse(value)
   if err != nil {
-    return "", "invalid Swagger source '" + value + "': " + err.Error() + "."
+    return "", "invalid Swagger source '" + value + "': " + causeText(err) + "."
   }
   if !drive && parsed.Scheme != "" {
     if parsed.Scheme != "http" && parsed.Scheme != "https" {
@@ -617,7 +721,7 @@ func decodeFiles(raw json.RawMessage, path string) (globSet, []string) {
   }
   globs, err := newGlobSet(patterns)
   if err != nil {
-    return globSet{}, []string{"Invalid evidence/graph configuration at " + path + ": " + err.Error()}
+    return globSet{}, []string{"Invalid evidence/graph configuration at " + path + ": " + causeText(err) + "."}
   }
   return globs, nil
 }
@@ -779,12 +883,17 @@ func describePatterns(globs globSet) string {
 }
 
 // describePopulation names the patterns a population selects with, and the base
-// they were resolved against when that base is not the project root.
+// they resolve against when that base is not the project root.
 //
 // The base is stated rather than assumed, because a citation that resolves
 // outside the project has to be repairable from the diagnostic alone: patterns
 // that look correct against a root the reader is imagining are the failure this
-// property introduces, and naming the resolved base is what removes it.
+// property introduces, and naming the base is what removes it.
+//
+// It is named by its declared spelling rather than its resolved one, because
+// the repair is an edit to a configuration property and the reader has to find
+// that property first. `populationRootLabel` owns that choice and the reasoning
+// behind it.
 func describePopulation(base populationBase, globs globSet) string {
   if base.Default {
     return describePatterns(globs)
