@@ -22,8 +22,8 @@
   ],
   "thresholds": {
     "high": 100,
-    "low": 11,
-    "break": 11
+    "low": 100,
+    "break": 100
   },
   "htmlReporter": null,
   "ignorers": [
