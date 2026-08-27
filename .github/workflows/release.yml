@@ -130,6 +130,11 @@ jobs:
     needs: [plan]
     name: the gate (pnpm check:ci)
     uses: ./.github/workflows/reusable-checks.yml
+  gate-contract:
+    if: needs.plan.outputs.phase == 'publish'
+    needs: [plan]
+    name: contract · integration tests (pnpm check:contract)
+    uses: ./.github/workflows/reusable-contract.yml
 
   publish:
     if: needs.plan.outputs.phase == 'publish'
@@ -137,7 +142,7 @@ jobs:
       contents: write
       id-token: write
     name: publish · oidc · tag
-    needs: [plan, gate]
+    needs: [plan, gate, gate-contract]
     runs-on: ubuntu-latest
     env:
       HUSKY: "0"
