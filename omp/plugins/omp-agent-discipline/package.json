@@ -74,11 +74,11 @@
     "provenance": true
   },
   "inlinedDependencies": {
-    "@effect/platform-node": "4.0.0-rc.111",
-    "@effect/platform-node-shared": "4.0.0-rc.111",
+    "@effect/platform-node": "4.0.0-rc.112",
+    "@effect/platform-node-shared": "4.0.0-rc.112",
     "@jsr/std__collections": "1.3.0",
     "@jsr/std__toml": "1.0.11",
-    "effect": "4.0.0-rc.111"
+    "effect": "4.0.0-rc.112"
   },
   "repository": {
     "type": "git",
