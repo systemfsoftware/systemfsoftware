@@ -17,9 +17,9 @@ import { Schema as S } from 'effect'
  * retires a crashed worker but not one whose method rejected.
  */
 export class WorkerMethodError extends S.TaggedError<WorkerMethodError>()('WorkerMethodError', {
-  message: Wire.string,
-  name: Wire.optional(Wire.string),
-  stack: Wire.optional(Wire.string),
+  message: Wire.mint(S.String),
+  name: Wire.mint(S.optional(Wire.mint(S.String))),
+  stack: Wire.mint(S.optional(Wire.mint(S.String))),
 }) {}
 
 // Node net.AddressInfo | string | null — OS-provided socket address foreign to workspace
@@ -41,8 +41,8 @@ export class WorkerSocketNotTcpError extends S.TaggedError<WorkerSocketNotTcpErr
 export class WorkerConnectTimeoutError extends S.TaggedError<WorkerConnectTimeoutError>()(
   'WorkerConnectTimeoutError',
   {
-    modulePath: Wire.string,
-    waitedMs: Wire.number,
+    modulePath: Wire.mint(S.String),
+    waitedMs: Wire.mint(S.Finite),
   },
 ) {}
 
@@ -67,14 +67,16 @@ export class WorkerSocketListenFailed extends S.TaggedError<WorkerSocketListenFa
  * A process identifier. `S.Int` rather than `S.Number` because the plain number
  * domain admits `NaN` and the infinities, and a pid is none of those.
  */
-const ProcessId = Wire.integer
+const ProcessId = Wire.mint(S.Int)
 
 /**
  * How a child process ended.
  */
-const ChildExit = Wire.union(
-  Wire.wire({ _tag: Wire.literal('Code'), code: Wire.integer }),
-  Wire.wire({ _tag: Wire.literal('Signal'), signal: Wire.string }),
+const ChildExit = Wire.mint(
+  S.Union([
+    Wire.wire({ _tag: Wire.mint(S.Literals(['Code'])), code: Wire.mint(S.Int) }),
+    Wire.wire({ _tag: Wire.mint(S.Literals(['Signal'])), signal: Wire.mint(S.String) }),
+  ]),
 )
 export type ChildExit = typeof ChildExit.Type
 
@@ -86,7 +88,7 @@ export class ChildProcessCrashedError extends S.TaggedError<ChildProcessCrashedE
   {
     pid: ProcessId,
     exit: ChildExit,
-    cause: Wire.optional(Wire.string),
+    cause: Wire.mint(S.optional(Wire.mint(S.String))),
   },
 ) {
   readonly exitClass = 'InternalError' as const
@@ -103,15 +105,15 @@ export class ChildProcessCrashedError extends S.TaggedError<ChildProcessCrashedE
 export class WorkerFrameTooLargeError extends S.TaggedError<WorkerFrameTooLargeError>()(
   'WorkerFrameTooLargeError',
   {
-    byteLength: Wire.integer,
-    limit: Wire.integer,
+    byteLength: Wire.mint(S.Int),
+    limit: Wire.mint(S.Int),
   },
 ) {
   readonly exitClass = 'InternalError' as const
 }
 export class OutOfMemoryError extends S.TaggedError<OutOfMemoryError>()('OutOfMemoryError', {
   pid: ProcessId,
-  exitCode: Wire.integer,
+  exitCode: Wire.mint(S.Int),
 }) {
   readonly exitClass = 'RuntimeError' as const
 }
