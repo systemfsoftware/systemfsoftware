@@ -17,8 +17,8 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
 const PositionSchema = Wire.wire({
-  line: Wire.number,
-  column: Wire.number,
+  line: Wire.mint(S.Finite),
+  column: Wire.mint(S.Finite),
 })
 
 const LocationSchema = Wire.wire({
@@ -28,7 +28,7 @@ const LocationSchema = Wire.wire({
 
 const OpenEndLocationSchema = Wire.wire({
   start: PositionSchema,
-  end: Wire.optional(PositionSchema),
+  end: Wire.mint(S.optional(PositionSchema)),
 })
 
 const MUTANT_STATUSES = [
@@ -43,40 +43,40 @@ const MUTANT_STATUSES = [
 ] as const
 
 const MutantResultLikeSchema = Wire.wire({
-  id: Wire.string,
-  mutatorName: Wire.string,
-  replacement: Wire.string,
+  id: Wire.mint(S.String),
+  mutatorName: Wire.mint(S.String),
+  replacement: Wire.mint(S.String),
   location: LocationSchema,
-  status: Wire.literal(...MUTANT_STATUSES),
-  killedBy: Wire.optional(Wire.array(Wire.string)),
-  coveredBy: Wire.optional(Wire.array(Wire.string)),
-  static: Wire.optional(Wire.boolean),
-  statusReason: Wire.optional(Wire.string),
-  testsCompleted: Wire.optional(Wire.number),
-  description: Wire.optional(Wire.string),
-  duration: Wire.optional(Wire.number),
+  status: Wire.mint(S.Literals(MUTANT_STATUSES)),
+  killedBy: Wire.mint(S.optional(Wire.mint(S.Array(Wire.mint(S.String))))),
+  coveredBy: Wire.mint(S.optional(Wire.mint(S.Array(Wire.mint(S.String))))),
+  static: Wire.mint(S.optional(Wire.mint(S.Boolean))),
+  statusReason: Wire.mint(S.optional(Wire.mint(S.String))),
+  testsCompleted: Wire.mint(S.optional(Wire.mint(S.Finite))),
+  description: Wire.mint(S.optional(Wire.mint(S.String))),
+  duration: Wire.mint(S.optional(Wire.mint(S.Finite))),
 })
 
 const FileResultLikeSchema = Wire.wire({
-  language: Wire.string,
-  source: Wire.string,
-  mutants: Wire.array(MutantResultLikeSchema),
+  language: Wire.mint(S.String),
+  source: Wire.mint(S.String),
+  mutants: Wire.mint(S.Array(MutantResultLikeSchema)),
 })
 
 const TestDefinitionLikeSchema = Wire.wire({
-  id: Wire.string,
-  name: Wire.string,
-  location: Wire.optional(OpenEndLocationSchema),
+  id: Wire.mint(S.String),
+  name: Wire.mint(S.String),
+  location: Wire.mint(S.optional(OpenEndLocationSchema)),
 })
 
 const TestFileLikeSchema = Wire.wire({
-  source: Wire.optional(Wire.string),
-  tests: Wire.array(TestDefinitionLikeSchema),
+  source: Wire.mint(S.optional(Wire.mint(S.String))),
+  tests: Wire.mint(S.Array(TestDefinitionLikeSchema)),
 })
 
 const ThresholdsLikeSchema = Wire.wire({
-  high: Wire.number,
-  low: Wire.number,
+  high: Wire.mint(S.Finite),
+  low: Wire.mint(S.Finite),
 })
 
 /** Every key the reader does not reshape is preserved verbatim via the open rest. */

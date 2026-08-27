@@ -14,21 +14,21 @@ import * as S from 'effect/Schema'
 export class DiagnosticWithoutFileError extends S.TaggedError<DiagnosticWithoutFileError>()(
   'DiagnosticWithoutFileError',
   {
-    text: Wire.string,
+    text: Wire.mint(S.String),
   },
 ) {}
 
 export class DiagnosticInUnrelatedFileError extends S.TaggedError<DiagnosticInUnrelatedFileError>()(
   'DiagnosticInUnrelatedFileError',
   {
-    text: Wire.string,
-    fileName: Wire.string,
+    text: Wire.mint(S.String),
+    fileName: Wire.mint(S.String),
   },
 ) {}
 
 const DiagnosticSchema = Wire.wire({
-  fileName: Wire.optional(Wire.string),
-  text: Wire.string,
+  fileName: Wire.mint(S.optional(Wire.mint(S.String))),
+  text: Wire.mint(S.String),
 })
 
 // TSFileNode graph: foreign compiler shape admitted via suspend
@@ -37,12 +37,14 @@ interface NodeDecodedShape {
   readonly parents: readonly NodeDecodedShape[]
   readonly children: readonly NodeDecodedShape[]
 }
-const TSFileNodeSchema: Wire.Minted<NodeDecodedShape, unknown> = Wire.suspend(() =>
-  Wire.wire({
-    fileName: Wire.string,
-    parents: Wire.array(TSFileNodeSchema),
-    children: Wire.array(TSFileNodeSchema),
-  })
+const TSFileNodeSchema: Wire.Minted<NodeDecodedShape, unknown> = Wire.mint(
+  S.suspend(() =>
+    Wire.wire({
+      fileName: Wire.mint(S.String),
+      parents: Wire.mint(S.Array(TSFileNodeSchema)),
+      children: Wire.mint(S.Array(TSFileNodeSchema)),
+    })
+  ),
 )
 
 export class CheckMutantsInput extends S.TaggedClass<CheckMutantsInput>()(
@@ -50,7 +52,7 @@ export class CheckMutantsInput extends S.TaggedClass<CheckMutantsInput>()(
   {
     mutants: S.Array(Mutant),
     diagnostics: S.Array(DiagnosticSchema),
-    nodes: Wire.record(Wire.string, TSFileNodeSchema),
+    nodes: Wire.mint(S.Record(Wire.mint(S.String), TSFileNodeSchema)),
   },
 ) {}
 

@@ -3,15 +3,15 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
 export class PlanMutationRunCommand extends S.TaggedClass<PlanMutationRunCommand>()('PlanMutationRunCommand', {
-  configMutatePatterns: Wire.array(Wire.string),
-  configMutatorNames: Wire.array(Wire.string),
-  targetMutatePatterns: Wire.array(Wire.string),
-  availableMutators: Wire.array(Wire.string),
+  configMutatePatterns: Wire.mint(S.Array(Wire.mint(S.String))),
+  configMutatorNames: Wire.mint(S.Array(Wire.mint(S.String))),
+  targetMutatePatterns: Wire.mint(S.Array(Wire.mint(S.String))),
+  availableMutators: Wire.mint(S.Array(Wire.mint(S.String))),
 }) {}
 
 export class MutationRunPlan extends S.TaggedClass<MutationRunPlan>()('MutationRunPlan', {
-  mutatePatterns: Wire.array(Wire.string),
-  mutatorNames: Wire.array(Wire.string),
+  mutatePatterns: Wire.mint(S.Array(Wire.mint(S.String))),
+  mutatorNames: Wire.mint(S.Array(Wire.mint(S.String))),
 }) {}
 
 export class PlanMutationRunError extends S.TaggedError<PlanMutationRunError>()('PlanMutationRunError', {
