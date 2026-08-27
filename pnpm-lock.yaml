@@ -300,6 +300,9 @@ importers:
       '@std/toml':
         specifier: 'catalog:'
         version: '@jsr/std__toml@1.0.11'
+      '@systemfsoftware/agent-discipline':
+        specifier: workspace:^
+        version: link:../../../packages/core/agent/discipline
       '@systemfsoftware/effect-cell-types':
         specifier: workspace:^
         version: link:../../../packages/core/effect/cell/types
@@ -388,6 +391,15 @@ importers:
       '@std/toml':
         specifier: 'catalog:'
         version: '@jsr/std__toml@1.0.11'
+      '@systemfsoftware/claude-hooks':
+        specifier: workspace:^
+        version: link:../../../packages/core/claude/hooks
+      '@systemfsoftware/claude-inject':
+        specifier: workspace:^
+        version: link:../../../packages/core/claude/inject
+      '@systemfsoftware/claude-settings':
+        specifier: workspace:^
+        version: link:../../../packages/core/claude/settings
       '@systemfsoftware/effect-cell-types':
         specifier: workspace:^
         version: link:../../../packages/core/effect/cell/types
@@ -406,6 +418,256 @@ importers:
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@0.24.0)
+
+  packages/core/agent/discipline:
+    dependencies:
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../../effect/cell/types
+      '@systemfsoftware/effect-harness-policy':
+        specifier: workspace:^
+        version: link:../../effect/policy
+    devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(redis@6.2.1(@opentelemetry/api@1.9.1))
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(vitest@4.1.10)
+      '@oh-my-pi/pi-coding-agent':
+        specifier: 'catalog:'
+        version: 17.0.5
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: catalog:attw
+        version: 1.1.1
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../../testing/specs/gherkin/effect
+      '@systemfsoftware/effect-memfs':
+        specifier: workspace:^
+        version: link:../../effect/filesystem/memfs
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../effect/schema/law
+      '@systemfsoftware/effect-schema-refutation-vite':
+        specifier: workspace:^
+        version: link:../../effect/schema/refutation-vite
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../effect/schema/vite
+      '@systemfsoftware/omp-runtime':
+        specifier: workspace:^
+        version: link:../../../../omp/packages/omp-runtime
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../../lint/oxlint/config
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../../toolchain/tsconfig
+      '@systemfsoftware/tsdown-config':
+        specifier: workspace:^
+        version: link:../../../toolchain/tsdown-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  packages/core/claude/hooks:
+    dependencies:
+      '@systemfsoftware/claude-settings':
+        specifier: workspace:^
+        version: link:../settings
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../../effect/cell/types
+    devDependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(redis@6.2.1(@opentelemetry/api@1.9.1))
+      '@effect/platform-node-shared':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(vitest@4.1.10)
+      '@oh-my-pi/pi-coding-agent':
+        specifier: 'catalog:'
+        version: 17.0.5
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../../testing/specs/gherkin/effect
+      '@systemfsoftware/effect-memfs':
+        specifier: workspace:^
+        version: link:../../effect/filesystem/memfs
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../effect/schema/law
+      '@systemfsoftware/effect-schema-refutation-vite':
+        specifier: workspace:^
+        version: link:../../effect/schema/refutation-vite
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../effect/schema/vite
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../../lint/oxlint/config
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../../toolchain/tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  packages/core/claude/inject:
+    dependencies:
+      '@systemfsoftware/effect-harness-policy':
+        specifier: workspace:^
+        version: link:../../effect/policy
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(vitest@4.1.10)
+      '@oh-my-pi/pi-coding-agent':
+        specifier: 'catalog:'
+        version: 17.0.5
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../../testing/specs/gherkin/effect
+      '@systemfsoftware/effect-memfs':
+        specifier: workspace:^
+        version: link:../../effect/filesystem/memfs
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../effect/schema/law
+      '@systemfsoftware/effect-schema-refutation-vite':
+        specifier: workspace:^
+        version: link:../../effect/schema/refutation-vite
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../effect/schema/vite
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../../lint/oxlint/config
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../../toolchain/tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  packages/core/claude/settings:
+    dependencies:
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../../effect/cell/types
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111(effect@4.0.0-rc.111)(vitest@4.1.10)
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../../testing/specs/gherkin/effect
+      '@systemfsoftware/effect-memfs':
+        specifier: workspace:^
+        version: link:../../effect/filesystem/memfs
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../effect/schema/law
+      '@systemfsoftware/effect-schema-refutation-vite':
+        specifier: workspace:^
+        version: link:../../effect/schema/refutation-vite
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../effect/schema/vite
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../../lint/oxlint/config
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../../toolchain/tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.111
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
 
   packages/core/effect/atom/atom:
     devDependencies:
@@ -3859,6 +4121,7 @@ packages:
   '@oh-my-pi/pi-coding-agent@17.0.5':
     resolution: {integrity: sha512-SdDYSuc1+zdoufN7xV6pResZXYEN0gpt1mjz7TwQH8LZroRpkA7JiLE48fQp0t3bJYMIKpuTjAXp1bZw2Qep4A==}
     engines: {bun: '>=1.3.14'}
+    hasBin: true
 
   '@oh-my-pi/pi-mnemopi@17.0.5':
     resolution: {integrity: sha512-mR0NMvMWI8x35y00cdGwfaC8LFV7W1MHjS09VclHJE/NVdGo1Cn4OxhOXHDt+ayqfHch3RqWfhPrnzV31zSMog==}

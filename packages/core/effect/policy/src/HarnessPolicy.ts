@@ -63,10 +63,10 @@ const readLayer = (
     Effect.flatMap((exists) =>
       exists
         ? fs.readFileString(filePath).pipe(
-            Effect.flatMap(parsePolicyText),
-            Effect.orElseSucceed(() => EMPTY_POLICY),
-          )
-        : Effect.succeed(EMPTY_POLICY),
+          Effect.flatMap(parsePolicyText),
+          Effect.orElseSucceed(() => EMPTY_POLICY),
+        )
+        : Effect.succeed(EMPTY_POLICY)
     ),
     Effect.orElseSucceed(() => EMPTY_POLICY),
   )

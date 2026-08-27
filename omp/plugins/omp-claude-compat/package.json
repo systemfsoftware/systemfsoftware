@@ -10,25 +10,15 @@
       "@systemfsoftware/source": "./src/index.ts",
       "default": "./dist/index.js"
     },
-    "./api": {
-      "@systemfsoftware/source": "./src/api.ts",
-      "default": "./dist/api.js"
-    },
-    "./inject": {
-      "@systemfsoftware/source": "./src/inject.ts",
-      "default": "./dist/inject.js"
-    },
     "./package.json": "./package.json"
   },
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "scripts": {
     "build": "rimraf dist && tsdown",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "attw": "attw --pack .",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
@@ -40,8 +30,12 @@
   },
   "optionalDependencies": {
     "@std/toml": "catalog:",
+    "@systemfsoftware/claude-hooks": "workspace:^",
+    "@systemfsoftware/claude-inject": "workspace:^",
+    "@systemfsoftware/claude-settings": "workspace:^",
     "@systemfsoftware/effect-cell-types": "workspace:^",
-    "@systemfsoftware/omp-platform": "workspace:^"
+    "@systemfsoftware/effect-harness-policy": "workspace:^",
+    "@systemfsoftware/omp-runtime": "workspace:^"
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
@@ -49,12 +43,16 @@
     "@effect/vitest": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/claude-hooks": "workspace:^",
+    "@systemfsoftware/claude-inject": "workspace:^",
+    "@systemfsoftware/claude-settings": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-refutation-vite": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
-    "@systemfsoftware/omp-platform": "workspace:^",
+    "@systemfsoftware/effect-harness-policy": "workspace:^",
+    "@systemfsoftware/omp-runtime": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",
     "@systemfsoftware/stryker-plugins": "workspace:^",
@@ -71,15 +69,11 @@
     "vitest": "catalog:"
   },
   "omp": {
-    "extensions": [
-      "./dist/index.js"
-    ]
+    "extensions": ["./dist/index.js"]
   },
   "publishConfig": {
     "exports": {
       ".": "./dist/index.js",
-      "./api": "./dist/api.js",
-      "./inject": "./dist/inject.js",
       "./package.json": "./package.json"
     },
     "provenance": true

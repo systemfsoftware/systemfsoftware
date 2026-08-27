@@ -1,38 +1,33 @@
 {
-  "name": "@systemfsoftware/omp-agent-discipline",
+  "name": "@systemfsoftware/agent-discipline",
+  "private": true,
   "license": "Apache-2.0",
-  "version": "2.1.0",
+  "version": "0.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
-  "description": "OMP agent discipline: mechanical enforcement of rules prose can't hold (xd:// retry guard, ...)",
+  "description": "Agent discipline library: doctrine, delegation, xd-retry guards",
   "type": "module",
   "exports": {
     ".": {
-      "@systemfsoftware/source": "./src/index.ts",
+      "@systemfsoftware/source": "./src/mod.ts",
       "default": "./dist/index.js"
     },
     "./package.json": "./package.json"
   },
   "files": [
-    "dist",
-    "skills"
+    "dist"
   ],
   "scripts": {
-    "build": "rimraf dist && tsdown",
     "clean": "rimraf dist",
+    "build": "rimraf dist && tsdown",
     "typecheck": "tsc --noEmit --incremental",
-    "attw": "attw --pack .",
-    "test": "vitest run --passWithNoTests",
+    "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
-  "optionalDependencies": {
-    "@std/toml": "catalog:",
-    "@systemfsoftware/agent-discipline": "workspace:^",
+  "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^",
-    "@systemfsoftware/effect-harness-policy": "workspace:^",
-    "@systemfsoftware/omp-runtime": "workspace:^"
+    "@systemfsoftware/effect-harness-policy": "workspace:^"
   },
   "peerDependencies": {
-    "@effect/platform-node": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:",
     "effect": "catalog:peers"
   },
@@ -40,14 +35,14 @@
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@oh-my-pi/pi-coding-agent": "catalog:",
-    "@systemfsoftware/agent-discipline": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
-    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/effect-harness-policy": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
+    "@systemfsoftware/effect-schema-refutation-vite": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
-    "@systemfsoftware/effect-harness-policy": "workspace:^",
     "@systemfsoftware/omp-runtime": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
@@ -60,11 +55,6 @@
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
-  "omp": {
-    "extensions": [
-      "./dist/index.js"
-    ]
-  },
   "publishConfig": {
     "exports": {
       ".": "./dist/index.js",
@@ -72,16 +62,9 @@
     },
     "provenance": true
   },
-  "inlinedDependencies": {
-    "@effect/platform-node": "4.0.0-rc.111",
-    "@effect/platform-node-shared": "4.0.0-rc.111",
-    "@jsr/std__collections": "1.3.0",
-    "@jsr/std__toml": "1.0.11",
-    "effect": "4.0.0-rc.111"
-  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "omp/plugins/omp-agent-discipline"
+    "directory": "packages/core/agent/discipline"
   }
 }

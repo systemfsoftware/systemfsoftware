@@ -49,13 +49,13 @@ Factory body = per session. Module top level = per process. Confusing the two is
   check: "`grep -n 'await import(' src/index.ts` accounts for every runtime-module import, each inside a callback; a top-level `import` of the runtime module is the violation"
 ```
 
-
 ## Failure Modes
 
-| Symptom | Cause | Fix |
-| --- | --- | --- |
-| `error TS2769: No overload matches this call` on `pi.on(...)` | OMP installed a stricter `ExtensionHandler` overload than the source pinned | Type-narrow the handler locally; never change the pi.on signature |
-| Workflow tests pass but `pnpm check` reports `pure-core` mutations unkillable | A workflow swallowed a typed error into `null` (unfalsifiable code path) | Surface the error variant in the error channel; let the executor branch on it |
+| Symptom                                                                       | Cause                                                                       | Fix                                                                           |
+| ----------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| `error TS2769: No overload matches this call` on `pi.on(...)`                 | OMP installed a stricter `ExtensionHandler` overload than the source pinned | Type-narrow the handler locally; never change the pi.on signature             |
+| Workflow tests pass but `pnpm check` reports `pure-core` mutations unkillable | A workflow swallowed a typed error into `null` (unfalsifiable code path)    | Surface the error variant in the error channel; let the executor branch on it |
+
 ## Verifying a lifecycle change
 
 ```bash

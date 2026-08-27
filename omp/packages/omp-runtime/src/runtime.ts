@@ -28,4 +28,5 @@ export const bootstrapPluginRuntime = <R>(layer: Layer.Layer<R, unknown, never>)
  */
 export const lazyRunSafe = <R>(
   loadRuntime: () => Promise<{ readonly runSafe: RunSafe<R> }>,
-): RunSafe<R> => (effect) => loadRuntime().then((mod) => mod.runSafe(effect))
+): RunSafe<R> =>
+(effect) => loadRuntime().then((mod) => mod.runSafe(effect))
