@@ -24,8 +24,7 @@ export const drainStreamFile = (
       Effect.gen(function*() {
         const handle = yield* fs.open(file, { flag: 'w' })
         yield* Stream.runForEach(framed, (line) =>
-          handle.writeAll(encodeUtf8(line)).pipe(Effect.flatMap(() => handle.sync)),
-        )
+          handle.writeAll(encodeUtf8(line)).pipe(Effect.flatMap(() => handle.sync)))
       }),
     ).pipe(Effect.orDie)
   })

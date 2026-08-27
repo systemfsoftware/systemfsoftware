@@ -203,13 +203,13 @@ U1 ∥ U2. Then U3 and U4 in one evaluator commit (CONST-E4), after U1/U2 so a f
 
 ## Verification Contract
 
-| Gate | When | Command |
-| --- | --- | --- |
-| Stream durability | after U1 | `pnpm --filter @systemfsoftware/stryker-js-cli test test:contract` |
-| Checkpoint / resume | after U2 | `pnpm --filter @systemfsoftware/stryker-js-platform-node test` |
-| Merge partials | after U3 | `node scripts/tools/merge-mutation-reports.mjs --selftest` |
-| Whole tree | after the last edit | `pnpm check:local` |
-| Evaluator observed | U3+U4 commit | require-report red on a missing report (already true); green still requires a final `mutation-report.json` |
+| Gate                | When                | Command                                                                                                    |
+| ------------------- | ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Stream durability   | after U1            | `pnpm --filter @systemfsoftware/stryker-js-cli test test:contract`                                         |
+| Checkpoint / resume | after U2            | `pnpm --filter @systemfsoftware/stryker-js-platform-node test`                                             |
+| Merge partials      | after U3            | `node scripts/tools/merge-mutation-reports.mjs --selftest`                                                 |
+| Whole tree          | after the last edit | `pnpm check:local`                                                                                         |
+| Evaluator observed  | U3+U4 commit        | require-report red on a missing report (already true); green still requires a final `mutation-report.json` |
 
 No local mutation run (REPO-D3). Changesets: `pnpm change --bump <patch>` for `@systemfsoftware/stryker-js-cli` and `@systemfsoftware/stryker-js-platform-node` if their turbo `build` hashes move; merge-script and workflow hashes are evaluator, no publishable bump.
 
