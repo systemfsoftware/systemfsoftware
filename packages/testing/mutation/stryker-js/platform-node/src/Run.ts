@@ -93,7 +93,6 @@ import { StrykerError } from './stryker-error.schema.js'
 import { buildTestRunner } from './TestRunner.js'
 import { makeChildProcessTestRunner } from './TestRunner.js'
 import type { PooledTestRunner } from './TestRunner.js'
-import { isActionableStatus } from './verdict-envelope.js'
 import { makeConcurrency } from './Worker.js'
 import { IdGenerator } from './Worker.js'
 import { layer as idGeneratorLayer } from './Worker.js'
@@ -1153,7 +1152,7 @@ export const mutationTestRun =
       for (const result of allResults) {
         completed += 1
         const rawStatus: string = result.status
-        if (isMutantStatus(rawStatus) && isActionableStatus(rawStatus)) {
+        if (isMutantStatus(rawStatus)) {
           const queue3 = yield* RunEvents
           yield* Queue.offer(
             queue3,

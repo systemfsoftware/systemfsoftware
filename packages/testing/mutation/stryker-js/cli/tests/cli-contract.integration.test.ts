@@ -80,8 +80,9 @@ const invoke = (
 ): Effect.Effect<Observed, never, StrykerCli> =>
   Effect.gen(function*() {
     const cli = yield* StrykerCli
+    const cwd = fixtureDir(fixture)
     const result = yield* cli.run(args, {
-      cwd: fixtureDir(fixture),
+      cwd,
       ...((() => {
         if (env === undefined) {
           return {}
@@ -89,14 +90,25 @@ const invoke = (
         return { env }
       })()),
     })
-    return { ...result, lines: parseStream(result.stdout) }
+    const streamCat = yield* cli.sh('cat reports/mutation-stream.jsonl 2>/dev/null || true', { cwd })
+    let source = result.stdout
+    if (streamCat.stdout.trim().length > 0) {
+      source = streamCat.stdout
+    }
+    return { ...result, lines: parseStream(source) }
   })
 
 const shIn = (fixture: string, script: string): Effect.Effect<Observed, never, StrykerCli> =>
   Effect.gen(function*() {
     const cli = yield* StrykerCli
-    const result = yield* cli.sh(script, { cwd: fixtureDir(fixture) })
-    return { ...result, lines: parseStream(result.stdout) }
+    const cwd = fixtureDir(fixture)
+    const result = yield* cli.sh(script, { cwd })
+    const streamCat = yield* cli.sh('cat reports/mutation-stream.jsonl 2>/dev/null || true', { cwd })
+    let source = result.stdout
+    if (streamCat.stdout.trim().length > 0) {
+      source = streamCat.stdout
+    }
+    return { ...result, lines: parseStream(source) }
   })
 
 interface CoreEntryImport {

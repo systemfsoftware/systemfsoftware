@@ -131,6 +131,18 @@ const toWireLine = (event: RunEvent): string => {
   return JSON.stringify({ kind: wireKind(event), ...fields })
 }
 
+export type FramedDrain = (framed: Stream.Stream<string>) => Effect.Effect<void, never, never>
+
+const ACTIONABLE_FINDING: Record<string, true> = {
+  Survived: true,
+  NoCoverage: true,
+  Timeout: true,
+  RuntimeError: true,
+}
+
+const writeStderr = (stdio: Stdio.Stdio, line: string): Effect.Effect<void, never, never> =>
+  Stream.run(Stream.succeed(`${line}\n`), stdio.stderr({ endOnDone: false })).pipe(Effect.ignore)
+
 const drainOf = (stdio: Stdio.Stdio, framed: Stream.Stream<string>): Effect.Effect<void, never, never> =>
   Stream.run(framed, stdio.stdout({ endOnDone: true })).pipe(Effect.ignore)
 
@@ -144,9 +156,10 @@ export interface RunEventStream {
   readonly closeAndDrain: Effect.Effect<void, never, never>
 }
 
-const makeRunEventStream = (
+export const makeRunEventStream = (
   stdio: Stdio.Stdio,
   resolved: ResolvedMode,
+  drainFramed: FramedDrain = drainOf.bind(null, stdio),
 ): Effect.Effect<RunEventStream, never, never> =>
   Effect.gen(function*() {
     const runId = generateRunId()
@@ -160,12 +173,14 @@ const makeRunEventStream = (
       headerWritten: boolean
       terminalWritten: boolean
       progress: Progress
+      findingsPrinted: number
     } = {
       mode: resolved.mode,
       signal: resolved.signal,
       headerWritten: false,
       terminalWritten: false,
       progress: { completed: 0, total: null },
+      findingsPrinted: 0,
     }
 
     const queueStream = Stream.fromQueue(queue).pipe(
@@ -213,10 +228,27 @@ const makeRunEventStream = (
         }
         return true
       }),
+      Stream.tap((event) =>
+        Match.value(event).pipe(
+          Match.tag('plan', (e) => writeStderr(stdio, `plan ${e.total} mutants`)),
+          Match.tag('phase', (e) => writeStderr(stdio, `phase ${e.phase}`)),
+          Match.tag('tick', (e) => writeStderr(stdio, `${e.completed}/${e.total ?? '?'} elapsed ${e.elapsedMs}ms`)),
+          Match.tag('mutant', (e) => {
+            if (ACTIONABLE_FINDING[e.status] !== true || state.findingsPrinted >= 20) {
+              return Effect.void
+            }
+            state.findingsPrinted += 1
+            return writeStderr(stdio, `${e.status} ${e.file} ${e.mutator}`)
+          }),
+          Match.tag('verdict', () => writeStderr(stdio, 'verdict')),
+          Match.tag('error', (e) => writeStderr(stdio, `error ${e.error}`)),
+          Match.orElse(() => Effect.void),
+        )
+      ),
       Stream.map((event) => `${toWireLine(event)}\n`),
     )
 
-    const drain: Effect.Effect<void, never, never> = drainOf(stdio, framed)
+    const drain: Effect.Effect<void, never, never> = drainFramed(framed)
 
     let drainFiber: Fiber.Fiber<void, never> | null = null
 

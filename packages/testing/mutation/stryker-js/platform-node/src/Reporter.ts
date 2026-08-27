@@ -605,9 +605,6 @@ export const makeProgressStreamReporter = (
       onMutantTested: (result: MutantResult) =>
         Effect.gen(function*() {
           const completed = yield* Ref.updateAndGet(completedRef, (n) => n + 1)
-          if (!isActionableStatus(result.status)) {
-            return
-          }
           const total = yield* Ref.get(totalRef)
           yield* Effect.try({
             try: () => {
