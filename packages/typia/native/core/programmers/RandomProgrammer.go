@@ -546,6 +546,26 @@ func randomProgrammer_decode(props randomProgrammer_decodeProps) *shimast.Node {
   if len(expressions) == 1 {
     return expressions[0]
   }
+  if escape := randomProgrammer_recursion_escape(props); escape != nil {
+    return nativefactories.ExpressionFactory.Conditional(
+      f.NewBinaryExpression(
+        nil,
+        nativefactories.ExpressionFactory.Number(nativehelpers.RandomJoiner_RECURSION_CUTOFF, props.Context.Emit),
+        nil,
+        f.NewToken(shimast.KindGreaterThanEqualsToken),
+        f.NewIdentifier("_depth"),
+      ),
+      randomProgrammer_decode_pick(props, expressions),
+      escape,
+      props.Context.Emit,
+    )
+  }
+  return randomProgrammer_decode_pick(props, expressions)
+}
+
+// randomProgrammer_decode_pick draws one of the candidate expressions uniformly.
+func randomProgrammer_decode_pick(props randomProgrammer_decodeProps, expressions []*shimast.Node) *shimast.Node {
+  f := nativecontext.EmitFactoryOf(randomProgrammer_factory, props.Context.Emit)
   pickers := make([]*shimast.Node, 0, len(expressions))
   for _, expr := range expressions {
     value := expr
@@ -574,6 +594,50 @@ func randomProgrammer_decode(props randomProgrammer_decodeProps) *shimast.Node {
     nil,
     shimast.NodeFlagsNone,
   )
+}
+
+// randomProgrammer_recursion_escape reports the terminating candidate a
+// recursive leaf must take once the depth cutoff is reached, or nil when the
+// leaf has none to force.
+//
+// A recursive array already stops at the cutoff -- RandomJoiner emits
+// `CUTOFF >= _depth ? … : []` around it. The nullable and optional escapes had
+// no such guard: `null` and `undefined` were simply two more candidates in the
+// uniform `_randomPick`, so the depth of a `self?: T` or `self: T | null` chain
+// was geometric with no bound at all. Measured before this guard, 20,000 draws
+// of `{ value: string; self?: Self }` reached depth 16, and exceeded 8 on 44 of
+// them -- which is why a suite asserting a depth bound failed at random.
+//
+// The guard needs `_depth` in scope, so it applies only inside a generated
+// function (`Explore.Function`) reached recursively (`Explore.Recursive`), and
+// only where the leaf actually recurses through an object or tuple. A leaf that
+// is merely nullable, with no recursive candidate, keeps drawing uniformly.
+func randomProgrammer_recursion_escape(props randomProgrammer_decodeProps) *shimast.Node {
+  if props.Explore.Function == false || props.Explore.Recursive == false {
+    return nil
+  }
+  recursive := false
+  for _, object := range props.Metadata.Objects {
+    if object.Type != nil && object.Type.Recursive {
+      recursive = true
+    }
+  }
+  for _, tuple := range props.Metadata.Tuples {
+    if tuple.Type != nil && tuple.Type.Recursive {
+      recursive = true
+    }
+  }
+  if recursive == false {
+    return nil
+  }
+  f := nativecontext.EmitFactoryOf(randomProgrammer_factory, props.Context.Emit)
+  if props.Metadata.Nullable {
+    return f.NewKeywordExpression(shimast.KindNullKeyword)
+  }
+  if props.Metadata.IsRequired() == false {
+    return f.NewIdentifier("undefined")
+  }
+  return nil
 }
 
 func randomProgrammer_decode_atomic(props randomProgrammer_decodeAtomicProps) []*shimast.Node {
@@ -1441,12 +1505,20 @@ func randomProgrammer_is_typed_array(name string) bool {
 // copy of the 64-bit bound that is deliberately inexact. They become `minimum` and
 // `maximum` comment tags on a number-typed JSON schema, and `number` cannot
 // represent 2**63 - 1 or 2**64 - 1 -- both arrive rounded up to the next power of
-// two. That costs nothing here: the generator only picks a value from the range,
-// and the TypedArray constructor wraps whatever it is handed. On the `number`
-// path validation owns exactness instead, in _isTypeInt64 and _isTypeUint64. The
-// `bigint` path owns none: Type<"int64"> declares no check and Type<"uint64">
-// only a lower bound, so that neither declaration names a runtime helper an
-// older `typia` cannot resolve (#2330). #2338 owns restoring the bound.
+// two. That costs nothing here, and not because the generator is careless: it
+// draws Math.floor(Math.random() * (maximum - minimum + 1)) + minimum, and that
+// span is 2**64 either way, where consecutive doubles are 2048 apart. So the
+// largest draw is 2**63 - 2048 for int64 and 2**64 - 2048 for uint64, both
+// inside the width. (Nearer the int64 maximum itself the spacing is 1024, which
+// is why the largest double below 2**63 is 2**63 - 1024; the span is what bounds
+// the draw.) The TypedArray constructor then wraps whatever it is handed anyway.
+//
+// Only the `bigint` path is exact, in _isTypeInt64Bigint and _isTypeUint64Bigint,
+// which take the true inclusive bound through a BigInt string a `number` literal
+// here could not spell. _isTypeInt64 and _isTypeUint64 on the `number` path
+// carry the same rounding this table does: their maxima are written 2**63 - 1
+// and 2**64 - 1, which are the powers of two as doubles, so each accepts one
+// value above its width -- the only float form that maximum has.
 func randomProgrammer_typed_array_range(name string) (string, string, string) {
   switch name {
   case "Uint8Array", "Uint8ClampedArray":

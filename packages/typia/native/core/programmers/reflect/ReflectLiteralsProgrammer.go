@@ -29,6 +29,12 @@ func (reflectLiteralsProgrammerNamespace) Write(props ReflectLiteralsProgrammer_
       Escape:   true,
       Constant: true,
       Absorb:   true,
+      // Only a constant literal, the `boolean` atomic (which stands for the
+      // `true | false` constants), and `null` beside them are members this
+      // operation can hand back. Anything else -- an unconstrained atomic, a
+      // template, a bucket of any other kind -- is rejected, and so is an
+      // argument carrying no member at all: `never` has no literal to list, so
+      // it is a compile error rather than an empty array (issue #2377).
       Validate: func(next struct {
         Metadata *nativemetadata.MetadataSchema
         Explore  nativefactories.MetadataFactory_IExplore
