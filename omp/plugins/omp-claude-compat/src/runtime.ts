@@ -7,9 +7,9 @@ import { Effect, Layer, Scope } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Path from 'effect/Path'
 import os from 'node:os'
+import { FileReferencedContentLive } from './inject/file-referenced-content.js'
 import { DEFAULT_NO_INJECT_REFS, NoInjectRefs, NoInjectRefsLive } from './inject/no-inject-refs.js'
 import { ClaudeSettingsLive } from './settings/mod.js'
-import { FileReferencedContentLive } from './inject/file-referenced-content.js'
 export const HookScopeLive = Layer.mergeAll(
   Layer.effect(Scope.Scope, Effect.scope),
   ClaudeSettingsLive,
@@ -44,8 +44,10 @@ const resolveHome = (): string => {
   return typeof override === 'string' && override.length > 0 ? override : os.homedir()
 }
 
-export const warmHarnessPolicy = (cwd: string): Effect.Effect<void, never, FileSystem.FileSystem | Path.Path | NoInjectRefs> =>
-  Effect.gen(function* () {
+export const warmHarnessPolicy = (
+  cwd: string,
+): Effect.Effect<void, never, FileSystem.FileSystem | Path.Path | NoInjectRefs> =>
+  Effect.gen(function*() {
     const path = yield* Path.Path
     const home = resolveHome()
     const paths: readonly string[] = [

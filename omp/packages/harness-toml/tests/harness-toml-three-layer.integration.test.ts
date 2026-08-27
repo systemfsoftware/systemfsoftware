@@ -32,7 +32,8 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
             no_delegate_skills: ['user-skill'],
             dispatch_doctrine_skills: ['project-skill'],
           })
-        })),
+        })
+      ),
     ),
   )
 
@@ -50,7 +51,8 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
       Then('the project value wins')((s) =>
         Effect.sync(() => {
           expect(s.config['no_delegate_skills']).toEqual(['project'])
-        })),
+        })
+      ),
     ),
   )
 
@@ -68,7 +70,8 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
       Then('the local value wins')((s) =>
         Effect.sync(() => {
           expect(s.config['no_delegate_skills']).toEqual(['local'])
-        })),
+        })
+      ),
     ),
   )
 
@@ -86,7 +89,8 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
       Then('the local value wins')((s) =>
         Effect.sync(() => {
           expect(s.config['no_delegate_skills']).toEqual(['local'])
-        })),
+        })
+      ),
     ),
   )
 
@@ -99,7 +103,8 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
       Then('the merged config is empty')((s) =>
         Effect.sync(() => {
           expect(s.config).toEqual({})
-        })),
+        })
+      ),
     ),
   )
 
@@ -116,7 +121,8 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
       Then('the user value is returned')((s) =>
         Effect.sync(() => {
           expect(s.config).toEqual({ no_delegate_skills: ['only-user'] })
-        })),
+        })
+      ),
     ),
   )
 
@@ -134,7 +140,8 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
       Then('the project array replaces the user array whole')((s) =>
         Effect.sync(() => {
           expect(s.config['plugins']).toEqual(['only-this-one'])
-        })),
+        })
+      ),
     ),
   )
 
@@ -152,7 +159,8 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
       Then('user keys still apply')((s) =>
         Effect.sync(() => {
           expect(s.config['no_delegate_skills']).toEqual(['user'])
-        })),
+        })
+      ),
     ),
   )
 
@@ -170,7 +178,8 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
       Then('project keys still apply')((s) =>
         Effect.sync(() => {
           expect(s.config['no_delegate_skills']).toEqual(['project'])
-        })),
+        })
+      ),
     ),
   )
 
@@ -188,7 +197,8 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
       Then('project still wins')((s) =>
         Effect.sync(() => {
           expect(s.config['no_delegate_skills']).toEqual(['project'])
-        })),
+        })
+      ),
     ),
   )
 })

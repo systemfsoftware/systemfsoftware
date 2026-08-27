@@ -7,8 +7,6 @@ import type {
   ToolResultEvent,
   ToolResultEventResult,
 } from '@oh-my-pi/pi-coding-agent'
-import { ClaudeSettings, ifEvaluatingEvent, matcherUnreadable } from '../settings/mod.js'
-import type { CommandHook, HookEntry, HookSettings } from '../settings/mod.js'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import {
   Array as Arr,
@@ -33,6 +31,8 @@ import type { PlatformError } from 'effect/PlatformError'
 import * as ChildProcess from 'effect/unstable/process/ChildProcess'
 import { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { homedir } from 'node:os'
+import { ClaudeSettings, ifEvaluatingEvent, matcherUnreadable } from '../settings/mod.js'
+import type { CommandHook, HookEntry, HookSettings } from '../settings/mod.js'
 import {
   type AdmitCommand,
   type AdmitError,

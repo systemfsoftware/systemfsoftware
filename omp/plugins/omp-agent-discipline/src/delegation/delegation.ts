@@ -73,7 +73,7 @@ function blockResult(verdict: DelegationVerdict): BlockResult | undefined {
 }
 
 function loadGuard(cwd: string): Effect.Effect<CompiledGuard | null, never, NoDelegateSkills> {
-  return Effect.gen(function* () {
+  return Effect.gen(function*() {
     const svc = yield* NoDelegateSkills
     const names = svc.get(cwd)
     return compileGuard(names)

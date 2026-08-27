@@ -8,15 +8,15 @@
  */
 
 import * as NodeFileSystem from '@effect/platform-node/NodeFileSystem'
-import { DOCTRINE_KERNEL } from '../../src/doctrine/mod.js'
-import type { DispatchDoctrineExtension as _DispatchDoctrineExtension } from '../../src/doctrine/mod.js'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { DispatchDoctrineSkillsLive } from '../../src/doctrine/config.js'
-import { NoDelegateSkillsLive } from '../../src/delegation/config.js'
 import { bootstrapPluginRuntime } from '@systemfsoftware/omp-runtime'
 import { Effect } from 'effect'
 import { Layer } from 'effect'
 import * as PathModule from 'effect/Path'
+import { NoDelegateSkillsLive } from '../../src/delegation/config.js'
+import { DispatchDoctrineSkillsLive } from '../../src/doctrine/config.js'
+import { DOCTRINE_KERNEL } from '../../src/doctrine/mod.js'
+import type { DispatchDoctrineExtension as _DispatchDoctrineExtension } from '../../src/doctrine/mod.js'
 import {
   BOTH_GUARDS_TOML,
   buildSession,
@@ -254,7 +254,10 @@ Feature('Dispatch-doctrine — handler tool_call gate')
               const projectDir = createProjectDir({ 'systemfsoftware.toml': DISPATCH_DUTY_TOML })
               vi.resetModules()
               const nodeLayer = Layer.mergeAll(NodeFileSystem.layer, PathModule.layer)
-              const appLayer = Layer.mergeAll(nodeLayer, Layer.mergeAll(DispatchDoctrineSkillsLive, NoDelegateSkillsLive))
+              const appLayer = Layer.mergeAll(
+                nodeLayer,
+                Layer.mergeAll(DispatchDoctrineSkillsLive, NoDelegateSkillsLive),
+              )
               const { runSafe } = bootstrapPluginRuntime(appLayer)
               const { warmHarnessPolicy } = await import('../../src/runtime.js')
               await runSafe(warmHarnessPolicy(projectDir))

@@ -22,7 +22,8 @@ Feature('Harness TOML — project-only file with shape and parse tolerance').bod
       Then('both keys appear with their array values')((s) =>
         Effect.sync(() => {
           expect(s.config).toEqual({ plugins: ['one', 'two'], foo: ['bar'] })
-        })),
+        })
+      ),
     ),
   )
 
@@ -35,7 +36,8 @@ Feature('Harness TOML — project-only file with shape and parse tolerance').bod
       Then('the merged config is empty')((s) =>
         Effect.sync(() => {
           expect(s.config).toEqual({})
-        })),
+        })
+      ),
     ),
   )
 
@@ -52,7 +54,8 @@ Feature('Harness TOML — project-only file with shape and parse tolerance').bod
       Then('the merged config is empty')((s) =>
         Effect.sync(() => {
           expect(s.config).toEqual({})
-        })),
+        })
+      ),
     ),
   )
 
@@ -72,7 +75,8 @@ Feature('Harness TOML — project-only file with shape and parse tolerance').bod
       Then('the merged config is empty')((s) =>
         Effect.sync(() => {
           expect(s.config).toEqual({})
-        })),
+        })
+      ),
     ),
   )
 })

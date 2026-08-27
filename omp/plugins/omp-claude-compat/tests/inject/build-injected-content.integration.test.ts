@@ -1,8 +1,8 @@
-import { buildInjectedContent } from '../../src/inject/referenced-content.js'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
+import { buildInjectedContent } from '../../src/inject/referenced-content.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -16,17 +16,17 @@ Feature('buildInjectedContent pure formatter').body(({ scenario }) => {
           refs: [{ sourcePath: '/test', resolvedPath: '/test/rules/a.md' }] as const,
           contents: { '/test/rules/a.md': '# A' } as const,
           skip: [] as const,
-        }),
-      ),
-      When('buildInjectedContent is called')('result', (s) =>
-        Effect.succeed(buildInjectedContent(s.ctx.projectDir, s.ctx.refs, s.ctx.contents, s.ctx.skip)),
+        })),
+      When('buildInjectedContent is called')(
+        'result',
+        (s) => Effect.succeed(buildInjectedContent(s.ctx.projectDir, s.ctx.refs, s.ctx.contents, s.ctx.skip)),
       ),
       Then('result should contain header and ref section')((s) =>
         Effect.sync(() => {
           expect(s.result).toContain('# Injected @-references from CLAUDE.md')
           expect(s.result).toContain('## rules/a.md')
           expect(s.result).toContain('# A')
-        }),
+        })
       ),
     ),
   )
@@ -40,15 +40,15 @@ Feature('buildInjectedContent pure formatter').body(({ scenario }) => {
           refs: [{ sourcePath: '/test', resolvedPath: '/test/AGENTS.md' }] as const,
           contents: { '/test/AGENTS.md': 'should be skipped' } as const,
           skip: ['AGENTS.md'] as const,
-        }),
-      ),
-      When('buildInjectedContent is called')('result', (s) =>
-        Effect.succeed(buildInjectedContent(s.ctx.projectDir, s.ctx.refs, s.ctx.contents, s.ctx.skip)),
+        })),
+      When('buildInjectedContent is called')(
+        'result',
+        (s) => Effect.succeed(buildInjectedContent(s.ctx.projectDir, s.ctx.refs, s.ctx.contents, s.ctx.skip)),
       ),
       Then('result should be empty')((s) =>
         Effect.sync(() => {
           expect(s.result).toBe('')
-        }),
+        })
       ),
     ),
   )
@@ -62,15 +62,15 @@ Feature('buildInjectedContent pure formatter').body(({ scenario }) => {
           refs: [{ sourcePath: '/test', resolvedPath: '/test/missing.md' }] as const,
           contents: {},
           skip: [] as const,
-        }),
-      ),
-      When('buildInjectedContent is called')('result', (s) =>
-        Effect.succeed(buildInjectedContent(s.ctx.projectDir, s.ctx.refs, s.ctx.contents, s.ctx.skip)),
+        })),
+      When('buildInjectedContent is called')(
+        'result',
+        (s) => Effect.succeed(buildInjectedContent(s.ctx.projectDir, s.ctx.refs, s.ctx.contents, s.ctx.skip)),
       ),
       Then('result should be empty')((s) =>
         Effect.sync(() => {
           expect(s.result).toBe('')
-        }),
+        })
       ),
     ),
   )

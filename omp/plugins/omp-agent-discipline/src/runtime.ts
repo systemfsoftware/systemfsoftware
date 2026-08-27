@@ -5,8 +5,8 @@ import { Effect, Layer } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as PathModule from 'effect/Path'
 import os from 'node:os'
-import { DispatchDoctrineSkills, DispatchDoctrineSkillsLive } from './doctrine/config.js'
 import { NoDelegateSkills, NoDelegateSkillsLive } from './delegation/config.js'
+import { DispatchDoctrineSkills, DispatchDoctrineSkillsLive } from './doctrine/config.js'
 
 export type DisciplineContext = FileSystem.FileSystem | PathModule.Path | NoDelegateSkills | DispatchDoctrineSkills
 
@@ -27,8 +27,10 @@ const resolveHome = (): string => {
   return typeof override === 'string' && override.length > 0 ? override : os.homedir()
 }
 
-export const warmHarnessPolicy = (cwd: string): Effect.Effect<void, never, FileSystem.FileSystem | PathModule.Path | NoDelegateSkills | DispatchDoctrineSkills> =>
-  Effect.gen(function* () {
+export const warmHarnessPolicy = (
+  cwd: string,
+): Effect.Effect<void, never, FileSystem.FileSystem | PathModule.Path | NoDelegateSkills | DispatchDoctrineSkills> =>
+  Effect.gen(function*() {
     const path = yield* PathModule.Path
     const home = resolveHome()
     const paths: readonly string[] = [

@@ -28,7 +28,7 @@ const gateResult = (verdict: DispatchDoctrineVerdict): DispatchGateResult =>
   )
 
 const readDoctrineSkills = (cwd: string): Effect.Effect<readonly string[], never, DispatchDoctrineSkills> =>
-  Effect.gen(function* () {
+  Effect.gen(function*() {
     const svc = yield* DispatchDoctrineSkills
     return svc.get(cwd)
   })

@@ -1,8 +1,10 @@
 import { Context, Effect } from 'effect'
 
-export class ReferencedContent extends Context.Service<ReferencedContent, { readonly load: () => Effect.Effect<string> }>()(
-  '@systemfsoftware/omp-claude-compat/inject/ReferencedContent',
-) {}
+export class ReferencedContent
+  extends Context.Service<ReferencedContent, { readonly load: () => Effect.Effect<string> }>()(
+    '@systemfsoftware/omp-claude-compat/inject/ReferencedContent',
+  )
+{}
 
 export const DEFAULT_NO_INJECT_REFS: readonly string[] = ['AGENTS.md']
 

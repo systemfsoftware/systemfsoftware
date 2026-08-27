@@ -23,7 +23,8 @@ export const PolicyFromToml: Schema.Codec<Policy, string> = Schema.String.pipe(
       }).pipe(
         Effect.flatMap((parsed) => Schema.decodeUnknownEffect(Policy)(parsed)),
         Effect.mapError((err) => (Schema.isSchemaError(err) ? err.issue : err)),
-      )),
+      )
+    ),
     encode: SchemaGetter.transform((policy: Policy) => stringify(policy)),
   }),
 )

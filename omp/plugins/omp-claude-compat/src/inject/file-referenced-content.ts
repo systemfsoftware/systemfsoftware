@@ -1,9 +1,9 @@
 import { Effect, Layer, Result } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import * as PathModule from 'effect/Path'
+import { NoInjectRefs } from './no-inject-refs.js'
 import { buildInjectedContent, ReferencedContent } from './referenced-content.js'
 import type { Ref } from './referenced-content.js'
-import { NoInjectRefs } from './no-inject-refs.js'
 
 const parseRefToken = (rawLine: string, path: PathModule.Path): string | null => {
   const noMarker = rawLine.trim().replace(/^[-*+]\s+/, '')
@@ -19,14 +19,14 @@ const isConfined = (resolved: string, projectDir: string): boolean =>
 
 export const FileReferencedContentLive = Layer.effect(
   ReferencedContent,
-  Effect.gen(function* () {
+  Effect.gen(function*() {
     const fs = yield* FileSystem
     const path = yield* PathModule.Path
     const skipListService = yield* NoInjectRefs
 
     return ReferencedContent.of({
       load: () =>
-        Effect.gen(function* () {
+        Effect.gen(function*() {
           const projectDir = process.env['CLAUDE_PROJECT_DIR'] ?? process.cwd()
 
           const claudeMdPaths = [

@@ -1,10 +1,10 @@
-import { InjectInstructionsTask } from '../../src/inject/inject.js'
-import { ReferencedContent } from '../../src/inject/referenced-content.js'
+import type { BeforeAgentStartEvent } from '@oh-my-pi/pi-coding-agent'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import type { BeforeAgentStartEvent } from '@oh-my-pi/pi-coding-agent'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
+import { InjectInstructionsTask } from '../../src/inject/inject.js'
+import { ReferencedContent } from '../../src/inject/referenced-content.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -20,7 +20,10 @@ type CapturedHandler = (
 function captureHandler(
   injectedContent: string,
 ): { handler: CapturedHandler; fakeLayer: Layer.Layer<ReferencedContent> } {
-  const fakeLayer = Layer.succeed(ReferencedContent, ReferencedContent.of({ load: () => Effect.succeed(injectedContent) }))
+  const fakeLayer = Layer.succeed(
+    ReferencedContent,
+    ReferencedContent.of({ load: () => Effect.succeed(injectedContent) }),
+  )
   let captured: CapturedHandler | undefined
   const pi = {
     on: (event: string, h: CapturedHandler) => {
@@ -41,15 +44,16 @@ Feature('inject handler via ReferencedContent port').body(({ scenario }) => {
   scenario(
     'Handler injects resolved content supplied through port',
     Gherkin.Do.pipe(
-      Given('a fake ReferencedContent that returns canned markdown')('ctx', () =>
-        Effect.succeed(captureHandler('# canned rules\ncontent here')),
+      Given('a fake ReferencedContent that returns canned markdown')(
+        'ctx',
+        () => Effect.succeed(captureHandler('# canned rules\ncontent here')),
       ),
       When('before_agent_start fires')('result', (s) => Effect.promise(() => s.ctx.handler(fakeEvent, {}))),
       Then('result should append injected markdown to systemPrompt')((s) =>
         Effect.sync(() => {
           expect(s.result?.systemPrompt.join('\n')).toContain('content here')
           expect(s.result?.systemPrompt[0]).toBe('base prompt')
-        }),
+        })
       ),
     ),
   )
@@ -57,14 +61,12 @@ Feature('inject handler via ReferencedContent port').body(({ scenario }) => {
   scenario(
     'Handler returns undefined when port yields empty string',
     Gherkin.Do.pipe(
-      Given('a fake ReferencedContent that returns empty')('ctx', () =>
-        Effect.succeed(captureHandler('')),
-      ),
+      Given('a fake ReferencedContent that returns empty')('ctx', () => Effect.succeed(captureHandler(''))),
       When('before_agent_start fires')('result', (s) => Effect.promise(() => s.ctx.handler(fakeEvent, {}))),
       Then('result should be undefined')((s) =>
         Effect.sync(() => {
           expect(s.result).toBeUndefined()
-        }),
+        })
       ),
     ),
   )

@@ -1,9 +1,9 @@
-import { runNoSkillDelegation } from '../../src/delegation/mod.js'
-import { NoDelegateSkills } from '../../src/delegation/config.js'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Layer } from 'effect'
 import { expect } from 'vitest'
+import { NoDelegateSkills } from '../../src/delegation/config.js'
+import { runNoSkillDelegation } from '../../src/delegation/mod.js'
 
 function present<A>(value: A | null | undefined): A {
   if (value === null || value === undefined) throw new Error('expected a value, got none')

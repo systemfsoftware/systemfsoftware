@@ -474,7 +474,7 @@ export class ClaudeSettingsSources extends Context.Service<
       FileSystem
     >
   }
->()('@systemfsoftware/claude-settings/settings/ClaudeSettingsSources') {}
+>()('@systemfsoftware/omp-claude-compat/settings/ClaudeSettingsSources') {}
 
 export const ClaudeCodeSettingsLive = Layer.effect(
   ClaudeSettingsSources,
@@ -512,7 +512,7 @@ export class ClaudeSettings extends Context.Service<
     readonly load: (cwd: string, homeDir: string) => Effect.Effect<HookSettings | null, never, FileSystem>
     readonly gaps: (cwd: string, homeDir: string) => Effect.Effect<SettingsGaps, never, FileSystem>
   }
->()('@systemfsoftware/claude-settings/settings/ClaudeSettings') {}
+>()('@systemfsoftware/omp-claude-compat/settings/ClaudeSettings') {}
 
 interface SettingsFileText {
   readonly path: string

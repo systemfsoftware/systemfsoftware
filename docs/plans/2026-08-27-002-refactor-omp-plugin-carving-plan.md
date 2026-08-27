@@ -182,17 +182,17 @@ U1 → U2 and U3 (independent) → U4 → U5.
 
 ## Verification Contract
 
-| Gate | Command | Applies to |
-|---|---|---|
-| Typecheck | `pnpm -r typecheck` | all units |
-| Per-package tests | `pnpm --filter <pkg> test` | U1–U4 packages |
-| Lint | `pnpm -r lint` | all units |
-| Surface check | `pnpm --filter @systemfsoftware/omp-claude-compat attw` and `pnpm --filter @systemfsoftware/omp-agent-discipline attw` | U2, U3 |
-| Plugin smoke | `node omp/scripts/smoke-plugin.mjs omp/plugins/omp-claude-compat/dist/index.js` and the `omp-agent-discipline` dist | U2–U4 |
-| Structural: no plugin↔plugin edge | `git grep -nE '"@systemfsoftware/omp-(claude-compat|agent-discipline|typescript-discipline)": "' -- omp/plugins/*/package.json` prints no dependency entries (dependency-key-scoped, all three manifests) | U2–U4 |
-| Structural: no core→omp edge | `git grep -nE '@systemfsoftware/omp-' -- packages/core` prints nothing | U4, U5 |
-| Structural: names removed | `git grep -nI -e '<deleted-package-name>' -- . ':!*.lock' ':!docs/plans/**' ':!.changeset/**'` prints nothing, per name | U4, U5 |
-| Whole-repo gate | `pnpm check:local` | U5, DoD |
+| Gate                              | Command                                                                                                                 | Applies to       |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| Typecheck                         | `pnpm -r typecheck`                                                                                                     | all units        |
+| Per-package tests                 | `pnpm --filter <pkg> test`                                                                                              | U1–U4 packages   |
+| Lint                              | `pnpm -r lint`                                                                                                          | all units        |
+| Surface check                     | `pnpm --filter @systemfsoftware/omp-claude-compat attw` and `pnpm --filter @systemfsoftware/omp-agent-discipline attw`  | U2, U3           |
+| Plugin smoke                      | `node omp/scripts/smoke-plugin.mjs omp/plugins/omp-claude-compat/dist/index.js` and the `omp-agent-discipline` dist     | U2–U4            |
+| Structural: no plugin↔plugin edge | `git grep -nE '"@systemfsoftware/omp-(claude-compat                                                                     | agent-discipline |
+| Structural: no core→omp edge      | `git grep -nE '@systemfsoftware/omp-' -- packages/core` prints nothing                                                  | U4, U5           |
+| Structural: names removed         | `git grep -nI -e '<deleted-package-name>' -- . ':!*.lock' ':!docs/plans/**' ':!.changeset/**'` prints nothing, per name | U4, U5           |
+| Whole-repo gate                   | `pnpm check:local`                                                                                                      | U5, DoD          |
 
 No mutation run is started by any agent (REPO-D3); a score below 100 is a human decision on the merged report.
 

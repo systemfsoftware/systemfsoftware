@@ -1,7 +1,7 @@
+import { parse, stringify } from '@std/toml'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
-import { parse, stringify } from '@std/toml'
 import { Effect, Schema } from 'effect'
 import { expect } from 'vitest'
 
@@ -18,7 +18,7 @@ Feature('Harness TOML — PolicyFromToml codec round-trip').body(({ scenario }) 
     Gherkin.Do.pipe(
       Given('a TOML document')('doc', () => Effect.succeed('plugins = ["a", "b"]\nfoo = ["bar"]')),
       When('the document is parsed and re-serialized')('roundTripped', (s) =>
-        Effect.gen(function* () {
+        Effect.gen(function*() {
           const parsed = parse(s.doc)
           const decoded = yield* Schema.decodeUnknownEffect(PolicySchema)(parsed).pipe(Effect.orDie)
           const encoded = stringify(decoded)
@@ -26,10 +26,11 @@ Feature('Harness TOML — PolicyFromToml codec round-trip').body(({ scenario }) 
           return yield* Schema.decodeUnknownEffect(PolicySchema)(reparsed).pipe(Effect.orDie)
         })),
       Then('the round-tripped policy equals the first decode')((s) =>
-        Effect.gen(function* () {
+        Effect.gen(function*() {
           const first = yield* Schema.decodeUnknownEffect(PolicySchema)(parse(s.doc)).pipe(Effect.orDie)
           expect(s['roundTripped']).toEqual(first)
-        })),
+        })
+      ),
     ),
   )
 
@@ -46,7 +47,8 @@ Feature('Harness TOML — PolicyFromToml codec round-trip').body(({ scenario }) 
       Then('the merged config is empty')((s) =>
         Effect.sync(() => {
           expect(s.config).toEqual({})
-        })),
+        })
+      ),
     ),
   )
 })
