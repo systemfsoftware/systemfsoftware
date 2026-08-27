@@ -5,6 +5,7 @@ import {
   parseLauncherOptions,
   projectOptions,
 } from "./launcherArgs";
+import { publishArtifacts } from "./model/publishedArtifacts";
 import { ensureExecutable } from "./nativeExecutable";
 import { resolveGraphBinary } from "./resolveGraphBinary";
 import { startServer } from "./server/startServer";
@@ -35,7 +36,7 @@ export { resolveGraphBinary } from "./resolveGraphBinary";
  */
 export { reduce } from "./reduce";
 export type { RawDump, RawEdge, RawNode, ViewerPayload } from "./reduce";
-export { loadGraph } from "./model/loadGraph";
+export { DUMP_SCHEMA_VERSION, loadGraph } from "./model/loadGraph";
 export {
   TtscGraphSession,
   type TtscGraphRequestOptions,
@@ -121,7 +122,9 @@ function printDumpHelp(): void {
 function runDump(argv: readonly string[]): number {
   // Resolve the native binary from the target project the caller named with
   // `--cwd`, not from wherever the launcher process happened to start.
-  const { cwd } = projectOptions(parseLauncherOptions(argv, DUMP_OPTIONS));
+  const { cwd, tsconfig } = projectOptions(
+    parseLauncherOptions(argv, DUMP_OPTIONS),
+  );
   const binary = resolveGraphBinary(process.env, cwd);
   if (binary === null) {
     // `ttscgraph` owns the flag contract, so a resolvable binary always answers
@@ -141,10 +144,24 @@ function runDump(argv: readonly string[]): number {
     return 1;
   }
   ensureExecutable(binary);
-  const result = spawnSync(binary, ["dump", ...argv], {
-    stdio: "inherit",
-    windowsHide: true,
-  });
+  // The same artifacts `loadGraph` and the resident session ask for, so the
+  // three ways to reach a dump answer a citation the same way. A caller that
+  // named `--artifacts` itself owns the answer and is not overridden.
+  const published = argv.includes("--artifacts")
+    ? null
+    : publishArtifacts({ cwd, tsconfig });
+  const result = spawnSync(
+    binary,
+    [
+      "dump",
+      ...argv,
+      ...(published?.file == null ? [] : ["--artifacts", published.file]),
+    ],
+    {
+      stdio: "inherit",
+      windowsHide: true,
+    },
+  );
   if (result.error) {
     process.stderr.write(`@ttsc/graph: ${result.error.message}\n`);
     return 1;

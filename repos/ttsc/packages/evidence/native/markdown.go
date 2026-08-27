@@ -41,39 +41,64 @@ func loadMarkdownBase(
   inventories map[string]*artifactInventory,
 ) []string {
   problems := []string{}
-  if problem := unreadableBaseProblem(base, artifactMarkdown); problem != "" {
+  if problem := baseDirectoryProblem(base, artifactMarkdown); problem != "" {
     recordPopulationFailure(inventories, artifactMarkdown, base)
     return []string{problem}
   }
-  err := filepath.WalkDir(base.Absolute, func(current string, entry fs.DirEntry, walkErr error) error {
+  from, resolved := resolvedBaseDirectory(base)
+  if !resolved {
+    recordPopulationFailure(inventories, artifactMarkdown, base)
+    return []string{unresolvedBaseProblem(base, artifactMarkdown)}
+  }
+  err := filepath.WalkDir(from, func(current string, entry fs.DirEntry, walkErr error) error {
     if walkErr != nil {
-      relative, ok := relativeProjectPath(base.Absolute, current)
-      relevant := ok &&
-        (matchesConfiguredMarkdownFile(config, base, relative) ||
-          couldContainConfiguredMarkdown(config, base, relative))
-      if !relevant {
-        if entry != nil && entry.IsDir() {
-          return filepath.SkipDir
-        }
-        return nil
+      // The walk root belongs to its population by construction, so a failure
+      // to list it is a failure of the population and is never decided by what
+      // the globs happen to select. The relevance test below answers for an
+      // entry inside the base, and it answers for the base itself only by
+      // accident: its base-relative path is ".", which `couldMatchDescendant`
+      // calls true under a pattern opening with `**` and false under one
+      // opening with a segment. So the one failure that empties the whole
+      // population was reported or discarded by the shape of the globs. The
+      // success branch already exempts the base; this is that exemption on the
+      // error side.
+      //
+      // Returning the error ends the walk and carries the failure to the
+      // handler below, which is where a population-level finding belongs and
+      // where the population is recorded failed rather than healthy and empty.
+      if current == from {
+        return walkErr
       }
-      recordPopulationFailure(inventories, artifactMarkdown, base)
-      problems = append(problems, "Evidence graph could not inspect '"+current+"': "+walkErr.Error()+". Fix filesystem access so configured Markdown sources can be indexed.")
-      if entry != nil && entry.IsDir() {
-        return filepath.SkipDir
+      problem, relevant := unreadableEntryProblem(
+        base,
+        from,
+        "Markdown",
+        current,
+        walkErr,
+        func(relative string) bool {
+          return matchesConfiguredMarkdownFile(config, base, relative) ||
+            couldContainConfiguredMarkdown(config, base, relative)
+        },
+      )
+      if relevant {
+        recordPopulationFailure(inventories, artifactMarkdown, base)
+        problems = append(problems, problem)
       }
-      return nil
+      // `WalkDir` passes a nil entry only for its root, which the guard above
+      // answers, so this error belongs to a directory whose listing failed and
+      // the walk continues with its siblings.
+      return filepath.SkipDir
     }
     if entry.IsDir() {
-      if current != base.Absolute {
-        relative, ok := relativeProjectPath(base.Absolute, current)
+      if current != from {
+        relative, ok := relativeProjectPath(from, current)
         if !ok || !couldContainConfiguredMarkdown(config, base, relative) {
           return filepath.SkipDir
         }
       }
       return nil
     }
-    relative, ok := relativeProjectPath(base.Absolute, current)
+    relative, ok := relativeProjectPath(from, current)
     if !ok {
       return nil
     }
@@ -88,13 +113,13 @@ func loadMarkdownBase(
         Type:       artifactMarkdown,
         LoadFailed: true,
       }
-      problems = append(problems, "Evidence graph could not read Markdown file '"+address.Display+"': "+readErr.Error()+". Fix filesystem access or exclude the file from configured globs.")
+      problems = append(problems, "Evidence graph could not read Markdown file '"+address.Display+"': "+causeText(readErr)+". Fix filesystem access or exclude the file from configured globs.")
       return nil
     }
     inventory, _ := scanMarkdownInventory(address, string(content))
     inventories[address.Key] = inventory
     for _, inventoryProblem := range inventory.Problems {
-      if selectedByMarkdownReference(config, base, relative, inventoryProblem.Symbol) {
+      if selectedByMarkdownPopulation(config, base, relative, inventoryProblem.Symbol) {
         problems = append(problems, inventoryProblem.Message)
       }
     }
@@ -107,7 +132,7 @@ func loadMarkdownBase(
   })
   if err != nil {
     recordPopulationFailure(inventories, artifactMarkdown, base)
-    problems = append(problems, "Evidence graph could not walk Markdown root '"+populationRootLabel(base)+"': "+err.Error()+".")
+    problems = append(problems, unlistableBaseProblem(base, "Markdown", err))
   }
   return problems
 }
@@ -231,14 +256,28 @@ func scanMarkdownInventory(
       }
       // A heading that materializes no unit still opens a region, and that
       // region's content belongs to the nearest heading unit enclosing it. An
-      // H5, and an H2 whose title yields no anchor, are both such headings.
+      // H5 or deeper, and an H2 whose title yields no anchor, are both such
+      // headings.
       // Carrying the previous unit forward instead would attribute the region to
       // whatever unit the walk happened to see last, which is a sibling rather
       // than an ancestor when the skipped heading is shallower: editing text
       // under an anchorless H2 would then expire a review of the H3 above it,
       // which does not contain that text.
       currentDigestHostID = fileUnitID
-      for ancestorLevel := level - 1; ancestorLevel >= 1; ancestorLevel-- {
+      // Start at the deepest level the array holds rather than at this
+      // heading's own. Only H1 through H4 ever write a slot, so a deeper
+      // heading's first candidate ancestor is H4, and reading from its own
+      // level indexed past the end: an H6 walked from 5 into a five-slot array
+      // and took the whole rule down before it materialized anything. An H5
+      // survived that only because it starts at the last valid slot.
+      //
+      // Clamp rather than widen the array. Widening would also seal it, since
+      // `markdownHeading` refuses a level past 6, so this is a choice about
+      // what the type says rather than about safety: the array is indexed by
+      // heading level and sized to hold every materializable one, so its length
+      // is the model. A wider array would carry slots nothing writes and stop
+      // saying so. It is not indexed by ordinal, so slot zero is unused.
+      for ancestorLevel := min(level-1, len(headingUnitIDs)-1); ancestorLevel >= 1; ancestorLevel-- {
         if headingUnitIDs[ancestorLevel] != "" {
           currentDigestHostID = headingUnitIDs[ancestorLevel]
           break
@@ -256,8 +295,12 @@ func scanMarkdownInventory(
             Message: problems[len(problems)-1],
           })
         } else {
+          // Clamped like the digest walk above, though the `level <= 4` around
+          // this block already bounds it. Both walks read the same array, so
+          // both state the same bound rather than one of them depending on a
+          // condition someone could move.
           parentID := fileUnitID
-          for ancestorLevel := level - 1; ancestorLevel >= 1; ancestorLevel-- {
+          for ancestorLevel := min(level-1, len(headingUnitIDs)-1); ancestorLevel >= 1; ancestorLevel-- {
             if headingUnitIDs[ancestorLevel] != "" {
               parentID = headingUnitIDs[ancestorLevel]
               break
@@ -315,7 +358,6 @@ func scanMarkdownInventory(
     }
     for _, review := range parseReviews(comment) {
       inventory.Reviews = append(inventory.Reviews, &evidenceReview{
-        HostID:          hostIDAtLine[line-1],
         SemanticHostIDs: []string{hostIDAtLine[line-1]},
         Reviews:         review.Reviews,
         Type:            artifactMarkdown,
@@ -432,13 +474,34 @@ func couldContainConfiguredMarkdown(
   return false
 }
 
-func selectedByMarkdownReference(
+// selectedByMarkdownPopulation reports whether any configured population reads
+// this file for the symbol a scan problem was filed under.
+//
+// Claims are asked as well as references. A scan problem says the file
+// materialized less than it looks like it should, and that is a hole on either
+// side: a reference loses evidence units, while a claim loses the hosts that owe
+// acknowledgements. The claim side was the silent one. A whitespace-named claim
+// file forms no target, so it contributes no host, drops out of the obligation,
+// and said nothing at all; the same file pointed at by a reference reported the
+// path immediately.
+//
+// The claim is matched on its own symbol set for the reason a reference is: a
+// problem about a kind this population does not read is not its problem. The
+// wildcard symbol still reaches both, which is what carries the unaddressable
+// path, since that one is about the file rather than about any heading kind.
+func selectedByMarkdownPopulation(
   config graphConfig,
   base populationBase,
   path string,
   symbol string,
 ) bool {
   for _, claim := range config.Claims {
+    if claim.Type == artifactMarkdown &&
+      claim.Base.Absolute == base.Absolute &&
+      claim.Files.matches(path) &&
+      (symbol == "*" || claim.Symbols.contains(symbol)) {
+      return true
+    }
     for _, reference := range claim.References {
       if reference.Type == artifactMarkdown &&
         reference.Base.Absolute == base.Absolute &&
@@ -561,7 +624,7 @@ func reportUnreadableMarkdownTags(
   }
   rendered := false
   for index, rawLine := range lines {
-    line := strings.TrimSuffix(rawLine, "")
+    line := strings.TrimSuffix(rawLine, "\r")
     if opens, closes := renderedCodeEdges(line); opens || closes {
       rendered = opens
       continue

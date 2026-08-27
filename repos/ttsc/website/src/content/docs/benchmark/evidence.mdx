@@ -4,7 +4,7 @@ import TtscWebsiteBenchmarkEvidenceSpend from "../../../components/benchmark/evi
 
 # Evidence Graph
 
-One coding engine builds the same application twice from the same frozen requirements: once with [`@ttsc/evidence`](/docs/evidence) in the workspace, once with neither. Same template, same instruction sequence, same model and effort. The variable is the graph.
+One coding engine builds the same application twice from the same frozen requirements: once with [`@ttsc/evidence`](/docs/evidence) in the workspace, once without. Same template, same instruction sequence, same model and effort. The variable is the graph.
 
 Four subjects in ascending size. Every figure comes from `benchmarks/evidence/aggregate` and from nowhere else.
 
@@ -45,6 +45,19 @@ Averaging the thirteen rates instead scored one subject 58.4% while 76 of its 55
 <TtscWebsiteBenchmarkEvidenceCounters />
 
 How much tokens, prices, times have consumed.
+
+## Applications
+
+Every application this cohort produced is published at [`samchon/evidence-benchmark-results`](https://github.com/samchon/evidence-benchmark-results).
+
+Each leaf is the complete source the agent left behind, so the two cells of a row are the same frozen requirements built twice.
+
+| Subject | Plain | Evidence |
+| --- | --- | --- |
+| todo | [`todo/plain`](https://github.com/samchon/evidence-benchmark-results/tree/master/codex/gpt-5.6-luna/todo/plain) | [`todo/evidence`](https://github.com/samchon/evidence-benchmark-results/tree/master/codex/gpt-5.6-luna/todo/evidence) |
+| reddit | [`reddit/plain`](https://github.com/samchon/evidence-benchmark-results/tree/master/codex/gpt-5.6-luna/reddit/plain) | [`reddit/evidence`](https://github.com/samchon/evidence-benchmark-results/tree/master/codex/gpt-5.6-luna/reddit/evidence) |
+| shopping | [`shopping/plain`](https://github.com/samchon/evidence-benchmark-results/tree/master/codex/gpt-5.6-luna/shopping/plain) | [`shopping/evidence`](https://github.com/samchon/evidence-benchmark-results/tree/master/codex/gpt-5.6-luna/shopping/evidence) |
+| erp | [`erp/plain`](https://github.com/samchon/evidence-benchmark-results/tree/master/codex/gpt-5.6-luna/erp/plain) | [`erp/evidence`](https://github.com/samchon/evidence-benchmark-results/tree/master/codex/gpt-5.6-luna/erp/evidence) |
 
 ## Reproduce
 

@@ -66,7 +66,8 @@ const LANES = [
       "node --test scripts/ci/validation-plan.test.cjs " +
       "scripts/ci/test-owners.test.cjs scripts/ci/line-endings.test.cjs " +
       "scripts/ci/dependency-audit.test.cjs " +
-      "scripts/ci/config-loader-copies.test.cjs && " +
+      "scripts/ci/config-loader-copies.test.cjs " +
+      "scripts/ci/gofmt-wrapper.test.cjs && " +
       "node scripts/ci/format-check.cjs && pnpm run test:typecheck",
   },
   {
@@ -124,6 +125,11 @@ const LANES = [
       "native-plugins/utility-host",
     ],
   },
+  // Every other lane runs the current Node, so the floor `engines.node`
+  // declares is checked only here. The cases this names are the ones whose
+  // behaviour the runtime itself changed between that floor and the current
+  // release: each passes on the newer Node whatever ttsx does, so only this
+  // lane can tell a working hook from one the runtime happened to cover.
   {
     id: "ttsx-node-22",
     name: "ttsx node 22.15",
@@ -131,7 +137,8 @@ const LANES = [
     build: "pnpm --filter ttsc build",
     run:
       "pnpm --filter @ttsc/test-ttsc start -- " +
-      "--include=commonjs_loads_prefix_only_node_builtins",
+      "--include=commonjs_loads_prefix_only_node_builtins " +
+      "--include=commonjs_require_rescues_a_js_specifier_inside_a_dynamic_import",
     dirs: ["features/ttsx-runtime"],
   },
   {
@@ -462,7 +469,23 @@ function planForPaths(files) {
       continue;
     }
     if (file.startsWith("packages/evidence/")) {
-      add(["evidence", "go"], file);
+      // `windows-go` is selected because this package's behavior is decided by
+      // platform path semantics rather than incidentally affected by them.
+      // `filepath.IsAbs` calls `/srv/x` relative there and a drive-lettered path
+      // absolute, `filepath.Rel` errors across volumes so a location falls back
+      // to an absolute spelling, a drive root carries its own separator, and a
+      // junction is read through `os.Readlink` where `EvalSymlinks` returns it
+      // unchanged.
+      //
+      // Two kinds of case need this lane. One asserts a different answer per
+      // platform, so running it on `go` alone proves only the POSIX half. The
+      // other reads a Windows junction, which is a reparse point rather than a
+      // symbolic link, so `resolveLinkedDirectory` takes the same branches over
+      // different operating-system behavior and only this lane exercises that
+      // side of `os.Readlink`. The doubled terminator Windows writes is pinned
+      // from a hand-built error and runs everywhere, so this lane is not what
+      // proves that one.
+      add(["evidence", "go", "windows-go"], file);
       continue;
     }
     if (file.startsWith("benchmarks/evidence/")) {
@@ -499,7 +522,13 @@ function planForPaths(files) {
       continue;
     }
     if (file.startsWith("packages/graph/")) {
-      add(["graph"], file);
+      // `tests/test-evidence` drives a resident graph session over a real
+      // evidence project — the only place the chain from a rule's published
+      // units to a graph node is exercised end to end — so a change here has to
+      // run that suite too. Its failure mode is an empty answer, which is also
+      // what a correct project with no publisher produces, and no other lane
+      // can tell those apart.
+      add(["graph", "evidence"], file);
       continue;
     }
     if (file.startsWith("packages/unplugin/")) {
@@ -616,6 +645,7 @@ function planForPaths(files) {
         "scripts/ci/dependency-audit.cjs",
         "scripts/ci/dependency-audit.test.cjs",
         "scripts/ci/format-check.cjs",
+        "scripts/ci/gofmt-wrapper.test.cjs",
         "scripts/ci/line-endings.test.cjs",
         "scripts/ci/plugin-cache-persistence.mjs",
         "scripts/ci/test-owners.cjs",

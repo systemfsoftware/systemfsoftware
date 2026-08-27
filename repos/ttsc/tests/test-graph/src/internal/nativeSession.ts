@@ -1,9 +1,10 @@
-import { TtscGraphSession } from "@ttsc/graph";
+import { DUMP_SCHEMA_VERSION, TtscGraphSession } from "@ttsc/graph";
 import { TestProject } from "@ttsc/testing";
 import fs from "node:fs";
 import path from "node:path";
 
-const DUMP_SCHEMA_VERSION = 6;
+import { readLogLines } from "./logLines";
+
 let fakeBinary: string | undefined;
 
 export interface NativeSessionFixture {
@@ -44,6 +45,20 @@ export function pendingCount(session: TtscGraphSession): number {
       pending: Map<number, unknown>;
     }
   ).pending.size;
+}
+
+/** Every request line the fake child received, in order, parsed. */
+export function readRequests(root: string): Record<string, unknown>[] {
+  return readLogLines(path.join(root, "requests.log")).map(
+    (line) => JSON.parse(line) as Record<string, unknown>,
+  );
+}
+
+/** The flags each fake child was spawned with, one entry per child. */
+export function readSpawnArguments(root: string): string[][] {
+  return readLogLines(path.join(root, "arguments.log")).map(
+    (line) => JSON.parse(line) as string[],
+  );
 }
 
 export function readPids(root: string): number[] {

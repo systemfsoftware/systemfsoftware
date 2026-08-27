@@ -93,8 +93,11 @@ func TestPrototypeAssembledAlias(t *testing.T) {
   shimast.SetParentInChildren(transformed.AsNode())
 
   // builtin emit chain (type-erase, import-elision, module-transform, ...) in
-  // the SAME EmitContext, applied after the plugin transformer.
-  builtins := shimcompiler.GetScriptTransformers(ec, host, transformed)
+  // the SAME EmitContext, applied after the plugin transformer. The chain is
+  // built from the PARSE tree and applied to the transformed one, exactly as
+  // EmitWithPluginTransformers does it: the file handed to GetScriptTransformers
+  // is the reference-marking target, not the file being transformed.
+  builtins := shimcompiler.GetScriptTransformers(ec, host, sf)
   out := transformed
   for _, tr := range builtins {
     out = tr.TransformSourceFile(out)
@@ -107,5 +110,15 @@ func TestPrototypeAssembledAlias(t *testing.T) {
   t.Logf("assembled emit:\n%s", text)
   if !strings.Contains(text, "dep_1.foo") {
     t.Fatalf("synthetic foo was NOT aliased by module-transform:\n%s", text)
+  }
+  // Assert the binding the alias names, not just the alias. Building the chain
+  // from `transformed` instead of `sf` still prints `dep_1.foo` while import
+  // elision drops `const dep_1 = require("./dep")`, so without this the
+  // assembly above could regress to the post-plugin tree unnoticed. This guards
+  // the assembly in this test only. The driver's own lane is guarded by the
+  // emit_plugin_rebuilt_* tests, which this one cannot stand in for because it
+  // never calls EmitWithPluginTransformers.
+  if !strings.Contains(text, `require("./dep")`) {
+    t.Fatalf("alias dep_1.foo has no require binding, so the assembled output would throw at runtime:\n%s", text)
   }
 }

@@ -18,6 +18,13 @@ const requireFromTtsc = createRequire(
   path.join(root, "packages", "ttsc", "package.json"),
 );
 
+/**
+ * Synchronous `stat` calls one delivery may spend proving project membership,
+ * independent of the project's directory count. Scenarios that add a cost of
+ * their own state a budget derived from this one.
+ */
+const MEMBERSHIP_STAT_BUDGET = 8;
+
 main()
   .catch((error) => {
     console.error(error);
@@ -93,7 +100,67 @@ async function main(): Promise<void> {
       count: 50,
       emitExternalKey: false,
       graphFanout: 50,
+      // One partitioned external, the config chain and the delivered file's own
+      // entry. Nothing here may grow with the envelope's size.
+      lstatBudget: 8,
       partitionExternalInputs: true,
+      unrelatedDirectoryCount: 100,
+    }),
+  );
+
+  console.log(
+    "\nScenario E — serve validation over a shared closure with globals:",
+  );
+  console.log(
+    "  invariant: per-module reads stay bounded when every module reaches the",
+  );
+  console.log(
+    "  same externals and the same global-scope declarations (the real shape)\n",
+  );
+  const sharedClosureModules = 50;
+  recordFailure(
+    failures,
+    await measureServeValidation(adapter, {
+      count: sharedClosureModules,
+      emitExternalKey: false,
+      // At least one distinct missing candidate per module, so the reachable
+      // candidate set is the module count rather than the fanout. Every one of
+      // them used to cost a failed probe per delivery — `(count + 1) / 2` on
+      // average, the residual samchon/ttsc#1261 removed — so the shared
+      // membership budget below is now the whole allowance, and a candidate
+      // that starts being probed again breaks it.
+      graphFanout: sharedClosureModules,
+      graphGlobals: 50,
+      partitionExternalInputs: false,
+      unrelatedDirectoryCount: 100,
+    }),
+  );
+
+  console.log(
+    "\nScenario F — the same serve shape from a producer that declares completeness:",
+  );
+  console.log(
+    "  invariant: the derived set collapses to the reported dependencies, the",
+  );
+  console.log(
+    "  config chain and the candidates, and stays measurably below the same\n" +
+      "  shape without the declaration\n",
+  );
+  recordFailure(
+    failures,
+    await measureServeValidation(adapter, {
+      count: sharedClosureModules,
+      declareComplete: true,
+      emitExternalKey: false,
+      graphFanout: sharedClosureModules,
+      graphGlobals: 50,
+      // What the producer declared: its reported dependencies (the chain
+      // sibling and every external) plus the universal inputs. The globals and
+      // the reach that the declaration drops must not reappear, which is the
+      // claim this scenario exists to hold, so the budget sits below the
+      // undeclared scenario above rather than at a round number.
+      lstatBudget: 60,
+      partitionExternalInputs: false,
       unrelatedDirectoryCount: 100,
     }),
   );
@@ -170,6 +237,15 @@ function requireFromUnplugin(specifier: string): unknown {
 
 interface MeasureOptions {
   count: number;
+  /**
+   * Stamp `dependenciesComplete` for every file the sidecar reports, the shape
+   * a producer takes once it declares what it consulted (samchon/typia#2357,
+   * and what `@ttsc/banner` and `@ttsc/strip` already do). It narrows a
+   * delivery's derived set to the reported dependencies, the config chain, and
+   * the resolution candidates, which is how the closure term is removed soundly
+   * rather than by memoizing a proof.
+   */
+  declareComplete?: boolean;
   emitExternalKey: boolean;
   /**
    * Number of external `node_modules/dep{j}/index.d.ts` targets each module's
@@ -178,6 +254,23 @@ interface MeasureOptions {
    * graph-bearing shape typia >= 13.1.19 produces.
    */
   graphFanout?: number;
+  /**
+   * Number of `node_modules/global{j}/index.d.ts` files stamped into the
+   * envelope's `graph.globals`. Globals belong to every delivered module at
+   * once, which is the shape a real `@types/*` package produces and the input
+   * class a per-delivery revalidation multiplies by module count. Requires a
+   * positive `graphFanout`: the sidecar builds the whole `graph` section only
+   * for a graph-bearing envelope.
+   */
+  graphGlobals?: number;
+  /**
+   * Metadata calls one delivery may spend on the file's own derived inputs.
+   *
+   * The term the declaration path owns: it is the size of what the producer
+   * declared, or the whole reference closure when it declared nothing, so a
+   * scenario states the number its own envelope justifies.
+   */
+  lstatBudget?: number;
   /** Give each module one disjoint external edge instead of the whole union. */
   partitionExternalInputs?: boolean;
   /** Unrelated nested project directories used to gate membership-stat cost. */
@@ -189,7 +282,9 @@ interface TransformHarness {
   cache: Map<string, Promise<unknown>>;
   counters: {
     bytes: number;
+    lstats: number;
     probes: number;
+    readdirs: number;
     reads: number;
     stats: number;
   };
@@ -200,8 +295,26 @@ function createTransformHarness(
   adapter: Adapter,
   project: string,
 ): TransformHarness {
-  const counters = { bytes: 0, probes: 0, reads: 0, stats: 0 };
+  const counters = {
+    bytes: 0,
+    lstats: 0,
+    probes: 0,
+    readdirs: 0,
+    reads: 0,
+    stats: 0,
+  };
   const cache = adapter.createTtscTransformCache({
+    // `lstat` is the metadata call every derived input's validation makes
+    // first, so leaving it uncounted hid the largest per-delivery term behind
+    // the ones below (samchon/ttsc#1261).
+    lstat: (location: string) => {
+      counters.lstats += 1;
+      return fs.lstatSync(location, { bigint: true });
+    },
+    readdir: (location: string) => {
+      counters.readdirs += 1;
+      return fs.readdirSync(location, { withFileTypes: true });
+    },
     readFile: (location: string) => {
       const contents = fs.readFileSync(location);
       counters.bytes += contents.length;
@@ -231,9 +344,22 @@ function createTransformHarness(
   };
 }
 
+/** Every counted filesystem call, which is what a delivery actually costs. */
+function totalSyscalls(harness: TransformHarness): number {
+  return (
+    harness.counters.lstats +
+    harness.counters.probes +
+    harness.counters.readdirs +
+    harness.counters.reads +
+    harness.counters.stats
+  );
+}
+
 function resetCounters(harness: TransformHarness): void {
   harness.counters.bytes = 0;
+  harness.counters.lstats = 0;
   harness.counters.probes = 0;
+  harness.counters.readdirs = 0;
   harness.counters.reads = 0;
   harness.counters.stats = 0;
 }
@@ -360,9 +486,18 @@ async function measureGraphBuild(
 
 /**
  * Gate the serve-mode path: with no `buildStart` boundary the cache stays in
- * persistent-validation mode. Each module owns one disjoint external graph
- * input, so rereading the envelope union is visible as linear reads per module
- * while per-file validation stays under a fixed budget.
+ * persistent-validation mode, so every delivery revalidates.
+ *
+ * Shared by two scenarios with opposite input shapes. With
+ * `partitionExternalInputs` each module owns one disjoint external graph input,
+ * so rereading the whole envelope union shows up as reads growing with the
+ * union rather than with the delivered file's own inputs. Without it every
+ * module reaches the same externals and the same globals — the shape a real
+ * program has, since a program's global-scope declarations belong to all of it
+ * — so reads grow with that shared set unless one generation's proof of an
+ * input is reused across its sibling deliveries. Both are gated by the same
+ * per-file read budget; the stat budget is per scenario, because missing
+ * resolution candidates cannot be proven absent by metadata.
  */
 async function measureServeValidation(
   adapter: Adapter,
@@ -414,23 +549,36 @@ async function measureServeValidation(
   console.log(
     `  N=${String(options.count).padStart(3)}  ` +
       `externals=${String(options.graphFanout ?? 0).padStart(4)}  ` +
+      `globals=${String(options.graphGlobals ?? 0).padStart(4)}  ` +
+      `shared=${options.partitionExternalInputs === true ? "no " : "yes"}  ` +
       `pluginRuns=${String(pluginRuns).padStart(3)}  ` +
-      `reads=${String(harness.counters.reads).padStart(8)}  ` +
-      `reads/file=${(harness.counters.reads / options.count).toFixed(1).padStart(8)}  ` +
+      `reads/file=${(harness.counters.reads / options.count).toFixed(1).padStart(5)}  ` +
+      `lstats/file=${(harness.counters.lstats / options.count).toFixed(1).padStart(6)}  ` +
       `stats/file=${(harness.counters.stats / options.count).toFixed(1).padStart(6)}  ` +
+      `syscalls/file=${(totalSyscalls(harness) / options.count).toFixed(1).padStart(6)}  ` +
       `${elapsedMs.toFixed(0).padStart(7)}ms`,
   );
   const readsPerFile = harness.counters.reads / options.count;
   const statsPerFile = harness.counters.stats / options.count;
+  const lstatsPerFile = harness.counters.lstats / options.count;
   if (pluginRuns !== 1) {
-    return `scenario D N=${options.count} K=${options.graphFanout}: pluginRuns=${pluginRuns} (expected 1)`;
+    return `serve validation N=${options.count} K=${options.graphFanout} G=${options.graphGlobals ?? 0}: pluginRuns=${pluginRuns} (expected 1)`;
   }
   if (readsPerFile > 16) {
-    return `scenario D N=${options.count} K=${options.graphFanout}: reads/file=${readsPerFile.toFixed(1)} exceeds the per-file validation budget of 16`;
+    return `serve validation N=${options.count} K=${options.graphFanout} G=${options.graphGlobals ?? 0}: reads/file=${readsPerFile.toFixed(1)} exceeds the per-file validation budget of 16`;
   }
-  return statsPerFile <= 8
+  // Every serve scenario now holds the membership budget itself. The one term
+  // that used to make a shared closure state a budget of its own — one failed
+  // stat per reachable missing candidate, per delivery — is what
+  // samchon/ttsc#1261 removed, so a scenario that needs more than membership
+  // costs is a regression rather than a shape.
+  if (statsPerFile > MEMBERSHIP_STAT_BUDGET) {
+    return `serve validation N=${options.count} dirs=${options.unrelatedDirectoryCount}: stats/file=${statsPerFile.toFixed(1)} exceeds the budget of ${MEMBERSHIP_STAT_BUDGET}`;
+  }
+  const lstatBudget = options.lstatBudget;
+  return lstatBudget === undefined || lstatsPerFile <= lstatBudget
     ? undefined
-    : `scenario D N=${options.count} dirs=${options.unrelatedDirectoryCount}: stats/file=${statsPerFile.toFixed(1)} exceeds the shared membership budget of 8`;
+    : `serve validation N=${options.count} K=${options.graphFanout} G=${options.graphGlobals ?? 0}: lstats/file=${lstatsPerFile.toFixed(1)} exceeds the budget of ${lstatBudget}`;
 }
 
 /**
@@ -560,12 +708,24 @@ function createProject(options: MeasureOptions): string {
       );
     }
   }
+  const graphGlobals = options.graphGlobals ?? 0;
+  for (let index = 0; index < graphGlobals; index += 1) {
+    const globalDir = path.join(project, "node_modules", `global${index}`);
+    fs.mkdirSync(globalDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(globalDir, "index.d.ts"),
+      `declare const ambient${index}: number;\n`,
+      "utf8",
+    );
+  }
   // The Go sidecar keys its extra output entry only when asked.
   process.env.TTSC_PERF_EMIT_EXTERNAL = options.emitExternalKey ? "1" : "0";
   process.env.TTSC_PERF_GRAPH_FANOUT = String(graphFanout);
+  process.env.TTSC_PERF_GRAPH_GLOBALS = String(graphGlobals);
   process.env.TTSC_PERF_PARTITION_EXTERNAL = options.partitionExternalInputs
     ? "1"
     : "0";
+  process.env.TTSC_PERF_DECLARE_COMPLETE = options.declareComplete ? "1" : "0";
   return project;
 }
 
@@ -612,6 +772,7 @@ function writeGoPlugin(project: string): void {
       "type transformResult struct {",
       '  TypeScript   map[string]string   `json:"typescript"`',
       '  Dependencies map[string][]string `json:"dependencies,omitempty"`',
+      '  DependenciesComplete []string    `json:"dependenciesComplete,omitempty"`',
       '  Graph        *referenceGraph     `json:"graph,omitempty"`',
       "}",
       "",
@@ -694,9 +855,22 @@ function writeGoPlugin(project: string): void {
       '      candidates[key] = []string{fmt.Sprintf("node_modules/dep%d/index.ts", i%fanout)}',
       "    }",
       "    result.Dependencies = deps",
+      '    if os.Getenv("TTSC_PERF_DECLARE_COMPLETE") == "1" {',
+      "      complete := []string{}",
+      "      for key := range deps {",
+      "        complete = append(complete, key)",
+      "      }",
+      "      sort.Strings(complete)",
+      "      result.DependenciesComplete = complete",
+      "    }",
+      '    globalCount, _ := strconv.Atoi(os.Getenv("TTSC_PERF_GRAPH_GLOBALS"))',
+      "    globals := []string{}",
+      "    for j := 0; j < globalCount; j++ {",
+      '      globals = append(globals, fmt.Sprintf("node_modules/global%d/index.d.ts", j))',
+      "    }",
       "    result.Graph = &referenceGraph{",
       "      Edges:      edges,",
-      "      Globals:    []string{},",
+      "      Globals:    globals,",
       '      Configs:    []string{"tsconfig.json"},',
       "      Candidates: candidates,",
       "      InputHashes: map[string]*string{},",

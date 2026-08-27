@@ -31,7 +31,23 @@ func runRootedGraph(
   config string,
 ) []string {
   t.Helper()
-  workspace := t.TempDir()
+  return runRootedGraphIn(t, t.TempDir(), files, config)
+}
+
+// runRootedGraphIn drives the same workspace from a caller-owned directory, for
+// the cases whose configuration has to name that directory.
+//
+// An absolute declared root cannot be written into a literal config string
+// against a workspace the helper allocates for itself, and it is the one form
+// where the declared spelling and the derived one differ — so the property those
+// cases exist to prove is unreachable without the caller owning the workspace.
+func runRootedGraphIn(
+  t *testing.T,
+  workspace string,
+  files map[string]string,
+  config string,
+) []string {
+  t.Helper()
   root := filepath.Join(workspace, "project")
   if err := os.MkdirAll(root, 0o755); err != nil {
     t.Fatal(err)
@@ -314,9 +330,9 @@ func TestRootedPrismaPopulationsCollectAcrossBasesWithoutDuplicating(t *testing.
   if strings.Join(displays, "\n") != want {
     t.Fatalf("addressed schemas:\n%s\nwant:\n%s", strings.Join(displays, "\n"), want)
   }
-  sources := distinctPrismaSources(addresses)
-  if strings.Join(sources, "\n") != "../schema/main.prisma\nprisma/local.prisma" {
-    t.Fatalf("parser set = %v; a file reached twice must be parsed once", sources)
+  set := distinctPrismaSources(root, addresses)
+  if strings.Join(set.Sources, "\n") != "../schema/main.prisma\nprisma/local.prisma" {
+    t.Fatalf("parser set = %v; a file reached twice must be parsed once", set.Sources)
   }
 }
 
@@ -594,5 +610,150 @@ func TestSwaggerSourcePathsResolveOutsideTheProject(t *testing.T) {
   absolute := filepath.Join(workspace, "shared", "contracts", "openapi.yaml")
   if got := swaggerSourcePath(root, filepath.ToSlash(absolute)); got != absolute {
     t.Fatalf("absolute source path = %q, want %q", got, absolute)
+  }
+}
+
+/**
+ * Verifies an unresolvable TypeScript claim root is reported as a root.
+ *
+ * The Markdown half of this pair has always worked, because its loader meets
+ * the root before it lists anything. TypeScript materializes from ctx.Sources
+ * and walks nothing, so the population came back healthy and empty and the
+ * author was answered with `matched no typescript files` and a lecture on glob
+ * syntax — for a mistake that is one directory name, and after the rule had
+ * already computed the right sentence and used it as a boolean.
+ *
+ *  1. Declare a TypeScript claim rooted at a directory that does not exist.
+ *  2. Read the diagnostics.
+ *  3. Assert the root is named and the glob diagnostic is suppressed.
+ */
+func TestAnUnresolvableTypeScriptClaimRootIsReportedAsARoot(t *testing.T) {
+  messages := runRootedGraph(t, map[string]string{
+    "project/docs/pricing.md": "## Discounts {#discounts}\n",
+    "project/src/sale.ts":     "export interface ISale {}\n",
+  }, `{"claims":[{
+    "type":"typescript",
+    "root":"../nowhere",
+    "files":["src/**/*.ts"],
+    "symbol":"type",
+    "reference":{"type":"markdown","files":["docs/**"],"symbol":"h2"}
+  }]}`)
+  assertProblemContains(
+    t,
+    messages,
+    "found no directory at the typescript root '../nowhere', which resolves to '",
+  )
+  if countProblemsContaining(messages, "matched no typescript files") != 0 {
+    t.Fatalf(
+      "an unresolvable root must not cascade into a healthy empty-match diagnostic:\n%s",
+      strings.Join(messages, "\n"),
+    )
+  }
+}
+
+/**
+ * Verifies an unreadable Markdown claim root survives the whole rule.
+ *
+ * The unit test over activation now records the population failure itself,
+ * because that is what the loader hands it, and a fixture that builds its own
+ * inputs can drift from the pipeline that fills them. This runs the real rule
+ * so the claim-side path is proved rather than assumed: the claim must stay
+ * active long enough for the root to be named, and the empty-match diagnostic
+ * must not arrive beside it.
+ *
+ *  1. Root a Markdown claim at a directory that does not exist.
+ *  2. Run the rule.
+ *  3. Assert the root is named and no empty-match diagnostic follows.
+ */
+func TestAnUnreadableMarkdownClaimRootSurvivesTheWholeRule(t *testing.T) {
+  messages := runRootedGraph(t, map[string]string{
+    "project/docs/pricing.md": "## Discounts {#discounts}\n",
+  }, `{"claims":[{
+    "type":"markdown",
+    "root":"../nowhere",
+    "files":["**/*.md"],
+    "symbol":"h2",
+    "reference":{"type":"markdown","files":["docs/**"],"symbol":"h3"}
+  }]}`)
+  assertProblemContains(
+    t,
+    messages,
+    "could not read the markdown root '../nowhere', which resolves to '",
+  )
+  if countProblemsContaining(messages, "matched no markdown files for") != 0 {
+    t.Fatalf(
+      "an unreadable claim root must not cascade into an empty-match diagnostic:\n%s",
+      strings.Join(messages, "\n"),
+    )
+  }
+}
+
+/**
+ * Verifies a resolvable TypeScript root that selects nothing stays silent.
+ *
+ * This is the negative twin of the two cases above, and it guards the property
+ * the repair could most easily overrun. A root that exists and simply admits no
+ * Program source is an empty population, not a broken one: the claim
+ * deactivates and owes no message. Reporting here would turn every staged or
+ * sibling-package claim into build output.
+ *
+ *  1. Root a TypeScript claim at a directory that exists and holds no source.
+ *  2. Read the diagnostics.
+ *  3. Assert neither a root nor an empty-match diagnostic is produced.
+ */
+func TestAResolvableTypeScriptRootSelectingNothingStaysSilent(t *testing.T) {
+  messages := runRootedGraph(t, map[string]string{
+    "shared/.keep":            "",
+    "project/docs/pricing.md": "## Discounts {#discounts}\n",
+    "project/src/sale.ts":     "export interface ISale {}\n",
+  }, `{"claims":[{
+    "type":"typescript",
+    "root":"../shared",
+    "files":["src/**/*.ts"],
+    "symbol":"type",
+    "reference":{"type":"markdown","files":["docs/**"],"symbol":"h2"}
+  }]}`)
+  if len(messages) != 0 {
+    t.Fatalf(
+      "a resolvable root selecting no host must deactivate in silence:\n%s",
+      strings.Join(messages, "\n"),
+    )
+  }
+}
+
+/**
+ * Verifies a resolvable declared root stays quiet while its reference speaks.
+ *
+ * Both halves need a declared root to mean anything. A claim with no `root` has
+ * the default base, which `baseDirectoryProblem` returns on before it
+ * stats anything and which `Check` has already validated, so an absence
+ * assertion there could not fail however the new pass behaved. With a declared
+ * root that exists, the pass genuinely evaluates it and produces nothing — while
+ * the reference-side empty-match diagnostic, which the claim-side removal must
+ * not have widened onto, still fires.
+ *
+ * The root also has to differ from the project root, which resolves as the
+ * default base and short-circuits before the stat for that reason alone.
+ *
+ *  1. Root a claim above the project, where its own source still matches.
+ *  2. Point its reference at a path no document occupies.
+ *  3. Assert the reference names its globs and the root names nothing.
+ */
+func TestAResolvableRootStaysQuietWhileItsReferenceSpeaks(t *testing.T) {
+  messages := runRootedGraph(t, map[string]string{
+    "project/src/sale.ts": "export interface ISale {}\n",
+  }, `{"claims":[{
+    "type":"typescript",
+    "root":"..",
+    "files":["project/src/**/*.ts"],
+    "symbol":"type",
+    "reference":{"type":"markdown","files":["docs/**"],"symbol":"h2"}
+  }]}`)
+  assertProblemContains(t, messages, "matched no markdown files for ['docs/**']")
+  if countProblemsContaining(messages, "found no directory at") != 0 {
+    t.Fatalf(
+      "a root that exists must not be reported as missing:\n%s",
+      strings.Join(messages, "\n"),
+    )
   }
 }

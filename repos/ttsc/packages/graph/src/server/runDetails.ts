@@ -1,6 +1,7 @@
-import { TtscGraphMemory } from "../model/TtscGraphMemory";
+import { TtscGraphMemory, leadingToken } from "../model/TtscGraphMemory";
 import { ITtscGraphDecorator } from "../structures/ITtscGraphDecorator";
 import { ITtscGraphDetails } from "../structures/ITtscGraphDetails";
+import { ITtscGraphDocTag } from "../structures/ITtscGraphDocTag";
 import { ITtscGraphEdge } from "../structures/ITtscGraphEdge";
 import { ITtscGraphEvidence } from "../structures/ITtscGraphEvidence";
 import { ITtscGraphNode } from "../structures/ITtscGraphNode";
@@ -106,6 +107,8 @@ export function runDetails(
     if (doc !== undefined) detail.doc = doc;
     const decorators = decoratorsOf(node);
     if (decorators !== undefined) detail.decorators = decorators;
+    const docTags = docTagsOf(node);
+    if (docTags !== undefined) detail.docTags = docTags;
     const implementation = evidenceCoordinatesOf(node.implementation);
     if (implementation !== undefined) detail.implementation = implementation;
     const span = implementation ?? evidenceCoordinatesOf(node.evidence);
@@ -481,6 +484,54 @@ export function decoratorsOf(
   return node.decorators !== undefined && node.decorators.length > 0
     ? node.decorators
     : undefined;
+}
+
+/**
+ * The declaration's documentation tags, with each text elided at the same
+ * length a doc summary is, optionally narrowed to the ones a caller matched.
+ *
+ * The text is a reason written for a human reader, so the same budget applies:
+ * enough to judge what the declaration claims, not the whole paragraph. What
+ * the budget may never reach is the address the text opens with, which is a
+ * hit's explanation of why it is in the result; {@link elideTagText} keeps it.
+ *
+ * The optional filter narrows to the tags a caller matched. It runs on the
+ * node's own tags, before any elision, so a tag found by an address longer than
+ * the budget is still recognized as the one that matched.
+ */
+export function docTagsOf(
+  node: ITtscGraphNode,
+  keep?: (tag: ITtscGraphDocTag) => boolean,
+): ITtscGraphDocTag[] | undefined {
+  if (node.docTags === undefined || node.docTags.length === 0) return undefined;
+  const selected =
+    keep === undefined ? node.docTags : node.docTags.filter(keep);
+  if (selected.length === 0) return undefined;
+  return selected.map((tag) =>
+    tag.text !== undefined && tag.text.length > MAX_DOC_CHARS
+      ? { ...tag, text: elideTagText(tag.text) }
+      : tag,
+  );
+}
+
+/**
+ * Cut a tag text to the doc budget without cutting the address it opens with.
+ *
+ * The protected prefix is whatever the index calls the address, taken from the
+ * same function the reverse lookup keys on, so the two cannot disagree about
+ * where it ends: a braced link holds spaces inside its group, and measuring the
+ * prefix to the first whitespace instead would return `{@link` and cut the rest
+ * of the group away.
+ *
+ * A text that is nothing but an over-long address comes back whole, with no
+ * marker — an ellipsis on text that was never cut says something false about
+ * the one field a caller reads to know whether to go on reading.
+ */
+function elideTagText(text: string): string {
+  const address = leadingToken(text)?.length ?? 0;
+  const keep = Math.max(MAX_DOC_CHARS, address);
+  if (keep >= text.length) return text;
+  return text.slice(0, keep).trimEnd() + "…";
 }
 
 /** Relationship evidence as public coordinates, omitted when absent. */
