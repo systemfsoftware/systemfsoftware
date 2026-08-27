@@ -1,11 +1,27 @@
 // Benchmarks. Run with `pnpm run bench`.
 //
-// Source maps are not measured. `printSync` is given no `sourceMap`, so it selects the builds
-// compiled without source map support, which is what most callers use.
+// Each fixture is printed three ways:
 //
-// Imports from `dist`, which must hold a RELEASE build. `pnpm run build-dev` replaces `dist` with a debug build,
-// which keeps `debugAssert` calls live and does not represent shipped performance.
-// `pnpm run bench` builds a release build first, so benchmarking that way is always correct.
+// 1. Without source maps:
+//    No `sourcemap` option is given, so `printSync` selects the builds compiled without source map support,
+//    which is what most callers use.
+//
+// 2. With source maps:
+//    `sourcemap: true` selects the source-map build, and `sourceText` is provided, so every mapped write
+//    records a mapping and `generateSourceMap` encodes them all into a Source Map v3 object at the end.
+//    This is the end-to-end cost of printing with a source map.
+//
+// 3. With source maps, without generating the map:
+//    Same as 2, except it skips the final `generateSourceMap` pass, measuring the print pass with its pushes
+//    to the mapping arrays alone - the difference from 2 is the cost of encoding the map.
+//
+// All 3 print the same AST. Mappings come from the `start` / `end` offsets every node already carries,
+// so the source-map build sees exactly the node shapes the plain build does.
+//
+// Imports from `dist`, which must hold a RELEASE build with `BENCHMARKS` enabled.
+// `pnpm run build-dev` replaces `dist` with a debug build, which keeps `debugAssert` calls live
+// and does not represent shipped performance.
+// `pnpm run bench` builds the right build first, so benchmarking that way is always correct.
 
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join as pathJoin } from "node:path";
@@ -77,6 +93,9 @@ async function loadFixture(url: string): Promise<{ filename: string; code: strin
   return { filename, code };
 }
 
+// Dummy var to prevent dead code removal in benchmark functions (see below).
+let flattenSink = 0;
+
 // `tiny.js` is one line long, so its result is a comparison of the two printers' fixed overhead
 // rather than of their throughput. Fixtures are ordered by size.
 const fixtures = [
@@ -92,14 +111,57 @@ for (const { filename, code } of fixtures) {
   // `.tsx`/`.jsx` fixtures need JSX-safe printing of type parameter lists (`<T,>`)
   const options = { jsx: filename.endsWith("x"), ts: /\.tsx?$/.test(filename) };
 
-  // Print once before timing, so a benchmark can never measure the printer bailing out.
-  oxcPrintSync(program, options);
+  // Options for the 2 source-map variants. `sourceText` is what mapped writes read to record
+  // an original name, and what `generateSourceMap` scans for line breaks at the end.
+  //
+  // `skipSourcemapGeneration` is spelled out in both, so the 2 objects share one shape -
+  // `printSync` and the `State` constructor read these options on every call.
+  // It is benchmarks-only, so it is absent from `Options`, which is why neither object is passed
+  // as a literal - an excess property is an error on a literal, but not on a variable.
+  const mapOptions = {
+    ...options,
+    sourcemap: true,
+    sourceText: code,
+    sourceFilename: filename,
+    skipSourcemapGeneration: false,
+  };
+  const mapNoGenerationOptions = { ...mapOptions, skipSourcemapGeneration: true };
 
+  // Print once before timing, so a benchmark can never measure the printer bailing out
+  oxcPrintSync(program, options);
+  oxcPrintSync(program, mapOptions);
+  oxcPrintSync(program, mapNoGenerationOptions);
+
+  // Each benchmark includes flattening the string as whatever user does with the returned code string
+  // (indexing into it, slicing it, writing it to a file) will involve flattening first.
+  // We don't want to hide a burden we push onto users from our benchmarks.
+  //
+  // `code.charCodeAt(0)` triggers flattening `code`. Writing the result to `flattenSink` prevents V8
+  // from optimizing out the `charCodeAt` call as dead code.
   describe(`${filename} (${code.length} bytes)`, () => {
     bench(
       "oxc-codegen",
       () => {
-        oxcPrintSync(program, options);
+        const { code } = oxcPrintSync(program, options);
+        flattenSink ^= code.charCodeAt(0);
+      },
+      BENCH_OPTIONS,
+    );
+
+    bench(
+      "oxc-codegen sourcemaps",
+      () => {
+        const { code } = oxcPrintSync(program, mapOptions);
+        flattenSink ^= code.charCodeAt(0);
+      },
+      BENCH_OPTIONS,
+    );
+
+    bench(
+      "oxc-codegen sourcemaps no generation",
+      () => {
+        const { code } = oxcPrintSync(program, mapNoGenerationOptions);
+        flattenSink ^= code.charCodeAt(0);
       },
       BENCH_OPTIONS,
     );

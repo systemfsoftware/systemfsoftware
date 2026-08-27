@@ -10,10 +10,11 @@
 // Reference: `oxc/crates/oxc_codegen/src/{gen.rs,lib.rs,str.rs,binary_expr_visitor.rs}`
 
 import { debugAssert, typeAssertIs } from "../asserts.ts";
-import { emitMappings } from "./source_map.ts";
+import { flattenString } from "./flatten.ts";
+import { generateSourceMap } from "./source_map.ts";
 import { printProgram, printStatement } from "./statement.ts";
 
-import type { Options } from "./options.ts";
+import type { CodegenResult, Options } from "./options.ts";
 import type { State } from "../state.ts";
 import type * as ESTree from "../../../../npm/oxc-types/types.d.ts";
 
@@ -29,7 +30,7 @@ import type * as ESTree from "../../../../npm/oxc-types/types.d.ts";
  * @param options - The same options `state` was created from, for the parts only this build acts on
  * @returns Object holding the generated code
  */
-export function printSync(node: ESTree.Node, state: State, options: Options): { code: string } {
+export function printSync(node: ESTree.Node, state: State, options: Options): CodegenResult {
   if (node.type === "Program") {
     printProgram(node, state);
   } else {
@@ -37,17 +38,35 @@ export function printSync(node: ESTree.Node, state: State, options: Options): { 
     printStatement(node, state);
   }
 
-  // This is removed by minifier in non-sourcemap builds
-  if (SOURCEMAPS) {
-    debugAssert(
-      options.sourceMap != null,
-      "`options.sourceMap` should be defined when `SOURCEMAPS` is `true`",
-    );
-
-    emitMappings(state, options.sourceMap);
+  // Flatten the output before handing it on - see `flatten.ts` for why, and why this way.
+  //
+  // A large print has already flattened most of its output into `state.outputChunks` chunk by chunk (see `flatten.ts`),
+  // leaving `state.output` as the tail. Those flat chunks and the tail are joined here, which is a straight copy,
+  // and the result is a proper flat string.
+  const { outputChunks } = state;
+  let output;
+  if (outputChunks === null) {
+    output = state.output;
+    flattenString(output);
+  } else {
+    // `state.output` may be empty, which `join` ignores. A lone chunk comes back as-is, and it is already flat.
+    outputChunks.push(state.output);
+    output = outputChunks.join("");
+    // The chunks are now redundant. Drop them now rather than when `state` dies, so a GC during `generateSourceMap`
+    // collects them, instead of pointlessly retaining and copying them
+    state.outputChunks = null;
   }
 
-  return { code: state.output };
-}
+  // This is removed by minifier in non-sourcemap builds.
+  //
+  // The `skipSourcemapGeneration` check exists only in benchmark builds -
+  // everywhere else `BENCHMARKS` is `false` and the condition folds back to `SOURCEMAPS` alone.
+  // The option is deliberately not in `Options` - types are documentation, and it is not public API.
+  // @ts-expect-error `skipSourcemapGeneration` is benchmarks-only, so is not in `Options`
+  if (SOURCEMAPS && (!BENCHMARKS || !options.skipSourcemapGeneration)) {
+    debugAssert(options.sourcemap === true, "`options.sourcemap` should be true in a maps build");
+    return { code: output, map: generateSourceMap(state, output, options) };
+  }
 
-export type { Mapping, Options, Position, SourceMapGenerator } from "./options.ts";
+  return { code: output, map: null };
+}
