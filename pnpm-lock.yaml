@@ -312,9 +312,6 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../../../packages/core/effect/schema/law
-      '@systemfsoftware/effect-schema-refutation-vite':
-        specifier: workspace:^
-        version: link:../../../packages/core/effect/schema/refutation-vite
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../../../packages/core/effect/schema/vite
@@ -388,9 +385,6 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../../../packages/core/effect/schema/law
-      '@systemfsoftware/effect-schema-refutation-vite':
-        specifier: workspace:^
-        version: link:../../../packages/core/effect/schema/refutation-vite
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../../../packages/core/effect/schema/vite
@@ -695,9 +689,6 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../schema/law
-      '@systemfsoftware/effect-schema-refutation-vite':
-        specifier: workspace:^
-        version: link:../schema/refutation-vite
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../schema/vite
@@ -1014,61 +1005,6 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  packages/core/effect/schema/refutation-vite:
-    dependencies:
-      '@oxc-project/types':
-        specifier: 'catalog:'
-        version: 0.140.0
-      '@systemfsoftware/effect-schema-discovery':
-        specifier: workspace:^
-        version: link:../discovery
-      oxc-parser:
-        specifier: 'catalog:'
-        version: 0.140.0
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../../../testing/specs/gherkin/effect
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../law
-      '@systemfsoftware/oxlint-config':
-        specifier: workspace:^
-        version: link:../../../../lint/oxlint/config
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../../../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@0.24.0)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      vite:
-        specifier: ^8
-        version: 8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0)
-      vitest:
-        specifier: ^4.1.10
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.27.7)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-
   packages/core/effect/schema/vite:
     dependencies:
       '@oxc-project/types':
@@ -1138,9 +1074,6 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../../effect/schema/law
-      '@systemfsoftware/effect-schema-refutation-vite':
-        specifier: workspace:^
-        version: link:../../effect/schema/refutation-vite
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../../effect/schema/vite
@@ -2231,9 +2164,6 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../../../../core/effect/schema/law
-      '@systemfsoftware/effect-schema-refutation-vite':
-        specifier: workspace:^
-        version: link:../../../../core/effect/schema/refutation-vite
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../../../../core/effect/schema/vite
@@ -2301,9 +2231,6 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../../../../core/effect/schema/law
-      '@systemfsoftware/effect-schema-refutation-vite':
-        specifier: workspace:^
-        version: link:../../../../core/effect/schema/refutation-vite
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../../../../core/effect/schema/vite

@@ -7,12 +7,11 @@
  * the bases below exist only to derive the `_tag` members rather than to
  * hand-write them, and neither is exported.
  *
- * That non-export is load-bearing. The obligation scan walks every refinement
+ * That non-export is load-bearing. The law generator walks every refinement
  * reachable from an *exported* schema, so the previous
  * `export const CliRequest = S.Union([...])` — whose `run` arm declared
- * `options: StrykerOptionsSchema` — pulled the entire option tree into this
- * package's refutation surface: 512 generated draws and 1024 decodes of a
- * sixty-field struct per arm, to prove things about a codec nobody runs.
+ * `options: StrykerOptionsSchema` — pulled the entire option tree into the
+ * generated suite, to prove things about a codec nobody runs.
  *
  * `options` is also PARTIAL, which is the substantive point the old schema got
  * wrong. These are only the options this invocation named on the command line;

@@ -282,15 +282,6 @@
 "@systemfsoftware/effect-schema-law@1.0.0":
   dir: packages/core/effect/schema/law
   intents:
-    - law-adds-the-refutation-entry
-"@systemfsoftware/effect-schema-refutation-vite@0.1.0":
-  dir: packages/core/effect/schema/refutation-vite
-  intents:
-    - refutation-vite-package-debut
-"@systemfsoftware/effect-schema-refutation-vite@0.2.0":
-  dir: packages/core/effect/schema/refutation-vite
-  intents:
-    - refutation-scan-owns-its-deadline
 "@systemfsoftware/effect-schema-vite@1.5.2":
   dir: packages/effect-schema-vite
   intents:
@@ -435,7 +426,6 @@
 "@systemfsoftware/oxlint-plugin-effect-dmmf@4.0.1":
   dir: packages/lint/oxlint/plugins/meta/effect-dmmf
   intents:
-    - refutation-suites-are-sanctioned-in-src
 "@systemfsoftware/oxlint-plugin-effect-entrypoint@1.0.3":
   dir: packages/oxlint-plugins/effect-entrypoint
   intents:
@@ -476,7 +466,6 @@
 "@systemfsoftware/oxlint-plugin-effect-schema@4.0.1":
   dir: packages/lint/oxlint/plugins/effect/schema
   intents:
-    - refutation-suites-are-sanctioned-in-src
 "@systemfsoftware/oxlint-plugin-effect-workflow@2.0.0":
   dir: packages/oxlint-plugins/effect-workflow
   intents:
@@ -570,7 +559,6 @@
 "@systemfsoftware/oxlint-plugin-test-placement@3.2.0":
   dir: packages/lint/oxlint/plugins/testing/test-placement
   intents:
-    - refutation-suites-are-sanctioned-in-src
 "@systemfsoftware/oxlint-plugin@1.0.0":
   dir: packages/oxlint-plugins/core
   intents:

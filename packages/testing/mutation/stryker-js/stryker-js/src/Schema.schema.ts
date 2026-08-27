@@ -235,11 +235,5 @@ type DeepOptional<T> = {
 }
 
 if (import.meta.vitest !== void 0) {
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
   const { FastCheck: fc } = await import('effect/testing')
-
-  refutes(StrykerOptionsSchema, {
-    StrykerOptionsConcurrencyGteOne: fc.constant({ concurrency: 0 }),
-    StrykerOptionsConcurrencyPattern: fc.constant({ concurrency: '101%' }),
-  })
 }

@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/core/effect/schema/discovery#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Shared Effect Schema source-discovery walk used by the Vite law and refutation plugins.",
+  "description": "Effect Schema source-discovery walk for the Vite law plugin.",
   "keywords": [
     "effect",
     "effect-ts",

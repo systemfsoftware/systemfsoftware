@@ -6,7 +6,7 @@ export const Options = S.Struct({
   exempt: S.Array(S.String).pipe(
     S.annotate({
       description:
-        'File basenames this rule stays silent on (e.g. ["refutation.kernel.property.test.ts"]). An owner who has measured the cost and accepted it names the file here; the property still runs.',
+        'File basenames this rule stays silent on. An owner who has measured the cost and accepted it names the file here; the property still runs.',
     }),
     S.withDecodingDefaultType(Effect.succeed([])),
   ),

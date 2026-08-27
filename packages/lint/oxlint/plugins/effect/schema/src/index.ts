@@ -2,7 +2,6 @@ import { banEffectSchemaImports } from './rules/ban-@-effect-schema-imports.js'
 import { banDataTaggedError } from './rules/ban-data-taggederror.js'
 import { noManualTagMember } from './rules/no-manual-tag-member.js'
 import { noManualTagProperty } from './rules/no-manual-tag-property.js'
-import { noSchemaLawDuplicate } from './rules/no-schema-law-duplicate.js'
 import { schemaDeclarationLocation } from './rules/schema-declaration-location.js'
 import { schemaFileExportsSchemasOnly } from './rules/schema-file-exports-schemas-only.js'
 
@@ -15,7 +14,6 @@ const recommendedRules = {
   [rule('ban-data-taggederror')]: 'error',
   [rule('no-manual-tag-member')]: 'error',
   [rule('no-manual-tag-property')]: 'error',
-  [rule('no-schema-law-duplicate')]: 'error',
   [rule('schema-declaration-location')]: 'error',
   [rule('schema-file-exports-schemas-only')]: 'error',
 } as const
@@ -29,7 +27,6 @@ export default {
     'ban-data-taggederror': banDataTaggedError,
     'no-manual-tag-member': noManualTagMember,
     'no-manual-tag-property': noManualTagProperty,
-    'no-schema-law-duplicate': noSchemaLawDuplicate,
     'schema-declaration-location': schemaDeclarationLocation,
     'schema-file-exports-schemas-only': schemaFileExportsSchemasOnly,
   },

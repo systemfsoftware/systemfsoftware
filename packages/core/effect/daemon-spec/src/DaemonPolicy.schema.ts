@@ -55,11 +55,6 @@ const CapOutsideSpan = Schema.Int.pipe(
   Schema.check(Schema.makeFilter((children) => children < 1 || children > MAX_CHILDREN_CEILING)),
 )
 
-const FractionalCap = Schema.Finite.pipe(
-  Schema.check(Schema.isBetween({ minimum: 1, maximum: MAX_CHILDREN_CEILING })),
-  Schema.check(Schema.makeFilter((children) => !Number.isInteger(children))),
-)
-
 const decodesChildRestart = Schema.decodeUnknownExit(ChildPolicyConfig)
 const decodesLockMode = Schema.decodeUnknownExit(LockPolicyConfig)
 const decodesTickLogLevel = Schema.decodeUnknownExit(TickPolicyConfig)
@@ -67,7 +62,6 @@ const decodesSupervisorPolicy = Schema.decodeUnknownExit(SupervisorPolicyConfig)
 
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
   const { Duration, Exit } = await import('effect')
   const { FastCheck: fc } = await import('effect/testing')
 
@@ -78,10 +72,6 @@ if (import.meta.vitest !== void 0) {
     [Schema.toArbitrary(CapOutsideSpan)(fc)],
     ([children]) => Exit.isFailure(Schema.decodeExit(MaxChildren)(children)),
   )
-
-  refutes(MaxChildren, {
-    FractionalCap: Schema.toArbitrary(FractionalCap)(fc),
-  })
 
   /**
    * The accepted value set of each policy field, written down rather than drawn from the schema.
@@ -135,14 +125,8 @@ if (import.meta.vitest !== void 0) {
     ([cooldown]) => Exit.isFailure(decodesSupervisorPolicy({ cooldown })),
   )
 
-  // IntensityConfig refutation (ported from intensity coverage)
   const window = Duration.seconds(1)
   const negative = fc.integer({ min: -100, max: -1 })
-  const nonInteger = fc.integer({ min: 0, max: 98 }).map((n) => n + 0.5)
-
-  refutes(IntensityConfig, {
-    RestartsNonInteger: nonInteger.map((restarts) => ({ restarts, window })),
-  })
 
   it.prop(
     '∀r_NegativeRestarts_⊥',

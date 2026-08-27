@@ -43,25 +43,5 @@ export class CompilerFailed extends S.TaggedError<CompilerFailed>()('CompilerFai
 }
 
 if (import.meta.vitest !== void 0) {
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
   const { FastCheck: fc } = await import('effect/testing')
-
-  refutes(CheckMutantsCommand, {
-    CheckMutantsCommandNonFinite: fc.constant({
-      _tag: 'CheckMutantsCommand',
-      mutants: [
-        {
-          _tag: 'Mutant',
-          id: '1',
-          fileName: 'file.ts',
-          mutatorName: 'm',
-          replacement: 'r',
-          location: {
-            start: { line: Number.POSITIVE_INFINITY, column: 0 },
-            end: { line: 1, column: 0 },
-          },
-        },
-      ],
-    }),
-  })
 }

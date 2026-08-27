@@ -39,11 +39,6 @@ ruleTester.run('no-test-file-in-src', noTestFileInSrc, {
       filename: '/repo/pkg/src/schema-laws.test.ts',
     },
     {
-      name: 'Should_Allow_SchemaRefutationsEntryPoint_When_NamedExactly',
-      code: '',
-      filename: '/repo/pkg/src/schema-refutations.test.ts',
-    },
-    {
       name: 'Should_Allow_NonTestFileInSrc_When_WorkflowSource',
       code: '',
       filename: '/repo/pkg/src/confirm-order.workflow.ts',

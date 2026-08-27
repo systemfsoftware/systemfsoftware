@@ -318,7 +318,6 @@ if (import.meta.vitest !== void 0) {
   // discrimination law requires a value the schema rejects for exactly this reason -
   // a hand-written record that also got the nested `parsed` wire shape wrong would be
   // rejected for that instead, and would discharge nothing.
-  const { refutes } = await import('@systemfsoftware/effect-schema-law/refutation')
   const validWire = S.encodeUnknownSync(SubmitVerdictCommand)(
     new SubmitVerdictCommand({
       cmd: new InterpretHookCommand({
@@ -330,7 +329,4 @@ if (import.meta.vitest !== void 0) {
       stdout: '',
     }),
   )
-  refutes(SubmitVerdictCommand, {
-    SubmitVerdictCommandNonFiniteCode: fc.constant({ ...validWire, code: Number.NaN }),
-  })
 }

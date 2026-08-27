@@ -8,13 +8,11 @@
 export function findExportedSchemas(dir: string): FoundSchema[];
 
 // @public
-export function findRefutedIdentities(dir: string, schemas: readonly FoundSchema[]): ReadonlySet<string>;
-
-// @public
 export interface FoundSchema {
-    filePath: string;
     // (undocumented)
-    name: string;
+    readonly filePath: string;
+    // (undocumented)
+    readonly name: string;
 }
 
 // @public
