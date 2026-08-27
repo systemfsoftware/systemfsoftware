@@ -1,69 +1,99 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
 import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
 
-import { modeDecision, ResolveModeCommand } from '../Output.workflow.js'
+import { modeDecision, ResolveModeCommand, TOOL_VARIABLES } from '../Output.workflow.js'
 
-const ttyArb = fc.boolean()
+const CONFLICT_EXPECTED = 'the "--format text" and "--json" flags are mutually exclusive — use one or the other'
+
+const hasNonemptyTool = (command: ResolveModeCommand): boolean => {
+  const toolVars = command.toolVars ?? {}
+  for (const variable of TOOL_VARIABLES) {
+    const value = toolVars[variable]
+    if (typeof value === 'string' && value.length > 0) {
+      return true
+    }
+  }
+  return false
+}
+
+const envSet = (command: ResolveModeCommand): boolean => command.envMode !== undefined && command.envMode.length > 0
+
+const agentSet = (command: ResolveModeCommand): boolean => command.agent !== undefined && command.agent.length > 0
 
 describe('modeDecision', () => {
-  it.prop('∀t_BothFlags_≡Conflict', [ttyArb], ([stdoutIsTTY]) => {
-    const result = modeDecision(ResolveModeCommand.make({ stdoutIsTTY, text: true, json: true }))
+  it.prop('∀c_Command_≡R4Mode', [S.toArbitrary(ResolveModeCommand)(fc)], ([command]) => {
+    const result = modeDecision(command)
+    if (command.text === true && command.json === true) {
+      return (
+        Result.isFailure(result) &&
+        result.failure.option === 'json' &&
+        result.failure.value === 'text' &&
+        result.failure.expected === CONFLICT_EXPECTED
+      )
+    }
+    if (command.text === true) {
+      return (
+        Result.isSuccess(result) &&
+        result.success.mode === 'human' &&
+        result.success.signal === 'flag' &&
+        result.success.stdoutIsTTY === command.stdoutIsTTY
+      )
+    }
+    if (command.json === true) {
+      return (
+        Result.isSuccess(result) &&
+        result.success.mode === 'machine' &&
+        result.success.signal === 'flag' &&
+        result.success.stdoutIsTTY === command.stdoutIsTTY
+      )
+    }
+    if (envSet(command)) {
+      if (command.envMode === 'machine') {
+        return (
+          Result.isSuccess(result) &&
+          result.success.mode === 'machine' &&
+          result.success.signal === 'env' &&
+          result.success.stdoutIsTTY === command.stdoutIsTTY
+        )
+      }
+      return (
+        Result.isSuccess(result) &&
+        result.success.mode === 'human' &&
+        result.success.signal === 'env' &&
+        result.success.stdoutIsTTY === command.stdoutIsTTY
+      )
+    }
+    if (!command.stdoutIsTTY) {
+      return (
+        Result.isSuccess(result) &&
+        result.success.mode === 'machine' &&
+        result.success.signal === 'tty' &&
+        result.success.stdoutIsTTY === false
+      )
+    }
+    if (agentSet(command)) {
+      return (
+        Result.isSuccess(result) &&
+        result.success.mode === 'machine' &&
+        result.success.signal === 'agent' &&
+        result.success.stdoutIsTTY === true
+      )
+    }
+    if (hasNonemptyTool(command)) {
+      return (
+        Result.isSuccess(result) &&
+        result.success.mode === 'machine' &&
+        result.success.signal === 'tool' &&
+        result.success.stdoutIsTTY === true
+      )
+    }
     return (
-      Result.isFailure(result) &&
-      result.failure.option === 'json' &&
-      result.failure.value === 'text' &&
-      result.failure.expected ===
-        'the "--format text" and "--json" flags are mutually exclusive — use one or the other'
+      Result.isSuccess(result) &&
+      result.success.mode === 'human' &&
+      result.success.signal === 'tty' &&
+      result.success.stdoutIsTTY === true
     )
-  })
-
-  it.prop('∀t_TextFlag_≡HumanFlag', [ttyArb], ([stdoutIsTTY]) => {
-    const result = modeDecision(ResolveModeCommand.make({ stdoutIsTTY, text: true }))
-    return Result.isSuccess(result) && result.success.mode === 'human' && result.success.signal === 'flag'
-  })
-
-  it.prop('∀t_JsonFlag_≡MachineFlag', [ttyArb], ([stdoutIsTTY]) => {
-    const result = modeDecision(ResolveModeCommand.make({ stdoutIsTTY, json: true }))
-    return Result.isSuccess(result) && result.success.mode === 'machine' && result.success.signal === 'flag'
-  })
-
-  it.prop('∀t_EnvMachine_≡MachineEnv', [ttyArb], ([stdoutIsTTY]) => {
-    const result = modeDecision(ResolveModeCommand.make({ stdoutIsTTY, envMode: 'machine' }))
-    return Result.isSuccess(result) && result.success.mode === 'machine' && result.success.signal === 'env'
-  })
-
-  it.prop('∀t_EnvHuman_≡HumanEnv', [ttyArb], ([stdoutIsTTY]) => {
-    const result = modeDecision(ResolveModeCommand.make({ stdoutIsTTY, envMode: 'human' }))
-    return Result.isSuccess(result) && result.success.mode === 'human' && result.success.signal === 'env'
-  })
-
-  it.prop('∀u_Pipe_≡MachineTty', [fc.constant(false)], ([stdoutIsTTY]) => {
-    const result = modeDecision(ResolveModeCommand.make({ stdoutIsTTY }))
-    return Result.isSuccess(result) && result.success.mode === 'machine' && result.success.signal === 'tty'
-  })
-
-  it.prop('∀a_AgentOnTty_≡MachineAgent', [fc.string({ minLength: 1, maxLength: 8 })], ([agent]) => {
-    const result = modeDecision(ResolveModeCommand.make({ stdoutIsTTY: true, agent }))
-    return Result.isSuccess(result) && result.success.mode === 'machine' && result.success.signal === 'agent'
-  })
-
-  it.prop('∀v_ClaudeCodeOnTty_≡MachineTool', [fc.string({ minLength: 1, maxLength: 8 })], ([value]) => {
-    const result = modeDecision(
-      ResolveModeCommand.make({ stdoutIsTTY: true, toolVars: { CLAUDECODE: value } }),
-    )
-    return Result.isSuccess(result) && result.success.mode === 'machine' && result.success.signal === 'tool'
-  })
-
-  it.prop('∀v_CodexOnTty_≡MachineTool', [fc.string({ minLength: 1, maxLength: 8 })], ([value]) => {
-    const result = modeDecision(
-      ResolveModeCommand.make({ stdoutIsTTY: true, toolVars: { CODEX_SANDBOX: value } }),
-    )
-    return Result.isSuccess(result) && result.success.mode === 'machine' && result.success.signal === 'tool'
-  })
-
-  it.prop('∀u_CleanTty_≡HumanTty', [fc.constant(true)], ([stdoutIsTTY]) => {
-    const result = modeDecision(ResolveModeCommand.make({ stdoutIsTTY }))
-    return Result.isSuccess(result) && result.success.mode === 'human' && result.success.signal === 'tty'
   })
 })
