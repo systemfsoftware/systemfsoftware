@@ -1,9 +1,7 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { HarnessPolicy } from '@systemfsoftware/effect-harness-policy'
-import type { Policy } from '@systemfsoftware/effect-harness-policy'
 import { Effect, Match, pipe, Result } from 'effect'
-import type { PlatformError } from 'effect/PlatformError'
+import { NoDelegateSkills } from './config.js'
 import {
   CheckDelegationCommand,
   checkNoSkillDelegation,
@@ -21,7 +19,7 @@ export type BlockResult = {
 
 export type NoSkillDelegationResult = BlockResult | undefined
 
-export type DisciplineContext = HarnessPolicy
+export type DisciplineContext = NoDelegateSkills
 
 export type RunSafe<R> = <A, E>(effect: Effect.Effect<A, E, R>) => Promise<A>
 
@@ -74,11 +72,10 @@ function blockResult(verdict: DelegationVerdict): BlockResult | undefined {
   )
 }
 
-function loadGuard(cwd: string): Effect.Effect<CompiledGuard | null, PlatformError, HarnessPolicy> {
-  return Effect.gen(function*() {
-    const loader = yield* HarnessPolicy
-    const config: Policy = yield* loader.load(cwd)
-    const names = config['no_delegate_skills'] ?? []
+function loadGuard(cwd: string): Effect.Effect<CompiledGuard | null, never, NoDelegateSkills> {
+  return Effect.gen(function* () {
+    const svc = yield* NoDelegateSkills
+    const names = svc.get(cwd)
     return compileGuard(names)
   })
 }
@@ -97,7 +94,7 @@ interface DelegationPhases extends Cell.Phases {
   readonly output: NoSkillDelegationResult
   readonly response: NoSkillDelegationResult
   readonly decodeError: never
-  readonly readError: PlatformError
+  readonly readError: never
   readonly writeError: never
 }
 
@@ -106,9 +103,9 @@ export function runNoSkillDelegation(
   toolName: string,
   subagentType: string,
   prompt: string,
-): Effect.Effect<NoSkillDelegationResult, PlatformError, HarnessPolicy> {
+): Effect.Effect<NoSkillDelegationResult, never, NoDelegateSkills> {
   return Effect.flatMap(
-    Effect.context<HarnessPolicy>(),
+    Effect.context<NoDelegateSkills>(),
     (services) =>
       Cell.apply(
         pipe(

@@ -1,9 +1,9 @@
-import { HarnessPolicy } from '@systemfsoftware/effect-harness-policy'
 import { Effect, Layer, Result } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import * as PathModule from 'effect/Path'
-import { buildInjectedContent, DEFAULT_NO_INJECT_REFS, ReferencedContent } from './referenced-content.js'
+import { buildInjectedContent, ReferencedContent } from './referenced-content.js'
 import type { Ref } from './referenced-content.js'
+import { NoInjectRefs } from './no-inject-refs.js'
 
 const parseRefToken = (rawLine: string, path: PathModule.Path): string | null => {
   const noMarker = rawLine.trim().replace(/^[-*+]\s+/, '')
@@ -19,14 +19,14 @@ const isConfined = (resolved: string, projectDir: string): boolean =>
 
 export const FileReferencedContentLive = Layer.effect(
   ReferencedContent,
-  Effect.gen(function*() {
+  Effect.gen(function* () {
     const fs = yield* FileSystem
     const path = yield* PathModule.Path
-    const tomlLoader = yield* HarnessPolicy
+    const skipListService = yield* NoInjectRefs
 
     return ReferencedContent.of({
       load: () =>
-        Effect.gen(function*() {
+        Effect.gen(function* () {
           const projectDir = process.env['CLAUDE_PROJECT_DIR'] ?? process.cwd()
 
           const claudeMdPaths = [
@@ -68,8 +68,7 @@ export const FileReferencedContentLive = Layer.effect(
             }
           }
 
-          const config = yield* tomlLoader.load(projectDir).pipe(Effect.orElseSucceed(() => undefined))
-          const skipList = config?.['no_inject_refs'] ?? DEFAULT_NO_INJECT_REFS
+          const skipList = skipListService.get(projectDir)
 
           const refContents: Record<string, string> = {}
           for (const ref of uniqueRefs) {

@@ -25,9 +25,8 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "optionalDependencies": {
-    "@std/toml": "catalog:",
     "@systemfsoftware/effect-cell-types": "workspace:^",
-    "@systemfsoftware/effect-harness-policy": "workspace:^",
+    "@systemfsoftware/harness-toml": "workspace:^",
     "@systemfsoftware/omp-runtime": "workspace:^"
   },
   "peerDependencies": {
@@ -46,6 +45,7 @@
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-refutation-vite": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
+    "@systemfsoftware/harness-toml": "workspace:^",
     "@systemfsoftware/omp-runtime": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",

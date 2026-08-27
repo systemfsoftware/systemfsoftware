@@ -9,5 +9,13 @@ export default async function agentDisciplineHandler(pi: ExtensionAPI): Promise<
   NoSkillDelegationExtension(pi, runSafe)
   const { XdRetryGuardExtension } = await import('./xd-retry/mod.js')
   XdRetryGuardExtension(pi)
+  pi.on('session_start', async (_event, ctx) => {
+    try {
+      const { warmHarnessPolicy } = await import('./runtime.js')
+      await runSafe(warmHarnessPolicy(ctx.cwd))
+    } catch {
+      // fail-open: discipline defaults to no denylist
+    }
+  })
   warmRuntimeAfterStart((warm) => pi.on('session_start', (_event, ctx) => warm(ctx)), () => import('./runtime.js'))
 }

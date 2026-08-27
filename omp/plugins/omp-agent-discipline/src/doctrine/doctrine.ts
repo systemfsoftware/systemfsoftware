@@ -1,9 +1,7 @@
 import type { ExtensionAPI, ExtensionContext } from '@oh-my-pi/pi-coding-agent'
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { HarnessPolicy } from '@systemfsoftware/effect-harness-policy'
-import type { Policy } from '@systemfsoftware/effect-harness-policy'
 import { Effect, Match, pipe, Result } from 'effect'
-import type { PlatformError } from 'effect/PlatformError'
+import { DispatchDoctrineSkills } from './config.js'
 import {
   CheckDispatchCommand,
   checkDispatchDoctrine,
@@ -18,7 +16,7 @@ export { DOCTRINE_KERNEL }
 
 export type DispatchGateResult = { readonly block: true; readonly reason: string } | undefined
 
-export type DisciplineContext = HarnessPolicy
+export type DisciplineContext = DispatchDoctrineSkills
 
 export type RunSafe<R> = <A, E>(effect: Effect.Effect<A, E, R>) => Promise<A>
 
@@ -29,13 +27,10 @@ const gateResult = (verdict: DispatchDoctrineVerdict): DispatchGateResult =>
     Match.exhaustive,
   )
 
-const readDoctrineSkills = (
-  cwd: string,
-): Effect.Effect<readonly string[], PlatformError, HarnessPolicy> =>
-  Effect.gen(function*() {
-    const loader = yield* HarnessPolicy
-    const config: Policy = yield* loader.load(cwd)
-    return config['dispatch_doctrine_skills'] ?? []
+const readDoctrineSkills = (cwd: string): Effect.Effect<readonly string[], never, DispatchDoctrineSkills> =>
+  Effect.gen(function* () {
+    const svc = yield* DispatchDoctrineSkills
+    return svc.get(cwd)
   })
 
 export type DispatchDoctrineCheck = {
@@ -52,7 +47,7 @@ interface DoctrinePhases extends Cell.Phases {
   readonly output: DispatchDoctrineCheck
   readonly response: DispatchDoctrineCheck
   readonly decodeError: never
-  readonly readError: PlatformError
+  readonly readError: never
   readonly writeError: never
 }
 
@@ -60,10 +55,10 @@ export function runDispatchDoctrineCheck(
   cwd: string,
   toolName: string,
   doctrineLoaded: boolean,
-): Effect.Effect<DispatchDoctrineCheck, PlatformError, HarnessPolicy> {
+): Effect.Effect<DispatchDoctrineCheck, never, DispatchDoctrineSkills> {
   let skills: readonly string[] = []
   return Effect.flatMap(
-    Effect.context<HarnessPolicy>(),
+    Effect.context<DispatchDoctrineSkills>(),
     (services) =>
       Cell.apply(
         pipe(

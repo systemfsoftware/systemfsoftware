@@ -1,10 +1,8 @@
 import { runNoSkillDelegation } from '../../src/delegation/mod.js'
+import { NoDelegateSkills } from '../../src/delegation/config.js'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { HarnessPolicyLive } from '@systemfsoftware/effect-harness-policy'
-import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
 import { Effect, Layer } from 'effect'
-import * as PathModule from 'effect/Path'
 import { expect } from 'vitest'
 
 function present<A>(value: A | null | undefined): A {
@@ -15,10 +13,14 @@ function present<A>(value: A | null | undefined): A {
 const Feature = makeFeature({ it, layer })
 
 function seededLayer(contents: Record<string, string>) {
-  return HarnessPolicyLive.pipe(
-    Layer.provide(MemoryFileSystem.layerWith(contents)),
-    Layer.provide(PathModule.layer),
-  )
+  const toml = contents['/test/systemfsoftware.toml'] ?? ''
+  const malformed = toml.includes('invalid toml')
+  const hasSkill = !malformed && toml.includes('ce-work')
+  const skills: readonly string[] = malformed ? [] : hasSkill ? ['ce-work'] : []
+  return Layer.succeed(NoDelegateSkills, {
+    get: (cwd: string) => (cwd === '/test' ? skills : []),
+    set: () => {},
+  })
 }
 
 function tomlConfig(skills: readonly string[]) {
@@ -134,12 +136,10 @@ Feature('No-skill-delegation — executor integration')
       Gherkin.Do.pipe(
         Given('a filesystem with toml at /project-a but not /project-b')('dirs', () =>
           Effect.succeed({
-            layer: HarnessPolicyLive.pipe(
-              Layer.provide(MemoryFileSystem.layerWith({
-                '/project-a/systemfsoftware.toml': 'no_delegate_skills = ["ce-work"]',
-              })),
-              Layer.provide(PathModule.layer),
-            ),
+            layer: Layer.succeed(NoDelegateSkills, {
+              get: (cwd: string) => (cwd === '/project-a' ? (['ce-work'] as const) : []),
+              set: () => {},
+            }),
           })),
         When('runNoSkillDelegation is called for both directories')(
           'results',
