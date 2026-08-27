@@ -54,8 +54,6 @@ interface DoctrinePhases extends Cell.Phases {
   readonly decodeError: never
   readonly readError: PlatformError
   readonly writeError: never
-  readonly readContext: HarnessPolicy
-  readonly writeContext: never
 }
 
 export function runDispatchDoctrineCheck(
@@ -64,35 +62,39 @@ export function runDispatchDoctrineCheck(
   doctrineLoaded: boolean,
 ): Effect.Effect<DispatchDoctrineCheck, PlatformError, HarnessPolicy> {
   let skills: readonly string[] = []
-  return Cell.apply(
-    pipe(
-      Cell.read<DoctrinePhases>(({ cwd: dir }) =>
-        readDoctrineSkills(dir).pipe(Effect.tap((loaded) =>
-          Effect.sync(() => {
-            skills = loaded
-          })
-        ))
+  return Effect.flatMap(
+    Effect.context<HarnessPolicy>(),
+    (services) =>
+      Cell.apply(
+        pipe(
+          Cell.read<DoctrinePhases>(({ cwd: dir }) =>
+            Effect.provideContext(readDoctrineSkills(dir), services).pipe(Effect.tap((loaded) =>
+              Effect.sync(() => {
+                skills = loaded
+              })
+            ))
+          ),
+          Cell.decode<DoctrinePhases>((loaded) =>
+            Result.succeed(
+              CheckDispatchCommand.make({
+                toolName,
+                doctrineLoaded,
+                gateEnabled: loaded.length > 0,
+              }),
+            )
+          ),
+          Cell.decide<DoctrinePhases>(checkDispatchDoctrine),
+          Cell.encode<DoctrinePhases>((outcome) => ({
+            skills,
+            gate: Result.match(outcome, {
+              onFailure: () => undefined,
+              onSuccess: gateResult,
+            }),
+          })),
+          Cell.write<DoctrinePhases>((check) => Effect.succeed(check)),
+        ),
+        { cwd, toolName, doctrineLoaded },
       ),
-      Cell.decode<DoctrinePhases>((loaded) =>
-        Result.succeed(
-          CheckDispatchCommand.make({
-            toolName,
-            doctrineLoaded,
-            gateEnabled: loaded.length > 0,
-          }),
-        )
-      ),
-      Cell.decide<DoctrinePhases>(checkDispatchDoctrine),
-      Cell.encode<DoctrinePhases>((outcome) => ({
-        skills,
-        gate: Result.match(outcome, {
-          onFailure: () => undefined,
-          onSuccess: gateResult,
-        }),
-      })),
-      Cell.write<DoctrinePhases>((check) => Effect.succeed(check)),
-    ),
-    { cwd, toolName, doctrineLoaded },
   )
 }
 

@@ -99,8 +99,6 @@ interface DelegationPhases extends Cell.Phases {
   readonly decodeError: never
   readonly readError: PlatformError
   readonly writeError: never
-  readonly readContext: HarnessPolicy
-  readonly writeContext: never
 }
 
 export function runNoSkillDelegation(
@@ -109,22 +107,26 @@ export function runNoSkillDelegation(
   subagentType: string,
   prompt: string,
 ): Effect.Effect<NoSkillDelegationResult, PlatformError, HarnessPolicy> {
-  return Cell.apply(
-    pipe(
-      Cell.read<DelegationPhases>(({ cwd: dir }) => loadGuard(dir)),
-      Cell.decode<DelegationPhases>((guard) =>
-        Result.succeed(CheckDelegationCommand.make({ toolName, subagentType, prompt, guard }))
+  return Effect.flatMap(
+    Effect.context<HarnessPolicy>(),
+    (services) =>
+      Cell.apply(
+        pipe(
+          Cell.read<DelegationPhases>(({ cwd: dir }) => Effect.provideContext(loadGuard(dir), services)),
+          Cell.decode<DelegationPhases>((guard) =>
+            Result.succeed(CheckDelegationCommand.make({ toolName, subagentType, prompt, guard }))
+          ),
+          Cell.decide<DelegationPhases>(checkNoSkillDelegation),
+          Cell.encode<DelegationPhases>((outcome) =>
+            Result.match(outcome, {
+              onFailure: () => undefined,
+              onSuccess: blockResult,
+            })
+          ),
+          Cell.write<DelegationPhases>((result) => Effect.succeed(result)),
+        ),
+        { cwd, toolName, subagentType, prompt },
       ),
-      Cell.decide<DelegationPhases>(checkNoSkillDelegation),
-      Cell.encode<DelegationPhases>((outcome) =>
-        Result.match(outcome, {
-          onFailure: () => undefined,
-          onSuccess: blockResult,
-        })
-      ),
-      Cell.write<DelegationPhases>((result) => Effect.succeed(result)),
-    ),
-    { cwd, toolName, subagentType, prompt },
   )
 }
 
