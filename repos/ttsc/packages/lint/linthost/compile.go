@@ -13,6 +13,7 @@ package linthost
 
 import (
   "context"
+  "crypto/sha256"
   "encoding/json"
   "errors"
   "flag"
@@ -21,6 +22,7 @@ import (
   "os"
   "path/filepath"
   "strings"
+  "sync"
   "time"
 
   shimast "github.com/microsoft/typescript-go/shim/ast"
@@ -386,6 +388,166 @@ func runProject(opts *subcommandOpts) int {
     }
   }
   return 0
+}
+
+// residentRules is the resident daemon's memo of one project's loaded rule
+// configuration, installed by RunLSPServe and nil in every one-shot process.
+//
+// Loading rules evaluates the project's `lint.config.ts`, which means standing
+// up a JavaScript runtime — the dominant cost of a verb that builds no Program
+// at all. A one-shot pays it once and exits; the daemon was paying it per
+// request, which is per document edit for a consumer that asks again whenever a
+// file it watches moves.
+var residentRules *residentRuleCache
+
+type residentRuleCache struct {
+  mu       sync.Mutex
+  key      string
+  resolver RuleResolver
+  configs  *residentRuleConfigSnapshot
+  // loads counts the resolver loads this memo did not avoid.
+  //
+  // It exists because a reuse is otherwise unobservable: a RuleResolver holds
+  // maps, so it is not a comparable type and two of them cannot be asked
+  // whether they are the same one. Without a count, a memo that silently never
+  // hit would satisfy every other property asked of it.
+  loads int
+}
+
+// residentRuleConfigState is the resolver-owned description of every input a
+// resident answer depends on. Files are native JSON configs; dependencies are
+// the executable loader's full fingerprints, including cache-only package
+// files that deliberately stay out of ConfigPaths and external watch lists.
+type residentRuleConfigState struct {
+  dependencies []configDependencyFingerprint
+  files        []string
+}
+
+type residentRuleConfigSnapshot struct {
+  dependencies []configDependencyFingerprint
+  files        map[string][sha256.Size]byte
+}
+
+// acquireRules returns the loaded rule configuration, reusing the daemon's memo
+// while the complete state it was loaded from is unchanged.
+//
+// Native JSON configs are validated against their files. Executable configs
+// retain the loader's complete dependency fingerprints, including missing
+// resolution candidates and cache-only package files. The latter must remain
+// outside public project watch lists without becoming invisible to the resident
+// memo: an imported package edit can change the resolved rules just as surely
+// as an edit to lint.config.ts itself.
+func acquireRules(pluginsJSON, cwd, tsconfigPath string) (RuleResolver, error) {
+  cache := residentRules
+  if cache == nil {
+    return loadRules(pluginsJSON, cwd, tsconfigPath)
+  }
+  key := strings.Join([]string{pluginsJSON, cwd, tsconfigPath}, "\x00")
+  cache.mu.Lock()
+  defer cache.mu.Unlock()
+  if cache.resolver != nil &&
+    cache.key == key &&
+    ruleConfigsUnchanged(cache.configs) {
+    return cache.resolver, nil
+  }
+  cache.loads++
+  // Noted before the load, because the load is what the recorded state has to
+  // describe. Evaluating a configuration stands up a JavaScript runtime and
+  // takes seconds, which is ample room for an author's next save to land, and
+  // a state read afterwards would describe that save rather than the resolver
+  // built from what came before it.
+  started := time.Now()
+  resolver, err := loadRules(pluginsJSON, cwd, tsconfigPath)
+  if err != nil {
+    // A failed load clears the memo rather than leaving the previous answer
+    // reachable: the next request has to see the same failure, not a rule set
+    // from before the edit that broke it.
+    cache.resolver = nil
+    cache.configs = nil
+    return nil, err
+  }
+  cache.key = key
+  cache.resolver = resolver
+  cache.configs = hashRuleConfigs(resolver, started)
+  return resolver, nil
+}
+
+// hashRuleConfigs records the complete state the resolver was built from. JSON
+// configs contribute file digests. Executable configs contribute the loader's
+// full dependency fingerprints, including missing resolution candidates,
+// directories, and cache-only package files that are not public watch inputs.
+// A resolver naming no state records nothing, and a memo with no proof is never
+// reused.
+//
+// A native JSON file written after the load began is recorded as nothing at
+// all. Which bytes the resolver was built from is unknowable once an edit lands
+// inside the evaluation window, and recording the ones readable now is the one
+// wrong answer that never corrects itself: the memo would agree with a file the
+// resolver does not match, and every later request would pass the reuse test
+// until some further edit happened to disagree. Executable configs carry the
+// loader's own pre/post dependency proof instead. Declining costs one reload.
+//
+// After, and not "not before". A filesystem timestamp and the instant the load
+// began are read from the same clock, whose tick is coarse on Windows, so the
+// save an author made just before asking shares its tick with the load start
+// far more often than not — and rejecting equality there rejects every
+// recording the memo could ever make. The write that equality could also mean
+// is one the load's own read, hundreds of milliseconds later behind a
+// JavaScript runtime start, would have picked up regardless; the edit this
+// guard is for lands well inside the evaluation and is well past the tick.
+//
+// Read first and stated second, in that order. A write landing between the two
+// moves the modification time forward and is caught; stating it first would
+// leave the window the check exists to close.
+func hashRuleConfigs(resolver RuleResolver, started time.Time) *residentRuleConfigSnapshot {
+  if configCacheDisabled() {
+    return nil
+  }
+  source, ok := resolver.(interface {
+    residentRuleConfigState() residentRuleConfigState
+  })
+  if !ok {
+    return nil
+  }
+  state := source.residentRuleConfigState()
+  if len(state.files) == 0 && len(state.dependencies) == 0 {
+    return nil
+  }
+  if !configDependencyDigestsAreCurrent(state.dependencies) {
+    return nil
+  }
+  configs := make(map[string][sha256.Size]byte, len(state.files))
+  for _, location := range state.files {
+    contents, err := os.ReadFile(location)
+    if err != nil {
+      return nil
+    }
+    info, err := os.Stat(location)
+    if err != nil || info.ModTime().After(started) {
+      return nil
+    }
+    configs[location] = sha256.Sum256(contents)
+  }
+  return &residentRuleConfigSnapshot{
+    dependencies: state.dependencies,
+    files:        configs,
+  }
+}
+
+func ruleConfigsUnchanged(configs *residentRuleConfigSnapshot) bool {
+  if configCacheDisabled() ||
+    configs == nil ||
+    (len(configs.files) == 0 && len(configs.dependencies) == 0) ||
+    !configDependencyDigestsAreCurrent(configs.dependencies) {
+    return false
+  }
+  for location, recorded := range configs.files {
+    contents, err := os.ReadFile(location)
+    if err != nil || sha256.Sum256(contents) != recorded {
+      return false
+    }
+  }
+  return true
 }
 
 // loadRules decodes `--plugins-json`, locates the `@ttsc/lint` entry, and

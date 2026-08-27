@@ -146,12 +146,13 @@ func loadPrismaInventories(
       Type: artifactPrisma,
     }
   }
-  // The set is composed of physical files, deduplicated across bases. Prisma
-  // parses one schema at a time and a file listed twice is a duplicate
-  // declaration to its own parser, so two populations that reach one file
-  // through different roots must still contribute it once.
-  sources := distinctPrismaSources(addresses)
-  if len(sources) == 0 {
+  // The set is composed of physical files, deduplicated across bases by what
+  // each address is on disk. Prisma parses one schema at a time and a file
+  // listed twice is a duplicate declaration to its own parser, so two
+  // populations that reach one file through different roots contribute it
+  // once and are both served by that one parse.
+  set := distinctPrismaSources(root, addresses)
+  if len(set.Sources) == 0 {
     return inventories, problems
   }
 
@@ -159,27 +160,27 @@ func loadPrismaInventories(
   // ten-model schema and a two-hundred-model one pay nearly the same. A
   // resident host repeats this every cycle, so an unchanged schema would
   // otherwise be re-parsed on every TypeScript keystroke that rebuilds.
-  digest := prismaContentDigest(root, sources)
+  digest := prismaContentDigest(root, set.Sources)
   if outcome, hit := prismaSchemas.lookup(digest); hit {
     return inventories, append(
       problems,
-      prismaUnitsFromOutcome(root, sources, inventories, outcome)...,
+      prismaUnitsFromOutcome(root, set, inventories, outcome)...,
     )
   }
 
-  result, err := normalizePrismaSet(root, sources)
+  result, err := normalizePrismaSet(root, set.Sources)
   if err != nil {
-    message := "Evidence graph could not run its Prisma schema loader: " + err.Error() + ". Prisma references require Node.js and a resolvable @prisma/prisma-schema-wasm."
-    return inventories, append(problems, failPrismaSet(inventories, sources, message))
+    message := "Evidence graph could not run its Prisma schema loader: " + causeText(err) + ". Prisma references require Node.js and a resolvable @prisma/prisma-schema-wasm."
+    return inventories, append(problems, failPrismaSet(inventories, set, message))
   }
 
   outcome, problem := prismaOutcomeOf(result)
   if problem != "" {
-    return inventories, append(problems, failPrismaSet(inventories, sources, problem))
+    return inventories, append(problems, failPrismaSet(inventories, set, problem))
   }
   problems = append(
     problems,
-    prismaUnitsFromOutcome(root, sources, inventories, outcome)...,
+    prismaUnitsFromOutcome(root, set, inventories, outcome)...,
   )
   rememberPrismaSchema(outcome.digest, outcome)
   return inventories, problems
@@ -234,42 +235,58 @@ func configuredPrismaAddressesWithHealth(
   failedBases := []populationBase{}
   problems := []string{}
   for _, base := range configuredBases(config, artifactPrisma) {
-    if problem := unreadableBaseProblem(base, artifactPrisma); problem != "" {
+    if problem := baseDirectoryProblem(base, artifactPrisma); problem != "" {
       problems = append(problems, problem)
       failedBases = append(failedBases, base)
       continue
     }
     baseFailed := false
-    err := filepath.WalkDir(base.Absolute, func(current string, entry fs.DirEntry, walkErr error) error {
+    from, resolved := resolvedBaseDirectory(base)
+    if !resolved {
+      problems = append(problems, unresolvedBaseProblem(base, artifactPrisma))
+      failedBases = append(failedBases, base)
+      continue
+    }
+    err := filepath.WalkDir(from, func(current string, entry fs.DirEntry, walkErr error) error {
       if walkErr != nil {
-        relative, ok := relativeProjectPath(base.Absolute, current)
-        relevant := ok &&
-          (matchesConfiguredPrismaFile(config, base, relative) ||
-            couldContainConfiguredPrisma(config, base, relative))
-        if !relevant {
-          if entry != nil && entry.IsDir() {
-            return filepath.SkipDir
-          }
-          return nil
+        // The walk root belongs to its population by construction, so a
+        // failure to list it is a failure of the population. The relevance test
+        // below is written for an entry inside the base and reached the base
+        // itself only by accident, on a decision the glob shape made;
+        // `loadMarkdownBase` records that history in full. Leaving this
+        // exemption in one walker would decide an identical filesystem state by
+        // artifact kind.
+        if current == from {
+          return walkErr
         }
-        baseFailed = true
-        problems = append(problems, "Evidence graph could not inspect '"+current+"': "+walkErr.Error()+". Fix filesystem access so configured Prisma sources can be indexed.")
-        if entry != nil && entry.IsDir() {
-          return filepath.SkipDir
+        problem, relevant := unreadableEntryProblem(
+          base,
+          from,
+          "Prisma",
+          current,
+          walkErr,
+          func(relative string) bool {
+            return matchesConfiguredPrismaFile(config, base, relative) ||
+              couldContainConfiguredPrisma(config, base, relative)
+          },
+        )
+        if relevant {
+          baseFailed = true
+          problems = append(problems, problem)
         }
-        return nil
+        return filepath.SkipDir
       }
       if entry.IsDir() {
-        if current == base.Absolute {
+        if current == from {
           return nil
         }
-        relative, ok := relativeProjectPath(base.Absolute, current)
+        relative, ok := relativeProjectPath(from, current)
         if !ok || !couldContainConfiguredPrisma(config, base, relative) {
           return filepath.SkipDir
         }
         return nil
       }
-      relative, ok := relativeProjectPath(base.Absolute, current)
+      relative, ok := relativeProjectPath(from, current)
       if !ok || !matchesConfiguredPrismaFile(config, base, relative) {
         return nil
       }
@@ -278,7 +295,7 @@ func configuredPrismaAddressesWithHealth(
     })
     if err != nil {
       baseFailed = true
-      problems = append(problems, "Evidence graph could not walk Prisma root '"+populationRootLabel(base)+"': "+err.Error()+".")
+      problems = append(problems, unlistableBaseProblem(base, "Prisma", err))
     }
     if baseFailed {
       failedBases = append(failedBases, base)
@@ -290,30 +307,133 @@ func configuredPrismaAddressesWithHealth(
   return addresses, failedBases, problems
 }
 
+// prismaSourceSet is the parser's input: one spelling per physical schema file,
+// beside every spelling the configuration reached that file by.
+//
+// Prisma parses a set, and a file handed to it twice is a duplicate declaration
+// to its own parser — so the set has to be one entry per file on disk, not one
+// per configured address. The spellings are kept because everything the parse
+// produces is addressed by the entry that was sent, while the inventories
+// waiting for it are addressed by whichever root each population reached the
+// file through.
+type prismaSourceSet struct {
+  // Sources is the ordered set handed to the parser, the digest, and the
+  // locator, one entry per physical file.
+  Sources []string
+  // Spellings maps each entry of Sources to every address display naming the
+  // same file, that entry included.
+  Spellings map[string][]string
+}
+
 // distinctPrismaSources reduces the configured addresses to the physical files
 // the parser is handed, in one stable order.
-func distinctPrismaSources(addresses []artifactAddress) []string {
+//
+// Identity is the file's own, taken from the filesystem rather than from the
+// path that named it. Two populations reach one schema through different roots
+// precisely when their spellings differ — a package rooted at its installed
+// location and at its source checkout is the layout a package manager produces
+// — so a spelling-keyed set sends that file to the parser twice and the parser
+// rejects the whole set for a model declared twice. `os.SameFile` answers for
+// the link, the junction, the hard link, and the case-insensitive volume
+// alike, none of which a comparison of two strings can see.
+//
+// A file that cannot be stat'ed stands alone under its own spelling, which is
+// the behavior every set had before identity was physical: the digest declines
+// it and the loader reports it unreadable at its own path.
+//
+// The cost is one `os.Stat` per distinct configured address, and on Windows one
+// file open beside it for each address that reaches a comparison, because
+// `os.SameFile` loads the volume and file index there through `CreateFile`
+// rather than from the stat — once per result, since the id is cached on it.
+// Against that, the digest now reads one file per physical file rather than one
+// per address, so in the very layout this exists for the reads go down as the
+// stats go up. Both are per load of this artifact kind, of which a pass
+// performs two — the claim-side populations and then the whole configuration —
+// over a set an adopter counts in files.
+func distinctPrismaSources(root string, addresses []artifactAddress) prismaSourceSet {
+  type physicalSchema struct {
+    identity  os.FileInfo
+    spellings []string
+  }
+  files := []*physicalSchema{}
   seen := map[string]bool{}
-  sources := []string{}
   for _, address := range addresses {
     if seen[address.Display] {
       continue
     }
     seen[address.Display] = true
-    sources = append(sources, address.Display)
+    identity, err := os.Stat(resolveProjectPath(root, address.Display))
+    var host *physicalSchema
+    if err == nil {
+      for _, file := range files {
+        if file.identity != nil && os.SameFile(file.identity, identity) {
+          host = file
+          break
+        }
+      }
+    }
+    if host == nil {
+      host = &physicalSchema{}
+      if err == nil {
+        host.identity = identity
+      }
+      files = append(files, host)
+    }
+    host.spellings = append(host.spellings, address.Display)
   }
-  sort.Strings(sources)
-  return sources
+  set := prismaSourceSet{
+    Sources:   []string{},
+    Spellings: map[string][]string{},
+  }
+  for _, file := range files {
+    // The set's own order is sorted below, but which spelling represents a
+    // file is what every unit, declaration, and diagnostic of it will be
+    // addressed by. Taking the smallest makes that choice a property of the
+    // configuration rather than of the order a walk happened to produce.
+    sort.Strings(file.spellings)
+    set.Sources = append(set.Sources, file.spellings[0])
+    set.Spellings[file.spellings[0]] = file.spellings
+  }
+  sort.Strings(set.Sources)
+  return set
 }
 
-// prismaInventoriesByDisplay indexes the inventories that share one physical
-// file.
+// prismaInventoriesBySource indexes the inventories waiting on each entry of
+// the parsed set.
+//
+// This is where one parse result becomes every population's. The parse, the
+// locations, and the comment scan all speak the set's spelling; an inventory
+// speaks its own population's. Resolving the second through the first is what
+// keeps a schema reached by two roots from serving only the root that happened
+// to sort first.
+func prismaInventoriesBySource(
+  inventories map[string]*artifactInventory,
+  set prismaSourceSet,
+) map[string][]*artifactInventory {
+  byDisplay := prismaInventoriesByDisplay(inventories)
+  indexed := map[string][]*artifactInventory{}
+  for _, source := range set.Sources {
+    // Every source is the spelling of an address, and every address owns an
+    // inventory, so no entry here is empty. It is written as an unconditional
+    // fan-out rather than guarded against a state that cannot arise, because a
+    // guard over one would say the opposite of what the loader guarantees.
+    for _, spelling := range set.Spellings[source] {
+      indexed[source] = append(indexed[source], byDisplay[spelling]...)
+    }
+  }
+  return indexed
+}
+
+// prismaInventoriesByDisplay indexes the inventories that share one spelling of
+// one physical file.
 //
 // Two populations reaching one schema through different roots own separate
 // inventories of it, because each answers a different set of globs — while the
 // file itself is parsed once and its models are located once. Everything derived
 // from those bytes therefore has to reach every inventory of the file rather
-// than one of them.
+// than one of them, which is what `prismaInventoriesBySource` composes on top
+// of this index; a population whose root spells the file differently is not
+// visible here.
 func prismaInventoriesByDisplay(
   inventories map[string]*artifactInventory,
 ) map[string][]*artifactInventory {
@@ -327,7 +447,8 @@ func prismaInventoriesByDisplay(
   return indexed
 }
 
-// failPrismaSet records one whole-set failure against every file of the set.
+// failPrismaSet records one whole-set failure against every inventory of every
+// file of the set.
 //
 // The symbol is `*` rather than `model`, and the difference is load-bearing. A
 // reference reads an inventory problem only when it selects that problem's
@@ -338,11 +459,11 @@ func prismaInventoriesByDisplay(
 // failure that belongs to the whole set belongs to every selector over it.
 func failPrismaSet(
   inventories map[string]*artifactInventory,
-  sources []string,
+  set prismaSourceSet,
   message string,
 ) string {
-  indexed := prismaInventoriesByDisplay(inventories)
-  for _, source := range sources {
+  indexed := prismaInventoriesBySource(inventories, set)
+  for _, source := range set.Sources {
     for _, inventory := range indexed[source] {
       inventory.Problems = append(inventory.Problems, inventoryProblem{
         Symbol:  "*",
@@ -586,7 +707,6 @@ func prismaDeclarationsFromComments(
       // nothing reads back — the same dead end the attached case just escaped.
       for _, review := range parseReviews(run.Body) {
         shared := &evidenceReview{
-          HostID:          "prisma:" + run.Path + ":file",
           SemanticHostIDs: []string{"prisma:" + run.Path + ":file"},
           Reviews:         review.Reviews,
           Type:            artifactPrisma,
@@ -664,7 +784,6 @@ func prismaDeclarationsFromComments(
     // author cannot perform.
     for _, review := range parseReviews(run.Body) {
       shared := &evidenceReview{
-        HostID:          host.ID,
         SemanticHostIDs: []string{host.ID},
         Reviews:         review.Reviews,
         Type:            artifactPrisma,
@@ -765,7 +884,7 @@ func prismaBuriedTag(trimmed string) bool {
 // the only place a location survives: a successful parse carries no positions
 // at all, while a rejection names the file and line the author has to open.
 func prismaNormalizationFailure(message string) string {
-  reason := strings.TrimSpace(message)
+  reason := causeReason(strings.TrimSpace(message))
   if reason == "" {
     reason = "the parser reported no reason"
   }

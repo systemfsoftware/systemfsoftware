@@ -2,9 +2,12 @@ import TtscWebsiteBenchmarkEvidenceSpend from "../../../components/benchmark/evi
 
 # Adoption
 
-Nothing here requires a new process. If your team already keeps requirements in the repository and hands them to an agent, the graph turns those documents into a denominator.
+Requirements are the handoff: whether a human or an AI wrote them, a human must review them last. That reviewed layer is the source of truth, and the agent builds everything below it with the graph counting what actually arrived.
 
-Keeping the versioned specification as the single source of truth is Spec-Driven Development, the practice GitHub Spec Kit named and AWS built Kiro around. SDD uses the specification as an input and does not count whether it was implemented. That is the gap this fills, which is why adopting it costs a configuration block rather than a workflow.
+- Hand over the requirements, and the agent writes the rest.
+- Hand over raw idea notes, and it writes the requirements too. The document chains below are what keep that second form safe.
+
+Keeping the versioned specification as the single source of truth is Spec-Driven Development, the practice GitHub Spec Kit named and AWS built Kiro around. SDD uses the specification as an input and does not count whether it was implemented. That is the gap this fills, which is why adopting it costs a configuration block rather than a workflow: nothing here requires a new process.
 
 ## Start with one claim
 
@@ -137,7 +140,7 @@ Clearing an obligation is work an agent has to do, so the honest question is wha
 
 <TtscWebsiteBenchmarkEvidenceSpend />
 
-On the three smaller subjects the arm with the graph finished on between a quarter and a half of the tokens. On the largest it spent about 9% more. Four subjects and one engine do not establish where the crossover sits, so treat the saving as measured on these four rather than as one you can assume.
+The arm with the graph finished on between a thirteenth and a fifth of the tokens on every subject, and the largest saved the most: the ERP closed on 411M tokens and $4.96 against 5,449M and $68.72. Four subjects and one engine do not make that a law, so treat the saving as measured on these four rather than as one you can assume.
 
 [The full benchmark](/docs/benchmark/evidence) has the phase split, the reconciled prices, and the raw counters.
 
@@ -153,6 +156,6 @@ The tags are written by the agent as it implements. What reaches a human changes
 
 ## Related
 
-- [Full-Stack Wiring](/docs/evidence/wiring) is the finished shape this ladder climbs toward.
+- [Examples](/docs/evidence/examples) is the finished shape this ladder climbs toward, on a backend, a frontend, and a novel.
 - [Claims and References](/docs/evidence/claims) covers `disabled`, `evidenceExcludeCarriers`, and the reference policies used above.
 - [The Evidence Graph benchmark](/docs/benchmark/evidence) measures what changes when a coding agent builds the same application with and without this graph.

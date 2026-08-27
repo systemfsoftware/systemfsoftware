@@ -19,12 +19,96 @@ import path from "node:path";
  * a reference-graph envelope where every module edges to every sibling plus
  * that many planted `node_modules/dep{j}/index.d.ts` declarations — the shape
  * typia >= 13.1.19 produces.
+ *
+ * `graphGlobals` plants that many `node_modules/global{j}/index.d.ts` files and
+ * stamps them into the envelope's `graph.globals`, the shape a real program
+ * produces for every global-scope declaration package (`@types/node` first of
+ * all). Unlike edges, globals belong to every delivered module at once, so they
+ * are the input class a per-delivery revalidation multiplies by module count.
+ * It requires a positive `graphFanout`: the fixture builds the whole `graph`
+ * section only for a graph-bearing envelope, so globals alone would produce no
+ * graph at all and silently exercise complete-snapshot validation instead.
  */
 interface ICacheProjectOptions {
+  /**
+   * Add a second lexical spelling of one global — a file symlink beside it —
+   * and stamp both into `graph.globals`, the alias first.
+   *
+   * The two share one physical identity but not their metadata, which is what
+   * separates a per-spelling proof from a per-identity one. Order matters:
+   * `deriveWatchInputs` deduplicates graph inputs by identity, so only the
+   * first spelling is validated per delivery, while the out-of-walk snapshot
+   * keeps both and records the _last_ one under a shared identity key. Stamping
+   * the alias first therefore makes a per-identity manifest answer the wrong
+   * spelling and re-read the file on every delivery, which is the cost the
+   * per-spelling proof exists to avoid.
+   *
+   * Requires a positive `graphGlobals` (the directory it links inside is one of
+   * those globals) and a positive `graphFanout` (the fixture builds the whole
+   * `graph` section only for a graph-bearing envelope).
+   *
+   * POSIX only: creating a file symlink on Windows needs elevation, so the
+   * option is dropped there and the case keeps its other assertions on every
+   * platform.
+   */
+  aliasedGlobal?: boolean;
   emitExternalKey?: boolean;
   externalSnapshotAbaRace?: boolean;
   fileCount?: number;
   graphFanout?: number;
+  /**
+   * Stamp this many superseding resolution candidates per module: higher
+   * priority spellings (`node_modules/dep{j}/index.ts`) that do not exist and
+   * that the fixture deliberately leaves without a compiler proof, exactly as
+   * `driver.SupersedingModuleCandidates` does for every real project whose
+   * resolution passes over a `.ts` spelling on its way to a `.d.ts`.
+   *
+   * Requires a positive `graphFanout`: the fixture builds the whole `graph`
+   * section only for a graph-bearing envelope.
+   */
+  graphCandidates?: number;
+  graphGlobals?: number;
+  /**
+   * Stamp one extra resolution candidate at this absolute spelling, which the
+   * caller places outside the project root.
+   *
+   * The bound the absent-candidate watch declines at: the chain that proves a
+   * candidate absent stops at the project's own root, so a spelling that leaves
+   * the subtree before reaching it cannot be covered and is not claimed at all.
+   * Only an absolute path exercises it, since a project-relative one can never
+   * leave.
+   */
+  outOfProjectCandidate?: string;
+  /**
+   * Project-relative path the fixture transform writes while the compile runs,
+   * for a file that is not an input of that compile (a build log, a coverage
+   * report, a framework's generated artifact). It must not cost the
+   * generation.
+   */
+  nonInputRaceFile?: string;
+  /**
+   * Drop the compiler proof of one realized graph edge target entirely, the
+   * shape a host reports for an input it read but could not prove. Unlike a
+   * candidate, this must refuse reuse.
+   */
+  unprovenGraphInput?: boolean;
+  /**
+   * Stamp one graph member with no compiler-time content hash while keeping its
+   * physical-identity proof, the shape a host reports for an input it could see
+   * but not read. Pairs with a cache whose `readFile` refuses that path, which
+   * makes the state deterministic on every platform.
+   */
+  unhashedGraphInput?: boolean;
+  /**
+   * Declare one out-of-walk universal host input that exists but cannot be
+   * read, as a link with no target. The host and the adapter then record the
+   * same missing state for it, which is the state no signature may stand for.
+   *
+   * Windows uses a directory junction: a file symlink needs elevation there
+   * while a junction does not, and a junction with no target reports the same
+   * state this needs, a readable link whose every traversal fails.
+   */
+  unreadableHostInput?: boolean;
   independentGraphLeaf?: string;
   partitionGraph?: boolean;
   snapshotAbaRace?: boolean;
@@ -194,6 +278,576 @@ async function assertCacheHitsDespiteOutOfWalkOutputKey(): Promise<void> {
   for (const code of outputs) {
     assert.match(code, /PROBED/);
   }
+}
+
+/**
+ * Asserts samchon/ttsc#1245: a graph carrying superseding resolution candidates
+ * still compiles the project once.
+ *
+ * A candidate is a spelling strictly ahead of the resolution target that won,
+ * so the compiler never selected it and usually never read it: no compile-time
+ * proof for it can exist. Requiring one made `projectSnapshotComplete` false
+ * for every generation of every project that resolves a dependency through a
+ * declaration file, which closed the build-scoped shortcut, the narrow
+ * persistent path, and complete-snapshot validation at once. Each refusal
+ * evicts the generation, so the next module recompiled the whole project and
+ * produced another unprovable generation, forever.
+ *
+ * 1. Build a six-file project whose envelope stamps three unproven candidates per
+ *    module.
+ * 2. Run a transform over every module sharing one persistent cache.
+ * 3. Assert the plugin ran exactly once, not once per module.
+ */
+async function assertUnprovenCandidatesKeepOneCompile(): Promise<void> {
+  const { pluginRuns, outputs } = await runProjectBuild({
+    fileCount: 6,
+    graphCandidates: 3,
+    graphFanout: 4,
+  });
+  assert.equal(pluginRuns, 1);
+  assert.equal(outputs.length, 6);
+  for (const code of outputs) {
+    assert.match(code, /PROBED/);
+  }
+}
+
+/**
+ * Asserts the candidate relaxation keeps its own invalidation: a superseding
+ * candidate that appears must still replace the generation.
+ *
+ * The recorded `missing` marker is state, not the absence of state, so the
+ * negative twin of {@link assertUnprovenCandidatesKeepOneCompile} is that
+ * creating the higher-priority spelling changes resolution and therefore must
+ * recompile the project.
+ *
+ * 1. Deliver one module from a generation that recorded three missing candidates.
+ * 2. Create the first candidate on disk.
+ * 3. Deliver a sibling module and assert the plugin ran a second time.
+ */
+async function assertAppearingCandidateInvalidatesGeneration(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const project = createCacheProject({
+    fileCount: 3,
+    graphCandidates: 3,
+    graphFanout: 4,
+  });
+  const cache = createTtscTransformCache();
+  const modules = projectModules(project.root);
+  const options = resolveOptions();
+  const deliver = async (file: string): Promise<void> => {
+    const result = await transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+    assert.ok(result, `expected transformed output for ${file}`);
+  };
+  await deliver(modules[0]!);
+  const runsBefore = fs.readFileSync(project.runLog, "utf8").length;
+  assert.equal(runsBefore, 1);
+  const candidate = path.join(project.root, "node_modules", "dep0", "index.ts");
+  fs.mkdirSync(path.dirname(candidate), { recursive: true });
+  fs.writeFileSync(candidate, "export const superseding = 1;\n", "utf8");
+  await deliver(modules[1]!);
+  assert.equal(fs.readFileSync(project.runLog, "utf8").length, 2);
+}
+
+/**
+ * Asserts samchon/ttsc#1272: a membership change made between two deliveries is
+ * seen by the second one.
+ *
+ * This is what the mutation-settle barrier exists for. A write returns before
+ * its watch event is applied, so a delivery that read the tracker's verdict
+ * immediately would validate against a watcher that had not been told, and
+ * serve a generation the new file already invalidated. The barrier used to be a
+ * fixed wait guessing at that crossing; it is now the watcher's own
+ * acknowledgement, and this case pins that the guarantee did not move with it.
+ *
+ * 1. Deliver one module so the generation is captured.
+ * 2. Write a new source file into the project, synchronously.
+ * 3. Deliver another module and assert the project was recompiled.
+ */
+async function assertSynchronousMembershipChangeReachesTheNextDelivery(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const project = createCacheProject({ fileCount: 4, graphFanout: 2 });
+  const cache = createTtscTransformCache();
+  const modules = projectModules(project.root);
+  const options = resolveOptions();
+  const deliver = async (file: string): Promise<void> => {
+    const result = await transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+    assert.ok(result, `expected transformed output for ${file}`);
+  };
+
+  await deliver(modules[0]!);
+  assert.equal(fs.readFileSync(project.runLog, "utf8").length, 1);
+
+  fs.writeFileSync(
+    path.join(project.root, "src", "added.ts"),
+    'export const added: string = "PROBE";\n',
+    "utf8",
+  );
+  await deliver(modules[1]!);
+
+  assert.equal(
+    fs.readFileSync(project.runLog, "utf8").length,
+    2,
+    "a file created between two deliveries must reach the watcher before the second one validates",
+  );
+}
+
+/**
+ * Asserts a candidate whose spelling leaves the project subtree is still
+ * probed.
+ *
+ * The negative twin of the notification proof at the boundary it declines at.
+ * The chain that proves an absent candidate stops at the project's own root:
+ * above that line the components belong to the machine rather than the project,
+ * and a link along the part outside the subtree could move the candidate's
+ * answer with nothing inside the bound to report it. Such a candidate therefore
+ * keeps the probe it always had, and claiming it anyway would serve a
+ * generation the appearance already superseded (samchon/ttsc#1261).
+ *
+ * 1. Stamp one candidate at an absolute spelling outside the project root, with
+ *    watch registration left working so only the bound decides.
+ * 2. Deliver one module to capture the generation, then reset the counters.
+ * 3. Deliver the rest and assert that spelling was checked every time.
+ */
+async function assertOutOfProjectCandidateIsStillProbed(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const outside = path.join(
+    TestProject.tmpdir("ttsc-unplugin-outside-candidate-"),
+    "index.ts",
+  );
+  const project = createCacheProject({
+    fileCount: 4,
+    graphFanout: 4,
+    outOfProjectCandidate: outside,
+  });
+  const probes = { calls: 0 };
+  const count = (location: string): void => {
+    if (path.resolve(location) === path.resolve(outside)) probes.calls += 1;
+  };
+  const cache = createTtscTransformCache({
+    exists: (location: string) => {
+      count(location);
+      return fs.existsSync(location);
+    },
+    lstat: (location: string) => {
+      count(location);
+      return fs.lstatSync(location, { bigint: true });
+    },
+    readFile: (location: string) => {
+      count(location);
+      return fs.readFileSync(location);
+    },
+    stat: (location: string) => {
+      count(location);
+      return fs.statSync(location);
+    },
+    statBigInt: (location: string) => {
+      count(location);
+      return fs.statSync(location, { bigint: true });
+    },
+  });
+  const modules = projectModules(project.root);
+  const options = resolveOptions();
+  const deliver = async (file: string): Promise<void> => {
+    const result = await transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+    assert.ok(result, `expected transformed output for ${file}`);
+  };
+
+  await deliver(modules[0]!);
+  assert.equal(fs.readFileSync(project.runLog, "utf8").length, 1);
+
+  probes.calls = 0;
+  for (const file of modules.slice(1)) {
+    await deliver(file);
+  }
+
+  assert.equal(fs.readFileSync(project.runLog, "utf8").length, 1);
+  assert.ok(
+    probes.calls > 0,
+    "a candidate outside the project subtree must keep being checked on the filesystem",
+  );
+}
+
+/**
+ * Asserts a candidate whose watch could not be opened is still probed.
+ *
+ * The bound samchon/ttsc#1261 rests on: only a candidate the tracker actually
+ * covers may skip its own check. A host that refuses watch registrations —
+ * inotify exhausted, a network filesystem, a sandbox — has no notification to
+ * offer, so the delivery must go back to asking the filesystem rather than
+ * trusting a channel that was never opened.
+ *
+ * 1. Build a project whose envelope stamps missing candidates, with a cache whose
+ *    watch registration always fails.
+ * 2. Deliver one module to capture the generation, then reset the counters.
+ * 3. Deliver the rest and assert the candidate paths were checked.
+ */
+async function assertUnwatchedAbsentCandidateIsStillProbed(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const graphCandidates = 3;
+  const project = createCacheProject({
+    fileCount: 4,
+    graphCandidates,
+    graphFanout: 4,
+  });
+  const candidates = new Set(
+    Array.from({ length: graphCandidates }, (_, index) =>
+      path.resolve(
+        path.join(project.root, "node_modules", `dep${index}`, "index.ts"),
+      ),
+    ),
+  );
+  const probes = { calls: 0 };
+  const count = (location: string): void => {
+    if (candidates.has(path.resolve(location))) probes.calls += 1;
+  };
+  const cache = createTtscTransformCache({
+    exists: (location: string) => {
+      count(location);
+      return fs.existsSync(location);
+    },
+    lstat: (location: string) => {
+      count(location);
+      return fs.lstatSync(location, { bigint: true });
+    },
+    readFile: (location: string) => {
+      count(location);
+      return fs.readFileSync(location);
+    },
+    stat: (location: string) => {
+      count(location);
+      return fs.statSync(location);
+    },
+    statBigInt: (location: string) => {
+      count(location);
+      return fs.statSync(location, { bigint: true });
+    },
+    watch: () => {
+      const error = new Error(
+        "watch registration refused",
+      ) as NodeJS.ErrnoException;
+      error.code = "ENOSPC";
+      throw error;
+    },
+  });
+  const modules = projectModules(project.root);
+  const options = resolveOptions();
+  const deliver = async (file: string): Promise<void> => {
+    const result = await transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+    assert.ok(result, `expected transformed output for ${file}`);
+  };
+
+  await deliver(modules[0]!);
+  assert.equal(fs.readFileSync(project.runLog, "utf8").length, 1);
+
+  probes.calls = 0;
+  for (const file of modules.slice(1)) {
+    await deliver(file);
+  }
+
+  assert.equal(fs.readFileSync(project.runLog, "utf8").length, 1);
+  assert.ok(
+    probes.calls > 0,
+    "a candidate no watcher covers must still be checked on the filesystem",
+  );
+}
+
+/**
+ * Asserts a candidate's directory being replaced still invalidates.
+ *
+ * The case the chain watch exists for beside the retarget: a package manager
+ * removes `node_modules/<package>` and lays a new tree down in its place, and
+ * the new tree carries a spelling the resolver would now prefer. The watch the
+ * candidate itself opened dies with the directory it was opened on, and a dead
+ * watch reports nothing, so only the name being watched in the _parent_ says
+ * that anything happened (samchon/ttsc#1261).
+ *
+ * 1. Create the candidate's directory empty, so the candidate is absent through a
+ *    directory that exists and carries no realized input.
+ * 2. Deliver one module to capture the generation.
+ * 3. Remove that directory and recreate it with the candidate inside, then assert
+ *    the next delivery recompiled.
+ */
+async function assertRecreatedCandidateDirectoryInvalidatesGeneration(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  // Fanout 1 keeps every realized edge target under `dep0`; the second
+  // candidate points at `dep1`, which the fixture never creates, so the
+  // directory below is the only thing between the candidate and its answer.
+  const project = createCacheProject({
+    fileCount: 3,
+    graphCandidates: 2,
+    graphFanout: 1,
+  });
+  const directory = path.join(project.root, "node_modules", "dep1");
+  fs.mkdirSync(directory, { recursive: true });
+
+  const cache = createTtscTransformCache();
+  const modules = projectModules(project.root);
+  const options = resolveOptions();
+  const deliver = async (file: string): Promise<void> => {
+    const result = await transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+    assert.ok(result, `expected transformed output for ${file}`);
+  };
+
+  await deliver(modules[0]!);
+  assert.equal(fs.readFileSync(project.runLog, "utf8").length, 1);
+
+  fs.rmSync(directory, { force: true, recursive: true });
+  fs.mkdirSync(directory, { recursive: true });
+  fs.writeFileSync(
+    path.join(directory, "index.ts"),
+    "export const superseding = 1;\n",
+    "utf8",
+  );
+  await deliver(modules[1]!);
+
+  assert.equal(
+    fs.readFileSync(project.runLog, "utf8").length,
+    2,
+    "replacing the directory a candidate lives in must replace the generation",
+  );
+}
+
+/**
+ * Asserts an absent candidate reached through a link still invalidates when the
+ * link is retargeted.
+ *
+ * The proof samchon/ttsc#1261 rests on is a watcher, and a watcher opened on a
+ * spelling that traverses a link follows it to a physical directory:
+ * retargeting the link moves the answer without touching what is watched. That
+ * is the pnpm layout exactly, where `node_modules/<package>` is a link into a
+ * store, so a reinstall makes a superseding candidate appear behind a watch
+ * still looking at the old store directory. Watching each component of the
+ * spelling by the name it carries in its own parent is what reports it.
+ *
+ * 1. Point a candidate's directory at an empty target through a link, so no
+ *    realized input lives under it and only the candidate is at stake.
+ * 2. Deliver one module to capture the generation.
+ * 3. Retarget the link at a directory that does carry the candidate, and assert
+ *    the next delivery recompiled.
+ */
+async function assertRetargetedCandidateLinkInvalidatesGeneration(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  // Fanout 1 keeps every realized edge target under `dep0`, while the second
+  // candidate points at `dep1`, which the fixture never creates: the link below
+  // is therefore the only thing standing between the candidate and its answer.
+  const project = createCacheProject({
+    fileCount: 3,
+    graphCandidates: 2,
+    graphFanout: 1,
+  });
+  const store = TestProject.tmpdir("ttsc-unplugin-candidate-store-");
+  const before = path.join(store, "before");
+  const after = path.join(store, "after");
+  fs.mkdirSync(before, { recursive: true });
+  fs.mkdirSync(after, { recursive: true });
+  fs.writeFileSync(
+    path.join(after, "index.ts"),
+    "export const superseding = 1;\n",
+    "utf8",
+  );
+  const link = path.join(project.root, "node_modules", "dep1");
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  fs.symlinkSync(before, link, "junction");
+
+  const cache = createTtscTransformCache();
+  const modules = projectModules(project.root);
+  const options = resolveOptions();
+  const deliver = async (file: string): Promise<void> => {
+    const result = await transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+    assert.ok(result, `expected transformed output for ${file}`);
+  };
+
+  await deliver(modules[0]!);
+  assert.equal(fs.readFileSync(project.runLog, "utf8").length, 1);
+
+  fs.rmSync(link, { force: true, recursive: true });
+  fs.symlinkSync(after, link, "junction");
+  await deliver(modules[1]!);
+
+  assert.equal(
+    fs.readFileSync(project.runLog, "utf8").length,
+    2,
+    "retargeting the link a candidate is reached through must replace the generation",
+  );
+}
+
+/**
+ * Asserts samchon/ttsc#1261: a delivery stops probing an absent resolution
+ * candidate the generation's watcher already covers.
+ *
+ * A missing candidate is the one input no proof can be memoized for. Its
+ * metadata cannot be read, so the signature that stands in for every other
+ * input's comparison never applies, and each delivery that reaches it probes
+ * the filesystem again — `modules x candidates` for one build, and the only
+ * per-delivery filesystem work a declaring producer has left. Watching the name
+ * answers it once for the whole generation instead, through the channel that
+ * already proves project membership.
+ *
+ * 1. Build a project whose envelope stamps missing candidates.
+ * 2. Deliver one module so the generation is captured, then reset the counters.
+ * 3. Deliver the remaining modules and assert nothing touched a candidate path.
+ */
+async function assertNotifiedAbsentCandidateIsNotReprobed(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const graphCandidates = 3;
+  const project = createCacheProject({
+    fileCount: 4,
+    graphCandidates,
+    graphFanout: 4,
+  });
+  const candidates = new Set(
+    Array.from({ length: graphCandidates }, (_, index) =>
+      path.resolve(
+        path.join(project.root, "node_modules", `dep${index}`, "index.ts"),
+      ),
+    ),
+  );
+  const probes = { calls: 0 };
+  const count = (location: string): void => {
+    if (candidates.has(path.resolve(location))) probes.calls += 1;
+  };
+  const cache = createTtscTransformCache({
+    exists: (location: string) => {
+      count(location);
+      return fs.existsSync(location);
+    },
+    lstat: (location: string) => {
+      count(location);
+      return fs.lstatSync(location, { bigint: true });
+    },
+    readFile: (location: string) => {
+      count(location);
+      return fs.readFileSync(location);
+    },
+    stat: (location: string) => {
+      count(location);
+      return fs.statSync(location);
+    },
+    statBigInt: (location: string) => {
+      count(location);
+      return fs.statSync(location, { bigint: true });
+    },
+  });
+  const modules = projectModules(project.root);
+  const options = resolveOptions();
+  const deliver = async (file: string): Promise<void> => {
+    const result = await transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+    assert.ok(result, `expected transformed output for ${file}`);
+  };
+
+  await deliver(modules[0]!);
+  assert.equal(fs.readFileSync(project.runLog, "utf8").length, 1);
+
+  probes.calls = 0;
+  for (const file of modules.slice(1)) {
+    await deliver(file);
+  }
+
+  assert.equal(fs.readFileSync(project.runLog, "utf8").length, 1);
+  assert.equal(
+    probes.calls,
+    0,
+    "a candidate the generation watches must cost no filesystem call per delivery",
+  );
+}
+
+/**
+ * Asserts a realized graph member with no compiler proof still refuses reuse.
+ *
+ * The candidate relaxation is scoped to paths the envelope reported _only_ as
+ * resolution candidates. An edge target is a file the compile read, so a
+ * missing proof for it means the generation cannot be shown to describe one
+ * coherent state, and replaying it could serve output computed from bytes that
+ * changed during the compile.
+ *
+ * 1. Build a four-file project whose envelope drops the proof of one edge target.
+ * 2. Run a transform over every module sharing one persistent cache.
+ * 3. Assert the project was recompiled for every module.
+ */
+async function assertUnprovenRealizedInputRefusesReuse(): Promise<void> {
+  const { pluginRuns, outputs } = await runProjectBuild({
+    fileCount: 4,
+    graphFanout: 4,
+    unprovenGraphInput: true,
+  });
+  assert.equal(pluginRuns, 4);
+  assert.equal(outputs.length, 4);
+}
+
+/**
+ * Asserts samchon/ttsc#1246: a file written inside the project root during a
+ * compile does not cost the generation when it is not an input of that
+ * compile.
+ *
+ * A project root is a working directory. A framework's generated types, a
+ * coverage report, a log, or a test artifact appears and changes there while a
+ * compile runs, and comparing every walked file made those generations
+ * incoherent, which cost a whole-project recompile per delivered module. Only a
+ * declared input can change an output; files entering or leaving the project
+ * stay covered by the directory-membership snapshot.
+ *
+ * 1. Build a six-file project whose fixture transform rewrites
+ *    `fixtures/build.log` (never an input) on every run.
+ * 2. Run a transform over every module sharing one persistent cache.
+ * 3. Assert the plugin ran exactly once.
+ */
+async function assertNonInputWriteDuringCompileKeepsGeneration(): Promise<void> {
+  const { pluginRuns, outputs } = await runProjectBuild({
+    fileCount: 6,
+    graphFanout: 4,
+    nonInputRaceFile: "fixtures/build.log",
+  });
+  assert.equal(pluginRuns, 1);
+  assert.equal(outputs.length, 6);
 }
 
 /**
@@ -539,9 +1193,12 @@ async function assertPersistentValidationUsesPerFileInputs(): Promise<void> {
           "selection.json",
         );
   if (brokenTarget !== undefined) {
-    // Creating file symlinks requires elevated privileges on Windows. POSIX CI
-    // owns this broken-target edge while the shared test retains every other
-    // validation and performance assertion on all platforms.
+    // A link with no target is reproducible on Windows as a junction, which
+    // needs no elevation. What is not is the second half of this edge: a
+    // junction whose target is later created as a *file* still reports ENOENT
+    // through the link, measured on Windows 11, so the appearance this asserts
+    // below can only be observed through a POSIX file symlink. POSIX CI owns
+    // it while the shared case retains every other assertion on all platforms.
     fs.symlinkSync(brokenTarget, descriptorProbes[1]!, "file");
   }
   fs.writeFileSync(descriptorSelection, 'module.exports = "go-plugin";\n');
@@ -776,6 +1433,1012 @@ async function assertPersistentValidationUsesPerFileInputs(): Promise<void> {
     /DESCRIPTOR-RELOADED/,
     "the replacement generation must reload the changed descriptor dependency",
   );
+}
+
+/**
+ * Asserts a generation whose watchers cannot be registered still validates.
+ *
+ * Folding watcher health into the generation's own completeness flag left an
+ * entry that neither validation path would accept, so every delivery evicted it
+ * and re-ran a whole-project compile — the state an inotify-exhausted or
+ * network-filesystem dev server lands in. Losing notifications must cost the
+ * narrow path, not the cache, and the recorded snapshot must keep proving every
+ * class of change on its own.
+ */
+async function assertUnavailableNotificationsKeepThePersistentCache(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const project = createCacheProject({ fileCount: 6, graphFanout: 6 });
+  const modules = projectModules(project.root);
+  const cache = createTtscTransformCache({
+    watch: () => {
+      const error = new Error(
+        "watch registration refused",
+      ) as NodeJS.ErrnoException;
+      error.code = "ENOSPC";
+      throw error;
+    },
+  });
+  const options = resolveOptions();
+  const deliver = (file: string) =>
+    transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+  const pluginRuns = (): number =>
+    fs.existsSync(project.runLog)
+      ? fs.readFileSync(project.runLog, "utf8").length
+      : 0;
+
+  for (const file of modules) {
+    const result = await deliver(file);
+    assert.ok(result);
+    assert.match(result.code, /PROBED/);
+  }
+  assert.equal(
+    pluginRuns(),
+    1,
+    "a generation with no notifications must still be validated from its snapshot",
+  );
+  const generation = [...cache.values()][0];
+  assert.equal(
+    (await generation!).projectMutationTracker,
+    undefined,
+    "an unusable watcher must not be attached to the generation",
+  );
+
+  // Every change class must still invalidate without a single notification.
+  fs.writeFileSync(
+    path.join(project.root, "src", "mod4.ts"),
+    'export const value4: string = "PROBE-EDITED";\n',
+    "utf8",
+  );
+  assert.ok(await deliver(modules[0]!));
+  assert.equal(pluginRuns(), 2, "an edited project source must recompile");
+
+  fs.writeFileSync(
+    path.join(project.root, "src", "added.d.ts"),
+    "declare const added: string;\n",
+    "utf8",
+  );
+  assert.ok(await deliver(modules[0]!));
+  assert.equal(pluginRuns(), 3, "a new project input must recompile");
+
+  fs.writeFileSync(
+    path.join(project.root, "node_modules", "dep2", "index.d.ts"),
+    "export declare const dep2: string;\n",
+    "utf8",
+  );
+  assert.ok(await deliver(modules[0]!));
+  assert.equal(
+    pluginRuns(),
+    4,
+    "an edited out-of-walk graph member must recompile",
+  );
+
+  fs.rmSync(path.join(project.root, "src", "added.d.ts"));
+  assert.ok(await deliver(modules[0]!));
+  assert.equal(pluginRuns(), 5, "a removed project input must recompile");
+
+  // A steady project must then stop recompiling.
+  for (const file of modules) {
+    assert.ok(await deliver(file));
+  }
+  assert.equal(
+    pluginRuns(),
+    5,
+    "a steady project must not recompile once its snapshot matches again",
+  );
+}
+
+/**
+ * Asserts a universal host input with no readable content never acquires one.
+ *
+ * Descriptor and config inputs are validated through their own manifest, which
+ * skips an entry whose metadata still matches. An input the host could see but
+ * not read records a missing state on both sides, so its comparison succeeds
+ * while nothing reads it and its metadata never moves. A signature for it would
+ * be skipped for the generation's life, and the per-module loop skips the same
+ * spelling, so bytes appearing later would never be compared at all.
+ *
+ * The input is a link with no target, the one shape both the host's own
+ * filesystem and the adapter's fail to read for the same reason. Its content
+ * then appears through the cache-owned read alone, so no metadata moves and
+ * only a retained content comparison can see it.
+ */
+async function assertUnreadableHostInputKeepsTheContentComparison(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const project = createCacheProject({
+    fileCount: 4,
+    graphFanout: 4,
+    unreadableHostInput: true,
+  });
+  const modules = projectModules(project.root);
+  const unreadable = path.join(project.root, "node_modules", "host-input.json");
+  let appeared = false;
+  const cache = createTtscTransformCache({
+    readFile: (location: string) => {
+      if (appeared && path.resolve(location) === unreadable) {
+        return Buffer.from("{}\n", "utf8");
+      }
+      return fs.readFileSync(location);
+    },
+  });
+  const options = resolveOptions();
+  const deliver = (file: string) =>
+    transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+  const pluginRuns = (): number =>
+    fs.existsSync(project.runLog)
+      ? fs.readFileSync(project.runLog, "utf8").length
+      : 0;
+
+  for (const file of modules) {
+    assert.ok(await deliver(file));
+  }
+  assert.equal(
+    pluginRuns(),
+    1,
+    "an unreadable universal input matching its recorded state must still hit",
+  );
+
+  appeared = true;
+  assert.ok(await deliver(modules[0]!));
+  assert.equal(
+    pluginRuns(),
+    2,
+    "a universal input whose content appears must replace the generation",
+  );
+}
+
+/**
+ * Asserts a graph member with no readable content never acquires a proof.
+ *
+ * A signature stands for the bytes a read proved, so an input that has none
+ * cannot have one. A member the compiler recorded without a content hash, and
+ * that the host can stat but not read, matches its recorded `missing` state
+ * exactly while unreadable; if it were handed a signature at capture, becoming
+ * readable without a metadata change would leave the narrow path skipping it
+ * forever and replaying output computed from nothing.
+ */
+async function assertUnreadableGraphInputKeepsTheContentComparison(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const project = createCacheProject({
+    fileCount: 4,
+    graphFanout: 4,
+    unhashedGraphInput: true,
+  });
+  const modules = projectModules(project.root);
+  const unreadable = path.join(
+    project.root,
+    "node_modules",
+    "dep0",
+    "index.d.ts",
+  );
+  let denied = true;
+  const cache = createTtscTransformCache({
+    readFile: (location: string) => {
+      if (denied && path.resolve(location) === unreadable) {
+        const error = new Error("permission denied") as NodeJS.ErrnoException;
+        error.code = "EACCES";
+        throw error;
+      }
+      return fs.readFileSync(location);
+    },
+  });
+  const options = resolveOptions();
+  const deliver = (file: string) =>
+    transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+  const pluginRuns = (): number =>
+    fs.existsSync(project.runLog)
+      ? fs.readFileSync(project.runLog, "utf8").length
+      : 0;
+
+  for (const file of modules) {
+    assert.ok(await deliver(file));
+  }
+  assert.equal(
+    pluginRuns(),
+    1,
+    "an unreadable member matching its recorded state must still hit the cache",
+  );
+
+  // Readable again, with every byte of metadata unchanged: only a content
+  // comparison can see this.
+  denied = false;
+  assert.ok(await deliver(modules[0]!));
+  assert.equal(
+    pluginRuns(),
+    2,
+    "content that becomes readable must replace the generation",
+  );
+}
+
+/**
+ * Asserts the whole-snapshot path proves each input once per generation.
+ *
+ * With notifications unavailable every delivery re-proves the recorded snapshot
+ * from disk, so a metadata-only change to any input would cost a re-read for
+ * the rest of the generation's life unless the walk that proved the snapshot
+ * hands its signatures back. The delivered file is the one input that must not
+ * receive one: its recorded hash is the source the bundler supplied, so the
+ * bytes this walk read for it were compared against nothing.
+ */
+async function assertCompleteValidationProvesEachInputOnce(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const project = createCacheProject({ fileCount: 6, graphFanout: 6 });
+  const modules = projectModules(project.root);
+  let reads = 0;
+  const cache = createTtscTransformCache({
+    readFile: (location: string) => {
+      reads += 1;
+      return fs.readFileSync(location);
+    },
+    // Refusing every watch registration keeps the generation on the
+    // whole-snapshot path for every delivery.
+    watch: () => {
+      const error = new Error(
+        "watch registration refused",
+      ) as NodeJS.ErrnoException;
+      error.code = "ENOSPC";
+      throw error;
+    },
+  });
+  const options = resolveOptions();
+  const deliver = (file: string, source?: string) =>
+    transformTtsc(
+      file,
+      source ?? fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+  const pluginRuns = (): number =>
+    fs.existsSync(project.runLog)
+      ? fs.readFileSync(project.runLog, "utf8").length
+      : 0;
+
+  for (const file of modules) {
+    assert.ok(await deliver(file));
+  }
+  assert.equal(pluginRuns(), 1);
+  reads = 0;
+  assert.ok(await deliver(modules[1]!));
+  const steady = reads;
+
+  // A metadata-only change to a project input and to an out-of-walk input costs
+  // one re-read each, once.
+  // A restored-from-backup timestamp: the content is untouched, so only the
+  // signature moves.
+  const shifted = new Date(0);
+  fs.utimesSync(path.join(project.root, "src", "mod4.ts"), shifted, shifted);
+  fs.utimesSync(
+    path.join(project.root, "node_modules", "dep2", "index.d.ts"),
+    shifted,
+    shifted,
+  );
+  reads = 0;
+  assert.ok(await deliver(modules[1]!));
+  assert.equal(pluginRuns(), 1, "a touch must not recompile");
+  assert.ok(
+    reads > steady,
+    "a changed metadata signature must fall back to the content comparison",
+  );
+  reads = 0;
+  assert.ok(await deliver(modules[2]!));
+  assert.ok(
+    reads <= steady,
+    `a re-proven input must not be reread per delivery (read ${reads}, steady ${steady})`,
+  );
+
+  // The delivered file's own key must never acquire a disk signature: its
+  // recorded hash is the bundler's source. Hand the transform the stale buffer
+  // while the file on disk moves ahead, then deliver a sibling: the walk has to
+  // read that file and see the edit.
+  const drifting = path.join(project.root, "src", "mod0.ts");
+  const stale = fs.readFileSync(drifting, "utf8");
+  fs.writeFileSync(
+    drifting,
+    'export const value0: string = "PROBE-DRIFTED";\n',
+    "utf8",
+  );
+  assert.ok(await deliver(drifting, stale));
+  assert.equal(
+    pluginRuns(),
+    1,
+    "the bundler's own source stays authoritative for the file it delivers",
+  );
+  assert.ok(await deliver(modules[3]!));
+  assert.equal(
+    pluginRuns(),
+    2,
+    "a sibling delivery must still see the drifted file on disk",
+  );
+}
+
+/**
+ * Asserts one failed tracker is enough to leave the narrow path.
+ *
+ * Membership has two halves — the project walk and the universal inputs — and a
+ * generation may take the narrow path only while both are still proven by
+ * notification. The neighbouring cases refuse or fail every watcher at once, so
+ * a regression that consulted a single tracker would keep them green while
+ * serving a module whose universal inputs nothing is watching.
+ */
+async function assertOneFailedTrackerFallsBackToCompleteValidation(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const project = createCacheProject({ fileCount: 6, graphFanout: 6 });
+  const modules = projectModules(project.root);
+  const cache = createTtscTransformCache({
+    watch: () => {
+      // The project tracker registers before the compile and the host-input
+      // tracker after it, so the fixture's own run log separates the two
+      // phases: on the first generation this refuses the host-input
+      // registrations only. A later recompile finds the log already written and
+      // refuses both, which the assertions after it do not depend on.
+      if (!fs.existsSync(project.runLog)) {
+        return { close: () => undefined };
+      }
+      const error = new Error(
+        "watch registration refused",
+      ) as NodeJS.ErrnoException;
+      error.code = "ENOSPC";
+      throw error;
+    },
+  });
+  const options = resolveOptions();
+  const deliver = (file: string) =>
+    transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+  const pluginRuns = (): number =>
+    fs.existsSync(project.runLog)
+      ? fs.readFileSync(project.runLog, "utf8").length
+      : 0;
+
+  for (const file of modules) {
+    assert.ok(await deliver(file));
+  }
+  assert.equal(
+    pluginRuns(),
+    1,
+    "one unusable tracker must not cost the cache its generation",
+  );
+  const generation = await [...cache.values()][0]!;
+  assert.equal(
+    generation.hostInputMutationTracker,
+    undefined,
+    "the tracker that could not register must not be attached",
+  );
+  assert.equal(
+    generation.projectMutationTracker,
+    undefined,
+    "its healthy sibling must not be attached either: the narrow path needs both",
+  );
+
+  fs.writeFileSync(
+    path.join(project.root, "src", "mod3.ts"),
+    'export const value3: string = "PROBE-EDITED";\n',
+    "utf8",
+  );
+  assert.ok(await deliver(modules[0]!));
+  assert.equal(
+    pluginRuns(),
+    2,
+    "an edit must still invalidate through the fallback",
+  );
+}
+
+/**
+ * Asserts a watcher that fails after generation falls back instead of evicting.
+ *
+ * A failed notification is the absence of a membership proof, never evidence of
+ * a change. The generation must keep serving through complete-snapshot
+ * validation, while a real membership event — which is evidence — still
+ * replaces it.
+ */
+async function assertFailedNotificationsFallBackToCompleteValidation(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const project = createCacheProject({ fileCount: 6, graphFanout: 6 });
+  const modules = projectModules(project.root);
+  const failures: (() => void)[] = [];
+  const cache = createTtscTransformCache({
+    watch: (_directory: string, _listener: unknown, onError: () => void) => {
+      failures.push(onError);
+      return { close: () => undefined };
+    },
+  });
+  const options = resolveOptions();
+  const deliver = (file: string) =>
+    transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+  const pluginRuns = (): number =>
+    fs.existsSync(project.runLog)
+      ? fs.readFileSync(project.runLog, "utf8").length
+      : 0;
+
+  for (const file of modules) {
+    assert.ok(await deliver(file));
+  }
+  assert.equal(pluginRuns(), 1);
+  const generation = [...cache.values()][0];
+  assert.notEqual(
+    (await generation!).projectMutationTracker,
+    undefined,
+    "a healthy watcher must be attached so the narrow path stays available",
+  );
+
+  // The watchers stop reporting after the generation was produced.
+  assert.ok(failures.length > 0, "the seam must have registered a watcher");
+  for (const fail of failures) {
+    fail();
+  }
+  for (const file of modules) {
+    assert.ok(await deliver(file));
+  }
+  assert.equal(
+    pluginRuns(),
+    1,
+    "a failed watcher must fall back to complete validation, not evict",
+  );
+  assert.equal(
+    [...cache.values()][0],
+    generation,
+    "the fallback must keep the same generation",
+  );
+
+  fs.writeFileSync(
+    path.join(project.root, "src", "mod2.ts"),
+    'export const value2: string = "PROBE-EDITED";\n',
+    "utf8",
+  );
+  assert.ok(await deliver(modules[0]!));
+  assert.equal(
+    pluginRuns(),
+    2,
+    "an edit must still invalidate once notifications have failed",
+  );
+}
+
+/**
+ * Asserts a generation proves each shared input once instead of once per
+ * delivered module, without loosening any invalidation.
+ *
+ * {@link assertPersistentValidationUsesPerFileInputs} partitions the graph so
+ * every module owns a disjoint external input, which hides the cost this pins:
+ * a real program gives every module the same reachable closure and the same
+ * `graph.globals`, so re-reading each delivered file's inputs multiplies one
+ * generation's proven bytes by the module count. The bound below is met only
+ * when an unchanged metadata signature stands in for the content comparison,
+ * and only when one physical file's two spellings each keep their own proof
+ * instead of overwriting it.
+ */
+async function assertPersistentValidationProvesSharedInputsOnce(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const count = 8;
+  const shared = 24;
+  const project = createCacheProject({
+    aliasedGlobal: true,
+    fileCount: count,
+    graphFanout: shared,
+    graphGlobals: shared,
+  });
+  const modules = projectModules(project.root);
+  let reads = 0;
+  const cache = createTtscTransformCache({
+    readFile: (location: string) => {
+      reads += 1;
+      return fs.readFileSync(location);
+    },
+  });
+  const options = resolveOptions();
+  const deliver = (file: string) =>
+    transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+  const pluginRuns = (): number =>
+    fs.existsSync(project.runLog)
+      ? fs.readFileSync(project.runLog, "utf8").length
+      : 0;
+
+  for (const file of modules) {
+    assert.ok(await deliver(file));
+  }
+  assert.equal(pluginRuns(), 1);
+
+  reads = 0;
+  for (const file of modules) {
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    assert.ok(await deliver(file));
+  }
+  assert.equal(pluginRuns(), 1, "a steady generation must not recompile");
+  // Every module reaches every sibling plus `shared` externals, `shared`
+  // globals and one aliased spelling of a global, so the pre-fix path read ~56
+  // files per delivery here. Every input of this generation is proven by now,
+  // the generation's own current file included: the first loop's second
+  // delivery compared its disk bytes against the recorded hash and recorded
+  // the signature then. So a proven generation reads nothing at all, and any
+  // read means an input lost its proof — which is what the alias and its
+  // target do to each other under a per-identity manifest. The envelope stamps
+  // no resolution candidates, so no absent path costs a probe read either.
+  assert.equal(
+    reads,
+    0,
+    `persistent validation read ${reads} files across ${modules.length} deliveries of a proven generation`,
+  );
+
+  // One delivery in isolation, once every input of this generation has been
+  // proven: nothing may be read at all. One read means the aliased global lost
+  // its own proof to its target's, which a per-identity manifest does on every
+  // delivery.
+  reads = 0;
+  assert.ok(await deliver(modules[1]!));
+  assert.equal(
+    reads,
+    0,
+    "an aliased spelling must keep its own proof rather than its target's",
+  );
+
+  // A metadata-only change must revalidate by content, keep the generation, and
+  // then stop being re-read.
+  const touched = path.join(
+    project.root,
+    "node_modules",
+    "global0",
+    "index.d.ts",
+  );
+  // A restored-from-backup timestamp: the content is untouched, so only the
+  // signature moves.
+  const shifted = new Date(0);
+  fs.utimesSync(touched, shifted, shifted);
+  const beforeTouch = [...cache.values()][0];
+  reads = 0;
+  assert.ok(await deliver(modules[0]!));
+  assert.equal(
+    [...cache.values()][0],
+    beforeTouch,
+    "a metadata-only change must not replace the generation",
+  );
+  assert.ok(
+    reads >= 1,
+    "a changed metadata signature must fall back to the content comparison",
+  );
+  reads = 0;
+  assert.ok(await deliver(modules[1]!));
+  // Every input of this generation is proven by now, the generation's own
+  // current file included: a sibling delivery compared its disk bytes against
+  // the recorded hash and recorded the signature then. Any read here means the
+  // touched global was not re-proven and is being reread on every delivery.
+  assert.equal(
+    reads,
+    0,
+    "a revalidated input must be proven again, not reread per delivery",
+  );
+
+  // The globals half must still invalidate every module, not just one.
+  fs.writeFileSync(touched, "declare const ambient0: string;\n", "utf8");
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.ok(await deliver(modules[2]!));
+  assert.notEqual(
+    [...cache.values()][0],
+    beforeTouch,
+    "an edited global-scope declaration must replace the generation",
+  );
+  assert.equal(pluginRuns(), 2, "the edited global must force one recompile");
+
+  // A reachable external edit must still invalidate through the same path.
+  const generationAfterGlobal = [...cache.values()][0];
+  fs.writeFileSync(
+    path.join(project.root, "node_modules", "dep3", "index.d.ts"),
+    "export declare const dep3: string;\n",
+    "utf8",
+  );
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.ok(await deliver(modules[3]!));
+  assert.notEqual(
+    [...cache.values()][0],
+    generationAfterGlobal,
+    "a reachable external edit must replace the generation",
+  );
+
+  // And so must a project-membership change.
+  const generationAfterExternal = [...cache.values()][0];
+  fs.writeFileSync(
+    path.join(project.root, "src", "added.d.ts"),
+    "declare const added: string;\n",
+    "utf8",
+  );
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.ok(await deliver(modules[4]!));
+  assert.notEqual(
+    [...cache.values()][0],
+    generationAfterExternal,
+    "a project-membership change must replace the generation",
+  );
+
+  // A sibling source edit must still be seen by the modules that reach it.
+  const generationAfterMembership = [...cache.values()][0];
+  fs.writeFileSync(
+    path.join(project.root, "src", "mod5.ts"),
+    'export const value5: string = "PROBE-EDITED";\n',
+    "utf8",
+  );
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.ok(await deliver(modules[6]!));
+  assert.notEqual(
+    [...cache.values()][0],
+    generationAfterMembership,
+    "an edited reachable project source must replace the generation",
+  );
+}
+
+/** The one synthetic clock tick every pinned metadata observation reports. */
+const PINNED_TICK = 1_000_000_000_000_000_000n;
+
+/**
+ * Cache-owned filesystem operations whose write-mintable stamps the test
+ * controls, reproducing the clock-tick collapse deterministically.
+ *
+ * A filesystem stamps a write once per clock tick, so a same-length rewrite
+ * inside the tick that minted an input's recorded stamp leaves its metadata
+ * signature unchanged. Real timing cannot pin that window reliably, so these
+ * operations report one constant tick for every path (overridable per path
+ * through `stamps`) while every other observation — kind, size, identity, bytes
+ * — remains the real filesystem's. With every stamp in one tick, the observed
+ * filesystem's clock never provably leaves it, which is exactly the state a
+ * freshly written tree is in on a coarse-tick filesystem.
+ *
+ * `watch` is a seam too: `"silent"` registers healthy watchers that never
+ * report, keeping the narrow validation path live without real watcher races,
+ * while `"refused"` throws so the generation validates through its recorded
+ * whole-snapshot state.
+ */
+function createTickPinnedFilesystem(props: {
+  reads?: string[];
+  watch: "refused" | "silent";
+}): {
+  operations: Record<string, unknown>;
+  stamps: Map<string, bigint>;
+} {
+  const stamps = new Map<string, bigint>();
+  const reported = (location: string): bigint =>
+    stamps.get(path.resolve(location)) ?? PINNED_TICK;
+  const pin = (location: string, stats: fs.BigIntStats): fs.BigIntStats =>
+    Object.assign(
+      Object.create(Object.getPrototypeOf(stats)) as fs.BigIntStats,
+      stats,
+      {
+        atimeNs: reported(location),
+        birthtimeNs: reported(location),
+        ctimeNs: reported(location),
+        mtimeNs: reported(location),
+      },
+    );
+  return {
+    operations: {
+      lstat: (location: string) =>
+        pin(location, fs.lstatSync(location, { bigint: true })),
+      statBigInt: (location: string) =>
+        pin(location, fs.statSync(location, { bigint: true })),
+      readFile: (location: string) => {
+        props.reads?.push(path.resolve(location));
+        return fs.readFileSync(location);
+      },
+      watch: () => {
+        if (props.watch === "silent") {
+          return { close: () => undefined };
+        }
+        const error = new Error(
+          "watch registration refused",
+        ) as NodeJS.ErrnoException;
+        error.code = "ENOSPC";
+        throw error;
+      },
+    },
+    stamps,
+  };
+}
+
+/**
+ * Asserts a same-tick, same-length rewrite of a derived input still replaces
+ * the generation on the narrow validation path.
+ *
+ * With every stamp pinned to one tick, no signature may be recorded: the clock
+ * never provably leaves the tick, so a later write is not guaranteed to move
+ * any stamp. A recorded signature here would make the rewrite invisible — the
+ * pre-fix state — while the retained content comparison must see it.
+ */
+async function assertSameTickDerivedRewriteReplacesTheGeneration(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const project = createCacheProject({
+    fileCount: 4,
+    graphFanout: 4,
+    graphGlobals: 4,
+  });
+  const modules = projectModules(project.root);
+  const pinned = createTickPinnedFilesystem({ watch: "silent" });
+  const cache = createTtscTransformCache(pinned.operations);
+  const options = resolveOptions();
+  const deliver = (file: string) =>
+    transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+  const pluginRuns = (): number =>
+    fs.existsSync(project.runLog)
+      ? fs.readFileSync(project.runLog, "utf8").length
+      : 0;
+
+  for (const file of modules) {
+    assert.ok(await deliver(file));
+  }
+  assert.equal(pluginRuns(), 1);
+  const steadyGeneration = [...cache.values()][0];
+
+  // Unchanged content keeps the generation even though nothing is proven by
+  // metadata: declining a signature costs reads, never the cache.
+  for (const file of modules) {
+    assert.ok(await deliver(file));
+  }
+  assert.equal(pluginRuns(), 1, "a steady same-tick tree must not recompile");
+  assert.equal([...cache.values()][0], steadyGeneration);
+
+  // The rewrite the metadata signature cannot see: same length, same tick.
+  const touched = path.join(
+    project.root,
+    "node_modules",
+    "global0",
+    "index.d.ts",
+  );
+  fs.writeFileSync(touched, "declare const ambient0: string;\n", "utf8");
+  assert.ok(await deliver(modules[1]!));
+  assert.notEqual(
+    [...cache.values()][0],
+    steadyGeneration,
+    "a same-tick rewrite of a derived input must replace the generation",
+  );
+  assert.equal(
+    pluginRuns(),
+    2,
+    "the retained content comparison must force one recompile",
+  );
+}
+
+/**
+ * Asserts a same-tick, same-length rewrite of a universal descriptor/config
+ * input still replaces the generation.
+ *
+ * The universal manifest is the more exposed half in practice — its inputs are
+ * `tsconfig.json`, plugin descriptors, and package manifests, which tooling
+ * rewrites in place. A capture-time signature for a stamp whose tick the clock
+ * has not provably left would let this rewrite replay stale output.
+ */
+async function assertSameTickUniversalRewriteReplacesTheGeneration(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const project = createCacheProject({ fileCount: 4, graphFanout: 4 });
+  const modules = projectModules(project.root);
+  const pinned = createTickPinnedFilesystem({ watch: "silent" });
+  const cache = createTtscTransformCache(pinned.operations);
+  const options = resolveOptions();
+  const deliver = (file: string) =>
+    transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+  const pluginRuns = (): number =>
+    fs.existsSync(project.runLog)
+      ? fs.readFileSync(project.runLog, "utf8").length
+      : 0;
+
+  for (const file of modules) {
+    assert.ok(await deliver(file));
+  }
+  assert.equal(pluginRuns(), 1);
+  const firstGeneration = [...cache.values()][0];
+
+  // Same bytes reordered: the length, and with the pinned tick every stamp,
+  // survive the rewrite untouched.
+  fs.writeFileSync(
+    path.join(project.root, "package.json"),
+    JSON.stringify({ type: "commonjs", private: true }, null, 2),
+    "utf8",
+  );
+  assert.ok(await deliver(modules[0]!));
+  assert.notEqual(
+    [...cache.values()][0],
+    firstGeneration,
+    "a same-tick rewrite of a universal input must replace the generation",
+  );
+  assert.equal(pluginRuns(), 2);
+}
+
+/**
+ * Asserts the whole-snapshot path keeps its content comparison against
+ * same-tick rewrites too, on both the project walk and the out-of-walk
+ * re-check.
+ *
+ * A generation whose watchers could not be opened re-proves its recorded
+ * snapshot from disk on every delivery. The walk may reuse a recorded hash for
+ * a file whose proven signature still holds, so a signature recorded inside an
+ * unfinished tick would let a sibling delivery replay output computed from
+ * bytes a rewrite already replaced.
+ */
+async function assertSameTickRewriteReplacesTheSnapshotGeneration(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const project = createCacheProject({ fileCount: 4, graphFanout: 4 });
+  const modules = projectModules(project.root);
+  const pinned = createTickPinnedFilesystem({ watch: "refused" });
+  const cache = createTtscTransformCache(pinned.operations);
+  const options = resolveOptions();
+  const deliver = (file: string) =>
+    transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+  const pluginRuns = (): number =>
+    fs.existsSync(project.runLog)
+      ? fs.readFileSync(project.runLog, "utf8").length
+      : 0;
+
+  for (const file of modules) {
+    assert.ok(await deliver(file));
+  }
+  assert.equal(pluginRuns(), 1);
+  const firstGeneration = [...cache.values()][0];
+
+  // Rewrite one project file and deliver a sibling, so only the walk — not the
+  // delivered module's own source comparison — can see the edit.
+  fs.writeFileSync(
+    path.join(project.root, "src", "mod2.ts"),
+    'export const value2: string = "PROBF";\n',
+    "utf8",
+  );
+  assert.ok(await deliver(modules[1]!));
+  assert.notEqual(
+    [...cache.values()][0],
+    firstGeneration,
+    "the walk must re-read a project file whose tick never provably ended",
+  );
+  assert.equal(pluginRuns(), 2);
+
+  // And the out-of-walk half of the same snapshot.
+  const externalGeneration = [...cache.values()][0];
+  fs.writeFileSync(
+    path.join(project.root, "node_modules", "dep0", "index.d.ts"),
+    "export declare const dep0: string;\n",
+    "utf8",
+  );
+  assert.ok(await deliver(modules[0]!));
+  assert.notEqual(
+    [...cache.values()][0],
+    externalGeneration,
+    "the out-of-walk re-check must re-read an unseparated external input",
+  );
+  assert.equal(pluginRuns(), 3);
+}
+
+/**
+ * Asserts an input re-earns its signature once the observed filesystem's clock
+ * provably leaves its stamp's tick, and that until then the content comparison
+ * keeps running without costing the generation.
+ */
+async function assertSeparatedStampReEarnsItsSignature(): Promise<void> {
+  const { createTtscTransformCache, resolveOptions, transformTtsc } =
+    await TestUnpluginRuntime.loadUnpluginApi();
+  const project = createCacheProject({
+    fileCount: 4,
+    graphFanout: 4,
+    graphGlobals: 4,
+  });
+  const modules = projectModules(project.root);
+  const reads: string[] = [];
+  const pinned = createTickPinnedFilesystem({ reads, watch: "silent" });
+  const cache = createTtscTransformCache(pinned.operations);
+  const options = resolveOptions();
+  const deliver = (file: string) =>
+    transformTtsc(
+      file,
+      fs.readFileSync(file, "utf8"),
+      options,
+      undefined,
+      cache,
+    );
+  const pluginRuns = (): number =>
+    fs.existsSync(project.runLog)
+      ? fs.readFileSync(project.runLog, "utf8").length
+      : 0;
+
+  for (const file of modules) {
+    assert.ok(await deliver(file));
+  }
+  assert.equal(pluginRuns(), 1);
+  const generation = [...cache.values()][0];
+
+  // Inside one unfinished tick nothing may be proven by metadata, so a steady
+  // delivery keeps re-reading its inputs.
+  reads.length = 0;
+  assert.ok(await deliver(modules[0]!));
+  assert.ok(
+    reads.length > 0,
+    "an unseparated stamp must keep the content comparison",
+  );
+
+  // The filesystem's clock provably moves past the pinned tick: one observed
+  // stamp lands in a later tick. The next content comparisons may then record
+  // their signatures, and later deliveries stop re-reading everything...
+  const touched = path.join(
+    project.root,
+    "node_modules",
+    "global0",
+    "index.d.ts",
+  );
+  pinned.stamps.set(touched, PINNED_TICK + 1n);
+  // One full pass, because the floor rises only when `touched` is observed, and
+  // a delivery validates its reachable siblings before the globals that carry
+  // it. The module delivered while the floor rose therefore leaves its siblings
+  // unproven, and no delivery proves the module it is delivering (a file is
+  // excluded from its own derived set). The three post-floor deliveries of this
+  // four-module mesh jointly prove all four, since every module belongs to some
+  // other module's closure.
+  for (const file of modules) {
+    assert.ok(await deliver(file));
+  }
+  reads.length = 0;
+  assert.ok(await deliver(modules[3]!));
+  // ...except the one input now sitting at the clock floor itself, whose own
+  // tick is not provably over: exactly it keeps the read.
+  assert.deepEqual(
+    reads,
+    [path.resolve(touched)],
+    "a re-proven generation must re-read only the input at the clock floor",
+  );
+  assert.equal(pluginRuns(), 1, "re-earning must never cost the generation");
+  assert.equal([...cache.values()][0], generation);
 }
 
 /**
@@ -1302,6 +2965,14 @@ function createCacheProject(options: ICacheProjectOptions): {
     JSON.stringify({ private: true, type: "commonjs" }, null, 2),
     "utf8",
   );
+  if (options.nonInputRaceFile !== undefined) {
+    // Materialize it before the first compile: the scenario is a file that
+    // keeps changing, not one that appears. A new file is a membership change,
+    // which the directory snapshot is supposed to catch.
+    const target = path.join(root, options.nonInputRaceFile);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, "seed\n", "utf8");
+  }
   for (
     let index = 0;
     index < (options.unrelatedDirectoryCount ?? 0);
@@ -1329,7 +3000,15 @@ function createCacheProject(options: ICacheProjectOptions): {
               name: "cache-probe",
               runLog,
               emitExternal: options.emitExternalKey === true,
+              aliasedGlobal:
+                options.aliasedGlobal === true && process.platform !== "win32",
               graphFanout: options.graphFanout ?? 0,
+              graphGlobals: options.graphGlobals ?? 0,
+              graphCandidates: options.graphCandidates ?? 0,
+              outOfProjectCandidate: options.outOfProjectCandidate ?? "",
+              nonInputRaceFile: options.nonInputRaceFile ?? "",
+              unhashedGraphInput: options.unhashedGraphInput === true,
+              unprovenGraphInput: options.unprovenGraphInput === true,
               independentGraphLeaf: options.independentGraphLeaf,
               partitionGraph: options.partitionGraph === true,
               ...(options.snapshotAbaRace === true
@@ -1359,15 +3038,61 @@ function createCacheProject(options: ICacheProjectOptions): {
     ),
     "utf8",
   );
+  const unreadableHostInput = path.join(
+    root,
+    "node_modules",
+    "host-input.json",
+  );
+  if (options.unreadableHostInput === true) {
+    fs.mkdirSync(path.dirname(unreadableHostInput), { recursive: true });
+    // A link with no target: it exists, so its own metadata is stable and
+    // readable, while every attempt to read through it fails for the host and
+    // the adapter alike. That is the state a missing marker records.
+    fs.symlinkSync(
+      path.join(root, "node_modules", "host-input-target.json"),
+      unreadableHostInput,
+      process.platform === "win32" ? "junction" : "file",
+    );
+  }
   fs.writeFileSync(
     path.join(root, "plugin.cjs"),
     [
-      'const fs = require("node:fs");',
+      ...(options.unreadableHostInput === true
+        ? [
+            'const crypto = require("node:crypto");',
+            'const fs = require("node:fs");',
+          ]
+        : []),
       'const path = require("node:path");',
+      ...(options.unreadableHostInput === true
+        ? [
+            "",
+            "function observedHash(file) {",
+            '  try { if (fs.statSync(file).isDirectory()) return crypto.createHash("sha256").update("ttsc:host-input:directory\\0").digest("hex"); } catch {}',
+            '  try { return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex"); }',
+            "  catch { return null; }",
+            "}",
+            "function observedRealpath(file) {",
+            "  try { return fs.realpathSync.native(file); }",
+            "  catch { return null; }",
+            "}",
+          ]
+        : []),
       "",
       "module.exports = (context) => {",
       "  return {",
       '    name: context.plugin.name ?? "cache-probe",',
+      ...(options.unreadableHostInput === true
+        ? [
+            // Report what this host actually observed, exactly as the
+            // descriptor of the neighbouring case does. A declared constant
+            // would encode one classification of an unreadable path, and ttsc
+            // revalidates a declared hash against its own filesystem.
+            `    hostInputs: [${JSON.stringify(unreadableHostInput)}],`,
+            `    hostInputHashes: { [${JSON.stringify(unreadableHostInput)}]: observedHash(${JSON.stringify(unreadableHostInput)}) },`,
+            `    hostInputRealpaths: { [${JSON.stringify(unreadableHostInput)}]: observedRealpath(${JSON.stringify(unreadableHostInput)}) },`,
+          ]
+        : []),
       '    source: path.resolve(context.dirname, "go-plugin"),',
       "  };",
       "};",
@@ -1392,6 +3117,27 @@ function createCacheProject(options: ICacheProjectOptions): {
       path.join(depDir, "index.d.ts"),
       `export declare const dep${index}: number;\n`,
       "utf8",
+    );
+  }
+  for (let index = 0; index < (options.graphGlobals ?? 0); index += 1) {
+    // Global-scope declarations the envelope reports for every module. They sit
+    // outside the project walk exactly like a real `@types/*` package.
+    const globalDir = path.join(root, "node_modules", `global${index}`);
+    fs.mkdirSync(globalDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(globalDir, "index.d.ts"),
+      `declare const ambient${index}: number;\n`,
+      "utf8",
+    );
+  }
+  if (options.aliasedGlobal === true && process.platform !== "win32") {
+    // One physical file under two spellings: the alias and its target share an
+    // identity but not their metadata.
+    const globalDir = path.join(root, "node_modules", "global0");
+    fs.symlinkSync(
+      path.join(globalDir, "index.d.ts"),
+      path.join(globalDir, "alias.d.ts"),
+      "file",
     );
   }
   writeGoPlugin(root);
@@ -1427,6 +3173,7 @@ function writeGoPlugin(root: string): void {
       '  "os"',
       '  "path/filepath"',
       '  "strings"',
+      '  "time"',
       ")",
       "",
       "type pluginDescriptor struct {",
@@ -1437,6 +3184,7 @@ function writeGoPlugin(root: string): void {
       '  Edges   map[string][]string `json:"edges"`',
       '  Globals []string            `json:"globals"`',
       '  Configs []string            `json:"configs"`',
+      '  Candidates map[string][]string `json:"candidates,omitempty"`',
       '  InputHashes map[string]*string `json:"inputHashes,omitempty"`',
       '  InputRealpaths map[string]*string `json:"inputRealpaths,omitempty"`',
       "}",
@@ -1481,6 +3229,16 @@ function writeGoPlugin(root: string): void {
       "",
       "  ts := map[string]string{}",
       "  observedInputs := map[string]string{}",
+      // Write one file that is not an input of this compile while the compile
+      // runs, the way a framework's type generator, a coverage reporter, or a
+      // log writes inside a project root. The bytes differ on every run, so a
+      // generation that compared it would never be reusable.
+      '  if nonInput := stringValue(cfg, "nonInputRaceFile"); nonInput != "" {',
+      "    target := nonInput",
+      "    if !filepath.IsAbs(target) { target = filepath.Join(root, filepath.FromSlash(nonInput)) }",
+      "    os.MkdirAll(filepath.Dir(target), 0o755)",
+      '    os.WriteFile(target, []byte(fmt.Sprintf("run-%d\\n", time.Now().UnixNano())), 0o644)',
+      "  }",
       '  srcDir := filepath.Join(root, "src")',
       "  entries, err := os.ReadDir(srcDir)",
       "  if err != nil { fmt.Fprintln(os.Stderr, err); return 2 }",
@@ -1564,6 +3322,45 @@ function writeGoPlugin(root: string): void {
       "    for input, observed := range observedInputs { addGraphInputProof(result.Graph, root, input, observed) }",
       '    addGraphInputProof(result.Graph, root, "tsconfig.json", "")',
       '    for _, input := range externals { addGraphInputProof(result.Graph, root, input, "") }',
+      '    if boolValue(cfg, "unhashedGraphInput") {',
+      '      result.Graph.InputHashes["node_modules/dep0/index.d.ts"] = nil',
+      "    }",
+      // Superseding resolution candidates, exactly as the real host emits
+      // them: higher-priority spellings the resolver never selected, and
+      // therefore never read, so no compiler proof exists for them. The host
+      // enumerates them speculatively (driver/resolution_candidates.go), which
+      // is why addGraphInputProof is deliberately not called here.
+      '    outside := stringValue(cfg, "outOfProjectCandidate")',
+      '    if probes := int(numberValue(cfg, "graphCandidates")); probes > 0 || outside != "" {',
+      "      result.Graph.Candidates = map[string][]string{}",
+      "      for _, name := range names {",
+      "        spellings := make([]string, 0, probes+1)",
+      "        for j := 0; j < probes; j++ {",
+      '          spellings = append(spellings, fmt.Sprintf("node_modules/dep%d/index.ts", j))',
+      "        }",
+      // An absolute spelling outside the project root, which the adapter keeps
+      // probing because no watch of its chain can stay inside the bound.
+      '        if outside != "" { spellings = append(spellings, outside) }',
+      '        result.Graph.Candidates["src/"+name] = spellings',
+      "      }",
+      "    }",
+      '    if boolValue(cfg, "unprovenGraphInput") {',
+      // A realized edge target whose proof the host could not produce. Unlike a
+      // candidate, the compile read this file, so the generation stays
+      // unprovable and must not be reused.
+      '      delete(result.Graph.InputHashes, "node_modules/dep0/index.d.ts")',
+      '      delete(result.Graph.InputRealpaths, "node_modules/dep0/index.d.ts")',
+      "    }",
+      '    if boolValue(cfg, "aliasedGlobal") {',
+      '      alias := "node_modules/global0/alias.d.ts"',
+      "      result.Graph.Globals = append(result.Graph.Globals, alias)",
+      '      addGraphInputProof(result.Graph, root, alias, "")',
+      "    }",
+      '    for j := 0; j < int(numberValue(cfg, "graphGlobals")); j++ {',
+      '      global := fmt.Sprintf("node_modules/global%d/index.d.ts", j)',
+      "      result.Graph.Globals = append(result.Graph.Globals, global)",
+      '      addGraphInputProof(result.Graph, root, global, "")',
+      "    }",
       '    if externalRaceFile != "" {',
       '      result.Graph.Edges["src/mod0.ts"] = append(result.Graph.Edges["src/mod0.ts"], externalRaceFile)',
       "      addGraphInputProof(result.Graph, root, externalRaceFile, externalRaceText)",
@@ -1619,8 +3416,21 @@ function writeGoPlugin(root: string): void {
 }
 
 export {
+  createCacheProject,
+  projectModules,
   assertCacheHitsDespiteOutOfWalkOutputKey,
+  assertAppearingCandidateInvalidatesGeneration,
+  assertNotifiedAbsentCandidateIsNotReprobed,
+  assertOutOfProjectCandidateIsStillProbed,
+  assertRecreatedCandidateDirectoryInvalidatesGeneration,
+  assertRetargetedCandidateLinkInvalidatesGeneration,
+  assertUnwatchedAbsentCandidateIsStillProbed,
+  assertSynchronousMembershipChangeReachesTheNextDelivery,
   assertCacheTransformsMultiFileProjectOnce,
+  assertNonInputWriteDuringCompileKeepsGeneration,
+  assertUnprovenCandidatesKeepOneCompile,
+  assertUnprovenRealizedInputRefusesReuse,
+  assertCompleteValidationProvesEachInputOnce,
   assertCompileSnapshotRaceCannotAuthorizeStaleOutput,
   assertCompileSnapshotAbaRaceCannotAuthorizeStaleOutput,
   assertIndependentGraphLeafCompileSnapshotAbaRaceCannotAuthorizeStaleOutput,
@@ -1632,10 +3442,20 @@ export {
   assertHostExceptionTransformIsEvictedAndRecovers,
   assertIncompleteProjectSnapshotFallsBackAndRecovers,
   assertPersistentCacheValidatesAnUnservedModule,
+  assertFailedNotificationsFallBackToCompleteValidation,
+  assertOneFailedTrackerFallsBackToCompleteValidation,
+  assertPersistentValidationProvesSharedInputsOnce,
   assertPersistentValidationUsesPerFileInputs,
   assertRejectedTransformIsEvictedAndRecovers,
+  assertSameTickDerivedRewriteReplacesTheGeneration,
+  assertSameTickRewriteReplacesTheSnapshotGeneration,
+  assertSameTickUniversalRewriteReplacesTheGeneration,
+  assertSeparatedStampReEarnsItsSignature,
   assertSiblingDeliveriesDoNotReprobeGraph,
   assertStaleEvictionKeepsNewerGeneration,
   assertStaleMismatchUsesNewerGeneration,
   assertSupersededMatchingGenerationIsNotServed,
+  assertUnavailableNotificationsKeepThePersistentCache,
+  assertUnreadableGraphInputKeepsTheContentComparison,
+  assertUnreadableHostInputKeepsTheContentComparison,
 };

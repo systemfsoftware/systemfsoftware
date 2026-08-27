@@ -6,6 +6,7 @@
 
 export * from "./ITtscGraphApplication";
 export * from "./ITtscGraphDecorator";
+export * from "./ITtscGraphDocTag";
 export * from "./ITtscGraphDump";
 export * from "./ITtscGraphEdge";
 export * from "./ITtscGraphEvidence";
@@ -23,5 +24,6 @@ export * from "./ITtscGraphTour";
 export * from "./TtscGraphEdgeKind";
 export * from "./TtscGraphDumpEdgeKind";
 export * from "./TtscGraphDumpNodeKind";
+export * from "./TtscGraphArtifactNodeKind";
 export * from "./TtscGraphNodeKind";
 export * from "./TtscGraphNodeModifier";

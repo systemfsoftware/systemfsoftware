@@ -315,33 +315,50 @@ func (loader *typeScriptLoader) locateInstalledPackage(
   return path.Join("node_modules", name), nil
 }
 
-// resolveLinkedDirectory returns the directory a path ultimately names.
+// resolveLinkedDirectory returns the directory a path ultimately names, and
+// reports whether the chain ended inside the hops this rule follows.
 //
 // `filepath.EvalSymlinks` answers this for a POSIX symlink but not for a
 // Windows junction, which is exactly what pnpm creates for a workspace
 // dependency there: it returns the junction unchanged, so a caller that trusts
 // it walks the link and finds nothing. `os.Readlink` does report a junction's
 // target, and `os.Stat` sees through both, so ask those instead.
-func resolveLinkedDirectory(directory string) string {
+//
+// The second answer is what separates an exhausted chain from a resolved
+// directory, which are one string without it: a caller comparing paths against
+// a link that still names another link cannot tell that it holds one, and that
+// is how the leaf case of #1269 stayed silent until the caller was told.
+//
+// The bound counts links followed, not answers given. A chain that ends exactly
+// on the last hop this rule follows has landed on its directory with no
+// iteration left to look, and it is a chain the filesystem resolves: Linux and
+// Windows follow further, and Darwin stops at this same number, so the boundary
+// sits where the strictest platform's does rather than inside it. So the answer
+// costs one `os.Lstat` in that case and nothing at all in every other, since
+// every earlier ending is a return from inside the loop. Refusing it instead
+// would turn a root that works into an error at the boundary, which is what
+// this rule exists to keep from happening in the other direction.
+func resolveLinkedDirectory(directory string) (string, bool) {
   current := directory
   for range 32 {
     info, err := os.Lstat(current)
     if err != nil || info.IsDir() {
-      return current
+      return current, true
     }
     if target, err := os.Stat(current); err != nil || !target.IsDir() {
-      return current
+      return current, true
     }
     linked, err := os.Readlink(current)
     if err != nil {
-      return current
+      return current, true
     }
     if !filepath.IsAbs(linked) {
       linked = filepath.Join(filepath.Dir(current), linked)
     }
     current = filepath.ToSlash(linked)
   }
-  return current
+  info, err := os.Lstat(current)
+  return current, err == nil && info.IsDir()
 }
 
 // walk lists the project-relative TypeScript files below a directory.
@@ -357,7 +374,13 @@ func (loader *typeScriptLoader) walk(base string) ([]string, string) {
   // nothing, so walking the spelled path finds no files and the reference
   // looks empty rather than unresolvable. Walk what the link points at, and
   // report the files under the spelled path so addresses stay stable.
-  walked := resolveLinkedDirectory(root)
+  // The bound is not refused here. A package whose chain outruns the resolver
+  // walks a link and matches nothing, and the caller already reports that as
+  // an empty population rather than passing over it in silence — so what is
+  // owed there is a better cause, not a diagnostic that does not exist. A
+  // declared base has no such report behind it, which is why
+  // `resolvedBaseDirectory` does refuse.
+  walked, _ := resolveLinkedDirectory(root)
   found := []string{}
   problem := ""
   err := filepath.WalkDir(walked, func(current string, entry fs.DirEntry, err error) error {

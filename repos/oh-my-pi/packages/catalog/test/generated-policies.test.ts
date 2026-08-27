@@ -18,6 +18,7 @@ function createSpec<TApi extends Api>(overrides: {
 	priority?: number;
 	applyPatchToolType?: "freeform" | "function";
 	cost?: ModelSpec<TApi>["cost"];
+	compat?: ModelSpec<TApi>["compat"];
 	thinking?: ModelSpec<TApi>["thinking"];
 }): ModelSpec<TApi> {
 	return {
@@ -27,6 +28,7 @@ function createSpec<TApi extends Api>(overrides: {
 		provider: overrides.provider,
 		baseUrl: "https://example.com",
 		reasoning: overrides.reasoning ?? true,
+		compat: overrides.compat,
 		thinking: overrides.thinking,
 		input: ["text"],
 		cost: overrides.cost ?? { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -91,6 +93,59 @@ describe("generated model policies", () => {
 		expect(models[3]?.priority).toBe(1);
 	});
 
+	it("preserves OpenRouter's mandatory provider-authored effort ladder", () => {
+		const models: ModelSpec<Api>[] = [
+			createSpec({
+				id: "mandatory-model",
+				api: "openrouter",
+				provider: "openrouter",
+				thinking: {
+					mode: "effort",
+					efforts: [Effort.Low, Effort.High, Effort.Max],
+					defaultLevel: Effort.Max,
+					requiresEffort: true,
+				},
+			}),
+		];
+
+		applyGeneratedModelPolicies(models);
+
+		expect(models[0]?.thinking).toEqual({
+			mode: "effort",
+			efforts: [Effort.Low, Effort.High, Effort.Max],
+			defaultLevel: Effort.Max,
+			requiresEffort: true,
+		});
+	});
+
+	it("preserves generic chat-template provider-authored effort mappings", () => {
+		const thinking = {
+			mode: "effort" as const,
+			efforts: [Effort.Minimal, Effort.Low, Effort.Medium, Effort.High, Effort.XHigh, Effort.Max],
+			effortMap: {
+				[Effort.Minimal]: "low",
+				[Effort.Low]: "low",
+				[Effort.Medium]: "high",
+				[Effort.High]: "high",
+				[Effort.XHigh]: "max",
+				[Effort.Max]: "max",
+			},
+		};
+		const models: ModelSpec<Api>[] = [
+			createSpec({
+				id: "deepseek-flash-v4",
+				api: "openai-completions",
+				provider: "yolo-auto",
+				compat: { thinkingFormat: "chat-template", supportsReasoningEffort: true },
+				thinking,
+			}),
+		];
+
+		applyGeneratedModelPolicies(models);
+
+		expect(models[0]?.thinking).toEqual(thinking);
+	});
+
 	it("applies GPT-5.6 off and long-context pricing through request-model aliases", () => {
 		const models: ModelSpec<Api>[] = [
 			createSpec({ id: "gpt-5.6", api: "openai-responses", provider: "openai" }),
@@ -120,9 +175,9 @@ describe("generated model policies", () => {
 		expect(models[4]?.cost.longContext).toBeUndefined();
 	});
 
-	it("pins GPT-5.6 Codex-transport context window to the 372K hard capacity (#5705)", () => {
+	it("floors GPT-5.6 Codex-transport context windows at 1M (openai/codex#38917)", () => {
 		const models: ModelSpec<Api>[] = [
-			// Codex discovery underreports these via DEFAULT_CONTEXT_WINDOW=272000.
+			// Codex discovery/registry still reports the stale 272000 for these.
 			createSpec({
 				id: "gpt-5.6-luna",
 				api: "openai-codex-responses",
@@ -155,11 +210,26 @@ describe("generated model policies", () => {
 
 		applyGeneratedModelPolicies(models);
 
-		expect(models[0]?.contextWindow).toBe(372000);
-		expect(models[1]?.contextWindow).toBe(372000);
-		expect(models[2]?.contextWindow).toBe(372000);
+		expect(models[0]?.contextWindow).toBe(1_000_000);
+		expect(models[1]?.contextWindow).toBe(1_000_000);
+		expect(models[2]?.contextWindow).toBe(1_000_000);
 		expect(models[3]?.contextWindow).toBe(1050000);
 		expect(models[4]?.contextWindow).toBe(272000);
+	});
+
+	it("applies GPT-5.6 long-context pricing to Codex-transport SKUs (openai/codex#32486)", () => {
+		const models: ModelSpec<Api>[] = [
+			createSpec({ id: "gpt-5.6-sol", api: "openai-codex-responses", provider: "openai-codex" }),
+			createSpec({ id: "gpt-5.6-luna", api: "openai-codex-responses", provider: "openai-codex" }),
+			// Third-party carriers of the same id must not inherit the tier.
+			createSpec({ id: "gpt-5.6-sol", api: "openai-completions", provider: "openrouter" }),
+		];
+
+		applyGeneratedModelPolicies(models);
+
+		expect(models[0]?.cost.longContext).toMatchObject({ inputThreshold: 272_000, input: 10, output: 45 });
+		expect(models[1]?.cost.longContext).toMatchObject({ inputThreshold: 272_000, input: 0.4, output: 1.8 });
+		expect(models[2]?.cost.longContext).toBeUndefined();
 	});
 
 	it("pins Claude Mythos 5 first-party Anthropic catalog metadata", () => {
@@ -238,6 +308,40 @@ describe("generated model policies", () => {
 
 		expect(models[0]?.contextWindow).toBe(1_000_000);
 		expect(models[0]?.maxTokens).toBe(131_072);
+	});
+
+	it("pins zai glm-5.3 to 1M context and derives uniform low/high/max thinking with mandatory reasoning", () => {
+		const models = [
+			createSpec({
+				id: "glm-5.3",
+				api: "anthropic-messages",
+				provider: "zai",
+				contextWindow: 200_000,
+				maxTokens: 8192,
+			}),
+			createSpec({
+				id: "glm-5.3",
+				api: "openai-completions",
+				provider: "zhipu-coding-plan",
+				contextWindow: 200_000,
+				maxTokens: 8192,
+			}),
+		];
+
+		applyGeneratedModelPolicies(models);
+
+		// Context pinning — same 1M tier as glm-5.2 on both GLM coding-plan hosts.
+		for (const model of models) {
+			expect(model.contextWindow).toBe(1_000_000);
+			expect(model.maxTokens).toBe(131_072);
+			// Uniform wire-exact low/high/max ladder (NOT the host-specific
+			// high/max scale GLM-5.2 uses on zai/zhipu).
+			expect(model.thinking?.efforts).toEqual([Effort.Low, Effort.High, Effort.Max]);
+			// Thinking can no longer be disabled.
+			expect(model.thinking?.requiresEffort).toBe(true);
+			// Default effort is `max` per the GLM-5.3 API spec.
+			expect(model.thinking?.defaultLevel).toBe(Effort.Max);
+		}
 	});
 
 	it("pins MiniMax-M3 long-context providers to 1M context", () => {
@@ -357,11 +461,11 @@ describe("generated model policies", () => {
 		expect(models[0]?.compat?.supportsToolChoice).toBe(false);
 	});
 
-	it("sets OpenCode Go DeepSeek V4 tool-call request compat", () => {
-		const models: ModelSpec<"openai-completions">[] = [
+	it("sets OpenCode Go DeepSeek V4 tool-call request compat for both OpenAI APIs", () => {
+		const models: ModelSpec<Api>[] = [
 			createSpec({
 				id: "deepseek-v4-flash",
-				api: "openai-completions",
+				api: "openai-responses",
 				provider: "opencode-go",
 			}),
 			createSpec({
@@ -466,6 +570,43 @@ describe("generated model policies", () => {
 		expect(models[1]?.applyPatchToolType).toBe("freeform");
 		expect(models[2]?.applyPatchToolType).toBeUndefined();
 		expect(models[3]?.applyPatchToolType).toBeUndefined();
+	});
+
+	it("strips paid xAI Responses effort dials for off-allowlist reasoners", () => {
+		const models: ModelSpec<"openai-responses">[] = [
+			createSpec({
+				id: "grok-code-fast-1",
+				api: "openai-responses",
+				provider: "xai",
+				thinking: { mode: "effort", efforts: [Effort.Minimal, Effort.Low, Effort.Medium, Effort.High] },
+			}),
+			createSpec({
+				id: "grok-4.5",
+				api: "openai-responses",
+				provider: "xai",
+				thinking: { mode: "effort", efforts: [Effort.Minimal, Effort.Low, Effort.Medium, Effort.High] },
+			}),
+			createSpec({
+				id: "grok-code-fast-1",
+				api: "openai-responses",
+				provider: "openrouter",
+				thinking: { mode: "effort", efforts: [Effort.Minimal, Effort.Low, Effort.Medium, Effort.High] },
+			}),
+		];
+
+		applyGeneratedModelPolicies(models);
+
+		expect(models[0]?.thinking).toBeUndefined();
+		expect(models[0]?.compat).toMatchObject({
+			supportsReasoningEffort: false,
+			omitReasoningEffort: true,
+		});
+		expect(models[0]?.compat).not.toHaveProperty("reasoningEffortMap");
+		expect(models[1]?.thinking?.efforts).toEqual([Effort.Minimal, Effort.Low, Effort.Medium, Effort.High]);
+		expect(models[1]?.compat?.supportsReasoningEffort).toBe(true);
+		// Non-xAI hosts are outside this policy — no baked no-dial compat.
+		expect(models[2]?.thinking).toBeDefined();
+		expect(models[2]?.compat?.supportsReasoningEffort).toBeUndefined();
 	});
 });
 

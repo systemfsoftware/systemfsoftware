@@ -144,8 +144,8 @@ style: |
   .narrative-node.scenarios,
   .narrative-node.storylines,
   .narrative-node.manuscripts { position: absolute; width: 25%; }
-  .narrative-node.scenarios { left: 41%; top: 25px; }
-  .narrative-node.storylines { left: 41%; top: 181px; }
+  .narrative-node.scenarios { left: 41%; top: 181px; }
+  .narrative-node.storylines { left: 41%; top: 25px; }
   .narrative-node.manuscripts { left: 72%; top: 316px; }
   .narrative-edge {
     position: absolute;
@@ -169,15 +169,14 @@ style: |
     border-right: 12px solid currentColor;
     border-bottom: 7px solid transparent;
   }
-  .narrative-edge.scenarios-foundations { top: 67px; }
-  .narrative-edge.storylines-foundations { top: 223px; }
+  .narrative-edge.scenarios-foundations { top: 223px; }
+  .narrative-edge.storylines-foundations { top: 67px; }
   .narrative-edge.storylines-scenarios {
     left: 53.5%;
     top: 109px;
     height: 72px;
     border-left: 3px solid currentColor;
   }
-  .narrative-edge.storylines-scenarios::after,
   .narrative-edge.manuscripts-foundations::after {
     content: "";
     position: absolute;
@@ -185,6 +184,15 @@ style: |
     left: -8px;
     border-right: 7px solid transparent;
     border-bottom: 12px solid currentColor;
+    border-left: 7px solid transparent;
+  }
+  .narrative-edge.storylines-scenarios::after {
+    content: "";
+    position: absolute;
+    bottom: -1px;
+    left: -8px;
+    border-top: 12px solid currentColor;
+    border-right: 7px solid transparent;
     border-left: 7px solid transparent;
   }
   .narrative-edge.settings-principles {
@@ -209,13 +217,13 @@ style: |
   }
   .narrative-edge.manuscripts-scenarios {
     left: 66%;
-    top: 67px;
+    top: 223px;
     width: 18.5%;
     border-top: 3px solid currentColor;
   }
   .narrative-edge.manuscripts-storylines {
     left: 66%;
-    top: 223px;
+    top: 67px;
     width: 18.5%;
     border-top: 3px solid currentColor;
   }
@@ -334,13 +342,19 @@ style: |
     border-left: 3px solid currentColor;
   }
   .document-foundations { left: 30%; }
-  .document-node.meeting { left: 0; top: 35px; width: 22%; }
+  .document-node.idea { left: 0; top: 35px; width: 22%; }
   .document-node.implementation { left: 70%; top: 35px; width: 22%; }
   .document-node.test { left: 70%; top: 197px; width: 22%; }
-  .document-edge.requirements-meeting { left: 22%; top: 71px; width: 9.3%; }
+  .document-edge.requirements-idea { left: 22%; top: 71px; width: 9.3%; }
   .document-edge.implementation-foundations { left: 61%; top: 71px; width: 9%; }
   .document-edge.test-implementation { left: 81%; top: 107px; height: 90px; }
   .document-edge.test-foundations { left: 61%; top: 233px; width: 9%; }
+  .document-graph.requirements-only .document-foundations { left: 12%; }
+  .document-graph.requirements-only .document-node.implementation { left: 66%; }
+  .document-graph.requirements-only .document-node.test { left: 66%; }
+  .document-graph.requirements-only .document-edge.implementation-foundations { left: 43%; width: 23%; }
+  .document-graph.requirements-only .document-edge.test-implementation { left: 77%; }
+  .document-graph.requirements-only .document-edge.test-foundations { left: 43%; width: 23%; }
   .backend-graph .architecture-foundations,
   .frontend-graph .architecture-foundations { top: 55px; }
   .backend-node.database { left: 40%; top: 70px; width: 22%; }
@@ -391,7 +405,53 @@ style: |
   .card .note { font-size: 28px; }
   .card.warm { border-top-color: #f08a24; }
   .card.warm b { color: #b35c00; }
-  .problem-measures { display: flex; flex-direction: column; gap: 12px; width: 94%; margin: 12px auto 0; }
+
+  /* Review checklist */
+  section.review-checklist table {
+    display: table;
+    width: 100%;
+    max-width: none;
+    margin-right: 0;
+    margin-left: 0;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0 10px;
+    font-size: 29px;
+  }
+  section.review-checklist th,
+  section.review-checklist td {
+    box-sizing: border-box;
+    padding: 14px 20px;
+    border: 0;
+    white-space: nowrap;
+  }
+  section.review-checklist th:first-child,
+  section.review-checklist td:first-child { width: 33.333%; }
+  section.review-checklist th:nth-child(2),
+  section.review-checklist td:nth-child(2) { width: 33.333%; }
+  section.review-checklist th:nth-child(3),
+  section.review-checklist td:nth-child(3) { width: 33.334%; }
+  section.review-checklist th {
+    background: #14284b;
+    color: #ffffff;
+    font-weight: 700;
+  }
+  section.review-checklist th:first-child { border-radius: 10px 0 0 10px; }
+  section.review-checklist th:last-child { border-radius: 0 10px 10px 0; }
+  section.review-checklist td {
+    color: #14161a;
+    font-weight: 400;
+  }
+  section.review-checklist td:first-child {
+    border-radius: 10px 0 0 10px;
+  }
+  section.review-checklist td:last-child {
+    border-radius: 0 10px 10px 0;
+  }
+  section.review-checklist td:first-child { background: #eef2f7; }
+  section.review-checklist td:nth-child(2) { background: #dce8f6; }
+  section.review-checklist td:nth-child(3) { background: #c5d9f0; }
+  .problem-measures { display: flex; flex-direction: column; gap: 12px; width: 94%; margin: 4px auto 0; }
   .problem-measure-title { margin-bottom: 8px; font-size: 32px; font-weight: 700; }
   .problem-bar {
     display: flex;
@@ -409,7 +469,16 @@ style: |
   .problem-legend i { display: inline-block; width: 20px; height: 20px; margin-right: 8px; border-radius: 4px; }
   .problem-legend .build { background: #14284b; }
   .problem-legend .review { background: #9bb4d2; }
-  .problem-context { margin-top: 16px; color: #5b6674; font-size: 28px; text-align: center; }
+  .problem-spend {
+    display: flex;
+    justify-content: center;
+    gap: 60px;
+    margin-top: 14px;
+    color: #5b6674;
+    font-size: 28px;
+  }
+  .problem-spend b { margin-right: 8px; color: #14284b; font-size: 34px; }
+  .problem-context { margin-top: 10px; color: #5b6674; font-size: 28px; text-align: center; }
 
   /* Bars */
   .track {
@@ -463,6 +532,29 @@ style: |
   .b75 { width: 7.5%; }
   .kp { color: #4a76b8; font-weight: 700; }
   .ke { color: #b35c00; font-weight: 700; }
+
+  /* Meme slides */
+  section.meme {
+    padding: 24px;
+    text-align: center;
+  }
+  section.meme p { margin: 0; }
+  section.meme img {
+    display: block;
+    box-sizing: border-box;
+    width: 672px;
+    height: 672px;
+    margin: 0 auto;
+    border: 2px solid #e6eaf0;
+    border-radius: 12px;
+  }
+
+  /* Citation code blocks */
+  section.cite-code pre { font-size: 23px; }
+
+  /* Evidence-backed lists */
+  section.stat-list li { font-size: 36px; margin-bottom: 14px; }
+  section.stat-list blockquote { font-size: 30px; }
 ---
 
 <!-- _class: dark -->
@@ -482,12 +574,14 @@ style: |
 <div class="opening-summary">
 
 - **Evidence Graph, a compiler harness**
-  - No loop until dry required
+  - No Loop Engineering required
   - `@evidence <target> <reason>`
+  - `@evidenceReview <target> <reason>`
   - `@evidenceExclude <target> <reason>`
 - **Spec Driven Development**
   - Write and review only the requirements
   - AI builds everything with 100% coverage
+  - Applies to programming, documents, and literature
 
 </div>
 <div class="benchmark-graphs">
@@ -507,26 +601,66 @@ style: |
 
 ---
 
+<!-- _class: meme -->
+
+![Asked whether every requirement was met, a human explains while the compiler stops the build](https://ttsc.dev/evidence/meme-coverage.svg)
+
+---
+
+<!-- _class: meme -->
+
+![Asked whether the rule document was read, a human reads it out again while the compiler asks at every file](https://ttsc.dev/evidence/meme-checklist.svg)
+
+---
+
 <!-- _class: divider -->
 
-# Current Limitation
+# Current Limitations
 
-<span class="note">Loop Until Dry</span>
+<span class="note">Why we all ended up looping</span>
+
+---
+
+<!-- _class: stat-list -->
+
+# Saying yes is not doing it
+
+- Six frontier models: **0/60** actual process compliance under default framing
+- Verbal compliance in the same runs exceeded **90%**
+- At 8 constraints: about 41% passed individually, only **5.7% passed all eight**
+- The strongest model fell below **50%** whole-response success at 7 constraints
+
+<span class="note">Measured with tool logs and deterministic verifiers ([2605.01771](https://arxiv.org/abs/2605.01771)) ([2608.12426](https://arxiv.org/abs/2608.12426))</span>
+
+---
+
+<!-- _class: stat-list -->
+
+# Split specs and long runs both degrade
+
+- Split across about 60 requests, single-shot was more faithful on **16/20** papers for Claude Code and **14/20** for Codex
+- Of 15 agents on 36 iterative problems, none finished one end-to-end; best strict rate: **14.8%**
+- Structural erosion rose in <strong>77%</strong> of trajectories; verbosity in **75.5%**
+- Versus 473 open-source Python repositories: **2.3× more verbose, 2× more eroded**
+
+<span class="note">Two 2026 coding-agent benchmarks ([2603.17104](https://arxiv.org/abs/2603.17104)) ([2603.24755](https://arxiv.org/abs/2603.24755))</span>
 
 ---
 
 <!-- _class: loop-slide -->
 
-# Loop Until Dry restarts the full review
+# So we built Loop Engineering
 
-- Read everything from the beginning
-- Fix every finding
-- Restart from the beginning
-- Stop only after an empty round
+- A claim of done proves nothing → **read it all again**
+- Omissions show only when you look → **fix every finding**
+- One fix breaks another → **restart from the top**
+- Nothing else says done → **stop after an empty round**
+
+> Also called Loop Until Dry. It is the state of the art, and it works.
 
 ---
 
-# ERP Plain: 90% review · 51.6% coverage
+# ERP Loop Engineering
 
 <div class="problem-measures">
 <div>
@@ -538,6 +672,11 @@ style: |
 <div class="problem-bar"><div class="problem-build">10%</div><div class="problem-review">90%</div></div>
 <div class="problem-legend"><span><i class="build"></i>Initial development</span><span><i class="review"></i>Review loops</span></div>
 </div>
+</div>
+
+<div class="problem-spend">
+<span><b>102h</b>work time</span>
+<span><b>5,449M</b>tokens</span>
 </div>
 
 <div class="problem-context">ERP · 100+ tables · 150K+ LoC</div>
@@ -557,7 +696,7 @@ style: |
 # First, divide the artifacts into layers
 
 <div class="document-graph">
-<div class="architecture-node document-node meeting">Meeting notes</div>
+<div class="architecture-node document-node idea">Idea notes</div>
 <div class="architecture-foundations document-foundations">
 <div class="architecture-node">Requirements</div>
 <div class="architecture-edge vertical arrow-up specifications-requirements"></div>
@@ -565,7 +704,7 @@ style: |
 </div>
 <div class="architecture-node document-node implementation">Implementation</div>
 <div class="architecture-node document-node test">Test</div>
-<div class="architecture-edge horizontal arrow-left document-edge requirements-meeting"></div>
+<div class="architecture-edge horizontal arrow-left document-edge requirements-idea"></div>
 <div class="architecture-edge horizontal arrow-left document-edge implementation-foundations"></div>
 <div class="architecture-edge vertical arrow-up document-edge test-implementation"></div>
 <div class="architecture-edge horizontal arrow-left document-edge test-foundations"></div>
@@ -575,11 +714,37 @@ style: |
 
 ---
 
+# One rule declares the relationship
+
+```ts
+type: "typescript",
+files: ["src/components/**/*.tsx"], // sources
+symbol: "function",
+reference: {
+  type: "markdown",
+  files: ["docs/specifications/*.md"], // targets
+  symbol: ["h2", "h3"],
+},
+```
+
+**Components implement specifications.**
+
+---
+
+# One grammar covers four artifact types
+
+- **Markdown**: file, H1-H4 section
+- **Prisma**: database model, columns, relation
+- **TypeScript**: type, function, property
+- **Swagger**: each operation under `paths`
+
+---
+
 # Code cites the specification
 
 ```tsx
 /**
- * @evidence docs/discount.md#coupon-stacking
+ * @evidence docs/specifications/discount.md#coupon-stacking
  *           Explains the stacking limit defined by this section.
  * @evidence POST:/orders/{orderId}/coupons
  *           Explains the rejection response from this endpoint.
@@ -596,12 +761,124 @@ export function CouponStackingNotice(props: IProps): JSX.Element;
 ```bash
 $ npx ttsc
 error TS16411: [evidence/graph]
-  Missing acknowledgement for 'docs/discount.md#coupon-stacking'
-  (Markdown H2 'Coupon Stacking' at docs/discount.md:3)
+  Missing acknowledgement for
+  'docs/specifications/discount.md#coupon-stacking'
+  (Markdown H2 'Coupon Stacking' at docs/specifications/discount.md:3)
 ```
 
 - One error per requirement → **the error list is the task list**
 - It runs alongside type errors in the same build
+
+---
+
+# 100% coverage can include false citations
+
+```ts
+/**
+ * @evidence docs/specifications/discount.md#coupon-stacking
+ *           Explains the per-issuer limit.
+ */
+export function CouponStackingNotice(props: IProps): JSX.Element;
+```
+
+- Inexpensive models **sometimes write facts that do not exist**
+- A false tag removes the error, **not the problem**
+
+<span class="note">Citations make the false claim detectable: 86-88%, no false positives ([2606.30689](https://arxiv.org/abs/2606.30689)).</span>
+
+---
+
+<!-- _class: cite-code -->
+
+# Review only citation truth
+
+```ts
+/**
+ * @evidence docs/specifications/discount.md#coupon-stacking
+ *           Explains the per-issuer limit.
+ * @evidenceReview docs/specifications/discount.md#coupon-stacking
+ *                 #a1b2c3d4e5f6 Verified against policy section 3.
+ */
+export function CouponStackingNotice(props: IProps): JSX.Element;
+```
+
+- Reviews match the **same declaration and target**
+- The fingerprint expires when the cited content changes
+
+<span class="note">Even Luna reduced false citations to zero in one review pass.</span>
+
+---
+
+<!-- _class: review-checklist -->
+
+# The tag list is the review checklist
+
+| Review    | Plain               | Evidence              |
+| --------- | ------------------- | --------------------- |
+| Target    | Everything          | Citation truth        |
+| Loop      | Restart every round | Follow the tag list   |
+| Omissions | Search manually     | Compiler reports them |
+
+> **The compiler catches omissions. Review catches falsehoods.**
+
+---
+
+<!-- _class: divider -->
+
+# Benchmark
+
+<span class="note">Same inputs · engine · model · Plugin only</span>
+
+---
+
+# Coverage: 51.6–85.5% → 100%
+
+| Subject | Plain | Evidence |
+| --- | --- | --- |
+| todo | 85.5% <span class="track"><i class="w855"></i></span> | 100% <span class="track on"><i class="w100"></i></span> |
+| reddit | 80.3% <span class="track"><i class="w803"></i></span> | 100% <span class="track on"><i class="w100"></i></span> |
+| shopping | 63.1% <span class="track"><i class="w631"></i></span> | 100% <span class="track on"><i class="w100"></i></span> |
+| erp | 51.6% <span class="track"><i class="w516"></i></span> | 100% <span class="track on"><i class="w100"></i></span> |
+
+Plain coverage falls with scope. **Evidence remains at 100%.**
+
+---
+
+# Token usage: 4.8–13.3× lower
+
+<div class="rows">
+<div class="row"><span class="lbl">todo</span><span class="bars"><i class="p b159"></i><i class="e b17"></i></span><span class="val">866M → 92M</span></div>
+<div class="row"><span class="lbl">reddit</span><span class="bars"><i class="p b216"></i><i class="e b45"></i></span><span class="val">1,179M → 245M</span></div>
+<div class="row"><span class="lbl">shopping</span><span class="bars"><i class="p b278"></i><i class="e b50"></i></span><span class="val">1,516M → 271M</span></div>
+<div class="row"><span class="lbl">erp</span><span class="bars"><i class="p b1000"></i><i class="e b75"></i></span><span class="val">5,449M → 411M</span></div>
+</div>
+
+<span class="kp">Plain</span> in blue. <span class="ke">Evidence</span> in orange.
+
+<span class="note">Original charts by phase: [https://ttsc.dev/docs/benchmark/evidence](https://ttsc.dev/docs/benchmark/evidence)</span>
+
+---
+
+# ERP: 100% coverage · $4.96 · 14h
+
+<div class="cards">
+<div class="card"><b>13.3×</b>fewer tokens<br/><span class="note">5,449M → 411M</span></div>
+<div class="card"><b>13.9×</b>lower cost<br/><span class="note">$68.72 → $4.96</span></div>
+<div class="card warm"><b>7.5×</b>less time<br/><span class="note">102h → 14h</span></div>
+</div>
+
+---
+
+# Review: 90–95% → 15–41% of tokens
+
+| Subject | Plain | Evidence |
+| --- | --- | --- |
+| todo | <span class="split"><i class="d97"></i><i class="rev"></i></span> Review 90% | <span class="split on"><i class="d720"></i><i class="rev"></i></span> Review 28% |
+| reddit | <span class="split"><i class="d54"></i><i class="rev"></i></span> Review 95% | <span class="split on"><i class="d808"></i><i class="rev"></i></span> Review 19% |
+| shopping | <span class="split"><i class="d47"></i><i class="rev"></i></span> Review 95% | <span class="split on"><i class="d586"></i><i class="rev"></i></span> Review 41% |
+| erp | <span class="split"><i class="d105"></i><i class="rev"></i></span> Review 90% | <span class="split on"><i class="d846"></i><i class="rev"></i></span> Review 15% |
+
+<span class="note">Dark is development. Light is review. Each cell represents 100% of its tokens.</span>
 
 ---
 
@@ -613,20 +890,64 @@ error TS16411: [evidence/graph]
 
 ---
 
+<!-- _class: architecture-slide -->
+
+# Method A starts from requirements
+
+<div class="document-graph requirements-only">
+<div class="architecture-foundations document-foundations">
+<div class="architecture-node">Requirements</div>
+<div class="architecture-edge vertical arrow-up specifications-requirements"></div>
+<div class="architecture-node">Specifications</div>
+</div>
+<div class="architecture-node document-node implementation">Implementation</div>
+<div class="architecture-node document-node test">Test</div>
+<div class="architecture-edge horizontal arrow-left document-edge implementation-foundations"></div>
+<div class="architecture-edge vertical arrow-up document-edge test-implementation"></div>
+<div class="architecture-edge horizontal arrow-left document-edge test-foundations"></div>
+</div>
+
+<p class="architecture-caption">Requirements are the source layer.</p>
+
+---
+
 # Method A: Humans write the requirements
 
 - Humans **review `docs/requirements` directly**
 - Specifications, implementation, and tests are **fully delegated**
 
-> The four benchmark subjects use this method as well.
+> The four subjects you just saw all used this method.
+
+---
+
+<!-- _class: architecture-slide -->
+
+# Method B starts from idea notes
+
+<div class="document-graph">
+<div class="architecture-node document-node idea">Idea notes</div>
+<div class="architecture-foundations document-foundations">
+<div class="architecture-node">Requirements</div>
+<div class="architecture-edge vertical arrow-up specifications-requirements"></div>
+<div class="architecture-node">Specifications</div>
+</div>
+<div class="architecture-node document-node implementation">Implementation</div>
+<div class="architecture-node document-node test">Test</div>
+<div class="architecture-edge horizontal arrow-left document-edge requirements-idea"></div>
+<div class="architecture-edge horizontal arrow-left document-edge implementation-foundations"></div>
+<div class="architecture-edge vertical arrow-up document-edge test-implementation"></div>
+<div class="architecture-edge horizontal arrow-left document-edge test-foundations"></div>
+</div>
+
+<p class="architecture-caption">Idea notes are the source layer.</p>
 
 ---
 
 # Method B: Delegate the requirements, too
 
-- Hand over meeting notes and idea notes **as-is, without organizing them**
+- Hand over idea notes **as-is, without organizing them**
 - **Delegate everything**, starting with writing the requirements
-- If anything decided in the meeting is omitted, **the build breaks immediately**
+- If anything in the idea notes is omitted, **the build breaks immediately**
 
 > Humans provide one source layer.<br/>The graph protects everything below it.
 
@@ -637,64 +958,13 @@ error TS16411: [evidence/graph]
 ```md
 ## Coupon stacking limit {#coupon-stacking}
 
-<!-- @evidence docs/meetings/2026-01-12.md#discount-policy
-     Carries over the per-issuer limit agreed upon in that meeting. -->
+<!-- @evidence docs/ideas/discount.md#discount-policy
+     Carries over the per-issuer limit recorded in the idea notes. -->
 ```
 
-- If anything decided in the meeting **is missing from the requirements, the build breaks**
-- Idea notes, interview records, and existing internal documents occupy the same layer
-- Citations are HTML comments, so **the rendered document stays clean**
-
----
-
-# One rule declares the relationship
-
-```ts
-type: "typescript",
-files: ["src/components/**/*.tsx"], // sources
-symbol: "function",
-reference: {
-  type: "markdown",
-  files: ["docs/**/*.md"], // targets
-  symbol: ["h2", "h3"],
-},
-```
-
-**Components implement documents. Therefore, every H2 and H3 must be cited.**
-
----
-
-# One grammar covers four artifact types
-
-| Kind       | Unit                         |
-| ---------- | ---------------------------- |
-| Markdown   | file, H1-H4 section          |
-| Prisma     | model, column, relation      |
-| TypeScript | type, function, property     |
-| Swagger    | each operation under `paths` |
-
----
-
-# The compiler determines 100%
-
-<div class="cards">
-<div class="card"><b>Denominator</b>The configuration declares it</div>
-<div class="card"><b>Numerator</b>Tags record it</div>
-<div class="card warm"><b>Decision</b>The compiler makes it every time</div>
-</div>
-
----
-
-# It closes mechanical loopholes
-
-| Option | What it prevents |
-| --- | --- |
-| `noEvidenceExclude` | Escaping with "not applicable" |
-| `uniqueEvidence` | Multiple places passing responsibility to one another |
-| `singleEvidencePerSymbol` | Piling every citation onto one place |
-| `requireReview` | Letting the specification change after it was cited |
-
-<span class="note">An exclusion requires a reason, and a review carries a fingerprint of the document content.</span>
+- Missing idea-note coverage **breaks the requirements build**
+- Idea notes, interviews, and internal documents share one layer
+- Citations are comments, so **the rendered document stays clean**
 
 ---
 
@@ -759,91 +1029,62 @@ reference: {
 
 ---
 
-<!-- _class: divider -->
+# Method D: Hand over principles only
 
-# Benchmark
+- The project already exists, so **a full document hierarchy is hard to introduce**
+- You want to **develop directly** instead of delegating requirements and specifications
+- You are not ready to design the whole graph yet
 
-<span class="note">Same requirements · Same engine · Same model · Only the plugin changed</span>
-
----
-
-# Coverage: 51.6–85.5% → 100%
-
-| Subject | Plain | Evidence |
-| --- | --- | --- |
-| todo | 85.5% <span class="track"><i class="w855"></i></span> | 100% <span class="track on"><i class="w100"></i></span> |
-| reddit | 80.3% <span class="track"><i class="w803"></i></span> | 100% <span class="track on"><i class="w100"></i></span> |
-| shopping | 63.1% <span class="track"><i class="w631"></i></span> | 100% <span class="track on"><i class="w100"></i></span> |
-| erp | 51.6% <span class="track"><i class="w516"></i></span> | 100% <span class="track on"><i class="w100"></i></span> |
-
-Plain coverage falls with scope. **Evidence remains at 100%.**
+> Start with one `docs/principles.md` and one claim.
 
 ---
 
-# Token usage: 4.8–13.3× lower
+# Every principle must be followed
 
-<div class="rows">
-<div class="row"><span class="lbl">todo</span><span class="bars"><i class="p b159"></i><i class="e b17"></i></span><span class="val">866M → 92M</span></div>
-<div class="row"><span class="lbl">reddit</span><span class="bars"><i class="p b216"></i><i class="e b45"></i></span><span class="val">1,179M → 245M</span></div>
-<div class="row"><span class="lbl">shopping</span><span class="bars"><i class="p b278"></i><i class="e b50"></i></span><span class="val">1,516M → 271M</span></div>
-<div class="row"><span class="lbl">erp</span><span class="bars"><i class="p b1000"></i><i class="e b75"></i></span><span class="val">5,449M → 411M</span></div>
-</div>
+```md
+## Do not hardcode {#no-hardcoding}
+Derive behavior from inputs and models. Never special-case a fixture.
 
-<span class="kp">Plain</span> in blue. <span class="ke">Evidence</span> in orange.
+## Do not monkey patch {#no-monkey-patching}
+Use public extension points. Never replace prototypes or module state.
 
-<span class="note">Original charts by phase: [https://ttsc.dev/docs/benchmark/evidence](https://ttsc.dev/docs/benchmark/evidence)</span>
+## Use the conventional solution {#conventional-solution}
+Avoid unmeasured optimization. Prefer standard structures and clear algorithms.
 
----
-
-# ERP: 100% coverage · $4.96 · 14h
-
-<div class="cards">
-<div class="card"><b>13.3×</b>fewer tokens<br/><span class="note">5,449M → 411M</span></div>
-<div class="card"><b>13.9×</b>lower cost<br/><span class="note">$68.72 → $4.96</span></div>
-<div class="card warm"><b>7.5×</b>less time<br/><span class="note">102h → 14h</span></div>
-</div>
+## Fix the root cause {#fix-the-root-cause}
+Do not route around one visible failure. Trace the cause and solve the whole class.
+```
 
 ---
 
-# Review: 90–95% → 15–41% of tokens
+# Every function answers every rule
 
-| Subject | Plain | Evidence |
-| --- | --- | --- |
-| todo | <span class="split"><i class="d97"></i><i class="rev"></i></span> Review 90% | <span class="split on"><i class="d720"></i><i class="rev"></i></span> Review 28% |
-| reddit | <span class="split"><i class="d54"></i><i class="rev"></i></span> Review 95% | <span class="split on"><i class="d808"></i><i class="rev"></i></span> Review 19% |
-| shopping | <span class="split"><i class="d47"></i><i class="rev"></i></span> Review 95% | <span class="split on"><i class="d586"></i><i class="rev"></i></span> Review 41% |
-| erp | <span class="split"><i class="d105"></i><i class="rev"></i></span> Review 90% | <span class="split on"><i class="d846"></i><i class="rev"></i></span> Review 15% |
+- Each selected function checks **every H2 rule**
+- Every answer records **how and why** the rule was followed
+- "Not applicable" can be closed as an escape hatch
+- One missing answer becomes **a compile error**
 
-<span class="note">Dark is development. Light is review. Each cell represents 100% of its tokens.</span>
+> Add one rule, and every function immediately gains one obligation.
 
 ---
 
-# 100% coverage can include false citations
+# Every answer explains how
 
 ```ts
 /**
- * @evidence docs/discount.md#coupon-stacking Explains the per-issuer limit.
- * @evidenceReview docs/discount.md#coupon-stacking #a1b2c3d4e5f6
- *                 Verified that the screen copy matches the limit in policy section 3.
+ * @evidence docs/principles.md#no-hardcoding
+ *   Builds the lookup from registered handlers, with no case-specific branch.
+ * @evidence docs/principles.md#no-monkey-patching
+ *   Uses the public adapter without replacing prototypes or module state.
+ * @evidence docs/principles.md#conventional-solution
+ *   Uses a standard Map and linear pass, with no speculative index or cache.
+ * @evidence docs/principles.md#fix-the-root-cause
+ *   Rejects invalid names at registration instead of retrying failed lookups.
  */
+export function resolveHandler(name: string): Handler;
 ```
 
-- Inexpensive models **sometimes write facts that do not exist**
-- Requiring fingerprinted reviews makes this **converge toward zero**<br/>but takes more time
-
-> A false tag removes the error, not the problem.
-
----
-
-# Human review checks citation truth
-
-|  | Plain | Evidence |
-| --- | --- | --- |
-| What to inspect | All code, documents, and tests | The truthfulness of citations |
-| Scope | Start over in every round | The tag list is the checklist |
-| What is missing | Humans and AI must search to find out | The compiler has already reported it |
-
-**The compiler handles "omissions"; humans handle "falsehoods."**
+Both the target and a non-empty reason are required. Miss one and the build breaks.
 
 ---
 
@@ -852,9 +1093,9 @@ Plain coverage falls with scope. **Evidence remains at 100%.**
 # Summary
 
 - Missing specification coverage becomes **a compile error**
-- Requirements are **the handoff**
+- Requirements are **the handoff**, and a principles list is enough to start
 - Coverage rises from **51.6–85.5% to 100%**
-- Human review checks **citation truth**
+- Review checks **the truth of the evidence**
 
 ---
 
@@ -866,13 +1107,56 @@ Plain coverage falls with scope. **Evidence remains at 100%.**
 
 ---
 
+<!-- _class: stat-list -->
+
+# Fluency is not authorship
+
+- **Flattening**: competent prose that no one could have signed
+- **Softened conflict**: the antagonist apologizes a paragraph later
+- **Translationese**: borrowed syntax, misplaced honorifics
+
+<span class="note">Studio case: every cool character got silver hair, every genre got the same moral ending.</span>
+
+---
+
+<!-- _class: stat-list -->
+
+# The failure is measured, not just felt
+
+- Training smooths out theme, emotion, and voice
+- Literary fiction loses **the most**
+- Contradictions grow **steadily** with length
+- Facts slip early (**15-30%**), contradictions late (**40-60%**)
+
+<span class="note">Narrative Flattening ([2605.27878](https://arxiv.org/abs/2605.27878)) · ConStory-Bench ([site](https://picrew.github.io/constory-bench.github.io/))</span>
+
+---
+
+<!-- _class: stat-list -->
+
 # A fluent scene can still be false
 
 - **Memory**: uses facts the character never learned
 - **Invention**: breaks history, geography, or motive
+- **Contradiction**: negates a number, a date, or a trait set earlier
 - **Revision**: keeps scenes invalidated by an earlier edit
+- **Amnesia**: 350 settings, and no way to tell which went unused
 
 > Long-form failure is global, not local.
+
+---
+
+<!-- _class: stat-list -->
+
+# Here the loop makes it worse
+
+- Every pass pulls the text toward **the model's own average**
+- Style and fluency rise, **accuracy barely moves**
+- Voice normalizes each time, and **prompts cannot stop it**
+
+> More rounds buy polish, not truth.
+
+<span class="note">Two 2026 revision studies ([2605.13368](https://arxiv.org/abs/2605.13368)) ([2604.22142](https://arxiv.org/abs/2604.22142))</span>
 
 ---
 
@@ -884,8 +1168,8 @@ Plain coverage falls with scope. **Evidence remains at 100%.**
 <div class="narrative-edge settings-principles"></div>
 <div class="narrative-node settings">Settings</div>
 </div>
-<div class="narrative-node scenarios">Scenarios</div>
 <div class="narrative-node storylines">Storylines</div>
+<div class="narrative-node scenarios">Scenarios</div>
 <div class="narrative-node manuscripts">Manuscripts</div>
 <div class="narrative-edge to-foundations scenarios-foundations"></div>
 <div class="narrative-edge to-foundations storylines-foundations"></div>
@@ -924,16 +1208,52 @@ Plain coverage falls with scope. **Evidence remains at 100%.**
 - **Causality**: clues, motives, consequences
 - **Continuity**: knowledge, arcs, revisions
 - Historical fiction, fantasy, science fiction, mystery, drama
-- **Napoleon**: one example with 25 principles, 350 settings commitments, and 742 scenes
+- **Napoleon**: 25 principles, 350 setting commitments, 742 scenes
 
 ---
 
 <!-- _class: dark -->
 <!-- _paginate: false -->
 
+# References: `@ttsc/evidence`
+
+- https://github.com/samchon/ttsc
+  - https://ttsc.dev/docs/evidence
+  - https://ttsc.dev/docs/benchmark/evidence
+- https://github.com/samchon/evidence-benchmark-results
+
+---
+
+<!-- _class: dark -->
+<!-- _paginate: false -->
+
+# References: Coding Agents
+
+- Faithfulness drops when the spec arrives in pieces ([2603.17104](https://arxiv.org/abs/2603.17104))
+- Agents erode their own code over long horizons ([2603.24755](https://arxiv.org/abs/2603.24755))
+- Process instructions agreed to, then bypassed ([2605.01771](https://arxiv.org/abs/2605.01771))
+- Citations make hallucinated requirements detectable ([2606.30689](https://arxiv.org/abs/2606.30689))
+- Specifications as the primary artifact ([2602.00180](https://arxiv.org/abs/2602.00180))
+
+---
+
+<!-- _class: dark -->
+<!-- _paginate: false -->
+
+# References: Long-form Narrative
+
+- Post-training flattens theme, affect, and style ([2605.27878](https://arxiv.org/abs/2605.27878))
+- Narrative tension measured by forecasting ([2604.09854](https://arxiv.org/abs/2604.09854))
+- Consistency bugs scale with story length ([ConStory-Bench](https://picrew.github.io/constory-bench.github.io/))
+- Revision improves style, not accuracy ([2605.13368](https://arxiv.org/abs/2605.13368))
+- Rewriting normalizes personal voice ([2604.22142](https://arxiv.org/abs/2604.22142))
+- Korean honorifics in automatic translation ([LREC 2026](https://lrec.elra.info/lrec2026-ws-iaai-03))
+
+---
+
+<!-- _class: divider -->
+<!-- _paginate: false -->
+
 # Q & A
 
-- [https://github.com/samchon/ttsc](https://github.com/samchon/ttsc)
-- [https://github.com/wrtnlabs/novels](https://github.com/wrtnlabs/novels)
-- [https://ttsc.dev/docs/evidence](https://ttsc.dev/docs/evidence)
-- [https://ttsc.dev/docs/benchmark/evidence](https://ttsc.dev/docs/benchmark/evidence)
+<span class="note">Samchon<br/>https://ttsc.dev</span>

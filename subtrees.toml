@@ -1,59 +1,65 @@
 [[repos]]
 name = "oh-my-pi"
 url = "https://github.com/can1357/oh-my-pi"
+description = "Coding-agent harness (OMP) with tools, skills, browser, and session runtime"
 tag_prefix = "v"
 
 [[repos]]
 name = "constitution"
 url = "https://github.com/systemfsoftware/constitution"
+description = "Shared engineering constitution: pure-core / imperative-shell design law"
 branch = "main"
 
 [[repos]]
 name = "tsdown"
 url = "https://github.com/rolldown/tsdown"
+description = "TypeScript bundler powered by Rolldown"
 tag_prefix = "v"
 
 [[repos]]
 name = "deno-std"
 url = "https://github.com/denoland/std"
+description = "Deno standard library published as @std/*"
 tag_prefix = "release-"
 
 [[repos]]
 name = "effect"
 url = "https://github.com/Effect-TS/effect"
+description = "Typed functional effects, Schema, Layer, and Stream for TypeScript"
 tag_prefix = "effect@4."
 
 [[repos]]
 name = "storybook"
 url = "https://github.com/storybookjs/storybook"
+description = "UI component workshop for developing components in isolation"
 tag_prefix = "v"
 
 [[repos]]
 name = "oxc"
 url = "https://github.com/oxc-project/oxc"
+description = "Rust JavaScript/TypeScript toolchain: parser, linter, transformer, minifier"
 branch = "main"
-
-[[repos]]
-name = "cruster"
-url = "https://github.com/Effectful-Tech/cruster"
-tag_prefix = "v"
 
 [[repos]]
 name = "clanka"
 url = "https://github.com/Effectful-Tech/clanka"
+description = "Effect coding-agent CLI with MCP, tree-sitter, and sqlite-vec memory"
 tag_prefix = "v"
 
 [[repos]]
 name = "effect-torch"
 url = "https://github.com/mikearnaldi/effect-torch"
+description = "Native tensor runtime and ML system for Effect TypeScript"
 branch = "main"
 
 [[repos]]
 name = "typia"
 url = "https://github.com/samchon/typia"
+description = "TypeScript transformer for runtime validators and serializers from types"
 tag_prefix = "v"
 
 [[repos]]
 name = "ttsc"
 url = "https://github.com/samchon/ttsc"
+description = "TypeScript-go toolchain that runs compiler plugins such as typia"
 tag_prefix = "v"

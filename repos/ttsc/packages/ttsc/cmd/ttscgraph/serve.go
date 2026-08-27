@@ -57,27 +57,82 @@ const (
 )
 
 // fullSnapshotCapabilities is what a snapshot from a resident compiler session
-// proves. Both commands that own a real Program declare all three; the constant
-// exists so the envelope's claim and the dump's claim cannot drift apart.
+// proves. Both commands that own a real Program declare every one of them; the
+// constant exists so the envelope's claim and the dump's claim cannot drift
+// apart.
 var fullSnapshotCapabilities = []string{
   graph.CapabilityUniverse,
   graph.CapabilitySourceDigests,
   graph.CapabilityDiskDigests,
   graph.CapabilityDiagnostics,
+  graph.CapabilityDocTags,
 }
 
-// serveCapabilities is what this server can prove, answered before a consumer
-// has a dump to inspect — an `unchanged` response carries no dump, and a client
-// negotiating on the first frame has not parsed one yet. It mirrors what every
-// dump this server publishes declares for itself.
+// serveCapabilities is what this server can prove before a session exists —
+// the frame a client reads when the project could not even be loaded. Once a
+// session exists its own capabilities answer, because those depend on what a
+// plugin published and this list cannot know it.
 var serveCapabilities = fullSnapshotCapabilities
+
+// capabilities is what THIS session proves, which is the shared list plus the
+// artifact claim when a plugin published one.
+//
+// The claim has to be conditional for the same reason it is on the dump command:
+// a project that publishes no artifacts and a session that was never handed any
+// are the same absent nodes, and only the claim separates them.
+func (s *graphSession) capabilities() []string {
+  if len(s.artifacts) == 0 {
+    return fullSnapshotCapabilities
+  }
+  return append(
+    append([]string{}, fullSnapshotCapabilities...),
+    graph.CapabilityArtifactNodes,
+  )
+}
+
+// artifactProducer names the second producer behind this session's artifact
+// nodes, and is nil when it has none.
+// provenance is this session's published origin for one generation.
+func (s *graphSession) provenance(texts map[string]string) graph.Provenance {
+  built := graph.NewProvenance(
+    serveProducer(),
+    s.capabilities(),
+    s.configDigests,
+    s.roots,
+    texts,
+    s.diskDigests,
+  )
+  built.ArtifactProducer = s.artifactProducer()
+  return built
+}
+
+func (s *graphSession) artifactProducer() *graph.Producer {
+  if len(s.artifacts) == 0 {
+    return nil
+  }
+  return &graph.Producer{Tool: "@ttsc/lint graph-nodes"}
+}
 
 type serveRequest struct {
   ID int `json:"id"`
   // GraphSnapshotVersion opts into the incremental shard protocol. Omitted
-  // requests retain the schema-v6 full-dump response for existing
-  // @ttsc/graph clients.
+  // requests retain the full-dump response for existing @ttsc/graph clients.
   GraphSnapshotVersion int `json:"graphSnapshotVersion,omitempty"`
+  // Artifacts is the path to the set a plugin published for this request, which
+  // the client re-derives when the documents or lint configuration behind it
+  // moved. It rides every request rather than only the changed ones: the client
+  // is the only side that can see those inputs, and the server is the only side
+  // that knows what it last applied, so the honest exchange is the client
+  // stating what it currently has and the server comparing it with its own.
+  //
+  // Three states, which is why it is a pointer. Absent is a client with no
+  // opinion — one predating this field, or one driving a session through the
+  // startup flag — and the set already applied stands. Empty is a client
+  // stating it now has none, which withdraws that set: a project whose
+  // publisher was removed must stop being answered with its artifacts, and
+  // without a way to say so it would be answered with them until the editor
+  // restarted. A path is the set to apply.
+  Artifacts *string `json:"artifacts,omitempty"`
 }
 
 type serveResponse struct {
@@ -119,8 +174,30 @@ func errorResponse(id int, message string) serveResponse {
 }
 
 type graphSession struct {
-  cwd          string
-  tsconfig     string
+  cwd      string
+  tsconfig string
+  // artifacts is the set a plugin published: a second producer's facts about
+  // documents this Program never read. Refreshing it is therefore not a refresh
+  // of the graph — editing a Markdown heading moves the artifact and not one
+  // compiler fact — so the two invalidations stay separate questions, and this
+  // one is answered by adoptArtifacts rather than by the build universe.
+  artifacts []graph.Artifact
+  // artifactsDigest is the content of the set currently applied. Content, and
+  // not the path or its modification time: the client overwrites one file per
+  // process and project, so the path never moves for a given session, and a
+  // republish triggered by a document whose headings did not actually change
+  // writes the same bytes and must therefore cost nothing.
+  artifactsDigest [sha256.Size]byte
+  // artifactsFile and artifactsStat are what the digest was taken from, kept so
+  // an unchanged file need not be read at all. The set is one entry per
+  // document section, model field, and operation, so it is bounded by the
+  // project's documentation rather than by anything small — and this comparison
+  // runs before every graph request, where reading and hashing that whole file
+  // to learn it did not move is the kind of cost a resident session pays
+  // forever.
+  artifactsFile string
+  artifactsStat artifactsFileState
+
   compiler     *driver.Session
   configHashes map[string][sha256.Size]byte
   auxStates    map[string]diskState
@@ -140,19 +217,132 @@ type graphSession struct {
   graphStore              *serveGraphStore
   requestProtocol         int
   requestProtocolSelected bool
-  // pending remembers a generation whose state was captured but whose selected
-  // projection failed. Until an input change lets the session rebuild, an
-  // unchanged request retries the same full or partial invalidation instead of
-  // falsely confirming the older client graph.
+  // pending remembers work the next request owes regardless of what the build
+  // universe says: a generation whose state was captured but whose selected
+  // projection failed, or an artifact set adopted after the graph carrying the
+  // previous one was built. Until it is discharged, an otherwise unchanged
+  // request retries the recorded invalidation instead of falsely confirming the
+  // older client graph.
   pending *graphChange
 }
 
 func newGraphSession(cwd, tsconfig string) (*graphSession, error) {
-  session := &graphSession{cwd: cwd, tsconfig: tsconfig}
+  return newGraphSessionWithArtifacts(cwd, tsconfig, nil)
+}
+
+// newGraphSessionWithArtifacts is the constructor the serve command uses, and
+// the plain one above is it with nothing published. The artifacts are read once
+// and held for the session: they are a second producer's facts about documents
+// this Program never read, so refreshing them is a different question from
+// refreshing the graph, and only the first answer is wired today.
+func newGraphSessionWithArtifacts(
+  cwd, tsconfig string,
+  artifacts []graph.Artifact,
+) (*graphSession, error) {
+  session := &graphSession{cwd: cwd, tsconfig: tsconfig, artifacts: artifacts}
   if err := session.reload(); err != nil {
     return nil, err
   }
   return session, nil
+}
+
+// adoptArtifacts makes what the request states the set this session applies,
+// and reports whether that replaced a set some already-built graph carries.
+//
+// A nil statement is a client with no opinion, and the set already applied
+// stands: dropping it on the say-so of a client that never mentioned artifacts
+// would delete them from the graph of every session driven through the startup
+// flag alone.
+//
+// A read failure is returned rather than swallowed. The client wrote this file
+// moments ago and named it in the same request, so a file that cannot be read
+// is a broken exchange, not a project without artifacts — and answering with a
+// silently artifact-free graph would look exactly like a correct answer.
+func (s *graphSession) adoptArtifacts(named *string) (bool, error) {
+  if named == nil {
+    return false, nil
+  }
+  path := strings.TrimSpace(*named)
+  if path == "" {
+    return s.applyArtifacts(nil, withdrawnArtifactsDigest), nil
+  }
+  stat, err := os.Stat(path)
+  if err != nil {
+    return false, err
+  }
+  state := artifactsFileState{size: stat.Size(), modTime: stat.ModTime().UnixNano()}
+  if path == s.artifactsFile && state == s.artifactsStat {
+    return false, nil
+  }
+  // One read, hashed and decoded from the same bytes. Reading twice would let
+  // an overwrite land between them and leave this session recording an identity
+  // for a set it is not holding — after which a later request naming the file
+  // it recorded would be answered as unchanged.
+  contents, err := os.ReadFile(path)
+  if err != nil {
+    return false, err
+  }
+  next, err := graph.ParseArtifacts(contents)
+  if err != nil {
+    return false, err
+  }
+  s.artifactsFile = path
+  s.artifactsStat = state
+  return s.applyArtifacts(next, sha256.Sum256(contents)), nil
+}
+
+// artifactsFileState is what an unchanged published file looks like from the
+// outside: size and modification time, never contents. It exists only to decide
+// whether the file is worth reading, and the digest taken from those contents is
+// still what decides whether the set is worth applying.
+type artifactsFileState struct {
+  size int64
+  // modTime is nanoseconds since the epoch rather than a time.Time, so the
+  // struct compares with == and means it. A time.Time carries a location
+  // pointer and an optional monotonic reading, and comparing two of those with
+  // == is a well-known way to get a false inequality that reads as a changed
+  // file forever.
+  modTime int64
+}
+
+// applyArtifacts installs a set and reports whether it differs from the applied
+// one. The first application of a session reports a change like any other and
+// costs nothing: no graph has been projected yet, so the invalidation it
+// records is discharged by the initial projection that was going to happen
+// regardless.
+func (s *graphSession) applyArtifacts(next []graph.Artifact, digest [sha256.Size]byte) bool {
+  if digest == s.artifactsDigest {
+    return false
+  }
+  s.artifacts = next
+  s.artifactsDigest = digest
+  return true
+}
+
+// withdrawnArtifactsDigest stands for "the client states it has none".
+//
+// A constant rather than the hash of an empty file, so that the withdrawn state
+// and a file whose contents happen to hash to the same value cannot be confused
+// — and domain-separated so it is not the digest of anything a producer writes.
+var withdrawnArtifactsDigest = sha256.Sum256([]byte("ttscgraph:artifacts:none"))
+
+// invalidateArtifacts records that the next projection must be a full one.
+//
+// Full, because replacing the published set is not a per-file delta: it moves
+// the artifact nodes and every citation edge into them at once, and the
+// incremental path is built to answer a different question — which sources
+// changed. It happens to reach the same answer here, through the closure
+// expansion that pulls a citing source back in, but that is a property of
+// machinery aimed elsewhere and not a guarantee this depends on.
+//
+// Full, but not a reload: the Program is reused untouched, because no compiler
+// input moved. That is the whole point of keeping documents out of the build
+// universe — a Markdown edit costs one projection, never one typecheck.
+func (s *graphSession) invalidateArtifacts() {
+  if s.pending != nil && s.pending.full {
+    return
+  }
+  s.pending = &graphChange{mode: serveModeRebuild, full: true}
 }
 
 func (s *graphSession) Close() error {
@@ -441,6 +631,7 @@ func missingRootInputs(configs []*shimtsoptions.ParsedCommandLine, sourceHashes 
 func (s *graphSession) buildDump() (graph.Dump, error) {
   program := s.compiler.Program()
   built := graph.Build(program)
+  graph.ApplyArtifacts(built, s.artifacts)
   // One texts map feeds both the spans and the manifest digests, so the bytes a
   // span points into are provably the bytes the manifest attests to.
   texts := graph.SourceTexts(program)
@@ -451,14 +642,7 @@ func (s *graphSession) buildDump() (graph.Dump, error) {
     graph.GitIgnoredFiles(s.cwd, built),
     texts,
     graph.DumpOrigin{
-      Provenance: graph.NewProvenance(
-        serveProducer(),
-        fullSnapshotCapabilities,
-        s.configDigests,
-        s.roots,
-        texts,
-        s.diskDigests,
-      ),
+      Provenance:  s.provenance(texts),
       Diagnostics: graph.NewDiagnostics(program),
     },
   )
@@ -861,8 +1045,22 @@ func runServe(args []string) int {
   fs.SetOutput(stderr)
   cwdFlag := fs.String("cwd", "", "project root (defaults to process cwd)")
   tsconfigFlag := fs.String("tsconfig", "tsconfig.json", "project tsconfig path")
+  artifactsFlag := fs.String(
+    "artifacts",
+    "",
+    "path to the artifacts a plugin published (JSON); absent or missing means none",
+  )
   if err := fs.Parse(args); err != nil {
     return 2
+  }
+  artifacts, artifactsErr := graph.LoadArtifacts(strings.TrimSpace(*artifactsFlag))
+  if artifactsErr != nil {
+    fmt.Fprintf(
+      stderr,
+      "ttscgraph: could not read the published artifacts: %v\n",
+      artifactsErr,
+    )
+    return 1
   }
 
   cwd := strings.TrimSpace(*cwdFlag)
@@ -880,10 +1078,22 @@ func runServe(args []string) int {
   cwd = shimtspath.ResolvePath(cwd)
   tsconfig := strings.TrimSpace(*tsconfigFlag)
 
-  return serveSnapshots(os.Stdin, stdout, cwd, tsconfig)
+  return serveSnapshotsWithArtifacts(os.Stdin, stdout, cwd, tsconfig, artifacts)
 }
 
 func serveSnapshots(input io.Reader, output io.Writer, cwd, tsconfig string) int {
+  return serveSnapshotsWithArtifacts(input, output, cwd, tsconfig, nil)
+}
+
+// serveSnapshotsWithArtifacts is the loop the serve command runs, and
+// serveSnapshots is it with nothing published — the shape every existing case
+// drives, unchanged.
+func serveSnapshotsWithArtifacts(
+  input io.Reader,
+  output io.Writer,
+  cwd, tsconfig string,
+  artifacts []graph.Artifact,
+) int {
   scanner := bufio.NewScanner(input)
   scanner.Buffer(make([]byte, 64*1024), 1024*1024)
   encoder := json.NewEncoder(output)
@@ -932,7 +1142,7 @@ func serveSnapshots(input io.Reader, output io.Writer, cwd, tsconfig string) int
     var loadDuration time.Duration
     if session == nil {
       loadStarted := time.Now()
-      created, err := newGraphSession(cwd, tsconfig)
+      created, err := newGraphSessionWithArtifacts(cwd, tsconfig, artifacts)
       loadDuration = time.Since(loadStarted)
       if err != nil {
         if err := encodeServeResponseWithTrace(
@@ -962,6 +1172,18 @@ func serveSnapshots(input io.Reader, output io.Writer, cwd, tsconfig string) int
     }
     session.requestProtocol = request.GraphSnapshotVersion
     session.requestProtocolSelected = true
+    if replaced, err := session.adoptArtifacts(request.Artifacts); err != nil {
+      if err := encodeServeResponseWithTrace(encoder, errorResponse(
+        request.ID,
+        fmt.Sprintf("ttscgraph: could not read the published artifacts: %v", err),
+      ), requestStarted, loadDuration, 0, 0); err != nil {
+        fmt.Fprintf(stderr, "ttscgraph: write serve response: %v\n", err)
+        return 1
+      }
+      continue
+    } else if replaced {
+      session.invalidateArtifacts()
+    }
     var dump *graph.Dump
     var snapshot *serveGraphSnapshot
     var mode string
@@ -975,6 +1197,12 @@ func serveSnapshots(input io.Reader, output io.Writer, cwd, tsconfig string) int
       dump, mode, changed, err = session.Snapshot()
     }
     response := newServeResponse(request.ID)
+    // The envelope answers for THIS session, not for the command in general. An
+    // `unchanged` response carries no dump, so the envelope is the only place a
+    // client learns what this server proves — and a session holding artifacts
+    // publishes a dump that claims them. Leaving the shared list here made the
+    // envelope and the dump disagree on the one frame that has no dump to check.
+    response.Capabilities = session.capabilities()
     response.Dump = dump
     response.Snapshot = snapshot
     response.Mode = mode

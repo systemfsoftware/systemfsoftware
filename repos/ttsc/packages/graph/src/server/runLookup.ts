@@ -1,13 +1,20 @@
-import { TtscGraphMemory } from "../model/TtscGraphMemory";
+import { TtscGraphMemory, documentationTarget } from "../model/TtscGraphMemory";
 import { ITtscGraphLookup } from "../structures/ITtscGraphLookup";
 import { ITtscGraphNode } from "../structures/ITtscGraphNode";
+import { isArtifactNodeKind } from "../structures/TtscGraphArtifactNodeKind";
 import { exportFanIn } from "./exportSurface";
 import { isExternalNode, isSupportPath } from "./pathPolicy";
 import { IRunnerOutput, resultNext } from "./resultNext";
-import { decoratorsOf, signatureOf } from "./runDetails";
+import { decoratorsOf, docTagsOf, signatureOf } from "./runDetails";
 
 // One file should not crowd out the rest of the ranking, so cap hits per file.
 const PER_FILE = 3;
+// The score a citation carrier reports. Citation hits are placed ahead of the
+// ranked list rather than sorted into it, so this value decides no order: it
+// exists because every hit owes a score, and it is high to say what kind of
+// answer this is — an exact match on an address the caller and the author spell
+// identically, not a better guess at a name.
+const CITATION_SCORE = 1000;
 const DEFAULT_LIMIT = 5;
 const MAX_LIMIT = 6;
 
@@ -29,7 +36,12 @@ export function runLookup(
   const wantsInternal = wantsInternalSymbol(queryLc, codeTerms);
   const wantsSupport = wantsSupportSymbol(queryLc);
   const includeExternal = props.includeExternal === true;
-  if (terms.length === 0)
+  // The reverse citation question is answered before the name tokenizer gets a
+  // veto. `subwords` splits on ASCII alphanumerics, so a target written in
+  // another script, or one made only of punctuation, produces no term and used
+  // to return "no searchable terms" while the index held that exact address.
+  const cited = citationHits(graph, props.query, includeExternal);
+  if (terms.length === 0 && cited.length === 0)
     return {
       result: {
         type: "lookup",
@@ -42,7 +54,12 @@ export function runLookup(
     };
 
   const scored: ITtscGraphLookup.IHit[] = [];
-  for (const node of graph.nodes) {
+  // With no term to match, nothing is a name match. The whole-query bonus below
+  // is awarded when every term landed, and no terms trivially satisfies that —
+  // so a query the tokenizer cannot read (an address in another script) would
+  // otherwise return the citation hit followed by arbitrary central symbols,
+  // presented as answers to a name it never matched.
+  for (const node of terms.length === 0 ? [] : graph.nodes) {
     if (node.kind === "file") continue;
     if (!includeExternal && isExternalNode(node)) continue;
     const score = scoreNode(
@@ -69,18 +86,46 @@ export function runLookup(
     scored.push(hit);
   }
 
-  scored.sort((a, b) => b.score - a.score);
+  // A query naming a documentation target is the reverse citation question, and
+  // it is the one an index has to answer: the declarations implementing one
+  // specification are scattered across every file that implements it, so
+  // anything less than an index means searching the repository.
+  //
+  // These are prepended rather than scored in. A tag target is an exact token
+  // the caller typed — `docs/pricing.md#sale`, `POST:/orders` — so a carrier is
+  // not a better fuzzy match than the name hits, it is a different and certain
+  // kind of answer, and name scoring cannot rank the two against each other.
+  const citedIds = new Set(cited.map((hit) => hit.id));
+  const ranked = scored.filter((hit) => !citedIds.has(hit.id));
+  ranked.sort((a, b) => b.score - a.score);
+  ranked.unshift(...cited);
 
   // Diversity: keep at most PER_FILE hits per file while filling up to the limit.
+  //
+  // A citation carrier is exempt. The cap exists so one file's roster cannot
+  // crowd out a name ranking, and a citation is not ranked against anything: it
+  // is an exact match on an address, and a module implementing one specification
+  // across four functions is the ordinary shape of the answer rather than a file
+  // dominating a shortlist. Capping those returned three of five carriers and
+  // called the result complete.
   const limit = bound(props.limit, DEFAULT_LIMIT, 1, MAX_LIMIT);
   const perFile = new Map<string, number>();
   const hits: ITtscGraphLookup.IHit[] = [];
-  for (const hit of scored) {
-    const used = perFile.get(hit.file) ?? 0;
-    if (used >= PER_FILE) continue;
-    perFile.set(hit.file, used + 1);
+  let truncated = false;
+  for (const hit of ranked) {
+    if (hits.length >= limit) {
+      truncated = true;
+      break;
+    }
+    if (!citedIds.has(hit.id)) {
+      const used = perFile.get(hit.file) ?? 0;
+      if (used >= PER_FILE) {
+        truncated = true;
+        continue;
+      }
+      perFile.set(hit.file, used + 1);
+    }
     hits.push(hit);
-    if (hits.length >= limit) break;
   }
 
   // Attach each kept hit's signature only for the shortlist, so the model can
@@ -95,6 +140,7 @@ export function runLookup(
     result: {
       type: "lookup",
       hits,
+      ...(truncated ? { truncated: true } : {}),
     },
     next:
       hits.length === 0
@@ -102,10 +148,16 @@ export function runLookup(
             "outside",
             "No symbol matched, so the graph did not resolve this name.",
           )
-        : resultNext(
-            "answer",
-            "The ranked hits and their signatures resolve the name.",
-          ),
+        : truncated
+          ? resultNext(
+              "answer",
+              "The hits resolve the name, and `truncated` says more matched " +
+                "than the limit returned: raise `limit` for the rest.",
+            )
+          : resultNext(
+              "answer",
+              "The ranked hits and their signatures resolve the name.",
+            ),
   };
 }
 
@@ -292,4 +344,77 @@ function subwords(text: string): string[] {
     .split(/[^a-zA-Z0-9]+/)
     .filter((w) => w.length > 0)
     .map((w) => w.toLowerCase());
+}
+
+/**
+ * The declarations whose documentation opens a tag with the address this query
+ * opens with, in file order.
+ *
+ * A caller writing `docs/pricing.md#sale` or `POST:/orders` is asking the
+ * reverse citation question: not what a symbol is, but which code answers to
+ * this specification. Nothing else in the graph can answer it, because the
+ * other end of the relation is a document section rather than a declaration.
+ *
+ * The match is exact, and only a token shaped like an address is one at all —
+ * `documentationTarget` decides that for the query and for every indexed tag,
+ * so the two sides can never disagree about what counts. Fuzzy matching is what
+ * the name scoring above does, and it is wrong here: an address is spelled
+ * identically by the author and the caller, and a near-miss would put a
+ * different specification's implementers in the answer under the same confident
+ * heading.
+ *
+ * Each returned hit carries the tags that matched, so the result says why the
+ * declaration is in it.
+ */
+function citationHits(
+  graph: TtscGraphMemory,
+  query: string,
+  includeExternal: boolean,
+): ITtscGraphLookup.IHit[] {
+  const target = documentationTarget(query);
+  if (target === undefined) return [];
+  const hits: ITtscGraphLookup.IHit[] = [];
+  // The artifact itself leads, when one was published under this address. A
+  // caller asking about `docs/sale.md#pricing` wants what that anchor names —
+  // the heading's own text and where it starts — before it wants the list of
+  // declarations that cite it, and answering only the second half is the gap an
+  // index of tokens had. It is not name-ranked: the address matched exactly.
+  const artifact = graph.node(target);
+  if (artifact !== undefined && isArtifactNodeKind(artifact.kind))
+    hits.push({
+      id: artifact.id,
+      name: artifact.name,
+      kind: artifact.kind,
+      file: artifact.file,
+      line: artifact.evidence?.startLine,
+      score: CITATION_SCORE,
+    });
+  for (const node of graph.citing(target)) {
+    if (node.kind === "file") continue;
+    if (!includeExternal && isExternalNode(node)) continue;
+    // Matched on the node's own tags and elided afterwards. Filtering the
+    // elided text instead dropped the explanation from a hit whose address was
+    // longer than the cap: the node was found by the address and then returned
+    // without the tag that said why.
+    const matched = docTagsOf(
+      node,
+      (tag) => documentationTarget(tag.text) === target,
+    );
+    const hit: ITtscGraphLookup.IHit = {
+      id: node.id,
+      name: node.qualifiedName ?? node.name,
+      kind: node.kind,
+      file: node.file,
+      line: node.evidence?.startLine,
+      // An exact target match is a certain answer rather than a ranked guess.
+      // The score exists so the field is never absent; it does not compete with
+      // the name scores, because these hits are not ordered against them.
+      score: CITATION_SCORE,
+    };
+    const decorators = decoratorsOf(node);
+    if (decorators !== undefined) hit.decorators = decorators;
+    if (matched !== undefined && matched.length > 0) hit.docTags = matched;
+    hits.push(hit);
+  }
+  return hits;
 }

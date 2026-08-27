@@ -16,7 +16,7 @@ import { TtscGraphDumpNodeKind } from "./TtscGraphDumpNodeKind";
  * the same dump.
  *
  * `project` is the producer-local absolute locator. Every identity-bearing path
- * uses one schema-v6 coordinate relative to it: project files are ordinary
+ * uses one portable coordinate relative to it: project files are ordinary
  * relative paths; same-filesystem siblings use `../` segments; package files
  * keep their full resolution context (including version/peer-store segments);
  * and a virtual compiler source stays `bundled:///…`. Raw absolute identities
@@ -76,8 +76,8 @@ export namespace ITtscGraphDump {
      * guessing from a field's emptiness, because an empty list and an
      * uncollected one look identical on the wire.
      *
-     * The known members are `universe`, `sourceDigests`, `diskDigests`, and
-     * `diagnostics`. The type stays `string[]` rather than a union of those on
+     * The known members are `universe`, `sourceDigests`, `diskDigests`,
+     * `diagnostics`, and `docTags`. The type stays `string[]` rather than a union of those on
      * purpose: a union would make `typia.assert` reject a newer producer for
      * naming a capability this client has not heard of, turning "proves more
      * than you know about" into a hard failure. An unknown capability is
@@ -87,6 +87,17 @@ export namespace ITtscGraphDump {
 
     /** What built the snapshot. */
     producer: IProducer;
+
+    /**
+     * The second producer behind the artifact nodes, absent when the dump
+     * carries none.
+     *
+     * Every other fact in this dump came from one Program. These did not: a
+     * plugin parsed documents that Program never read, in a process of its own.
+     * Saying so is what keeps the one-generation contract honest instead of
+     * letting an overlay ride the same claim as the compiler's facts.
+     */
+    artifactProducer?: IProducer;
 
     /** The inputs that decide which files are in the program at all. */
     universe: IUniverse;
@@ -233,8 +244,18 @@ export namespace ITtscGraphDump {
     ITtscGraphNode,
     "evidence" | "implementation" | "kind"
   > {
-    /** Declaration kind written by the native producer. */
+    /** Node kind written by the native producer. */
     kind: TtscGraphDumpNodeKind;
+
+    /**
+     * The artifact containing this one, by id.
+     *
+     * Present only on an artifact node: a declaration's containment is
+     * synthesized by the memory layer, and two producers of one relation would
+     * put two answers in the graph. Absent at the top of a chain, and absent
+     * rather than invented when the parent was not published.
+     */
+    parent?: string;
 
     /** Declaration span; its file is this node's `file`. */
     evidence?: ITtscGraphSpan;

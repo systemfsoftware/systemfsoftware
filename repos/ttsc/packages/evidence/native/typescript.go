@@ -32,13 +32,14 @@ func extendTypeScriptInventories(
   inventories map[string]*artifactInventory,
   governed map[string]bool,
 ) {
-  bases := configuredBases(config, artifactTypeScript)
+  bases := typeScriptMatchBases(config)
   for _, file := range sources {
     if file == nil || !isTypeScriptPath(file.FileName()) {
       continue
     }
-    for _, base := range bases {
-      relative, ok := relativeProjectPath(base.Absolute, file.FileName())
+    for _, entry := range bases {
+      base := entry.base
+      relative, ok := entry.relativeOf(file.FileName())
       if !ok || !isTypeScriptPath(relative) {
         continue
       }
@@ -54,6 +55,67 @@ func extendTypeScriptInventories(
   }
 }
 
+// typeScriptBaseProblems reports every declared TypeScript root that is not an
+// existing directory and marks the population behind it failed.
+//
+// The other two claim-capable kinds get this from their loaders: the Markdown
+// and Prisma walkers meet the root before they list anything, report it, and
+// record a population failure that suppresses the glob diagnostic as its
+// derivative. TypeScript materializes from `ctx.Sources` and walks nothing, so
+// no loader is ever in a position to notice, and the population came back
+// healthy and empty — which routed the author to `matched no typescript files`
+// and a lecture on glob syntax for a mistake that was one directory name. The
+// rule had already computed the right sentence and used it as a boolean.
+//
+// Recording the failure rather than only reporting the string is what makes the
+// three kinds converge: health alone now decides that the claim stays active,
+// and the population it names is the one the author has to repair.
+//
+// Only claim bases can reach a declared root here. A TypeScript reference selects
+// the active program with `files` or an installed package with `package` and is
+// refused a `root` outright, so every reference base of this kind is the default
+// one, which this pass leaves alone: `baseDirectoryProblem` returns on it, and
+// the resolver question below is asked only of a root someone declared.
+func typeScriptBaseProblems(
+  config graphConfig,
+  inventories map[string]*artifactInventory,
+) []string {
+  problems := []string{}
+  for _, base := range configuredBases(config, artifactTypeScript) {
+    problem := baseDirectoryProblem(base, artifactTypeScript)
+    // The stat accepts a chain of links the resolver will not finish, and this
+    // kind has no walk to notice it afterwards, so the gate asks here. Without
+    // it the population came back empty and the claim deactivated in silence,
+    // which is the state a linked root was repaired to remove.
+    //
+    // Only a declared root is asked. The default base is the project root the
+    // host resolved, which both entry points realpath before this rule sees it,
+    // and a Program spells its sources against the same root, so the first
+    // comparison matches and no resolution is wanted here. Refusing anyway turns
+    // a population that works into an error: measured as a graph closing at zero
+    // diagnostics becoming one refusal that fails every claim on the base nearly
+    // every project uses.
+    //
+    // A Markdown or Prisma population on that base still answers, because those
+    // walkers generate the paths they compare and a link they cannot resolve
+    // leaves them nothing to walk; a project declaring neither has nothing that
+    // reports it. A chain long enough to survive the host's own realpath is
+    // longer than the platform follows, so this is the residue of a shape
+    // production does not reach rather than a hole in what it does.
+    if problem == "" && !base.Default {
+      if _, resolved := resolvedBaseDirectory(base); !resolved {
+        problem = unresolvedBaseProblem(base, artifactTypeScript)
+      }
+    }
+    if problem == "" {
+      continue
+    }
+    recordPopulationFailure(inventories, artifactTypeScript, base)
+    problems = append(problems, problem)
+  }
+  return problems
+}
+
 // isTypeScriptPath is asked once per source file per configured base on every
 // rebuild, so it compares the suffix in place rather than lowercasing the whole
 // path into a fresh string to answer four fixed questions.
@@ -65,6 +127,56 @@ func isTypeScriptPath(path string) bool {
     }
   }
   return false
+}
+
+// typeScriptMatchBase pairs a configured base with the directory a Program
+// source path is measured against.
+//
+// This kind walks nothing, so the link asymmetry #1258 removed from the two
+// walkers looked like a walk problem and was left here. It is not: `os.Stat`
+// accepts a linked root as a directory, and a Program reports whatever path its
+// tsconfig resolved, so when the two disagree about the link every source fails
+// the comparison, the claim selects nothing, and it deactivates without a word.
+// Measured before the repair: a claim rooted at a junction over its own project
+// produced no diagnostic at all.
+//
+// Both spellings are tried, because the Program may report either, and the
+// address is composed from the declared base in both cases, so a source reached
+// through a link is identified exactly as it would be without one. The
+// resolution is per base and the comparison is per source, so the extra spelling
+// costs nothing where no link is involved.
+type typeScriptMatchBase struct {
+  base     populationBase
+  resolved string
+}
+
+func typeScriptMatchBases(config graphConfig) []typeScriptMatchBase {
+  bases := configuredBases(config, artifactTypeScript)
+  entries := make([]typeScriptMatchBase, 0, len(bases))
+  for _, base := range bases {
+    // An unresolved chain is reported by the gate for a declared root, and this
+    // comparison then has only the declared spelling to offer: keeping the link
+    // the resolver stopped on would spend a second comparison against a path no
+    // source can sit under, and the guard in `relativeOf` reads exactly this
+    // equality to skip it. For the default base nothing reports it here, which is
+    // the trade the gate's own comment states.
+    resolved, ok := resolvedBaseDirectory(base)
+    if !ok {
+      resolved = base.Absolute
+    }
+    entries = append(entries, typeScriptMatchBase{base: base, resolved: resolved})
+  }
+  return entries
+}
+
+func (entry typeScriptMatchBase) relativeOf(name string) (string, bool) {
+  if relative, ok := relativeProjectPath(entry.base.Absolute, name); ok {
+    return relative, true
+  }
+  if entry.resolved == entry.base.Absolute {
+    return "", false
+  }
+  return relativeProjectPath(entry.resolved, name)
 }
 
 func relativeProjectPath(root string, absolute string) (string, bool) {
@@ -1553,7 +1665,6 @@ func collectTypeScriptDeclarations(
     // from every acknowledgement map in evaluation.
     for _, review := range parseReviews(content[entry.node.Pos():entry.node.End()]) {
       inventory.Reviews = append(inventory.Reviews, &evidenceReview{
-        HostID:          hostID,
         SemanticHostIDs: semanticHostIDs,
         Reviews:         review.Reviews,
         Type:            artifactTypeScript,
@@ -1814,18 +1925,18 @@ func recordGovernedTypeScriptFiles(
   if governed == nil {
     return
   }
-  bases := configuredBases(declared, artifactTypeScript)
+  bases := typeScriptMatchBases(declared)
   for _, file := range sources {
     if file == nil || !isTypeScriptPath(file.FileName()) {
       continue
     }
-    for _, base := range bases {
-      relative, ok := relativeProjectPath(base.Absolute, file.FileName())
+    for _, entry := range bases {
+      relative, ok := entry.relativeOf(file.FileName())
       if !ok || !isTypeScriptPath(relative) {
         continue
       }
-      if matchesConfiguredTypeScriptFile(declared, base, relative) {
-        governed[base.addressOf(relative).Key] = true
+      if matchesConfiguredTypeScriptFile(declared, entry.base, relative) {
+        governed[entry.base.addressOf(relative).Key] = true
       }
     }
   }

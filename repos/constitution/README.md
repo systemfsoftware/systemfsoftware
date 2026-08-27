@@ -32,10 +32,10 @@ constitution/
 
 | File | Delivery | Contents | How to load it |
 | :--- | :--- | :--- | :--- |
-| `CONSTITUTION.md` | **Always on** | Preamble, rule enforcement and Conduct (Article V) | Include in agent context on every turn (`@CONSTITUTION.md` in `AGENTS.md` or `CLAUDE.md`) |
+| `CONSTITUTION.md` | **Always on** | Conduct (Article V) | Include in agent context on every turn (`@CONSTITUTION.md` in `AGENTS.md` or `CLAUDE.md`) |
 | `CONSTITUTION-ARTICLES.md` | **On demand** | Articles I to IV (Pure Core, Boundaries, Testing, Project Layout) | Load via tool hook or path rule when editing source code (never on read) |
 
-Rules about conduct and rule enforcement stay resident because nothing triggers them after a mistake happens. Craft rules (like how to structure a domain model or write a test) only need to load when someone touches source code.
+Rules about conduct stay resident because nothing triggers them after a mistake happens. Craft rules (like how to structure a domain model or write a test) only need to load when someone touches source code.
 
 ---
 

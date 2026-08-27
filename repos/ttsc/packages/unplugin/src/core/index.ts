@@ -40,8 +40,10 @@ const virtualModulePattern = /\0/;
  * The factory resolves raw options once, creates a per-build transform cache,
  * and captures Vite alias configuration via the `vite.configResolved` hook so
  * that path aliases are forwarded to the generated tsconfig overlay. Real build
- * lifecycles use a per-build cache; Vite's development server keeps persistent
- * validation because its one `buildStart` spans later HMR edits.
+ * lifecycles use a per-build cache; a watching Vite development server keeps
+ * persistent validation because its one `buildStart` spans later HMR edits,
+ * while a dev server configured without a watcher takes the build-scoped path
+ * with them, having declared it will observe no edit at all.
  */
 const unpluginFactory: UnpluginFactory<
   TtscUnpluginOptions | undefined,
@@ -52,6 +54,7 @@ const unpluginFactory: UnpluginFactory<
   const missingInputs = createViteServeMissingInputWatch();
   let aliases: unknown;
   let viteCommand: string | undefined;
+  let viteWatching = true;
 
   return {
     name,
@@ -65,6 +68,16 @@ const unpluginFactory: UnpluginFactory<
         // serve-time poll, even though the closed server stays attached
         // (see the dispose note in viteServe.ts).
         viteCommand = config.command;
+        // `server.watch: null` disables Vite's watcher outright, which is how
+        // a one-shot consumer (a `vitest --run` suite above all) configures the
+        // dev server. Nothing can then deliver a change event, so every watch
+        // registration is dead weight, and not cheap dead weight: Vite's
+        // import analysis resolves each registered path like a real import of
+        // the transformed module, once per module, which is the dominant cost
+        // of a delivered module in a project with a real dependency graph
+        // (samchon/ttsc#1246).
+        viteWatching =
+          (config as { server?: { watch?: unknown } }).server?.watch !== null;
       },
       // Vite serve funnels every transform-context `addWatchFile()` into the
       // module's added-import graph (`_addedImports`), which import-analysis
@@ -83,7 +96,22 @@ const unpluginFactory: UnpluginFactory<
     },
 
     buildStart() {
-      if (viteCommand === "serve") {
+      // Persistent validation exists for a session that spans edits it can
+      // observe, and a dev server told to open no watcher is not one:
+      // `server.watch: null` leaves Vite with no change channel at all, so no
+      // edit can reach the session, nothing invalidates what one touched, and
+      // no client is hot-updated. Validating each delivery there does not buy
+      // freshness, it buys incoherence — modules delivered before an edit and
+      // after it would come from two different compilations of one program —
+      // while costing a full derived-input proof per delivered module. The
+      // build-scoped lifecycle settles each module's first delivery against the
+      // generation the session started from, exactly as a build does, and still
+      // revalidates a module this session already delivered. A one-shot suite
+      // configures precisely this server (`vitest --run` sets `server.watch =
+      // null`) and is the workload behind samchon/ttsc#970
+      // (samchon/ttsc#1260). The neighbouring watch-registration decision reads
+      // the same two properties for the same reason.
+      if (viteCommand === "serve" && viteWatching) {
         resetTtscTransformCache(transformCache);
       } else {
         beginTtscTransformBuild(transformCache);
@@ -111,13 +139,28 @@ const unpluginFactory: UnpluginFactory<
         // (a superseding resolution candidate, a not-yet-generated
         // dependency), so those are watched on the filesystem instead and
         // invalidate this module when created.
-        addWatchFile: (watched) => {
-          if (
-            viteCommand === "serve" &&
-            missingInputs.serving() &&
-            !fs.existsSync(watched)
-          ) {
-            missingInputs.watch(watched, path.resolve(file));
+        addWatchFile: (watched, evidence) => {
+          if (viteCommand === "serve" && missingInputs.serving()) {
+            // Trust the generation's recorded existence when it supplied one:
+            // every cache hit revalidates it, and probing each input again
+            // costs one `existsSync` per input per delivered module.
+            const missing = evidence?.missing ?? !fs.existsSync(watched);
+            if (missing) {
+              missingInputs.watch(
+                watched,
+                path.resolve(file),
+                evidence?.identity,
+              );
+              return;
+            }
+          }
+          // A dev server configured without a watcher can never deliver a
+          // change event, so a registration here buys nothing, and it is not
+          // free: Vite's import analysis resolves every registered path like a
+          // real import of the transformed module, once per module. The
+          // adapter's own missing-input poll above stays active either way,
+          // because it never depended on Vite's watcher.
+          if (viteCommand === "serve" && !viteWatching) {
             return;
           }
           this.addWatchFile(watched);
@@ -149,6 +192,7 @@ export type {
 export type {
   TtscTransformFilesystemOperations,
   TtscTransformHooks,
+  TtscWatchInputEvidence,
 } from "./transform";
 export {
   beginTtscTransformBuild,

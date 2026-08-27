@@ -1,5 +1,0 @@
-error: #[activity] and #[method] cannot be #[public]
-  --> tests/ui/activity_public_invalid.rs:11:5
-   |
-11 |     async fn bad(&self) -> Result<(), cruster::error::ClusterError> {
-   |     ^^^^^
