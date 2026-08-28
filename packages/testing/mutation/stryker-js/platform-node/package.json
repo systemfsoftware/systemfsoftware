@@ -16,7 +16,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "build": "tsdown",
+    "build": "tsdown && pnpm api:check",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint --format=${f:-default}",
     "attw": "attw --pack ."
   },
@@ -41,6 +43,7 @@
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
+    "@microsoft/api-extractor": "^7.58.7",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/diff-match-patch": "1.0.36",
     "@types/node": "catalog:",

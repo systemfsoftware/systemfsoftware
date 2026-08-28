@@ -2117,6 +2117,9 @@ importers:
         specifier: 3.7.3
         version: 3.7.3
     devDependencies:
+      '@microsoft/api-extractor':
+        specifier: ^7.58.7
+        version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/all':
         specifier: workspace:^
         version: link:../../../../lint/oxlint/all
@@ -2275,6 +2278,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
+      '@microsoft/api-extractor':
+        specifier: ^7.58.7
+        version: 7.58.9(@types/node@24.13.2)
       '@std/jsonc':
         specifier: 'catalog:'
         version: '@jsr/std__jsonc@1.0.2'

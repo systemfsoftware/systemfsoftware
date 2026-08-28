@@ -15,7 +15,9 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown",
+    "build": "tsdown && pnpm api:check",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local",
     "typecheck": "tsc --noEmit",
     "attw": "attw --pack .",
     "test": "vitest run",
@@ -38,6 +40,7 @@
     "effect": "catalog:",
     "oxlint": "catalog:oxlint",
     "oxlint-tsgolint": "catalog:oxlint",
+    "@microsoft/api-extractor": "^7.58.7",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
