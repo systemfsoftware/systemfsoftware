@@ -76,12 +76,12 @@ const openChecker = Effect.gen(function*() {
   return sut
 })
 
-Feature('Checking TypeScript mutants for compile errors')
+Feature('Typechecking mutants')
   .withLayer(host)
   .liveClock()
   .body(({ scenario }) => {
     scenario(
-      'Two changes share a compiler error that cannot be blamed on one of them',
+      'Each change is typechecked when a group error cannot be blamed on one of them',
       Gherkin.Do.pipe(
         Given('the sample project has a todo list and a neighbouring counter')('sources', () =>
           Effect.gen(function*() {
@@ -119,12 +119,12 @@ Feature('Checking TypeScript mutants for compile errors')
               ])
             }),
         ),
-        Then('the todo change is sent on to the tests')(({ actual }) =>
+        Then('typecheck succeeds for the todo change')(({ actual }) =>
           Effect.sync(() => {
             expect(HashMap.get(actual, 'passedAlone')).toEqual(Option.some({ status: 'passed' }))
           })
         ),
-        And('the counter change is reported as a compile error')(({ actual }) =>
+        And('typecheck fails for the counter change')(({ actual }) =>
           Effect.sync(() => {
             const failed = HashMap.get(actual, 'compileErrorAlone')
             expect(Option.isSome(failed) && failed.value.status === 'compileError').toBe(true)
@@ -134,7 +134,7 @@ Feature('Checking TypeScript mutants for compile errors')
     )
 
     scenario(
-      'A change that no longer typechecks is reported as a compile error',
+      'A change whose typecheck fails is reported as a typecheck failure, not a skip',
       Gherkin.Do.pipe(
         Given('the sample project has a todo list')('todo', () =>
           Effect.gen(function*() {
@@ -161,7 +161,7 @@ Feature('Checking TypeScript mutants for compile errors')
               ])
             }),
         ),
-        Then('that change is reported as a compile error')(({ actual }) =>
+        Then('typecheck fails')(({ actual }) =>
           Effect.sync(() => {
             const result = HashMap.get(actual, 'mutId')
             expect(Option.isSome(result) && result.value.status === 'compileError').toBe(true)
@@ -171,7 +171,7 @@ Feature('Checking TypeScript mutants for compile errors')
     )
 
     scenario(
-      'A change that still typechecks is sent on to the tests',
+      'A change whose typecheck succeeds is reported as a success, not a skip',
       Gherkin.Do.pipe(
         Given('the sample project has a todo list')('todo', () =>
           Effect.gen(function*() {
@@ -195,7 +195,7 @@ Feature('Checking TypeScript mutants for compile errors')
               ),
             ])
           })),
-        Then('that change is sent on to the tests')(({ actual }) =>
+        Then('typecheck succeeds')(({ actual }) =>
           Effect.sync(() => {
             expect(HashMap.get(actual, 'ok')).toEqual(Option.some({ status: 'passed' }))
           })
