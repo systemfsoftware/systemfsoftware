@@ -1209,7 +1209,7 @@ export const runStrykerCli = (
       }),
       () =>
         Effect.gen(function*() {
-          yield* input.program
+          const parsed = yield* Effect.exit(input.program)
           const request = yield* Ref.get(input.requestRef)
           const fileName = yield* progressStreamFileOf(request, basePath).pipe(
             Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
@@ -1218,6 +1218,9 @@ export const runStrykerCli = (
             yield* stream.setProgressStreamFile(fileName)
           }
           yield* stream.open
+          if (Exit.isFailure(parsed)) {
+            return yield* Effect.failCause(parsed.cause)
+          }
           return yield* Option.match(request, {
             onNone: () => Effect.void,
             onSome: (cliRequest) => dispatch(cliRequest),
