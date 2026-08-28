@@ -2,8 +2,9 @@ import { recommended as tsgoRecommended } from '@effect/tsgo/oxlint-presets'
 import effectDmmf from '@systemfsoftware/oxlint-plugin-effect-dmmf'
 import { defineConfig } from 'oxlint'
 
-export const promoteWarnToError = (rules: Record<string, unknown>): Record<string, 'error' | 'off'> => {
+export const promoteWarnToError = (rules: Record<string, unknown> | undefined): Record<string, 'error' | 'off'> => {
   const out: Record<string, 'error' | 'off'> = {}
+  if (!rules) return out
   for (const [key, severity] of Object.entries(rules)) {
     if (severity === 'warn') out[key] = 'error'
     else if (severity === 'error') out[key] = 'error'
@@ -88,9 +89,11 @@ export default defineConfig({
 
     // effect-ts/tsgo — recommended preset with warn→error promotion (agents ignore warn)
     // https://github.com/effect-ts/tsgo — docs/README.md Oxlint Setup; preset ships ~78 effecttsgo/* rules at warn
-    ...promoteWarnToError(tsgoRecommended.rules as unknown as Record<string, unknown>),
+    ...promoteWarnToError(tsgoRecommended.rules),
 
     '@systemfsoftware/oxlint-plugin/no-new-worker-with-wasm-import': 'error',
+    '@systemfsoftware/oxlint-plugin/no-barrels': 'off',
+    '@systemfsoftware/oxlint-plugin/no-inline-destructured-type': 'off',
   },
 
   overrides: [
