@@ -41,4 +41,4 @@
 "@systemfsoftware/stryker-test-contribution": none
 ---
 
-Tooling-internal hardening: build-time release-tag enforcement, generated surface snapshots, and test-lane cleanup. No exported name, type, or runtime behaviour changes.
+Tooling-internal hardening: build-time release-tag enforcement and test-lane cleanup. No exported name, type, or runtime behaviour changes.

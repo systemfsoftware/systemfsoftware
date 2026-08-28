@@ -6,11 +6,7 @@ export default defineConfig({
   plugins: [inlineSchemaTests()],
   test: {
     ...sharedConfig.test,
-    include: ['src/**/*.test.ts', 'tests/surface.snapshot.test.ts'],
+    include: ['src/**/*.test.ts'],
     includeSource: ['src/**/*.ts'],
-  },
-
-  resolve: {
-    conditions: ['@systemfsoftware/source', 'source', 'import', 'node', 'default'],
   },
 })

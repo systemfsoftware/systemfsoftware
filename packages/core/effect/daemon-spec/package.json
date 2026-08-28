@@ -47,8 +47,7 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
-    "attw": "attw --pack .",
-    "surface:update": "api-surface generate ."
+    "attw": "attw --pack ."
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^"
@@ -56,7 +55,6 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "^7.58.7",
-    "@systemfsoftware/api-surface": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",

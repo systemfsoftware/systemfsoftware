@@ -4,11 +4,7 @@ export default defineConfig({
   ...sharedConfig,
   test: {
     ...sharedConfig.test,
-    include: ['src/**/*.test.ts', 'tests/surface.snapshot.test.ts'],
+    include: ['src/**/*.test.ts'],
     setupFiles: ['./vitest-setup.ts'],
-  },
-
-  resolve: {
-    conditions: ['@systemfsoftware/source', 'source', 'import', 'node', 'default'],
   },
 })

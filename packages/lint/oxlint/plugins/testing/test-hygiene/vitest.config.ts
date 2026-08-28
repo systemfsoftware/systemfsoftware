@@ -8,9 +8,6 @@ const config = {
     setupFiles: ['vitest-setup.ts'],
     bail: 0 as const,
   },
-  resolve: {
-    conditions: ['@systemfsoftware/source', 'source', 'import', 'node', 'default'],
-  },
 }
 
 export default defineConfig(config)

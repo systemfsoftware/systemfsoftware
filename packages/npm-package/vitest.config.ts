@@ -11,8 +11,4 @@ export default defineConfig({
     // silently never run.
     includeSource: ['src/**/*.ts'],
   },
-
-  resolve: {
-    conditions: ['@systemfsoftware/source', 'source', 'import', 'node', 'default'],
-  },
 })

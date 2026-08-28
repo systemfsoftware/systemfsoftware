@@ -7,8 +7,4 @@ export default defineConfig({
       provider: 'v8',
     },
   },
-
-  resolve: {
-    conditions: ['@systemfsoftware/source', 'source', 'import', 'node', 'default'],
-  },
 })

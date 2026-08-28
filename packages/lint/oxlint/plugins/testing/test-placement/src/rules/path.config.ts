@@ -34,8 +34,6 @@ export const SCHEMA_SUFFIX = '.schema.test.ts' as const
  */
 export const WORKFLOW_TEST_BASENAME = /^[^.]+\.workflow\.property\.test\.ts$/
 
-export const SURFACE_SNAPSHOT_BASENAME = 'surface.snapshot.test.ts' as const
-
 export const DOUBLE_BASENAME_PATTERN: RegExp = /(?:^|[^a-z])(?:fake|stub|mock|noop)(?:[^a-z]|$)/
 
 export const GHERKIN_PACKAGE = '@systemfsoftware/effect-gherkin-spec' as const

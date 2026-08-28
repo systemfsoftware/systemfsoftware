@@ -20,8 +20,7 @@
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint --format=${f:-default}",
-    "attw": "attw --pack .",
-    "surface:update": "api-surface generate ."
+    "attw": "attw --pack ."
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -42,7 +41,6 @@
     "@microsoft/api-extractor": "^7.58.7",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/all": "workspace:^",
-    "@systemfsoftware/api-surface": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",

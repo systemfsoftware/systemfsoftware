@@ -1,8 +1,0 @@
-[
-  "ColonHex",
-  "HexBytes",
-  "HexString",
-  "PrefixedHex",
-  "StrictHex",
-  "Uint8ArrayFromPrefixedHex",
-]

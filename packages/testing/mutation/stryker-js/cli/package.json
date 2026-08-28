@@ -25,8 +25,7 @@
     "mutation": "node ./dist/main.mjs run",
     "mutation:full": "node ./dist/main.mjs run --force",
     "api:check": "echo 'no API report for CLI (dts: false)' && exit 0",
-    "api:update": "echo 'no API report for CLI (dts: false)' && exit 0",
-    "surface:update": "api-surface generate ."
+    "api:update": "echo 'no API report for CLI (dts: false)' && exit 0"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
@@ -40,7 +39,6 @@
   },
   "devDependencies": {
     "@systemfsoftware/all": "workspace:^",
-    "@systemfsoftware/api-surface": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",

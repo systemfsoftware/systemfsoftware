@@ -40,8 +40,7 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --config oxlint.config.ts --format=${f:-default}",
     "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.json --format ${TSGO_FORMAT:-text}",
     "attw": "attw --pack .",
-    "dts:check": "tsc --noEmit -p tsconfig.dts.json",
-    "surface:update": "api-surface generate ."
+    "dts:check": "tsc --noEmit -p tsconfig.dts.json"
   },
   "dependencies": {
     "@systemfsoftware/effect-atom": "workspace:^"
@@ -54,7 +53,6 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "@systemfsoftware/api-surface": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
