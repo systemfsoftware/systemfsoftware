@@ -10,6 +10,13 @@ export interface TestFileContribution {
   readonly soleKills: number
   readonly totalKills: number
   /**
+   * How many non-`Ignored` mutants this test file covers. Zero means the report
+   * offered the file nothing it could kill, so it is unjudged (unauditable)
+   * rather than toothless — the deletion accusation requires the file to have
+   * been given a live mutant to defend.
+   */
+  readonly killableCovered: number
+  /**
    * Whether this file covers a killing mutant that no test file was credited with.
    *
    * A `Timeout` counts as a kill but arrives with `killedBy: []` — the runner cannot say
@@ -48,13 +55,26 @@ const testFileById = (
   return byId
 }
 
-// A killer we cannot place in a file stands for itself, so it still counts as a distinct
-// killer: the one file we did place never claims the mutant alone, and the unplaced key is
-// not a test file, so no real file is credited for it.
+// A killer we cannot place in a file still counts as a distinct killer for the sole-credit
+// test (a `[real, ghost]` pair never lets the real file claim the mutant alone), and the
+// unplaced key is not a test file, so it never credits or exempts a real file.
 const killersOf = (
   killedBy: readonly string[],
   fileById: ReadonlyMap<string, string>,
 ): ReadonlySet<string> => new Set(killedBy.map((testId) => fileById.get(testId) ?? testId))
+
+/** The real test files an id list maps to; ids naming no file are dropped as inert. */
+const realFiles = (
+  testIds: readonly string[],
+  fileById: ReadonlyMap<string, string>,
+): ReadonlySet<string> => {
+  const files = new Set<string>()
+  for (const testId of testIds) {
+    const fileName = fileById.get(testId)
+    if (fileName !== undefined) files.add(fileName)
+  }
+  return files
+}
 
 export const contributionByTestFile = (
   report: ReportView,
@@ -63,23 +83,30 @@ export const contributionByTestFile = (
   const fileById = testFileById(testFiles)
   const soleKills = new Map<string, number>()
   const totalKills = new Map<string, number>()
+  const killableCovered = new Map<string, number>()
   const unattributed = new Set<string>()
 
   for (const file of Object.values(report.files)) {
     for (const mutant of file.mutants) {
+      if (mutant.status !== 'Ignored') {
+        for (const fileName of realFiles(mutant.coveredBy ?? [], fileById)) {
+          killableCovered.set(fileName, (killableCovered.get(fileName) ?? 0) + 1)
+        }
+      }
       if (!KILLING_STATUSES.has(mutant.status)) continue
       const killers = killersOf(mutant.killedBy ?? [], fileById)
-      // A kill nobody is credited with is still a kill. Whoever covered it may be the one
-      // causing it, so they cannot be told that deleting them changes nothing.
-      if (killers.size === 0) {
+      const realKillers = realFiles(mutant.killedBy ?? [], fileById)
+      // A kill no real file is credited with is still a kill, and an id naming no file is
+      // not a test file at all. The coverers may be what causes it, so they cannot be told
+      // deleting them changes nothing. An all-unmapped `killedBy` lands here exactly as an
+      // empty one does; the inert ids are dropped and never spare anyone.
+      if (realKillers.size === 0) {
         const covered = mutant.coveredBy
-        // `killersOf` places every id, falling back to the id itself, so an id that names no
-        // test file lands in the set inert — no real file is ever spared on its account.
-        if (covered !== undefined) { for (const fileName of killersOf(covered, fileById)) unattributed.add(fileName) }
+        if (covered !== undefined) { for (const fileName of realFiles(covered, fileById)) unattributed.add(fileName) }
         continue
       }
       const soleKill = killers.size === 1
-      for (const fileName of killers) {
+      for (const fileName of realKillers) {
         totalKills.set(fileName, (totalKills.get(fileName) ?? 0) + 1)
         if (soleKill) soleKills.set(fileName, (soleKills.get(fileName) ?? 0) + 1)
       }
@@ -91,6 +118,7 @@ export const contributionByTestFile = (
     byTestFile.set(fileName, {
       soleKills: soleKills.get(fileName) ?? 0,
       totalKills: totalKills.get(fileName) ?? 0,
+      killableCovered: killableCovered.get(fileName) ?? 0,
       coversUnattributedKill: unattributed.has(fileName),
     })
   }
@@ -102,12 +130,14 @@ export const toothlessTestFiles = (
   { suffixes, everyKillerRecorded }: TestContributionInput,
 ): readonly string[] => {
   const toothless: string[] = []
-  for (const [fileName, { soleKills, totalKills, coversUnattributedKill }] of contribution) {
+  for (const [fileName, { soleKills, totalKills, coversUnattributedKill, killableCovered }] of contribution) {
     const defends = everyKillerRecorded ? soleKills > 0 : totalKills > 0
     const inScope = suffixes.some((suffix) => fileName.endsWith(suffix))
     // Covering a kill credited to nobody makes this file unmeasurable, not toothless: the
-    // accusation is that deleting it changes nothing, and that cannot be shown here.
-    if (!defends && inScope && !coversUnattributedKill) toothless.push(fileName)
+    // accusation is that deleting it changes nothing, and that cannot be shown here. A file
+    // the report gave no killable, covered mutant is unjudged for the same reason — it had
+    // nothing it could kill, so the report cannot say deleting it changes nothing.
+    if (!defends && inScope && !coversUnattributedKill && killableCovered > 0) toothless.push(fileName)
   }
   return toothless.sort()
 }
@@ -119,6 +149,39 @@ export interface TestContributionVerdict {
 
 // Past the bail guard, which returns before any verdict when killers went unrecorded.
 const PRECISION = 'every killing test was recorded'
+
+const defends = (
+  contribution: ReadonlyMap<string, TestFileContribution>,
+  fileName: string,
+): boolean => (contribution.get(fileName)?.soleKills ?? 0) > 0
+
+/**
+ * Joint subsumption over an accused set: every mutant some accused file kills
+ * retains at least one killer outside the accused set. Only then does deleting
+ * the whole set leave every mutant just as dead.
+ */
+const jointSubsumption = (
+  report: ReportView,
+  accused: readonly string[],
+  fileById: ReadonlyMap<string, string>,
+): boolean => {
+  const accusedSet = new Set(accused)
+  for (const file of Object.values(report.files)) {
+    for (const mutant of file.mutants) {
+      if (!KILLING_STATUSES.has(mutant.status)) continue
+      const killers = realFiles(mutant.killedBy ?? [], fileById)
+      if (killers.size === 0) continue // unattributed kill — cannot testify against the accused
+      let killsAccused = false
+      let killsOutside = false
+      for (const fileName of killers) {
+        if (accusedSet.has(fileName)) killsAccused = true
+        else killsOutside = true
+      }
+      if (killsAccused && !killsOutside) return false
+    }
+  }
+  return true
+}
 
 export const judgeTestContribution = (
   report: ReportView,
@@ -156,12 +219,41 @@ export const judgeTestContribution = (
   const toothless = toothlessTestFiles(contribution, { suffixes, everyKillerRecorded })
 
   if (toothless.length === 0) {
+    const everyDefends = inScope.every((fileName) => defends(contribution, fileName))
+    if (everyDefends) {
+      return {
+        failed: false,
+        message: `Every test file matching ${matches} kills a mutant nothing else kills (${PRECISION}).`,
+      }
+    }
+    // Some in-scope file was exempted (covers an unattributed kill) or unjudged (the report
+    // offered it no killable, covered mutant). The unique-kill sentence would be false for
+    // it, so state the honest judged/exempt/unjudged counts instead — never the blanket claim.
+    const judged = inScope.filter((fileName) => defends(contribution, fileName))
+    const notJudged = inScope.filter((fileName) => !defends(contribution, fileName))
+    const exempt = notJudged.filter(
+      (fileName) =>
+        contribution.get(fileName)?.coversUnattributedKill === true &&
+        (contribution.get(fileName)?.killableCovered ?? 0) > 0,
+    )
+    const unjudged = notJudged.filter((fileName) => (contribution.get(fileName)?.killableCovered ?? 0) === 0)
+    const parts: string[] = []
+    if (judged.length > 0) parts.push(`${judged.length} judged (kill a mutant nothing else kills)`)
+    if (exempt.length > 0) parts.push(`${exempt.length} exempted (cover a kill attributed to no test file)`)
+    if (unjudged.length > 0) parts.push(`${unjudged.length} unjudged (offered no killable, covered mutant)`)
+    return { failed: false, message: `Every file matching ${matches} was reviewed: ${parts.join('; ')}.` }
+  }
+
+  const testFiles = report.testFiles ?? {}
+  const fileById = testFileById(testFiles)
+  const listed = toothless.map((fileName) => `  - ${fileName}`).join('\n')
+  if (!jointSubsumption(report, toothless, fileById)) {
     return {
-      failed: false,
-      message: `Every test file matching ${matches} kills a mutant nothing else kills (${PRECISION}).`,
+      failed: true,
+      message:
+        `Deleting these ${toothless.length} test file(s) together would not leave every mutant just as dead: some mutant only they kill would be resurrected (${PRECISION}). Each is individually redundant, but the joint claim is not made on this evidence:\n${listed}`,
     }
   }
-  const listed = toothless.map((fileName) => `  - ${fileName}`).join('\n')
   return {
     failed: true,
     message:

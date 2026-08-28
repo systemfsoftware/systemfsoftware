@@ -55,6 +55,7 @@ export interface TestContributionVerdict {
 // @public (undocumented)
 export interface TestFileContribution {
     readonly coversUnattributedKill: boolean;
+    readonly killableCovered: number;
     // (undocumented)
     readonly soleKills: number;
     // (undocumented)

@@ -49,6 +49,7 @@ const reportWithToothlessKernelFile = (): schema.MutationTestResult => ({
           mutatorName: 'BooleanLiteral',
           location: LOCATION,
           killedBy: ['t1'],
+          coveredBy: ['t1', 't2'],
         },
       ],
     },
