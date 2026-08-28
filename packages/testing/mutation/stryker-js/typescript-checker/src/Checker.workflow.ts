@@ -2,8 +2,8 @@
  * Checker — pure check decision.
  *
  * `Workflow.make` lives here and only here. The workflow receives a fully
- * decoded input (mutants + diagnostics + file graph) and produces the
- * pass/compileError map without touching I/O.
+ * decoded input (mutants + diagnostics + file graph) and produces results plus
+ * `needsRetest` without touching I/O.
  */
 import { Wire, Workflow } from '@systemfsoftware/effect-cell-types'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
@@ -58,6 +58,11 @@ export class CheckMutantsInput extends S.TaggedClass<CheckMutantsInput>()(
 type MutantDecoded = S.Schema.Type<typeof Mutant>
 type DiagnosticDecoded = S.Schema.Type<typeof DiagnosticSchema>
 type NodeDecoded = NodeDecodedShape
+type MutantCheckStatus = { readonly status: 'passed' } | { readonly status: 'compileError'; readonly reason: string }
+export interface CheckMutantsDecision {
+  readonly results: Readonly<Record<string, MutantCheckStatus>>
+  readonly needsRetest: readonly MutantDecoded[]
+}
 
 const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
 
@@ -131,42 +136,40 @@ const classifyDiagnosticsPure = (
 
 const buildResult = (
   input: CheckMutantsInput,
-): Result.Result<
-  Readonly<
-    Record<string, { readonly status: 'passed' } | { readonly status: 'compileError'; readonly reason: string }>
-  >,
-  DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError
-> => {
+): Result.Result<CheckMutantsDecision, DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError> => {
   const mutants = input.mutants
   const diagnostics = input.diagnostics
   const nodes = input.nodes
-  const result: Record<
-    string,
-    { readonly status: 'passed' } | { readonly status: 'compileError'; readonly reason: string }
-  > = {}
-  for (const m of mutants) {
-    result[m.id] = { status: 'passed' }
-  }
   if (mutants.length === 0) {
-    return Result.succeed(result)
+    return Result.succeed({ results: {}, needsRetest: [] })
   }
   const first = mutants[0]
   if (first === undefined || nodes[normalizeFileName(first.fileName)] === undefined) {
-    return Result.succeed(result)
+    const results: Record<string, MutantCheckStatus> = {}
+    for (const m of mutants) {
+      results[m.id] = { status: 'passed' }
+    }
+    return Result.succeed({ results, needsRetest: [] })
   }
   const classified = classifyDiagnosticsPure(diagnostics, mutants, nodes)
   if (Result.isFailure(classified)) {
     return Result.fail(classified.failure)
   }
-  const { definitive } = classified.success
-  for (const id of Object.keys(definitive)) {
-    const diags = definitive[id]
+  const { definitive, needsRetest } = classified.success
+  const retestIds: Record<string, true> = {}
+  for (const m of needsRetest) {
+    retestIds[m.id] = true
+  }
+  const results: Record<string, MutantCheckStatus> = {}
+  for (const m of mutants) {
+    const diags = definitive[m.id]
     if (diags !== undefined) {
-      const reason = diags.map((d) => d.text).join('\n')
-      result[id] = { status: 'compileError', reason }
+      results[m.id] = { status: 'compileError', reason: diags.map((d) => d.text).join('\n') }
+    } else if (retestIds[m.id] !== true) {
+      results[m.id] = { status: 'passed' }
     }
   }
-  return Result.succeed(result)
+  return Result.succeed({ results, needsRetest })
 }
 
 export const checkMutants = Workflow.make(CheckMutantsInput, (input: CheckMutantsInput) => buildResult(input))

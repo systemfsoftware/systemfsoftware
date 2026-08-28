@@ -25,6 +25,7 @@ import type { Diagnostic } from 'typescript/unstable/sync'
 import { CheckMutantsCommand } from './Checker.schema.js'
 import {
   checkMutants,
+  type CheckMutantsDecision,
   CheckMutantsInput,
   DiagnosticInUnrelatedFileError,
   DiagnosticWithoutFileError,
@@ -52,91 +53,6 @@ const findSourceMapRegex = /\/\/# sourceMappingURL=(.+)$/m
 export function getSourceMappingURL(content: string): string | undefined {
   findSourceMapRegex.lastIndex = 0
   return findSourceMapRegex.exec(content)?.[1]
-}
-
-// ── diagnostics classification (pure) ────────────────────────────────────
-
-export interface Classification {
-  readonly definitive: MutableHashMap.MutableHashMap<string, readonly Diagnostic[]>
-  readonly needsRetest: readonly Mutant[]
-}
-
-type ClassifyError = DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError
-
-/**
- * Pure decision: given diagnostics and the file graph, decide which mutants
- * are definitely responsible and which need an individual re-check.
- */
-export function classifyDiagnostics(
-  diagnostics: readonly Diagnostic[],
-  mutants: readonly Mutant[],
-  nodes: ReadonlyMap<string, TSFileNode>,
-): Result.Result<Classification, ClassifyError> {
-  const definitive = MutableHashMap.empty<string, Diagnostic[]>()
-  const needsRetest = MutableHashMap.empty<string, Mutant>()
-  if (diagnostics.length > 0 && mutants.length === 1) {
-    const only = mutants[0]
-    if (only !== undefined) {
-      MutableHashMap.set(definitive, only.id, [...diagnostics])
-      return Result.succeed({ definitive, needsRetest: [] })
-    }
-  }
-
-  for (const diagnostic of diagnostics) {
-    const text = diagnostic.text
-    let fileName: string | undefined
-    if (Predicate.hasProperty(diagnostic, 'fileName')) {
-      const candidate = diagnostic.fileName
-      if (typeof candidate === 'string') {
-        fileName = candidate
-      }
-    }
-    if (fileName === undefined || fileName === '') {
-      return Result.fail(new DiagnosticWithoutFileError({ text }))
-    }
-    const normalized = normalizeFileName(fileName)
-    const node = nodes.get(normalized) ?? nodes.get(fileName)
-    if (node === undefined) {
-      return Result.fail(new DiagnosticInUnrelatedFileError({ text, fileName }))
-    }
-    const related = getMutantsWithReferenceToChildrenOrSelf(node, [...mutants])
-    if (related.length === 0) {
-      for (const m of mutants) {
-        MutableHashMap.set(needsRetest, m.id, m)
-      }
-    } else if (related.length === 1) {
-      const only = related[0]
-      if (only !== undefined) {
-        const existing = MutableHashMap.get(definitive, only.id)
-        if (Option.isSome(existing)) {
-          existing.value.push(diagnostic)
-        } else {
-          MutableHashMap.set(definitive, only.id, [diagnostic])
-        }
-      }
-    } else {
-      for (const m of related) {
-        MutableHashMap.set(needsRetest, m.id, m)
-      }
-    }
-  }
-
-  const filteredRetest = [...MutableHashMap.values(needsRetest)].filter((m) => !MutableHashMap.has(definitive, m.id))
-  return Result.succeed({ definitive, needsRetest: filteredRetest })
-}
-
-function getMutantsWithReferenceToChildrenOrSelf(
-  node: TSFileNode,
-  mutants: Mutant[],
-  nodesChecked: string[] = [],
-): Mutant[] {
-  if (nodesChecked.includes(node.fileName)) {
-    return []
-  }
-  nodesChecked.push(node.fileName)
-  const relatedMutants = mutants.filter((m) => normalizeFileName(m.fileName) === node.fileName)
-  const childResult = node.children.flatMap((c) => getMutantsWithReferenceToChildrenOrSelf(c, mutants, nodesChecked))
-  return [...relatedMutants, ...childResult]
 }
 
 /**
@@ -192,17 +108,10 @@ interface CheckPhases extends Cell.Phases {
   readonly command: CheckMutantsCommand
   readonly raw: CheckMutantsInput
   readonly decoded: CheckMutantsInput
-  readonly decision: Readonly<
-    Record<string, { readonly status: 'passed' } | { readonly status: 'compileError'; readonly reason: string }>
-  >
+  readonly decision: CheckMutantsDecision
   readonly decisionError: DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError
-  readonly output: Result.Result<
-    Readonly<
-      Record<string, { readonly status: 'passed' } | { readonly status: 'compileError'; readonly reason: string }>
-    >,
-    DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError
-  >
-  readonly response: HashMap.HashMap<string, CheckResult>
+  readonly output: Result.Result<CheckMutantsDecision, DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError>
+  readonly response: CheckMutantsDecision
   readonly decodeError: never
   readonly readError: CheckerFailed
   readonly writeError: CheckerFailed
@@ -256,17 +165,7 @@ const makeCheckDescription = (compiler: TypeScriptCompiler['Service']): Cell.Wri
               cause: errorToString(failure),
             }),
           ),
-        onSuccess: (record) => {
-          let map = HashMap.empty<string, CheckResult>()
-          for (const [id, value] of Object.entries(record)) {
-            if (value.status === 'passed') {
-              map = HashMap.set(map, id, { status: 'passed' })
-            } else {
-              map = HashMap.set(map, id, { status: 'compileError', reason: value.reason })
-            }
-          }
-          return Effect.succeed(map)
-        },
+        onSuccess: (decision) => Effect.succeed(decision),
       })
     ),
   )
@@ -340,9 +239,37 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
 
     check: (mutants) =>
       Effect.gen(function*() {
-        const command = new CheckMutantsCommand({ mutants: [...mutants] })
         const description = makeCheckDescription(compiler)
-        return yield* Cell.apply(description, command)
+        const applyOnce = (group: readonly Mutant[]) =>
+          Cell.apply(description, new CheckMutantsCommand({ mutants: [...group] }))
+        const first = yield* applyOnce(mutants)
+        let map = HashMap.empty<string, CheckResult>()
+        const mergeResults = (results: CheckMutantsDecision['results']) => {
+          for (const [id, value] of Object.entries(results)) {
+            if (value.status === 'passed') {
+              map = HashMap.set(map, id, { status: 'passed' })
+            } else {
+              map = HashMap.set(map, id, { status: 'compileError', reason: value.reason })
+            }
+          }
+        }
+        mergeResults(first.results)
+        if (first.needsRetest.length > 0) {
+          yield* applyOnce([])
+        }
+        const originals: Record<string, Mutant> = {}
+        for (const m of mutants) {
+          originals[m.id] = m
+        }
+        for (const pending of first.needsRetest) {
+          const original = originals[pending.id]
+          if (original === undefined) {
+            continue
+          }
+          const one = yield* applyOnce([original])
+          mergeResults(one.results)
+        }
+        return map
       }),
 
     group: (mutants) =>

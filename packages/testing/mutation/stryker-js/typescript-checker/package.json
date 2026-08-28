@@ -37,6 +37,7 @@
     "typescript": "catalog:"
   },
   "devDependencies": {
+    "@effect/platform-node-shared": "catalog:",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
