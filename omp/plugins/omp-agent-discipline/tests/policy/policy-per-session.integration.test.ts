@@ -22,7 +22,7 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Policy per-session timing — two cwds get their own projects config').body(({ scenario }) => {
   scenario(
-    'Should isolate per-session policy between two project cwds',
+    'Per-session policy is isolated between two project working directories',
     Gherkin.Do.pipe(
       Given('a memfs with two project tomls')('ctx', () =>
         Effect.succeed({
@@ -68,7 +68,7 @@ Feature('Policy per-session timing — two cwds get their own projects config').
   )
 
   scenario(
-    'Should read through to the real FS layer on a never-warmed cwd (read-on-miss)',
+    'A never-warmed working directory reads through to the file system on miss',
     Gherkin.Do.pipe(
       Given('a memfs with a toml for a cwd that is never warmed')('ctx', () =>
         Effect.succeed({
@@ -98,7 +98,7 @@ Feature('Policy per-session timing — two cwds get their own projects config').
   )
 
   scenario(
-    'Should let a second warm of the same cwd win',
+    'The second warm wins for the same working directory',
     Gherkin.Do.pipe(
       Given('a cwd warmed twice with different tomls')('ctx', () =>
         Effect.succeed({

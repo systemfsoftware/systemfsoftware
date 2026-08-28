@@ -19,7 +19,9 @@ import {
   classCall,
   memberOf,
   namedProperty,
+  objectExpression,
   objectOf,
+  stringLiteral,
 } from '../__fixtures__/EffectSchemaAst.fixtures.js'
 
 const Feature = makeFeature({ it, layer })
@@ -27,12 +29,12 @@ const Feature = makeFeature({ it, layer })
 Feature('Effect Schema declarations — ignored mutants on tags, brands, optionals, and annotation objects')
   .body(({ scenario }) => {
     scenario(
-      'Should_NotIgnoreTaggedArgs_When_FactoryIsBareIdentifier',
+      'A bare identifier factory keeps its tagged arguments live',
       Gherkin.Do.pipe(
         Given('a bare `TaggedClass("tag", {})` call expression (no `Schema.` prefix)')('node', () =>
           Effect.sync(() => {
-            const tag = { type: 'StringLiteral', value: 'someTag' }
-            const fields = { type: 'ObjectExpression' }
+            const tag = stringLiteral('someTag')
+            const fields = objectExpression()
             return { tag, fields, call: bareFactoryCall('TaggedClass', tag, fields) }
           })),
         When('decideSchemaDeclarationIgnore examines the tag and fields')('results', (s) =>
@@ -51,11 +53,11 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
     )
 
     scenario(
-      'Should_NotIgnore_When_ObjectIsNamedSymbolButPropertyIsNotFor',
+      'A description string in a Symbol dot keyFor call stays live',
       Gherkin.Do.pipe(
         Given('a `Symbol.keyFor("desc")` call')('node', () =>
           Effect.sync(() => {
-            const description = { type: 'StringLiteral', value: 'desc' }
+            const description = stringLiteral('desc')
             return { description, call: callOf(memberOf('Symbol', 'keyFor'), [description]) }
           })),
         When('decideSchemaDeclarationIgnore examines the argument')(
@@ -71,11 +73,11 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
     )
 
     scenario(
-      'Should_NotIgnore_When_ObjectIsNotSymbolButPropertyIsFor',
+      'A description string in an Object dot for call stays live',
       Gherkin.Do.pipe(
         Given('a `Object.for("desc")` call')('node', () =>
           Effect.sync(() => {
-            const description = { type: 'StringLiteral', value: 'desc' }
+            const description = stringLiteral('desc')
             return { description, call: callOf(memberOf('Object', 'for'), [description]) }
           })),
         When('decideSchemaDeclarationIgnore examines the argument')(
@@ -91,7 +93,7 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
     )
 
     scenario(
-      'Should_IgnoreOptionalWithDefault_When_ArgIsArrowFunction',
+      'An arrow function default for an optional field is ignored',
       Gherkin.Do.pipe(
         Given('`S.optionalWith(S.String, () => default)`')('node', () =>
           Effect.sync(() => {
@@ -112,11 +114,11 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
     )
 
     scenario(
-      'Should_NotIgnoreOptionalWithDefault_When_ArgIsNotArrowFunction',
+      'A string literal default for an optional field stays live',
       Gherkin.Do.pipe(
         Given('`S.optionalWith(S.String, "x")`')('node', () =>
           Effect.sync(() => {
-            const notFn = { type: 'StringLiteral', value: 'x' }
+            const notFn = stringLiteral('x')
             const schemaArg = memberOf('S', 'String')
             return { notFn, call: callOf(memberOf('S', 'optionalWith'), [schemaArg, notFn]) }
           })),
@@ -133,7 +135,7 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
     )
 
     scenario(
-      'Should_NotIgnoreOptionalWithDefault_When_CalleeIsNotOptionalWith',
+      'An arrow function default outside optionalWith stays live',
       Gherkin.Do.pipe(
         Given('`S.optional(S.String, () => default)` — wrong callee')('node', () =>
           Effect.sync(() => {
@@ -154,19 +156,19 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
     )
 
     scenario(
-      'Should_IgnoreObjectAndValues_When_AnnotationsHoldOnlyDocumentation',
+      'An annotations object holding only documentation is ignored in full',
       Gherkin.Do.pipe(
         Given('an `S.annotations({ identifier, description, title })` call with documentation only')(
           'node',
           () =>
             Effect.sync(() => {
               const documentation = objectOf([
-                namedProperty('identifier', { type: 'StringLiteral', value: 'HexBytes' }),
+                namedProperty('identifier', stringLiteral('HexBytes')),
                 namedProperty('description', {
                   type: 'StringLiteral',
                   value: 'Uint8Array encoded as a lowercase hex string',
                 }),
-                namedProperty('title', { type: 'StringLiteral', value: 'Hex Bytes' }),
+                namedProperty('title', stringLiteral('Hex Bytes')),
               ])
               const call = annotationsCall(documentation)
               return { documentation, call }
@@ -194,7 +196,7 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
     )
 
     scenario(
-      'Should_IgnoreDocumentationOnly_When_AnnotationsAlsoCarryBehaviour',
+      'An annotations object mixing a generator with documentation keeps the generator live',
       Gherkin.Do.pipe(
         Given('`S.annotations({ arbitrary, identifier })` — one behaviour key plus a documentation key')(
           'node',
@@ -202,7 +204,7 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
             Effect.sync(() => {
               const mixed = objectOf([
                 namedProperty('arbitrary', { type: 'ArrowFunctionExpression' }),
-                namedProperty('identifier', { type: 'StringLiteral', value: 'HexStringInput' }),
+                namedProperty('identifier', stringLiteral('HexStringInput')),
               ])
               const call = annotationsCall(mixed)
               const properties = mixed.properties
@@ -237,7 +239,7 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
     )
 
     scenario(
-      'Should_NotIgnore_When_AnnotationsCarryAnArbitrary',
+      'An annotations object holding only a generator stays live',
       Gherkin.Do.pipe(
         Given('`S.annotations({ arbitrary })` — only a generator')('node', () =>
           Effect.sync(() => {
@@ -257,7 +259,7 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
     )
 
     scenario(
-      'Should_NotIgnore_When_AnnotationsObjectIsEmpty',
+      'An empty annotations object stays live',
       Gherkin.Do.pipe(
         Given('`S.annotations({})` — empty documentation object')('node', () =>
           Effect.sync(() => {
@@ -277,13 +279,13 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
     )
 
     scenario(
-      'Should_NotIgnore_When_DocumentationObjectSitsAtAnotherArgument',
+      'A documentation object in the wrong argument position stays live',
       Gherkin.Do.pipe(
         Given('a documentation object passed to a non-annotations call')('node', () =>
           Effect.sync(() => {
-            const documentation = objectOf([namedProperty('title', { type: 'StringLiteral', value: 'Hex Bytes' })])
+            const documentation = objectOf([namedProperty('title', stringLiteral('Hex Bytes'))])
             const call = callOf(memberOf('S', 'annotations'), [
-              { type: 'StringLiteral', value: 'other' },
+              stringLiteral('other'),
               documentation,
             ])
             return { documentation, call }
@@ -301,11 +303,11 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
     )
 
     scenario(
-      'Should_NotIgnore_When_CalleeIsABareAnnotationsIdentifier',
+      'A documentation object passed to a bare annotations call stays live',
       Gherkin.Do.pipe(
         Given('a call to a bare `annotations` identifier (not `S.annotations`)')('node', () =>
           Effect.sync(() => {
-            const documentation = objectOf([namedProperty('title', { type: 'StringLiteral', value: 'Hex Bytes' })])
+            const documentation = objectOf([namedProperty('title', stringLiteral('Hex Bytes'))])
             const call = callOf({ type: 'Identifier', name: 'annotations' }, [documentation])
             return { documentation, call }
           })),
@@ -322,14 +324,14 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
     )
 
     scenario(
-      'Should_IgnoreClassIdButNotItsFields_When_FactoryIsSchemaClass',
+      'A class identifier is ignored while its fields object stays live',
       Gherkin.Do.pipe(
         Given('a `Schema.Class<A>("ChildPolicyConfig")({ … })` call, whose id rides the inner call')(
           'node',
           () =>
             Effect.sync(() => {
-              const id = { type: 'StringLiteral', value: 'ChildPolicyConfig' }
-              const fields = { type: 'ObjectExpression', properties: [] }
+              const id = stringLiteral('ChildPolicyConfig')
+              const fields = objectExpression()
               const outer = classCall(id, fields)
               return { id, fields, outer, inner: outer.callee }
             }),
@@ -352,11 +354,11 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
     )
 
     scenario(
-      'Should_IgnoreBrandName_When_CalleeIsSchemaBrand',
+      'A brand name string is ignored',
       Gherkin.Do.pipe(
         Given('an `S.brand("MaxChildren")` call')('node', () =>
           Effect.sync(() => {
-            const name = { type: 'StringLiteral', value: 'MaxChildren' }
+            const name = stringLiteral('MaxChildren')
             return { name, call: brandCall(name) }
           })),
         When('decideSchemaDeclarationIgnore examines the brand name')(
@@ -372,19 +374,19 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
     )
 
     scenario(
-      'Should_NotIgnoreLiteralMembers_When_TheyRideASchemaLiteralInsideClassFields',
+      'Accepted literal values inside class fields stay live',
       Gherkin.Do.pipe(
         Given('a `Schema.Literal("permanent", "transient")` inside a `Schema.Class` fields object')(
           'node',
           () =>
             Effect.sync(() => {
-              const member = { type: 'StringLiteral', value: 'permanent' }
+              const member = stringLiteral('permanent')
               const literal = callOf(memberOf('Schema', 'Literal'), [member, {
                 type: 'StringLiteral',
                 value: 'transient',
               }])
               const fields = objectOf([namedProperty('restart', literal)])
-              return { member, literal, outer: classCall({ type: 'StringLiteral', value: 'C' }, fields) }
+              return { member, literal, outer: classCall(stringLiteral('C'), fields) }
             }),
         ),
         When('decideSchemaDeclarationIgnore examines one accepted literal')(

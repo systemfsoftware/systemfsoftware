@@ -24,7 +24,7 @@ Feature('Feature builder — live clock with a shared layer')
   .withScope({ token: Effect.succeed('scoped') })
   .body(({ scenario, scope }) => {
     scenario(
-      'Should read the shared service when withLayer provides it',
+      'A shared service is available inside the scenario',
       Gherkin.Do.pipe(
         Given('the widget is in the environment')('label', () => Widget.pipe(Effect.map((w) => w.label))),
         Then('the label is the shared one')((s) => {
@@ -34,7 +34,7 @@ Feature('Feature builder — live clock with a shared layer')
     )
 
     scenario(
-      'Should observe a finite wall-clock time when liveClock is set',
+      'The current wall-clock time is a finite number',
       Gherkin.Do.pipe(
         Given('the current time')('now', () => Clock.currentTimeMillis),
         Then('the time is a finite number')((s) => {
@@ -44,7 +44,7 @@ Feature('Feature builder — live clock with a shared layer')
     )
 
     scenario(
-      'Should expose the scope binding when withScope is set',
+      'A scoped token is available inside the scenario',
       scope.pipe(
         Then('the token is present')((s) => {
           expect(s.token).toBe('scoped')

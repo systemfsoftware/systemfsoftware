@@ -23,7 +23,7 @@ const makeLayer = (contents: Record<string, string>) =>
 
 Feature('FileReferencedContent adapter — extraction, resolution, and injection').body(({ scenario }) => {
   scenario(
-    'Should extract plain @-refs from CLAUDE.md',
+    'Plain at-refs are extracted from CLAUDE.md',
     {
       scenarioLayer: makeLayer({
         '/test/CLAUDE.md': '@rules/typescript.md\n',
@@ -47,7 +47,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should extract refs from bullet list lines starting with dash',
+    'A dash-prefixed at-ref is extracted from CLAUDE.md',
     {
       scenarioLayer: makeLayer({
         '/test/CLAUDE.md': '- @rules/lint.md\n',
@@ -70,7 +70,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should extract refs when star and plus markers are used',
+    'Star- and plus-prefixed at-refs are extracted from CLAUDE.md',
     {
       scenarioLayer: makeLayer({
         '/test/CLAUDE.md': '* @config/eslint.md\n\n+ @config/prettier.md\n',
@@ -95,7 +95,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should skip missing referenced file',
+    'A ref to a missing file is skipped',
     {
       scenarioLayer: makeLayer({
         '/test/CLAUDE.md': '@rules/missing.md\n',
@@ -117,7 +117,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should reject absolute path refs starting with slash',
+    'A ref with an absolute path is rejected',
     {
       scenarioLayer: makeLayer({
         '/test/CLAUDE.md': '@/etc/passwd\n',
@@ -139,7 +139,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should reject path traversal refs with dot-dot',
+    'A ref escaping its base directory is rejected',
     {
       scenarioLayer: makeLayer({
         '/test/CLAUDE.md': '@../outside.txt\n',
@@ -161,7 +161,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should reject refs containing a space',
+    'A ref containing a space is rejected',
     {
       scenarioLayer: makeLayer({
         '/test/CLAUDE.md': '@rules/with space.md\n',
@@ -184,7 +184,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should return empty when no refs found',
+    'No at-refs in CLAUDE.md yields no injection',
     {
       scenarioLayer: makeLayer({
         '/test/CLAUDE.md': 'No refs in here\n',
@@ -206,7 +206,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should load refs from .claude/CLAUDE.md when root CLAUDE.md is missing',
+    'Refs are loaded from .claude/CLAUDE.md when the root file is absent',
     {
       scenarioLayer: makeLayer({
         '/test/.claude/CLAUDE.md': '@.claude/rules.md\n',
@@ -229,7 +229,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should merge refs from both CLAUDE.md files concurrently',
+    'Refs from both CLAUDE.md files are merged',
     {
       scenarioLayer: makeLayer({
         '/test/CLAUDE.md': '@rules/a.md\n',
@@ -255,7 +255,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should dedupe the same resolved path appearing in both CLAUDE.md files',
+    'A ref appearing in both CLAUDE.md files is deduplicated',
     {
       scenarioLayer: makeLayer({
         '/test/CLAUDE.md': '@shared.md\n',
@@ -280,7 +280,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should fall back to project root when baseDir resolution is not confined or missing',
+    'A ref not found in its own directory falls back to the project root',
     {
       scenarioLayer: makeLayer({
         '/test/.claude/CLAUDE.md': '@shared.md\n',
@@ -306,7 +306,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should skip an unreadable ref target without leaking an error into the prompt',
+    'An unreadable ref is skipped without leaking an error into the prompt',
     {
       scenarioLayer: makeLayer({
         '/test/CLAUDE.md': '@refdir\n@docs/style.md\n',
@@ -332,7 +332,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should still inject a ref outside the default skip list',
+    'A ref outside the default skip list is still injected',
     {
       scenarioLayer: makeLayer({
         '/test/CLAUDE.md': '@docs/style.md\n',
@@ -355,7 +355,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should suppress a skip-listed ref whatever its content',
+    'A skip-listed ref is suppressed regardless of content',
     {
       scenarioLayer: makeLayer({
         '/test/CLAUDE.md': '@AGENTS.md\n',
@@ -378,7 +378,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should replace the default skip list with a configured one',
+    'A configured skip list replaces the default one',
     {
       scenarioLayer: makeLayer({
         '/test/systemfsoftware.toml': 'no_inject_refs = ["CUSTOM.md"]\n',
@@ -404,7 +404,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should read no_inject_refs alongside an unrelated config key',
+    'The no-inject list is read alongside an unrelated config key',
     {
       scenarioLayer: makeLayer({
         '/test/systemfsoftware.toml': 'no_delegate_skills = ["lfg"]\nno_inject_refs = ["CUSTOM.md"]\n',
@@ -433,7 +433,7 @@ Feature('FileReferencedContent adapter — extraction, resolution, and injection
   )
 
   scenario(
-    'Should return one injected section when one ref read fails concurrently',
+    'One readable ref still injects when a concurrent ref fails',
     {
       scenarioLayer: makeLayer({
         '/test/CLAUDE.md': '@ok.md\n@missing.md\n',

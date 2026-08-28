@@ -5,6 +5,11 @@ interface Identifier {
   readonly name: string
 }
 
+interface StringLiteral {
+  readonly type: 'StringLiteral'
+  readonly value: string
+}
+
 interface MemberExpression {
   readonly type: 'MemberExpression'
   readonly object: Identifier
@@ -84,6 +89,13 @@ export const propertyOf = (key: AstNode, value: AstNode, computed = false): Prop
 export const namedProperty = (key: string, value: AstNode): PropertyNode => propertyOf(identifier(key), value)
 
 export const objectOf = (properties: readonly PropertyNode[]): ObjectNode => ({
+  type: 'ObjectExpression',
+  properties,
+})
+
+export const stringLiteral = (value: string): StringLiteral => ({ type: 'StringLiteral', value })
+
+export const objectExpression = (properties: readonly PropertyNode[] = []): ObjectNode => ({
   type: 'ObjectExpression',
   properties,
 })

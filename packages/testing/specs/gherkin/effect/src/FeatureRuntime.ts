@@ -73,18 +73,43 @@ const buildScenarioWithFresh = <RShared, RFresh, RFreshReq>(
   return result.pipe(Effect.provide(Layer.fresh(featureScenarioLayer)))
 }
 
+/**
+ * A scenario title names a concrete situation in natural-language prose. Two
+ * shape checks keep DAMP `Should_[Behavior]_When_[Condition]` unit-test names —
+ * and every concatenated-token title shaped like one — out of the call site:
+ *  1. the literal must not start with `Should`;
+ *  2. the literal must contain at least one ASCII space (a single-word title is
+ *     a test name, not prose).
+ * Either check failing maps to `ScenarioTitleRejected`, so the call fails to
+ * type-check with the rule in the diagnostic. Non-literal titles (widened
+ * `string`) pass through untouched — a runtime guard would catch those, but
+ * the brand is the contract this skill ships.
+ */
+export type ScenarioTitleRejected<T extends string> =
+  | `Scenario titles are natural-language prose of a concrete situation, not DAMP Should_[Behavior]_When_[Condition] unit-test names. Got: ${T}`
+  | `Scenario title must be natural-language prose (at least one space separates words); got: ${T}`
+
+export type ScenarioTitle<T extends string> = T extends `Should${string}` ? ScenarioTitleRejected<T>
+  : T extends `${string} ${string}` ? T
+  : ScenarioTitleRejected<T>
+
 type OutlineCallable<RShared = never, RFresh = never, RFreshReq = never> = {
-  <const Rows extends readonly Record<string, unknown>[], RPipe extends RShared | RFresh | RFreshReq | Scope.Scope>(
-    name: string,
+  <
+    TName extends string,
+    const Rows extends readonly Record<string, unknown>[],
+    RPipe extends RShared | RFresh | RFreshReq | Scope.Scope,
+  >(
+    name: ScenarioTitle<TName>,
     examples: Rows,
     stepFactory: (row: Rows[number]) => Effect.Effect<unknown, StepError, RPipe>,
   ): void
   <
+    TName extends string,
     const Rows extends readonly Record<string, unknown>[],
     RExtra,
     RPipe extends RShared | RFresh | RFreshReq | Scope.Scope | RExtra,
   >(
-    name: string,
+    name: ScenarioTitle<TName>,
     examples: Rows,
     stepFactory: (row: Rows[number]) => Effect.Effect<unknown, StepError, RPipe>,
     opts: ScenarioOptions<RShared | RFresh | RFreshReq, RExtra>,
@@ -232,12 +257,12 @@ export const createOutlineFnWithFresh = <RShared, RFresh, RFreshReq>(
 }
 
 type ScenarioCallable<RShared, RFresh, RFreshReq> = {
-  <RPipe extends RShared | RFresh | RFreshReq | Scope.Scope>(
-    name: string,
+  <TName extends string, RPipe extends RShared | RFresh | RFreshReq | Scope.Scope>(
+    name: ScenarioTitle<TName>,
     pipeline: Effect.Effect<unknown, StepError, RPipe>,
   ): void
-  <RExtra, RPipe extends RShared | RFresh | RFreshReq | Scope.Scope | RExtra>(
-    name: string,
+  <TName extends string, RExtra, RPipe extends RShared | RFresh | RFreshReq | Scope.Scope | RExtra>(
+    name: ScenarioTitle<TName>,
     opts: ScenarioOptions<RShared | RFresh | RFreshReq, RExtra>,
     pipeline: Effect.Effect<unknown, StepError, RPipe>,
   ): void
@@ -497,25 +522,25 @@ if (import.meta.vitest !== void 0) {
 
     it('Should_CallRegisterWithRunMode_When_BaseScenarioCalled', () => {
       const { registered, scenario } = record()
-      scenario('test', EffectModule.void)
-      expect(registered).toEqual([{ name: 'test', mode: 'run' }])
+      scenario('A base scenario call registers under run mode', EffectModule.void)
+      expect(registered).toEqual([{ name: 'A base scenario call registers under run mode', mode: 'run' }])
     })
 
     it('Should_CallRegisterWithSkipMode_When_SkipCalled', () => {
       const { registered, scenario } = record()
-      scenario.skip('skipped', EffectModule.void)
-      expect(registered).toEqual([{ name: 'skipped', mode: 'skip' }])
+      scenario.skip('A skipped scenario registers under skip mode', EffectModule.void)
+      expect(registered).toEqual([{ name: 'A skipped scenario registers under skip mode', mode: 'skip' }])
     })
 
     it('Should_CallRegisterWithOnlyMode_When_OnlyCalled', () => {
       const { registered, scenario } = record()
-      scenario.only('only', EffectModule.void)
-      expect(registered).toEqual([{ name: 'only', mode: 'only' }])
+      scenario.only('An only scenario registers under only mode', EffectModule.void)
+      expect(registered).toEqual([{ name: 'An only scenario registers under only mode', mode: 'only' }])
     })
 
     it('Should_AcceptScenarioOptions_When_SecondArgIsOpts', () => {
       const { registered, scenario } = record()
-      scenario('test', { layer: LayerModule.empty }, EffectModule.void)
+      scenario('A scenario with options registers under run mode', { layer: LayerModule.empty }, EffectModule.void)
       expect(registered).toHaveLength(1)
       expect(registered[0]?.mode).toBe('run')
     })
@@ -530,7 +555,7 @@ if (import.meta.vitest !== void 0) {
         },
         () => null,
       )
-      outline('test', [{ x: '1' }, { x: '2' }], () => EffectModule.void)
+      outline('An outline example registers a scenario per row', [{ x: '1' }, { x: '2' }], () => EffectModule.void)
       expect(registered).toHaveLength(2)
       expect(registered.every((r) => r.mode === 'run')).toBe(true)
     })
@@ -543,7 +568,7 @@ if (import.meta.vitest !== void 0) {
         () => null,
       )
       outline(
-        'test',
+        'An outline passes its typed row to the factory',
         [{ role: 'admin', id: '1' }, { role: 'user', id: '2' }] satisfies readonly Row[],
         (row: Row) => {
           receivedRows.push(row)
@@ -561,8 +586,15 @@ if (import.meta.vitest !== void 0) {
         },
         () => null,
       )
-      outline('test <role>', [{ role: 'admin' }, { role: 'user' }], () => EffectModule.void)
-      expect(registered).toEqual(['test admin', 'test user'])
+      outline(
+        'A <role> example expands into one scenario',
+        [{ role: 'admin' }, { role: 'user' }],
+        () => EffectModule.void,
+      )
+      expect(registered).toEqual([
+        'A admin example expands into one scenario',
+        'A user example expands into one scenario',
+      ])
     })
 
     it('Should_CallRegisterWithSkipMode_When_SkipCalled', () => {
@@ -571,8 +603,8 @@ if (import.meta.vitest !== void 0) {
         (name, _effect, mode) => registered.push({ name, mode }),
         () => null,
       )
-      outline.skip('skipped', [{ x: '1' }], () => EffectModule.void)
-      expect(registered).toEqual([{ name: 'skipped', mode: 'skip' }])
+      outline.skip('A skipped outline registers under skip mode', [{ x: '1' }], () => EffectModule.void)
+      expect(registered).toEqual([{ name: 'A skipped outline registers under skip mode', mode: 'skip' }])
     })
 
     it('Should_CallRegisterWithOnlyMode_When_OnlyCalled', () => {
@@ -581,8 +613,8 @@ if (import.meta.vitest !== void 0) {
         (name, _effect, mode) => registered.push({ name, mode }),
         () => null,
       )
-      outline.only('focused', [{ x: '1' }], () => EffectModule.void)
-      expect(registered).toEqual([{ name: 'focused', mode: 'only' }])
+      outline.only('A focused outline registers under only mode', [{ x: '1' }], () => EffectModule.void)
+      expect(registered).toEqual([{ name: 'A focused outline registers under only mode', mode: 'only' }])
     })
   })
 

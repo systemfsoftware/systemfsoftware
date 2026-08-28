@@ -15,7 +15,7 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Scenario registration — argument resolution').body(({ scenario }) => {
   scenario(
-    'Should return failing pipeline when second arg undefined',
+    'An undefined second argument yields a failing pipeline',
     Effect.gen(function*() {
       const { pipeline } = resolveScenarioArgs<never>(void 0, void 0)
       const result = yield* Effect.result(pipeline)
@@ -28,7 +28,7 @@ Feature('Scenario registration — argument resolution').body(({ scenario }) => 
   )
 
   scenario(
-    'Should return failing pipeline when opts provided but no pipeline',
+    'Providing options without a pipeline yields a failing pipeline',
     Effect.gen(function*() {
       const { pipeline } = resolveScenarioArgs<never>({ layer: Layer.empty }, void 0)
       const result = yield* Effect.result(pipeline)

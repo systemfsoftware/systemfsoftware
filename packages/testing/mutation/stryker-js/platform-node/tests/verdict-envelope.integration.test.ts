@@ -84,7 +84,7 @@ const LOCATION_C = { start: { line: 3, column: 0 }, end: { line: 3, column: 6 } 
 
 Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
   scenario(
-    'Should_ProduceADifferentRunId_When_ItIsCalledTwice',
+    'Two run-id generations produce different ids',
     Gherkin.Do.pipe(
       When('two run ids are generated')('ids', () => Effect.sync(() => [generateRunId(), generateRunId()])),
       Then('the ids differ')((s: { ids: readonly string[] }) => {
@@ -94,7 +94,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_CarryEveryNamedField_When_TheReportMixesStatuses',
+    'A report mixing statuses keeps every named field',
     Gherkin.Do.pipe(
       Given('a report with survivors, killed and no-coverage mutants')('report', () =>
         Effect.succeed(
@@ -138,7 +138,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_CarryTheFullSurvivorRerunKey_When_MutantsSurviveTimeoutOrLackCoverage',
+    'Actionable mutants carry their file, location and replacement details',
     Gherkin.Do.pipe(
       Given('survivor, timeout and no-coverage mutants')('report', () =>
         Effect.succeed(
@@ -187,7 +187,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_ReportKilledMutantsAsCountsOnly_When_TheyAreNotIncludedInTheMutantList',
+    'Killed and compile-error mutants appear only in counts',
     Gherkin.Do.pipe(
       Given('killed, compile-error and survived mutants')('report', () =>
         Effect.succeed(
@@ -234,7 +234,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_YieldAnEmptyMutantList_When_EveryMutantIsKilled',
+    'An all-killed report yields an empty mutant list',
     Gherkin.Do.pipe(
       Given('an all-killed report')('report', () =>
         Effect.succeed(
@@ -257,7 +257,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_UseTheConfiguredReportFileName_When_TheEmbeddedConfigDeclaresIt',
+    'A configured report file name is carried into the envelope',
     Gherkin.Do.pipe(
       Given('a report whose embedded config names a custom file')('report', () =>
         Effect.succeed(
@@ -277,7 +277,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_ReportNullScoreAndNullReportFile_When_TheRunHadNoMutants',
+    'An empty report produces no score and no report file',
     Gherkin.Do.pipe(
       Given('an empty report')('report', () => Effect.succeed(reportOf([]))),
       When('the verdict envelope is built')(
@@ -296,7 +296,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_ReportANullScore_When_OnlyCompileErrorsExistInTheReport',
+    'A report with only compile errors produces no score',
     Gherkin.Do.pipe(
       Given('a report with a single compile-error mutant')(
         'report',
@@ -315,7 +315,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_StayUnderTheScannerLimit_When_AnAllKilled2164MutantReportIsEnveloped',
+    'A large all-killed report stays under the scanner size limit',
     Gherkin.Do.pipe(
       Given('an all-killed report of 2164 mutants')('report', () =>
         Effect.sync(() => {

@@ -15,7 +15,7 @@ const Feature = makeFeature({ it, layer })
 Feature('In-source Vitest test guard — the if-statement shape and the ancestor walk')
   .body(({ scenario }) => {
     scenario(
-      'Should_Match_When_TestIsBareImportMetaVitest',
+      'A bare vitest flag as the guard condition matches',
       Gherkin.Do.pipe(
         Given('an if-statement whose test is bare `import.meta.vitest`')(
           'node',
@@ -31,7 +31,7 @@ Feature('In-source Vitest test guard — the if-statement shape and the ancestor
     )
 
     scenario(
-      'Should_Match_When_ImportMetaVitestIsBinaryLeft',
+      'A vitest flag on the left side of a comparison matches',
       Gherkin.Do.pipe(
         Given('an if-statement whose test is `import.meta.vitest === undefined`')(
           'node',
@@ -47,7 +47,7 @@ Feature('In-source Vitest test guard — the if-statement shape and the ancestor
     )
 
     scenario(
-      'Should_Match_When_ImportMetaVitestIsBinaryRight',
+      'A vitest flag on the right side of a comparison matches',
       Gherkin.Do.pipe(
         Given('an if-statement whose test is `undefined === import.meta.vitest`')(
           'node',
@@ -63,7 +63,7 @@ Feature('In-source Vitest test guard — the if-statement shape and the ancestor
     )
 
     scenario(
-      'Should_NotMatch_When_MetaPropertyIsNotVitest',
+      'A flag for a different meta property does not match',
       Gherkin.Do.pipe(
         Given('an if-statement whose test is `import.meta.env`')(
           'node',
@@ -79,7 +79,7 @@ Feature('In-source Vitest test guard — the if-statement shape and the ancestor
     )
 
     scenario(
-      'Should_NotMatch_When_MetaIsNotImport',
+      'A vitest flag on a non-import meta does not match',
       Gherkin.Do.pipe(
         Given('an if-statement whose test is `require.meta.vitest`')('node', () =>
           Effect.sync(() =>
@@ -99,7 +99,7 @@ Feature('In-source Vitest test guard — the if-statement shape and the ancestor
     )
 
     scenario(
-      'Should_NotMatch_When_MetaPropertyIsNotMeta',
+      'A vitest property on a non-meta object does not match',
       Gherkin.Do.pipe(
         Given('an if-statement whose test is `import.cache.vitest`')('node', () =>
           Effect.sync(() =>
@@ -119,7 +119,7 @@ Feature('In-source Vitest test guard — the if-statement shape and the ancestor
     )
 
     scenario(
-      'Should_NotMatch_When_NodeIsNotAnIfStatement',
+      'A bare vitest expression without an if statement does not match',
       Gherkin.Do.pipe(
         Given('a bare `import.meta.vitest` member expression')(
           'node',
@@ -135,7 +135,7 @@ Feature('In-source Vitest test guard — the if-statement shape and the ancestor
     )
 
     scenario(
-      'Should_NotMatch_When_BinaryHoldsNoImportMetaVitest',
+      'A plain comparison without a vitest flag does not match',
       Gherkin.Do.pipe(
         Given('an if-statement whose test is a plain binary `a === b`')(
           'node',
@@ -151,7 +151,7 @@ Feature('In-source Vitest test guard — the if-statement shape and the ancestor
     )
 
     scenario(
-      'Should_Ignore_When_AnAncestorIsTheGuard',
+      'A mutant guarded by an ancestor vitest check is ignored',
       Gherkin.Do.pipe(
         Given('ancestors including an `if (import.meta.vitest)` guard deeper in the chain')(
           'ancestors',
@@ -175,7 +175,7 @@ Feature('In-source Vitest test guard — the if-statement shape and the ancestor
     )
 
     scenario(
-      'Should_NotIgnore_When_NoAncestorIsTheGuard',
+      'A mutant with no guard in its ancestors stays live',
       Gherkin.Do.pipe(
         Given('ancestors none of which is a vitest guard')(
           'ancestors',
@@ -194,7 +194,7 @@ Feature('In-source Vitest test guard — the if-statement shape and the ancestor
     )
 
     scenario(
-      'Should_NotIgnore_When_ThereAreNoAncestors',
+      'A mutant with no ancestors at all stays live',
       Gherkin.Do.pipe(
         Given('an empty ancestor chain')('ancestors', () => Effect.sync(() => [] as readonly unknown[])),
         When('decideInSourceTestIgnore walks the chain')(

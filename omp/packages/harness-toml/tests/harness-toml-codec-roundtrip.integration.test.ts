@@ -11,7 +11,7 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Harness TOML — PolicyFromToml codec round-trip').body(({ scenario }) => {
   scenario(
-    'Should round-trip a policy through stringify and parse',
+    'A policy survives a full serialize-and-parse round trip',
     {
       scenarioLayer: MemoryFileSystem.layerWith({}),
     },
@@ -35,7 +35,7 @@ Feature('Harness TOML — PolicyFromToml codec round-trip').body(({ scenario }) 
   )
 
   scenario(
-    'Should fail open when the TOML document is unparseable',
+    'An unparseable TOML document fails open',
     {
       scenarioLayer: MemoryFileSystem.layerWith({
         '/proj/systemfsoftware.toml': 'not a toml document [[[ =',

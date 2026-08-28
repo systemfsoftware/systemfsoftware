@@ -44,7 +44,7 @@ const testLayer = ClaudeSettingsLiveUnbaked.pipe(
 
 Feature('Settings policy substitution').withLayer(testLayer).body(({ scenario }) => {
   scenario(
-    'Should_load_hooks_from_fake_source_without_reading_default_paths',
+    'Hooks load from a fake source without ever reading the default paths',
     Gherkin.Do.pipe(
       Given('a memfs with a custom settings file and a fake source policy')(
         'ctx',

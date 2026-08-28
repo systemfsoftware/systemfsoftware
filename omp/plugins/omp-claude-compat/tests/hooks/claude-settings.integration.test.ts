@@ -37,7 +37,7 @@ Feature('Settings snapshot at the edge')
   .withLayer(testLayer)
   .body(({ scenario }) => {
     scenario(
-      'Should return nothing when no settings file exists',
+      'No settings file on disk yields no settings',
       Gherkin.Do.pipe(
         Given('an empty project tree')(
           'dir',

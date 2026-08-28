@@ -28,7 +28,7 @@ const PairwiseAB = pairwiseFor(
 
 Feature('pairwiseFor — dual-side execution').body(({ scenario }) => {
   scenario(
-    'Should read distinct services when pairwise runs two sides',
+    'Running a workload against two sides yields distinct service values',
     Gherkin.Do.pipe(
       PairwiseAB('the workload reads Widget')('dual', () => (w) => Effect.succeed(w.value)),
       Then('the two values match their layers')(({ dual }) =>
@@ -43,7 +43,7 @@ Feature('pairwiseFor — dual-side execution').body(({ scenario }) => {
   )
 
   scenario(
-    'Should fail with StepError when second side fails',
+    'A failure on one side surfaces as a step failure',
     Effect.gen(function*() {
       const piped = Gherkin.Do.pipe(
         PairwiseAB('boom on B only')('dual', (_s) => (w) =>
@@ -59,7 +59,7 @@ Feature('pairwiseFor — dual-side execution').body(({ scenario }) => {
   )
 
   scenario(
-    'Should increment acquire count when pairwise runs layer fresh twice',
+    'Each side acquires its layer separately',
     Effect.gen(function*() {
       const counter = yield* Ref.make(0)
       const layerSide = Layer.effect(

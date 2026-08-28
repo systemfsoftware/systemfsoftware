@@ -40,9 +40,33 @@ export interface FeatureOptions {
  */
 export type StepArg<TArgs> = Step<TArgs> | readonly Step<TArgs>[]
 
+/**
+ * A scenario title names a concrete situation in natural-language prose. Two
+ * shape checks keep DAMP `Should_[Behavior]_When_[Condition]` unit-test names —
+ * and every concatenated-token title shaped like one — out of the call site:
+ *  1. the literal must not start with `Should`;
+ *  2. the literal must contain at least one ASCII space (a single-word title is
+ *     a test name, not prose).
+ * Either check failing maps to `ScenarioTitleRejected`, so the call fails to
+ * type-check with the rule in the diagnostic. Non-literal titles (widened
+ * `string`) pass through untouched — a runtime guard would catch those, but
+ * the brand is the contract this skill ships.
+ */
+export type ScenarioTitleRejected<T extends string> =
+  | `Scenario titles are natural-language prose of a concrete situation, not DAMP Should_[Behavior]_When_[Condition] unit-test names. Got: ${T}`
+  | `Scenario title must be natural-language prose (at least one space separates words); got: ${T}`
+
+export type ScenarioTitle<T extends string> = T extends `Should${string}` ? ScenarioTitleRejected<T>
+  : T extends `${string} ${string}` ? T
+  : ScenarioTitleRejected<T>
+
 export interface ScenarioFn<TArgs> {
-  (name: string, ...steps: readonly StepArg<TArgs>[]): StorySpec<TArgs>
-  (name: string, options: ScenarioOptions, ...steps: readonly StepArg<TArgs>[]): StorySpec<TArgs>
+  <TName extends string>(name: ScenarioTitle<TName>, ...steps: readonly StepArg<TArgs>[]): StorySpec<TArgs>
+  <TName extends string>(
+    name: ScenarioTitle<TName>,
+    options: ScenarioOptions,
+    ...steps: readonly StepArg<TArgs>[]
+  ): StorySpec<TArgs>
 }
 
 export interface OutlineBuilder<TArgs> {
@@ -52,8 +76,12 @@ export interface OutlineBuilder<TArgs> {
 }
 
 export interface OutlineFn<TArgs> {
-  (name: string, ...steps: readonly StepArg<TArgs>[]): OutlineBuilder<TArgs>
-  (name: string, options: ScenarioOptions, ...steps: readonly StepArg<TArgs>[]): OutlineBuilder<TArgs>
+  <TName extends string>(name: ScenarioTitle<TName>, ...steps: readonly StepArg<TArgs>[]): OutlineBuilder<TArgs>
+  <TName extends string>(
+    name: ScenarioTitle<TName>,
+    options: ScenarioOptions,
+    ...steps: readonly StepArg<TArgs>[]
+  ): OutlineBuilder<TArgs>
 }
 
 export interface RuleScope<TArgs> {

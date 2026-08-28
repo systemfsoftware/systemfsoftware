@@ -8,7 +8,7 @@ const Feature = makeFeature({ it, layer })
 
 Feature('buildInjectedContent pure formatter').body(({ scenario }) => {
   scenario(
-    'Should format single ref into injected markdown',
+    'A single ref is formatted into the injected markdown',
     Gherkin.Do.pipe(
       Given('a projectDir and one resolved ref with content')('ctx', () =>
         Effect.succeed({
@@ -32,7 +32,7 @@ Feature('buildInjectedContent pure formatter').body(({ scenario }) => {
   )
 
   scenario(
-    'Should skip refs listed in skipList',
+    'A ref on the skip list is not injected',
     Gherkin.Do.pipe(
       Given('a ref whose relative path is in skipList')('ctx', () =>
         Effect.succeed({
@@ -54,7 +54,7 @@ Feature('buildInjectedContent pure formatter').body(({ scenario }) => {
   )
 
   scenario(
-    'Should return empty when ref content missing from map',
+    'A ref missing from the content map yields an empty result',
     Gherkin.Do.pipe(
       Given('a ref with no entry in refContents')('ctx', () =>
         Effect.succeed({

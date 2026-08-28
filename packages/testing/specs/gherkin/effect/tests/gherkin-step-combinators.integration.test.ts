@@ -16,7 +16,7 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Gherkin step combinators').body(({ scenario }) => {
   scenario(
-    'Should add binding when Given step succeeds',
+    'A succeeding Given step adds its binding to the scope',
     Gherkin.Do.pipe(
       Given('initial state')('x', () => Effect.succeed(42)),
       Then('x equals 42')((s) => {
@@ -26,7 +26,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should accumulate bindings when multiple Given steps',
+    'Multiple succeeding Given steps accumulate their bindings',
     Gherkin.Do.pipe(
       Given('first')('a', () => Effect.succeed('hello')),
       Given('second')('b', () => Effect.succeed(99)),
@@ -37,7 +37,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should fail when Given step body dies',
+    'A failing Given step surfaces as a step failure',
     Effect.gen(function*() {
       const result = yield* Gherkin.Do.pipe(
         Given('boom')('x', () => Effect.fail('kaboom')),
@@ -48,7 +48,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should read prior bindings when Given step uses scope',
+    'A Given step can read bindings from earlier steps',
     Gherkin.Do.pipe(
       Given('base')('base', () => Effect.succeed(10)),
       Given('derived')('derived', (s) => Effect.succeed(s.base * 2)),
@@ -59,7 +59,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should add binding when When step succeeds',
+    'A succeeding When step adds its binding to the scope',
     Gherkin.Do.pipe(
       Given('setup')('x', () => Effect.succeed(1)),
       When('action')('y', (s) => Effect.succeed(s.x + 10)),
@@ -70,7 +70,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should fail when When step body dies',
+    'A failing When step surfaces as a step failure',
     Effect.gen(function*() {
       const result = yield* Gherkin.Do.pipe(
         Given('setup')('x', () => Effect.succeed(1)),
@@ -82,7 +82,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should preserve scope when Then step succeeds',
+    'A succeeding Then step leaves the scope intact',
     Gherkin.Do.pipe(
       Given('setup')('x', () => Effect.succeed(42)),
       Then('check value')((s) => {
@@ -95,7 +95,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should not add binding when Then step returns value',
+    'A Then step does not add bindings to the scope',
     Gherkin.Do.pipe(
       Given('setup')('x', () => Effect.succeed('a')),
       Then('ignored return')(() => {
@@ -109,7 +109,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should preserve scope when And step succeeds',
+    'A succeeding And step leaves the scope intact',
     Gherkin.Do.pipe(
       Given('setup')('x', () => Effect.succeed(1)),
       And('additional check')((s) => {
@@ -119,7 +119,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should preserve scope when But step succeeds',
+    'A succeeding But step leaves the scope intact',
     Gherkin.Do.pipe(
       Given('setup')('x', () => Effect.succeed(1)),
       But('negative check')((s) => {
@@ -129,7 +129,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should wrap domain error when non-assertion error thrown',
+    'A domain error from a step is surfaced as a step failure',
     Effect.gen(function*() {
       const result = yield* Gherkin.Do.pipe(
         Given('failing step')('x', () => Effect.fail(new TestDomainError({ message: 'domain oops' }))),
@@ -140,7 +140,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should wrap in StepError when Then assertion fails',
+    'A failing Then assertion surfaces as a StepError',
     Effect.gen(function*() {
       const result = yield* Gherkin.Do.pipe(
         Given('setup')('x', () => Effect.succeed(1)),
@@ -161,7 +161,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should wrap in StepError when Then step fails with non-assertion',
+    'A failing Then step surfaces as a StepError',
     Effect.gen(function*() {
       const result = yield* Gherkin.Do.pipe(
         Given('setup')('x', () => Effect.succeed(1)),
@@ -175,7 +175,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should have keyword and text when constructed',
+    'A constructed step error carries its keyword and text',
     Effect.sync(() => {
       const err = StepError.make({ keyword: 'when', text: 'action', cause: null })
       expect(err).toEqual(expect.objectContaining({ keyword: 'when', text: 'action', cause: null }))
@@ -183,7 +183,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should preserve original cause when wrapping',
+    'A step error preserves its original cause',
     Effect.sync(() => {
       const original = new Error('deep failure')
       const err = StepError.make({ keyword: 'given', text: 'step', cause: original })
@@ -192,7 +192,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should contain Given keyword when Given step fails',
+    'A failed Given step carries the Given keyword in its error',
     Effect.gen(function*() {
       const result = yield* Gherkin.Do.pipe(
         Given('failing given')('x', () => Effect.fail('err')),
@@ -211,7 +211,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should contain When keyword when When step fails',
+    'A failed When step carries the When keyword in its error',
     Effect.gen(function*() {
       const result = yield* Gherkin.Do.pipe(
         Given('ok')('x', () => Effect.succeed(1)),
@@ -231,7 +231,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should contain Then keyword when Then step throws',
+    'A failed Then step carries the Then keyword in its error',
     Effect.gen(function*() {
       const result = yield* Gherkin.Do.pipe(
         Given('ok')('x', () => Effect.succeed(1)),
@@ -253,7 +253,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should contain And keyword when And step throws',
+    'A failed And step carries the And keyword in its error',
     Effect.gen(function*() {
       const result = yield* Gherkin.Do.pipe(
         Given('ok')('x', () => Effect.succeed(1)),
@@ -275,7 +275,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should contain But keyword when But step throws',
+    'A failed But step carries the But keyword in its error',
     Effect.gen(function*() {
       const result = yield* Gherkin.Do.pipe(
         Given('ok')('x', () => Effect.succeed(1)),
@@ -297,7 +297,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should accumulate all bindings when full Gherkin pipeline',
+    'A full pipeline accumulates bindings across Given, When, Then and And',
     Gherkin.Do.pipe(
       Given('user exists')('user', () => Effect.succeed({ id: 1 })),
       When('request sent')('response', (s) => Effect.succeed({ status: 200, userId: s.user.id })),
@@ -311,7 +311,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should chain multiple Whens when each reads prior scope',
+    'Chained When steps each read bindings from prior steps',
     Gherkin.Do.pipe(
       Given('base')('a', () => Effect.succeed(1)),
       When('double')('b', (s) => Effect.succeed(s.a * 2)),
@@ -323,7 +323,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should pre-seed scope when using startWith',
+    'A pre-seeded scope is available to subsequent steps',
     Gherkin.startWith({ userId: 42 }).pipe(
       When('fetch user')('profile', (s) => Effect.succeed({ name: 'Alice', id: s.userId })),
       Then('has both')((s) => {
@@ -334,7 +334,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should preserve exact type when startWith provides bindings',
+    'Pre-seeded bindings remain visible inside the scenario',
     Gherkin.startWith({ x: 'typed', y: 123 }).pipe(
       Then('values match')((s) => {
         expect(s).toEqual(expect.objectContaining({ x: 'typed', y: 123 }))
@@ -343,7 +343,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should preserve scope when Then step returns Effect',
+    'A Then step returning an Effect leaves the scope intact',
     Gherkin.Do.pipe(
       Given('setup')('x', () => Effect.succeed(1)),
       Then('check via Effect')((s) =>
@@ -358,7 +358,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should preserve scope when And step returns Effect',
+    'An And step returning an Effect leaves the scope intact',
     Gherkin.Do.pipe(
       Given('setup')('x', () => Effect.succeed(42)),
       Then('first check')((s) => {
@@ -373,7 +373,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should wrap error when Effect-returning Then fails',
+    'A failing Effect-returning Then step surfaces as a step failure',
     Effect.gen(function*() {
       const result = yield* Gherkin.Do.pipe(
         Given('setup')('x', () => Effect.succeed(1)),
@@ -385,7 +385,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should pass through assertion when Effect-returning Then has assertion error',
+    'An assertion failure inside an Effect-returning Then step propagates as an assertion error',
     Effect.gen(function*() {
       const result = yield* Gherkin.Do.pipe(
         Given('setup')('x', () => Effect.succeed(1)),
@@ -401,7 +401,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should succeed when Then step returns void explicitly',
+    'A Then step returning void explicitly still succeeds',
     Gherkin.Do.pipe(
       Given('setup')('x', () => Effect.succeed(5)),
       Then('explicit void')(() => {
@@ -414,7 +414,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should succeed with empty scope when no steps',
+    'An empty pipeline exposes an empty scope',
     Gherkin.Do.pipe(
       Then('empty')((s) => {
         expect(Object.keys(s)).toEqual([])
@@ -423,7 +423,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should work with empty text when text not provided',
+    'A step with empty text still binds its value',
     Gherkin.Do.pipe(
       Given('')('x', () => Effect.succeed('empty-text')),
       Then('binding present')((s) => {
@@ -433,7 +433,7 @@ Feature('Gherkin step combinators').body(({ scenario }) => {
   )
 
   scenario(
-    'Should override prior binding when same name reused',
+    'Reusing a binding name overrides the prior value',
     Gherkin.Do.pipe(
       Given('first')('x', () => Effect.succeed(1)),
       Given('second')('x', (s) => Effect.succeed(s.x + 1)),
