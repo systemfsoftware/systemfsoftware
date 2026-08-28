@@ -1146,25 +1146,29 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       )
     })
 
+  const remappers = (() => {
+    const testIdMap: Record<string, string> = Object.fromEntries(
+      [...MutableHashMap.values(input.testCoverage.testsById)].map((test, index) => {
+        const pair: readonly [string, string] = [test.id, index.toString()]
+        return pair
+      }),
+    )
+    const remapTestId = (id: string): string => testIdMap[id] ?? id
+    const remapTestIds = (ids: readonly string[] | undefined): readonly string[] | undefined => {
+      if (ids === undefined) {
+        return undefined
+      }
+      return ids.map(remapTestId)
+    }
+    return { remapTestId, remapTestIds }
+  })()
+
   const mutationTestReport = (
     results: readonly MutantResult[],
   ): Effect.Effect<schema.MutationTestResult, unknown, FileSystem.FileSystem | Path.Path> =>
     Effect.gen(function*() {
-      const testIdMap: Record<string, string> = Object.fromEntries(
-        [...MutableHashMap.values(input.testCoverage.testsById)].map((test, index) => {
-          const pair: readonly [string, string] = [test.id, index.toString()]
-          return pair
-        }),
-      )
-      const remapTestId = (id: string): string => testIdMap[id] ?? id
-      const remapTestIds = (ids: readonly string[] | undefined): readonly string[] | undefined => {
-        if (ids === undefined) {
-          return undefined
-        }
-        return ids.map(remapTestId)
-      }
-      const files = yield* toFileResults(results, remapTestIds)
-      const testFiles = yield* toTestFiles(remapTestId)
+      const files = yield* toFileResults(results, remappers.remapTestIds)
+      const testFiles = yield* toTestFiles(remappers.remapTestId)
 
       return {
         files,
@@ -1343,21 +1347,8 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
 
   const slimIncrementalReport = (results: readonly MutantResult[]) =>
     Effect.gen(function*() {
-      const testIdMap: Record<string, string> = Object.fromEntries(
-        [...MutableHashMap.values(input.testCoverage.testsById)].map((test, index) => {
-          const pair: readonly [string, string] = [test.id, index.toString()]
-          return pair
-        }),
-      )
-      const remapTestId = (id: string): string => testIdMap[id] ?? id
-      const remapTestIds = (ids: readonly string[] | undefined): readonly string[] | undefined => {
-        if (ids === undefined) {
-          return undefined
-        }
-        return ids.map(remapTestId)
-      }
-      const files = yield* toFileResults(results, remapTestIds)
-      const testFiles = yield* toTestFiles(remapTestId)
+      const files = yield* toFileResults(results, remappers.remapTestIds)
+      const testFiles = yield* toTestFiles(remappers.remapTestId)
       return {
         schemaVersion: '1.0',
         thresholds: input.options.thresholds,
