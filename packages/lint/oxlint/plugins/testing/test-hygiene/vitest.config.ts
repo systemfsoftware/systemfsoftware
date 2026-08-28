@@ -4,7 +4,7 @@ const config = {
   ...sharedConfig,
   test: {
     ...sharedConfig.test,
-    include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
+    include: ['src/**/*.test.ts'],
     setupFiles: ['vitest-setup.ts'],
     bail: 0 as const,
   },

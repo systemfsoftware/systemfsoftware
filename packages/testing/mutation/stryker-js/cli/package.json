@@ -20,6 +20,7 @@
     "typecheck": "tsc --noEmit --incremental",
     "attw": "attw --pack .",
     "test": "vitest run",
+    "test:contract": "vitest run --config vitest.contract.config.ts",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "mutation": "node ./dist/main.mjs run",
     "mutation:full": "node ./dist/main.mjs run --force",
