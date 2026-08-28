@@ -21,7 +21,6 @@ export default defineConfig({
       { definedTags: ['category', 'since', 'internal', 'example', 'module', 'packageDocumentation'] },
     ],
     '@systemfsoftware/oxlint-plugin-effect-dmmf/tests-import-public-api': 'error',
-    '@systemfsoftware/oxlint-plugin-effect-dmmf/no-hand-assertive-test-outside-src': 'error',
   },
   ignorePatterns: ['dist', 'node_modules'],
 })

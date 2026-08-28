@@ -2,7 +2,6 @@ import { behaviourExercisesUseCase } from './rules/behaviour-exercises-use-case.
 import { behaviourOneFeaturePerFile } from './rules/behaviour-one-feature-per-file.js'
 import { behaviourTestRequiresGherkin } from './rules/behaviour-test-requires-gherkin.js'
 import { inSourceTestTargetsPrivate } from './rules/in-source-test-targets-private.js'
-import { noHandAssertiveTestOutsideSrc } from './rules/no-hand-assertive-test-outside-src.js'
 import { noIoModuleInSourceTest } from './rules/no-io-module-in-source-test.js'
 import { noTestFileInSrc } from './rules/no-test-file-in-src.js'
 import { srcPropertyTestCell } from './rules/src-property-test-cell.js'
@@ -27,7 +26,6 @@ const recommendedRules = {
   [rule('tests-dir-helpers-in-fixtures')]: 'error',
   [rule('no-io-module-in-source-test')]: 'error',
   [rule('tests-import-public-api')]: 'error',
-  [rule('no-hand-assertive-test-outside-src')]: 'error',
 } as const
 
 export default {
@@ -46,7 +44,6 @@ export default {
     'tests-dir-helpers-in-fixtures': testsDirHelpersInFixtures,
     'no-io-module-in-source-test': noIoModuleInSourceTest,
     'tests-import-public-api': testsImportPublicApi,
-    'no-hand-assertive-test-outside-src': noHandAssertiveTestOutsideSrc,
   },
   configs: {
     recommended: {

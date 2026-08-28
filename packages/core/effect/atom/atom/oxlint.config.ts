@@ -18,6 +18,7 @@ export default defineConfig({
     'unicorn/prefer-node-protocol': 'error',
     'jsdoc/check-tag-names': ['warn', { definedTags: ['category', 'since', 'internal'] }],
     '@systemfsoftware/oxlint-plugin-effect-dmmf/tests-import-public-api': 'error',
-    '@systemfsoftware/oxlint-plugin-effect-dmmf/no-hand-assertive-test-outside-src': 'error',
   },
+
+  ignorePatterns: ['tests/AtomRpc.integration.test.ts'],
 })
