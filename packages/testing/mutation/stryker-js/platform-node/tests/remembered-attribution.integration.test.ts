@@ -3,20 +3,19 @@
  * carry killedBy drives the reuse path, and the emitted report carries the
  * same attribution, marked statusReason Remembered.
  */
-import { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
+import { NodeFileSystem, NodePath } from '@effect/platform-node'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Clock, Effect } from 'effect'
+import * as FileSystem from 'effect/FileSystem'
+import * as Layer from 'effect/Layer'
+import * as Path from 'effect/Path'
 import { expect } from 'vitest'
 
 import { generateRunId, makeRunLayer, runMutationTest } from '@systemfsoftware/stryker-js-platform-node'
 
 const Feature = makeFeature({ it, layer })
 
-const FIXTURE = join(dirname(fileURLToPath(import.meta.url)), '__fixtures__/reuse-project')
+const Host = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)
 
 type Location = { readonly start: { line: number; column: number }; readonly end: { line: number; column: number } }
 
@@ -37,22 +36,18 @@ type IncrementalReport = {
   readonly files: Record<string, { language: string; source: string; mutants: ReportMutant[] }>
 }
 
-type Setup = {
-  readonly workDir: string
-  readonly incrementalFile: string
-}
-
 const runOnce = (workDir: string, incrementalFile: string) =>
   Effect.gen(function*() {
+    const path = yield* Path.Path
     const runStartedAt = yield* Clock.currentTimeMillis
     return yield* Effect.scoped(
       runMutationTest({
-        configFile: join(workDir, 'stryker.config.json'),
+        configFile: path.join(workDir, 'stryker.config.json'),
         incremental: true,
         incrementalFile,
         force: false,
         disableBail: true,
-        tempDirName: join(workDir, '.stryker-tmp'),
+        tempDirName: path.join(workDir, '.stryker-tmp'),
       }),
     ).pipe(
       Effect.provide(
@@ -75,13 +70,15 @@ const isIncrementalReport = (value: unknown): value is IncrementalReport => {
   return 'files' in value && 'schemaVersion' in value && 'thresholds' in value
 }
 
-const readReport = (incrementalFile: string): IncrementalReport => {
-  const parsed: unknown = JSON.parse(readFileSync(incrementalFile, 'utf8'))
-  if (!isIncrementalReport(parsed)) {
-    throw new Error(`Incremental file at ${incrementalFile} is not a mutation report`)
-  }
-  return parsed
-}
+const readReport = (incrementalFile: string) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const parsed: unknown = JSON.parse(yield* fs.readFileString(incrementalFile))
+    if (!isIncrementalReport(parsed)) {
+      return yield* Effect.fail(new Error(`Incremental file at ${incrementalFile} is not a mutation report`))
+    }
+    return parsed
+  })
 
 const seedReuseFile = (report: IncrementalReport): IncrementalReport => {
   const listed = Object.values(report.files).flatMap((file) => file.mutants)
@@ -115,32 +112,32 @@ Feature('Remembered incremental verdicts keep kill attribution').body(({ scenari
   scenario(
     'Should_KeepKilledBy_When_ReusingAnAttributedIncrementalFile',
     Gherkin.Do.pipe(
-      Given('a fixture whose incremental file records one attributed kill and one timeout')('setup', () => {
-        const workDir = mkdtempSync(join(tmpdir(), 'reuse-attribution-'))
-        cpSync(FIXTURE, workDir, { recursive: true })
-        const incrementalFile = join(workDir, 'reports', 'stryker-incremental.json')
-        return runOnce(workDir, incrementalFile).pipe(
-          Effect.tap(() =>
-            Effect.sync(() => {
-              writeFileSync(incrementalFile, JSON.stringify(seedReuseFile(readReport(incrementalFile)), null, 2))
-            })
+      Given('the reuse-project fixture')(
+        'fixture',
+        () =>
+          Path.Path.pipe(
+            Effect.flatMap((path) => path.fromFileUrl(new URL('./__fixtures__/reuse-project', import.meta.url))),
+            Effect.provide(Host),
           ),
-          Effect.map(() => ({ workDir, incrementalFile }) satisfies Setup),
-          Effect.catchCause((cause) => {
-            rmSync(workDir, { recursive: true, force: true })
-            return Effect.failCause(cause)
-          }),
-        )
-      }),
-      When('the reuse path runs against that file')(
+      ),
+      When('the reuse path runs against a seeded incremental file')(
         'emitted',
-        (s: { setup: Setup }) =>
-          runOnce(s.setup.workDir, s.setup.incrementalFile).pipe(
-            Effect.map(() => readReport(s.setup.incrementalFile)),
-            Effect.ensuring(Effect.sync(() => {
-              rmSync(s.setup.workDir, { recursive: true, force: true })
-            })),
-          ),
+        (s: { fixture: string }) =>
+          Effect.scoped(
+            Effect.gen(function*() {
+              const fs = yield* FileSystem.FileSystem
+              const path = yield* Path.Path
+              const scratch = yield* fs.makeTempDirectoryScoped({ prefix: 'reuse-attribution-' })
+              const workDir = path.join(scratch, 'project')
+              const incrementalFile = path.join(workDir, 'reports', 'stryker-incremental.json')
+              yield* fs.copy(s.fixture, workDir)
+              yield* runOnce(workDir, incrementalFile)
+              const produced = yield* readReport(incrementalFile)
+              yield* fs.writeFileString(incrementalFile, JSON.stringify(seedReuseFile(produced), null, 2))
+              yield* runOnce(workDir, incrementalFile)
+              return yield* readReport(incrementalFile)
+            }),
+          ).pipe(Effect.provide(Host)),
       ),
       Then('the killed mutant keeps killedBy and Remembered, and the timeout stays unattributed')((s: {
         emitted: IncrementalReport
