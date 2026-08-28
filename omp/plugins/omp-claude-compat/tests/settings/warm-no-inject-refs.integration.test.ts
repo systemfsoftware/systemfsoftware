@@ -15,7 +15,7 @@ afterEach(() => {
 
 Feature('Warm harness policy — per-cwd isolation and last-write-wins').body(({ scenario }) => {
   scenario(
-    'Should isolate per-cwd no_inject_refs after warming two cwds',
+    'Two working directories warmed with distinct configs keep their own no-inject lists',
     Gherkin.Do.pipe(
       Given('a memfs with two distinct tomls')('ctx', () =>
         Effect.succeed({
@@ -58,7 +58,7 @@ Feature('Warm harness policy — per-cwd isolation and last-write-wins').body(({
   )
 
   scenario(
-    'Should return default for an unwarmed cwd',
+    'An unwarmed working directory falls back to the default skip list',
     Gherkin.Do.pipe(
       Given('a memfs with one toml and an unwarmed cwd')('ctx', () =>
         Effect.succeed({
@@ -93,7 +93,7 @@ Feature('Warm harness policy — per-cwd isolation and last-write-wins').body(({
   )
 
   scenario(
-    'Should let a second warm of the same cwd win (last-write-wins)',
+    'A second warm of the same working directory overrides the first',
     Gherkin.Do.pipe(
       Given('a memfs with two successive tomls for the same cwd')('ctx', () =>
         Effect.succeed({

@@ -55,7 +55,7 @@ Feature('CLI help regression')
   .liveClock()
   .body(({ scenario }) => {
     scenario(
-      'Should_emit_help_When_bare_or_flag_in_machine_mode',
+      'Bare and flag invocations emit help in machine mode',
       Gherkin.Do.pipe(
         When('the harness asks for help')('helpObserved', () => invoke(['--help'])),
         When('the harness invokes the tool with nothing at all')('bareObserved', () => invoke([])),
@@ -76,7 +76,7 @@ Feature('CLI help regression')
     )
 
     scenario(
-      'Should_print_prose_When_human_mode',
+      'Help prints as prose in human mode with no machine lines',
       Gherkin.Do.pipe(
         Given('a human-facing invocation')('observed', () => invoke(['--help'], { STRYKER_MODE: 'human' })),
         Then('the output reads as prose and no machine line is written')((s) => {
@@ -88,7 +88,7 @@ Feature('CLI help regression')
     )
 
     scenario(
-      'Should_keep_llms_When_invoked',
+      'The manifest keeps the description following the stream header',
       Gherkin.Do.pipe(
         Given('a harness asking for the manifest')('observed', () => invoke(['--llms'])),
         Then('the description follows the stream header')((s) => {

@@ -93,7 +93,7 @@ Feature('Remembered incremental verdicts keep kill attribution')
   .withLayer(Host)
   .body(({ scenario }) => {
     scenario(
-      'Should_KeepAttribution_When_ReusingAnIncrementalFile',
+      'Reusing a seeded incremental file keeps every previous killer attribution',
       Gherkin.Do.pipe(
         Given('the reuse-project fixture')(
           'fixture',

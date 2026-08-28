@@ -17,7 +17,7 @@ afterEach(() => {
 
 Feature('Key divergence — warm and inject key on ctx.cwd, not process.cwd').body(({ scenario }) => {
   scenario(
-    'Should warm and inject using ctx.cwd even when process.cwd differs',
+    'The working directory drives warm-up and injection even when the process cwd differs',
     Gherkin.Do.pipe(
       Given('a ctx cwd distinct from process.cwd with a toml that blocks one ref')('ctx', () =>
         Effect.succeed({

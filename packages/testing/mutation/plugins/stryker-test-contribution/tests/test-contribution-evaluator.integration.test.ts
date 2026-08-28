@@ -110,7 +110,7 @@ const expectVerdictFail = (exit: Exit.Exit<ExitClass | null, EvaluatorFailed>): 
 Feature('test-contribution evaluator plugin')
   .body(({ scenario }) => {
     scenario(
-      'Should_DeclareOneEvaluatorNamedTestContribution',
+      'The published plugin list declares one evaluator named test-contribution',
       Gherkin.Do.pipe(
         Given('the published plugin list')('plugins', () => Effect.succeed(strykerPlugins)),
         Then('it contains one Evaluator named test-contribution')((s) => {
@@ -122,7 +122,7 @@ Feature('test-contribution evaluator plugin')
     )
 
     scenario(
-      'Should_ReturnVerdictFail_When_ARequiredFileIsToothless',
+      'A toothless required file yields a failing verdict',
       Gherkin.Do.pipe(
         Given('an evaluator service with disableBail true')(
           'evaluator',
@@ -139,7 +139,7 @@ Feature('test-contribution evaluator plugin')
     )
 
     scenario(
-      'Should_ReturnVerdictFail_When_BailStoppedRecordingKillers',
+      'Bail stopping killer recording still yields a failing verdict',
       Gherkin.Do.pipe(
         Given('an evaluator service with bail active (disableBail unset)')(
           'evaluator',
@@ -156,7 +156,7 @@ Feature('test-contribution evaluator plugin')
     )
 
     scenario(
-      'Should_ReturnNull_When_EveryRequiredFileDefends',
+      'Every required file defending a mutant yields no verdict',
       Gherkin.Do.pipe(
         Given('an evaluator service with disableBail true')(
           'evaluator',
@@ -180,7 +180,7 @@ Feature('test-contribution evaluator plugin')
     )
 
     scenario(
-      'Should_ProvideEvaluatorViaLayer_WithRunConfiguration',
+      'The layer-provided evaluator fails on a toothless file',
       Gherkin.Do.pipe(
         Given('a RunConfiguration with disableBail true')('options', () => Effect.succeed({ disableBail: true })),
         When('the evaluator layer is built with that configuration')('exit', (s) =>
@@ -195,7 +195,7 @@ Feature('test-contribution evaluator plugin')
     )
 
     scenario(
-      'Should_FailWithEvaluatorFailed_When_ReportIsUnreadable',
+      'An unreadable report fails evaluation with an error',
       Gherkin.Do.pipe(
         Given('an evaluator service with disableBail true')(
           'evaluator',

@@ -17,7 +17,7 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Resolving the process exit code').body(({ scenario }) => {
   scenario(
-    'Should_StayZero_When_NothingIsPendingAndNoSignalArrived',
+    'No pending exit class and no signal keeps the exit code at 0',
     Gherkin.Do.pipe(
       Given('no pending exit classes and no signal')('pending', () => Effect.succeed(new Set<ExitClass>())),
       Then('the code is 0')((s: { pending: Set<ExitClass> }) => {
@@ -27,7 +27,7 @@ Feature('Resolving the process exit code').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_ResolveThePendingClass_When_VerdictFailStandAloneIsPending',
+    'A lone pending verdict failure resolves to exit code 1',
     Gherkin.Do.pipe(
       Given('a pending VerdictFail class')('pending', () => Effect.succeed(new Set<ExitClass>(['VerdictFail']))),
       Then('the code is 1')((s: { pending: Set<ExitClass> }) => {
@@ -37,7 +37,7 @@ Feature('Resolving the process exit code').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_ResolveTheHighestPendingClass_When_RuntimeAndInternalArePending',
+    'Pending runtime and internal errors resolve to the highest exit code',
     Gherkin.Do.pipe(
       Given('pending RuntimeError and InternalError classes')(
         'pending',
@@ -50,7 +50,7 @@ Feature('Resolving the process exit code').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_ResolveConfigError_When_VerdictFailAndConfigErrorArePending',
+    'A pending configuration error outranks a verdict failure',
     Gherkin.Do.pipe(
       Given('pending VerdictFail and ConfigError classes')(
         'pending',
@@ -63,7 +63,7 @@ Feature('Resolving the process exit code').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_ResolveRuntimeError_When_VerdictFailAndRuntimeErrorArePending',
+    'A pending runtime error outranks a verdict failure',
     Gherkin.Do.pipe(
       Given('pending VerdictFail and RuntimeError classes')(
         'pending',
@@ -76,7 +76,7 @@ Feature('Resolving the process exit code').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_ResolveSignalTo128PlusItsNumber_When_ASignalArrives',
+    'An incoming signal resolves to 128 plus its number',
     Gherkin.Do.pipe(
       Given('a SIGINT-class signal 2')('signal', () => Effect.succeed(2)),
       Then('the code is 130')((s: { signal: number }) => {
@@ -86,7 +86,7 @@ Feature('Resolving the process exit code').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_WinOverPendingClasses_When_ASignalArrives',
+    'An incoming signal wins over every pending exit class',
     Gherkin.Do.pipe(
       Given('a SIGTERM-class signal 15 and pending VerdictFail and InternalError')(
         'args',
@@ -104,7 +104,7 @@ Feature('Resolving the process exit code').body(({ scenario }) => {
     ),
   )
   scenario(
-    'Should_ResolveVerdictFail_When_EvaluatorReturnsVerdictFailWhileScorePasses',
+    'A failing evaluator verdict outranks a passing score',
     Gherkin.Do.pipe(
       Given('a passing score and an evaluator returning VerdictFail')('pending', () => {
         const scoreVerdict = verdictExitClass(80, 60)
@@ -123,7 +123,7 @@ Feature('Resolving the process exit code').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_StayZero_When_EvaluatorReturnsNullWhileScorePasses',
+    'A passing score with no evaluator failure keeps the exit code at 0',
     Gherkin.Do.pipe(
       Given('a passing score and an evaluator returning null')('pending', () => {
         const scoreVerdict = verdictExitClass(80, 60)
@@ -142,7 +142,7 @@ Feature('Resolving the process exit code').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_ResolveVerdictFail_When_ScoreIsBelowThreshold',
+    'A score below its threshold resolves to a failing exit code',
     Gherkin.Do.pipe(
       Given('a score below its breaking threshold')('pending', () => {
         const scoreVerdict = verdictExitClass(59, 60)
@@ -158,7 +158,7 @@ Feature('Resolving the process exit code').body(({ scenario }) => {
   )
 
   scenario(
-    'Should_StayZero_When_ScoreEqualsThreshold',
+    'A score at its threshold keeps the exit code at 0',
     Gherkin.Do.pipe(
       Given('a score exactly equal to its breaking threshold')('pending', () => {
         const scoreVerdict = verdictExitClass(60, 60)

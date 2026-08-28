@@ -17,8 +17,12 @@ import {
   identifier,
   memberOf,
   namedProperty,
+  objectExpression,
   objectOf,
   propertyOf,
+  stringLiteral,
+  symbolForCall,
+  taggedCall,
 } from '../__fixtures__/EffectSchemaAst.fixtures.js'
 
 const Feature = makeFeature({ it, layer })
@@ -26,12 +30,12 @@ const Feature = makeFeature({ it, layer })
 Feature('Effect Schema declarations — invariant coverage as named examples')
   .body(({ scenario }) => {
     scenario(
-      'Recognised_SymbolForBrandDescription_IsIgnored',
+      'A `Symbol.for` description string is recognised as ignorable',
       Gherkin.Do.pipe(
         Given('`Symbol.for("MyBrand")`')('node', () =>
           Effect.sync(() => {
-            const description = { type: 'StringLiteral', value: 'MyBrand' }
-            const call = callOf(memberOf('Symbol', 'for'), [description])
+            const description = stringLiteral('MyBrand')
+            const call = symbolForCall(description)
             return { description, call }
           })),
         When('decideSchemaDeclarationIgnore examines the description argument')(
@@ -47,13 +51,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'Recognised_TaggedClassTag_IsIgnored',
+      'A `Schema.TaggedClass` tag string is recognised as ignorable',
       Gherkin.Do.pipe(
         Given('`Schema.TaggedClass("myTag", {})`')('node', () =>
           Effect.sync(() => {
-            const tag = { type: 'StringLiteral', value: 'myTag' }
-            const fields = { type: 'ObjectExpression' }
-            const call = callOf(callOf(memberOf('Schema', 'TaggedClass'), []), [tag, fields])
+            const tag = stringLiteral('myTag')
+            const fields = objectExpression()
+            const call = taggedCall('TaggedClass', tag, fields)
             return { tag, call }
           })),
         When('decideSchemaDeclarationIgnore examines the tag argument')(
@@ -69,13 +73,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'Recognised_TaggedErrorTag_IsIgnored',
+      'A `Schema.TaggedError` tag string is recognised as ignorable',
       Gherkin.Do.pipe(
         Given('`Schema.TaggedError("err", {})`')('node', () =>
           Effect.sync(() => {
-            const tag = { type: 'StringLiteral', value: 'err' }
-            const fields = { type: 'ObjectExpression' }
-            const call = callOf(callOf(memberOf('Schema', 'TaggedError'), []), [tag, fields])
+            const tag = stringLiteral('err')
+            const fields = objectExpression()
+            const call = taggedCall('TaggedError', tag, fields)
             return { tag, call }
           })),
         When('decideSchemaDeclarationIgnore examines the tag argument')(
@@ -91,13 +95,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'Recognised_TaggedClassFields_AreIgnored',
+      'A `Schema.TaggedClass` fields object is recognised as ignorable',
       Gherkin.Do.pipe(
         Given('`Schema.TaggedClass("myTag", {})`')('node', () =>
           Effect.sync(() => {
-            const tag = { type: 'StringLiteral', value: 'myTag' }
-            const fields = { type: 'ObjectExpression' }
-            const call = callOf(callOf(memberOf('Schema', 'TaggedClass'), []), [tag, fields])
+            const tag = stringLiteral('myTag')
+            const fields = objectExpression()
+            const call = taggedCall('TaggedClass', tag, fields)
             return { fields, call }
           })),
         When('decideSchemaDeclarationIgnore examines the fields argument')(
@@ -113,13 +117,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'Recognised_TaggedErrorFields_AreIgnored',
+      'A `Schema.TaggedError` fields object is recognised as ignorable',
       Gherkin.Do.pipe(
         Given('`Schema.TaggedError("err", {})`')('node', () =>
           Effect.sync(() => {
-            const tag = { type: 'StringLiteral', value: 'err' }
-            const fields = { type: 'ObjectExpression' }
-            const call = callOf(callOf(memberOf('Schema', 'TaggedError'), []), [tag, fields])
+            const tag = stringLiteral('err')
+            const fields = objectExpression()
+            const call = taggedCall('TaggedError', tag, fields)
             return { fields, call }
           })),
         When('decideSchemaDeclarationIgnore examines the fields argument')(
@@ -135,11 +139,11 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'ExactDiscriminant_SymbolIterator_IsNotIgnored',
+      'A `Symbol.iterator` member is not an exact-discriminant match',
       Gherkin.Do.pipe(
         Given('`Symbol.iterator("desc")`')('node', () =>
           Effect.sync(() => {
-            const description = { type: 'StringLiteral', value: 'desc' }
+            const description = stringLiteral('desc')
             const call = callOf(memberOf('Symbol', 'iterator'), [description])
             return { description, call }
           })),
@@ -156,13 +160,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'ExactDiscriminant_StructFactory_IsNotIgnored',
+      'A non-tagged `Schema.Struct` factory is not an exact-discriminant match',
       Gherkin.Do.pipe(
         Given('`Schema.Struct("tag", {})` — non-tagged factory')('node', () =>
           Effect.sync(() => {
-            const tag = { type: 'StringLiteral', value: 'tag' }
-            const fields = { type: 'ObjectExpression' }
-            const call = callOf(callOf(memberOf('Schema', 'Struct'), []), [tag, fields])
+            const tag = stringLiteral('tag')
+            const fields = objectExpression()
+            const call = taggedCall('Struct', tag, fields)
             return { tag, fields, call }
           })),
         When('decideSchemaDeclarationIgnore examines the tag and fields arguments')(
@@ -183,13 +187,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'PositionLoadBearing_ObjectExpressionAtTagSlot_IsNotIgnored',
+      'An object expression at the tag slot is position-load-bearing',
       Gherkin.Do.pipe(
         Given('`Schema.TaggedClass({}, "tag")` — arguments swapped')('node', () =>
           Effect.sync(() => {
-            const tag = { type: 'StringLiteral', value: 'tag' }
-            const fields = { type: 'ObjectExpression' }
-            const call = callOf(callOf(memberOf('Schema', 'TaggedClass'), []), [fields, tag])
+            const tag = stringLiteral('tag')
+            const fields = objectExpression()
+            const call = taggedCall('TaggedClass', fields, tag)
             return { fields, call }
           })),
         When('decideSchemaDeclarationIgnore examines the first argument')(
@@ -205,14 +209,14 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'PositionLoadBearing_NonStringAtSymbolForArgument_IsNotIgnored',
+      'A non-string at the `Symbol.for` argument slot is position-load-bearing',
       Gherkin.Do.pipe(
         Given('`Symbol.for({})` — the argument is an object expression, not a string literal')(
           'node',
           () =>
             Effect.sync(() => {
-              const node = { type: 'ObjectExpression' }
-              const call = callOf(memberOf('Symbol', 'for'), [node])
+              const node = objectExpression()
+              const call = symbolForCall(node)
               return { node, call }
             }),
         ),
@@ -229,15 +233,15 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'PositionLoadBearing_StringBesideSymbolForCall_IsNotIgnored',
+      'A string beside a `Symbol.for` call is position-load-bearing',
       Gherkin.Do.pipe(
         Given('a string literal examined against a Symbol.for call that holds a different string')(
           'node',
           () =>
             Effect.sync(() => {
-              const description = { type: 'StringLiteral', value: 'MyBrand' }
-              const other = { type: 'StringLiteral', value: 'Other' }
-              const call = callOf(memberOf('Symbol', 'for'), [other])
+              const description = stringLiteral('MyBrand')
+              const other = stringLiteral('Other')
+              const call = symbolForCall(other)
               return { description, call }
             }),
         ),
@@ -254,11 +258,11 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'BehaviourInput_MatchTagCall_IsNotIgnored',
+      'A `Match.tag` call as behaviour input is not ignored',
       Gherkin.Do.pipe(
         Given('`Match.tag("a")`')('node', () =>
           Effect.sync(() => {
-            const tag = { type: 'StringLiteral', value: 'a' }
+            const tag = stringLiteral('a')
             const call = callOf(memberOf('Match', 'tag'), [tag])
             return { tag, call }
           })),
@@ -275,11 +279,11 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'BehaviourInput_OrphanNodeWithoutParent_IsNotIgnored',
+      'An orphan node without a parent as behaviour input is not ignored',
       Gherkin.Do.pipe(
         Given('an identifier examined without a parent')('node', () =>
           Effect.sync(() => {
-            const node = { type: 'Identifier', name: 'x' }
+            const node = identifier('x')
             return { node }
           })),
         When('decideSchemaDeclarationIgnore runs with parent=undefined')(
@@ -295,12 +299,12 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'BehaviourInput_ArbitraryNodeAndParent_ReturnsKnownReasonsOrUndefined',
+      'An arbitrary node and parent pair returns known reasons or undefined',
       Gherkin.Do.pipe(
         Given('a representative `Symbol.for("MyBrand")` call')('node', () =>
           Effect.sync(() => {
-            const node = { type: 'StringLiteral', value: 'MyBrand' }
-            const parent = callOf(memberOf('Symbol', 'for'), [node])
+            const node = stringLiteral('MyBrand')
+            const parent = symbolForCall(node)
             return { node, parent }
           })),
         When('decideSchemaDeclarationIgnore examines the description argument')(
@@ -319,12 +323,12 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'DocumentationObject_IdentifierKey_IsIgnored',
+      'An identifier key in a documentation object is ignored',
       Gherkin.Do.pipe(
         Given('`S.annotations({ identifier: "HexBytes" })`')('node', () =>
           Effect.sync(() => {
             const object = objectOf([
-              namedProperty('identifier', { type: 'StringLiteral', value: 'HexBytes' }),
+              namedProperty('identifier', stringLiteral('HexBytes')),
             ])
             const call = annotationsCall(object)
             return { object, call }
@@ -346,12 +350,12 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'DocumentationObject_QuotedStringLiteralKey_IsIgnored',
+      'A quoted string-literal key in a documentation object is ignored',
       Gherkin.Do.pipe(
         Given('`S.annotations({ "identifier": "HexBytes" })`')('node', () =>
           Effect.sync(() => {
             const object = objectOf([
-              propertyOf({ type: 'StringLiteral', value: 'identifier' }, { type: 'StringLiteral', value: 'HexBytes' }),
+              propertyOf(stringLiteral('identifier'), stringLiteral('HexBytes')),
             ])
             const call = annotationsCall(object)
             return { object, call }
@@ -369,12 +373,12 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'DocumentationObject_DocumentationBesideBehaviour_KeepsObjectMutated',
+      'Documentation beside a behaviour key keeps the object mutated',
       Gherkin.Do.pipe(
         Given('`S.annotations({ description: "x", arbitrary: () => ... })`')('node', () =>
           Effect.sync(() => {
             const object = objectOf([
-              namedProperty('description', { type: 'StringLiteral', value: 'x' }),
+              namedProperty('description', stringLiteral('x')),
               namedProperty('arbitrary', { type: 'ArrowFunctionExpression' }),
             ])
             const call = annotationsCall(object)
@@ -404,7 +408,7 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'DocumentationObject_OnlyBehaviourValue_IsNotIgnored',
+      'An object holding only a behaviour value is not ignored',
       Gherkin.Do.pipe(
         Given('`S.annotations({ arbitrary: () => ... })`')('node', () =>
           Effect.sync(() => {
@@ -428,7 +432,7 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'DocumentationObject_BehaviourKeyAlone_IsNotIgnored',
+      'A behaviour key alone in the object is not ignored',
       Gherkin.Do.pipe(
         Given('`S.annotations({ arbitrary: () => ... })`')('node', () =>
           Effect.sync(() => {
@@ -451,12 +455,12 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'DocumentationObject_ComputedDocumentationKey_IsNotIgnored',
+      'A computed documentation key is not ignored',
       Gherkin.Do.pipe(
         Given('`S.annotations({ [key]: "x" })`')('node', () =>
           Effect.sync(() => {
             const key = identifier('identifier')
-            const value = { type: 'StringLiteral', value: 'x' }
+            const value = stringLiteral('x')
             const object = objectOf([propertyOf(key, value, true)])
             const call = annotationsCall(object)
             return { object, call }
@@ -478,12 +482,12 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'AnnotationsCall_DocumentationObjectOutsideAnnotationsCall_IsNotIgnored',
+      'A documentation object outside an annotations call is not ignored',
       Gherkin.Do.pipe(
         Given('`S.filter({ identifier: "x" })`')('node', () =>
           Effect.sync(() => {
             const object = objectOf([
-              namedProperty('identifier', { type: 'StringLiteral', value: 'x' }),
+              namedProperty('identifier', stringLiteral('x')),
             ])
             const call = callOf(memberOf('S', 'filter'), [object])
             return { object, call }
@@ -501,12 +505,12 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'AnnotationsCall_PropertyKeyItself_IsNotIgnored',
+      'A property key itself in a non-annotations position is not ignored',
       Gherkin.Do.pipe(
         Given('`S.annotations({ identifier: "HexBytes" })` — examining the key node')('node', () =>
           Effect.sync(() => {
             const object = objectOf([
-              namedProperty('identifier', { type: 'StringLiteral', value: 'HexBytes' }),
+              namedProperty('identifier', stringLiteral('HexBytes')),
             ])
             const call = annotationsCall(object)
             return { object, call }
@@ -525,14 +529,14 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'AnnotationsCall_DocumentationValueAtNonAnnotationsCall_IsNotIgnored',
+      'A documentation value at a non-annotations call is not ignored',
       Gherkin.Do.pipe(
         Given('`S.filter({ identifier: "x" })` — the value sits at a non-annotations call')(
           'node',
           () =>
             Effect.sync(() => {
               const object = objectOf([
-                namedProperty('identifier', { type: 'StringLiteral', value: 'x' }),
+                namedProperty('identifier', stringLiteral('x')),
               ])
               const call = callOf(memberOf('S', 'filter'), [object])
               return { object, call }
@@ -552,14 +556,14 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'AnnotationsCall_DocumentationValueWithoutItsCall_IsNotIgnored',
+      'A documentation value without its enclosing call is not ignored',
       Gherkin.Do.pipe(
         Given('a documentation value examined without passing the annotations call expression')(
           'node',
           () =>
             Effect.sync(() => {
               const object = objectOf([
-                namedProperty('identifier', { type: 'StringLiteral', value: 'x' }),
+                namedProperty('identifier', stringLiteral('x')),
               ])
               return { object }
             }),
@@ -581,16 +585,16 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
     )
 
     scenario(
-      'AnnotationsCall_DocumentationObjectAtSecondArgument_IsNotIgnored',
+      'A documentation object at the second argument slot is not ignored',
       Gherkin.Do.pipe(
         Given('`S.annotations("other", { identifier: "x" })` — documentation object at argument index 1')(
           'node',
           () =>
             Effect.sync(() => {
               const object = objectOf([
-                namedProperty('identifier', { type: 'StringLiteral', value: 'x' }),
+                namedProperty('identifier', stringLiteral('x')),
               ])
-              const value = { type: 'StringLiteral', value: 'other' }
+              const value = stringLiteral('other')
               const call = callOf(memberOf('S', 'annotations'), [value, object])
               return { object, call }
             }),

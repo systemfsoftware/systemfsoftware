@@ -158,7 +158,7 @@ const Feature = makeFeature({ it, layer })
 Feature('Regex mutation characterization')
   .body(({ scenario }) => {
     scenario(
-      'Should_EmitEveryRecordedReplacementInOrder_When_TheCorpusIsInstrumented',
+      'The full corpus yields exactly its recorded replacements in order',
       Gherkin.Do.pipe(
         Given('a module declaring every corpus pattern as a literal')('source', () => Effect.succeed(SOURCE)),
         When('it is instrumented')(
@@ -185,7 +185,7 @@ Feature('Regex mutation characterization')
     )
 
     scenario(
-      'Should_EmitOnlyCompilableLiterals_When_TheCorpusIsInstrumented',
+      'Every recorded replacement compiles as a regular expression',
       Gherkin.Do.pipe(
         Given('the recorded replacements')('rows', () => Effect.succeed(CORPUS)),
         Then('each one compiles as a regular expression')(({ rows }: { rows: typeof CORPUS }) =>
@@ -208,7 +208,7 @@ Feature('Regex mutation characterization')
     )
 
     scenario(
-      'Should_NeverEmitTheOriginalPattern_When_TheCorpusIsInstrumented',
+      'No replacement repeats its original pattern',
       Gherkin.Do.pipe(
         Given('the recorded replacements')('rows', () => Effect.succeed(CORPUS)),
         Then('no replacement equals the literal it came from')(({ rows }: { rows: typeof CORPUS }) =>

@@ -96,7 +96,7 @@ const Feature = makeFeature({ it, layer })
 Feature('Instrumenter characterization')
   .body(({ scenario }) => {
     scenario(
-      'Should_ContainAllSixteenMutators_When_RegistryIsRead',
+      'The mutator registry contains all sixteen mutator families',
       Gherkin.Do.pipe(
         // This scenario asserts the COMPLETE set of mutator names, not the
         // count. The registry was, until this session, populated by import
@@ -135,7 +135,7 @@ Feature('Instrumenter characterization')
     )
 
     scenario(
-      'Should_ProduceThirteenMutantsAcrossSixFamilies_When_BaselineSnippetIsInstrumented',
+      'The baseline snippet yields thirteen mutants across six families',
       Gherkin.Do.pipe(
         Given('the baseline source')('source', () => Effect.succeed(PROBE_SOURCE)),
         When('it is instrumented')(
@@ -168,7 +168,7 @@ Feature('Instrumenter characterization')
     )
 
     scenario(
-      'Should_MarkMutantsIgnoredWithReason_When_ExcludedMutationsContainsMutator',
+      'An excluded mutator marks its mutants ignored with a reason',
       Gherkin.Do.pipe(
         Given('the baseline source')('source', () => Effect.succeed(PROBE_SOURCE)),
         When('it is instrumented without exclusions')(
@@ -233,7 +233,7 @@ Feature('Instrumenter characterization')
     )
 
     scenario(
-      'Should_KeepArgumentLiveAndIgnoreSibling_When_InvertedIgnorerIsSelected',
+      'Selecting the inverted keep ignorer keeps the marked argument live and ignores its sibling',
       Gherkin.Do.pipe(
         Given('a file with a keep() argument body and a sibling function')('source', () => Effect.succeed(KEEP_SOURCE)),
         When('it is instrumented with the inverted ignorer selected')(
@@ -279,7 +279,7 @@ Feature('Instrumenter characterization')
     )
 
     scenario(
-      'Should_IgnoreMutantsInsideFlagBlock_When_RegionIgnorerIsSelected',
+      'Selecting the region ignorer ignores mutants inside the flag block while leaving siblings live',
       Gherkin.Do.pipe(
         Given('a file with a sibling function and an if (flag) block')('source', () => Effect.succeed(REGION_SOURCE)),
         When('it is instrumented with the region ignorer selected')(

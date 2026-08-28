@@ -27,7 +27,7 @@ Feature('Svelte component instrumentation')
       // package was built, and the version branch then reads the wrong answer.
       // This scenario fails if the compiler stops resolving from the consumer's
       // install, which is the only thing that makes the peer declaration honest.
-      'Should_ProduceMutants_When_TheSvelteCompilerResolvesFromTheInstall',
+      'A Svelte component with a comparison yields mutants from its script block when the compiler resolves from the install',
       Gherkin.Do.pipe(
         Given('a Svelte component with a comparison')('source', () => Effect.succeed(COMPONENT)),
         When('it is instrumented')(

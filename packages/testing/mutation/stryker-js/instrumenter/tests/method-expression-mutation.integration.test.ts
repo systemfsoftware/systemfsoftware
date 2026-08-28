@@ -27,7 +27,7 @@ const Feature = makeFeature({ it, layer })
 Feature('Mutating a method named after an Object.prototype member')
   .body(({ scenario }) => {
     scenario(
-      'Should_Instrument_When_TheCalledMethodSharesItsNameWithAPrototypeMember',
+      'Prototype-named method calls instrument without proposing a method replacement',
       Gherkin.Do.pipe(
         Given('a module calling each prototype-named method')('source', () => Effect.succeed(SOURCE)),
         When('it is instrumented')(

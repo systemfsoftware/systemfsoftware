@@ -75,7 +75,7 @@ function createMockGuard() {
 
 Feature('xd:// retry guard').body(({ scenario }) => {
   scenario(
-    'Should inject retry reminder when tool not found failure unresolved',
+    'An unresolved tool-not-found failure injects a retry reminder',
     Gherkin.Do.pipe(
       Given('the retry guard is loaded')('guard', () =>
         Effect.promise(async () => {
@@ -106,7 +106,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
   )
 
   scenario(
-    'Should not inject reminder when no failure recorded',
+    'No retry reminder is injected when no failure is recorded',
     Gherkin.Do.pipe(
       Given('the retry guard is loaded with no recorded errors')('guard', () =>
         Effect.promise(async () => {
@@ -132,7 +132,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
   )
 
   scenario(
-    'Should clear ledger entry when xd:// write starts',
+    'A write to xd:// clears its ledger entry',
     Gherkin.Do.pipe(
       Given('a guard with a recorded recall failure')('guard', () =>
         Effect.promise(async () => {
@@ -165,7 +165,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
   )
 
   scenario(
-    'Should keep ledger entry when only reading xd:// docs',
+    'Reading xd:// docs leaves the ledger entry intact',
     Gherkin.Do.pipe(
       Given('a guard with a web_search failure recorded')('guard', () =>
         Effect.promise(async () => {
@@ -199,7 +199,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
   )
 
   scenario(
-    'Should ignore unrelated tool errors',
+    'An unrelated tool error is ignored',
     Gherkin.Do.pipe(
       Given('a guard loaded')('guard', () =>
         Effect.promise(async () => {
@@ -232,7 +232,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
   )
 
   scenario(
-    'Should detect not found when error text is lower case',
+    'Lower-case error text still reads as not found',
     Gherkin.Do.pipe(
       Given('a guard loaded')('guard', () =>
         Effect.promise(async () => {
@@ -266,7 +266,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
   )
 
   scenario(
-    'Should detect not found when tool name has underscore',
+    'A tool name containing an underscore still reads as not found',
     Gherkin.Do.pipe(
       Given('a guard loaded')('guard', () =>
         Effect.promise(async () => {
@@ -300,7 +300,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
   )
 
   scenario(
-    'Should detect not found when tool name has colon prefix',
+    'A namespaced tool name still reads as not found',
     Gherkin.Do.pipe(
       Given('a guard loaded')('guard', () =>
         Effect.promise(async () => {
@@ -334,7 +334,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
   )
 
   scenario(
-    'Should evict oldest entry when ledger exceeds max size',
+    'A full retry ledger evicts its oldest entry',
     Gherkin.Do.pipe(
       Given('a guard loaded')('guard', () =>
         Effect.promise(async () => {
@@ -380,7 +380,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
   )
 
   scenario(
-    'Should not re-remind when tool already reminded without new failure',
+    'No new reminder appears when a tool is already reminded without a new failure',
     Gherkin.Do.pipe(
       Given('a guard with a retain failure already consumed by context')('guard', () =>
         Effect.promise(async () => {
@@ -408,7 +408,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
   )
 
   scenario(
-    'Should re-remind when tool fails again after previous reminder',
+    'A repeated failure after a reminder triggers a new reminder',
     Gherkin.Do.pipe(
       Given('a guard where retain failed and was reminded')('guard', () =>
         Effect.promise(async () => {
@@ -438,7 +438,7 @@ Feature('xd:// retry guard').body(({ scenario }) => {
   )
 
   scenario(
-    'Should remind only for new tools when mixed with already reminded',
+    'Only newly failed tools are reminded when mixed with already-reminded ones',
     Gherkin.Do.pipe(
       Given('a guard with retain consumed and web_search failing')('guard', () =>
         Effect.promise(async () => {

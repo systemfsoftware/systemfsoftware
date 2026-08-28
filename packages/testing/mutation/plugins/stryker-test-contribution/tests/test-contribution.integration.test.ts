@@ -62,7 +62,7 @@ const earnsAndIdleReport = (): Pick<schema.MutationTestResult, 'files' | 'testFi
 Feature('Judging test contribution under the test-contribution gate')
   .body(({ scenario }) => {
     scenario(
-      'Should_CreditASoleKill_When_OnlyOneFileKilledTheMutant',
+      'A mutant killed by one file earns sole credit for that file',
       Gherkin.Do.pipe(
         Given('a mutant killed by one file and another file covering nothing')('report', () =>
           Effect.succeed(
@@ -85,7 +85,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_CreditASharedKillToBothFiles_When_TwoFilesKilledTogether',
+      'A kill shared by two files credits both files',
       Gherkin.Do.pipe(
         Given('a report killed jointly by two files')('report', () =>
           Effect.succeed(
@@ -108,7 +108,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_DenySoleCredit_When_ACoKillerCannotBePlacedInAnyFile',
+      'A kill whose co-killer sits outside every test file denies sole credit',
       Gherkin.Do.pipe(
         Given('a kill whose co-killer is not in any test file')('report', () =>
           Effect.succeed(
@@ -127,7 +127,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_CountATimeoutAsAKill_When_ItRecordedAKillingTest',
+      'A timeout that recorded its killer counts as a kill',
       Gherkin.Do.pipe(
         Given('a timeout mutant with a recorded killing test')(
           'report',
@@ -146,7 +146,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_CreditNobody_When_TheMutantSurvived',
+      'A mutant that survived credits no file',
       Gherkin.Do.pipe(
         Given('a report with a surviving mutant')('report', () =>
           Effect.succeed(
@@ -165,7 +165,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_CreditNobodyForAKillThatRecordedNoKillingTest_When_TheReportOmitsKilledBy',
+      'A killed mutant with no recorded killer credits no file',
       Gherkin.Do.pipe(
         Given('a killed mutant with no recorded killing test')(
           'report',
@@ -184,7 +184,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_AccuseAFile_When_EveryKillItMakesAnotherFileAlsoMakes',
+      'A file that never kills alone is accused when killers are fully recorded',
       Gherkin.Do.pipe(
         Given(
           'a report where one file kills nothing another file does not also kill',
@@ -203,7 +203,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_SpareARedundantFile_When_TheRunBailed',
+      'A redundant file is spared when bail may have hidden killers',
       Gherkin.Do.pipe(
         Given(
           'a report where a file kills nothing alone, with everyKillerRecorded false',
@@ -222,7 +222,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_AccuseAFileThatKilledNothing_When_TheRunBailed',
+      'A file that killed nothing is still accused even when bail is on',
       Gherkin.Do.pipe(
         Given(
           'a report with a file that killed nothing at all',
@@ -244,7 +244,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_SpareAFileCoveringAnUnattributedKill_When_DeletingItMayResurrectTheKill',
+      'A file covering an unattributed kill is spared because removing it might resurrect the kill',
       Gherkin.Do.pipe(
         Given(
           'a file covering a timeout whose killing test was never named',
@@ -266,7 +266,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_StillAccuseAFileThatCoversNothing_When_ASiblingCoversTheUnattributedKill',
+      'A file covering nothing is still accused when a sibling covers the unattributed kill',
       Gherkin.Do.pipe(
         Given(
           'a report with one coverer of an unattributed kill and one idle file',
@@ -292,7 +292,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_TreatAbsentKilledByLikeAnEmptyKilledBy_When_CoveringTheKill',
+      'A timeout with no killer list spares its covering file like an empty list',
       Gherkin.Do.pipe(
         Given(
           'a timeout mutant whose killedBy is absent rather than an empty array',
@@ -314,7 +314,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_NeverAccuseAFileOutsideTheConfiguredSuffixes',
+      'A file outside the configured suffixes is never accused',
       Gherkin.Do.pipe(
         Given('an idle file that does not match the configured suffixes')('report', () =>
           Effect.succeed(
@@ -334,7 +334,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_ReturnTheAccusedFilesSorted',
+      'Accused files are returned sorted alphabetically',
       Gherkin.Do.pipe(
         Given('a report with several accused files out of order')('report', () =>
           Effect.succeed(
@@ -355,7 +355,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_FailTheRunAndNameTheFile_When_AFileEarnsNothing',
+      'A file that earns nothing fails the run and is named',
       Gherkin.Do.pipe(
         Given('a report with an earns-nothing file')('report', () =>
           Effect.succeed(
@@ -375,7 +375,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_PassTheRun_When_EveryInScopeFileEarnsItsPlace',
+      'Every in-scope file earning its place lets the run pass',
       Gherkin.Do.pipe(
         Given('a report where every in-scope file kills a distinct mutant')('report', () =>
           Effect.succeed(
@@ -402,7 +402,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_FailWithAConfigurationError_When_BailIsOnAndAnInScopeFileRan',
+      'Bail being on with an in-scope file needing judgement reports a configuration error',
       Gherkin.Do.pipe(
         Given('a report with an earns-nothing file under bail')('report', () =>
           Effect.succeed(
@@ -421,7 +421,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_StaySilent_When_BailIsOnAndNoFileMatchesTheConfiguredSuffixes',
+      'An out-of-scope run stays silent under bail',
       Gherkin.Do.pipe(
         Given('a report whose files carry no configured suffix')('report', () =>
           Effect.succeed(
@@ -443,7 +443,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_NotSingleOutAZeroKillingFile_WhenBailIsOn',
+      'No individual workflow file is singled out when bail hides possible killers',
       Gherkin.Do.pipe(
         Given('a report with only zero-kill workflow files and bail on')('report', () =>
           Effect.succeed(
@@ -468,7 +468,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_BlameTheRun_When_NoKillWasCreditedToAnyTestFile',
+      'No kill credited to any test file blames the run itself',
       Gherkin.Do.pipe(
         Given('a report with killed mutants but no credited killer')('report', () =>
           Effect.succeed(
@@ -490,7 +490,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_PassWithoutJudging_WhenNoFileMatchesTheSuffixes',
+      'No file matching the suffixes passes the run without judgement',
       Gherkin.Do.pipe(
         Given('a report with no in-scope test files')('report', () =>
           Effect.succeed(
@@ -511,7 +511,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_CountEveryMutantAFileKills_NotMerelyThatItKilledOne',
+      'A file that kills two mutants counts both kills',
       Gherkin.Do.pipe(
         Given('a report with two mutants both killed by the same file')('report', () =>
           Effect.succeed(
@@ -533,7 +533,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_JudgeAFileInScope_When_ItMatchesAnyConfiguredSuffix',
+      'A file matching any of several suffixes is judged in scope',
       Gherkin.Do.pipe(
         Given('a report with one file matching only one of several suffixes')('report', () =>
           Effect.succeed(
@@ -557,7 +557,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_NameEveryConfiguredSuffix_WhenNothingMatched',
+      'No file matching any suffix names every configured suffix',
       Gherkin.Do.pipe(
         Given('a report with no file matching any configured suffix')('report', () =>
           Effect.succeed(
@@ -577,7 +577,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_SayTheAnswerIsExact_WhenEveryKillerWasRecorded',
+      'A verdict with fully recorded killers states the answer is exact',
       Gherkin.Do.pipe(
         Given('a report where every killer was recorded')('report', () =>
           Effect.succeed(
@@ -594,7 +594,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_ListEachAccusedFileOnItsOwnBulletedLine',
+      'Each accused file appears on its own bulleted line',
       Gherkin.Do.pipe(
         Given('a report with two idle files')('report', () =>
           Effect.succeed(
@@ -620,7 +620,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_ProduceNoContributionVerdict_WhenOnlySchemaPropertyTestsRun',
+      'Only schema property tests running yields no judgement for the default suffixes',
       Gherkin.Do.pipe(
         Given('a report whose only tests are schema property tests')('report', () =>
           Effect.succeed(
@@ -643,7 +643,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_StillProduceAVerdictForTheDefault_WhenAWorkflowPropertyTestIsPresent',
+      'A workflow property test among schema tests still triggers judgement',
       Gherkin.Do.pipe(
         Given('a report with a workflow property test among schema ones')('report', () =>
           Effect.succeed(
@@ -666,7 +666,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_JudgeAgainstACustomSuffixList_When_OneIsSupplied',
+      'A custom suffix list judges the files it matches',
       Gherkin.Do.pipe(
         Given('a report with only schema property tests and a custom suffix list')('report', () =>
           Effect.succeed(
@@ -689,7 +689,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_NotCreditPhantomKillAndShouldExemptItsCoverer_When_KillerIdMapsToNoTestFile',
+      'A kill from an unknown test id credits no file and exempts its real coverer',
       Gherkin.Do.pipe(
         Given('a kill whose only killer id names no test file and a real file covers it')(
           'report',
@@ -716,7 +716,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_PassWithHonestCountsAndNotClaimUniqueKill_When_AFileOnlySurvivesByExemption',
+      'A file that only survives by covering an unattributed kill is not claimed as unique',
       Gherkin.Do.pipe(
         Given('a report where one file defends and another only survives by covering an unattributed kill')(
           'report',
@@ -748,7 +748,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_FailWithoutClaimingJustAsDead_When_TwoFilesKillExactlyTheSameMutants',
+      'Two files killing the same mutants fail the run without claiming a just-as-dead escape',
       Gherkin.Do.pipe(
         Given('a report where two files kill exactly the same mutants')('report', () =>
           Effect.succeed(
@@ -778,7 +778,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_ClaimJustAsDead_When_JointSubsumptionHoldsAcrossAccusedFiles',
+      'Joint subsumption across accused files earns the just-as-dead verdict',
       Gherkin.Do.pipe(
         Given('a report where every mutant the accused files kill retains an outside killer')(
           'report',
@@ -813,7 +813,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_TreatZeroKillFileAsUnjudged_When_ItCoveredNoKillableMutant_AndAsToothless_When_ItDid',
+      'A zero-kill file is unjudged when it covered nothing killable and accused when it did',
       Gherkin.Do.pipe(
         Given('a report with one auditable idle file and one unauditable idle file')('report', () =>
           Effect.succeed(
@@ -846,7 +846,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_SayUnjudgedInTheJudge_When_AnInScopeFileCoveredNoKillableMutant',
+      'The judge reports an in-scope file with no killable coverage as unjudged',
       Gherkin.Do.pipe(
         Given('a report with one defending file and one file the report gave no killable mutant')(
           'report',
@@ -875,7 +875,7 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_NotCountAnIgnoredMutantAsKillable_When_JudgingWhichFilesWereOfferedOne',
+      'An Ignored mutant is not counted as killable when judging who was offered one',
       Gherkin.Do.pipe(
         Given('a report whose only in-scope idle file covers only an Ignored mutant')('report', () =>
           Effect.succeed(

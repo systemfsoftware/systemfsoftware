@@ -16,7 +16,7 @@ const localPath = '/proj/systemfsoftware.local.toml'
 
 Feature('Harness TOML — three-layer config with per-key override').body(({ scenario }) => {
   scenario(
-    'Should merge user and project when keys are disjoint',
+    'Disjoint user and project keys merge into one policy',
     {
       scenarioLayer: MemoryFileSystem.layerWith({
         [userPath]: 'no_delegate_skills = ["user-skill"]',
@@ -38,7 +38,7 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
   )
 
   scenario(
-    'Should let project win when user and project set the same key',
+    'A project key overrides the same user key',
     {
       scenarioLayer: MemoryFileSystem.layerWith({
         [userPath]: 'no_delegate_skills = ["user"]',
@@ -57,7 +57,7 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
   )
 
   scenario(
-    'Should let local win when project and local set the same key',
+    'A local key overrides the same project key',
     {
       scenarioLayer: MemoryFileSystem.layerWith({
         [projectPath]: 'no_delegate_skills = ["project"]',
@@ -76,7 +76,7 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
   )
 
   scenario(
-    'Should let local win when user and local set the same key',
+    'A local key overrides the same user key',
     {
       scenarioLayer: MemoryFileSystem.layerWith({
         [userPath]: 'no_delegate_skills = ["user"]',
@@ -95,7 +95,7 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
   )
 
   scenario(
-    'Should return empty when all layers are missing',
+    'A policy with no layer files at all is empty',
     { scenarioLayer: MemoryFileSystem.layerWith({}) },
     Gherkin.Do.pipe(
       Given('no user, project, or local file')('cwd', () => Effect.succeed('/empty')),
@@ -109,7 +109,7 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
   )
 
   scenario(
-    'Should return user only when only the user layer is present',
+    'Only the user layer present yields just its keys',
     {
       scenarioLayer: MemoryFileSystem.layerWith({
         [userPath]: 'no_delegate_skills = ["only-user"]',
@@ -127,7 +127,7 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
   )
 
   scenario(
-    'Should replace array whole when a later layer overrides the array',
+    'A later layer replaces an earlier array wholesale',
     {
       scenarioLayer: MemoryFileSystem.layerWith({
         [userPath]: 'plugins = ["a", "b", "c"]',
@@ -146,7 +146,7 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
   )
 
   scenario(
-    'Should keep user keys when the project TOML is malformed',
+    'A malformed project file leaves the user keys intact',
     {
       scenarioLayer: MemoryFileSystem.layerWith({
         [userPath]: 'no_delegate_skills = ["user"]',
@@ -165,7 +165,7 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
   )
 
   scenario(
-    'Should keep project keys when the user TOML is malformed',
+    'A malformed user file leaves the project keys intact',
     {
       scenarioLayer: MemoryFileSystem.layerWith({
         [userPath]: 'garbage [[ =\ninvalid',
@@ -184,7 +184,7 @@ Feature('Harness TOML — three-layer config with per-key override').body(({ sce
   )
 
   scenario(
-    'Should let project win when the local TOML is malformed',
+    'A malformed local file leaves the project key intact',
     {
       scenarioLayer: MemoryFileSystem.layerWith({
         [projectPath]: 'no_delegate_skills = ["project"]',

@@ -38,7 +38,7 @@ const makeFixture = (mutant: unknown, ancestors: readonly unknown[]) => ({ mutan
 Feature('Workflow.make boundary — the inverted mutation-population selector')
   .body(({ scenario }) => {
     scenario(
-      'Should_NotIgnore_When_Mutant_IsInside_MakeBody',
+      'A mutant inside a Workflow.make body stays live',
       Gherkin.Do.pipe(
         Given('a file whose `Workflow.make(...)` argument body holds the mutant')('fixture', () =>
           Effect.sync(() => {
@@ -61,7 +61,7 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
     )
 
     scenario(
-      'Should_NotIgnore_When_Mutant_IsDeeperThanOneLevelInside_MakeBody',
+      'A mutant nested several levels inside a make body stays live',
       Gherkin.Do.pipe(
         Given('a mutant several expression levels below a `Workflow.make(...)` argument')(
           'fixture',
@@ -88,7 +88,7 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
     )
 
     scenario(
-      'Should_Ignore_When_Mutant_IsOutsideEveryMakeBody',
+      'A mutant at module level outside any make body is ignored',
       Gherkin.Do.pipe(
         Given('a file importing Workflow whose module-level body holds the mutant')('fixture', () =>
           Effect.sync(() => {
@@ -109,7 +109,7 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
     )
 
     scenario(
-      'Should_Ignore_When_File_ImportsNoWorkflow',
+      'A mutant in a file that imports no workflow is ignored',
       Gherkin.Do.pipe(
         Given('a file with no effect-cell-types import at all')('fixture', () =>
           Effect.sync(() => {
@@ -130,7 +130,7 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
     )
 
     scenario(
-      'Should_Ignore_When_WorkflowBound_FromAnotherModule',
+      'A mutant in a make call bound to a local workflow is ignored',
       Gherkin.Do.pipe(
         Given('a `Workflow.make(...)` call whose `Workflow` binding comes from a local module')(
           'fixture',
@@ -156,7 +156,7 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
     )
 
     scenario(
-      'Should_NotIgnore_When_MakeArgumentIsAModuleScopeFunctionReference',
+      'A mutant in a function referenced by a make call stays live',
       Gherkin.Do.pipe(
         Given('a `Workflow.make(...)` call whose argument names a same-file function holding the mutant')(
           'fixture',
@@ -186,7 +186,7 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
     )
 
     scenario(
-      'Should_NotIgnore_When_TwoArgumentMakeArgumentIsAModuleScopeFunctionReference',
+      'A mutant in the decider function of a two-argument make stays live',
       Gherkin.Do.pipe(
         Given(
           'a two-argument `Workflow.make(Command, decide)` whose second argument names the mutant-bearing function',
@@ -219,7 +219,7 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
     )
 
     scenario(
-      'Should_NotIgnore_When_TwoArgumentMakeBodyIsInline',
+      'A mutant inline in the second argument of a two-argument make stays live',
       Gherkin.Do.pipe(
         Given('a two-argument `Workflow.make(Command, (c) => ...)` holding the mutant inline')(
           'fixture',
@@ -245,7 +245,7 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
     )
 
     scenario(
-      'Should_Ignore_When_MakeArgumentNamesAMissingFunction',
+      'A mutant naming a missing function is ignored',
       Gherkin.Do.pipe(
         Given('a make call naming an identifier that resolves to no function in the file')(
           'fixture',
@@ -270,7 +270,7 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
     )
 
     scenario(
-      'Should_NotIgnore_When_TwoMakeCallsInOneFile',
+      'A mutant in the second of two make calls stays live',
       Gherkin.Do.pipe(
         Given('a file with two `Workflow.make` calls and a mutant inside the second body')(
           'fixture',
@@ -297,7 +297,7 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
     )
 
     scenario(
-      'Should_NotIgnore_When_MakeNested_InsideAnotherMakeBody',
+      'A mutant inside a nested make stays live',
       Gherkin.Do.pipe(
         Given('a `Workflow.make` call inside another make body, with the mutant in the inner body')(
           'fixture',
@@ -323,9 +323,8 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
         ),
       ),
     )
-
     scenario(
-      'Should_NotIgnore_When_MakeCalledThroughNamespaceImport',
+      'A mutant inside a make called through a namespace import stays live',
       Gherkin.Do.pipe(
         Given('`import * as Workflow` with the mutant inside the make argument')('fixture', () =>
           Effect.sync(() => {
@@ -348,7 +347,7 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
     )
 
     scenario(
-      'Should_NotIgnore_When_MakeCalledThrough_AliasedImport',
+      'A mutant inside a make called through an aliased import stays live',
       Gherkin.Do.pipe(
         Given('`import { Workflow as W }` with the mutant inside `W.make(...)`')('fixture', () =>
           Effect.sync(() => {
@@ -371,7 +370,7 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
     )
 
     scenario(
-      'Composition_TagMutant_OutsideMakeBody_IsIgnoredByOneNamedReason',
+      'A schema tag outside every make body earns its own distinct reason from each ignorer',
       Gherkin.Do.pipe(
         Given('a `_tag` inside a TaggedClass declaration sitting outside any make body')(
           'fixture',
@@ -404,7 +403,7 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
     )
 
     scenario(
-      'Should_Register_AnIgnorePlugin_NamedWorkflowMakeBoundary',
+      'The entrypoint registers an ignore plugin named workflow-make-boundary',
       Gherkin.Do.pipe(
         Given('the entrypoint plugin array')('plugins', () => Effect.sync(() => strykerPlugins)),
         When('the declared plugin is inspected')('plugin', (s) => Effect.sync(() => s.plugins[0])),
@@ -422,7 +421,7 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
     )
 
     scenario(
-      'Should_Compose_IntoThePackageBarrel',
+      'The package barrel carries all three ignore plugins',
       Gherkin.Do.pipe(
         Given('the package barrel plugin array')('plugins', () => Effect.sync(() => composedPlugins)),
         Then('it carries all three declarable ignorer names')((s) =>

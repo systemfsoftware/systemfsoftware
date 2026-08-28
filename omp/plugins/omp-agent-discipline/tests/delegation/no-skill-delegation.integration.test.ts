@@ -34,7 +34,7 @@ function tomlConfig(skills: readonly string[]) {
 Feature('No-skill-delegation — executor integration')
   .body(({ scenario }) => {
     scenario(
-      'Should allow dispatch from an unknown cwd (no guard compiled)',
+      'Dispatch from an unknown working directory is allowed when no guard is compiled',
       { scenarioLayer: seededLayer(tomlConfig(['ce-work'])) },
       Gherkin.Do.pipe(
         Given('a toml config at /test')('cwd', () => Effect.succeed('/unknown')),
@@ -51,7 +51,7 @@ Feature('No-skill-delegation — executor integration')
     )
 
     scenario(
-      'Should block a delegated prompt in a configured cwd',
+      'A delegated prompt is blocked in a configured working directory',
       { scenarioLayer: seededLayer(tomlConfig(['ce-work'])) },
       Gherkin.Do.pipe(
         Given('a toml config at /test')('cwd', () => Effect.succeed('/test')),
@@ -70,7 +70,7 @@ Feature('No-skill-delegation — executor integration')
     )
 
     scenario(
-      'Should fail open when toml is malformed',
+      'A malformed TOML file fails open',
       {
         scenarioLayer: seededLayer({
           '/test/systemfsoftware.toml': 'invalid toml [[[',
@@ -91,7 +91,7 @@ Feature('No-skill-delegation — executor integration')
     )
 
     scenario(
-      'Should block a delegated prompt through the executor',
+      'A delegated prompt is blocked through the executor',
       { scenarioLayer: seededLayer(tomlConfig(['ce-work'])) },
       Gherkin.Do.pipe(
         Given('a toml config at /test')(
@@ -115,7 +115,7 @@ Feature('No-skill-delegation — executor integration')
     )
 
     scenario(
-      'Should allow a reference prompt through the executor',
+      'A reference prompt passes through the executor',
       { scenarioLayer: seededLayer(tomlConfig(['ce-work'])) },
       Gherkin.Do.pipe(
         Given('a toml config at /test')(
@@ -135,7 +135,7 @@ Feature('No-skill-delegation — executor integration')
     )
 
     scenario(
-      'Should have independent verdicts for different cwds',
+      'Two working directories receive independent delegation verdicts',
       Gherkin.Do.pipe(
         Given('a filesystem with toml at /project-a but not /project-b')('dirs', () =>
           Effect.succeed({
