@@ -9,7 +9,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { Effect } from 'effect'
+import { Clock, Effect } from 'effect'
 import { expect } from 'vitest'
 
 import { generateRunId, makeRunLayer, runMutationTest } from '@systemfsoftware/stryker-js-platform-node'
@@ -43,27 +43,30 @@ type Setup = {
 }
 
 const runOnce = (workDir: string, incrementalFile: string) =>
-  Effect.scoped(
-    runMutationTest({
-      configFile: join(workDir, 'stryker.config.json'),
-      incremental: true,
-      incrementalFile,
-      force: false,
-      disableBail: true,
-      tempDirName: join(workDir, '.stryker-tmp'),
-    }),
-  ).pipe(
-    Effect.provide(
-      makeRunLayer({
-        runId: generateRunId(),
-        resolvedMode: { mode: 'human', signal: 'env', stdoutIsTTY: false },
-        runStartedAt: Date.now(),
-        basePath: workDir,
-        reporterPluginModules: [],
-        allowConsoleColors: false,
+  Effect.gen(function*() {
+    const runStartedAt = yield* Clock.currentTimeMillis
+    return yield* Effect.scoped(
+      runMutationTest({
+        configFile: join(workDir, 'stryker.config.json'),
+        incremental: true,
+        incrementalFile,
+        force: false,
+        disableBail: true,
+        tempDirName: join(workDir, '.stryker-tmp'),
       }),
-    ),
-  )
+    ).pipe(
+      Effect.provide(
+        makeRunLayer({
+          runId: generateRunId(),
+          resolvedMode: { mode: 'human', signal: 'env', stdoutIsTTY: false },
+          runStartedAt,
+          basePath: workDir,
+          reporterPluginModules: [],
+          allowConsoleColors: false,
+        }),
+      ),
+    )
+  })
 
 const isIncrementalReport = (value: unknown): value is IncrementalReport => {
   if (typeof value !== 'object' || value === null) {
