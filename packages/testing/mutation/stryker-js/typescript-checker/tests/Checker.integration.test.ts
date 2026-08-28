@@ -1,6 +1,6 @@
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
-import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { strykerPlugins } from '@systemfsoftware/stryker-js-typescript-checker'
 import { Checker } from '@systemfsoftware/stryker-js/Checker'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
@@ -76,14 +76,14 @@ const openChecker = Effect.gen(function*() {
   return sut
 })
 
-Feature('TypeScript checker live check path')
+Feature('Checking TypeScript mutants for compile errors')
   .withLayer(host)
   .liveClock()
   .body(({ scenario }) => {
     scenario(
-      'Should_SplitPassedAndCompileError_When_GroupDiagnosticIsAmbiguous',
+      'Two changes share a compiler error that cannot be blamed on one of them',
       Gherkin.Do.pipe(
-        Given('todo.ts and counter.ts from errorInFileAbove2Mutants')('sources', () =>
+        Given('the sample project has a todo list and a neighbouring counter')('sources', () =>
           Effect.gen(function*() {
             const fs = yield* FileSystem.FileSystem
             const path = yield* Path.Path
@@ -93,8 +93,8 @@ Feature('TypeScript checker live check path')
             const counter = yield* fs.readFileString(path.join(dir, 'counter.ts'))
             return { todo, counter }
           })),
-        Given('an initialized typescript checker on that fixture')('sut', () => openChecker),
-        When('a valid todo mutant and an invalid counter mutant are checked together')(
+        Given('the TypeScript checker is ready on that project')('sut', () => openChecker),
+        When('a type-preserving todo change and a type-breaking counter change are checked together')(
           'actual',
           ({ sources, sut }) =>
             Effect.gen(function*() {
@@ -119,9 +119,13 @@ Feature('TypeScript checker live check path')
               ])
             }),
         ),
-        Then('the valid mutant is passed and the invalid mutant is compileError')(({ actual }) =>
+        Then('the todo change is sent on to the tests')(({ actual }) =>
           Effect.sync(() => {
             expect(HashMap.get(actual, 'passedAlone')).toEqual(Option.some({ status: 'passed' }))
+          })
+        ),
+        And('the counter change is reported as a compile error')(({ actual }) =>
+          Effect.sync(() => {
             const failed = HashMap.get(actual, 'compileErrorAlone')
             expect(Option.isSome(failed) && failed.value.status === 'compileError').toBe(true)
           })
@@ -130,31 +134,34 @@ Feature('TypeScript checker live check path')
     )
 
     scenario(
-      'Should_ReportCompileError_When_SingleMutantFailsTypecheck',
+      'A change that no longer typechecks is reported as a compile error',
       Gherkin.Do.pipe(
-        Given('todo.ts from the single-project fixture')('todo', () =>
+        Given('the sample project has a todo list')('todo', () =>
           Effect.gen(function*() {
             const fs = yield* FileSystem.FileSystem
             const path = yield* Path.Path
             const root = yield* fixtureRoot
             return yield* fs.readFileString(path.join(root, 'src/todo.ts'))
           })),
-        Given('an initialized typescript checker on that fixture')('sut', () => openChecker),
-        When('one mutant that replaces a push with a string is checked')('actual', ({ sut, todo }) =>
-          Effect.gen(function*() {
-            const path = yield* Path.Path
-            const root = yield* fixtureRoot
-            return yield* sut.check([
-              locate(
-                todo,
-                path.join(root, 'src', 'todo.ts'),
-                'TodoList.allTodos.push(newItem)',
-                '"This should not be a string"',
-                'mutId',
-              ),
-            ])
-          })),
-        Then('that mutant is compileError')(({ actual }) =>
+        Given('the TypeScript checker is ready on that project')('sut', () => openChecker),
+        When('a change that turns a number into a string is checked')(
+          'actual',
+          ({ sut, todo }) =>
+            Effect.gen(function*() {
+              const path = yield* Path.Path
+              const root = yield* fixtureRoot
+              return yield* sut.check([
+                locate(
+                  todo,
+                  path.join(root, 'src', 'todo.ts'),
+                  'TodoList.allTodos.push(newItem)',
+                  '"This should not be a string"',
+                  'mutId',
+                ),
+              ])
+            }),
+        ),
+        Then('that change is reported as a compile error')(({ actual }) =>
           Effect.sync(() => {
             const result = HashMap.get(actual, 'mutId')
             expect(Option.isSome(result) && result.value.status === 'compileError').toBe(true)
@@ -164,25 +171,31 @@ Feature('TypeScript checker live check path')
     )
 
     scenario(
-      'Should_ReportPassed_When_MutantTypechecks',
+      'A change that still typechecks is sent on to the tests',
       Gherkin.Do.pipe(
-        Given('todo.ts from the single-project fixture')('todo', () =>
+        Given('the sample project has a todo list')('todo', () =>
           Effect.gen(function*() {
             const fs = yield* FileSystem.FileSystem
             const path = yield* Path.Path
             const root = yield* fixtureRoot
             return yield* fs.readFileString(path.join(root, 'src/todo.ts'))
           })),
-        Given('an initialized typescript checker on that fixture')('sut', () => openChecker),
-        When('one mutant that keeps the type is checked')('actual', ({ sut, todo }) =>
+        Given('the TypeScript checker is ready on that project')('sut', () => openChecker),
+        When('a change that still returns a number is checked')('actual', ({ sut, todo }) =>
           Effect.gen(function*() {
             const path = yield* Path.Path
             const root = yield* fixtureRoot
             return yield* sut.check([
-              locate(todo, path.join(root, 'src', 'todo.ts'), 'TodoList.allTodos.push(newItem)', 'newItem? 42: 43', 'ok'),
+              locate(
+                todo,
+                path.join(root, 'src', 'todo.ts'),
+                'TodoList.allTodos.push(newItem)',
+                'newItem? 42: 43',
+                'ok',
+              ),
             ])
           })),
-        Then('that mutant is passed')(({ actual }) =>
+        Then('that change is sent on to the tests')(({ actual }) =>
           Effect.sync(() => {
             expect(HashMap.get(actual, 'ok')).toEqual(Option.some({ status: 'passed' }))
           })
