@@ -2,7 +2,7 @@ import { Cause, Effect, Exit, Layer, ManagedRuntime } from 'effect'
 
 export type RunSafe<R = unknown> = <A, E>(effect: Effect.Effect<A, E, R>) => Promise<A>
 
-export const bootstrapPluginRuntime = <R>(layer: Layer.Layer<R, unknown, never>) => {
+export const bootstrapPluginRuntime = <R, LE>(layer: Layer.Layer<R, LE, never>) => {
   const runtime = ManagedRuntime.make(layer)
 
   const dispose = (): void => {
