@@ -2,7 +2,7 @@ import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChild
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import * as NodeStdio from '@effect/platform-node/NodeStdio'
-import { makeRunLayer, readConfig, runMutationTest, strykerVersion } from '@systemfsoftware/stryker-js-platform-node'
+import { makeRunLayer, runMutationTest, strykerVersion } from '@systemfsoftware/stryker-js-platform-node'
 import type {
   ConfigFileInvalidError,
   ConfigFileNotFoundError,
@@ -1116,36 +1116,6 @@ function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironme
   }
 }
 
-const progressStreamFileOf = (
-  request: Option.Option<CliRequest>,
-  basePath: string,
-): Effect.Effect<string, never, FileSystem.FileSystem | Path.Path> =>
-  Option.match(request, {
-    onNone: () => Effect.succeed(DEFAULT_PROGRESS_STREAM_FILE),
-    onSome: (cliRequest) =>
-      Match.value(cliRequest).pipe(
-        Match.tag(
-          'run',
-          (runRequest): Effect.Effect<string, never, FileSystem.FileSystem | Path.Path> =>
-            Effect.gen(function*() {
-              const loaded = yield* Effect.exit(readConfig(runRequest.options, basePath))
-              if (Exit.isSuccess(loaded)) {
-                const fileName = loaded.value['progressStreamFile']
-                if (typeof fileName === 'string' && fileName.length > 0) {
-                  return fileName
-                }
-              }
-              const fromCli = runRequest.options['progressStreamFile']
-              if (typeof fromCli === 'string' && fromCli.length > 0) {
-                return fromCli
-              }
-              return DEFAULT_PROGRESS_STREAM_FILE
-            }),
-        ),
-        Match.orElse(() => Effect.succeed(DEFAULT_PROGRESS_STREAM_FILE)),
-      ),
-  })
-
 export const runStrykerCli = (
   input: RunStrykerCliInput,
   createRunEventStream: CreateRunEventStreamCapability,
@@ -1207,17 +1177,28 @@ export const runStrykerCli = (
       }),
       () =>
         Effect.gen(function*() {
-          const parsed = yield* Effect.exit(input.program)
+          const parsed = yield* Effect.result(input.program)
           const request = yield* Ref.get(input.requestRef)
-          const fileName = yield* progressStreamFileOf(request, basePath).pipe(
-            Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
-          )
+          const fileName = Option.match(request, {
+            onNone: () => DEFAULT_PROGRESS_STREAM_FILE,
+            onSome: (cliRequest) =>
+              Match.value(cliRequest).pipe(
+                Match.tag('run', (runRequest) => {
+                  const fromCli = runRequest.options['progressStreamFile']
+                  if (typeof fromCli === 'string' && fromCli.length > 0) {
+                    return fromCli
+                  }
+                  return DEFAULT_PROGRESS_STREAM_FILE
+                }),
+                Match.orElse(() => DEFAULT_PROGRESS_STREAM_FILE),
+              ),
+          })
           if (stream.setProgressStreamFile !== undefined) {
             yield* stream.setProgressStreamFile(fileName)
           }
           yield* stream.open
-          if (Exit.isFailure(parsed)) {
-            return yield* Effect.failCause(parsed.cause)
+          if (Result.isFailure(parsed)) {
+            return yield* Effect.fail(parsed.failure)
           }
           return yield* Option.match(request, {
             onNone: () => Effect.void,
