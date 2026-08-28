@@ -1,6 +1,7 @@
 /// <reference types="vitest/import-meta" />
 import { Schema as S } from 'effect'
 
+/** @public */
 export const StrictHex = S.String.pipe(
   S.check(S.isPattern(/^[0-9a-f]*$/)),
   S.annotate({

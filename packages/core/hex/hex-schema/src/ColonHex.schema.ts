@@ -4,6 +4,7 @@ import { HexString } from './HexString.schema.js'
 
 const hexToColon = (hex: string): string => (hex.match(/.{1,2}/g) ?? []).map((byte) => byte.toUpperCase()).join(':')
 
+/** @public */
 export const ColonHex = S.String.pipe(
   S.check(S.isPattern(/^([0-9A-Fa-f]{1,2}(:[0-9A-Fa-f]{1,2})*)?$/)),
   S.decodeTo(
@@ -22,6 +23,7 @@ export const ColonHex = S.String.pipe(
   S.brand('ColonHex'),
 )
 
+/** @public */
 export type ColonHex = S.Schema.Type<typeof ColonHex>
 
 if (import.meta.vitest !== void 0) {

@@ -184,6 +184,7 @@ const makeFile = (handle: FileHandle): FileSystem.File => {
   }
 }
 
+/** @public */
 export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.FileSystem {
   const cwd = opts?.cwd ?? '/'
   const nfs = memfs.createFsFromVolume(
@@ -419,6 +420,7 @@ export function make(contents?: Contents, opts?: { cwd: string }): FileSystem.Fi
   })
 }
 
+/** @public */
 export const layerWith = (contents: Contents): Layer.Layer<FileSystem.FileSystem> =>
   Layer.effect(
     FileSystem.FileSystem,
@@ -427,6 +429,7 @@ export const layerWith = (contents: Contents): Layer.Layer<FileSystem.FileSystem
 
 // Not `export * as`: API Extractor cannot follow a namespace re-export and emits
 // the members undeclared, degrading every one to `any` in the rollup and API report.
+/** @public */
 export const MemoryFileSystem: {
   readonly layer: Layer.Layer<FileSystem.FileSystem>
   readonly layerWith: (contents: Contents) => Layer.Layer<FileSystem.FileSystem>

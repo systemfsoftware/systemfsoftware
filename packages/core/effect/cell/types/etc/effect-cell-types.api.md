@@ -4,24 +4,125 @@
 
 ```ts
 
+import { Effect } from 'effect/Effect';
+import { Result } from 'effect/Result';
+
 // @public (undocumented)
 export namespace Cell {
-    export { Convention, DESCRIPTION_MODULE, DecideDone, DecideNode, DecidePhase, DecodeDone, DecodeNode, DecodePhase, Description, EncodeDone, EncodeNode, EncodePhase, IO_CELLS, IoCellClassification, Layer, Phase, PhaseFact, Phases, ReadDone, ReadNode, ReadPhase, Vocabulary, WriteDone, WriteNode, WritePhase, apply, canonical, decide, decode, encode, read, vocabulary, write };
+    // (undocumented)
+    export type Convention = Convention;
+    // (undocumented)
+    export type DecideDone<P extends Phases> = DecideDone<P>;
+    // (undocumented)
+    export type DecideNode<P extends Phases> = DecideNode<P>;
+    // (undocumented)
+    export type DecidePhase<P extends Phases> = DecidePhase<P>;
+    // (undocumented)
+    export type DecodeDone<P extends Phases> = DecodeDone<P>;
+    // (undocumented)
+    export type DecodeNode<P extends Phases> = DecodeNode<P>;
+    // (undocumented)
+    export type DecodePhase<P extends Phases> = DecodePhase<P>;
+    // (undocumented)
+    export type Description<P extends Phases> = Description<P>;
+    // (undocumented)
+    export type EncodeDone<P extends Phases> = EncodeDone<P>;
+    // (undocumented)
+    export type EncodeNode<P extends Phases> = EncodeNode<P>;
+    // (undocumented)
+    export type EncodePhase<P extends Phases> = EncodePhase<P>;
+    // (undocumented)
+    export type IoCellClassification = IoCellClassification;
+    // (undocumented)
+    export type Layer<P extends Phases> = Layer<P>;
+    // (undocumented)
+    export type Phase<P extends Phases> = Phase<P>;
+    // (undocumented)
+    export type PhaseFact = PhaseFact;
+    // Warning: (ae-forgotten-export) The symbol "Phases$1" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    export type Phases = Phases$1;
+    // (undocumented)
+    export type ReadDone<P extends Phases> = ReadDone<P>;
+    // (undocumented)
+    export type ReadNode<P extends Phases> = ReadNode<P>;
+    // (undocumented)
+    export type ReadPhase<P extends Phases> = ReadPhase<P>;
+    // (undocumented)
+    export type Vocabulary = Vocabulary;
+    // (undocumented)
+    export type WriteDone<P extends Phases> = WriteDone<P>;
+    // (undocumented)
+    export type WriteNode<P extends Phases> = WriteNode<P>;
+    // (undocumented)
+    export type WritePhase<P extends Phases> = WritePhase<P>;
+    const // (undocumented)
+    DESCRIPTION_MODULE: typeof DESCRIPTION_MODULE;
+    const // (undocumented)
+    IO_CELLS: typeof IO_CELLS;
+    const // (undocumented)
+    read: typeof read;
+    const // (undocumented)
+    decode: typeof decode;
+    const // (undocumented)
+    decide: typeof decide;
+    const // (undocumented)
+    encode: typeof encode;
+    const // (undocumented)
+    write: typeof write;
+    const // (undocumented)
+    apply: typeof apply;
+    const // (undocumented)
+    canonical: typeof canonical;
+    const // (undocumented)
+    vocabulary: typeof vocabulary;
 }
 
 // @public (undocumented)
 export namespace Policy {
-    export { Policy };
+    // Warning: (ae-forgotten-export) The symbol "Policy$1" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    export type Policy<A, E, R> = Policy$1<A, E, R>;
 }
 
 // @public (undocumented)
 export namespace Wire {
-    export { AnyMinted, Fields, Mark, Minted, MintedField, mint, wire };
+    // (undocumented)
+    export type AnyMinted = AnyMinted;
+    // (undocumented)
+    export type Fields = Fields;
+    // (undocumented)
+    export type Mark = Mark;
+    // (undocumented)
+    export type Minted<A, I = A> = Minted<A, I>;
+    // (undocumented)
+    export type MintedField = MintedField;
+    const // (undocumented)
+    mint: typeof mint;
+    const // (undocumented)
+    wire: typeof wire;
 }
 
 // @public (undocumented)
 export namespace Workflow {
-    export { Inhabited, UninhabitedDecision, UninhabitedError, UntaggedError, Workflow, WorkflowBrand, make };
+    // (undocumented)
+    export type Inhabited<Decision, DecisionError> = Inhabited<Decision, DecisionError>;
+    // (undocumented)
+    export type UninhabitedDecision = UninhabitedDecision;
+    // (undocumented)
+    export type UninhabitedError = UninhabitedError;
+    // (undocumented)
+    export type UntaggedError = UntaggedError;
+    // Warning: (ae-forgotten-export) The symbol "Workflow$1" needs to be exported by the entry point index.d.ts
+    //
+    // (undocumented)
+    export type Workflow<Command, Decision, DecisionError> = Workflow$1<Command, Decision, DecisionError>;
+    // (undocumented)
+    export type WorkflowBrand = WorkflowBrand;
+    const // (undocumented)
+    make: typeof make;
 }
 
 // (No @packageDocumentation comment for this package)

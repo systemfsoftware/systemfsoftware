@@ -8,6 +8,7 @@ import { judgeTestContribution } from './test-contribution.js'
 
 import type { schema } from '@systemfsoftware/stryker-js/Mutant'
 
+/** @public */
 export const makeTestContributionEvaluatorService = (options: {
   readonly disableBail: boolean
 }): { readonly evaluate: (report: schema.MutationTestResult) => Effect.Effect<ExitClass | null, EvaluatorFailed> } => ({
@@ -36,6 +37,7 @@ const make = Effect.gen(function*() {
   return Evaluator.of(makeTestContributionEvaluatorService(options))
 })
 
+/** @public */
 export const testContributionEvaluatorLayer: Layer.Layer<Evaluator, never, RunConfiguration> = Layer.effect(
   Evaluator,
   make,

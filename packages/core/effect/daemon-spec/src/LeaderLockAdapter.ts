@@ -2,6 +2,7 @@ import { Context, Effect, Exit, Layer, Option, Scope } from 'effect'
 import { LeaderLockInfraError } from './LeaderLock.schema.js'
 import { LockPrimitiveError } from './LockPrimitive.schema.js'
 
+/** @public */
 export interface LeaderLockService {
   readonly withLock: <A, E, R>(
     key: string,
@@ -9,6 +10,7 @@ export interface LeaderLockService {
   ) => Effect.Effect<Option.Option<A>, E | LeaderLockInfraError, R>
 }
 
+/** @public */
 export class LeaderLock extends Context.Service<LeaderLock, LeaderLockService>()(
   '@systemfsoftware/effect-daemon-spec/LeaderLockAdapter/LeaderLock',
 ) {
@@ -20,16 +22,19 @@ export class LeaderLock extends Context.Service<LeaderLock, LeaderLockService>()
   )
 }
 
+/** @public */
 export interface LockPrimitiveService {
   readonly tryAcquire: (
     key: string,
   ) => Effect.Effect<boolean, LockPrimitiveError, Scope.Scope>
 }
 
+/** @public */
 export class LockPrimitive extends Context.Service<LockPrimitive, LockPrimitiveService>()(
   '@systemfsoftware/effect-daemon-spec/LeaderLockAdapter/LockPrimitive',
 ) {}
 
+/** @public */
 export const LeaderLockFromPrimitive: Layer.Layer<LeaderLock, never, LockPrimitive> = Layer.effect(
   LeaderLock,
   Effect.gen(function*() {

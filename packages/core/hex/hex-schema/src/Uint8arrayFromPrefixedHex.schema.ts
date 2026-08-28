@@ -3,6 +3,7 @@ import { Schema as S } from 'effect'
 import { HexBytes } from './HexBytes.schema.js'
 import { PrefixedHex } from './PrefixedHex.schema.js'
 
+/** @public */
 export const Uint8ArrayFromPrefixedHex = S.decodeTo(HexBytes)(PrefixedHex).pipe(
   S.annotate({
     identifier: 'Uint8ArrayFromPrefixedHex',
@@ -10,6 +11,7 @@ export const Uint8ArrayFromPrefixedHex = S.decodeTo(HexBytes)(PrefixedHex).pipe(
     title: 'Uint8Array from Prefixed Hex',
   }),
 )
+/** @public */
 export type Uint8ArrayFromPrefixedHex = S.Schema.Type<typeof Uint8ArrayFromPrefixedHex>
 
 const decode = S.decodeUnknownExit(Uint8ArrayFromPrefixedHex)

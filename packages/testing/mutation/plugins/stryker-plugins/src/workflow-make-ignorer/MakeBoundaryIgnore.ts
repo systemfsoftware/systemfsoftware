@@ -13,6 +13,7 @@ import {
   isStringLiteral,
 } from './AstNode.schema.js'
 
+/** @public */
 export const NOT_INSIDE_WORKFLOW_MAKE =
   'mutant is outside every Workflow.make decision body; only make bodies are the mutation population' as const
 
@@ -270,6 +271,7 @@ const insideMakeBoundary = (node: unknown, ancestors: readonly unknown[]): boole
  * `Workflow.make(...)` call argument is excised with the named reason, and every mutant
  * inside any make boundary passes through to the next ignorer.
  */
+/** @public */
 export const decideWorkflowMakeBoundaryIgnore = (
   node: unknown,
   ancestors: readonly unknown[],

@@ -6,7 +6,7 @@
 
 import { PluginContribution } from '@systemfsoftware/stryker-js/Plugin';
 
-// @public
+// @public (undocumented)
 export const decideWorkflowMakeBoundaryIgnore: (node: unknown, ancestors: readonly unknown[]) => string | undefined;
 
 // @public (undocumented)

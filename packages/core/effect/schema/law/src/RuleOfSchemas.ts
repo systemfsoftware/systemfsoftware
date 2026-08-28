@@ -51,6 +51,8 @@ const lawsOf = <A, I>(schema: S.Codec<A, I>): {
  *   2. `∀x. dec(enc(x)) === x` — round-trip identity.
  *
  * Use inside a `describe` block to scope the generated tests.
+ *
+ * @public
  */
 export const ruleOfSchemas = <A, I>(
   name: string,

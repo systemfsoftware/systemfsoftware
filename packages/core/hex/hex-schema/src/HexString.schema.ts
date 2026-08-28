@@ -4,6 +4,7 @@ import { StrictHex } from './StrictHex.schema.js'
 
 const toStrictHex = (hex: string): string => (hex.startsWith('0x') ? hex.slice(2) : hex).toLowerCase()
 
+/** @public */
 export const HexString = S.String.pipe(
   S.annotate({
     identifier: 'HexStringInput',
@@ -24,6 +25,7 @@ export const HexString = S.String.pipe(
   S.brand('HexString'),
 )
 
+/** @public */
 export type HexString = S.Schema.Type<typeof HexString>
 
 if (import.meta.vitest !== void 0) {

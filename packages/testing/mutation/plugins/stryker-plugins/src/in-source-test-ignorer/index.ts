@@ -6,6 +6,7 @@ import * as Option from 'effect/Option'
 import { ancestorsOf, type IgnorerPath } from '../AncestorPath.js'
 import { decideInSourceTestIgnore, IN_SOURCE_TEST_IGNORED, isInSourceTestGuard } from './InSourceTestIgnore.js'
 
+/** @public */
 export const strykerPlugins = [
   declarePlugin(
     'Ignore',

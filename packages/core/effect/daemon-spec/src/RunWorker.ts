@@ -12,6 +12,7 @@ import { LeaderLock } from './LeaderLockAdapter.js'
  * root, and handed down as part of the lock binding: the executor behind this
  * entry point never sees the tag. A worker whose lock is `{ mode: 'none' }`
  * takes no lock at all.
+ * @public
  */
 export const worker: {
   <E, R>(w: Worker<E, R, { mode: 'none' }>): Effect.Effect<

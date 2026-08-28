@@ -9,15 +9,24 @@ import {
   isStringLiteral,
 } from './AstNode.schema.js'
 
+/** @public */
 export const SYMBOL_DESCRIPTION_IGNORED = 'Symbol.for() brand description is identity-only data, not behaviour' as const
+/** @public */
 export const TAGGED_TAG_IGNORED = 'TaggedClass/TaggedError _tag is a declaration discriminant, not behaviour' as const
+/** @public */
 export const TAGGED_FIELDS_IGNORED = 'TaggedClass/TaggedError field schema is a declaration, not behaviour' as const
+/** @public */
 export const CLASS_ID_IGNORED = 'Schema.Class identifier is a declaration name, not behaviour' as const
+/** @public */
 export const CLASS_FIELDS_IGNORED = 'Schema.Class field schema is a declaration, not behaviour' as const
+/** @public */
 export const BRAND_NAME_IGNORED = 'Schema.brand name is identity-only data, not behaviour' as const
+/** @public */
 export const OPTIONAL_DEFAULT_IGNORED = 'optionalWith default value is config, not behaviour' as const
+/** @public */
 export const ANNOTATION_OBJECT_IGNORED =
   'annotations object holding only documentation is a declaration, not behaviour' as const
+/** @public */
 export const ANNOTATION_TEXT_IGNORED = 'annotation documentation value is declaration data, not behaviour' as const
 
 /**
@@ -137,6 +146,7 @@ const RULES: readonly IgnoreRule[] = [
   documentationValueRule,
 ]
 
+/** @public */
 export const decideSchemaDeclarationIgnore = (
   node: unknown,
   parent: unknown,

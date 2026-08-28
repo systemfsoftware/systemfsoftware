@@ -12,7 +12,7 @@ export const ColonHex: Schema.brand<Schema.decodeTo<Schema.brand<Schema.decodeTo
 // @public (undocumented)
 export type ColonHex = Schema.Schema.Type<typeof ColonHex>;
 
-// @public
+// @public (undocumented)
 export const HexBytes: Schema.Uint8ArrayFromHex;
 
 // @public (undocumented)

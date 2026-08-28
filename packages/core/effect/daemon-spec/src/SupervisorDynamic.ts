@@ -1,7 +1,9 @@
 import { DynamicSpecTypeId } from './Brands.js'
 
+/** @public */
 export const MAX_CHILDREN_CEILING = 1000
 
+/** @public */
 export const dynamic = <
   Args,
   CH,

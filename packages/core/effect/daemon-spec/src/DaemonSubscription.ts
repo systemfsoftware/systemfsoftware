@@ -13,6 +13,7 @@ type WorkerRecord<TICK, THOOKS, CHILD, LCK, L> = {
   readonly lock: LCK
 }
 
+/** @public */
 export const subscription = <
   AE,
   AR,
