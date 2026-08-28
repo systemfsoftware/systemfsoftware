@@ -1,11 +1,13 @@
 import { schema } from '@systemfsoftware/stryker-js/Mutant'
 
+/** @public */
 export const defaultRequireTestContributionSuffixes = [
   '.workflow.property.test.ts',
   '.policy.property.test.ts',
   '.kernel.property.test.ts',
 ] as const
 
+/** @public */
 export interface TestFileContribution {
   readonly soleKills: number
   readonly totalKills: number
@@ -27,6 +29,7 @@ export interface TestFileContribution {
   readonly coversUnattributedKill: boolean
 }
 
+/** @public */
 export interface TestContributionInput {
   readonly suffixes: readonly string[]
   /**
@@ -76,6 +79,7 @@ const realFiles = (
   return files
 }
 
+/** @public */
 export const contributionByTestFile = (
   report: ReportView,
 ): ReadonlyMap<string, TestFileContribution> => {
@@ -127,6 +131,7 @@ export const contributionByTestFile = (
   return byTestFile
 }
 
+/** @public */
 export const toothlessTestFiles = (
   contribution: ReadonlyMap<string, TestFileContribution>,
   { suffixes, everyKillerRecorded }: TestContributionInput,
@@ -145,6 +150,7 @@ export const toothlessTestFiles = (
   return toothless.sort()
 }
 
+/** @public */
 export interface TestContributionVerdict {
   readonly failed: boolean
   readonly message: string
@@ -191,6 +197,7 @@ const jointSubsumption = (
   return true
 }
 
+/** @public */
 export const judgeTestContribution = (
   report: ReportView,
   everyKillerRecorded: boolean,
