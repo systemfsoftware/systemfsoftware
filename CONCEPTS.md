@@ -104,6 +104,10 @@ The npm publish orchestrator the repo used before adopting intent versioning: tr
 
 `arethetypeswrong` — the type-resolution validator. `attw --pack .` runs against the package tarball the same way npm would install it, validating that `exports` declarations resolve to consistent types across node10 / node16-CJS / node16-ESM / bundler. Catches downstream-facing drift that workspace-local checks miss.
 
+### Surface snapshot test
+
+A generated test in a package's `tests/` lane that imports the package by its public name and pins the entry's runtime export set to a committed snapshot; any change to the export keys fails `pnpm test` until the snapshot is updated, which makes widening the entry a deliberate, diff-visible act. Generated with real import edges rather than a virtual module (the `effect-schema-vite` rewrite pattern) so mutation related-file walks reach it. Complements the `.api.md` report: the report pins the type-level surface, the snapshot pins the value-space keys. Introduced by `docs/plans/2026-08-27-004-feat-declared-public-api-surface-plan.md`.
+
 ## Gate provenance
 
 ### Evaluator surface
