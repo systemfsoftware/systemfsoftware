@@ -13,5 +13,7 @@ const rawPackageJson: unknown = JSON.parse(
 )
 const pkg = deepFreeze(S.decodeUnknownSync(PackageJsonSchema)(rawPackageJson))
 
+/** @public */
 export const strykerVersion = pkg.version
+/** @public */
 export const strykerEngines = pkg.engines

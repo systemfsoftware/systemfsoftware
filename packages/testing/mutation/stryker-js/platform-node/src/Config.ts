@@ -42,6 +42,7 @@ import { getAvailableParallelism } from './Worker.js'
 /**
  * Config-file names the rebuild removed, mapped to their remediation.
  */
+/** @public */
 export const REMOVED_OPTIONS: Record<string, string> = {
   'dots': 'the "dots" reporter was removed; use "clear-text" instead',
   'event-recorder':
@@ -53,6 +54,7 @@ export const REMOVED_OPTIONS: Record<string, string> = {
 }
 
 const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
+/** @public */
 export const optionsPath = (...path: string[]): string => path.join('.')
 
 // ── config-file-formats ─────────────────────────────────────────────
@@ -73,6 +75,7 @@ const combine = (
   return fileNames
 }
 
+/** @public */
 export const SUPPORTED_CONFIG_FILE_NAMES = Object.freeze(
   combine(
     ['', '.'],
@@ -81,6 +84,7 @@ export const SUPPORTED_CONFIG_FILE_NAMES = Object.freeze(
   ),
 )
 
+/** @public */
 export const DEFAULT_CONFIG_FILE_NAMES = Object.freeze(
   {
     JSON: 'stryker.config.json',
@@ -90,10 +94,12 @@ export const DEFAULT_CONFIG_FILE_NAMES = Object.freeze(
 
 // ── config-freeze ───────────────────────────────────────────────────
 
+/** @public */
 export type Primitive = boolean | number | string | null | undefined
 
 type ImmutablePrimitive = Primitive | ((...args: never[]) => unknown)
 
+/** @public */
 export type Immutable<T> = T extends ImmutablePrimitive ? T
   : T extends Array<infer U> ? ReadonlyArray<Immutable<U>>
   : T extends Map<infer K, infer V> ? ReadonlyMap<Immutable<K>, Immutable<V>>
@@ -101,7 +107,9 @@ export type Immutable<T> = T extends ImmutablePrimitive ? T
   : T extends RegExp ? Readonly<RegExp>
   : { readonly [K in keyof T]: Immutable<T[K]> }
 
+/** @public */
 export function deepFreeze<T>(target: T): Immutable<T>
+/** @public */
 export function deepFreeze(target: unknown): unknown {
   switch (typeof target) {
     case 'object':
@@ -153,11 +161,13 @@ export function deepFreeze(target: unknown): unknown {
 
 // ── config-serializability ──────────────────────────────────────────
 
+/** @public */
 export interface UnserializableDescription {
   path: string[]
   reason: string
 }
 
+/** @public */
 export function findUnserializables(
   thing: unknown,
 ): UnserializableDescription[] | undefined {
@@ -239,8 +249,10 @@ type KnownKeys<T> = keyof {
   [P in keyof T as string extends P ? never : number extends P ? never : P]: T[P]
 }
 
+/** @public */
 export type WarningOptions = Exclude<StrykerOptions['warnings'], boolean>
 
+/** @public */
 export function isWarningEnabled(
   warningType: KnownKeys<WarningOptions>,
   warningOptions: WarningOptions | boolean,
@@ -266,6 +278,7 @@ function normalizePattern(pattern: boolean | string, pathService: Path.Path): bo
   return false
 }
 
+/** @public */
 export function createFileMatcher(
   pattern: boolean | string,
   pathService: Path.Path,
@@ -281,6 +294,7 @@ export function createFileMatcher(
   return () => normalized
 }
 
+/** @public */
 export function matchesFile(
   pattern: boolean | string,
   fileName: string,
@@ -321,6 +335,7 @@ const phrase = (expectation: string): string => {
   return expectation
 }
 
+/** @public */
 export function describeErrors(error: S.SchemaError): string[] {
   const messages: string[] = []
   let expectation: string | undefined
@@ -345,6 +360,7 @@ export function describeErrors(error: S.SchemaError): string[] {
 
 // ── module-loader ───────────────────────────────────────────────────
 
+/** @public */
 export function importModule(moduleName: string, basePath: string): Effect.Effect<unknown, StrykerError> {
   return Effect.tryPromise({
     try: () => {
@@ -357,21 +373,25 @@ export function importModule(moduleName: string, basePath: string): Effect.Effec
   })
 }
 
+/** @public */
 export interface ExtendsStepState {
   readonly visited: readonly string[]
   readonly documents: readonly ExtendsStepDocument[]
 }
 
+/** @public */
 export interface ExtendsStepDocument {
   readonly path: string
   readonly options: PartialStrykerOptions
 }
 
+/** @public */
 export const initialExtendsStepState: ExtendsStepState = {
   visited: [],
   documents: [],
 }
 
+/** @public */
 export type ExtendsRefusalReason = 'cycle' | 'non-string-extends'
 
 const DoneTag = { _tag: 'done' } as const
@@ -383,6 +403,7 @@ type ResolveTag = typeof ResolveTag
 const RefusedTag = { _tag: 'refused' } as const
 type RefusedTag = typeof RefusedTag
 
+/** @public */
 export type ExtendsStepDecision =
   | DoneTag & { readonly options: PartialStrykerOptions }
   | ReadTag & { readonly path: string; readonly state: ExtendsStepState }
@@ -402,6 +423,7 @@ export type ExtendsStepDecision =
  * redeclare the preset's plugins to keep them. The append preserves the
  * preset's plugins and lets the child add or deduplicate.
  */
+/** @public */
 export function mergeConfigs(
   parent: PartialStrykerOptions,
   child: PartialStrykerOptions,
@@ -443,6 +465,7 @@ export function mergeConfigs(
   return out
 }
 
+/** @public */
 export function isModuleSpecifier(value: string): boolean {
   return !(value.startsWith('./') || value.startsWith('../') ||
     value.startsWith('/') || value.startsWith('\\'))
@@ -459,6 +482,7 @@ const mergeChainDocuments = (documents: readonly ExtendsStepDocument[]): Partial
     {},
   )
 
+/** @public */
 export const decideExtendsStep = (
   state: ExtendsStepState,
   document: PartialStrykerOptions,
@@ -502,6 +526,7 @@ export const decideExtendsStep = (
 
 // ── resolve-extends ─────────────────────────────────────────────────
 
+/** @public */
 export function readConfigFile(
   configFile: string,
 ): Effect.Effect<
@@ -567,6 +592,7 @@ function resolveExtendsSpecifier(
   })
 }
 
+/** @public */
 export function resolveExtends(
   configFile: string,
   document: PartialStrykerOptions,
@@ -614,6 +640,7 @@ export function resolveExtends(
 
 // ── options-validator ───────────────────────────────────────────────
 
+/** @public */
 export type ValidationSchemaDocument = {
   readonly properties?: unknown
   readonly [key: string]: unknown
@@ -621,6 +648,7 @@ export type ValidationSchemaDocument = {
 
 // JSON Schema document for the fork's option surface — a *use* of forkOptionsSchema, not a declaration.
 // Config.schema.ts declares forkOptionsSchema; this module builds the document where the boundary is crossed.
+/** @public */
 export const forkCoreSchema: Record<string, unknown> = S.toJsonSchemaDocument(forkOptionsSchema).schema
 
 const decodeOptions = S.decodeUnknownResult(StrykerOptionsSchema, { errors: 'all' })
@@ -976,6 +1004,7 @@ function markOptions(
   })
 }
 
+/** @public */
 export function validateOptions(
   options: Record<string, unknown>,
   schema: ValidationSchemaDocument,
@@ -991,10 +1020,12 @@ export function validateOptions(
   })
 }
 
+/** @public */
 export function createDefaultOptions(): Effect.Effect<StrykerOptions> {
   return S.decodeEffect(StrykerOptionsSchema)({}).pipe(Effect.orDie)
 }
 
+/** @public */
 export const defaultOptions: Effect.Effect<Immutable<StrykerOptions>, never, never> = Effect.map(
   createDefaultOptions(),
   (opts) => deepFreeze(opts),
@@ -1004,6 +1035,7 @@ export const defaultOptions: Effect.Effect<Immutable<StrykerOptions>, never, nev
 
 const cliOptionsRecord = Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown))) // plugin sections are foreign by design
 
+/** @public */
 export const CONFIG_SYNTAX_HELP = `
 Example of how a config file should look:
 /**
@@ -1211,6 +1243,7 @@ const configReaderDescription = (
     Cell.write<ConfigReaderPhases>((output) => Effect.succeed(output)),
   )
 
+/** @public */
 export function readConfig(
   cliOptions: PartialStrykerOptions,
   basePath: string,

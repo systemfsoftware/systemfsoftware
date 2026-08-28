@@ -100,6 +100,7 @@ import { layer as idGeneratorLayer } from './Worker.js'
 
 // ── RunEnvironment ───────────────────────────────────────────────────────
 
+/** @public */
 export interface RunEnvironmentShape {
   readonly runId: string
   readonly resolvedMode: ResolvedMode
@@ -109,12 +110,14 @@ export interface RunEnvironmentShape {
   readonly allowConsoleColors: boolean
 }
 
+/** @public */
 export class RunEnvironment extends Context.Service<RunEnvironment, RunEnvironmentShape>()(
   '@systemfsoftware/stryker-js-platform-node/RunEnvironment',
 ) {}
 
 // ── Stage result types ───────────────────────────────────────────────────
 
+/** @public */
 export interface PrepareDone {
   readonly project: Project
   readonly plugins: ComposedPlugins
@@ -124,6 +127,7 @@ export interface PrepareDone {
   readonly temporaryDirectoryPath: string
 }
 
+/** @public */
 export interface InstrumentDone extends PrepareDone {
   readonly mutants: readonly Mutant[]
   readonly sandbox: SandboxHandle
@@ -133,12 +137,14 @@ export interface InstrumentDone extends PrepareDone {
   }
 }
 
+/** @public */
 export interface DryRunDone extends InstrumentDone {
   readonly dryRunResult: CompleteDryRunResult
   readonly testCoverage: TestCoverage
   readonly timeOverhead: Duration.Duration
 }
 
+/** @public */
 export interface RunOutcome {
   readonly results: readonly MutantResult[]
   readonly verdict: ExitClass | null
@@ -1203,6 +1209,7 @@ export const mutationTestRun =
 
 // ── makeRunLayer & runMutationTest ───────────────────────────────────────
 
+/** @public */
 export const makeRunLayer = (
   env: RunEnvironmentShape,
 ): Layer.Layer<
@@ -1237,6 +1244,7 @@ export const makeRunLayer = (
  * the prepare phase event was emitted. Threading the responses here is what makes the
  * sequence a pipeline.
  */
+/** @public */
 export const runMutationTest = (
   cliOptions: PartialStrykerOptions,
   targetMutatePatterns?: string[],
@@ -1271,6 +1279,7 @@ export const runMutationTest = (
     )
   })
 
+/** @public */
 export const shouldKeepTempDir = (
   exit: Exit.Exit<unknown, unknown>,
   cleanTempDir: 'always' | boolean,

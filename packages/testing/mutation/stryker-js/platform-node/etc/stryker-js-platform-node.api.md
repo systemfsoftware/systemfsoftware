@@ -42,13 +42,13 @@ import { TestResult } from '@systemfsoftware/stryker-js/TestRunner';
 import { Wire } from '@systemfsoftware/effect-cell-types';
 import { YieldableError } from 'effect/Cause';
 
-// @public
+// @public (undocumented)
 export const ACTIONABLE_STATUSES: readonly ['Survived', 'NoCoverage', 'Timeout', 'RuntimeError'];
 
 // @public (undocumented)
 export function buildVerdictEnvelope(report: schema.MutationTestResult, mode: OutputMode, signal: ModeSignal, runId: string, basePath: string, pathService: Path.Path): VerdictEnvelope;
 
-// @public
+// @public (undocumented)
 export interface CheckerResourceService {
     // Warning: (ae-forgotten-export) The symbol "CheckerCrash" needs to be exported by the entry point index.d.mts
     //
@@ -64,7 +64,7 @@ export const checkGroupedPlans: (checker: CheckerResourceService, checkerName: s
 
 // Warning: (ae-forgotten-export) The symbol "ChildProcessCrashedError_base" needs to be exported by the entry point index.d.mts
 //
-// @public
+// @public (undocumented)
 export class ChildProcessCrashedError extends ChildProcessCrashedError_base {
     // (undocumented)
     readonly exitClass: 'InternalError';
@@ -86,7 +86,7 @@ export class ConfigError extends ConfigError_base {
 
 // Warning: (ae-forgotten-export) The symbol "ConfigFileInvalidError_base" needs to be exported by the entry point index.d.mts
 //
-// @public
+// @public (undocumented)
 export class ConfigFileInvalidError extends ConfigFileInvalidError_base {
     // (undocumented)
     readonly exitClass: 'ConfigError';
@@ -94,7 +94,7 @@ export class ConfigFileInvalidError extends ConfigFileInvalidError_base {
 
 // Warning: (ae-forgotten-export) The symbol "ConfigFileNotFoundError_base" needs to be exported by the entry point index.d.mts
 //
-// @public
+// @public (undocumented)
 export class ConfigFileNotFoundError extends ConfigFileNotFoundError_base {
     // (undocumented)
     readonly exitClass: 'ConfigError';
@@ -102,7 +102,7 @@ export class ConfigFileNotFoundError extends ConfigFileNotFoundError_base {
 
 // Warning: (ae-forgotten-export) The symbol "ConfigFileUnreadableError_base" needs to be exported by the entry point index.d.mts
 //
-// @public
+// @public (undocumented)
 export class ConfigFileUnreadableError extends ConfigFileUnreadableError_base {
     // (undocumented)
     readonly exitClass: 'ConfigError';
@@ -192,13 +192,13 @@ export function findUnserializables(thing: unknown): UnserializableDescription[]
 // @public (undocumented)
 export const forkCoreSchema: Record<string, unknown>;
 
-// @public
+// @public (undocumented)
 export const forkOptionsSchema: S.StructWithRest<S.Struct<{
     readonly survivorsPriorReport: S.optionalKey<S.String>;
     readonly extends: S.optionalKey<S.String>;
 }>, readonly [S.$Record<S.String & Wire.Mark, S.Unknown & Wire.Mark> & Wire.Mark]>;
 
-// @public
+// @public (undocumented)
 export function generateRunId(): string;
 
 // Warning: (ae-forgotten-export) The symbol "ImmutablePrimitive" needs to be exported by the entry point index.d.mts
@@ -232,7 +232,7 @@ export interface InstrumentDone extends PrepareDone {
     readonly sandbox: SandboxHandle;
 }
 
-// @public
+// @public (undocumented)
 export function isActionableStatus(status: MutantStatus): boolean;
 
 // @public (undocumented)
@@ -251,7 +251,7 @@ export const makeRunLayer: (env: RunEnvironmentShape) => Layer.Layer<RunEnvironm
 // @public (undocumented)
 export function matchesFile(pattern: boolean | string, fileName: string, pathService: Path.Path, allowHiddenFiles?: boolean): boolean;
 
-// @public
+// @public (undocumented)
 export function mergeConfigs(parent: PartialStrykerOptions, child: PartialStrykerOptions): PartialStrykerOptions;
 
 // @public (undocumented)
@@ -268,7 +268,7 @@ export class OutOfMemoryError extends OutOfMemoryError_base {
     readonly exitClass: 'RuntimeError';
 }
 
-// @public
+// @public (undocumented)
 export type OutputMode = 'human' | 'machine';
 
 // @public (undocumented)
@@ -305,7 +305,7 @@ export class ReadConfigCommand extends ReadConfigCommand_base {}
 // @public (undocumented)
 export function readConfigFile(configFile: string): Effect.Effect<PartialStrykerOptions, ConfigFileUnreadableError | ConfigFileInvalidError, FileSystem.FileSystem | Path.Path>;
 
-// @public
+// @public (undocumented)
 export const REMOVED_OPTIONS: Record<string, string>;
 
 // @public (undocumented)
@@ -344,7 +344,7 @@ export interface RunEnvironmentShape {
 
 // Warning: (ae-forgotten-export) The symbol "StageServices" needs to be exported by the entry point index.d.mts
 //
-// @public
+// @public (undocumented)
 export const runMutationTest: (cliOptions: PartialStrykerOptions, targetMutatePatterns?: string[]) => Effect.Effect<RunOutcome, StageError, StageServices>;
 
 // @public (undocumented)
@@ -411,7 +411,7 @@ export type ValidationSchemaDocument = {
     readonly [key: string]: unknown;
 };
 
-// @public
+// @public (undocumented)
 export const VERDICT_ENVELOPE_SCHEMA_VERSION = "1.1";
 
 // @public (undocumented)
@@ -434,7 +434,7 @@ export interface VerdictCounts {
     readonly timeout: number;
 }
 
-// @public
+// @public (undocumented)
 export interface VerdictEnvelope {
     // (undocumented)
     readonly counts: VerdictCounts;
@@ -456,7 +456,7 @@ export interface VerdictEnvelope {
     readonly thresholds: VerdictThresholds;
 }
 
-// @public
+// @public (undocumented)
 export interface VerdictMutant {
     // (undocumented)
     readonly file: string;
@@ -472,7 +472,7 @@ export interface VerdictMutant {
     readonly status: MutantStatus;
 }
 
-// @public
+// @public (undocumented)
 export interface VerdictThresholds {
     // (undocumented)
     readonly break: number | null;

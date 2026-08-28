@@ -6,8 +6,10 @@ import * as S from 'effect/Schema'
 
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 
+/** @public */
 export const ConfigDocumentSchema = S.Record(S.String, S.Unknown)
 
+/** @public */
 export const ImportedModuleSchema = S.Struct({
   default: S.optional(S.Unknown),
 })
@@ -15,6 +17,7 @@ export const ImportedModuleSchema = S.Struct({
 /**
  * The config file the run was explicitly told to use does not exist.
  */
+/** @public */
 export class ConfigFileNotFoundError extends S.TaggedError<ConfigFileNotFoundError>()(
   'ConfigFileNotFoundError',
   {
@@ -28,6 +31,7 @@ export class ConfigFileNotFoundError extends S.TaggedError<ConfigFileNotFoundErr
  * The file is present and cannot be read or imported — permissions, a
  * directory where a file was expected, a syntax error in a JavaScript config.
  */
+/** @public */
 export class ConfigFileUnreadableError extends S.TaggedError<ConfigFileUnreadableError>()(
   'ConfigFileUnreadableError',
   {
@@ -39,6 +43,7 @@ export class ConfigFileUnreadableError extends S.TaggedError<ConfigFileUnreadabl
 }
 
 /** The file was read and its contents are not a valid configuration. */
+/** @public */
 export class ConfigFileInvalidError extends S.TaggedError<ConfigFileInvalidError>()(
   'ConfigFileInvalidError',
   {
@@ -49,17 +54,20 @@ export class ConfigFileInvalidError extends S.TaggedError<ConfigFileInvalidError
   readonly exitClass = 'ConfigError' as const
 }
 
+/** @public */
 export class ConfigError extends S.TaggedError<ConfigError>()('ConfigError', {
   message: S.String,
 }) {
   readonly exitClass = 'ConfigError' as const
 }
 
+/** @public */
 export class ReadConfigCommand extends S.TaggedClass<ReadConfigCommand>()('ReadConfigCommand', {
   cliOptions: Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown))), // plugin sections are foreign by design
   basePath: S.String,
 }) {}
 
+/** @public */
 export const survivorsPriorReport = S.optionalKey(
   S.String.pipe(
     S.annotate({
@@ -69,6 +77,7 @@ export const survivorsPriorReport = S.optionalKey(
   ),
 )
 
+/** @public */
 export const extendsPropertySchema = S.optionalKey(
   S.String.pipe(
     S.annotate({
@@ -97,6 +106,7 @@ const REMOVED_OPTIONS: Record<string, string> = {
  * The option document schema, composed from the single `StrykerOptionsSchema` the plugin-api declares.
  * Removed options are dropped so their defaults do not leak into resolved options.
  */
+/** @public */
 export const forkOptionsSchema = S.StructWithRest(
   S.Struct({
     ...Object.fromEntries(

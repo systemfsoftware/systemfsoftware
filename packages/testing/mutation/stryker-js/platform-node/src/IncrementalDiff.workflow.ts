@@ -76,6 +76,7 @@ const REMEMBERED_STATUS: ReadonlySet<string> = new Set(['Killed', 'Survived', 'T
 
 const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
 
+/** @public */
 export const toRelativeNormalizedFileName = (fileName: string | undefined, basePath: string): string => {
   const raw = fileName ?? ''
   if (raw.startsWith(basePath)) {
