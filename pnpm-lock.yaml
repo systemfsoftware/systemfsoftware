@@ -144,6 +144,15 @@ catalogs:
     '@systemfsoftware/stryker-test-contribution':
       specifier: ^1.0.1
       version: 1.0.1
+    mutation-testing-elements:
+      specifier: 3.7.3
+      version: 3.7.3
+    mutation-testing-metrics:
+      specifier: 3.7.3
+      version: 3.7.3
+    mutation-testing-report-schema:
+      specifier: 3.7.3
+      version: 3.7.3
 
 overrides:
   fast-check: ^4
@@ -184,10 +193,10 @@ importers:
         specifier: ^17.1.0
         version: 17.1.0
       mutation-testing-elements:
-        specifier: 3.7.3
+        specifier: catalog:stryker
         version: 3.7.3
       mutation-testing-metrics:
-        specifier: 3.7.3
+        specifier: catalog:stryker
         version: 3.7.3
       oxc-parser:
         specifier: 'catalog:'
@@ -2108,13 +2117,13 @@ importers:
         specifier: workspace:^
         version: link:../stryker-js
       mutation-testing-elements:
-        specifier: 3.7.3
+        specifier: catalog:stryker
         version: 3.7.3
       mutation-testing-metrics:
-        specifier: 3.7.3
+        specifier: catalog:stryker
         version: 3.7.3
       mutation-testing-report-schema:
-        specifier: 3.7.3
+        specifier: catalog:stryker
         version: 3.7.3
     devDependencies:
       '@systemfsoftware/all':
@@ -2268,8 +2277,11 @@ importers:
       minimatch:
         specifier: ~10.2.4
         version: 10.2.5
+      mutation-testing-metrics:
+        specifier: catalog:stryker
+        version: 3.7.3
       mutation-testing-report-schema:
-        specifier: 3.7.3
+        specifier: catalog:stryker
         version: 3.7.3
     devDependencies:
       '@effect/vitest':
@@ -2327,7 +2339,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
       mutation-testing-report-schema:
-        specifier: 3.7.3
+        specifier: catalog:stryker
         version: 3.7.3
     devDependencies:
       '@systemfsoftware/all':

@@ -28,7 +28,7 @@
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "effect": "catalog:",
-    "mutation-testing-report-schema": "3.7.3"
+    "mutation-testing-report-schema": "catalog:stryker"
   },
   "devDependencies": {
     "@systemfsoftware/all": "workspace:^",

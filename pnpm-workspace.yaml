@@ -70,6 +70,9 @@ catalogs:
     "@systemfsoftware/stryker-js-vitest-runner": ^2.0.1
     "@systemfsoftware/stryker-plugins": ^1.0.1
     "@systemfsoftware/stryker-test-contribution": ^1.0.1
+    "mutation-testing-elements": 3.7.3
+    "mutation-testing-metrics": 3.7.3
+    "mutation-testing-report-schema": 3.7.3
   attw:
     # @systemfsoftware/arethetypeswrong runs the JS compiler bridge (typescript@6).
     # typescript@7 is the native Go compiler with no JS API; see
