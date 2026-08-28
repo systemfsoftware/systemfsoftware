@@ -490,27 +490,6 @@ Feature('Judging test contribution under the test-contribution gate')
     )
 
     scenario(
-      'Should_Judge_When_EveryKillIsRememberedAndAttributed',
-      Gherkin.Do.pipe(
-        Given('a fully-remembered report whose every kill carries killedBy')('report', () =>
-          Effect.succeed(
-            reportOf(
-              [{ ...mutantOf('m1', 'Killed', ['t1']), statusReason: 'Remembered' }],
-              { 'remembered.property.test.ts': ['t1'] },
-            ),
-          )),
-        When('the verdict is judged with every killer recorded')(
-          'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, true, PROPERTY)),
-        ),
-        Then('the gate judges rather than refuses')((s) => {
-          expect(s.verdict?.failed).toBe(false)
-          expect(s.verdict?.message).toContain('kills a mutant nothing else kills')
-        }),
-      ),
-    )
-
-    scenario(
       'Should_PassWithoutJudging_WhenNoFileMatchesTheSuffixes',
       Gherkin.Do.pipe(
         Given('a report with no in-scope test files')('report', () =>

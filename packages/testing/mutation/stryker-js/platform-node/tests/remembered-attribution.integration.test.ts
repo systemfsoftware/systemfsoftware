@@ -1,8 +1,3 @@
-/**
- * The reuse-path gatekeeper: a written incremental file whose Killed mutants
- * carry killedBy drives the reuse path, and the emitted report carries the
- * same attribution, marked statusReason Remembered.
- */
 import { NodeFileSystem, NodePath } from '@effect/platform-node'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Clock, Effect } from 'effect'
@@ -108,51 +103,52 @@ const seedReuseFile = (report: IncrementalReport): IncrementalReport => {
   return { ...report, files }
 }
 
-Feature('Remembered incremental verdicts keep kill attribution').body(({ scenario }) => {
-  scenario(
-    'Should_KeepKilledBy_When_ReusingAnAttributedIncrementalFile',
-    Gherkin.Do.pipe(
-      Given('the reuse-project fixture')(
-        'fixture',
-        () =>
-          Path.Path.pipe(
-            Effect.flatMap((path) => path.fromFileUrl(new URL('./__fixtures__/reuse-project', import.meta.url))),
-            Effect.provide(Host),
-          ),
+Feature('Remembered incremental verdicts keep kill attribution')
+  .withLayer(Host)
+  .body(({ scenario }) => {
+    scenario(
+      'Should_KeepKilledBy_When_ReusingAnAttributedIncrementalFile',
+      Gherkin.Do.pipe(
+        Given('the reuse-project fixture')(
+          'fixture',
+          () =>
+            Path.Path.pipe(
+              Effect.flatMap((path) => path.fromFileUrl(new URL('./__fixtures__/reuse-project', import.meta.url))),
+            ),
+        ),
+        When('the reuse path runs against a seeded incremental file')(
+          'emitted',
+          (s: { fixture: string }) =>
+            Effect.scoped(
+              Effect.gen(function*() {
+                const fs = yield* FileSystem.FileSystem
+                const path = yield* Path.Path
+                const scratch = yield* fs.makeTempDirectoryScoped({ prefix: 'reuse-attribution-' })
+                const workDir = path.join(scratch, 'project')
+                const incrementalFile = path.join(workDir, 'reports', 'stryker-incremental.json')
+                yield* fs.copy(s.fixture, workDir)
+                yield* runOnce(workDir, incrementalFile)
+                const produced = yield* readReport(incrementalFile)
+                yield* fs.writeFileString(incrementalFile, JSON.stringify(seedReuseFile(produced), null, 2))
+                yield* runOnce(workDir, incrementalFile)
+                return yield* readReport(incrementalFile)
+              }),
+            ),
+        ),
+        Then('the killed mutant keeps killedBy and Remembered, and the timeout stays unattributed')((s: {
+          emitted: IncrementalReport
+        }) => {
+          const mutants = Object.values(s.emitted.files).flatMap((file) => file.mutants)
+          const killed = mutants.find((mutant) => mutant.status === 'Killed')
+          const timedOut = mutants.find((mutant) => mutant.status === 'Timeout')
+          expect(killed).toBeDefined()
+          expect(killed?.killedBy).toEqual(['t1'])
+          expect(killed?.coveredBy).toEqual(['t1'])
+          expect(killed?.statusReason).toBe('Remembered')
+          expect(timedOut).toBeDefined()
+          expect(timedOut?.killedBy).toBeUndefined()
+          expect(timedOut?.statusReason).toBe('Remembered')
+        }),
       ),
-      When('the reuse path runs against a seeded incremental file')(
-        'emitted',
-        (s: { fixture: string }) =>
-          Effect.scoped(
-            Effect.gen(function*() {
-              const fs = yield* FileSystem.FileSystem
-              const path = yield* Path.Path
-              const scratch = yield* fs.makeTempDirectoryScoped({ prefix: 'reuse-attribution-' })
-              const workDir = path.join(scratch, 'project')
-              const incrementalFile = path.join(workDir, 'reports', 'stryker-incremental.json')
-              yield* fs.copy(s.fixture, workDir)
-              yield* runOnce(workDir, incrementalFile)
-              const produced = yield* readReport(incrementalFile)
-              yield* fs.writeFileString(incrementalFile, JSON.stringify(seedReuseFile(produced), null, 2))
-              yield* runOnce(workDir, incrementalFile)
-              return yield* readReport(incrementalFile)
-            }),
-          ).pipe(Effect.provide(Host)),
-      ),
-      Then('the killed mutant keeps killedBy and Remembered, and the timeout stays unattributed')((s: {
-        emitted: IncrementalReport
-      }) => {
-        const mutants = Object.values(s.emitted.files).flatMap((file) => file.mutants)
-        const killed = mutants.find((mutant) => mutant.status === 'Killed')
-        const timedOut = mutants.find((mutant) => mutant.status === 'Timeout')
-        expect(killed).toBeDefined()
-        expect(killed?.killedBy).toEqual(['t1'])
-        expect(killed?.coveredBy).toEqual(['t1'])
-        expect(killed?.statusReason).toBe('Remembered')
-        expect(timedOut).toBeDefined()
-        expect(timedOut?.killedBy).toBeUndefined()
-        expect(timedOut?.statusReason).toBe('Remembered')
-      }),
-    ),
-  )
-})
+    )
+  })
