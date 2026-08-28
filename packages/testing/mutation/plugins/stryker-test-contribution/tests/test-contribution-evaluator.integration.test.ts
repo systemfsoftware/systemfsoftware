@@ -35,22 +35,25 @@ const Feature = makeFeature({ it, layer })
 
 const LOCATION = { start: { line: 1, column: 1 }, end: { line: 1, column: 2 } }
 
-const reportWithToothlessKernelFile = (): schema.MutationTestResult => ({
+const kernelMutant = (id: string, killedBy?: string[], coveredBy?: string[]): schema.MutantResult => ({
+  id,
+  status: 'Killed',
+  mutatorName: 'BooleanLiteral',
+  location: LOCATION,
+  ...(killedBy === undefined ? {} : { killedBy }),
+  ...(coveredBy === undefined ? {} : { coveredBy }),
+})
+
+const reportWithToothlessKernelFile = (
+  mutants: schema.MutantResult[] = [kernelMutant('m1', ['t1'], ['t1', 't2'])],
+): schema.MutationTestResult => ({
   schemaVersion: '2',
   thresholds: { high: 80, low: 60 },
   files: {
     'src/subject.ts': {
       language: 'typescript',
       source: 'export const a = 1\n',
-      mutants: [
-        {
-          id: 'm1',
-          status: 'Killed',
-          mutatorName: 'BooleanLiteral',
-          location: LOCATION,
-          killedBy: ['t1'],
-        },
-      ],
+      mutants,
     },
   },
   testFiles: {
@@ -96,6 +99,13 @@ const causeOfExit = (exit: Exit.Exit<ExitClass | null, EvaluatorFailed>): string
   }
   return Cause.pretty(exit.cause)
 }
+// A VerdictFail on a success exit is the evaluator's non-error failure signal; assert it once here.
+const expectVerdictFail = (exit: Exit.Exit<ExitClass | null, EvaluatorFailed>): void => {
+  expect(Exit.isSuccess(exit)).toBe(true)
+  if (Exit.isSuccess(exit)) {
+    expect(exit.value).toBe('VerdictFail')
+  }
+}
 
 Feature('test-contribution evaluator plugin')
   .body(({ scenario }) => {
@@ -123,10 +133,7 @@ Feature('test-contribution evaluator plugin')
           (s) => exitOf(s.evaluator, reportWithToothlessKernelFile()),
         ),
         Then('the evaluation succeeds with the VerdictFail exit class')((s) => {
-          expect(Exit.isSuccess(s.exit)).toBe(true)
-          if (Exit.isSuccess(s.exit)) {
-            expect(s.exit.value).toBe('VerdictFail')
-          }
+          expectVerdictFail(s.exit)
         }),
       ),
     )
@@ -143,10 +150,7 @@ Feature('test-contribution evaluator plugin')
           (s) => exitOf(s.evaluator, reportWithToothlessKernelFile()),
         ),
         Then('the evaluation succeeds with the VerdictFail exit class for the bail case')((s) => {
-          expect(Exit.isSuccess(s.exit)).toBe(true)
-          if (Exit.isSuccess(s.exit)) {
-            expect(s.exit.value).toBe('VerdictFail')
-          }
+          expectVerdictFail(s.exit)
         }),
       ),
     )
@@ -158,39 +162,14 @@ Feature('test-contribution evaluator plugin')
           'evaluator',
           () => Effect.sync(() => evaluatorServiceWith({ disableBail: true })),
         ),
-        When('a report where the required file defends a mutant is evaluated')('exit', (s) => {
-          const report: schema.MutationTestResult = {
-            schemaVersion: '2',
-            thresholds: { high: 80, low: 60 },
-            files: {
-              'src/subject.ts': {
-                language: 'typescript',
-                source: 'export const a = 1\n',
-                mutants: [
-                  {
-                    id: 'm1',
-                    status: 'Killed',
-                    mutatorName: 'BooleanLiteral',
-                    location: LOCATION,
-                    killedBy: ['t1'],
-                  },
-                  {
-                    id: 'm2',
-                    status: 'Killed',
-                    mutatorName: 'BooleanLiteral',
-                    location: LOCATION,
-                    killedBy: ['t2'],
-                  },
-                ],
-              },
-            },
-            testFiles: {
-              'earns.kernel.property.test.ts': { tests: [{ id: 't1', name: 'test t1' }] },
-              'idle.kernel.property.test.ts': { tests: [{ id: 't2', name: 'test t2' }] },
-            },
-          }
-          return exitOf(s.evaluator, report)
-        }),
+        When('a report where every kernel file kills a distinct mutant is evaluated')(
+          'exit',
+          (s) =>
+            exitOf(
+              s.evaluator,
+              reportWithToothlessKernelFile([kernelMutant('m1', ['t1']), kernelMutant('m2', ['t2'])]),
+            ),
+        ),
         Then('the evaluation succeeds with null')((s) => {
           expect(Exit.isSuccess(s.exit)).toBe(true)
           if (Exit.isSuccess(s.exit)) {
@@ -210,10 +189,7 @@ Feature('test-contribution evaluator plugin')
             return yield* exitOf(evaluator, reportWithToothlessKernelFile())
           })),
         Then('the layer-provided evaluator also succeeds with the VerdictFail exit class')((s) => {
-          expect(Exit.isSuccess(s.exit)).toBe(true)
-          if (Exit.isSuccess(s.exit)) {
-            expect(s.exit.value).toBe('VerdictFail')
-          }
+          expectVerdictFail(s.exit)
         }),
       ),
     )
