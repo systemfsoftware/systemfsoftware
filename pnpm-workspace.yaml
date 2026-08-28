@@ -64,9 +64,12 @@ catalogs:
     "@oxlint/plugins": ^1.77.0
     oxlint-tsgolint: ">=0.24.0"
   stryker:
-    # The fork packages' pinned third-party deps; the catalog keeps the name it
-    # had when the strykerjs org packages lived here.
     semver: ^7.7.0
+    "@systemfsoftware/stryker-js-cli": ^4.0.1
+    "@systemfsoftware/stryker-js-typescript-checker": ^3.0.1
+    "@systemfsoftware/stryker-js-vitest-runner": ^2.0.1
+    "@systemfsoftware/stryker-plugins": ^1.0.1
+    "@systemfsoftware/stryker-test-contribution": ^1.0.1
   attw:
     # @systemfsoftware/arethetypeswrong runs the JS compiler bridge (typescript@6).
     # typescript@7 is the native Go compiler with no JS API; see
@@ -77,6 +80,8 @@ catalogs:
     # docs/solutions/tooling-decisions/registry-consumption-of-self-hosted-forks.md
     "@systemfsoftware/arethetypeswrong-cli": ^1.1.1
 minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - "@systemfsoftware/*"
 overrides:
   fast-check: ^4
   vite: ^8
