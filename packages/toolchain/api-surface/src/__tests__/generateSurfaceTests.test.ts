@@ -1,9 +1,3 @@
-import {
-  generateSurfaceTests,
-  isJsonExportValue,
-  sanitizeKey,
-  shouldSkipExportValue,
-} from '@systemfsoftware/api-surface'
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import { existsSync } from 'node:fs'
@@ -11,6 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect } from 'vitest'
+import { generateSurfaceTests, isJsonExportValue, sanitizeKey, shouldSkipExportValue } from '../index.js'
 
 const Feature = makeFeature({ it, layer })
 

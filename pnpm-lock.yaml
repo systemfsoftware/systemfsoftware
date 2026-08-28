@@ -495,6 +495,12 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../../lint/oxlint/config
+      '@systemfsoftware/oxlint-plugin-effect-dmmf':
+        specifier: workspace:^
+        version: link:../../../../lint/oxlint/plugins/meta/effect-dmmf
+      '@systemfsoftware/oxlint-plugin-test-placement':
+        specifier: workspace:^
+        version: link:../../../../lint/oxlint/plugins/testing/test-placement
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../toolchain/tsconfig
@@ -547,6 +553,12 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../../lint/oxlint/config
+      '@systemfsoftware/oxlint-plugin-effect-dmmf':
+        specifier: workspace:^
+        version: link:../../../../lint/oxlint/plugins/meta/effect-dmmf
+      '@systemfsoftware/oxlint-plugin-test-placement':
+        specifier: workspace:^
+        version: link:../../../../lint/oxlint/plugins/testing/test-placement
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../toolchain/tsconfig
@@ -2862,6 +2874,9 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../testing/specs/gherkin/effect
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../lint/oxlint/config

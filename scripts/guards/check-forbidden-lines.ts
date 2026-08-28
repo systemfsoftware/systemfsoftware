@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read --allow-run=git
 
-const PROTECTED_RULE_IDS: readonly string[] = ['make-command-schema']
+const PROTECTED_RULE_IDS: readonly string[] = ['make-command-schema', 'tests-import-public-api']
 const DISABLE_DIRECTIVE = /(?:oxlint|eslint)-disable(?:-next-line|-line)?/
 const DIRECTIVE_WITH_TAIL = /(?:oxlint|eslint)-disable(?:-next-line|-line)?([^\n]*)/
 
