@@ -31,7 +31,7 @@ function captureHandler(
     },
   } as unknown as Parameters<typeof InjectInstructionsTask>[0]
 
-  const runSafe = <A, _E>(eff: Effect.Effect<A, unknown, ReferencedContent>) =>
+  const runSafe = <A, E>(eff: Effect.Effect<A, E, ReferencedContent>) =>
     Effect.runPromise(eff.pipe(Effect.provide(fakeLayer)))
 
   InjectInstructionsTask(pi, runSafe)

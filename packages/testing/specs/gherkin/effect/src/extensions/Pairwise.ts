@@ -31,9 +31,9 @@ export const pairwiseFor = <Identifier, Service, RA = never, RB = never>(
     ): <E1, R1>(
       self: GherkinEffect<A, E1, R1>,
     ) => GherkinEffect<A & Record<N, PairwiseResult<Out>>, E1 | StepError, R1 | RA | RB>
-    function step(
+    function step<E>(
       name: string,
-      f: (scope: object) => (svc: Service) => Effect.Effect<unknown, unknown, never>,
+      f: (scope: object) => (svc: Service) => Effect.Effect<unknown, E, never>,
     ) {
       return <E1, R1>(self: GherkinEffect<object, E1, R1>) =>
         self.pipe(

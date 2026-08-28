@@ -231,8 +231,9 @@ export const Service =
         : Layer.provide(layer, httpClient),
     )
 
-    const catchErrors = Effect.catch((e: unknown) =>
-      Schema.isSchemaError(e) || HttpClientError.isHttpClientError(e) ? Effect.die(e) : Effect.fail(e)
+    const catchErrors = Effect.catch(
+      (e: HttpClientError.HttpClientError | Schema.SchemaError | Error) =>
+        Schema.isSchemaError(e) || HttpClientError.isHttpClientError(e) ? Effect.die(e) : Effect.fail(e),
     )
 
     interface EndpointCall {
@@ -242,7 +243,7 @@ export const Service =
         readonly payload?: unknown
         readonly headers?: unknown
         readonly responseMode?: HttpApiEndpoint.ClientResponseMode | undefined
-      }): Effect.Effect<unknown, unknown, never>
+      }): Effect.Effect<unknown, HttpClientError.HttpClientError | Schema.SchemaError | Error, never>
     }
     const isEndpointCall = (u: unknown): u is EndpointCall => typeof u === 'function'
 
@@ -281,7 +282,7 @@ export const Service =
         readonly headers?: unknown
         readonly responseMode?: HttpApiEndpoint.ClientResponseMode | undefined
       },
-    ): Effect.Effect<unknown, unknown, never> => {
+    ): Effect.Effect<unknown, HttpClientError.HttpClientError | Schema.SchemaError | Error, never> => {
       const groupEntry: unknown = (typeof client === 'object' && client !== null) || typeof client === 'function'
         ? Reflect.get(client, group)
         : undefined

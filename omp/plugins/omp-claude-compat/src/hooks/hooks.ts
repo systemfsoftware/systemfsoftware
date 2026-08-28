@@ -996,7 +996,7 @@ export const onToolCall = (event: HookToolCall, ctx: HookSession) =>
 export const onToolResult: (
   event: ToolResultEvent,
   ctx: HookSession,
-) => Effect.Effect<ToolResultEventResult | undefined, unknown, HookDispatchContext> = (event, ctx) =>
+) => Effect.Effect<ToolResultEventResult | undefined, PlatformError, HookDispatchContext> = (event, ctx) =>
   dispatchAdmit(
     (settings) =>
       Effect.gen(function*() {
