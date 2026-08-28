@@ -83,48 +83,39 @@ Feature('Typechecking mutants')
     scenario(
       'Each change is typechecked when a group error cannot be blamed on one of them',
       Gherkin.Do.pipe(
-        Given('the sample project has a todo list and a neighbouring counter')('sources', () =>
+        Given('the sample project has a todo list')('todo', () =>
           Effect.gen(function*() {
             const fs = yield* FileSystem.FileSystem
             const path = yield* Path.Path
             const root = yield* fixtureRoot
-            const dir = path.join(root, 'src/errorInFileAbove2Mutants')
-            const todo = yield* fs.readFileString(path.join(dir, 'todo.ts'))
-            const counter = yield* fs.readFileString(path.join(dir, 'counter.ts'))
-            return { todo, counter }
+            return yield* fs.readFileString(path.join(root, 'src/todo.ts'))
           })),
         Given('the TypeScript checker is ready on that project')('sut', () => openChecker),
-        When('a type-preserving todo change and a type-breaking counter change are checked together')(
+        When('a type-preserving change and a type-breaking change in that file are checked together')(
           'actual',
-          ({ sources, sut }) =>
+          ({ sut, todo }) =>
             Effect.gen(function*() {
               const path = yield* Path.Path
               const root = yield* fixtureRoot
+              const fileName = path.join(root, 'src', 'todo.ts')
               return yield* sut.check([
+                locate(todo, fileName, 'return TodoList.allTodos', '[]', 'passedAlone', 7),
                 locate(
-                  sources.todo,
-                  path.join(root, 'src', 'errorInFileAbove2Mutants/todo.ts'),
-                  'return TodoList.allTodos',
-                  '[]',
-                  'passedAlone',
-                  7,
-                ),
-                locate(
-                  sources.counter,
-                  path.join(root, 'src', 'errorInFileAbove2Mutants/counter.ts'),
-                  'return (this.currentNumber += numberToIncrementBy)',
-                  'return "This should not return a string"',
+                  todo,
+                  fileName,
+                  'TodoList.allTodos.push(newItem)',
+                  '"This should not be a string"',
                   'compileErrorAlone',
                 ),
               ])
             }),
         ),
-        Then('typecheck succeeds for the todo change')(({ actual }) =>
+        Then('typecheck succeeds for the type-preserving change')(({ actual }) =>
           Effect.sync(() => {
             expect(HashMap.get(actual, 'passedAlone')).toEqual(Option.some({ status: 'passed' }))
           })
         ),
-        And('typecheck fails for the counter change')(({ actual }) =>
+        And('typecheck fails for the type-breaking change')(({ actual }) =>
           Effect.sync(() => {
             const failed = HashMap.get(actual, 'compileErrorAlone')
             expect(Option.isSome(failed) && failed.value.status === 'compileError').toBe(true)
