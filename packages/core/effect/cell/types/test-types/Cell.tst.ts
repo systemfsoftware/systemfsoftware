@@ -222,8 +222,8 @@ describe('the channels the interpreter derives', () => {
   })
 
   it('Should_RequireAWrittenDescription_When_Applying', () => {
-    // @ts-expect-error: call write(output) before applying the description
-    Cell.apply(Cell.read(readPhase), command)
+    // `apply` takes `WriteDone<P>`; a read-only description never reaches it.
+    expect(Cell.read(readPhase)).type.not.toBeAssignableTo<Cell.WriteDone<Shape>>()
   })
 })
 

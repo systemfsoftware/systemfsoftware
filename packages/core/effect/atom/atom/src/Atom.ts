@@ -182,24 +182,44 @@ type FnOptions = {
   readonly concurrent?: boolean | undefined
 }
 
-function runtimeFn<R, ER>(
+function runtimeFn<R, ER, Arg>(
   this: AtomRuntime<R, ER>,
-): (arg: unknown, options?: FnOptions) => AtomResultFn<unknown, unknown, unknown>
-function runtimeFn<R, ER>(
+): {
+  <E, A>(
+    fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | R | AtomRegistry | Reactivity.Reactivity>,
+    options?: FnOptions,
+  ): AtomResultFn<Arg, A, E | ER> | AtomResultFn<unknown, unknown, unknown>
+  <E, A>(
+    fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
+    options?: FnOptions,
+  ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AtomResultFn<unknown, unknown, unknown>
+}
+function runtimeFn<R, ER, E, A, Arg = void>(
   this: AtomRuntime<R, ER>,
-  arg: unknown,
+  fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | R | AtomRegistry | Reactivity.Reactivity>,
   options?: FnOptions,
-): AtomResultFn<unknown, unknown, unknown>
-function runtimeFn<R, ER>(
+): AtomResultFn<Arg, A, E | ER> | AtomResultFn<unknown, unknown, unknown>
+function runtimeFn<R, ER, E, A, Arg = void>(
   this: AtomRuntime<R, ER>,
-  arg?: unknown,
+  fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
+  options?: FnOptions,
+): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AtomResultFn<unknown, unknown, unknown>
+function runtimeFn<R, ER, Arg, A, E>(
+  this: AtomRuntime<R, ER>,
+  fn?: (arg: Arg, get: FnContext) =>
+    | Effect.Effect<A, E, Scope.Scope | R | AtomRegistry | Reactivity.Reactivity>
+    | Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
   options?: FnOptions,
 ): unknown {
-  if (arguments.length === 0) {
-    return (arg: unknown, options?: FnOptions): AtomResultFn<unknown, unknown, unknown> =>
-      makeFnRuntime(this, arg, options)
+  if (fn === undefined) {
+    return <Arg2, A2, E2>(
+      fn2: (arg: Arg2, get: FnContext) =>
+        | Effect.Effect<A2, E2, Scope.Scope | R | AtomRegistry | Reactivity.Reactivity>
+        | Stream.Stream<A2, E2, AtomRegistry | Reactivity.Reactivity | R>,
+      curriedOptions?: FnOptions,
+    ) => makeFnRuntime(this, fn2, curriedOptions)
   }
-  return makeFnRuntime(this, arg, options)
+  return makeFnRuntime(this, fn, options)
 }
 
 const RuntimeProto: {
@@ -238,12 +258,26 @@ const RuntimeProto: {
   fn: {
     <R, ER, Arg>(
       this: AtomRuntime<R, ER>,
-    ): (arg: Arg, options?: FnOptions) => AtomResultFn<Arg, unknown, unknown>
-    <R, ER>(
+    ): {
+      <E, A>(
+        fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | R | AtomRegistry | Reactivity.Reactivity>,
+        options?: FnOptions,
+      ): AtomResultFn<Arg, A, E | ER> | AtomResultFn<unknown, unknown, unknown>
+      <E, A>(
+        fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
+        options?: FnOptions,
+      ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AtomResultFn<unknown, unknown, unknown>
+    }
+    <R, ER, E, A, Arg = void>(
       this: AtomRuntime<R, ER>,
-      arg: unknown,
+      fn: (arg: Arg, get: FnContext) => Effect.Effect<A, E, Scope.Scope | R | AtomRegistry | Reactivity.Reactivity>,
       options?: FnOptions,
-    ): AtomResultFn<unknown, unknown, unknown>
+    ): AtomResultFn<Arg, A, E | ER> | AtomResultFn<unknown, unknown, unknown>
+    <R, ER, E, A, Arg = void>(
+      this: AtomRuntime<R, ER>,
+      fn: (arg: Arg, get: FnContext) => Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
+      options?: FnOptions,
+    ): AtomResultFn<Arg, A, E | ER | Cause.NoSuchElementError> | AtomResultFn<unknown, unknown, unknown>
   }
   pull: <R, ER, A, E>(
     this: AtomRuntime<R, ER>,
@@ -371,53 +405,42 @@ const RuntimeProto: {
   },
 }
 
-const makeFnRuntime = <R, ER>(
+const makeFnRuntime = <R, ER, Arg, A, E>(
   self: AtomRuntime<R, ER>,
-  arg: unknown,
+  fn: (arg: Arg, get: FnContext) =>
+    | Effect.Effect<A, E, Scope.Scope | R | AtomRegistry | Reactivity.Reactivity>
+    | Stream.Stream<A, E, AtomRegistry | Reactivity.Reactivity | R>,
   options?: {
-    readonly initialValue?: unknown
+    readonly initialValue?: A
     readonly reactivityKeys?: readonly unknown[] | ReadonlyRecord<string, readonly unknown[]> | undefined
   },
 ) => {
-  const isFnArg = (
-    u: unknown,
-  ): u is (
-    a: unknown,
-    get: FnContext,
-  ) =>
-    | Effect.Effect<unknown, unknown, Scope.Scope | R | AtomRegistry | Reactivity.Reactivity>
-    | Stream.Stream<unknown, unknown, AtomRegistry | Reactivity.Reactivity> => typeof u === 'function'
-  const f: (
-    a: unknown,
-    get: FnContext,
-  ) =>
-    | Effect.Effect<unknown, unknown, Scope.Scope | R | AtomRegistry | Reactivity.Reactivity>
-    | Stream.Stream<unknown, unknown, AtomRegistry | Reactivity.Reactivity> = (a, get) => {
-      if (!isFnArg(arg)) {
-        throw new Error('AtomRuntime.fn expects a function argument')
-      }
-      return arg(a, get)
-    }
-  const [read, write, argAtom] = makeResultFn<unknown, unknown, unknown, R | Reactivity.Reactivity>(
+  const [read, write, argAtom] = makeResultFn<Arg, E, A, R | Reactivity.Reactivity>(
     options?.reactivityKeys
       ? (a, get) => {
-        const eff = f(a, get)
+        const eff = fn(a, get)
         return Effect.isEffect(eff)
           ? Reactivity.mutation(eff, options.reactivityKeys ?? [])
           : Stream.ensuring(eff, Reactivity.invalidate(options.reactivityKeys ?? []))
       }
-      : f,
+      : fn,
     options,
   )
-  return writable<AsyncResult.Result<unknown, unknown>, unknown>((get) => {
-    const previous = get.self<AsyncResult.Result<unknown, unknown>>()
-    get.get(argAtom)
-    const runtimeResult = get.get(self)
-    if (AsyncResult.isSuccess(runtimeResult)) {
-      return read(get, runtimeResult.value)
-    }
-    return AsyncResult.replacePrevious(runtimeResult, previous)
-  }, write)
+  return writable<
+    AsyncResult.Result<A | Context.Context<R>, E | ER | Cause.NoSuchElementError>,
+    Arg | Reset | Interrupt
+  >(
+    (get) => {
+      const previous = get.self<AsyncResult.Result<A | Context.Context<R>, E | ER | Cause.NoSuchElementError>>()
+      get.get(argAtom)
+      const runtimeResult = get.get(self)
+      if (AsyncResult.isSuccess(runtimeResult)) {
+        return read(get, runtimeResult.value)
+      }
+      return AsyncResult.replacePrevious(runtimeResult, previous)
+    },
+    write,
+  )
 }
 
 function constSetSelf<A>(ctx: WriteContext<A>, value: A) {
@@ -465,16 +488,29 @@ export function make<A>(initialValue: A): Writable<A>
 export function make<A, E>(
   arg:
     | Effect.Effect<A, E, Scope.Scope | AtomRegistry>
-    | ((get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>)
+    | ((
+      get: AtomContext,
+      services?: Context.Context<never>,
+    ) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>)
     | Stream.Stream<A, E, AtomRegistry>
-    | ((get: AtomContext) => Stream.Stream<A, E, AtomRegistry>)
-    | ((get: AtomContext) => A)
+    | ((get: AtomContext, services?: Context.Context<never>) => Stream.Stream<A, E, AtomRegistry>)
+    | ((get: AtomContext, services?: Context.Context<never>) => A)
     | A,
   options?: {
     readonly initialValue?: unknown
     readonly uninterruptible?: boolean | undefined
   },
 ): Atom<unknown> | Writable<unknown> {
+  const isFnArg = (
+    u: unknown,
+  ): u is (
+    get: AtomContext,
+    services?: Context.Context<never>,
+  ) =>
+    | Effect.Effect<A, E, Scope.Scope | AtomRegistry>
+    | Stream.Stream<A, E, AtomRegistry>
+    | A => typeof u === 'function'
+
   let readOrAtom: ((get: AtomContext, services?: Context.Context<never>) => unknown) | Writable<A>
   if (Effect.isEffect(arg)) {
     readOrAtom = function(get: AtomContext, providedServices?: Context.Context<never>) {
@@ -484,9 +520,9 @@ export function make<A, E>(
     readOrAtom = function(get: AtomContext, providedServices?: Context.Context<never>) {
       return stream(get, arg, options, providedServices)
     }
-  } else if (typeof arg === 'function') {
+  } else if (isFnArg(arg)) {
     readOrAtom = function(get: AtomContext, providedServices?: Context.Context<never>) {
-      const value: unknown = Reflect.apply(arg, undefined, [get, providedServices])
+      const value = arg(get, providedServices)
       if (Effect.isEffect(value)) {
         return effect(get, value, options, providedServices)
       } else if (Stream.isStream(value)) {
@@ -542,16 +578,28 @@ export function makeRead<A>(initialValue: A): Writable<A>
 export function makeRead<A, E>(
   arg:
     | Effect.Effect<A, E, Scope.Scope | AtomRegistry>
-    | ((get: AtomContext) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>)
+    | ((
+      get: AtomContext,
+      services?: Context.Context<never>,
+    ) => Effect.Effect<A, E, Scope.Scope | AtomRegistry>)
     | Stream.Stream<A, E, AtomRegistry>
-    | ((get: AtomContext) => Stream.Stream<A, E, AtomRegistry>)
-    | ((get: AtomContext) => A)
+    | ((get: AtomContext, services?: Context.Context<never>) => Stream.Stream<A, E, AtomRegistry>)
+    | ((get: AtomContext, services?: Context.Context<never>) => A)
     | A,
   options?: {
     readonly initialValue?: unknown
     readonly uninterruptible?: boolean | undefined
   },
 ): ((get: AtomContext, services?: Context.Context<never>) => unknown) | Writable<A> {
+  const isFnArg = (
+    u: unknown,
+  ): u is (
+    get: AtomContext,
+    services?: Context.Context<never>,
+  ) =>
+    | Effect.Effect<A, E, Scope.Scope | AtomRegistry>
+    | Stream.Stream<A, E, AtomRegistry>
+    | A => typeof u === 'function'
   if (Effect.isEffect(arg)) {
     return function(get: AtomContext, providedServices?: Context.Context<never>) {
       return effect(get, arg, options, providedServices)
@@ -560,9 +608,9 @@ export function makeRead<A, E>(
     return function(get: AtomContext, providedServices?: Context.Context<never>) {
       return stream(get, arg, options, providedServices)
     }
-  } else if (typeof arg === 'function') {
+  } else if (isFnArg(arg)) {
     return function(get: AtomContext, providedServices?: Context.Context<never>) {
-      const value: unknown = Reflect.apply(arg, undefined, [get, providedServices])
+      const value = arg(get, providedServices)
       if (Effect.isEffect(value)) {
         return effect(get, value, options, providedServices)
       } else if (Stream.isStream(value)) {
@@ -824,9 +872,9 @@ export function context(options?: {
   const resolveMemoMap = (get: AtomContext): Layer.MemoMap => isAtom(memoMap) ? get(memoMap) : memoMap
   // widened container: accumulates global layers across merges of heterogeneous output types.
   // ROut=never is sound: Layer is contravariant in ROut, so any accumulated layer is assignable
-  // back into this slot; E=never after orDie keeps the slot closed; RIn=unknown absorbs the
-  // union of requirements of the merged layers.
-  let globalLayer: Layer.Layer<never, never, unknown> = Reactivity.layer
+  // back into this slot; E=never after orDie keeps the slot closed; RIn=AtomRegistry is the one
+  // requirement every merged layer shares after Reactivity is provided.
+  let globalLayer: Layer.Layer<never, never, AtomRegistry> = Reactivity.layer
   const addGlobalLayer = <A, E>(layer: Layer.Layer<A, E, AtomRegistry | Reactivity.Reactivity>): void => {
     globalLayer = Layer.provideMerge(globalLayer, Layer.orDie(Layer.provide(layer, Reactivity.layer)))
   }
@@ -853,15 +901,15 @@ export function context(options?: {
     }
     return { ...atom, read }
   }
-  const factoryFn = function makeRuntime<R, E>(
+  const factoryFn = function makeRuntime<R, E, RIn = never>(
     create:
-      | Layer.Layer<R, E, unknown>
-      | ((get: AtomContext) => Layer.Layer<R, E, unknown>),
+      | Layer.Layer<R, E, RIn>
+      | ((get: AtomContext) => Layer.Layer<R, E, RIn>),
   ): AtomRuntime<R, E> {
     const layerAtom = keepAlive(
       typeof create === 'function'
-        ? readable<Layer.Layer<R, E, unknown>>((get) => Layer.provideMerge(create(get), globalLayer))
-        : readable<Layer.Layer<R, E, unknown>>(() => Layer.provideMerge(create, globalLayer)),
+        ? readable<Layer.Layer<R, E, RIn | AtomRegistry>>((get) => Layer.provideMerge(create(get), globalLayer))
+        : readable<Layer.Layer<R, E, RIn | AtomRegistry>>(() => Layer.provideMerge(create, globalLayer)),
     )
     const self: AtomRuntime<R, E> = {
       ...AtomProto,
@@ -1025,21 +1073,25 @@ export const subscriptionRef: {
       | Effect.Effect<SubscriptionRef.SubscriptionRef<A>, E, Scope.Scope | AtomRegistry>
       | ((get: AtomContext) => Effect.Effect<SubscriptionRef.SubscriptionRef<A>, E, Scope.Scope | AtomRegistry>),
   ): Writable<AsyncResult.Result<A, E | Cause.NoSuchElementError>, A> | Writable<unknown, unknown>
-} = (
+} = <A, E = never>(
   ref:
-    | SubscriptionRef.SubscriptionRef<unknown>
-    | ((get: AtomContext) => SubscriptionRef.SubscriptionRef<unknown>)
-    | Effect.Effect<SubscriptionRef.SubscriptionRef<unknown>, unknown, Scope.Scope | AtomRegistry>
+    | SubscriptionRef.SubscriptionRef<A>
+    | ((get: AtomContext) => SubscriptionRef.SubscriptionRef<A>)
+    | Effect.Effect<SubscriptionRef.SubscriptionRef<A>, E, Scope.Scope | AtomRegistry>
     | ((
       get: AtomContext,
-    ) => Effect.Effect<SubscriptionRef.SubscriptionRef<unknown>, unknown, Scope.Scope | AtomRegistry>),
-): Writable<unknown, unknown> =>
+    ) => Effect.Effect<SubscriptionRef.SubscriptionRef<A>, E, Scope.Scope | AtomRegistry>),
+): Writable<
+  A | AsyncResult.Result<A | Context.Context<unknown>, E | Cause.NoSuchElementError>,
+  A
+> =>
   makeSubRef(
     readable((get) => {
       const value = typeof ref === 'function' ? ref(get) : ref
-      return SubscriptionRef.isSubscriptionRef(value)
-        ? value
-        : makeEffect(get, value, AsyncResult.initial(true))
+      if (Effect.isEffect(value)) {
+        return makeEffect(get, value, AsyncResult.initial(true))
+      }
+      return value
     }),
     (get, source) => AsyncResult.isResult(source) ? readRefResult(get, source) : readRefDirect(get, source),
   )

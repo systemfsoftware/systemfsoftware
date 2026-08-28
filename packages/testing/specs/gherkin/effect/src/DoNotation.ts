@@ -46,8 +46,8 @@ const tapStep = (keyword: string, text: StepText) =>
     return Effect.succeed(scope)
   })
 
-type BindStepTapArgs = [f: (scope: object) => Effect.Effect<unknown, unknown, unknown> | void]
-type BindStepBindArgs = [name: string, f: (scope: object) => Effect.Effect<unknown, unknown, unknown>]
+type BindStepTapArgs<E, R> = [f: (scope: object) => Effect.Effect<unknown, E, R> | void]
+type BindStepBindArgs<E, R> = [name: string, f: (scope: object) => Effect.Effect<unknown, E, R>]
 
 const bindStep = (keyword: 'given' | 'when', text: StepText) => {
   function step<N extends string, A extends object, B, E2, R2>(
@@ -59,7 +59,7 @@ const bindStep = (keyword: 'given' | 'when', text: StepText) => {
   function step<A extends object, E2 = never, R2 = never>(
     f: (a: NoInfer<A>) => Effect.Effect<unknown, E2, R2> | void,
   ): <E1, R1>(self: GherkinEffect<A, E1, R1>) => GherkinEffect<A, E1 | StepError, R1 | R2>
-  function step(...args: BindStepTapArgs | BindStepBindArgs) {
+  function step<E2, R2>(...args: BindStepTapArgs<E2, R2> | BindStepBindArgs<E2, R2>) {
     if (args.length === 1) {
       return tapStep(keyword, text)(args[0])
     }
@@ -85,7 +85,7 @@ const _but = (text: StepText) => tapStep('but', text)
 
 const emptyScope: GherkinScope<Record<string, never>> = { [GherkinScopeTypeId]: GherkinScopeTypeId }
 
-export type ScopeMap = Readonly<Record<string, Effect.Effect<unknown, never, unknown>>>
+export type ScopeMap = Readonly<Record<string, Effect.Effect<unknown, never, never>>>
 
 export type ScopeServices<S extends ScopeMap> = {
   readonly [K in keyof S]: S[K] extends Effect.Effect<infer A, never, infer _R> ? A : never
@@ -96,7 +96,7 @@ export type ScopeIdentifiers<S extends ScopeMap> = {
 }[keyof S]
 
 function makeScope<S extends ScopeMap>(map: S): GherkinEffect<ScopeServices<S>, never, ScopeIdentifiers<S>>
-function makeScope(map: ScopeMap): Effect.Effect<GherkinScope<Record<string, unknown>>, never, unknown> {
+function makeScope<S extends ScopeMap>(map: S): Effect.Effect<GherkinScope<Record<string, unknown>>, never, never> {
   return Effect.gen(function*() {
     const out: Record<string, unknown> = { [GherkinScopeTypeId]: GherkinScopeTypeId }
     for (const [key, tag] of Object.entries(map)) {

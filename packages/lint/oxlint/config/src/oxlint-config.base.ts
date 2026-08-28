@@ -1,4 +1,4 @@
-import { recommended as tsgoRecommended } from '@effect/tsgo/oxlint-presets'
+import { correctness as tsgoCorrectness } from '@effect/tsgo/oxlint-presets'
 import effectDmmf from '@systemfsoftware/oxlint-plugin-effect-dmmf'
 import { defineConfig } from 'oxlint'
 
@@ -87,9 +87,12 @@ export default defineConfig({
     '@systemfsoftware/oxlint-plugin/no-internal-jsdoc-outside': 'error',
     ...effectDmmf.configs.recommended.rules,
 
-    // effect-ts/tsgo — recommended preset with warn→error promotion (agents ignore warn)
-    // https://github.com/effect-ts/tsgo — docs/README.md Oxlint Setup; preset ships ~78 effecttsgo/* rules at warn
-    ...promoteWarnToError(tsgoRecommended.rules),
+    // effect-ts/tsgo — correctness preset (18 rules; the bar a rule whose every finding is a bug)
+    // with warn→error promotion (agents ignore warn). `recommended` (78 rules) was audited and
+    // rejected: it flags JSON.parse, instanceof, console/Date/process.env across the tree in both
+    // src and tests — noise that buries the bugs this subset catches.
+    // https://github.com/effect-ts/tsgo — docs/README.md Oxlint Setup
+    ...promoteWarnToError(tsgoCorrectness.rules),
 
     '@systemfsoftware/oxlint-plugin/no-new-worker-with-wasm-import': 'error',
     '@systemfsoftware/oxlint-plugin/no-barrels': 'off',

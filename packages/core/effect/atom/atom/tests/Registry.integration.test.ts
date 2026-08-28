@@ -1155,16 +1155,16 @@ Feature('Keeping a value that is still loading available to every reader')
                 get.setSelf(4)
               })
               get.addFinalizer(() => {
-                get.stream(plain)
+                const _stream = get.stream(plain)
               })
               get.addFinalizer(() => {
-                get.setResult(resultWritable, Result.success(4))
+                const _effect = get.setResult(resultWritable, Result.success(4))
               })
               get.addFinalizer(() => {
-                get.result(failed)
+                const _result = get.result(failed)
               })
               get.addFinalizer(() => {
-                get.some(noOption)
+                const _some = get.some(noOption)
               })
               get.addFinalizer(() => {
                 get.addFinalizer(() => {})
