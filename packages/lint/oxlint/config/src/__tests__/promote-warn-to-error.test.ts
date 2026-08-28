@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { promoteWarnToError } from '../promote-warn-to-error.js'
+import { promoteWarnToError } from '../oxlint-config.base.js'
 
 describe('promoteWarnToError', () => {
   it('maps warn to error and preserves error/off', () => {
