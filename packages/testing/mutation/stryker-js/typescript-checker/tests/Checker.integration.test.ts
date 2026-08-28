@@ -1,6 +1,3 @@
-import * as nodePath from 'node:path'
-import { fileURLToPath } from 'node:url'
-
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -15,19 +12,21 @@ import * as FileSystem from 'effect/FileSystem'
 import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
 import * as S from 'effect/Schema'
 import { expect } from 'vitest'
 
-const fixtureRoot = nodePath.resolve(
-  fileURLToPath(new URL('../testResources/single-project', import.meta.url)),
-)
+const fixtureRoot = Effect.gen(function*() {
+  const path = yield* Path.Path
+  return yield* path.fromFileUrl(new URL('../testResources/single-project', import.meta.url))
+}).pipe(Effect.orDie)
 
 const Feature = makeFeature({ it, layer })
 
 const host = Layer.mergeAll(
   NodeFileSystem.layer,
   NodePath.layer,
-  Layer.succeed(SandboxDirectory, fixtureRoot),
+  Layer.effect(SandboxDirectory, fixtureRoot).pipe(Layer.provide(NodePath.layer)),
 )
 
 const locate = (
@@ -50,7 +49,7 @@ const locate = (
   const textColumn = line.indexOf(findText)
   return new Mutant({
     id,
-    fileName: nodePath.join(fixtureRoot, 'src', fileName),
+    fileName,
     mutatorName: 'foo-mutator',
     replacement,
     location: {
@@ -65,8 +64,10 @@ const openChecker = Effect.gen(function*() {
   if (plugin === undefined) {
     return yield* Effect.die(new Error('typescript checker plugin missing'))
   }
+  const path = yield* Path.Path
+  const root = yield* fixtureRoot
   const options = yield* S.decodeUnknownEffect(StrykerOptionsSchema)({
-    tsconfigFile: nodePath.join(fixtureRoot, 'tsconfig.json'),
+    tsconfigFile: path.join(root, 'tsconfig.json'),
   }).pipe(Effect.orDie)
   const env = Layer.mergeAll(host, Layer.succeed(RunConfiguration, options))
   const context = yield* Layer.build(plugin.layer.pipe(Layer.provide(env)))
@@ -85,32 +86,38 @@ Feature('TypeScript checker live check path')
         Given('todo.ts and counter.ts from errorInFileAbove2Mutants')('sources', () =>
           Effect.gen(function*() {
             const fs = yield* FileSystem.FileSystem
-            const dir = nodePath.join(fixtureRoot, 'src/errorInFileAbove2Mutants')
-            const todo = yield* fs.readFileString(nodePath.join(dir, 'todo.ts'))
-            const counter = yield* fs.readFileString(nodePath.join(dir, 'counter.ts'))
+            const path = yield* Path.Path
+            const root = yield* fixtureRoot
+            const dir = path.join(root, 'src/errorInFileAbove2Mutants')
+            const todo = yield* fs.readFileString(path.join(dir, 'todo.ts'))
+            const counter = yield* fs.readFileString(path.join(dir, 'counter.ts'))
             return { todo, counter }
           })),
         Given('an initialized typescript checker on that fixture')('sut', () => openChecker),
         When('a valid todo mutant and an invalid counter mutant are checked together')(
           'actual',
           ({ sources, sut }) =>
-            sut.check([
-              locate(
-                sources.todo,
-                'errorInFileAbove2Mutants/todo.ts',
-                'return TodoList.allTodos',
-                '[]',
-                'passedAlone',
-                7,
-              ),
-              locate(
-                sources.counter,
-                'errorInFileAbove2Mutants/counter.ts',
-                'return (this.currentNumber += numberToIncrementBy)',
-                'return "This should not return a string"',
-                'compileErrorAlone',
-              ),
-            ]),
+            Effect.gen(function*() {
+              const path = yield* Path.Path
+              const root = yield* fixtureRoot
+              return yield* sut.check([
+                locate(
+                  sources.todo,
+                  path.join(root, 'src', 'errorInFileAbove2Mutants/todo.ts'),
+                  'return TodoList.allTodos',
+                  '[]',
+                  'passedAlone',
+                  7,
+                ),
+                locate(
+                  sources.counter,
+                  path.join(root, 'src', 'errorInFileAbove2Mutants/counter.ts'),
+                  'return (this.currentNumber += numberToIncrementBy)',
+                  'return "This should not return a string"',
+                  'compileErrorAlone',
+                ),
+              ])
+            }),
         ),
         Then('the valid mutant is passed and the invalid mutant is compileError')(({ actual }) =>
           Effect.sync(() => {
@@ -128,13 +135,25 @@ Feature('TypeScript checker live check path')
         Given('todo.ts from the single-project fixture')('todo', () =>
           Effect.gen(function*() {
             const fs = yield* FileSystem.FileSystem
-            return yield* fs.readFileString(nodePath.join(fixtureRoot, 'src/todo.ts'))
+            const path = yield* Path.Path
+            const root = yield* fixtureRoot
+            return yield* fs.readFileString(path.join(root, 'src/todo.ts'))
           })),
         Given('an initialized typescript checker on that fixture')('sut', () => openChecker),
         When('one mutant that replaces a push with a string is checked')('actual', ({ sut, todo }) =>
-          sut.check([
-            locate(todo, 'todo.ts', 'TodoList.allTodos.push(newItem)', '"This should not be a string"', 'mutId'),
-          ])),
+          Effect.gen(function*() {
+            const path = yield* Path.Path
+            const root = yield* fixtureRoot
+            return yield* sut.check([
+              locate(
+                todo,
+                path.join(root, 'src', 'todo.ts'),
+                'TodoList.allTodos.push(newItem)',
+                '"This should not be a string"',
+                'mutId',
+              ),
+            ])
+          })),
         Then('that mutant is compileError')(({ actual }) =>
           Effect.sync(() => {
             const result = HashMap.get(actual, 'mutId')
@@ -150,14 +169,19 @@ Feature('TypeScript checker live check path')
         Given('todo.ts from the single-project fixture')('todo', () =>
           Effect.gen(function*() {
             const fs = yield* FileSystem.FileSystem
-            return yield* fs.readFileString(nodePath.join(fixtureRoot, 'src/todo.ts'))
+            const path = yield* Path.Path
+            const root = yield* fixtureRoot
+            return yield* fs.readFileString(path.join(root, 'src/todo.ts'))
           })),
         Given('an initialized typescript checker on that fixture')('sut', () => openChecker),
-        When('one mutant that keeps the type is checked')(
-          'actual',
-          ({ sut, todo }) =>
-            sut.check([locate(todo, 'todo.ts', 'TodoList.allTodos.push(newItem)', 'newItem? 42: 43', 'ok')]),
-        ),
+        When('one mutant that keeps the type is checked')('actual', ({ sut, todo }) =>
+          Effect.gen(function*() {
+            const path = yield* Path.Path
+            const root = yield* fixtureRoot
+            return yield* sut.check([
+              locate(todo, path.join(root, 'src', 'todo.ts'), 'TodoList.allTodos.push(newItem)', 'newItem? 42: 43', 'ok'),
+            ])
+          })),
         Then('that mutant is passed')(({ actual }) =>
           Effect.sync(() => {
             expect(HashMap.get(actual, 'ok')).toEqual(Option.some({ status: 'passed' }))
