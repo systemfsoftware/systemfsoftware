@@ -31,7 +31,8 @@
     "attw": "npm_config_ignore_scripts=true attw --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "test": "vitest run",
-    "prepack": "pnpm build"
+    "prepack": "pnpm build",
+    "surface:update": "api-surface generate ."
   },
   "type": "module",
   "exports": {
@@ -52,6 +53,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@systemfsoftware/api-surface": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/arethetypeswrong-recipes": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",

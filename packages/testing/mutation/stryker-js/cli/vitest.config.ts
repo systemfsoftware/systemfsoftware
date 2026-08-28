@@ -9,6 +9,10 @@ export default defineConfig({
     // KTD5: the container lane lives in `tests` under its own config
     // (`test:contract`); the default `test` task stays container-free and
     // covers the relocated unit specs and the in-source property tests.
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'tests/surface.snapshot.test.ts'],
+  },
+
+  resolve: {
+    conditions: ['@systemfsoftware/source', 'source', 'import', 'node', 'default'],
   },
 })

@@ -21,7 +21,8 @@
     "typecheck": "tsc --noEmit",
     "attw": "attw --pack .",
     "test": "vitest run",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint --format=${f:-default}"
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint --format=${f:-default}",
+    "surface:update": "api-surface generate ."
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^",
@@ -31,7 +32,9 @@
     "mutation-testing-report-schema": "3.7.3"
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "^7.58.7",
     "@systemfsoftware/all": "workspace:^",
+    "@systemfsoftware/api-surface": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
@@ -40,7 +43,6 @@
     "effect": "catalog:",
     "oxlint": "catalog:oxlint",
     "oxlint-tsgolint": "catalog:oxlint",
-    "@microsoft/api-extractor": "^7.58.7",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",

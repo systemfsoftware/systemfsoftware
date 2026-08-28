@@ -37,7 +37,8 @@
     "attw": "attw --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "test": "vitest run",
-    "prepack": "pnpm build"
+    "prepack": "pnpm build",
+    "surface:update": "api-surface generate ."
   },
   "dependencies": {
     "@andrewbranch/untar.js": "^1.0.3",
@@ -48,6 +49,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@systemfsoftware/api-surface": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",

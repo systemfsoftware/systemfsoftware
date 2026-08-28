@@ -1,0 +1,6 @@
+[
+  "IN_SOURCE_TEST_IGNORED",
+  "decideInSourceTestIgnore",
+  "isInSourceTestGuard",
+  "strykerPlugins",
+]

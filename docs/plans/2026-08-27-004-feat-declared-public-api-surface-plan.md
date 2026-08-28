@@ -24,7 +24,7 @@ execution: code
 
 ## Product Contract
 
-*Product Contract unchanged from the review-hardened requirements version; requirement and acceptance IDs R1–R9, AE1–AE5 preserved. The four planning-deferred Outstanding Questions are resolved into KTD1–KTD5 and the section is removed.*
+_Product Contract unchanged from the review-hardened requirements version; requirement and acceptance IDs R1–R9, AE1–AE5 preserved. The four planning-deferred Outstanding Questions are resolved into KTD1–KTD5 and the section is removed._
 
 ### Summary
 
@@ -45,6 +45,7 @@ The repo forces integration tests onto the public API (`tests-import-public-api`
 - Mass-`@public` tagging stays mechanically green — the accepted backstop is the `.api.md` diff plus the changeset intent the turbo build hash already forces; no red gate for it (session-settled: user-approved).
 
 ### Requirements
+
 **Surface gate**
 
 - R1. An exported declaration without a release tag fails that package's build, naming the symbol. Gate: `ae-missing-release-tag` at `logLevel: "error"` in every `packages/**/api-extractor.json` (29 entry configs across 25 gated packages — `stryker-plugins` carries four entry configs, `effect/schema` two); tags inherit from containers, so the outermost declaration carries the tag. `packages/core/effect/atom/atom` and `atom-react` carry no api-extractor config — the rollup there measured 154 and 51 declaration errors against tsdown's 0 (`packages/core/effect/atom/AGENTS.md`) — so R6 is their enforced lane, not this gate.
@@ -107,7 +108,7 @@ The repo forces integration tests onto the public API (`tests-import-public-api`
 
 ## Planning Contract
 
-*Research grounding: this run dispatched two read-only researchers whose findings are cited per KTD; external wiki/literature grounding for the snapshot doctrine and the exports-map authority already lives in Product Contract Key Decisions and Sources (wiki rulings `declared-entry-points-only` and `snapshot-testing`; doi:10.1016/j.jss.2023.111797). External findings shaped R6's rejection criterion, so the confidence check's load-bearing-research override applies.*
+_Research grounding: this run dispatched two read-only researchers whose findings are cited per KTD; external wiki/literature grounding for the snapshot doctrine and the exports-map authority already lives in Product Contract Key Decisions and Sources (wiki rulings `declared-entry-points-only` and `snapshot-testing`; doi:10.1016/j.jss.2023.111797). External findings shaped R6's rejection criterion, so the confidence check's load-bearing-research override applies._
 
 ### Key Technical Decisions
 
@@ -119,6 +120,7 @@ The repo forces integration tests onto the public API (`tests-import-public-api`
 - KTD6. The 29 config flips across the 25 gated packages land as one commit, observed red on a known-bad fixture before and green after; U1's sweep lands before it, which satisfies R9's per-package ordering globally (every package is swept before any flip). One commit covers 29 identical edits; 29 separate observation rituals would be ceremony. Governs U2.
 
 ### Assumptions
+
 - No completeness guard (asserting every future publishable package has an enforcement lane) ships in this run — that scope addition was surfaced in scoping but never confirmed; it is recorded here as a labeled bet and left out of the unit map.
 - The two straggler packages already carry api-extractor configs (`dist/index.d.mts` entries) but build with bare `tsdown` and no extractor script — U2 adds the `api:check` script (`api-extractor run`, mirroring `packages/core/effect/daemon-spec`) plus the build chain.
 
@@ -216,14 +218,14 @@ U1 (sweep) precedes U2 (flip) per R9. U3, U4, U5 are independent of each other a
 
 ## Verification Contract
 
-| Gate | Command | Proves |
-|---|---|---|
-| Package build + tag gate | `pnpm --filter <pkg> build` | R1, R2 — build runs `tsdown && api:check`; untagged export fails naming the symbol |
-| Surface snapshots | `pnpm --filter <pkg> test` | R6 — per-key committed snapshots; changed keys fail |
-| Placement rule | `pnpm --filter <pkg> lint` | R5 — non-snapshot tests under `tests/` fail |
-| Guard | `pnpm check:ci` (runs `check:forbidden-lines`) | R7 — protected-rule suppressions fail; selftest covers red/green |
-| Full local gate | `pnpm check:local` | REPO-D1 — run after the last edit, exit 0 |
-| Changesets | changeset workflow vs base SHA | REPO-R2 — every hash-moved publishable package carries an intent |
+| Gate                     | Command                                        | Proves                                                                             |
+| ------------------------ | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
+| Package build + tag gate | `pnpm --filter <pkg> build`                    | R1, R2 — build runs `tsdown && api:check`; untagged export fails naming the symbol |
+| Surface snapshots        | `pnpm --filter <pkg> test`                     | R6 — per-key committed snapshots; changed keys fail                                |
+| Placement rule           | `pnpm --filter <pkg> lint`                     | R5 — non-snapshot tests under `tests/` fail                                        |
+| Guard                    | `pnpm check:ci` (runs `check:forbidden-lines`) | R7 — protected-rule suppressions fail; selftest covers red/green                   |
+| Full local gate          | `pnpm check:local`                             | REPO-D1 — run after the last edit, exit 0                                          |
+| Changesets               | changeset workflow vs base SHA                 | REPO-R2 — every hash-moved publishable package carries an intent                   |
 
 Evidence discipline: the U2 and U5 red/green observations are captured (command + exit code) in the implementing session and referenced in the commit bodies — a claimed observation without a recorded exit code did not happen.
 

@@ -27,7 +27,8 @@
     "typecheck": "tsc --noEmit --incremental",
     "attw": "attw --pack .",
     "test": "vitest run",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "surface:update": "api-surface generate ."
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -40,6 +41,7 @@
     "@effect/platform-node-shared": "catalog:",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/all": "workspace:^",
+    "@systemfsoftware/api-surface": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",

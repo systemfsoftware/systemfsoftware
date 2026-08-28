@@ -9,4 +9,8 @@ export default defineConfig({
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
     setupFiles: ['./vitest.setup.ts'],
   },
+
+  resolve: {
+    conditions: ['@systemfsoftware/source', 'source', 'import', 'node', 'default'],
+  },
 })

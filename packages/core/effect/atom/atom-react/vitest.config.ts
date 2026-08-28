@@ -24,7 +24,7 @@ export default defineConfig({
         extends: true,
         test: {
           name: 'node',
-          include: ['./tests/ssr.integration.test.ts'],
+          include: ['./tests/ssr.integration.test.ts', './tests/surface.snapshot.test.ts'],
           environment: 'node',
         },
       },

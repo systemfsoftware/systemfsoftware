@@ -7,4 +7,8 @@ export default defineConfig({
     include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
     includeSource: ['src/**/*.ts'],
   },
+
+  resolve: {
+    conditions: ['@systemfsoftware/source', 'source', 'import', 'node', 'default'],
+  },
 })

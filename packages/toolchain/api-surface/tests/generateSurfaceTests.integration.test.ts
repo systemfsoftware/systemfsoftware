@@ -6,7 +6,8 @@ import {
 } from '@systemfsoftware/api-surface'
 import { it, layer, makeFeature } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { existsSync } from 'node:fs'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { expect } from 'vitest'
@@ -68,8 +69,8 @@ Feature('api-surface generator').body(({ scenario }) => {
         const content = await readFile(join(dir, 'tests', 'surface.snapshot.test.ts'), 'utf8')
         expect(content).not.toContain('surface: ./package.json')
         expect(content).not.toContain('surface: ./data')
-        expect(content).toContain(`surface: .`)
-        expect(content).toContain('surface: ./utils')
+        expect(content).toContain('Should_PinExportSet_When_ImportingRoot')
+        expect(content).toContain('Should_PinExportSet_When_ImportingRootUtils')
       } finally {
         await rm(dir, { recursive: true, force: true })
       }
@@ -91,13 +92,13 @@ Feature('api-surface generator').body(({ scenario }) => {
           `import { describe, expect, it } from 'vitest'`,
           ``,
           `describe('surface', () => {`,
-          `  it('surface: .', async () => {`,
+          `  it('Should_PinExportSet_When_ImportingRoot', async () => {`,
           `    const mod = await import('@test/fixture-pkg')`,
-          `    expect(Object.keys(mod).sort()).toMatchFileSnapshot('./__snapshots__/surface.root.snap')`,
+          `    await expect(Object.keys(mod).sort()).toMatchFileSnapshot('./__snapshots__/surface.root.snap')`,
           `  })`,
-          `  it('surface: ./utils', async () => {`,
+          `  it('Should_PinExportSet_When_ImportingRootUtils', async () => {`,
           `    const mod = await import('@test/fixture-pkg/utils')`,
-          `    expect(Object.keys(mod).sort()).toMatchFileSnapshot('./__snapshots__/surface.root-utils.snap')`,
+          `    await expect(Object.keys(mod).sort()).toMatchFileSnapshot('./__snapshots__/surface.root-utils.snap')`,
           `  })`,
           `})`,
           ``,
@@ -162,9 +163,9 @@ Feature('api-surface generator').body(({ scenario }) => {
       try {
         await generateSurfaceTests(dir)
         const content = await readFile(join(dir, 'tests', 'surface.snapshot.test.ts'), 'utf8')
-        const idxRoot = content.indexOf(`surface: .`)
-        const idxA = content.indexOf(`surface: ./a`)
-        const idxZ = content.indexOf(`surface: ./z`)
+        const idxRoot = content.indexOf(`Should_PinExportSet_When_ImportingRoot'`)
+        const idxA = content.indexOf('Should_PinExportSet_When_ImportingRootA')
+        const idxZ = content.indexOf('Should_PinExportSet_When_ImportingRootZ')
         expect(idxRoot).toBeLessThan(idxA)
         expect(idxA).toBeLessThan(idxZ)
       } finally {
@@ -181,6 +182,22 @@ Feature('api-surface generator').body(({ scenario }) => {
         await generateSurfaceTests(dir)
         const content = await readFile(join(dir, 'tests', 'surface.snapshot.test.ts'), 'utf8')
         expect(content).toContain(`describe('surface'`)
+      } finally {
+        await rm(dir, { recursive: true, force: true })
+      }
+    }),
+  )
+
+  scenario(
+    'Should_RemoveStaleTestFile_When_OnlyJsonExportsRemain',
+    Effect.promise(async () => {
+      const dir = await makeFixture({ './package.json': './package.json' })
+      const outPath = join(dir, 'tests', 'surface.snapshot.test.ts')
+      try {
+        await mkdir(join(dir, 'tests'), { recursive: true })
+        await writeFile(outPath, 'stale', 'utf8')
+        await generateSurfaceTests(dir)
+        expect(existsSync(outPath)).toBe(false)
       } finally {
         await rm(dir, { recursive: true, force: true })
       }

@@ -18,4 +18,8 @@ export default defineConfig({
     // helpers. Without the glob the next such block would silently never run.
     includeSource: ['src/**/*.ts'],
   },
+
+  resolve: {
+    conditions: ['@systemfsoftware/source', 'source', 'import', 'node', 'default'],
+  },
 })

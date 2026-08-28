@@ -1,0 +1,9 @@
+[
+  "contributionByTestFile",
+  "defaultRequireTestContributionSuffixes",
+  "judgeTestContribution",
+  "makeTestContributionEvaluatorService",
+  "strykerPlugins",
+  "testContributionEvaluatorLayer",
+  "toothlessTestFiles",
+]

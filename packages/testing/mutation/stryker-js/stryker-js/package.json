@@ -19,7 +19,8 @@
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "attw": "attw --pack .",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "surface:update": "api-surface generate ."
   },
   "license": "Apache-2.0",
   "engines": {
@@ -32,6 +33,7 @@
   },
   "devDependencies": {
     "@systemfsoftware/all": "workspace:^",
+    "@systemfsoftware/api-surface": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",

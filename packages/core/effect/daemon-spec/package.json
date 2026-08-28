@@ -47,7 +47,8 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
-    "attw": "attw --pack ."
+    "attw": "attw --pack .",
+    "surface:update": "api-surface generate ."
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^"
@@ -55,16 +56,17 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "^7.58.7",
+    "@systemfsoftware/api-surface": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",
-    "@systemfsoftware/stryker-plugins": "workspace:^",
     "@systemfsoftware/stryker-js-cli": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
+    "@systemfsoftware/stryker-plugins": "workspace:^",
     "@systemfsoftware/stryker-test-contribution": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",

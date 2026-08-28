@@ -1,0 +1,9 @@
+[
+  "PluginContribution",
+  "PluginKind",
+  "RunConfiguration",
+  "SandboxDirectory",
+  "Shadowing",
+  "composePlugins",
+  "declarePlugin",
+]

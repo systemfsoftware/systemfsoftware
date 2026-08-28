@@ -13,4 +13,8 @@ export default defineConfig({
     testTimeout: 60000,
     hookTimeout: 60000,
   },
+
+  resolve: {
+    conditions: ['@systemfsoftware/source', 'source', 'import', 'node', 'default'],
+  },
 })

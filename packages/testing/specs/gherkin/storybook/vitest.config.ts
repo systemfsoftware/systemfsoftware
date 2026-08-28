@@ -27,6 +27,18 @@ export default defineConfig({
           },
         },
       },
+      {
+        extends: true,
+        test: {
+          name: 'node',
+          include: ['./tests/surface.snapshot.test.ts'],
+          environment: 'node',
+        },
+      },
     ],
+  },
+
+  resolve: {
+    conditions: ['@systemfsoftware/source', 'source', 'import', 'node', 'default'],
   },
 })
