@@ -48,6 +48,16 @@ const EXACT = { suffixes: PROPERTY, everyKillerRecorded: true }
 const BAILED = { suffixes: PROPERTY, everyKillerRecorded: false }
 
 const defaultSuffixes: readonly string[] = defaultRequireTestContributionSuffixes
+// The canonical "earns vs idle" report: one file claims a sole kill, the other kills nothing another
+// does not also kill. Used by every scenario that distinguishes auditable from redundant files.
+const earnsAndIdleReport = (): Pick<schema.MutationTestResult, 'files' | 'testFiles'> =>
+  reportOf(
+    [
+      mutantOf('m1', 'Killed', ['t1', 't2'], ['t1', 't2']),
+      mutantOf('m2', 'Killed', ['t1'], ['t1']),
+    ],
+    { 'earns.property.test.ts': ['t1'], 'idle.property.test.ts': ['t2'] },
+  )
 
 Feature('Judging test contribution under the test-contribution gate')
   .body(({ scenario }) => {
@@ -180,16 +190,7 @@ Feature('Judging test contribution under the test-contribution gate')
           'a report where one file kills nothing another file does not also kill',
         )('report', () =>
           Effect.succeed(
-            reportOf(
-              [
-                mutantOf('m1', 'Killed', ['t1', 't2'], ['t1', 't2']),
-                mutantOf('m2', 'Killed', ['t1'], ['t1']),
-              ],
-              {
-                'earns.property.test.ts': ['t1'],
-                'idle.property.test.ts': ['t2'],
-              },
-            ),
+            earnsAndIdleReport(),
           )),
         When('toothless files are computed with every killer recorded')(
           'accused',
@@ -208,16 +209,7 @@ Feature('Judging test contribution under the test-contribution gate')
           'a report where a file kills nothing alone, with everyKillerRecorded false',
         )('report', () =>
           Effect.succeed(
-            reportOf(
-              [
-                mutantOf('m1', 'Killed', ['t1', 't2'], ['t1', 't2']),
-                mutantOf('m2', 'Killed', ['t1'], ['t1']),
-              ],
-              {
-                'earns.property.test.ts': ['t1'],
-                'idle.property.test.ts': ['t2'],
-              },
-            ),
+            earnsAndIdleReport(),
           )),
         When('toothless files are computed under bail')(
           'accused',
@@ -367,22 +359,17 @@ Feature('Judging test contribution under the test-contribution gate')
       Gherkin.Do.pipe(
         Given('a report with an earns-nothing file')('report', () =>
           Effect.succeed(
-            reportOf(
-              [
-                mutantOf('m1', 'Killed', ['t1', 't2'], ['t1', 't2']),
-                mutantOf('m2', 'Killed', ['t1'], ['t1']),
-              ],
-              { 'earns.property.test.ts': ['t1'], 'idle.property.test.ts': ['t2'] },
-            ),
+            earnsAndIdleReport(),
           )),
         When('the run is judged with exact killer recording')(
           'verdict',
           (s) => Effect.sync(() => judgeTestContribution(s.report, true, PROPERTY)),
         ),
-        Then('the run fails and the idle file is named')((s) => {
+        Then('the run fails, names the idle file, and carries no bail text')((s) => {
           expect(s.verdict?.failed).toBe(true)
           expect(s.verdict?.message).toContain('idle.property.test.ts')
           expect(s.verdict?.message).toContain('just as dead')
+          expect(s.verdict?.message).not.toContain('disableBail: true')
         }),
       ),
     )
@@ -419,13 +406,7 @@ Feature('Judging test contribution under the test-contribution gate')
       Gherkin.Do.pipe(
         Given('a report with an earns-nothing file under bail')('report', () =>
           Effect.succeed(
-            reportOf(
-              [
-                mutantOf('m1', 'Killed', ['t1', 't2'], ['t1', 't2']),
-                mutantOf('m2', 'Killed', ['t1'], ['t1']),
-              ],
-              { 'earns.property.test.ts': ['t1'], 'idle.property.test.ts': ['t2'] },
-            ),
+            earnsAndIdleReport(),
           )),
         When('the verdict is judged with everyKillerRecorded false')(
           'verdict',
@@ -435,31 +416,6 @@ Feature('Judging test contribution under the test-contribution gate')
           expect(s.verdict?.failed).toBe(true)
           expect(s.verdict?.message).toContain('bail')
           expect(s.verdict?.message).toContain('disableBail: true')
-        }),
-      ),
-    )
-
-    scenario(
-      'Should_StillAccuseAZeroKillFile_When_DisableBailIsTrue',
-      Gherkin.Do.pipe(
-        Given('a report with an idle file and bail disabled')('report', () =>
-          Effect.succeed(
-            reportOf(
-              [
-                mutantOf('m1', 'Killed', ['t1', 't2'], ['t1', 't2']),
-                mutantOf('m2', 'Killed', ['t1'], ['t1']),
-              ],
-              { 'earns.property.test.ts': ['t1'], 'idle.property.test.ts': ['t2'] },
-            ),
-          )),
-        When('the verdict is judged with every killer recorded')(
-          'verdict',
-          (s) => Effect.sync(() => judgeTestContribution(s.report, true, PROPERTY)),
-        ),
-        Then('the zero-kill file is still accused without the bail text')((s) => {
-          expect(s.verdict?.failed).toBe(true)
-          expect(s.verdict?.message).toContain('idle.property.test.ts')
-          expect(s.verdict?.message).not.toContain('disableBail: true')
         }),
       ),
     )
@@ -625,13 +581,7 @@ Feature('Judging test contribution under the test-contribution gate')
       Gherkin.Do.pipe(
         Given('a report where every killer was recorded')('report', () =>
           Effect.succeed(
-            reportOf(
-              [
-                mutantOf('m1', 'Killed', ['t1', 't2'], ['t1', 't2']),
-                mutantOf('m2', 'Killed', ['t1'], ['t1']),
-              ],
-              { 'earns.property.test.ts': ['t1'], 'idle.property.test.ts': ['t2'] },
-            ),
+            earnsAndIdleReport(),
           )),
         When('the verdict is judged with every killer recorded')(
           'verdict',
@@ -876,15 +826,21 @@ Feature('Judging test contribution under the test-contribution gate')
               },
             ),
           )),
-        When('toothless files are computed with every killer recorded')(
-          'accused',
-          (s) => Effect.sync(() => toothlessTestFiles(contributionByTestFile(s.report), EXACT)),
+        When('toothless files are computed with every killer recorded and contribution is kept')(
+          'result',
+          (s) =>
+            Effect.sync(() => {
+              const contribution = contributionByTestFile(s.report)
+              return {
+                accused: toothlessTestFiles(contribution, EXACT),
+                contribution: Object.fromEntries(contribution),
+              }
+            }),
         ),
         Then('only the auditable file is accused and the unauditable file is spared')((s) => {
-          expect(s.accused).toEqual(['auditable.property.test.ts'])
-          const contrib = Object.fromEntries(contributionByTestFile(s.report))
-          expect(contrib['auditable.property.test.ts']?.killableCovered).toBe(1)
-          expect(contrib['unauditable.property.test.ts']?.killableCovered).toBe(0)
+          expect(s.result.accused).toEqual(['auditable.property.test.ts'])
+          expect(s.result.contribution['auditable.property.test.ts']?.killableCovered).toBe(1)
+          expect(s.result.contribution['unauditable.property.test.ts']?.killableCovered).toBe(0)
         }),
       ),
     )
@@ -931,14 +887,20 @@ Feature('Judging test contribution under the test-contribution gate')
               },
             ),
           )),
-        When('toothless files are computed with every killer recorded')(
-          'accused',
-          (s) => Effect.sync(() => toothlessTestFiles(contributionByTestFile(s.report), EXACT)),
+        When('toothless files are computed with every killer recorded and contribution is kept')(
+          'result',
+          (s) =>
+            Effect.sync(() => {
+              const contribution = contributionByTestFile(s.report)
+              return {
+                accused: toothlessTestFiles(contribution, EXACT),
+                contribution: Object.fromEntries(contribution),
+              }
+            }),
         ),
-        Then('the Ignored-only file is not accused and not counted as killable')((s) => {
-          expect(s.accused).toEqual([])
-          const contrib = Object.fromEntries(contributionByTestFile(s.report))
-          expect(contrib['ignored-cover.property.test.ts']?.killableCovered).toBe(0)
+        Then('the Ignored-only file is not accused and not counted as coverable')((s) => {
+          expect(s.result.accused).toEqual([])
+          expect(s.result.contribution['ignored-cover.property.test.ts']?.killableCovered).toBe(0)
         }),
       ),
     )
