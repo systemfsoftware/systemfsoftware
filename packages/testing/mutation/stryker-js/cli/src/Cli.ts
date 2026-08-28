@@ -1127,22 +1127,20 @@ const progressStreamFileOf = (
         Match.tag(
           'run',
           (runRequest): Effect.Effect<string, never, FileSystem.FileSystem | Path.Path> =>
-            readConfig(runRequest.options, basePath).pipe(
-              Effect.map((options) => {
-                const fileName = options['progressStreamFile']
+            Effect.gen(function*() {
+              const loaded = yield* Effect.exit(readConfig(runRequest.options, basePath))
+              if (Exit.isSuccess(loaded)) {
+                const fileName = loaded.value['progressStreamFile']
                 if (typeof fileName === 'string' && fileName.length > 0) {
                   return fileName
                 }
-                return DEFAULT_PROGRESS_STREAM_FILE
-              }),
-              Effect.orElseSucceed(() => {
-                const fileName = runRequest.options['progressStreamFile']
-                if (typeof fileName === 'string' && fileName.length > 0) {
-                  return fileName
-                }
-                return DEFAULT_PROGRESS_STREAM_FILE
-              }),
-            ),
+              }
+              const fromCli = runRequest.options['progressStreamFile']
+              if (typeof fromCli === 'string' && fromCli.length > 0) {
+                return fromCli
+              }
+              return DEFAULT_PROGRESS_STREAM_FILE
+            }),
         ),
         Match.orElse(() => Effect.succeed(DEFAULT_PROGRESS_STREAM_FILE)),
       ),
