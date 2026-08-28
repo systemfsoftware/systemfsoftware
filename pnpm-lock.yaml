@@ -638,6 +638,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/api-surface':
+        specifier: workspace:^
+        version: link:../../../../toolchain/api-surface
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
