@@ -16,8 +16,10 @@ describe('promoteWarnToError', () => {
     })
   })
 
-  it('promotes no rule to warn', () => {
-    const out = promoteWarnToError({ 'effecttsgo/x': 'warn' } as unknown as Record<string, 'warn'>)
-    expect((Object.values(out) as Array<string>).every((v) => v !== 'warn')).toBe(true)
+  it('promotes tuple warn severities to error', () => {
+    expect(promoteWarnToError({ 'effecttsgo/x': ['warn', { allow: ['foo'] }] } as unknown as Record<string, unknown>))
+      .toEqual({
+        'effecttsgo/x': 'error',
+      })
   })
 })
