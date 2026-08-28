@@ -1,0 +1,55 @@
+{
+  "name": "@systemfsoftware/api-surface",
+  "private": true,
+  "license": "Apache-2.0",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "description": "Generate per-exports-map surface snapshot tests pinned with toMatchFileSnapshot.",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./cli": {
+      "@systemfsoftware/source": "./src/cli.ts",
+      "default": "./dist/cli.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "api-surface": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+  },
+  "dependencies": {
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./cli": "./dist/cli.mjs",
+      "./package.json": "./package.json"
+    }
+  }
+}

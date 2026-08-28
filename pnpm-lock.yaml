@@ -2781,6 +2781,43 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  packages/toolchain/api-surface:
+    dependencies:
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.112
+    devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../testing/specs/gherkin/effect
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../lint/oxlint/config
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@0.24.0)
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+
   packages/toolchain/tsconfig:
     devDependencies:
       '@systemfsoftware/arethetypeswrong-cli':
