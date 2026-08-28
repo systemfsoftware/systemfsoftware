@@ -52,8 +52,7 @@ import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawne
 
 import { createCheckerFactory } from './Checker.js'
 import type { CheckerResourceService } from './Checker.js'
-import { checkPlans } from './Checker.js'
-import { groupPlans } from './Checker.js'
+import { checkGroupedPlans } from './Checker.js'
 import { forkCoreSchema, readConfig, validateOptions, type ValidationSchemaDocument } from './Config.js'
 import { REMEMBERED_REASON, toRelativeNormalizedFileName } from './IncrementalDiff.workflow.js'
 import { decidePlans, incrementalDiff } from './Mutants.js'
@@ -1098,15 +1097,18 @@ export const mutationTestRun =
       if (checkerPool !== undefined) {
         for (const checkerName of prev.options.checkers) {
           const checked = yield* Effect.scoped(
-            Effect.flatMap(Pool.get(checkerPool), (checker) =>
-              checkPlans(checker, checkerName, passedPlans).pipe(
-                Effect.catchTags({
-                  OutOfMemoryError: (error) =>
-                    Effect.flatMap(Pool.invalidate(checkerPool, checker), () => Effect.fail(error)),
-                  ChildProcessCrashedError: (error) =>
-                    Effect.flatMap(Pool.invalidate(checkerPool, checker), () => Effect.fail(error)),
-                }),
-              )),
+            Effect.flatMap(
+              Pool.get(checkerPool),
+              (checker) =>
+                checkGroupedPlans(checker, checkerName, passedPlans).pipe(
+                  Effect.catchTags({
+                    OutOfMemoryError: (error) =>
+                      Effect.flatMap(Pool.invalidate(checkerPool, checker), () => Effect.fail(error)),
+                    ChildProcessCrashedError: (error) =>
+                      Effect.flatMap(Pool.invalidate(checkerPool, checker), () => Effect.fail(error)),
+                  }),
+                ),
+            ),
           )
           const kept: MutantRunPlan[] = []
           for (const [plan, result] of checked) {
@@ -1119,24 +1121,7 @@ export const mutationTestRun =
           passedPlans = kept
         }
       }
-      const lastChecker = prev.options.checkers.at(-1)
-      let executionOrder: readonly MutantRunPlan[]
-      if (lastChecker === undefined || checkerPool === undefined) {
-        executionOrder = passedPlans
-      } else {
-        executionOrder = (yield* Effect.scoped(
-          Effect.flatMap(Pool.get(checkerPool), (checker) =>
-            groupPlans(checker, lastChecker, passedPlans).pipe(
-              Effect.catchTags({
-                OutOfMemoryError: (error) =>
-                  Effect.flatMap(Pool.invalidate(checkerPool, checker), () => Effect.fail(error)),
-                ChildProcessCrashedError: (error) =>
-                  Effect.flatMap(Pool.invalidate(checkerPool, checker), () => Effect.fail(error)),
-              }),
-            )),
-        )).flat()
-      }
-      const testRunnerStream = Stream.fromIterable(executionOrder)
+      const testRunnerStream = Stream.fromIterable(passedPlans)
       const plannedTotal = allPlansForReporter.length + noCoverageResults.length + rememberedResults.length
       const pathService = yield* Path.Path
       const progressQueue = yield* RunEvents
