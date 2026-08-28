@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [inlineSchemaTests()],
   test: {
     ...sharedConfig.test,
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'tests/**/*.test.ts'],
     exclude: ['**/node_modules/**', '**/.stryker-tmp/**', '**/testResources/**'],
     testTimeout: 30000,
     hookTimeout: 30000,
