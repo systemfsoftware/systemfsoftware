@@ -28,11 +28,13 @@
 '@systemfsoftware/oxlint-plugin-property-testing': none
 '@systemfsoftware/oxlint-plugin-recommended': none
 '@systemfsoftware/oxlint-plugin-test-hygiene': none
-'@systemfsoftware/oxlint-plugin-test-placement': none
+'@systemfsoftware/stryker-js-html-reporter': none
+
 '@systemfsoftware/rx-effect': none
 '@systemfsoftware/stryker-js': none
 '@systemfsoftware/stryker-js-cli': none
-'@systemfsoftware/stryker-js-html-reporter': none
+
+'@systemfsoftware/stryker-js-typescript-checker': none
 '@systemfsoftware/stryker-js-instrumenter': none
 '@systemfsoftware/stryker-js-platform-node': none
 '@systemfsoftware/stryker-js-vitest-runner': none
