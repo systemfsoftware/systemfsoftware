@@ -639,6 +639,9 @@ Feature('Driving the mutation tester from an agent harness')
         Then('the run hands its caller the status a signal leaves behind')((s) => {
           checkExpect(s.observed.stdout).toContain('@@130')
         }),
+        Then('the on-disk progress stream still opens as a machine stream')((s) => {
+          checkExpect(s.observed.lines[0]).toMatchObject({ kind: 'stream' })
+        }),
       ),
     )
 

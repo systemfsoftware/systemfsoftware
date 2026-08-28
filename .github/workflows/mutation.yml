@@ -130,7 +130,7 @@ jobs:
           fi
 
       - uses: actions/cache/save@v6
-        if: always()
+        if: ${{ always() && hashFiles(format('{0}/reports/stryker-incremental.json', matrix.package)) != '' }}
         with:
           path: ${{ matrix.package }}/reports/stryker-incremental.json
           key: ${{ runner.os }}-stryker-${{ matrix.package }}-${{ github.run_id }}

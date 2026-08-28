@@ -264,7 +264,11 @@ const run = () => {
   const rows = []
   if (merged) {
     const allMetrics = calculateMetrics(merged.files).metrics
-    const all = verdictOf({ metrics: allMetrics, outcome: 'success' })
+    const all = verdictOf({
+      metrics: allMetrics,
+      outcome: withReport.some((part) => part.outcome === 'failure') ? 'failure' : 'success',
+      incomplete: withReport.some((part) => part.incomplete === true),
+    })
     rows.push({
       label: '**all**',
       score: all.score,
@@ -436,12 +440,43 @@ const selftest = () => {
     failures.push('empty stream: expected no reconstruction')
   }
 
+  const completeReport = {
+    files: {
+      'src/b.ts': {
+        language: 'javascript',
+        source: 'true',
+        mutants: [
+          {
+            id: 'c1',
+            mutatorName: 'BooleanLiteral',
+            replacement: 'false',
+            status: 'Killed',
+            location: { start: { line: 1, column: 1 }, end: { line: 1, column: 5 } },
+          },
+        ],
+      },
+    },
+  }
+  const mixed = [
+    { label: 'complete', report: completeReport, outcome: 'success' },
+    { label: 'partial', report: fromStream, outcome: 'failure', incomplete: true },
+  ]
+  const mixedMerged = mergeParts(mixed)
+  const allRow = verdictOf({
+    metrics: calculateMetrics(mixedMerged.files).metrics,
+    outcome: mixed.some((part) => part.outcome === 'failure') ? 'failure' : 'success',
+    incomplete: mixed.some((part) => part.incomplete === true),
+  })
+  if (allRow.score !== 'incomplete' || allRow.verdict !== '❌') {
+    failures.push(`all-row incomplete: expected incomplete/❌, got ${allRow.score}/${allRow.verdict}`)
+  }
+
   if (failures.length > 0) {
     console.error('merge-mutation-reports: selftest FAILED\n')
     for (const failure of failures) console.error(`  ${failure}`)
     process.exit(1)
   }
-  console.log('merge-mutation-reports: selftest ok (10 fixtures)')
+  console.log('merge-mutation-reports: selftest ok (11 fixtures)')
 }
 
 // Entry point. Runs only when executed directly, not when imported.

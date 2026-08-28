@@ -1170,12 +1170,16 @@ export const mutationTestRun =
       }
       const completedMutants = yield* Ref.make<MutantResult[]>([...rememberedResults, ...noCoverageResults])
       const checkpointGate = yield* Semaphore.make(1)
-      yield* reporting.checkpoint(yield* Ref.get(completedMutants))
+      yield* reporting.checkpoint(yield* Ref.get(completedMutants)).pipe(
+        Effect.catchCause((cause) => Effect.logWarning('Reporter failed handling onMutantTested', cause)),
+      )
       const persist = (result: MutantResult) =>
         checkpointGate.withPermits(1)(
           Effect.gen(function*() {
             const next = yield* Ref.updateAndGet(completedMutants, (prev) => [...prev, result])
-            yield* reporting.checkpoint(next)
+            yield* reporting.checkpoint(next).pipe(
+              Effect.catchCause((cause) => Effect.logWarning('Reporter failed handling onMutantTested', cause)),
+            )
           }),
         )
       const runResults: MutantResult[] = yield* Stream.mapEffect(
