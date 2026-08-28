@@ -441,6 +441,10 @@
   dir: omp/plugins/omp-claude-compat
   intents:
     - effect-rc112
+"@systemfsoftware/omp-claude-compat@3.0.2":
+  dir: omp/plugins/omp-claude-compat
+  intents:
+    - fluffy-forks-rule
 "@systemfsoftware/omp-typescript-discipline@1.0.0":
   dir: omp/plugins/omp-typescript-discipline
   intents:
@@ -966,6 +970,10 @@
     - worker-calls-are-declared-not-guessed
     - worker-calls-no-longer-lose-their-replies
     - workers-are-group-killed
+"@systemfsoftware/stryker-js-platform-node@0.1.1":
+  dir: packages/testing/mutation/stryker-js/platform-node
+  intents:
+    - incremental-report-schema-export
 "@systemfsoftware/stryker-js-plugin-api@1.0.0":
   dir: packages/stryker-js/plugin-api
   intents:
@@ -1149,6 +1157,10 @@
   dir: packages/testing/mutation/plugins/stryker-test-contribution
   intents:
     - effect-rc112
+"@systemfsoftware/stryker-test-contribution@1.1.0":
+  dir: packages/testing/mutation/plugins/stryker-test-contribution
+  intents:
+    - test-contribution-emits-truthful-verdicts
 "@systemfsoftware/tsconfig@1.3.2":
   dir: packages/tsconfig
   intents:
