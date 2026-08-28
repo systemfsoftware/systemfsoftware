@@ -335,6 +335,7 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
       CLAUDE_PROJECT_DIR: cwd,
       ...(pluginRoot === undefined ? {} : { CLAUDE_PLUGIN_ROOT: pluginRoot }),
     },
+    extendEnv: true,
     stdin: Stream.fromIterable([new TextEncoder().encode(stdinText)]),
     stdout: 'pipe' as const,
     stderr: 'pipe' as const,
