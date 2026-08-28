@@ -24,9 +24,9 @@
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/stryker-js": "workspace:^",
-    "mutation-testing-elements": "3.7.3",
-    "mutation-testing-metrics": "3.7.3",
-    "mutation-testing-report-schema": "3.7.3"
+    "mutation-testing-elements": "catalog:stryker",
+    "mutation-testing-metrics": "catalog:stryker",
+    "mutation-testing-report-schema": "catalog:stryker"
   },
   "devDependencies": {
     "@systemfsoftware/all": "workspace:^",
