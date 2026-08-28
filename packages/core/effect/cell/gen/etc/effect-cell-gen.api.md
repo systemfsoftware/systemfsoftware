@@ -4,18 +4,9 @@
 
 ```ts
 
-import { Arbitrary } from 'effect/testing/FastCheck';
-
 // @public (undocumented)
 export namespace Gen {
-    // (undocumented)
-    export type Bag = Bag;
-    // (undocumented)
-    export type DescriptionCase = DescriptionCase;
-    // (undocumented)
-    export type DrawnFailure = DrawnFailure;
-    const // (undocumented)
-    description: Arbitrary<DescriptionCase>;
+    export { Bag, DescriptionCase, DrawnFailure, description };
 }
 
 // (No @packageDocumentation comment for this package)
