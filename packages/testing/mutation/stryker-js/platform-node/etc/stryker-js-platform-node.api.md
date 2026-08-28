@@ -214,6 +214,59 @@ export const ImportedModuleSchema: S.Struct<{
 // @public (undocumented)
 export function importModule(moduleName: string, basePath: string): Effect.Effect<unknown, StrykerError>;
 
+// @public
+export const IncrementalReportSchema: S.StructWithRest<S.Struct<{
+    readonly schemaVersion: S.String;
+    readonly thresholds: S.Struct<{
+        high: S.Finite & Wire.Mark;
+        low: S.Finite & Wire.Mark;
+    }> & Wire.Mark;
+    readonly files: S.$Record<S.String, S.Struct<{
+        language: S.String & Wire.Mark;
+        source: S.String & Wire.Mark;
+        mutants: S.$Array<S.Struct<{
+            id: S.String & Wire.Mark;
+            mutatorName: S.String & Wire.Mark;
+            replacement: S.String & Wire.Mark;
+            location: S.Struct<{
+                start: S.Struct<{
+                    line: S.Finite & Wire.Mark;
+                    column: S.Finite & Wire.Mark;
+                }> & Wire.Mark;
+                end: S.Struct<{
+                    line: S.Finite & Wire.Mark;
+                    column: S.Finite & Wire.Mark;
+                }> & Wire.Mark;
+            }> & Wire.Mark;
+            status: S.Literals<readonly ["Killed", "Survived", "NoCoverage", "Timeout", "CompileError", "RuntimeError", "Ignored", "Pending"]> & Wire.Mark;
+            killedBy: S.optional<S.$Array<S.String & Wire.Mark> & Wire.Mark> & Wire.Mark;
+            coveredBy: S.optional<S.$Array<S.String & Wire.Mark> & Wire.Mark> & Wire.Mark;
+            static: S.optional<S.Boolean & Wire.Mark> & Wire.Mark;
+            statusReason: S.optional<S.String & Wire.Mark> & Wire.Mark;
+            testsCompleted: S.optional<S.Finite & Wire.Mark> & Wire.Mark;
+            description: S.optional<S.String & Wire.Mark> & Wire.Mark;
+            duration: S.optional<S.Finite & Wire.Mark> & Wire.Mark;
+        }> & Wire.Mark> & Wire.Mark;
+    }> & Wire.Mark>;
+    readonly testFiles: S.optional<S.$Record<S.String, S.Struct<{
+        source: S.optional<S.String & Wire.Mark> & Wire.Mark;
+        tests: S.$Array<S.Struct<{
+            id: S.String & Wire.Mark;
+            name: S.String & Wire.Mark;
+            location: S.optional<S.Struct<{
+                start: S.Struct<{
+                    line: S.Finite & Wire.Mark;
+                    column: S.Finite & Wire.Mark;
+                }> & Wire.Mark;
+                end: S.optional<S.Struct<{
+                    line: S.Finite & Wire.Mark;
+                    column: S.Finite & Wire.Mark;
+                }> & Wire.Mark> & Wire.Mark;
+            }> & Wire.Mark> & Wire.Mark;
+        }> & Wire.Mark> & Wire.Mark;
+    }> & Wire.Mark>>;
+}>, readonly [S.$Record<S.String, S.Unknown>]>;
+
 // @public (undocumented)
 export const initialExtendsStepState: ExtendsStepState;
 

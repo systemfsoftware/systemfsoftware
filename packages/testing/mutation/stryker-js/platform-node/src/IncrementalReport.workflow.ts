@@ -79,7 +79,9 @@ const ThresholdsLikeSchema = Wire.wire({
   low: Wire.mint(S.Finite),
 })
 
-/** Every key the reader does not reshape is preserved verbatim via the open rest. */
+/** Every key the reader does not reshape is preserved verbatim via the open rest.
+ * @public
+ */
 export const IncrementalReportSchema = S.StructWithRest(
   S.Struct({
     schemaVersion: S.String,
