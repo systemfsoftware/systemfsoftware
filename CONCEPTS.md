@@ -34,6 +34,10 @@ A package.json `dependencies` (or `peerDependencies`) entry that tsdown leaves a
 
 A `bundledPackages` array entry in `api-extractor.json` listing workspace dependencies whose types should be inlined into the rollup output. Inlining means consumers don't have to install the dep at all for type resolution — the rollup contains everything. Used when a package is a structural re-export layer (barrels from one or more workspace deps) so its published types stand alone.
 
+### Package boundary audit
+
+The turbo `boundaries` query verdict that a package only imports packages it declares as dependencies — the check that fails with `cannot import package X because it is not a dependency`. A green audit therefore names every runtime import reachable from a package's source within its manifest. An undeclared import that resolves through pnpm hoisting ships silently — installs and builds pass — until this audit runs, so a manifest change is unverified until the boundaries query is clean, and a diagnostic means a missing declaration, never a wrong import.
+
 ### Toolchain bootstrap cycle
 
 A mutual dev-dependency between two of this repo's own tooling packages, arising because the repo self-hosts what it publishes: a lint plugin governs the mutation tooling, while that same mutation tooling exercises the plugin's own tests. The class is legitimate at the package level — each edge exists because the depending package's _verification_ needs it — but false at the build level: a devDependency is not a build input, and a package-level mutual devDependency turns the topological build dependency into an unschedulable loop that masks every other fault in the tree behind a single graph error.
