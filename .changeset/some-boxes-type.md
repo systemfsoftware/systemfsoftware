@@ -2,4 +2,4 @@
 "@systemfsoftware/stryker-js-platform-node": patch
 ---
 
-@systemfsoftware/stryker-js-platform-node now declares `mutation-testing-metrics` as a runtime dependency instead of inlining its code into the published bundle. Installers of the package pull in `mutation-testing-metrics` explicitly. No exported API changes.
+The package now declares a runtime dependency on `mutation-testing-metrics` instead of shipping the code inline. Installing the package pulls that dependency in explicitly; nothing in the public API changes.
