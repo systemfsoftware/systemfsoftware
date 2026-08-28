@@ -57,6 +57,7 @@ import {
 } from './Envelope.js'
 import { emitMachineModeOutput, isColorEnabled } from './Output.js'
 import type { OutputModeProbe, RunEventStream, RunEventStreamPort } from './Output.js'
+import { DEFAULT_PROGRESS_STREAM_FILE } from './StreamFile.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 import type { StrykerRun } from './StrykerRun.js'
 import { runSurvivorsAdmission } from './Survivors.js'
@@ -650,6 +651,11 @@ const runOptions = {
       Flag.withDescription('Specify the file to use for incremental mode.'),
       optional,
     ),
+  progressStreamFile: Flag.string('progressStreamFile')
+    .pipe(
+      Flag.withDescription('Specify the file for the machine-mode progress stream.'),
+      optional,
+    ),
   force: Flag.map(optional(Flag.boolean('force')), absentWhenFalse).pipe(
     Flag.withDescription(
       'Run all mutants, even if --incremental is provided and an incremental file exists. Can be used to force a rebuild of the incremental file.',
@@ -931,6 +937,7 @@ function makeStrykerCommand(requestRef: Ref.Ref<Option.Option<CliRequest>>) {
     setIfPresent(options, 'incremental', config.incremental)
     setIfPresent(options, 'allowEmpty', config.allowEmpty)
     setIfPresent(options, 'incrementalFile', config.incrementalFile)
+    setIfPresent(options, 'progressStreamFile', config.progressStreamFile)
     setIfPresent(options, 'force', config.force)
     setIfPresent(options, 'mutate', config.mutate)
     setIfPresent(options, 'testFiles', config.testFiles)
@@ -1170,9 +1177,29 @@ export const runStrykerCli = (
       }),
       () =>
         Effect.gen(function*() {
-          yield* stream.open
-          yield* input.program
+          const parsed = yield* Effect.result(input.program)
           const request = yield* Ref.get(input.requestRef)
+          const fileName = Option.match(request, {
+            onNone: () => DEFAULT_PROGRESS_STREAM_FILE,
+            onSome: (cliRequest) =>
+              Match.value(cliRequest).pipe(
+                Match.tag('run', (runRequest) => {
+                  const fromCli = runRequest.options['progressStreamFile']
+                  if (typeof fromCli === 'string' && fromCli.length > 0) {
+                    return fromCli
+                  }
+                  return DEFAULT_PROGRESS_STREAM_FILE
+                }),
+                Match.orElse(() => DEFAULT_PROGRESS_STREAM_FILE),
+              ),
+          })
+          if (stream.setProgressStreamFile !== undefined) {
+            yield* stream.setProgressStreamFile(fileName)
+          }
+          yield* stream.open
+          if (Result.isFailure(parsed)) {
+            return yield* Effect.fail(parsed.failure)
+          }
           return yield* Option.match(request, {
             onNone: () => Effect.void,
             onSome: (cliRequest) => dispatch(cliRequest),

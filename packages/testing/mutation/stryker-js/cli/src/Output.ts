@@ -187,6 +187,7 @@ export interface RunEventStream {
   readonly ensureOpen: (resolved: ResolvedMode) => void
   readonly open: Effect.Effect<void, never, never>
   readonly closeAndDrain: Effect.Effect<void, never, never>
+  readonly setProgressStreamFile?: (fileName: string) => Effect.Effect<void, never, never>
 }
 
 export const makeRunEventStream = (

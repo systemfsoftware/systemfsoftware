@@ -1,3 +1,4 @@
+/// <reference types="vitest/import-meta" />
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as Result from 'effect/Result'
@@ -19,6 +20,7 @@ const PreviousMutantSchema = S.Struct({
   status: S.String,
   testsCompleted: S.optional(S.Finite),
   coveredBy: S.optional(S.Array(S.String)),
+  killedBy: S.optional(S.Array(S.String)),
 })
 
 const PreviousFileSchema = S.Struct({
@@ -34,6 +36,8 @@ const RememberedMutantSchema = S.Struct({
   mutantId: S.String,
   status: S.String,
   testsCompleted: S.optional(S.Finite),
+  coveredBy: S.optional(S.Array(S.String)),
+  killedBy: S.optional(S.Array(S.String)),
 })
 
 export const PreviousFilesSchema = S.Record(S.String, PreviousFileSchema)
@@ -201,10 +205,17 @@ const removedMutantFiles = (
   })
 
 const rememberedEntryOf = (mutant: Mutant, previous: PreviousMutant): RememberedMutant => {
-  if (previous.testsCompleted === undefined) {
-    return { mutantId: mutant.id, status: previous.status }
+  const entry: RememberedMutant = { mutantId: mutant.id, status: previous.status }
+  if (previous.testsCompleted !== undefined) {
+    Object.assign(entry, { testsCompleted: previous.testsCompleted })
   }
-  return { mutantId: mutant.id, status: previous.status, testsCompleted: previous.testsCompleted }
+  if (previous.coveredBy !== undefined) {
+    Object.assign(entry, { coveredBy: previous.coveredBy })
+  }
+  if (previous.killedBy !== undefined) {
+    Object.assign(entry, { killedBy: previous.killedBy })
+  }
+  return entry
 }
 
 const decideIncremental = (
@@ -259,3 +270,32 @@ const decideIncremental = (
 }
 
 export const incrementalDifferWorkflow = Workflow.make(IncrementalDiffCommand, (command) => decideIncremental(command))
+
+if (import.meta.vitest !== void 0) {
+  const { expect, it } = await import('vitest')
+
+  it('Should_KeepKilledBy_When_BuildingARememberedEntry', () => {
+    const location = { start: { line: 1, column: 0 }, end: { line: 1, column: 1 } }
+    const mutant = new Mutant({
+      id: 'm1',
+      fileName: '/proj/src/a.ts',
+      mutatorName: 'BooleanLiteral',
+      replacement: 'false',
+      location,
+    })
+    const previous = {
+      mutatorName: 'BooleanLiteral',
+      replacement: 'false',
+      location,
+      status: 'Killed',
+      killedBy: ['t1'],
+      coveredBy: ['t1'],
+    }
+    expect(rememberedEntryOf(mutant, previous)).toEqual({
+      mutantId: 'm1',
+      status: 'Killed',
+      killedBy: ['t1'],
+      coveredBy: ['t1'],
+    })
+  })
+}

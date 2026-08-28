@@ -382,6 +382,11 @@
       ],
       "default": "reports/stryker-incremental.json"
     },
+    "progressStreamFile": {
+      "description": "The relative filename for the machine-mode progress stream.",
+      "type": "string",
+      "default": "reports/mutation-stream.jsonl"
+    },
     "force": {
       "description": "Run all mutants, even if --incremental is provided and an incremental file exists. Can be used to force a rebuild of the incremental file.",
       "type": "boolean",

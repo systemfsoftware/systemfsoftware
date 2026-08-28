@@ -117,15 +117,23 @@ jobs:
           report='${{ matrix.package }}/reports/mutation-report.json'
           stream='${{ matrix.package }}/reports/mutation-stream.jsonl'
           if [ ! -f "$report" ]; then
-            echo "::error title=Mutation produced no report::${{ matrix.package }}: stryker exited '${{ steps.mutation.outcome }}' without writing $report — infrastructure failure (missing binary, crashed run or timeout), not a score outcome. Stream artifact: $stream"
+            mutants=0
+            if [ -f "$stream" ]; then
+              mutants=$(node -e 'const fs=require("fs"); let n=0; for (const line of fs.readFileSync(process.argv[1],"utf8").split("\n")) { try { if (JSON.parse(line).kind==="mutant") n+=1 } catch {} } process.stdout.write(String(n))' "$stream")
+            fi
+            if [ "$mutants" = 0 ]; then
+              echo "::error title=Mutation produced no report::${{ matrix.package }}: stryker exited '${{ steps.mutation.outcome }}' with zero mutant results — infrastructure failure (missing binary, crashed run or timeout), not a score outcome. Stream artifact: $stream"
+            else
+              echo "::error title=Mutation produced no report::${{ matrix.package }}: stryker exited '${{ steps.mutation.outcome }}' after $mutants completed mutant(s) without a final report — infrastructure failure, not a score outcome. Partial stream: $stream"
+            fi
             exit 1
           fi
 
       - uses: actions/cache/save@v6
-        if: github.ref == 'refs/heads/main' && steps.mutation.outcome == 'success'
+        if: ${{ always() && hashFiles(format('{0}/reports/stryker-incremental.json', matrix.package)) != '' }}
         with:
           path: ${{ matrix.package }}/reports/stryker-incremental.json
-          key: ${{ runner.os }}-stryker-${{ matrix.package }}-main-${{ github.run_id }}
+          key: ${{ runner.os }}-stryker-${{ matrix.package }}-${{ github.run_id }}
 
       - name: Record part metadata
         if: always()

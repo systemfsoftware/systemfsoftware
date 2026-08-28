@@ -935,6 +935,9 @@ export interface MutationReportingService {
   readonly reportAll: (
     results: readonly MutantResult[],
   ) => Effect.Effect<RunOutcome, unknown, FileSystem.FileSystem | Path.Path | RunEvents>
+  readonly checkpoint: (
+    results: readonly MutantResult[],
+  ) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path>
 }
 
 export class MutationReporting extends Context.Service<MutationReporting, MutationReportingService>()(
@@ -1143,25 +1146,29 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       )
     })
 
+  const remappers = (() => {
+    const testIdMap: Record<string, string> = Object.fromEntries(
+      [...MutableHashMap.values(input.testCoverage.testsById)].map((test, index) => {
+        const pair: readonly [string, string] = [test.id, index.toString()]
+        return pair
+      }),
+    )
+    const remapTestId = (id: string): string => testIdMap[id] ?? id
+    const remapTestIds = (ids: readonly string[] | undefined): readonly string[] | undefined => {
+      if (ids === undefined) {
+        return undefined
+      }
+      return ids.map(remapTestId)
+    }
+    return { remapTestId, remapTestIds }
+  })()
+
   const mutationTestReport = (
     results: readonly MutantResult[],
   ): Effect.Effect<schema.MutationTestResult, unknown, FileSystem.FileSystem | Path.Path> =>
     Effect.gen(function*() {
-      const testIdMap: Record<string, string> = Object.fromEntries(
-        [...MutableHashMap.values(input.testCoverage.testsById)].map((test, index) => {
-          const pair: readonly [string, string] = [test.id, index.toString()]
-          return pair
-        }),
-      )
-      const remapTestId = (id: string): string => testIdMap[id] ?? id
-      const remapTestIds = (ids: readonly string[] | undefined): readonly string[] | undefined => {
-        if (ids === undefined) {
-          return undefined
-        }
-        return ids.map(remapTestId)
-      }
-      const files = yield* toFileResults(results, remapTestIds)
-      const testFiles = yield* toTestFiles(remapTestId)
+      const files = yield* toFileResults(results, remappers.remapTestIds)
+      const testFiles = yield* toTestFiles(remappers.remapTestId)
 
       return {
         files,
@@ -1326,11 +1333,44 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       }
       return { results, verdict } satisfies RunOutcome
     })
+  const writeAtomic = (file: string, content: string) =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem
+      const pathService = yield* Path.Path
+      yield* fs.makeDirectory(pathService.dirname(file), { recursive: true })
+      const tmp = `${file}.tmp`
+      yield* fs.writeFileString(tmp, content)
+      yield* fs.rename(tmp, file).pipe(
+        Effect.catch(() => fs.copyFile(tmp, file).pipe(Effect.andThen(fs.remove(tmp)))),
+      )
+    })
+
+  const slimIncrementalReport = (results: readonly MutantResult[]) =>
+    Effect.gen(function*() {
+      const files = yield* toFileResults(results, remappers.remapTestIds)
+      const testFiles = yield* toTestFiles(remappers.remapTestId)
+      return {
+        schemaVersion: '1.0',
+        thresholds: input.options.thresholds,
+        files,
+        testFiles,
+      }
+    })
+
+  const checkpoint: MutationReportingService['checkpoint'] = (results) =>
+    Effect.gen(function*() {
+      if (!input.options.incremental) {
+        return
+      }
+      const report = yield* slimIncrementalReport(results)
+      yield* writeAtomic(input.options.incrementalFile, JSON.stringify(report))
+    })
 
   return {
     reportCheckFailure,
     reportMutantRunResult,
     reportAll,
+    checkpoint,
   }
 }
 

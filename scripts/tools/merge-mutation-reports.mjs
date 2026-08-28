@@ -94,7 +94,39 @@ const mergeParts = (parts) => {
   return merged
 }
 
-const verdictOf = ({ metrics, outcome }) => {
+const reportFromStream = (text) => {
+  const files = {}
+  for (const raw of text.split('\n')) {
+    const line = raw.trim()
+    if (line.length === 0) continue
+    let event
+    try {
+      event = JSON.parse(line)
+    } catch {
+      continue
+    }
+    if (event.kind !== 'mutant') continue
+    const file = event.file ?? 'unknown'
+    if (files[file] === undefined) {
+      files[file] = { language: 'javascript', source: '', mutants: [] }
+    }
+    files[file].mutants.push({
+      id: String(event.id),
+      mutatorName: event.mutator,
+      replacement: event.replacement,
+      status: event.status,
+      location: event.location,
+    })
+  }
+  if (Object.keys(files).length === 0) return undefined
+  return { schemaVersion: '1.0', thresholds: { high: 100, low: 80, break: 100 }, files }
+}
+
+const verdictOf = ({ metrics, outcome, incomplete }) => {
+  if (incomplete) {
+    if (outcome !== 'success') return { score: 'incomplete', verdict: '❌' }
+    return { score: 'incomplete', verdict: '⚠️' }
+  }
   if (metrics === undefined) return { score: 'no report', verdict: '⚠️' }
   if (Number.isNaN(metrics.mutationScore)) return { score: 'n/a', verdict: '⚠️' }
   if (outcome !== 'success') return { score: metrics.mutationScore.toFixed(2), verdict: '❌' }
@@ -207,7 +239,18 @@ const run = () => {
     try {
       reportText = readFileSync(join(part.dir, 'mutation-report.json'), 'utf8')
     } catch {
-      continue // no report at all: the run crashed before the reporter wrote it
+      let streamText = ''
+      try {
+        streamText = readFileSync(join(part.dir, 'mutation-stream.jsonl'), 'utf8')
+      } catch {
+        continue
+      }
+      const reconstructed = reportFromStream(streamText)
+      if (reconstructed === undefined) continue
+      part.report = reconstructed
+      part.incomplete = true
+      withReport.push(part)
+      continue
     }
     try {
       part.report = JSON.parse(reportText)
@@ -221,7 +264,11 @@ const run = () => {
   const rows = []
   if (merged) {
     const allMetrics = calculateMetrics(merged.files).metrics
-    const all = verdictOf({ metrics: allMetrics, outcome: 'success' })
+    const all = verdictOf({
+      metrics: allMetrics,
+      outcome: withReport.some((part) => part.outcome === 'failure') ? 'failure' : 'success',
+      incomplete: withReport.some((part) => part.incomplete === true),
+    })
     rows.push({
       label: '**all**',
       score: all.score,
@@ -239,7 +286,7 @@ const run = () => {
   for (const label of [...labelled.map((part) => part.label), ...missing].sort()) {
     const part = byLabel.get(label)
     const metrics = part?.report ? calculateMetrics(part.report.files).metrics : undefined
-    const verdict = verdictOf({ metrics, outcome: part?.outcome })
+    const verdict = verdictOf({ metrics, outcome: part?.outcome, incomplete: part?.incomplete })
     const cells = metrics
       ? [metrics.killed, metrics.survived, metrics.noCoverage, metrics.timeout, metrics.compileErrors]
       : ['—', '—', '—', '—', '—']
@@ -370,12 +417,66 @@ const selftest = () => {
     failures.push(`survivors cap: expected 100 bullets plus the more-line, got ${bullets.length} bullets`)
   }
 
+  const fromStream = reportFromStream(
+    '{"kind":"stream"}\n{"kind":"mutant","id":"m1","status":"Killed","file":"src/a.ts","mutator":"BooleanLiteral","replacement":"false","location":{"start":{"line":1,"column":1},"end":{"line":1,"column":5}}}\n{torn',
+  )
+  const incomplete = verdictOf({
+    metrics: calculateMetrics(fromStream.files).metrics,
+    outcome: 'failure',
+    incomplete: true,
+  })
+  if (
+    fromStream?.files['src/a.ts']?.mutants.length !== 1 ||
+    incomplete.score !== 'incomplete' ||
+    incomplete.verdict !== '❌'
+  ) {
+    failures.push(
+      `stream reconstruct: expected 1 mutant and incomplete/❌, got ${
+        fromStream?.files['src/a.ts']?.mutants.length
+      }/${incomplete.score}/${incomplete.verdict}`,
+    )
+  }
+  if (reportFromStream('') !== undefined) {
+    failures.push('empty stream: expected no reconstruction')
+  }
+
+  const completeReport = {
+    files: {
+      'src/b.ts': {
+        language: 'javascript',
+        source: 'true',
+        mutants: [
+          {
+            id: 'c1',
+            mutatorName: 'BooleanLiteral',
+            replacement: 'false',
+            status: 'Killed',
+            location: { start: { line: 1, column: 1 }, end: { line: 1, column: 5 } },
+          },
+        ],
+      },
+    },
+  }
+  const mixed = [
+    { label: 'complete', report: completeReport, outcome: 'success' },
+    { label: 'partial', report: fromStream, outcome: 'failure', incomplete: true },
+  ]
+  const mixedMerged = mergeParts(mixed)
+  const allRow = verdictOf({
+    metrics: calculateMetrics(mixedMerged.files).metrics,
+    outcome: mixed.some((part) => part.outcome === 'failure') ? 'failure' : 'success',
+    incomplete: mixed.some((part) => part.incomplete === true),
+  })
+  if (allRow.score !== 'incomplete' || allRow.verdict !== '❌') {
+    failures.push(`all-row incomplete: expected incomplete/❌, got ${allRow.score}/${allRow.verdict}`)
+  }
+
   if (failures.length > 0) {
     console.error('merge-mutation-reports: selftest FAILED\n')
     for (const failure of failures) console.error(`  ${failure}`)
     process.exit(1)
   }
-  console.log('merge-mutation-reports: selftest ok (8 fixtures)')
+  console.log('merge-mutation-reports: selftest ok (11 fixtures)')
 }
 
 // Entry point. Runs only when executed directly, not when imported.
@@ -384,4 +485,4 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   else run()
 }
 
-export { labelsOf, mergeParts, missingPackages, summaryOf, verdictOf }
+export { labelsOf, mergeParts, missingPackages, reportFromStream, summaryOf, verdictOf }

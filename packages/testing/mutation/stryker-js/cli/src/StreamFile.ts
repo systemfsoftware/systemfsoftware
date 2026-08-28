@@ -2,25 +2,31 @@ import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
+import * as Ref from 'effect/Ref'
 import * as Stdio from 'effect/Stdio'
 import * as Stream from 'effect/Stream'
 
 import { makeRunEventStream, RunEventStreamPort } from './Output.js'
 
-export const STREAM_FILE_DIR = 'reports'
-export const STREAM_FILE_NAME = 'mutation-stream.jsonl'
+export const DEFAULT_PROGRESS_STREAM_FILE = 'reports/mutation-stream.jsonl'
 
 const encodeUtf8 = (line: string): Uint8Array => new TextEncoder().encode(line)
 
-export const drainStreamFile = (
+const drainStreamFile = (
+  fileName: string,
   framed: Stream.Stream<string>,
 ): Effect.Effect<void, never, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
-    const file = path.join(STREAM_FILE_DIR, STREAM_FILE_NAME)
-    yield* fs.makeDirectory(STREAM_FILE_DIR, { recursive: true }).pipe(Effect.orDie)
-    yield* Stream.run(framed.pipe(Stream.map(encodeUtf8)), fs.sink(file, { flag: 'w' })).pipe(Effect.orDie)
+    yield* fs.makeDirectory(path.dirname(fileName), { recursive: true }).pipe(Effect.orDie)
+    yield* Effect.scoped(
+      Effect.gen(function*() {
+        const handle = yield* fs.open(fileName, { flag: 'w' })
+        yield* Stream.runForEach(framed, (line) =>
+          handle.writeAll(encodeUtf8(line)).pipe(Effect.flatMap(() => handle.sync)))
+      }),
+    ).pipe(Effect.orDie)
   })
 
 export const RunEventStreamFileLive = Layer.effect(
@@ -29,13 +35,24 @@ export const RunEventStreamFileLive = Layer.effect(
     const stdio = yield* Stdio.Stdio
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
+    const fileNameRef = yield* Ref.make(DEFAULT_PROGRESS_STREAM_FILE)
     const drainFramed = (framed: Stream.Stream<string>) =>
-      drainStreamFile(framed).pipe(
-        Effect.provideService(FileSystem.FileSystem, fs),
-        Effect.provideService(Path.Path, path),
-      )
+      Effect.gen(function*() {
+        const fileName = yield* Ref.get(fileNameRef)
+        yield* drainStreamFile(fileName, framed).pipe(
+          Effect.provideService(FileSystem.FileSystem, fs),
+          Effect.provideService(Path.Path, path),
+        )
+      })
     return RunEventStreamPort.of({
-      createRunEventStream: (resolved) => makeRunEventStream(stdio, resolved, drainFramed),
+      createRunEventStream: (resolved) =>
+        Effect.gen(function*() {
+          const stream = yield* makeRunEventStream(stdio, resolved, drainFramed)
+          return {
+            ...stream,
+            setProgressStreamFile: (fileName: string) => Ref.set(fileNameRef, fileName),
+          }
+        }),
     })
   }),
 )
