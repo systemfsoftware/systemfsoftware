@@ -177,6 +177,7 @@ export const StrykerOptionsSchema = S.StructWithRest(
     ignoreStatic: defaulted(Wire.mint(S.Boolean), false),
     incremental: defaulted(Wire.mint(S.Boolean), false),
     incrementalFile: defaulted(Wire.mint(S.String), 'reports/stryker-incremental.json'),
+    progressStreamFile: defaulted(Wire.mint(S.String), 'reports/mutation-stream.jsonl'),
     force: defaulted(Wire.mint(S.Boolean), false),
     fileLogLevel: defaulted(LogLevel, RENDERED_OPTION_DEFAULTS.fileLogLevel),
     inPlace: defaulted(Wire.mint(S.Boolean), false),

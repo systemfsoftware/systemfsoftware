@@ -2,7 +2,7 @@ import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChild
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import * as NodeStdio from '@effect/platform-node/NodeStdio'
-import { makeRunLayer, runMutationTest, strykerVersion } from '@systemfsoftware/stryker-js-platform-node'
+import { makeRunLayer, readConfig, runMutationTest, strykerVersion } from '@systemfsoftware/stryker-js-platform-node'
 import type {
   ConfigFileInvalidError,
   ConfigFileNotFoundError,
@@ -57,6 +57,7 @@ import {
 } from './Envelope.js'
 import { emitMachineModeOutput, isColorEnabled } from './Output.js'
 import type { OutputModeProbe, RunEventStream, RunEventStreamPort } from './Output.js'
+import { DEFAULT_PROGRESS_STREAM_FILE } from './StreamFile.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 import type { StrykerRun } from './StrykerRun.js'
 import { runSurvivorsAdmission } from './Survivors.js'
@@ -650,6 +651,11 @@ const runOptions = {
       Flag.withDescription('Specify the file to use for incremental mode.'),
       optional,
     ),
+  progressStreamFile: Flag.string('progressStreamFile')
+    .pipe(
+      Flag.withDescription('Specify the file for the machine-mode progress stream.'),
+      optional,
+    ),
   force: Flag.map(optional(Flag.boolean('force')), absentWhenFalse).pipe(
     Flag.withDescription(
       'Run all mutants, even if --incremental is provided and an incremental file exists. Can be used to force a rebuild of the incremental file.',
@@ -931,6 +937,7 @@ function makeStrykerCommand(requestRef: Ref.Ref<Option.Option<CliRequest>>) {
     setIfPresent(options, 'incremental', config.incremental)
     setIfPresent(options, 'allowEmpty', config.allowEmpty)
     setIfPresent(options, 'incrementalFile', config.incrementalFile)
+    setIfPresent(options, 'progressStreamFile', config.progressStreamFile)
     setIfPresent(options, 'force', config.force)
     setIfPresent(options, 'mutate', config.mutate)
     setIfPresent(options, 'testFiles', config.testFiles)
@@ -1109,6 +1116,38 @@ function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironme
   }
 }
 
+const progressStreamFileOf = (
+  request: Option.Option<CliRequest>,
+  basePath: string,
+): Effect.Effect<string, never, FileSystem.FileSystem | Path.Path> =>
+  Option.match(request, {
+    onNone: () => Effect.succeed(DEFAULT_PROGRESS_STREAM_FILE),
+    onSome: (cliRequest) =>
+      Match.value(cliRequest).pipe(
+        Match.tag(
+          'run',
+          (runRequest): Effect.Effect<string, never, FileSystem.FileSystem | Path.Path> =>
+            readConfig(runRequest.options, basePath).pipe(
+              Effect.map((options) => {
+                const fileName = options['progressStreamFile']
+                if (typeof fileName === 'string' && fileName.length > 0) {
+                  return fileName
+                }
+                return DEFAULT_PROGRESS_STREAM_FILE
+              }),
+              Effect.orElseSucceed(() => {
+                const fileName = runRequest.options['progressStreamFile']
+                if (typeof fileName === 'string' && fileName.length > 0) {
+                  return fileName
+                }
+                return DEFAULT_PROGRESS_STREAM_FILE
+              }),
+            ),
+        ),
+        Match.orElse(() => Effect.succeed(DEFAULT_PROGRESS_STREAM_FILE)),
+      ),
+  })
+
 export const runStrykerCli = (
   input: RunStrykerCliInput,
   createRunEventStream: CreateRunEventStreamCapability,
@@ -1170,9 +1209,15 @@ export const runStrykerCli = (
       }),
       () =>
         Effect.gen(function*() {
-          yield* stream.open
           yield* input.program
           const request = yield* Ref.get(input.requestRef)
+          const fileName = yield* progressStreamFileOf(request, basePath).pipe(
+            Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+          )
+          if (stream.setProgressStreamFile !== undefined) {
+            yield* stream.setProgressStreamFile(fileName)
+          }
+          yield* stream.open
           return yield* Option.match(request, {
             onNone: () => Effect.void,
             onSome: (cliRequest) => dispatch(cliRequest),

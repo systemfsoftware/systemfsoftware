@@ -30,7 +30,6 @@
 "@systemfsoftware/oxlint-plugin-test-placement": none
 "@systemfsoftware/rx-effect": none
 "@systemfsoftware/storybook-gherkin": none
-"@systemfsoftware/stryker-js": none
 "@systemfsoftware/stryker-js-html-reporter": none
 "@systemfsoftware/stryker-js-instrumenter": none
 "@systemfsoftware/stryker-js-typescript-checker": none
