@@ -29,36 +29,19 @@ export function isJsonExportValue(value: unknown): boolean {
   return false
 }
 
-export function shouldSkipExportValue(value: unknown): boolean {
-  return isJsonExportValue(value)
-}
-
-function sortedFilteredEntries(exportsMap: Record<string, unknown>): Array<[string, unknown]> {
-  const entries = Object.entries(exportsMap).filter(([, v]) => !shouldSkipExportValue(v))
-  entries.sort((a, b) => a[0].localeCompare(b[0]))
-  return entries
-}
-
-function importSpecifier(packageName: string, key: string): string {
-  return key === '.' ? packageName : `${packageName}${key.slice(1)}`
-}
+export const shouldSkipExportValue = isJsonExportValue
 
 function buildFileContent(packageName: string, entries: Array<[string, unknown]>): string {
-  const lines: Array<string> = []
-  lines.push(`import { describe, expect, it } from 'vitest'`)
-  lines.push('')
-  lines.push(`describe('surface', () => {`)
-  for (const [key] of entries) {
-    const spec = importSpecifier(packageName, key)
-    const snap = `surface.${sanitizeKey(key)}.snap`
-    lines.push(`  it('Should_PinExportSet_When_Importing${pascalKey(key)}', async () => {`)
-    lines.push(`    const mod = await import('${spec}')`)
-    lines.push(`    await expect(Object.keys(mod).sort()).toMatchFileSnapshot('./__snapshots__/${snap}')`)
-    lines.push(`  })`)
-  }
-  lines.push(`})`)
-  lines.push('')
-  return lines.join('\n')
+  const body = entries
+    .map(([key]) => {
+      const spec = key === '.' ? packageName : `${packageName}${key.slice(1)}`
+      const snap = `surface.${sanitizeKey(key)}.snap`
+      return `  it('Should_PinExportSet_When_Importing${
+        pascalKey(key)
+      }', async () => {\n    const mod = await import('${spec}')\n    await expect(Object.keys(mod).sort()).toMatchFileSnapshot('./__snapshots__/${snap}')\n  })`
+    })
+    .join('\n')
+  return `import { describe, expect, it } from 'vitest'\n\ndescribe('surface', () => {\n${body ? `${body}\n` : ''}})\n`
 }
 
 export async function generateSurfaceTests(packageDir: string): Promise<void> {
@@ -72,7 +55,9 @@ export async function generateSurfaceTests(packageDir: string): Promise<void> {
 
   const packageName = decoded.name
   const exportsMap: Record<string, unknown> = decoded.exports ?? {}
-  const entries = sortedFilteredEntries(exportsMap)
+  const entries = Object.entries(exportsMap).filter(([, v]) => !isJsonExportValue(v)).sort((a, b) =>
+    a[0].localeCompare(b[0])
+  )
   const outPath = join(packageDir, 'tests', 'surface.snapshot.test.ts')
   if (entries.length === 0) {
     await fsPromises.rm(outPath, { force: true })
@@ -89,8 +74,6 @@ if (import.meta.vitest) {
   const fsPromises = await import('node:fs/promises')
   const os = await import('node:os')
   const path = await import('node:path')
-  void sortedFilteredEntries
-  void importSpecifier
   void buildFileContent
 
   async function makeFixture(exportsMap: Record<string, unknown>, name = '@test/fixture-pkg'): Promise<string> {

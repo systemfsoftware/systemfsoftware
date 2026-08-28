@@ -15,11 +15,11 @@ export const noHandAssertiveTestOutsideSrc = defineRule({
   meta,
   create(context: Context) {
     const filename = context.filename
-    if (isUnderSrc(filename)) return {}
-    if (!isInSanctionedTestDir(filename)) return {}
     const basename = basenameOf(filename)
-    if (!isTestFile(basename)) return {}
-    if (basename === SURFACE_SNAPSHOT_BASENAME) return {}
+    if (
+      isUnderSrc(filename) || !isInSanctionedTestDir(filename) || !isTestFile(basename) ||
+      basename === SURFACE_SNAPSHOT_BASENAME
+    ) return {}
 
     let hasSnapshotMatcher = false
 
@@ -28,13 +28,12 @@ export const noHandAssertiveTestOutsideSrc = defineRule({
         const callee = node.callee
         if (callee.type !== 'MemberExpression') return
         const property = callee.property
-        let name: string | undefined
-        if (property.type === 'Identifier') name = property.name
-        else if (property.type === 'Literal' && typeof property.value === 'string') name = property.value
-        else return
-        if (name !== undefined && SNAPSHOT_MATCHERS.has(name)) {
-          hasSnapshotMatcher = true
-        }
+        const name = property.type === 'Identifier'
+          ? property.name
+          : property.type === 'Literal' && typeof property.value === 'string'
+          ? property.value
+          : undefined
+        if (name !== undefined && SNAPSHOT_MATCHERS.has(name)) hasSnapshotMatcher = true
       },
       'Program:exit'(node: ESTree.Program) {
         if (hasSnapshotMatcher) return
