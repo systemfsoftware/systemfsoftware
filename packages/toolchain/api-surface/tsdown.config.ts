@@ -8,4 +8,5 @@ export default defineConfig({
   exports: { devExports: '@systemfsoftware/source' },
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   tsconfig: './tsconfig.build.json',
+  define: { 'import.meta.vitest': 'undefined' },
 })
