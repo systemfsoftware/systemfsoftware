@@ -45,8 +45,7 @@
     "attw": "attw --pack .",
     "dts:check": "node scripts/check-dts.mjs",
     "storybook": "storybook dev -p 6006 --no-open",
-    "test:browser": "vitest run",
-    "surface:update": "api-surface generate ."
+    "test:browser": "vitest run"
   },
   "dependencies": {
     "type-fest": "catalog:"
@@ -58,7 +57,6 @@
   "devDependencies": {
     "@storybook/addon-vitest": "catalog:",
     "@storybook/react-vite": "catalog:",
-    "@systemfsoftware/api-surface": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
