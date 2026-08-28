@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/omp-typescript-discipline",
   "license": "Apache-2.0",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "description": "OMP TypeScript discipline plugin: enforces project references for tooling files and pure tsconfig boundaries",
   "type": "module",

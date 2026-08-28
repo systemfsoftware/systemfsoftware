@@ -8,6 +8,10 @@
   intents:
     - peer-ranges-accept-compatible-rc
     - tag-members-derive-from-schemas
+"@systemfsoftware/all@1.0.1":
+  dir: packages/lint/oxlint/all
+  intents:
+    - effect-rc112
 "@systemfsoftware/arethetypeswrong-cli@2.0.0":
   dir: packages/arethetypeswrong/cli
   intents:
@@ -35,6 +39,10 @@
   intents:
     - attw-in-memory-package-dsl-cli
     - cli-hash-bump
+"@systemfsoftware/arethetypeswrong-cli@3.0.3":
+  dir: packages/testing/type-testing/arethetypeswrong/cli
+  intents:
+    - effect-rc112
 "@systemfsoftware/arethetypeswrong-core@2.0.0":
   dir: packages/arethetypeswrong/core
   intents:
@@ -68,6 +76,10 @@
     - modern-ends-know
     - parse-error-is-constructed
     - projections-collapsed-into-ports
+"@systemfsoftware/arethetypeswrong@6.0.1":
+  dir: packages/testing/type-testing/arethetypeswrong/analysis
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-atom-react@0.6.0":
   dir: packages/effect-atom/atom-react
   intents:
@@ -92,6 +104,10 @@
   dir: packages/core/effect/atom/atom-react
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/effect-atom-react@0.7.2":
+  dir: packages/core/effect/atom/atom-react
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-atom@1.0.0":
   dir: packages/effect-atom/atom
   intents:
@@ -125,6 +141,10 @@
   intents:
     - peer-ranges-accept-compatible-rc
     - published-types-omit-internal
+"@systemfsoftware/effect-atom@3.0.1":
+  dir: packages/core/effect/atom/atom
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-cell-gen@0.1.0":
   dir: packages/core/effect/cell/gen
   intents:
@@ -168,6 +188,10 @@
     - cell-phases-require-nothing
     - cell-write-receives-its-raw
     - wire-shrinks-to-its-invariant
+"@systemfsoftware/effect-cell-types@5.0.1":
+  dir: packages/core/effect/cell/types
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-daemon-spec@1.0.0":
   dir: packages/effect-daemon-spec
   intents:
@@ -198,6 +222,10 @@
     - loop-tags-ship-as-values
     - peer-ranges-accept-compatible-rc
     - published-types-omit-internal
+"@systemfsoftware/effect-daemon-spec@3.0.2":
+  dir: packages/core/effect/daemon-spec
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-gherkin-spec@1.0.0":
   dir: packages/effect-gherkin-spec
   intents:
@@ -218,6 +246,10 @@
   dir: packages/testing/specs/gherkin/effect
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/effect-gherkin-spec@2.0.2":
+  dir: packages/testing/specs/gherkin/effect
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-memfs@1.2.0":
   dir: packages/effect-memfs
   intents:
@@ -240,14 +272,27 @@
   dir: packages/core/effect/filesystem/memfs
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/effect-memfs@1.3.2":
+  dir: packages/core/effect/filesystem/memfs
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-schema-bounded-union@0.1.0":
   dir: packages/core/effect/schema/bounded-union
   intents:
     - bounded-union-package-debut
+"@systemfsoftware/effect-schema-bounded-union@0.1.1":
+  dir: packages/core/effect/schema/bounded-union
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-schema-discovery@0.1.0":
   dir: packages/core/effect/schema/discovery
   intents:
     - discovery-package-debut
+"@systemfsoftware/effect-schema-discovery@1.0.0":
+  dir: packages/core/effect/schema/discovery
+  intents:
+    - effect-rc112
+    - remove-schema-refutations
 "@systemfsoftware/effect-schema-extensions@0.8.0":
   dir: packages/effect-schema-extensions
   intents:
@@ -262,6 +307,10 @@
   dir: packages/core/effect/schema/extensions
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/effect-schema-extensions@0.9.2":
+  dir: packages/core/effect/schema/extensions
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-schema-law@0.7.0":
   dir: packages/effect-schema-law
   intents:
@@ -281,7 +330,12 @@
     - public-names-stay-public
 "@systemfsoftware/effect-schema-law@1.0.0":
   dir: packages/core/effect/schema/law
+  intents: []
+"@systemfsoftware/effect-schema-law@2.0.0":
+  dir: packages/core/effect/schema/law
   intents:
+    - effect-rc112
+    - remove-schema-refutations
 "@systemfsoftware/effect-schema-vite@1.5.2":
   dir: packages/effect-schema-vite
   intents:
@@ -308,6 +362,10 @@
   dir: packages/core/effect/schema/vite
   intents:
     - vite-emits-only-the-codec-laws
+"@systemfsoftware/effect-schema-vite@2.0.1":
+  dir: packages/core/effect/schema/vite
+  intents:
+    - effect-rc112
 "@systemfsoftware/hex-schema@1.7.0":
   dir: packages/hex-schema
   intents:
@@ -326,10 +384,18 @@
   dir: packages/core/hex/hex-schema
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/hex-schema@1.8.2":
+  dir: packages/core/hex/hex-schema
+  intents:
+    - effect-rc112
 "@systemfsoftware/npm-package@0.2.0":
   dir: packages/npm-package
   intents:
     - npm-package-in-memory-tree
+"@systemfsoftware/npm-package@0.2.1":
+  dir: packages/npm-package
+  intents:
+    - effect-rc112
 "@systemfsoftware/omp-agent-discipline@2.0.0":
   dir: omp/plugins/omp-agent-discipline
   intents:
@@ -346,6 +412,10 @@
   dir: omp/plugins/omp-agent-discipline
   intents:
     - omp-agent-discipline-bundles-capabilities
+"@systemfsoftware/omp-agent-discipline@3.0.1":
+  dir: omp/plugins/omp-agent-discipline
+  intents:
+    - effect-rc112
 "@systemfsoftware/omp-claude-compat@2.0.0":
   dir: omp/plugins/omp-claude-compat
   intents:
@@ -367,6 +437,10 @@
   intents:
     - omp-claude-compat-bundles-capabilities
     - plugin-hooks-json-run
+"@systemfsoftware/omp-claude-compat@3.0.1":
+  dir: omp/plugins/omp-claude-compat
+  intents:
+    - effect-rc112
 "@systemfsoftware/omp-typescript-discipline@1.0.0":
   dir: omp/plugins/omp-typescript-discipline
   intents:
@@ -375,6 +449,10 @@
   dir: omp/plugins/omp-typescript-discipline
   intents:
     - no-hand-rolled-std-ttsr
+"@systemfsoftware/omp-typescript-discipline@1.0.2":
+  dir: omp/plugins/omp-typescript-discipline
+  intents:
+    - effect-rc112
 "@systemfsoftware/oxlint-config@0.1.0":
   dir: packages/lint/oxlint/config
   intents:
@@ -398,6 +476,10 @@
   dir: packages/lint/oxlint/plugins/cells/cell-vocabulary
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/oxlint-plugin-cell-vocabulary@1.2.3":
+  dir: packages/lint/oxlint/plugins/cells/cell-vocabulary
+  intents:
+    - effect-rc112
 "@systemfsoftware/oxlint-plugin-effect-dmmf@2.0.0":
   dir: packages/oxlint-plugins/effect-dmmf
   intents:
@@ -425,7 +507,12 @@
     - tag-members-derive-from-schemas
 "@systemfsoftware/oxlint-plugin-effect-dmmf@4.0.1":
   dir: packages/lint/oxlint/plugins/meta/effect-dmmf
+  intents: []
+"@systemfsoftware/oxlint-plugin-effect-dmmf@5.0.0":
+  dir: packages/lint/oxlint/plugins/meta/effect-dmmf
   intents:
+    - effect-rc112
+    - remove-schema-refutations
 "@systemfsoftware/oxlint-plugin-effect-entrypoint@1.0.3":
   dir: packages/oxlint-plugins/effect-entrypoint
   intents:
@@ -440,6 +527,10 @@
   dir: packages/lint/oxlint/plugins/effect/entrypoint
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/oxlint-plugin-effect-entrypoint@1.0.6":
+  dir: packages/lint/oxlint/plugins/effect/entrypoint
+  intents:
+    - effect-rc112
 "@systemfsoftware/oxlint-plugin-effect-schema@2.0.0":
   dir: packages/oxlint-plugins/effect-schema
   intents:
@@ -465,7 +556,12 @@
     - tag-members-derive-from-schemas
 "@systemfsoftware/oxlint-plugin-effect-schema@4.0.1":
   dir: packages/lint/oxlint/plugins/effect/schema
+  intents: []
+"@systemfsoftware/oxlint-plugin-effect-schema@5.0.0":
+  dir: packages/lint/oxlint/plugins/effect/schema
   intents:
+    - effect-rc112
+    - remove-schema-refutations
 "@systemfsoftware/oxlint-plugin-effect-workflow@2.0.0":
   dir: packages/oxlint-plugins/effect-workflow
   intents:
@@ -491,6 +587,10 @@
   intents:
     - command-position-rule-ships
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/oxlint-plugin-effect-workflow@4.0.1":
+  dir: packages/lint/oxlint/plugins/cells/effect-workflow
+  intents:
+    - effect-rc112
 "@systemfsoftware/oxlint-plugin-property-testing@1.2.0":
   dir: packages/oxlint-plugins/property-testing
   intents:
@@ -507,6 +607,10 @@
   dir: packages/lint/oxlint/plugins/testing/property-testing
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/oxlint-plugin-property-testing@1.3.2":
+  dir: packages/lint/oxlint/plugins/testing/property-testing
+  intents:
+    - effect-rc112
 "@systemfsoftware/oxlint-plugin-recommended@1.1.2":
   dir: packages/oxlint-plugins/recommended
   intents:
@@ -531,6 +635,10 @@
   dir: packages/lint/oxlint/plugins/testing/test-hygiene
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/oxlint-plugin-test-hygiene@1.1.6":
+  dir: packages/lint/oxlint/plugins/testing/test-hygiene
+  intents:
+    - effect-rc112
 "@systemfsoftware/oxlint-plugin-test-placement@2.0.0":
   dir: packages/oxlint-plugins/test-placement
   intents:
@@ -558,7 +666,11 @@
     - peer-ranges-accept-compatible-rc
 "@systemfsoftware/oxlint-plugin-test-placement@3.2.0":
   dir: packages/lint/oxlint/plugins/testing/test-placement
+  intents: []
+"@systemfsoftware/oxlint-plugin-test-placement@3.2.1":
+  dir: packages/lint/oxlint/plugins/testing/test-placement
   intents:
+    - effect-rc112
 "@systemfsoftware/oxlint-plugin@1.0.0":
   dir: packages/oxlint-plugins/core
   intents:
@@ -591,6 +703,10 @@
   dir: packages/lint/oxlint/plugins/meta/core
   intents:
     - ban-classes-resolves-namespace-imports
+"@systemfsoftware/oxlint-plugin@2.1.2":
+  dir: packages/lint/oxlint/plugins/meta/core
+  intents:
+    - effect-rc112
 "@systemfsoftware/rx-effect@0.6.0":
   dir: packages/rx-effect
   intents:
@@ -607,6 +723,10 @@
   dir: packages/core/effect/rx/rx-effect
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/rx-effect@0.7.2":
+  dir: packages/core/effect/rx/rx-effect
+  intents:
+    - effect-rc112
 "@systemfsoftware/storybook-gherkin@1.0.0":
   dir: packages/storybook-gherkin
   intents:
@@ -625,6 +745,10 @@
   dir: packages/testing/specs/gherkin/storybook
   intents:
     - peer-ranges-accept-compatible-rc
+"@systemfsoftware/storybook-gherkin@2.0.2":
+  dir: packages/testing/specs/gherkin/storybook
+  intents:
+    - effect-rc112
 "@systemfsoftware/stryker-js-cli@2.0.0":
   dir: packages/stryker-js/cli
   intents:
@@ -683,11 +807,17 @@
     - json-report-is-written
     - machine-stream-is-a-file
     - verdict-carries-its-findings
+"@systemfsoftware/stryker-js-cli@4.0.1":
+  dir: packages/testing/mutation/stryker-js/cli
+  intents:
+    - crash-tolerant-mutation-runs
+    - effect-rc112
 "@systemfsoftware/stryker-js-html-reporter@0.1.0":
   dir: packages/testing/mutation/stryker-js/html-reporter
   intents:
     - concept-modules-platform-node
     - debut-releases-gain-oidc
+    - effect-rc112
     - grumpy-rules-behave
     - json-report-is-written
     - only-the-api-is-a-door
@@ -714,6 +844,10 @@
     - concept-modules-platform-node
     - make-bodies-stay-in-the-population
     - prototype-named-methods-instrument
+"@systemfsoftware/stryker-js-instrumenter@2.0.1":
+  dir: packages/testing/mutation/stryker-js/instrumenter
+  intents:
+    - effect-rc112
 "@systemfsoftware/stryker-js-mutation-report@1.2.6":
   dir: packages/stryker-js/mutation-report
   intents:
@@ -797,12 +931,15 @@
     - a-dropped-worker-frame-fails-the-call
     - an-ignorer-you-did-not-ask-for
     - base-preset-is-published-again
+    - checkers-group-then-check
     - command-runner-actually-runs
     - concept-modules-platform-node
     - config-errors-name-the-setting
+    - crash-tolerant-mutation-runs
     - crawl-skips-installed-dependencies
     - curly-plants-fold
     - debut-releases-gain-oidc
+    - effect-rc112
     - evaluator-answers-with-a-verdict
     - failures-name-themselves
     - human-mode-prints-for-humans
@@ -895,6 +1032,11 @@
     - a-dependency-declaration-is-not-a-mutant
     - concept-modules-platform-node
     - oversized-frames-fail-the-run
+"@systemfsoftware/stryker-js-typescript-checker@3.0.1":
+  dir: packages/testing/mutation/stryker-js/typescript-checker
+  intents:
+    - checker-isolates-ambiguous-mutants
+    - effect-rc112
 "@systemfsoftware/stryker-js-util@0.2.0":
   dir: packages/testing/mutation/stryker-js/util
   intents:
@@ -933,11 +1075,17 @@
     - concept-modules-platform-node
     - json-report-is-written
     - machine-stream-is-a-file
+"@systemfsoftware/stryker-js-vitest-runner@2.0.1":
+  dir: packages/testing/mutation/stryker-js/vitest-runner
+  intents:
+    - effect-rc112
 "@systemfsoftware/stryker-js@0.1.0":
   dir: packages/testing/mutation/stryker-js/stryker-js
   intents:
     - concept-modules-platform-node
+    - crash-tolerant-mutation-runs
     - debut-releases-gain-oidc
+    - effect-rc112
     - evaluator-answers-with-a-verdict
     - option-defaults-are-published
     - oversized-frames-fail-the-run
@@ -981,6 +1129,10 @@
   intents:
     - concept-modules-platform-node
     - make-bodies-stay-in-the-population
+"@systemfsoftware/stryker-plugins@1.0.1":
+  dir: packages/testing/mutation/plugins/stryker-plugins
+  intents:
+    - effect-rc112
 "@systemfsoftware/stryker-test-contribution@0.1.0":
   dir: packages/testing/mutation/plugins/stryker-test-contribution
   intents:
@@ -993,6 +1145,10 @@
   dir: packages/testing/mutation/plugins/stryker-test-contribution
   intents:
     - concept-modules-platform-node
+"@systemfsoftware/stryker-test-contribution@1.0.1":
+  dir: packages/testing/mutation/plugins/stryker-test-contribution
+  intents:
+    - effect-rc112
 "@systemfsoftware/tsconfig@1.3.2":
   dir: packages/tsconfig
   intents:
