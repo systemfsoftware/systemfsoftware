@@ -4,7 +4,7 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import type { CheckResult } from '@systemfsoftware/stryker-js/Checker'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import type { RunPlan as MutantRunPlan } from '@systemfsoftware/stryker-js/Mutant'
-import { Effect } from 'effect'
+import { Array as Arr, Effect, Equal, HashMap, HashSet, Option } from 'effect'
 
 import { type CheckerResourceService, checkGroupedPlans } from '@systemfsoftware/stryker-js-platform-node'
 
@@ -50,115 +50,103 @@ const recordingChecker = (
   const checker: CheckerResourceService = {
     group: (_checkerName, mutants) => {
       if (groups.length === 0) {
-        return Effect.succeed(mutants.map((mutant) => [mutant.id] as const))
+        return Effect.succeed(Arr.map(mutants, (mutant) => [mutant.id] as const))
       }
       return Effect.succeed(groups)
     },
     check: (_checkerName, mutants) =>
       Effect.sync(() => {
-        const ids = mutants.map((mutant) => mutant.id)
+        const ids = Arr.map(mutants, (mutant) => mutant.id)
         checkIdSets.push(ids)
-        const answers: Record<string, CheckResult> = {}
-        for (const id of ids) {
-          answers[id] = resultsById[id] ?? { status: 'passed' }
-        }
-        return answers
+        return Object.fromEntries(
+          Arr.map(ids, (id) => [id, resultsById[id] ?? { status: 'passed' }] as const),
+        )
       }),
   }
-  return { checker, checkIdSets, plans: planIds.map(planOf) }
+  return { checker, checkIdSets, plans: Arr.map(planIds, planOf) }
 }
 
-const idSetsEqual = (actual: readonly string[], expected: readonly string[]): boolean => {
-  if (actual.length !== expected.length) {
-    return false
-  }
-  const wanted: Record<string, true> = {}
-  for (const id of expected) {
-    wanted[id] = true
-  }
-  return actual.every((id) => wanted[id] === true)
-}
+const batchSet = (groups: Iterable<Iterable<string>>) =>
+  HashSet.fromIterable(Arr.map(Arr.fromIterable(groups), HashSet.fromIterable))
 
-Feature('Checking mutants in checker-defined groups').body(({ scenario }) => {
+Feature('Isolating typechecks to one mutant group').body(({ scenario }) => {
   scenario(
-    'Should_CheckEachGroupOnce_When_GroupReturnsTwoDisjointGroups',
+    'Two unrelated batches are typechecked separately',
     Gherkin.Do.pipe(
-      Given('plans a, b, c and a checker that groups [a,b] and [c]')(
+      Given('a checker that batches mutants a and b together and mutant c alone')(
         'fixture',
         () => Effect.sync(() => recordingChecker([['a', 'b'], ['c']], {}, ['a', 'b', 'c'])),
       ),
-      When('the grouped checker phase runs')(
+      When('the typecheck phase runs')(
         'pairs',
         (s: { fixture: Recording }) => checkGroupedPlans(s.fixture.checker, 'typescript', s.fixture.plans),
       ),
-      Then('check ran twice, once per group, never on the full set')((s: {
+      Then('each batch is typechecked on its own')((s: {
         fixture: Recording
         pairs: readonly (readonly [MutantRunPlan, CheckResult])[]
       }) => {
-        expect(s.fixture.checkIdSets).toHaveLength(2)
-        expect(s.fixture.checkIdSets.some((ids) => idSetsEqual(ids, ['a', 'b']))).toBe(true)
-        expect(s.fixture.checkIdSets.some((ids) => idSetsEqual(ids, ['c']))).toBe(true)
-        expect(s.fixture.checkIdSets.some((ids) => idSetsEqual(ids, ['a', 'b', 'c']))).toBe(false)
-        expect(s.pairs.map(([plan]) => plan.mutant.id).sort()).toEqual(['a', 'b', 'c'])
+        expect(Equal.equals(batchSet(s.fixture.checkIdSets), batchSet([['a', 'b'], ['c']]))).toBe(true)
+        expect(
+          Equal.equals(
+            HashSet.fromIterable(Arr.map(s.pairs, ([plan]) => plan.mutant.id)),
+            HashSet.fromIterable(['a', 'b', 'c']),
+          ),
+        ).toBe(true)
       }),
     ),
   )
 
   scenario(
-    'Should_NotCallCheck_When_ThereAreNoPlans',
+    'An empty run does not typecheck',
     Gherkin.Do.pipe(
-      Given('an empty plan list')('fixture', () => Effect.sync(() => recordingChecker([]))),
-      When('the grouped checker phase runs on no plans')(
+      Given('no mutants remain')('fixture', () => Effect.sync(() => recordingChecker([]))),
+      When('the typecheck phase runs')(
         'pairs',
         (s: { fixture: Recording }) => checkGroupedPlans(s.fixture.checker, 'typescript', s.fixture.plans),
       ),
-      Then('check is not called')((s: { fixture: Recording }) => {
-        expect(s.fixture.checkIdSets).toHaveLength(0)
+      Then('no typecheck runs')((s: { fixture: Recording }) => {
+        expect(Equal.equals(batchSet(s.fixture.checkIdSets), batchSet([]))).toBe(true)
       }),
     ),
   )
 
   scenario(
-    'Should_CheckOnce_When_GroupReturnsOneAllMutantGroup',
+    'A single all-mutant batch is typechecked once',
     Gherkin.Do.pipe(
-      Given('plans a, b, c in a single group')(
+      Given('a checker that puts mutants a, b and c in one batch')(
         'fixture',
         () => Effect.sync(() => recordingChecker([['a', 'b', 'c']], {}, ['a', 'b', 'c'])),
       ),
-      When('the grouped checker phase runs')(
+      When('the typecheck phase runs')(
         'pairs',
         (s: { fixture: Recording }) => checkGroupedPlans(s.fixture.checker, 'typescript', s.fixture.plans),
       ),
-      Then('check ran once with the full set')((s: { fixture: Recording }) => {
-        expect(s.fixture.checkIdSets).toHaveLength(1)
-        expect(idSetsEqual(s.fixture.checkIdSets[0] ?? [], ['a', 'b', 'c'])).toBe(true)
+      Then('that batch is typechecked once')((s: { fixture: Recording }) => {
+        expect(Equal.equals(batchSet(s.fixture.checkIdSets), batchSet([['a', 'b', 'c']]))).toBe(true)
       }),
     ),
   )
 
   scenario(
-    'Should_KeepCompileErrorPairs_When_OneGroupFailsCheck',
+    'A type-invalid mutant is still reported as a compile error',
     Gherkin.Do.pipe(
-      Given('group [a] compile-errors and group [b] passes')(
+      Given('a checker that rejects mutant a and accepts mutant b')(
         'fixture',
         () =>
           Effect.sync(() =>
             recordingChecker([['a'], ['b']], { a: { status: 'compileError', reason: 'TS2322' } }, ['a', 'b'])
           ),
       ),
-      When('the grouped checker phase runs')(
+      When('the typecheck phase runs')(
         'pairs',
         (s: { fixture: Recording }) => checkGroupedPlans(s.fixture.checker, 'typescript', s.fixture.plans),
       ),
-      Then('a is compileError and b is passed')((s: {
+      Then('mutant a is a compile error and mutant b passed')((s: {
         pairs: readonly (readonly [MutantRunPlan, CheckResult])[]
       }) => {
-        const byId: Record<string, CheckResult> = {}
-        for (const [plan, result] of s.pairs) {
-          byId[plan.mutant.id] = result
-        }
-        expect(byId['a']).toEqual({ status: 'compileError', reason: 'TS2322' })
-        expect(byId['b']).toEqual({ status: 'passed' })
+        const byId = HashMap.fromIterable(Arr.map(s.pairs, ([plan, result]) => [plan.mutant.id, result] as const))
+        expect(HashMap.get(byId, 'a')).toEqual(Option.some({ status: 'compileError', reason: 'TS2322' }))
+        expect(HashMap.get(byId, 'b')).toEqual(Option.some({ status: 'passed' }))
       }),
     ),
   )
