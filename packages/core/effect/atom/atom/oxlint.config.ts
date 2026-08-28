@@ -20,6 +20,4 @@ export default defineConfig({
     '@systemfsoftware/oxlint-plugin-effect-dmmf/tests-import-public-api': 'error',
     '@systemfsoftware/oxlint-plugin-effect-dmmf/no-hand-assertive-test-outside-src': 'error',
   },
-
-  ignorePatterns: ['tests/AtomRpc.integration.test.ts'],
 })

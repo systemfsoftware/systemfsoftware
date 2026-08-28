@@ -117,6 +117,8 @@ const selftest = (): number => {
     '// oxlint-disable',
     '/* eslint-disable */',
     '// oxlint-disable -- the whole file is generated',
+    '// oxlint-disable-next-line tests-import-public-api',
+    '// eslint-disable @systemfsoftware/oxlint-plugin-effect-dmmf/tests-import-public-api -- legacy lane',
   ]
   const mustIgnoreSuppression: readonly string[] = [
     '// oxlint-disable-next-line no-console',

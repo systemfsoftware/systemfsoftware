@@ -18,6 +18,7 @@ export function pascalKey(key: string): string {
 }
 
 export function isJsonExportValue(value: unknown): boolean {
+  if (Array.isArray(value)) return false
   if (typeof value === 'string') {
     return value.endsWith('.json') || value.endsWith('.jsonc')
   }
@@ -27,6 +28,18 @@ export function isJsonExportValue(value: unknown): boolean {
     }
   }
   return false
+}
+
+function assertUniqueSanitizedKeys(keys: ReadonlyArray<string>): void {
+  const seen = new Map<string, string>()
+  for (const key of keys) {
+    const sanitized = sanitizeKey(key)
+    const prior = seen.get(sanitized)
+    if (prior !== undefined) {
+      throw new Error(`exports keys '${prior}' and '${key}' sanitize to the same snapshot name '${sanitized}'`)
+    }
+    seen.set(sanitized, key)
+  }
 }
 
 export const shouldSkipExportValue = isJsonExportValue
@@ -58,6 +71,7 @@ export async function generateSurfaceTests(packageDir: string): Promise<void> {
   const entries = Object.entries(exportsMap).filter(([, v]) => !isJsonExportValue(v)).sort((a, b) =>
     a[0].localeCompare(b[0])
   )
+  assertUniqueSanitizedKeys(entries.map(([k]) => k))
   const outPath = join(packageDir, 'tests', 'surface.snapshot.test.ts')
   if (entries.length === 0) {
     await fsPromises.rm(outPath, { force: true })
@@ -230,5 +244,18 @@ if (import.meta.vitest) {
     } finally {
       await fsPromises.rm(dir, { recursive: true, force: true })
     }
+  })
+
+  test('Should_TreatArrayValueAsModule_When_ExportsEntryIsAnArray', () => {
+    expect(isJsonExportValue(['./x.json', './index.d.ts'])).toBe(false)
+  })
+
+  test('Should_FailFast_When_TwoKeysSanitizeToTheSameName', async () => {
+    const dir = await makeFixture({
+      '.': { default: './dist/index.mjs' },
+      './a/b': { default: './dist/a-b.mjs' },
+      './a-b': { default: './dist/a-b.mjs' },
+    })
+    await expect(generateSurfaceTests(dir)).rejects.toThrow(/sanitize to the same snapshot name/)
   })
 }
