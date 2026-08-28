@@ -79,7 +79,9 @@
     "scheduler": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@systemfsoftware/oxlint-plugin-test-placement": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-dmmf": "workspace:^"
   },
   "publishConfig": {
     "exports": {

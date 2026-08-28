@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { INTEGRATION_SUFFIX } from './path.config.js'
+import { INTEGRATION_SUFFIX, SURFACE_SNAPSHOT_BASENAME } from './path.config.js'
 import { basenameOf, isTestFile, isUnderSrc } from './path.js'
 import {
   meta,
@@ -16,7 +16,7 @@ export const testSuffixOutsideSrc = defineRule({
   create(context: Context) {
     const filename = context.filename
     const basename = basenameOf(filename)
-    const suffixIsAllowed = basename.endsWith(INTEGRATION_SUFFIX)
+    const suffixIsAllowed = basename.endsWith(INTEGRATION_SUFFIX) || basename === SURFACE_SNAPSHOT_BASENAME
     return {
       Program(node: ESTree.Program) {
         if (isUnderSrc(filename)) return
