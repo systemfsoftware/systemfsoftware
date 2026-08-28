@@ -54,6 +54,11 @@
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/stryker-js-cli": "catalog:stryker",
+    "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
+    "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
+    "@systemfsoftware/stryker-plugins": "catalog:stryker",
+    "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",

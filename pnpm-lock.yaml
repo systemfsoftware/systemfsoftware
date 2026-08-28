@@ -128,6 +128,22 @@ catalogs:
     oxlint-tsgolint:
       specifier: '>=0.24.0'
       version: 0.24.0
+  stryker:
+    '@systemfsoftware/stryker-js-cli':
+      specifier: ^4.0.1
+      version: 4.0.1
+    '@systemfsoftware/stryker-js-typescript-checker':
+      specifier: ^3.0.1
+      version: 3.0.1
+    '@systemfsoftware/stryker-js-vitest-runner':
+      specifier: ^2.0.1
+      version: 2.0.1
+    '@systemfsoftware/stryker-plugins':
+      specifier: ^1.0.1
+      version: 1.0.1
+    '@systemfsoftware/stryker-test-contribution':
+      specifier: ^1.0.1
+      version: 1.0.1
 
 overrides:
   fast-check: ^4
@@ -155,24 +171,6 @@ importers:
       '@std/jsonc':
         specifier: 'catalog:'
         version: '@jsr/std__jsonc@1.0.2'
-      '@systemfsoftware/stryker-js':
-        specifier: workspace:^
-        version: link:packages/testing/mutation/stryker-js/stryker-js
-      '@systemfsoftware/stryker-js-cli':
-        specifier: workspace:^
-        version: link:packages/testing/mutation/stryker-js/cli
-      '@systemfsoftware/stryker-js-platform-node':
-        specifier: workspace:^
-        version: link:packages/testing/mutation/stryker-js/platform-node
-      '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:packages/testing/mutation/stryker-js/typescript-checker
-      '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:packages/testing/mutation/stryker-js/vitest-runner
-      '@systemfsoftware/stryker-test-contribution':
-        specifier: workspace:^
-        version: link:packages/testing/mutation/plugins/stryker-test-contribution
       concurrently:
         specifier: ^9.2.1
         version: 9.2.3
@@ -318,6 +316,21 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../packages/lint/oxlint/config
+      '@systemfsoftware/stryker-js-cli':
+        specifier: workspace:^
+        version: link:../../../packages/testing/mutation/stryker-js/cli
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: workspace:^
+        version: link:../../../packages/testing/mutation/stryker-js/typescript-checker
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: workspace:^
+        version: link:../../../packages/testing/mutation/stryker-js/vitest-runner
+      '@systemfsoftware/stryker-plugins':
+        specifier: workspace:^
+        version: link:../../../packages/testing/mutation/plugins/stryker-plugins
+      '@systemfsoftware/stryker-test-contribution':
+        specifier: workspace:^
+        version: link:../../../packages/testing/mutation/plugins/stryker-test-contribution
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../packages/toolchain/tsconfig
@@ -394,6 +407,21 @@ importers:
       '@systemfsoftware/oxlint-plugin-cell-vocabulary':
         specifier: workspace:^
         version: link:../../../packages/lint/oxlint/plugins/cells/cell-vocabulary
+      '@systemfsoftware/stryker-js-cli':
+        specifier: workspace:^
+        version: link:../../../packages/testing/mutation/stryker-js/cli
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: workspace:^
+        version: link:../../../packages/testing/mutation/stryker-js/typescript-checker
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: workspace:^
+        version: link:../../../packages/testing/mutation/stryker-js/vitest-runner
+      '@systemfsoftware/stryker-plugins':
+        specifier: workspace:^
+        version: link:../../../packages/testing/mutation/plugins/stryker-plugins
+      '@systemfsoftware/stryker-test-contribution':
+        specifier: workspace:^
+        version: link:../../../packages/testing/mutation/plugins/stryker-test-contribution
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../packages/toolchain/tsconfig
@@ -698,9 +726,21 @@ importers:
       '@systemfsoftware/oxlint-plugin-cell-vocabulary':
         specifier: workspace:^
         version: link:../../../lint/oxlint/plugins/cells/cell-vocabulary
+      '@systemfsoftware/stryker-js-cli':
+        specifier: workspace:^
+        version: link:../../../testing/mutation/stryker-js/cli
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: workspace:^
+        version: link:../../../testing/mutation/stryker-js/typescript-checker
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: workspace:^
+        version: link:../../../testing/mutation/stryker-js/vitest-runner
       '@systemfsoftware/stryker-plugins':
         specifier: workspace:^
         version: link:../../../testing/mutation/plugins/stryker-plugins
+      '@systemfsoftware/stryker-test-contribution':
+        specifier: workspace:^
+        version: link:../../../testing/mutation/plugins/stryker-test-contribution
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../toolchain/tsconfig
@@ -1080,9 +1120,21 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../lint/oxlint/config
+      '@systemfsoftware/stryker-js-cli':
+        specifier: workspace:^
+        version: link:../../../testing/mutation/stryker-js/cli
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: workspace:^
+        version: link:../../../testing/mutation/stryker-js/typescript-checker
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: workspace:^
+        version: link:../../../testing/mutation/stryker-js/vitest-runner
       '@systemfsoftware/stryker-plugins':
         specifier: workspace:^
         version: link:../../../testing/mutation/plugins/stryker-plugins
+      '@systemfsoftware/stryker-test-contribution':
+        specifier: workspace:^
+        version: link:../../../testing/mutation/plugins/stryker-test-contribution
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../toolchain/tsconfig
@@ -1242,6 +1294,21 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/stryker-js-cli':
+        specifier: catalog:stryker
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: catalog:stryker
+        version: 3.0.1
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: catalog:stryker
+        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
+      '@systemfsoftware/stryker-plugins':
+        specifier: catalog:stryker
+        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+      '@systemfsoftware/stryker-test-contribution':
+        specifier: catalog:stryker
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1288,6 +1355,21 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/stryker-js-cli':
+        specifier: catalog:stryker
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: catalog:stryker
+        version: 3.0.1
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: catalog:stryker
+        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
+      '@systemfsoftware/stryker-plugins':
+        specifier: catalog:stryker
+        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+      '@systemfsoftware/stryker-test-contribution':
+        specifier: catalog:stryker
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1334,6 +1416,21 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/stryker-js-cli':
+        specifier: catalog:stryker
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: catalog:stryker
+        version: 3.0.1
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: catalog:stryker
+        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
+      '@systemfsoftware/stryker-plugins':
+        specifier: catalog:stryker
+        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+      '@systemfsoftware/stryker-test-contribution':
+        specifier: catalog:stryker
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1380,6 +1477,21 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/stryker-js-cli':
+        specifier: catalog:stryker
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: catalog:stryker
+        version: 3.0.1
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: catalog:stryker
+        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
+      '@systemfsoftware/stryker-plugins':
+        specifier: catalog:stryker
+        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+      '@systemfsoftware/stryker-test-contribution':
+        specifier: catalog:stryker
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1426,6 +1538,21 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/stryker-js-cli':
+        specifier: catalog:stryker
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: catalog:stryker
+        version: 3.0.1
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: catalog:stryker
+        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
+      '@systemfsoftware/stryker-plugins':
+        specifier: catalog:stryker
+        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+      '@systemfsoftware/stryker-test-contribution':
+        specifier: catalog:stryker
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1539,6 +1666,21 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/stryker-js-cli':
+        specifier: catalog:stryker
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: catalog:stryker
+        version: 3.0.1
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: catalog:stryker
+        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
+      '@systemfsoftware/stryker-plugins':
+        specifier: catalog:stryker
+        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+      '@systemfsoftware/stryker-test-contribution':
+        specifier: catalog:stryker
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1585,6 +1727,21 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/stryker-js-cli':
+        specifier: catalog:stryker
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: catalog:stryker
+        version: 3.0.1
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: catalog:stryker
+        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
+      '@systemfsoftware/stryker-plugins':
+        specifier: catalog:stryker
+        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+      '@systemfsoftware/stryker-test-contribution':
+        specifier: catalog:stryker
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1631,6 +1788,21 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/stryker-js-cli':
+        specifier: catalog:stryker
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+      '@systemfsoftware/stryker-js-typescript-checker':
+        specifier: catalog:stryker
+        version: 3.0.1
+      '@systemfsoftware/stryker-js-vitest-runner':
+        specifier: catalog:stryker
+        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
+      '@systemfsoftware/stryker-plugins':
+        specifier: catalog:stryker
+        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
+      '@systemfsoftware/stryker-test-contribution':
+        specifier: catalog:stryker
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1884,15 +2056,18 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../../../lint/oxlint/config
-      '@systemfsoftware/oxlint-plugin-cell-vocabulary':
+      '@systemfsoftware/stryker-js-typescript-checker':
         specifier: workspace:^
-        version: link:../../../../lint/oxlint/plugins/cells/cell-vocabulary
-      '@systemfsoftware/oxlint-plugin-effect-entrypoint':
+        version: link:../typescript-checker
+      '@systemfsoftware/stryker-js-vitest-runner':
         specifier: workspace:^
-        version: link:../../../../lint/oxlint/plugins/effect/entrypoint
-      '@systemfsoftware/oxlint-plugin-test-placement':
+        version: link:../vitest-runner
+      '@systemfsoftware/stryker-plugins':
         specifier: workspace:^
-        version: link:../../../../lint/oxlint/plugins/testing/test-placement
+        version: link:../../plugins/stryker-plugins
+      '@systemfsoftware/stryker-test-contribution':
+        specifier: workspace:^
+        version: link:../../plugins/stryker-test-contribution
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../toolchain/tsconfig
@@ -2167,12 +2342,6 @@ importers:
       '@systemfsoftware/effect-schema-vite':
         specifier: workspace:^
         version: link:../../../../core/effect/schema/vite
-      '@systemfsoftware/oxlint-plugin-cell-vocabulary':
-        specifier: workspace:^
-        version: link:../../../../lint/oxlint/plugins/cells/cell-vocabulary
-      '@systemfsoftware/oxlint-plugin-effect-workflow':
-        specifier: workspace:^
-        version: link:../../../../lint/oxlint/plugins/cells/effect-workflow
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../toolchain/tsconfig
@@ -5124,6 +5293,63 @@ packages:
   '@systemfsoftware/arethetypeswrong-core@1.1.0':
     resolution: {integrity: sha512-9mXbVygdA53JCzGPLxcCg1ni4f2OToYOZS+3nyDgwcBnE8ELSkZlBwvV5YqmuwoVKtDaqDL3LBE+ovZnCiqEZA==}
     engines: {node: '>=22'}
+
+  '@systemfsoftware/effect-cell-types@5.0.1':
+    resolution: {integrity: sha512-pIheHBnwShyLoJNXJLOaUlWA5Eaqxq64xJibPnzUtRpJ6Zo/+oSPUqhV1wrQ145CTvlcznKV2H6CS4zodg3Iuw==}
+    peerDependencies:
+      effect: ^4.0.0-rc.112
+
+  '@systemfsoftware/stryker-js-cli@4.0.1':
+    resolution: {integrity: sha512-OeMTokScJT4mWKdMnnaMS119Rme8PiHTueNCZEUnJWYNLT7YI9uNxLP0Bifunjerp5kVjRmC5ef6tNNf+YyBiA==}
+    engines: {node: '>=20.0.0'}
+    hasBin: true
+
+  '@systemfsoftware/stryker-js-html-reporter@0.1.0':
+    resolution: {integrity: sha512-+r/n1kVhXPQRY8G4Zn3a7FWz29O24czxDCvRk5kmtu0KmeXakWc3gtyHAXe3VkgaUw2y0AlEl04TwCZaJiVLhQ==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      effect: ^4.0.0-rc.112
+
+  '@systemfsoftware/stryker-js-instrumenter@2.0.1':
+    resolution: {integrity: sha512-0gNGub2tTRr6fecMIsdkdQtO6kPP0NUVFNQ7iPGjaqIinb1Gz8vFdFWLXosrb5pGEffvwEJzLdeZ78LnKbpZFg==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      svelte: '>=4.0.0'
+    peerDependenciesMeta:
+      svelte:
+        optional: true
+
+  '@systemfsoftware/stryker-js-platform-node@0.1.0':
+    resolution: {integrity: sha512-5iFBJqVdYXzuHWqYe4+002A5XUtmAsojH6GQzwOUO975RC+7xINkERfcXDRKjmjEmslAa8jhE5gDMb25ehYruw==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      effect: ^4.0.0-rc.112
+
+  '@systemfsoftware/stryker-js-typescript-checker@3.0.1':
+    resolution: {integrity: sha512-asYToyl9ZtOa0DnQ8oXHRJ5gxZHzdWOmjsl9pWSxCHngEmsg2SrY05cYgZhEQ+3sofrkUzYVWVZqatZdfjHSBw==}
+
+  '@systemfsoftware/stryker-js-vitest-runner@2.0.1':
+    resolution: {integrity: sha512-0qZYljYn/nzrdRFcsbuK6sxGxQTqF/HZntj93Wu8s4RaARy/GCXRcfAbx86tJzeU5Hd7RZCqhPpG2EWq7EJPnQ==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      effect: ^4.0.0-rc.112
+      vitest: '>=2.0.0'
+
+  '@systemfsoftware/stryker-js@0.1.0':
+    resolution: {integrity: sha512-opXrRTtkG30oHIr/53DLPJ7K3Wabtz2daijId6b3i0D0semzcP/kn+lrxLb9mGuAl3KmLkXWdk8ocdrpShLARA==}
+    engines: {node: '>=20.0.0'}
+
+  '@systemfsoftware/stryker-plugins@1.0.1':
+    resolution: {integrity: sha512-Ms4IanHHeaqzpQ9+pTxpsTLNnjGaJ5J2SwlVldXRMZP71cqKOU+aQ4PPK5P26uVGuHX/ZO0KAGXvj7yel9+JTQ==}
+    peerDependencies:
+      '@systemfsoftware/stryker-js': ^0.1.0
+      effect: ^4.0.0-rc.112
+      typescript: '>=5.0.0'
+
+  '@systemfsoftware/stryker-test-contribution@1.0.1':
+    resolution: {integrity: sha512-62XE7tv2V8uv0GW4bhhNIo+2AqVdFE+YSgV9215EgXFoFTFG03Ov9/+UATyL92FDUj3sncj5MK+ijS0E6Q+B6w==}
+    peerDependencies:
+      effect: ^4.0.0-rc.112
 
   '@tailwindcss/node@4.3.3':
     resolution: {integrity: sha512-/T8IKEsf9VTU6tLjgC7+sv2mOPtQxzE2jMw7u4Tt40Tx+QSZxpzh95/H6cMKoja9XuW7iMdLJYBB0o9G1CaAgg==}
@@ -8320,6 +8546,19 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@babel/helper-create-class-features-plugin@7.29.7(@babel/core@7.29.7)':
+    dependencies:
+      '@babel/core': 7.29.7
+      '@babel/helper-annotate-as-pure': 7.29.7
+      '@babel/helper-member-expression-to-functions': 7.29.7(supports-color@8.1.1)
+      '@babel/helper-optimise-call-expression': 7.29.7
+      '@babel/helper-replace-supers': 7.29.7(@babel/core@7.29.7)
+      '@babel/helper-skip-transparent-expression-wrappers': 7.29.7(supports-color@8.1.1)
+      '@babel/traverse': 7.29.7(supports-color@8.1.1)
+      semver: 6.3.1
+    transitivePeerDependencies:
+      - supports-color
+
   '@babel/helper-globals@7.29.7': {}
 
   '@babel/helper-member-expression-to-functions@7.29.7(supports-color@8.1.1)':
@@ -8369,6 +8608,15 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@babel/helper-replace-supers@7.29.7(@babel/core@7.29.7)':
+    dependencies:
+      '@babel/core': 7.29.7
+      '@babel/helper-member-expression-to-functions': 7.29.7(supports-color@8.1.1)
+      '@babel/helper-optimise-call-expression': 7.29.7
+      '@babel/traverse': 7.29.7(supports-color@8.1.1)
+    transitivePeerDependencies:
+      - supports-color
+
   '@babel/helper-skip-transparent-expression-wrappers@7.29.7(supports-color@8.1.1)':
     dependencies:
       '@babel/traverse': 7.29.7(supports-color@8.1.1)
@@ -8400,9 +8648,23 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@babel/plugin-proposal-decorators@7.29.7(@babel/core@7.29.7)':
+    dependencies:
+      '@babel/core': 7.29.7
+      '@babel/helper-create-class-features-plugin': 7.29.7(@babel/core@7.29.7)
+      '@babel/helper-plugin-utils': 7.29.7
+      '@babel/plugin-syntax-decorators': 7.29.7(@babel/core@7.29.7)
+    transitivePeerDependencies:
+      - supports-color
+
   '@babel/plugin-syntax-decorators@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
+      '@babel/helper-plugin-utils': 7.29.7
+
+  '@babel/plugin-syntax-decorators@7.29.7(@babel/core@7.29.7)':
+    dependencies:
+      '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.29.7
 
   '@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))':
@@ -8410,14 +8672,32 @@ snapshots:
       '@babel/core': 7.29.7(supports-color@8.1.1)
       '@babel/helper-plugin-utils': 7.29.7
 
+  '@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7)':
+    dependencies:
+      '@babel/core': 7.29.7
+      '@babel/helper-plugin-utils': 7.29.7
+
   '@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
       '@babel/helper-plugin-utils': 7.29.7
 
+  '@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7)':
+    dependencies:
+      '@babel/core': 7.29.7
+      '@babel/helper-plugin-utils': 7.29.7
+
   '@babel/plugin-transform-destructuring@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)':
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
+      '@babel/helper-plugin-utils': 7.29.7
+      '@babel/traverse': 7.29.7(supports-color@8.1.1)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@babel/plugin-transform-destructuring@7.29.7(@babel/core@7.29.7)':
+    dependencies:
+      '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.29.7
       '@babel/traverse': 7.29.7(supports-color@8.1.1)
     transitivePeerDependencies:
@@ -8431,10 +8711,26 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@babel/plugin-transform-explicit-resource-management@7.29.7(@babel/core@7.29.7)':
+    dependencies:
+      '@babel/core': 7.29.7
+      '@babel/helper-plugin-utils': 7.29.7
+      '@babel/plugin-transform-destructuring': 7.29.7(@babel/core@7.29.7)
+    transitivePeerDependencies:
+      - supports-color
+
   '@babel/plugin-transform-modules-commonjs@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)':
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
       '@babel/helper-module-transforms': 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
+      '@babel/helper-plugin-utils': 7.29.7
+    transitivePeerDependencies:
+      - supports-color
+
+  '@babel/plugin-transform-modules-commonjs@7.29.7(@babel/core@7.29.7)':
+    dependencies:
+      '@babel/core': 7.29.7
+      '@babel/helper-module-transforms': 7.29.7(@babel/core@7.29.7)
       '@babel/helper-plugin-utils': 7.29.7
     transitivePeerDependencies:
       - supports-color
@@ -8450,6 +8746,17 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
+  '@babel/plugin-transform-typescript@7.29.7(@babel/core@7.29.7)':
+    dependencies:
+      '@babel/core': 7.29.7
+      '@babel/helper-annotate-as-pure': 7.29.7
+      '@babel/helper-create-class-features-plugin': 7.29.7(@babel/core@7.29.7)
+      '@babel/helper-plugin-utils': 7.29.7
+      '@babel/helper-skip-transparent-expression-wrappers': 7.29.7(supports-color@8.1.1)
+      '@babel/plugin-syntax-typescript': 7.29.7(@babel/core@7.29.7)
+    transitivePeerDependencies:
+      - supports-color
+
   '@babel/preset-typescript@7.28.5(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)':
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
@@ -8458,6 +8765,17 @@ snapshots:
       '@babel/plugin-syntax-jsx': 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))
       '@babel/plugin-transform-modules-commonjs': 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
       '@babel/plugin-transform-typescript': 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@babel/preset-typescript@7.28.5(@babel/core@7.29.7)':
+    dependencies:
+      '@babel/core': 7.29.7
+      '@babel/helper-plugin-utils': 7.29.7
+      '@babel/helper-validator-option': 7.29.7
+      '@babel/plugin-syntax-jsx': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-transform-modules-commonjs': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-transform-typescript': 7.29.7(@babel/core@7.29.7)
     transitivePeerDependencies:
       - supports-color
 
@@ -10385,6 +10703,111 @@ snapshots:
       semver: 7.8.5
       typescript: 5.9.3
       validate-npm-package-name: 5.0.1
+
+  '@systemfsoftware/effect-cell-types@5.0.1(effect@4.0.0-rc.112)':
+    dependencies:
+      effect: 4.0.0-rc.112
+
+  '@systemfsoftware/stryker-js-cli@4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)':
+    dependencies:
+      '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
+      '@effect/platform-node-shared': 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@noble/hashes': 1.8.0
+      '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
+      '@systemfsoftware/stryker-js': 0.1.0
+      '@systemfsoftware/stryker-js-html-reporter': 0.1.0(effect@4.0.0-rc.112)
+      '@systemfsoftware/stryker-js-platform-node': 0.1.0(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+      effect: 4.0.0-rc.112
+    transitivePeerDependencies:
+      - bufferutil
+      - redis
+      - supports-color
+      - svelte
+      - utf-8-validate
+
+  '@systemfsoftware/stryker-js-html-reporter@0.1.0(effect@4.0.0-rc.112)':
+    dependencies:
+      '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
+      '@systemfsoftware/stryker-js': 0.1.0
+      effect: 4.0.0-rc.112
+      mutation-testing-elements: 3.7.3
+      mutation-testing-metrics: 3.7.3
+      mutation-testing-report-schema: 3.7.3
+
+  '@systemfsoftware/stryker-js-instrumenter@2.0.1(svelte@5.55.1)':
+    dependencies:
+      '@babel/core': 7.29.7
+      '@babel/generator': 7.29.7
+      '@babel/parser': 7.29.8
+      '@babel/plugin-proposal-decorators': 7.29.7(@babel/core@7.29.7)
+      '@babel/plugin-transform-explicit-resource-management': 7.29.7(@babel/core@7.29.7)
+      '@babel/preset-typescript': 7.28.5(@babel/core@7.29.7)
+      '@eslint-community/regexpp': 4.12.2
+      '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
+      '@systemfsoftware/stryker-js': 0.1.0
+      angular-html-parser: 10.4.0
+      effect: 4.0.0-rc.112
+    optionalDependencies:
+      svelte: 5.55.1
+    transitivePeerDependencies:
+      - supports-color
+
+  '@systemfsoftware/stryker-js-platform-node@0.1.0(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)':
+    dependencies:
+      '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
+      '@effect/platform-node-shared': 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@noble/hashes': 1.8.0
+      '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
+      '@systemfsoftware/stryker-js': 0.1.0
+      '@systemfsoftware/stryker-js-instrumenter': 2.0.1(svelte@5.55.1)
+      diff-match-patch: 1.0.5
+      effect: 4.0.0-rc.112
+      minimatch: 10.2.5
+      mutation-testing-report-schema: 3.7.3
+    transitivePeerDependencies:
+      - bufferutil
+      - redis
+      - supports-color
+      - svelte
+      - utf-8-validate
+
+  '@systemfsoftware/stryker-js-typescript-checker@3.0.1':
+    dependencies:
+      '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
+      '@systemfsoftware/stryker-js': 0.1.0
+      effect: 4.0.0-rc.112
+      typescript: 7.0.2
+
+  '@systemfsoftware/stryker-js-vitest-runner@2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)':
+    dependencies:
+      '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
+      '@systemfsoftware/stryker-js': 0.1.0
+      effect: 4.0.0-rc.112
+      vitest: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  '@systemfsoftware/stryker-js@0.1.0':
+    dependencies:
+      '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
+      effect: 4.0.0-rc.112
+      mutation-testing-report-schema: 3.7.3
+
+  '@systemfsoftware/stryker-plugins@1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)':
+    dependencies:
+      '@systemfsoftware/stryker-js': 0.1.0
+      effect: 4.0.0-rc.112
+      typescript: 7.0.2
+
+  '@systemfsoftware/stryker-test-contribution@1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)':
+    dependencies:
+      '@systemfsoftware/stryker-js': 0.1.0
+      '@systemfsoftware/stryker-js-platform-node': 0.1.0(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+      effect: 4.0.0-rc.112
+    transitivePeerDependencies:
+      - bufferutil
+      - redis
+      - supports-color
+      - svelte
+      - utf-8-validate
 
   '@tailwindcss/node@4.3.3':
     dependencies:
