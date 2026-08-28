@@ -8,6 +8,7 @@
  */
 
 // Run the engine.
+export { type CheckerResourceService, checkGroupedPlans } from './Checker.js'
 export { RunEnvironment, type RunEnvironmentShape } from './Run.js'
 export { makeRunLayer } from './Run.js'
 export type { DryRunDone, InstrumentDone, PrepareDone, RunOutcome } from './Run.js'
