@@ -62,7 +62,7 @@ catalogs:
   oxlint:
     oxlint: ^1.77.0
     "@oxlint/plugins": ^1.77.0
-    oxlint-tsgolint: ">=0.24.0"
+    oxlint-tsgolint: 7.0.2001
   stryker:
     semver: ^7.7.0
     "@systemfsoftware/stryker-js-cli": ^4.0.1

@@ -1,5 +1,19 @@
+import { recommended as tsgoRecommended } from '@effect/tsgo/oxlint-presets'
 import effectDmmf from '@systemfsoftware/oxlint-plugin-effect-dmmf'
 import { defineConfig } from 'oxlint'
+
+export const promoteWarnToError = (rules: Record<string, unknown>): Record<string, 'error' | 'off'> => {
+  const out: Record<string, 'error' | 'off'> = {}
+  for (const [key, severity] of Object.entries(rules)) {
+    if (severity === 'warn') out[key] = 'error'
+    else if (severity === 'error') out[key] = 'error'
+    else if (severity === 'off') out[key] = 'off'
+    else if (Array.isArray(severity) && severity[0] === 'warn') out[key] = 'error'
+    else if (Array.isArray(severity) && severity[0] === 'error') out[key] = 'error'
+    else if (Array.isArray(severity) && severity[0] === 'off') out[key] = 'off'
+  }
+  return out
+}
 
 export default defineConfig({
   categories: {
@@ -21,7 +35,7 @@ export default defineConfig({
   // `--oxc-plugin` flag to reveal the loss -- only `--disable-oxc-plugin`. Omitting it
   // silently dropped every oxc correctness rule (erasing-op, const-comparisons,
   // bad-min-max-func) from the whole tree while `correctness: 'error'` looked enabled.
-  plugins: ['typescript', 'jsdoc', 'node', 'promise', 'vitest', 'unicorn', 'oxc'],
+  plugins: ['typescript', 'jsdoc', 'node', 'promise', 'vitest', 'unicorn', 'oxc', 'effecttsgo'],
 
   jsPlugins: [
     import.meta.resolve('@systemfsoftware/oxlint-plugin'),
@@ -69,13 +83,14 @@ export default defineConfig({
     '@systemfsoftware/oxlint-plugin/no-native-setinterval-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-native-settimeout-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/internal-export-jsdoc': 'error',
-
     '@systemfsoftware/oxlint-plugin/no-internal-jsdoc-outside': 'error',
     ...effectDmmf.configs.recommended.rules,
 
+    // effect-ts/tsgo — recommended preset with warn→error promotion (agents ignore warn)
+    // https://github.com/effect-ts/tsgo — docs/README.md Oxlint Setup; preset ships ~78 effecttsgo/* rules at warn
+    ...promoteWarnToError(tsgoRecommended.rules as unknown as Record<string, unknown>),
+
     '@systemfsoftware/oxlint-plugin/no-new-worker-with-wasm-import': 'error',
-    '@systemfsoftware/oxlint-plugin/no-barrels': 'off',
-    '@systemfsoftware/oxlint-plugin/no-inline-destructured-type': 'off',
   },
 
   overrides: [
