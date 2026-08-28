@@ -26,6 +26,21 @@ export type Verdict =
   | { readonly refused: true; readonly reason: string }
 
 const ALLOWED: Verdict = { refused: false }
+const OWN_ORG_EXCLUDE = '@systemfsoftware/*'
+
+const isWorkspaceGlob = (name: string): boolean =>
+  name.startsWith('packages/') || name.startsWith('omp/') || name.startsWith('agent-plugins/')
+
+const excludeCandidates = (added: string): readonly string[] => {
+  const names: string[] = []
+  const item = /^[ \t]*-[ \t]+(?:"([^"]+)"|'([^']+)'|(\S+))/gm
+  for (const match of added.matchAll(item)) {
+    const name = match[1] ?? match[2] ?? match[3]
+    if (name === undefined || isWorkspaceGlob(name)) continue
+    names.push(name)
+  }
+  return names
+}
 
 export const relativeTarget = (target: string, root: string): string | null => {
   if (!isAbsolute(target)) return target
@@ -67,11 +82,14 @@ export const decide = (payload: WritePayload, facts: Facts): Verdict => {
     }
   }
 
-  if (rel === 'pnpm-workspace.yaml' && added.includes('minimumReleaseAgeExclude')) {
-    return {
-      refused: true,
-      reason:
-        'minimumReleaseAgeExclude is the supply-chain cutoff — pin the dependency tighter or wait for it (REPO-S2).',
+  if (rel === 'pnpm-workspace.yaml') {
+    const listed = excludeCandidates(added)
+    if (listed.some((name) => name !== OWN_ORG_EXCLUDE)) {
+      return {
+        refused: true,
+        reason:
+          `minimumReleaseAgeExclude is the supply-chain cutoff — pin the dependency tighter or wait for it (REPO-S2). Own-org \`${OWN_ORG_EXCLUDE}\` is the only permitted exclusion.`,
+      }
     }
   }
 
