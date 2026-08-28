@@ -102,7 +102,9 @@ export const contributionByTestFile = (
       // empty one does; the inert ids are dropped and never spare anyone.
       if (realKillers.size === 0) {
         const covered = mutant.coveredBy
-        if (covered !== undefined) { for (const fileName of realFiles(covered, fileById)) unattributed.add(fileName) }
+        if (covered !== undefined) {
+          for (const fileName of realFiles(covered, fileById)) unattributed.add(fileName)
+        }
         continue
       }
       const soleKill = killers.size === 1
@@ -132,12 +134,13 @@ export const toothlessTestFiles = (
   const toothless: string[] = []
   for (const [fileName, { soleKills, totalKills, coversUnattributedKill, killableCovered }] of contribution) {
     const defends = everyKillerRecorded ? soleKills > 0 : totalKills > 0
-    const inScope = suffixes.some((suffix) => fileName.endsWith(suffix))
     // Covering a kill credited to nobody makes this file unmeasurable, not toothless: the
     // accusation is that deleting it changes nothing, and that cannot be shown here. A file
     // the report gave no killable, covered mutant is unjudged for the same reason — it had
     // nothing it could kill, so the report cannot say deleting it changes nothing.
-    if (!defends && inScope && !coversUnattributedKill && killableCovered > 0) toothless.push(fileName)
+    if (!defends && isInScope(fileName, suffixes) && !coversUnattributedKill && killableCovered > 0) {
+      toothless.push(fileName)
+    }
   }
   return toothless.sort()
 }
@@ -150,10 +153,15 @@ export interface TestContributionVerdict {
 // Past the bail guard, which returns before any verdict when killers went unrecorded.
 const PRECISION = 'every killing test was recorded'
 
-const defends = (
+/** Past the bail guard, a file defends itself only by a sole kill. */
+const defendsUniquely = (
   contribution: ReadonlyMap<string, TestFileContribution>,
   fileName: string,
 ): boolean => (contribution.get(fileName)?.soleKills ?? 0) > 0
+
+/** Whether a file is a gate target — its name carries one of the required suffixes. */
+const isInScope = (fileName: string, suffixes: readonly string[]): boolean =>
+  suffixes.some((suffix) => fileName.endsWith(suffix))
 
 /**
  * Joint subsumption over an accused set: every mutant some accused file kills
@@ -190,7 +198,7 @@ export const judgeTestContribution = (
 ): TestContributionVerdict => {
   const matches = suffixes.join(', ')
   const contribution = contributionByTestFile(report)
-  const inScope = [...contribution.keys()].filter((fileName) => suffixes.some((suffix) => fileName.endsWith(suffix)))
+  const inScope = [...contribution.keys()].filter((fileName) => isInScope(fileName, suffixes))
   if (inScope.length === 0) {
     return { failed: false, message: `No test file matching ${matches} ran, so none was judged.` }
   }
@@ -219,7 +227,7 @@ export const judgeTestContribution = (
   const toothless = toothlessTestFiles(contribution, { suffixes, everyKillerRecorded })
 
   if (toothless.length === 0) {
-    const everyDefends = inScope.every((fileName) => defends(contribution, fileName))
+    const everyDefends = inScope.every((fileName) => defendsUniquely(contribution, fileName))
     if (everyDefends) {
       return {
         failed: false,
@@ -229,14 +237,20 @@ export const judgeTestContribution = (
     // Some in-scope file was exempted (covers an unattributed kill) or unjudged (the report
     // offered it no killable, covered mutant). The unique-kill sentence would be false for
     // it, so state the honest judged/exempt/unjudged counts instead — never the blanket claim.
-    const judged = inScope.filter((fileName) => defends(contribution, fileName))
-    const notJudged = inScope.filter((fileName) => !defends(contribution, fileName))
-    const exempt = notJudged.filter(
-      (fileName) =>
-        contribution.get(fileName)?.coversUnattributedKill === true &&
-        (contribution.get(fileName)?.killableCovered ?? 0) > 0,
-    )
-    const unjudged = notJudged.filter((fileName) => (contribution.get(fileName)?.killableCovered ?? 0) === 0)
+    // A non-defending file where toothless is empty is exempt or unjudged — exactly one
+    // class, so classify it in a single pass rather than a chain of filters.
+    const judged: string[] = []
+    const exempt: string[] = []
+    const unjudged: string[] = []
+    for (const fileName of inScope) {
+      if (defendsUniquely(contribution, fileName)) {
+        judged.push(fileName)
+      } else {
+        const c = contribution.get(fileName)
+        if (c?.coversUnattributedKill === true) exempt.push(fileName)
+        else unjudged.push(fileName)
+      }
+    }
     const parts: string[] = []
     if (judged.length > 0) parts.push(`${judged.length} judged (kill a mutant nothing else kills)`)
     if (exempt.length > 0) parts.push(`${exempt.length} exempted (cover a kill attributed to no test file)`)

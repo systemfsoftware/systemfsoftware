@@ -888,4 +888,58 @@ Feature('Judging test contribution under the test-contribution gate')
         }),
       ),
     )
+
+    scenario(
+      'Should_SayUnjudgedInTheJudge_When_AnInScopeFileCoveredNoKillableMutant',
+      Gherkin.Do.pipe(
+        Given('a report with one defending file and one file the report gave no killable mutant')(
+          'report',
+          () =>
+            Effect.succeed(
+              reportOf(
+                [mutantOf('m1', 'Killed', ['t1'], ['t1'])],
+                {
+                  'earns.property.test.ts': ['t1'],
+                  'unauditable.property.test.ts': ['t3'],
+                },
+              ),
+            ),
+        ),
+        When('the run is judged with exact killer recording')(
+          'verdict',
+          (s) => Effect.sync(() => judgeTestContribution(s.report, true, PROPERTY)),
+        ),
+        Then('the run passes reporting the bare file unjudged, never the unique-kill sentence')((s) => {
+          expect(s.verdict?.failed).toBe(false)
+          expect(s.verdict?.message).toContain('1 judged')
+          expect(s.verdict?.message).toContain('1 unjudged')
+          expect(s.verdict?.message).not.toContain('kills a mutant nothing else kills')
+        }),
+      ),
+    )
+
+    scenario(
+      'Should_NotCountAnIgnoredMutantAsKillable_When_JudgingWhichFilesWereOfferedOne',
+      Gherkin.Do.pipe(
+        Given('a report whose only in-scope idle file covers only an Ignored mutant')('report', () =>
+          Effect.succeed(
+            reportOf(
+              [mutantOf('m1', 'Killed', ['t1'], ['t1']), mutantOf('m2', 'Ignored', [], ['t2'])],
+              {
+                'earns.property.test.ts': ['t1'],
+                'ignored-cover.property.test.ts': ['t2'],
+              },
+            ),
+          )),
+        When('toothless files are computed with every killer recorded')(
+          'accused',
+          (s) => Effect.sync(() => toothlessTestFiles(contributionByTestFile(s.report), EXACT)),
+        ),
+        Then('the Ignored-only file is not accused and not counted as killable')((s) => {
+          expect(s.accused).toEqual([])
+          const contrib = Object.fromEntries(contributionByTestFile(s.report))
+          expect(contrib['ignored-cover.property.test.ts']?.killableCovered).toBe(0)
+        }),
+      ),
+    )
   })
