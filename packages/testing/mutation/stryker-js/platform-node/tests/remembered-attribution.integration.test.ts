@@ -4,32 +4,21 @@ import { Clock, Effect } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
+import * as S from 'effect/Schema'
 import { expect } from 'vitest'
 
-import { generateRunId, makeRunLayer, runMutationTest } from '@systemfsoftware/stryker-js-platform-node'
+import {
+  generateRunId,
+  IncrementalReportSchema,
+  makeRunLayer,
+  runMutationTest,
+} from '@systemfsoftware/stryker-js-platform-node'
 
 const Feature = makeFeature({ it, layer })
 
 const Host = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)
 
-type Location = { readonly start: { line: number; column: number }; readonly end: { line: number; column: number } }
-
-type ReportMutant = {
-  readonly id: string
-  readonly mutatorName: string
-  readonly replacement: string
-  readonly location: Location
-  readonly status: string
-  readonly killedBy?: readonly string[]
-  readonly coveredBy?: readonly string[]
-  readonly statusReason?: string
-}
-
-type IncrementalReport = {
-  readonly schemaVersion: string
-  readonly thresholds: { readonly high: number; readonly low: number }
-  readonly files: Record<string, { language: string; source: string; mutants: ReportMutant[] }>
-}
+type IncrementalReport = typeof IncrementalReportSchema.Type
 
 const runOnce = (workDir: string, incrementalFile: string) =>
   Effect.gen(function*() {
@@ -58,21 +47,18 @@ const runOnce = (workDir: string, incrementalFile: string) =>
     )
   })
 
-const isIncrementalReport = (value: unknown): value is IncrementalReport => {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-  return 'files' in value && 'schemaVersion' in value && 'thresholds' in value
-}
-
 const readReport = (incrementalFile: string) =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
-    const parsed: unknown = JSON.parse(yield* fs.readFileString(incrementalFile))
-    if (!isIncrementalReport(parsed)) {
-      return yield* Effect.fail(new Error(`Incremental file at ${incrementalFile} is not a mutation report`))
-    }
-    return parsed
+    const text = yield* fs.readFileString(incrementalFile)
+    return yield* S.decodeUnknownEffect(S.fromJsonString(IncrementalReportSchema))(text)
+  })
+
+const writeReport = (incrementalFile: string, report: IncrementalReport) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const encoded = yield* S.encodeEffect(S.fromJsonString(IncrementalReportSchema, { space: 2 }))(report)
+    yield* fs.writeFileString(incrementalFile, encoded)
   })
 
 const seedReuseFile = (report: IncrementalReport): IncrementalReport => {
@@ -80,9 +66,9 @@ const seedReuseFile = (report: IncrementalReport): IncrementalReport => {
   if (listed.length < 2) {
     throw new Error('Fixture produced fewer than two mutants; the reuse gatekeeper needs a Killed and a Timeout')
   }
-  const files: IncrementalReport['files'] = {}
   let remainingKilled = 1
   let remainingTimeout = 1
+  const files: Record<string, IncrementalReport['files'][string]> = {}
   for (const [name, file] of Object.entries(report.files)) {
     files[name] = {
       ...file,
@@ -107,7 +93,7 @@ Feature('Remembered incremental verdicts keep kill attribution')
   .withLayer(Host)
   .body(({ scenario }) => {
     scenario(
-      'Should_KeepKilledBy_When_ReusingAnAttributedIncrementalFile',
+      'Should_KeepAttribution_When_ReusingAnIncrementalFile',
       Gherkin.Do.pipe(
         Given('the reuse-project fixture')(
           'fixture',
@@ -129,7 +115,7 @@ Feature('Remembered incremental verdicts keep kill attribution')
                 yield* fs.copy(s.fixture, workDir)
                 yield* runOnce(workDir, incrementalFile)
                 const produced = yield* readReport(incrementalFile)
-                yield* fs.writeFileString(incrementalFile, JSON.stringify(seedReuseFile(produced), null, 2))
+                yield* writeReport(incrementalFile, seedReuseFile(produced))
                 yield* runOnce(workDir, incrementalFile)
                 return yield* readReport(incrementalFile)
               }),
