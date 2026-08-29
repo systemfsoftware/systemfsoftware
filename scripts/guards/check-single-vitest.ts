@@ -9,10 +9,12 @@
 //
 // The invariant is per-package equality (KTD2): for every test-chain importer that
 // resolves @effect/vitest, realpath(<importer>/node_modules/@effect/vitest/node_modules/vitest)
-// must equal realpath(<importer>/node_modules/vitest) — or, for an importer with no own
-// vitest declaration, the vitest its workspace-link chain resolves. Whole-tree instance
-// counts are rejected: trunk legitimately carries a second vitest instance through
-// storybook's transitive esbuild pin.
+// must equal realpath(<importer>/node_modules/vitest). An importer whose node_modules
+// carries only the @effect/vitest copy has a single vitest — nothing to compare.
+// Whole-tree instance counts are rejected: trunk legitimately carries a second
+// vitest instance through storybook's transitive esbuild pin.
+
+import { parse } from '@std/yaml'
 
 interface Importer {
   readonly path: string
@@ -28,100 +30,57 @@ interface TreeView {
 
 interface ParsedLockfile {
   readonly importers: readonly Importer[]
-  /** The vitest version-string the @effect/vitest packages block declares, when present. */
-  readonly effectVitestChild: string | null
   /** True when the importers section was found and parsed at all. */
   readonly parsed: boolean
 }
 
-const DEP_GROUP_KEYS = new Set(['dependencies:', 'devDependencies:', 'optionalDependencies:'])
-
-const unquote = (key: string): string => key.startsWith("'") && key.endsWith("'") ? key.slice(1, -1) : key
+const DEP_GROUP_KEYS = ['dependencies', 'devDependencies', 'optionalDependencies']
 
 /**
- * Line-oriented parse of pnpm-lock.yaml's `importers:` section (importer path,
- * declared dep names, workspace `link:` targets) plus the `vitest` child declared
- * by the `@effect/vitest@...` entry in the `packages:` section. Only these shapes
- * are read; everything else in the file is ignored.
+ * Parses pnpm-lock.yaml's `importers:` section (importer path, declared dep names,
+ * workspace `link:` targets). Only these shapes are read; everything else in the
+ * file is ignored. Malformed YAML fails loud through `parsed: false`.
  */
 export const parseLockfile = (lockfileText: string): ParsedLockfile => {
-  const lines = lockfileText.split('\n')
-  const rawImporters: { path: string; deps: Set<string>; links: string[] }[] = []
-  let effectVitestChild: string | null = null
-
-  let section = 'header'
-  let importer: { path: string; deps: Set<string>; links: string[] } | null = null
-  let depGroup = ''
-  let depName = ''
-  let inEffectVitestBlock = false
-
-  for (const line of lines) {
-    if (line.length === 0 || line.trim().length === 0) continue
-    const indent = line.length - line.trimStart().length
-    const trimmed = line.trim()
-
-    if (indent === 0 && trimmed.endsWith(':')) {
-      section = trimmed.slice(0, -1)
-      importer = null
-      inEffectVitestBlock = false
-      continue
-    }
-
-    if (section === 'importers') {
-      if (indent === 2 && trimmed.endsWith(':')) {
-        importer = { path: trimmed.slice(0, -1), deps: new Set(), links: [] }
-        rawImporters.push(importer)
-        depGroup = ''
-        depName = ''
-        continue
-      }
-      if (indent === 4 && trimmed.endsWith(':')) {
-        depGroup = trimmed
-        depName = ''
-        continue
-      }
-      if (indent === 6 && trimmed.endsWith(':')) {
-        depName = unquote(trimmed.slice(0, -1))
-        if (importer !== null && DEP_GROUP_KEYS.has(depGroup)) importer.deps.add(depName)
-        continue
-      }
-      if (trimmed.startsWith('version: link:') && importer !== null && depName !== '') {
-        importer.links.push(trimmed.slice('version: link:'.length))
-      }
-      continue
-    }
-
-    // The peer-suffixed `@effect/vitest@...(...)` entry whose `vitest:` child names
-    // the resolved instance lives in `snapshots:`; `packages:` carries the unsuffixed
-    // declaration. Scan both store sections.
-    if (section === 'packages' || section === 'snapshots') {
-      if (indent === 2 && trimmed.endsWith(':')) {
-        inEffectVitestBlock = trimmed.startsWith("'@effect/vitest@") && trimmed.includes('(vitest@')
-        continue
-      }
-      if (inEffectVitestBlock && indent === 6 && trimmed.startsWith('vitest: ')) {
-        effectVitestChild = trimmed.slice('vitest: '.length)
-      }
-      continue
-    }
+  let doc: unknown
+  try {
+    doc = parse(lockfileText)
+  } catch {
+    return { importers: [], parsed: false }
+  }
+  const importersDoc = doc !== null && typeof doc === 'object'
+    ? (doc as Record<string, unknown>)['importers']
+    : null
+  if (importersDoc === null || typeof importersDoc !== 'object') {
+    return { importers: [], parsed: false }
   }
 
-  return {
-    importers: rawImporters.map((raw) => ({
-      path: raw.path,
-      hasEffectVitest: raw.deps.has('@effect/vitest'),
-      hasVitest: raw.deps.has('vitest'),
-      links: raw.links,
-    })),
-    effectVitestChild,
-    parsed: section !== 'header' || rawImporters.length > 0,
-  }
+  const importers = Object.entries(importersDoc as Record<string, unknown>).map(([path, block]) => {
+    const deps = new Set<string>()
+    const links: string[] = []
+    if (block !== null && typeof block === 'object') {
+      for (const [group, entries] of Object.entries(block as Record<string, unknown>)) {
+        if (entries === null || typeof entries !== 'object') continue
+        for (const [name, spec] of Object.entries(entries as Record<string, unknown>)) {
+          if (DEP_GROUP_KEYS.includes(group)) deps.add(name)
+          if (typeof spec === 'string' && spec.startsWith('link:')) links.push(spec.slice('link:'.length))
+        }
+      }
+    }
+    return {
+      path,
+      hasEffectVitest: deps.has('@effect/vitest'),
+      hasVitest: deps.has('vitest'),
+      links,
+    }
+  })
+  return { importers, parsed: true }
 }
 
-/** Resolves `../..`-style link targets against the importing importer's path. */
+/** Resolves a `link:` target the way the OS does: relative to the importing importer dir. */
 const normalizeLink = (fromPath: string, target: string): string => {
   const out: string[] = []
-  for (const segment of [...fromPath.split('/').slice(0, -1), ...target.split('/')]) {
+  for (const segment of [...fromPath.split('/'), ...target.split('/')]) {
     if (segment === '' || segment === '.') continue
     if (segment === '..') {
       out.pop()
@@ -160,9 +119,14 @@ const edgeRealpathOf = (tree: TreeView, importerPath: string): string | null => 
 const runnerRealpathOf = (tree: TreeView, importerPath: string): string | null =>
   tree.realpath(`${importerPath}/node_modules/vitest`)
 
-const linkClosureOf = (start: string, byPath: Map<string, Importer>): Set<string> => {
-  const reached = new Set<string>([start])
-  const queue = [start]
+const testChainOf = (importers: readonly Importer[], byPath: Map<string, Importer>): Set<string> => {
+  const reached = new Set<string>()
+  const queue: string[] = []
+  for (const importer of importers) {
+    if (!importer.hasEffectVitest || reached.has(importer.path)) continue
+    reached.add(importer.path)
+    queue.push(importer.path)
+  }
   while (queue.length > 0) {
     const current = byPath.get(queue.shift()!)
     if (current === undefined) continue
@@ -171,8 +135,7 @@ const linkClosureOf = (start: string, byPath: Map<string, Importer>): Set<string
       // Only importers that themselves declare @effect/vitest carry the vitest
       // binding the edge loads; other workspace links (shared tooling, lint config)
       // are not part of the test chain.
-      if (byPath.get(target)?.hasEffectVitest !== true) continue
-      if (reached.has(target)) continue
+      if (byPath.get(target)?.hasEffectVitest !== true || reached.has(target)) continue
       reached.add(target)
       queue.push(target)
     }
@@ -206,11 +169,7 @@ export const verdict = (
   }
 
   const byPath = new Map<string, Importer>(parsed.importers.map((importer) => [importer.path, importer]))
-  const chain = new Set<string>()
-  for (const importer of parsed.importers) {
-    if (!importer.hasEffectVitest) continue
-    for (const path of linkClosureOf(importer.path, byPath)) chain.add(path)
-  }
+  const chain = testChainOf(parsed.importers, byPath)
 
   const loudFailures: string[] = []
   if (chain.size === 0) {
@@ -233,16 +192,7 @@ export const verdict = (
       continue
     }
 
-    let runner = importer.hasVitest ? runnerRealpathOf(tree, path) : null
-    if (runner === null && !importer.hasVitest) {
-      // Transitive-only consumer: the vitest it runs is the first reachable linked importer's.
-      for (const linked of linkClosureOf(path, byPath)) {
-        const linkedImporter = byPath.get(linked)
-        if (linkedImporter === undefined || !linkedImporter.hasVitest) continue
-        runner = runnerRealpathOf(tree, linked)
-        if (runner !== null) break
-      }
-    }
+    const runner = importer.hasVitest ? runnerRealpathOf(tree, path) : null
     if (runner === null) {
       if (importer.hasVitest) {
         loudFailures.push(`${path}: declares vitest but node_modules has no vitest — install is missing or incomplete`)
@@ -258,31 +208,36 @@ export const verdict = (
   return { forks, loudFailures }
 }
 
-const fsView = (root: string): TreeView => ({
-  realpath(path: string): string | null {
-    const joined = path.startsWith('/') ? path : `${root}/${path}`
-    try {
-      return Deno.realPathSync(joined)
-    } catch {
-      return null
-    }
-  },
-})
+const fsView = (root: string): TreeView => {
+  const cache = new Map<string, string | null>()
+  return {
+    realpath(path: string): string | null {
+      const joined = path.startsWith('/') ? path : `${root}/${path}`
+      const cached = cache.get(joined)
+      if (cached !== undefined) return cached
+      let resolved: string | null
+      try {
+        resolved = Deno.realPathSync(joined)
+      } catch {
+        resolved = null
+      }
+      cache.set(joined, resolved)
+      return resolved
+    },
+  }
+}
 
 const selftest = (): number => {
   const failures: string[] = []
 
   const importerBlock = (path: string, entries: readonly string[]): string => {
     if (entries.length === 0) return `  ${path}:\n`
-    const body = entries.map((entry) => `      ${entry}\n      version: 1.0.0\n`).join('')
+    const body = entries.map((entry) => `      ${entry}\n        version: 1.0.0\n`).join('')
     return `  ${path}:\n    devDependencies:\n${body}`
   }
 
   const vitestDep = (name: string): string => `'${name}':`
-  const lockfileOf = (importers: readonly string[]): string =>
-    `importers:\n${
-      importers.join('')
-    }\npackages:\n  '@effect/vitest@4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)':\n    dependencies:\n      vitest: 4.1.10\n`
+  const lockfileOf = (importers: readonly string[]): string => `importers:\n${importers.join('')}\n`
 
   const mapOf = (mappings: readonly (readonly [string, string])[]): TreeView => {
     const byPath = new Map<string, string>(mappings)
