@@ -1,5 +1,4 @@
 import type { Package } from '@systemfsoftware/npm-package'
-import { init as initCjsLexer } from 'cjs-module-lexer'
 import { Effect, MutableHashMap, Option } from 'effect'
 import checks from './internal/checks/index.js'
 import type { AnyCheck, CheckDependenciesContext } from './internal/DefineCheck.js'
@@ -78,11 +77,6 @@ export const checkPackage = (
       node16: { moduleKinds: getModuleKinds(entrypointResolutions, 'node16', hosts) },
       bundler: {},
     }
-
-    yield* Effect.tryPromise({
-      try: () => initCjsLexer(),
-      catch: (cause) => new Error('Analysis failed', { cause }),
-    })
 
     const problems: Problem[] = []
     const problemIdsToIndices = MutableHashMap.empty<string, number[]>()

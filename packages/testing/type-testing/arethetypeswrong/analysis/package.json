@@ -42,16 +42,13 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@loaderkit/resolve": "^1.0.2",
     "@systemfsoftware/npm-package": "workspace:^",
-    "cjs-module-lexer": "^1.2.3",
     "effect": "catalog:",
-    "semver": "^7.5.4",
-    "typescript": "catalog:attw",
-    "validate-npm-package-name": "^5.0.0"
+    "typescript": "catalog:attw"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@std/semver": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/arethetypeswrong-recipes": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
@@ -62,8 +59,6 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
-    "@types/semver": "^7.5.0",
-    "@types/validate-npm-package-name": "^4.0.0",
     "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
@@ -73,5 +68,8 @@
   },
   "engines": {
     "node": ">=24"
+  },
+  "inlinedDependencies": {
+    "@jsr/std__semver": "1.0.8"
   }
 }

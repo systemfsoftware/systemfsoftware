@@ -1,26 +1,7 @@
-import * as cjs from '@loaderkit/resolve/cjs'
-import * as esm from '@loaderkit/resolve/esm'
-import type { FileSystemSync } from '@loaderkit/resolve/fs'
-import type { Package } from '@systemfsoftware/npm-package'
-
-function makeFileSystemAdapter(fs: Package): FileSystemSync {
-  return {
-    directoryExists: url => fs.directoryExists(url.pathname),
-    fileExists: url => fs.fileExists(url.pathname),
-    readFileJSON: (url) => {
-      const parsed: unknown = JSON.parse(fs.readFile(url.pathname))
-      return parsed
-    },
-    readLink: () => undefined,
-  }
-}
+import { cjsResolve as kernelCjsResolve, esmResolve as kernelEsmResolve } from './Resolver.js'
 
 /** @internal */
-export function cjsResolve(fs: Package, specifier: string, parentURL: URL) {
-  return cjs.resolveSync(makeFileSystemAdapter(fs), specifier, parentURL)
-}
+export const cjsResolve = kernelCjsResolve
 
 /** @internal */
-export function esmResolve(fs: Package, specifier: string, parentURL: URL) {
-  return esm.resolveSync(makeFileSystemAdapter(fs), specifier, parentURL)
-}
+export const esmResolve = kernelEsmResolve

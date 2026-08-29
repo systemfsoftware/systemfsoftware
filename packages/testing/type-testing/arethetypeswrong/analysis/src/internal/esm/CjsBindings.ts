@@ -1,7 +1,3 @@
-import type { Exports } from 'cjs-module-lexer'
-import { parse as cjsParse } from 'cjs-module-lexer'
-
+import { getCjsModuleBindings as detectorGetCjsModuleBindings } from './CjsBindingDetector.js'
 /** @internal */
-export function getCjsModuleBindings(sourceText: string): Exports {
-  return cjsParse(sourceText)
-}
+export const getCjsModuleBindings = detectorGetCjsModuleBindings

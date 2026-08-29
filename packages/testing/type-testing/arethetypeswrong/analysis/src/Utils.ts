@@ -1,11 +1,7 @@
-import { valid, validRange } from 'semver'
-import validatePackgeName from 'validate-npm-package-name'
 import type {
   BuildTool,
   EntrypointInfo,
   EntrypointResolutionAnalysis,
-  Failable,
-  ParsedPackageSpec,
   Problem,
   ProblemKind,
   ResolutionKind,
@@ -95,59 +91,6 @@ export function groupProblemsByKind<K extends ProblemKind>(
     ;(result[problem.kind] ??= []).push(problem)
   }
   return result
-}
-
-export type { ParsedPackageSpec }
-export function parsePackageSpec(input: string): Failable<ParsedPackageSpec> {
-  let name
-  let version
-  let i = 0
-  if (input.startsWith('@')) {
-    i = input.indexOf('/')
-    if (i === -1 || i === 1) {
-      return {
-        status: 'error',
-        error: 'Invalid package name',
-      }
-    }
-    i++
-  }
-  i = input.indexOf('@', i)
-  if (i === -1) {
-    name = input
-  } else {
-    name = input.slice(0, i)
-    version = input.slice(i + 1)
-  }
-
-  if (validatePackgeName(name).errors) {
-    return {
-      status: 'error',
-      error: 'Invalid package name',
-    }
-  }
-  if (!version) {
-    return {
-      status: 'success',
-      data: { versionKind: 'none', name, version: '' },
-    }
-  }
-  if (valid(version)) {
-    return {
-      status: 'success',
-      data: { versionKind: 'exact', name, version },
-    }
-  }
-  if (validRange(version)) {
-    return {
-      status: 'success',
-      data: { versionKind: 'range', name, version },
-    }
-  }
-  return {
-    status: 'success',
-    data: { versionKind: 'tag', name, version },
-  }
 }
 
 const buildToolsObject = {

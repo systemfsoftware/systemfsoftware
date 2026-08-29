@@ -1,6 +1,6 @@
+import { canParse, tryParseRange } from '@std/semver'
 import { Result } from 'effect'
-import { valid, validRange } from 'semver'
-import validatePackageName from 'validate-npm-package-name'
+import { validatePackageName } from './internal/PackageNameValidator.js'
 
 import { PackageSpecParseError, type ParsedPackageSpec } from './PackageSpec.schema.js'
 
@@ -22,16 +22,16 @@ export const parsePackageSpec = (input: string): Result.Result<ParsedPackageSpec
   }
   const version = i === -1 ? '' : input.slice(i + 1)
 
-  if (validatePackageName(name).errors) {
+  if (validatePackageName(name).errors.length > 0) {
     return Result.fail(new PackageSpecParseError({ message: 'Invalid package name' }))
   }
   if (!version) {
     return Result.succeed({ versionKind: 'none' as const, name, version: '' })
   }
-  if (valid(version)) {
+  if (canParse(version)) {
     return Result.succeed({ versionKind: 'exact' as const, name, version })
   }
-  if (validRange(version)) {
+  if (tryParseRange(version) !== undefined) {
     return Result.succeed({ versionKind: 'range' as const, name, version })
   }
   return Result.succeed({ versionKind: 'tag' as const, name, version })

@@ -36,13 +36,7 @@ export default defineConfig({
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   tsconfig: './tsconfig.build.json',
   deps: {
-    neverBundle: [
-      'typescript',
-      '@loaderkit/resolve',
-      '@systemfsoftware/npm-package',
-      'cjs-module-lexer',
-      'semver',
-      'validate-npm-package-name',
-    ],
+    neverBundle: ['typescript', '@systemfsoftware/npm-package'],
   },
+  noExternal: ['@std/semver'],
 })
