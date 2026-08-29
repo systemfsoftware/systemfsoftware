@@ -3,8 +3,6 @@ import { checkPackage, ProblemKindSchema, withTypesCompanion } from '@systemfsof
 import { recipes } from '@systemfsoftware/arethetypeswrong-recipes'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Exit } from 'effect'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
 import { expect } from 'vitest'
 const Feature = makeFeature({ it, layer })
 
@@ -43,25 +41,11 @@ Feature('The analysis of a synthetic package reproduces its recorded outcome', {
               return yield* checkPackage(pkg)
             })),
           Then('the recorded snapshot still matches the canonical analysis')(({ analysis }) =>
-            Effect.promise(async () => {
-              const snapshotPath = new URL(`./__fixtures__/snapshots/${recipeKey}.json`, import.meta.url)
-              const canonical = JSON.stringify(analysis, null, 2) + '\n'
-              let recorded: string | undefined
-              try {
-                recorded = await readFile(snapshotPath, 'utf8')
-              } catch {
-                // First run for a new recipe: record the canonical analysis.
-                // Plain read-and-compare replaces vitest's toMatchFileSnapshot,
-                // whose per-test snapshot state Effect's fiber scheduling drops
-                // for recipes whose analysis crosses an async boundary
-                // (FalseCJS), failing every CI run with "snapshot state not
-                // found". The recorded file remains the spec either way.
-                await mkdir(dirname(snapshotPath.pathname), { recursive: true })
-                await writeFile(snapshotPath, canonical)
-                return
-              }
-              expect(recorded).toBe(canonical)
-            })
+            Effect.promise(() =>
+              expect(JSON.stringify(analysis, null, 2) + '\n').toMatchFileSnapshot(
+                `./__fixtures__/snapshots/${recipeKey}.json`,
+              )
+            )
           ),
           Then('the analysis reports the problem kind the recipe is named for')(({ analysis }) =>
             Effect.sync(() => {
