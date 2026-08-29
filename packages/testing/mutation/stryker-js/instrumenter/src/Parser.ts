@@ -51,7 +51,7 @@ export type Parser<T extends Ast = Ast> = (
   context: ParserContext,
 ) => Promise<T>
 // ---------------------------------------------------------------------------
-// Oxc parse — one engine for js, ts and tsx (Babel is gone from this package).
+// Oxc parse — one engine for js, ts and tsx.
 // ---------------------------------------------------------------------------
 
 function parseWithOxc(

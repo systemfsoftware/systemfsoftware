@@ -1,5 +1,3 @@
-// oxlint-disable
-// @ts-nocheck
 type A = string & number | boolean
 type B<U extends string = string> = U | null
 type C = { [K in keyof B]: B[K] } & { readonly [x: `get${Capitalize<string>}`]: () => void }

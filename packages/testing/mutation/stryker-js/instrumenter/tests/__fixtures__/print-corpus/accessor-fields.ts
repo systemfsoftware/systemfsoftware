@@ -1,5 +1,3 @@
-// oxlint-disable
-// @ts-nocheck
 class Point {
   accessor x = 0
   accessor y: number = 0

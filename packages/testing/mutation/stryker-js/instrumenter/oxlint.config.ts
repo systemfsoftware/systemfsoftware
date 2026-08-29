@@ -3,6 +3,11 @@ import { defineConfig } from 'oxlint'
 
 export default defineConfig({
   extends: [base],
+  ignorePatterns: [
+    // Parse fixtures are input data for the printer's round-trip suite, not
+    // source. They deliberately carry constructs these rules exist to flag.
+    'tests/__fixtures__/print-corpus/**',
+  ],
   rules: {
     // Enabled per-package because the shared config deliberately leaves it out.
     // It judges a class by the expression it extends, so `Context.Service`,

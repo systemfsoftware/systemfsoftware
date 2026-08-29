@@ -1,5 +1,3 @@
-// oxlint-disable
-// @ts-nocheck
 const a = 1 + 2 * 3 - 4 / 2
 const b = (a + b) * c
 const c2 = a - (b - c)

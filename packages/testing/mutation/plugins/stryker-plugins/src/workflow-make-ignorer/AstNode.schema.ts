@@ -29,7 +29,7 @@ export const FunctionExpression = S.Struct({
 })
 export type FunctionExpression = S.Schema.Type<typeof FunctionExpression>
 
-/** Any AST node outside the modeled vocabulary — accepts every babel node type structurally. */
+/** Any AST node outside the modeled vocabulary — accepts every node type structurally. */
 export const UnknownNode = S.Struct({ type: S.String })
 export type UnknownNode = S.Schema.Type<typeof UnknownNode>
 

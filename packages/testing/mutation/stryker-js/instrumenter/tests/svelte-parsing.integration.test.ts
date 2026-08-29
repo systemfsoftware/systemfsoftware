@@ -35,7 +35,6 @@ Feature('Svelte component instrumentation')
           ({ source }: { source: string }) =>
             instrument([{ name: '/tmp/component.svelte', content: source, mutate: true }], {
               ignorers: [],
-              plugins: null,
               excludedMutations: [],
             }),
         ),

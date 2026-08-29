@@ -1,8 +1,6 @@
-// oxlint-disable
-// @ts-nocheck
 async function withResources(): Promise<void> {
   using file = openFile('data.txt')
-  await using conn = openConnection()
+  await using _conn = openConnection()
   {
     using a = getA(), b = getB()
     console.log(a, b)

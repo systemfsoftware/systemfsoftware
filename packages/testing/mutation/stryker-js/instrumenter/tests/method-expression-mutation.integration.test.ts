@@ -35,7 +35,6 @@ Feature('Mutating a method named after an Object.prototype member')
           ({ source }: { source: string }) =>
             instrument([{ name: '/tmp/prototype-methods.ts', content: source, mutate: true }], {
               ignorers: [],
-              plugins: null,
               excludedMutations: [],
             }),
         ),

@@ -149,6 +149,7 @@ export interface Comment {
 export interface Hashbang {
   readonly type: 'Hashbang'
   readonly value: string
+  readonly start: number
 }
 
 export interface PrintOptions {
@@ -267,12 +268,11 @@ class PrintState {
   constructor(opts: PrintOptions) {
     this.comments = opts.comments ?? []
     this.hashbang = opts.hashbang ?? null
-    // Filter out the hashbang-like comment: oxc emits the hashbang as both
-    // Program.hashbang and a Line comment with the same span. Deduplicate to
-    // avoid double-printing.
-    const hashStart = this.hashbang ? -1 : -1 // not used for filtering; we check value
+    // oxc emits the hashbang as both Program.hashbang and a Line comment with
+    // the same span. Deduplicate by span so a regular comment that merely
+    // repeats the hashbang text survives.
     const filtered = this.hashbang
-      ? this.comments.filter((c) => !(c.type === 'Line' && c.value === this.hashbang!.value))
+      ? this.comments.filter((c) => !(c.type === 'Line' && c.start === this.hashbang!.start))
       : this.comments
     this.sortedComments = [...filtered].sort((a, b) => a.start - b.start)
   }
@@ -1009,7 +1009,6 @@ class PrintState {
         }
       }
     }
-    void prec
   }
 
   private printCallExpression(node: CallExpression, prec: number): void {
@@ -1026,7 +1025,6 @@ class PrintState {
       this.printNode(node.arguments[i] as unknown as { type: string }, PREC.Assignment)
     }
     this.out += ')'
-    void prec
   }
 
   private printNewExpression(node: NewExpression, prec: number): void {
@@ -1041,7 +1039,6 @@ class PrintState {
       this.printNode(node.arguments[i] as unknown as { type: string }, PREC.Assignment)
     }
     this.out += ')'
-    void prec
   }
 
   private printMetaProperty(node: MetaProperty): void {
@@ -1082,7 +1079,6 @@ class PrintState {
       this.out += needsParen ? `(${argStr})` : argStr
       this.out += node.operator
     }
-    void prec
   }
 
   private printUnaryExpression(node: UnaryExpression, prec: number): void {
@@ -1098,7 +1094,6 @@ class PrintState {
       node.argument.type === 'ConditionalExpression' ||
       node.argument.type === 'SequenceExpression'
     this.out += argNeedsParen ? `(${argStr})` : argStr
-    void prec
   }
 
   private printBinaryExpression(node: BinaryExpression, prec: number): void {
@@ -1233,8 +1228,6 @@ class PrintState {
       this.out += ' '
       this.printNode(node.argument as unknown as { type: string }, PREC.Assignment)
     }
-    void myPrec
-    void prec
   }
 
   private printArrowFunction(node: ArrowFunctionExpression, prec: number): void {
@@ -1496,6 +1489,7 @@ class PrintState {
 
   private printStatement(node: unknown): void {
     const n = node as { type: string }
+    this.printAttachedComments(n, 'leadingComments')
     switch (n.type) {
       case 'BlockStatement':
         this.printBlockStatement(n as BlockStatement)
@@ -1595,9 +1589,33 @@ class PrintState {
           this.printTSType(n as unknown as TSType)
           this.out += ';'
         } else {
-          this.out += `/* unhandled stmt: ${n.type} */;`
+          // Silent corruption is worse than a loud failure: instrumented code
+          // that dropped a statement would downgrade runs, not crash them.
+          throw new Error(`Printer: unhandled statement kind ${n.type}`)
         }
         break
+    }
+    this.printAttachedComments(n, 'trailingComments')
+  }
+
+  /**
+   * Emits the comments `attachComments` folded into the tree
+   * (`leadingComments` before the statement, `trailingComments` on the
+   * statement's last line). The flat `opts.comments` path only serves direct
+   * `printProgram` calls on freshly parsed trees; instrumented trees carry
+   * their comments attached to nodes.
+   */
+  private printAttachedComments(node: unknown, field: 'leadingComments' | 'trailingComments'): void {
+    const comments = (node as Record<string, unknown>)[field]
+    if (!Array.isArray(comments)) return
+    for (const comment of comments as Array<{ type: string; value: string }>) {
+      if (field === 'leadingComments') this.out += this.indent()
+      if (comment.type === 'Block') {
+        this.out += `/*${comment.value}*/`
+      } else {
+        this.out += `//${comment.value}`
+      }
+      this.out += field === 'leadingComments' ? '\n' : ' '
     }
   }
 
@@ -1666,7 +1684,7 @@ class PrintState {
     this.out += 'for ('
     if (node.init) {
       if ((node.init as { type: string }).type === 'VariableDeclaration') {
-        this.printVariableDeclaration(node.init as VariableDeclaration, true)
+        this.printVariableDeclaration(node.init as VariableDeclaration)
       } else {
         this.printNode(node.init as unknown as { type: string }, PREC.Sequence)
       }
@@ -1682,7 +1700,7 @@ class PrintState {
   private printForInStatement(node: ForInStatement): void {
     this.out += 'for ('
     if ((node.left as { type: string }).type === 'VariableDeclaration') {
-      this.printVariableDeclaration(node.left as VariableDeclaration, true)
+      this.printVariableDeclaration(node.left as VariableDeclaration)
     } else {
       this.printNode(node.left as unknown as { type: string }, PREC.Sequence)
     }
@@ -1693,10 +1711,10 @@ class PrintState {
   }
 
   private printForOfStatement(node: ForOfStatement): void {
-    this.out += 'for ('
-    if (node.await) this.out += 'await '
+    // `for await (const x of y)`: the await keyword sits before the paren.
+    this.out += node.await ? 'for await (' : 'for ('
     if ((node.left as { type: string }).type === 'VariableDeclaration') {
-      this.printVariableDeclaration(node.left as VariableDeclaration, true)
+      this.printVariableDeclaration(node.left as VariableDeclaration)
     } else {
       this.printNode(node.left as unknown as { type: string }, PREC.Sequence)
     }
@@ -1761,7 +1779,13 @@ class PrintState {
       this.out += ' catch'
       if (node.handler.param) {
         this.out += ' ('
-        this.printNode(node.handler.param as unknown as { type: string }, PREC.Sequence)
+        // An Identifier carries the TS type annotation (`catch (e: unknown)`);
+        // printIdentifierWithOptional renders name + optional + annotation.
+        if (node.handler.param.type === 'Identifier') {
+          this.printIdentifierWithOptional(node.handler.param as never)
+        } else {
+          this.printNode(node.handler.param as unknown as { type: string }, PREC.Sequence)
+        }
         this.out += ')'
       }
       this.out += ' '
@@ -1773,15 +1797,12 @@ class PrintState {
     }
   }
 
-  private printVariableDeclaration(node: VariableDeclaration, noSemi = false): void {
+  private printVariableDeclaration(node: VariableDeclaration): void {
     if (node.declare) this.out += 'declare '
     this.out += `${node.kind} `
     for (let i = 0; i < node.declarations.length; i++) {
       if (i > 0) this.out += ', '
       this.printVariableDeclarator(node.declarations[i]!)
-    }
-    if (!noSemi) {
-      // caller adds semicolon
     }
   }
 
@@ -1856,8 +1877,6 @@ class PrintState {
           this.printDecorators(fp['decorators'] as Decorator[])
         }
         // Identifier or pattern with optional, typeAnnotation
-        const idDecorators = fp['decorators'] as Decorator[] | undefined
-        void idDecorators
         // Print binding pattern
         if (fp['type'] === 'Identifier') {
           this.printIdentifierWithOptional(fp as unknown as never)
@@ -1904,7 +1923,6 @@ class PrintState {
     if (node.accessibility) this.out += `${node.accessibility} `
     if (node.static) this.out += 'static '
     if (node.override) this.out += 'override '
-    if (node.optional) this.out += ''
     const fn = node.value as unknown as FunctionNode
     if (fn.async) this.out += 'async '
     if (fn.generator) this.out += '*'
@@ -1966,7 +1984,6 @@ class PrintState {
     if (node.accessibility) this.out += `${node.accessibility} `
     if (node.static) this.out += 'static '
     if (node.override) this.out += 'override '
-    if (node.definite) this.out += ''
     this.out += 'accessor '
     if (node.computed) {
       this.out += '['

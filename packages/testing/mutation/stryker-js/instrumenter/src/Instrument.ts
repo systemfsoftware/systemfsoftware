@@ -183,7 +183,7 @@ function tryParseTSDirective(
   }
   return undefined
 }
-function toBabelLineNumber(range: MutateDescription): MutateDescription {
+function toOneBasedLineNumber(range: MutateDescription): MutateDescription {
   if (typeof range === 'boolean') {
     return range
   }
@@ -257,7 +257,7 @@ const instrumentDescription = pipe(
           try: () =>
             transform(ast, collector, {
               options: toTransformerOptions(options),
-              mutateDescription: toBabelLineNumber(file.mutate),
+              mutateDescription: toOneBasedLineNumber(file.mutate),
             }),
           catch: (cause) => new InstrumentError({ message: `Failed to transform ${file.name}`, cause }),
         })

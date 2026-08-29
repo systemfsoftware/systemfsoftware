@@ -1,5 +1,3 @@
-// oxlint-disable
-// @ts-nocheck
 type Props<T> = { value: T; label: string }
 function Greeting<T extends string>(props: Props<T>) {
   const { value, label } = props

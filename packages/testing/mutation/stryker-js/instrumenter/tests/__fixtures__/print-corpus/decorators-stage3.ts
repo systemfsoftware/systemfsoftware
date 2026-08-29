@@ -1,5 +1,3 @@
-// oxlint-disable
-// @ts-nocheck
 function logged(value: unknown, context: ClassDecoratorContext): void {}
 function bound(_value: unknown, _context: ClassFieldDecoratorContext): void {}
 
