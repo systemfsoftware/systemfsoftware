@@ -6,8 +6,9 @@ export const Identifier = S.Struct({
 })
 export type Identifier = S.Schema.Type<typeof Identifier>
 
+// ESTree renders string literals as Literal{value:string}; the semantic name records what this matches.
 export const StringLiteral = S.Struct({
-  type: S.Literal('StringLiteral'),
+  type: S.Literal('Literal'),
   value: S.String,
 })
 export type StringLiteral = S.Schema.Type<typeof StringLiteral>

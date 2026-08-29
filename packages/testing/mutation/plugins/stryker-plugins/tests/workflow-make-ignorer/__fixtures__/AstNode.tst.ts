@@ -1,4 +1,4 @@
-import type * as t from '@babel/types'
+import type * as t from 'estree'
 import { describe, expect, test } from 'tstyche'
 import type {
   ArrowFunctionExpression,
@@ -9,28 +9,31 @@ import type {
   StringLiteral,
 } from '../../../src/workflow-make-ignorer/AstNode.schema.js'
 
-describe('Workflow-make boundary AST node schemas are typed equivalently to @babel/types nodes', () => {
-  test('Should_AcceptBabelIdentifier_When_TypedAsIdentifierSchema', () => {
+describe('Workflow-make boundary AST node schemas are typed equivalently to estree nodes', () => {
+  test('Should_AcceptEstreeIdentifier_When_TypedAsIdentifierSchema', () => {
     expect<Identifier>().type.toBeAssignableFrom<t.Identifier>()
   })
 
-  test('Should_AcceptBabelStringLiteral_When_TypedAsStringLiteralSchema', () => {
-    expect<StringLiteral>().type.toBeAssignableFrom<t.StringLiteral>()
+  test('Should_AcceptEstreeStringLiteral_When_TypedAsStringLiteralSchema', () => {
+    expect<StringLiteral>().type.toBeAssignableFrom<t.Literal & { value: string }>()
   })
 
-  test('Should_AcceptBabelMemberExpression_When_TypedAsMemberExpressionSchema', () => {
+  test('Should_AcceptEstreeMemberExpression_When_TypedAsMemberExpressionSchema', () => {
     expect<MemberExpression>().type.toBeAssignableFrom<t.MemberExpression>()
   })
 
-  test('Should_AcceptBabelCallExpression_When_TypedAsCallExpressionSchema', () => {
-    expect<CallExpression>().type.toBeAssignableFrom<t.CallExpression>()
+  // estree types CallExpression's tag as `"CallExpression" | "NewExpression"`
+  // (NewExpression extends CallExpressionBase without narrowing it); the
+  // schema matches the precise tag, so the fixture intersects it.
+  test('Should_AcceptEstreeCallExpression_When_TypedAsCallExpressionSchema', () => {
+    expect<CallExpression>().type.toBeAssignableFrom<t.CallExpression & { type: 'CallExpression' }>()
   })
 
-  test('Should_AcceptBabelArrowFunctionExpression_When_TypedAsArrowFunctionExpressionSchema', () => {
+  test('Should_AcceptEstreeArrowFunctionExpression_When_TypedAsArrowFunctionExpressionSchema', () => {
     expect<ArrowFunctionExpression>().type.toBeAssignableFrom<t.ArrowFunctionExpression>()
   })
 
-  test('Should_AcceptBabelFunctionExpression_When_TypedAsFunctionExpressionSchema', () => {
+  test('Should_AcceptEstreeFunctionExpression_When_TypedAsFunctionExpressionSchema', () => {
     expect<FunctionExpression>().type.toBeAssignableFrom<t.FunctionExpression>()
   })
 

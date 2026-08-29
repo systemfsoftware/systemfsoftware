@@ -1,13 +1,12 @@
 /**
  * Parser — all parsers that turn source text into the instrumenter's ASTs.
  */
-import babel from '@babel/core'
-import type { ParserPlugin } from '@babel/parser'
 import type { Ast as NGAst } from 'angular-html-parser'
 import * as Predicate from 'effect/Predicate'
 import type { BaseNode, Program } from 'estree'
-import { createRequire } from 'module'
+import { parseSync } from 'oxc-parser'
 import path from 'path'
+import { buildLineTable, positionFromLineTable } from './estree.js'
 import {
   ParseFailed,
   ParserNotFound,
@@ -15,6 +14,7 @@ import {
   SvelteVersionNotSupported,
   SvelteWalkerNotFound,
 } from './Parser.schema.js'
+import { type SpannedComment } from './Syntax.js'
 import {
   type Ast,
   type AstByFormat,
@@ -35,9 +35,7 @@ import {
 } from './Syntax.js'
 export { ParseFailed, ParserNotFound, SvelteParseFailed, SvelteVersionNotSupported, SvelteWalkerNotFound }
 
-export interface ParserOptions {
-  plugins: readonly unknown[] | null
-}
+export interface ParserOptions {}
 
 export interface ParserContext {
   parse<T extends AstFormat>(
@@ -52,17 +50,57 @@ export type Parser<T extends Ast = Ast> = (
   fileName: string,
   context: ParserContext,
 ) => Promise<T>
+// ---------------------------------------------------------------------------
+// Oxc parse — one engine for js, ts and tsx (Babel is gone from this package).
+// ---------------------------------------------------------------------------
 
-const { types, parseAsync } = babel
-const require = createRequire(import.meta.url)
+function parseWithOxc(
+  text: string,
+  fileName: string,
+  lang: 'js' | 'jsx' | 'ts' | 'tsx',
+): { root: Program; comments: readonly SpannedComment[] } {
+  const result = parseSync(fileName, text, { lang, range: true })
+  if (result.errors.length > 0) {
+    const first = result.errors[0]
+    const label = first?.labels[0]
+    const position = positionFromLineTable(label?.start ?? 0, buildLineTable(text))
+    throw new ParseFailed({
+      fileName,
+      message: first?.message ?? 'unknown parse error',
+      location: position,
+      cause: result.errors.map((error) => error.message),
+    })
+  }
+  // oxc's Program and comments are structurally the estree Program /
+  // SpannedComment shapes the rest of this package works with; the boundary
+  // casts name that contract once, and the scoped disables stay on those lines.
+  // oxlint-disable-next-line typescript/no-unsafe-type-assertion
+  const program = result.program as unknown as Program
+  // oxlint-disable-next-line typescript/no-unnecessary-type-assertion typescript/no-unsafe-type-assertion
+  return { root: program, comments: result.comments as readonly SpannedComment[] }
+}
 
+/**
+ * Shifts a parsed script's root span by the offset of the script tag inside
+ * the embedding document (html/svelte), so range math against the raw
+ * document stays consistent. Child nodes keep their script-relative offsets —
+ * mutant positions are re-mapped through the AST's `offset` field.
+ */
+function shiftScriptOffsets(ast: Ast, offset: number): void {
+  const root: unknown = ast.root
+  if (
+    typeof root === 'object' && root !== null && 'start' in root && 'end' in root &&
+    typeof root.start === 'number' && typeof root.end === 'number'
+  ) {
+    root.start += offset
+    root.end += offset
+  }
+}
 // ---------------------------------------------------------------------------
 // Top-level dispatcher
 // ---------------------------------------------------------------------------
 
-export function createParser(
-  parserOptions: ParserOptions,
-): {
+export function createParser(): {
   <T extends AstFormat>(
     code: string,
     fileName: string,
@@ -70,7 +108,7 @@ export function createParser(
   ): Promise<AstByFormat[T]>
   (code: string, fileName: string, formatOverride?: AstFormat): Promise<Ast>
 } {
-  const jsParse = createJSParser(parserOptions)
+  const jsParse = createJSParser()
 
   async function parse<T extends AstFormat>(
     code: string,
@@ -90,9 +128,7 @@ export function createParser(
     const format = getFormat(fileName, formatOverride)
     if (!format) {
       const ext = path.extname(fileName).toLowerCase()
-      throw new Error(
-        `Unable to parse ${fileName}. No parser registered for ${ext}!`,
-      )
+      throw new ParserNotFound({ fileName, extension: ext, cause: undefined })
     }
     switch (format) {
       case 'js':
@@ -147,74 +183,10 @@ export function getFormat(
 // ---------------------------------------------------------------------------
 // JS parser
 // ---------------------------------------------------------------------------
-
-function isParserPlugin(value: unknown): value is ParserPlugin {
-  return typeof value === 'string' || Array.isArray(value)
-}
-function isParserPluginArray(value: readonly unknown[]): value is ParserPlugin[] {
-  return value.every(isParserPlugin)
-}
-
-function getParserPlugins(
-  override: readonly unknown[] | null,
-): ParserPlugin[] {
-  if (override === null) {
-    return defaultPlugins
-  }
-  if (isParserPluginArray(override)) {
-    return override
-  }
-  throw new Error('Invalid parser plugins: expected ParserPlugin[]')
-}
-
-const defaultPlugins: ParserPlugin[] = [
-  'doExpressions',
-  'objectRestSpread',
-  'classProperties',
-  'exportDefaultFrom',
-  'exportNamespaceFrom',
-  'asyncGenerators',
-  'functionBind',
-  'functionSent',
-  'dynamicImport',
-  'numericSeparator',
-  'importMeta',
-  'optionalCatchBinding',
-  'optionalChaining',
-  'classPrivateProperties',
-  ['pipelineOperator', { proposal: 'minimal' }],
-  'nullishCoalescingOperator',
-  'bigInt',
-  'throwExpressions',
-  'logicalAssignment',
-  'classPrivateMethods',
-  'v8intrinsic',
-  'partialApplication',
-  ['decorators', { decoratorsBeforeExport: false }],
-  'jsx',
-]
-
-function createJSParser({ plugins: pluginsOverride }: ParserOptions) {
+function createJSParser(): (text: string, fileName: string) => Promise<JSAst> {
   return async function parse(text: string, fileName: string): Promise<JSAst> {
-    const plugins = getParserPlugins(pluginsOverride)
-    const ast = await parseAsync(text, {
-      parserOpts: {
-        plugins: [...plugins],
-      },
-      filename: fileName,
-      sourceType: 'module',
-    })
-    if (ast === null) {
-      throw new Error(
-        `Expected ${fileName} to contain a babel.types.file, but it yielded null`,
-      )
-    }
-    return {
-      originFileName: fileName,
-      rawContent: text,
-      format: 'js',
-      root: ast,
-    }
+    const { root, comments } = parseWithOxc(text, fileName, 'js')
+    return { originFileName: fileName, rawContent: text, format: 'js', root, comments }
   }
 }
 
@@ -222,68 +194,18 @@ function createJSParser({ plugins: pluginsOverride }: ParserOptions) {
 // TS / TSX parsers
 // ---------------------------------------------------------------------------
 
-/**
- * See https://babeljs.io/docs/en/babel-preset-typescript
- * @param text The text to parse
- * @param fileName The name of the file
- */
 export async function parseTS(text: string, fileName: string): Promise<TSAst> {
-  return {
-    originFileName: fileName,
-    rawContent: text,
-    format: 'ts',
-    root: await parseTSInternal(text, fileName, false),
-  }
+  const { root, comments } = parseWithOxc(text, fileName, 'ts')
+  return { originFileName: fileName, rawContent: text, format: 'ts', root, comments }
 }
 
 export async function parseTsx(
   text: string,
   fileName: string,
 ): Promise<TsxAst> {
-  return {
-    root: await parseTSInternal(text, fileName, true),
-    format: 'tsx',
-    originFileName: fileName,
-    rawContent: text,
-  }
+  const { root, comments } = parseWithOxc(text, fileName, 'tsx')
+  return { root, comments, format: 'tsx', originFileName: fileName, rawContent: text }
 }
-
-async function parseTSInternal(
-  text: string,
-  fileName: string,
-  isTSX: boolean,
-): Promise<babel.types.File> {
-  const ast = await parseAsync(text, {
-    filename: fileName,
-    parserOpts: {
-      ranges: true,
-    },
-    configFile: false,
-    babelrc: false,
-    presets: [
-      [
-        require.resolve('@babel/preset-typescript'),
-        { isTSX, allExtensions: true },
-      ],
-    ],
-    plugins: [
-      [require.resolve('@babel/plugin-proposal-decorators'), { legacy: true }],
-      [require.resolve('@babel/plugin-transform-explicit-resource-management')],
-    ],
-  })
-  if (ast === null) {
-    throw new Error(
-      `Expected ${fileName} to contain a babel.types.file, but it yielded null`,
-    )
-  }
-  if (types.isProgram(ast)) {
-    throw new Error(
-      `Expected ${fileName} to contain a babel.types.file, but was a program`,
-    )
-  }
-  return ast
-}
-
 // ---------------------------------------------------------------------------
 // HTML parser
 // ---------------------------------------------------------------------------
@@ -396,16 +318,7 @@ async function ngHtmlParser(
     const ast = await parserContext.parse(content, fileName, scriptFormat)
     if (ast !== null && ast !== undefined) {
       const offset = el.startSourceSpan.end
-      const rootStart = ast.root.start
-      if (rootStart == null) {
-        throw new Error('Babel File node without a start offset')
-      }
-      const rootEnd = ast.root.end
-      if (rootEnd == null) {
-        throw new Error('Babel File node without an end offset')
-      }
-      ast.root.start = rootStart + offset.offset
-      ast.root.end = rootEnd + offset.offset
+      shiftScriptOffsets(ast, offset.offset)
       return {
         ...ast,
         offset: {
