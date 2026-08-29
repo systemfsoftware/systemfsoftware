@@ -345,10 +345,54 @@ export const recipes = {
         'dist/index.d.ts': 'export declare const a: number;\n',
         'dist/macros.js': 'module.exports = { m: 1 };\n',
         'dist/macros.d.ts': 'export declare const m: number;\n',
-        'dist/utils.js': 'module.exports = { u: 1 };\n',
         'dist/utils.d.ts': 'export declare const u: number;\n',
       },
       'multi-entrypoint',
+      '1.0.0',
+    ),
+
+  BabelTranspiledCJS: () =>
+    createPackage(
+      {
+        'package.json': JSON.stringify({
+          name: 'babel-transpiled-cjs',
+          version: '1.0.0',
+          main: './lib/index.js',
+        }),
+        'lib/index.js': [
+          '"use strict";',
+          'Object.defineProperty(exports, "__esModule", { value: true });',
+          'exports.foo = void 0;',
+          'exports.foo = "foo";',
+          'exports.bar = "bar";',
+          'Object.defineProperty(exports, "baz", { enumerable: true, get: function() { return _dep.baz; } });',
+        ].join('\n'),
+        'lib/index.d.ts': 'export declare const foo: string;\nexport declare const bar: string;\n',
+      },
+      'babel-transpiled-cjs',
+      '1.0.0',
+    ),
+
+  EsbuildTranspiledCJS: () =>
+    createPackage(
+      {
+        'package.json': JSON.stringify({
+          name: 'esbuild-transpiled-cjs',
+          version: '1.0.0',
+          main: './dist/index.js',
+        }),
+        'dist/index.js': [
+          'var __defProp = Object.defineProperty;',
+          'var __getOwnPropNames = Object.getOwnPropertyNames;',
+          'var __export = (target, all) => { for (var name in all) __defProp(target, name, { get: all[name], enumerable: true }); };',
+          'var __copyProps = (to, from, except, desc) => { if (from && typeof from === "object" || typeof from === "function") { for (let key of __getOwnPropNames(from)) if (!except.has(key)) __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropNames(from)) }); } return to; };',
+          'var __reExport = (a, b, c) => __copyProps(a, b, c);',
+          '__export(exports, { foo: () => foo, bar: () => bar });',
+          'var foo = "foo"; var bar = "bar";',
+        ].join('\n'),
+        'dist/index.d.ts': 'export declare const foo: string;\n',
+      },
+      'esbuild-transpiled-cjs',
       '1.0.0',
     ),
 }

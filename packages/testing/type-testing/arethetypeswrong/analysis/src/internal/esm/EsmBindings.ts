@@ -1,6 +1,6 @@
-import type { Exports } from 'cjs-module-lexer'
 import ts from 'typescript'
 import { hasModifier } from '../TsCompat.js'
+import type { Exports } from './CjsBindingDetector.js'
 
 // Note: There is a pretty solid module `es-module-lexer` which performs a similar lexing operation
 // as `cjs-module-lexer`, but has some limitations in what it can express. This implementation

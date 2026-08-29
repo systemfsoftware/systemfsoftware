@@ -16,7 +16,7 @@ export function getCjsModuleNamespace(fs: Package, file: URL, seen = new Set<str
 
   // Additionally, resolve facade reexports
 
-  for (const source of bindings.reexports.reverse()) {
+  for (const source of [...bindings.reexports].reverse()) {
     try {
       const { format, url } = cjsResolve(fs, source, file)
       if (format === 'commonjs' && !seen.has(url.pathname)) {

@@ -42,9 +42,7 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
-    "@loaderkit/resolve": "^1.0.2",
     "@systemfsoftware/npm-package": "workspace:^",
-    "cjs-module-lexer": "^1.2.3",
     "effect": "catalog:",
     "typescript": "catalog:attw"
   },

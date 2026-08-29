@@ -1,6 +1,6 @@
 import { canParse, tryParseRange } from '@std/semver'
 import { Result } from 'effect'
-import { validatePackageName } from './internal/PackageName.kernel.js'
+import { validatePackageName } from './internal/PackageNameValidator.js'
 
 import { PackageSpecParseError, type ParsedPackageSpec } from './PackageSpec.schema.js'
 

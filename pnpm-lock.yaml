@@ -2607,15 +2607,9 @@ importers:
 
   packages/testing/type-testing/arethetypeswrong/analysis:
     dependencies:
-      '@loaderkit/resolve':
-        specifier: ^1.0.2
-        version: 1.0.6
       '@systemfsoftware/npm-package':
         specifier: workspace:^
         version: link:../../../../npm-package
-      cjs-module-lexer:
-        specifier: ^1.2.3
-        version: 1.4.3
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112

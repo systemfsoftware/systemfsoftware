@@ -493,41 +493,6 @@
               "======== Module name 'multi-entrypoint/utils' was successfully resolved to '/node_modules/multi-entrypoint/dist/utils.d.ts' with Package ID 'multi-entrypoint/dist/utils.d.ts@1.0.0'. ========"
             ]
           },
-          "implementationResolution": {
-            "fileName": "/node_modules/multi-entrypoint/dist/utils.js",
-            "isJson": false,
-            "isTypeScript": false,
-            "trace": [
-              "======== Resolving module 'multi-entrypoint/utils' from '/index.ts'. ========",
-              "Explicitly specified module resolution kind: 'Node16'.",
-              "Resolving in CJS mode with conditions 'require', 'node'.",
-              "File '/package.json' does not exist according to earlier cached lookups.",
-              "Loading module 'multi-entrypoint/utils' from 'node_modules' folder, target file types: TypeScript, JavaScript, JSON.",
-              "Searching all ancestor node_modules directories for preferred extensions: TypeScript.",
-              "File '/node_modules/multi-entrypoint/package.json' exists according to earlier cached lookups.",
-              "Entering conditional exports.",
-              "Saw non-matching condition 'types'.",
-              "Matched 'exports' condition 'default'.",
-              "Using 'exports' subpath './utils' with target './dist/utils.js'.",
-              "File name '/node_modules/multi-entrypoint/dist/utils.js' has a '.js' extension - stripping it.",
-              "File '/node_modules/multi-entrypoint/dist/utils.ts' does not exist.",
-              "File '/node_modules/multi-entrypoint/dist/utils.tsx' does not exist.",
-              "Failed to resolve under condition 'default'.",
-              "Exiting conditional exports.",
-              "Export specifier './utils' does not exist in package.json scope at path '/node_modules/multi-entrypoint'.",
-              "Searching all ancestor node_modules directories for fallback extensions: JavaScript, JSON.",
-              "File '/node_modules/multi-entrypoint/package.json' exists according to earlier cached lookups.",
-              "Entering conditional exports.",
-              "Saw non-matching condition 'types'.",
-              "Matched 'exports' condition 'default'.",
-              "Using 'exports' subpath './utils' with target './dist/utils.js'.",
-              "File name '/node_modules/multi-entrypoint/dist/utils.js' has a '.js' extension - stripping it.",
-              "File '/node_modules/multi-entrypoint/dist/utils.js' exists - use it as a name resolution result.",
-              "Resolved under condition 'default'.",
-              "Exiting conditional exports.",
-              "======== Module name 'multi-entrypoint/utils' was successfully resolved to '/node_modules/multi-entrypoint/dist/utils.js' with Package ID 'multi-entrypoint/dist/utils.js@1.0.0'. ========"
-            ]
-          },
           "files": [
             "/node_modules/typescript/lib/lib.d.ts",
             "/node_modules/multi-entrypoint/dist/utils.d.ts"
@@ -558,53 +523,11 @@
               "======== Module name 'multi-entrypoint/utils' was successfully resolved to '/node_modules/multi-entrypoint/dist/utils.d.ts' with Package ID 'multi-entrypoint/dist/utils.d.ts@1.0.0'. ========"
             ]
           },
-          "implementationResolution": {
-            "fileName": "/node_modules/multi-entrypoint/dist/utils.js",
-            "isJson": false,
-            "isTypeScript": false,
-            "trace": [
-              "======== Resolving module 'multi-entrypoint/utils' from '/index.mts'. ========",
-              "Explicitly specified module resolution kind: 'Node16'.",
-              "Resolving in ESM mode with conditions 'import', 'node'.",
-              "File '/package.json' does not exist according to earlier cached lookups.",
-              "Loading module 'multi-entrypoint/utils' from 'node_modules' folder, target file types: TypeScript, JavaScript, JSON.",
-              "Searching all ancestor node_modules directories for preferred extensions: TypeScript.",
-              "File '/node_modules/multi-entrypoint/package.json' exists according to earlier cached lookups.",
-              "Entering conditional exports.",
-              "Saw non-matching condition 'types'.",
-              "Matched 'exports' condition 'default'.",
-              "Using 'exports' subpath './utils' with target './dist/utils.js'.",
-              "File name '/node_modules/multi-entrypoint/dist/utils.js' has a '.js' extension - stripping it.",
-              "File '/node_modules/multi-entrypoint/dist/utils.ts' does not exist.",
-              "File '/node_modules/multi-entrypoint/dist/utils.tsx' does not exist.",
-              "Failed to resolve under condition 'default'.",
-              "Exiting conditional exports.",
-              "Export specifier './utils' does not exist in package.json scope at path '/node_modules/multi-entrypoint'.",
-              "Searching all ancestor node_modules directories for fallback extensions: JavaScript, JSON.",
-              "File '/node_modules/multi-entrypoint/package.json' exists according to earlier cached lookups.",
-              "Entering conditional exports.",
-              "Saw non-matching condition 'types'.",
-              "Matched 'exports' condition 'default'.",
-              "Using 'exports' subpath './utils' with target './dist/utils.js'.",
-              "File name '/node_modules/multi-entrypoint/dist/utils.js' has a '.js' extension - stripping it.",
-              "File '/node_modules/multi-entrypoint/dist/utils.js' exists - use it as a name resolution result.",
-              "Resolved under condition 'default'.",
-              "Exiting conditional exports.",
-              "Resolution of non-relative name failed; trying with modern Node resolution features disabled to see if npm library needs configuration update.",
-              "File '/package.json' does not exist according to earlier cached lookups.",
-              "Loading module 'multi-entrypoint/utils' from 'node_modules' folder, target file types: TypeScript.",
-              "Searching all ancestor node_modules directories for preferred extensions: TypeScript.",
-              "File '/node_modules/multi-entrypoint/package.json' exists according to earlier cached lookups.",
-              "======== Module name 'multi-entrypoint/utils' was successfully resolved to '/node_modules/multi-entrypoint/dist/utils.js' with Package ID 'multi-entrypoint/dist/utils.js@1.0.0'. ========"
-            ]
-          },
           "files": [
             "/node_modules/typescript/lib/lib.d.ts",
             "/node_modules/multi-entrypoint/dist/utils.d.ts"
           ],
-          "visibleProblems": [
-            5
-          ]
+          "visibleProblems": []
         },
         "bundler": {
           "name": "./utils",
@@ -628,48 +551,6 @@
               "Resolved under condition 'types'.",
               "Exiting conditional exports.",
               "======== Module name 'multi-entrypoint/utils' was successfully resolved to '/node_modules/multi-entrypoint/dist/utils.d.ts' with Package ID 'multi-entrypoint/dist/utils.d.ts@1.0.0'. ========"
-            ]
-          },
-          "implementationResolution": {
-            "fileName": "/node_modules/multi-entrypoint/dist/utils.js",
-            "isJson": false,
-            "isTypeScript": false,
-            "trace": [
-              "======== Resolving module 'multi-entrypoint/utils' from '/index.ts'. ========",
-              "Explicitly specified module resolution kind: 'Bundler'.",
-              "Resolving in CJS mode with conditions 'import'.",
-              "File '/package.json' does not exist according to earlier cached lookups.",
-              "Loading module 'multi-entrypoint/utils' from 'node_modules' folder, target file types: TypeScript, JavaScript, JSON.",
-              "Searching all ancestor node_modules directories for preferred extensions: TypeScript.",
-              "File '/node_modules/multi-entrypoint/package.json' exists according to earlier cached lookups.",
-              "Entering conditional exports.",
-              "Saw non-matching condition 'types'.",
-              "Matched 'exports' condition 'default'.",
-              "Using 'exports' subpath './utils' with target './dist/utils.js'.",
-              "File name '/node_modules/multi-entrypoint/dist/utils.js' has a '.js' extension - stripping it.",
-              "File '/node_modules/multi-entrypoint/dist/utils.ts' does not exist.",
-              "File '/node_modules/multi-entrypoint/dist/utils.tsx' does not exist.",
-              "Failed to resolve under condition 'default'.",
-              "Exiting conditional exports.",
-              "Export specifier './utils' does not exist in package.json scope at path '/node_modules/multi-entrypoint'.",
-              "Searching all ancestor node_modules directories for fallback extensions: JavaScript, JSON.",
-              "File '/node_modules/multi-entrypoint/package.json' exists according to earlier cached lookups.",
-              "Entering conditional exports.",
-              "Saw non-matching condition 'types'.",
-              "Matched 'exports' condition 'default'.",
-              "Using 'exports' subpath './utils' with target './dist/utils.js'.",
-              "File name '/node_modules/multi-entrypoint/dist/utils.js' has a '.js' extension - stripping it.",
-              "File '/node_modules/multi-entrypoint/dist/utils.js' exists - use it as a name resolution result.",
-              "Resolved under condition 'default'.",
-              "Exiting conditional exports.",
-              "Resolution of non-relative name failed; trying with modern Node resolution features disabled to see if npm library needs configuration update.",
-              "File '/package.json' does not exist according to earlier cached lookups.",
-              "Loading module 'multi-entrypoint/utils' from 'node_modules' folder, target file types: TypeScript.",
-              "Searching all ancestor node_modules directories for preferred extensions: TypeScript.",
-              "File '/node_modules/multi-entrypoint/package.json' exists according to earlier cached lookups.",
-              "File '/node_modules/multi-entrypoint/utils.ts' does not exist.",
-              "File '/node_modules/multi-entrypoint/utils.tsx' does not exist.",
-              "======== Module name 'multi-entrypoint/utils' was successfully resolved to '/node_modules/multi-entrypoint/dist/utils.js' with Package ID 'multi-entrypoint/dist/utils.js@1.0.0'. ========"
             ]
           },
           "files": [
@@ -716,11 +597,6 @@
           "detectedKind": 1,
           "detectedReason": "no:type",
           "reasonFileName": "/node_modules/multi-entrypoint/package.json"
-        },
-        "/node_modules/multi-entrypoint/dist/utils.js": {
-          "detectedKind": 1,
-          "detectedReason": "no:type",
-          "reasonFileName": "/node_modules/multi-entrypoint/package.json"
         }
       }
     },
@@ -759,15 +635,6 @@
       "kind": "NoResolution",
       "entrypoint": "./utils",
       "resolutionKind": "node10"
-    },
-    {
-      "kind": "NamedExports",
-      "implementationFileName": "/node_modules/multi-entrypoint/dist/utils.js",
-      "typesFileName": "/node_modules/multi-entrypoint/dist/utils.d.ts",
-      "isMissingAllNamed": true,
-      "missing": [
-        "u"
-      ]
     }
   ]
 }

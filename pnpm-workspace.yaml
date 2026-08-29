@@ -67,7 +67,6 @@ catalogs:
     "@oxlint/plugins": ^1.77.0
     oxlint-tsgolint: 7.0.2001
   stryker:
-    semver: ^7.7.0
     "@systemfsoftware/stryker-js-cli": ^4.0.1
     "@systemfsoftware/stryker-js-typescript-checker": ^3.0.1
     "@systemfsoftware/stryker-js-vitest-runner": ^2.0.1

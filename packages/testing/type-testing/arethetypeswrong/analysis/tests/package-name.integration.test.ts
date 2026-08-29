@@ -2,7 +2,7 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Result } from 'effect'
 import { expect } from 'vitest'
-import { validatePackageName } from '../src/internal/PackageName.kernel.js'
+import { validatePackageName } from '../src/internal/PackageNameValidator.js'
 import { parsePackageSpec } from '../src/PackageSpec.js'
 
 const Feature = makeFeature({ it, layer })
