@@ -1,5 +1,5 @@
+import { canParse, tryParseRange } from '@std/semver'
 import { Result } from 'effect'
-import { valid, validRange } from 'semver'
 import validatePackageName from 'validate-npm-package-name'
 
 import { PackageSpecParseError, type ParsedPackageSpec } from './PackageSpec.schema.js'
@@ -28,10 +28,10 @@ export const parsePackageSpec = (input: string): Result.Result<ParsedPackageSpec
   if (!version) {
     return Result.succeed({ versionKind: 'none' as const, name, version: '' })
   }
-  if (valid(version)) {
+  if (canParse(version)) {
     return Result.succeed({ versionKind: 'exact' as const, name, version })
   }
-  if (validRange(version)) {
+  if (tryParseRange(version) !== undefined) {
     return Result.succeed({ versionKind: 'range' as const, name, version })
   }
   return Result.succeed({ versionKind: 'tag' as const, name, version })

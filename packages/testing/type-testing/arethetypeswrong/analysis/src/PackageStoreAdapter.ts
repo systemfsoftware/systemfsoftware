@@ -1,5 +1,6 @@
+import { maxSatisfying, tryParse, tryParseRange } from '@std/semver'
+import type { SemVer } from '@std/semver'
 import { Context, Effect, Layer, Option, Schema } from 'effect'
-import { maxSatisfying } from 'semver'
 
 import { type NpmRegistryDoc, NpmRegistryDocSchema } from './NpmRegistry.schema.js'
 import type { ParsedPackageSpec } from './PackageSpec.schema.js'
@@ -64,6 +65,33 @@ const nameOf = (specs: readonly ParsedPackageSpec[]): string => specs[0]?.name ?
 const decodeRegistryDoc = Schema.decodeUnknownOption(NpmRegistryDocSchema)
 
 /** The tarball URL a spec resolves to inside one registry document, if any. */
+export const selectRangeTarball = (
+  versions: NonNullable<NpmRegistryDoc['versions']>,
+  spec: ParsedPackageSpec,
+  options: PackageStoreOptions,
+): PackageStoreTarballRef | undefined => {
+  const range = tryParseRange(spec.version)
+  if (range === undefined) return undefined
+  const parsedCandidates = Object.keys(versions)
+    .filter(
+      (version) => options.allowDeprecated === true || versions[version]?.deprecated === undefined,
+    )
+    .flatMap((version): Array<[string, SemVer]> => {
+      const parsed = tryParse(version)
+      return parsed === undefined ? [] : [[version, parsed]]
+    })
+  const matched = parsedCandidates.length > 0
+    ? maxSatisfying(parsedCandidates.map(([, semver]) => semver), range)
+    : undefined
+  if (matched === undefined) return undefined
+  const packageVersion = parsedCandidates.find(([, semver]) => semver === matched)?.[0]
+  if (packageVersion === undefined) return undefined
+  const tarballUrl = versions[packageVersion]?.dist.tarball
+  return tarballUrl === undefined
+    ? undefined
+    : { packageName: spec.name, packageVersion, tarballUrl }
+}
+
 const tarballFor = (
   doc: NpmRegistryDoc,
   spec: ParsedPackageSpec,
@@ -72,15 +100,7 @@ const tarballFor = (
   const versions = doc.versions
   if (spec.versionKind === 'range') {
     if (versions === undefined) return undefined
-    const candidates = Object.keys(versions).filter(
-      (version) => options.allowDeprecated === true || versions[version]?.deprecated === undefined,
-    )
-    const packageVersion = maxSatisfying(candidates, spec.version)
-    if (packageVersion === null) return undefined
-    const tarballUrl = versions[packageVersion]?.dist.tarball
-    return tarballUrl === undefined
-      ? undefined
-      : { packageName: spec.name, packageVersion, tarballUrl }
+    return selectRangeTarball(versions, spec, options)
   }
   if (spec.versionKind === 'tag' && spec.version !== 'latest') {
     // A named tag names no version in the packument's `versions` map, so the

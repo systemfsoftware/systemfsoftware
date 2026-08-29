@@ -41,8 +41,8 @@ export default defineConfig({
       '@loaderkit/resolve',
       '@systemfsoftware/npm-package',
       'cjs-module-lexer',
-      'semver',
       'validate-npm-package-name',
     ],
   },
+  noExternal: ['@std/semver'],
 })
