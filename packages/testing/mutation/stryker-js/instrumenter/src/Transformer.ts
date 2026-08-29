@@ -1,14 +1,45 @@
+// oxlint-disable typescript/no-unsafe-type-assertion typescript/no-unnecessary-type-assertion
+// ^ Mutant placers build and graft plain ESTree nodes; the shapes the placers
+// construct are guaranteed by construction, not by the type system.
 /**
  * Transformer — traverses ASTs, asks mutators for mutants and placers to instrument them.
  */
-import babel, { File, type NodePath, type types } from '@babel/core'
 import { type IgnorerService, type NodePath as IgnorerNodePath } from '@systemfsoftware/stryker-js/Ignorer'
 import { INSTRUMENTER_CONSTANTS as ID } from '@systemfsoftware/stryker-js/Mutant'
 import { type MutateDescription, type Position } from '@systemfsoftware/stryker-js/Mutant'
 import { propertyPath, type StrykerOptions, strykerReportBugUrl } from '@systemfsoftware/stryker-js/Schema'
 import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'
+import type { Comment, Expression, Node, Program, Statement } from 'estree'
 import path from 'node:path'
+import { parseSync } from 'oxc-parser'
+
+import {
+  arrowFunctionExpression,
+  attachComments,
+  type AttachedComment,
+  blockStatement,
+  buildLineTable,
+  callExpression,
+  cloneNode,
+  conditionalExpression,
+  expressionStatement,
+  identifier,
+  ifStatement,
+  isExpressionKind,
+  isStatementKind,
+  nodeType,
+  positionFromLineTable,
+  returnStatement,
+  sequenceExpression,
+  spanOf,
+  stringLiteral,
+  switchCase,
+  traverse,
+  type TraversePath,
+  variableDeclaration,
+  variableDeclarator,
+} from './estree.js'
 import { applyMutant, createMutant, type Mutable, type Mutant } from './Mutator.js'
 import { type MutatorContext, type MutatorOptions } from './Mutator.js'
 import { allMutators } from './Mutator.js'
@@ -24,9 +55,6 @@ import {
 import { PlacementFailed, TransformFailed } from './Transformer.schema.js'
 export { PlacementFailed, TransformFailed }
 
-const { types: babelTypes } = babel
-const t = babelTypes
-type BabelNodePath = NodePath
 const STRYKER_NAMESPACE_HELPER = 'stryNS_9fa48'
 const COVER_MUTANT_HELPER = 'stryCov_9fa48'
 const IS_MUTANT_ACTIVE_HELPER = 'stryMutAct_9fa48'
@@ -44,9 +72,10 @@ export function createMutantCollector(): MutantCollector {
 export function collect(
   collector: MutantCollector,
   fileName: string,
-  original: types.Node,
+  original: Node,
   mutable: Mutable,
   offset: Position = { line: 0, column: 0 },
+  lineTable: readonly number[] = buildLineTable(''),
 ): Mutant {
   const mutant = createMutant(
     collector.length.toString(),
@@ -54,6 +83,7 @@ export function collect(
     original,
     mutable,
     offset,
+    lineTable,
   )
   collector.push(mutant)
   return mutant
@@ -126,14 +156,20 @@ export function findIgnoreReason(
   }
 }
 
+interface LocatedComment extends Comment {
+  readonly loc?: {
+    readonly start: { readonly line: number; readonly column: number }
+    readonly end: { readonly line: number; readonly column: number }
+  }
+}
+
 export function processStrykerDirectives(
   rule: Rule,
-  node: types.Node,
+  node: Node,
   allMutatorNames: readonly string[],
   originFileName: string,
 ): { rule: Rule; warnings: readonly string[] } {
-  const nodeWithComments: types.Node & { leadingComments?: readonly types.Comment[] | null } = node
-  const leadingComments = nodeWithComments.leadingComments
+  const leadingComments = (node as { leadingComments?: readonly LocatedComment[] }).leadingComments
   if (!leadingComments) {
     return { rule, warnings: [] }
   }
@@ -172,7 +208,7 @@ export function processStrykerDirectives(
     }
     mutatorNames = mutatorNames.map((mutator) => mutator.toLowerCase())
     const reason = (optionalReason ?? DEFAULT_REASON).trim()
-    current = applyDirective(current, directiveType, scope, mutatorNames, reason, node.loc)
+    current = applyDirective(current, directiveType, scope, mutatorNames, reason, comment.loc)
   }
   return { rule: current, warnings }
 }
@@ -183,7 +219,7 @@ function applyDirective(
   scope: string | undefined,
   mutatorNames: string[],
   reason: string,
-  loc: types.SourceLocation | null | undefined,
+  loc: { start: { line: number; column: number } } | undefined,
 ): Rule {
   switch (directiveType) {
     case 'disable':
@@ -200,7 +236,7 @@ function applyDisable(
   scope: string | undefined,
   mutatorNames: string[],
   reason: string,
-  loc: types.SourceLocation | null | undefined,
+  loc: { start: { line: number; column: number } } | undefined,
 ): Rule {
   switch (scope) {
     case 'next-line':
@@ -227,7 +263,7 @@ function applyRestore(
   rule: Rule,
   scope: string | undefined,
   mutatorNames: string[],
-  loc: types.SourceLocation | null | undefined,
+  loc: { start: { line: number; column: number } } | undefined,
 ): Rule {
   switch (scope) {
     case 'next-line':
@@ -248,79 +284,55 @@ function applyRestore(
   }
 }
 
-function getLine(loc: types.SourceLocation | null | undefined): number {
+function getLine(loc: { start: { line: number; column: number } } | undefined): number {
   if (loc == null) {
-    throw new Error('Babel node without location')
+    throw new Error('Comment without location')
   }
   return loc.start.line
 }
 
-function toIgnorerPath(path: BabelNodePath): IgnorerNodePath {
+function toIgnorerPath(path: TraversePath): IgnorerNodePath {
   let parentResult: IgnorerNodePath | null = null
   if (path.parentPath !== null) {
     parentResult = toIgnorerPath(path.parentPath)
   }
+  const node: unknown = path.node
   const result: IgnorerNodePath = {
     node: path.node,
     parentPath: parentResult,
     isObjectExpression(): boolean {
-      return path.isObjectExpression()
+      return nodeType(node) === 'ObjectExpression'
     },
     isCallExpression(): boolean {
-      return path.isCallExpression() || path.isOptionalCallExpression()
+      // estree: optional calls are CallExpression{optional:true}
+      return nodeType(node) === 'CallExpression'
     },
     isClassProperty(): boolean {
-      return path.isClassProperty()
+      return nodeType(node) === 'PropertyDefinition'
     },
     isClassPrivateProperty(): boolean {
-      return path.isClassPrivateProperty()
+      return nodeType(node) === 'PropertyDefinition' &&
+        Predicate.hasProperty(node, 'key') && nodeType(PredicateRecord.key(node)) === 'PrivateIdentifier'
     },
     isClassAccessorProperty(): boolean {
-      return path.isClassAccessorProperty()
+      return nodeType(node) === 'AccessorProperty'
     },
   }
   return result
 }
 
-/**
- * `@babel/core` exports its `File` class at runtime, but `@types/babel__core`
- * omits it. The declaration lives in this module rather than an ambient
- * `.d.ts` so it travels with the sources: a consumer that compiles this
- * package from source (the workspace's `@systemfsoftware/source` condition,
- * and api-extractor with it) reaches the augmentation through the import
- * graph, which an unreferenced ambient file never joins.
- */
-declare module '@babel/core' {
-  export class File {
-    constructor(
-      options: { filename?: string },
-      input: { code: string; ast: types.File; inputMap?: unknown },
-    )
-    public ast: types.File
-  }
+const PredicateRecord = {
+  key: (
+    node: unknown,
+  ): unknown => (Predicate.hasProperty(node, 'key') ? (node as Record<string, unknown>)['key'] : undefined),
 }
 
-/**
- * Wraps a parsed AST the way Babel's own pipeline does, so
- * `NodePath#buildCodeFrameError` can render a code frame
- * (https://github.com/babel/babel/issues/11889). Without the wrapper a
- * placement failure reports no source context.
- */
-export function createBabelFile(
-  filename: string,
-  code: string,
-  ast: types.File,
-): File {
-  return new File({ filename }, { code, ast })
-}
-
-export function isTypeNode(path: babel.NodePath): boolean {
+export function isTypeNode(path: TraversePath): boolean {
   return (
-    path.isTypeAnnotation() ||
     flowTypeAnnotationNodeTypes.includes(path.node.type) ||
     tsTypeAnnotationNodeTypes.includes(path.node.type) ||
-    isDeclareVariableStatement(path) ||
-    isDeclareModule(path)
+    isDeclareVariableStatement(path.node) ||
+    isDeclareModule(path.node)
   )
 }
 
@@ -329,8 +341,8 @@ export function isTypeNode(path: babel.NodePath): boolean {
  * @example
  * declare const foo: 'foo';
  */
-function isDeclareVariableStatement(path: babel.NodePath): boolean {
-  return path.isVariableDeclaration() && path.node.declare === true
+function isDeclareVariableStatement(node: Node): boolean {
+  return nodeType(node) === 'VariableDeclaration' && 'declare' in node && node.declare === true
 }
 
 /**
@@ -338,11 +350,11 @@ function isDeclareVariableStatement(path: babel.NodePath): boolean {
  * @example
  * declare module "express" {};
  */
-function isDeclareModule(path: babel.NodePath): boolean {
-  return path.isTSModuleDeclaration() && (path.node.declare ?? false)
+function isDeclareModule(node: Node): boolean {
+  return nodeType(node) === 'TSModuleDeclaration' && 'declare' in node && node.declare === true
 }
 
-const tsTypeAnnotationNodeTypes: ReadonlyArray<babel.types.Node['type']> = Object.freeze([
+const tsTypeAnnotationNodeTypes: ReadonlyArray<string> = Object.freeze([
   'TSAsExpression',
   'TSInterfaceDeclaration',
   'TSTypeAnnotation',
@@ -353,7 +365,7 @@ const tsTypeAnnotationNodeTypes: ReadonlyArray<babel.types.Node['type']> = Objec
   'TSTypeParameterDeclaration',
 ])
 
-const flowTypeAnnotationNodeTypes: ReadonlyArray<babel.types.Node['type']> = Object.freeze([
+const flowTypeAnnotationNodeTypes: ReadonlyArray<string> = Object.freeze([
   'DeclareClass',
   'DeclareFunction',
   'DeclareInterface',
@@ -367,12 +379,11 @@ const flowTypeAnnotationNodeTypes: ReadonlyArray<babel.types.Node['type']> = Obj
   'InterfaceDeclaration',
   'OpaqueType',
   'TypeAlias',
-  'InterfaceDeclaration',
 ])
 
-export function isImportDeclaration(path: babel.NodePath): boolean {
+export function isImportDeclaration(path: TraversePath): boolean {
   return (
-    babelTypes.isTSImportEqualsDeclaration(path.node) || path.isImportDeclaration()
+    nodeType(path.node) === 'TSImportEqualsDeclaration' || path.node.type === 'ImportDeclaration'
   )
 }
 
@@ -382,10 +393,8 @@ export function isImportDeclaration(path: babel.NodePath): boolean {
  */
 export function mutantTestExpression(
   mutantId: string,
-): babel.types.CallExpression {
-  return babelTypes.callExpression(babelTypes.identifier(IS_MUTANT_ACTIVE_HELPER), [
-    babelTypes.stringLiteral(mutantId),
-  ])
+): Expression {
+  return callExpression(identifier(IS_MUTANT_ACTIVE_HELPER), [stringLiteral(mutantId)])
 }
 
 /**
@@ -397,55 +406,51 @@ export function mutantTestExpression(
  */
 export function mutationCoverageSequenceExpression(
   mutants: Iterable<Mutant>,
-  targetExpression?: babel.types.Expression,
-): babel.types.Expression {
-  const mutantIds = [...mutants].map((mutant) => babelTypes.stringLiteral(mutant.id))
-  const sequence: babel.types.Expression[] = [
-    babelTypes.callExpression(babelTypes.identifier(COVER_MUTANT_HELPER), mutantIds),
+  targetExpression?: Expression,
+): Expression {
+  const mutantIds = [...mutants].map((mutant) => stringLiteral(mutant.id))
+  const sequence: Expression[] = [
+    callExpression(identifier(COVER_MUTANT_HELPER), mutantIds),
   ]
   if (targetExpression) {
     sequence.push(targetExpression)
   }
-  return babelTypes.sequenceExpression(sequence)
+  return sequenceExpression(sequence)
 }
 
-export interface MutantPlacer<TNode extends types.Node = types.Node> {
+export interface MutantPlacer {
   name: string
-  canPlace(path: NodePath): boolean
-  place(path: NodePath<TNode>, appliedMutants: Map<Mutant, types.Node>): void
+  canPlace(path: TraversePath): boolean
+  place(path: TraversePath, appliedMutants: Map<Mutant, Node>): void
 }
 
 /**
- * Narrows an applied mutant to the node kind a placer emits. `applied()` hands
- * back a plain node — whether it fits this position is the placer's claim, and
- * `canPlace` is what established it, so a mismatch here means the placer was
- * handed a mutant it never accepted.
+ * Verifies the placer's claim: `canPlace` established the node kind, so a
+ * mismatch here means the placer was handed a mutant it never accepted.
  */
-export function nodeOfKind<TNode extends types.Node>(
+export function nodeOfKind(
   mutant: Mutant,
-  node: types.Node,
-  isKind: (candidate: types.Node) => candidate is TNode,
+  node: Node,
+  isKind: (candidate: Node) => boolean,
   kind: string,
-): TNode {
+): Node {
   if (!isKind(node)) {
     throw new Error(`Cannot place mutant ${mutant.id}: expected ${kind}, got ${node.type}`)
   }
   return node
 }
 
-// node:path builds a relative path for a diagnostic message; threading Path.Path
-// through every placer into a `never`-returning formatter is pure churn (REPO-A2).
-
 export function throwPlacementError(
   error: Error,
-  nodePath: NodePath,
+  nodePath: TraversePath,
   placer: MutantPlacer,
   mutants: Mutant[],
   fileName: string,
+  lineTable: readonly number[],
 ): never {
-  const location = `${
-    path.relative(process.cwd(), fileName)
-  }:${nodePath.node.loc?.start.line}:${nodePath.node.loc?.start.column}`
+  const span = spanOf(nodePath.node)
+  const position = span !== undefined ? positionFromLineTable(span.start, lineTable) : undefined
+  const location = `${path.relative(process.cwd(), fileName)}:${position?.line}:${position?.column}`
   const message = `${placer.name} could not place mutants with type(s): "${
     new Intl.ListFormat('en').format(mutants.map((mutant) => mutant.mutatorName))
   }"`
@@ -456,14 +461,7 @@ export function throwPlacementError(
         'excludedMutations',
       )
     }). Please report this issue at ${strykerReportBugUrl(message)}. Original error: ${error.stack}`
-  let builtError = new Error(errorMessage)
-  try {
-    // `buildCodeFrameError` is kind of flaky, see https://github.com/stryker-mutator/stryker-js/issues/2695
-    builtError = nodePath.buildCodeFrameError(errorMessage)
-  } catch {
-    // Idle, regular error will have to suffice
-  }
-  throw builtError
+  throw new Error(errorMessage)
 }
 
 /**
@@ -475,24 +473,32 @@ export function throwPlacementError(
  * const a = function a() {}
  */
 function classOrFunctionExpressionNamedIfNeeded(
-  path: NodePath<babel.types.Expression>,
-): babel.types.Expression | undefined {
+  path: TraversePath,
+): Expression | undefined {
+  const kind = nodeType(path.node)
   if (
-    (path.isFunctionExpression() || path.isClassExpression()) &&
-    !path.node.id
+    (kind === 'FunctionExpression' || kind === 'ClassExpression') && !('id' in path.node) === false &&
+    path.node['id' as keyof Node] !== null
   ) {
+    // fallthrough handled below
+  }
+  if (
+    (kind === 'FunctionExpression' || kind === 'ClassExpression') &&
+    ('id' in path.node) &&
+    (path.node as { id?: unknown }).id == null
+  ) {
+    const parentPath = path.parentPath
     if (
-      path.parentPath.isVariableDeclarator() &&
-      babelTypes.isIdentifier(path.parentPath.node.id)
+      parentPath !== null && parentPath.node.type === 'VariableDeclarator' && parentPath.node.id.type === 'Identifier'
     ) {
-      path.node.id = path.parentPath.node.id
-      return path.node
-    } else if (
-      path.parentPath.isObjectProperty() &&
-      babelTypes.isIdentifier(path.parentPath.node.key) &&
-      path.getStatementParent()?.isVariableDeclaration() === true
+      ;(path.node as unknown as { id: unknown }).id = parentPath.node.id
+      return path.node as Expression
+    }
+    if (
+      parentPath !== null && parentPath.node.type === 'Property' && parentPath.node.key.type === 'Identifier' &&
+      path.getStatementParent()?.node.type === 'VariableDeclaration'
     ) {
-      return path.node
+      return path.node as Expression
     }
   }
   return
@@ -507,21 +513,21 @@ function classOrFunctionExpressionNamedIfNeeded(
  * const a = (() => { const a = () => {}; return a; })()
  */
 function arrowFunctionExpressionNamedIfNeeded(
-  path: NodePath<babel.types.Expression>,
-): babel.types.Expression | undefined {
+  path: TraversePath,
+): Expression | undefined {
+  const parentPath = path.parentPath
   if (
-    path.isArrowFunctionExpression() &&
-    path.parentPath.isVariableDeclarator() &&
-    babelTypes.isIdentifier(path.parentPath.node.id)
+    path.node.type === 'ArrowFunctionExpression' &&
+    parentPath !== null && parentPath.node.type === 'VariableDeclarator' &&
+    parentPath.node.id.type === 'Identifier'
   ) {
-    return babelTypes.callExpression(
-      babelTypes.arrowFunctionExpression(
+    const declaratorId = parentPath.node.id
+    return callExpression(
+      arrowFunctionExpression(
         [],
-        babelTypes.blockStatement([
-          babelTypes.variableDeclaration('const', [
-            babelTypes.variableDeclarator(path.parentPath.node.id, path.node),
-          ]),
-          babelTypes.returnStatement(path.parentPath.node.id),
+        blockStatement([
+          variableDeclaration('const', [variableDeclarator(declaratorId, path.node)]),
+          returnStatement(declaratorId),
         ]),
       ),
       [],
@@ -531,50 +537,41 @@ function arrowFunctionExpressionNamedIfNeeded(
 }
 
 function nameIfAnonymous(
-  path: NodePath<babel.types.Expression>,
-): babel.types.Expression {
+  path: TraversePath,
+): Expression {
   return (
     classOrFunctionExpressionNamedIfNeeded(path) ??
       arrowFunctionExpressionNamedIfNeeded(path) ??
-      path.node
+      path.node as Expression
   )
 }
 
-function isMemberOrCallOrNonNullExpression(path: NodePath) {
-  return isCallExpression(path) || isMemberOrNonNullExpression(path)
+function isMemberOrCallOrNonNullExpression(path: TraversePath | null): boolean {
+  return isCallExpressionNode(path) || isMemberOrNonNullExpression(path)
 }
 
-function isMemberOrNonNullExpression(
-  path: NodePath,
-): path is NodePath<
-  | babel.types.MemberExpression
-  | babel.types.OptionalMemberExpression
-  | babel.types.TSNonNullExpression
-> {
-  return isMemberExpression(path) || path.isTSNonNullExpression()
-}
-function isMemberExpression(
-  path: NodePath,
-): path is NodePath<
-  babel.types.MemberExpression | babel.types.OptionalMemberExpression
-> {
-  return path.isMemberExpression() || path.isOptionalMemberExpression()
+function isMemberOrNonNullExpression(path: TraversePath | null): boolean {
+  return isMemberExpressionNode(path) || nodeType(path?.node) === 'TSNonNullExpression'
 }
 
-function isCallExpression(
-  path: NodePath,
-): path is NodePath<
-  babel.types.CallExpression | babel.types.OptionalCallExpression
-> {
-  return path.isCallExpression() || path.isOptionalCallExpression()
+function isMemberExpressionNode(path: TraversePath | null): boolean {
+  // estree: optional member access is MemberExpression{optional:true}
+  return nodeType(path?.node) === 'MemberExpression'
 }
 
-function isValidExpression(path: NodePath<babel.types.Expression>) {
+function isCallExpressionNode(path: TraversePath | null): boolean {
+  return nodeType(path?.node) === 'CallExpression'
+}
+function isValidExpression(path: TraversePath): boolean {
   const parent = path.parentPath
+  if (parent === null) {
+    return true
+  }
+  const parentNode = parent.node
   return (
     !isObjectPropertyKey() &&
     !isPartOfChain() &&
-    !parent.isTaggedTemplateExpression() &&
+    !(parentNode.type === 'TaggedTemplateExpression') &&
     !isPartOfDeleteExpression() &&
     !isPartOfAssignmentExpression()
   )
@@ -587,7 +584,7 @@ function isValidExpression(path: NodePath<babel.types.Expression>) {
    * };
    */
   function isObjectPropertyKey() {
-    return parent.isObjectProperty() && parent.node.key === path.node
+    return parentNode.type === 'Property' && parentNode.key === path.node
   }
 
   /**
@@ -606,10 +603,10 @@ function isValidExpression(path: NodePath<babel.types.Expression>) {
   function isPartOfChain() {
     return (
       isMemberOrCallOrNonNullExpression(path) &&
-      ((isMemberExpression(parent) &&
-        !(parent.node.computed && parent.node.property === path.node)) ||
-        parent.isTSNonNullExpression() ||
-        (isCallExpression(parent) && parent.node.callee === path.node))
+      ((isMemberExpressionNode(parent) &&
+        !(parentNode.type === 'MemberExpression' && parentNode.computed && parentNode.property === path.node)) ||
+        nodeType(parentNode) === 'TSNonNullExpression' ||
+        (isCallExpressionNode(parent) && parentNode.type === 'CallExpression' && parentNode.callee === path.node))
     )
   }
 
@@ -620,7 +617,7 @@ function isValidExpression(path: NodePath<babel.types.Expression>) {
    * delete foo.bar;
    */
   function isPartOfDeleteExpression() {
-    return parent.isUnaryExpression() && parent.node.operator === 'delete'
+    return parentNode.type === 'UnaryExpression' && parentNode.operator === 'delete'
   }
 
   /**
@@ -631,14 +628,14 @@ function isValidExpression(path: NodePath<babel.types.Expression>) {
    * initialNodes.filter((n) => n.id === 'tiptilt')[0].className = tiptiltState;
    */
   function isPartOfAssignmentExpression() {
-    return parent.isAssignmentExpression() && parent.node.left === path.node
+    return parentNode.type === 'AssignmentExpression' && parentNode.left === path.node
   }
 }
 
 /**
  * Places the mutants with a conditional expression: `global.activeMutant === 1? mutatedCode : originalCode`;
  */
-export const expressionMutantPlacer = {
+export const expressionMutantPlacer: MutantPlacer = {
   name: 'expressionMutantPlacer',
   canPlace(path) {
     return path.isExpression() && isValidExpression(path)
@@ -655,46 +652,46 @@ export const expressionMutantPlacer = {
 
     // Now apply the mutants
     for (const [mutant, appliedMutant] of appliedMutants) {
-      expression = babelTypes.conditionalExpression(
+      expression = conditionalExpression(
         mutantTestExpression(mutant.id),
-        nodeOfKind(mutant, appliedMutant, babelTypes.isExpression, 'an expression'),
+        nodeOfKind(mutant, appliedMutant, isExpressionKind, 'an expression') as Expression,
         expression,
       )
     }
     path.replaceWith(expression)
   },
-} satisfies MutantPlacer<babel.types.Expression>
+}
 
 /**
  * Mutant placer that places mutants in statements that allow it.
  * It uses an `if` statement to do so
  */
-export const statementMutantPlacer: MutantPlacer<types.Statement> = {
+export const statementMutantPlacer: MutantPlacer = {
   name: 'statementMutantPlacer',
   canPlace(path) {
     return path.isStatement()
   },
   place(path, appliedMutants) {
-    const bodyStatements: types.Statement[] = [
-      t.expressionStatement(
+    const bodyStatements: Statement[] = [
+      expressionStatement(
         mutationCoverageSequenceExpression(appliedMutants.keys()),
       ),
     ]
-    if (path.isBlockStatement()) {
+    if (path.node.type === 'BlockStatement') {
       bodyStatements.push(...path.node.body)
     } else {
-      bodyStatements.push(path.node)
+      bodyStatements.push(path.node as Statement)
     }
-    let statement: types.Statement = t.blockStatement(bodyStatements)
+    let statement: Statement = blockStatement(bodyStatements)
     for (const [mutant, appliedMutant] of appliedMutants) {
-      statement = t.ifStatement(
+      statement = ifStatement(
         mutantTestExpression(mutant.id),
-        t.blockStatement([nodeOfKind(mutant, appliedMutant, t.isStatement, 'a statement')]),
+        blockStatement([nodeOfKind(mutant, appliedMutant, isStatementKind, 'a statement') as Statement]),
         statement,
       )
     }
-    if (path.isBlockStatement()) {
-      path.replaceWith(t.blockStatement([statement]))
+    if (path.node.type === 'BlockStatement') {
+      path.replaceWith(blockStatement([statement]))
     } else {
       path.replaceWith(statement)
     }
@@ -710,27 +707,33 @@ export const statementMutantPlacer: MutantPlacer<types.Statement> = {
  *      break;
  *   }
  */
-export const switchCaseMutantPlacer: MutantPlacer<types.SwitchCase> = {
+export const switchCaseMutantPlacer: MutantPlacer = {
   name: 'switchCaseMutantPlacer',
   canPlace(path) {
-    return path.isSwitchCase()
+    return nodeType(path.node) === 'SwitchCase'
   },
   place(path, appliedMutants) {
-    let consequence: types.Statement = babel.types.blockStatement([
-      babel.types.expressionStatement(
+    const currentCase = path.node as unknown as { test: Expression | null; consequent: Statement[] }
+    let consequence: Statement = blockStatement([
+      expressionStatement(
         mutationCoverageSequenceExpression(appliedMutants.keys()),
       ),
-      ...path.node.consequent,
+      ...currentCase.consequent,
     ])
     for (const [mutant, appliedMutant] of appliedMutants) {
-      const switchCase = nodeOfKind(mutant, appliedMutant, babel.types.isSwitchCase, 'a switch case')
-      consequence = babel.types.ifStatement(
+      const appliedCase = nodeOfKind(
+        mutant,
+        appliedMutant,
+        (candidate) => nodeType(candidate) === 'SwitchCase',
+        'a switch case',
+      ) as unknown as { consequent: Statement[] }
+      consequence = ifStatement(
         mutantTestExpression(mutant.id),
-        babel.types.blockStatement(switchCase.consequent),
+        blockStatement(appliedCase.consequent),
         consequence,
       )
     }
-    path.replaceWith(babel.types.switchCase(path.node.test, [consequence]))
+    path.replaceWith(switchCase(currentCase.test, [consequence]))
   },
 }
 
@@ -772,27 +775,33 @@ export const angularIgnorer: IgnorerService = {
 }
 
 function isClassFieldLike(path: IgnorerNodePath): boolean {
-  return path.isClassProperty() || path.isClassPrivateProperty() || path.isClassAccessorProperty()
+  const kind = nodeType(path.node)
+  if (kind === 'PropertyDefinition' || kind === 'AccessorProperty') {
+    return true
+  }
+  return kind === 'PropertyDefinition' &&
+    Predicate.hasProperty(path.node, 'key') &&
+    nodeType((path.node as unknown as Record<string, unknown>)['key']) === 'PrivateIdentifier'
 }
 
 function isInputModelOrOutputConfigurationObject(path: IgnorerNodePath): boolean {
   const parent = path.parentPath
   const grandParent = parent?.parentPath
   if (
-    !path.isObjectExpression() ||
+    nodeType(path.node) !== 'ObjectExpression' ||
     parent === null ||
     parent === undefined ||
-    !parent.isCallExpression() ||
+    nodeType(parent.node) !== 'CallExpression' ||
     grandParent === null ||
     grandParent === undefined ||
-    !grandParent.isClassProperty()
+    nodeType(grandParent.node) !== 'PropertyDefinition'
   ) {
     return false
   }
 
-  const callExpression = parent
-  const objectExpression = path
-  const callNode = callExpression.node
+  const callExpressionPath = parent
+  const objectExpressionPath = path
+  const callNode: unknown = callExpressionPath.node
   if (!Predicate.hasProperty(callNode, 'callee') || !Predicate.hasProperty(callNode, 'arguments')) {
     return false
   }
@@ -807,11 +816,11 @@ function isInputModelOrOutputConfigurationObject(path: IgnorerNodePath): boolean
   const isOutput = isIdentifierWithName(callee, 'output')
 
   if (isRequiredSignalIOFunction || isOutput) {
-    return args.length >= 1 && args[0] === objectExpression.node
+    return args.length >= 1 && args[0] === objectExpressionPath.node
   }
 
   if (isSignalIOFunction) {
-    return args.length >= 2 && args[1] === objectExpression.node
+    return args.length >= 2 && args[1] === objectExpressionPath.node
   }
 
   return false
@@ -821,10 +830,10 @@ function isSignalQueryOptionsObject(path: IgnorerNodePath): boolean {
   const parent = path.parentPath
   const grandParent = parent?.parentPath
   if (
-    !path.isObjectExpression() ||
+    nodeType(path.node) !== 'ObjectExpression' ||
     parent === null ||
     parent === undefined ||
-    !parent.isCallExpression() ||
+    nodeType(parent.node) !== 'CallExpression' ||
     grandParent === null ||
     grandParent === undefined ||
     !isClassFieldLike(grandParent)
@@ -832,9 +841,9 @@ function isSignalQueryOptionsObject(path: IgnorerNodePath): boolean {
     return false
   }
 
-  const callExpression = parent
-  const objectExpression = path
-  const callNode = callExpression.node
+  const callExpressionPath = parent
+  const objectExpressionPath = path
+  const callNode: unknown = callExpressionPath.node
   if (!Predicate.hasProperty(callNode, 'callee') || !Predicate.hasProperty(callNode, 'arguments')) {
     return false
   }
@@ -848,7 +857,7 @@ function isSignalQueryOptionsObject(path: IgnorerNodePath): boolean {
   if (!isQueryFn && !isRequiredQueryFn) {
     return false
   }
-  return args.length >= 2 && args[1] === objectExpression.node
+  return args.length >= 2 && args[1] === objectExpressionPath.node
 }
 
 function isIdentifierWithName(node: unknown, name: string): boolean {
@@ -890,10 +899,12 @@ export const strykerPlugins: readonly unknown[] = []
 export const frameworkPluginsFileUrl = import.meta.url
 
 /**
- * Returns syntax for the header if JS/TS files
+ * The instrumentation header: parsed once with oxc, frozen, shared. The
+ * `globalThis` implementation is based on core-js's — see
+ * https://github.com/stryker-mutator/stryker-js/issues/4035
  */
-const parsedInstrumentationHeader = babel.parse(
-  // `globalThis` implementation is based on core-js's implementation. See https://github.com/stryker-mutator/stryker-js/issues/4035
+const parsedInstrumentationHeader = parseSync(
+  'instrumenter-header.js',
   `// @ts-nocheck
 var ${STRYKER_NAMESPACE_HELPER} = function(){
   var g = typeof globalThis === 'object' && globalThis && globalThis.Math === Math && globalThis || new Function("return this")();
@@ -939,19 +950,20 @@ var ${IS_MUTANT_ACTIVE_HELPER} = function(id) {
   ${IS_MUTANT_ACTIVE_HELPER} = isActive;
   return isActive(id);
 }`,
-  { configFile: false, browserslistConfigFile: false, env: { targets: {} } },
+  { lang: 'js', range: true },
 )
-if (!babelTypes.isFile(parsedInstrumentationHeader)) {
-  throw new Error('Instrumentation header parsed as non-File')
+if (parsedInstrumentationHeader.errors.length > 0) {
+  throw new Error('Instrumentation header failed to parse')
 }
-export const instrumentationBabelHeader: readonly babel.types.Statement[] = parsedInstrumentationHeader.program.body
-deepFreeze(instrumentationBabelHeader)
+export const instrumentationHeader: readonly Statement[] = parsedInstrumentationHeader.program
+  .body as unknown as readonly Statement[]
+deepFreeze(instrumentationHeader)
 
 export function placeHeaderIfNeeded(
   mutantCollector: MutantCollector,
   originFileName: string,
   options: MutatorOptions,
-  root: babel.types.File,
+  root: Program,
 ): void {
   if (hasPlacedMutants(mutantCollector, originFileName) && options.noHeader !== true) {
     // Be sure to leave comments like `// @flow` in.
@@ -959,20 +971,20 @@ export function placeHeaderIfNeeded(
   }
 }
 
-export function placeHeader(root: babel.types.File): void {
-  let header: readonly babel.types.Statement[] = instrumentationBabelHeader
-  const firstStatement = root.program.body[0]
-  const leadingComments = firstStatement?.leadingComments
+export function placeHeader(root: Program): void {
+  let header: readonly Statement[] = instrumentationHeader
+  const firstStatement = root.body[0]
+  const leadingComments = (firstStatement as { leadingComments?: unknown } | undefined)?.leadingComments
   if (Array.isArray(leadingComments)) {
-    const firstHeader = instrumentationBabelHeader[0]
+    const firstHeader = instrumentationHeader[0]
     if (firstHeader === undefined) {
       throw new Error('Instrumentation header is empty')
     }
-    const cloned = babelTypes.cloneNode(firstHeader, true, false)
+    const cloned = cloneNode(firstHeader) as unknown as { leadingComments?: unknown }
     cloned.leadingComments = leadingComments
-    header = [cloned, ...instrumentationBabelHeader.slice(1)]
+    header = [cloned as unknown as Statement, ...instrumentationHeader.slice(1)]
   }
-  root.program.body.unshift(...header)
+  root.body.unshift(...header)
 }
 
 function deepFreeze(value: unknown): unknown {
@@ -1022,7 +1034,7 @@ export function transform(
     case 'js':
     case 'ts':
     case 'tsx':
-      return transformBabel(ast, mutantCollector, context)
+      return transformScript(ast, mutantCollector, context)
     case 'svelte':
       return transformSvelte(ast, mutantCollector, context)
   }
@@ -1084,7 +1096,8 @@ export const transformSvelte: AstTransformer<'svelte'> = (
       root.moduleScript = {
         ast: {
           format: 'js',
-          root: babelTypes.file(babelTypes.program([])),
+          root: emptyProgram(),
+          comments: [],
           rawContent: '',
           originFileName,
         },
@@ -1105,23 +1118,29 @@ export const transformSvelte: AstTransformer<'svelte'> = (
   return warnings
 }
 
-const { traverse } = babel
-
-interface MutantsPlacement<TNode extends types.Node> {
-  appliedMutants: Map<Mutant, types.Node>
-  placer: MutantPlacer<TNode>
+function emptyProgram(): Program {
+  return { type: 'Program', sourceType: 'module', body: [] }
 }
 
-type PlacementMap = Map<types.Node, MutantsPlacement<types.Node>>
+interface MutantsPlacement {
+  appliedMutants: Map<Mutant, Node>
+  placer: MutantPlacer
+}
 
-export const transformBabel: AstTransformer<ScriptFormat> = (
-  { root, originFileName, rawContent, offset },
+type PlacementMap = Map<Node, MutantsPlacement>
+
+export const transformScript: AstTransformer<ScriptFormat> = (
+  { root, originFileName, rawContent, offset, comments },
   mutantCollector,
   { options, mutateDescription },
   mutators = allMutators,
   mutantPlacers = allMutantPlacers,
 ) => {
-  const file = createBabelFile(originFileName, rawContent, root)
+  const lineTable = buildLineTable(rawContent)
+
+  // oxc ships comments flat; the directive pass reads `leadingComments`, so
+  // fold the flat list into the tree once (and give each comment a loc).
+  attachComments(root, comments as readonly AttachedComment[], lineTable)
 
   const placementMap: PlacementMap = new Map()
 
@@ -1131,7 +1150,7 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
 
   const warnings: string[] = []
 
-  traverse(file.ast, {
+  traverse(root, {
     enter(path) {
       const result = processStrykerDirectives(
         directiveRule,
@@ -1176,17 +1195,17 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
 
   return warnings
 
-  function addToPlacementMapIfPossible(path: NodePath): void {
+  function addToPlacementMapIfPossible(path: TraversePath): void {
     const placer = mutantPlacers.find((p) => p.canPlace(path))
     if (placer !== undefined) {
       placementMap.set(path.node, { appliedMutants: new Map(), placer })
     }
   }
-  function shouldSkip(path: NodePath): boolean {
+  function shouldSkip(path: TraversePath): boolean {
     return (
       isTypeNode(path) ||
       isImportDeclaration(path) ||
-      path.isDecorator() ||
+      nodeType(path.node) === 'Decorator' ||
       mutateDescription === false ||
       (Array.isArray(mutateDescription) &&
         mutateDescription.every((range: SourceLocationInFile) => {
@@ -1196,7 +1215,7 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
     )
   }
 
-  function shouldMutate(path: NodePath): boolean {
+  function shouldMutate(path: TraversePath): boolean {
     return (
       mutateDescription === true ||
       (Array.isArray(mutateDescription) &&
@@ -1207,7 +1226,18 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
     )
   }
 
-  function placeMutantsIfNeeded(path: NodePath): void {
+  function getNodeLocation(node: Node): SourceLocationInFile {
+    const span = spanOf(node)
+    if (span === undefined) {
+      throw new Error('Node without a span')
+    }
+    return {
+      start: positionFromLineTable(span.start, lineTable),
+      end: positionFromLineTable(span.end, lineTable),
+    }
+  }
+
+  function placeMutantsIfNeeded(path: TraversePath): void {
     const mutantsPlacement = placementMap.get(path.node)
     if (mutantsPlacement !== undefined && mutantsPlacement.appliedMutants.size > 0) {
       try {
@@ -1221,11 +1251,12 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
           mutantsPlacement.placer,
           [...mutantsPlacement.appliedMutants.keys()],
           originFileName,
+          lineTable,
         )
       }
     }
   }
-  function ignoreMessageFor(path: NodePath): string | undefined {
+  function ignoreMessageFor(path: TraversePath): string | undefined {
     const view = toIgnorerPath(path)
     for (const ignorer of options.ignorers) {
       const result = ignorer.shouldIgnore(view)
@@ -1236,12 +1267,14 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
     return undefined
   }
 
-  function collectMutants(path: NodePath): Mutant[] {
-    return [...mutate(path)].map((mutable) => collect(mutantCollector, originFileName, path.node, mutable, offset))
+  function collectMutants(path: TraversePath): Mutant[] {
+    return [...mutate(path)].map((mutable) =>
+      collect(mutantCollector, originFileName, path.node, mutable, offset, lineTable)
+    )
       .filter((mutant) => mutant.ignoreReason === undefined)
   }
 
-  function* mutate(path: NodePath): Iterable<Mutable> {
+  function* mutate(path: TraversePath): Iterable<Mutable> {
     const context = toMutatorContext(path)
     for (const [mutatorName, mutate] of mutatorEntries) {
       for (const replacement of mutate(path.node, context)) {
@@ -1269,9 +1302,9 @@ export const transformBabel: AstTransformer<ScriptFormat> = (
   }
 }
 
-function toMutatorContext(path: NodePath): MutatorContext {
-  const ancestors: types.Node[] = []
-  let current: NodePath | null = path.parentPath
+function toMutatorContext(path: TraversePath): MutatorContext {
+  const ancestors: Node[] = []
+  let current: TraversePath | null = path.parentPath
   while (current !== null) {
     ancestors.push(current.node)
     current = current.parentPath
@@ -1283,18 +1316,6 @@ function toMutatorContext(path: NodePath): MutatorContext {
   }
 }
 
-function getNodeLocation(
-  node: types.Node,
-): { start: { line: number; column: number }; end: { line: number; column: number } } {
-  const loc = node.loc
-  if (loc == null) {
-    throw new Error('Babel node without location')
-  }
-  return {
-    start: { line: loc.start.line, column: loc.start.column },
-    end: { line: loc.end.line, column: loc.end.column },
-  }
-}
 function toError(value: unknown): Error {
   if (value instanceof Error) {
     return value

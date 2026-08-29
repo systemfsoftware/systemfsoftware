@@ -62,7 +62,6 @@
     "api:update": "concurrently --kill-others-on-fail \"api-extractor run --local\" \"api-extractor run --local --config api-extractor.effect-schema-ignorer.json\" \"api-extractor run --local --config api-extractor.in-source-test-ignorer.json\" \"api-extractor run --local --config api-extractor.workflow-make-ignorer.json\""
   },
   "devDependencies": {
-    "@babel/types": "^7.29.0",
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
@@ -73,6 +72,7 @@
     "@systemfsoftware/stryker-js": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/estree": "1.0.8",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",

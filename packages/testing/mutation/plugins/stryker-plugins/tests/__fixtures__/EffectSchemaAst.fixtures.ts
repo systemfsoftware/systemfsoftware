@@ -6,7 +6,7 @@ interface Identifier {
 }
 
 interface StringLiteral {
-  readonly type: 'StringLiteral'
+  readonly type: 'Literal'
   readonly value: string
 }
 
@@ -68,7 +68,7 @@ export const nonSymbolForMember = fc.oneof(
 )
 
 export interface PropertyNode {
-  readonly type: 'ObjectProperty'
+  readonly type: 'Property'
   readonly computed: boolean
   readonly key: AstNode
   readonly value: AstNode
@@ -80,7 +80,7 @@ export interface ObjectNode {
 }
 
 export const propertyOf = (key: AstNode, value: AstNode, computed = false): PropertyNode => ({
-  type: 'ObjectProperty',
+  type: 'Property',
   computed,
   key,
   value,
@@ -93,7 +93,7 @@ export const objectOf = (properties: readonly PropertyNode[]): ObjectNode => ({
   properties,
 })
 
-export const stringLiteral = (value: string): StringLiteral => ({ type: 'StringLiteral', value })
+export const stringLiteral = (value: string): StringLiteral => ({ type: 'Literal', value })
 
 export const objectExpression = (properties: readonly PropertyNode[] = []): ObjectNode => ({
   type: 'ObjectExpression',

@@ -1,92 +1,98 @@
 /**
  * Mutator — every mutation operator and its registry.
  */
-import babel, { type types } from '@babel/core'
-import generator from '@babel/generator'
 import { RegExpParser, visitRegExpAST } from '@eslint-community/regexpp'
 import { type Location, Mutant as ApiMutant, type Position } from '@systemfsoftware/stryker-js/Mutant'
 import * as Predicate from 'effect/Predicate'
+import type {
+  AssignmentExpression as EstreeAssignmentExpression,
+  BinaryExpression as EstreeBinaryExpression,
+  BlockStatement as EstreeBlockStatement,
+  Expression as EstreeExpression,
+  NewExpression as EstreeNewExpression,
+  Node as EstreeNode,
+} from 'estree'
 
-const { traverse: babelTraverse, types: babelTypes } = babel
-const t = babelTypes
-type GeneratorFn = (ast: unknown, opts?: unknown, code?: unknown) => { code: string }
-function isGeneratorFn(value: unknown): value is GeneratorFn {
-  return typeof value === 'function'
-}
-function hasDefault(value: unknown): value is { default: GeneratorFn } {
-  if (typeof value !== 'object' || value === null) {
-    return false
-  }
-  if (!('default' in value)) {
-    return false
-  }
-  const def = Reflect.get(value, 'default')
-  return typeof def === 'function'
-}
-let generateExport: GeneratorFn
-const candidate: unknown = generator
-if (isGeneratorFn(candidate)) {
-  generateExport = candidate
-} else if (hasDefault(candidate)) {
-  generateExport = candidate.default
-} else {
-  throw new Error('Missing generator')
-}
-const generate = generateExport
+import {
+  arrayExpression,
+  arrowFunctionExpression,
+  blockStatement,
+  booleanLiteral,
+  buildLineTable,
+  callExpression,
+  cloneNode,
+  identifier,
+  memberExpression,
+  newExpression,
+  nodeType,
+  positionFromLineTable,
+  regExpLiteral,
+  spanOf,
+  stringLiteral,
+  templateElement,
+  templateLiteral,
+  traverse,
+  unaryExpression,
+  updateExpression,
+} from './estree.js'
+import { printNode } from './print/index.js'
 
-export function deepCloneNode<TNode extends babel.types.Node>(node: TNode): TNode {
-  return babelTypes.cloneNode(node, true, false)
-}
-
-function eqPosition(a: Position, b: Position): boolean {
-  return a.line === b.line && a.column === b.column
-}
-function eqLocation(a: types.SourceLocation, b: types.SourceLocation): boolean {
-  return eqPosition(a.start, b.start) && eqPosition(a.end, b.end)
-}
-export function eqNode<T extends types.Node>(a: T, b: types.Node): b is T {
-  return a.type === b.type && !!a.loc && !!b.loc && eqLocation(a.loc, b.loc)
+export type Node = EstreeNode
+/**
+ * Node identity: same kind, same span. oxc nodes always carry a range
+ * (parsed with `range: true`), which is a stronger identity than the old
+ * Babel line/column loc.
+ */
+export function eqNode(a: Node, b: Node): boolean {
+  const spanA = spanOf(a)
+  const spanB = spanOf(b)
+  return (
+    a.type === b.type &&
+    spanA !== undefined && spanB !== undefined &&
+    spanA.start === spanB.start && spanA.end === spanB.end
+  )
 }
 
 export interface Mutable {
   mutatorName: string
   ignoreReason?: string | undefined
-  replacement: types.Node
+  replacement: Node
 }
 export interface Mutant extends Mutable {
   readonly id: string
   readonly fileName: string
-  readonly original: types.Node
+  readonly original: Node
   readonly offset: Position
+  readonly lineTable: readonly number[]
   readonly replacementCode: string
 }
 export function createMutant(
   id: string,
   fileName: string,
-  original: types.Node,
+  original: Node,
   specs: Mutable,
   offset: Position = { column: 0, line: 0 },
+  lineTable: readonly number[] = buildLineTable(''),
 ): Mutant {
   return {
     id,
     fileName,
     original,
     offset,
+    lineTable,
     replacement: specs.replacement,
     mutatorName: specs.mutatorName,
     ignoreReason: specs.ignoreReason,
-    replacementCode: generate(specs.replacement, { sourceMaps: false }).code,
+    replacementCode: printNode(specs.replacement),
   }
 }
 export function toApiMutant(mutant: Mutant): ApiMutant {
-  const loc = mutant.original.loc
-  if (loc === undefined || loc === null) {
-    throw new Error('Babel node without a source location')
-  }
+  const start = nodeOffset(mutant, 'start')
+  const end = nodeOffset(mutant, 'end')
   const baseFields = {
     fileName: mutant.fileName,
     id: mutant.id,
-    location: toApiLocation(loc, mutant.offset),
+    location: toApiLocation(start, end, mutant.lineTable, mutant.offset),
     mutatorName: mutant.mutatorName,
     replacement: mutant.replacementCode,
   }
@@ -99,11 +105,21 @@ export function toApiMutant(mutant: Mutant): ApiMutant {
   }
   return ApiMutant.make(baseFields)
 }
-export function applyMutant(mutant: Mutant, originalTree: types.Node): types.Node {
+
+function nodeOffset(mutant: Mutant, edge: 'start' | 'end'): number {
+  const span = spanOf(mutant.original)
+  const value = span?.[edge]
+  if (typeof value !== 'number') {
+    throw new Error(`Node without a ${edge} offset`)
+  }
+  return value
+}
+
+export function applyMutant(mutant: Mutant, originalTree: Node): Node {
   if (originalTree === mutant.original) {
     return mutant.replacement
   }
-  const mutatedAst = deepCloneNode(originalTree)
+  const mutatedAst = cloneNode(originalTree)
   const { original, replacement } = mutant
   const didApply = hasReplaced(mutatedAst, original, replacement)
   if (didApply === false) {
@@ -111,22 +127,38 @@ export function applyMutant(mutant: Mutant, originalTree: types.Node): types.Nod
   }
   return mutatedAst
 }
-function hasReplaced(root: types.Node, original: types.Node, replacement: types.Node): boolean {
+function hasReplaced(root: Node, original: Node, replacement: Node): boolean {
   let applied = false
-  babelTraverse(root, {
-    noScope: true,
+  traverse(root, {
     enter(path) {
+      if (applied) {
+        path.stop()
+        return
+      }
       if (eqNode(path.node, original)) {
         path.replaceWith(replacement)
-        path.stop()
         applied = true
+        path.stop()
       }
     },
   })
   return applied
 }
-function toApiLocation(source: types.SourceLocation, offset: Position): Location {
-  return { start: toPosition(source.start, offset), end: toPosition(source.end, offset) }
+
+/**
+ * Converts a node span to the API location: offsets become positions via the
+ * file's line table, then the embedding-document offset (html/svelte) applies.
+ */
+function toApiLocation(
+  startOffset: number,
+  endOffset: number,
+  lineTable: readonly number[],
+  offset: Position,
+): Location {
+  return {
+    start: toPosition(positionFromLineTable(startOffset, lineTable), offset),
+    end: toPosition(positionFromLineTable(endOffset, lineTable), offset),
+  }
 }
 function toPosition(source: Position, offset: Position): Position {
   let columnOffset = 0
@@ -137,9 +169,9 @@ function toPosition(source: Position, offset: Position): Position {
 }
 
 export interface MutatorContext {
-  readonly parent: types.Node | undefined
-  readonly grandParent: types.Node | undefined
-  readonly ancestors: readonly types.Node[]
+  readonly parent: Node | undefined
+  readonly grandParent: Node | undefined
+  readonly ancestors: readonly Node[]
 }
 
 /**
@@ -150,7 +182,7 @@ export interface MutatorContext {
  * two could disagree; the registry's key is now the only place a name is
  * written.
  */
-export type Mutator = (node: types.Node, context: MutatorContext) => Iterable<types.Node>
+export type Mutator = (node: Node, context: MutatorContext) => Iterable<Node>
 
 export interface MutatorOptions {
   excludedMutations: string[]
@@ -286,9 +318,9 @@ const arithmeticOperatorReplacements = Object.freeze(
 )
 
 export const arithmeticOperatorMutator: Mutator = function*(node, _context: MutatorContext) {
-  if (t.isBinaryExpression(node) && isSupportedArithmeticOperator(node.operator, node)) {
+  if (node.type === 'BinaryExpression' && isSupportedArithmeticOperator(node.operator, node)) {
     const mutatedOperator = arithmeticOperatorReplacements[node.operator]
-    const replacement = deepCloneNode(node)
+    const replacement = cloneNode(node)
     replacement.operator = mutatedOperator
     yield replacement
   }
@@ -296,21 +328,18 @@ export const arithmeticOperatorMutator: Mutator = function*(node, _context: Muta
 
 function isSupportedArithmeticOperator(
   operator: string,
-  node: types.BinaryExpression,
+  node: EstreeBinaryExpression,
 ): operator is keyof typeof arithmeticOperatorReplacements {
   if (!Object.keys(arithmeticOperatorReplacements).includes(operator)) {
     return false
   }
 
-  const stringTypes = ['StringLiteral', 'TemplateLiteral']
-  let leftType: string
-  if (t.isBinaryExpression(node.left)) {
-    leftType = node.left.right.type
-  } else {
-    leftType = node.left.type
+  let leftOperand: unknown = node.left
+  if (node.left.type === 'BinaryExpression') {
+    leftOperand = node.left.right
   }
 
-  if (stringTypes.includes(node.right.type) || stringTypes.includes(leftType)) {
+  if (isStringLike(node.right) || isStringLike(leftOperand)) {
     return false
   }
 
@@ -318,31 +347,31 @@ function isSupportedArithmeticOperator(
 }
 
 export const arrayDeclarationMutator: Mutator = function*(node, _context: MutatorContext) {
-  if (babelTypes.isArrayExpression(node)) {
-    let replacement: types.ArrayExpression
+  if (node.type === 'ArrayExpression') {
+    let replacement: EstreeExpression
     if (node.elements.length > 0) {
-      replacement = babelTypes.arrayExpression()
+      replacement = arrayExpression()
     } else {
-      replacement = babelTypes.arrayExpression([babelTypes.stringLiteral('Stryker was here')])
+      replacement = arrayExpression([stringLiteral('Stryker was here')])
     }
     yield replacement
   }
   if (
-    (babelTypes.isCallExpression(node) || babelTypes.isNewExpression(node)) &&
-    babelTypes.isIdentifier(node.callee) &&
+    (node.type === 'CallExpression' || node.type === 'NewExpression') &&
+    node.callee.type === 'Identifier' &&
     node.callee.name === 'Array'
   ) {
-    let mutatedCallArgs: types.Expression[]
+    let mutatedCallArgs: EstreeExpression[]
     if (node.arguments.length > 0) {
       mutatedCallArgs = []
     } else {
-      mutatedCallArgs = [babelTypes.arrayExpression()]
+      mutatedCallArgs = [arrayExpression()]
     }
-    let replacement: types.CallExpression | types.NewExpression
-    if (babelTypes.isNewExpression(node)) {
-      replacement = babelTypes.newExpression(deepCloneNode(node.callee), mutatedCallArgs)
+    let replacement: EstreeExpression
+    if (node.type === 'NewExpression') {
+      replacement = newExpression(cloneNode(node.callee), mutatedCallArgs)
     } else {
-      replacement = babelTypes.callExpression(deepCloneNode(node.callee), mutatedCallArgs)
+      replacement = callExpression(cloneNode(node.callee), mutatedCallArgs)
     }
     yield replacement
   }
@@ -350,11 +379,11 @@ export const arrayDeclarationMutator: Mutator = function*(node, _context: Mutato
 
 export const arrowFunctionMutator: Mutator = function*(node, _context: MutatorContext) {
   if (
-    babelTypes.isArrowFunctionExpression(node) &&
-    !babelTypes.isBlockStatement(node.body) &&
-    !(babelTypes.isIdentifier(node.body) && node.body.name === 'undefined')
+    node.type === 'ArrowFunctionExpression' &&
+    node.body.type !== 'BlockStatement' &&
+    !(node.body.type === 'Identifier' && node.body.name === 'undefined')
   ) {
-    yield babelTypes.arrowFunctionExpression([], babelTypes.identifier('undefined'))
+    yield arrowFunctionExpression([], identifier('undefined'))
   }
 }
 
@@ -375,16 +404,23 @@ const assignmentOperatorReplacements = Object.freeze(
   } as const,
 )
 
-const stringTypes = Object.freeze(['StringLiteral', 'TemplateLiteral'])
+// estree merges string literals into `Literal` (numbers, booleans and regex
+// share the tag), so the string check inspects the value, not the tag.
+function isStringLike(node: unknown): boolean {
+  if (node === null || node === undefined) return false
+  if (nodeType(node) === 'TemplateLiteral') return true
+  return nodeType(node) === 'Literal' && typeof (node as { value?: unknown }).value === 'string'
+}
+
 const stringAssignmentTypes = Object.freeze(['&&=', '||=', '??='])
 
 export const assignmentOperatorMutator: Mutator = function*(node, _context: MutatorContext) {
   if (
-    babelTypes.isAssignmentExpression(node) && isSupportedAssignmentOperator(node.operator) &&
+    node.type === 'AssignmentExpression' && isSupportedAssignmentOperator(node.operator) &&
     isSupportedAssignmentExpression(node)
   ) {
     const mutatedOperator = assignmentOperatorReplacements[node.operator]
-    const replacement = deepCloneNode(node)
+    const replacement = cloneNode(node)
     replacement.operator = mutatedOperator
     yield replacement
   }
@@ -393,9 +429,8 @@ export const assignmentOperatorMutator: Mutator = function*(node, _context: Muta
 function isSupportedAssignmentOperator(operator: string): operator is keyof typeof assignmentOperatorReplacements {
   return Object.keys(assignmentOperatorReplacements).includes(operator)
 }
-
-function isSupportedAssignmentExpression(node: types.AssignmentExpression): boolean {
-  if (stringTypes.includes(node.right.type) && !stringAssignmentTypes.includes(node.operator)) {
+function isSupportedAssignmentExpression(node: EstreeAssignmentExpression): boolean {
+  if (isStringLike(node.right) && !stringAssignmentTypes.includes(node.operator)) {
     return false
   }
 
@@ -403,41 +438,43 @@ function isSupportedAssignmentExpression(node: types.AssignmentExpression): bool
 }
 
 export const blockStatementMutator: Mutator = function*(node, context: MutatorContext) {
-  if (babelTypes.isBlockStatement(node) && isValid(node, context)) {
-    yield babelTypes.blockStatement([])
+  if (node.type === 'BlockStatement' && isValid(node, context)) {
+    yield blockStatement([])
   }
 }
 
-function isValid(node: babel.types.BlockStatement, context: MutatorContext): boolean {
+function isValid(node: EstreeBlockStatement, context: MutatorContext): boolean {
   return !isEmpty(node) && !isInvalidConstructorBody(node, context)
 }
 
-function isEmpty(node: babel.types.BlockStatement): boolean {
+function isEmpty(node: EstreeBlockStatement): boolean {
   return node.body.length === 0
 }
 
-function isInvalidConstructorBody(node: babel.types.BlockStatement, context: MutatorContext): boolean {
+function isInvalidConstructorBody(node: EstreeBlockStatement, context: MutatorContext): boolean {
   const parent = context.parent
-  if (parent === undefined || !babelTypes.isClassMethod(parent) || parent.kind !== 'constructor') {
+  // estree: the constructor is a MethodDefinition whose `value` is the function
+  if (parent === undefined || parent.type !== 'MethodDefinition' || parent.kind !== 'constructor') {
     return false
   }
-  const hasParamProps = parent.params.some((param) => babelTypes.isTSParameterProperty(param))
+  const fn = parent.value
+  const hasParamProps = fn.params.some((param) => param !== null && nodeType(param) === 'TSParameterProperty')
   const hasInitProps = containsInitializedClassProperties(parent, context)
   const hasSuper = hasSuperExpression(node)
   return (hasParamProps || hasInitProps) && hasSuper
 }
 
-function containsInitializedClassProperties(constructor: babel.types.ClassMethod, context: MutatorContext): boolean {
+function containsInitializedClassProperties(constructor: Node, context: MutatorContext): boolean {
   const grandParent = context.grandParent
-  if (grandParent === undefined || !babelTypes.isClassBody(grandParent)) {
+  if (grandParent === undefined || grandParent.type !== 'ClassBody') {
     return false
   }
   return grandParent.body.some((classMember) =>
-    babelTypes.isClassProperty(classMember) && classMember.value !== null && classMember.value !== undefined
+    classMember.type === 'PropertyDefinition' && classMember.value !== null && classMember.value !== undefined
   )
 }
 
-function hasSuperExpression(block: babel.types.BlockStatement): boolean {
+function hasSuperExpression(block: EstreeBlockStatement): boolean {
   return containsSuperCall(block)
 }
 
@@ -484,11 +521,11 @@ function hasSuperInChildren(node: object): boolean {
 }
 
 export const booleanLiteralMutator: Mutator = function*(node, _context: MutatorContext) {
-  if (babelTypes.isBooleanLiteral(node)) {
-    yield babelTypes.booleanLiteral(!node.value)
+  if (node.type === 'Literal' && typeof node.value === 'boolean') {
+    yield booleanLiteral(!node.value)
   }
-  if (babelTypes.isUnaryExpression(node) && node.operator === '!' && node.prefix) {
-    yield deepCloneNode(node.argument)
+  if (node.type === 'UnaryExpression' && node.operator === '!' && node.prefix) {
+    yield cloneNode(node.argument)
   }
 }
 
@@ -496,65 +533,69 @@ const booleanOperators = Object.freeze(['!=', '!==', '&&', '<', '<=', '==', '===
 
 export const conditionalExpressionMutator: Mutator = function*(node, context: MutatorContext) {
   if (isTestOfLoop(node, context)) {
-    yield babelTypes.booleanLiteral(false)
+    yield booleanLiteral(false)
   } else if (isTestOfCondition(node, context)) {
-    yield babelTypes.booleanLiteral(true)
-    yield babelTypes.booleanLiteral(false)
+    yield booleanLiteral(true)
+    yield booleanLiteral(false)
   } else if (isBooleanExpression(node)) {
     const parent = context.parent
-    if (parent !== undefined && babelTypes.isLogicalExpression(parent)) {
+    if (parent !== undefined && parent.type === 'LogicalExpression') {
       if (parent.operator === '||') {
-        yield babelTypes.booleanLiteral(false)
+        yield booleanLiteral(false)
         return
       }
       if (parent.operator === '&&') {
-        yield babelTypes.booleanLiteral(true)
+        yield booleanLiteral(true)
         return
       }
     }
-    yield babelTypes.booleanLiteral(true)
-    yield babelTypes.booleanLiteral(false)
-  } else if (babelTypes.isForStatement(node) && node.test === null) {
-    const replacement = deepCloneNode(node)
-    replacement.test = babelTypes.booleanLiteral(false)
+    yield booleanLiteral(true)
+    yield booleanLiteral(false)
+  } else if (node.type === 'ForStatement' && node.test === null) {
+    const replacement = cloneNode(node)
+    if (replacement.type === 'ForStatement') {
+      replacement.test = booleanLiteral(false)
+    }
     yield replacement
-  } else if (babelTypes.isSwitchCase(node) && node.consequent.length > 0) {
-    const replacement = deepCloneNode(node)
-    replacement.consequent = []
+  } else if (node.type === 'SwitchCase' && node.consequent.length > 0) {
+    const replacement = cloneNode(node)
+    if (replacement.type === 'SwitchCase') {
+      replacement.consequent = []
+    }
     yield replacement
   }
 }
 
-function isTestOfLoop(node: babel.types.Node, context: MutatorContext): boolean {
+function isTestOfLoop(node: Node, context: MutatorContext): boolean {
   const parent = context.parent
   if (parent === undefined) {
     return false
   }
-  if (babelTypes.isForStatement(parent) && parent.test === node) {
+  if (parent.type === 'ForStatement' && parent.test === node) {
     return true
   }
-  if (babelTypes.isWhileStatement(parent) && parent.test === node) {
+  if (parent.type === 'WhileStatement' && parent.test === node) {
     return true
   }
-  if (babelTypes.isDoWhileStatement(parent) && parent.test === node) {
+  if (parent.type === 'DoWhileStatement' && parent.test === node) {
     return true
   }
   return false
 }
 
-function isTestOfCondition(node: babel.types.Node, context: MutatorContext): boolean {
+function isTestOfCondition(node: Node, context: MutatorContext): boolean {
   const parent = context.parent
   if (parent === undefined) {
     return false
   }
-  return babelTypes.isIfStatement(parent) && parent.test === node
+  return parent.type === 'IfStatement' && parent.test === node
 }
 
-function isBooleanExpression(node: babel.types.Node): boolean {
-  if (babelTypes.isBinaryExpression(node)) {
+function isBooleanExpression(node: Node): boolean {
+  if (node.type === 'BinaryExpression') {
     return booleanOperators.includes(node.operator)
   }
-  if (babelTypes.isLogicalExpression(node)) {
+  if (node.type === 'LogicalExpression') {
     return booleanOperators.includes(node.operator)
   }
   return false
@@ -576,9 +617,9 @@ function isEqualityOperator(operator: string): operator is keyof typeof operator
 }
 
 export const equalityOperatorMutator: Mutator = function*(node, _context: MutatorContext) {
-  if (t.isBinaryExpression(node) && isEqualityOperator(node.operator)) {
+  if (node.type === 'BinaryExpression' && isEqualityOperator(node.operator)) {
     for (const mutableOperator of operators[node.operator]) {
-      const replacement = t.cloneNode(node, true)
+      const replacement = cloneNode(node)
       replacement.operator = mutableOperator
       yield replacement
     }
@@ -594,9 +635,9 @@ const logicalOperatorReplacements = Object.freeze(
 )
 
 export const logicalOperatorMutator: Mutator = function*(node, _context: MutatorContext) {
-  if (babelTypes.isLogicalExpression(node) && isSupportedLogicalOperator(node.operator)) {
+  if (node.type === 'LogicalExpression' && isSupportedLogicalOperator(node.operator)) {
     const mutatedOperator = logicalOperatorReplacements[node.operator]
-    const replacement = deepCloneNode(node)
+    const replacement = cloneNode(node)
     replacement.operator = mutatedOperator
     yield replacement
   }
@@ -641,15 +682,14 @@ for (const [key, value] of Object.entries(baseReplacements)) {
 }
 
 export const methodExpressionMutator: Mutator = function*(node, _context: MutatorContext) {
-  if (!(babelTypes.isCallExpression(node) || babelTypes.isOptionalCallExpression(node))) {
+  if (node.type !== 'CallExpression') {
     return
   }
 
   const { callee } = node
-  if (
-    !(babelTypes.isMemberExpression(callee) || babelTypes.isOptionalMemberExpression(callee)) ||
-    !babelTypes.isIdentifier(callee.property)
-  ) {
+  // estree: optional chaining is MemberExpression{optional:true}; the property
+  // must be a non-computed identifier for this mutator to apply.
+  if (callee.type !== 'MemberExpression' || callee.optional === true || callee.property.type !== 'Identifier') {
     return
   }
 
@@ -659,80 +699,73 @@ export const methodExpressionMutator: Mutator = function*(node, _context: Mutato
   }
 
   if (newName === null) {
-    yield deepCloneNode(callee.object)
+    yield cloneNode(callee.object)
     return
   }
 
-  const nodeArguments = node.arguments.map((argumentNode) => deepCloneNode(argumentNode))
-
-  let mutatedCallee: types.MemberExpression | types.OptionalMemberExpression
-  if (babelTypes.isMemberExpression(callee)) {
-    mutatedCallee = babelTypes.memberExpression(
-      deepCloneNode(callee.object),
-      babelTypes.identifier(newName),
-      false,
-      callee.optional,
-    )
-  } else {
-    mutatedCallee = babelTypes.optionalMemberExpression(
-      deepCloneNode(callee.object),
-      babelTypes.identifier(newName),
-      false,
-      callee.optional,
-    )
+  const nodeArguments: EstreeExpression[] = []
+  for (const argumentNode of node.arguments) {
+    if (argumentNode.type !== 'SpreadElement') {
+      nodeArguments.push(cloneNode(argumentNode))
+    }
   }
 
-  if (babelTypes.isCallExpression(node)) {
-    yield babelTypes.callExpression(mutatedCallee, nodeArguments)
-  } else {
-    yield babelTypes.optionalCallExpression(mutatedCallee, nodeArguments, node.optional)
+  if (callee.object.type === 'Super') {
+    return
   }
+  const mutatedCallee = memberExpression(
+    cloneNode(callee.object),
+    identifier(newName),
+    false,
+    false,
+  )
+
+  yield callExpression(mutatedCallee, nodeArguments)
 }
 
 export const objectLiteralMutator: Mutator = function*(node, _context: MutatorContext) {
-  if (babelTypes.isObjectExpression(node) && node.properties.length > 0) {
-    yield babelTypes.objectExpression([])
+  if (node.type === 'ObjectExpression' && node.properties.length > 0) {
+    // estree builders here own the empty-object shape
+    yield { type: 'ObjectExpression', properties: [] }
   }
 }
 
 export const optionalChainingMutator: Mutator = function*(node, _context: MutatorContext) {
-  if (t.isOptionalMemberExpression(node) && node.optional) {
-    yield t.optionalMemberExpression(
-      t.cloneNode(node.object, true),
-      t.cloneNode(node.property, true),
-      node.computed,
-      false,
-    )
+  if (node.type === 'MemberExpression' && node.optional) {
+    const replacement = cloneNode(node)
+    replacement.optional = false
+    yield replacement
   }
-  if (t.isOptionalCallExpression(node) && node.optional) {
-    yield t.optionalCallExpression(
-      t.cloneNode(node.callee, true),
-      node.arguments.map((arg) => t.cloneNode(arg, true)),
-      false,
-    )
+  if (node.type === 'CallExpression' && node.optional) {
+    const replacement = cloneNode(node)
+    replacement.optional = false
+    yield replacement
   }
 }
 
 export const regexMutator: Mutator = function*(node, context: MutatorContext) {
-  if (babelTypes.isRegExpLiteral(node)) {
-    for (const replacementPattern of mutateRegexPattern(node.pattern, node.flags)) {
-      yield babelTypes.regExpLiteral(replacementPattern, node.flags)
+  if (nodeType(node) === 'Literal' && 'regex' in node && node.regex !== null && node.regex !== undefined) {
+    for (const replacementPattern of mutateRegexPattern(node.regex.pattern, node.regex.flags)) {
+      yield regExpLiteral(replacementPattern, node.regex.flags)
     }
-  } else if (babelTypes.isStringLiteral(node) && isObviousRegexString(node, context)) {
+  } else if (
+    nodeType(node) === 'Literal' && 'value' in node && typeof node.value === 'string' &&
+    isObviousRegexString(node, context)
+  ) {
     const parent = context.parent
-    if (parent !== undefined && babelTypes.isNewExpression(parent)) {
+    if (parent !== undefined && parent.type === 'NewExpression') {
       const flags = getFlags(parent)
       for (const replacementPattern of mutateRegexPattern(node.value, flags)) {
-        yield babelTypes.stringLiteral(replacementPattern)
+        yield stringLiteral(replacementPattern)
       }
     }
   }
 }
 
-function isObviousRegexString(node: babel.types.StringLiteral, context: MutatorContext): boolean {
+function isObviousRegexString(node: Node, context: MutatorContext): boolean {
   const parent = context.parent
   if (
-    parent === undefined || !babelTypes.isNewExpression(parent) || !babelTypes.isIdentifier(parent.callee) ||
+    parent === undefined || parent.type !== 'NewExpression' || parent.callee.type !== 'Identifier' ||
     parent.callee.name !== RegExp.name
   ) {
     return false
@@ -740,16 +773,16 @@ function isObviousRegexString(node: babel.types.StringLiteral, context: MutatorC
   return parent.arguments[0] === node
 }
 
-function getFlags(node: babel.types.NewExpression): string | undefined {
+function getFlags(node: EstreeNewExpression): string | undefined {
   const secondArg = node.arguments[1]
-  if (secondArg !== undefined && babelTypes.isStringLiteral(secondArg)) {
+  if (secondArg !== undefined && secondArg.type === 'Literal' && typeof secondArg.value === 'string') {
     return secondArg.value
   }
   return undefined
 }
 
 export const stringLiteralMutator: Mutator = function*(node, context: MutatorContext) {
-  if (babelTypes.isTemplateLiteral(node)) {
+  if (node.type === 'TemplateLiteral') {
     const firstQuasi = node.quasis[0]
     if (firstQuasi === undefined) {
       return
@@ -760,20 +793,21 @@ export const stringLiteralMutator: Mutator = function*(node, context: MutatorCon
     } else {
       replacement = ''
     }
-    yield babelTypes.templateLiteral([babelTypes.templateElement({ raw: replacement })], [])
+    yield templateLiteral([templateElement(replacement)], [])
   }
-  if (babelTypes.isStringLiteral(node) && isValidParent(node, context)) {
+  if (
+    nodeType(node) === 'Literal' && 'value' in node && typeof node.value === 'string' && isValidParent(node, context)
+  ) {
     let replacement: string
     if (node.value.length === 0) {
       replacement = 'Stryker was here!'
     } else {
       replacement = ''
     }
-    yield babelTypes.stringLiteral(replacement)
+    yield stringLiteral(replacement)
   }
 }
-
-function isValidParent(child: babel.types.StringLiteral, context: MutatorContext): boolean {
+function isValidParent(child: Node, context: MutatorContext): boolean {
   const parent = context.parent
   if (parent === undefined) {
     return true
@@ -786,43 +820,47 @@ function isValidParent(child: babel.types.StringLiteral, context: MutatorContext
   )
 }
 
-function isImportExportRelated(parent: babel.types.Node): boolean {
+function isImportExportRelated(parent: Node): boolean {
   return (
-    babelTypes.isImportDeclaration(parent) ||
-    babelTypes.isExportDeclaration(parent) ||
-    babelTypes.isImportOrExportDeclaration(parent) ||
-    babelTypes.isTSExternalModuleReference(parent)
+    nodeType(parent) === 'ImportDeclaration' ||
+    nodeType(parent) === 'ExportNamedDeclaration' ||
+    nodeType(parent) === 'ExportDefaultDeclaration' ||
+    nodeType(parent) === 'ExportAllDeclaration' ||
+    nodeType(parent) === 'TSExternalModuleReference'
   )
 }
 
-function isJsxOrExpressionRelated(parent: babel.types.Node): boolean {
+function isJsxOrExpressionRelated(parent: Node): boolean {
   return (
-    babelTypes.isJSXAttribute(parent) ||
-    babelTypes.isExpressionStatement(parent) ||
-    babelTypes.isTSLiteralType(parent) ||
-    babelTypes.isObjectMethod(parent)
+    nodeType(parent) === 'JSXAttribute' ||
+    nodeType(parent) === 'ExpressionStatement' ||
+    nodeType(parent) === 'TSLiteralType' ||
+    // estree: an object method is a Property whose `method` flag is set
+    (parent.type === 'Property' && parent.method === true)
   )
 }
 
-function isObjectOrClassPropertyKey(parent: babel.types.Node, child: babel.types.StringLiteral): boolean {
-  return (babelTypes.isObjectProperty(parent) && parent.key === child) ||
-    (babelTypes.isClassProperty(parent) && parent.key === child)
+function isObjectOrClassPropertyKey(parent: Node, child: Node): boolean {
+  return ((parent.type === 'Property' || parent.type === 'PropertyDefinition') && nodeType(parent.key) !== undefined &&
+    parent.key === child)
 }
 
-function isDisallowedCallExpression(parent: babel.types.Node): boolean {
+function isDisallowedCallExpression(parent: Node): boolean {
   return isRequireCall(parent) || isSymbolCall(parent) || isImportCall(parent)
 }
 
-function isRequireCall(parent: babel.types.Node): boolean {
-  return babelTypes.isCallExpression(parent) && babelTypes.isIdentifier(parent.callee, { name: 'require' })
+function isRequireCall(parent: Node): boolean {
+  return parent.type === 'CallExpression' && nodeType(parent.callee) === 'Identifier' && 'name' in parent.callee &&
+    parent.callee.name === 'require'
 }
 
-function isSymbolCall(parent: babel.types.Node): boolean {
-  return babelTypes.isCallExpression(parent) && babelTypes.isIdentifier(parent.callee, { name: 'Symbol' })
+function isSymbolCall(parent: Node): boolean {
+  return parent.type === 'CallExpression' && nodeType(parent.callee) === 'Identifier' && 'name' in parent.callee &&
+    parent.callee.name === 'Symbol'
 }
 
-function isImportCall(parent: babel.types.Node): boolean {
-  return babelTypes.isCallExpression(parent) && babelTypes.isImport(parent.callee)
+function isImportCall(parent: Node): boolean {
+  return parent.type === 'CallExpression' && nodeType(parent.callee) === 'Import'
 }
 
 const UnaryOperator = {
@@ -832,13 +870,13 @@ const UnaryOperator = {
 } as const
 
 export const unaryOperatorMutator: Mutator = function*(node, _context: MutatorContext) {
-  if (babelTypes.isUnaryExpression(node) && isSupportedUnaryOperator(node.operator) && node.prefix) {
+  if (node.type === 'UnaryExpression' && isSupportedUnaryOperator(node.operator) && node.prefix) {
     const mutatedOperator = UnaryOperator[node.operator]
-    let replacement: types.Node
+    let replacement: EstreeExpression
     if (isPlusOrMinus(mutatedOperator)) {
-      replacement = babelTypes.unaryExpression(mutatedOperator, deepCloneNode(node.argument))
+      replacement = unaryExpression(mutatedOperator, cloneNode(node.argument))
     } else {
-      replacement = deepCloneNode(node.argument)
+      replacement = cloneNode(node.argument)
     }
     yield replacement
   }
@@ -858,8 +896,8 @@ const UpdateOperators = {
 } as const
 
 export const updateOperatorMutator: Mutator = function*(node, _context: MutatorContext) {
-  if (babelTypes.isUpdateExpression(node)) {
-    yield babelTypes.updateExpression(UpdateOperators[node.operator], deepCloneNode(node.argument), node.prefix)
+  if (node.type === 'UpdateExpression') {
+    yield updateExpression(UpdateOperators[node.operator], cloneNode(node.argument), node.prefix)
   }
 }
 

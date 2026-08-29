@@ -1,15 +1,8 @@
 /**
  * Instrument — the instrument capability: Cell description, file/mutant types and the instrument entry point.
  */
-import babel, { type types } from '@babel/core'
-import generator from '@babel/generator'
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import {
-  type FileDescription,
-  type Location,
-  Mutant as ApiMutant,
-  type Position,
-} from '@systemfsoftware/stryker-js/Mutant'
+import { type FileDescription, Mutant as ApiMutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
 import * as Predicate from 'effect/Predicate'
@@ -27,20 +20,11 @@ import {
   InstrumentResult as InstrumentResultSchema,
 } from './Instrument.workflow.js'
 import { instrumentWorkflow } from './Instrument.workflow.js'
-import { createParser, getFormat, type ParserOptions } from './Parser.js'
+import { createParser, getFormat } from './Parser.js'
 import { print } from './Printer.js'
 import { type Ast, AstFormat, type HtmlAst, type ScriptAst, type SvelteAst } from './Syntax.js'
 import { createMutantCollector, transform } from './Transformer.js'
 import type { TransformerOptions } from './Transformer.js'
-
-const { traverse, types: babelTypes } = babel
-function resolveGenerate() {
-  if (typeof generator === 'function') {
-    return generator
-  }
-  return generator.default
-}
-const generate = resolveGenerate()
 
 // ---- File ----
 export interface File extends FileDescription {
@@ -53,112 +37,18 @@ export interface InstrumentResult {
 }
 
 export type { InstrumenterOptions }
-// ---- clone / equality ----
-export function deepCloneNode<TNode extends babel.types.Node>(node: TNode): TNode {
-  return babelTypes.cloneNode(node, true, false)
-}
-
-function eqPosition(a: Position, b: Position): boolean {
-  return a.line === b.line && a.column === b.column
-}
-function eqLocation(a: babel.types.SourceLocation, b: babel.types.SourceLocation): boolean {
-  return eqPosition(a.start, b.start) && eqPosition(a.end, b.end)
-}
-export function eqNode<T extends babel.types.Node>(a: T, b: babel.types.Node): b is T {
-  return a.type === b.type && !!a.loc && !!b.loc && eqLocation(a.loc, b.loc)
-}
-
-// ---- Mutant ----
-export interface Mutable {
-  mutatorName: string
-  ignoreReason?: string | undefined
-  replacement: types.Node
-}
-export interface Mutant extends Mutable {
-  readonly id: string
-  readonly fileName: string
-  readonly original: types.Node
-  readonly offset: Position
-  readonly replacementCode: string
-}
-export function createMutant(
-  id: string,
-  fileName: string,
-  original: types.Node,
-  specs: Mutable,
-  offset: Position = { column: 0, line: 0 },
-): Mutant {
-  return {
-    id,
-    fileName,
-    original,
-    offset,
-    replacement: specs.replacement,
-    mutatorName: specs.mutatorName,
-    ignoreReason: specs.ignoreReason,
-    replacementCode: generate(specs.replacement, { sourceMaps: false }).code,
-  }
-}
-export function toApiMutant(mutant: Mutant): ApiMutant {
-  const loc = mutant.original.loc
-  if (loc === undefined || loc === null) {
-    throw new Error('Babel node without a source location')
-  }
-  const base = {
-    fileName: mutant.fileName,
-    id: mutant.id,
-    location: toApiLocation(loc, mutant.offset),
-    mutatorName: mutant.mutatorName,
-    replacement: mutant.replacementCode,
-  }
-  if (mutant.ignoreReason === undefined) {
-    return ApiMutant.make(base)
-  }
-  return ApiMutant.make({
-    ...base,
-    statusReason: mutant.ignoreReason,
-    status: 'Ignored' as const,
-  })
-}
-export function applyMutant(mutant: Mutant, originalTree: types.Node): types.Node {
-  if (originalTree === mutant.original) {
-    return mutant.replacement
-  }
-  const mutatedAst = deepCloneNode(originalTree)
-  const state = { applied: false }
-  const { original, replacement } = mutant
-  traverse(mutatedAst, {
-    noScope: true,
-    enter(path) {
-      if (eqNode(path.node, original)) {
-        path.replaceWith(replacement)
-        path.stop()
-        state.applied = true
-      }
-    },
-  })
-  if (state.applied === false) {
-    throw new Error(`Could not apply mutant ${JSON.stringify(replacement)}.`)
-  }
-  return mutatedAst
-}
-function toApiLocation(source: types.SourceLocation, offset: Position): Location {
-  return { start: toPosition(source.start, offset), end: toPosition(source.end, offset) }
-}
-function toPosition(source: Position, offset: Position): Position {
-  let columnOffset = 0
-  if (source.line === 1) {
-    columnOffset = offset.column
-  }
-  return { column: source.column + columnOffset, line: source.line + offset.line - 1 }
-}
+// Mutant identity, application and API mapping live with the mutators — this
+// module only orchestrates the pipeline.
+import { spanOf } from './estree.js'
+import { toApiMutant } from './Mutator.js'
+import { type SpannedComment } from './Syntax.js'
 
 // ---- disable-type-checks ----
 const commentDirectiveRegEx = /^(\s*)@(ts-[a-z-]+).*$/
 const tsDirectiveLikeRegEx = /@(ts-[a-z-]+)/
 const startingCommentRegex = /(^\s*\/\*.*?\*\/)/gs
 
-export async function disableTypeChecks(file: File, options: ParserOptions): Promise<File> {
+export async function disableTypeChecks(file: File): Promise<File> {
   const format = getFormat(file.name)
   if (!format) {
     return file
@@ -166,13 +56,13 @@ export async function disableTypeChecks(file: File, options: ParserOptions): Pro
   if (isJSFileWithoutTSDirectives(file, format)) {
     return { ...file, content: prefixWithNoCheck(file.content) }
   }
-  const parse = createParser(options)
+  const parse = createParser()
   const ast = await parse(file.content, file.name)
   switch (ast.format) {
     case 'js':
     case 'ts':
     case 'tsx':
-      return { ...file, content: disableTypeCheckingInBabelAst(ast) }
+      return { ...file, content: disableTypeCheckingInScript(ast) }
     case 'html':
       return { ...file, content: disableTypeCheckingInHtml(ast) }
     case 'svelte':
@@ -182,8 +72,8 @@ export async function disableTypeChecks(file: File, options: ParserOptions): Pro
 function isJSFileWithoutTSDirectives(file: File, format: AstFormat) {
   return (format === 'ts' || format === 'js') && !tsDirectiveLikeRegEx.test(file.content)
 }
-function disableTypeCheckingInBabelAst(ast: ScriptAst): string {
-  return prefixWithNoCheck(removeTSDirectives(ast.rawContent, ast.root.comments))
+function disableTypeCheckingInScript(ast: ScriptAst): string {
+  return prefixWithNoCheck(removeTSDirectives(ast.rawContent, ast.comments))
 }
 function prefixWithNoCheck(code: string): string {
   if (code.startsWith('#')) {
@@ -204,18 +94,19 @@ function prefixWithNoCheck(code: string): string {
   }
 }
 function getScriptStart(script: HtmlAst['root']['scripts'][number]): number {
-  const start = script.root.start
-  if (start === undefined || start === null) {
+  const span = spanOf(script.root)
+  if (span === undefined) {
     throw new Error('Script AST root without start')
   }
-  return start
+  return span.start
 }
+
 function getScriptEnd(script: HtmlAst['root']['scripts'][number]): number {
-  const end = script.root.end
-  if (end === undefined || end === null) {
+  const span = spanOf(script.root)
+  if (span === undefined) {
     throw new Error('Script AST root without end')
   }
-  return end
+  return span.end
 }
 function disableTypeCheckingInHtml(ast: HtmlAst): string {
   const sortedScripts = [...ast.root.scripts].sort((a, b) => getScriptStart(a) - getScriptStart(b))
@@ -224,7 +115,7 @@ function disableTypeCheckingInHtml(ast: HtmlAst): string {
   for (const script of sortedScripts) {
     html += ast.rawContent.substring(currentIndex, getScriptStart(script))
     html += '\n'
-    html += prefixWithNoCheck(removeTSDirectives(script.rawContent, script.root.comments))
+    html += prefixWithNoCheck(removeTSDirectives(script.rawContent, script.comments))
     html += '\n'
     currentIndex = getScriptEnd(script)
   }
@@ -241,7 +132,7 @@ function disableTypeCheckingInSvelte(ast: SvelteAst): string {
   for (const script of sortedScripts) {
     html += ast.rawContent.substring(currentIndex, script.range.start)
     html += '\n'
-    html += prefixWithNoCheck(removeTSDirectives(script.ast.rawContent, script.ast.root.comments))
+    html += prefixWithNoCheck(removeTSDirectives(script.ast.rawContent, script.ast.comments))
     html += '\n'
     currentIndex = script.range.end
   }
@@ -250,7 +141,7 @@ function disableTypeCheckingInSvelte(ast: SvelteAst): string {
 }
 function removeTSDirectives(
   text: string,
-  comments: Array<types.CommentBlock | types.CommentLine> | null | undefined,
+  comments: readonly SpannedComment[] | null | undefined,
 ): string {
   if (comments === null || comments === undefined) {
     return text
@@ -271,12 +162,12 @@ function removeTSDirectives(
   return pruned
 }
 function tryParseTSDirective(
-  comment: types.CommentBlock | types.CommentLine,
+  comment: SpannedComment,
 ): { startPos: number; endPos: number } | undefined {
   const match = commentDirectiveRegEx.exec(comment.value)
   if (match !== null) {
     const start = comment.start
-    if (start == null) {
+    if (start === undefined) {
       throw new Error('Comment without start')
     }
     const directivePrefix = match[1]
@@ -345,7 +236,7 @@ const instrumentDescription = pipe(
     Effect.gen(function*() {
       const files = command.files
       const options = command.options
-      const parse = createParser(options)
+      const parse = createParser()
       const asts: Ast[] = []
       for (const { name, content } of files) {
         const ast = yield* Effect.tryPromise({
