@@ -23,7 +23,7 @@
   "dependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
-    "@noble/hashes": "1.8.0",
+    "@noble/hashes": "2.3.0",
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/stryker-js": "workspace:^",
     "@systemfsoftware/stryker-js-instrumenter": "workspace:^",
