@@ -68,7 +68,8 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "@vitest/snapshot": "catalog:"
   },
   "engines": {
     "node": ">=24"
