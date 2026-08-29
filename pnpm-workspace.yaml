@@ -88,6 +88,10 @@ minimumReleaseAgeExclude:
 overrides:
   fast-check: ^4
   vite: ^8
+  # storybook's csf-plugin resolves esbuild 0.27 in its peer context while tsx
+  # uses 0.28; the split forks vite and therefore vitest into two physical builds
+  # per peer context. One esbuild keeps one vitest (issue #304 guard).
+  esbuild: ^0.28.2
 packages:
   - packages/*
   - packages/core/effect/*
