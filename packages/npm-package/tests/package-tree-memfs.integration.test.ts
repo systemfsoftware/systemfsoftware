@@ -1,8 +1,8 @@
 import { it, layer, makeFeature, StepError } from '@systemfsoftware/effect-gherkin-spec'
 import { MemoryFileSystem } from '@systemfsoftware/effect-memfs'
+import { toDirectoryJSON } from '@systemfsoftware/npm-package'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
-import { toDirectoryJSON } from './__fixtures__/npm-package.js'
 
 const Feature = makeFeature({ it, layer })
 
