@@ -63,7 +63,7 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "vite": "catalog:",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "peerDependencies": {
     "@systemfsoftware/effect-schema-law": "workspace:*",
