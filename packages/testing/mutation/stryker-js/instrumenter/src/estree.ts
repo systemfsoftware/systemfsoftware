@@ -3,9 +3,9 @@
 // type system cannot express (estree unions vs oxc serializer output).
 /**
  * ESTree toolkit — node builders, kind classification and a walker with
- * parent-chain paths. Replaces `@babel/traverse` + `@babel/types`: oxc hands
+ * parent-chain paths. The walker replaces the previous traversal stack: oxc hands
  * back standard ESTree, so the instrumenter owns the traversal instead of
- * pulling Babel's scope machinery along.
+ * without pulling scope machinery along.
  */
 import type {
   BlockStatement,
@@ -157,8 +157,13 @@ export function arrayExpression(elements: ReadonlyArray<Expression | null> = [],
   return mark<Expression>({ type: 'ArrayExpression', elements: elementList }, loc)
 }
 
-export function callExpression(callee: Expression, args: ReadonlyArray<Expression> = [], loc?: Loc): Expression {
-  return mark<Expression>({ type: 'CallExpression', callee, arguments: [...args], optional: false }, loc)
+export function callExpression(
+  callee: Expression,
+  args: ReadonlyArray<Expression> = [],
+  optional = false,
+  loc?: Loc,
+): Expression {
+  return mark<Expression>({ type: 'CallExpression', callee, arguments: [...args], optional }, loc)
 }
 
 export function newExpression(callee: Expression, args: ReadonlyArray<Expression> = [], loc?: Loc): Expression {
@@ -292,7 +297,7 @@ export function switchCase(test: Expression | null, consequent: ReadonlyArray<St
 
 /**
  * Deep clone of a plain ESTree node. oxc nodes are JSON-shaped, so
- * `structuredClone` is `babelTypes.cloneNode(node, true, false)`.
+ * Deep clone over plain nodes: no prototypes to preserve.
  */
 export function cloneNode<T extends Node>(node: T): T {
   return structuredClone(node)
@@ -324,10 +329,10 @@ export interface AttachedComment {
 
 /**
  * Attaches every comment to the node it precedes (`leadingComments`) or, when
- * no node follows it, to the node it trails (`trailingComments`). Babel nests
- * comments inside nodes; oxc ships them flat, and the Stryker directive pass
- * reads `node.leadingComments`, so the flat list is folded into the tree once
- * per transform with the file's line table in hand.
+ * no node follows it, to the node it trails (`trailingComments`). oxc ships
+ * comments flat, and the Stryker directive pass reads `node.leadingComments`,
+ * so the flat list is folded into the tree once per transform with the file's
+ * line table in hand.
  */
 export function attachComments(
   root: Node,
@@ -335,7 +340,10 @@ export function attachComments(
   lineTable: readonly number[],
 ): void {
   if (comments.length === 0) return
-  const nodes = collectNodes(root)
+  // The Program root is not a comment host: its span starts at the first
+  // statement, so a leading file comment would otherwise attach to it and
+  // never print. Candidates are the statements and expressions under it.
+  const nodes = collectNodes(root).filter((entry) => entry.node !== root)
   nodes.sort((a, b) => a.start - b.start)
   const leading = new Map<Node, AttachedComment[]>()
   const trailing = new Map<Node, AttachedComment[]>()
@@ -344,7 +352,10 @@ export function attachComments(
     if (next !== undefined) {
       pushComment(leading, next.node, comment)
     } else {
-      const previous = findLast(nodes, (entry) => entry.end <= comment.start)
+      // Same-line trailing comments: host them on the nearest statement so
+      // the statement printer (the only emitter of trailing comments) prints
+      // them; an expression host would never reach the output.
+      const previous = nodes.findLast((entry) => entry.end <= comment.start && isStatementKind(entry.node))
       if (previous !== undefined) pushComment(trailing, previous.node, comment)
     }
   }
@@ -373,14 +384,6 @@ function pushComment(map: Map<Node, AttachedComment[]>, node: Node, comment: Att
   const list = map.get(node)
   if (list === undefined) map.set(node, [comment])
   else list.push(comment)
-}
-
-function findLast<T>(list: readonly T[], predicate: (item: T) => boolean): T | undefined {
-  for (let i = list.length - 1; i >= 0; i--) {
-    const item = list[i]
-    if (item !== undefined && predicate(item)) return item
-  }
-  return undefined
 }
 
 function collectNodes(node: unknown): Array<{ node: Node; start: number; end: number }> {
@@ -412,7 +415,7 @@ export function isAstNode(value: unknown): value is Node & Record<string, unknow
 
 // ---------------------------------------------------------------------------
 // Line table — delegates to Syntax's line starts; positions here are 1-based
-// (Babel `loc` parity, which the directive and API-location code compares).
+// (The `loc` shape the directive and API-location code compares).
 // ---------------------------------------------------------------------------
 
 export function buildLineTable(content: string): readonly number[] {
@@ -478,10 +481,6 @@ function visit(
   context: WalkContext,
 ): void {
   if (context.stopped) return
-  if (Array.isArray(node)) {
-    visitArray(node, parentPath, key, listKey, visitors, context)
-    return
-  }
   if (!isAstNode(node) || context.skipped.has(node)) return
 
   const path = createPath(node, parentPath, key, listKey, context)
@@ -490,21 +489,6 @@ function visit(
   visitChildren(node, path, visitors, context)
   if (context.stopped) return
   visitors.exit?.(path)
-}
-
-function visitArray(
-  nodes: readonly unknown[],
-  parentPath: TraversePath | null,
-  key: string,
-  listKey: string | undefined,
-  visitors: TraverseVisitors,
-  context: WalkContext,
-): void {
-  for (let i = 0; i < nodes.length; i++) {
-    const indexKey = listKey === undefined ? String(i) : `${listKey}.${i}`
-    visit(nodes[i], parentPath, key, indexKey, visitors, context)
-    if (context.stopped) return
-  }
 }
 
 function visitChildren(
@@ -557,8 +541,8 @@ function createPath(
       context.stopped = true
     },
     find(predicate) {
-      // Babel's `path.find` includes the path itself: a node that registered
-      // as its own placement anchor wins over any ancestor.
+      // `path.find` includes the path itself: a node that registered as its
+      // own placement anchor wins over any ancestor.
       let current: TraversePath | null = path
       while (current !== null) {
         if (predicate(current)) return current
@@ -599,18 +583,10 @@ function replaceInParent(
   if (parentPath === null) return
   const parent = parentPath.node
   if (!isAstNode(parent)) return
-  if (listKey === undefined) {
-    parent[key] = replacement
-    return
-  }
-  const indices = listKey.split('.').map((segment) => Number(segment))
-  let container: unknown = parent[key]
-  for (const index of indices.slice(0, -1)) {
-    if (!Array.isArray(container)) return
-    container = container[index]
-  }
-  const last = indices[indices.length - 1]
-  if (Array.isArray(container) && typeof last === 'number' && Number.isFinite(last)) {
-    container[last] = replacement
+  // Array descent is inlined in `visitChild`, so a list key is always a single index.
+  const index = Number(listKey)
+  const container = parent[key]
+  if (Array.isArray(container) && Number.isInteger(index)) {
+    container[index] = replacement
   }
 }

@@ -711,12 +711,7 @@ export const instrumentLayer = (
         new InstrumentCommand({
           fileCount: raw.filesToMutate.length,
           inPlace: raw.prev.options.inPlace,
-          pluginCount: (() => {
-            if (raw.prev.options.mutator.plugins === null) {
-              return 0
-            }
-            return raw.prev.options.mutator.plugins.length
-          })(),
+          pluginCount: raw.prev.loadedPlugins.pluginModulePaths.length,
         }),
       )
     ),

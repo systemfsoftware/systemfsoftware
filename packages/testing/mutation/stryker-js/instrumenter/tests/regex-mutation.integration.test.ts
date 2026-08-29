@@ -166,7 +166,6 @@ Feature('Regex mutation characterization')
           ({ source }: { source: string }) =>
             instrument([{ name: '/tmp/regex-corpus.ts', content: source, mutate: true }], {
               ignorers: [],
-              plugins: null,
               excludedMutations: [],
             }),
         ),

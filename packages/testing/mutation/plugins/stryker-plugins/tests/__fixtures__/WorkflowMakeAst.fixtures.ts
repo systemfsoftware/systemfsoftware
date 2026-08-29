@@ -117,7 +117,7 @@ export const makeBodyOf = (inner: unknown): ArrowFunctionExpression & { readonly
 
 /**
  * `const <name> = <init>` — a module-scope binding a `Workflow.make` identifier
- * argument can resolve to. The declarator layer is elided: babel's ancestry
+ * argument can resolve to. The declarator layer is elided: the parser's ancestry
  * goes body -> declarator -> declaration, and the kernels model the statement.
  */
 export const constBindingOf = (name: string, init: unknown) => ({

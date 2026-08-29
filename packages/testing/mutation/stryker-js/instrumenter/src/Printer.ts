@@ -28,12 +28,23 @@ export function print(file: Ast): string {
   }
 }
 
+// oxc carries the hashbang on the Program; estree's type does not declare it.
+const hashbangOf = (root: Ast['root']): { type: 'Hashbang'; value: string; start: number } | null => {
+  if (!('hashbang' in root)) return null
+  const hashbang: unknown = root['hashbang' as keyof typeof root]
+  if (typeof hashbang !== 'object' || hashbang === null) return null
+  if (!('type' in hashbang && hashbang.type === 'Hashbang')) return null
+  if (!('value' in hashbang && typeof hashbang.value === 'string')) return null
+  if (!('start' in hashbang && typeof hashbang.start === 'number')) return null
+  return { type: 'Hashbang', value: hashbang.value, start: hashbang.start }
+}
+
 const jsPrint: Printer<JSAst> = (file) => {
-  return printProgram(file.root)
+  return printProgram(file.root, { hashbang: hashbangOf(file.root) })
 }
 
 const tsPrint: Printer<TSAst | TsxAst> = (file) => {
-  return printProgram(file.root)
+  return printProgram(file.root, { hashbang: hashbangOf(file.root) })
 }
 
 function getScriptStart(script: HtmlAst['root']['scripts'][number]): number {

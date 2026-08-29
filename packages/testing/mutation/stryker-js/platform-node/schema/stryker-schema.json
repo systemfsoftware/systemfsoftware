@@ -836,24 +836,6 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "plugins": {
-          "description": "Override the default babel plugins Stryker uses to parse your JavaScript files. The default list of plugins is extensive and normally doesn't need overriding. Stryker also loads your babel plugins by default (if you have them). If Stryker's default babel plugins conflicts with your plugins, try to override this list with an empty array.",
-          "anyOf": [
-            {
-              "type": "array",
-              "items": {
-                "type": [
-                  "string",
-                  "array"
-                ]
-              }
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        },
         "excludedMutations": {
           "type": "array",
           "items": {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// oxlint-disable
-// @ts-nocheck
+// linter-disable
+// @ts-expect-error
 'use strict'
 /**
  * JSDoc comment for the module

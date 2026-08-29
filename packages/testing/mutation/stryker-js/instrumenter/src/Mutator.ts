@@ -41,7 +41,7 @@ export type Node = EstreeNode
 /**
  * Node identity: same kind, same span. oxc nodes always carry a range
  * (parsed with `range: true`), which is a stronger identity than the old
- * Babel line/column loc.
+ * estree line/column loc.
  */
 export function eqNode(a: Node, b: Node): boolean {
   const spanA = spanOf(a)
@@ -688,8 +688,10 @@ export const methodExpressionMutator: Mutator = function*(node, _context: Mutato
 
   const { callee } = node
   // estree: optional chaining is MemberExpression{optional:true}; the property
-  // must be a non-computed identifier for this mutator to apply.
-  if (callee.type !== 'MemberExpression' || callee.optional === true || callee.property.type !== 'Identifier') {
+  // must be a non-computed identifier for this mutator to apply. Optional
+  // members stay in the population: `a?.b()` mutates to `a?.()` / `a?.c()`,
+  // matching the upstream method-expression coverage.
+  if (callee.type !== 'MemberExpression' || callee.property.type !== 'Identifier') {
     return
   }
 
@@ -698,8 +700,12 @@ export const methodExpressionMutator: Mutator = function*(node, _context: Mutato
     return
   }
 
+  if (callee.object.type === 'Super') {
+    return
+  }
+
   if (newName === null) {
-    yield cloneNode(callee.object)
+    yield callExpression(cloneNode(callee.object), [], callee.optional === true)
     return
   }
 
@@ -710,17 +716,14 @@ export const methodExpressionMutator: Mutator = function*(node, _context: Mutato
     }
   }
 
-  if (callee.object.type === 'Super') {
-    return
-  }
   const mutatedCallee = memberExpression(
     cloneNode(callee.object),
     identifier(newName),
     false,
-    false,
+    callee.optional === true,
   )
 
-  yield callExpression(mutatedCallee, nodeArguments)
+  yield callExpression(mutatedCallee, nodeArguments, node.optional === true)
 }
 
 export const objectLiteralMutator: Mutator = function*(node, _context: MutatorContext) {

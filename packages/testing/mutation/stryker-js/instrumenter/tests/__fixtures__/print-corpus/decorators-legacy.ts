@@ -1,5 +1,3 @@
-// oxlint-disable
-// @ts-nocheck
 function sealed(constructor: Function): void {}
 function readonly(_target: unknown, _key: string, descriptor: PropertyDescriptor): void {}
 
