@@ -16,9 +16,10 @@ catalog:
   effect: ^4.0.0-rc.112
   "@effect/vitest": 4.0.0-rc.112
   fast-check: ^4
-  vitest: ^4.1.10
-  "@vitest/snapshot": ^4.1.10
+  vitest: ^4
+  "@vitest/snapshot": ^4
   "@vitest/coverage-v8": ^4
+  "@vitest/coverage-istanbul": ^4
   vite-tsconfig-paths: ^6.1.1
   vite: ^8
   tsdown: ^0.22.14

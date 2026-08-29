@@ -60,7 +60,7 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "vitest": "^4.1.10"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@effect/vitest": "catalog:peers",

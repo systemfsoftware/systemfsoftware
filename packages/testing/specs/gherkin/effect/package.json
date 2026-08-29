@@ -58,7 +58,7 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "tstyche": "catalog:",
-    "vitest": "^4.1.10"
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@effect/vitest": "catalog:peers",
