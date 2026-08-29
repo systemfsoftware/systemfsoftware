@@ -4,13 +4,6 @@ export interface Exports {
   readonly reexports: readonly string[]
 }
 
-/**
- * First-party CJS binding detector — token-stream scanner implementing the
- * frozen cjs-module-lexer grammar (KTD4). Produces the same
- * `{ exports, reexports }` shape the old lexer does for the corpus.
- * @internal
- */
-
 /** @internal */
 export const getCjsModuleBindings = (sourceText: string): Exports => {
   const exportsSet = new Set<string>()

@@ -2,21 +2,11 @@
 
 import { builtinModules } from 'node:module'
 
-/**
- * First-party package-name validation — the documented npm name rules with the
- * exact `errors`/`warnings` split `validate-npm-package-name@5.0.1` produces,
- * so the spec parser's acceptance boundary is unchanged: only `errors` block a
- * spec, `warnings` are the rules npm no longer enforces on existing packages.
- * @internal
- */
 const blacklistedNames = ['node_modules', 'favicon.ico']
 const specialCharacters = /[~'!()*]/
 const scopedPackagePattern = /^(?:@([^/]+?)[/])?([^/]+?)$/
 
-/**
- * The npm name rules' verdict: `errors` block a spec, `warnings` do not.
- * @internal
- */
+/** @internal */
 export interface PackageNameValidation {
   readonly errors: readonly string[]
   readonly warnings: readonly string[]
@@ -35,7 +25,6 @@ export const validatePackageName = (name: string): PackageNameValidation => {
   const lowered = name.toLowerCase()
   if (blacklistedNames.includes(lowered)) errors.push(`${lowered} is a blacklisted name`)
 
-  // Warnings name what npm used to allow and no longer recommends.
   if (builtinModules.includes(lowered)) warnings.push(`${name} is a core module name`)
   if (name.length > 214) warnings.push('name can no longer contain more than 214 characters')
   if (lowered !== name) warnings.push('name can no longer contain capital letters')
@@ -44,7 +33,6 @@ export const validatePackageName = (name: string): PackageNameValidation => {
   }
 
   if (encodeURIComponent(name) !== name) {
-    // Maybe it's a scoped package name, like @user/package
     const scoped = name.match(scopedPackagePattern)
     const bothPartsUrlFriendly = scoped !== null &&
       scoped[1] !== undefined && encodeURIComponent(scoped[1]) === scoped[1] &&
