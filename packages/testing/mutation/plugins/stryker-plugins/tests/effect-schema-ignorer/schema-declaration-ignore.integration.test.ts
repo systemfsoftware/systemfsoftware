@@ -165,7 +165,7 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
               const documentation = objectOf([
                 namedProperty('identifier', stringLiteral('HexBytes')),
                 namedProperty('description', {
-                  type: 'StringLiteral',
+                  type: 'Literal',
                   value: 'Uint8Array encoded as a lowercase hex string',
                 }),
                 namedProperty('title', stringLiteral('Hex Bytes')),
@@ -382,7 +382,7 @@ Feature('Effect Schema declarations — ignored mutants on tags, brands, optiona
             Effect.sync(() => {
               const member = stringLiteral('permanent')
               const literal = callOf(memberOf('Schema', 'Literal'), [member, {
-                type: 'StringLiteral',
+                type: 'Literal',
                 value: 'transient',
               }])
               const fields = objectOf([namedProperty('restart', literal)])

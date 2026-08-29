@@ -1,27 +1,12 @@
 /**
- * Printer — turns the instrumenter's ASTs back into source text.
+ * Printer — turns the instrumenter's ASTs back into source text. The owned
+ * ESTree printer (`./print/index.js`) renders; the script-root offsets that
+ * html/svelte slicing needs come from the parsed `range`.
  */
-import generator from '@babel/generator'
 import * as Predicate from 'effect/Predicate'
+import { spanOf } from './estree.js'
+import { printProgram } from './print/index.js'
 import { type Ast, type HtmlAst, type JSAst, type SvelteAst, type TSAst, type TsxAst } from './Syntax.js'
-
-/**
- * `@babel/generator` is CommonJS. Under Node's own ESM interop a default import
- * of it is the module's `exports` object, so the code generator sits behind
- * `.default` — the shape upstream reaches for, because upstream ships one
- * emitted file per source file. This package ships a bundle, where the default
- * import is already the function and `.default` is `undefined`, which fails at
- * the first mutant with `generator is not a function` rather than at build
- * time. Resolving both shapes once keeps the printers and the mutant's
- * replacement code identical under either layout.
- */
-function resolveGenerate() {
-  if (typeof generator === 'function') {
-    return generator
-  }
-  return generator.default
-}
-export const generate = resolveGenerate()
 
 export type Printer<T extends Ast> = (file: T, context: PrinterContext) => string
 export interface PrinterContext {
@@ -43,31 +28,39 @@ export function print(file: Ast): string {
   }
 }
 
+// oxc carries the hashbang on the Program; estree's type does not declare it.
+const hashbangOf = (root: Ast['root']): { type: 'Hashbang'; value: string; start: number } | null => {
+  if (!('hashbang' in root)) return null
+  const hashbang: unknown = root['hashbang' as keyof typeof root]
+  if (typeof hashbang !== 'object' || hashbang === null) return null
+  if (!('type' in hashbang && hashbang.type === 'Hashbang')) return null
+  if (!('value' in hashbang && typeof hashbang.value === 'string')) return null
+  if (!('start' in hashbang && typeof hashbang.start === 'number')) return null
+  return { type: 'Hashbang', value: hashbang.value, start: hashbang.start }
+}
+
 const jsPrint: Printer<JSAst> = (file) => {
-  return generate(file.root, { sourceMaps: false }).code
+  return printProgram(file.root, { hashbang: hashbangOf(file.root) })
 }
 
 const tsPrint: Printer<TSAst | TsxAst> = (file) => {
-  return generate(file.root, {
-    decoratorsBeforeExport: true,
-    sourceMaps: false,
-  }).code
+  return printProgram(file.root, { hashbang: hashbangOf(file.root) })
 }
 
 function getScriptStart(script: HtmlAst['root']['scripts'][number]): number {
-  const start = script.root.start
-  if (start === undefined || start === null) {
+  const span = spanOf(script.root)
+  if (span === undefined) {
     throw new Error('Script AST root without start')
   }
-  return start
+  return span.start
 }
 
 function getScriptEnd(script: HtmlAst['root']['scripts'][number]): number {
-  const end = script.root.end
-  if (end === undefined || end === null) {
+  const span = spanOf(script.root)
+  if (span === undefined) {
     throw new Error('Script AST root without end')
   }
-  return end
+  return span.end
 }
 
 const htmlPrint: Printer<HtmlAst> = (ast, context) => {

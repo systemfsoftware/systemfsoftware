@@ -660,17 +660,8 @@ export const instrumentLayer = (
             ),
           )
 
-          let plugins: unknown[] | null
-          if (cmd.options.mutator.plugins === null) {
-            plugins = null
-          } else {
-            plugins = [...cmd.options.mutator.plugins]
-          }
-
           const instrumentResult = yield* instrument(filesToMutate, {
             ignorers: [...cmd.ignorers],
-            ...cmd.options.mutator,
-            plugins,
             excludedMutations: [...cmd.options.mutator.excludedMutations],
           }).pipe(Effect.mapError((cause) =>
             new StageError({ stage: 'instrument', reason: 'Instrumenter failed', cause })
@@ -720,12 +711,7 @@ export const instrumentLayer = (
         new InstrumentCommand({
           fileCount: raw.filesToMutate.length,
           inPlace: raw.prev.options.inPlace,
-          pluginCount: (() => {
-            if (raw.prev.options.mutator.plugins === null) {
-              return 0
-            }
-            return raw.prev.options.mutator.plugins.length
-          })(),
+          pluginCount: raw.prev.loadedPlugins.pluginModulePaths.length,
         }),
       )
     ),

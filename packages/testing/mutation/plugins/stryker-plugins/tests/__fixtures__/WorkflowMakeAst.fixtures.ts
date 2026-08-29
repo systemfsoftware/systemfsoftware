@@ -26,7 +26,7 @@ interface Program {
 }
 
 interface StringLiteral {
-  readonly type: 'StringLiteral'
+  readonly type: 'Literal'
   readonly value: string
 }
 
@@ -34,7 +34,7 @@ type AstNode = unknown
 
 export const identifier = (name: string): Identifier => ({ type: 'Identifier', name })
 
-export const stringLiteral = (value: string): StringLiteral => ({ type: 'StringLiteral', value })
+export const stringLiteral = (value: string): StringLiteral => ({ type: 'Literal', value })
 
 export const importSpecifierOf = (imported: string, local: string) => ({
   type: 'ImportSpecifier' as const,
@@ -117,7 +117,7 @@ export const makeBodyOf = (inner: unknown): ArrowFunctionExpression & { readonly
 
 /**
  * `const <name> = <init>` — a module-scope binding a `Workflow.make` identifier
- * argument can resolve to. The declarator layer is elided: babel's ancestry
+ * argument can resolve to. The declarator layer is elided: the parser's ancestry
  * goes body -> declarator -> declaration, and the kernels model the statement.
  */
 export const constBindingOf = (name: string, init: unknown) => ({

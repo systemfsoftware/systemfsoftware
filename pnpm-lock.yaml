@@ -589,7 +589,7 @@ importers:
         version: 4.1.10(playwright@1.62.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))(vitest@4.1.10)
       '@vitest/coverage-istanbul':
         specifier: 'catalog:'
-        version: 4.1.10(vitest@4.1.10)
+        version: 4.1.10(supports-color@8.1.1)(vitest@4.1.10)
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
@@ -1312,7 +1312,7 @@ importers:
         version: 1.1.1
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
         version: 3.0.1
@@ -1324,7 +1324,7 @@ importers:
         version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1373,7 +1373,7 @@ importers:
         version: 1.1.1
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
         version: 3.0.1
@@ -1385,7 +1385,7 @@ importers:
         version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1434,7 +1434,7 @@ importers:
         version: 1.1.1
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
         version: 3.0.1
@@ -1446,7 +1446,7 @@ importers:
         version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1495,7 +1495,7 @@ importers:
         version: 1.1.1
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
         version: 3.0.1
@@ -1507,7 +1507,7 @@ importers:
         version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1556,7 +1556,7 @@ importers:
         version: 1.1.1
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
         version: 3.0.1
@@ -1568,7 +1568,7 @@ importers:
         version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1684,7 +1684,7 @@ importers:
         version: 1.1.1
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
         version: 3.0.1
@@ -1696,7 +1696,7 @@ importers:
         version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1745,7 +1745,7 @@ importers:
         version: 1.1.1
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
         version: 3.0.1
@@ -1757,7 +1757,7 @@ importers:
         version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1806,7 +1806,7 @@ importers:
         version: 1.1.1
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
-        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-typescript-checker':
         specifier: catalog:stryker
         version: 3.0.1
@@ -1818,7 +1818,7 @@ importers:
         version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
       '@systemfsoftware/stryker-test-contribution':
         specifier: catalog:stryker
-        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../../../toolchain/tsconfig
@@ -1911,9 +1911,6 @@ importers:
         specifier: '>=5.0.0'
         version: 7.0.2
     devDependencies:
-      '@babel/types':
-        specifier: ^7.29.0
-        version: 7.29.8
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
@@ -1944,6 +1941,9 @@ importers:
       '@systemfsoftware/vitest-config':
         specifier: workspace:^
         version: link:../../../../toolchain/vitest-config
+      '@types/estree':
+        specifier: 1.0.8
+        version: 1.0.8
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
@@ -2175,27 +2175,12 @@ importers:
 
   packages/testing/mutation/stryker-js/instrumenter:
     dependencies:
-      '@babel/core':
-        specifier: ~7.29.0
-        version: 7.29.7(supports-color@8.1.1)
-      '@babel/generator':
-        specifier: ~7.29.0
-        version: 7.29.7
-      '@babel/parser':
-        specifier: ~7.29.0
-        version: 7.29.8
-      '@babel/plugin-proposal-decorators':
-        specifier: ~7.29.0
-        version: 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
-      '@babel/plugin-transform-explicit-resource-management':
-        specifier: ~7.29.0
-        version: 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
-      '@babel/preset-typescript':
-        specifier: ~7.28.0
-        version: 7.28.5(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
       '@eslint-community/regexpp':
         specifier: 4.12.2
         version: 4.12.2
+      '@oxc-project/types':
+        specifier: 'catalog:'
+        version: 0.140.0
       '@systemfsoftware/effect-cell-types':
         specifier: workspace:^
         version: link:../../../../core/effect/cell/types
@@ -2208,6 +2193,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.140.0
     devDependencies:
       '@systemfsoftware/all':
         specifier: workspace:^
@@ -2227,12 +2215,6 @@ importers:
       '@systemfsoftware/vitest-config':
         specifier: workspace:^
         version: link:../../../../toolchain/vitest-config
-      '@types/babel__core':
-        specifier: 7.20.5
-        version: 7.20.5
-      '@types/babel__generator':
-        specifier: 7.27.0
-        version: 7.27.0
       '@types/estree':
         specifier: 1.0.8
         version: 1.0.8
@@ -2561,7 +2543,7 @@ importers:
         version: 10.5.7(@vitest/browser-playwright@4.1.10)(@vitest/browser@4.1.10(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))(vitest@4.1.10))(@vitest/runner@4.1.10)(react@19.2.8)(storybook@10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(vitest@4.1.10)
       '@storybook/react-vite':
         specifier: 'catalog:'
-        version: 10.5.7(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rollup@4.62.4)(storybook@10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+        version: 10.5.7(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rollup@4.62.4)(storybook@10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(supports-color@8.1.1)(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
@@ -8338,26 +8320,6 @@ snapshots:
 
   '@babel/compat-data@7.29.7': {}
 
-  '@babel/core@7.29.7':
-    dependencies:
-      '@babel/code-frame': 7.29.7
-      '@babel/generator': 7.29.7
-      '@babel/helper-compilation-targets': 7.29.7
-      '@babel/helper-module-transforms': 7.29.7(@babel/core@7.29.7)
-      '@babel/helpers': 7.29.7
-      '@babel/parser': 7.29.8
-      '@babel/template': 7.29.7
-      '@babel/traverse': 7.29.7(supports-color@8.1.1)
-      '@babel/types': 7.29.8
-      '@jridgewell/remapping': 2.3.5
-      convert-source-map: 2.0.0
-      debug: 4.4.3(supports-color@8.1.1)
-      gensync: 1.0.0-beta.2
-      json5: 2.2.3
-      semver: 6.3.1
-    transitivePeerDependencies:
-      - supports-color
-
   '@babel/core@7.29.7(supports-color@8.1.1)':
     dependencies:
       '@babel/code-frame': 7.29.7
@@ -8411,19 +8373,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/helper-create-class-features-plugin@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-annotate-as-pure': 7.29.7
-      '@babel/helper-member-expression-to-functions': 7.29.7(supports-color@8.1.1)
-      '@babel/helper-optimise-call-expression': 7.29.7
-      '@babel/helper-replace-supers': 7.29.7(@babel/core@7.29.7)
-      '@babel/helper-skip-transparent-expression-wrappers': 7.29.7(supports-color@8.1.1)
-      '@babel/traverse': 7.29.7(supports-color@8.1.1)
-      semver: 6.3.1
-    transitivePeerDependencies:
-      - supports-color
-
   '@babel/helper-globals@7.29.7': {}
 
   '@babel/helper-member-expression-to-functions@7.29.7(supports-color@8.1.1)':
@@ -8449,15 +8398,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/helper-module-transforms@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-module-imports': 7.29.7(supports-color@8.1.1)
-      '@babel/helper-validator-identifier': 7.29.7
-      '@babel/traverse': 7.29.7(supports-color@8.1.1)
-    transitivePeerDependencies:
-      - supports-color
-
   '@babel/helper-optimise-call-expression@7.29.7':
     dependencies:
       '@babel/types': 7.29.8
@@ -8467,15 +8407,6 @@ snapshots:
   '@babel/helper-replace-supers@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)':
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
-      '@babel/helper-member-expression-to-functions': 7.29.7(supports-color@8.1.1)
-      '@babel/helper-optimise-call-expression': 7.29.7
-      '@babel/traverse': 7.29.7(supports-color@8.1.1)
-    transitivePeerDependencies:
-      - supports-color
-
-  '@babel/helper-replace-supers@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
       '@babel/helper-member-expression-to-functions': 7.29.7(supports-color@8.1.1)
       '@babel/helper-optimise-call-expression': 7.29.7
       '@babel/traverse': 7.29.7(supports-color@8.1.1)
@@ -8513,23 +8444,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/plugin-proposal-decorators@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-create-class-features-plugin': 7.29.7(@babel/core@7.29.7)
-      '@babel/helper-plugin-utils': 7.29.7
-      '@babel/plugin-syntax-decorators': 7.29.7(@babel/core@7.29.7)
-    transitivePeerDependencies:
-      - supports-color
-
   '@babel/plugin-syntax-decorators@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
-      '@babel/helper-plugin-utils': 7.29.7
-
-  '@babel/plugin-syntax-decorators@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.29.7
 
   '@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))':
@@ -8537,32 +8454,14 @@ snapshots:
       '@babel/core': 7.29.7(supports-color@8.1.1)
       '@babel/helper-plugin-utils': 7.29.7
 
-  '@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-plugin-utils': 7.29.7
-
   '@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))':
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
       '@babel/helper-plugin-utils': 7.29.7
 
-  '@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-plugin-utils': 7.29.7
-
   '@babel/plugin-transform-destructuring@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)':
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
-      '@babel/helper-plugin-utils': 7.29.7
-      '@babel/traverse': 7.29.7(supports-color@8.1.1)
-    transitivePeerDependencies:
-      - supports-color
-
-  '@babel/plugin-transform-destructuring@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
       '@babel/helper-plugin-utils': 7.29.7
       '@babel/traverse': 7.29.7(supports-color@8.1.1)
     transitivePeerDependencies:
@@ -8576,26 +8475,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/plugin-transform-explicit-resource-management@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-plugin-utils': 7.29.7
-      '@babel/plugin-transform-destructuring': 7.29.7(@babel/core@7.29.7)
-    transitivePeerDependencies:
-      - supports-color
-
   '@babel/plugin-transform-modules-commonjs@7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)':
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
       '@babel/helper-module-transforms': 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
-      '@babel/helper-plugin-utils': 7.29.7
-    transitivePeerDependencies:
-      - supports-color
-
-  '@babel/plugin-transform-modules-commonjs@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-module-transforms': 7.29.7(@babel/core@7.29.7)
       '@babel/helper-plugin-utils': 7.29.7
     transitivePeerDependencies:
       - supports-color
@@ -8611,17 +8494,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@babel/plugin-transform-typescript@7.29.7(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-annotate-as-pure': 7.29.7
-      '@babel/helper-create-class-features-plugin': 7.29.7(@babel/core@7.29.7)
-      '@babel/helper-plugin-utils': 7.29.7
-      '@babel/helper-skip-transparent-expression-wrappers': 7.29.7(supports-color@8.1.1)
-      '@babel/plugin-syntax-typescript': 7.29.7(@babel/core@7.29.7)
-    transitivePeerDependencies:
-      - supports-color
-
   '@babel/preset-typescript@7.28.5(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)':
     dependencies:
       '@babel/core': 7.29.7(supports-color@8.1.1)
@@ -8630,17 +8502,6 @@ snapshots:
       '@babel/plugin-syntax-jsx': 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))
       '@babel/plugin-transform-modules-commonjs': 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
       '@babel/plugin-transform-typescript': 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
-    transitivePeerDependencies:
-      - supports-color
-
-  '@babel/preset-typescript@7.28.5(@babel/core@7.29.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/helper-plugin-utils': 7.29.7
-      '@babel/helper-validator-option': 7.29.7
-      '@babel/plugin-syntax-jsx': 7.29.7(@babel/core@7.29.7)
-      '@babel/plugin-transform-modules-commonjs': 7.29.7(@babel/core@7.29.7)
-      '@babel/plugin-transform-typescript': 7.29.7(@babel/core@7.29.7)
     transitivePeerDependencies:
       - supports-color
 
@@ -10208,7 +10069,7 @@ snapshots:
 
   '@rollup/pluginutils@5.4.0(rollup@4.62.4)':
     dependencies:
-      '@types/estree': 1.0.9
+      '@types/estree': 1.0.8
       estree-walker: 2.0.2
       picomatch: 4.0.5
     optionalDependencies:
@@ -10425,16 +10286,16 @@ snapshots:
       '@types/react': 19.2.18
       '@types/react-dom': 19.2.4(@types/react@19.2.18)
 
-  '@storybook/react-vite@10.5.7(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rollup@4.62.4)(storybook@10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))':
+  '@storybook/react-vite@10.5.7(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rollup@4.62.4)(storybook@10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(supports-color@8.1.1)(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))':
     dependencies:
       '@joshwooding/vite-plugin-react-docgen-typescript': 0.7.0(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
       '@rollup/pluginutils': 5.4.0(rollup@4.62.4)
       '@storybook/builder-vite': 10.5.7(esbuild@0.28.2)(rollup@4.62.4)(storybook@10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-      '@storybook/react': 10.5.7(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(storybook@10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(typescript@7.0.2)
+      '@storybook/react': 10.5.7(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(storybook@10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(supports-color@8.1.1)(typescript@7.0.2)
       empathic: 2.0.1
       magic-string: 0.30.21
       react: 19.2.8
-      react-docgen: 8.0.3
+      react-docgen: 8.0.3(supports-color@8.1.1)
       react-dom: 19.2.8(react@19.2.8)
       resolve: 1.22.12
       storybook: 10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8)
@@ -10450,12 +10311,12 @@ snapshots:
       - supports-color
       - webpack
 
-  '@storybook/react@10.5.7(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(storybook@10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(typescript@7.0.2)':
+  '@storybook/react@10.5.7(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(storybook@10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(supports-color@8.1.1)(typescript@7.0.2)':
     dependencies:
       '@storybook/global': 5.0.0
       '@storybook/react-dom-shim': 10.5.7(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(storybook@10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))
       react: 19.2.8
-      react-docgen: 8.0.3
+      react-docgen: 8.0.3(supports-color@8.1.1)
       react-docgen-typescript: 2.4.0(typescript@7.0.2)
       react-dom: 19.2.8(react@19.2.8)
       storybook: 10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8)
@@ -10495,7 +10356,7 @@ snapshots:
     dependencies:
       effect: 4.0.0-rc.112
 
-  '@systemfsoftware/stryker-js-cli@4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)':
+  '@systemfsoftware/stryker-js-cli@4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)':
     dependencies:
       '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@effect/platform-node-shared': 4.0.0-rc.112(effect@4.0.0-rc.112)
@@ -10503,7 +10364,7 @@ snapshots:
       '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
       '@systemfsoftware/stryker-js': 0.1.0
       '@systemfsoftware/stryker-js-html-reporter': 0.1.0(effect@4.0.0-rc.112)
-      '@systemfsoftware/stryker-js-platform-node': 0.1.0(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+      '@systemfsoftware/stryker-js-platform-node': 0.1.0(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       effect: 4.0.0-rc.112
     transitivePeerDependencies:
       - bufferutil
@@ -10521,14 +10382,14 @@ snapshots:
       mutation-testing-metrics: 3.7.3
       mutation-testing-report-schema: 3.7.3
 
-  '@systemfsoftware/stryker-js-instrumenter@2.0.1(svelte@5.55.1)':
+  '@systemfsoftware/stryker-js-instrumenter@2.0.1(supports-color@8.1.1)(svelte@5.55.1)':
     dependencies:
-      '@babel/core': 7.29.7
+      '@babel/core': 7.29.7(supports-color@8.1.1)
       '@babel/generator': 7.29.7
       '@babel/parser': 7.29.8
-      '@babel/plugin-proposal-decorators': 7.29.7(@babel/core@7.29.7)
-      '@babel/plugin-transform-explicit-resource-management': 7.29.7(@babel/core@7.29.7)
-      '@babel/preset-typescript': 7.28.5(@babel/core@7.29.7)
+      '@babel/plugin-proposal-decorators': 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
+      '@babel/plugin-transform-explicit-resource-management': 7.29.7(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
+      '@babel/preset-typescript': 7.28.5(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1)
       '@eslint-community/regexpp': 4.12.2
       '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
       '@systemfsoftware/stryker-js': 0.1.0
@@ -10539,14 +10400,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@systemfsoftware/stryker-js-platform-node@0.1.0(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)':
+  '@systemfsoftware/stryker-js-platform-node@0.1.0(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)':
     dependencies:
       '@effect/platform-node': 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@effect/platform-node-shared': 4.0.0-rc.112(effect@4.0.0-rc.112)
       '@noble/hashes': 1.8.0
       '@systemfsoftware/effect-cell-types': 5.0.1(effect@4.0.0-rc.112)
       '@systemfsoftware/stryker-js': 0.1.0
-      '@systemfsoftware/stryker-js-instrumenter': 2.0.1(svelte@5.55.1)
+      '@systemfsoftware/stryker-js-instrumenter': 2.0.1(supports-color@8.1.1)(svelte@5.55.1)
       diff-match-patch: 1.0.5
       effect: 4.0.0-rc.112
       minimatch: 10.2.5
@@ -10584,10 +10445,10 @@ snapshots:
       effect: 4.0.0-rc.112
       typescript: 7.0.2
 
-  '@systemfsoftware/stryker-test-contribution@1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)':
+  '@systemfsoftware/stryker-test-contribution@1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)':
     dependencies:
       '@systemfsoftware/stryker-js': 0.1.0
-      '@systemfsoftware/stryker-js-platform-node': 0.1.0(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(svelte@5.55.1)
+      '@systemfsoftware/stryker-js-platform-node': 0.1.0(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       effect: 4.0.0-rc.112
     transitivePeerDependencies:
       - bufferutil
@@ -10855,9 +10716,9 @@ snapshots:
       - utf-8-validate
       - vite
 
-  '@vitest/coverage-istanbul@4.1.10(vitest@4.1.10)':
+  '@vitest/coverage-istanbul@4.1.10(supports-color@8.1.1)(vitest@4.1.10)':
     dependencies:
-      '@babel/core': 7.29.7
+      '@babel/core': 7.29.7(supports-color@8.1.1)
       '@istanbuljs/schema': 0.1.6
       '@jridgewell/gen-mapping': 0.3.13
       '@jridgewell/trace-mapping': 0.3.31
@@ -12681,9 +12542,9 @@ snapshots:
     dependencies:
       typescript: 7.0.2
 
-  react-docgen@8.0.3:
+  react-docgen@8.0.3(supports-color@8.1.1):
     dependencies:
-      '@babel/core': 7.29.7
+      '@babel/core': 7.29.7(supports-color@8.1.1)
       '@babel/traverse': 7.29.7(supports-color@8.1.1)
       '@babel/types': 7.29.8
       '@types/babel__core': 7.20.5
@@ -13582,7 +13443,7 @@ snapshots:
       '@opentelemetry/api': 1.9.1
       '@types/node': 24.13.2
       '@vitest/browser-playwright': 4.1.10(playwright@1.62.1)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))(vitest@4.1.10)
-      '@vitest/coverage-istanbul': 4.1.10(vitest@4.1.10)
+      '@vitest/coverage-istanbul': 4.1.10(supports-color@8.1.1)(vitest@4.1.10)
       '@vitest/coverage-v8': 4.1.9(vitest@4.1.10)
       jsdom: 29.1.1(@noble/hashes@1.8.0)
     transitivePeerDependencies:

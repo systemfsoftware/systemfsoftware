@@ -1,8 +1,8 @@
 /**
  * Syntax — the instrumenter's AST shapes, location helpers and syntax utilities.
  */
-import type { types as babelTypes } from '@babel/core'
-import { type Position } from '@systemfsoftware/stryker-js/Mutant'
+import type { Position } from '@systemfsoftware/stryker-js/Mutant'
+import type { Program } from 'estree'
 import { AstFormat as SchemaAstFormat } from './Syntax.schema.js'
 
 export const AstFormat = SchemaAstFormat
@@ -17,6 +17,17 @@ export interface AstByFormat {
 export type Ast = HtmlAst | JSAst | SvelteAst | TSAst | TsxAst
 
 export type ScriptFormat = Extract<AstFormat, 'js' | 'ts' | 'tsx'>
+
+/**
+ * A parsed comment with its source span. oxc emits comments flat with offsets
+ * (no loc); consumers that need line/column derive it from the line table.
+ */
+export interface SpannedComment {
+  readonly type: 'Line' | 'Block'
+  readonly value: string
+  readonly start: number
+  readonly end: number
+}
 export type ScriptAst = JSAst | TSAst | TsxAst
 export interface BaseAst {
   originFileName: string
@@ -38,7 +49,8 @@ export interface HtmlAst extends BaseAst {
  */
 export interface JSAst extends BaseAst {
   format: 'js'
-  root: babelTypes.File
+  root: Program
+  comments: readonly SpannedComment[]
 }
 
 /**
@@ -46,7 +58,8 @@ export interface JSAst extends BaseAst {
  */
 export interface TSAst extends BaseAst {
   format: 'ts'
-  root: babelTypes.File
+  root: Program
+  comments: readonly SpannedComment[]
 }
 
 /**
@@ -54,7 +67,8 @@ export interface TSAst extends BaseAst {
  */
 export interface TsxAst extends BaseAst {
   format: 'tsx'
-  root: babelTypes.File
+  root: Program
+  comments: readonly SpannedComment[]
 }
 
 /**

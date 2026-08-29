@@ -1,7 +1,7 @@
 /**
  * Instrument.workflow — pure decision for the instrument capability.
  *
- * The heavy lifting (Babel traversal, mutant collection, code generation)
+ * The heavy lifting (AST traversal, mutant collection, code generation)
  * happens in `Instrument.ts`'s read phase, which is allowed to be stateful.
  * This decision receives the already-collected mutants as data and wraps them
  * into the decision type. All helpers and schemas live in this file so the
@@ -48,15 +48,12 @@ export const FileSchema = S.Struct({
   mutate: MutateDescriptionSchema,
 })
 
-// babel ParserPlugin is third-party, not declared here
-const PluginSchema = Wire.mint(S.Unknown)
 // IgnorerService is a runtime plugin service, not a serializable schema
 const IgnorerSchema = Wire.mint(S.Unknown)
-// babel Ast is third-party, not declared here
+// AST shapes are external data from the read phase, not declared here
 const AstSchema = Wire.mint(S.Unknown)
 
 const InstrumenterOptionsSchema = Wire.wire({
-  plugins: Wire.mint(S.NullOr(Wire.mint(S.Array(PluginSchema)))),
   excludedMutations: Wire.mint(S.Array(Wire.mint(S.String))),
   ignorers: Wire.mint(S.Array(IgnorerSchema)),
   noHeader: Wire.mint(S.optional(Wire.mint(S.Boolean))),

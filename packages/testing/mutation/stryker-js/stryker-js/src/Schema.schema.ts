@@ -115,23 +115,6 @@ export const MutationScoreThresholdsSchema = S.Struct({
 export type MutationScoreThresholds = typeof MutationScoreThresholdsSchema.Type
 
 const MutatorDescriptor = Wire.wire({
-  plugins: defaulted(
-    Wire.mint(
-      S.NullOr(
-        Wire.mint(
-          S.Array(
-            Wire.mint(
-              S.Union([
-                Wire.mint(S.String),
-                Wire.mint(S.Array(Wire.mint(S.Unknown))), // mutator plugin options this workspace does not declare
-              ]),
-            ),
-          ),
-        ),
-      ),
-    ),
-    null,
-  ),
   excludedMutations: defaulted(Wire.mint(S.Array(Wire.mint(S.String))), []),
 })
 
@@ -188,7 +171,7 @@ export const StrykerOptionsSchema = S.StructWithRest(
       '{src,lib}/**/!(*.+(s|S)pec|*.+(t|T)est).+(cjs|mjs|js|ts|mts|cts|jsx|tsx|html|vue|svelte)',
       '!{src,lib}/**/__tests__/**/*.+(cjs|mjs|js|ts|mts|cts|jsx|tsx|html|vue|svelte)',
     ]),
-    mutator: defaulted(MutatorDescriptor, { plugins: null, excludedMutations: [] }),
+    mutator: defaulted(MutatorDescriptor, { excludedMutations: [] }),
     packageManager: S.optional(PackageManager),
     plugins: defaulted(Wire.mint(S.Array(Wire.mint(S.String))), ['@systemfsoftware/stryker-js-*']),
     appendPlugins: defaulted(Wire.mint(S.Array(Wire.mint(S.String))), []),

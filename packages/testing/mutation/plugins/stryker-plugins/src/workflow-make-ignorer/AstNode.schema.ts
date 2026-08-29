@@ -6,8 +6,9 @@ export const Identifier = S.Struct({
 })
 export type Identifier = S.Schema.Type<typeof Identifier>
 
+// ESTree renders string literals as Literal{value:string}; the semantic name records what this matches.
 export const StringLiteral = S.Struct({
-  type: S.Literal('StringLiteral'),
+  type: S.Literal('Literal'),
   value: S.String,
 })
 export type StringLiteral = S.Schema.Type<typeof StringLiteral>
@@ -28,7 +29,7 @@ export const FunctionExpression = S.Struct({
 })
 export type FunctionExpression = S.Schema.Type<typeof FunctionExpression>
 
-/** Any AST node outside the modeled vocabulary — accepts every babel node type structurally. */
+/** Any AST node outside the modeled vocabulary — accepts every node type structurally. */
 export const UnknownNode = S.Struct({ type: S.String })
 export type UnknownNode = S.Schema.Type<typeof UnknownNode>
 

@@ -29,6 +29,7 @@ const OUTSIDE_KEEP = 'outside keep()'
 const INSIDE_FLAG = 'inside if (flag)'
 
 type Mutant = {
+  id: string
   mutatorName: string
   status?: string
   statusReason?: string
@@ -143,7 +144,6 @@ Feature('Instrumenter characterization')
           ({ source }: { source: string }) =>
             instrument([{ name: '/tmp/probe.ts', content: source, mutate: true }], {
               ignorers: [],
-              plugins: null,
               excludedMutations: [],
             }),
         ),
@@ -168,6 +168,41 @@ Feature('Instrumenter characterization')
     )
 
     scenario(
+      'Instrumented output carries a switch for every active mutant',
+      Gherkin.Do.pipe(
+        // A mutant that is counted but never wrapped prints pristine code:
+        // the sandbox runs it unmutated, every test passes, and the mutant
+        // silently "survives" — the score reads zero with no error anywhere.
+        // The contract lane caught exactly that (all mutants surviving, no
+        // switch in the file), so this asserts the wrap itself: for each
+        // active mutant id, the emitted content must test that id.
+        Given('the baseline source')('source', () => Effect.succeed(PROBE_SOURCE)),
+        When('it is instrumented')(
+          'result',
+          ({ source }: { source: string }) =>
+            instrument([{ name: '/tmp/probe.ts', content: source, mutate: true }], {
+              ignorers: [],
+              excludedMutations: [],
+            }),
+        ),
+        Then('every active mutant id is tested in the emitted content')((
+          { result }: { result: { mutants: readonly Mutant[]; files: readonly { content: string }[] } },
+        ) =>
+          Effect.sync(() => {
+            const content = result.files[0]?.content ?? ''
+            const hash = content.match(/stryMutAct_([0-9a-f]+)/)?.[1]
+            expect(hash).toBeDefined()
+            const activeIds = result.mutants.filter(isActive).map((mutant) => mutant.id)
+            expect(activeIds.length).toBe(13)
+            for (const id of activeIds) {
+              expect(content).toContain(`stryMutAct_${hash}("${id}")`)
+            }
+          })
+        ),
+      ),
+    )
+
+    scenario(
       'An excluded mutator marks its mutants ignored with a reason',
       Gherkin.Do.pipe(
         Given('the baseline source')('source', () => Effect.succeed(PROBE_SOURCE)),
@@ -176,7 +211,6 @@ Feature('Instrumenter characterization')
           ({ source }: { source: string }) =>
             instrument([{ name: '/tmp/probe.ts', content: source, mutate: true }], {
               ignorers: [],
-              plugins: null,
               excludedMutations: [],
             }),
         ),
@@ -185,7 +219,6 @@ Feature('Instrumenter characterization')
           ({ source }: { source: string }) =>
             instrument([{ name: '/tmp/probe.ts', content: source, mutate: true }], {
               ignorers: [],
-              plugins: null,
               excludedMutations: ['ArithmeticOperator'],
             }),
         ),
@@ -241,7 +274,6 @@ Feature('Instrumenter characterization')
           ({ source }: { source: string }) =>
             instrument([{ name: '/tmp/keep.ts', content: source, mutate: true }], {
               ignorers: [invertedKeepIgnorer],
-              plugins: null,
               excludedMutations: [],
             }),
         ),
@@ -250,7 +282,6 @@ Feature('Instrumenter characterization')
           ({ source }: { source: string }) =>
             instrument([{ name: '/tmp/keep.ts', content: source, mutate: true }], {
               ignorers: [],
-              plugins: null,
               excludedMutations: [],
             }),
         ),
@@ -279,6 +310,40 @@ Feature('Instrumenter characterization')
     )
 
     scenario(
+      'Instrumented output keeps comments and the hashbang',
+      Gherkin.Do.pipe(
+        Given('a source with a hashbang, leading comments, and inline comments')('source', () =>
+          Effect.succeed(
+            `#!/usr/bin/env node
+// leading file comment
+/* block lead */
+export function price(n) {
+  return n + 1 // trailing on return
+}
+`,
+          )),
+        When('it is instrumented')(
+          'result',
+          ({ source }: { source: string }) =>
+            instrument([{ name: '/tmp/commented.ts', content: source, mutate: true }], {
+              ignorers: [],
+              excludedMutations: [],
+            }),
+        ),
+        Then('the printed file still carries every comment and the hashbang')((
+          { result }: { result: { files: readonly { content: string }[] } },
+        ) =>
+          Effect.sync(() => {
+            const content = result.files[0]?.content ?? ''
+            expect(content.startsWith('#!/usr/bin/env node')).toBe(true)
+            expect(content).toContain('// leading file comment')
+            expect(content).toContain('/* block lead */')
+            expect(content).toContain('// trailing on return')
+          })
+        ),
+      ),
+    )
+    scenario(
       'Selecting the region ignorer ignores mutants inside the flag block while leaving siblings live',
       Gherkin.Do.pipe(
         Given('a file with a sibling function and an if (flag) block')('source', () => Effect.succeed(REGION_SOURCE)),
@@ -287,7 +352,6 @@ Feature('Instrumenter characterization')
           ({ source }: { source: string }) =>
             instrument([{ name: '/tmp/region.ts', content: source, mutate: true }], {
               ignorers: [regionFlagIgnorer],
-              plugins: null,
               excludedMutations: [],
             }),
         ),

@@ -232,13 +232,13 @@ const makeArgumentBodiesOf = (program: unknown): ReadonlySet<object> => {
 }
 
 /**
- * True when the mutant descends from an argument slot of a `Workflow.make` call — babel nests
+ * True when the mutant descends from an argument slot of a `Workflow.make` call — the parser
  * the make body under the call's `arguments` array, so identity containment through the walk
  * is the boundary test. A mutant ON the call (its callee or the call itself) is outside the
  * argument and therefore outside the population, which is the point of the inverted gate.
  */
 const insideMakeBoundary = (node: unknown, ancestors: readonly unknown[]): boolean => {
-  // The Program is the file root; babel wraps it in a File node above, so search, don't assume.
+  // Search rather than assume: the argument may sit under an expression wrapper.
   let root: unknown = undefined
   for (let i = ancestors.length - 1; i >= 0; i--) {
     if (isProgram(ancestors[i])) {
