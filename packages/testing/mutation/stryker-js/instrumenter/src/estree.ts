@@ -583,6 +583,10 @@ function replaceInParent(
   if (parentPath === null) return
   const parent = parentPath.node
   if (!isAstNode(parent)) return
+  if (listKey === undefined) {
+    parent[key] = replacement
+    return
+  }
   // Array descent is inlined in `visitChild`, so a list key is always a single index.
   const index = Number(listKey)
   const container = parent[key]

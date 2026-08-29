@@ -29,6 +29,7 @@ const OUTSIDE_KEEP = 'outside keep()'
 const INSIDE_FLAG = 'inside if (flag)'
 
 type Mutant = {
+  id: string
   mutatorName: string
   status?: string
   statusReason?: string
@@ -161,6 +162,41 @@ Feature('Instrumenter characterization')
               EqualityOperator: 3,
               StringLiteral: 1,
             })
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'Instrumented output carries a switch for every active mutant',
+      Gherkin.Do.pipe(
+        // A mutant that is counted but never wrapped prints pristine code:
+        // the sandbox runs it unmutated, every test passes, and the mutant
+        // silently "survives" — the score reads zero with no error anywhere.
+        // The contract lane caught exactly that (all mutants surviving, no
+        // switch in the file), so this asserts the wrap itself: for each
+        // active mutant id, the emitted content must test that id.
+        Given('the baseline source')('source', () => Effect.succeed(PROBE_SOURCE)),
+        When('it is instrumented')(
+          'result',
+          ({ source }: { source: string }) =>
+            instrument([{ name: '/tmp/probe.ts', content: source, mutate: true }], {
+              ignorers: [],
+              excludedMutations: [],
+            }),
+        ),
+        Then('every active mutant id is tested in the emitted content')((
+          { result }: { result: { mutants: readonly Mutant[]; files: readonly { content: string }[] } },
+        ) =>
+          Effect.sync(() => {
+            const content = result.files[0]?.content ?? ''
+            const hash = content.match(/stryMutAct_([0-9a-f]+)/)?.[1]
+            expect(hash).toBeDefined()
+            const activeIds = result.mutants.filter(isActive).map((mutant) => mutant.id)
+            expect(activeIds.length).toBe(13)
+            for (const id of activeIds) {
+              expect(content).toContain(`stryMutAct_${hash}("${id}")`)
+            }
           })
         ),
       ),
