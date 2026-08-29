@@ -46,8 +46,7 @@
     "@systemfsoftware/npm-package": "workspace:^",
     "cjs-module-lexer": "^1.2.3",
     "effect": "catalog:",
-    "typescript": "catalog:attw",
-    "validate-npm-package-name": "^5.0.0"
+    "typescript": "catalog:attw"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
@@ -62,7 +61,6 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
-    "@types/validate-npm-package-name": "^4.0.0",
     "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
