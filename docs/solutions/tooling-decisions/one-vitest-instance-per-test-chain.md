@@ -10,10 +10,10 @@ applies_when:
   - Snapshot matchers throw "SnapshotClient.setup()" errors that most cases in the same file do not reproduce
   - pnpm install output or `pnpm why vitest` shows two vitest paths differing only in peer-suffix hash
 root_cause: dependency_duplicate
-resolution_type: gate
+resolution_type: config_change
 related_components:
-  - pnpm-lock.yaml
-  - scripts/guards/check-single-vitest.ts
+  - the pnpm lockfile importer graph
+  - the vitest peer-dependency closure
   - packages/testing/specs/gherkin/effect
   - packages/testing/type-testing/arethetypeswrong/analysis
 tags:
@@ -43,13 +43,12 @@ Repair is deduplicating the peer driver — `pnpm dedupe` when the contexts are 
 ## Architectural invariants
 
 - **Single-instance invariant:** for every workspace importer whose link closure reaches `@effect/vitest` — as a declarer or as a consumer that links one — the vitest copy `@effect/vitest` loads and the vitest copy the importer runs must realpath to the same file. A consumer without its own `@effect/vitest` inherits the edge of the nearest declarer in its link reach. Equality is per-importer and per-physical-path; version-string equality proves nothing.
-- **The invariant lives in the install, not the tests.** No test-level workaround can reunify two module registries. Enforce it where the fork is created: derive expected edges from the lockfile importer graph (including the pnpm virtual-store walk-up from the `@effect/vitest` package dir to its peer-level vitest), compare against real installed realpaths, and fail the check chains on divergence with the repair command in the message.
-- **A gate that scans nothing proves nothing.** If no importer resolves `@effect/vitest`, the guard must fail loud, not pass silent — silence is only evidence when the scan demonstrably covered the chain.
-- **Known boundary:** the chain keys on `@effect/vitest` specifically. Another vitest plugin that imports vitest internals forks snapshot state the same way and would need the same treatment; no such plugin exists in this workspace today.
+- **The invariant lives in the install, not the tests.** No test-level workaround can reunify two module registries. Repair where the fork is created: deduplicate the peer driver (`pnpm dedupe` when the peer contexts are accidental, a single-version override in the workspace settings when a transitive peer genuinely forks them).
+- **Detecting relapse without a standing gate:** `pnpm why vitest` listing two physical paths (same version, different `.pnpm` suffix) is the fork, already present. `pnpm dedupe --check` fails when overlapping ranges resolve to separate builds — run it when snapshot-state errors appear, not as a standing chain member; the guard class that re-derives pnpm's resolution by hand was rejected in review as cargo cult.
 
 ## Verification
 
-The single-vitest gate wired into both check chains carries a `--selftest` fixture suite covering converged, forked, cross-package-consistent, unrelated-importer, unrecognized-layout, transitive-consumer, and zero-chain shapes. Observed: the committed pre-dedupe lockfile fails with per-package fork findings naming both physical paths; the deduped tree passes. The gate's error text names the repair (`pnpm dedupe`) so the fix is one command from the failure message.
+The repair was verified on the failure itself: with the forked lockfile, the snapshot suite failed deterministically for one recipe and flaked across the others; after the override collapsed the peer driver to one esbuild minor, the same native-snapshot suite passed 16/16 on three consecutive runs. When the smell resurfaces, confirm the fork with `pnpm why vitest` before touching the test.
 
 ## Code smells
 
