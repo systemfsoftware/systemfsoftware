@@ -1,7 +1,7 @@
 import { it, layer, makeFeature, StepError } from '@systemfsoftware/effect-gherkin-spec'
-import { createPackage, createPackageFromTarballData, packPackage, packTree } from '@systemfsoftware/npm-package'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
+import { createPackage, createPackageFromTarballData, packPackage, packTree } from './__fixtures__/npm-package.js'
 
 const Feature = makeFeature({ it, layer })
 
