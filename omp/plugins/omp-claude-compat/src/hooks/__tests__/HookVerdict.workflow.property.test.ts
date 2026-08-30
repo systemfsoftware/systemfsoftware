@@ -2,8 +2,9 @@ import { describe, it } from '@effect/vitest'
 import { Exit, Option, Result } from 'effect'
 import { Schema as S } from 'effect'
 import { FastCheck as fc } from 'effect/testing'
+import { interpretHookResult } from '../hooks.js'
 import { HookOutputFromStdout, type ParsedHookOutput } from '../hooks.schema.js'
-import { InterpretHookCommand, interpretHookResult, submitVerdict, SubmitVerdictCommand } from '../hooks.workflow.js'
+import { InterpretHookCommand, submitVerdict, SubmitVerdictCommand } from '../hooks.workflow.js'
 
 /**
  * The decode exactly as the shell supplies it: `None` when the stdout never

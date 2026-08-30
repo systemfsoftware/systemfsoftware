@@ -77,7 +77,7 @@ const KNOWN_EMOJI: Record<string, true> = {
   '💥': true,
 }
 
-export function plural(items: number): string {
+function plural(items: number): string {
   if (items > 1) {
     return 's'
   } else {
@@ -85,7 +85,7 @@ export function plural(items: number): string {
   }
 }
 
-export function getEmojiForStatus(status: schema.MutantStatus): string {
+function getEmojiForStatus(status: schema.MutantStatus): string {
   switch (status) {
     case 'Killed':
       return '✅'
@@ -105,7 +105,7 @@ export function getEmojiForStatus(status: schema.MutantStatus): string {
   }
 }
 
-export function stringWidth(input: string): number {
+function stringWidth(input: string): number {
   return Array.from(input).reduce((acc, char) => {
     if (KNOWN_EMOJI[char] === true) {
       return acc + 2
@@ -490,7 +490,7 @@ const drawTableBody = (
 
 const EOL = '\n'
 
-export const drawClearTextScoreTable = (
+const drawClearTextScoreTable = (
   metricsResult: MetricsResult<Metrics>,
   options: ProvidedStrykerOptions,
 ): string => {
@@ -684,7 +684,7 @@ function scoreTable(
   return drawClearTextScoreTable(metrics.systemUnderTestMetrics, options)
 }
 
-export function renderClearText(
+function renderClearText(
   report: schema.MutationTestResult,
   metrics: MutationTestMetricsResult,
   options: ProvidedStrykerOptions,
@@ -711,19 +711,6 @@ export function renderClearText(
   return { stdout, debug }
 }
 
-export function renderClearTextString(
-  report: schema.MutationTestResult,
-  metrics: MutationTestMetricsResult,
-  options: ProvidedStrykerOptions,
-): string {
-  const { stdout } = renderClearText(report, metrics, options)
-  return stdout.join('\n')
-}
-
-export function buildJsonReport(report: schema.MutationTestResult): string {
-  return JSON.stringify(report, null, 0)
-}
-
 // ─── workflow ─────────────────────────────────────────────────────────
 
 export const makeClearTextDocument = Workflow.make(
@@ -733,15 +720,3 @@ export const makeClearTextDocument = Workflow.make(
     return Result.succeed(ClearTextDocument.make({ stdout: [...stdout], debug: [...debug] }))
   },
 )
-
-// ─── ansi re-export for score table consumers ──────────────────────────
-
-export { ansi }
-export type { AnsiColor as Color }
-
-export function colorEnabled(enabled: boolean, color: AnsiColor, text: string): string {
-  if (enabled) {
-    return wrap(color, text)
-  }
-  return text
-}

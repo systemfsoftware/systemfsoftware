@@ -36,15 +36,16 @@ import type { CommandHook, HookEntry, HookSettings } from '../settings/mod.js'
 import {
   type AdmitCommand,
   type AdmitError,
+  AdmitHooksCommand,
   admitLoadedSettings,
-  admitPresent,
   type HookDispatchDecision,
-  skipHooks,
+  SkipHooks,
 } from './admit.workflow.js'
 import { Blocked, Continue, type HookOutcome, HookOutputFromStdout, HookResult } from './hooks.schema.js'
 import type { HookPrompt, HookSession, HookToolCall, HookToolResult } from './hooks.schema.js'
 import {
   type HookDecision,
+  HookVerdictError,
   InterpretHookCommand,
   type SubmitHookVerdictError,
   submitVerdict,
@@ -62,6 +63,26 @@ import {
   sessionIds,
 } from './wire.js'
 import { ToolInputRecord } from './wire.schema.js'
+
+export const skipHooks = (): HookDispatchDecision => new SkipHooks()
+export const admitPresent = (present: boolean): AdmitCommand => new AdmitHooksCommand({ present })
+
+export const interpretHookResult = (
+  command: InterpretHookCommand,
+): Result.Result<HookDecision, HookVerdictError> =>
+  Result.mapBoth(
+    submitVerdict(
+      SubmitVerdictCommand.make({
+        cmd: command,
+        code: command.result.code,
+        stdout: command.result.stdout,
+      }),
+    ),
+    {
+      onSuccess: (decision) => decision.verdict,
+      onFailure: (error) => error.error,
+    },
+  )
 
 /** The stdout crossing applied where the boundary is crossed. */
 const parseHookOutput = S.decodeUnknownExit(HookOutputFromStdout)

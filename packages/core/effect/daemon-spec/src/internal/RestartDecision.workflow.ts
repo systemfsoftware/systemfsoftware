@@ -23,7 +23,7 @@ export type RestartStrategyName = 'one_for_one' | 'one_for_all' | 'rest_for_one'
  * than dispatch, so it lives in the decision cell beside the `Workflow.make` it serves.
  */
 /** @internal */
-export const restartIndicesFor = (
+const restartIndicesFor = (
   strategy: RestartStrategyName,
   failedIndex: number,
   total: number,

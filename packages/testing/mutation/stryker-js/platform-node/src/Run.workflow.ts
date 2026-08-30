@@ -25,6 +25,3 @@ export const prepareWorkflow = Workflow.make(
     return Result.succeed(new PrepareDecision({ fileCount: command.fileCount }))
   },
 )
-
-export { DryRunCommand, DryRunDecision, DryRunError, dryRunWorkflow } from './DryRun.workflow.js'
-export { InstrumentCommand, InstrumentDecision, InstrumentError, instrumentWorkflow } from './Instrument.workflow.js'

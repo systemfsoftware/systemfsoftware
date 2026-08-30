@@ -56,7 +56,11 @@ import { createCheckerFactory } from './Checker.js'
 import type { CheckerResourceService } from './Checker.js'
 import { checkGroupedPlans } from './Checker.js'
 import { forkCoreSchema, readConfig, validateOptions, type ValidationSchemaDocument } from './Config.js'
-import { REMEMBERED_REASON, toRelativeNormalizedFileName } from './IncrementalDiff.workflow.js'
+import { DryRunCommand, DryRunDecision, dryRunWorkflow } from './DryRun.workflow.js'
+import type { DryRunError } from './DryRun.workflow.js'
+import { REMEMBERED_REASON, toRelativeNormalizedFileName } from './IncrementalDiff.paths.js'
+import { InstrumentCommand, InstrumentDecision, instrumentWorkflow } from './Instrument.workflow.js'
+import type { InstrumentError } from './Instrument.workflow.js'
 import { decidePlans, incrementalDiff } from './Mutants.js'
 import type { TestCoverage } from './Mutants.js'
 import { testCoverageFrom } from './Mutants.js'
@@ -69,25 +73,13 @@ import type { Project } from './Project.js'
 import { readProject } from './Project.js'
 import { FILE_CONCURRENCY, readOriginal, toInstrumenterFile } from './Project.js'
 import { withInstrumentedFiles } from './Project.js'
+import { ansi } from './Reporter.ansi.js'
 import { makeMutationReportingService } from './Reporter.js'
 import { toSchemaLocation } from './Reporter.js'
 import { normalizeReportFileName } from './Reporter.js'
 import { selectReporters } from './Reporter.js'
-import { ansi } from './Reporter.workflow.js'
 import { StageError } from './Run.schema.js'
-import {
-  DryRunCommand,
-  DryRunDecision,
-  dryRunWorkflow,
-  InstrumentCommand,
-  InstrumentDecision,
-  instrumentWorkflow,
-  PrepareCommand,
-  PrepareDecision,
-  prepareWorkflow,
-} from './Run.workflow.js'
-import type { DryRunError } from './Run.workflow.js'
-import type { InstrumentError } from './Run.workflow.js'
+import { PrepareCommand, PrepareDecision, prepareWorkflow } from './Run.workflow.js'
 import type { PrepareError } from './Run.workflow.js'
 import { makeSandbox } from './Sandbox.js'
 import type { SandboxHandle } from './Sandbox.js'

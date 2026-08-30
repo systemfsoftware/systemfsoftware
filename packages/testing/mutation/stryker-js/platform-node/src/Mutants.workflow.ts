@@ -4,7 +4,7 @@ import type { MutantStatus } from '@systemfsoftware/stryker-js/Mutant'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
-export const HIT_LIMIT_FACTOR = 100
+const HIT_LIMIT_FACTOR = 100
 
 const PlannerOptionsSchema = S.Struct({
   disableBail: S.Boolean,

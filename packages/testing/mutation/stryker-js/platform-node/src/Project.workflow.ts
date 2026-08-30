@@ -5,19 +5,9 @@ import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
-export const ALWAYS_IGNORE = Object.freeze([
-  'node_modules',
-  '.git',
-  '*.tsbuildinfo',
-  '/stryker.log',
-  '.next',
-  '.nuxt',
-  '.svelte-kit',
-])
+const IGNORE_PATTERN_CHARACTER = '!'
 
-export const IGNORE_PATTERN_CHARACTER = '!'
-
-export const MUTATION_RANGE_REGEX = /(.*?):((\d+)(?::(\d+))?-(\d+)(?::(\d+))?)$/
+const MUTATION_RANGE_REGEX = /(.*?):((\d+)(?::(\d+))?-(\d+)(?::(\d+))?)$/
 
 const DEFAULT_GLOB = '**/*.{js,ts,jsx,tsx,html,vue,mjs,mts,cts,cjs}'
 
@@ -400,10 +390,3 @@ function decide(command: FileSelectionCommand): Result.Result<FileSelectionDecis
 }
 
 export const fileSelectionWorkflow = Workflow.make(FileSelectionCommand, decide)
-
-export {
-  IncrementalReportCommand,
-  IncrementalReportDecision,
-  IncrementalReportError,
-  incrementalReportWorkflow,
-} from './IncrementalReport.workflow.js'

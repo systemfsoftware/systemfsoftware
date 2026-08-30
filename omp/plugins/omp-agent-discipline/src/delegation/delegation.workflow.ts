@@ -182,7 +182,7 @@ const analyzePrompt = (guard: CompiledGuard, prompt: string): PromptAnalysis =>
     Match.exhaustive,
   )
 
-export const decideNoSkillDelegation = (cmd: CheckDelegationCommand): DelegationVerdict =>
+const decideNoSkillDelegation = (cmd: CheckDelegationCommand): DelegationVerdict =>
   Match.value(classifyInput(cmd)).pipe(
     Match.tag('NoGuard', () => Allow.make()),
     Match.tag('NonDelegatedTool', () => Allow.make()),

@@ -32,6 +32,7 @@ const recommendedRules = {
   [rule('workflow-match-exhaustive')]: 'error',
   [rule('make-body-purity')]: 'error',
   [rule('make-command-schema')]: 'error',
+  [rule('workflow-file-export-topology')]: 'error',
 } as const
 
 export default {

@@ -32,7 +32,7 @@ import {
   ReadConfigCommand,
 } from './Config.schema.js'
 import { MergeCommand, mergeConfigsWorkflow } from './Config.workflow.js'
-import { IGNORE_PATTERN_CHARACTER, MUTATION_RANGE_REGEX } from './Project.workflow.js'
+import { IGNORE_PATTERN_CHARACTER, MUTATION_RANGE_REGEX } from './Project.ignore.js'
 import { StrykerError } from './stryker-error.schema.js'
 import { isCommandRunner } from './TestRunner.js'
 import { getAvailableParallelism } from './Worker.js'

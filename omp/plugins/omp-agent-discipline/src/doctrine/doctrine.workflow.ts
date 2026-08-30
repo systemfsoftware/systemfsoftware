@@ -39,7 +39,7 @@ export class DispatchDoctrineImpossible extends S.TaggedError<DispatchDoctrineIm
   { reason: S.String },
 ) {}
 
-export const DOCTRINE_KERNEL =
+const DOCTRINE_KERNEL =
   `Refuse monolithic dispatches: size the unit, specify it completely, then dispatch — or do the work inline.
 
 rules:
@@ -53,7 +53,7 @@ Full doctrine: skill://task-decomposition — sizing calibration, the dispatch c
 const dispatchIsBlocked = (cmd: CheckDispatchCommand): boolean =>
   cmd.gateEnabled && isDelegatorTool(cmd.toolName) && !cmd.doctrineLoaded
 
-export const decideDispatchDoctrine = (cmd: CheckDispatchCommand): DispatchDoctrineVerdict =>
+const decideDispatchDoctrine = (cmd: CheckDispatchCommand): DispatchDoctrineVerdict =>
   Match.value(dispatchIsBlocked(cmd)).pipe(
     Match.when(true, () => DeliverDoctrine.make({ reason: DOCTRINE_KERNEL })),
     Match.when(false, () => Allow.make()),
@@ -65,59 +65,3 @@ export const checkDispatchDoctrine = Workflow.make(
   (command): Result.Result<DispatchDoctrineVerdict, DispatchDoctrineImpossible> =>
     Result.succeed(decideDispatchDoctrine(command)),
 )
-
-// ── Pure helpers — previously in DispatchDoctrine.ts ──
-
-const SKILL_SCHEME = 'skill://'
-const SKILLS_DIR = '/skills/'
-const SKILL_FILE = '/SKILL.md'
-
-const skillUriName = (path: string): string | null => {
-  const body = path.slice(SKILL_SCHEME.length)
-  if (body.length === 0) return null
-  const nameEnd = body.search(/[:/]/)
-  return nameEnd === -1 ? body : body.slice(0, nameEnd)
-}
-
-const normalizeFilesystemPath = (path: string): string => path.split('\\').join('/')
-
-const matchesSkillTail = (normalizedPath: string, skill: string): boolean => {
-  const tail = SKILLS_DIR + skill + SKILL_FILE
-  return normalizedPath.endsWith(tail)
-}
-
-/**
- * Recognize a read-path that targets a doctrine skill. Pure-string only.
- */
-export const matchesDoctrineSkillPath = (
-  path: string,
-  skills: readonly string[],
-): boolean => {
-  if (path.startsWith(SKILL_SCHEME)) {
-    const name = skillUriName(path)
-    if (name === null) return false
-    return skills.includes(name)
-  }
-
-  const normalized = normalizeFilesystemPath(path)
-  for (const skill of skills) {
-    if (matchesSkillTail(normalized, skill)) return true
-  }
-  return false
-}
-
-const SPEC_FIELD_PATTERNS = {
-  hasObjective: /\bobjective\b/i,
-  hasWriteScope: /\bwrite_scope\b/i,
-  hasVerifyCommands: /\bverify_commands\b/i,
-} as const
-
-export const extractSpecShape = (text: string): {
-  readonly hasObjective: boolean
-  readonly hasWriteScope: boolean
-  readonly hasVerifyCommands: boolean
-} => ({
-  hasObjective: SPEC_FIELD_PATTERNS.hasObjective.test(text),
-  hasWriteScope: SPEC_FIELD_PATTERNS.hasWriteScope.test(text),
-  hasVerifyCommands: SPEC_FIELD_PATTERNS.hasVerifyCommands.test(text),
-})
