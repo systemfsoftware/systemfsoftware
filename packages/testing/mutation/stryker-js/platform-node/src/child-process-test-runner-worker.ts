@@ -1,4 +1,4 @@
-import { NodeFileSystem, NodePath, NodeWorkerRunner } from '@effect/platform-node'
+import { NodeFileSystem, NodePath, NodeSocketServer } from '@effect/platform-node'
 import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
 import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
@@ -9,13 +9,16 @@ import type {
   MutantRunResult,
 } from '@systemfsoftware/stryker-js/TestRunner'
 import { TestRunner, TestRunnerFailed } from '@systemfsoftware/stryker-js/TestRunner'
+import { Schema as S } from 'effect'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
-import * as S from 'effect/Schema'
+import * as Path from 'effect/Path'
+import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization'
 import * as RpcServer from 'effect/unstable/rpc/RpcServer'
-import * as RpcWorker from 'effect/unstable/rpc/RpcWorker'
 
+import { nodeModuleLayer } from './NodeModule.js'
 import { create, loadPlugins } from './Plugins.js'
 import { MutantCoverageSchema } from './TestRunner.schema.js'
 import { TestRunnerRpcs } from './WorkerProtocol.js'
@@ -45,9 +48,17 @@ const normalizeMutantRun = (result: MutantRunResult): MutantRunResult => {
   return result
 }
 
+const readWorkerOptions = Effect.gen(function*() {
+  const workerDir = process.env['STRYKER_WORKER_DIR'] ?? (yield* Effect.die(new Error('STRYKER_WORKER_DIR is not set')))
+  const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const raw = yield* fs.readFileString(path.join(workerDir, 'options.json'))
+  return yield* S.decodeUnknownEffect(S.fromJsonString(S.toCodecJson(StrykerOptionsSchema)))(raw)
+})
+
 const TestRunnerHandlers = TestRunnerRpcs.toLayer(
   Effect.gen(function*() {
-    const options = yield* RpcWorker.initialMessage(StrykerOptionsSchema)
+    const options = yield* readWorkerOptions
     const runnerName = options.testRunner
     const failed =
       (phase: 'capabilities' | 'dryRun' | 'init' | 'mutantRun') =>
@@ -85,10 +96,18 @@ const TestRunnerHandlers = TestRunnerRpcs.toLayer(
   }),
 ).pipe(Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)))
 
+const socketPath = process.env['STRYKER_SOCKET']
+if (socketPath === undefined) {
+  process.stderr.write('test runner worker stopped: STRYKER_SOCKET is not set\n')
+  process.exit(1)
+}
+
 const MainLayer = RpcServer.layer(TestRunnerRpcs).pipe(
   Layer.provide(TestRunnerHandlers),
-  Layer.provide(RpcServer.layerProtocolWorkerRunner),
-  Layer.provide(NodeWorkerRunner.layer),
+  Layer.provide(RpcServer.layerProtocolSocketServer),
+  Layer.provide(RpcSerialization.layerNdjson),
+  Layer.provide(NodeSocketServer.layer({ path: socketPath })),
+  Layer.provide(nodeModuleLayer),
 )
 
 Effect.runFork(

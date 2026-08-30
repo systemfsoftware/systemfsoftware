@@ -7,6 +7,7 @@ import { Context, Effect } from 'effect'
 import * as Layer from 'effect/Layer'
 import type { Scope } from 'effect/Scope'
 
+import { nodeModuleLayer } from '@systemfsoftware/stryker-js-platform-node'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { TestRunner } from '@systemfsoftware/stryker-js/TestRunner'
 import { makeVitestRunnerLayer } from '../../src/Runner.js'
@@ -18,6 +19,14 @@ import {
 } from './factories.js'
 
 import { TempTestDirectorySandbox } from './temp-test-directory-sandbox.js'
+
+export const resolvePath = (base: string, ...segments: ReadonlyArray<string>): string => path.resolve(base, ...segments)
+
+export const fileExists = (file: string): Promise<boolean> =>
+  fs.promises.access(file).then(
+    () => true,
+    () => false,
+  )
 
 type MutableStrykerOptions = { -readonly [K in keyof StrykerOptions]: StrykerOptions[K] }
 
@@ -73,7 +82,7 @@ export const runnerContext = (
         setupFilePath: fileURLToPath(new URL('../../dist/stryker-setup.mjs', import.meta.url)),
       })
       const context = yield* Layer.build(layer).pipe(
-        Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+        Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, nodeModuleLayer)),
       )
       const service = Context.get(context, TestRunner)
       const sut = {
@@ -128,11 +137,11 @@ export const twoRunnersContext = (
         setupFilePath,
       })
       const context1 = yield* Layer.build(layer1).pipe(
-        Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+        Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, nodeModuleLayer)),
       )
       const service1 = Context.get(context1, TestRunner)
       const context2 = yield* Layer.build(layer2).pipe(
-        Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+        Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, nodeModuleLayer)),
       )
       const service2 = Context.get(context2, TestRunner)
       yield* service1.init

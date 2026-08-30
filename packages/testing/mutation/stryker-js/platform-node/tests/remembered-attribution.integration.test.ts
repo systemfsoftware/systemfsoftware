@@ -25,16 +25,15 @@ const runOnce = (workDir: string, incrementalFile: string) =>
     const path = yield* Path.Path
     const runStartedAt = yield* Clock.currentTimeMillis
     return yield* Effect.scoped(
-      runMutationTest({
-        configFile: path.join(workDir, 'stryker.config.json'),
-        incremental: true,
-        incrementalFile,
-        force: false,
-        disableBail: true,
-        tempDirName: path.join(workDir, '.stryker-tmp'),
-      }),
-    ).pipe(
-      Effect.provide(
+      runMutationTest(
+        {
+          configFile: path.join(workDir, 'stryker.config.json'),
+          incremental: true,
+          incrementalFile,
+          force: false,
+          disableBail: true,
+          tempDirName: path.join(workDir, '.stryker-tmp'),
+        },
         makeRunLayer({
           runId: generateRunId(),
           resolvedMode: { mode: 'human', signal: 'env', stdoutIsTTY: false },

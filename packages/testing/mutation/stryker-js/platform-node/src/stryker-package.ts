@@ -1,16 +1,10 @@
 import * as S from 'effect/Schema'
-import fs from 'fs'
-import { fileURLToPath, URL } from 'url'
+import pkgJson from '../package.json' with { type: 'json' }
 import { deepFreeze } from './Config.js'
 
 import { PackageJsonSchema } from './stryker-package.schema.js'
 
-const rawPackageJson: unknown = JSON.parse(
-  fs.readFileSync(
-    fileURLToPath(new URL('../package.json', import.meta.url)),
-    'utf-8',
-  ),
-)
+const rawPackageJson: unknown = pkgJson
 const pkg = deepFreeze(S.decodeUnknownSync(PackageJsonSchema)(rawPackageJson))
 
 export const strykerVersion = pkg.version

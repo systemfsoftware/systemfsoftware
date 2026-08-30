@@ -1,6 +1,3 @@
-import fs from 'fs'
-import path from 'path'
-
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
@@ -14,7 +11,7 @@ import {
 } from './__fixtures__/assertions.js'
 import { createDryRunOptions, createMutant, createMutantRunOptions } from './__fixtures__/factories.js'
 import { TempTestDirectorySandbox } from './__fixtures__/temp-test-directory-sandbox.js'
-import { runnerContext, twoRunnersContext } from './__fixtures__/vitest-runner-harness.js'
+import { fileExists, resolvePath, runnerContext, twoRunnersContext } from './__fixtures__/vitest-runner-harness.js'
 const Feature = makeFeature({ it, layer })
 
 const test1 = 'tests/add.spec.ts#add should be able to add two numbers'
@@ -25,9 +22,9 @@ const test5 = 'tests/math.spec.ts#math should be able to recognize a negative nu
 const test6 = 'tests/pi.spec.ts#pi should be 3.14'
 
 const mathFile = (s: { runner: { sandbox: TempTestDirectorySandbox } }): string =>
-  path.resolve(s.runner.sandbox.tmpDir, 'math.ts')
+  resolvePath(s.runner.sandbox.tmpDir, 'math.ts')
 const specFile = (s: { runner: { sandbox: TempTestDirectorySandbox } }, file: string): string =>
-  path.resolve(s.runner.sandbox.tmpDir, file)
+  resolvePath(s.runner.sandbox.tmpDir, file)
 
 Feature('Driving the Vitest runner through the Stryker interface')
   .body(({ scenario }) => {
@@ -435,7 +432,7 @@ Feature('Driving the Vitest runner through the Stryker interface')
             return s.runner.sut.mutantRun(
               createMutantRunOptions({
                 activeMutant: createMutant({ id: '1' }),
-                sandboxFileName: path.resolve(
+                sandboxFileName: resolvePath(
                   s.runner.sandbox.tmpDir,
                   'packages',
                   'bar',
@@ -545,7 +542,7 @@ Feature('Driving the Vitest runner through the Stryker interface')
             return s.runner.sut.mutantRun(
               createMutantRunOptions({
                 activeMutant: createMutant({ id: '1' }),
-                sandboxFileName: path.resolve(
+                sandboxFileName: resolvePath(
                   s.runner.sandbox.tmpDir,
                   'packages',
                   'app',
@@ -636,7 +633,7 @@ Feature('Driving the Vitest runner through the Stryker interface')
             return s.runner.sut.mutantRun(
               createMutantRunOptions({
                 activeMutant: createMutant({ id: '2' }),
-                sandboxFileName: path.resolve(s.runner.sandbox.tmpDir, 'math.ts'),
+                sandboxFileName: resolvePath(s.runner.sandbox.tmpDir, 'math.ts'),
                 mutantActivation: 'runtime',
                 testFilter: [
                   'tests/math-with-fixtures.spec.ts#math with fixtures should be able to add two numbers using fixture',
@@ -660,8 +657,8 @@ Feature('Driving the Vitest runner through the Stryker interface')
         When('the second runner is disposed')('disposed', (s) => Effect.promise(() => s.runners.runner2.sut.dispose())),
         Then('the first setup file still exists and the second is gone')((s) =>
           Effect.gen(function*() {
-            yield* Effect.promise(() => fs.promises.access(s.runners.setupFile1))
-            yield* Effect.promise(() => expect(fs.promises.access(s.runners.setupFile2)).rejects.toThrow('ENOENT'))
+            yield* Effect.promise(() => expect(fileExists(s.runners.setupFile1)).resolves.toBe(true))
+            yield* Effect.promise(() => expect(fileExists(s.runners.setupFile2)).resolves.toBe(false))
           })
         ),
       ),

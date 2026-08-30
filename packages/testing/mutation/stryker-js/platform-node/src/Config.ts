@@ -6,10 +6,8 @@
  * The pure merge decision lives in `Config.workflow.ts` so `Workflow.make`
  * stays behind its gate; schemas live in `Config.schema.ts`.
  */
-import { createRequire } from 'node:module'
-import { pathToFileURL } from 'node:url'
-
 import { Cell, Wire } from '@systemfsoftware/effect-cell-types'
+import { Module } from '@systemfsoftware/stryker-js/Module'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import * as Context from 'effect/Context'
@@ -343,17 +341,24 @@ export function describeErrors(error: S.SchemaError): string[] {
   return [error.message]
 }
 
-// ── module-loader ───────────────────────────────────────────────────
-
-export function importModule(moduleName: string, basePath: string): Effect.Effect<unknown, StrykerError> {
-  return Effect.tryPromise({
-    try: () => {
-      if (moduleName.startsWith('.') || moduleName.startsWith('/') || moduleName.startsWith('file://')) {
-        return import(moduleName)
-      }
-      return import(createRequire(`${basePath}/noop.js`).resolve(moduleName))
-    },
-    catch: (cause) => new StrykerError({ message: `Failed to import module "${moduleName}"`, cause }),
+export function importModule(
+  moduleName: string,
+  basePath: string,
+): Effect.Effect<unknown, StrykerError, Module | Path.Path> {
+  return Effect.gen(function*() {
+    const path = yield* Path.Path
+    if (moduleName.startsWith('.') || moduleName.startsWith('/') || moduleName.startsWith('file://')) {
+      return yield* Effect.tryPromise({
+        try: (): Promise<unknown> => import(moduleName),
+        catch: (cause) => new StrykerError({ message: `Failed to import module "${moduleName}"`, cause }),
+      })
+    }
+    const module = yield* Module
+    const requireFrom = module.createRequire(path.join(basePath, 'package.json'))
+    return yield* Effect.try({
+      try: () => requireFrom(moduleName),
+      catch: (cause) => new StrykerError({ message: `Failed to import module "${moduleName}"`, cause }),
+    })
   })
 }
 
@@ -528,8 +533,11 @@ export function readConfigFile(
         Effect.mapError((cause) => new ConfigFileInvalidError({ file: configFile, cause })),
       )
     }
+    const url = yield* pathService.toFileUrl(pathService.resolve(configFile)).pipe(
+      Effect.mapError((cause) => new ConfigFileUnreadableError({ file: configFile, cause })),
+    )
     const importResult = yield* Effect.tryPromise({
-      try: () => import(pathToFileURL(pathService.resolve(configFile)).toString()),
+      try: () => import(url.href),
       catch: (cause) => new ConfigFileUnreadableError({ file: configFile, cause }),
     }).pipe(Effect.result)
     if (Result.isFailure(importResult)) {
@@ -555,13 +563,13 @@ export function readConfigFile(
 function resolveExtendsSpecifier(
   specifier: string,
   configDir: string,
-): Effect.Effect<string, ConfigFileUnreadableError, Path.Path> {
+): Effect.Effect<string, ConfigFileUnreadableError, Module | Path.Path> {
   return Effect.gen(function*() {
-    const pathService = yield* Path.Path
+    const path = yield* Path.Path
+    const module = yield* Module
+    const requireFrom = module.createRequire(path.join(configDir, 'package.json'))
     return yield* Effect.try({
-      try: () => {
-        return createRequire(pathService.join(configDir, 'noop.js')).resolve(specifier)
-      },
+      try: () => requireFrom.resolve(specifier),
       catch: (cause) => new ConfigFileUnreadableError({ file: specifier, cause }),
     })
   })
@@ -573,7 +581,7 @@ export function resolveExtends(
 ): Effect.Effect<
   PartialStrykerOptions,
   ConfigFileUnreadableError | ConfigFileInvalidError,
-  FileSystem.FileSystem | Path.Path
+  FileSystem.FileSystem | Module | Path.Path
 > {
   return Effect.gen(function*() {
     const pathService = yield* Path.Path
@@ -585,7 +593,7 @@ export function resolveExtends(
     ): Effect.Effect<
       PartialStrykerOptions,
       ConfigFileUnreadableError | ConfigFileInvalidError,
-      FileSystem.FileSystem | Path.Path
+      FileSystem.FileSystem | Module | Path.Path
     > =>
       Match.value(decideExtendsStep(state, currentDocument, file, pathService)).pipe(
         Match.tag('done', (d) => Effect.succeed(d.options)),
@@ -1083,11 +1091,13 @@ function readJsonConfig(
 function importJSConfigModule(
   configFile: string,
   basePath: string,
-): Effect.Effect<unknown, ConfigFileUnreadableError, Path.Path> {
+): Effect.Effect<unknown, ConfigFileUnreadableError, Module | Path.Path> {
   return Effect.gen(function*() {
     const pathService = yield* Path.Path
-    const url = pathToFileURL(pathService.resolve(configFile)).toString()
-    return yield* importModule(url, basePath).pipe(
+    const url = yield* pathService.toFileUrl(pathService.resolve(configFile)).pipe(
+      Effect.mapError((cause) => new ConfigFileUnreadableError({ file: configFile, cause })),
+    )
+    return yield* importModule(url.href, basePath).pipe(
       Effect.mapError((cause) => new ConfigFileUnreadableError({ file: configFile, cause })),
     )
   })
@@ -1096,7 +1106,7 @@ function importJSConfigModule(
 function importJSConfig(
   configFile: string,
   basePath: string,
-): Effect.Effect<Record<string, unknown>, ConfigFileUnreadableError | ConfigFileInvalidError, Path.Path> {
+): Effect.Effect<Record<string, unknown>, ConfigFileUnreadableError | ConfigFileInvalidError, Module | Path.Path> {
   return Effect.gen(function*() {
     const importedModule = yield* importJSConfigModule(configFile, basePath)
     const decodedResult = S.decodeUnknownResult(ImportedModuleSchema)(importedModule)
@@ -1130,7 +1140,7 @@ function loadOptionsFromConfigFile(
 ): Effect.Effect<
   unknown,
   ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError,
-  FileSystem.FileSystem | Path.Path
+  FileSystem.FileSystem | Module | Path.Path
 > {
   return findConfigFile(cliOptions['configFile']).pipe(
     Effect.flatMap((configFile) => {
@@ -1170,7 +1180,7 @@ interface ConfigReaderPhases extends Cell.Phases {
 const configReaderDescription = (
   cliOptions: Record<string, unknown>,
   basePath: string,
-  services: Context.Context<FileSystem.FileSystem | Path.Path>,
+  services: Context.Context<FileSystem.FileSystem | Module | Path.Path>,
 ): Cell.WriteDone<ConfigReaderPhases> =>
   pipe(
     Cell.read<ConfigReaderPhases>(() =>
@@ -1217,10 +1227,10 @@ export function readConfig(
 ): Effect.Effect<
   StrykerOptions,
   ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError,
-  FileSystem.FileSystem | Path.Path
+  FileSystem.FileSystem | Module | Path.Path
 > {
   return Effect.gen(function*() {
-    const services = yield* Effect.context<FileSystem.FileSystem | Path.Path>()
+    const services = yield* Effect.context<FileSystem.FileSystem | Module | Path.Path>()
     const cliRecord = yield* S.decodeUnknownEffect(cliOptionsRecord)(cliOptions).pipe(Effect.orDie)
     const description = configReaderDescription(cliRecord, basePath, services)
     const command = new ReadConfigCommand({ cliOptions: cliRecord, basePath })

@@ -1,6 +1,7 @@
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { nodeModuleLayer } from '@systemfsoftware/stryker-js-platform-node'
 import { strykerPlugins } from '@systemfsoftware/stryker-js-typescript-checker'
 import { Checker } from '@systemfsoftware/stryker-js/Checker'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
@@ -26,6 +27,7 @@ const Feature = makeFeature({ it, layer })
 const host = Layer.mergeAll(
   NodeFileSystem.layer,
   NodePath.layer,
+  nodeModuleLayer,
   Layer.effect(SandboxDirectory, fixtureRoot).pipe(Layer.provide(NodePath.layer)),
 )
 

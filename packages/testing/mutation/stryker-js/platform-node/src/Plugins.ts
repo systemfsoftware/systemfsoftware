@@ -1,27 +1,24 @@
-/**
- * Plugins capability — loading Stryker plugin modules, warning about shadowed
- * contributions, and creating typed plugin instances from the loaded graph.
- */
-
 import { Schema as S } from 'effect'
-import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
+import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Predicate from 'effect/Predicate'
 import * as Result from 'effect/Result'
-import { fileURLToPath, pathToFileURL } from 'node:url'
 
+import { NodeFileSystem, NodePath } from '@effect/platform-node'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { PluginKind } from '@systemfsoftware/stryker-js/Plugin'
 import type { AnyPluginContribution, ContributionOf, PluginContribution } from '@systemfsoftware/stryker-js/Plugin'
 
+import { Module } from '@systemfsoftware/stryker-js/Module'
 import { defaultOptions, importModule } from './Config.js'
+import { nodeModuleLayer } from './NodeModule.js'
 import { StrykerError } from './stryker-error.schema.js'
 
 import {
@@ -109,7 +106,10 @@ function resolvePluginModules(
             return yield* globPluginModules(pluginExpression)
           }
           if (pathService.isAbsolute(pluginExpression) || pluginExpression.startsWith('.')) {
-            return [pathToFileURL(pathService.resolve(pluginExpression)).toString()]
+            const url = yield* pathService.toFileUrl(pathService.resolve(pluginExpression)).pipe(
+              Effect.mapError((cause) => new PluginLoadFailedError({ descriptor: pluginExpression, cause })),
+            )
+            return [url.href]
           }
           return [pluginExpression]
         }),
@@ -152,7 +152,8 @@ function readOrgDirectory(
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     let names: HashSet.HashSet<string> = HashSet.empty()
-    let directory = path.dirname(fileURLToPath(import.meta.url))
+    const base = yield* path.fromFileUrl(new URL('.', import.meta.url)).pipe(Effect.orDie)
+    let directory = path.dirname(base)
     for (;;) {
       let installRoot = path.join(directory, 'node_modules')
       if (path.basename(directory) === 'node_modules') {
@@ -205,7 +206,8 @@ function loadPlugin(
     schemaContribution: Record<string, unknown> | undefined
   }
   | undefined,
-  PluginLoadFailedError
+  PluginLoadFailedError,
+  Module | Path.Path
 > {
   return Effect.gen(function*() {
     yield* Effect.logDebug(`Loading plugin ${descriptor}`)
@@ -271,38 +273,34 @@ interface PluginLoaderPhases extends Cell.Phases {
 
 const pluginLoaderDescription = (
   basePath: string,
-  services: Context.Context<FileSystem.FileSystem | Path.Path>,
 ): Cell.WriteDone<PluginLoaderPhases> =>
   pipe(
     Cell.read<PluginLoaderPhases>((pluginDescriptors) =>
-      Effect.provideContext(
-        Effect.gen(function*() {
-          const pluginModules = yield* resolvePluginModules(pluginDescriptors)
-          const loaded = yield* Effect.forEach(
-            pluginModules,
-            (moduleName: string) =>
-              loadPlugin(moduleName, basePath).pipe(
-                Effect.map((plugin) => {
-                  if (plugin === undefined) {
-                    return undefined
-                  }
-                  return {
-                    ...plugin,
-                    moduleName,
-                  }
-                }),
-              ),
-            { concurrency: 'unbounded' },
-          ).pipe(Effect.map((arr) => arr.filter(Predicate.isNotNullish)))
-          const raw: readonly PluginLoaderRawEntry[] = loaded.map((entry) => ({
-            moduleName: entry.moduleName,
-            plugins: entry.plugins,
-            schemaContribution: entry.schemaContribution,
-          }))
-          return raw
-        }),
-        services,
-      )
+      Effect.gen(function*() {
+        const pluginModules = yield* resolvePluginModules(pluginDescriptors)
+        const loaded = yield* Effect.forEach(
+          pluginModules,
+          (moduleName: string) =>
+            loadPlugin(moduleName, basePath).pipe(
+              Effect.map((plugin) => {
+                if (plugin === undefined) {
+                  return undefined
+                }
+                return {
+                  ...plugin,
+                  moduleName,
+                }
+              }),
+            ),
+          { concurrency: 'unbounded' },
+        ).pipe(Effect.map((arr) => arr.filter(Predicate.isNotNullish)))
+        const raw: readonly PluginLoaderRawEntry[] = loaded.map((entry) => ({
+          moduleName: entry.moduleName,
+          plugins: entry.plugins,
+          schemaContribution: entry.schemaContribution,
+        }))
+        return raw
+      }).pipe(Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, nodeModuleLayer)))
     ),
     Cell.decode<PluginLoaderPhases>((raw) => {
       const entries = raw.map((entry) =>
@@ -343,11 +341,8 @@ const pluginLoaderDescription = (
 export function loadPlugins(
   pluginDescriptors: readonly string[],
   basePath: string,
-): Effect.Effect<LoadedPlugins, PluginLoadFailedError, FileSystem.FileSystem | Path.Path> {
-  return Effect.gen(function*() {
-    const services = yield* Effect.context<FileSystem.FileSystem | Path.Path>()
-    return yield* Cell.apply(pluginLoaderDescription(basePath, services), pluginDescriptors)
-  })
+): Effect.Effect<LoadedPlugins, PluginLoadFailedError, FileSystem.FileSystem | Module | Path.Path> {
+  return Cell.apply(pluginLoaderDescription(basePath), pluginDescriptors)
 }
 
 function parsePluginExpression(pluginExpression: string): { org: string; pkg: string } {

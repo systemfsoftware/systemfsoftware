@@ -1,12 +1,10 @@
-import path from 'path'
-
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 
 import { expectCompleted, expectKilled, sortTestResults } from './__fixtures__/assertions.js'
 import { createDryRunOptions, createMutant, createMutantRunOptions } from './__fixtures__/factories.js'
-import { runnerContext } from './__fixtures__/vitest-runner-harness.js'
+import { resolvePath, runnerContext } from './__fixtures__/vitest-runner-harness.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -39,7 +37,7 @@ Feature('Selecting tests related to a mutated file')
             Effect.promise(() =>
               s.runner.sut.dryRun(
                 createDryRunOptions({
-                  files: [path.resolve(s.runner.sandbox.tmpDir, 'src', 'math.ts')],
+                  files: [resolvePath(s.runner.sandbox.tmpDir, 'src', 'math.ts')],
                 }),
               )
             ),
@@ -50,7 +48,7 @@ Feature('Selecting tests related to a mutated file')
             Effect.promise(() =>
               s.runner.sut.dryRun(
                 createDryRunOptions({
-                  files: [path.resolve(s.runner.sandbox.tmpDir, 'src', 'string-utils.ts')],
+                  files: [resolvePath(s.runner.sandbox.tmpDir, 'src', 'string-utils.ts')],
                 }),
               )
             ),
@@ -93,7 +91,7 @@ Feature('Selecting tests related to a mutated file')
               createMutantRunOptions({
                 activeMutant: createMutant({ id: '9' }),
                 testFilter: [mathTest1],
-                sandboxFileName: path.resolve(s.runner.sandbox.tmpDir, 'src', 'math.ts'),
+                sandboxFileName: resolvePath(s.runner.sandbox.tmpDir, 'src', 'math.ts'),
               }),
             )
           )),
@@ -124,7 +122,7 @@ Feature('Selecting tests related to a mutated file')
             Effect.promise(() =>
               s.runner.sut.dryRun(
                 createDryRunOptions({
-                  files: [path.resolve(s.runner.sandbox.tmpDir, 'src', 'math.ts')],
+                  files: [resolvePath(s.runner.sandbox.tmpDir, 'src', 'math.ts')],
                 }),
               )
             ),
@@ -159,7 +157,7 @@ Feature('Selecting tests related to a mutated file')
             Effect.promise(() =>
               s.runner.sut.dryRun(
                 createDryRunOptions({
-                  files: [path.resolve(s.runner.sandbox.tmpDir, 'src', 'math.ts')],
+                  files: [resolvePath(s.runner.sandbox.tmpDir, 'src', 'math.ts')],
                 }),
               )
             ),

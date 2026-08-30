@@ -1,22 +1,17 @@
+import { NodeServices, NodeSocket } from '@effect/platform-node'
+import { ManagedRuntime } from 'effect'
+import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
-import { execFile } from 'node:child_process'
-import { access, mkdtemp, readdir, rm } from 'node:fs/promises'
-import { connect } from 'node:net'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { promisify } from 'node:util'
+import * as FileSystem from 'effect/FileSystem'
+import * as Layer from 'effect/Layer'
+import * as Path from 'effect/Path'
+import * as Ref from 'effect/Ref'
+import * as ChildProcess from 'effect/unstable/process/ChildProcess'
+import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 import { GenericContainer, getContainerRuntimeClient, type StartedTestContainer } from 'testcontainers'
 import type { TestProject } from 'vitest/node'
 
-const execFileAsync = promisify(execFile)
-
-// Manifest-list digest (not the amd64 platform digest) for tag 22-alpine, resolved 2026-08-10.
 const NODE_IMAGE = 'node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32'
-// Every workspace package in the CLI's transitive closure is packed and
-// installed from a local tarball: none is on the registry at this version, so
-// one left out of this list is fetched from npm and the install 404s before a
-// single test is collected.
 const WORKSPACE_PACKAGES = [
   '@systemfsoftware/stryker-js-cli',
   '@systemfsoftware/stryker-js',
@@ -25,21 +20,50 @@ const WORKSPACE_PACKAGES = [
   '@systemfsoftware/stryker-js-instrumenter',
   '@systemfsoftware/effect-cell-types',
 ] as const
-const CLI_DIR = fileURLToPath(new URL('./', import.meta.url))
-const FIXTURES_DIR = fileURLToPath(new URL('./tests/__fixtures__/fixtures', import.meta.url))
 const WORKDIR = '/work'
 const TARBALLS_IN_CONTAINER = '/opt/tarballs'
 const WORKSPACE_MANIFEST = JSON.stringify({
   name: 'stryker-contract-workspace',
   private: true,
 })
-
-let container: StartedTestContainer | undefined
-let tarballDir: string | undefined
+interface ContractResources {
+  readonly container: StartedTestContainer | undefined
+  readonly tarballDir: string | undefined
+}
 
 const DOCKER_SOCKET = '/var/run/docker.sock'
 
-const podmanSockets = (): readonly string[] => {
+const ContractResources = Context.Service<ContractResources, Ref.Ref<ContractResources>>()(
+  'stryker-contract/resources',
+)
+
+const releaseContractResources = (state: Ref.Ref<ContractResources>) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const { container, tarballDir } = yield* Ref.get(state)
+    if (container !== undefined) {
+      yield* Effect.ignore(
+        Effect.tryPromise({
+          try: () => container.stop(),
+          catch: () => undefined,
+        }),
+      )
+    }
+    if (tarballDir !== undefined) {
+      yield* Effect.ignore(fs.remove(tarballDir, { recursive: true }))
+    }
+  })
+const contractLayer: Layer.Layer<ContractResources> = Layer.effect(
+  ContractResources,
+  Effect.acquireUseRelease(
+    Ref.make<ContractResources>({ container: undefined, tarballDir: undefined }),
+    Effect.succeed,
+    releaseContractResources,
+  ),
+).pipe(Layer.provide(NodeServices.layer))
+
+const runtime = ManagedRuntime.make(Layer.mergeAll(NodeServices.layer, contractLayer))
+const podmanSockets = (path: Path.Path): readonly string[] => {
   const uid = process.getuid?.()
   let runtimeDir: string | undefined = process.env['XDG_RUNTIME_DIR']
   if (runtimeDir === undefined) {
@@ -51,21 +75,9 @@ const podmanSockets = (): readonly string[] => {
   if (runtimeDir === undefined) {
     rootless = []
   } else {
-    rootless = [join(runtimeDir, 'podman', 'podman.sock')]
+    rootless = [path.join(runtimeDir, 'podman', 'podman.sock')]
   }
   return [...rootless, '/run/podman/podman.sock']
-}
-
-const reachable = (socketPath: string): Promise<boolean> => {
-  const { promise, resolve } = Promise.withResolvers<boolean>()
-  const socket = connect(socketPath)
-  const settle = (value: boolean): void => {
-    socket.destroy()
-    resolve(value)
-  }
-  socket.once('connect', () => settle(true))
-  socket.once('error', () => settle(false))
-  return promise
 }
 
 const dockerHost = (): string | undefined => process.env['DOCKER_HOST']
@@ -73,41 +85,38 @@ const setDockerHost = (host: string): void => {
   process.env['DOCKER_HOST'] = host
 }
 
-/**
- * A host can carry a docker socket FILE that no daemon is listening on while
- * podman serves the real runtime, and testcontainers reads the stale file as
- * the answer rather than falling through. Probing reachability first, and
- * naming podman only when nothing answers on the docker socket, keeps
- * `pnpm check` green on either runtime with no env ritual - and keeps an
- * explicit DOCKER_HOST authoritative.
- */
+const reachable = (socketPath: string): Effect.Effect<boolean, never, never> =>
+  Effect.scoped(NodeSocket.makeNet({ path: socketPath, openTimeout: '1 seconds' })).pipe(
+    Effect.as(true),
+    Effect.catchCause(() => Effect.succeed(false)),
+    Effect.catchDefect(() => Effect.succeed(false)),
+  )
+
 const selectContainerRuntime = Effect.gen(function*() {
   if (dockerHost() !== undefined) return
-  if (yield* Effect.promise(() => reachable(DOCKER_SOCKET))) return
-  for (const candidate of podmanSockets()) {
-    if (yield* Effect.promise(() => reachable(candidate))) {
+  if (yield* reachable(DOCKER_SOCKET)) return
+  const path = yield* Path.Path
+  for (const candidate of podmanSockets(path)) {
+    if (yield* reachable(candidate)) {
       setDockerHost(`unix://${candidate}`)
       return
     }
   }
 })
 
-/**
- * Packing, starting and installing all happen here rather than in a suite hook
- * so the per-hook and per-test budgets stay small enough to catch a real hang.
- * Vitest bounds this function separately, and a failure here fails the run.
- * The setup is the harness boundary: an Effect program interpreted once
- * through the platform runtime, because vitest's hook API is promise-shaped.
- */
 export function setup(project: TestProject): Promise<void> {
-  return Effect.runPromise(
+  return runtime.runPromise(
     Effect.gen(function*() {
-      const distEntry = join(CLI_DIR, 'dist', 'main.mjs')
-      const distPresent = yield* Effect.promise(() =>
-        access(distEntry).then(
-          () => true,
-          () => false,
-        )
+      const path = yield* Path.Path
+      const fs = yield* FileSystem.FileSystem
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+      const resources = yield* ContractResources
+      const cliDir = yield* path.fromFileUrl(new URL('./', import.meta.url))
+      const fixturesDir = yield* path.fromFileUrl(new URL('./tests/__fixtures__/fixtures', import.meta.url))
+      const distEntry = path.join(cliDir, 'dist', 'main.mjs')
+      const distPresent = yield* fs.exists(distEntry).pipe(
+        Effect.catchCause(() => Effect.succeed(false)),
+        Effect.catchDefect(() => Effect.succeed(false)),
       )
       if (!distPresent) {
         return yield* Effect.die(
@@ -116,38 +125,33 @@ export function setup(project: TestProject): Promise<void> {
       }
 
       yield* selectContainerRuntime
-      yield* Effect.promise(() =>
-        getContainerRuntimeClient().catch((cause: unknown) => {
-          throw new Error(
+      yield* Effect.tryPromise({
+        try: () => getContainerRuntimeClient(),
+        catch: (cause: unknown) =>
+          new Error(
             `the CLI contract lane needs a container runtime, and DOCKER_HOST=${
               process.env['DOCKER_HOST'] ?? '<unset>'
-            } is not reachable - tried ${[DOCKER_SOCKET, ...podmanSockets()].join(', ')}`,
+            } is not reachable - tried ${[DOCKER_SOCKET, ...podmanSockets(path)].join(', ')}`,
             { cause },
-          )
-        })
-      )
-
-      const packDir = yield* Effect.promise(() => mkdtemp(join(tmpdir(), 'stryker-contract-')))
-      tarballDir = packDir
+          ),
+      }).pipe(Effect.orDie)
+      const packDir = yield* fs.makeTempDirectory({ prefix: 'stryker-contract-' })
+      yield* Ref.set(resources, { container: undefined, tarballDir: packDir })
       for (const workspacePackage of WORKSPACE_PACKAGES) {
-        yield* Effect.promise(() =>
-          execFileAsync(
-            'pnpm',
-            [
-              '--filter',
-              workspacePackage,
-              'exec',
-              'pnpm',
-              'pack',
-              '--config.ignore-scripts=true',
-              '--pack-destination',
-              packDir,
-            ],
-            { cwd: CLI_DIR },
-          )
-        )
+        const command = ChildProcess.make('pnpm', [
+          '--filter',
+          workspacePackage,
+          'exec',
+          'pnpm',
+          'pack',
+          '--config.ignore-scripts=true',
+          '--pack-destination',
+          packDir,
+        ]).pipe(ChildProcess.setCwd(cliDir))
+        yield* spawner.string(command).pipe(Effect.orDie)
       }
-      const packed = (yield* Effect.promise(() => readdir(packDir))).filter((entry) => entry.endsWith('.tgz'))
+      const entries = yield* fs.readDirectory(packDir)
+      const packed = entries.filter((entry) => entry.endsWith('.tgz'))
       if (packed.length !== WORKSPACE_PACKAGES.length) {
         return yield* Effect.die(
           new Error(
@@ -158,35 +162,39 @@ export function setup(project: TestProject): Promise<void> {
         )
       }
 
-      const startedContainer = yield* Effect.promise(() =>
-        new GenericContainer(NODE_IMAGE)
-          .withCopyFilesToContainer(
-            packed.map((name) => ({ source: join(packDir, name), target: `${TARBALLS_IN_CONTAINER}/${name}` })),
-          )
-          .withCopyDirectoriesToContainer([{ source: FIXTURES_DIR, target: `${WORKDIR}/fixtures` }])
-          .withCopyContentToContainer([{
-            content: WORKSPACE_MANIFEST,
-            target: `${WORKDIR}/package.json`,
-          }])
-          .withWorkingDir(WORKDIR)
-          .withCommand(['sleep', 'infinity'])
-          .start()
-      )
-      container = startedContainer
+      const startedContainer = yield* Effect.tryPromise({
+        try: () =>
+          new GenericContainer(NODE_IMAGE)
+            .withCopyFilesToContainer(
+              packed.map((name) => ({ source: path.join(packDir, name), target: `${TARBALLS_IN_CONTAINER}/${name}` })),
+            )
+            .withCopyDirectoriesToContainer([{ source: fixturesDir, target: `${WORKDIR}/fixtures` }])
+            .withCopyContentToContainer([{ content: WORKSPACE_MANIFEST, target: `${WORKDIR}/package.json` }])
+            .withWorkingDir(WORKDIR)
+            .withCommand(['sleep', 'infinity'])
+            .start(),
+        catch: (cause) => cause,
+      }).pipe(Effect.orDie)
+      yield* Ref.modify(resources, (state) => [
+        state.container,
+        { container: startedContainer, tarballDir: state.tarballDir },
+      ])
 
-      const installed = yield* Effect.promise(() =>
-        startedContainer.exec(
-          [
-            'npm',
-            'install',
-            '--no-audit',
-            '--no-fund',
-            '--loglevel=error',
-            ...packed.map((name) => `${TARBALLS_IN_CONTAINER}/${name}`),
-          ],
-          { workingDir: WORKDIR },
-        )
-      )
+      const installed = yield* Effect.tryPromise({
+        try: () =>
+          startedContainer.exec(
+            [
+              'npm',
+              'install',
+              '--no-audit',
+              '--no-fund',
+              '--loglevel=error',
+              ...packed.map((name) => `${TARBALLS_IN_CONTAINER}/${name}`),
+            ],
+            { workingDir: WORKDIR },
+          ),
+        catch: (cause) => cause,
+      }).pipe(Effect.orDie)
       if (installed.exitCode !== 0) {
         return yield* Effect.die(
           new Error(`installing the packed tarball failed with ${installed.exitCode}:\n${installed.output}`),
@@ -198,17 +206,12 @@ export function setup(project: TestProject): Promise<void> {
   )
 }
 
+/**
+ * Vitest invokes this once after the run (no arguments) and awaits it.
+ * Disposing the runtime closes its root scope, which runs the registered
+ * cleanup — container stop and tarball removal — uninterruptibly, with the
+ * services of that scope already in context.
+ */
 export function teardown(): Promise<void> {
-  return Effect.runPromise(
-    Effect.gen(function*() {
-      const started = container
-      if (started !== undefined) {
-        yield* Effect.promise(() => started.stop())
-      }
-      const packDir = tarballDir
-      if (packDir !== undefined) {
-        yield* Effect.promise(() => rm(packDir, { recursive: true, force: true }))
-      }
-    }),
-  )
+  return Effect.runPromise(Effect.ignore(Effect.promise(() => runtime.dispose())))
 }

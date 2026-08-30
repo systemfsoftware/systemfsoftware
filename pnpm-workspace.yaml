@@ -34,6 +34,7 @@ catalog:
   "@std/toml": jsr:^1.0.11
   "@std/jsonc": jsr:^1.0.2
   "@std/path": jsr:^1.0.0
+  "@std/fs": jsr:^1.0.6
   "@testing-library/dom": ^10.4.1
   "@testing-library/jest-dom": ^7.0.0
   "@testing-library/react": ^16.3.2

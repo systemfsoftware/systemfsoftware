@@ -455,7 +455,7 @@ if (import.meta.vitest !== void 0) {
   const { describe, it } = await import('@systemfsoftware/effect-gherkin-spec')
   const { expect } = await import('vitest')
   const { FastCheck: fc } = await import('effect/testing')
-  const { isDeepStrictEqual } = await import('node:util')
+  const { Equal } = await import('effect')
   const Result = await import('effect/Result')
   const Option = await import('effect/Option')
   const CliError = await import('effect/unstable/cli/CliError')
@@ -574,19 +574,19 @@ if (import.meta.vitest !== void 0) {
     )
 
     it.prop('∀i_EmptyEnvMode_≡Unset', [modeInputArb], ([input]) =>
-      isDeepStrictEqual(
+      Equal.equals(
         resolveMode(toModeInput({ ...input, envMode: '' })),
         resolveMode(toModeInput({ ...input, envMode: undefined })),
       ))
 
     it.prop('∀i_EmptyAgent_≡Unset', [modeInputArb], ([input]) =>
-      isDeepStrictEqual(
+      Equal.equals(
         resolveMode(toModeInput({ ...input, agent: '' })),
         resolveMode(toModeInput({ ...input, agent: undefined })),
       ))
 
     it.prop('∀i_EmptyToolVariable_≡Absent', [modeInputArb], ([input]) =>
-      isDeepStrictEqual(
+      Equal.equals(
         resolveMode(toModeInput({ ...input, toolVars: { CLAUDECODE: '' } })),
         resolveMode(toModeInput({ ...input, toolVars: undefined })),
       ))
