@@ -22,43 +22,6 @@ export class WorkerMethodError extends S.TaggedError<WorkerMethodError>()('Worke
   stack: Wire.mint(S.optional(Wire.mint(S.String))),
 }) {}
 
-// Node net.AddressInfo | string | null — OS-provided socket address foreign to workspace
-const SocketAddress = Wire.mint(S.Unknown)
-
-/**
- * The parent bound its IPC socket but the OS did not give it a TCP address.
- */
-export class WorkerSocketNotTcpError extends S.TaggedError<WorkerSocketNotTcpError>()(
-  'WorkerSocketNotTcpError',
-  {
-    address: SocketAddress,
-  },
-) {}
-
-/**
- * The worker process never connected back within the window.
- */
-export class WorkerConnectTimeoutError extends S.TaggedError<WorkerConnectTimeoutError>()(
-  'WorkerConnectTimeoutError',
-  {
-    modulePath: Wire.mint(S.String),
-    waitedMs: Wire.mint(S.Finite),
-  },
-) {}
-
-// Node.js server listen error — OS-provided Error shape foreign to workspace
-const ListenCause = Wire.mint(S.Unknown)
-
-/**
- * The parent could not bind its IPC socket.
- */
-export class WorkerSocketListenFailed extends S.TaggedError<WorkerSocketListenFailed>()(
-  'WorkerSocketListenFailed',
-  {
-    cause: ListenCause,
-  },
-) {}
-
 // ---------------------------------------------------------------------------
 // Process exit — crash discriminants
 // ---------------------------------------------------------------------------

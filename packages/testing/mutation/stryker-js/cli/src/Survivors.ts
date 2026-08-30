@@ -5,22 +5,11 @@
  * pipeline for --survivors runs. Pure admission decision lives in
  * Survivors.workflow.ts.
  */
+import { NodeFileSystem, NodePath } from '@effect/platform-node'
 import { sha256 } from '@noble/hashes/sha256'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils'
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import * as Context from 'effect/Context'
-import * as Effect from 'effect/Effect'
-import * as FileSystem from 'effect/FileSystem'
-import { pipe } from 'effect/Function'
-import * as Match from 'effect/Match'
-import * as Path from 'effect/Path'
-import * as Ref from 'effect/Ref'
-import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
-import { resolve as resolvePath } from 'node:path'
-import { PriorReportDocument as PriorReportDocumentSchema } from './Survivors.workflow.js'
-export type PriorReportDocument = S.Schema.Type<typeof PriorReportDocumentSchema>
-export type PriorReportMutant = PriorReportDocument['files'][string]['mutants'][number]
+import { nodeModuleLayer } from '@systemfsoftware/stryker-js-platform-node'
 import {
   ConfigFileUnreadableError,
   readConfig,
@@ -33,9 +22,22 @@ import type {
   ResolvedMode,
 } from '@systemfsoftware/stryker-js-platform-node'
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
+import { Module } from '@systemfsoftware/stryker-js/Module'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import { schema } from '@systemfsoftware/stryker-js/Mutant'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
+import { pipe } from 'effect/Function'
+import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
+import * as Path from 'effect/Path'
+import * as Ref from 'effect/Ref'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+import { PriorReportDocument as PriorReportDocumentSchema } from './Survivors.workflow.js'
+export type PriorReportDocument = S.Schema.Type<typeof PriorReportDocumentSchema>
+export type PriorReportMutant = PriorReportDocument['files'][string]['mutants'][number]
 import { emitNullScoreVerdict } from './Output.js'
 import type { RunEventStream } from './Output.js'
 import type { StrykerRun } from './StrykerRun.js'
@@ -231,10 +233,7 @@ export function survivorMutateSpans(survivors: readonly Mutant[], basePath: stri
 
 /** The exit class a rejected survivors run exits with (R6: exit 2). */
 export const SURVIVORS_REJECT_EXIT_CLASS: ExitClass = 'ConfigError'
-
 const hashContent: HashContent = (content) => bytesToHex(sha256(utf8ToBytes(content)))
-
-const resolveAbsolutePath: ResolveAbsolutePath = (file) => resolvePath(file)
 
 /**
  * The phases of the survivors admission, in one bag so the chain's order is
@@ -248,15 +247,11 @@ interface AdmissionPhases extends Cell.Phases {
   readonly command: PartialStrykerOptions
   readonly raw: {
     readonly resolvedOptions: StrykerOptions
-    /**
-     * The prior report exactly as it came off disk, undecoded. `undefined` means no
-     * report was there to read; a value that is present but malformed is the decode
-     * phase's problem, not the read's, so nothing validates it here.
-     */
     readonly priorReportRaw: unknown
     readonly priorReportFound: boolean
     readonly priorReportPath: string
     readonly sourceContentHashes: Readonly<Record<string, string>>
+    readonly resolveAbsolutePath: ResolveAbsolutePath
   }
   readonly decoded: AdmitSurvivorsRunCommand
   readonly decision: SurvivorsAdmission
@@ -297,57 +292,57 @@ const survivorsAdmissionDescription = (
   mode: ResolvedMode,
   runContext: Ref.Ref<AdmissionRunContext | undefined>,
   basePath: string,
-  services: Context.Context<FileSystem.FileSystem | Path.Path>,
 ): Cell.WriteDone<AdmissionPhases> =>
   pipe(
     Cell.read<AdmissionPhases>((cliOptions) =>
-      Effect.provideContext(
-        Effect.flatMap(Path.Path, (pathService) =>
-          resolveSurvivorsRunOptions(cliOptions, basePath).pipe(
-            Effect.flatMap((resolvedOptions) => {
-              const priorReportPath = priorReportPathOf(resolvedOptions)
-              return Effect.flatMap(readPriorReport(priorReportPath), (read) =>
-                Effect.flatMap(currentSourceHashesFor(priorReportFileKeys(read.raw)), (sourceContentHashes) =>
-                  Ref.set(runContext, { resolvedOptions, priorReportPath, pathService }).pipe(
-                    Effect.as({
-                      resolvedOptions,
-                      priorReportRaw: read.raw,
-                      priorReportFound: read.found,
-                      priorReportPath,
-                      sourceContentHashes,
-                    }),
-                  )))
-            }),
-          )),
-        services,
-      )
+      Effect.flatMap(Path.Path, (pathService) =>
+        resolveSurvivorsRunOptions(cliOptions, basePath).pipe(
+          Effect.flatMap((resolvedOptions) => {
+            const priorReportPath = priorReportPathOf(resolvedOptions)
+            const resolveAbsolutePath: ResolveAbsolutePath = (file) => pathService.resolve(file)
+            return Effect.flatMap(readPriorReport(priorReportPath), (read) =>
+              Effect.flatMap(currentSourceHashesFor(priorReportFileKeys(read.raw)), (sourceContentHashes) =>
+                Ref.set(runContext, { resolvedOptions, priorReportPath, pathService }).pipe(
+                  Effect.as({
+                    resolvedOptions,
+                    priorReportRaw: read.raw,
+                    priorReportFound: read.found,
+                    priorReportPath,
+                    sourceContentHashes,
+                    resolveAbsolutePath,
+                  }),
+                )))
+          }),
+        )).pipe(Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, nodeModuleLayer)))
     ),
-    Cell.decode<AdmissionPhases>(({ resolvedOptions, priorReportRaw, priorReportFound, sourceContentHashes }) => {
-      if (!priorReportFound) {
-        return Result.succeed(
+    Cell.decode<AdmissionPhases>(
+      ({ resolvedOptions, priorReportRaw, priorReportFound, sourceContentHashes, resolveAbsolutePath }) => {
+        if (!priorReportFound) {
+          return Result.succeed(
+            AdmitSurvivorsRunCommand.make({
+              priorReport: undefined,
+              currentConfig: resolvedOptions,
+              frameworkVersion: strykerVersion,
+              sourceContentHashes,
+              priorSourceHashes: {},
+              priorSurvivors: [],
+            }),
+          )
+        }
+        return Result.map(decodePriorReport(priorReportRaw), (document) =>
           AdmitSurvivorsRunCommand.make({
-            priorReport: undefined,
+            priorReport: PriorReportFacts.make({
+              config: document.config ?? {},
+              frameworkVersion: document.framework?.version,
+            }),
             currentConfig: resolvedOptions,
             frameworkVersion: strykerVersion,
             sourceContentHashes,
-            priorSourceHashes: {},
-            priorSurvivors: [],
-          }),
-        )
-      }
-      return Result.map(decodePriorReport(priorReportRaw), (document) =>
-        AdmitSurvivorsRunCommand.make({
-          priorReport: PriorReportFacts.make({
-            config: document.config ?? {},
-            frameworkVersion: document.framework?.version,
-          }),
-          currentConfig: resolvedOptions,
-          frameworkVersion: strykerVersion,
-          sourceContentHashes,
-          priorSourceHashes: priorSourceHashes(document, hashContent),
-          priorSurvivors: extractSurvivors(document, resolveAbsolutePath),
-        }))
-    }),
+            priorSourceHashes: priorSourceHashes(document, hashContent),
+            priorSurvivors: extractSurvivors(document, resolveAbsolutePath),
+          }))
+      },
+    ),
     Cell.decide<AdmissionPhases>(admitSurvivorsRun),
     Cell.encode<AdmissionPhases>((outcome) => outcome),
     Cell.write<AdmissionPhases>((outcome) =>
@@ -415,10 +410,9 @@ export function runSurvivorsAdmission(
   FileSystem.FileSystem | Path.Path
 > {
   return Effect.gen(function*() {
-    const services = yield* Effect.context<FileSystem.FileSystem | Path.Path>()
     const admissionContext = yield* Ref.make<AdmissionRunContext | undefined>(undefined)
     return yield* Cell.apply(
-      survivorsAdmissionDescription(runMutationTest, stream, mode, admissionContext, basePath, services),
+      survivorsAdmissionDescription(runMutationTest, stream, mode, admissionContext, basePath),
       cliOptions,
     )
   })
@@ -430,7 +424,7 @@ function resolveSurvivorsRunOptions(
 ): Effect.Effect<
   StrykerOptions,
   ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError,
-  FileSystem.FileSystem | Path.Path
+  FileSystem.FileSystem | Module | Path.Path
 > {
   return readConfig(cliOptions, basePath)
 }

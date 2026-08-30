@@ -1,20 +1,3 @@
-/**
- * Turning a run's results into reports — file reports, stdout summaries, and
- * the machine-mode progress stream.
- *
- * Two outputs share one shape: a pure decision (what to write) and an impure
- * edge (where to write it). The decision lives in `Reporter.workflow.ts` so
- * `Workflow.make` stays behind its gate; the edge — `FileSystem`, `Path`,
- * `process.stdout`, and the `ReporterService` dispatcher — lives here.
- * Progress tracking is split the same way: `ProgressTally` is the state,
- * `progress-bar` formatting is the view, and the three reporter factories
- * (`clear-text`, `json`, `progress`) are the wiring that the engine selects
- * via `selectReporters` and fans out through `MutationReporting`.
- */
-
-import os from 'os'
-import { pathToFileURL } from 'url'
-
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { type CheckResult, type CheckStatus, type PassedCheckResult } from '@systemfsoftware/stryker-js/Checker'
 import type {
@@ -327,7 +310,7 @@ export const makeClearTextReporter = (params: {
     Cell.write<ClearTextReportPhases>((output) =>
       Effect.gen(function*() {
         for (const line of output.stdout) {
-          out.write(`${line}${os.EOL}`)
+          out.write(`${line}\n`)
         }
         for (const line of output.debug) {
           yield* Effect.logDebug(line)
@@ -411,7 +394,8 @@ export const makeJsonReporter = (params: {
         const filePath = path.normalize(options.jsonReporter.fileName)
         yield* Effect.logDebug(`Using relative path ${filePath}`)
         yield* writeOutputFile(fs, path, path.resolve(filePath), json)
-        yield* Effect.logInfo(`Your report can be found at: ${pathToFileURL(filePath).href}`)
+        const url = yield* path.toFileUrl(path.resolve(filePath)).pipe(Effect.orDie)
+        yield* Effect.logInfo(`Your report can be found at: ${url.href}`)
       })
     ),
   )

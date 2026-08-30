@@ -13,6 +13,7 @@ export default defineConfig({
     Run: './src/Run.ts',
     Evaluator: './src/Evaluator.ts',
     ExitClass: './src/ExitClass.ts',
+    Module: './src/Module.ts',
     'provided-options': './src/provided-options.ts',
     'output-file': './src/output-file.ts',
   },

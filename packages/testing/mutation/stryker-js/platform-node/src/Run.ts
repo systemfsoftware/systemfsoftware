@@ -6,6 +6,7 @@ import type { File as InstrumenterFile } from '@systemfsoftware/stryker-js-instr
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import type { IgnorerService } from '@systemfsoftware/stryker-js/Ignorer'
 import { Ignorer } from '@systemfsoftware/stryker-js/Ignorer'
+import { Module } from '@systemfsoftware/stryker-js/Module'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import type { MutantResult } from '@systemfsoftware/stryker-js/Mutant'
 import type { MutantTestCoverage } from '@systemfsoftware/stryker-js/Mutant'
@@ -37,6 +38,7 @@ import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
@@ -58,6 +60,7 @@ import { REMEMBERED_REASON, toRelativeNormalizedFileName } from './IncrementalDi
 import { decidePlans, incrementalDiff } from './Mutants.js'
 import type { TestCoverage } from './Mutants.js'
 import { testCoverageFrom } from './Mutants.js'
+import { nodeModuleLayer } from './NodeModule.js'
 import type { ResolvedMode } from './output-mode.js'
 import { createAll } from './Plugins.js'
 import { loadPlugins } from './Plugins.js'
@@ -340,7 +343,7 @@ const makeCheckerPool = (
 ): Effect.Effect<
   Pool.Pool<CheckerResourceService, unknown> | undefined,
   never,
-  Scope.Scope | ChildProcessSpawner.ChildProcessSpawner
+  Scope.Scope | ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
 > =>
   Effect.gen(function*() {
     if (prev.options.checkers.length === 0) {
@@ -387,7 +390,7 @@ const resolveReporterService = <E>(
     const ctx = yield* Layer.build(layerOpt.value).pipe(
       Effect.provideService(RunConfiguration, options),
       Effect.provideService(SandboxDirectory, directory),
-      Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+      Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, nodeModuleLayer)),
     )
     const maybeReporter = Context.getOption(ctx, Reporter)
     if (Option.isNone(maybeReporter)) {
@@ -442,16 +445,16 @@ interface PreparePhases extends Cell.Phases {
  * bag members this replaced could do neither: inside a body generic over `Phases` the compiler
  * cannot see what the lambda reached for, so `never` was accepted for all eight of these.
  */
-type StageServices =
+export type StageServices =
   | ChildProcessSpawner.ChildProcessSpawner
   | FileSystem.FileSystem
   | IdGenerator
+  | Module
   | Path.Path
   | RunEnvironment
   | RunEvents
   | Scope.Scope
-
-export const prepareLayer = (services: Context.Context<StageServices>): Cell.WriteDone<PreparePhases> => {
+export const prepareLayer = (run: Layer.Layer<StageServices>): Cell.WriteDone<PreparePhases> => {
   const description = pipe(
     Cell.read<PreparePhases>(
       (command) =>
@@ -578,7 +581,7 @@ export const prepareLayer = (services: Context.Context<StageServices>): Cell.Wri
             ignorers,
           }
           return raw
-        }).pipe(Effect.provideContext(services)),
+        }).pipe(Effect.provide(run)),
     ),
     Cell.decode<PreparePhases>((raw) =>
       // Constructed, not decoded from a bare object literal. `PrepareCommand` is a
@@ -612,7 +615,7 @@ export const prepareLayer = (services: Context.Context<StageServices>): Cell.Wri
           options: raw.options,
           temporaryDirectoryPath: raw.temporaryDirectoryPath,
         }
-      }).pipe(Effect.provideContext(services))
+      }).pipe(Effect.provide(run))
     ),
   )
   return description
@@ -641,7 +644,7 @@ interface InstrumentPhases extends Cell.Phases {
 }
 
 export const instrumentLayer = (
-  services: Context.Context<StageServices>,
+  run: Layer.Layer<StageServices>,
 ): Cell.WriteDone<InstrumentPhases> => {
   const description = pipe(
     Cell.read<InstrumentPhases>(
@@ -702,7 +705,7 @@ export const instrumentLayer = (
             concurrency,
           }
           return raw
-        }).pipe(Effect.provideContext(services)),
+        }).pipe(Effect.provide(run)),
     ),
     Cell.decode<InstrumentPhases>((raw) =>
       // Constructed, not decoded: `InstrumentCommand` is a `TaggedClass`, and a bare object
@@ -740,7 +743,7 @@ export const instrumentLayer = (
             checkers: raw.concurrency.checkers,
           },
         }
-      }).pipe(Effect.provideContext(services))
+      }).pipe(Effect.provide(run))
     ),
   )
 
@@ -768,7 +771,7 @@ interface DryRunPhases extends Cell.Phases {
   readonly writeError: StageError
 }
 
-export const dryRunLayer = (services: Context.Context<StageServices>): Cell.WriteDone<DryRunPhases> => {
+export const dryRunLayer = (run: Layer.Layer<StageServices>): Cell.WriteDone<DryRunPhases> => {
   const description = pipe(
     Cell.read<DryRunPhases>(
       (command) =>
@@ -852,7 +855,7 @@ export const dryRunLayer = (services: Context.Context<StageServices>): Cell.Writ
             reporterService,
           }
           return raw
-        }).pipe(Effect.provideContext(services)),
+        }).pipe(Effect.provide(run)),
     ),
     Cell.decode<DryRunPhases>((raw) => {
       const rawResult = raw.rawResult
@@ -957,7 +960,7 @@ export const dryRunLayer = (services: Context.Context<StageServices>): Cell.Writ
           testCoverage,
           timeOverhead: overhead,
         }
-      }).pipe(Effect.provideContext(services))
+      }).pipe(Effect.provide(run))
     ),
   )
 
@@ -965,7 +968,7 @@ export const dryRunLayer = (services: Context.Context<StageServices>): Cell.Writ
 }
 
 export const mutationTestRun =
-  (services: Context.Context<StageServices>) => (command: DryRunDone): Effect.Effect<RunOutcome, unknown, never> =>
+  (run: Layer.Layer<StageServices>) => (command: DryRunDone): Effect.Effect<RunOutcome, unknown, never> =>
     Effect.gen(function*() {
       const prev = toDryRunDone(command)
       yield* Scope.Scope
@@ -1185,32 +1188,49 @@ export const mutationTestRun =
       yield* Effect.logInfo(`Done in ${Duration.format(elapsed)}.`)
       const finalOutcome: RunOutcome = outcomeResult
       return finalOutcome
-    }).pipe(Effect.provideContext(services))
+    }).pipe(Effect.provide(run))
 
 // ── makeRunLayer & runMutationTest ───────────────────────────────────────
 
 export const makeRunLayer = (
   env: RunEnvironmentShape,
+  events?: Queue.Queue<RunEvent, Cause.Done>,
 ): Layer.Layer<
   | RunEnvironment
   | RunEvents
   | FileSystem.FileSystem
   | Path.Path
   | IdGenerator
-  | ChildProcessSpawner.ChildProcessSpawner,
+  | Module
+  | ChildProcessSpawner.ChildProcessSpawner
+  | Scope.Scope,
   never,
   never
-> =>
-  Layer.mergeAll(
+> => {
+  const eventsLayer: Layer.Layer<RunEvents> = Match.value(events).pipe(
+    Match.when(undefined, () => Layer.effect(RunEvents, Queue.unbounded<RunEvent, Cause.Done>())),
+    Match.orElse((queue) => Layer.succeed(RunEvents, queue)),
+  )
+  return Layer.mergeAll(
     Layer.succeed(RunEnvironment, env),
-    Layer.effect(RunEvents, Queue.unbounded<RunEvent, Cause.Done>()),
+    eventsLayer,
     NodeFileSystem.layer,
     NodePath.layer,
+    nodeModuleLayer,
     idGeneratorLayer,
     NodeChildProcessSpawner.layer.pipe(
       Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
     ),
+    Layer.effect(
+      Scope.Scope,
+      Effect.gen(function*() {
+        const stageScope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(stageScope, Exit.void))
+        return stageScope
+      }),
+    ),
   )
+}
 
 /**
  * The run, as four stages applied in order.
@@ -1225,29 +1245,27 @@ export const makeRunLayer = (
  */
 export const runMutationTest = (
   cliOptions: PartialStrykerOptions,
+  run: Layer.Layer<StageServices>,
   targetMutatePatterns?: string[],
-): Effect.Effect<RunOutcome, StageError, StageServices> =>
+): Effect.Effect<RunOutcome, StageError> =>
   Effect.gen(function*() {
     const args: PrepareExecutorArgs = { cliOptions, targetMutatePatterns }
-    // Resolved once, here, because a phase requires nothing and every stage's phases run
-    // against whatever this hands them.
-    const services = yield* Effect.context<StageServices>()
     // Each stage declares its own `Phases`, so `apply` returns that stage's own `response`.
     // The converters stay because they also check the shape at runtime, which is what caught
     // the missing command threading.
     const prepared: PrepareDone = toPrepareDone(
-      yield* Cell.apply(prepareLayer(services), args),
+      yield* Cell.apply(prepareLayer(run), args),
     )
     const instrumented: InstrumentDone = toInstrumentDone(
-      yield* Cell.apply(instrumentLayer(services), prepared),
+      yield* Cell.apply(instrumentLayer(run), prepared),
     )
     const dried: DryRunDone = toDryRunDone(
-      yield* Cell.apply(dryRunLayer(services), instrumented),
+      yield* Cell.apply(dryRunLayer(run), instrumented),
     )
     // This stage's write drives the checker and test-runner pools, whose `Pool.get` failures
     // are not narrowed, so its error channel is honestly `unknown`. Naming the failure here is
     // what lets this function keep a declared error type; the alternative was asserting one.
-    return yield* mutationTestRun(services)(dried).pipe(
+    return yield* mutationTestRun(run)(dried).pipe(
       Effect.mapError((cause) => {
         if (cause instanceof StageError) {
           return cause

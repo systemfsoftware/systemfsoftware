@@ -9,6 +9,7 @@ import * as Path from 'effect/Path'
 import { Checker } from './Checker.js'
 import type { Evaluator } from './Evaluator.js'
 import { Ignorer } from './Ignorer.js'
+import { Module } from './Module.js'
 import { PluginContribution, PluginKind, Shadowing } from './Plugin.schema.js'
 import { Reporter } from './Reporter.js'
 import type { ReporterService } from './Reporter.js'
@@ -36,7 +37,7 @@ export interface PluginInterfaces {
   Ignore: Ignorer
   Evaluator: Evaluator
 }
-export type PluginEnvironment = RunConfiguration | SandboxDirectory | FileSystem.FileSystem | Path.Path
+export type PluginEnvironment = RunConfiguration | SandboxDirectory | FileSystem.FileSystem | Module | Path.Path
 
 export type AnyPluginContribution = { [K in PluginKind]: PluginContribution<K> }[PluginKind]
 

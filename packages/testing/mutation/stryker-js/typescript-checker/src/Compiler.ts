@@ -5,7 +5,6 @@
  * All `typescript/unstable/*` interaction is confined here; callers consume
  * only the Effect-typed service surface.
  */
-import { createRequire } from 'module'
 
 import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
@@ -43,13 +42,16 @@ function getSourceMappingURL(content: string): string | undefined {
 
 let cachedTSVersion: string | undefined
 
-export const getTSVersion = (fsService: FileSystem.FileSystem): Effect.Effect<string, unknown> =>
+export const getTSVersion = (
+  fsService: FileSystem.FileSystem,
+  pathService: Path.Path,
+): Effect.Effect<string, unknown> =>
   Effect.gen(function*() {
     if (cachedTSVersion !== undefined) {
       return cachedTSVersion
     }
-    const require = createRequire(import.meta.url)
-    const pkgPath = require.resolve('typescript/package.json')
+    const urlString = import.meta.resolve('typescript/package.json')
+    const pkgPath = yield* pathService.fromFileUrl(new URL(urlString))
     const text = yield* fsService.readFileString(pkgPath)
     const raw: unknown = JSON.parse(text)
     let version = ''
@@ -83,9 +85,12 @@ export function isSupportedTypescriptVersion(version: string): boolean {
   return patch >= 0
 }
 
-export const guardTSVersion = (fsService: FileSystem.FileSystem): Effect.Effect<void, unknown> =>
+export const guardTSVersion = (
+  fsService: FileSystem.FileSystem,
+  pathService: Path.Path,
+): Effect.Effect<void, unknown> =>
   Effect.gen(function*() {
-    const version = yield* getTSVersion(fsService)
+    const version = yield* getTSVersion(fsService, pathService)
     if (!isSupportedTypescriptVersion(version)) {
       return yield* new UnsupportedTypeScriptVersionError({ version })
     }
@@ -803,7 +808,7 @@ export function makeTypescriptCompiler(
     })
 
   const init: Effect.Effect<readonly Diagnostic[], unknown> = Effect.gen(function*() {
-    yield* guardTSVersion(fsService)
+    yield* guardTSVersion(fsService, pathService)
     const absoluteTsconfigFile = normalizeFileName(pathService.resolve(rawTsconfigFile))
     yield* Ref.update(
       stateRef,

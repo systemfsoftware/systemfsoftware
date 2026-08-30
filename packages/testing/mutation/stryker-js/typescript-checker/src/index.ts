@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs'
+import rawSchemaJson from '../schema/typescript-checker-options.json' with { type: 'json' }
 
 import { Checker } from '@systemfsoftware/stryker-js/Checker'
 import { declarePlugin } from '@systemfsoftware/stryker-js/Plugin'
@@ -30,9 +30,7 @@ export const strykerPlugins = [
   ),
 ]
 
-const rawSchema: unknown = JSON.parse(
-  readFileSync(new URL('../schema/typescript-checker-options.json', import.meta.url), 'utf-8'),
-)
+const rawSchema: unknown = rawSchemaJson
 if (!S.is(S.Record(S.String, S.Unknown))(rawSchema)) {
   throw new Error('Invalid typescript-checker schema file')
 }
