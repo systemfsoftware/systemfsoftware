@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/stryker-js-vitest-runner",
-  "version": "2.0.2",
+  "version": "2.1.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
@@ -55,11 +55,11 @@
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
-    "@systemfsoftware/stryker-js-platform-node": "workspace:^",
     "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/stryker-js-platform-node": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
