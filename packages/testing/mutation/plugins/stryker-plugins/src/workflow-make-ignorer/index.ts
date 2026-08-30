@@ -6,6 +6,7 @@ import * as Option from 'effect/Option'
 import { ancestorsOf, type IgnorerPath } from '../AncestorPath.js'
 import { decideWorkflowMakeBoundaryIgnore, NOT_INSIDE_WORKFLOW_MAKE } from './MakeBoundaryIgnore.js'
 
+/** @public */
 export const strykerPlugins = [
   declarePlugin(
     'Ignore',

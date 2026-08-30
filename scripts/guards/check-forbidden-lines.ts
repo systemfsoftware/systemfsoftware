@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run --allow-read --allow-run=git
 
-const PROTECTED_RULE_IDS: readonly string[] = ['make-command-schema']
+const PROTECTED_RULE_IDS: readonly string[] = ['make-command-schema', 'tests-import-public-api']
 const DISABLE_DIRECTIVE = /(?:oxlint|eslint)-disable(?:-next-line|-line)?/
 const DIRECTIVE_WITH_TAIL = /(?:oxlint|eslint)-disable(?:-next-line|-line)?([^\n]*)/
 
@@ -117,6 +117,8 @@ const selftest = (): number => {
     '// oxlint-disable',
     '/* eslint-disable */',
     '// oxlint-disable -- the whole file is generated',
+    '// oxlint-disable-next-line tests-import-public-api',
+    '// eslint-disable @systemfsoftware/oxlint-plugin-effect-dmmf/tests-import-public-api -- legacy lane',
   ]
   const mustIgnoreSuppression: readonly string[] = [
     '// oxlint-disable-next-line no-console',

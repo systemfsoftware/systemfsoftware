@@ -7,8 +7,10 @@ import * as Path from 'effect/Path'
 
 import { makeHtmlReporter } from './Reporter.js'
 
+/** @public */
 export { makeHtmlReporter } from './Reporter.js'
 
+/** @public */
 export const strykerPlugins = [
   declarePlugin(
     'Reporter',

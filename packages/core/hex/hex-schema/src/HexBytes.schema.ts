@@ -10,6 +10,7 @@ import { Schema as S } from 'effect'
  * S.decodeTo(HexBytes)(ColonHex)         // Schema<Uint8Array, string>
  * ```
  */
+/** @public */
 export const HexBytes = S.Uint8ArrayFromHex.pipe(
   S.annotate({
     identifier: 'HexBytes',

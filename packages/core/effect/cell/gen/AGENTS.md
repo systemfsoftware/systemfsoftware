@@ -65,7 +65,7 @@ rules:
       generator's own input cannot catch any of those
     check: "`pnpm --filter @systemfsoftware/effect-cell-gen test` exits 0 with both
       properties running, and the expectations in
-      `src/__tests__/drawn-decision.workflow.property.test.ts` read only the drawn value"
+      `src/__tests__/DrawnDecision.workflow.property.test.ts` read only the drawn value"
 ```
 
 ## Verification

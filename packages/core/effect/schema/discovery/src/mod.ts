@@ -3,6 +3,7 @@ import { extname, join, resolve } from 'node:path'
 import { findExportedSchemaNames } from './internal/schema-names.js'
 
 /**
+ * @public
  * @since 0.1.0
  */
 export interface FoundSchema {
@@ -14,6 +15,7 @@ export interface FoundSchema {
  * A schema is identified by the module that declares it *and* its exported
  * name. Two modules exporting the same name are two different schemas.
  *
+ * @public
  * @since 0.1.0
  */
 export const identityOf = (filePath: string, name: string): string => `${resolve(filePath)}#${name}`
@@ -22,6 +24,7 @@ export const identityOf = (filePath: string, name: string): string => `${resolve
  * A single-quoted TypeScript literal. Every quoted value the suite emits is
  * single-quoted, so this is the only quoting the package owns.
  *
+ * @public
  * @since 0.1.0
  */
 export const quote = (value: string): string => `'${value.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
@@ -30,6 +33,7 @@ export const quote = (value: string): string => `'${value.replace(/\\/g, '\\\\')
  * Walk a directory and return every exported const whose type annotation
  * or initializer mentions `Schema`.
  *
+ * @public
  * @since 0.1.0
  */
 export function findExportedSchemas(dir: string): FoundSchema[] {

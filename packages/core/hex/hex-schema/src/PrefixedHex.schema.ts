@@ -3,6 +3,7 @@ import { type Brand, Schema as S, SchemaTransformation } from 'effect'
 import { addHexPrefix, stripHexPrefix } from './PrefixedHex.js'
 import { StrictHex } from './StrictHex.schema.js'
 
+/** @public */
 export const PrefixedHex = S.TemplateLiteral(['0x', S.String]).pipe(
   S.decodeTo(
     StrictHex,
@@ -18,6 +19,7 @@ export const PrefixedHex = S.TemplateLiteral(['0x', S.String]).pipe(
   }),
   S.brand('PrefixedHex'),
 )
+/** @public */
 export type PrefixedHex = S.Schema.Type<typeof PrefixedHex>
 
 const decode = S.decodeUnknownExit(PrefixedHex)

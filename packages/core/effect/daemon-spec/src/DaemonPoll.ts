@@ -27,6 +27,7 @@ type PollShape<W, D, WE, WR> =
     readonly prereq?: undefined
   }
 
+/** @public */
 export const poll = <
   W extends Effect.Effect<unknown, WE, WR>,
   D,

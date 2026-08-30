@@ -43,4 +43,5 @@ export interface FileHandle {
   close(): Promise<void>
 }
 
+/** @public */
 export type Contents = memfs.DirectoryJSON

@@ -3,6 +3,7 @@ import { cappedBackoff } from './Backoff.js'
 import { BoundedIntensity } from './DaemonPolicy.schema.js'
 import type { SupervisionConfig } from './DaemonSpec.schema.js'
 
+/** @public */
 export const WorkerConfig = Context.Reference<SupervisionConfig>(
   '@systemfsoftware/effect-daemon-spec/WorkerConfig',
   {
@@ -14,6 +15,7 @@ export const WorkerConfig = Context.Reference<SupervisionConfig>(
   },
 )
 
+/** @public */
 export const worker = <
   INTENSITY,
   COOLDOWN extends Duration.Input,

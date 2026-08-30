@@ -5,10 +5,13 @@
  * `stdoutIsTTY`) ride along in `VerdictEnvelope` (`verdict-envelope.ts`),
  * so the types stay where the data does.
  */
+/** @public */
 export type OutputMode = 'human' | 'machine'
 
+/** @public */
 export type ModeSignal = 'flag' | 'env' | 'tty' | 'agent' | 'tool'
 
+/** @public */
 export interface ResolvedMode {
   readonly mode: OutputMode
   readonly signal: ModeSignal

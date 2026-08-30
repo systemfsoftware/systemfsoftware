@@ -4,10 +4,10 @@
 
 ```ts
 
+// Warning: (ae-forgotten-export) The symbol "Gen_d_exports" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export namespace Gen {
-    export { Bag, DescriptionCase, DrawnFailure, description };
-}
+export const Gen: typeof Gen_d_exports;
 
 // (No @packageDocumentation comment for this package)
 

@@ -1,5 +1,6 @@
 import { Duration, Effect, Schedule } from 'effect'
 
+/** @public */
 export const cappedBackoff = (
   base: Duration.Input,
   cap: Duration.Input,

@@ -6,6 +6,7 @@ import { allocateWorkerHealth } from './internal/AllocateWorkerHealth.js'
 import { buildWorkerLoop } from './internal/BuildWorkerLoop.js'
 import { type LockBinding, withLockByMode } from './internal/WithLockByModeExecutor.js'
 
+/** @public */
 export const worker = <E, R>(
   w: Worker<E, R, LockConfig>,
   binding: LockBinding,

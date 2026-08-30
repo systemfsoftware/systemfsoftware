@@ -3,7 +3,7 @@
   "extends": "@systemfsoftware/tsconfig/tsc/no-dom/library-monorepo",
   "compilerOptions": {
     "noEmit": true,
-    "types": ["node"],
+    "types": ["node", "vitest/importMeta"],
     "customConditions": ["@systemfsoftware/source"],
     // Host-adapter terminus: `pi.on` hands this plugin a Promise-returning callback API, so the
     // Effect-native tier (asyncFunction above all) cannot bind here. Same exemption class as the

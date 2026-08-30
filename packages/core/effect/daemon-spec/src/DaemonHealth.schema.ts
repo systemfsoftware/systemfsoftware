@@ -2,6 +2,7 @@
 import { Latch, Schema as S } from 'effect'
 import type { Effect } from 'effect'
 
+/** @public */
 export class DynamicLimitExceeded extends S.TaggedError<DynamicLimitExceeded>()(
   'DynamicLimitExceeded',
   { limit: S.Int.pipe(S.check(S.isGreaterThanOrEqualTo(0))) },
@@ -9,6 +10,7 @@ export class DynamicLimitExceeded extends S.TaggedError<DynamicLimitExceeded>()(
 
 const decode = S.decodeUnknownExit(DynamicLimitExceeded)
 
+/** @public */
 export interface DaemonHealth {
   readonly name: string
   readonly ready: Latch.Latch
@@ -16,6 +18,7 @@ export interface DaemonHealth {
   readonly paused: Latch.Latch
 }
 
+/** @public */
 export interface SupervisorHealth {
   readonly name: string
   readonly ready: Latch.Latch
@@ -24,6 +27,7 @@ export interface SupervisorHealth {
   readonly children: readonly (DaemonHealth | SupervisorHealth)[]
 }
 
+/** @public */
 export interface DynamicHandle<Args, R = never> {
   readonly health: SupervisorHealth
   readonly startChild: (args: Args) => Effect.Effect<ChildRef, DynamicLimitExceeded, R>
@@ -31,6 +35,7 @@ export interface DynamicHandle<Args, R = never> {
   readonly count: Effect.Effect<number>
 }
 
+/** @public */
 export type ChildRef = {
   readonly id: number
   readonly removed: Effect.Effect<void>

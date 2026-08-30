@@ -20,6 +20,7 @@ interface IgnorerPath {
   readonly parentPath?: IgnorerPath | null
 }
 
+/** @public */
 export const strykerPlugins = [
   declarePlugin(
     'Ignore',

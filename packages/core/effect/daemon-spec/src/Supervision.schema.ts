@@ -4,6 +4,7 @@ import type { ChildPolicyConfig } from './DaemonPolicy.schema.js'
 import type { SupervisionPolicy } from './DaemonSpec.schema.js'
 import type { IntensityTracker } from './internal/Intensity.js'
 
+/** @public */
 export interface BootedChild<R> {
   readonly name: string
   readonly health: DaemonHealth | SupervisorHealth
@@ -11,6 +12,7 @@ export interface BootedChild<R> {
   readonly childPolicy: ChildPolicyConfig
 }
 
+/** @public */
 export interface SupervisionContext<R> {
   readonly name: string
   readonly booted: readonly BootedChild<R>[]
@@ -21,6 +23,7 @@ export interface SupervisionContext<R> {
   readonly intensityEff: Effect.Effect<IntensityTracker>
 }
 
+/** @public */
 export type Supervision<R> = Effect.Effect<
   void,
   never,

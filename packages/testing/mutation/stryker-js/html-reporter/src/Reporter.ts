@@ -42,6 +42,7 @@ interface HtmlReportPhases extends Cell.Phases {
   readonly writeError: PlatformError
 }
 
+/** @public */
 export const makeHtmlReporter = (params: {
   readonly options?: ProvidedStrykerOptions
   readonly fs: FileSystem.FileSystem

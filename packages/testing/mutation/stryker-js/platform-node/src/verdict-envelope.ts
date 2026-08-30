@@ -18,6 +18,7 @@ const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\'
  * here are pure over the report — no I/O side effects, no randomness except
  * inside `generateRunId`.
  */
+/** @public */
 export const VERDICT_ENVELOPE_SCHEMA_VERSION = '1.1'
 
 /**
@@ -30,11 +31,13 @@ export const VERDICT_ENVELOPE_SCHEMA_VERSION = '1.1'
  * zero actionable entries. This is the single definition of the R20 filter,
  * shared with the progress stream.
  */
+/** @public */
 export const ACTIONABLE_STATUSES = ['Survived', 'NoCoverage', 'Timeout', 'RuntimeError'] as const
 
 /**
  * Whether `status` is actionable (R20) — one of `ACTIONABLE_STATUSES`.
  */
+/** @public */
 export function isActionableStatus(status: MutantStatus): boolean {
   return ACTIONABLE_STATUSES.some((actionable) => actionable === status)
 }
@@ -44,6 +47,7 @@ export function isActionableStatus(status: MutantStatus): boolean {
  * key; `location`/`mutator`/`replacement` are exactly the survivor re-run
  * matching key (R10/R11).
  */
+/** @public */
 export interface VerdictMutant {
   readonly id: string
   readonly file: string
@@ -57,12 +61,14 @@ export interface VerdictMutant {
  * The configured thresholds. `break` rides along even though the report
  * schema does not declare it — it is the threshold the exit code depends on.
  */
+/** @public */
 export interface VerdictThresholds {
   readonly high: number
   readonly low: number
   readonly break: number | null
 }
 
+/** @public */
 export interface VerdictCounts {
   readonly killed: number
   readonly timeout: number
@@ -80,6 +86,7 @@ export interface VerdictCounts {
  * written. `mutants` is bounded to `ACTIONABLE_STATUSES` (R20) — see that
  * definition for why the remaining statuses are counts only.
  */
+/** @public */
 export interface VerdictEnvelope {
   readonly schemaVersion: string
   readonly runId: string
@@ -100,6 +107,7 @@ const CROCKFORD_BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
  * prefix keeps ids roughly sortable; the randomness makes collisions
  * negligible.
  */
+/** @public */
 export function generateRunId(): string {
   const bytes = new Uint8Array(16)
   const now = new Date().getTime()
@@ -171,6 +179,7 @@ function breakThreshold(thresholds: schema.Thresholds): number | null {
   return decoded.value.break ?? null
 }
 
+/** @public */
 export function buildVerdictEnvelope(
   report: schema.MutationTestResult,
   mode: OutputMode,

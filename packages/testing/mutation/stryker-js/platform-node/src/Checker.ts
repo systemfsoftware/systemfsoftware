@@ -57,6 +57,7 @@ export type CheckerCrash = ChildProcessCrashedErrorType | OutOfMemoryError | Wor
  * cannot. The error channel names both crash variants rather than `unknown`,
  * which lets the retry combinator prove it handles every one of them.
  */
+/** @public */
 export interface CheckerResourceService {
   readonly check: (
     checkerName: string,
@@ -462,6 +463,7 @@ export const groupPlans = (
   return Cell.apply(description, { checker, checkerName, plans })
 }
 
+/** @public */
 export const checkGroupedPlans = (
   checker: CheckerResourceService,
   checkerName: string,

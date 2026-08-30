@@ -1,7 +1,6 @@
 import base from '@systemfsoftware/oxlint-config/base'
 import { defineConfig } from 'oxlint'
 
-// Vendored fork: effect documents with @category/@since/@internal; teach the tag checker those tags.
 export default defineConfig({
   extends: [base],
 
@@ -11,6 +10,9 @@ export default defineConfig({
   },
 
   plugins: ['typescript', 'import', 'jsdoc', 'unicorn', 'oxc'],
+
+  jsPlugins: [import.meta.resolve('@systemfsoftware/oxlint-plugin-test-placement')],
+
   rules: {
     'import/no-cycle': 'warn',
     'unicorn/prefer-node-protocol': 'error',
@@ -18,6 +20,7 @@ export default defineConfig({
       'error',
       { definedTags: ['category', 'since', 'internal', 'example', 'module', 'packageDocumentation'] },
     ],
+    '@systemfsoftware/oxlint-plugin-effect-dmmf/tests-import-public-api': 'error',
   },
   ignorePatterns: ['dist', 'node_modules'],
 })

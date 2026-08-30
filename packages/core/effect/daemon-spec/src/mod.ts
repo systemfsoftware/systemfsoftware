@@ -35,6 +35,7 @@ import type {
 } from './DaemonSpec.schema.js'
 import { stream as streamKernel } from './DaemonStream.js'
 import { subscription as subscriptionKernel } from './DaemonSubscription.js'
+/** @public */
 export const poll = <A, E, R, L extends LockConfig>(opts: PollOpts<A, E, R, L>): Worker<E, R, L> =>
   pollKernel<
     Effect.Effect<A, E, R>,
@@ -47,6 +48,7 @@ export const poll = <A, E, R, L extends LockConfig>(opts: PollOpts<A, E, R, L>):
     L,
     PollOpts<A, E, R, L>
   >(opts)
+/** @public */
 export const stream = <A, E, R, L extends LockConfig>(
   opts: CommonOpts<L> & { readonly stream: Stream.Stream<A, E, R> },
 ): Worker<E, R, L> =>
@@ -65,6 +67,7 @@ export const stream = <A, E, R, L extends LockConfig>(
       readonly lock: L
     }
   >(opts)
+/** @public */
 export const subscription = <A, E, R, L extends LockConfig>(
   opts: CommonOpts<L> & { readonly acquire: Effect.Effect<A, E, R> },
 ): Worker<E, R, L> =>
@@ -85,6 +88,7 @@ export const subscription = <A, E, R, L extends LockConfig>(
       readonly lock: L
     }
   >(opts)
+/** @public */
 export const Daemon = {
   poll,
   stream,
@@ -99,7 +103,9 @@ import { worker } from './RunWorker.js'
 export { supervisor, worker }
 
 export { withLeaderLock } from './WithLeaderLock.js'
+/** @public */
 export type { LeaderLockOptions } from './WithLeaderLock.js'
+/** @public */
 export const run = {
   worker,
   supervisor,
@@ -112,15 +118,19 @@ import { TaskConfig } from './SupervisionTask.js'
 import { task as taskKernel } from './SupervisionTask.js'
 import { WorkerConfig } from './SupervisionWorker.js'
 import { worker as supervisionKernel } from './SupervisionWorker.js'
+/** @public */
 export const leader = (cap: Duration.Input): Effect.Effect<SupervisionPolicy> =>
   Effect.flatMap(LeaderConfig, (config) => leaderKernel(config, cap))
+/** @public */
 export const task = (budget: Duration.Input): Effect.Effect<SupervisionPolicy> =>
   Effect.flatMap(TaskConfig, (config) => taskKernel(config, budget))
+/** @public */
 export const supervision = (cap: Duration.Input): Effect.Effect<SupervisionPolicy> =>
   Effect.flatMap(WorkerConfig, (config) => supervisionKernel(config, cap))
 export { LeaderConfig } from './SupervisionLeader.js'
 export { TaskConfig } from './SupervisionTask.js'
 export { WorkerConfig } from './SupervisionWorker.js'
+/** @public */
 export const Supervision = {
   leader,
   worker: supervision,
@@ -131,6 +141,7 @@ import { dynamic as dynamicKernel, MAX_CHILDREN_CEILING } from './SupervisorDyna
 import { oneForAll as oneForAllKernel } from './SupervisorOneForAll.js'
 import { oneForOne as oneForOneKernel } from './SupervisorOneForOne.js'
 import { restForOne as restForOneKernel } from './SupervisorRestForOne.js'
+/** @public */
 export const dynamic = <E, R, Args>(
   opts: {
     readonly name: string
@@ -143,14 +154,17 @@ export const dynamic = <E, R, Args>(
     readonly child: (args: Args) => Worker<E, R>
     readonly maxChildren: MaxChildren
   }>({ ...opts, maxChildren: opts.maxChildren ?? MaxChildren.make(MAX_CHILDREN_CEILING) })
+/** @public */
 export const oneForAll = <E, R, L extends LockConfig = LockConfig>(
   opts: SupervisorOpts<E, R, L>,
 ): Supervisor<E, R, L> =>
   oneForAllKernel<Child<E, R>, Effect.Effect<SupervisionPolicy>, L, ReporterPolicyHooks, SupervisorOpts<E, R, L>>(opts)
+/** @public */
 export const oneForOne = <E, R, L extends LockConfig = LockConfig>(
   opts: SupervisorOpts<E, R, L>,
 ): Supervisor<E, R, L> =>
   oneForOneKernel<Child<E, R>, Effect.Effect<SupervisionPolicy>, L, ReporterPolicyHooks, SupervisorOpts<E, R, L>>(opts)
+/** @public */
 export const restForOne = <E, R, L extends LockConfig = LockConfig>(
   opts: SupervisorOpts<E, R, L>,
 ): Supervisor<E, R, L> =>

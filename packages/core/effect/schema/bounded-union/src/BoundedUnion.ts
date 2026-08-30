@@ -2,6 +2,7 @@
 import { Schema as S } from 'effect'
 import type { FastCheck } from 'effect/testing'
 
+/** @public */
 export const boundedUnion = <
   Base extends readonly [S.ConstraintCodec<unknown, unknown>, ...readonly S.ConstraintCodec<unknown, unknown>[]],
   Recur extends readonly [S.ConstraintCodec<unknown, unknown>, ...readonly S.ConstraintCodec<unknown, unknown>[]],

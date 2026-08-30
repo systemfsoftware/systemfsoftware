@@ -31,7 +31,7 @@
         "logLevel": "error"
       },
       "ae-missing-release-tag": {
-        "logLevel": "none"
+        "logLevel": "error"
       },
       "ae-internal-missing-underscore": {
         "logLevel": "none"

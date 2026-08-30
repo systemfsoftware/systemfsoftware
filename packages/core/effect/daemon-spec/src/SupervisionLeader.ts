@@ -3,6 +3,7 @@ import { cappedBackoff } from './Backoff.js'
 import { UnboundedIntensity } from './DaemonPolicy.schema.js'
 import type { SupervisionConfig } from './DaemonSpec.schema.js'
 
+/** @public */
 export const LeaderConfig = Context.Reference<SupervisionConfig>(
   '@systemfsoftware/effect-daemon-spec/LeaderConfig',
   {
@@ -14,6 +15,7 @@ export const LeaderConfig = Context.Reference<SupervisionConfig>(
   },
 )
 
+/** @public */
 export const leader = <
   INTENSITY,
   COOLDOWN extends Duration.Input,

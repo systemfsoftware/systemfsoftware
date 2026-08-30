@@ -16,7 +16,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "build": "tsdown",
+    "build": "tsdown && pnpm api:check",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint --format=${f:-default}",
     "attw": "attw --pack ."
   },
@@ -37,6 +39,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "^7.58.7",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",

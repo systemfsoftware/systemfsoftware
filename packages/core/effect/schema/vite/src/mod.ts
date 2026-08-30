@@ -2,7 +2,10 @@ import { findExportedSchemas, type FoundSchema, quote } from '@systemfsoftware/e
 import { dirname, relative, resolve } from 'node:path'
 import type { Plugin, ResolvedConfig } from 'vite'
 
-/** @since 0.1.0 */
+/**
+ * @public
+ * @since 0.1.0
+ */
 export interface InlineSchemaTestsOptions {
   /** Directory to scan for schema files, relative to Vite root. Default: `"src"`. */
   dir?: string
@@ -12,6 +15,7 @@ export interface InlineSchemaTestsOptions {
  * The one test filename the placement taxonomy whitelists by name. The plugin
  * rewrites this file in the consumer's `src/`; nothing else is touched.
  *
+ * @public
  * @since 1.4.0
  */
 export const LAW_FILE_BASENAME = 'schema-laws.test.ts' as const
@@ -29,6 +33,7 @@ export const LAW_FILE_BASENAME = 'schema-laws.test.ts' as const
  * namesake while the suite still reports a passing pair for it. An alias also
  * keeps a schema named `it` or `ruleOfSchemas` from shadowing the harness.
  *
+ * @public
  * @since 1.4.0
  */
 export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string => {
@@ -67,6 +72,7 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string 
  * has no path on disk), which silently drops every generated law from
  * `stryker --related` runs and reports the survivors as coverage gaps.
  *
+ * @public
  * @example
  * ```ts
  * // vitest.config.ts

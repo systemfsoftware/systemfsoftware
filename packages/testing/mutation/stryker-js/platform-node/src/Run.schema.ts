@@ -4,6 +4,7 @@ import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 
 const TypeId = '~stryker/mutation-run/StageError' as const
 
+/** @public */
 export class StageError extends S.TaggedError<StageError>(TypeId)('StageError', {
   stage: S.Literals(['prepare', 'instrument', 'dryRun', 'dryRunNoTests', 'mutationTest']),
   reason: S.String,

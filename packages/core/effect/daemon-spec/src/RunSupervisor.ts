@@ -13,6 +13,7 @@ import { LeaderLock } from './LeaderLockAdapter.js'
  * the `LeaderLock` capabilities at the composition root, then hands them down to the
  * supervisor body via the lock binding. The body itself only ever sees the service
  * values.
+ * @public
  */
 export const supervisor = <E, R>(
   s: Supervisor<E, R, LockConfig>,

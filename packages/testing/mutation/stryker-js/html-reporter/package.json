@@ -15,7 +15,9 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown",
+    "build": "tsdown && pnpm api:check",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local",
     "typecheck": "tsc --noEmit",
     "attw": "attw --pack .",
     "test": "vitest run",
@@ -29,6 +31,7 @@
     "mutation-testing-report-schema": "catalog:stryker"
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "^7.58.7",
     "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",

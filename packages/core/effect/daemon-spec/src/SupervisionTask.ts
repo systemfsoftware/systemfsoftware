@@ -2,6 +2,7 @@ import { Context, Duration, Effect, Schedule } from 'effect'
 import { UnboundedIntensity } from './DaemonPolicy.schema.js'
 import type { SupervisionConfig } from './DaemonSpec.schema.js'
 
+/** @public */
 export const TaskConfig = Context.Reference<SupervisionConfig>(
   '@systemfsoftware/effect-daemon-spec/TaskConfig',
   {
@@ -13,6 +14,7 @@ export const TaskConfig = Context.Reference<SupervisionConfig>(
   },
 )
 
+/** @public */
 export const task = <
   INTENSITY,
   COOLDOWN extends Duration.Input,

@@ -83,6 +83,7 @@ export type ChildExit = typeof ChildExit.Type
 /**
  * The child process hosting a worker ended when it was not supposed to.
  */
+/** @public */
 export class ChildProcessCrashedError extends S.TaggedError<ChildProcessCrashedError>()(
   'ChildProcessCrashedError',
   {
@@ -111,6 +112,7 @@ export class WorkerFrameTooLargeError extends S.TaggedError<WorkerFrameTooLargeE
 ) {
   readonly exitClass = 'InternalError' as const
 }
+/** @public */
 export class OutOfMemoryError extends S.TaggedError<OutOfMemoryError>()('OutOfMemoryError', {
   pid: ProcessId,
   exitCode: Wire.mint(S.Int),

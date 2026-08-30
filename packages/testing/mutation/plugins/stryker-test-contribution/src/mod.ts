@@ -2,6 +2,7 @@ import { declarePlugin } from '@systemfsoftware/stryker-js/Plugin'
 
 import { testContributionEvaluatorLayer } from './test-contribution-evaluator.js'
 
+/** @public */
 export const strykerPlugins = [
   declarePlugin('Evaluator', 'test-contribution', testContributionEvaluatorLayer),
 ]
