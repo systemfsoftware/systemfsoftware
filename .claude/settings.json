@@ -70,11 +70,6 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v comment-checker >/dev/null 2>&1 && exec comment-checker; command -v direnv >/dev/null 2>&1 && exec direnv exec \"$CLAUDE_PROJECT_DIR\" comment-checker; echo 'comment-checker: not found on PATH - run direnv allow or nix develop to provision it' >&2; exit 1",
-            "timeout": 30
-          },
-          {
-            "type": "command",
             "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard: deno not found on PATH - install Deno (https://deno.land) so the guard can run' >&2; exit 1; }; exec deno run --quiet --allow-read --allow-run --allow-env \"$CLAUDE_PROJECT_DIR/agent-plugins/oxlint-guard/src/guard-lint.ts\"",
             "timeout": 120
           }
