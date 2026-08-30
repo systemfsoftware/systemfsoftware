@@ -1,5 +1,5 @@
 import { Cell, Wire } from '@systemfsoftware/effect-cell-types'
-import { Context, Effect, Exit, Layer, Option, pipe, Result, Schema as S } from 'effect'
+import { Context, Effect, Exit, Layer, Match, Option, pipe, Result, Schema as S } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import { homedir } from 'node:os'
 import {
@@ -17,13 +17,29 @@ import type { BridgedEvent } from './events.js'
 import { SettingsJSON } from './settings.schema.js'
 import type { DisableSource, HookCoverage, HookCoverageRow, HookSettings, SettingsSource } from './settings.schema.js'
 import {
+  type DecodedSource,
+  EmptySources,
   type MergeCommand,
   type MergedSnapshot,
   mergeEffectiveSettings,
-  packMergeCommand,
+  MergeSettingsCommand,
+  NonEmptySources,
   type SettingsDecisionError,
-  snapshotSettings,
+  type SettingsSnapshot,
 } from './settings.workflow.js'
+
+export const packMergeCommand = (sources: readonly DecodedSource[]): MergeCommand => {
+  const first = sources[0]
+  const pack = first === undefined ? new EmptySources() : new NonEmptySources({ sources: [first, ...sources.slice(1)] })
+  return new MergeSettingsCommand({ pack })
+}
+
+export const snapshotSettings = (snapshot: SettingsSnapshot): HookSettings | null =>
+  Match.value(snapshot).pipe(
+    Match.tag('EmptySnapshot', () => null),
+    Match.tag('LoadedSnapshot', (loaded) => loaded.settings),
+    Match.exhaustive,
+  )
 
 export const MANAGED_SETTINGS_PATH = '/etc/claude-code/managed-settings.json'
 
@@ -369,8 +385,6 @@ export function matcherUnreadable(event: string): boolean {
 export function ifEvaluatingEvent(event: string): boolean {
   return IF_EVALUATING_EVENTS.includes(event)
 }
-
-export { mergeSettings } from './settings.workflow.js'
 
 const dedupeByEvent = (rows: readonly HookCoverageRow[]): readonly HookCoverageRow[] =>
   rows.filter((row, index) => rows.findIndex((other) => other.event === row.event) === index)

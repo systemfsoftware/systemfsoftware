@@ -47,11 +47,12 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 
 ## Rules
 
-| Rule                        | Reports                                                                                                                                                                                                                                                        |
-| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `make-file-location`        | A `Workflow.make` call in a file that is not a single-segment `<stem>.workflow.ts`, or a second `Workflow.make` call in the same file                                                                                                                          |
-| `workflow-match-exhaustive` | `Match.orElse` in a `Match.tag` pipe; `Match.orElse` as the fallback of a predicate or literal dispatch over an open type (close the variant type first); or a `Match.tag` dispatch with no `Match.exhaustive` — all scoped to a `Workflow.make` argument body |
-| `make-body-purity`          | A reference inside a `Workflow.make` argument body that resolves to I/O — an impure import, a module-level mutable, a mutable local, or an ambient global; and control-flow keywords past the one converging first-statement guard                             |
+| Rule                            | Reports                                                                                                                                                                                                                                                        |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `make-file-location`            | A `Workflow.make` call in a file that is not a single-segment `<stem>.workflow.ts`, or a second `Workflow.make` call in the same file                                                                                                                          |
+| `workflow-match-exhaustive`     | `Match.orElse` in a `Match.tag` pipe; `Match.orElse` as the fallback of a predicate or literal dispatch over an open type (close the variant type first); or a `Match.tag` dispatch with no `Match.exhaustive` — all scoped to a `Workflow.make` argument body |
+| `make-body-purity`              | A reference inside a `Workflow.make` argument body that resolves to I/O — an impure import, a module-level mutable, a mutable local, or an ambient global; and control-flow keywords past the one converging first-statement guard                             |
+| `workflow-file-export-topology` | A second non-schema value export from a single-segment `<stem>.workflow.ts`, a missing non-schema value export, or any re-export (`export * from`, `export { x } from`, `export { imported }`)                                                                 |
 
 ## FAQ
 
@@ -59,7 +60,7 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 A: The name was placed in oxlint's `plugins` field, which takes built-in namespaces only. JavaScript plugins load through `jsPlugins`; their rules go in `rules`.
 
 **Q: Installed, but nothing is reported.**
-A: `make-body-purity` and `workflow-match-exhaustive` are boundary-scoped — only `Workflow.make` argument bodies are examined. `make-file-location` keys on the filename: it reports a `Workflow.make` call in a file that is not a single-segment `<stem>.workflow.ts`, or a second call in the same file.
+A: `make-body-purity` and `workflow-match-exhaustive` are boundary-scoped — only `Workflow.make` argument bodies are examined. `make-file-location` keys on the filename: it reports a `Workflow.make` call in a file that is not a single-segment `<stem>.workflow.ts`, or a second call in the same file. `workflow-file-export-topology` keys on the same filename: it reports extra or missing non-schema value exports and every re-export.
 
 ## Requirements
 

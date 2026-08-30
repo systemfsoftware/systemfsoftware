@@ -5,19 +5,16 @@ export class AdmitError extends S.TaggedError<AdmitError>()('AdmitImpossible', {
   reason: S.String,
 }) {}
 
-class AdmitHooksCommand extends S.TaggedClass<AdmitHooksCommand>()('AdmitHooksCommand', {
+export class AdmitHooksCommand extends S.TaggedClass<AdmitHooksCommand>()('AdmitHooksCommand', {
   present: S.Boolean,
 }) {}
 
-class SkipHooks extends S.TaggedClass<SkipHooks>()('SkipHooks', {}) {}
+export class SkipHooks extends S.TaggedClass<SkipHooks>()('SkipHooks', {}) {}
 
-class RunHooks extends S.TaggedClass<RunHooks>()('RunHooks', {}) {}
+export class RunHooks extends S.TaggedClass<RunHooks>()('RunHooks', {}) {}
 
 export type AdmitCommand = InstanceType<typeof AdmitHooksCommand>
 export type HookDispatchDecision = InstanceType<typeof SkipHooks> | InstanceType<typeof RunHooks>
-
-export const skipHooks = (): HookDispatchDecision => new SkipHooks()
-export const admitPresent = (present: boolean): AdmitCommand => new AdmitHooksCommand({ present })
 
 /** Whether loaded settings admit hook dispatch at all. */
 export const admitLoadedSettings = Workflow.make(

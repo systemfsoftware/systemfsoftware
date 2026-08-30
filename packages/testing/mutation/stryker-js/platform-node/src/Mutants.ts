@@ -11,21 +11,21 @@ import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import type { CoverageData, TestPlan } from '@systemfsoftware/stryker-js/Mutant'
 import type { CompleteDryRunResult, TestResult } from '@systemfsoftware/stryker-js/TestRunner'
 
+import { toRelativeNormalizedFileName } from './IncrementalDiff.paths.js'
 import {
   IncrementalDiffCommand,
   incrementalDifferWorkflow,
   PreviousFilesSchema,
   PreviousTestFilesSchema,
-  toRelativeNormalizedFileName,
 } from './IncrementalDiff.workflow.js'
 import {
-  HIT_LIMIT_FACTOR,
   planMutantTests,
   PlanMutantTestsCommand,
   type PlanMutantTestsError,
   PlannedMutantTests,
 } from './Mutants.workflow.js'
-export { HIT_LIMIT_FACTOR }
+
+export const HIT_LIMIT_FACTOR = 100
 
 // ---------------------------------------------------------------------------
 // Diff statistics

@@ -624,21 +624,6 @@ export const makeProgressStreamReporter = (
     return reporter
   })
 
-// ─── re-export render helpers from workflow for external callers ─────────
-
-export {
-  ansi,
-  buildJsonReport,
-  colorEnabled,
-  drawClearTextScoreTable,
-  getEmojiForStatus,
-  plural,
-  renderClearText,
-  renderClearTextString,
-  stringWidth,
-} from './Reporter.workflow.js'
-export type { Column } from './Reporter.workflow.js'
-
 // ═══════════════════════════════════════════════════════════════════════════
 // Report location — 0-based run positions <-> 1-based schema positions
 // ═══════════════════════════════════════════════════════════════════════════

@@ -16,6 +16,7 @@ const _default: {
         'workflow-match-exhaustive': Rule;
         'make-body-purity': Rule;
         'make-command-schema': Rule;
+        'workflow-file-export-topology': Rule;
     };
     configs: {
         recommended: {

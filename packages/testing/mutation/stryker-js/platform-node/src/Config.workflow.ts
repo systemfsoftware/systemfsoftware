@@ -27,7 +27,7 @@ export class MergeError extends S.TaggedError<MergeError>()('MergeError', {
  * which adds config-specific rules on top. This file is the generic associative
  * merge the property test covers.
  */
-export function mergeRecords(
+function mergeRecords(
   base: object,
   overrides: object,
 ): Record<string, unknown> {

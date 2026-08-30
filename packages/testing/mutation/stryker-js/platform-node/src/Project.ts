@@ -14,12 +14,8 @@ import type { MutationTestResult } from 'mutation-testing-report-schema/api'
 
 import { defaultOptions } from './Config.js'
 import { IncrementalReportCommand, incrementalReportWorkflow } from './IncrementalReport.workflow.js'
-import {
-  ALWAYS_IGNORE,
-  FileSelectionCommand,
-  fileSelectionWorkflow,
-  IGNORE_PATTERN_CHARACTER,
-} from './Project.workflow.js'
+import { ALWAYS_IGNORE, IGNORE_PATTERN_CHARACTER } from './Project.ignore.js'
+import { FileSelectionCommand, fileSelectionWorkflow } from './Project.workflow.js'
 
 /** `JSON.parse` hands back `any`; the annotation is what forces a decode downstream. */
 const parseJson = (text: string): unknown => JSON.parse(text)

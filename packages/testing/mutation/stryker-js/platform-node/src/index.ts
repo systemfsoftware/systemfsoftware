@@ -23,7 +23,7 @@ export * from './output-mode.js'
 export * from './verdict-envelope.js'
 
 // Diff sources for an incremental run.
-export { toRelativeNormalizedFileName } from './IncrementalDiff.workflow.js'
+export { toRelativeNormalizedFileName } from './IncrementalDiff.paths.js'
 // The decoder for a persisted incremental file — adopter-facing surface, not wiring: the
 // reader decodes through it and adopts it as the wire contract of the on-disk report.
 export { IncrementalReportSchema } from './IncrementalReport.workflow.js'

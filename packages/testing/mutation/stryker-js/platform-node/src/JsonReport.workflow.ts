@@ -17,7 +17,7 @@ export class JsonReportError extends S.TaggedError<JsonReportError>()('JsonRepor
   message: S.String,
 }) {}
 
-export function buildJsonReport(report: schema.MutationTestResult): string {
+function buildJsonReport(report: schema.MutationTestResult): string {
   return JSON.stringify(report, null, 0)
 }
 
