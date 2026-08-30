@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/arethetypeswrong",
-  "version": "6.0.1",
+  "version": "6.0.2",
   "description": "The API behind arethetypeswrong.github.io — owned and maintained by systemfsoftware",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "license": "Apache-2.0",
@@ -64,12 +64,12 @@
     "@types/node": "catalog:",
     "@types/semver": "^7.5.0",
     "@types/validate-npm-package-name": "^4.0.0",
+    "@vitest/snapshot": "catalog:",
     "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "vitest": "catalog:",
-    "@vitest/snapshot": "catalog:"
+    "vitest": "catalog:"
   },
   "engines": {
     "node": ">=24"

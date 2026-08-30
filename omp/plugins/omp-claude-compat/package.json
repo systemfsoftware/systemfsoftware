@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/omp-claude-compat",
   "license": "Apache-2.0",
-  "version": "3.0.2",
+  "version": "3.0.3",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "description": "OMP Claude Code compatibility: dispatch .claude/settings.json and enabled plugin hooks/hooks.json hooks + inject CLAUDE.md @-references",
   "type": "module",
