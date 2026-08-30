@@ -119,9 +119,11 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "stryker.config.json",
+        "$TURBO_ROOT$/stryker.config.base.json",
         "vitest.config.ts",
         "vitest.setup.ts",
         "reports/stryker-incremental.json",
+        "$TURBO_ROOT$/packages/testing/mutation/**",
         "!**/*.md"
       ],
       "outputs": [
