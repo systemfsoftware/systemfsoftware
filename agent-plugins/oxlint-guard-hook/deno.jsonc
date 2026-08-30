@@ -1,5 +1,8 @@
 {
   "nodeModulesDir": "none",
+  "imports": {
+    "effect": "npm:effect@4.0.0-rc.112",
+  },
   "tasks": {
     "check": "deno check src/ && deno lint src/",
   },
