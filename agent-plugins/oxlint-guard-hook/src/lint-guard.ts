@@ -56,7 +56,9 @@ type Plan =
   | { readonly tag: 'run-oxlint'; readonly filePath: string; readonly configPath: string }
 
 type LintOutcome =
-  | { readonly tag: 'outcome'; readonly outcome: 'clean' | 'benign-no-files' | 'ignored-path' }
+  | { readonly tag: 'outcome' }
+  | { readonly tag: 'retry-without-type-aware' }
+  | { readonly tag: 'not-found' }
   | { readonly tag: 'violation'; readonly output: string }
 
 export interface HookResult {
@@ -152,6 +154,9 @@ export const decodePayload = (raw: string): EditCommand | undefined => {
 
 const DENO_SHEBANG = /^#!.*\bdeno\b/
 
+const isLintableExtension = (extension: string): boolean =>
+  (LINTABLE_EXTENSIONS as readonly string[]).includes(extension.toLowerCase())
+
 interface PlanRule {
   readonly matches: (facts: GatherFacts) => boolean
   readonly plan: (facts: GatherFacts) => Plan
@@ -160,27 +165,23 @@ interface PlanRule {
 const SKIP_FILE_MISSING = (): Plan => ({ tag: 'skip', reason: 'file-missing' })
 const SKIP_NOT_LINTABLE = (): Plan => ({ tag: 'skip', reason: 'not-lintable-extension' })
 const SKIP_NO_CONFIG = (): Plan => ({ tag: 'skip', reason: 'no-oxlint-config' })
-const SKIP_UNMATCHED = (): Plan => ({ tag: 'skip', reason: 'file-missing' })
 
 const PLAN_RULES: readonly PlanRule[] = [
   { matches: (f) => !f.exists, plan: SKIP_FILE_MISSING },
-  {
-    matches: (f) => !(LINTABLE_EXTENSIONS as readonly string[]).includes(f.extension.toLowerCase()),
-    plan: SKIP_NOT_LINTABLE,
-  },
+  { matches: (f) => !isLintableExtension(f.extension), plan: SKIP_NOT_LINTABLE },
   {
     matches: (f) => f.denoShebang,
     plan: (f) => ({ tag: 'run-deno', filePath: f.resolvedPath }),
   },
   { matches: (f) => f.configPath === null, plan: SKIP_NO_CONFIG },
   {
-    matches: (f) => f.configPath !== null,
+    matches: () => true,
     plan: (f) => ({ tag: 'run-oxlint', filePath: f.resolvedPath, configPath: f.configPath ?? '' }),
   },
 ]
 
 const decidePlan = (facts: GatherFacts): Plan =>
-  PLAN_RULES.find((rule) => rule.matches(facts))?.plan(facts) ?? SKIP_UNMATCHED()
+  PLAN_RULES.find((rule) => rule.matches(facts))?.plan(facts) ?? PLAN_RULES.at(-1)!.plan(facts)
 
 const combinedOutput = (result: ProcessResult): string => result.stdout + '\n' + result.stderr
 
@@ -190,42 +191,60 @@ const NO_FILES_FOUND = /No files found to lint/i
 const PATH_OUTSIDE_ROOT = /path is expected to be under the root/i
 const OXLINT_PANIC = /panicked at/
 
+const TSGOLINT_MISSING = /tsgolint/i
+const OXLINT_NOT_FOUND = /ERR_PNPM|command .* not found/i
+
 interface ClassifyRule {
-  readonly matches: (result: ProcessResult) => boolean
+  readonly matches: (combined: string, exitCode: number, canRetry: boolean) => boolean
   readonly outcome: (result: ProcessResult) => LintOutcome
 }
 
 const CLASSIFY_RULES: readonly ClassifyRule[] = [
   {
-    matches: (r) => r.exitCode === 0,
-    outcome: () => ({ tag: 'outcome', outcome: 'clean' }),
+    matches: (_combined, exitCode) => exitCode === 0,
+    outcome: () => ({ tag: 'outcome' }),
   },
   {
-    matches: (r) => NO_FILES_FOUND.test(combinedOutput(r)),
-    outcome: () => ({ tag: 'outcome', outcome: 'benign-no-files' }),
+    matches: (combined) => NO_FILES_FOUND.test(combined),
+    outcome: () => ({ tag: 'outcome' }),
   },
   {
-    matches: (r) => OXLINT_PANIC.test(combinedOutput(r)) && PATH_OUTSIDE_ROOT.test(combinedOutput(r)),
-    outcome: () => ({ tag: 'outcome', outcome: 'ignored-path' }),
+    matches: (combined) => OXLINT_PANIC.test(combined) && PATH_OUTSIDE_ROOT.test(combined),
+    outcome: () => ({ tag: 'outcome' }),
+  },
+  {
+    matches: (combined, _exitCode, canRetry) => canRetry && TSGOLINT_MISSING.test(combined),
+    outcome: () => ({ tag: 'retry-without-type-aware' }),
+  },
+  {
+    matches: (combined, exitCode) => exitCode !== 0 && OXLINT_NOT_FOUND.test(combined),
+    outcome: () => ({ tag: 'not-found' }),
   },
   {
     matches: () => true,
-    outcome: (r) => ({ tag: 'violation', output: stderrOrStdout(r) }),
+    outcome: (result) => ({ tag: 'violation', output: stderrOrStdout(result) }),
   },
 ]
 
-const classifyResult = (result: ProcessResult): LintOutcome =>
-  CLASSIFY_RULES.find((rule) => rule.matches(result))?.outcome(result) ??
-    { tag: 'violation', output: stderrOrStdout(result) }
+const classifyResult = (result: ProcessResult, canRetry: boolean): LintOutcome => {
+  const combined = combinedOutput(result)
+  return (
+    CLASSIFY_RULES.find((rule) => rule.matches(combined, result.exitCode, canRetry))?.outcome(result) ??
+      CLASSIFY_RULES.at(-1)!.outcome(result)
+  )
+}
 
 const MAX_OUTPUT_LINES = 30
 
 const truncateOutput = (text: string): string => {
-  const lines = text.split('\n')
-  if (lines.length <= MAX_OUTPUT_LINES) {
+  let cut = text.indexOf('\n')
+  for (let line = 1; line < MAX_OUTPUT_LINES && cut !== -1; line++) {
+    cut = text.indexOf('\n', cut + 1)
+  }
+  if (cut === -1) {
     return text
   }
-  return lines.slice(0, MAX_OUTPUT_LINES).join('\n') + '\n... [truncated — run the linter manually for full output]'
+  return text.slice(0, cut) + '\n... [truncated — run the linter manually for full output]'
 }
 
 const diagnostic = (tool: string, output: string): string =>
@@ -243,9 +262,15 @@ Find skills for the ROOT CAUSE above. Invoke them, THEN fix.`
 const DENO_PREREQUISITE = 'deno (https://deno.land)'
 const PNPM_PREREQUISITE = 'pnpm with oxlint as a dev dependency (pnpm add -D oxlint)'
 
+const REASON_PHRASES: Record<SpawnFailureReason, string> = {
+  'not-found': 'not found',
+  'not-executable': 'not executable',
+  unknown: 'spawn failed',
+}
+
 const spawnUnavailableHint = (missing: SpawnFailureReason, prerequisite: string): string =>
   `oxlint-guard-hook: ${prerequisite} could not be run (${
-    missing === 'not-found' ? 'not found' : 'not executable'
+    REASON_PHRASES[missing]
   }) - the lint guard cannot check this file. Install the prerequisite per the plugin README and retry.`
 
 type StdinResult = { readonly tag: 'content'; readonly content: string } | { readonly tag: 'too-large' }
@@ -307,7 +332,7 @@ const realFs: GuardFs = {
     } catch {
       return null
     } finally {
-      file?.close()
+      await file?.close()
     }
   },
 }
@@ -373,18 +398,18 @@ const gather = async (
   rootOverride: string | undefined,
 ): Promise<GatherFacts> => {
   const resolvedPath = path.resolve(cwd, filePath)
-  const root = await findProjectRoot(fs, cwd, rootOverride)
   const extension = path.extname(resolvedPath).slice(1)
   const exists = await fs.exists(resolvedPath)
   const firstLine = exists ? await fs.readFirstLine(resolvedPath) : null
-  const dirs = walkUp(path.dirname(resolvedPath), root)
-  return {
-    resolvedPath,
-    exists,
-    extension,
-    denoShebang: DENO_SHEBANG.test(firstLine ?? ''),
-    configPath: await firstExistingConfig(fs, dirs),
-  }
+  const denoShebang = DENO_SHEBANG.test(firstLine ?? '')
+  const needsConfig = exists && !denoShebang && isLintableExtension(extension)
+  const configPath = needsConfig
+    ? await firstExistingConfig(
+      fs,
+      walkUp(path.dirname(resolvedPath), await findProjectRoot(fs, cwd, rootOverride)),
+    )
+    : null
+  return { resolvedPath, exists, extension, denoShebang, configPath }
 }
 
 const reasonOf = (error: unknown): SpawnFailureReason => {
@@ -415,11 +440,12 @@ const realRunner: Runner = {
       })
       const process = command.spawn()
       const decode = async (stream: ReadableStream<Uint8Array>): Promise<string> => await new Response(stream).text()
-      const [stdout, stderr] = await Promise.all([decode(process.stdout), decode(process.stderr)])
+      const drained = Promise.all([decode(process.stdout), decode(process.stderr)])
       const status = await process.status
       if (signal.aborted) {
         return { tag: 'timeout' }
       }
+      const [stdout, stderr] = await drained
       return { tag: 'result', result: { exitCode: status.code, stdout, stderr } }
     } catch (error) {
       if (signal.aborted) {
@@ -433,56 +459,123 @@ const realRunner: Runner = {
   },
 }
 
+type GuardedOutcome<CanRetry extends boolean> =
+  | HookResult
+  | 'ok'
+  | (CanRetry extends true ? 'retry-without-type-aware' : never)
+
+interface GuardRun {
+  readonly runner: Runner
+  readonly program: string
+  readonly args: string[]
+  readonly cwd: string
+  readonly env: Record<string, string>
+  readonly prerequisite: string
+  readonly toolLabel: string
+}
+
+async function runGuarded(run: GuardRun, canRetry: true): Promise<GuardedOutcome<true>>
+async function runGuarded(run: GuardRun, canRetry: false): Promise<GuardedOutcome<false>>
+async function runGuarded(run: GuardRun, canRetry: boolean): Promise<GuardedOutcome<boolean>> {
+  const attempt = await run.runner.run(run.program, run.args, run.cwd, run.env, COMMAND_BUDGET_MS)
+  if (attempt.tag === 'spawn-failure') {
+    return { exitCode: 1, stderr: spawnUnavailableHint(attempt.failure.reason, run.prerequisite) }
+  }
+  if (attempt.tag === 'timeout') {
+    return { exitCode: 0, stderr: '' }
+  }
+  const verdict = classifyResult(attempt.result, canRetry)
+  if (verdict.tag === 'violation') {
+    return { exitCode: 2, stderr: diagnostic(run.toolLabel, verdict.output) }
+  }
+  if (verdict.tag === 'not-found') {
+    return { exitCode: 1, stderr: spawnUnavailableHint('not-found', run.prerequisite) }
+  }
+  if (verdict.tag === 'retry-without-type-aware') {
+    return 'retry-without-type-aware'
+  }
+  return 'ok'
+}
+
 const runDenoPair = async (runner: Runner, filePath: string, env: Record<string, string>): Promise<HookResult> => {
   const cwd = path.dirname(filePath)
-  const check = await runner.run('deno', ['check', '--', filePath], cwd, env, COMMAND_BUDGET_MS)
-  if (check.tag === 'spawn-failure') {
-    return { exitCode: 1, stderr: spawnUnavailableHint(check.failure.reason, DENO_PREREQUISITE) }
+  const check = await runGuarded(
+    {
+      runner,
+      program: 'deno',
+      args: ['check', '--', filePath],
+      cwd,
+      env,
+      prerequisite: DENO_PREREQUISITE,
+      toolLabel: 'DENO CHECK',
+    },
+    false,
+  )
+  if (check !== 'ok') {
+    return check
   }
-  if (check.tag === 'timeout') {
-    return { exitCode: 0, stderr: '' }
-  }
-  const checkVerdict = classifyResult(check.result)
-  if (checkVerdict.tag === 'violation') {
-    return { exitCode: 2, stderr: diagnostic('DENO CHECK', checkVerdict.output) }
-  }
-  const lint = await runner.run('deno', ['lint', '--', filePath], cwd, env, COMMAND_BUDGET_MS)
-  if (lint.tag === 'spawn-failure') {
-    return { exitCode: 1, stderr: spawnUnavailableHint(lint.failure.reason, DENO_PREREQUISITE) }
-  }
-  if (lint.tag === 'timeout') {
-    return { exitCode: 0, stderr: '' }
-  }
-  const lintVerdict = classifyResult(lint.result)
-  if (lintVerdict.tag === 'violation') {
-    return { exitCode: 2, stderr: diagnostic('DENO LINT', lintVerdict.output) }
-  }
-  return { exitCode: 0, stderr: '' }
+  const lint = await runGuarded(
+    {
+      runner,
+      program: 'deno',
+      args: ['lint', '--', filePath],
+      cwd,
+      env,
+      prerequisite: DENO_PREREQUISITE,
+      toolLabel: 'DENO LINT',
+    },
+    false,
+  )
+  return lint === 'ok' ? { exitCode: 0, stderr: '' } : lint
 }
+
+const oxlintArgs = (
+  plan: { readonly filePath: string; readonly configPath: string },
+  typeAware: boolean,
+): string[] => [
+  'exec',
+  'oxlint',
+  '-c',
+  plan.configPath,
+  ...(typeAware ? ['--type-aware', '--type-check'] : []),
+  '-f',
+  'unix',
+  plan.filePath,
+]
 
 const runOxlint = async (
   runner: Runner,
   plan: { readonly filePath: string; readonly configPath: string },
   env: Record<string, string>,
 ): Promise<HookResult> => {
-  const attempt = await runner.run(
-    'pnpm',
-    ['exec', 'oxlint', '-c', plan.configPath, '--type-aware', '--type-check', '-f', 'unix', plan.filePath],
-    path.dirname(plan.configPath),
-    env,
-    COMMAND_BUDGET_MS,
+  const first = await runGuarded(
+    {
+      runner,
+      program: 'pnpm',
+      args: oxlintArgs(plan, true),
+      cwd: path.dirname(plan.configPath),
+      env,
+      prerequisite: PNPM_PREREQUISITE,
+      toolLabel: 'OXLINT',
+    },
+    true,
   )
-  if (attempt.tag === 'spawn-failure') {
-    return { exitCode: 1, stderr: spawnUnavailableHint(attempt.failure.reason, PNPM_PREREQUISITE) }
+  if (first !== 'retry-without-type-aware') {
+    return first === 'ok' ? { exitCode: 0, stderr: '' } : first
   }
-  if (attempt.tag === 'timeout') {
-    return { exitCode: 0, stderr: '' }
-  }
-  const verdict = classifyResult(attempt.result)
-  if (verdict.tag === 'violation') {
-    return { exitCode: 2, stderr: diagnostic('OXLINT', verdict.output) }
-  }
-  return { exitCode: 0, stderr: '' }
+  const retry = await runGuarded(
+    {
+      runner,
+      program: 'pnpm',
+      args: oxlintArgs(plan, false),
+      cwd: path.dirname(plan.configPath),
+      env,
+      prerequisite: PNPM_PREREQUISITE,
+      toolLabel: 'OXLINT',
+    },
+    false,
+  )
+  return retry === 'ok' ? { exitCode: 0, stderr: '' } : retry
 }
 
 export const runLintGuard = async (

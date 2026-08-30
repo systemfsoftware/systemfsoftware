@@ -40,7 +40,7 @@ Both hooks register on the same edit-tool events. If you install both, every edi
   pnpm add -D oxlint
   ```
 - **An oxlint config within the project root** — `.oxlintrc.json`, `.oxlintrc.jsonc`, `oxlint.config.ts`, or `oxlint.config.mts` (the names oxlint itself auto-discovers), with `oxlint.config.js`/`.mjs`/`.cjs` and `oxlint.json` also accepted for older installs. A project without one is simply not guarded — silence, never an error.
-- **Type-aware pass**: oxlint runs with `--type-aware --type-check`, which requires oxlint's tsgolint companion (`oxlint-tsgolint`).
+- **Type-aware pass**: oxlint runs with `--type-aware --type-check`, which requires oxlint's tsgolint companion (`oxlint-tsgolint`). When the companion is absent, the guard retries once without the type-aware flags instead of failing the edit.
 
 The hooks' dependencies (`@std/assert` for the test suite) resolve from Deno's registry cache on first run, so the first hook invocation needs network access; after that the hook runs offline.
 
@@ -82,17 +82,19 @@ The `DENO CHECK` and `DENO LINT` variants use the same body with their own heade
 
 After each edit to a lintable file (`.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs`, `.cjs`, `.vue`, `.svelte`, `.astro`), the guard lints that file. Deno-shebang files route to `deno check`/`deno lint` from the file's own directory — oxlint's type-aware pass cannot resolve the `Deno` global.
 
-| The guard ...                                                         | Exit                                       |
-| --------------------------------------------------------------------- | ------------------------------------------ |
-| Lints clean                                                           | 0 — silent                                 |
-| Skips: tool is not an edit tool, extension not lintable, file absent  | 0 — silent                                 |
-| Skips: no oxlint config within the project root                       | 0 — silent (opt-in doctrine)               |
-| Skips: payload exceeds 1 MiB                                          | 0 — silent                                 |
-| Skips: a linter run exceeds its 30-second budget                      | 0 — silent (a hung run is not a violation) |
-| Skips: oxlint reports `No files found to lint`                        | 0 — silent                                 |
-| Skips: oxlint panics on a path ignored by `ignorePatterns`            | 0 — silent                                 |
-| Reports a lint violation                                              | 2 — skills-first diagnostic on stderr      |
-| Cannot spawn `pnpm`/`oxlint`, or `deno` is missing for a shebang file | 1 — install hint on stderr                 |
+| The guard ...                                                         | Exit                                          |
+| --------------------------------------------------------------------- | --------------------------------------------- |
+| Lints clean                                                           | 0 — silent                                    |
+| Skips: tool is not an edit tool, extension not lintable, file absent  | 0 — silent                                    |
+| Skips: no oxlint config within the project root                       | 0 — silent (opt-in doctrine)                  |
+| Skips: payload exceeds 1 MiB                                          | 0 — silent                                    |
+| Skips: a linter run exceeds its 30-second budget                      | 0 — silent (a hung run is not a violation)    |
+| Skips: oxlint reports `No files found to lint`                        | 0 — silent                                    |
+| Skips: oxlint panics on a path ignored by `ignorePatterns`            | 0 — silent                                    |
+| `oxlint-tsgolint` is missing — the type-aware pass cannot start       | 0 — retries once without the type-aware flags |
+| `pnpm exec` reports the local `oxlint` binary missing                 | 1 — install hint on stderr                    |
+| Reports a lint violation                                              | 2 — skills-first diagnostic on stderr         |
+| Cannot spawn `pnpm`/`oxlint`, or `deno` is missing for a shebang file | 1 — install hint on stderr                    |
 
 Config discovery walks up from the edited file but never escapes the project root (`CLAUDE_PROJECT_DIR`, else the enclosing git root) — a config planted in an ancestor directory can never silently govern the lint.
 

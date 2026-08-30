@@ -1,4 +1,5 @@
 import { assert, assertEquals, assertStringIncludes } from '@std/assert'
+import * as path from 'node:path'
 import { decodePayload, isRecord, readStdin, runLintGuard } from './lint-guard.ts'
 import type { GuardOptions, HookResult, ProcessResult, Runner } from './lint-guard.ts'
 
@@ -49,10 +50,22 @@ const ignoredPathPanic: ProcessResult = {
   stderr: '',
 }
 
-const basenameOf = (filePath: string): string => filePath.slice(filePath.lastIndexOf('/') + 1)
+const tsgolintFailure: ProcessResult = {
+  exitCode: 1,
+  stdout: 'Error: Failed to initialize oxlint-tsgolint: executable file not found\n',
+  stderr: '',
+}
+
+const stillViolating: ProcessResult = { exitCode: 1, stdout: violationLines(2, 'stillbad.ts'), stderr: '' }
+
+const oxlintNotFound: ProcessResult = {
+  exitCode: 1,
+  stdout: 'ERR_PNPM_NO_BIN  Command "oxlint" not found\n',
+  stderr: '',
+}
 
 const shim = (program: string, args: readonly string[]): ShimResult => {
-  const name = basenameOf(args.at(-1) ?? '')
+  const name = path.basename(args.at(-1) ?? '')
   if (program === 'pnpm') {
     switch (name) {
       case 'clean.ts':
@@ -71,6 +84,13 @@ const shim = (program: string, args: readonly string[]): ShimResult => {
         return 'timeout'
       case 'spawnfail.ts':
         return 'spawn-pnpm'
+      case 'tsgolint.ts':
+      case 'tsgolint-still.ts': {
+        if (args.includes('--type-aware')) return tsgolintFailure
+        return name === 'tsgolint.ts' ? clean : stillViolating
+      }
+      case 'nooxlint.ts':
+        return oxlintNotFound
       default:
         return undefined
     }
@@ -164,6 +184,9 @@ const tree = (): Record<string, string> => ({
   [`${PROJECT}/src/spawnfail.ts`]: 'export const f = 1\n',
   [`${PROJECT}/src/primary.ts`]: 'export const p = 1\n',
   [`${PROJECT}/src/app.vue`]: '<template><div /></template>\n',
+  [`${PROJECT}/src/tsgolint.ts`]: 'export const t = 1\n',
+  [`${PROJECT}/src/tsgolint-still.ts`]: 'export const t = 1\n',
+  [`${PROJECT}/src/nooxlint.ts`]: 'export const n = 1\n',
   [`${PROJECT}/src/deno-clean.ts`]: '#!/usr/bin/env -S deno run\nexport const ok = 1\n',
   [`${PROJECT}/src/check-fail.ts`]: '#!/usr/bin/env deno\nexport const bad = bad\n',
   [`${PROJECT}/src/lint-fail.ts`]: '#!/usr/bin/env deno\ndebugger;\n',
@@ -379,6 +402,29 @@ Deno.test('a timed-out linter run is a tolerated skip', async () => {
   const { result, records } = await execute(payload(`${PROJECT}/src/slow.ts`))
   assertEquals(result, { exitCode: 0, stderr: '' })
   assertEquals(records.length, 1)
+})
+
+Deno.test('missing tsgolint companion retries once without the type-aware flags', async () => {
+  const { result, records } = await execute(payload(`${PROJECT}/src/tsgolint.ts`))
+  assertEquals(result, { exitCode: 0, stderr: '' })
+  assertEquals(records.length, 2)
+  assert(records[0]!.args.includes('--type-aware'))
+  assertEquals(records[1]!.args.includes('--type-aware'), false)
+  assertEquals(records[1]!.args.includes('--type-check'), false)
+})
+
+Deno.test('a retry that still fails reports the plain-run violation', async () => {
+  const { result } = await execute(payload(`${PROJECT}/src/tsgolint-still.ts`))
+  assertEquals(result.exitCode, 2)
+  assertStringIncludes(result.stderr, SKILL_HEADER)
+  assertStringIncludes(result.stderr, 'stillbad.ts:1:1')
+})
+
+Deno.test('a missing local oxlint binary exits 1 with the install hint, not a violation', async () => {
+  const { result } = await execute(payload(`${PROJECT}/src/nooxlint.ts`))
+  assertEquals(result.exitCode, 1)
+  assertStringIncludes(result.stderr, 'pnpm add -D oxlint')
+  assert(!result.stderr.includes(SKILL_HEADER))
 })
 
 Deno.test('a timed-out deno pair is a tolerated skip', async () => {
