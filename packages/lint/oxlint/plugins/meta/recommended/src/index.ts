@@ -84,7 +84,6 @@ export const rules: NonNullable<OxlintConfig['rules']> = {
     { allowDefaultCaseForExhaustiveSwitch: false, considerDefaultExhaustiveForUnions: false },
   ],
   'typescript/no-base-to-string': 'error',
-  'typescript/explicit-module-boundary-types': 'error',
   'import/no-cycle': 'error',
   'import/no-mutable-exports': 'error',
   'no-var': 'error',

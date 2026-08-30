@@ -47,6 +47,7 @@ export default defineConfig({
     'no-console': 'off',
     'no-debugger': 'off',
     'typescript/no-unnecessary-boolean-literal-compare': 'off',
+    'typescript/explicit-module-boundary-types': 'off',
     'typescript/no-explicit-any': 'error',
     'jest/no-standalone-expect': 'off',
     'jest/valid-expect': 'off',
