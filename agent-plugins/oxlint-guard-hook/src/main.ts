@@ -30,10 +30,7 @@ const program = Effect.gen(function*() {
     return
   }
   const text = decodeBytes(chunks)
-
-  const parse = (): unknown => JSON.parse(text)
-  const payload = yield* Effect.try(parse).pipe(
-    Effect.flatMap(S.decodeUnknownEffect(WirePayload)),
+  const payload = yield* S.decodeUnknownEffect(S.fromJsonString(WirePayload))(text).pipe(
     Effect.option,
   )
   if (Option.isNone(payload)) {
