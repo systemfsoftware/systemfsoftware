@@ -2,6 +2,7 @@ import { NodeServices, NodeSocket } from '@effect/platform-node'
 import { ManagedRuntime } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
+import * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
 import * as ChildProcess from 'effect/unstable/process/ChildProcess'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
@@ -25,7 +26,34 @@ const WORKSPACE_MANIFEST = JSON.stringify({
 })
 
 /** One runtime for the whole contract lane, created once at module load. */
-const runtime = ManagedRuntime.make(NodeServices.layer)
+const stopContractResources = Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem
+  const started = container
+  if (started !== undefined) {
+    yield* Effect.tryPromise({
+      try: () => started.stop(),
+      catch: () => undefined,
+    }).pipe(Effect.orElseSucceed(() => undefined))
+  }
+  const packDir = tarballDir
+  if (packDir !== undefined) {
+    yield* fs.remove(packDir, { recursive: true }).pipe(
+      Effect.catchCause(() => Effect.succeed(undefined)),
+      Effect.catchDefect(() => Effect.succeed(undefined)),
+    )
+  }
+})
+
+const runtime = ManagedRuntime.make(
+  Layer.merge(
+    NodeServices.layer,
+    Layer.effectDiscard(
+      Effect.gen(function*() {
+        yield* Effect.addFinalizer(() => stopContractResources)
+      }),
+    ).pipe(Layer.provide(NodeServices.layer)),
+  ),
+)
 
 let container: StartedTestContainer | undefined
 let tarballDir: string | undefined
@@ -172,25 +200,12 @@ export function setup(project: TestProject): Promise<void> {
   )
 }
 
-export async function teardown(): Promise<void> {
-  await runtime.runPromise(
-    Effect.gen(function*() {
-      const fs = yield* FileSystem.FileSystem
-      const started = container
-      if (started !== undefined) {
-        yield* Effect.tryPromise({
-          try: () => started.stop(),
-          catch: () => undefined,
-        }).pipe(Effect.orElseSucceed(() => undefined))
-      }
-      const packDir = tarballDir
-      if (packDir !== undefined) {
-        yield* fs.remove(packDir, { recursive: true }).pipe(
-          Effect.catchCause(() => Effect.succeed(undefined)),
-          Effect.catchDefect(() => Effect.succeed(undefined)),
-        )
-      }
-    }),
-  )
-  await runtime.dispose()
+/**
+ * Vitest invokes this once after the run (no arguments) and awaits it.
+ * Disposing the runtime closes its root scope, which runs the registered
+ * cleanup — container stop and tarball removal — uninterruptibly, with the
+ * services of that scope already in context.
+ */
+export function teardown(): Promise<void> {
+  return runtime.dispose()
 }
