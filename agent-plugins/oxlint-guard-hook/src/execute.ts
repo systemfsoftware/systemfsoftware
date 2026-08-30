@@ -1,8 +1,7 @@
 import { Effect, Match, Option } from 'effect'
 import { COMMAND_BUDGET_MS, DENO_PREREQUISITE, PNPM_PREREQUISITE } from './constants.ts'
-import type { AttemptOutcome, FinalAttempt, HookResult } from './flow.schema.ts'
-import type { Runner } from './flow.schema.ts'
-import { attemptOutcome, haltOf, PASS } from './verdict.ts'
+import type { GuardVerdict, HookResult, Runner } from './flow.schema.ts'
+import { PASS, verdictOf } from './verdict.ts'
 
 interface GuardRun {
   readonly runner: Runner
@@ -13,51 +12,65 @@ interface GuardRun {
   readonly toolLabel: string
 }
 
-function runGuarded(
-  run: GuardRun,
-  canRetry: true,
-): Effect.Effect<AttemptOutcome, never, never>
-function runGuarded(
-  run: GuardRun,
-  canRetry: false,
-): Effect.Effect<FinalAttempt, never, never>
-function runGuarded(
-  run: GuardRun,
-  canRetry: boolean,
-): Effect.Effect<AttemptOutcome, never, never> {
-  return Effect.map(
-    run.runner.run(run.program, run.args, run.cwd, COMMAND_BUDGET_MS),
-    (attempt) =>
-      attemptOutcome(attempt, canRetry, {
-        prerequisite: run.prerequisite,
-        toolLabel: run.toolLabel,
-      }),
-  )
+/**
+ * One rung of a tool's retry ladder. The ladder carries the retry state:
+ * `canRetry` declares whether the classify layer may emit a retry verdict,
+ * and `proceedStops` declares whether a clean run ends the ladder (oxlint)
+ * or falls through to the next rung (the deno pair).
+ */
+interface Rung {
+  readonly run: GuardRun
+  readonly canRetry: boolean
+  readonly proceedStops: boolean
 }
 
-export const runDenoPair = (
+const responseOf = (verdict: GuardVerdict, rung: Rung): Option.Option<HookResult> =>
+  Match.value(verdict).pipe(
+    Match.tag('Halt', ({ response }) => Option.some(response)),
+    Match.tag('Proceed', () => {
+      if (rung.proceedStops) {
+        return Option.some(PASS)
+      }
+      return Option.none()
+    }),
+    Match.tag('Retry', () => Option.none()),
+    Match.exhaustive,
+  )
+
+const runLadder = (rungs: readonly Rung[]): Effect.Effect<HookResult, never, never> =>
+  Effect.gen(function*() {
+    for (const rung of rungs) {
+      const attempt = yield* rung.run.runner.run(
+        rung.run.program,
+        rung.run.args,
+        rung.run.cwd,
+        COMMAND_BUDGET_MS,
+      )
+      const verdict = verdictOf(attempt, rung.canRetry, {
+        prerequisite: rung.run.prerequisite,
+        toolLabel: rung.run.toolLabel,
+      })
+      const response = responseOf(verdict, rung)
+      if (Option.isSome(response)) {
+        return response.value
+      }
+    }
+    return PASS
+  })
+
+const denoRun = (
   runner: Runner,
   dirname: (target: string) => string,
   filePath: string,
-): Effect.Effect<HookResult, never, never> =>
-  Effect.gen(function*() {
-    const step = (command: 'check' | 'lint'): GuardRun => ({
-      runner,
-      program: 'deno',
-      args: [command, '--', filePath],
-      cwd: dirname(filePath),
-      prerequisite: DENO_PREREQUISITE,
-      toolLabel: `DENO ${command.toUpperCase()}`,
-    })
-    const halted = haltOf(yield* runGuarded(step('check'), false))
-    if (Option.isSome(halted)) {
-      return halted.value
-    }
-    return Option.getOrElse(
-      haltOf(yield* runGuarded(step('lint'), false)),
-      () => PASS,
-    )
-  })
+  command: 'check' | 'lint',
+): GuardRun => ({
+  runner,
+  program: 'deno',
+  args: [command, '--', filePath],
+  cwd: dirname(filePath),
+  prerequisite: DENO_PREREQUISITE,
+  toolLabel: `DENO ${command.toUpperCase()}`,
+})
 
 const oxlintArgs = (
   plan: { readonly filePath: string; readonly configPath: string },
@@ -79,28 +92,36 @@ const oxlintArgs = (
   return ['exec', 'oxlint', '-c', plan.configPath, '-f', 'unix', plan.filePath]
 }
 
+const oxlintRun = (
+  runner: Runner,
+  dirname: (target: string) => string,
+  plan: { readonly filePath: string; readonly configPath: string },
+  typeAware: boolean,
+): GuardRun => ({
+  runner,
+  program: 'pnpm',
+  args: oxlintArgs(plan, typeAware),
+  cwd: dirname(plan.configPath),
+  prerequisite: PNPM_PREREQUISITE,
+  toolLabel: 'OXLINT',
+})
+
+export const runDenoPair = (
+  runner: Runner,
+  dirname: (target: string) => string,
+  filePath: string,
+): Effect.Effect<HookResult, never, never> =>
+  runLadder([
+    { run: denoRun(runner, dirname, filePath, 'check'), canRetry: false, proceedStops: false },
+    { run: denoRun(runner, dirname, filePath, 'lint'), canRetry: false, proceedStops: true },
+  ])
+
 export const runOxlint = (
   runner: Runner,
   dirname: (target: string) => string,
   plan: { readonly filePath: string; readonly configPath: string },
 ): Effect.Effect<HookResult, never, never> =>
-  Effect.gen(function*() {
-    const step = (typeAware: boolean): GuardRun => ({
-      runner,
-      program: 'pnpm',
-      args: oxlintArgs(plan, typeAware),
-      cwd: dirname(plan.configPath),
-      prerequisite: PNPM_PREREQUISITE,
-      toolLabel: 'OXLINT',
-    })
-    const settled = Match.value(yield* runGuarded(step(true), true)).pipe(
-      Match.tag('proceed', () => Option.some(PASS)),
-      Match.tag('retry-plain', () => Option.none()),
-      Match.tag('respond', ({ result }) => Option.some(result)),
-      Match.exhaustive,
-    )
-    if (Option.isSome(settled)) {
-      return settled.value
-    }
-    return Option.getOrElse(haltOf(yield* runGuarded(step(false), false)), () => PASS)
-  })
+  runLadder([
+    { run: oxlintRun(runner, dirname, plan, true), canRetry: true, proceedStops: true },
+    { run: oxlintRun(runner, dirname, plan, false), canRetry: false, proceedStops: true },
+  ])
