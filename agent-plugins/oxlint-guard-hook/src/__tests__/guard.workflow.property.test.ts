@@ -5,8 +5,9 @@ import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
 
 import { GuardCommand } from '../flow.schema.ts'
+import type { GuardPlan } from '../flow.schema.ts'
 import { GUARD_TOOL_NAMES, guardPlan } from '../guard.workflow.ts'
-import type { GuardPlan, GuardUnsupportedToolError } from '../guard.workflow.ts'
+import type { GuardUnsupportedToolError } from '../guard.workflow.ts'
 
 const commandArb = S.toArbitrary(GuardCommand)(fc)
 

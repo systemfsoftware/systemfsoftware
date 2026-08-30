@@ -25,23 +25,7 @@ export class GuardUnsupportedToolError extends S.TaggedError<GuardUnsupportedToo
   { toolName: S.String },
 ) {}
 
-const SkipBase = S.TaggedStruct('Skip', {
-  reason: S.Union([
-    S.Literal('file-missing'),
-    S.Literal('not-lintable-extension'),
-    S.Literal('no-oxlint-config'),
-  ]),
-})
-const RunDenoBase = S.TaggedStruct('RunDeno', { filePath: S.String })
-const RunOxlintBase = S.TaggedStruct('RunOxlint', {
-  filePath: S.String,
-  configPath: S.String,
-})
-
-export type Skip = S.Schema.Type<typeof SkipBase>
-export type RunDeno = S.Schema.Type<typeof RunDenoBase>
-export type RunOxlint = S.Schema.Type<typeof RunOxlintBase>
-export type GuardPlan = Skip | RunDeno | RunOxlint
+import type { GuardPlan, RunDeno, RunOxlint, Skip } from './flow.schema.ts'
 
 interface PlanRule {
   readonly matches: (command: GuardCommandShape) => boolean
