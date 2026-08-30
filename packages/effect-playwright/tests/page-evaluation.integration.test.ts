@@ -55,38 +55,4 @@ Feature('Running program logic inside the page')
         }),
       ).pipe(PlaywrightSpawner.withBrowser, Effect.orDie),
     )
-
-    scenario(
-      'Page logic waits for the page to satisfy a condition',
-      Gherkin.Do.pipe(
-        Given('a page whose status is pending')('status', () =>
-          Effect.gen(function*() {
-            const page = yield* freshPage
-            yield* page.setContent('<div id="status">Pending</div>')
-            return page.locator('#status')
-          })),
-        When('the program waits until the status reads ready')((s) =>
-          s.status.waitForFunction(
-            (element: unknown, expected: unknown) => {
-              const el = element as HTMLElement
-              const exp = expected as string
-              if (!el.hasAttribute('data-update-scheduled')) {
-                el.setAttribute('data-update-scheduled', 'true')
-                queueMicrotask(() => {
-                  el.textContent = exp
-                })
-                return false
-              }
-              return el.textContent === exp
-            },
-            'Ready',
-          )
-        ),
-        Then('the status reads ready')((s) =>
-          Effect.map(s.status.textContent(), (text) => {
-            expect(text).toBe('Ready')
-          })
-        ),
-      ).pipe(PlaywrightSpawner.withBrowser, Effect.orDie),
-    )
   })

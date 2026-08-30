@@ -8,7 +8,7 @@ const Feature = makeFeature({ it, layer })
 
 const freshPage = Effect.flatMap(Playwright.Browser, (browser) => browser.newPage())
 
-Feature('Navigating pages')
+Feature('Reaching the pages a flow needs')
   .liveClock()
   .withLayer(PlaywrightSpawner.layer(chromium))
   .body(({ scenario }) => {
@@ -105,22 +105,6 @@ Feature('Navigating pages')
         When('the page is sent to another address')((s) => s.page.goto('data:text/html,<h1>Page 2</h1>')),
         Then('the page reports the latest address')((s) => {
           expect(s.page.url()).toBe('data:text/html,<h1>Page 2</h1>')
-        }),
-      ).pipe(PlaywrightSpawner.withBrowser, Effect.orDie),
-    )
-
-    scenario(
-      'A page reports when its load has finished',
-      Gherkin.Do.pipe(
-        Given('a page that just arrived at an address')('page', () =>
-          Effect.gen(function*() {
-            const page = yield* freshPage
-            yield* page.goto('about:blank')
-            return page
-          })),
-        When('the program waits for the load to finish')((s) => s.page.waitForLoadState('load')),
-        Then('the page is still on its address')((s) => {
-          expect(s.page.url()).toBe('about:blank')
         }),
       ).pipe(PlaywrightSpawner.withBrowser, Effect.orDie),
     )

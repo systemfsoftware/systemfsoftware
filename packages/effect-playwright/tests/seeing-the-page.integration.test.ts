@@ -8,7 +8,7 @@ const Feature = makeFeature({ it, layer })
 
 const freshPage = Effect.flatMap(Playwright.Browser, (browser) => browser.newPage())
 
-Feature('Reading the loaded document')
+Feature('Seeing what the page loaded')
   .liveClock()
   .withLayer(PlaywrightSpawner.layer(chromium))
   .body(({ scenario }) => {

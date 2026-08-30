@@ -5,7 +5,7 @@ import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
 
-Feature('Provisioning browsers for programs')
+Feature("Acquiring a browser on the program's terms")
   .liveClock()
   .withLayer(PlaywrightSpawner.layer(chromium))
   .body(({ scenario }) => {

@@ -10,7 +10,7 @@ type TestWindow = Window & { magicValue?: number }
 
 const freshPage = Effect.flatMap(Playwright.Browser, (browser) => browser.newPage())
 
-Feature('Injecting behavior into pages')
+Feature('Shaping a page before and as it loads')
   .liveClock()
   .withLayer(PlaywrightSpawner.layer(chromium))
   .body(({ scenario }) => {

@@ -8,7 +8,7 @@ const Feature = makeFeature({ it, layer })
 
 const launchChromium = Effect.flatMap(Playwright.Playwright, (playwright) => playwright.launchScoped(chromium))
 
-Feature('Driving a browser session from an Effect program')
+Feature('Owning a browser session for the length of a program')
   .liveClock()
   .withLayer(Playwright.layer)
   .body(({ scenario }) => {

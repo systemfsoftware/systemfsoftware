@@ -22,7 +22,7 @@ const pageWithFrame = Effect.gen(function*() {
   return { page, frame }
 })
 
-Feature('Working inside embedded frames')
+Feature('Reaching and driving content inside embedded frames')
   .liveClock()
   .withLayer(PlaywrightSpawner.layer(chromium))
   .body(({ scenario }) => {

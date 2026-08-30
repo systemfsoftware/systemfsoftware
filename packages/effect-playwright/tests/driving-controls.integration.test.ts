@@ -27,7 +27,7 @@ const dragApproaches = [
   },
 ] as const
 
-Feature('Interacting with page elements')
+Feature("Driving the page's controls")
   .liveClock()
   .withLayer(PlaywrightSpawner.layer(chromium))
   .body(({ scenario, scenarioOutline: outline }) => {
