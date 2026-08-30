@@ -29,13 +29,13 @@ export const RunOutcomeSchema = S.Union([
 ])
 export type RunOutcome = S.Schema.Type<typeof RunOutcomeSchema>
 
-export const LintOutcomeSchema = S.Union([
-  S.TaggedStruct('outcome', {}),
-  S.TaggedStruct('retry-without-type-aware', {}),
-  S.TaggedStruct('not-found', {}),
-  S.TaggedStruct('violation', { output: S.String }),
+export const LintVerdictSchema = S.Union([
+  S.TaggedStruct('Pass', {}),
+  S.TaggedStruct('RetryWithoutTypeCheck', {}),
+  S.TaggedStruct('ToolMissing', {}),
+  S.TaggedStruct('Violation', { output: S.String }),
 ])
-export type LintOutcome = S.Schema.Type<typeof LintOutcomeSchema>
+export type LintVerdict = S.Schema.Type<typeof LintVerdictSchema>
 
 export const HookResultSchema = S.Struct({
   exitCode: S.Union([S.Literal(0), S.Literal(1), S.Literal(2)]),
@@ -43,24 +43,12 @@ export const HookResultSchema = S.Struct({
 })
 export type HookResult = S.Schema.Type<typeof HookResultSchema>
 
-export const AttemptProceedSchema = S.TaggedStruct('proceed', {})
-export const AttemptRetrySchema = S.TaggedStruct('retry-plain', {})
-export const AttemptRespondSchema = S.TaggedStruct('respond', {
-  result: HookResultSchema,
-})
-
-export const AttemptOutcomeSchema = S.Union([
-  AttemptProceedSchema,
-  AttemptRetrySchema,
-  AttemptRespondSchema,
+export const GuardVerdictSchema = S.Union([
+  S.TaggedStruct('Proceed', {}),
+  S.TaggedStruct('Retry', {}),
+  S.TaggedStruct('Halt', { response: HookResultSchema }),
 ])
-export type AttemptOutcome = S.Schema.Type<typeof AttemptOutcomeSchema>
-
-export const FinalAttemptSchema = S.Union([
-  AttemptProceedSchema,
-  AttemptRespondSchema,
-])
-export type FinalAttempt = S.Schema.Type<typeof FinalAttemptSchema>
+export type GuardVerdict = S.Schema.Type<typeof GuardVerdictSchema>
 
 /** The wire payload Claude Code posts to the hook on stdin. */
 export const WirePayload = S.Struct({
