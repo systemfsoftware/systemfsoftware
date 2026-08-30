@@ -1,8 +1,6 @@
 /**
  * Effect-aware wrappers for Playwright requests, responses, workers, dialogs,
  * file choosers, and downloads.
- *
- * @since 0.1.2
  */
 
 import { Data, Effect, Option, Stream } from 'effect'
@@ -26,12 +24,9 @@ import { useHelper } from './utils.js'
  * The payload Playwright reports for a failed request.
  *
  * @see {@link CoreRequest.failure}
- * @since 0.1.2
- * @internal
  */
 type RequestFailure = { readonly errorText: string }
 
-/** @internal */
 export class Request extends Data.TaggedClass(
   'effect-playwright/common/Request',
 )<{
@@ -46,7 +41,6 @@ export class Request extends Data.TaggedClass(
   /**
    * Returns the matching Response object, or null if the response was not received yet.
    * @see {@link CoreRequest.existingResponse}
-   * @since 0.5.1
    */
   existingResponse: () => Option.Option<Response>
 
@@ -210,10 +204,7 @@ export class Request extends Data.TaggedClass(
   }
 }
 
-/**
- * @since 0.1.2
- * @internal
- */
+/** */
 export class Response extends Data.TaggedClass(
   'effect-playwright/common/Response',
 )<{
@@ -248,7 +239,6 @@ export class Response extends Data.TaggedClass(
   /**
    * Returns the HTTP version of the response.
    * @see {@link CoreResponse.httpVersion}
-   * @since 0.5.1
    */
   httpVersion: Effect.Effect<
     Awaited<ReturnType<CoreResponse['httpVersion']>>,
@@ -312,10 +302,7 @@ export class Response extends Data.TaggedClass(
   }
 }
 
-/**
- * @since 0.1.2
- * @internal
- */
+/** */
 export class Worker extends Data.TaggedClass(
   'effect-playwright/common/Worker',
 )<{
@@ -341,10 +328,7 @@ export class Worker extends Data.TaggedClass(
   }
 }
 
-/**
- * @since 0.1.2
- * @internal
- */
+/** */
 export class Dialog extends Data.TaggedClass(
   'effect-playwright/common/Dialog',
 )<{
@@ -369,10 +353,7 @@ export class Dialog extends Data.TaggedClass(
   }
 }
 
-/**
- * @since 0.1.2
- * @internal
- */
+/** */
 export class FileChooser extends Data.TaggedClass(
   'effect-playwright/common/FileChooser',
 )<{
@@ -396,17 +377,13 @@ export class FileChooser extends Data.TaggedClass(
   }
 }
 
-/**
- * @since 0.1.2
- * @internal
- */
+/** */
 export class Download extends Data.TaggedClass(
   'effect-playwright/common/Download',
 )<{
   cancel: Effect.Effect<void, PlaywrightError>
   /**
    * Creates a stream of the download data.
-   * @since 0.2.0
    */
   stream: Stream.Stream<Uint8Array, PlaywrightError>
   delete: Effect.Effect<void, PlaywrightError>

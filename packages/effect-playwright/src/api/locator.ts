@@ -1,7 +1,5 @@
 /**
  * Effect service wrapper for Playwright locators and element operations.
- *
- * @since 0.1.0
  */
 
 import { Array, Context, Effect, Match, Option, Predicate } from 'effect'
@@ -20,21 +18,16 @@ import { useHelper } from './utils.js'
  * Use locators for resilient element selection, interaction, assertions, and
  * browser-side evaluation. Locator-producing operations are synchronous;
  * operations that query or interact with the page return `Effect`.
- *
- * @since 0.1.0
- * @internal
  */
 export interface Locator {
   /**
    * The underlying Playwright Locator instance.
-   * @internal
    */
   readonly _raw: CoreLocator
   /**
    * Clicks the element.
    *
    * @see {@link CoreLocator.click}
-   * @since 0.1.0
    */
   readonly click: (
     options?: Parameters<CoreLocator['click']>[0],
@@ -43,7 +36,6 @@ export interface Locator {
    * Checks the element.
    *
    * @see {@link CoreLocator.check}
-   * @since 0.1.0
    */
   readonly check: (
     options?: Parameters<CoreLocator['check']>[0],
@@ -52,7 +44,6 @@ export interface Locator {
    * Fills the input field.
    *
    * @see {@link CoreLocator.fill}
-   * @since 0.1.0
    */
   readonly fill: (
     value: string,
@@ -62,7 +53,6 @@ export interface Locator {
    * Gets an attribute value.
    *
    * @see {@link CoreLocator.getAttribute}
-   * @since 0.1.0
    */
   readonly getAttribute: (
     name: string,
@@ -72,7 +62,6 @@ export interface Locator {
    * Gets the inner text.
    *
    * @see {@link CoreLocator.innerText}
-   * @since 0.1.0
    */
   readonly innerText: (
     options?: Parameters<CoreLocator['innerText']>[0],
@@ -81,7 +70,6 @@ export interface Locator {
    * Gets the inner HTML.
    *
    * @see {@link CoreLocator.innerHTML}
-   * @since 0.1.0
    */
   readonly innerHTML: (
     options?: Parameters<CoreLocator['innerHTML']>[0],
@@ -90,7 +78,6 @@ export interface Locator {
    * Gets the input value.
    *
    * @see {@link CoreLocator.inputValue}
-   * @since 0.1.0
    */
   readonly inputValue: (
     options?: Parameters<CoreLocator['inputValue']>[0],
@@ -99,7 +86,6 @@ export interface Locator {
    * Gets the text content.
    *
    * @see {@link CoreLocator.textContent}
-   * @since 0.1.0
    */
   readonly textContent: (
     options?: Parameters<CoreLocator['textContent']>[0],
@@ -108,7 +94,6 @@ export interface Locator {
    * Gets all inner texts.
    *
    * @see {@link CoreLocator.allInnerTexts}
-   * @since 0.1.0
    */
   readonly allInnerTexts: () => Effect.Effect<
     ReadonlyArray<string>,
@@ -118,7 +103,6 @@ export interface Locator {
    * Gets all text contents.
    *
    * @see {@link CoreLocator.allTextContents}
-   * @since 0.1.0
    */
   readonly allTextContents: () => Effect.Effect<
     ReadonlyArray<string>,
@@ -128,7 +112,6 @@ export interface Locator {
    * Returns the accessibility tree snapshot.
    *
    * @see {@link CoreLocator.ariaSnapshot}
-   * @since 0.1.0
    */
   readonly ariaSnapshot: (
     options?: Parameters<CoreLocator['ariaSnapshot']>[0],
@@ -137,7 +120,6 @@ export interface Locator {
    * Returns the bounding box of the element.
    *
    * @see {@link CoreLocator.boundingBox}
-   * @since 0.1.0
    */
   readonly boundingBox: (
     options?: Parameters<CoreLocator['boundingBox']>[0],
@@ -149,48 +131,41 @@ export interface Locator {
    * Describes the locator.
    *
    * @see {@link CoreLocator.describe}
-   * @since 0.1.0
    */
   readonly describe: (description: string) => Locator
   /**
    * Returns the description of the locator.
    *
    * @see {@link CoreLocator.description}
-   * @since 0.1.0
    */
   readonly description: () => Option.Option<string>
   /**
    * Counts the number of matched elements.
    *
    * @see {@link CoreLocator.count}
-   * @since 0.1.0
    */
   readonly count: Effect.Effect<number, PlaywrightError>
   /**
    * Returns a locator that points to the first matched element.
    * @see {@link CoreLocator.first}
-   * @since 0.1.0
    */
   readonly first: () => Locator
   /**
    * Returns a locator that points to the last matched element.
    *
    * @see {@link CoreLocator.last}
-   * @since 0.1.0
    */
   readonly last: () => Locator
   /**
    * Returns a locator that points to the nth matched element.
    *
    * @see {@link CoreLocator.nth}
-   * @since 0.1.0
    */
   readonly nth: (index: number) => Locator
   /**
    * Returns a locator that points to a matched element.
    *
    * @see {@link CoreLocator.locator}
-   * @since 0.1.0
    */
   readonly locator: (
     selectorOrLocator: string | CoreLocator | Locator,
@@ -200,7 +175,6 @@ export interface Locator {
    * Allows locating elements by their ARIA role, ARIA attributes and accessible name.
    *
    * @see {@link CoreLocator.getByRole}
-   * @since 0.1.0
    */
   readonly getByRole: (
     role: Parameters<CoreLocator['getByRole']>[0],
@@ -210,7 +184,6 @@ export interface Locator {
    * Allows locating elements that contain given text.
    *
    * @see {@link CoreLocator.getByText}
-   * @since 0.1.0
    */
   readonly getByText: (
     text: Parameters<CoreLocator['getByText']>[0],
@@ -220,7 +193,6 @@ export interface Locator {
    * Allows locating elements by their label text.
    *
    * @see {@link CoreLocator.getByLabel}
-   * @since 0.1.0
    */
   readonly getByLabel: (
     text: Parameters<CoreLocator['getByLabel']>[0],
@@ -230,7 +202,6 @@ export interface Locator {
    * Allows locating elements by their placeholder text.
    *
    * @see {@link CoreLocator.getByPlaceholder}
-   * @since 0.1.0
    */
   readonly getByPlaceholder: (
     text: Parameters<CoreLocator['getByPlaceholder']>[0],
@@ -240,7 +211,6 @@ export interface Locator {
    * Allows locating elements by their alt text.
    *
    * @see {@link CoreLocator.getByAltText}
-   * @since 0.1.0
    */
   readonly getByAltText: (
     text: Parameters<CoreLocator['getByAltText']>[0],
@@ -250,7 +220,6 @@ export interface Locator {
    * Allows locating elements by their title attribute.
    *
    * @see {@link CoreLocator.getByTitle}
-   * @since 0.1.0
    */
   readonly getByTitle: (
     text: Parameters<CoreLocator['getByTitle']>[0],
@@ -260,7 +229,6 @@ export interface Locator {
    * Allows locating elements by their test id.
    *
    * @see {@link CoreLocator.getByTestId}
-   * @since 0.1.0
    */
   readonly getByTestId: (
     testId: Parameters<CoreLocator['getByTestId']>[0],
@@ -269,7 +237,6 @@ export interface Locator {
    * Returns whether the element is checked.
    *
    * @see {@link CoreLocator.isChecked}
-   * @since 0.4.1
    */
   readonly isChecked: (
     options?: Parameters<CoreLocator['isChecked']>[0],
@@ -278,7 +245,6 @@ export interface Locator {
    * Returns whether the element is disabled.
    *
    * @see {@link CoreLocator.isDisabled}
-   * @since 0.4.1
    */
   readonly isDisabled: (
     options?: Parameters<CoreLocator['isDisabled']>[0],
@@ -287,7 +253,6 @@ export interface Locator {
    * Returns whether the element is editable.
    *
    * @see {@link CoreLocator.isEditable}
-   * @since 0.4.1
    */
   readonly isEditable: (
     options?: Parameters<CoreLocator['isEditable']>[0],
@@ -296,7 +261,6 @@ export interface Locator {
    * Returns whether the element is enabled.
    *
    * @see {@link CoreLocator.isEnabled}
-   * @since 0.4.1
    */
   readonly isEnabled: (
     options?: Parameters<CoreLocator['isEnabled']>[0],
@@ -305,7 +269,6 @@ export interface Locator {
    * Returns whether the element is hidden.
    *
    * @see {@link CoreLocator.isHidden}
-   * @since 0.4.1
    */
   readonly isHidden: (
     options?: Parameters<CoreLocator['isHidden']>[0],
@@ -314,7 +277,6 @@ export interface Locator {
    * Returns whether the element is visible.
    *
    * @see {@link CoreLocator.isVisible}
-   * @since 0.4.1
    */
   readonly isVisible: (
     options?: Parameters<CoreLocator['isVisible']>[0],
@@ -323,7 +285,6 @@ export interface Locator {
    * Returns when element specified by locator satisfies the `state` option.
    *
    * @see {@link CoreLocator.waitFor}
-   * @since 0.1.0
    */
   readonly waitFor: (
     options?: Parameters<CoreLocator['waitFor']>[0],
@@ -352,7 +313,6 @@ export interface Locator {
    * ```
    *
    * @see {@link CoreLocator.waitForFunction}
-   * @since 0.5.1
    */
   readonly waitForFunction: <
     R,
@@ -380,7 +340,6 @@ export interface Locator {
    * ```
    *
    * @see {@link CoreLocator.evaluate}
-   * @since 0.1.0
    */
   readonly evaluate: <
     R,
@@ -395,7 +354,6 @@ export interface Locator {
    * Highlights the corresponding element(s) on the screen.
    *
    * @see {@link CoreLocator.highlight}
-   * @since 0.4.1
    */
   readonly highlight: (
     options?: Parameters<CoreLocator['highlight']>[0],
@@ -404,14 +362,12 @@ export interface Locator {
    * Hides the element highlight previously added by highlight.
    *
    * @see {@link CoreLocator.hideHighlight}
-   * @since 0.5.0
    */
   readonly hideHighlight: Effect.Effect<void, PlaywrightError>
   /**
    * Drops the locator.
    *
    * @see {@link CoreLocator.drop}
-   * @since 0.5.0
    */
   readonly drop: (
     data: Parameters<CoreLocator['drop']>[0],
@@ -421,14 +377,12 @@ export interface Locator {
    * Normalizes the locator.
    *
    * @see {@link CoreLocator.normalize}
-   * @since 0.5.0
    */
   readonly normalize: () => Effect.Effect<Locator, PlaywrightError>
   /**
    * Captures a screenshot of the element.
    *
    * @see {@link CoreLocator.screenshot}
-   * @since 0.4.1
    */
   readonly screenshot: (
     options?: Parameters<CoreLocator['screenshot']>[0],
@@ -437,14 +391,12 @@ export interface Locator {
    * Returns the string representation of the locator.
    *
    * @see {@link CoreLocator.toString}
-   * @since 0.4.1
    */
   readonly toString: () => string
   /**
    * Evaluates a function on all matched elements.
    *
    * @see {@link CoreLocator.evaluateAll}
-   * @since 0.3.0
    */
   readonly evaluateAll: <
     R,
@@ -458,7 +410,6 @@ export interface Locator {
    * Evaluates a function on the matched element and returns the result as a handle.
    *
    * @see {@link CoreLocator.evaluateHandle}
-   * @since 0.3.0
    */
   readonly evaluateHandle: <
     R,
@@ -473,7 +424,6 @@ export interface Locator {
    * Resolves given locator to the first matching DOM element.
    *
    * @see {@link CoreLocator.elementHandle}
-   * @since 0.3.0
    */
   readonly elementHandle: (
     options?: Parameters<CoreLocator['elementHandle']>[0],
@@ -485,7 +435,6 @@ export interface Locator {
    * Resolves given locator to all matching DOM elements.
    *
    * @see {@link CoreLocator.elementHandles}
-   * @since 0.3.0
    */
   readonly elementHandles: () => Effect.Effect<
     ReadonlyArray<ElementHandle<SVGElement | HTMLElement>>,
@@ -495,56 +444,48 @@ export interface Locator {
    * Returns an array of locators pointing to the matched elements.
    *
    * @see {@link CoreLocator.all}
-   * @since 0.4.1
    */
   readonly all: () => Effect.Effect<ReadonlyArray<Locator>, PlaywrightError>
   /**
    * Creates a locator that matches both this locator and the argument locator.
    *
    * @see {@link CoreLocator.and}
-   * @since 0.4.1
    */
   readonly and: (locator: Locator | CoreLocator) => Locator
   /**
    * Returns a FrameLocator object pointing to the same iframe as this locator.
    *
    * @see {@link CoreLocator.contentFrame}
-   * @since 0.4.1
    */
   readonly contentFrame: () => FrameLocator
   /**
    * Narrows existing locator according to the options.
    *
    * @see {@link CoreLocator.filter}
-   * @since 0.4.1
    */
   readonly filter: (options?: Parameters<CoreLocator['filter']>[0]) => Locator
   /**
    * Creates a frame locator that will enter the iframe and allow selecting elements in that iframe.
    *
    * @see {@link CoreLocator.frameLocator}
-   * @since 0.4.1
    */
   readonly frameLocator: (selector: string) => FrameLocator
   /**
    * Creates a locator that matches either this locator or the argument locator.
    *
    * @see {@link CoreLocator.or}
-   * @since 0.4.1
    */
   readonly or: (locator: Locator | CoreLocator) => Locator
   /**
    * A page this locator belongs to.
    *
    * @see {@link CoreLocator.page}
-   * @since 0.4.1
    */
   readonly page: () => Page
   /**
    * Removes keyboard focus from the current element.
    *
    * @see {@link CoreLocator.blur}
-   * @since 0.4.2
    */
   readonly blur: (
     options?: Parameters<CoreLocator['blur']>[0],
@@ -553,7 +494,6 @@ export interface Locator {
    * Clear the input field.
    *
    * @see {@link CoreLocator.clear}
-   * @since 0.4.2
    */
   readonly clear: (
     options?: Parameters<CoreLocator['clear']>[0],
@@ -562,7 +502,6 @@ export interface Locator {
    * Double-clicks the element.
    *
    * @see {@link CoreLocator.dblclick}
-   * @since 0.4.2
    */
   readonly dblclick: (
     options?: Parameters<CoreLocator['dblclick']>[0],
@@ -571,7 +510,6 @@ export interface Locator {
    * Dispatches an event.
    *
    * @see {@link CoreLocator.dispatchEvent}
-   * @since 0.4.2
    */
   readonly dispatchEvent: (
     type: Parameters<CoreLocator['dispatchEvent']>[0],
@@ -582,7 +520,6 @@ export interface Locator {
    * Drags the locator to another target locator.
    *
    * @see {@link CoreLocator.dragTo}
-   * @since 0.4.2
    */
   readonly dragTo: (
     target: Locator | CoreLocator,
@@ -592,7 +529,6 @@ export interface Locator {
    * Focuses the element.
    *
    * @see {@link CoreLocator.focus}
-   * @since 0.4.2
    */
   readonly focus: (
     options?: Parameters<CoreLocator['focus']>[0],
@@ -601,7 +537,6 @@ export interface Locator {
    * Hovers over the element.
    *
    * @see {@link CoreLocator.hover}
-   * @since 0.4.2
    */
   readonly hover: (
     options?: Parameters<CoreLocator['hover']>[0],
@@ -610,7 +545,6 @@ export interface Locator {
    * Focuses the element, and then uses `keyboard.down` and `keyboard.up`.
    *
    * @see {@link CoreLocator.press}
-   * @since 0.4.2
    */
   readonly press: (
     key: Parameters<CoreLocator['press']>[0],
@@ -620,7 +554,6 @@ export interface Locator {
    * Focuses the element, and then sends a `keydown`, `keypress`/`input`, and `keyup` event for each character in the text.
    *
    * @see {@link CoreLocator.pressSequentially}
-   * @since 0.4.2
    */
   readonly pressSequentially: (
     text: Parameters<CoreLocator['pressSequentially']>[0],
@@ -630,7 +563,6 @@ export interface Locator {
    * Scrolls the element into view if needed.
    *
    * @see {@link CoreLocator.scrollIntoViewIfNeeded}
-   * @since 0.4.2
    */
   readonly scrollIntoViewIfNeeded: (
     options?: Parameters<CoreLocator['scrollIntoViewIfNeeded']>[0],
@@ -639,7 +571,6 @@ export interface Locator {
    * Selects an option in a `<select>` element.
    *
    * @see {@link CoreLocator.selectOption}
-   * @since 0.4.2
    */
   readonly selectOption: (
     values: Parameters<CoreLocator['selectOption']>[0],
@@ -649,7 +580,6 @@ export interface Locator {
    * Selects text.
    *
    * @see {@link CoreLocator.selectText}
-   * @since 0.4.2
    */
   readonly selectText: (
     options?: Parameters<CoreLocator['selectText']>[0],
@@ -658,7 +588,6 @@ export interface Locator {
    * Checks the element if not already checked.
    *
    * @see {@link CoreLocator.setChecked}
-   * @since 0.4.2
    */
   readonly setChecked: (
     checked: Parameters<CoreLocator['setChecked']>[0],
@@ -668,7 +597,6 @@ export interface Locator {
    * Sets the value of the file input.
    *
    * @see {@link CoreLocator.setInputFiles}
-   * @since 0.4.2
    */
   readonly setInputFiles: (
     files: Parameters<CoreLocator['setInputFiles']>[0],
@@ -678,7 +606,6 @@ export interface Locator {
    * Taps the element.
    *
    * @see {@link CoreLocator.tap}
-   * @since 0.4.2
    */
   readonly tap: (
     options?: Parameters<CoreLocator['tap']>[0],
@@ -687,7 +614,6 @@ export interface Locator {
    * Unchecks the element.
    *
    * @see {@link CoreLocator.uncheck}
-   * @since 0.4.2
    */
   readonly uncheck: (
     options?: Parameters<CoreLocator['uncheck']>[0],
@@ -719,7 +645,6 @@ export interface Locator {
    * @param f - A function that receives the native locator and returns a promise.
    * @returns An effect that maps a rejected promise to `PlaywrightError`.
    * @see {@link CoreLocator}
-   * @since 0.1.0
    */
   readonly use: <T>(
     f: (locator: CoreLocator) => Promise<T>,
@@ -728,9 +653,6 @@ export interface Locator {
 
 /**
  * A service that provides a `Locator` instance.
- *
- * @since 0.1.0
- * @internal
  */
 export const Locator = Context.Service<Locator>(
   'effect-playwright/locator/Locator',
@@ -759,8 +681,6 @@ export const Locator = Context.Service<Locator>(
  * ```
  *
  * @param locator - The native Playwright locator to wrap.
- * @since 0.1.0
- * @internal
  */
 export const makeLocator = (locator: CoreLocator): Locator => {
   const use = useHelper(locator)

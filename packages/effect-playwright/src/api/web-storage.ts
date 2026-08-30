@@ -1,7 +1,5 @@
 /**
  * Effect service wrapper for page-local and session storage.
- *
- * @since 0.5.1
  */
 
 import { Context, Effect, Option } from 'effect'
@@ -23,16 +21,12 @@ import { useHelper } from './utils.js'
  *   return yield* page.localStorage.getItem("theme");
  * });
  * ```
- *
- * @since 0.5.1
- * @internal
  */
 export interface WebStorage {
   /**
    * Removes all items from storage.
    *
    * @see {@link CoreWebStorage.clear}
-   * @since 0.5.1
    */
   readonly clear: Effect.Effect<
     Awaited<ReturnType<CoreWebStorage['clear']>>,
@@ -43,7 +37,6 @@ export interface WebStorage {
    * Returns the value stored under the given name, if present.
    *
    * @see {@link CoreWebStorage.getItem}
-   * @since 0.5.1
    */
   readonly getItem: (
     name: Parameters<CoreWebStorage['getItem']>[0],
@@ -56,7 +49,6 @@ export interface WebStorage {
    * Returns all items in storage as name/value pairs.
    *
    * @see {@link CoreWebStorage.items}
-   * @since 0.5.1
    */
   readonly items: Effect.Effect<
     Awaited<ReturnType<CoreWebStorage['items']>>,
@@ -67,7 +59,6 @@ export interface WebStorage {
    * Removes the item stored under the given name.
    *
    * @see {@link CoreWebStorage.removeItem}
-   * @since 0.5.1
    */
   readonly removeItem: (
     name: Parameters<CoreWebStorage['removeItem']>[0],
@@ -80,7 +71,6 @@ export interface WebStorage {
    * Stores a value under the given name.
    *
    * @see {@link CoreWebStorage.setItem}
-   * @since 0.5.1
    */
   readonly setItem: (
     name: Parameters<CoreWebStorage['setItem']>[0],
@@ -91,10 +81,7 @@ export interface WebStorage {
   >
 }
 
-/**
- * @since 0.5.1
- * @internal
- */
+/** */
 export const WebStorage = Context.Service<WebStorage>(
   'effect-playwright/web-storage/WebStorage',
 )
@@ -103,8 +90,6 @@ export const WebStorage = Context.Service<WebStorage>(
  * Creates a `WebStorage` from a Playwright `WebStorage` instance.
  *
  * @param webStorage - The Playwright `WebStorage` instance to wrap.
- * @since 0.5.1
- * @internal
  */
 export const makeWebStorage = (webStorage: CoreWebStorage): WebStorage => {
   const use = useHelper(webStorage)

@@ -6,4 +6,4 @@
  * effect's lifetime.
  */
 
-export * from './internal/playwright-spawner.js'
+export * from './api/playwright-spawner.js'

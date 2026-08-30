@@ -1,8 +1,6 @@
 /**
  * Effect service wrapper for Playwright pages, including navigation, DOM
  * interaction, evaluation, media capture, and event streams.
- *
- * @since 0.1.0
  */
 
 import { Array, Context, Effect, identity, Option, Queue, Stream } from 'effect'
@@ -58,9 +56,6 @@ interface CorePageEventMap {
  * Values emitted by {@link Page.eventStream} for each supported page event.
  * Native Playwright values are converted to Effect Playwright wrappers where
  * a wrapper is available.
- *
- * @since 0.7.0
- * @internal
  */
 export interface PageEventMap {
   readonly close: Page
@@ -121,59 +116,43 @@ type PageWithPatchedEvents = PatchedEvents<CorePage, CorePageEventMap>
  * and page event streams. Operations that can fail return `Effect`; safe
  * synchronous observations remain plain functions, and nullable Playwright
  * results are represented with `Option`.
- *
- * @since 0.1.0
- * @internal
  */
 export interface Page {
   /**
    * Access the clock.
-   *
-   * @since 0.3.0
    */
   readonly clock: Clock
   /**
    * Access local storage for the page's current origin.
    *
    * @see {@link CorePage.localStorage}
-   * @since 0.5.1
    */
   readonly localStorage: WebStorage
   /**
    * Access the keyboard.
-   *
-   * @since 0.3.0
    */
   readonly keyboard: Keyboard
   /**
    * Access the mouse.
-   *
-   * @since 0.3.0
    */
   readonly mouse: Mouse
   /**
    * Access the touchscreen.
-   *
-   * @since 0.3.0
    */
   readonly touchscreen: Touchscreen
   /**
    * Access the screencast.
-   *
-   * @since 0.5.0
    */
   readonly screencast: Screencast
   /**
    * Access session storage for the page's current origin.
    *
    * @see {@link CorePage.sessionStorage}
-   * @since 0.5.1
    */
   readonly sessionStorage: WebStorage
   /**
    * Navigates the page to the given URL.
    * @see {@link CorePage.goto}
-   * @since 0.1.0
    */
   readonly goto: (
     url: string,
@@ -184,7 +163,6 @@ export interface Page {
    * inheriting all its specific characteristics and behaviors.
    *
    * @see {@link CorePage.setContent}
-   * @since 0.3.0
    */
   readonly setContent: (
     html: string,
@@ -194,7 +172,6 @@ export interface Page {
    * Waits for the given timeout in milliseconds.
    *
    * @see {@link CorePage.waitForTimeout}
-   * @since 0.4.0
    */
   readonly waitForTimeout: (
     timeout: number,
@@ -209,7 +186,6 @@ export interface Page {
    * - {@link Page.waitForURL}
    *
    * @see {@link CorePage.setDefaultNavigationTimeout}
-   * @since 0.3.0
    */
   readonly setDefaultNavigationTimeout: (
     timeout: Parameters<CorePage['setDefaultNavigationTimeout']>[0],
@@ -218,7 +194,6 @@ export interface Page {
    * This setting will change the default maximum time for all the methods accepting `timeout` option.
    *
    * @see {@link CorePage.setDefaultTimeout}
-   * @since 0.3.0
    */
   readonly setDefaultTimeout: (
     timeout: Parameters<CorePage['setDefaultTimeout']>[0],
@@ -227,7 +202,6 @@ export interface Page {
    * The extra HTTP headers will be sent with every request the page initiates.
    *
    * @see {@link CorePage.setExtraHTTPHeaders}
-   * @since 0.3.0
    */
   readonly setExtraHTTPHeaders: (
     headers: Parameters<CorePage['setExtraHTTPHeaders']>[0],
@@ -236,7 +210,6 @@ export interface Page {
    * Sets the viewport size for the page.
    *
    * @see {@link CorePage.setViewportSize}
-   * @since 0.3.0
    */
   readonly setViewportSize: (
     viewportSize: Parameters<CorePage['setViewportSize']>[0],
@@ -245,13 +218,11 @@ export interface Page {
    * Returns the viewport size.
    *
    * @see {@link CorePage.viewportSize}
-   * @since 0.3.0
    */
   readonly viewportSize: () => Option.Option<{ width: number; height: number }>
   /**
    * Waits for the page to navigate to the given URL.
    * @see {@link CorePage.waitForURL}
-   * @since 0.1.0
    */
   readonly waitForURL: (
     url: Parameters<CorePage['waitForURL']>[0],
@@ -262,7 +233,6 @@ export interface Page {
    *
    * NOTE: Most of the time, this method is not needed because Playwright auto-waits before every action.
    * @see {@link CorePage.waitForLoadState}
-   * @since 0.2.0
    */
   readonly waitForLoadState: (
     state?: Parameters<CorePage['waitForLoadState']>[0],
@@ -285,7 +255,6 @@ export interface Page {
    * });
    * ```
    * @see {@link CorePage.evaluate}
-   * @since 0.1.0
    */
   readonly evaluate: <R, Arg = void>(
     pageFunction: PageFunction<Arg, R>,
@@ -298,7 +267,6 @@ export interface Page {
    * - Whenever the child frame is attached or navigated. In this case, the script is evaluated in the context of the newly attached frame.
    *
    * @see {@link CorePage.addInitScript}
-   * @since 0.3.0
    */
   readonly addInitScript: <Arg>(
     script: PageFunction<Arg, unknown> | { path?: string; content?: string },
@@ -309,7 +277,6 @@ export interface Page {
    * Adds a `<script>` tag into the page with the desired url or content.
    *
    * @see {@link CorePage.addScriptTag}
-   * @since 0.3.0
    */
   readonly addScriptTag: (
     options: Parameters<CorePage['addScriptTag']>[0],
@@ -384,7 +351,6 @@ export interface Page {
    * ```
    *
    * @see {@link CorePage.exposeFunction}
-   * @since 0.3.0
    */
   readonly exposeFunction: <A, E, R, Args extends unknown[]>(
     name: Parameters<CorePage['exposeFunction']>[0],
@@ -415,7 +381,6 @@ export interface Page {
    * ```
    *
    * @see {@link CorePage.exposeFunction}
-   * @since 0.3.0
    */
   readonly exposeEffect: <A, E, R>(
     name: Parameters<CorePage['exposeFunction']>[0],
@@ -425,7 +390,6 @@ export interface Page {
    * Adds a `<link rel="stylesheet">` tag into the page with the desired url or a `<style type="text/css">` tag with the content.
    *
    * @see {@link CorePage.addStyleTag}
-   * @since 0.3.0
    */
   readonly addStyleTag: (
     options: Parameters<CorePage['addStyleTag']>[0],
@@ -433,13 +397,11 @@ export interface Page {
   /**
    * Returns the page title.
    * @see {@link CorePage.title}
-   * @since 0.1.0
    */
   readonly title: Effect.Effect<string, PlaywrightError>
   /**
    * Returns the full HTML contents of the page, including the doctype.
    * @see {@link CorePage.content}
-   * @since 0.3.0
    */
   readonly content: Effect.Effect<string, PlaywrightError>
   /**
@@ -467,7 +429,6 @@ export interface Page {
    * ```
    *
    * @see {@link CorePage}
-   * @since 0.1.0
    */
   readonly use: <T>(
     f: (page: CorePage) => Promise<T>,
@@ -478,7 +439,6 @@ export interface Page {
    * NOTE: This method will cause a defect if `options.has` or `options.hasNot` are provided and belong to a different frame.
    *
    * @see {@link CorePage.locator}
-   * @since 0.1.0
    */
   readonly locator: (
     selector: string,
@@ -488,7 +448,6 @@ export interface Page {
    * Returns a locator that matches the given role.
    *
    * @see {@link CorePage.getByRole}
-   * @since 0.1.0
    */
   readonly getByRole: (
     role: Parameters<CorePage['getByRole']>[0],
@@ -498,7 +457,6 @@ export interface Page {
    * Returns a locator that matches the given text.
    *
    * @see {@link CorePage.getByText}
-   * @since 0.1.0
    */
   readonly getByText: (
     text: Parameters<CorePage['getByText']>[0],
@@ -508,7 +466,6 @@ export interface Page {
    * Returns a locator that matches the given label.
    *
    * @see {@link CorePage.getByLabel}
-   * @since 0.1.0
    */
   readonly getByLabel: (
     label: Parameters<CorePage['getByLabel']>[0],
@@ -518,7 +475,6 @@ export interface Page {
    * Returns a locator that matches the given test id.
    *
    * @see {@link CorePage.getByTestId}
-   * @since 0.1.0
    */
   readonly getByTestId: (
     testId: Parameters<CorePage['getByTestId']>[0],
@@ -527,7 +483,6 @@ export interface Page {
    * Returns a locator that matches the given alt text.
    *
    * @see {@link CorePage.getByAltText}
-   * @since 0.3.0
    */
   readonly getByAltText: (
     text: Parameters<CorePage['getByAltText']>[0],
@@ -537,7 +492,6 @@ export interface Page {
    * Returns a locator that matches the given placeholder.
    *
    * @see {@link CorePage.getByPlaceholder}
-   * @since 0.3.0
    */
   readonly getByPlaceholder: (
     text: Parameters<CorePage['getByPlaceholder']>[0],
@@ -547,7 +501,6 @@ export interface Page {
    * Returns a locator that matches the given title.
    *
    * @see {@link CorePage.getByTitle}
-   * @since 0.3.0
    */
   readonly getByTitle: (
     text: Parameters<CorePage['getByTitle']>[0],
@@ -558,7 +511,6 @@ export interface Page {
    * Captures a screenshot of the page.
    *
    * @see {@link CorePage.screenshot}
-   * @since 0.3.0
    */
   readonly screenshot: (
     options?: Parameters<CorePage['screenshot']>[0],
@@ -571,7 +523,6 @@ export interface Page {
    * {@link Page.emulateMedia} before calling `page.pdf()`.
    *
    * @see {@link CorePage.pdf}
-   * @since 0.3.0
    */
   readonly pdf: (
     options?: Parameters<CorePage['pdf']>[0],
@@ -582,7 +533,6 @@ export interface Page {
    *
    * @deprecated Use {@link Page.locator} to create a locator and then call `click` on it instead.
    * @see {@link CorePage.click}
-   * @since 0.1.0
    */
   readonly click: (
     selector: string,
@@ -593,7 +543,6 @@ export interface Page {
    * Drags a source element to a target element and drops it.
    *
    * @see {@link CorePage.dragAndDrop}
-   * @since 0.3.0
    */
   readonly dragAndDrop: (
     source: Parameters<CorePage['dragAndDrop']>[0],
@@ -606,7 +555,6 @@ export interface Page {
    * and/or the 'prefers-colors-scheme' media feature, using the colorScheme argument.
    *
    * @see {@link CorePage.emulateMedia}
-   * @since 0.3.0
    */
   readonly emulateMedia: (
     options?: Parameters<CorePage['emulateMedia']>[0],
@@ -616,14 +564,12 @@ export interface Page {
    * Reloads the page.
    *
    * @see {@link CorePage.reload}
-   * @since 0.1.0
    */
   readonly reload: Effect.Effect<void, PlaywrightError>
   /**
    * Navigate to the previous page in history.
    *
    * @see {@link CorePage.goBack}
-   * @since 0.3.0
    */
   readonly goBack: (
     options?: Parameters<CorePage['goBack']>[0],
@@ -632,7 +578,6 @@ export interface Page {
    * Navigate to the next page in history.
    *
    * @see {@link CorePage.goForward}
-   * @since 0.3.0
    */
   readonly goForward: (
     options?: Parameters<CorePage['goForward']>[0],
@@ -642,35 +587,30 @@ export interface Page {
    * be collected.
    *
    * @see {@link CorePage.requestGC}
-   * @since 0.3.0
    */
   readonly requestGC: Effect.Effect<void, PlaywrightError>
   /**
    * Brings page to front (activates tab).
    *
    * @see {@link CorePage.bringToFront}
-   * @since 0.3.0
    */
   readonly bringToFront: Effect.Effect<void, PlaywrightError>
   /**
    * Pauses the script execution.
    *
    * @see {@link CorePage.pause}
-   * @since 0.3.0
    */
   readonly pause: Effect.Effect<void, PlaywrightError>
   /**
    * Closes the page.
    *
    * @see {@link CorePage.close}
-   * @since 0.1.0
    */
   readonly close: Effect.Effect<void, PlaywrightError>
   /**
    * Indicates that the page has been closed.
    *
    * @see {@link CorePage.isClosed}
-   * @since 0.3.0
    */
   readonly isClosed: () => boolean
 
@@ -678,7 +618,6 @@ export interface Page {
    * Returns the current URL of the page.
    *
    * @see {@link CorePage.url}
-   * @since 0.1.0
    */
   readonly url: () => string
 
@@ -686,7 +625,6 @@ export interface Page {
    * Clears all highlights.
    *
    * @see {@link CorePage.hideHighlight}
-   * @since 0.5.0
    */
   readonly hideHighlight: Effect.Effect<void, PlaywrightError>
 
@@ -694,7 +632,6 @@ export interface Page {
    * Clears stored console messages.
    *
    * @see {@link CorePage.clearConsoleMessages}
-   * @since 0.5.0
    */
   readonly clearConsoleMessages: Effect.Effect<void, PlaywrightError>
 
@@ -702,7 +639,6 @@ export interface Page {
    * Clears stored page errors.
    *
    * @see {@link CorePage.clearPageErrors}
-   * @since 0.5.0
    */
   readonly clearPageErrors: Effect.Effect<void, PlaywrightError>
 
@@ -710,7 +646,6 @@ export interface Page {
    * Returns all messages that have been logged to the console.
    *
    * @see {@link CorePage.consoleMessages}
-   * @since 0.3.0
    */
   readonly consoleMessages: (
     options?: Parameters<CorePage['consoleMessages']>[0],
@@ -720,7 +655,6 @@ export interface Page {
    * Returns all errors that have been thrown in the page.
    *
    * @see {@link CorePage.pageErrors}
-   * @since 0.3.0
    */
   readonly pageErrors: (
     options?: Parameters<CorePage['pageErrors']>[0],
@@ -730,7 +664,6 @@ export interface Page {
    * Returns the most recent network requests from the page.
    *
    * @see {@link CorePage.requests}
-   * @since 0.5.0
    */
   readonly requests: Effect.Effect<ReadonlyArray<Request>, PlaywrightError>
 
@@ -738,7 +671,6 @@ export interface Page {
    * Enters an interactive mode where hovering over elements highlights them and shows the corresponding locator.
    *
    * @see {@link CorePage.pickLocator}
-   * @since 0.5.0
    */
   readonly pickLocator: Effect.Effect<Locator, PlaywrightError>
 
@@ -746,7 +678,6 @@ export interface Page {
    * Cancels the locator picking mode.
    *
    * @see {@link CorePage.cancelPickLocator}
-   * @since 0.5.0
    */
   readonly cancelPickLocator: Effect.Effect<void, PlaywrightError>
 
@@ -754,7 +685,6 @@ export interface Page {
    * Captures the aria snapshot of the page.
    *
    * @see {@link CorePage.ariaSnapshot}
-   * @since 0.5.0
    */
   readonly ariaSnapshot: (
     options?: Parameters<CorePage['ariaSnapshot']>[0],
@@ -764,7 +694,6 @@ export interface Page {
    * Returns all workers.
    *
    * @see {@link CorePage.workers}
-   * @since 0.3.0
    */
   readonly workers: () => ReadonlyArray<Worker>
 
@@ -772,7 +701,6 @@ export interface Page {
    * Get the browser context that the page belongs to.
    *
    * @see {@link CorePage.context}
-   * @since 0.3.0
    */
   readonly context: () => BrowserContext
   /**
@@ -781,14 +709,12 @@ export interface Page {
    * If the opener has been closed already, returns `Option.none`.
    *
    * @see {@link CorePage.opener}
-   * @since 0.3.0
    */
   readonly opener: Effect.Effect<Option.Option<Page>, PlaywrightError>
   /**
    * Returns a frame matching the specified criteria.
    *
    * @see {@link CorePage.frame}
-   * @since 0.3.0
    */
   readonly frame: (
     frameSelector: Parameters<CorePage['frame']>[0],
@@ -798,14 +724,12 @@ export interface Page {
    * Returns all frames attached to the page.
    *
    * @see {@link CorePage.frames}
-   * @since 0.2.0
    */
   readonly frames: Effect.Effect<ReadonlyArray<Frame>, PlaywrightError>
   /**
    * The page's main frame. Page is guaranteed to have a main frame which persists during navigations.
    *
    * @see {@link CorePage.mainFrame}
-   * @since 0.3.0
    */
   readonly mainFrame: () => Frame
   /**
@@ -829,7 +753,6 @@ export interface Page {
    * ```
    *
    * @see {@link CorePage.on}
-   * @since 0.1.0
    */
   readonly eventStream: <K extends keyof PageEventMap>(
     event: K,
@@ -838,9 +761,6 @@ export interface Page {
 
 /**
  * Service tag for the active {@link Page}.
- *
- * @since 0.1.0
- * @internal
  */
 export const Page = Context.Service<Page>('effect-playwright/page/Page')
 
@@ -848,8 +768,6 @@ export const Page = Context.Service<Page>('effect-playwright/page/Page')
  * Creates a `Page` from a Playwright `Page` instance.
  *
  * @param page - The Playwright `Page` instance to wrap.
- * @since 0.1.0
- * @internal
  */
 export const makePage = (page: CorePage): Page => {
   const events = page as PageWithPatchedEvents

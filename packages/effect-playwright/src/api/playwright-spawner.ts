@@ -1,7 +1,5 @@
 /**
  * Service for provisioning a scoped Playwright browser.
- *
- * @since 0.7.0
  */
 
 import { Context, Effect, Layer } from 'effect'
@@ -17,9 +15,6 @@ import type { PlaywrightError } from './errors.js'
  *
  * Use through {@link withBrowser} for the common case, or access `browser`
  * directly when composing a custom scoped layer.
- *
- * @since 0.7.0
- * @internal
  */
 export interface PlaywrightSpawner {
   readonly browser: Effect.Effect<Playwright.Browser, PlaywrightError, Scope>
@@ -27,9 +22,6 @@ export interface PlaywrightSpawner {
 
 /**
  * Service tag for the active {@link PlaywrightSpawner}.
- *
- * @since 0.7.0
- * @internal
  */
 export const PlaywrightSpawner = Context.Service<PlaywrightSpawner>(
   'effect-playwright/playwright-spawner/PlaywrightSpawner',
@@ -63,9 +55,6 @@ export const PlaywrightSpawner = Context.Service<PlaywrightSpawner>(
  *
  * @param browser - Browser engine to launch.
  * @param launchOptions - Optional browser launch options.
- *
- * @since 0.1.0
- * @internal
  */
 export const layer = (
   browser: BrowserType,
@@ -115,8 +104,5 @@ const withBrowserUnscoped = Effect.provideServiceEffect(
  *   Effect.provide(PlaywrightSpawner.layer(chromium)),
  * );
  * ```
- *
- * @since 0.1.0
- * @internal
  */
 export const withBrowser = <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.scoped(withBrowserUnscoped(self)) // TODO: roast check if using Effect.scope here is an anti-pattern

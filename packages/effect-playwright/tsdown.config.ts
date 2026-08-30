@@ -2,13 +2,14 @@ import { defineConfig } from 'tsdown'
 
 type ExportEntry = string | Record<string, string | undefined>
 
-const typesMap: Record<string, string> = {
-  '.': './dist/index.d.ts',
-  './experimental': './dist/experimental/index.d.ts',
+const apiExtractorRollups: Record<string, string> = {
+  '.': './dist/effect-playwright.d.ts',
+  './experimental': './dist/experimental.d.ts',
   './test': './dist/test.d.ts',
 }
-const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
-  for (const [subpath, types] of Object.entries(typesMap)) {
+
+const shapeExports = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
+  for (const [subpath, types] of Object.entries(apiExtractorRollups)) {
     const entry = exports[subpath]
     if (typeof entry === 'string') {
       exports[subpath] = { types, default: entry }
@@ -22,7 +23,11 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
 }
 
 export default defineConfig({
-  entry: ['src/index.ts', 'src/experimental/index.ts', 'src/test.ts'],
+  entry: {
+    index: './src/index.ts',
+    experimental: './src/experimental/index.ts',
+    test: './src/test.ts',
+  },
   format: 'esm',
   dts: true,
   clean: true,
@@ -30,7 +35,7 @@ export default defineConfig({
   define: {
     'import.meta.vitest': 'undefined',
   },
-  exports: { devExports: '@systemfsoftware/source', customExports: injectTypes },
+  exports: { devExports: '@systemfsoftware/source', customExports: shapeExports },
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   tsconfig: './tsconfig.build.json',
   deps: {

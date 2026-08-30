@@ -6,8 +6,6 @@
  * acquired by the program remain scoped to that program. Because Playwright does
  * not expose a public test-completion signal, timeout interruption starts during
  * test-scoped fixture teardown, after user `afterEach` hooks have run.
- *
- * @since 0.6.0
  */
 
 import {
@@ -43,8 +41,6 @@ import { makePage, Page } from './page.js'
  * ```
  *
  * @see https://playwright.dev/docs/test-fixtures
- * @since 0.6.0
- * @internal
  */
 export type TestEnvironment = Browser | BrowserContext | Page | Scope.Scope
 
@@ -67,8 +63,6 @@ export type TestEnvironment = Browser | BrowserContext | Page | Scope.Scope
  * ```
  *
  * @see https://playwright.dev/docs/test-fixtures
- * @since 0.6.0
- * @internal
  */
 export type EffectTestFunction<Args extends object, A, E, R = never> = (
   args: Args,
@@ -94,8 +88,6 @@ export type EffectTestFunction<Args extends object, A, E, R = never> = (
  * ```
  *
  * @see https://playwright.dev/docs/test-fixtures
- * @since 0.6.0
- * @internal
  */
 export interface EffectTest<Args extends object, R = never> {
   <A, E>(title: string, body: EffectTestFunction<Args, A, E, R>): void
@@ -125,8 +117,6 @@ export interface EffectTest<Args extends object, R = never> {
  * ```
  *
  * @see https://playwright.dev/docs/test-annotations
- * @since 0.6.0
- * @internal
  */
 export interface EffectTester<Args extends object, R = never> extends EffectTest<Args, R> {
   readonly only: EffectTest<Args, R>
@@ -139,9 +129,6 @@ export interface EffectTester<Args extends object, R = never> extends EffectTest
  * Options for acquiring an Effect layer shared by a test registration block.
  * `memoMap` controls layer memoization, while `timeout` bounds setup and
  * teardown.
- *
- * @since 0.6.0
- * @internal
  */
 export interface LayerOptions {
   readonly memoMap?: Layer.MemoMap
@@ -150,9 +137,6 @@ export interface LayerOptions {
 /**
  * Options for a nested shared layer. Nested layers reuse their parent's memo
  * map and may configure their own setup and teardown timeout.
- *
- * @since 0.6.0
- * @internal
  */
 export interface NestedLayerOptions {
   readonly timeout?: Duration.Input
@@ -161,9 +145,6 @@ export interface NestedLayerOptions {
 /**
  * Registers tests that share an acquired Effect layer, optionally inside a
  * named Playwright `describe` block.
- *
- * @since 0.6.0
- * @internal
  */
 export interface LayerRegistration<T extends object, W extends object, R> {
   (f: (test: LayerTestMethods<T, W, R>) => void): void
@@ -174,9 +155,6 @@ export interface LayerRegistration<T extends object, W extends object, R> {
  * Playwright test methods available inside a shared-layer registration block.
  * The `effect` and `scoped` methods receive the layer's services, and `layer`
  * adds another layer that depends on the current one.
- *
- * @since 0.6.0
- * @internal
  */
 export type LayerTestMethods<T extends object, W extends object, R> =
   & TestType<
@@ -194,9 +172,6 @@ export type LayerTestMethods<T extends object, W extends object, R> =
 
 /**
  * Creates a registration block whose tests share an Effect layer.
- *
- * @since 0.6.0
- * @internal
  */
 export type LayerMethod<T extends object, W extends object> = <R, E>(
   layer: Layer.Layer<R, E>,
@@ -222,8 +197,6 @@ export type LayerMethod<T extends object, W extends object> = <R, E>(
  * ```
  *
  * @see https://playwright.dev/docs/test-fixtures
- * @since 0.6.0
- * @internal
  */
 export type TestMethods<T extends object, W extends object> = TestType<T, W> & {
   readonly effect: EffectTester<T & W>
@@ -518,8 +491,6 @@ const makeLayer = <T extends object, W extends object, R, E>(
  * ```
  *
  * @see https://playwright.dev/docs/test-fixtures
- * @since 0.6.0
- * @internal
  */
 export const makeMethods: <
   T extends Pick<PlaywrightTestArgs, 'context' | 'page'>,
@@ -613,8 +584,6 @@ export const makeMethods: <
  * ```
  *
  * @see https://playwright.dev/docs/test-fixtures
- * @since 0.6.0
- * @internal
  */
 export const test = makeMethods(playwrightTest)
 
@@ -642,8 +611,6 @@ export const test = makeMethods(playwrightTest)
  * ```
  *
  * @see https://playwright.dev/docs/api/class-test#test-before-all
- * @since 0.6.0
- * @internal
  */
 export const layer: LayerMethod<PlaywrightTestArgs, PlaywrightWorkerArgs> = test.layer
 
@@ -666,7 +633,5 @@ export const layer: LayerMethod<PlaywrightTestArgs, PlaywrightWorkerArgs> = test
  * ```
  *
  * @see https://playwright.dev/docs/test-fixtures
- * @since 0.6.0
- * @internal
  */
 export const effect = test.effect

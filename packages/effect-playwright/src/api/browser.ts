@@ -1,8 +1,6 @@
 /**
  * Effect service wrapper for Playwright browsers, including scoped context and
  * page creation, lifecycle operations, and browser event streams.
- *
- * @since 0.1.0
  */
 
 import { Context, Effect, Queue, Stream } from 'effect'
@@ -21,23 +19,14 @@ import { useHelper } from './utils.js'
 
 /**
  * Options for launching a Playwright browser.
- *
- * @since 0.1.0
- * @internal
  */
 export type LaunchOptions = Parameters<typeof chromium.launch>[0]
 /**
  * Options for creating a page directly from a browser.
- *
- * @since 0.1.0
- * @internal
  */
 export type NewPageOptions = Parameters<CoreBrowser['newPage']>[0]
 /**
  * Options for creating a browser context.
- *
- * @since 0.1.0
- * @internal
  */
 export type NewContextOptions = Parameters<CoreBrowser['newContext']>[0]
 
@@ -69,9 +58,6 @@ type BrowserWithPatchedEvents = PatchedEvents<CoreBrowser, BrowserEvents>
  * browser, consume browser events, or access an unsupported native operation.
  * Prefer `Playwright.launchScoped` or `PlaywrightSpawner.withBrowser` when this
  * service owns the browser process.
- *
- * @since 0.1.0
- * @internal
  */
 export interface Browser {
   /**
@@ -113,7 +99,6 @@ export interface Browser {
    * @param f - A function that receives the native browser and returns a promise.
    * @returns An effect that maps a rejected promise to `PlaywrightError`.
    * @see {@link CoreBrowser}
-   * @since 0.1.0
    */
   readonly use: <T>(
     f: (browser: CoreBrowser) => Promise<T>,
@@ -139,7 +124,6 @@ export interface Browser {
    * failure or interruption.
    *
    * @see {@link CoreBrowser.newContext}
-   * @since 0.1.0
    */
   readonly newContext: (
     options?: NewContextOptions,
@@ -166,7 +150,6 @@ export interface Browser {
    * Binds the browser to a title.
    *
    * @see {@link CoreBrowser.bind}
-   * @since 0.5.0
    */
   readonly bind: (
     title: string,
@@ -177,7 +160,6 @@ export interface Browser {
    * Unbinds the browser.
    *
    * @see {@link CoreBrowser.unbind}
-   * @since 0.5.0
    */
   readonly unbind: Effect.Effect<void, PlaywrightError>
 
@@ -190,7 +172,6 @@ export interface Browser {
    * ends when the browser disconnects.
    *
    * @see {@link CoreBrowser.on}
-   * @since 0.1.2
    */
   readonly eventStream: <K extends keyof BrowserEvents>(
     event: K,
@@ -199,9 +180,6 @@ export interface Browser {
 
 /**
  * Service tag for the active {@link Browser}.
- *
- * @since 0.1.0
- * @internal
  */
 
 export const Browser = Context.Service<Browser>(
@@ -212,8 +190,6 @@ export const Browser = Context.Service<Browser>(
  * Creates a `Browser` from a Playwright `Browser` instance.
  *
  * @param browser - The Playwright `Browser` instance to wrap.
- * @since 0.1.0
- * @internal
  */
 export const makeBrowser = (browser: CoreBrowser): Browser => {
   const events = browser as BrowserWithPatchedEvents

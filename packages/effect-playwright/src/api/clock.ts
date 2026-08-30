@@ -1,7 +1,5 @@
 /**
  * Effect service wrapper for Playwright's browser clock APIs.
- *
- * @since 0.1.0
  */
 
 import { Context, type Effect } from 'effect'
@@ -11,7 +9,6 @@ import { useHelper } from './utils.js'
 
 /**
  * Interface for a Playwright clock.
- * @internal
  */
 export interface Clock {
   /**
@@ -19,7 +16,6 @@ export interface Clock {
    * closing the laptop lid for a while and reopening it later, after given time.
    *
    * @see {@link CoreClock.fastForward}
-   * @since 0.1.0
    */
   readonly fastForward: (
     ticks: number | string,
@@ -29,7 +25,6 @@ export interface Clock {
    * Install fake implementations for time-related functions.
    *
    * @see {@link CoreClock.install}
-   * @since 0.1.0
    */
   readonly install: (options?: {
     time?: number | string | Date
@@ -39,7 +34,6 @@ export interface Clock {
    * Advance the clock by jumping forward in time and pause the time.
    *
    * @see {@link CoreClock.pauseAt}
-   * @since 0.1.0
    */
   readonly pauseAt: (
     time: number | string | Date,
@@ -49,7 +43,6 @@ export interface Clock {
    * Resumes timers. Once this method is called, time resumes flowing, timers are fired as usual.
    *
    * @see {@link CoreClock.resume}
-   * @since 0.1.0
    */
   readonly resume: Effect.Effect<void, PlaywrightError>
 
@@ -57,7 +50,6 @@ export interface Clock {
    * Advance the clock, firing all the time-related callbacks.
    *
    * @see {@link CoreClock.runFor}
-   * @since 0.1.0
    */
   readonly runFor: (
     ticks: number | string,
@@ -67,7 +59,6 @@ export interface Clock {
    * Makes `Date.now` and `new Date()` return fixed fake time at all times, keeps all the timers running.
    *
    * @see {@link CoreClock.setFixedTime}
-   * @since 0.1.0
    */
   readonly setFixedTime: (
     time: number | string | Date,
@@ -77,7 +68,6 @@ export interface Clock {
    * Sets system time, but does not trigger any timers.
    *
    * @see {@link CoreClock.setSystemTime}
-   * @since 0.1.0
    */
   readonly setSystemTime: (
     time: number | string | Date,
@@ -90,7 +80,6 @@ export interface Clock {
    * @param f - A function that takes the Playwright `Clock` and returns a `Promise`.
    * @returns An effect that wraps the promise and returns its result.
    * @see {@link CoreClock}
-   * @since 0.1.0
    */
   readonly use: <T>(
     f: (clock: CoreClock) => Promise<T>,
@@ -99,9 +88,6 @@ export interface Clock {
 
 /**
  * A service that provides a `Clock` instance.
- *
- * @since 0.1.0
- * @internal
  */
 export const Clock = Context.Service<Clock>('effect-playwright/clock/Clock')
 
@@ -109,8 +95,6 @@ export const Clock = Context.Service<Clock>('effect-playwright/clock/Clock')
  * Creates a `Clock` from a Playwright `Clock` instance.
  *
  * @param clock - The Playwright `Clock` instance to wrap.
- * @since 0.1.0
- * @internal
  */
 export const makeClock = (clock: CoreClock): Clock => {
   const use = useHelper(clock)

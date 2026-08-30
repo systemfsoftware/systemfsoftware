@@ -29,13 +29,15 @@
     "effect-playwright": "./bin/cli.mjs"
   },
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && pnpm api:check",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "attw": "attw --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "test": "vitest run",
     "test:playwright": "playwright test --workers=1",
+    "api:check": "api-extractor run && api-extractor run --config api-extractor.experimental.json && api-extractor run --config api-extractor.test.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.experimental.json && api-extractor run --local --config api-extractor.test.json",
     "prepack": "pnpm build"
   },
   "dependencies": {
@@ -52,6 +54,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
     "@playwright/test": "^1.62.1",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
@@ -72,12 +75,12 @@
     "provenance": true,
     "exports": {
       ".": {
-        "types": "./dist/index.d.ts",
+        "types": "./dist/effect-playwright.d.ts",
         "default": "./dist/index.mjs"
       },
       "./experimental": {
-        "types": "./dist/experimental/index.d.ts",
-        "default": "./dist/experimental/index.mjs"
+        "types": "./dist/experimental.d.ts",
+        "default": "./dist/experimental.mjs"
       },
       "./test": {
         "types": "./dist/test.d.ts",
@@ -92,13 +95,13 @@
   "exports": {
     ".": {
       "@systemfsoftware/source": "./src/index.ts",
-      "types": "./dist/index.d.ts",
+      "types": "./dist/effect-playwright.d.ts",
       "default": "./dist/index.mjs"
     },
     "./experimental": {
       "@systemfsoftware/source": "./src/experimental/index.ts",
-      "types": "./dist/experimental/index.d.ts",
-      "default": "./dist/experimental/index.mjs"
+      "types": "./dist/experimental.d.ts",
+      "default": "./dist/experimental.mjs"
     },
     "./test": {
       "@systemfsoftware/source": "./src/test.ts",

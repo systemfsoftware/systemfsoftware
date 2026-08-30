@@ -1,7 +1,5 @@
 /**
  * Effect service wrapper for Playwright mouse input.
- *
- * @since 0.3.0
  */
 
 import { Context, type Effect } from 'effect'
@@ -9,16 +7,12 @@ import type { Mouse as CoreMouse } from 'playwright-core'
 import type { PlaywrightError } from './errors.js'
 import { useHelper } from './utils.js'
 
-/**
- * @since 0.3.0
- * @internal
- */
+/** */
 export interface Mouse {
   /**
    * Shortcut for mouse.move, mouse.down, mouse.up.
    *
    * @see {@link CoreMouse.click}
-   * @since 0.3.0
    */
   readonly click: (
     x: Parameters<CoreMouse['click']>[0],
@@ -29,7 +23,6 @@ export interface Mouse {
    * Shortcut for mouse.move, mouse.down, mouse.up, mouse.down and mouse.up.
    *
    * @see {@link CoreMouse.dblclick}
-   * @since 0.3.0
    */
   readonly dblclick: (
     x: Parameters<CoreMouse['dblclick']>[0],
@@ -40,7 +33,6 @@ export interface Mouse {
    * Dispatches a `mousedown` event.
    *
    * @see {@link CoreMouse.down}
-   * @since 0.3.0
    */
   readonly down: (
     options?: Parameters<CoreMouse['down']>[0],
@@ -49,7 +41,6 @@ export interface Mouse {
    * Dispatches a `mousemove` event.
    *
    * @see {@link CoreMouse.move}
-   * @since 0.3.0
    */
   readonly move: (
     x: Parameters<CoreMouse['move']>[0],
@@ -60,7 +51,6 @@ export interface Mouse {
    * Dispatches a `mouseup` event.
    *
    * @see {@link CoreMouse.up}
-   * @since 0.3.0
    */
   readonly up: (
     options?: Parameters<CoreMouse['up']>[0],
@@ -69,7 +59,6 @@ export interface Mouse {
    * Dispatches a `wheel` event.
    *
    * @see {@link CoreMouse.wheel}
-   * @since 0.3.0
    */
   readonly wheel: (
     deltaX: Parameters<CoreMouse['wheel']>[0],
@@ -77,17 +66,13 @@ export interface Mouse {
   ) => Effect.Effect<void, PlaywrightError>
 }
 
-/**
- * @internal
- */
+/** */
 export const Mouse = Context.Service<Mouse>('effect-playwright/mouse/Mouse')
 
 /**
  * Creates a `Mouse` from a Playwright `Mouse` instance.
  *
  * @param mouse - The Playwright `Mouse` instance to wrap.
- * @since 0.3.0
- * @internal
  */
 export const makeMouse = (mouse: CoreMouse): Mouse => {
   const use = useHelper(mouse)

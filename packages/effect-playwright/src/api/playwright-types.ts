@@ -1,7 +1,5 @@
 /**
  * Public type utilities used by page and locator evaluation APIs.
- *
- * @since 0.1.0
  */
 
 import type { ElementHandle, JSHandle } from 'playwright-core'
@@ -10,12 +8,8 @@ import type { ElementHandle, JSHandle } from 'playwright-core'
  * Recursively excludes Playwright handles from an argument shape.
  *
  * Adapted from Playwright's internal evaluation types.
- *
- * @since 0.1.0
- * @internal
  */
 
-/** @internal */
 export type NoHandles<Arg> = Arg extends JSHandle ? never
   : Arg extends (...args: infer T) => PromiseLike<infer U> ? (...args: T) => Promise<NoHandles<U>>
   : Arg extends (...args: infer T) => infer R ? (...args: T) => NoHandles<R>
@@ -25,9 +19,6 @@ export type NoHandles<Arg> = Arg extends JSHandle ? never
 /**
  * Converts Playwright handles to the values visible in the browser evaluation
  * context.
- *
- * @since 0.1.0
- * @internal
  */
 export type Unboxed<Arg> = Arg extends ElementHandle<infer T> ? T
   : Arg extends JSHandle<infer T> ? T
@@ -44,9 +35,6 @@ export type Unboxed<Arg> = Arg extends ElementHandle<infer T> ? T
 
 /**
  * A function or source string evaluated in a Playwright page context.
- *
- * @since 0.1.0
- * @internal
  */
 export type PageFunction<Arg, R> =
   | string
@@ -58,8 +46,6 @@ export type PageFunction<Arg, R> =
  *
  * This is useful because Playwright's event methods are often overloaded,
  * making them difficult to use in generic contexts or with custom event maps.
- *
- * @internal
  */
 export type PatchedEvents<Original, Events> = Original & {
   on<K extends keyof Events>(

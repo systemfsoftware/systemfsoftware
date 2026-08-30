@@ -1,8 +1,6 @@
 /**
  * Effect service wrapper for Playwright browser contexts, including pages,
  * storage state, tracing, credentials, and event streams.
- *
- * @since 0.1.0
  */
 
 import { Context, Effect, identity, Option, Queue, Stream } from 'effect'
@@ -105,9 +103,6 @@ type BrowserContextWithPatchedEvents = PatchedEvents<
  * Use a context to isolate cookies, permissions, storage, pages, and tracing
  * within one browser. Contexts created by `Browser.newContext` are scoped and
  * close automatically when their scope ends.
- *
- * @since 0.1.0
- * @internal
  */
 export interface BrowserContext {
   /**
@@ -118,40 +113,33 @@ export interface BrowserContext {
    * Access the virtual WebAuthn credentials manager.
    *
    * @see {@link CoreBrowserContext.credentials}
-   * @since 0.5.1
    */
   readonly credentials: Credentials
   /**
    * Access the tracing.
-   *
-   * @since 0.5.0
    */
   readonly tracing: Tracing
   /**
    * Returns the list of all open pages in the browser context.
    *
    * @see {@link CoreBrowserContext.pages}
-   * @since 0.1.0
    */
   readonly pages: () => Array<Page>
   /**
    * Opens a new page in the browser context.
    * @see {@link CoreBrowserContext.newPage}
-   * @since 0.1.0
    */
   readonly newPage: Effect.Effect<Page, PlaywrightError>
   /**
    * Closes the browser context.
    *
    * @see {@link CoreBrowserContext.close}
-   * @since 0.1.0
    */
   readonly close: Effect.Effect<void, PlaywrightError>
   /**
    * Indicates that the browser context is in the process of closing or has already been closed.
    *
    * @see {@link CoreBrowserContext.isClosed}
-   * @since 0.5.1
    */
   readonly isClosed: () => boolean
   /**
@@ -160,7 +148,6 @@ export interface BrowserContext {
    * - Whenever a child frame is attached or navigated. In this case, the script is evaluated in the context of the newly attached frame.
    *
    * @see {@link CoreBrowserContext.addInitScript}
-   * @since 0.2.0
    */
   readonly addInitScript: <Arg>(
     script: PageFunction<Arg, unknown> | { path?: string; content?: string },
@@ -172,7 +159,6 @@ export interface BrowserContext {
    * Returns the browser that the context belongs to.
    *
    * @see {@link CoreBrowserContext.browser}
-   * @since 0.4.0
    */
   readonly browser: () => Option.Option<Browser>
 
@@ -180,7 +166,6 @@ export interface BrowserContext {
    * Clears the cookies from the browser context.
    *
    * @see {@link CoreBrowserContext.clearCookies}
-   * @since 0.4.0
    */
   readonly clearCookies: (options?: {
     name?: string | RegExp
@@ -192,7 +177,6 @@ export interface BrowserContext {
    * Clears the permissions from the browser context.
    *
    * @see {@link CoreBrowserContext.clearPermissions}
-   * @since 0.4.0
    */
   readonly clearPermissions: Effect.Effect<void, PlaywrightError>
 
@@ -200,7 +184,6 @@ export interface BrowserContext {
    * Returns the cookies for the browser context.
    *
    * @see {@link CoreBrowserContext.cookies}
-   * @since 0.4.0
    */
   readonly cookies: (
     urls?: string | string[],
@@ -213,7 +196,6 @@ export interface BrowserContext {
    * Sets the cookies for the browser context.
    *
    * @see {@link CoreBrowserContext.addCookies}
-   * @since 0.4.0
    */
   readonly addCookies: (
     cookies: Parameters<CoreBrowserContext['addCookies']>[0],
@@ -223,7 +205,6 @@ export interface BrowserContext {
    * Grants permissions to the browser context.
    *
    * @see {@link CoreBrowserContext.grantPermissions}
-   * @since 0.4.0
    */
   readonly grantPermissions: (
     permissions: Parameters<CoreBrowserContext['grantPermissions']>[0],
@@ -234,7 +215,6 @@ export interface BrowserContext {
    * Sets the extra HTTP headers for the browser context.
    *
    * @see {@link CoreBrowserContext.setExtraHTTPHeaders}
-   * @since 0.4.0
    */
   readonly setExtraHTTPHeaders: (
     headers: Parameters<CoreBrowserContext['setExtraHTTPHeaders']>[0],
@@ -244,7 +224,6 @@ export interface BrowserContext {
    * Sets the geolocation for the browser context.
    *
    * @see {@link CoreBrowserContext.setGeolocation}
-   * @since 0.4.0
    */
   readonly setGeolocation: (
     geolocation: Parameters<CoreBrowserContext['setGeolocation']>[0],
@@ -254,7 +233,6 @@ export interface BrowserContext {
    * Sets the offline state for the browser context.
    *
    * @see {@link CoreBrowserContext.setOffline}
-   * @since 0.4.0
    */
   readonly setOffline: (
     offline: boolean,
@@ -264,7 +242,6 @@ export interface BrowserContext {
    * Sets the default navigation timeout for the browser context.
    *
    * @see {@link CoreBrowserContext.setDefaultNavigationTimeout}
-   * @since 0.4.0
    */
   readonly setDefaultNavigationTimeout: (timeout: number) => void
 
@@ -272,7 +249,6 @@ export interface BrowserContext {
    * Sets the default timeout for the browser context.
    *
    * @see {@link CoreBrowserContext.setDefaultTimeout}
-   * @since 0.4.0
    */
   readonly setDefaultTimeout: (timeout: number) => void
 
@@ -281,7 +257,6 @@ export interface BrowserContext {
    * snapshot.
    *
    * @see {@link CoreBrowserContext.storageState}
-   * @since 0.5.1
    */
   readonly storageState: (
     options?: Parameters<CoreBrowserContext['storageState']>[0],
@@ -294,7 +269,6 @@ export interface BrowserContext {
    * Sets the storage state for the browser context.
    *
    * @see {@link CoreBrowserContext.setStorageState}
-   * @since 0.5.0
    */
   readonly setStorageState: (
     options: Parameters<CoreBrowserContext['setStorageState']>[0],
@@ -310,7 +284,6 @@ export interface BrowserContext {
    * ends when the browser context closes.
    *
    * @see {@link CoreBrowserContext.on}
-   * @since 0.1.2
    */
   readonly eventStream: <K extends keyof BrowserContextEvents>(
     event: K,
@@ -319,15 +292,11 @@ export interface BrowserContext {
 
 /**
  * Service tag for the active {@link BrowserContext}.
- *
- * @since 0.1.0
- * @internal
  */
 export const BrowserContext = Context.Service<BrowserContext>(
   'effect-playwright/browser-context/BrowserContext',
 )
 
-/** @internal */
 export const makeBrowserContext = (
   context: CoreBrowserContext,
 ): BrowserContext => {

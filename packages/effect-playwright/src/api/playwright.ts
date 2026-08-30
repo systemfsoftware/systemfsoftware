@@ -1,8 +1,6 @@
 /**
  * Service for launching and connecting Playwright browsers with explicit or
  * scope-managed lifecycles.
- *
- * @since 0.1.0
  */
 
 import { Context, Effect, Layer, type Scope } from 'effect'
@@ -23,9 +21,6 @@ type LaunchPersistentContextOptions = Parameters<
  *
  * Use this service when browser acquisition is part of an Effect program.
  * Prefer the `Scoped` variants unless ownership must outlive the current scope.
- *
- * @since 0.1.0
- * @internal
  */
 export interface Playwright {
   /**
@@ -61,7 +56,6 @@ export interface Playwright {
    *
    * @param browserType - The browser engine to launch.
    * @param options - Optional browser launch options.
-   * @since 0.1.0
    */
   launch: (
     browserType: BrowserType,
@@ -93,7 +87,6 @@ export interface Playwright {
    *
    * @param browserType - The browser engine to launch.
    * @param options - Optional browser launch options.
-   * @since 0.1.0
    */
   launchScoped: (
     browserType: BrowserType,
@@ -137,7 +130,6 @@ export interface Playwright {
    * @param browserType - The browser engine to launch.
    * @param userDataDir - Browser profile directory, or `""` for a temporary directory.
    * @param options - Optional persistent-context launch options.
-   * @since 0.2.4
    */
   launchPersistentContext: (
     browserType: BrowserType,
@@ -174,7 +166,6 @@ export interface Playwright {
    * @param browserType - The browser engine to launch.
    * @param userDataDir - Browser profile directory, or `""` for a temporary directory.
    * @param options - Optional persistent-context launch options.
-   * @since 0.2.4
    */
   launchPersistentContextScoped: (
     browserType: BrowserType,
@@ -214,7 +205,6 @@ export interface Playwright {
    *
    * @param cdpUrl - CDP endpoint URL.
    * @param options - Optional CDP connection options.
-   * @since 0.1.0
    */
   connectCDP: (
     cdpUrl: string,
@@ -246,7 +236,6 @@ export interface Playwright {
    *
    * @param cdpUrl - CDP endpoint URL.
    * @param options - Optional CDP connection options.
-   * @since 0.1.1
    */
   connectCDPScoped: (
     cdpUrl: string,
@@ -301,19 +290,13 @@ const launchPersistentContext: (
   return makeBrowserContext(rawContext)
 })
 
-/**
- * @since 0.1.0
- * @internal
- */
+/** */
 export const Playwright = Context.Service<Playwright>(
   'effect-playwright/playwright/Playwright',
 )
 
 /**
  * The layer that provides the {@link Playwright} service.
- *
- * @since 0.1.0
- * @internal
  */
 export const layer = Layer.succeed(Playwright, {
   launch,

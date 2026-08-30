@@ -6,9 +6,6 @@ import { Schema } from 'effect'
  *
  * Timeout errors occur when a timeout is reached. All other errors are
  * grouped under "Unknown".
- *
- * @since 0.1.0
- * @internal
  */
 export class PlaywrightError extends Schema.TaggedError<PlaywrightError>()(
   'PlaywrightError',

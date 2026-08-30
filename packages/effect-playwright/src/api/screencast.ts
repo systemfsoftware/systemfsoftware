@@ -1,7 +1,5 @@
 /**
  * Effect service wrapper for Playwright screencast recording and overlays.
- *
- * @since 0.5.0
  */
 
 import { Context, type Effect } from 'effect'
@@ -9,16 +7,12 @@ import type { Screencast as CoreScreencast } from 'playwright-core'
 import type { PlaywrightError } from './errors.js'
 import { useHelper } from './utils.js'
 
-/**
- * @since 0.5.0
- * @internal
- */
+/** */
 export interface Screencast {
   /**
    * Starts recording the screencast.
    *
    * @see {@link CoreScreencast.start}
-   * @since 0.5.0
    */
   readonly start: (
     options?: Parameters<CoreScreencast['start']>[0],
@@ -28,7 +22,6 @@ export interface Screencast {
    * Stops recording the screencast.
    *
    * @see {@link CoreScreencast.stop}
-   * @since 0.5.0
    */
   readonly stop: Effect.Effect<void, PlaywrightError>
 
@@ -36,7 +29,6 @@ export interface Screencast {
    * Shows action annotations.
    *
    * @see {@link CoreScreencast.showActions}
-   * @since 0.5.0
    */
   readonly showActions: (
     options?: Parameters<CoreScreencast['showActions']>[0],
@@ -46,7 +38,6 @@ export interface Screencast {
    * Hides action annotations.
    *
    * @see {@link CoreScreencast.hideActions}
-   * @since 0.5.0
    */
   readonly hideActions: Effect.Effect<void, PlaywrightError>
 
@@ -54,7 +45,6 @@ export interface Screencast {
    * Shows a chapter title.
    *
    * @see {@link CoreScreencast.showChapter}
-   * @since 0.5.0
    */
   readonly showChapter: (
     title: string,
@@ -65,7 +55,6 @@ export interface Screencast {
    * Shows a custom HTML overlay.
    *
    * @see {@link CoreScreencast.showOverlay}
-   * @since 0.5.0
    */
   readonly showOverlay: (
     html: string,
@@ -76,7 +65,6 @@ export interface Screencast {
    * Shows all overlays.
    *
    * @see {@link CoreScreencast.showOverlays}
-   * @since 0.5.0
    */
   readonly showOverlays: Effect.Effect<void, PlaywrightError>
 
@@ -84,14 +72,11 @@ export interface Screencast {
    * Hides all overlays.
    *
    * @see {@link CoreScreencast.hideOverlays}
-   * @since 0.5.0
    */
   readonly hideOverlays: Effect.Effect<void, PlaywrightError>
 }
 
-/**
- * @internal
- */
+/** */
 export const Screencast = Context.Service<Screencast>(
   'effect-playwright/screencast/Screencast',
 )
@@ -100,8 +85,6 @@ export const Screencast = Context.Service<Screencast>(
  * Creates a `Screencast` from a Playwright `Screencast` instance.
  *
  * @param screencast - The Playwright `Screencast` instance to wrap.
- * @since 0.5.0
- * @internal
  */
 export const makeScreencast = (screencast: CoreScreencast): Screencast => {
   const use = useHelper(screencast)

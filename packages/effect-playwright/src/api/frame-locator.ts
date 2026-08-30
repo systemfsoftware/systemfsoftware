@@ -1,7 +1,5 @@
 /**
  * Effect service wrapper for Playwright frame locators.
- *
- * @since 0.1.0
  */
 
 import { Context, Match, Predicate } from 'effect'
@@ -10,12 +8,10 @@ import { type Locator, makeLocator } from './locator.js'
 
 /**
  * Interface for a Playwright frame locator.
- * @internal
  */
 export interface FrameLocator {
   /**
    * The underlying Playwright FrameLocator instance.
-   * @internal
    */
   readonly _raw: CoreFrameLocator
 
@@ -23,7 +19,6 @@ export interface FrameLocator {
    * Returns locator to the first matching frame.
    *
    * @see {@link CoreFrameLocator.first}
-   * @since 0.1.0
    */
   readonly first: () => FrameLocator
 
@@ -32,7 +27,6 @@ export interface FrameLocator {
    * in that iframe.
    *
    * @see {@link CoreFrameLocator.frameLocator}
-   * @since 0.1.0
    */
   readonly frameLocator: (selector: string) => FrameLocator
 
@@ -40,7 +34,6 @@ export interface FrameLocator {
    * Returns locator to the last matching frame.
    *
    * @see {@link CoreFrameLocator.last}
-   * @since 0.1.0
    */
   readonly last: () => FrameLocator
 
@@ -48,7 +41,6 @@ export interface FrameLocator {
    * Returns locator to the n-th matching frame.
    *
    * @see {@link CoreFrameLocator.nth}
-   * @since 0.1.0
    */
   readonly nth: (index: number) => FrameLocator
 
@@ -56,7 +48,6 @@ export interface FrameLocator {
    * Returns a `Locator` object pointing to the same `iframe` as this frame locator.
    *
    * @see {@link CoreFrameLocator.owner}
-   * @since 0.1.0
    */
   readonly owner: () => Locator
 
@@ -64,7 +55,6 @@ export interface FrameLocator {
    * Finds an element matching the specified selector in the locator's subtree.
    *
    * @see {@link CoreFrameLocator.locator}
-   * @since 0.1.0
    */
   readonly locator: (
     selectorOrLocator: string | CoreLocator | Locator,
@@ -75,7 +65,6 @@ export interface FrameLocator {
    * Allows locating elements by their ARIA role.
    *
    * @see {@link CoreFrameLocator.getByRole}
-   * @since 0.1.0
    */
   readonly getByRole: (
     role: Parameters<CoreFrameLocator['getByRole']>[0],
@@ -86,7 +75,6 @@ export interface FrameLocator {
    * Allows locating elements that contain given text.
    *
    * @see {@link CoreFrameLocator.getByText}
-   * @since 0.1.0
    */
   readonly getByText: (
     text: Parameters<CoreFrameLocator['getByText']>[0],
@@ -97,7 +85,6 @@ export interface FrameLocator {
    * Allows locating elements by their label text.
    *
    * @see {@link CoreFrameLocator.getByLabel}
-   * @since 0.1.0
    */
   readonly getByLabel: (
     text: Parameters<CoreFrameLocator['getByLabel']>[0],
@@ -108,7 +95,6 @@ export interface FrameLocator {
    * Allows locating elements by their placeholder text.
    *
    * @see {@link CoreFrameLocator.getByPlaceholder}
-   * @since 0.1.0
    */
   readonly getByPlaceholder: (
     text: Parameters<CoreFrameLocator['getByPlaceholder']>[0],
@@ -119,7 +105,6 @@ export interface FrameLocator {
    * Allows locating elements by their alt text.
    *
    * @see {@link CoreFrameLocator.getByAltText}
-   * @since 0.1.0
    */
   readonly getByAltText: (
     text: Parameters<CoreFrameLocator['getByAltText']>[0],
@@ -130,7 +115,6 @@ export interface FrameLocator {
    * Allows locating elements by their title attribute.
    *
    * @see {@link CoreFrameLocator.getByTitle}
-   * @since 0.1.0
    */
   readonly getByTitle: (
     text: Parameters<CoreFrameLocator['getByTitle']>[0],
@@ -141,7 +125,6 @@ export interface FrameLocator {
    * Allows locating elements by their test id.
    *
    * @see {@link CoreFrameLocator.getByTestId}
-   * @since 0.1.0
    */
   readonly getByTestId: (
     testId: Parameters<CoreFrameLocator['getByTestId']>[0],
@@ -150,9 +133,6 @@ export interface FrameLocator {
 
 /**
  * A service that provides a `FrameLocator` instance.
- *
- * @since 0.1.0
- * @internal
  */
 export const FrameLocator = Context.Service<FrameLocator>(
   'effect-playwright/frame-locator/FrameLocator',
@@ -162,8 +142,6 @@ export const FrameLocator = Context.Service<FrameLocator>(
  * Creates a `FrameLocator` from a Playwright `FrameLocator` instance.
  *
  * @param frameLocator - The Playwright `FrameLocator` instance to wrap.
- * @since 0.1.0
- * @internal
  */
 export const makeFrameLocator = (
   frameLocator: CoreFrameLocator,

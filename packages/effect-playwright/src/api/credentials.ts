@@ -1,7 +1,5 @@
 /**
  * Effect service wrapper for Playwright WebAuthn credential operations.
- *
- * @since 0.5.1
  */
 
 import { Context, type Effect } from 'effect'
@@ -25,16 +23,12 @@ import { useHelper } from './utils.js'
  *   return credentials;
  * });
  * ```
- *
- * @since 0.5.1
- * @internal
  */
 export interface Credentials {
   /**
    * Installs the virtual WebAuthn authenticator into the browser context.
    *
    * @see {@link CoreCredentials.install}
-   * @since 0.5.1
    */
   readonly install: Effect.Effect<
     Awaited<ReturnType<CoreCredentials['install']>>,
@@ -45,7 +39,6 @@ export interface Credentials {
    * Seeds a virtual WebAuthn credential and returns it.
    *
    * @see {@link CoreCredentials.create}
-   * @since 0.5.1
    */
   readonly create: (
     rpId: Parameters<CoreCredentials['create']>[0],
@@ -59,7 +52,6 @@ export interface Credentials {
    * Returns credentials currently held by the virtual authenticator.
    *
    * @see {@link CoreCredentials.get}
-   * @since 0.5.1
    */
   readonly get: (
     options?: Parameters<CoreCredentials['get']>[0],
@@ -72,7 +64,6 @@ export interface Credentials {
    * Removes a credential from the virtual authenticator.
    *
    * @see {@link CoreCredentials.delete}
-   * @since 0.5.1
    */
   readonly delete: (
     id: Parameters<CoreCredentials['delete']>[0],
@@ -82,10 +73,7 @@ export interface Credentials {
   >
 }
 
-/**
- * @since 0.5.1
- * @internal
- */
+/** */
 export const Credentials = Context.Service<Credentials>(
   'effect-playwright/credentials/Credentials',
 )
@@ -94,8 +82,6 @@ export const Credentials = Context.Service<Credentials>(
  * Creates `Credentials` from a Playwright `Credentials` instance.
  *
  * @param credentials - The Playwright `Credentials` instance to wrap.
- * @since 0.5.1
- * @internal
  */
 export const makeCredentials = (credentials: CoreCredentials): Credentials => {
   const use = useHelper(credentials)
