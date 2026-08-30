@@ -81,79 +81,25 @@ maximal category sweep. Turning on `style`, `restriction`, and `pedantic`
 wholesale produces roughly 1750 findings on working code in this monorepo —
 each one a lesson that the linter is wrong.
 
-## The tiers
+## What's Included
 
-### Universal — defect classes, every file
+The preset defines two configuration tiers:
 
-| Rule                                                                                      | Invariant               | Why it cannot fire on correct code                                                                                    |
-| ----------------------------------------------------------------------------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `typescript/no-explicit-any`, `no-unsafe-{argument,assignment,call,member-access,return}` | II.5 decode, never cast | `any` flowing into typed positions is the laundering path the decode rule exists to close                             |
-| `no-ternary`                                                                              | one branching form      | operator ruling, not a derivation — see below. A branch belongs in an `if`, where review and coverage can see it      |
-| `typescript/consistent-type-assertions` (`assertionStyle: never`)                         | II.5 + G1 hardening     | an assertion changes the compiler's belief, never the value; brands widen back through `as`. `as const` is unaffected |
-| `typescript/no-non-null-assertion`                                                        | I.5                     | `!` asserts away precisely the null the type is warning about                                                         |
-| `typescript/ban-ts-comment`, `unicorn/no-abusive-eslint-disable`                          | L1 anti-gaming          | suppression is the one edit that removes an observer; `ts-expect-error` survives only with a description              |
-| `typescript/no-floating-promises`, `no-misused-promises`, `await-thenable`                | II.2 effects are values | an unawaited effect is an effect nobody observes                                                                      |
-| `typescript/only-throw-error`, `no-throw-literal`                                         | B8 three channels       | a thrown non-error carries no channel a consumer can branch on                                                        |
-| `typescript/no-unnecessary-condition`, `no-unnecessary-type-assertion`                    | III.4 / B5              | a condition that cannot change the outcome is an equivalent-mutant factory                                            |
-| `typescript/strict-boolean-expressions`                                                   | I.5                     | `if (x)` on `boolean \| undefined` reads identically for absent and false                                             |
-| `typescript/switch-exhaustiveness-check`                                                  | G1 exhaustiveness       | the missing arm becomes an error — the one gate the red team could not break                                          |
-| `typescript/no-base-to-string`                                                            | I.4                     | `[object Object]` is primitive obsession reaching the user                                                            |
-| `typescript/explicit-module-boundary-types`                                               | II.1 / L6               | the module boundary is the contract; an inferred exported signature changes silently                                  |
-| `import/no-cycle`                                                                         | II.4                    | a cycle means the dependency direction is violated somewhere in it                                                    |
-| `import/no-mutable-exports`                                                               | S axis                  | an exported mutable binding is escaping state outside the quarantine cell                                             |
-| `no-var`                                                                                  | scope defects           | cannot fire on modern code that never writes `var`                                                                    |
+### Universal Defect Tier
 
-### Test-file hygiene
+Defect-class stock rules enabled at `error` across all files:
 
-| Files                                   | Rules                                                                                                                                                   | Invariant                                                                     |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| `*.test.ts`, `tests/**`, `__tests__/**` | `vitest/expect-expect`, `valid-expect`, `no-standalone-expect`, `no-conditional-in-test`, `no-focused-tests`, `no-disabled-tests`, `no-identical-title` | X5 — a test that asserts nothing passes; `.only` and `.skip` delete observers |
+- **Type Safety & Assertions**: Disallows `any`, unsafe expressions/assignments/returns, and arbitrary type assertions (`typescript/consistent-type-assertions: ['error', { assertionStyle: 'never' }]`, `typescript/no-non-null-assertion`).
+- **Async & Effect Safety**: Catches unhandled or misused promises (`typescript/no-floating-promises`, `typescript/no-misused-promises`, `typescript/await-thenable`).
+- **Control Flow & Error Handling**: Exhaustive pattern matches (`typescript/switch-exhaustiveness-check`), strict boolean checks (`typescript/strict-boolean-expressions`), and typed error throwing (`typescript/only-throw-error`, `no-throw-literal`).
+- **Module & Boundary Invariants**: Prevents import cycles (`import/no-cycle`) and mutable exports (`import/no-mutable-exports`).
 
-The cell-scoped tiers this preset used to carry — pure/kernel/front-half/terminus
-suffix globs and their importer groups — are gone (KTD5). The cell-role suffix
-taxonomy itself was deleted from the tree, and a stock-rule glob cannot outlive
-the taxonomy that named it. The boundary rules are now keyed to the
-`Workflow.make` callee by the custom plugins (`effect-workflow`,
-`effect-executor`, `effect-schema`, …), which take over exactly the purity and
-import restrictions the globs used to encode; register them alongside this
-preset.
+### Test Hygiene Tier
 
-`no-ternary` is on everywhere, and it is the one rule here that ships as an
-**operator ruling rather than a derivation**. Admission test 2 is not met: a
-correct shell ternary now reports, and the fix is to write the `if`. The
-theory's own G2 hardening bans ternaries in core cells; extending that
-repo-wide is a project decision about having exactly one branching form, and
-it is recorded as such rather than dressed up as an invariant.
+Enforces test assertion integrity and structure across `*.test.ts`, `tests/**`, and `__tests__/**` using stock `vitest` rules:
 
-## The refusal ledger
-
-Stock rules deliberately left off, each with what it would fight. A preset
-without this list is a preference wearing a rule's clothes.
-
-| Refused                                                                                  | Why                                                                                                                                     |
-| ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `no-nested-ternary`                                                                      | redundant under `no-ternary`, which is enabled above                                                                                    |
-| `complexity`, `max-depth`, `max-lines`, `max-statements`                                 | the shell sequences I/O and is allowed to; the decision cell's complexity is gated by its own rule                                      |
-| `style`, `restriction`, `pedantic` categories wholesale                                  | ~1750 findings on correct code in this repo; rules that fire on correct code train the disable habit and cost the real gates (L1)       |
-| `typescript/explicit-function-return-type`                                               | demands annotations on private functions, where the type is inferred and checked either way; the boundary variant carries the invariant |
-| `curly`, `sort-keys`, `sort-imports`, `capitalized-comments`, `numeric-separators-style` | dprint owns formatting; none names an invariant                                                                                         |
-| `import/group-exports`, `import/exports-last`                                            | export _topology_ is a real invariant; how you punctuate exports is not                                                                 |
-| `unicorn/prefer-at`                                                                      | the fix is marked dangerous and lint-staged applies fixes unreviewed                                                                    |
-| `eqeqeq`                                                                                 | in strict TypeScript the coercion it prevents is already a type error                                                                   |
-| `vitest/prefer-expect-assertions`                                                        | fires on correct single-assertion tests; `expect-expect` closes the actual X5 exploit                                                   |
-
-## Known residue
-
-The theory demands these; no stock rule can deliver them. They are listed
-rather than implied (L5 — a ruling that cannot compile to a gate is dated debt
-or deleted, never silent prose).
-
-| Ruling                                                                            | Where it is gated instead                                                                                                                                                                                   |
-| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| the cell contracts: workflow, executor, schema, filename taxonomy, test placement | the custom plugins — `effect-workflow`, `effect-executor`, `effect-schema`, `cell-taxonomy`, `test-placement`, `property-testing`, `test-hygiene`, and the core plugin. Register them alongside this preset |
-| the pure-cell purity bans (I.1) that this preset's cell tiers used to carry       | the boundary rules — `make-body-purity` and `workflow-no-effect-import` in `effect-workflow`, plus the per-regime rules in `effect-executor`, `effect-schema`, and `cell-vocabulary`                        |
-| store owns the transaction primitive                                              | the driver is project-specific; supply a `no-restricted-imports` pattern per project                                                                                                                        |
-| G7 mutation, G6 properties, G8 composition, G9 contract                           | other observers; lint cannot see them                                                                                                                                                                       |
+- Requires explicit assertions (`vitest/expect-expect`, `vitest/valid-expect`, `vitest/no-standalone-expect`).
+- Forbids disabled, focused, or conditional tests (`vitest/no-disabled-tests`, `vitest/no-focused-tests`, `vitest/no-conditional-in-test`, `vitest/no-identical-title`).
 
 ## Development
 
@@ -166,3 +112,7 @@ being true.
 ```bash
 pnpm --filter @systemfsoftware/oxlint-plugin-recommended build
 ```
+
+## License
+
+[Apache-2.0](LICENSE). Part of [systemfsoftware](https://github.com/systemfsoftware/systemfsoftware).
