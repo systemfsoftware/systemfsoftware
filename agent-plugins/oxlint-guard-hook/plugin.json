@@ -1,0 +1,10 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "oxlint-guard-hook",
+  "version": "0.1.0",
+  "description": "Lints every agent edit with the project's oxlint config (or deno check/deno lint for Deno scripts) and feeds failures back with a diagnostic that demands new skill invocations before fixing.",
+  "author": { "name": "systemfsoftware" },
+  "repository": "https://github.com/systemfsoftware/systemfsoftware",
+  "license": "MIT",
+  "keywords": ["oxlint", "lint", "claude-code", "hooks", "skills", "guard"]
+}

@@ -28,6 +28,19 @@
         "hooks",
         "guard"
       ]
+    },
+    {
+      "name": "oxlint-guard-hook",
+      "source": "./agent-plugins/oxlint-guard-hook",
+      "description": "After every edit, lints the file with the project's oxlint config (deno check/deno lint for Deno scripts) and feeds failures back with a diagnostic that demands new skill invocations",
+      "category": "linting",
+      "keywords": [
+        "oxlint",
+        "lint",
+        "hooks",
+        "skills",
+        "guard"
+      ]
     }
   ]
 }
