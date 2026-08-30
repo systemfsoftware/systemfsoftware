@@ -18,6 +18,7 @@ import * as Path from 'effect/Path'
 import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization'
 import * as RpcServer from 'effect/unstable/rpc/RpcServer'
 
+import { nodeModuleLayer } from './NodeModule.js'
 import { create, loadPlugins } from './Plugins.js'
 import { MutantCoverageSchema } from './TestRunner.schema.js'
 import { TestRunnerRpcs } from './WorkerProtocol.js'
@@ -106,6 +107,7 @@ const MainLayer = RpcServer.layer(TestRunnerRpcs).pipe(
   Layer.provide(RpcServer.layerProtocolSocketServer),
   Layer.provide(RpcSerialization.layerNdjson),
   Layer.provide(NodeSocketServer.layer({ path: socketPath })),
+  Layer.provide(nodeModuleLayer),
 )
 
 Effect.runFork(

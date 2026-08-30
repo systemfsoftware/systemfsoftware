@@ -16,8 +16,6 @@ const WORKSPACE_PACKAGES = [
   '@systemfsoftware/stryker-js-platform-node',
   '@systemfsoftware/stryker-js-html-reporter',
   '@systemfsoftware/stryker-js-instrumenter',
-  '@systemfsoftware/project-modules',
-  '@systemfsoftware/project-modules-node',
   '@systemfsoftware/effect-cell-types',
 ] as const
 const WORKDIR = '/work'

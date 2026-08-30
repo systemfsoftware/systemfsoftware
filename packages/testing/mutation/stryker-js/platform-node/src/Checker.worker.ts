@@ -16,6 +16,7 @@ import * as Path from 'effect/Path'
 import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization'
 import * as RpcServer from 'effect/unstable/rpc/RpcServer'
 
+import { nodeModuleLayer } from './NodeModule.js'
 import { create, loadPlugins } from './Plugins.js'
 import { CheckerRpcs } from './WorkerProtocol.js'
 
@@ -32,6 +33,7 @@ const buildChecker = (
             Layer.succeed(SandboxDirectory, process.cwd()),
             NodeFileSystem.layer,
             NodePath.layer,
+            nodeModuleLayer,
           ),
         ),
       ),
@@ -108,6 +110,7 @@ const MainLayer = RpcServer.layer(CheckerRpcs).pipe(
   Layer.provide(RpcServer.layerProtocolSocketServer),
   Layer.provide(RpcSerialization.layerNdjson),
   Layer.provide(NodeSocketServer.layer({ path: socketPath })),
+  Layer.provide(nodeModuleLayer),
 )
 
 Effect.runFork(

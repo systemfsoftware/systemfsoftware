@@ -13,8 +13,7 @@ import { createVitest as createVitestOriginal } from 'vitest/node'
 import type { Vitest } from 'vitest/node'
 
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { ProjectModules } from '@systemfsoftware/project-modules'
-import { ProjectModulesLive } from '@systemfsoftware/project-modules-node'
+import { Module } from '@systemfsoftware/stryker-js/Module'
 import {
   type CoverageData,
   errorToString,
@@ -281,7 +280,7 @@ export interface ResolvedVitest {
 }
 export type VitestResolver = (
   _dir: string,
-) => Effect.Effect<ResolvedVitest, never, ProjectModules | FileSystem.FileSystem | Path.Path>
+) => Effect.Effect<ResolvedVitest, never, Module | FileSystem.FileSystem | Path.Path>
 
 const isRunnerTestSuite = (value: unknown): value is RunnerTestSuite =>
   typeof value === 'object' && value !== null && 'tasks' in value && Array.isArray(Reflect.get(value, 'tasks'))
@@ -302,11 +301,13 @@ export const resolveVitest: VitestResolver = (_dir) =>
       return { createVitest: createVitestOriginal, version: decoded.version } satisfies ResolvedVitest
     }).pipe(Effect.orDie)
     const primary = Effect.gen(function*() {
-      const modules = yield* ProjectModules
+      const module = yield* Module
+      const pathService = yield* Path.Path
       const fs = yield* FileSystem.FileSystem
-      const imported = yield* modules.import('vitest/node')
+      const requireFromProject = module.createRequire(pathService.join(_dir, 'package.json'))
+      const imported: unknown = requireFromProject('vitest/node')
       const decodedNode = yield* S.decodeUnknownEffect(VitestNodeModuleSchema)(imported)
-      const packageJsonPath = yield* modules.resolve('vitest/package.json')
+      const packageJsonPath = requireFromProject.resolve('vitest/package.json')
       const content = yield* fs.readFileString(packageJsonPath)
       const parsed: unknown = JSON.parse(content)
       const decodedPackage = yield* S.decodeUnknownEffect(VitestPackageSchema)(parsed)
@@ -423,13 +424,14 @@ export interface VitestRunnerLayerInput {
 
 export const makeVitestRunnerLayer = (
   input: VitestRunnerLayerInput,
-): Layer.Layer<TestRunner, never, FileSystem.FileSystem | Path.Path> =>
+): Layer.Layer<TestRunner, never, Module | FileSystem.FileSystem | Path.Path> =>
   Layer.effect(
     TestRunner,
     Effect.gen(function*() {
       const stateRef = yield* Ref.make<RunnerState>({ ctx: undefined, localSetupFile: undefined })
       const fsService = yield* FileSystem.FileSystem
       const pathService = yield* Path.Path
+      const moduleService = yield* Module
       const getState = Ref.get(stateRef)
       const requireCtx = Effect.gen(function*() {
         const state = yield* getState
@@ -478,7 +480,7 @@ export const makeVitestRunnerLayer = (
         )
         const resolver = input.resolveVitestFor ?? resolveVitest
         const { createVitest, version } = yield* resolver(projectRoot).pipe(
-          Effect.provide(ProjectModulesLive(projectRoot)),
+          Effect.provideService(Module, moduleService),
           Effect.provideService(FileSystem.FileSystem, fsService),
           Effect.provideService(Path.Path, pathService),
           Effect.catchDefect((cause) =>

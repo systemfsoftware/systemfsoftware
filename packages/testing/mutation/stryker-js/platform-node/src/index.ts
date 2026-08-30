@@ -30,6 +30,7 @@ export { IncrementalReportSchema } from './IncrementalReport.workflow.js'
 
 // The failure identities a caller can catch (the config-read failures already
 // arrive through ./config/config-resolution above).
+export { nodeModuleLayer } from './NodeModule.js'
 export { StageError } from './Run.schema.js'
 export { StrykerError } from './stryker-error.schema.js'
 export { ChildProcessCrashedError, OutOfMemoryError } from './Worker.schema.js'

@@ -1100,9 +1100,10 @@ export function strykerCliEffect(
 
 const defaultRunMutationTest =
   (hostOptions: RunEnvironmentShape, queue: Queue.Queue<RunEvent, Cause.Done>): StrykerRun => (options) =>
-    Effect.scoped(runMutationTest(options)).pipe(
+    Effect.scoped(
+      runMutationTest(options, makeRunLayer(hostOptions)),
+    ).pipe(
       Effect.provideService(RunEvents, queue),
-      Effect.provide(makeRunLayer(hostOptions)),
     )
 
 function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironmentShape {

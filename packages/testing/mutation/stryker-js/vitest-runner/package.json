@@ -46,8 +46,6 @@
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^",
-    "@systemfsoftware/project-modules": "workspace:^",
-    "@systemfsoftware/project-modules-node": "workspace:^",
     "@systemfsoftware/stryker-js": "workspace:^"
   },
   "peerDependencies": {
@@ -57,6 +55,7 @@
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
+    "@systemfsoftware/stryker-js-platform-node": "workspace:^",
     "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",

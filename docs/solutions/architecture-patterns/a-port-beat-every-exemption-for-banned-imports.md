@@ -23,22 +23,26 @@ structural reason, not a taste reason.
 
 ## What shipped
 
-1. **The port**: `ProjectModules` (Context.Service Tag, `{ resolve; import }`
-   failing with `ModuleNotFound`) in a dependency-free package;
-   `ProjectModulesLive(projectDir)` in an adapter package whose single file
-   reaches `process.getBuiltinModule('node:module')`. Because
-   `getBuiltinModule` is a runtime call and not an import, the adapter needs
-   no lint exemption and the ban holds in every package including its own.
-2. **The transport**: parent spawns via `ChildProcess.make(process.execPath, …)`
-   (`@effect/platform`'s spawner), passes the endpoint through the
-   environment; child binds `NodeSocketServer.layer({ path })`, parent
-   connects `NodeSocket.layerNet({ path })` +
-   `RpcClient.layerProtocolSocket`; NDJSON both sides (framing included).
-   Options travel the worker directory as a JSON file decoded with
-   `Schema.fromJsonString` — no initial-message channel exists on socket
-   protocols.
-3. **The preset**: `no-restricted-imports` regexes for `node:*`, the unprefixed
-   builtin list, and `@std/*` modules that mirror platform services.
+1. **The tag lives with its consumers**: `Module` (a Context.Service holding
+   the host-module subset — `createRequire(filename)` returning a callable
+   require with `.resolve`, plus `isBuiltin`) is declared in the engine
+   package and exported as its own specifier. The Node implementation
+   (`process.getBuiltinModule('node:module')`) ships as `nodeModuleLayer` in
+   the platform package that already owns the socket adapter, and is
+   composed at the entry points: the CLI main, the two worker bootstraps,
+   and the run layer. Feature packages carry the tag in their requirement
+   channel only. Because `getBuiltinModule` is a runtime call and not an
+   import, the adapter needs no lint exemption and the ban holds in every
+   package including its own.
+2. **The transport**: the parent spawns workers through the platform
+   spawner, passes the endpoint through the environment; the child binds a
+   socket server at that path, the parent connects a socket protocol client;
+   NDJSON both sides (framing included). Options travel the worker directory
+   as a JSON file decoded with `Schema.fromJsonString` — no initial-message
+   channel exists on socket protocols.
+3. **The preset**: `no-restricted-imports` regexes for `node:*`, the
+   unprefixed builtin list, and `@std/*` modules that mirror platform
+   services.
 
 ## Invariants the transport depends on
 
