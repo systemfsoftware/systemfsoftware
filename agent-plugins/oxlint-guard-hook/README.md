@@ -42,7 +42,7 @@ Both hooks register on the same edit-tool events. If you install both, every edi
 - **An oxlint config within the project root** — `.oxlintrc.json`, `.oxlintrc.jsonc`, `oxlint.config.ts`, or `oxlint.config.mts` (the names oxlint itself auto-discovers), with `oxlint.config.js`/`.mjs`/`.cjs` and `oxlint.json` also accepted for older installs. A project without one is simply not guarded — silence, never an error.
 - **Type-aware pass**: oxlint runs with `--type-aware --type-check`, which requires oxlint's tsgolint companion (`oxlint-tsgolint`). When the companion is absent, the guard retries once without the type-aware flags instead of failing the edit.
 
-The hooks' dependencies (`@std/assert` for the test suite) resolve from Deno's registry cache on first run, so the first hook invocation needs network access; after that the hook runs offline.
+The hook resolves its dependencies from Deno's registry cache on first run, so the first hook invocation needs network access; after that the hook runs offline.
 
 ## How It Works
 
@@ -120,7 +120,6 @@ From the plugin directory:
 
 ```bash
 deno task check    # type-check + lint
-deno task test     # behaviour tests (in-memory fs and a scripted linter runner)
 ```
 
 Formatting is owned by the repository's dprint config (`pnpm exec dprint fmt` from the repo root).
