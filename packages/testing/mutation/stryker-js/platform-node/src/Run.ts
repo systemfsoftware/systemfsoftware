@@ -38,6 +38,7 @@ import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
@@ -1193,6 +1194,7 @@ export const mutationTestRun =
 
 export const makeRunLayer = (
   env: RunEnvironmentShape,
+  events?: Queue.Queue<RunEvent, Cause.Done>,
 ): Layer.Layer<
   | RunEnvironment
   | RunEvents
@@ -1204,10 +1206,14 @@ export const makeRunLayer = (
   | Scope.Scope,
   never,
   never
-> =>
-  Layer.mergeAll(
+> => {
+  const eventsLayer: Layer.Layer<RunEvents> = Match.value(events).pipe(
+    Match.when(undefined, () => Layer.effect(RunEvents, Queue.unbounded<RunEvent, Cause.Done>())),
+    Match.orElse((queue) => Layer.succeed(RunEvents, queue)),
+  )
+  return Layer.mergeAll(
     Layer.succeed(RunEnvironment, env),
-    Layer.effect(RunEvents, Queue.unbounded<RunEvent, Cause.Done>()),
+    eventsLayer,
     NodeFileSystem.layer,
     NodePath.layer,
     nodeModuleLayer,
@@ -1224,6 +1230,7 @@ export const makeRunLayer = (
       }),
     ),
   )
+}
 
 /**
  * The run, as four stages applied in order.
