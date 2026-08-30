@@ -1,12 +1,27 @@
 # Oxlint Guard Hook — Architecture Audit
 
-Baseline captured at pre-rewrite commit `27f4e41290318e8f870cd6f56e56f286c7ff198a`.
-Graphs are extracted by script (`./extract-graph.ts`), never narrated.
+**Status: close-out.** Baseline at `27f4e4129031`; rewrite landed in the three commits following it. Module boundary graph is byte-identical pre/post (`as-is-graph.json` vs `target-graph.json`, diff empty) — the structural delta is internal to the modules, which is what the plan targeted: the algebra collapsed, the ladder replaced boolean dispatch, no boundaries moved.
 
-## As-is boundary map
+## Target-state findings resolution
 
-Extracted: `deno run --allow-read=. docs/audits/oxlint-guard-hook/extract-graph.ts agent-plugins/oxlint-guard-hook/src`
-Raw edge list: `as-is-graph.json` (recorded from `27f4e412`).
+| # | Finding                              | Resolution                                                                                                                                                                                                                                                                                                                                                                                                                    | Evidence                                                                                                                                 |
+| - | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 1 | Overlapping outcome vocabularies     | Resolved: one `GuardVerdict` algebra (`Proceed`/`Retry`/`Halt`) in `flow.schema.ts`; `AttemptOutcome`/`FinalAttempt` unions and the `attemptOutcome`+`haltOf` mapping pair deleted; `LintOutcome` renamed to expert-named `LintVerdict` (`Pass`/`Violation`/`RetryWithoutTypeCheck`/`ToolMissing`); `RunOutcome` kept (process reality)                                                                                       | R2 check green (deno check 0 errors; lint 0 findings; every verdict-layer export `S.Schema.Type`-derived, every transform total `Match`) |
+| 2 | Structural variant names             | Resolved: domain verdicts PascalCase; plan variants (`Skip`/`RunDeno`/`RunOxlint`) exempt — they name tools/actions, not outcome verdicts. Naming clause adopted as convention (decision-gate ruling A7/A8: convention-band warrant, not canon)                                                                                                                                                                               | Same gates as #1                                                                                                                         |
+| 3 | Boolean-overload retry dispatch      | Resolved: `Rung { canRetry, proceedStops }` ladder values in `execute.ts`; zero function overloads                                                                                                                                                                                                                                                                                                                            | R3: `deno check` clean; grep `function runGuarded(` → none                                                                               |
+| 4 | `GuardPhases` provenance unverified  | Resolved by falsification: source `Cell.Phases` (`packages/core/effect/cell/types/src/Cell.ts:16-27`) declares exactly the 10 members `GuardPhases` implements, same names; `R = never` pin documented at `Cell.ts:35-42`. Current shape is already the source idiom — no re-declare. Plugin pins published cell-types 5.0.1; workspace source is 5.0.2 at the path above; the bag interface is the stable published contract | This row; cite `Cell.ts:16-27`                                                                                                           |
+| 5 | Plan-variant bases location unprobed | Resolved by probe: bases moved to `flow.schema.ts` (schema-declaration-location admits them), `planFor`/`PLAN_RULES`/`GuardUnsupportedToolError` stay same-file (make-body-purity), type-only `GuardPlan` import in the workflow. Gate ran clean: 0 check errors, 0 lint violations, 13/13 tests — the decide body's references remain same-file                                                                              | KTD4 ruling recorded here                                                                                                                |
+
+## Behavior verification (post-rewrite smoke matrix)
+
+- skip input (missing file) → exit 0
+- garbage stdin → exit 0
+- unknown tool → exit 0
+- deno-check violation fixture → exit 2 with skills-first diagnostic on stderr
+- pnpm missing (deno-only PATH) → exit 1 with prerequisite hint on stderr (R1 exit-1 path, newly pinned)
+- timeout → exit 0 (algebra arm `Halt(0, '')`, compile-checked; not independently smoked)
+
+13/13 vitest (property suite + in-source verdict properties re-scoped to the merged algebra). gcanti-tim-smart-style audit: 0 fail, 0 warn (effect-4.x).
 
 ```mermaid
 flowchart LR
