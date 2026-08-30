@@ -1,6 +1,7 @@
 import { makeBodyPurity } from './rules/make-body-purity.js'
 import { makeCommandSchema } from './rules/make-command-schema.js'
 import { makeFileLocation } from './rules/make-file-location.js'
+import { workflowFileExportTopology } from './rules/workflow-file-export-topology.js'
 import { workflowMatchExhaustive } from './rules/workflow-match-exhaustive.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-effect-workflow'
@@ -8,7 +9,7 @@ const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-effect-workflow'
 const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
 
 /**
- * The four rules this plugin ships for decision construction:
+ * The rules this plugin ships for decision construction:
  *
  * - `make-file-location` - the construction-site rule: `Workflow.make` may be
  *   invoked only in a `<stem>.workflow.ts` file (single-segment stem, no
@@ -23,6 +24,8 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
  *   to the shapes `make`'s own type bound cannot refuse: an assertion, a
  *   laundering call, a `declare`d binding. It reports nothing the compiler
  *   already reports.
+ * - `workflow-file-export-topology` - exactly one non-schema value export;
+ *   re-exports forbidden. Enrolled in recommended after in-tree cutover.
  */
 const recommendedRules = {
   [rule('make-file-location')]: 'error',
@@ -40,6 +43,7 @@ export default {
     'workflow-match-exhaustive': workflowMatchExhaustive,
     'make-body-purity': makeBodyPurity,
     'make-command-schema': makeCommandSchema,
+    'workflow-file-export-topology': workflowFileExportTopology,
   },
   configs: {
     recommended: {
