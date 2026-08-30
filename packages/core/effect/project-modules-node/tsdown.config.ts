@@ -3,7 +3,7 @@ import { defineConfig } from 'tsdown'
 type ExportEntry = string | Record<string, string | undefined>
 
 const typesMap: Record<string, string> = {
-  '.': './dist/project-modules-node.d.ts',
+  '.': './dist/index.d.ts',
 }
 
 const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {

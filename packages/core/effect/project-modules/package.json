@@ -27,7 +27,7 @@
   "exports": {
     ".": {
       "@systemfsoftware/source": "./src/index.ts",
-      "types": "./dist/project-modules.d.ts",
+      "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     }
   },
@@ -57,7 +57,7 @@
   "publishConfig": {
     "exports": {
       ".": {
-        "types": "./dist/project-modules.d.ts",
+        "types": "./dist/index.d.ts",
         "default": "./dist/index.mjs"
       }
     }
