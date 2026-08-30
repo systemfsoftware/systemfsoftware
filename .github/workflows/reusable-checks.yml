@@ -21,14 +21,9 @@ jobs:
         with:
           fetch-depth: 2
       - uses: ./.github/actions/install-deps
-      # dprint is a flake package, not an npm dependency; bin/dprint takes the
-      # first dprint on PATH.
       - uses: cachix/install-nix-action@v31
       - name: dprint from the flake
         run: echo "$(nix build --no-link --print-out-paths .#dprint)/bin" >> "$GITHUB_PATH"
-      # The runner image ships no Deno, and `pnpm check:ci` runs the Deno guards
-      # (`//#check:exported-wiring`) inside gate:tasks, so the runtime must be on PATH.
-      # Same reason changeset-check.yml and release.yml already carry this step.
       - uses: denoland/setup-deno@v2
       - name: Turbo cache
         uses: actions/cache@v6
@@ -38,7 +33,6 @@ jobs:
           restore-keys: |
             turbo-${{ runner.os }}-checks-
             turbo-${{ runner.os }}-
-      # atom-react tests run in Vitest browser mode (playwright chromium).
       - name: Cache Playwright browsers
         uses: actions/cache@v6
         with:
@@ -47,7 +41,8 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Install Playwright chromium
-        run: corepack pnpm --filter @systemfsoftware/effect-atom-react exec playwright install chromium
-      # Root package.json `check:ci` is the one definition. Never re-enumerate its steps here.
+        run: |
+          corepack pnpm --filter @systemfsoftware/effect-atom-react exec playwright install chromium
+          corepack pnpm --filter @systemfsoftware/effect-playwright exec playwright-core install chromium
       - name: Gate
         run: corepack pnpm check:ci
