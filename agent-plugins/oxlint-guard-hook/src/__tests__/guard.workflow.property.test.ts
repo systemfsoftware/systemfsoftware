@@ -41,10 +41,14 @@ const listedToolWith = (overrides: {
     )
   })
 
-const decisionOn = (command: GuardCommand): Result.Result<GuardDecision, GuardUnsupportedToolError> =>
-  guardPlan(command)
+const decisionOn = (
+  command: GuardCommand,
+): Result.Result<GuardDecision, GuardUnsupportedToolError> => guardPlan(command)
 
-const isSuccessFor = (command: GuardCommand, predicate: (decision: GuardDecision) => boolean): boolean =>
+const isSuccessFor = (
+  command: GuardCommand,
+  predicate: (decision: GuardDecision) => boolean,
+): boolean =>
   Result.match(decisionOn(command), {
     onFailure: () => false,
     onSuccess: predicate,
@@ -105,7 +109,12 @@ it.prop(
 
 it.prop(
   '∀c_NoConfig_≡SkipNoConfig',
-  [listedToolWith({ exists: true, denoShebang: false, extension: 'ts', configPath: null })],
+  [listedToolWith({
+    exists: true,
+    denoShebang: false,
+    extension: 'ts',
+    configPath: null,
+  })],
   ([command]) =>
     isSuccessFor(command, (decision) =>
       Match.value(decision).pipe(
@@ -116,7 +125,12 @@ it.prop(
 
 it.prop(
   '∀c_WithConfig_≡RunOxlintIdentity',
-  [listedToolWith({ exists: true, denoShebang: false, extension: 'ts', configPath: '/root/oxlint.config.mts' })],
+  [listedToolWith({
+    exists: true,
+    denoShebang: false,
+    extension: 'ts',
+    configPath: '/root/oxlint.config.mts',
+  })],
   ([command]) =>
     isSuccessFor(command, (decision) =>
       Match.value(decision).pipe(
@@ -130,7 +144,12 @@ it.prop(
 
 it.prop(
   '∀c_MissingFile_≡PrecedesShebang',
-  [listedToolWith({ exists: false, denoShebang: true, extension: 'ts', configPath: null })],
+  [listedToolWith({
+    exists: false,
+    denoShebang: true,
+    extension: 'ts',
+    configPath: null,
+  })],
   ([command]) =>
     isSuccessFor(command, (decision) =>
       Match.value(decision).pipe(
@@ -141,7 +160,12 @@ it.prop(
 
 it.prop(
   '∀c_DenoShebang_≡PrecedesNoConfig',
-  [listedToolWith({ exists: true, denoShebang: true, extension: 'ts', configPath: null })],
+  [listedToolWith({
+    exists: true,
+    denoShebang: true,
+    extension: 'ts',
+    configPath: null,
+  })],
   ([command]) =>
     isSuccessFor(command, (decision) =>
       Match.value(decision).pipe(

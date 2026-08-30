@@ -1,9 +1,9 @@
-import { Effect, Match } from 'effect'
+import { Effect, Match, Option } from 'effect'
 import * as Result from 'effect/Result'
 import type { FastCheck } from 'effect/testing'
 import { COMMAND_BUDGET_MS, DENO_PREREQUISITE, PNPM_PREREQUISITE } from './constants.ts'
-import type { LintOutcome, ProcessResult, RunOutcome } from './flow.schema.ts'
-import type { GuardDecision, GuardUnsupportedToolError, HookResult, Runner } from './guard.workflow.ts'
+import type { AttemptOutcome, FinalAttempt, HookResult, LintOutcome, ProcessResult, RunOutcome } from './flow.schema.ts'
+import type { GuardDecision, GuardUnsupportedToolError, Runner } from './guard.workflow.ts'
 
 interface GuardRun {
   readonly runner: Runner
@@ -30,7 +30,11 @@ const stderrOrStdout = (result: ProcessResult): string => {
 }
 
 interface ClassifyRule {
-  readonly matches: (combined: string, exitCode: number, canRetry: boolean) => boolean
+  readonly matches: (
+    combined: string,
+    exitCode: number,
+    canRetry: boolean,
+  ) => boolean
   readonly outcome: (result: ProcessResult) => LintOutcome
 }
 
@@ -57,9 +61,15 @@ const CLASSIFY_RULES: readonly ClassifyRule[] = [
   },
 ]
 
-const catchAllOutcome = (result: ProcessResult): LintOutcome => ({ _tag: 'violation', output: stderrOrStdout(result) })
+const catchAllOutcome = (result: ProcessResult): LintOutcome => ({
+  _tag: 'violation',
+  output: stderrOrStdout(result),
+})
 
-const classifyResult = (result: ProcessResult, canRetry: boolean): LintOutcome => {
+const classifyResult = (
+  result: ProcessResult,
+  canRetry: boolean,
+): LintOutcome => {
   const combined = combinedOutput(result)
   const rule = CLASSIFY_RULES.find((candidate) => candidate.matches(combined, result.exitCode, canRetry))
   if (rule !== undefined) {
@@ -71,20 +81,16 @@ const classifyResult = (result: ProcessResult, canRetry: boolean): LintOutcome =
 const MAX_OUTPUT_LINES = 30
 
 const truncateOutput = (text: string): string => {
-  let cut = text.indexOf('\n')
-  for (let line = 1; line < MAX_OUTPUT_LINES && cut !== -1; line++) {
-    cut = text.indexOf('\n', cut + 1)
-  }
-  if (cut === -1) {
+  const lines = text.split('\n')
+  if (lines.length <= MAX_OUTPUT_LINES) {
     return text
   }
-  return text.slice(0, cut) + '\n... [truncated — run the linter manually for full output]'
+  return `${lines.slice(0, MAX_OUTPUT_LINES).join('\n')}\n... [truncated — run the linter manually for full output]`
 }
 
 const diagnostic = (tool: string, output: string): string =>
   `⛔ ${tool} FAILED — INVOKE SKILLS FIRST.
 
-Before fixing anything below, invoke skills that address why these rules fire.
 You decide which — the hook will not map rules to skills for you.
 Already-invoked skills do NOT count. Each failure demands NEW invocations.
 
@@ -104,27 +110,40 @@ const spawnUnavailableHint = (missing: string, prerequisite: string): string =>
     REASON_PHRASES[missing] ?? 'spawn failed'
   }) - the lint guard cannot check this file. Install the prerequisite per the plugin README and retry.`
 
+const PROCEED: AttemptOutcome = { _tag: 'proceed' }
+const RETRY: AttemptOutcome = { _tag: 'retry-plain' }
+
+const respond = (exitCode: 0 | 1 | 2, stderr: string): AttemptOutcome => ({
+  _tag: 'respond',
+  result: { exitCode, stderr },
+})
+
+const PASS: HookResult = { exitCode: 0, stderr: '' }
+
 function attemptOutcome(
   attempt: RunOutcome,
   canRetry: boolean,
   run: GuardRun,
-): HookResult | 'ok' | 'retry-without-type-aware' {
+): AttemptOutcome {
   return Match.value(attempt).pipe(
-    Match.tag('spawn-failure', ({ failure }) => ({
-      exitCode: 1 as const,
-      stderr: spawnUnavailableHint(failure.reason, run.prerequisite),
-    })),
-    Match.tag('timeout', () => ({ exitCode: 0 as const, stderr: '' })),
+    Match.tag(
+      'spawn-failure',
+      ({ failure }) => respond(1, spawnUnavailableHint(failure.reason, run.prerequisite)),
+    ),
+    Match.tag('timeout', () => respond(0, '')),
     Match.tag('result', ({ result }) => {
       const verdict = classifyResult(result, canRetry)
       return Match.value(verdict).pipe(
-        Match.tag('outcome', () => 'ok' as const),
-        Match.tag('retry-without-type-aware', () => 'retry-without-type-aware' as const),
-        Match.tag('not-found', () => ({
-          exitCode: 1 as const,
-          stderr: spawnUnavailableHint('not-found', run.prerequisite),
-        })),
-        Match.tag('violation', ({ output }) => ({ exitCode: 2 as const, stderr: diagnostic(run.toolLabel, output) })),
+        Match.tag('outcome', () => PROCEED),
+        Match.tag('retry-without-type-aware', () => RETRY),
+        Match.tag(
+          'not-found',
+          () => respond(1, spawnUnavailableHint('not-found', run.prerequisite)),
+        ),
+        Match.tag(
+          'violation',
+          ({ output }) => respond(2, diagnostic(run.toolLabel, output)),
+        ),
         Match.exhaustive,
       )
     }),
@@ -135,16 +154,27 @@ function attemptOutcome(
 function runGuarded(
   run: GuardRun,
   canRetry: true,
-): Effect.Effect<HookResult | 'ok' | 'retry-without-type-aware', never, never>
-function runGuarded(run: GuardRun, canRetry: false): Effect.Effect<HookResult | 'ok', never, never>
+): Effect.Effect<AttemptOutcome, never, never>
+function runGuarded(
+  run: GuardRun,
+  canRetry: false,
+): Effect.Effect<FinalAttempt, never, never>
 function runGuarded(
   run: GuardRun,
   canRetry: boolean,
-): Effect.Effect<HookResult | 'ok' | 'retry-without-type-aware', never, never> {
-  return run.runner.run(run.program, run.args, run.cwd, COMMAND_BUDGET_MS).pipe(
-    Effect.map((attempt) => attemptOutcome(attempt, canRetry, run)),
+): Effect.Effect<AttemptOutcome, never, never> {
+  return Effect.map(
+    run.runner.run(run.program, run.args, run.cwd, COMMAND_BUDGET_MS),
+    (attempt) => attemptOutcome(attempt, canRetry, run),
   )
 }
+
+const haltOf = (attempt: FinalAttempt): Option.Option<HookResult> =>
+  Match.value(attempt).pipe(
+    Match.tag('proceed', () => Option.none()),
+    Match.tag('respond', ({ result }) => Option.some(result)),
+    Match.exhaustive,
+  )
 
 const runDenoPair = (
   runner: Runner,
@@ -152,35 +182,22 @@ const runDenoPair = (
   filePath: string,
 ): Effect.Effect<HookResult, never, never> =>
   Effect.gen(function*() {
-    const check = yield* runGuarded(
-      {
-        runner,
-        program: 'deno',
-        args: ['check', '--', filePath],
-        cwd: dirname(filePath),
-        prerequisite: DENO_PREREQUISITE,
-        toolLabel: 'DENO CHECK',
-      },
-      false,
-    )
-    if (check !== 'ok') {
-      return check
+    const step = (command: 'check' | 'lint'): GuardRun => ({
+      runner,
+      program: 'deno',
+      args: [command, '--', filePath],
+      cwd: dirname(filePath),
+      prerequisite: DENO_PREREQUISITE,
+      toolLabel: `DENO ${command.toUpperCase()}`,
+    })
+    const halted = haltOf(yield* runGuarded(step('check'), false))
+    if (Option.isSome(halted)) {
+      return halted.value
     }
-    const lint = yield* runGuarded(
-      {
-        runner,
-        program: 'deno',
-        args: ['lint', '--', filePath],
-        cwd: dirname(filePath),
-        prerequisite: DENO_PREREQUISITE,
-        toolLabel: 'DENO LINT',
-      },
-      false,
+    return Option.getOrElse(
+      haltOf(yield* runGuarded(step('lint'), false)),
+      () => PASS,
     )
-    if (lint === 'ok') {
-      return { exitCode: 0 as const, stderr: '' }
-    }
-    return lint
   })
 
 const oxlintArgs = (
@@ -188,7 +205,17 @@ const oxlintArgs = (
   typeAware: boolean,
 ): string[] => {
   if (typeAware) {
-    return ['exec', 'oxlint', '-c', plan.configPath, '--type-aware', '--type-check', '-f', 'unix', plan.filePath]
+    return [
+      'exec',
+      'oxlint',
+      '-c',
+      plan.configPath,
+      '--type-aware',
+      '--type-check',
+      '-f',
+      'unix',
+      plan.filePath,
+    ]
   }
   return ['exec', 'oxlint', '-c', plan.configPath, '-f', 'unix', plan.filePath]
 }
@@ -199,38 +226,24 @@ const runOxlint = (
   plan: { readonly filePath: string; readonly configPath: string },
 ): Effect.Effect<HookResult, never, never> =>
   Effect.gen(function*() {
-    const first = yield* runGuarded(
-      {
-        runner,
-        program: 'pnpm',
-        args: oxlintArgs(plan, true),
-        cwd: dirname(plan.configPath),
-        prerequisite: PNPM_PREREQUISITE,
-        toolLabel: 'OXLINT',
-      },
-      true,
+    const step = (typeAware: boolean): GuardRun => ({
+      runner,
+      program: 'pnpm',
+      args: oxlintArgs(plan, typeAware),
+      cwd: dirname(plan.configPath),
+      prerequisite: PNPM_PREREQUISITE,
+      toolLabel: 'OXLINT',
+    })
+    const settled = Match.value(yield* runGuarded(step(true), true)).pipe(
+      Match.tag('proceed', () => Option.some(PASS)),
+      Match.tag('retry-plain', () => Option.none()),
+      Match.tag('respond', ({ result }) => Option.some(result)),
+      Match.exhaustive,
     )
-    if (first !== 'retry-without-type-aware') {
-      if (first === 'ok') {
-        return { exitCode: 0 as const, stderr: '' }
-      }
-      return first
+    if (Option.isSome(settled)) {
+      return settled.value
     }
-    const retry = yield* runGuarded(
-      {
-        runner,
-        program: 'pnpm',
-        args: oxlintArgs(plan, false),
-        cwd: dirname(plan.configPath),
-        prerequisite: PNPM_PREREQUISITE,
-        toolLabel: 'OXLINT',
-      },
-      false,
-    )
-    if (retry === 'ok') {
-      return { exitCode: 0 as const, stderr: '' }
-    }
-    return retry
+    return Option.getOrElse(haltOf(yield* runGuarded(step(false), false)), () => PASS)
   })
 
 export const executeDecision = (
@@ -242,9 +255,18 @@ export const executeDecision = (
     onFailure: () => Effect.succeed<HookResult>({ exitCode: 0, stderr: '' }),
     onSuccess: (decision) =>
       Match.value(decision).pipe(
-        Match.tag('Skip', () => Effect.succeed<HookResult>({ exitCode: 0, stderr: '' })),
-        Match.tag('RunDeno', ({ filePath }) => runDenoPair(runner, dirname, filePath)),
-        Match.tag('RunOxlint', ({ filePath, configPath }) => runOxlint(runner, dirname, { filePath, configPath })),
+        Match.tag(
+          'Skip',
+          () => Effect.succeed<HookResult>({ exitCode: 0, stderr: '' }),
+        ),
+        Match.tag(
+          'RunDeno',
+          ({ filePath }) => runDenoPair(runner, dirname, filePath),
+        ),
+        Match.tag(
+          'RunOxlint',
+          ({ filePath, configPath }) => runOxlint(runner, dirname, { filePath, configPath }),
+        ),
         Match.exhaustive,
       ),
   })
@@ -329,7 +351,9 @@ if (import.meta.vitest !== void 0) {
     },
   )
 
-  const multilineArb = fc.array(fc.stringMatching(/^[^\n]{0,20}$/), { maxLength: 80 }).map((lines) => lines.join('\n'))
+  const multilineArb = fc.array(fc.stringMatching(/^[^\n]{0,20}$/), {
+    maxLength: 80,
+  }).map((lines) => lines.join('\n'))
 
   it.prop(
     '∀t_Truncated_⊆Original',

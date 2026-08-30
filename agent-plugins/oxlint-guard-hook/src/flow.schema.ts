@@ -36,6 +36,31 @@ export const LintOutcomeSchema = S.Union([
 ])
 export type LintOutcome = S.Schema.Type<typeof LintOutcomeSchema>
 
+export const HookResultSchema = S.Struct({
+  exitCode: S.Union([S.Literal(0), S.Literal(1), S.Literal(2)]),
+  stderr: S.String,
+})
+export type HookResult = S.Schema.Type<typeof HookResultSchema>
+
+export const AttemptProceedSchema = S.TaggedStruct('proceed', {})
+export const AttemptRetrySchema = S.TaggedStruct('retry-plain', {})
+export const AttemptRespondSchema = S.TaggedStruct('respond', {
+  result: HookResultSchema,
+})
+
+export const AttemptOutcomeSchema = S.Union([
+  AttemptProceedSchema,
+  AttemptRetrySchema,
+  AttemptRespondSchema,
+])
+export type AttemptOutcome = S.Schema.Type<typeof AttemptOutcomeSchema>
+
+export const FinalAttemptSchema = S.Union([
+  AttemptProceedSchema,
+  AttemptRespondSchema,
+])
+export type FinalAttempt = S.Schema.Type<typeof FinalAttemptSchema>
+
 export class LintFailure extends S.TaggedError<LintFailure>()('LintFailure', {
   exitCode: S.Union([S.Literal(1), S.Literal(2)]),
   message: S.String,

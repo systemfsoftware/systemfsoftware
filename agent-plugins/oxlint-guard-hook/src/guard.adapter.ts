@@ -1,4 +1,4 @@
-import { Duration, Effect, Stream } from 'effect'
+import { Duration, Effect, Option, Stream } from 'effect'
 import type { FileSystem } from 'effect/FileSystem'
 import type { Path } from 'effect/Path'
 import { make as makeProcessCommand } from 'effect/unstable/process/ChildProcess'
@@ -24,7 +24,7 @@ const messageOf = (error: unknown): string => {
   return 'unknown gather failure'
 }
 
-const decodeBytes = (chunks: Iterable<Uint8Array>): string => {
+export const decodeBytes = (chunks: Iterable<Uint8Array>): string => {
   const list = Array.from(chunks)
   let total = 0
   for (const chunk of list) {
@@ -43,7 +43,11 @@ const firstLineOf = (text: string): string => text.split('\n', 1)[0] ?? ''
 
 const withinRoot = (path: Path, root: string, dir: string): boolean => dir === root || dir.startsWith(root + path.sep)
 
-const walkUp = (path: Path, startDir: string, root: string): readonly string[] => {
+const walkUp = (
+  path: Path,
+  startDir: string,
+  root: string,
+): readonly string[] => {
   const dirs: string[] = []
   let dir = startDir
   while (withinRoot(path, root, dir)) {
@@ -57,7 +61,12 @@ const walkUp = (path: Path, startDir: string, root: string): readonly string[] =
   return dirs
 }
 
-const findProjectRoot = (fs: FileSystem, path: Path, cwd: string, rootOverride: string | undefined) =>
+const findProjectRoot = (
+  fs: FileSystem,
+  path: Path,
+  cwd: string,
+  rootOverride: string | undefined,
+) =>
   Effect.gen(function*() {
     if (rootOverride !== undefined && rootOverride.trim() !== '') {
       return path.resolve(cwd, rootOverride)
@@ -72,15 +81,19 @@ const findProjectRoot = (fs: FileSystem, path: Path, cwd: string, rootOverride: 
     return cwd
   })
 
-const firstExistingConfig = (fs: FileSystem, path: Path, dirs: readonly string[]) =>
+const firstExistingConfig = (
+  fs: FileSystem,
+  path: Path,
+  dirs: readonly string[],
+) =>
   Effect.gen(function*() {
     const candidates = dirs.flatMap((dir) => CONFIG_BASENAMES.map((name) => path.join(dir, name)))
     for (const candidate of candidates) {
       if (yield* fs.exists(candidate)) {
-        return candidate
+        return Option.some(candidate)
       }
     }
-    return null
+    return Option.none()
   })
 
 const gatherFacts =
@@ -92,14 +105,21 @@ const gatherFacts =
       const exists = yield* fs.exists(resolvedPath)
       let firstLine: string | null = null
       if (exists) {
-        const bytes = yield* Stream.runCollect(fs.stream(resolvedPath, { bytesToRead: 4096 }))
+        const bytes = yield* Stream.runCollect(
+          fs.stream(resolvedPath, { bytesToRead: 4096 }),
+        )
         firstLine = firstLineOf(decodeBytes(bytes))
       }
       const denoShebang = DENO_SHEBANG.test(firstLine ?? '')
       let configPath: string | null = null
       if (exists && !denoShebang) {
         const root = yield* findProjectRoot(fs, path, cwd, rootOverride)
-        configPath = yield* firstExistingConfig(fs, path, walkUp(path, path.dirname(resolvedPath), root))
+        const found = yield* firstExistingConfig(
+          fs,
+          path,
+          walkUp(path, path.dirname(resolvedPath), root),
+        )
+        configPath = Option.getOrElse(found, () => null)
       }
       const facts: FactFields = { exists, denoShebang, extension, configPath }
       return { wire, facts }
@@ -107,7 +127,9 @@ const gatherFacts =
       Effect.catchEager((error) => Effect.fail(new GuardReadError({ message: messageOf(error) }))),
     )
 
-const reasonOf = (error: unknown): 'not-found' | 'not-executable' | 'unknown' => {
+const reasonOf = (
+  error: unknown,
+): 'not-found' | 'not-executable' | 'unknown' => {
   if (typeof error !== 'object' || error === null) {
     return 'unknown'
   }
@@ -126,7 +148,10 @@ const reasonOf = (error: unknown): 'not-found' | 'not-executable' | 'unknown' =>
 
 const failureOf = (
   error: unknown,
-): { readonly reason: 'not-found' | 'not-executable' | 'unknown'; readonly message: string } => {
+): {
+  readonly reason: 'not-found' | 'not-executable' | 'unknown'
+  readonly message: string
+} => {
   let message = 'unknown error'
   if (error instanceof Error) {
     message = error.message
@@ -164,8 +189,16 @@ const runCommand = (
   }).pipe(
     Effect.scoped,
     Effect.timeout(Duration.millis(timeoutMs)),
-    Effect.catchTag('TimeoutError', () => Effect.succeed<RunOutcome>({ _tag: 'timeout' })),
-    Effect.catchEager((error) => Effect.succeed<RunOutcome>({ _tag: 'spawn-failure', failure: failureOf(error) })),
+    Effect.catchTag(
+      'TimeoutError',
+      () => Effect.succeed<RunOutcome>({ _tag: 'timeout' }),
+    ),
+    Effect.catchEager((error) =>
+      Effect.succeed<RunOutcome>({
+        _tag: 'spawn-failure',
+        failure: failureOf(error),
+      })
+    ),
     Effect.provideService(ChildProcessSpawner, spawner),
   )
 }

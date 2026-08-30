@@ -37,7 +37,10 @@ export const FALLBACK_CONFIG_BASENAMES: readonly string[] = [
   'oxlint.config.cjs',
   'oxlint.json',
 ]
-export const CONFIG_BASENAMES: readonly string[] = [...PRIMARY_CONFIG_BASENAMES, ...FALLBACK_CONFIG_BASENAMES]
+export const CONFIG_BASENAMES: readonly string[] = [
+  ...PRIMARY_CONFIG_BASENAMES,
+  ...FALLBACK_CONFIG_BASENAMES,
+]
 
 export const DENO_PREREQUISITE = 'deno (https://deno.land)'
 export const PNPM_PREREQUISITE = 'pnpm with oxlint as a dev dependency (pnpm add -D oxlint)'

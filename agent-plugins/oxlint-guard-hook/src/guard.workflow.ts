@@ -3,7 +3,7 @@ import { Effect } from 'effect'
 import { Schema as S } from 'effect'
 import { pipe } from 'effect/Function'
 import * as Result from 'effect/Result'
-import type { RunOutcome } from './flow.schema.ts'
+import type { HookResult, RunOutcome } from './flow.schema.ts'
 import { executeDecision } from './guard.kernel.ts'
 
 /** Edit tool names the guard recognizes; declared here because the decision body may only reference same-file declarations. */
@@ -87,11 +87,6 @@ export class GuardReadError extends S.TaggedError<GuardReadError>()('GuardReadEr
   message: S.String,
 }) {}
 
-export interface HookResult {
-  readonly exitCode: 0 | 1 | 2
-  readonly stderr: string
-}
-
 export interface Runner {
   readonly run: (
     program: string,
@@ -118,7 +113,10 @@ interface PlanRule {
 }
 
 const PLAN_RULES: readonly PlanRule[] = [
-  { matches: (c) => !c.exists, plan: () => new Skip({ reason: 'file-missing' }) },
+  {
+    matches: (c) => !c.exists,
+    plan: () => new Skip({ reason: 'file-missing' }),
+  },
   {
     matches: (c) => !GUARD_LINTABLE_EXTENSIONS.includes(c.extension.toLowerCase()),
     plan: () => new Skip({ reason: 'not-lintable-extension' }),
@@ -127,7 +125,10 @@ const PLAN_RULES: readonly PlanRule[] = [
     matches: (c) => c.denoShebang,
     plan: (c) => new RunDeno({ filePath: c.filePath }),
   },
-  { matches: (c) => c.configPath === null, plan: () => new Skip({ reason: 'no-oxlint-config' }) },
+  {
+    matches: (c) => c.configPath === null,
+    plan: () => new Skip({ reason: 'no-oxlint-config' }),
+  },
   {
     matches: () => true,
     plan: (c) => new RunOxlint({ filePath: c.filePath, configPath: c.configPath ?? '' }),
@@ -139,20 +140,29 @@ const planFor = (command: GuardCommand): GuardDecision => {
   if (rule !== undefined) {
     return rule.plan(command)
   }
-  return new RunOxlint({ filePath: command.filePath, configPath: command.configPath ?? '' })
+  return new RunOxlint({
+    filePath: command.filePath,
+    configPath: command.configPath ?? '',
+  })
 }
 
 export const guardPlan = Workflow.make(
   GuardCommand,
-  (command: GuardCommand): Result.Result<GuardDecision, GuardUnsupportedToolError> => {
+  (
+    command: GuardCommand,
+  ): Result.Result<GuardDecision, GuardUnsupportedToolError> => {
     if (!GUARD_TOOL_NAMES.includes(command.toolName)) {
-      return Result.fail(new GuardUnsupportedToolError({ toolName: command.toolName }))
+      return Result.fail(
+        new GuardUnsupportedToolError({ toolName: command.toolName }),
+      )
     }
     return Result.succeed(planFor(command))
   },
 )
 
-export const buildGuardCell = (adapters: GuardAdapters): Cell.WriteDone<GuardPhases> =>
+export const buildGuardCell = (
+  adapters: GuardAdapters,
+): Cell.WriteDone<GuardPhases> =>
   pipe(
     Cell.read<GuardPhases>((wire) => adapters.gather(wire)),
     Cell.decode<GuardPhases>((raw) =>
