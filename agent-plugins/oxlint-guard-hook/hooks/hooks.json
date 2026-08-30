@@ -1,0 +1,17 @@
+{
+  "description": "Lints every edited file with the project's own oxlint config (or deno check/deno lint for Deno-shebang files) and feeds violations back with a diagnostic that demands new skill invocations before fixing.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|Update|MultiEdit|Create|morph_mcp_edit-file|morph_edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard-hook: deno not found on PATH - install Deno (https://deno.land) so the lint guard can run' >&2; exit 1; }; exec deno run --quiet --config \"${CLAUDE_PLUGIN_ROOT}/deno.jsonc\" --allow-read --allow-run --allow-env \"${CLAUDE_PLUGIN_ROOT}/src/lint-guard.ts\"",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}
