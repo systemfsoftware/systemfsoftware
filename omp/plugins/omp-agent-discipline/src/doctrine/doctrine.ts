@@ -81,7 +81,7 @@ export type RunSafe<R> = <A, E>(effect: Effect.Effect<A, E, R>) => Promise<A>
 
 const gateResult = (verdict: DispatchDoctrineVerdict): DispatchGateResult =>
   Match.value(verdict).pipe(
-    Match.tag('DeliverDoctrine', (v) => ({ block: true as const, reason: v.reason })),
+    Match.tag('DeliverDoctrine', () => ({ block: true as const, reason: DOCTRINE_KERNEL })),
     Match.tag('Allow', () => undefined),
     Match.exhaustive,
   )

@@ -44,12 +44,10 @@ import {
 import { Blocked, Continue, type HookOutcome, HookOutputFromStdout, HookResult } from './hooks.schema.js'
 import type { HookPrompt, HookSession, HookToolCall, HookToolResult } from './hooks.schema.js'
 import {
-  type HookDecision,
-  HookVerdictError,
+  type HookVerdictDecision,
+  type HookVerdictFailure,
   InterpretHookCommand,
-  type SubmitHookVerdictError,
-  submitVerdict,
-  SubmitVerdictCommand,
+  interpretHookResult,
   Warning,
 } from './hooks.workflow.js'
 import {
@@ -66,23 +64,6 @@ import { ToolInputRecord } from './wire.schema.js'
 
 export const skipHooks = (): HookDispatchDecision => new SkipHooks()
 export const admitPresent = (present: boolean): AdmitCommand => new AdmitHooksCommand({ present })
-
-export const interpretHookResult = (
-  command: InterpretHookCommand,
-): Result.Result<HookDecision, HookVerdictError> =>
-  Result.mapBoth(
-    submitVerdict(
-      SubmitVerdictCommand.make({
-        cmd: command,
-        code: command.result.code,
-        stdout: command.result.stdout,
-      }),
-    ),
-    {
-      onSuccess: (decision) => decision.verdict,
-      onFailure: (error) => error.error,
-    },
-  )
 
 /** The stdout crossing applied where the boundary is crossed. */
 const parseHookOutput = S.decodeUnknownExit(HookOutputFromStdout)
@@ -446,9 +427,9 @@ const AGGREGATE_CEILING_MS = 26_000
 interface HookVerdictPhases extends Cell.Phases {
   readonly command: { readonly hook: CommandHook; readonly input: Record<string, unknown> }
   readonly raw: HookResult
-  readonly decoded: SubmitVerdictCommand
-  readonly decision: { readonly verdict: HookDecision; readonly code: number; readonly stdout: string }
-  readonly decisionError: SubmitHookVerdictError
+  readonly decoded: InterpretHookCommand
+  readonly decision: HookVerdictDecision
+  readonly decisionError: HookVerdictFailure
   readonly output: HookOutcome
   readonly response: Option.Option<HooksForEventResult>
   readonly decodeError: never
@@ -471,37 +452,23 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
   // named the hook at session start, so this is a silent skip, not a report.
   const unreadableMatcher = matcherUnreadable(event)
 
-  /**
-   * The verdict chain, as a description applied per hook iteration. The read
-   * is the hook script run; `decode` wraps the raw result for the workflow and
-   * threads the raw's code and stdout forward; `submitVerdict` is the decision;
-   * `encode` folds the decision's two channels into the outcome the site acts
-   * on; `write` sequences the loop — a block returns the terminal result, a
-   * continue accumulates state. The write's `currentInput` and `warning` are
-   * the same mutable loop state the shell updated, so each iteration's command
-   * carries the input the previous write produced.
-   */
   const hookVerdictDescription = pipe(
     Cell.read<HookVerdictPhases>(({ hook, input }) =>
       Effect.provideContext(runHookScript(hook, input, cwd, event), services)
     ),
     Cell.decode<HookVerdictPhases>((raw) =>
       Result.succeed(
-        new SubmitVerdictCommand({
-          cmd: new InterpretHookCommand({
-            result: raw,
-            event,
-            parsed: Exit.match(parseHookOutput(raw.stdout), {
-              onFailure: () => Option.none(),
-              onSuccess: Option.some,
-            }),
+        new InterpretHookCommand({
+          result: raw,
+          event,
+          parsed: Exit.match(parseHookOutput(raw.stdout), {
+            onFailure: () => Option.none(),
+            onSuccess: Option.some,
           }),
-          code: raw.code,
-          stdout: raw.stdout,
         }),
       )
     ),
-    Cell.decide<HookVerdictPhases>(submitVerdict),
+    Cell.decide<HookVerdictPhases>(interpretHookResult),
     Cell.encode<HookVerdictPhases>((outcome) =>
       Match.value(
         Result.match(outcome, {
@@ -814,21 +781,12 @@ export const runPreCompactHooks = Effect.fn('runPreCompactHooks')(function*(
 })
 
 // ── RunUserPromptSubmitHooks ──
-/**
- * The per-hook prompt-submission chain, in one bag so the phase order is
- * carried by types: run the hook script (read), wrap the raw result for the
- * workflow while carrying the raw's code and stdout forward (decode),
- * interpret it (decide), fold both channels into the block decision (encode),
- * and act on it (write). The workflow's `Left` — a malformed decision JSON —
- * folds to `blockReason: undefined`, so it reaches the write as a value rather
- * than a failure.
- */
 interface SubmitPhases extends Cell.Phases {
   readonly command: { readonly hook: CommandHook; readonly input: Record<string, unknown> }
   readonly raw: HookResult
-  readonly decoded: SubmitVerdictCommand
-  readonly decision: { readonly verdict: HookDecision; readonly code: number; readonly stdout: string }
-  readonly decisionError: SubmitHookVerdictError
+  readonly decoded: InterpretHookCommand
+  readonly decision: HookVerdictDecision
+  readonly decisionError: HookVerdictFailure
   readonly output: { readonly blockReason: string | undefined; readonly code: number; readonly stdout: string }
   readonly response: Option.Option<InputEventResult>
   readonly decodeError: never
@@ -858,37 +816,23 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
     prompt: event.text,
     source: event.source,
   }
-
-  /**
-   * The prompt-submission verdict chain, as a description applied per hook
-   * iteration. The read is the hook script run; `decode` wraps the raw result
-   * for the workflow, hoists the stdout parse, and carries the raw's code and
-   * stdout forward, because the write still needs them; `submitVerdict` is the
-   * decision, with both channels carrying that forward context; `encode` folds
-   * the decision into the block reason; `write` blocks with a notify, skips
-   * failed hooks, or accumulates the trimmed stdout.
-   */
   const submitDescription = pipe(
     Cell.read<SubmitPhases>(({ hook, input }) =>
       Effect.provideContext(runHookScript(hook, input, cwd, 'UserPromptSubmit'), services)
     ),
     Cell.decode<SubmitPhases>((raw) =>
       Result.succeed(
-        new SubmitVerdictCommand({
-          cmd: new InterpretHookCommand({
-            result: raw,
-            event: 'UserPromptSubmit',
-            parsed: Exit.match(parseHookOutput(raw.stdout), {
-              onFailure: () => Option.none(),
-              onSuccess: Option.some,
-            }),
+        new InterpretHookCommand({
+          result: raw,
+          event: 'UserPromptSubmit',
+          parsed: Exit.match(parseHookOutput(raw.stdout), {
+            onFailure: () => Option.none(),
+            onSuccess: Option.some,
           }),
-          code: raw.code,
-          stdout: raw.stdout,
         }),
       )
     ),
-    Cell.decide<SubmitPhases>(submitVerdict),
+    Cell.decide<SubmitPhases>(interpretHookResult),
     Cell.encode<SubmitPhases>((outcome) =>
       Result.match(outcome, {
         onFailure: ({ code, stdout }) => ({ blockReason: undefined, code, stdout }),

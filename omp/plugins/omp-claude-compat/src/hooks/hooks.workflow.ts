@@ -122,97 +122,65 @@ export class HookVerdictError extends S.TaggedError<HookVerdictError>()('HookVer
   readonly [HookVerdictErrorTypeId] = HookVerdictErrorTypeId
 }
 
-/**
- * The hook-exit verdict: how a typed exit code and stdout decide an Allow, a
- * Block, or a Warning. Same-file decision core of {@link submitVerdict} — the
- * merged make composes this with the raw's context, so the brand lives there.
- */
-const interpretHookResult = (
-  command: InterpretHookCommand,
-): Result.Result<HookDecision, HookVerdictError> =>
-  Match.value(exitKindOf(command.result.code, command.result.stdout)).pipe(
-    Match.when(
-      'ExitBlock',
-      () => Result.succeed(new Block({ reason: blockReason(command.result.stderr, command.event) })),
-    ),
-    Match.when('ExitNoDecision', () => Result.succeed(new Allow({}))),
-    Match.when('ExitDecisionJson', () =>
-      Option.match(command.parsed, {
-        onNone: () => Result.fail(new HookVerdictError({ raw: command.result.stdout })),
-        onSome: (parsed) =>
-          Match.value(parsedVerdict(parsed.hookSpecificOutput?.permissionDecision, parsed.decision)).pipe(
-            Match.when('block', () =>
-              Result.succeed(
-                new Block({
-                  reason: parsedBlockReason(
-                    parsed.hookSpecificOutput?.permissionDecision,
-                    parsed.hookSpecificOutput?.permissionDecisionReason,
-                    parsed.reason,
-                    command.event,
-                  ),
-                }),
-              )),
-            Match.when('allow', () =>
-              Result.succeed(new Allow({ updatedInput: parsed.hookSpecificOutput?.updatedInput }))),
-            Match.exhaustive,
-          ),
-      })),
-    Match.when('ExitOther', () =>
-      Match.value(stderrVerdict(command.result.stderr)).pipe(
-        Match.when('warning', () => Result.succeed(new Warning({ message: spokenStderr(command.result.stderr) }))),
-        Match.when('allow', () => Result.succeed(new Allow({}))),
-        Match.exhaustive,
-      )),
-    Match.exhaustive,
-  )
-
-/**
- * The submit chain's command: the verdict command plus the raw's code and stdout.
- *
- * A schema class rather than an interface because `Workflow.make` constrains its
- * command argument on the class value — a declared type produces none, so it cannot
- * reach the argument position at all. `InterpretHookCommand` is itself a tagged class,
- * so it is usable directly as a field schema.
- */
-export class SubmitVerdictCommand extends S.TaggedClass<SubmitVerdictCommand>()('SubmitVerdictCommand', {
-  cmd: InterpretHookCommand,
-  code: S.Finite,
-  stdout: S.String,
-}) {}
-
-/** The submit chain's decision: the verdict plus the context the write acts on. */
-export interface SubmitVerdictDecision {
+export interface HookVerdictDecision {
   readonly verdict: HookDecision
   readonly code: number
   readonly stdout: string
 }
 
-/**
- * The submit decision's failure: the verdict error plus the raw's code and
- * stdout, as a schema-derived tagged struct — the error channel of a branded
- * decide run must carry a tag, and the struct derives one instead of declaring
- * a `_tag` by hand.
- */
-const SubmitHookVerdictError = S.TaggedStruct('SubmitHookVerdictError', {
+const HookVerdictFailure = S.TaggedStruct('HookVerdictFailure', {
   error: HookVerdictError,
   code: S.Finite,
   stdout: S.String,
 })
-export type SubmitHookVerdictError = S.Schema.Type<typeof SubmitHookVerdictError>
+export type HookVerdictFailure = S.Schema.Type<typeof HookVerdictFailure>
 
-/**
- * The submit verdict decision, and this file's one make: the hook verdict
- * composed with the raw's code and stdout, both channels carrying the context
- * the write still needs. `interpretHookResult` is the same-file decision core;
- * the reader imports this workflow and never reaches past it.
- */
-export const submitVerdict = Workflow.make(
-  SubmitVerdictCommand,
-  ({ cmd, code, stdout }): Result.Result<SubmitVerdictDecision, SubmitHookVerdictError> =>
-    Result.mapBoth(interpretHookResult(cmd), {
-      onFailure: (error) => SubmitHookVerdictError.make({ error, code, stdout }),
-      onSuccess: (verdict) => ({ verdict, code, stdout }),
-    }),
+export const interpretHookResult = Workflow.make(
+  InterpretHookCommand,
+  (command): Result.Result<HookVerdictDecision, HookVerdictFailure> => {
+    const { code, stdout } = command.result
+    return Result.mapBoth(
+      Match.value(exitKindOf(code, stdout)).pipe(
+        Match.when(
+          'ExitBlock',
+          () => Result.succeed(new Block({ reason: blockReason(command.result.stderr, command.event) })),
+        ),
+        Match.when('ExitNoDecision', () => Result.succeed(new Allow({}))),
+        Match.when('ExitDecisionJson', () =>
+          Option.match(command.parsed, {
+            onNone: () => Result.fail(new HookVerdictError({ raw: stdout })),
+            onSome: (parsed) =>
+              Match.value(parsedVerdict(parsed.hookSpecificOutput?.permissionDecision, parsed.decision)).pipe(
+                Match.when('block', () =>
+                  Result.succeed(
+                    new Block({
+                      reason: parsedBlockReason(
+                        parsed.hookSpecificOutput?.permissionDecision,
+                        parsed.hookSpecificOutput?.permissionDecisionReason,
+                        parsed.reason,
+                        command.event,
+                      ),
+                    }),
+                  )),
+                Match.when('allow', () =>
+                  Result.succeed(new Allow({ updatedInput: parsed.hookSpecificOutput?.updatedInput }))),
+                Match.exhaustive,
+              ),
+          })),
+        Match.when('ExitOther', () =>
+          Match.value(stderrVerdict(command.result.stderr)).pipe(
+            Match.when('warning', () => Result.succeed(new Warning({ message: spokenStderr(command.result.stderr) }))),
+            Match.when('allow', () => Result.succeed(new Allow({}))),
+            Match.exhaustive,
+          )),
+        Match.exhaustive,
+      ),
+      {
+        onFailure: (error) => HookVerdictFailure.make({ error, code, stdout }),
+        onSuccess: (verdict) => ({ verdict, code, stdout }),
+      },
+    )
+  },
 )
 
 if (import.meta.vitest !== void 0) {
