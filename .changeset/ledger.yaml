@@ -16,6 +16,10 @@
   dir: packages/lint/oxlint/all
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/all@1.1.0":
+  dir: packages/lint/oxlint/all
+  intents:
+    - eager-rockets-relate
 "@systemfsoftware/arethetypeswrong-cli@2.0.0":
   dir: packages/arethetypeswrong/cli
   intents:
@@ -255,6 +259,10 @@
   dir: packages/core/effect/daemon-spec
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/effect-daemon-spec@3.0.4":
+  dir: packages/core/effect/daemon-spec
+  intents:
+    - quiet-lions-hunt
 "@systemfsoftware/effect-gherkin-spec@1.0.0":
   dir: packages/effect-gherkin-spec
   intents:
@@ -365,6 +373,10 @@
   dir: packages/core/effect/schema/extensions
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/effect-schema-extensions@0.9.4":
+  dir: packages/core/effect/schema/extensions
+  intents:
+    - quiet-lions-hunt
 "@systemfsoftware/effect-schema-law@0.7.0":
   dir: packages/effect-schema-law
   intents:
@@ -454,6 +466,10 @@
   dir: packages/core/hex/hex-schema
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/hex-schema@1.8.4":
+  dir: packages/core/hex/hex-schema
+  intents:
+    - quiet-lions-hunt
 "@systemfsoftware/npm-package@0.2.0":
   dir: packages/npm-package
   intents:
@@ -490,6 +506,11 @@
   dir: omp/plugins/omp-agent-discipline
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/omp-agent-discipline@4.0.0":
+  dir: omp/plugins/omp-agent-discipline
+  intents:
+    - doctrine-verdict-payload
+    - quiet-lions-hunt
 "@systemfsoftware/omp-claude-compat@2.0.0":
   dir: omp/plugins/omp-claude-compat
   intents:
@@ -524,6 +545,11 @@
   intents:
     - concrete-effect-channels
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/omp-claude-compat@4.0.0":
+  dir: omp/plugins/omp-claude-compat
+  intents:
+    - hook-verdict-decision-channels
+    - quiet-lions-hunt
 "@systemfsoftware/omp-typescript-discipline@1.0.0":
   dir: omp/plugins/omp-typescript-discipline
   intents:
@@ -608,6 +634,10 @@
   dir: packages/lint/oxlint/plugins/meta/effect-dmmf
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/oxlint-plugin-effect-dmmf@5.1.0":
+  dir: packages/lint/oxlint/plugins/meta/effect-dmmf
+  intents:
+    - workflow-file-one-export
 "@systemfsoftware/oxlint-plugin-effect-entrypoint@1.0.3":
   dir: packages/oxlint-plugins/effect-entrypoint
   intents:
@@ -698,6 +728,10 @@
   dir: packages/lint/oxlint/plugins/cells/effect-workflow
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/oxlint-plugin-effect-workflow@4.1.0":
+  dir: packages/lint/oxlint/plugins/cells/effect-workflow
+  intents:
+    - workflow-file-one-export
 "@systemfsoftware/oxlint-plugin-property-testing@1.2.0":
   dir: packages/oxlint-plugins/property-testing
   intents:
@@ -732,6 +766,10 @@
   intents:
     - dead-spec-citations-removed
     - debut-releases-gain-oidc
+"@systemfsoftware/oxlint-plugin-recommended@1.1.4":
+  dir: packages/lint/oxlint/plugins/meta/recommended
+  intents:
+    - disable-explicit-boundary-types
 "@systemfsoftware/oxlint-plugin-test-hygiene@1.1.3":
   dir: packages/oxlint-plugins/test-hygiene
   intents:
@@ -951,6 +989,10 @@
   dir: packages/testing/mutation/stryker-js/cli
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/stryker-js-cli@4.0.3":
+  dir: packages/testing/mutation/stryker-js/cli
+  intents:
+    - quiet-lions-hunt
 "@systemfsoftware/stryker-js-html-reporter@0.1.0":
   dir: packages/testing/mutation/stryker-js/html-reporter
   intents:
@@ -967,6 +1009,10 @@
   dir: packages/testing/mutation/stryker-js/html-reporter
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/stryker-js-html-reporter@0.1.2":
+  dir: packages/testing/mutation/stryker-js/html-reporter
+  intents:
+    - quiet-lions-hunt
 "@systemfsoftware/stryker-js-instrumenter@0.2.0":
   dir: packages/testing/mutation/stryker-js/instrumenter
   intents:
@@ -995,6 +1041,10 @@
   dir: packages/testing/mutation/stryker-js/instrumenter
   intents:
     - blue-nights-yell
+"@systemfsoftware/stryker-js-instrumenter@3.0.1":
+  dir: packages/testing/mutation/stryker-js/instrumenter
+  intents:
+    - quiet-lions-hunt
 "@systemfsoftware/stryker-js-mutation-report@1.2.6":
   dir: packages/stryker-js/mutation-report
   intents:
@@ -1122,6 +1172,10 @@
   intents:
     - oxc-instrumenter-dependency-bump
     - some-boxes-type
+"@systemfsoftware/stryker-js-platform-node@0.2.0":
+  dir: packages/testing/mutation/stryker-js/platform-node
+  intents:
+    - brown-clocks-talk
 "@systemfsoftware/stryker-js-plugin-api@1.0.0":
   dir: packages/stryker-js/plugin-api
   intents:
@@ -1197,6 +1251,10 @@
   dir: packages/testing/mutation/stryker-js/typescript-checker
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/stryker-js-typescript-checker@3.0.3":
+  dir: packages/testing/mutation/stryker-js/typescript-checker
+  intents:
+    - quiet-lions-hunt
 "@systemfsoftware/stryker-js-util@0.2.0":
   dir: packages/testing/mutation/stryker-js/util
   intents:
@@ -1243,6 +1301,11 @@
   dir: packages/testing/mutation/stryker-js/vitest-runner
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/stryker-js-vitest-runner@2.1.0":
+  dir: packages/testing/mutation/stryker-js/vitest-runner
+  intents:
+    - lucky-otters-read
+    - quiet-lions-hunt
 "@systemfsoftware/stryker-js@0.1.0":
   dir: packages/testing/mutation/stryker-js/stryker-js
   intents:
@@ -1264,6 +1327,11 @@
   dir: packages/testing/mutation/stryker-js/stryker-js
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/stryker-js@0.2.0":
+  dir: packages/testing/mutation/stryker-js/stryker-js
+  intents:
+    - lucky-otters-read
+    - quiet-lions-hunt
 "@systemfsoftware/stryker-plugins@0.12.0":
   dir: packages/stryker-plugins
   intents:
@@ -1305,6 +1373,10 @@
   dir: packages/testing/mutation/plugins/stryker-plugins
   intents:
     - free-animals-win
+"@systemfsoftware/stryker-plugins@2.0.1":
+  dir: packages/testing/mutation/plugins/stryker-plugins
+  intents:
+    - quiet-lions-hunt
 "@systemfsoftware/stryker-test-contribution@0.1.0":
   dir: packages/testing/mutation/plugins/stryker-test-contribution
   intents:
@@ -1329,6 +1401,10 @@
   dir: packages/testing/mutation/plugins/stryker-test-contribution
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/stryker-test-contribution@1.1.2":
+  dir: packages/testing/mutation/plugins/stryker-test-contribution
+  intents:
+    - quiet-lions-hunt
 "@systemfsoftware/tsconfig@1.3.2":
   dir: packages/tsconfig
   intents:
