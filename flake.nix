@@ -18,8 +18,6 @@
       packages = forEachSystem (pkgs:
         let
           dprint = pkgs.callPackage ./nix/dprint.nix { };
-          # Always latest: flake input `comment-checker` tracks github:systemfsoftware/comment-checker.
-          # `nix flake update` advances it — no version/hash pinned in this repo.
           cc = comment-checker.packages.${pkgs.system}.comment-checker;
           comment-checker-bwrap = pkgs.callPackage ./nix/comment-checker-bwrap.nix { comment-checker = cc; };
         in { inherit dprint comment-checker-bwrap; comment-checker = cc; default = dprint; });
