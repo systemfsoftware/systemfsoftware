@@ -4,7 +4,7 @@
   "mainEntryPointFilePath": "<projectFolder>/dist/test.d.ts",
   "bundledPackages": [],
   "compiler": {
-    "tsconfigFilePath": "<projectFolder>/tsconfig.api-test.json"
+    "tsconfigFilePath": "<projectFolder>/tsconfig.build.json"
   },
   "apiReport": {
     "enabled": true,
