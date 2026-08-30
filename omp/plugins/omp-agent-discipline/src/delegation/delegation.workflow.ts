@@ -2,7 +2,7 @@ import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Match, Result, Schema as S } from 'effect'
 import * as Option from 'effect/Option'
 
-export const How = S.Literals(['subagent_type', 'prompt'])
+const How = S.Literals(['subagent_type', 'prompt'])
 
 const DelegationVerdictTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-agent-discipline/DelegationVerdict')
 export class Allow extends S.TaggedClass<Allow>()('Allow', {}) {
