@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard: deno not found on PATH - install Deno (https://deno.land) so the lint guard can run' >&2; exit 1; }; exec deno run --quiet --allow-read --allow-run --allow-env \"${CLAUDE_PLUGIN_ROOT}/src/guard-lint.ts\"",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard: deno not found on PATH - install Deno (https://deno.land) so the lint guard can run' >&2; exit 1; }; exec deno run --quiet --config \"${CLAUDE_PLUGIN_ROOT}/deno.jsonc\" --allow-read --allow-run --allow-env \"${CLAUDE_PLUGIN_ROOT}/src/guard-lint.ts\"",
             "timeout": 120
           }
         ]
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard: deno not found on PATH - install Deno (https://deno.land) so the config guard can run' >&2; exit 1; }; exec deno run --quiet --allow-read \"${CLAUDE_PLUGIN_ROOT}/src/guard-config.ts\"",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard: deno not found on PATH - install Deno (https://deno.land) so the config guard can run' >&2; exit 1; }; exec deno run --quiet --config \"${CLAUDE_PLUGIN_ROOT}/deno.jsonc\" --allow-read \"${CLAUDE_PLUGIN_ROOT}/src/guard-config.ts\"",
             "timeout": 30
           }
         ]
