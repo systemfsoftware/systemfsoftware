@@ -12,10 +12,10 @@ import * as RpcClient from 'effect/unstable/rpc/RpcClient'
 import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization'
 import type * as Socket from 'effect/unstable/socket/Socket'
 
-import { ChildProcessCrashedError, WorkerConnectTimeoutError } from './Worker.schema.js'
+import { ChildProcessCrashedError } from './Worker.schema.js'
 
-/** How long the parent retries the connection while a worker boots. */
-export const connectRetry = Schedule.min([Schedule.spaced(50), Schedule.recurs(100)])
+/** Bounded connect attempts while a worker boots: 100 x 50ms. */
+export const connectRetry = Schedule.max([Schedule.spaced(50), Schedule.recurs(100)])
 
 /**
  * One worker child process and the client protocol layer that talks to it.
@@ -28,6 +28,12 @@ export const connectRetry = Schedule.min([Schedule.spaced(50), Schedule.recurs(1
 export interface SpawnedSocketWorker {
   readonly pid: number
   readonly clientLayer: Layer.Layer<RpcClient.Protocol, Socket.SocketError>
+  /**
+   * Fails with `ChildProcessCrashedError` as soon as the child process ends.
+   * Race it against the client-layer build so a worker that dies during boot
+   * fails the spawn immediately instead of burning the connect budget.
+   */
+  readonly exited: Effect.Effect<never, ChildProcessCrashedError>
 }
 
 /**
@@ -44,12 +50,13 @@ export const spawnSocketWorker = (params: {
   readonly tempDirPrefix: string
 }): Effect.Effect<
   SpawnedSocketWorker,
-  ChildProcessCrashedError | WorkerConnectTimeoutError,
+  ChildProcessCrashedError,
   Scope.Scope | ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
 > =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
+
     const workerDir = yield* fs.makeTempDirectoryScoped({ prefix: params.tempDirPrefix })
     const socketPath = Match.value(process.platform).pipe(
       Match.when('win32', () => `\\\\.\\pipe\\stryker-worker-${globalThis.crypto.randomUUID()}`),
@@ -70,10 +77,23 @@ export const spawnSocketWorker = (params: {
       Layer.provide(RpcSerialization.layerNdjson),
     )
 
-    return { pid: Number(handle.pid), clientLayer }
+    const exited = handle.exitCode.pipe(
+      Effect.orDie,
+      Effect.flatMap((exitCode) =>
+        Effect.fail(
+          new ChildProcessCrashedError({
+            pid: Number(handle.pid),
+            exit: { _tag: 'Code', code: exitCode },
+            cause: 'worker exited before it accepted the RPC connection',
+          }),
+        )
+      ),
+    )
+
+    return { pid: Number(handle.pid), clientLayer, exited }
   }).pipe(
     Effect.catch((error) => {
-      if (error instanceof ChildProcessCrashedError || error instanceof WorkerConnectTimeoutError) {
+      if (error instanceof ChildProcessCrashedError) {
         return Effect.fail(error)
       }
       return Effect.fail(

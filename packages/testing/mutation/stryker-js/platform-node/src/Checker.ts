@@ -214,20 +214,17 @@ export const makeCheckerChildProcess = (params: {
       execArgv: [...params.execArgv],
       optionsJson,
       tempDirPrefix: 'stryker-checker-',
-    }).pipe(
-      Effect.catchTag('WorkerConnectTimeoutError', (error) =>
-        Effect.fail(
-          new ChildProcessCrashedError({
-            pid: 0,
-            exit: { _tag: 'Code', code: 1 },
-            cause: `worker did not announce its RPC port within ${String(error.waitedMs)}ms`,
-          }),
-        )),
-    )
+    })
 
     const workerContext = yield* Layer.build(worker.clientLayer).pipe(
       Effect.retry(connectRetry),
-      Effect.mapError((error) => crashed(`Checker worker failed to start: ${error.message}`)),
+      Effect.raceFirst(worker.exited),
+      Effect.catch((error) => {
+        if (error instanceof ChildProcessCrashedError) {
+          return Effect.fail(error)
+        }
+        return Effect.fail(crashed(`Checker worker failed to start: ${error.message}`))
+      }),
     )
     const client = yield* RpcClient.make(CheckerRpcs).pipe(Effect.provideContext(workerContext))
 

@@ -42,14 +42,14 @@ import * as ChildProcess from 'effect/unstable/process/ChildProcess'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 import * as RpcClient from 'effect/unstable/rpc/RpcClient'
 import type { RpcClientError } from 'effect/unstable/rpc/RpcClientError'
+import type { SocketError } from 'effect/unstable/socket/Socket'
 
 import { CommandRunnerUnsupportedOption } from './TestRunner.schema.js'
 import type { IdGeneratorShape } from './Worker.js'
 import { ChildProcessCrashedError, OutOfMemoryError } from './Worker.schema.js'
 import type { WorkerFrameTooLargeError } from './Worker.schema.js'
 import { TestRunnerRpcs } from './WorkerProtocol.js'
-import { spawnSocketWorker } from './WorkerSocket.js'
-
+import { connectRetry, spawnSocketWorker } from './WorkerSocket.js'
 // ---------------------------------------------------------------------------
 // Pooled runner — the child-process port
 // ---------------------------------------------------------------------------
@@ -129,20 +129,18 @@ export const makeChildProcessTestRunner = (
       execArgv: [...params.options.testRunnerNodeArgs],
       optionsJson,
       tempDirPrefix: 'stryker-test-runner-',
-    }).pipe(
-      Effect.catchTag('WorkerConnectTimeoutError', (error) =>
-        Effect.fail(
-          new ChildProcessCrashedError({
-            pid: 0,
-            exit: { _tag: 'Code', code: 1 },
-            cause: `worker did not announce its RPC port within ${String(error.waitedMs)}ms`,
-          }),
-        )),
-    )
+    })
     const workerContext = yield* Layer.build(worker.clientLayer).pipe(
-      Effect.mapError((error) =>
-        new TestRunnerFailed({ runnerName, phase: 'init', cause: `Worker failed to start: ${error.message}` })
-      ),
+      Effect.retry(connectRetry),
+      Effect.raceFirst(worker.exited),
+      Effect.catch((error: ChildProcessCrashedError | SocketError): Effect.Effect<never, PooledTestRunnerError> => {
+        if (error instanceof ChildProcessCrashedError) {
+          return Effect.fail(error)
+        }
+        return Effect.fail(
+          new TestRunnerFailed({ runnerName, phase: 'init', cause: `Worker failed to start: ${error.message}` }),
+        )
+      }),
     )
     const client = yield* RpcClient.make(TestRunnerRpcs).pipe(Effect.provideContext(workerContext))
 
