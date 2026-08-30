@@ -2,7 +2,6 @@ import { NodeServices, NodeSocket } from '@effect/platform-node'
 import { ManagedRuntime } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
-import type * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
 import * as ChildProcess from 'effect/unstable/process/ChildProcess'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
@@ -25,7 +24,9 @@ const WORKSPACE_MANIFEST = JSON.stringify({
   private: true,
 })
 
-let runtime: ManagedRuntime.ManagedRuntime<Layer.Success<typeof NodeServices.layer>, never> | undefined
+/** One runtime for the whole contract lane, created once at module load. */
+const runtime = ManagedRuntime.make(NodeServices.layer)
+
 let container: StartedTestContainer | undefined
 let tarballDir: string | undefined
 
@@ -73,9 +74,7 @@ const selectContainerRuntime = Effect.gen(function*() {
 })
 
 export function setup(project: TestProject): Promise<void> {
-  const managed = ManagedRuntime.make(NodeServices.layer)
-  runtime = managed
-  return managed.runPromise(
+  return runtime.runPromise(
     Effect.gen(function*() {
       const path = yield* Path.Path
       const fs = yield* FileSystem.FileSystem
@@ -174,10 +173,7 @@ export function setup(project: TestProject): Promise<void> {
 }
 
 export async function teardown(): Promise<void> {
-  const managed = runtime
-  if (managed === undefined) return
-  runtime = undefined
-  await managed.runPromise(
+  await runtime.runPromise(
     Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem
       const started = container
@@ -196,5 +192,5 @@ export async function teardown(): Promise<void> {
       }
     }),
   )
-  await managed.dispose()
+  await runtime.dispose()
 }
