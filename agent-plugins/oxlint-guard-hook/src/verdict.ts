@@ -142,8 +142,10 @@ if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
   const fc: typeof FastCheck = (await import('effect/testing')).FastCheck
 
-  const lintTagOf = (result: ProcessResult, canRetry: boolean): LintVerdict['_tag'] =>
-    lintVerdict(result, canRetry)._tag
+  const lintTagOf = (
+    result: ProcessResult,
+    canRetry: boolean,
+  ): LintVerdict['_tag'] => lintVerdict(result, canRetry)._tag
 
   const violationOutput = (result: ProcessResult): string | undefined => {
     const lint = lintVerdict(result, true)

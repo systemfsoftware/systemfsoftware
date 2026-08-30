@@ -24,7 +24,10 @@ interface Rung {
   readonly proceedStops: boolean
 }
 
-const responseOf = (verdict: GuardVerdict, rung: Rung): Option.Option<HookResult> =>
+const responseOf = (
+  verdict: GuardVerdict,
+  rung: Rung,
+): Option.Option<HookResult> =>
   Match.value(verdict).pipe(
     Match.tag('Halt', ({ response }) => Option.some(response)),
     Match.tag('Proceed', () => {
@@ -37,7 +40,9 @@ const responseOf = (verdict: GuardVerdict, rung: Rung): Option.Option<HookResult
     Match.exhaustive,
   )
 
-const runLadder = (rungs: readonly Rung[]): Effect.Effect<HookResult, never, never> =>
+const runLadder = (
+  rungs: readonly Rung[],
+): Effect.Effect<HookResult, never, never> =>
   Effect.gen(function*() {
     for (const rung of rungs) {
       const attempt = yield* rung.run.runner.run(
@@ -112,8 +117,16 @@ export const runDenoPair = (
   filePath: string,
 ): Effect.Effect<HookResult, never, never> =>
   runLadder([
-    { run: denoRun(runner, dirname, filePath, 'check'), canRetry: false, proceedStops: false },
-    { run: denoRun(runner, dirname, filePath, 'lint'), canRetry: false, proceedStops: true },
+    {
+      run: denoRun(runner, dirname, filePath, 'check'),
+      canRetry: false,
+      proceedStops: false,
+    },
+    {
+      run: denoRun(runner, dirname, filePath, 'lint'),
+      canRetry: false,
+      proceedStops: true,
+    },
   ])
 
 export const runOxlint = (
@@ -122,6 +135,14 @@ export const runOxlint = (
   plan: { readonly filePath: string; readonly configPath: string },
 ): Effect.Effect<HookResult, never, never> =>
   runLadder([
-    { run: oxlintRun(runner, dirname, plan, true), canRetry: true, proceedStops: true },
-    { run: oxlintRun(runner, dirname, plan, false), canRetry: false, proceedStops: true },
+    {
+      run: oxlintRun(runner, dirname, plan, true),
+      canRetry: true,
+      proceedStops: true,
+    },
+    {
+      run: oxlintRun(runner, dirname, plan, false),
+      canRetry: false,
+      proceedStops: true,
+    },
   ])
