@@ -35,9 +35,6 @@ import * as CliError from 'effect/unstable/cli/CliError'
 import * as Command from 'effect/unstable/cli/Command'
 import * as Flag from 'effect/unstable/cli/Flag'
 import * as GlobalFlag from 'effect/unstable/cli/GlobalFlag'
-import { readFileSync } from 'node:fs'
-import { createRequire } from 'node:module'
-import { resolve as resolvePath } from 'node:path'
 import type { CliRequest } from './Cli.schema.js'
 import {
   buildErrorEnvelope,
@@ -522,44 +519,67 @@ function describeCommandNode(node: unknown): LLMSManifestCommand | undefined {
   }
 }
 
-function readCoreEntries(): readonly string[] {
-  try {
-    const requireFn = createRequire(import.meta.url)
-    const manifestPath = requireFn.resolve('@systemfsoftware/stryker-js-platform-node/package.json')
-    const raw = readFileSync(manifestPath, 'utf-8')
-    const parsed: unknown = JSON.parse(raw)
+function readCoreEntries(): Effect.Effect<readonly string[], never, FileSystem.FileSystem | Path.Path> {
+  return Effect.gen(function*() {
+    const path = yield* Path.Path
+    const fs = yield* FileSystem.FileSystem
+    const resolved = import.meta.resolve('@systemfsoftware/stryker-js-platform-node/package.json')
+    const manifestPath = yield* path.fromFileUrl(new URL(resolved))
+    const raw = yield* fs.readFileString(manifestPath)
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      const empty: readonly string[] = []
+      return empty
+    }
     const ExportsSchema = S.Struct({ exports: S.Record(S.String, S.Unknown) })
     const decoded = S.decodeUnknownResult(ExportsSchema)(parsed)
     if (Result.isSuccess(decoded)) {
-      const keys = Object.keys(decoded.success.exports).filter((key) => key !== './package.json')
-      return keys
+      return Object.keys(decoded.success.exports).filter((key) => key !== './package.json')
     }
-    return []
-  } catch {
-    return []
-  }
+    const empty: readonly string[] = []
+    return empty
+  }).pipe(
+    Effect.catchCause(() => {
+      const empty: readonly string[] = []
+      return Effect.succeed(empty)
+    }),
+    Effect.catchDefect(() => {
+      const empty: readonly string[] = []
+      return Effect.succeed(empty)
+    }),
+  )
 }
 
-export function buildLLMSManifest(command: Command.Command.Any, version: string): LLMSManifest {
-  const root = describeCommandNode(command) ?? {
-    name: '',
-    description: '',
-    options: [],
-    args: [],
-    subcommands: [],
-  }
-  return {
-    schemaVersion: LLMS_MANIFEST_SCHEMA_VERSION,
-    tool: root.name,
-    version,
-    commands: [root],
-    entries: readCoreEntries(),
-  }
+export function buildLLMSManifest(
+  command: Command.Command.Any,
+  version: string,
+): Effect.Effect<LLMSManifest, never, FileSystem.FileSystem | Path.Path> {
+  return Effect.gen(function*() {
+    const root = describeCommandNode(command) ?? {
+      name: '',
+      description: '',
+      options: [],
+      args: [],
+      subcommands: [],
+    }
+    const entries = yield* readCoreEntries()
+    return {
+      schemaVersion: LLMS_MANIFEST_SCHEMA_VERSION,
+      tool: root.name,
+      version,
+      commands: [root],
+      entries,
+    }
+  })
 }
 
-/** The manifest as one JSON document, ready for stdout — the U4 convention. */
-export function emitLLMSManifest(command: Command.Command.Any, version: string): string {
-  return JSON.stringify(buildLLMSManifest(command, version))
+export function emitLLMSManifest(
+  command: Command.Command.Any,
+  version: string,
+): Effect.Effect<string, never, FileSystem.FileSystem | Path.Path> {
+  return Effect.map(buildLLMSManifest(command, version), (manifest) => JSON.stringify(manifest))
 }
 
 function createSplitter(separator: string) {
@@ -971,48 +991,31 @@ function makeStrykerCommand(requestRef: Ref.Ref<Option.Option<CliRequest>>) {
 
   // The explicit type breaks the circular inference from `root` being
   // referenced inside its own handler, which would collapse R/E to unknown.
-  const root: Command.Command<'stryker', { readonly llms: boolean | undefined }, {}, CliError.CliError, never> = Command
-    .make('stryker', rootConfig, (config) => {
-      if (config.llms === true) {
-        // U11 — the manifest is walked from the command's own compiled form
-        // (LlmsManifest.ts), so a newly added option appears with no
-        // manifest change. `strykerCommand` is the final tree, subcommands
-        // included; the handler runs only after the const is bound (the same
-        // pattern as the explicit root type above). Requesting `--llms` IS
-        // the machine signal, so the executor always produces the machine
-        // contract — a `stream` header followed by one tagged `manifest`
-        // terminal event (R5) — regardless of TTY or resolved mode.
-        const document: ManifestRendered = {
-          _tag: 'manifest',
-          schemaVersion: STREAM_SCHEMA_VERSION,
-          code: 0,
-          manifest: emitLLMSManifest(strykerCommand, strykerVersion),
+  const root: Command.Command<
+    'stryker',
+    { readonly llms: boolean | undefined },
+    {},
+    CliError.CliError,
+    FileSystem.FileSystem | Path.Path
+  > = Command
+    .make('stryker', rootConfig, (config) =>
+      Effect.gen(function*() {
+        if (config.llms === true) {
+          const manifest = yield* emitLLMSManifest(strykerCommand, strykerVersion)
+          const document: ManifestRendered = {
+            _tag: 'manifest',
+            schemaVersion: STREAM_SCHEMA_VERSION,
+            code: 0,
+            manifest,
+          }
+          return yield* Ref.set(requestRef, Option.some({ _tag: 'llms', document }))
         }
-        return Ref.set(requestRef, Option.some({ _tag: 'llms', document }))
-      }
-      // Bare `stryker`: render help and exit 0, matching commander. The
-      // runner renders the ShowHelp document through the Console layer (the
-      // machine capture) before rethrowing it; the executor maps an error-free
-      // ShowHelp to exit 0 and the `help` terminal event.
-      return Effect.failSync(() => CliError.ShowHelp.make({ commandPath: ['stryker'], errors: [] }))
-    })
+        return yield* Effect.failSync(() => CliError.ShowHelp.make({ commandPath: ['stryker'], errors: [] }))
+      }))
 
   const strykerCommand = root.pipe(Command.withSubcommands([runCommand]))
   return strykerCommand
 }
-/**
- * The CLI parses only text/number/choice options, so the framework's platform
- * services are never read at runtime; the v4 runner still demands them in its
- * environment. The bootstrap provides `Path.layer` (the universal
- * implementation in `effect/Path`), an *empty* file system (`layerNoop`:
- * every operation reports not-found), and a process-stdio `Terminal` whose
- * interactive input primitives fail loudly — the run-only surface (R14) has
- * no prompts. `@effect/platform-node` is a declared dependency of this
- * package (it provides the `NodeRuntime` the bin runs through), but no
- * platform-node service is wired into the command environment: the parser
- * never reads a real file system at run time, so the noop layers are
- * sufficient.
- */
 const terminalLayer = Layer.succeed(
   Terminal.Terminal,
   Terminal.make({
@@ -1051,7 +1054,7 @@ const cliLayer = Layer.mergeAll(
     ],
   }),
   Path.layer,
-  FileSystem.layerNoop({}),
+  NodeFileSystem.layer,
   terminalLayer,
   // The v4 framework renders help and version documents through the `Stdio`
   // service's sinks, so the CLI provides the real process-backed layer —
@@ -1107,7 +1110,7 @@ function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironme
     runId: stream.runId,
     resolvedMode: mode,
     runStartedAt: stream.startedAt,
-    basePath: resolvePath(process.cwd()),
+    basePath: process.cwd(),
     reporterPluginModules: [
       import.meta.resolve('@systemfsoftware/stryker-js-html-reporter'),
       import.meta.resolve('@systemfsoftware/stryker-js-platform-node/builtin-reporters'),

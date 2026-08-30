@@ -5,7 +5,6 @@
  * to the compiler service and the pure `checkMutants` workflow. Diagnostics
  * are classified without I/O; the file graph is sourced from the compiler.
  */
-import { EOL } from 'os'
 
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Checker } from '@systemfsoftware/stryker-js/Checker'
@@ -212,7 +211,7 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
   const createErrorText = (errors: readonly Diagnostic[]): Effect.Effect<string, never> =>
     Effect.gen(function*() {
       const parts = yield* Effect.forEach(errors, formatDiagnostic)
-      return parts.join(EOL)
+      return parts.join('\n')
     })
 
   return {

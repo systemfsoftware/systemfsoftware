@@ -1,8 +1,3 @@
-/**
- * Plugins capability — loading Stryker plugin modules, warning about shadowed
- * contributions, and creating typed plugin instances from the loaded graph.
- */
-
 import { Schema as S } from 'effect'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
@@ -15,12 +10,12 @@ import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Predicate from 'effect/Predicate'
 import * as Result from 'effect/Result'
-import { fileURLToPath, pathToFileURL } from 'node:url'
 
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { PluginKind } from '@systemfsoftware/stryker-js/Plugin'
 import type { AnyPluginContribution, ContributionOf, PluginContribution } from '@systemfsoftware/stryker-js/Plugin'
 
+import { ProjectModulesLive } from '@systemfsoftware/project-modules-node'
 import { defaultOptions, importModule } from './Config.js'
 import { StrykerError } from './stryker-error.schema.js'
 
@@ -109,7 +104,10 @@ function resolvePluginModules(
             return yield* globPluginModules(pluginExpression)
           }
           if (pathService.isAbsolute(pluginExpression) || pluginExpression.startsWith('.')) {
-            return [pathToFileURL(pathService.resolve(pluginExpression)).toString()]
+            const url = yield* pathService.toFileUrl(pathService.resolve(pluginExpression)).pipe(
+              Effect.mapError((cause) => new PluginLoadFailedError({ descriptor: pluginExpression, cause })),
+            )
+            return [url.href]
           }
           return [pluginExpression]
         }),
@@ -152,7 +150,8 @@ function readOrgDirectory(
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     let names: HashSet.HashSet<string> = HashSet.empty()
-    let directory = path.dirname(fileURLToPath(import.meta.url))
+    const base = yield* path.fromFileUrl(new URL('.', import.meta.url)).pipe(Effect.orDie)
+    let directory = path.dirname(base)
     for (;;) {
       let installRoot = path.join(directory, 'node_modules')
       if (path.basename(directory) === 'node_modules') {
@@ -210,6 +209,7 @@ function loadPlugin(
   return Effect.gen(function*() {
     yield* Effect.logDebug(`Loading plugin ${descriptor}`)
     const moduleEffect = importModule(descriptor, basePath).pipe(
+      Effect.provide(ProjectModulesLive(basePath)),
       Effect.catch((error) => {
         let cause: unknown = error
         if (error instanceof StrykerError) {

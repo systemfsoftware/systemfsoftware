@@ -46,6 +46,8 @@
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/project-modules": "workspace:^",
+    "@systemfsoftware/project-modules-node": "workspace:^",
     "@systemfsoftware/stryker-js": "workspace:^"
   },
   "peerDependencies": {

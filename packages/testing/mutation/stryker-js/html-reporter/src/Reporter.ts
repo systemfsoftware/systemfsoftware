@@ -2,11 +2,6 @@
  * Html reporter — Cell pipeline that renders the mutation report to a file.
  */
 
-// node:url — no Effect Path equivalent for file URL conversion
-import { pathToFileURL } from 'url'
-// node:module — require.resolve for bundled script lookup
-import { createRequire } from 'module'
-
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import type { MutantResult } from '@systemfsoftware/stryker-js/Mutant'
 import { writeOutputFile } from '@systemfsoftware/stryker-js/output-file'
@@ -23,7 +18,7 @@ import * as Effect from 'effect/Effect'
 import type * as FileSystem from 'effect/FileSystem'
 import { pipe } from 'effect/Function'
 import type * as Path from 'effect/Path'
-import type { PlatformError } from 'effect/PlatformError'
+import type { BadArgument, PlatformError } from 'effect/PlatformError'
 import * as Result from 'effect/Result'
 import type * as schema from 'mutation-testing-report-schema/api'
 
@@ -38,8 +33,8 @@ interface HtmlReportPhases extends Cell.Phases {
   readonly output: string
   readonly response: void
   readonly decodeError: unknown
-  readonly readError: PlatformError
-  readonly writeError: PlatformError
+  readonly readError: PlatformError | BadArgument
+  readonly writeError: PlatformError | BadArgument
 }
 
 export const makeHtmlReporter = (params: {
@@ -56,8 +51,9 @@ export const makeHtmlReporter = (params: {
   const htmlReportDescription: Cell.WriteDone<HtmlReportPhases> = pipe(
     Cell.read<HtmlReportPhases>(() =>
       Effect.gen(function*() {
-        const require = createRequire(import.meta.url)
-        const scriptPath = require.resolve('mutation-testing-elements/dist/mutation-test-elements.js')
+        const scriptPath = yield* path.fromFileUrl(
+          new URL(import.meta.resolve('mutation-testing-elements/dist/mutation-test-elements.js')),
+        )
         const scriptContent = yield* fs.readFileString(scriptPath)
         const report: unknown = heldReport
         return { report, scriptContent }
@@ -79,7 +75,8 @@ export const makeHtmlReporter = (params: {
         const fileName = options.htmlReporter.fileName
         yield* Effect.logDebug(`Using file "${fileName}"`)
         yield* writeOutputFile(fs, path, fileName, html)
-        yield* Effect.logInfo(`Your report can be found at: ${pathToFileURL(path.resolve(fileName)).href}`)
+        const fileUrl = yield* path.toFileUrl(path.resolve(fileName))
+        yield* Effect.logInfo(`Your report can be found at: ${fileUrl.href}`)
       })
     ),
   )

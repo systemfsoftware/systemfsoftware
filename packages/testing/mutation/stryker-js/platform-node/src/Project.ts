@@ -1,17 +1,8 @@
-/**
- * Project capability — the files a run mutates, and the prior report it compares against.
- *
- * The impure edge walks the tree and reads the incremental document; which of
- * those files are mutated, and how the prior report is reshaped, are decisions
- * that live in `Project.workflow.ts` and `IncrementalReport.workflow.ts`.
- */
-
-import * as Equivalence from 'effect/Equivalence'
-
 import type { File as InstrumentFile } from '@systemfsoftware/stryker-js-instrumenter'
 import type { FileDescription, FileDescriptions, MutateDescription } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Effect from 'effect/Effect'
+import * as Equivalence from 'effect/Equivalence'
 import * as FileSystem from 'effect/FileSystem'
 import * as Match from 'effect/Match'
 import * as MutableHashMap from 'effect/MutableHashMap'
@@ -461,15 +452,13 @@ if (import.meta.vitest !== void 0) {
   const { expect, it } = await import('@effect/vitest')
   const { NodeFileSystem, NodePath } = await import('@effect/platform-node')
   const { Layer } = await import('effect')
-  const { mkdtempSync } = await import('node:fs')
-  const { tmpdir } = await import('node:os')
 
   const platform = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)
 
   it.effect('Should_ExcludeInstalledDependencies_When_TheProjectCarriesANodeModulesTree', () =>
     Effect.gen(function*() {
       const fs = yield* FileSystem.FileSystem
-      const base = mkdtempSync(`${tmpdir()}/stryker-project-read-`)
+      const base = yield* fs.makeTempDirectoryScoped({ prefix: 'stryker-project-read-' })
       yield* fs.makeDirectory(`${base}/src`, { recursive: true })
       yield* fs.writeFileString(`${base}/src/subject.ts`, 'export const subject = 1\n')
       yield* fs.makeDirectory(`${base}/node_modules/some-dep/src`, { recursive: true })

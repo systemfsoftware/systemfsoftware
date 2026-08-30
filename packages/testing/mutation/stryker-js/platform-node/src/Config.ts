@@ -6,10 +6,9 @@
  * The pure merge decision lives in `Config.workflow.ts` so `Workflow.make`
  * stays behind its gate; schemas live in `Config.schema.ts`.
  */
-import { createRequire } from 'node:module'
-import { pathToFileURL } from 'node:url'
-
 import { Cell, Wire } from '@systemfsoftware/effect-cell-types'
+import { ProjectModules } from '@systemfsoftware/project-modules'
+import { ProjectModulesLive } from '@systemfsoftware/project-modules-node'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import * as Context from 'effect/Context'
@@ -343,17 +342,21 @@ export function describeErrors(error: S.SchemaError): string[] {
   return [error.message]
 }
 
-// ── module-loader ───────────────────────────────────────────────────
-
-export function importModule(moduleName: string, basePath: string): Effect.Effect<unknown, StrykerError> {
-  return Effect.tryPromise({
-    try: () => {
-      if (moduleName.startsWith('.') || moduleName.startsWith('/') || moduleName.startsWith('file://')) {
-        return import(moduleName)
-      }
-      return import(createRequire(`${basePath}/noop.js`).resolve(moduleName))
-    },
-    catch: (cause) => new StrykerError({ message: `Failed to import module "${moduleName}"`, cause }),
+export function importModule(
+  moduleName: string,
+  _basePath: string,
+): Effect.Effect<unknown, StrykerError, ProjectModules> {
+  return Effect.gen(function*() {
+    if (moduleName.startsWith('.') || moduleName.startsWith('/') || moduleName.startsWith('file://')) {
+      return yield* Effect.tryPromise({
+        try: (): Promise<unknown> => import(moduleName),
+        catch: (cause) => new StrykerError({ message: `Failed to import module "${moduleName}"`, cause }),
+      })
+    }
+    const modules = yield* ProjectModules
+    return yield* modules.import(moduleName).pipe(
+      Effect.mapError((cause) => new StrykerError({ message: `Failed to import module "${moduleName}"`, cause })),
+    )
   })
 }
 
@@ -528,8 +531,11 @@ export function readConfigFile(
         Effect.mapError((cause) => new ConfigFileInvalidError({ file: configFile, cause })),
       )
     }
+    const url = yield* pathService.toFileUrl(pathService.resolve(configFile)).pipe(
+      Effect.mapError((cause) => new ConfigFileUnreadableError({ file: configFile, cause })),
+    )
     const importResult = yield* Effect.tryPromise({
-      try: () => import(pathToFileURL(pathService.resolve(configFile)).toString()),
+      try: () => import(url.href),
       catch: (cause) => new ConfigFileUnreadableError({ file: configFile, cause }),
     }).pipe(Effect.result)
     if (Result.isFailure(importResult)) {
@@ -557,13 +563,14 @@ function resolveExtendsSpecifier(
   configDir: string,
 ): Effect.Effect<string, ConfigFileUnreadableError, Path.Path> {
   return Effect.gen(function*() {
-    const pathService = yield* Path.Path
-    return yield* Effect.try({
-      try: () => {
-        return createRequire(pathService.join(configDir, 'noop.js')).resolve(specifier)
-      },
-      catch: (cause) => new ConfigFileUnreadableError({ file: specifier, cause }),
-    })
+    const resolved = yield* Effect.gen(function*() {
+      const modules = yield* ProjectModules
+      return yield* modules.resolve(specifier)
+    }).pipe(
+      Effect.provide(ProjectModulesLive(configDir)),
+      Effect.mapError((cause) => new ConfigFileUnreadableError({ file: specifier, cause })),
+    )
+    return resolved
   })
 }
 
@@ -1086,8 +1093,11 @@ function importJSConfigModule(
 ): Effect.Effect<unknown, ConfigFileUnreadableError, Path.Path> {
   return Effect.gen(function*() {
     const pathService = yield* Path.Path
-    const url = pathToFileURL(pathService.resolve(configFile)).toString()
-    return yield* importModule(url, basePath).pipe(
+    const url = yield* pathService.toFileUrl(pathService.resolve(configFile)).pipe(
+      Effect.mapError((cause) => new ConfigFileUnreadableError({ file: configFile, cause })),
+    )
+    return yield* importModule(url.href, basePath).pipe(
+      Effect.provide(ProjectModulesLive(basePath)),
       Effect.mapError((cause) => new ConfigFileUnreadableError({ file: configFile, cause })),
     )
   })

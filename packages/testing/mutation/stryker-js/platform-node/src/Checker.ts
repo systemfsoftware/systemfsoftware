@@ -7,10 +7,6 @@
  * the two and verifies the join.
  */
 
-import { fork } from 'node:child_process'
-import { URL } from 'node:url'
-
-import { NodeWorker } from '@effect/platform-node'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import type { CheckResult } from '@systemfsoftware/stryker-js/Checker'
 import type { FileDescriptions } from '@systemfsoftware/stryker-js/Mutant'
@@ -18,18 +14,20 @@ import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import type { RunPlan as MutantRunPlan } from '@systemfsoftware/stryker-js/Mutant'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import { Schema as S } from 'effect'
 import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
 import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
 import * as Result from 'effect/Result'
 import * as Scope from 'effect/Scope'
 
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 import * as RpcClient from 'effect/unstable/rpc/RpcClient'
-import * as RpcWorker from 'effect/unstable/rpc/RpcWorker'
 import {
   CheckerAnsweredUnrequested,
   CheckerCommand,
@@ -46,6 +44,7 @@ import type {
   WorkerFrameTooLargeError,
 } from './Worker.schema.js'
 import { CheckerRpcs } from './WorkerProtocol.js'
+import { connectRetry, spawnSocketWorker } from './WorkerSocket.js'
 
 export type CheckerCrash = ChildProcessCrashedErrorType | OutOfMemoryError | WorkerFrameTooLargeError
 
@@ -198,36 +197,46 @@ export const makeCheckerChildProcess = (params: {
   readonly workingDirectory: string
   readonly execArgv: readonly string[]
   readonly idGenerator: IdGeneratorShape
-}): Effect.Effect<CheckerResourceService, CheckerCrash, Scope.Scope | ChildProcessSpawner.ChildProcessSpawner> =>
+}): Effect.Effect<
+  CheckerResourceService,
+  CheckerCrash,
+  Scope.Scope | ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
+> =>
   Effect.gen(function*() {
-    const entry = new URL('./internal/checker-worker.mjs', import.meta.url).pathname
     const crashed = (cause: string): ChildProcessCrashedError =>
       new ChildProcessCrashedError({ pid: 0, exit: { _tag: 'Code', code: 1 }, cause })
 
-    const workerLayer = RpcClient.layerProtocolWorker({ size: 1 }).pipe(
-      Layer.provide(
-        NodeWorker.layer(() =>
-          fork(entry, [], {
-            cwd: params.workingDirectory,
-            execArgv: [...params.execArgv],
-          })
-        ),
-      ),
-      Layer.provide(
-        RpcWorker.layerInitialMessage(StrykerOptionsSchema, Effect.succeed(params.options)),
-      ),
+    const optionsWire = S.fromJsonString(S.toCodecJson(StrykerOptionsSchema))
+    const optionsJson = yield* S.encodeEffect(optionsWire)(params.options).pipe(Effect.orDie)
+    const worker = yield* spawnSocketWorker({
+      entryUrl: new URL('./internal/checker-worker.mjs', import.meta.url),
+      workingDirectory: params.workingDirectory,
+      execArgv: [...params.execArgv],
+      optionsJson,
+      tempDirPrefix: 'stryker-checker-',
+    }).pipe(
+      Effect.catchTag('WorkerConnectTimeoutError', (error) =>
+        Effect.fail(
+          new ChildProcessCrashedError({
+            pid: 0,
+            exit: { _tag: 'Code', code: 1 },
+            cause: `worker did not announce its RPC port within ${String(error.waitedMs)}ms`,
+          }),
+        )),
     )
-    const workerContext = yield* Layer.build(workerLayer).pipe(
+
+    const workerContext = yield* Layer.build(worker.clientLayer).pipe(
+      Effect.retry(connectRetry),
       Effect.mapError((error) => crashed(`Checker worker failed to start: ${error.message}`)),
     )
     const client = yield* RpcClient.make(CheckerRpcs).pipe(Effect.provideContext(workerContext))
 
     return {
-      check: (checkerName, mutants) =>
+      check: (checkerName: string, mutants: readonly Mutant[]) =>
         client.check({ checkerName, mutants: [...mutants] }).pipe(
           Effect.mapError((error) => crashed(error.message)),
         ),
-      group: (checkerName, mutants) =>
+      group: (checkerName: string, mutants: readonly Mutant[]) =>
         client.group({ checkerName, mutants: [...mutants] }).pipe(
           Effect.mapError((error) => crashed(error.message)),
         ),
@@ -240,7 +249,11 @@ export const createCheckerFactory = (
   pluginModulePaths: readonly string[],
   idGenerator: IdGeneratorShape,
   workingDirectory: string,
-): Effect.Effect<CheckerResourceService, unknown, Scope.Scope | ChildProcessSpawner.ChildProcessSpawner> =>
+): Effect.Effect<
+  CheckerResourceService,
+  unknown,
+  Scope.Scope | ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
+> =>
   makeCheckerChildProcess({
     options,
     fileDescriptions,
@@ -249,8 +262,6 @@ export const createCheckerFactory = (
     execArgv: [...options.checkerNodeArgs],
     idGenerator,
   })
-// ---------------------------------------------------------------------------
-// Cell pipelines — Cell.read -> decode -> decide(Workflow.make) -> encode -> write
 // ---------------------------------------------------------------------------
 interface CheckPhases extends Cell.Phases {
   readonly command: {

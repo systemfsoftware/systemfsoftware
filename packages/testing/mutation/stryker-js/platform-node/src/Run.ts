@@ -340,7 +340,7 @@ const makeCheckerPool = (
 ): Effect.Effect<
   Pool.Pool<CheckerResourceService, unknown> | undefined,
   never,
-  Scope.Scope | ChildProcessSpawner.ChildProcessSpawner
+  Scope.Scope | ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
 > =>
   Effect.gen(function*() {
     if (prev.options.checkers.length === 0) {

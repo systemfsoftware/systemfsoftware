@@ -1,3 +1,4 @@
+// oxlint-disable no-restricted-imports -- Node.js tooling requires Node builtins — portable library code must use @effect/platform or Web Standard APIs
 /**
  * The test runner capability — spawning, timeout, retry, reuse and environment
  * decisions for the engine's test execution.
@@ -9,10 +10,6 @@
  * chunk).
  */
 
-import { fork } from 'node:child_process'
-import { URL } from 'node:url'
-
-import { NodeWorker } from '@effect/platform-node'
 import * as Layer from 'effect/Layer'
 
 import type { Policy } from '@systemfsoftware/effect-cell-types'
@@ -30,11 +27,14 @@ import {
   TestRunnerFailed,
   toMutantRunResult,
 } from '@systemfsoftware/stryker-js/TestRunner'
+import { Schema as S } from 'effect'
 import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as FileSystem from 'effect/FileSystem'
 import * as Match from 'effect/Match'
+import * as Path from 'effect/Path'
 import * as Ref from 'effect/Ref'
 import type * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
@@ -42,13 +42,13 @@ import * as ChildProcess from 'effect/unstable/process/ChildProcess'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 import * as RpcClient from 'effect/unstable/rpc/RpcClient'
 import type { RpcClientError } from 'effect/unstable/rpc/RpcClientError'
-import * as RpcWorker from 'effect/unstable/rpc/RpcWorker'
 
 import { CommandRunnerUnsupportedOption } from './TestRunner.schema.js'
 import type { IdGeneratorShape } from './Worker.js'
 import { ChildProcessCrashedError, OutOfMemoryError } from './Worker.schema.js'
 import type { WorkerFrameTooLargeError } from './Worker.schema.js'
 import { TestRunnerRpcs } from './WorkerProtocol.js'
+import { spawnSocketWorker } from './WorkerSocket.js'
 
 // ---------------------------------------------------------------------------
 // Pooled runner — the child-process port
@@ -117,25 +117,29 @@ export const makeChildProcessTestRunner = (
 ): Effect.Effect<
   PooledTestRunner,
   PooledTestRunnerError,
-  Scope.Scope | ChildProcessSpawner.ChildProcessSpawner
+  Scope.Scope | ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
 > =>
   Effect.gen(function*() {
     const runnerName = params.options.testRunner
-    const entry = new URL('./internal/child-process-test-runner-worker.mjs', import.meta.url).pathname
-    const workerLayer = RpcClient.layerProtocolWorker({ size: 1 }).pipe(
-      Layer.provide(
-        NodeWorker.layer(() =>
-          fork(entry, [], {
-            cwd: params.sandboxWorkingDirectory,
-            execArgv: [...params.options.testRunnerNodeArgs],
-          })
-        ),
-      ),
-      Layer.provide(
-        RpcWorker.layerInitialMessage(StrykerOptionsSchema, Effect.succeed(params.options)),
-      ),
+    const optionsWire = S.fromJsonString(S.toCodecJson(StrykerOptionsSchema))
+    const optionsJson = yield* S.encodeEffect(optionsWire)(params.options).pipe(Effect.orDie)
+    const worker = yield* spawnSocketWorker({
+      entryUrl: new URL('./internal/child-process-test-runner-worker.mjs', import.meta.url),
+      workingDirectory: params.sandboxWorkingDirectory,
+      execArgv: [...params.options.testRunnerNodeArgs],
+      optionsJson,
+      tempDirPrefix: 'stryker-test-runner-',
+    }).pipe(
+      Effect.catchTag('WorkerConnectTimeoutError', (error) =>
+        Effect.fail(
+          new ChildProcessCrashedError({
+            pid: 0,
+            exit: { _tag: 'Code', code: 1 },
+            cause: `worker did not announce its RPC port within ${String(error.waitedMs)}ms`,
+          }),
+        )),
     )
-    const workerContext = yield* Layer.build(workerLayer).pipe(
+    const workerContext = yield* Layer.build(worker.clientLayer).pipe(
       Effect.mapError((error) =>
         new TestRunnerFailed({ runnerName, phase: 'init', cause: `Worker failed to start: ${error.message}` })
       ),
@@ -532,8 +536,16 @@ const commandRunner = (
  */
 export const buildTestRunner = (
   context: TestRunnerBuildContext,
-  childProcessRunner: Effect.Effect<PooledTestRunner, unknown, Scope.Scope | ChildProcessSpawner.ChildProcessSpawner>,
-): Effect.Effect<PooledTestRunner, unknown, ChildProcessSpawner.ChildProcessSpawner | Scope.Scope> =>
+  childProcessRunner: Effect.Effect<
+    PooledTestRunner,
+    unknown,
+    Scope.Scope | ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path
+  >,
+): Effect.Effect<
+  PooledTestRunner,
+  unknown,
+  ChildProcessSpawner.ChildProcessSpawner | Scope.Scope | FileSystem.FileSystem | Path.Path
+> =>
   Effect.gen(function*() {
     if (isCommandRunner(context.options.testRunner)) {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner

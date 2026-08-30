@@ -19,6 +19,14 @@ import {
 
 import { TempTestDirectorySandbox } from './temp-test-directory-sandbox.js'
 
+export const resolvePath = (base: string, ...segments: ReadonlyArray<string>): string => path.resolve(base, ...segments)
+
+export const fileExists = (file: string): Promise<boolean> =>
+  fs.promises.access(file).then(
+    () => true,
+    () => false,
+  )
+
 type MutableStrykerOptions = { -readonly [K in keyof StrykerOptions]: StrykerOptions[K] }
 
 export type MutableRunnerOptions = MutableStrykerOptions & { vitest: VitestRunnerOptions }

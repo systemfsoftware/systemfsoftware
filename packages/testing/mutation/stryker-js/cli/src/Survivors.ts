@@ -17,7 +17,6 @@ import * as Path from 'effect/Path'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { resolve as resolvePath } from 'node:path'
 import { PriorReportDocument as PriorReportDocumentSchema } from './Survivors.workflow.js'
 export type PriorReportDocument = S.Schema.Type<typeof PriorReportDocumentSchema>
 export type PriorReportMutant = PriorReportDocument['files'][string]['mutants'][number]
@@ -231,10 +230,7 @@ export function survivorMutateSpans(survivors: readonly Mutant[], basePath: stri
 
 /** The exit class a rejected survivors run exits with (R6: exit 2). */
 export const SURVIVORS_REJECT_EXIT_CLASS: ExitClass = 'ConfigError'
-
 const hashContent: HashContent = (content) => bytesToHex(sha256(utf8ToBytes(content)))
-
-const resolveAbsolutePath: ResolveAbsolutePath = (file) => resolvePath(file)
 
 /**
  * The phases of the survivors admission, in one bag so the chain's order is
@@ -248,15 +244,11 @@ interface AdmissionPhases extends Cell.Phases {
   readonly command: PartialStrykerOptions
   readonly raw: {
     readonly resolvedOptions: StrykerOptions
-    /**
-     * The prior report exactly as it came off disk, undecoded. `undefined` means no
-     * report was there to read; a value that is present but malformed is the decode
-     * phase's problem, not the read's, so nothing validates it here.
-     */
     readonly priorReportRaw: unknown
     readonly priorReportFound: boolean
     readonly priorReportPath: string
     readonly sourceContentHashes: Readonly<Record<string, string>>
+    readonly resolveAbsolutePath: ResolveAbsolutePath
   }
   readonly decoded: AdmitSurvivorsRunCommand
   readonly decision: SurvivorsAdmission
@@ -306,6 +298,7 @@ const survivorsAdmissionDescription = (
           resolveSurvivorsRunOptions(cliOptions, basePath).pipe(
             Effect.flatMap((resolvedOptions) => {
               const priorReportPath = priorReportPathOf(resolvedOptions)
+              const resolveAbsolutePath: ResolveAbsolutePath = (file) => pathService.resolve(file)
               return Effect.flatMap(readPriorReport(priorReportPath), (read) =>
                 Effect.flatMap(currentSourceHashesFor(priorReportFileKeys(read.raw)), (sourceContentHashes) =>
                   Ref.set(runContext, { resolvedOptions, priorReportPath, pathService }).pipe(
@@ -315,6 +308,7 @@ const survivorsAdmissionDescription = (
                       priorReportFound: read.found,
                       priorReportPath,
                       sourceContentHashes,
+                      resolveAbsolutePath,
                     }),
                   )))
             }),
@@ -322,32 +316,34 @@ const survivorsAdmissionDescription = (
         services,
       )
     ),
-    Cell.decode<AdmissionPhases>(({ resolvedOptions, priorReportRaw, priorReportFound, sourceContentHashes }) => {
-      if (!priorReportFound) {
-        return Result.succeed(
+    Cell.decode<AdmissionPhases>(
+      ({ resolvedOptions, priorReportRaw, priorReportFound, sourceContentHashes, resolveAbsolutePath }) => {
+        if (!priorReportFound) {
+          return Result.succeed(
+            AdmitSurvivorsRunCommand.make({
+              priorReport: undefined,
+              currentConfig: resolvedOptions,
+              frameworkVersion: strykerVersion,
+              sourceContentHashes,
+              priorSourceHashes: {},
+              priorSurvivors: [],
+            }),
+          )
+        }
+        return Result.map(decodePriorReport(priorReportRaw), (document) =>
           AdmitSurvivorsRunCommand.make({
-            priorReport: undefined,
+            priorReport: PriorReportFacts.make({
+              config: document.config ?? {},
+              frameworkVersion: document.framework?.version,
+            }),
             currentConfig: resolvedOptions,
             frameworkVersion: strykerVersion,
             sourceContentHashes,
-            priorSourceHashes: {},
-            priorSurvivors: [],
-          }),
-        )
-      }
-      return Result.map(decodePriorReport(priorReportRaw), (document) =>
-        AdmitSurvivorsRunCommand.make({
-          priorReport: PriorReportFacts.make({
-            config: document.config ?? {},
-            frameworkVersion: document.framework?.version,
-          }),
-          currentConfig: resolvedOptions,
-          frameworkVersion: strykerVersion,
-          sourceContentHashes,
-          priorSourceHashes: priorSourceHashes(document, hashContent),
-          priorSurvivors: extractSurvivors(document, resolveAbsolutePath),
-        }))
-    }),
+            priorSourceHashes: priorSourceHashes(document, hashContent),
+            priorSurvivors: extractSurvivors(document, resolveAbsolutePath),
+          }))
+      },
+    ),
     Cell.decide<AdmissionPhases>(admitSurvivorsRun),
     Cell.encode<AdmissionPhases>((outcome) => outcome),
     Cell.write<AdmissionPhases>((outcome) =>

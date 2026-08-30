@@ -8,15 +8,13 @@
  * declarations live in `Runner.schema.ts`.
  */
 import type * as PathType from 'effect/Path'
-import { createRequire } from 'module'
-import { pathToFileURL } from 'node:url'
-import path from 'path'
-import { fileURLToPath } from 'url'
 import type { RunMode, RunnerTestCase, RunnerTestSuite, TaskState } from 'vitest'
 import { createVitest as createVitestOriginal } from 'vitest/node'
 import type { Vitest } from 'vitest/node'
 
 import { Cell } from '@systemfsoftware/effect-cell-types'
+import { ProjectModules } from '@systemfsoftware/project-modules'
+import { ProjectModulesLive } from '@systemfsoftware/project-modules-node'
 import {
   type CoverageData,
   errorToString,
@@ -26,8 +24,10 @@ import {
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import {
   type BaseTestResult,
+  type DryRunOptions,
   DryRunResult,
   type MutantCoverage as DryRunMutantCoverage,
+  type MutantRunOptions,
   MutantRunResult,
   testFilesProvided,
   type TestResult,
@@ -279,42 +279,44 @@ export interface ResolvedVitest {
   createVitest: typeof createVitestOriginal
   version: string
 }
-export type VitestResolver = (dir: string) => Promise<ResolvedVitest>
-
-const readVitestVersion = (readPackageJson: () => unknown): string =>
-  S.decodeUnknownSync(VitestPackageSchema)(readPackageJson()).version
-
-/** Falls back to the Vitest bundled with this package when `dir` has none. */
-export const resolveVitest: VitestResolver = async (dir) => {
-  try {
-    const projectRequire = createRequire(path.join(dir, 'package.json'))
-    const vitestNodePath = projectRequire.resolve('vitest/node')
-    // Dynamic import: the specifier is the *project's* Vitest, resolved at runtime from `dir`.
-    // A static import would bind this package's own copy instead.
-    const vitestNodeUrl = pathToFileURL(vitestNodePath).href
-    const vitestNode = S.decodeUnknownSync(VitestNodeModuleSchema)(await import(vitestNodeUrl))
-    return {
-      createVitest: (vitestNode satisfies { createVitest: typeof createVitestOriginal }).createVitest,
-      version: readVitestVersion(() => projectRequire(projectRequire.resolve('vitest/package.json'))),
-    }
-  } catch {
-    const bundledRequire = createRequire(import.meta.url)
-    return {
-      createVitest: createVitestOriginal,
-      version: readVitestVersion(() => bundledRequire(bundledRequire.resolve('vitest/package.json'))),
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Runner core (from vitest-test-runner.ts)
-// ---------------------------------------------------------------------------
+export type VitestResolver = (
+  _dir: string,
+) => Effect.Effect<ResolvedVitest, never, ProjectModules | FileSystem.FileSystem | Path.Path>
 
 const isRunnerTestSuite = (value: unknown): value is RunnerTestSuite =>
   typeof value === 'object' && value !== null && 'tasks' in value && Array.isArray(Reflect.get(value, 'tasks'))
 
 type StrykerNamespace = '__stryker__' | '__stryker2__'
-const STRYKER_SETUP = fileURLToPath(new URL('./stryker-setup.mjs', import.meta.url))
+const STRYKER_SETUP_URL = new URL('./stryker-setup.mjs', import.meta.url)
+
+export const resolveVitest: VitestResolver = (_dir) =>
+  Effect.gen(function*() {
+    const fallback = Effect.gen(function*() {
+      const pathService = yield* Path.Path
+      const fs = yield* FileSystem.FileSystem
+      const urlString: string = import.meta.resolve('vitest/package.json')
+      const packageJsonPath = yield* pathService.fromFileUrl(new URL(urlString))
+      const content = yield* fs.readFileString(packageJsonPath)
+      const parsed: unknown = JSON.parse(content)
+      const decoded = yield* S.decodeUnknownEffect(VitestPackageSchema)(parsed)
+      return { createVitest: createVitestOriginal, version: decoded.version } satisfies ResolvedVitest
+    }).pipe(Effect.orDie)
+    const primary = Effect.gen(function*() {
+      const modules = yield* ProjectModules
+      const fs = yield* FileSystem.FileSystem
+      const imported = yield* modules.import('vitest/node')
+      const decodedNode = yield* S.decodeUnknownEffect(VitestNodeModuleSchema)(imported)
+      const packageJsonPath = yield* modules.resolve('vitest/package.json')
+      const content = yield* fs.readFileString(packageJsonPath)
+      const parsed: unknown = JSON.parse(content)
+      const decodedPackage = yield* S.decodeUnknownEffect(VitestPackageSchema)(parsed)
+      return {
+        createVitest: decodedNode.createVitest,
+        version: decodedPackage.version,
+      } satisfies ResolvedVitest
+    })
+    return yield* primary.pipe(Effect.catchCause(() => fallback), Effect.catchDefect(() => fallback))
+  }).pipe(Effect.orDie)
 
 export const shouldUseSuiteMetaSecondArg = (version: string): boolean => {
   const parts = version.split('.')
@@ -464,15 +466,25 @@ export const makeVitestRunnerLayer = (
         const projectRoot = input.sandboxDirectory
         const localSetupFile = pathService.resolve(projectRoot, `stryker-setup-${process.pid}.js`)
         yield* Ref.update(stateRef, (s) => ({ ...s, localSetupFile }))
-        yield* fsService.copyFile(input.setupFilePath ?? STRYKER_SETUP, localSetupFile).pipe(Effect.mapError((cause) =>
-          new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause: errorToString(cause) })
-        ))
+        const defaultSetupPath = yield* pathService.fromFileUrl(STRYKER_SETUP_URL).pipe(
+          Effect.mapError((cause) =>
+            new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause: errorToString(cause) })
+          ),
+        )
+        yield* fsService.copyFile(input.setupFilePath ?? defaultSetupPath, localSetupFile).pipe(
+          Effect.mapError((cause) =>
+            new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause: errorToString(cause) })
+          ),
+        )
         const resolver = input.resolveVitestFor ?? resolveVitest
-        const { createVitest, version } = yield* Effect.tryPromise({
-          try: () =>
-            resolver(projectRoot),
-          catch: (cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause: errorToString(cause) }),
-        })
+        const { createVitest, version } = yield* resolver(projectRoot).pipe(
+          Effect.provide(ProjectModulesLive(projectRoot)),
+          Effect.provideService(FileSystem.FileSystem, fsService),
+          Effect.provideService(Path.Path, pathService),
+          Effect.catchDefect((cause) =>
+            Effect.fail(new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause: errorToString(cause) }))
+          ),
+        )
         const namespace = input.globalNamespace ?? INSTRUMENTER_CONSTANTS.NAMESPACE
         const scanDir = (() => {
           if (typeof options.vitest.dir === 'string') return pathService.resolve(projectRoot, options.vitest.dir)
@@ -515,7 +527,7 @@ export const makeVitestRunnerLayer = (
         yield* Ref.update(stateRef, (s) => ({ ...s, ctx }))
       }).pipe(Effect.mapError((cause) => ((() => {
         if (cause instanceof TestRunnerFailed) return cause
-        return new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause })
+        return new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause: errorToString(cause) })
       })())))
       const resetContext = Effect.gen(function*() {
         const ctx = yield* requireCtx
@@ -656,7 +668,7 @@ export const makeVitestRunnerLayer = (
           return { rawTests, hasExternalError, externalErrorText }
         })
       interface DryRunPhases extends Cell.Phases {
-        readonly command: import('@systemfsoftware/stryker-js/TestRunner').DryRunOptions
+        readonly command: DryRunOptions
         readonly raw: {
           readonly rawTests: readonly unknown[]
           readonly projectRoot: string
@@ -674,7 +686,7 @@ export const makeVitestRunnerLayer = (
       }
 
       interface MutantRunPhases extends Cell.Phases {
-        readonly command: import('@systemfsoftware/stryker-js/TestRunner').MutantRunOptions
+        readonly command: MutantRunOptions
         readonly raw: {
           readonly rawTests: readonly unknown[]
           readonly projectRoot: string
