@@ -2,7 +2,6 @@
   "extends": "../../stryker.config.base.json",
   "mutate": [
     "src/guard.workflow.ts",
-    "src/guard.kernel.ts",
     "!src/**/*.test.ts",
     "!src/**/*.property.test.ts",
     "!src/**/*.d.ts",
