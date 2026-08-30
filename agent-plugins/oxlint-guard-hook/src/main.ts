@@ -5,10 +5,10 @@ import { FileSystem } from 'effect/FileSystem'
 import { Path } from 'effect/Path'
 import { Stdio } from 'effect/Stdio'
 import { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
+import { decodeBytes, makeGuardAdapters } from './adapters.ts'
 import { STDIN_CAP_BYTES } from './constants.ts'
-import { LintFailure } from './flow.schema.ts'
-import { decodeBytes, makeGuardAdapters } from './guard.adapter.ts'
-import { buildGuardCell, GuardWire, WirePayload } from './guard.workflow.ts'
+import { GuardWire, LintFailure, WirePayload } from './flow.schema.ts'
+import { buildGuardCell } from './guard.workflow.ts'
 
 const program = Effect.gen(function*() {
   const stdio = yield* Stdio
@@ -30,7 +30,9 @@ const program = Effect.gen(function*() {
     return
   }
   const text = decodeBytes(chunks)
-  const payload = yield* S.decodeUnknownEffect(S.fromJsonString(WirePayload))(text).pipe(
+  const payload = yield* S.decodeUnknownEffect(S.fromJsonString(WirePayload))(
+    text,
+  ).pipe(
     Effect.option,
   )
   if (Option.isNone(payload)) {

@@ -4,8 +4,14 @@ import type { Path } from 'effect/Path'
 import { make as makeProcessCommand } from 'effect/unstable/process/ChildProcess'
 import { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { CONFIG_BASENAMES } from './constants.ts'
-import type { RunOutcome } from './flow.schema.ts'
-import { type FactFields, type GuardAdapters, type GuardRaw, GuardReadError, type GuardWire } from './guard.workflow.ts'
+import {
+  type FactFields,
+  type GuardAdapters,
+  type GuardRaw,
+  GuardReadError,
+  type GuardWire,
+  type RunOutcome,
+} from './flow.schema.ts'
 
 interface AdapterDeps {
   readonly fs: FileSystem

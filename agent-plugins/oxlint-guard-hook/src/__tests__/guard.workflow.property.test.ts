@@ -4,19 +4,11 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
 
-import { GUARD_TOOL_NAMES, GuardCommand, guardPlan } from '../guard.workflow.ts'
-import type { GuardDecision, GuardUnsupportedToolError } from '../guard.workflow.ts'
+import { GuardCommand } from '../flow.schema.ts'
+import { GUARD_TOOL_NAMES, guardPlan } from '../guard.workflow.ts'
+import type { GuardPlan, GuardUnsupportedToolError } from '../guard.workflow.ts'
 
-const commandArb = S.toArbitrary(GuardCommand)(fc).map((c) =>
-  new GuardCommand({
-    toolName: c.toolName,
-    filePath: c.filePath,
-    exists: c.exists,
-    denoShebang: c.denoShebang,
-    extension: c.extension,
-    configPath: c.configPath,
-  })
-)
+const commandArb = S.toArbitrary(GuardCommand)(fc)
 
 const listedToolWith = (overrides: {
   readonly exists?: boolean
@@ -43,11 +35,11 @@ const listedToolWith = (overrides: {
 
 const decisionOn = (
   command: GuardCommand,
-): Result.Result<GuardDecision, GuardUnsupportedToolError> => guardPlan(command)
+): Result.Result<GuardPlan, GuardUnsupportedToolError> => guardPlan(command)
 
 const isSuccessFor = (
   command: GuardCommand,
-  predicate: (decision: GuardDecision) => boolean,
+  predicate: (plan: GuardPlan) => boolean,
 ): boolean =>
   Result.match(decisionOn(command), {
     onFailure: () => false,

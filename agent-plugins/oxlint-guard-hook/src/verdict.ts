@@ -1,17 +1,14 @@
-import { Effect, Match, Option } from 'effect'
-import * as Result from 'effect/Result'
+import { Match, Option } from 'effect'
 import type { FastCheck } from 'effect/testing'
-import { COMMAND_BUDGET_MS, DENO_PREREQUISITE, PNPM_PREREQUISITE } from './constants.ts'
 import type { AttemptOutcome, FinalAttempt, HookResult, LintOutcome, ProcessResult, RunOutcome } from './flow.schema.ts'
-import type { GuardDecision, GuardUnsupportedToolError, Runner } from './guard.workflow.ts'
 
-interface GuardRun {
-  readonly runner: Runner
-  readonly program: string
-  readonly args: string[]
-  readonly cwd: string
-  readonly prerequisite: string
-  readonly toolLabel: string
+const combinedOutput = (result: ProcessResult): string => result.stdout + '\n' + result.stderr
+
+const stderrOrStdout = (result: ProcessResult): string => {
+  if (result.stderr.trim() !== '') {
+    return result.stderr
+  }
+  return result.stdout
 }
 
 const NO_FILES_FOUND = /No files found to lint/i
@@ -19,15 +16,6 @@ const PATH_OUTSIDE_ROOT = /path is expected to be under the root/i
 const OXLINT_PANIC = /panicked at/
 const TSGOLINT_MISSING = /tsgolint/i
 const OXLINT_NOT_FOUND = /ERR_PNPM|command .* not found/i
-
-const combinedOutput = (result: ProcessResult): string => result.stdout + '\n' + result.stderr
-
-const stderrOrStdout = (result: ProcessResult): string => {
-  if (result.stderr !== '') {
-    return result.stderr
-  }
-  return result.stdout
-}
 
 interface ClassifyRule {
   readonly matches: (
@@ -66,7 +54,7 @@ const catchAllOutcome = (result: ProcessResult): LintOutcome => ({
   output: stderrOrStdout(result),
 })
 
-const classifyResult = (
+export const classifyResult = (
   result: ProcessResult,
   canRetry: boolean,
 ): LintOutcome => {
@@ -91,6 +79,7 @@ const truncateOutput = (text: string): string => {
 const diagnostic = (tool: string, output: string): string =>
   `⛔ ${tool} FAILED — INVOKE SKILLS FIRST.
 
+Before fixing anything below, invoke skills that address why these rules fire.
 You decide which — the hook will not map rules to skills for you.
 Already-invoked skills do NOT count. Each failure demands NEW invocations.
 
@@ -118,158 +107,40 @@ const respond = (exitCode: 0 | 1 | 2, stderr: string): AttemptOutcome => ({
   result: { exitCode, stderr },
 })
 
-const PASS: HookResult = { exitCode: 0, stderr: '' }
+export const PASS: HookResult = { exitCode: 0, stderr: '' }
 
-function attemptOutcome(
+export interface AttemptContext {
+  readonly prerequisite: string
+  readonly toolLabel: string
+}
+
+export const attemptOutcome = (
   attempt: RunOutcome,
   canRetry: boolean,
-  run: GuardRun,
-): AttemptOutcome {
-  return Match.value(attempt).pipe(
-    Match.tag(
-      'spawn-failure',
-      ({ failure }) => respond(1, spawnUnavailableHint(failure.reason, run.prerequisite)),
-    ),
+  context: AttemptContext,
+): AttemptOutcome =>
+  Match.value(attempt).pipe(
+    Match.tag('spawn-failure', ({ failure }) => respond(1, spawnUnavailableHint(failure.reason, context.prerequisite))),
     Match.tag('timeout', () => respond(0, '')),
     Match.tag('result', ({ result }) => {
       const verdict = classifyResult(result, canRetry)
       return Match.value(verdict).pipe(
         Match.tag('outcome', () => PROCEED),
         Match.tag('retry-without-type-aware', () => RETRY),
-        Match.tag(
-          'not-found',
-          () => respond(1, spawnUnavailableHint('not-found', run.prerequisite)),
-        ),
-        Match.tag(
-          'violation',
-          ({ output }) => respond(2, diagnostic(run.toolLabel, output)),
-        ),
+        Match.tag('not-found', () => respond(1, spawnUnavailableHint('not-found', context.prerequisite))),
+        Match.tag('violation', ({ output }) => respond(2, diagnostic(context.toolLabel, output))),
         Match.exhaustive,
       )
     }),
     Match.exhaustive,
   )
-}
 
-function runGuarded(
-  run: GuardRun,
-  canRetry: true,
-): Effect.Effect<AttemptOutcome, never, never>
-function runGuarded(
-  run: GuardRun,
-  canRetry: false,
-): Effect.Effect<FinalAttempt, never, never>
-function runGuarded(
-  run: GuardRun,
-  canRetry: boolean,
-): Effect.Effect<AttemptOutcome, never, never> {
-  return Effect.map(
-    run.runner.run(run.program, run.args, run.cwd, COMMAND_BUDGET_MS),
-    (attempt) => attemptOutcome(attempt, canRetry, run),
-  )
-}
-
-const haltOf = (attempt: FinalAttempt): Option.Option<HookResult> =>
+export const haltOf = (attempt: FinalAttempt): Option.Option<HookResult> =>
   Match.value(attempt).pipe(
     Match.tag('proceed', () => Option.none()),
     Match.tag('respond', ({ result }) => Option.some(result)),
     Match.exhaustive,
   )
-
-const runDenoPair = (
-  runner: Runner,
-  dirname: (target: string) => string,
-  filePath: string,
-): Effect.Effect<HookResult, never, never> =>
-  Effect.gen(function*() {
-    const step = (command: 'check' | 'lint'): GuardRun => ({
-      runner,
-      program: 'deno',
-      args: [command, '--', filePath],
-      cwd: dirname(filePath),
-      prerequisite: DENO_PREREQUISITE,
-      toolLabel: `DENO ${command.toUpperCase()}`,
-    })
-    const halted = haltOf(yield* runGuarded(step('check'), false))
-    if (Option.isSome(halted)) {
-      return halted.value
-    }
-    return Option.getOrElse(
-      haltOf(yield* runGuarded(step('lint'), false)),
-      () => PASS,
-    )
-  })
-
-const oxlintArgs = (
-  plan: { readonly filePath: string; readonly configPath: string },
-  typeAware: boolean,
-): string[] => {
-  if (typeAware) {
-    return [
-      'exec',
-      'oxlint',
-      '-c',
-      plan.configPath,
-      '--type-aware',
-      '--type-check',
-      '-f',
-      'unix',
-      plan.filePath,
-    ]
-  }
-  return ['exec', 'oxlint', '-c', plan.configPath, '-f', 'unix', plan.filePath]
-}
-
-const runOxlint = (
-  runner: Runner,
-  dirname: (target: string) => string,
-  plan: { readonly filePath: string; readonly configPath: string },
-): Effect.Effect<HookResult, never, never> =>
-  Effect.gen(function*() {
-    const step = (typeAware: boolean): GuardRun => ({
-      runner,
-      program: 'pnpm',
-      args: oxlintArgs(plan, typeAware),
-      cwd: dirname(plan.configPath),
-      prerequisite: PNPM_PREREQUISITE,
-      toolLabel: 'OXLINT',
-    })
-    const settled = Match.value(yield* runGuarded(step(true), true)).pipe(
-      Match.tag('proceed', () => Option.some(PASS)),
-      Match.tag('retry-plain', () => Option.none()),
-      Match.tag('respond', ({ result }) => Option.some(result)),
-      Match.exhaustive,
-    )
-    if (Option.isSome(settled)) {
-      return settled.value
-    }
-    return Option.getOrElse(haltOf(yield* runGuarded(step(false), false)), () => PASS)
-  })
-
-export const executeDecision = (
-  outcome: Result.Result<GuardDecision, GuardUnsupportedToolError>,
-  runner: Runner,
-  dirname: (target: string) => string,
-): Effect.Effect<HookResult, never, never> =>
-  Result.match(outcome, {
-    onFailure: () => Effect.succeed<HookResult>({ exitCode: 0, stderr: '' }),
-    onSuccess: (decision) =>
-      Match.value(decision).pipe(
-        Match.tag(
-          'Skip',
-          () => Effect.succeed<HookResult>({ exitCode: 0, stderr: '' }),
-        ),
-        Match.tag(
-          'RunDeno',
-          ({ filePath }) => runDenoPair(runner, dirname, filePath),
-        ),
-        Match.tag(
-          'RunOxlint',
-          ({ filePath, configPath }) => runOxlint(runner, dirname, { filePath, configPath }),
-        ),
-        Match.exhaustive,
-      ),
-  })
 
 if (import.meta.vitest !== void 0) {
   // Dynamic imports by necessity: vitest sets import.meta.vitest only when
@@ -277,6 +148,7 @@ if (import.meta.vitest !== void 0) {
   // hook runtime, which never enters this block.
   const { it } = await import('@effect/vitest')
   const fc: typeof FastCheck = (await import('effect/testing')).FastCheck
+
   const outcomeTag = (result: ProcessResult, canRetry: boolean): string => {
     const verdict = classifyResult(result, canRetry)
     let tag = ''

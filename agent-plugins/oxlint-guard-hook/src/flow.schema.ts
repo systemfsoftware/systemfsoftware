@@ -1,4 +1,5 @@
 import { Schema as S } from 'effect'
+import type { Effect } from 'effect'
 import { errorExitCode, errorReported } from 'effect/Runtime'
 
 const ProcessResultSchema = S.Struct({
@@ -60,6 +61,57 @@ export const FinalAttemptSchema = S.Union([
   AttemptRespondSchema,
 ])
 export type FinalAttempt = S.Schema.Type<typeof FinalAttemptSchema>
+
+/** The wire payload Claude Code posts to the hook on stdin. */
+export const WirePayload = S.Struct({
+  tool_name: S.String,
+  tool_input: S.Struct({ file_path: S.String }),
+})
+
+export class GuardWire extends S.TaggedClass<GuardWire>()('GuardWire', {
+  toolName: S.String,
+  filePath: S.String,
+}) {}
+
+export interface FactFields {
+  readonly exists: boolean
+  readonly denoShebang: boolean
+  readonly extension: string
+  readonly configPath: string | null
+}
+
+export interface GuardRaw {
+  readonly wire: GuardWire
+  readonly facts: FactFields
+}
+
+export interface Runner {
+  readonly run: (
+    program: string,
+    args: string[],
+    cwd: string,
+    timeoutMs: number,
+  ) => Effect.Effect<RunOutcome, never, never>
+}
+
+export interface GuardAdapters {
+  readonly gather: (wire: GuardWire) => Effect.Effect<GuardRaw, GuardReadError>
+  readonly runner: Runner
+  readonly dirname: (target: string) => string
+}
+
+export class GuardCommand extends S.TaggedClass<GuardCommand>()('GuardCommand', {
+  toolName: S.String,
+  filePath: S.String,
+  exists: S.Boolean,
+  denoShebang: S.Boolean,
+  extension: S.String,
+  configPath: S.Union([S.String, S.Null]),
+}) {}
+
+export class GuardReadError extends S.TaggedError<GuardReadError>()('GuardReadError', {
+  message: S.String,
+}) {}
 
 export class LintFailure extends S.TaggedError<LintFailure>()('LintFailure', {
   exitCode: S.Union([S.Literal(1), S.Literal(2)]),

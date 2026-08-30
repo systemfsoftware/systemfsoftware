@@ -1,156 +1,106 @@
 import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
-import { Effect } from 'effect'
-import { Schema as S } from 'effect'
+import { Effect, Match, Schema as S } from 'effect'
 import { pipe } from 'effect/Function'
 import * as Result from 'effect/Result'
-import type { HookResult, RunOutcome } from './flow.schema.ts'
-import { executeDecision } from './guard.kernel.ts'
+import { EDIT_TOOL_NAMES, LINTABLE_EXTENSIONS } from './constants.ts'
+import { runDenoPair, runOxlint } from './execute.ts'
+import {
+  type GuardAdapters,
+  GuardCommand,
+  type GuardRaw,
+  type GuardReadError,
+  GuardWire,
+  type HookResult,
+} from './flow.schema.ts'
+import { PASS } from './verdict.ts'
 
 /** Edit tool names the guard recognizes; declared here because the decision body may only reference same-file declarations. */
-export const GUARD_TOOL_NAMES: readonly string[] = [
-  'Write',
-  'Edit',
-  'Update',
-  'MultiEdit',
-  'Create',
-  'morph_mcp_edit-file',
-  'morph_edit',
-]
+export const GUARD_TOOL_NAMES: readonly string[] = EDIT_TOOL_NAMES
 
 /** Extensions the guard lints; same-file for the same make-body-purity reason. */
-export const GUARD_LINTABLE_EXTENSIONS: readonly string[] = [
-  'ts',
-  'tsx',
-  'js',
-  'jsx',
-  'mts',
-  'cts',
-  'mjs',
-  'cjs',
-  'vue',
-  'svelte',
-  'astro',
-]
-
-/** The wire payload Claude Code posts to the hook on stdin. */
-export const WirePayload = S.Struct({
-  tool_name: S.String,
-  tool_input: S.Struct({ file_path: S.String }),
-})
-
-export class GuardWire extends S.TaggedClass<GuardWire>()('GuardWire', {
-  toolName: S.String,
-  filePath: S.String,
-}) {}
-
-export interface FactFields {
-  readonly exists: boolean
-  readonly denoShebang: boolean
-  readonly extension: string
-  readonly configPath: string | null
-}
-
-export class GuardCommand extends S.TaggedClass<GuardCommand>()('GuardCommand', {
-  toolName: S.String,
-  filePath: S.String,
-  exists: S.Boolean,
-  denoShebang: S.Boolean,
-  extension: S.String,
-  configPath: S.Union([S.String, S.Null]),
-}) {}
-
-export class Skip extends S.TaggedClass<Skip>()('Skip', {
-  reason: S.Union([
-    S.Literal('file-missing'),
-    S.Literal('not-lintable-extension'),
-    S.Literal('no-oxlint-config'),
-  ]),
-}) {}
-
-export class RunDeno extends S.TaggedClass<RunDeno>()('RunDeno', {
-  filePath: S.String,
-}) {}
-
-export class RunOxlint extends S.TaggedClass<RunOxlint>()('RunOxlint', {
-  filePath: S.String,
-  configPath: S.String,
-}) {}
-
-export type GuardDecision = Skip | RunDeno | RunOxlint
+export const GUARD_LINTABLE_EXTENSIONS: readonly string[] = LINTABLE_EXTENSIONS
 
 export class GuardUnsupportedToolError extends S.TaggedError<GuardUnsupportedToolError>()(
   'GuardUnsupportedToolError',
   { toolName: S.String },
 ) {}
 
-export class GuardReadError extends S.TaggedError<GuardReadError>()('GuardReadError', {
-  message: S.String,
-}) {}
+const SkipBase = S.TaggedStruct('Skip', {
+  reason: S.Union([
+    S.Literal('file-missing'),
+    S.Literal('not-lintable-extension'),
+    S.Literal('no-oxlint-config'),
+  ]),
+})
+const RunDenoBase = S.TaggedStruct('RunDeno', { filePath: S.String })
+const RunOxlintBase = S.TaggedStruct('RunOxlint', {
+  filePath: S.String,
+  configPath: S.String,
+})
 
-export interface Runner {
-  readonly run: (
-    program: string,
-    args: string[],
-    cwd: string,
-    timeoutMs: number,
-  ) => Effect.Effect<RunOutcome, never, never>
-}
-
-export interface GuardRaw {
-  readonly wire: GuardWire
-  readonly facts: FactFields
-}
-
-export interface GuardAdapters {
-  readonly gather: (wire: GuardWire) => Effect.Effect<GuardRaw, GuardReadError>
-  readonly runner: Runner
-  readonly dirname: (target: string) => string
-}
+export type Skip = S.Schema.Type<typeof SkipBase>
+export type RunDeno = S.Schema.Type<typeof RunDenoBase>
+export type RunOxlint = S.Schema.Type<typeof RunOxlintBase>
+export type GuardPlan = Skip | RunDeno | RunOxlint
 
 interface PlanRule {
-  readonly matches: (command: GuardCommand) => boolean
-  readonly plan: (command: GuardCommand) => GuardDecision
+  readonly matches: (command: GuardCommandShape) => boolean
+  readonly plan: (command: GuardCommandShape) => GuardPlan
+}
+
+interface GuardCommandShape {
+  readonly toolName: string
+  readonly filePath: string
+  readonly exists: boolean
+  readonly denoShebang: boolean
+  readonly extension: string
+  readonly configPath: string | null
 }
 
 const PLAN_RULES: readonly PlanRule[] = [
   {
     matches: (c) => !c.exists,
-    plan: () => new Skip({ reason: 'file-missing' }),
+    plan: (): Skip => ({ _tag: 'Skip', reason: 'file-missing' }),
   },
   {
     matches: (c) => !GUARD_LINTABLE_EXTENSIONS.includes(c.extension.toLowerCase()),
-    plan: () => new Skip({ reason: 'not-lintable-extension' }),
+    plan: (): Skip => ({ _tag: 'Skip', reason: 'not-lintable-extension' }),
   },
   {
     matches: (c) => c.denoShebang,
-    plan: (c) => new RunDeno({ filePath: c.filePath }),
+    plan: (c): RunDeno => ({ _tag: 'RunDeno', filePath: c.filePath }),
   },
   {
     matches: (c) => c.configPath === null,
-    plan: () => new Skip({ reason: 'no-oxlint-config' }),
+    plan: (): Skip => ({ _tag: 'Skip', reason: 'no-oxlint-config' }),
   },
   {
     matches: () => true,
-    plan: (c) => new RunOxlint({ filePath: c.filePath, configPath: c.configPath ?? '' }),
+    plan: (c): RunOxlint => ({
+      _tag: 'RunOxlint',
+      filePath: c.filePath,
+      configPath: c.configPath ?? '',
+    }),
   },
 ]
 
-const planFor = (command: GuardCommand): GuardDecision => {
+const planFor = (command: GuardCommandShape): GuardPlan => {
   const rule = PLAN_RULES.find((candidate) => candidate.matches(command))
   if (rule !== undefined) {
     return rule.plan(command)
   }
-  return new RunOxlint({
+  return {
+    _tag: 'RunOxlint',
     filePath: command.filePath,
     configPath: command.configPath ?? '',
-  })
+  }
 }
 
 export const guardPlan = Workflow.make(
   GuardCommand,
   (
     command: GuardCommand,
-  ): Result.Result<GuardDecision, GuardUnsupportedToolError> => {
+  ): Result.Result<GuardPlan, GuardUnsupportedToolError> => {
     if (!GUARD_TOOL_NAMES.includes(command.toolName)) {
       return Result.fail(
         new GuardUnsupportedToolError({ toolName: command.toolName }),
@@ -179,16 +129,31 @@ export const buildGuardCell = (
     ),
     Cell.decide<GuardPhases>(guardPlan),
     Cell.encode<GuardPhases>((outcome) => outcome),
-    Cell.write<GuardPhases>((outcome) => executeDecision(outcome, adapters.runner, adapters.dirname)),
+    Cell.write<GuardPhases>((outcome) =>
+      Result.match(outcome, {
+        onFailure: () => Effect.succeed(PASS),
+        onSuccess: (plan) =>
+          Match.value(plan).pipe(
+            Match.tag('Skip', () => Effect.succeed(PASS)),
+            Match.tag('RunDeno', ({ filePath }) => runDenoPair(adapters.runner, adapters.dirname, filePath)),
+            Match.tag('RunOxlint', ({ filePath, configPath }) =>
+              runOxlint(adapters.runner, adapters.dirname, {
+                filePath,
+                configPath,
+              })),
+            Match.exhaustive,
+          ),
+      })
+    ),
   )
 
 export interface GuardPhases extends Cell.Phases {
   readonly command: GuardWire
   readonly raw: GuardRaw
   readonly decoded: GuardCommand
-  readonly decision: GuardDecision
+  readonly decision: GuardPlan
   readonly decisionError: GuardUnsupportedToolError
-  readonly output: Result.Result<GuardDecision, GuardUnsupportedToolError>
+  readonly output: Result.Result<GuardPlan, GuardUnsupportedToolError>
   readonly response: HookResult
   readonly decodeError: never
   readonly readError: GuardReadError
