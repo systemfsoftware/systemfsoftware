@@ -63,3 +63,9 @@ name = "ttsc"
 url = "https://github.com/samchon/ttsc"
 description = "TypeScript-go toolchain that runs compiler plugins such as typia"
 tag_prefix = "v"
+
+[[repos]]
+name = "worktrunk-scripts"
+url = "https://github.com/systemfsoftware/worktrunk-scripts"
+description = "Deno worktree hooks for worktrunk automating environment setup, warm-copy indexing, and path isolation"
+branch = "main"
