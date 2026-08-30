@@ -1,0 +1,28 @@
+{
+  "name": "@systemfsoftware/oxlint-guard-hook",
+  "private": true,
+  "license": "Apache-2.0",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "mutation": "stryker run"
+  },
+  "dependencies": {
+    "@effect/platform-deno": "4.0.0-rc.112",
+    "@systemfsoftware/effect-cell-types": "5.0.1",
+    "effect": "4.0.0-rc.112"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@systemfsoftware/stryker-js-cli": "workspace:^",
+    "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
+    "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
+    "@systemfsoftware/stryker-plugins": "workspace:^",
+    "@systemfsoftware/stryker-test-contribution": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard-hook: deno not found on PATH - install Deno (https://deno.land) so the lint guard can run' >&2; exit 1; }; exec deno run --quiet --config \"${CLAUDE_PLUGIN_ROOT}/deno.jsonc\" --allow-read --allow-run --allow-env \"${CLAUDE_PLUGIN_ROOT}/src/run.ts\"",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'oxlint-guard-hook: deno not found on PATH - install Deno (https://deno.land) so the lint guard can run' >&2; exit 1; }; exec deno run --quiet --config \"${CLAUDE_PLUGIN_ROOT}/deno.jsonc\" --allow-read --allow-run --allow-env \"${CLAUDE_PLUGIN_ROOT}/src/main.ts\" \"$PWD\" \"${CLAUDE_PROJECT_DIR:-}\"",
             "timeout": 120
           }
         ]
