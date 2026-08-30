@@ -4,6 +4,7 @@
   // --config flag. nodeModulesDir none keeps pnpm's node_modules untouched and
   // stops Deno from migrating pnpm-workspace.yaml into package.json.
   "imports": {
+    "effect": "npm:effect@4.0.0-rc.112",
     "@std/async/pool": "jsr:@std/async@1.5.0/pool",
     "@std/cli/parse-args": "jsr:@std/cli@1.0.32/parse-args",
     "@std/log": "jsr:@std/log@0.224.0",

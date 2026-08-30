@@ -92,6 +92,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/install-deps
+      - uses: denoland/setup-deno@v2
       - run: corepack pnpm build
 
       - uses: actions/cache/restore@v6
@@ -113,21 +114,17 @@ jobs:
 
       - name: Require a mutation report
         if: ${{ !cancelled() }}
-        run: |
-          report='${{ matrix.package }}/reports/mutation-report.json'
-          stream='${{ matrix.package }}/reports/mutation-stream.jsonl'
-          if [ ! -f "$report" ]; then
-            mutants=0
-            if [ -f "$stream" ]; then
-              mutants=$(node -e 'const fs=require("fs"); let n=0; for (const line of fs.readFileSync(process.argv[1],"utf8").split("\n")) { try { if (JSON.parse(line).kind==="mutant") n+=1 } catch {} } process.stdout.write(String(n))' "$stream")
-            fi
-            if [ "$mutants" = 0 ]; then
-              echo "::error title=Mutation produced no report::${{ matrix.package }}: stryker exited '${{ steps.mutation.outcome }}' with zero mutant results — infrastructure failure (missing binary, crashed run or timeout), not a score outcome. Stream artifact: $stream"
-            else
-              echo "::error title=Mutation produced no report::${{ matrix.package }}: stryker exited '${{ steps.mutation.outcome }}' after $mutants completed mutant(s) without a final report — infrastructure failure, not a score outcome. Partial stream: $stream"
-            fi
-            exit 1
-          fi
+        env:
+          PACKAGE: ${{ matrix.package }}
+          OUTCOME: ${{ steps.mutation.outcome }}
+        run: ./scripts/tools/build-mutation-summary.ts --require --package "$PACKAGE" --outcome "$OUTCOME" --reports-dir "$PACKAGE/reports"
+
+      - name: Write mutation summary
+        if: always()
+        env:
+          PACKAGE: ${{ matrix.package }}
+          OUTCOME: ${{ steps.mutation.outcome }}
+        run: ./scripts/tools/build-mutation-summary.ts --package "$PACKAGE" --outcome "$OUTCOME" --reports-dir "$PACKAGE/reports"
 
       - uses: actions/cache/save@v6
         if: ${{ always() && hashFiles(format('{0}/reports/stryker-incremental.json', matrix.package)) != '' }}
