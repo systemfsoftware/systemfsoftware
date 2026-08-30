@@ -1,9 +1,11 @@
 import { NodeServices, NodeSocket } from '@effect/platform-node'
 import { ManagedRuntime } from 'effect'
+import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
+import * as Ref from 'effect/Ref'
 import * as ChildProcess from 'effect/unstable/process/ChildProcess'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 import { GenericContainer, getContainerRuntimeClient, type StartedTestContainer } from 'testcontainers'
@@ -24,42 +26,43 @@ const WORKSPACE_MANIFEST = JSON.stringify({
   name: 'stryker-contract-workspace',
   private: true,
 })
-
-/** One runtime for the whole contract lane, created once at module load. */
-const stopContractResources = Effect.gen(function*() {
-  const fs = yield* FileSystem.FileSystem
-  const started = container
-  if (started !== undefined) {
-    yield* Effect.tryPromise({
-      try: () => started.stop(),
-      catch: () => undefined,
-    }).pipe(Effect.orElseSucceed(() => undefined))
-  }
-  const packDir = tarballDir
-  if (packDir !== undefined) {
-    yield* fs.remove(packDir, { recursive: true }).pipe(
-      Effect.catchCause(() => Effect.succeed(undefined)),
-      Effect.catchDefect(() => Effect.succeed(undefined)),
-    )
-  }
-})
-
-const runtime = ManagedRuntime.make(
-  Layer.merge(
-    NodeServices.layer,
-    Layer.effectDiscard(
-      Effect.gen(function*() {
-        yield* Effect.addFinalizer(() => stopContractResources)
-      }),
-    ).pipe(Layer.provide(NodeServices.layer)),
-  ),
-)
-
-let container: StartedTestContainer | undefined
-let tarballDir: string | undefined
+interface ContractResources {
+  readonly container: StartedTestContainer | undefined
+  readonly tarballDir: string | undefined
+}
 
 const DOCKER_SOCKET = '/var/run/docker.sock'
 
+const ContractResources = Context.Service<ContractResources, Ref.Ref<ContractResources>>()(
+  'stryker-contract/resources',
+)
+
+const releaseContractResources = (state: Ref.Ref<ContractResources>) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const { container, tarballDir } = yield* Ref.get(state)
+    if (container !== undefined) {
+      yield* Effect.ignore(
+        Effect.tryPromise({
+          try: () => container.stop(),
+          catch: () => undefined,
+        }),
+      )
+    }
+    if (tarballDir !== undefined) {
+      yield* Effect.ignore(fs.remove(tarballDir, { recursive: true }))
+    }
+  })
+const contractLayer: Layer.Layer<ContractResources> = Layer.effect(
+  ContractResources,
+  Effect.acquireUseRelease(
+    Ref.make<ContractResources>({ container: undefined, tarballDir: undefined }),
+    Effect.succeed,
+    releaseContractResources,
+  ),
+).pipe(Layer.provide(NodeServices.layer))
+
+const runtime = ManagedRuntime.make(Layer.mergeAll(NodeServices.layer, contractLayer))
 const podmanSockets = (path: Path.Path): readonly string[] => {
   const uid = process.getuid?.()
   let runtimeDir: string | undefined = process.env['XDG_RUNTIME_DIR']
@@ -107,6 +110,7 @@ export function setup(project: TestProject): Promise<void> {
       const path = yield* Path.Path
       const fs = yield* FileSystem.FileSystem
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+      const resources = yield* ContractResources
       const cliDir = yield* path.fromFileUrl(new URL('./', import.meta.url))
       const fixturesDir = yield* path.fromFileUrl(new URL('./tests/__fixtures__/fixtures', import.meta.url))
       const distEntry = path.join(cliDir, 'dist', 'main.mjs')
@@ -131,9 +135,8 @@ export function setup(project: TestProject): Promise<void> {
             { cause },
           ),
       }).pipe(Effect.orDie)
-
       const packDir = yield* fs.makeTempDirectory({ prefix: 'stryker-contract-' })
-      tarballDir = packDir
+      yield* Ref.set(resources, { container: undefined, tarballDir: packDir })
       for (const workspacePackage of WORKSPACE_PACKAGES) {
         const command = ChildProcess.make('pnpm', [
           '--filter',
@@ -172,7 +175,10 @@ export function setup(project: TestProject): Promise<void> {
             .start(),
         catch: (cause) => cause,
       }).pipe(Effect.orDie)
-      container = startedContainer
+      yield* Ref.modify(resources, (state) => [
+        state.container,
+        { container: startedContainer, tarballDir: state.tarballDir },
+      ])
 
       const installed = yield* Effect.tryPromise({
         try: () =>
@@ -207,5 +213,5 @@ export function setup(project: TestProject): Promise<void> {
  * services of that scope already in context.
  */
 export function teardown(): Promise<void> {
-  return runtime.dispose()
+  return Effect.runPromise(Effect.ignore(Effect.promise(() => runtime.dispose())))
 }
