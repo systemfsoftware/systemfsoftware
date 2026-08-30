@@ -1,0 +1,65 @@
+{
+  "name": "@systemfsoftware/project-modules",
+  "license": "Apache-2.0",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/core/effect/project-modules"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/core/effect/project-modules#readme",
+  "bugs": "https://github.com/systemfsoftware/issues",
+  "description": "Port for resolving and importing modules relative to a project directory — feature code takes the tag, hosts provide the layer.",
+  "keywords": [
+    "effect",
+    "modules",
+    "resolution",
+    "port",
+    "plugin-loading"
+  ],
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/project-modules.d.ts",
+      "default": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rimraf dist",
+    "typecheck": "tsc --noEmit --incremental",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+  },
+  "devDependencies": {
+    "@systemfsoftware/all": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers"
+  },
+  "engines": {
+    "node": ">=20.16.0"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/project-modules.d.ts",
+        "default": "./dist/index.mjs"
+      }
+    }
+  }
+}
