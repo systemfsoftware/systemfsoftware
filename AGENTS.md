@@ -4,7 +4,7 @@ TypeScript libraries and tooling for pure-core/imperative-shell architecture, Ef
 
 ## Standing Law
 
-Density-budgeted root invariants. Rules bind through deterministic gates run before claiming done, not layout or prose position (ADOC-A1). Read `CONSTITUTION.md` before architecture or rule authoring.
+Read `CONSTITUTION.md` before architecture or rule authoring.
 
 Startup: confirm working directory and active task; run `pnpm check:local` and repair failures before adding scope.
 
