@@ -22,8 +22,6 @@ Load docs on-demand when triggers fire; do not perform eager multi-spec reads at
 
 ## Stack & Conventions
 
-Not derivable from manifests:
-
 - Run `pnpm --filter <pkg> <cmd>` from workspace root; never `cd` into packages, never `npx`.
 - Production code must use `@systemfsoftware/effect-cell-types` for workflow and cell contracts.
 - Production code must use `@systemfsoftware/effect-schema-vite` to auto-discover Schema exports and run property tests.
