@@ -69,7 +69,7 @@ Every row is load-bearing and names its runnable gate.
 | **REPO-C1** | `type(scope): subject` with no trailing period. Keep subjects concise.                                                                                                                                                                      | `pnpm exec commitlint --edit <msgfile>`                                                     |
 | **REPO-C2** | Valid types: `feat`, `fix`, `chore`, `build`, `ci`, `deps`, `docs`, `perf`, `refactor`, `revert`, `style`, `test`. Config-only changes cannot be `feat` or `fix`.                                                                           | `pnpm exec commitlint` via `commit-msg` hook                                                |
 
-## Definition of Done
+## Verification Commands
 
 ```bash
 # Local pre-delivery verification chain
