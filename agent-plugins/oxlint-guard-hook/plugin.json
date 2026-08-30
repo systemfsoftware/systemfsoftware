@@ -5,6 +5,6 @@
   "description": "Lints every agent edit with the project's oxlint config (or deno check/deno lint for Deno scripts) and feeds failures back with a diagnostic that demands new skill invocations before fixing.",
   "author": { "name": "systemfsoftware" },
   "repository": "https://github.com/systemfsoftware/systemfsoftware",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": ["oxlint", "lint", "claude-code", "hooks", "skills", "guard"]
 }
