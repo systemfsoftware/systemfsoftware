@@ -14,7 +14,8 @@ const stderrOrStdout = (result: ProcessResult): string => {
 const NO_FILES_FOUND = /No files found to lint/i
 const PATH_OUTSIDE_ROOT = /path is expected to be under the root/i
 const OXLINT_PANIC = /panicked at/
-const TSGOLINT_MISSING = /tsgolint/i
+const TSGOLINT_MISSING =
+  /failed to find tsgolint executable|tsgolint executable not found|cannot find (?:the )?tsgolint (?:executable|binary)/i
 const OXLINT_NOT_FOUND = /ERR_PNPM|command .* not found/i
 
 interface ClassifyRule {
@@ -23,29 +24,33 @@ interface ClassifyRule {
     exitCode: number,
     canRetry: boolean,
   ) => boolean
-  readonly outcome: () => LintVerdict
+  readonly outcome: LintVerdict
 }
+
+const PASS_VERDICT: LintVerdict = { _tag: 'Pass' }
+const RETRY_VERDICT: LintVerdict = { _tag: 'RetryWithoutTypeCheck' }
+const TOOL_MISSING_VERDICT: LintVerdict = { _tag: 'ToolMissing' }
 
 const CLASSIFY_RULES: readonly ClassifyRule[] = [
   {
     matches: (_combined, exitCode) => exitCode === 0,
-    outcome: () => ({ _tag: 'Pass' }),
+    outcome: PASS_VERDICT,
   },
   {
     matches: (combined) => NO_FILES_FOUND.test(combined),
-    outcome: () => ({ _tag: 'Pass' }),
+    outcome: PASS_VERDICT,
   },
   {
     matches: (combined) => OXLINT_PANIC.test(combined) && PATH_OUTSIDE_ROOT.test(combined),
-    outcome: () => ({ _tag: 'Pass' }),
+    outcome: PASS_VERDICT,
   },
   {
     matches: (combined, _exitCode, canRetry) => canRetry && TSGOLINT_MISSING.test(combined),
-    outcome: () => ({ _tag: 'RetryWithoutTypeCheck' }),
+    outcome: RETRY_VERDICT,
   },
   {
     matches: (combined, exitCode) => exitCode !== 0 && OXLINT_NOT_FOUND.test(combined),
-    outcome: () => ({ _tag: 'ToolMissing' }),
+    outcome: TOOL_MISSING_VERDICT,
   },
 ]
 
@@ -61,7 +66,7 @@ export const lintVerdict = (
   const combined = combinedOutput(result)
   const rule = CLASSIFY_RULES.find((candidate) => candidate.matches(combined, result.exitCode, canRetry))
   if (rule !== undefined) {
-    return rule.outcome()
+    return rule.outcome
   }
   return catchAllOutcome(result)
 }
@@ -69,7 +74,7 @@ export const lintVerdict = (
 const MAX_OUTPUT_LINES = 30
 
 const truncateOutput = (text: string): string => {
-  const lines = text.split('\n')
+  const lines = text.split('\n', MAX_OUTPUT_LINES + 1)
   if (lines.length <= MAX_OUTPUT_LINES) {
     return text
   }
@@ -142,22 +147,14 @@ if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
   const fc: typeof FastCheck = (await import('effect/testing')).FastCheck
 
-  const lintTagOf = (
-    result: ProcessResult,
-    canRetry: boolean,
-  ): LintVerdict['_tag'] => lintVerdict(result, canRetry)._tag
+  const lintTagOf = (result: ProcessResult, canRetry: boolean): LintVerdict['_tag'] =>
+    lintVerdict(result, canRetry)._tag
 
-  const violationOutput = (result: ProcessResult): string | undefined => {
-    const lint = lintVerdict(result, true)
-    let output: string | undefined
-    Match.value(lint).pipe(
-      Match.tag('Violation', ({ output: value }) => {
-        output = value
-      }),
-      Match.orElse(() => {}),
+  const violationOutput = (result: ProcessResult): string | undefined =>
+    Match.value(lintVerdict(result, true)).pipe(
+      Match.tag('Violation', ({ output }) => output),
+      Match.orElse(() => undefined),
     )
-    return output
-  }
 
   // Constructive complement of the classify regexes: every trigger phrase
   // contains letters, so strings drawn from this letter-free alphabet can

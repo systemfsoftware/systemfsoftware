@@ -70,9 +70,9 @@ The guard lints the **whole file**, not the diff: a checkpoint fires for pre-exi
 
 The hook resolves its dependencies from Deno's registry cache on first run, so the first hook invocation needs network access; after that the hook runs offline.
 
-## Hermetic by Construction
+## Sandboxed Hook Runtime
 
-The hook runs on Deno with a scoped permission set — read, run, and env — and **never** `--allow-net`. Spawned linters do not inherit the agent's environment: they receive a minimal allowlist (`PATH`, `HOME`, and the platform's temp/shell variables). A linter in the project's `node_modules` is the project's code, and it does not need the agent's credentials to lint a file.
+The hook itself runs on Deno with a scoped permission set — read, run, and env — and **never** `--allow-net`, so the hook process cannot reach the network. Spawned linters currently inherit the hook's environment; scoping that child environment to a minimal allowlist is planned work. A linter in the project's `node_modules` is the project's code, and it does not need the agent's credentials to lint a file.
 
 ## Other Hook Runners
 
@@ -80,7 +80,7 @@ The hook follows the standard Claude Code hook contract: **exit 0 allows, exit 2
 
 ## Relationship to oxlint-guard
 
-This marketplace also ships [oxlint-guard](../../agent-plugins/oxlint-guard), a sibling lint guard with a different doctrine:
+This marketplace also ships [oxlint-guard](https://github.com/systemfsoftware/systemfsoftware/tree/main/agent-plugins/oxlint-guard), a sibling lint guard with a different doctrine:
 
 |                       | oxlint-guard-hook                                                   | oxlint-guard                                              |
 | --------------------- | ------------------------------------------------------------------- | --------------------------------------------------------- |
@@ -99,7 +99,7 @@ Both hooks register on the same edit-tool events. Installing both runs both guar
 
 ## Contributing
 
-Development setup and workflow: [AGENTS.md](../../AGENTS.md). Formatting is owned by the repository's dprint config.
+Development setup and workflow: [AGENTS.md](https://github.com/systemfsoftware/systemfsoftware/blob/main/AGENTS.md). Formatting is owned by the repository's dprint config.
 
 ## License
 

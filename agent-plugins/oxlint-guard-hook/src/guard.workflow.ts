@@ -7,10 +7,13 @@ import { runDenoPair, runOxlint } from './execute.ts'
 import {
   type GuardAdapters,
   GuardCommand,
+  type GuardPlan,
   type GuardRaw,
   type GuardReadError,
   GuardWire,
   type HookResult,
+  type RunDeno,
+  type Skip,
 } from './flow.schema.ts'
 import { PASS } from './verdict.ts'
 
@@ -25,21 +28,12 @@ export class GuardUnsupportedToolError extends S.TaggedError<GuardUnsupportedToo
   { toolName: S.String },
 ) {}
 
-import type { GuardPlan, RunDeno, RunOxlint, Skip } from './flow.schema.ts'
-
 interface PlanRule {
   readonly matches: (command: GuardCommandShape) => boolean
   readonly plan: (command: GuardCommandShape) => GuardPlan
 }
 
-interface GuardCommandShape {
-  readonly toolName: string
-  readonly filePath: string
-  readonly exists: boolean
-  readonly denoShebang: boolean
-  readonly extension: string
-  readonly configPath: string | null
-}
+type GuardCommandShape = Omit<GuardCommand, '_tag'>
 
 const PLAN_RULES: readonly PlanRule[] = [
   {
@@ -57,14 +51,6 @@ const PLAN_RULES: readonly PlanRule[] = [
   {
     matches: (c) => c.configPath === null,
     plan: (): Skip => ({ _tag: 'Skip', reason: 'no-oxlint-config' }),
-  },
-  {
-    matches: () => true,
-    plan: (c): RunOxlint => ({
-      _tag: 'RunOxlint',
-      filePath: c.filePath,
-      configPath: c.configPath ?? '',
-    }),
   },
 ]
 

@@ -124,5 +124,7 @@ export class LintFailure extends S.TaggedError<LintFailure>()('LintFailure', {
   message: S.String,
 }) {
   override readonly [errorExitCode]: number = this.exitCode
-  override readonly [errorReported]: boolean = true
+  // main.ts reports the diagnostic to stderr via Console.error before failing;
+  // `false` stops runMain from re-logging the whole failure to stdout.
+  override readonly [errorReported]: boolean = false
 }

@@ -178,11 +178,14 @@ const runCommand = (
   // the guard acts on (skip with exit 0).
   return Effect.gen(function*() {
     const handle = yield* command
-    const [stdoutChunk, stderrChunk, exitCode] = yield* Effect.all([
-      Stream.runCollect(handle.stdout),
-      Stream.runCollect(handle.stderr),
-      handle.exitCode,
-    ])
+    // Concurrent drain: tuple Effect.all is sequential by default, and a
+    // sequential drain deadlocks when the child fills the stderr pipe while
+    // stdout is still open — the timeout would then misclassify a healthy
+    // (or failing) run as `timeout` and the guard would silently pass.
+    const [stdoutChunk, stderrChunk, exitCode] = yield* Effect.all(
+      [Stream.runCollect(handle.stdout), Stream.runCollect(handle.stderr), handle.exitCode],
+      { concurrency: 'unbounded' },
+    )
     const outcome: RunOutcome = {
       _tag: 'result',
       result: {
