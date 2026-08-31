@@ -4,9 +4,10 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
 
+import { EDIT_TOOL_NAMES } from '../constants.ts'
 import { GuardCommand } from '../flow.schema.ts'
 import type { GuardPlan } from '../flow.schema.ts'
-import { GUARD_TOOL_NAMES, guardPlan } from '../guard.workflow.ts'
+import { guardPlan } from '../guard.workflow.ts'
 import type { GuardUnsupportedToolError } from '../guard.workflow.ts'
 
 const commandArb = S.toArbitrary(GuardCommand)(fc)
@@ -22,7 +23,7 @@ const listedToolWith = (overrides: {
     if ('configPath' in overrides) {
       configPath = overrides.configPath ?? null
     }
-    return fc.constantFrom(...GUARD_TOOL_NAMES).map((toolName) =>
+    return fc.constantFrom(...EDIT_TOOL_NAMES).map((toolName) =>
       new GuardCommand({
         toolName,
         filePath: c.filePath,

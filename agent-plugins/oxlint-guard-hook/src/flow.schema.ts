@@ -68,11 +68,26 @@ export type RunDeno = S.Schema.Type<typeof RunDenoBase>
 export type RunOxlint = S.Schema.Type<typeof RunOxlintBase>
 export type GuardPlan = Skip | RunDeno | RunOxlint
 
+/** What the encode phase hands the write: either a finished response or one linter run to execute. */
+export const GuardActionSchema = S.Union([
+  S.TaggedStruct('respond', { result: HookResultSchema }),
+  RunDenoBase,
+  RunOxlintBase,
+])
+export type GuardAction = S.Schema.Type<typeof GuardActionSchema>
+
 /** The wire payload Claude Code posts to the hook on stdin. */
 export const WirePayload = S.Struct({
   tool_name: S.String,
   tool_input: S.Struct({ file_path: S.String }),
 })
+
+/** What the shell reads from stdin: the raw payload text plus whether it exceeded the byte cap. */
+export const StdinPayloadSchema = S.Struct({
+  text: S.String,
+  overCap: S.Boolean,
+})
+export type StdinPayload = S.Schema.Type<typeof StdinPayloadSchema>
 
 export class GuardWire extends S.TaggedClass<GuardWire>()('GuardWire', {
   toolName: S.String,
@@ -91,6 +106,9 @@ export interface GuardRaw {
   readonly facts: FactFields
 }
 
+/** The read phase's failure modes: stdin policy and transport parse are the boundary's, fs failures carry a message. */
+export type GuardInputError = StdinOverCapError | WireUnreadableError | GuardReadError
+
 export interface Runner {
   readonly run: (
     program: string,
@@ -101,7 +119,7 @@ export interface Runner {
 }
 
 export interface GuardAdapters {
-  readonly gather: (wire: GuardWire) => Effect.Effect<GuardRaw, GuardReadError>
+  readonly gather: (stdin: StdinPayload) => Effect.Effect<GuardRaw, GuardInputError>
   readonly runner: Runner
   readonly dirname: (target: string) => string
 }
@@ -118,6 +136,10 @@ export class GuardCommand extends S.TaggedClass<GuardCommand>()('GuardCommand', 
 export class GuardReadError extends S.TaggedError<GuardReadError>()('GuardReadError', {
   message: S.String,
 }) {}
+
+export class StdinOverCapError extends S.TaggedError<StdinOverCapError>()('StdinOverCapError', {}) {}
+
+export class WireUnreadableError extends S.TaggedError<WireUnreadableError>()('WireUnreadableError', {}) {}
 
 export class LintFailure extends S.TaggedError<LintFailure>()('LintFailure', {
   exitCode: S.Union([S.Literal(1), S.Literal(2)]),

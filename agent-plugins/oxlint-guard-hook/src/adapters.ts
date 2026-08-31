@@ -1,17 +1,24 @@
-import { Duration, Effect, Option, Stream } from 'effect'
+import { Duration, Effect, Match, Option, Schema as S, Stream } from 'effect'
 import type { FileSystem } from 'effect/FileSystem'
 import type { Path } from 'effect/Path'
 import { make as makeProcessCommand } from 'effect/unstable/process/ChildProcess'
 import { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
-import { CONFIG_BASENAMES } from './constants.ts'
+import { CONFIG_BASENAMES, STDIN_CAP_BYTES } from './constants.ts'
 import {
   type FactFields,
   type GuardAdapters,
+  type GuardInputError,
   type GuardRaw,
   GuardReadError,
-  type GuardWire,
+  GuardWire,
+  type HookResult,
   type RunOutcome,
+  StdinOverCapError,
+  type StdinPayload,
+  WirePayload,
+  WireUnreadableError,
 } from './flow.schema.ts'
+import { PASS } from './verdict.ts'
 
 interface AdapterDeps {
   readonly fs: FileSystem
@@ -44,6 +51,34 @@ export const decodeBytes = (chunks: Iterable<Uint8Array>): string => {
   }
   return new TextDecoder().decode(all)
 }
+
+/**
+ * The shell's pure read transform: concatenated stdin bytes plus the cap verdict as data.
+ * The over-cap decision itself belongs to the cell's read phase.
+ */
+export const stdinPayload = (chunks: Iterable<Uint8Array>): StdinPayload => {
+  const list = Array.from(chunks)
+  const bytes = list.reduce((total, chunk) => total + chunk.byteLength, 0)
+  return { text: decodeBytes(list), overCap: bytes > STDIN_CAP_BYTES }
+}
+
+/**
+ * The boundary's response to an unreadable input: the hook contract keeps over-cap and
+ * malformed payloads a silent skip, while a gather failure surfaces as the exit-1 hint.
+ */
+export const inputErrorResponse = (error: GuardInputError): HookResult =>
+  Match.value(error).pipe(
+    Match.tag('StdinOverCapError', () => PASS),
+    Match.tag('WireUnreadableError', () => PASS),
+    Match.tag(
+      'GuardReadError',
+      (): HookResult => ({
+        exitCode: 1,
+        stderr: 'oxlint-guard-hook: could not read the file to lint - check the path exists and retry.',
+      }),
+    ),
+    Match.exhaustive,
+  )
 
 const firstLineOf = (text: string): string => text.split('\n', 1)[0] ?? ''
 
@@ -102,36 +137,70 @@ const firstExistingConfig = (
     return Option.none()
   })
 
-const gatherFacts =
-  (fs: FileSystem, path: Path, cwd: string, rootOverride: string | undefined) =>
-  (wire: GuardWire): Effect.Effect<GuardRaw, GuardReadError> =>
-    Effect.gen(function*() {
-      const resolvedPath = path.resolve(cwd, wire.filePath)
-      const extension = path.extname(resolvedPath).slice(1)
-      const exists = yield* fs.exists(resolvedPath)
-      let firstLine: string | null = null
-      if (exists) {
-        const bytes = yield* Stream.runCollect(
-          fs.stream(resolvedPath, { bytesToRead: 4096 }),
-        )
-        firstLine = firstLineOf(decodeBytes(bytes))
-      }
-      const denoShebang = DENO_SHEBANG.test(firstLine ?? '')
-      let configPath: string | null = null
-      if (exists && !denoShebang) {
-        const root = yield* findProjectRoot(fs, path, cwd, rootOverride)
-        const found = yield* firstExistingConfig(
-          fs,
-          path,
-          walkUp(path, path.dirname(resolvedPath), root),
-        )
-        configPath = Option.getOrElse(found, () => null)
-      }
-      const facts: FactFields = { exists, denoShebang, extension, configPath }
-      return { wire, facts }
-    }).pipe(
-      Effect.catchEager((error) => Effect.fail(new GuardReadError({ message: messageOf(error) }))),
+/**
+ * The fs half of the read: everything here is a genuine gather failure, so the whole
+ * block is wrapped into GuardReadError. Transport failures never enter this effect.
+ */
+const gatherFileFacts = (
+  fs: FileSystem,
+  path: Path,
+  cwd: string,
+  rootOverride: string | undefined,
+  filePath: string,
+): Effect.Effect<FactFields, GuardReadError> =>
+  Effect.gen(function*() {
+    const resolvedPath = path.resolve(cwd, filePath)
+    const extension = path.extname(resolvedPath).slice(1)
+    const exists = yield* fs.exists(resolvedPath)
+    let firstLine: string | null = null
+    if (exists) {
+      const bytes = yield* Stream.runCollect(
+        fs.stream(resolvedPath, { bytesToRead: 4096 }),
+      )
+      firstLine = firstLineOf(decodeBytes(bytes))
+    }
+    const denoShebang = DENO_SHEBANG.test(firstLine ?? '')
+    let configPath: string | null = null
+    if (exists && !denoShebang) {
+      const root = yield* findProjectRoot(fs, path, cwd, rootOverride)
+      const found = yield* firstExistingConfig(
+        fs,
+        path,
+        walkUp(path, path.dirname(resolvedPath), root),
+      )
+      configPath = Option.getOrElse(found, () => null)
+    }
+    return { exists, denoShebang, extension, configPath } satisfies FactFields
+  }).pipe(
+    Effect.catchEager((error) => Effect.fail(new GuardReadError({ message: messageOf(error) }))),
+  )
+
+/**
+ * The cell's read phase: the raw stdin text is validated as transport here (an over-cap
+ * payload or an unreadable one is a typed read failure, not a domain state), and the file
+ * facts the decision needs are gathered in the same impure step.
+ */
+const gatherStdin = (
+  fs: FileSystem,
+  path: Path,
+  cwd: string,
+  rootOverride: string | undefined,
+) =>
+(stdin: StdinPayload): Effect.Effect<GuardRaw, GuardInputError> =>
+  Effect.gen(function*() {
+    if (stdin.overCap) {
+      return yield* Effect.fail(new StdinOverCapError())
+    }
+    const payload = yield* Effect.option(
+      S.decodeUnknownEffect(S.fromJsonString(WirePayload))(stdin.text),
     )
+    if (Option.isNone(payload)) {
+      return yield* Effect.fail(new WireUnreadableError())
+    }
+    const filePath = payload.value.tool_input.file_path
+    const facts = yield* gatherFileFacts(fs, path, cwd, rootOverride, filePath)
+    return { wire: new GuardWire({ toolName: payload.value.tool_name, filePath }), facts }
+  })
 
 const reasonOf = (
   error: unknown,
@@ -213,7 +282,7 @@ const runCommand = (
 }
 
 export const makeGuardAdapters = (deps: AdapterDeps): GuardAdapters => ({
-  gather: gatherFacts(deps.fs, deps.path, deps.cwd, deps.rootOverride),
+  gather: gatherStdin(deps.fs, deps.path, deps.cwd, deps.rootOverride),
   runner: {
     run: (program, args, cwd, timeoutMs) => runCommand(deps.spawner, program, args, cwd, timeoutMs),
   },

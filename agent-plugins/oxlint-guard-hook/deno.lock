@@ -4,7 +4,8 @@
     "npm:@effect/platform-deno@4.0.0-rc.112": "4.0.0-rc.112_effect@4.0.0-rc.112",
     "npm:@effect/vitest@4.0.0-rc.112": "4.0.0-rc.112_effect@4.0.0-rc.112_vitest@4.1.11__vite@8.2.2_vite@8.2.2",
     "npm:@systemfsoftware/effect-cell-types@5.0.1": "5.0.1_effect@4.0.0-rc.112",
-    "npm:effect@4.0.0-rc.112": "4.0.0-rc.112"
+    "npm:effect@4.0.0-rc.112": "4.0.0-rc.112",
+    "npm:vitest@4": "4.1.11_vite@8.2.2"
   },
   "npm": {
     "@effect/platform-deno@4.0.0-rc.112_effect@4.0.0-rc.112": {
@@ -623,7 +624,8 @@
       "npm:@effect/platform-deno@4.0.0-rc.112",
       "npm:@effect/vitest@4.0.0-rc.112",
       "npm:@systemfsoftware/effect-cell-types@5.0.1",
-      "npm:effect@4.0.0-rc.112"
+      "npm:effect@4.0.0-rc.112",
+      "npm:vitest@4"
     ],
     "packageJson": {
       "dependencies": [

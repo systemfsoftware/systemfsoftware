@@ -1,3 +1,4 @@
+/// <reference types="vitest/importMeta" />
 import { Match } from 'effect'
 import type { FastCheck } from 'effect/testing'
 import type { GuardVerdict, HookResult, LintVerdict, ProcessResult, RunOutcome } from './flow.schema.ts'

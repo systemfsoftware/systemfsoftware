@@ -1,6 +1,6 @@
 # Oxlint Guard Hook — Architecture Audit
 
-**Status: close-out.** Baseline at `27f4e4129031`; rewrite landed in the three commits following it. Module boundary graph is byte-identical pre/post (`as-is-graph.json` vs `target-graph.json`, diff empty) — the structural delta is internal to the modules, which is what the plan targeted: the algebra collapsed, the ladder replaced boolean dispatch, no boundaries moved.
+**Status: close-out.** Baseline at `27f4e4129031`; rewrite landed in the three commits following it (module boundary graph byte-identical pre/post — the structural delta was internal). The follow-up sandwich restructure (`af11645dfa5`+) moved the remaining boundary decisions into the cell: `main.ts` is now read stdin → `Cell.apply` → write response; stdin transport validation (over-cap, malformed wire) is typed read-phase failures (`StdinOverCapError`/`WireUnreadableError` → silent exit 0 per R1; fs gather failures → exit-1 hint via `GuardReadError`); `Cell.encode` shapes a real `GuardAction` sum (respond/RunDeno/RunOxlint) instead of passing the decision through identity; the hand-rolled `guard.import-meta.d.ts` was deleted in favor of vitest's own `vitest/importMeta` augmentation (`/// <reference types="vitest/importMeta" />`, `vitest` mapped in `deno.jsonc`). Graph regenerated from the tree; `as-is-graph.json` == `target-graph.json`.
 
 ## Target-state findings resolution
 
@@ -16,34 +16,42 @@
 
 - skip input (missing file) → exit 0
 - garbage stdin → exit 0
+- over-cap stdin (>1 MiB) → exit 0
 - unknown tool → exit 0
-- deno-check violation fixture → exit 2 with skills-first diagnostic on stderr
-- pnpm missing (deno-only PATH) → exit 1 with prerequisite hint on stderr (R1 exit-1 path, newly pinned)
+- not-lintable extension / no oxlint config → exit 0
+- deno-check violation fixture → exit 2 with skills-first diagnostic on stderr, stdout byte-empty
+- gather failure (unreadable file) → exit 1 with hint on stderr (typed `GuardReadError` arm)
+- pnpm missing (deno-only PATH) → exit 1 with prerequisite hint on stderr (R1 exit-1 path)
 - timeout → exit 0 (algebra arm `Halt(0, '')`, compile-checked; not independently smoked)
 
-13/13 vitest (property suite + in-source verdict properties re-scoped to the merged algebra). gcanti-tim-smart-style audit: 0 fail, 0 warn (effect-4.x).
+13/13 vitest (property suite + in-source verdict properties, typed by vitest's own augmentation). gcanti-tim-smart-style audit: 0 fail, 0 warn (effect-4.x).
 
 ```mermaid
 flowchart LR
     MAIN[main.ts] --> ADP[adapters.ts]
-    MAIN --> WF[guard.workflow.ts]
+    MAIN --> CELL[guard.cell.ts]
     MAIN --> SCH[flow.schema.ts]
     MAIN --> CONST[constants.ts]
     ADP --> SCH
     ADP --> CONST
+    ADP --> VER[verdict.ts]
+    CELL --> SCH
+    CELL --> CONST
+    CELL --> WF[guard.workflow.ts]
+    CELL --> EXE[execute.ts]
+    CELL --> VER
     WF --> SCH
     WF --> CONST
-    WF --> EXE[execute.ts]
-    WF --> VER[verdict.ts]
     EXE --> SCH
     EXE --> CONST
     EXE --> VER
     VER --> SCH
-    TST[__tests__/guard.workflow.property.test.ts] --> WF
+    TST[__tests__/guard.workflow.property.test.ts] --> CONST
+    TST --> WF
     TST --> SCH
 ```
 
-Cycle check: the import graph is acyclic (`adapters → schema`, `execute → schema+verdict`, `workflow → execute+verdict+schema`; no module imports upward).
+Cycle check: the import graph is acyclic (`adapters → constants+schema+verdict`, `cell → workflow+execute+verdict+schema`, `workflow → constants+schema`; no module imports upward).
 
 ## As-is findings (the rewrite's targets, each with its confirming gate)
 
