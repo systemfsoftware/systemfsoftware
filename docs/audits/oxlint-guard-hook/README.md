@@ -29,7 +29,7 @@
 ```mermaid
 flowchart LR
     MAIN[main.ts] --> ADP[adapters.ts]
-    MAIN --> CELL[lint-edit.cell.ts]
+    MAIN --> CELL[lint-edit.ts]
     MAIN --> SCH[flow.schema.ts]
     MAIN --> CONST[constants.ts]
     ADP --> SCH

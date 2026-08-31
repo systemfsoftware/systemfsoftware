@@ -8,7 +8,7 @@ import { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner
 import { makeAdapters, readFailureOf, responseOf, unparsedEdit } from './adapters.ts'
 import { STDIN_CAP_BYTES } from './constants.ts'
 import { LintFailure } from './flow.schema.ts'
-import { buildLintCell } from './lint-edit.cell.ts'
+import { buildLintCell } from './lint-edit.ts'
 
 // The I/O sandwich: read stdin (impure) → one cell whose phases carry every
 // decision from the raw event to the lint's answer as data (decode/decide/encode
