@@ -5,13 +5,15 @@ import { FileSystem } from 'effect/FileSystem'
 import { Path } from 'effect/Path'
 import { Stdio } from 'effect/Stdio'
 import { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
-import { inputErrorResponse, makeGuardAdapters, stdinPayload } from './adapters.ts'
+import { makeAdapters, readFailureOf, responseOf, unparsedEdit } from './adapters.ts'
 import { STDIN_CAP_BYTES } from './constants.ts'
 import { LintFailure } from './flow.schema.ts'
-import { buildGuardCell } from './guard.cell.ts'
-// The I/O sandwich: read stdin (impure) → one Cell whose phases carry every
-// decision from raw payload text to the response (decode/decide/encode pure
-// between the impure read and write) → write the response (impure).
+import { buildLintCell } from './lint-edit.cell.ts'
+
+// The I/O sandwich: read stdin (impure) → one cell whose phases carry every
+// decision from the raw event to the lint's answer as data (decode/decide/encode
+// pure between the impure read and write) → write the answer (impure). The only
+// failure reaching this edge is a gather fault, rendered per the hook contract.
 const program = Effect.gen(function*() {
   const stdio = yield* Stdio
   const args = yield* stdio.args
@@ -19,9 +21,9 @@ const program = Effect.gen(function*() {
   const rootOverride = Option.getOrUndefined(
     Option.filter(Option.fromNullishOr(args[1]), (value) => value !== ''),
   )
-  const stdin = stdinPayload(yield* Stream.runCollect(stdio.stdin.pipe(Stream.take(STDIN_CAP_BYTES + 1))))
+  const edit = unparsedEdit(yield* Stream.runCollect(stdio.stdin.pipe(Stream.take(STDIN_CAP_BYTES + 1))))
 
-  const adapters = makeGuardAdapters({
+  const adapters = makeAdapters({
     fs: yield* FileSystem,
     path: yield* Path,
     spawner: yield* ChildProcessSpawner,
@@ -29,10 +31,12 @@ const program = Effect.gen(function*() {
     rootOverride,
   })
 
-  const result = yield* Effect.catchEager(
-    Cell.apply(buildGuardCell(adapters), stdin),
-    (error) => Effect.succeed(inputErrorResponse(error)),
+  const event = yield* Effect.catchTag(
+    Cell.apply(buildLintCell(adapters), edit),
+    'ReadError',
+    (error) => Effect.succeed(readFailureOf(error)),
   )
+  const result = responseOf(event)
 
   // The write bread: the stderr diagnostic is the hook contract's product
   // output, and a blocking exit code rides LintFailure's errorExitCode.

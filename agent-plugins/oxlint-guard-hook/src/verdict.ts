@@ -1,12 +1,12 @@
 /// <reference types="vitest/importMeta" />
 import { Match } from 'effect'
 import type { FastCheck } from 'effect/testing'
-import type { GuardVerdict, HookResult, LintVerdict, ProcessResult, RunOutcome } from './flow.schema.ts'
+import type { LadderVerdict, LintEvent, LintVerdict, ProcessResult, RunOutcome } from './flow.schema.ts'
 
 const combinedOutput = (result: ProcessResult): string => result.stdout + '\n' + result.stderr
 
 const stderrOrStdout = (result: ProcessResult): string => {
-  if (result.stderr.trim() !== '') {
+  if (result.stderr !== '') {
     return result.stderr
   }
   return result.stdout
@@ -103,17 +103,12 @@ const REASON_PHRASES: Record<string, string> = {
 const spawnUnavailableHint = (missing: string, prerequisite: string): string =>
   `oxlint-guard-hook: ${prerequisite} could not be run (${
     REASON_PHRASES[missing] ?? 'spawn failed'
-  }) - the lint guard cannot check this file. Install the prerequisite per the plugin README and retry.`
+  }) - the lint cannot check this file. Install the prerequisite per the plugin README and retry.`
 
-const PROCEED: GuardVerdict = { _tag: 'Proceed' }
-const RETRY: GuardVerdict = { _tag: 'Retry' }
+const PROCEED: LadderVerdict = { _tag: 'Proceed' }
+const RETRY: LadderVerdict = { _tag: 'Retry' }
 
-const halt = (exitCode: 0 | 1 | 2, stderr: string): GuardVerdict => ({
-  _tag: 'Halt',
-  response: { exitCode, stderr },
-})
-
-export const PASS: HookResult = { exitCode: 0, stderr: '' }
+const haltOn = (event: LintEvent): LadderVerdict => ({ _tag: 'Halt', event })
 
 export interface AttemptContext {
   readonly prerequisite: string
@@ -124,17 +119,29 @@ export const verdictOf = (
   attempt: RunOutcome,
   canRetry: boolean,
   context: AttemptContext,
-): GuardVerdict =>
+): LadderVerdict =>
   Match.value(attempt).pipe(
-    Match.tag('spawn-failure', ({ failure }) => halt(1, spawnUnavailableHint(failure.reason, context.prerequisite))),
-    Match.tag('timeout', () => halt(0, '')),
+    Match.tag('spawn-failure', ({ failure }) =>
+      haltOn({
+        _tag: 'Errored',
+        hint: spawnUnavailableHint(failure.reason, context.prerequisite),
+      })),
+    Match.tag('timeout', () => haltOn({ _tag: 'Skipped', reason: 'linter-timeout' })),
     Match.tag('result', ({ result }) => {
       const lint = lintVerdict(result, canRetry)
       return Match.value(lint).pipe(
         Match.tag('Pass', () => PROCEED),
         Match.tag('RetryWithoutTypeCheck', () => RETRY),
-        Match.tag('ToolMissing', () => halt(1, spawnUnavailableHint('not-found', context.prerequisite))),
-        Match.tag('Violation', ({ output }) => halt(2, diagnostic(context.toolLabel, output))),
+        Match.tag('ToolMissing', () =>
+          haltOn({
+            _tag: 'Errored',
+            hint: spawnUnavailableHint('not-found', context.prerequisite),
+          })),
+        Match.tag('Violation', ({ output }) =>
+          haltOn({
+            _tag: 'Blocked',
+            diagnostic: diagnostic(context.toolLabel, output),
+          })),
         Match.exhaustive,
       )
     }),

@@ -5,20 +5,17 @@ import { make as makeProcessCommand } from 'effect/unstable/process/ChildProcess
 import { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 import { CONFIG_BASENAMES, STDIN_CAP_BYTES } from './constants.ts'
 import {
+  EditTarget,
   type FactFields,
-  type GuardAdapters,
-  type GuardInputError,
-  type GuardRaw,
-  GuardReadError,
-  GuardWire,
   type HookResult,
+  type LintAdapters,
+  type LintEvent,
+  type ParsedEdit,
+  ReadError,
   type RunOutcome,
-  StdinOverCapError,
-  type StdinPayload,
+  type UnparsedEdit,
   WirePayload,
-  WireUnreadableError,
 } from './flow.schema.ts'
-import { PASS } from './verdict.ts'
 
 interface AdapterDeps {
   readonly fs: FileSystem
@@ -53,32 +50,34 @@ export const decodeBytes = (chunks: Iterable<Uint8Array>): string => {
 }
 
 /**
- * The shell's pure read transform: concatenated stdin bytes plus the cap verdict as data.
- * The over-cap decision itself belongs to the cell's read phase.
+ * The shell's pure read transform: concatenated stdin bytes plus the cap verdict
+ * as data. The oversized-input decision itself belongs to the workflow's decode
+ * phase.
  */
-export const stdinPayload = (chunks: Iterable<Uint8Array>): StdinPayload => {
+export const unparsedEdit = (chunks: Iterable<Uint8Array>): UnparsedEdit => {
   const list = Array.from(chunks)
   const bytes = list.reduce((total, chunk) => total + chunk.byteLength, 0)
   return { text: decodeBytes(list), overCap: bytes > STDIN_CAP_BYTES }
 }
 
 /**
- * The boundary's response to an unreadable input: the hook contract keeps over-cap and
- * malformed payloads a silent skip, while a gather failure surfaces as the exit-1 hint.
+ * The edge's transport table: the lint's answer rendered into the hook contract.
+ * A total function — every event has exactly one rendering, decided here and
+ * nowhere else.
  */
-export const inputErrorResponse = (error: GuardInputError): HookResult =>
-  Match.value(error).pipe(
-    Match.tag('StdinOverCapError', () => PASS),
-    Match.tag('WireUnreadableError', () => PASS),
-    Match.tag(
-      'GuardReadError',
-      (): HookResult => ({
-        exitCode: 1,
-        stderr: 'oxlint-guard-hook: could not read the file to lint - check the path exists and retry.',
-      }),
-    ),
+export const responseOf = (event: LintEvent): HookResult =>
+  Match.value(event).pipe(
+    Match.tag('Approved', (): HookResult => ({ exitCode: 0, stderr: '' })),
+    Match.tag('Skipped', (): HookResult => ({ exitCode: 0, stderr: '' })),
+    Match.tag('Blocked', ({ diagnostic }): HookResult => ({ exitCode: 2, stderr: diagnostic })),
+    Match.tag('Errored', ({ hint }): HookResult => ({ exitCode: 1, stderr: hint })),
     Match.exhaustive,
   )
+/** The host's rendering of a gather fault: the exit-1 hint channel of the hook contract. */
+export const readFailureOf = (_error: ReadError): LintEvent => ({
+  _tag: 'Errored',
+  hint: 'oxlint-guard-hook: could not read the file to lint - check the path exists and retry.',
+})
 
 const firstLineOf = (text: string): string => text.split('\n', 1)[0] ?? ''
 
@@ -138,16 +137,17 @@ const firstExistingConfig = (
   })
 
 /**
- * The fs half of the read: everything here is a genuine gather failure, so the whole
- * block is wrapped into GuardReadError. Transport failures never enter this effect.
+ * The file-facts half of the read. Everything here is a genuine gather fault, so
+ * the whole block is wrapped into ReadError; transport failures never enter it —
+ * they leave the parse as data variants of the parsed sum.
  */
-const gatherFileFacts = (
+const gatherFacts = (
   fs: FileSystem,
   path: Path,
   cwd: string,
   rootOverride: string | undefined,
   filePath: string,
-): Effect.Effect<FactFields, GuardReadError> =>
+): Effect.Effect<FactFields, ReadError> =>
   Effect.gen(function*() {
     const resolvedPath = path.resolve(cwd, filePath)
     const extension = path.extname(resolvedPath).slice(1)
@@ -172,67 +172,39 @@ const gatherFileFacts = (
     }
     return { exists, denoShebang, extension, configPath } satisfies FactFields
   }).pipe(
-    Effect.catchEager((error) => Effect.fail(new GuardReadError({ message: messageOf(error) }))),
+    Effect.catchEager((error) => Effect.fail(new ReadError({ message: messageOf(error) }))),
   )
 
 /**
- * The cell's read phase: the raw stdin text is validated as transport here (an over-cap
- * payload or an unreadable one is a typed read failure, not a domain state), and the file
- * facts the decision needs are gathered in the same impure step.
+ * The cell's read phase: parses the raw event into the parsed sum — an oversized
+ * payload or an unparsable one is a data variant the decision will see, not a
+ * failure — and gathers the file facts for the lintable case in the same impure
+ * step.
  */
-const gatherStdin = (
+const gatherEdit = (
   fs: FileSystem,
   path: Path,
   cwd: string,
   rootOverride: string | undefined,
 ) =>
-(stdin: StdinPayload): Effect.Effect<GuardRaw, GuardInputError> =>
+(edit: UnparsedEdit): Effect.Effect<ParsedEdit, ReadError> =>
   Effect.gen(function*() {
-    if (stdin.overCap) {
-      return yield* Effect.fail(new StdinOverCapError())
+    if (edit.overCap) {
+      return { _tag: 'OversizedEdit' }
     }
     const payload = yield* Effect.option(
-      S.decodeUnknownEffect(S.fromJsonString(WirePayload))(stdin.text),
+      S.decodeUnknownEffect(S.fromJsonString(WirePayload))(edit.text),
     )
     if (Option.isNone(payload)) {
-      return yield* Effect.fail(new WireUnreadableError())
+      return { _tag: 'UnreadableEdit' }
     }
-    const filePath = payload.value.tool_input.file_path
-    const facts = yield* gatherFileFacts(fs, path, cwd, rootOverride, filePath)
-    return { wire: new GuardWire({ toolName: payload.value.tool_name, filePath }), facts }
+    const target = new EditTarget({
+      toolName: payload.value.tool_name,
+      filePath: payload.value.tool_input.file_path,
+    })
+    const facts = yield* gatherFacts(fs, path, cwd, rootOverride, target.filePath)
+    return { _tag: 'LintableEdit', target, facts }
   })
-
-const reasonOf = (
-  error: unknown,
-): 'not-found' | 'not-executable' | 'unknown' => {
-  if (typeof error !== 'object' || error === null) {
-    return 'unknown'
-  }
-  if (!('name' in error)) {
-    return 'unknown'
-  }
-  const name = error.name
-  if (name === 'NotFound') {
-    return 'not-found'
-  }
-  if (name === 'PermissionDenied' || name === 'NotCapable') {
-    return 'not-executable'
-  }
-  return 'unknown'
-}
-
-const failureOf = (
-  error: unknown,
-): {
-  readonly reason: 'not-found' | 'not-executable' | 'unknown'
-  readonly message: string
-} => {
-  let message = 'unknown error'
-  if (error instanceof Error) {
-    message = error.message
-  }
-  return { reason: reasonOf(error), message }
-}
 
 const runCommand = (
   spawner: ChildProcessSpawner['Service'],
@@ -243,8 +215,8 @@ const runCommand = (
 ): Effect.Effect<RunOutcome, never, never> => {
   const command = makeProcessCommand(program, args, { cwd })
   // The Effect.timeout below is the outermost deadline for the spawned linter:
-  // its typed TimeoutError is handled here as a `{ _tag: 'timeout' }` outcome
-  // the guard acts on (skip with exit 0).
+  // its typed TimeoutError is handled by the verdict layer as a
+  // `{ _tag: 'timeout' }` outcome the guard acts on (skip with exit 0).
   return Effect.gen(function*() {
     const handle = yield* command
     // Concurrent drain: tuple Effect.all is sequential by default, and a
@@ -281,8 +253,40 @@ const runCommand = (
   )
 }
 
-export const makeGuardAdapters = (deps: AdapterDeps): GuardAdapters => ({
-  gather: gatherStdin(deps.fs, deps.path, deps.cwd, deps.rootOverride),
+const reasonOf = (
+  error: unknown,
+): 'not-found' | 'not-executable' | 'unknown' => {
+  if (typeof error !== 'object' || error === null) {
+    return 'unknown'
+  }
+  if (!('name' in error)) {
+    return 'unknown'
+  }
+  const name = error.name
+  if (name === 'NotFound') {
+    return 'not-found'
+  }
+  if (name === 'PermissionDenied' || name === 'NotCapable') {
+    return 'not-executable'
+  }
+  return 'unknown'
+}
+
+const failureOf = (
+  error: unknown,
+): {
+  readonly reason: 'not-found' | 'not-executable' | 'unknown'
+  readonly message: string
+} => {
+  let message = 'unknown error'
+  if (error instanceof Error) {
+    message = error.message
+  }
+  return { reason: reasonOf(error), message }
+}
+
+export const makeAdapters = (deps: AdapterDeps): LintAdapters => ({
+  gather: gatherEdit(deps.fs, deps.path, deps.cwd, deps.rootOverride),
   runner: {
     run: (program, args, cwd, timeoutMs) => runCommand(deps.spawner, program, args, cwd, timeoutMs),
   },

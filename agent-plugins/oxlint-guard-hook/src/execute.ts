@@ -1,9 +1,9 @@
 import { Effect, Match, Option } from 'effect'
 import { COMMAND_BUDGET_MS, DENO_PREREQUISITE, PNPM_PREREQUISITE } from './constants.ts'
-import type { GuardVerdict, HookResult, Runner } from './flow.schema.ts'
-import { PASS, verdictOf } from './verdict.ts'
+import type { LadderVerdict, LintEvent, Runner } from './flow.schema.ts'
+import { verdictOf } from './verdict.ts'
 
-interface GuardRun {
+interface LintRun {
   readonly runner: Runner
   readonly program: string
   readonly args: string[]
@@ -19,20 +19,21 @@ interface GuardRun {
  * or falls through to the next rung (the deno pair).
  */
 interface Rung {
-  readonly run: GuardRun
+  readonly run: LintRun
   readonly canRetry: boolean
   readonly proceedStops: boolean
 }
 
-const responseOf = (
-  verdict: GuardVerdict,
+const eventOf = (
+  verdict: LadderVerdict,
   rung: Rung,
-): Option.Option<HookResult> =>
+): Option.Option<LintEvent> =>
   Match.value(verdict).pipe(
-    Match.tag('Halt', ({ response }) => Option.some(response)),
+    Match.tag('Halt', ({ event }) => Option.some(event)),
     Match.tag('Proceed', () => {
       if (rung.proceedStops) {
-        return Option.some(PASS)
+        const approved: LintEvent = { _tag: 'Approved' }
+        return Option.some(approved)
       }
       return Option.none()
     }),
@@ -42,7 +43,7 @@ const responseOf = (
 
 const runLadder = (
   rungs: readonly Rung[],
-): Effect.Effect<HookResult, never, never> =>
+): Effect.Effect<LintEvent, never, never> =>
   Effect.gen(function*() {
     for (const rung of rungs) {
       const attempt = yield* rung.run.runner.run(
@@ -55,12 +56,12 @@ const runLadder = (
         prerequisite: rung.run.prerequisite,
         toolLabel: rung.run.toolLabel,
       })
-      const response = responseOf(verdict, rung)
-      if (Option.isSome(response)) {
-        return response.value
+      const event = eventOf(verdict, rung)
+      if (Option.isSome(event)) {
+        return event.value
       }
     }
-    return PASS
+    return { _tag: 'Approved' }
   })
 
 const denoRun = (
@@ -68,7 +69,7 @@ const denoRun = (
   dirname: (target: string) => string,
   filePath: string,
   command: 'check' | 'lint',
-): GuardRun => ({
+): LintRun => ({
   runner,
   program: 'deno',
   args: [command, '--', filePath],
@@ -102,7 +103,7 @@ const oxlintRun = (
   dirname: (target: string) => string,
   plan: { readonly filePath: string; readonly configPath: string },
   typeAware: boolean,
-): GuardRun => ({
+): LintRun => ({
   runner,
   program: 'pnpm',
   args: oxlintArgs(plan, typeAware),
@@ -115,7 +116,7 @@ export const runDenoPair = (
   runner: Runner,
   dirname: (target: string) => string,
   filePath: string,
-): Effect.Effect<HookResult, never, never> =>
+): Effect.Effect<LintEvent, never, never> =>
   runLadder([
     {
       run: denoRun(runner, dirname, filePath, 'check'),
@@ -133,7 +134,7 @@ export const runOxlint = (
   runner: Runner,
   dirname: (target: string) => string,
   plan: { readonly filePath: string; readonly configPath: string },
-): Effect.Effect<HookResult, never, never> =>
+): Effect.Effect<LintEvent, never, never> =>
   runLadder([
     {
       run: oxlintRun(runner, dirname, plan, true),

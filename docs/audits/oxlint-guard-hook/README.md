@@ -29,29 +29,27 @@
 ```mermaid
 flowchart LR
     MAIN[main.ts] --> ADP[adapters.ts]
-    MAIN --> CELL[guard.cell.ts]
+    MAIN --> CELL[lint-edit.cell.ts]
     MAIN --> SCH[flow.schema.ts]
     MAIN --> CONST[constants.ts]
     ADP --> SCH
     ADP --> CONST
-    ADP --> VER[verdict.ts]
     CELL --> SCH
     CELL --> CONST
-    CELL --> WF[guard.workflow.ts]
+    CELL --> WF[lint-edit.workflow.ts]
     CELL --> EXE[execute.ts]
-    CELL --> VER
-    WF --> SCH
-    WF --> CONST
     EXE --> SCH
     EXE --> CONST
-    EXE --> VER
+    EXE --> VER[verdict.ts]
     VER --> SCH
-    TST[__tests__/guard.workflow.property.test.ts] --> CONST
+    WF --> SCH
+    WF --> CONST
+    TST[__tests__/lint-edit.workflow.property.test.ts] --> CONST
     TST --> WF
     TST --> SCH
 ```
 
-Cycle check: the import graph is acyclic (`adapters → constants+schema+verdict`, `cell → workflow+execute+verdict+schema`, `workflow → constants+schema`; no module imports upward).
+Cycle check: the import graph is acyclic (`adapters → constants+schema`, `cell → workflow+execute+schema`, `workflow → constants+schema`, `execute → constants+schema+verdict`; no module imports upward). The verdict-to-transport mapping lives once in `adapters.responseOf`; the workflow emits domain events only.
 
 ## As-is findings (the rewrite's targets, each with its confirming gate)
 
