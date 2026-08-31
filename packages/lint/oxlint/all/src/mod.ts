@@ -76,9 +76,9 @@ export const rules: NonNullable<OxlintConfig['rules']> = {
             'Importing Node.js builtins without the "node:" prefix is forbidden (e.g. "fs") — use "@effect/platform" or a Web Standard API instead. Even "node:fs" is forbidden.',
         },
         {
-          regex: '^@std/(?:fs|path)(?:/.*)?$',
+          regex: '^@std/(?:fs|path|encoding|streams)(?:/.*)?$',
           message:
-            'Importing @std modules that mirror @effect/platform services (fs, path) is forbidden — use the corresponding Effect platform service instead.',
+            'Importing @std modules that mirror Effect services (fs → FileSystem, path → Path, encoding → Encoding, streams → Stream) is forbidden — use the corresponding Effect module instead.',
         },
       ],
     },
