@@ -20,6 +20,10 @@
   dir: packages/lint/oxlint/all
   intents:
     - eager-rockets-relate
+"@systemfsoftware/all@1.1.1":
+  dir: packages/lint/oxlint/all
+  intents:
+    - breezy-donuts-grin
 "@systemfsoftware/arethetypeswrong-cli@2.0.0":
   dir: packages/arethetypeswrong/cli
   intents:
