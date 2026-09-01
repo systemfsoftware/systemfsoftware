@@ -36,21 +36,6 @@ const walk = (value: unknown, visit: (node: Walkable) => void): void => {
 const isCallExpression = (value: Walkable): value is Walkable & ESTree.CallExpression =>
   nodeType(value) === 'CallExpression'
 
-/**
- * The pure phase a call targets, or null when the callee is not one. The object must
- * be a local binding of the description module's `Cell` export — never a name that
- * merely spells like one, and never another export of the same module.
- */
-const purePhaseNameOf = (callee: ESTree.Node, namespaces: ReadonlySet<string>): string | null => {
-  if (callee.type !== 'MemberExpression') return null
-  const object = callee.object
-  if (object.type !== 'Identifier') return null
-  if (!namespaces.has(object.name)) return null
-  const property = callee.property
-  const propertyName = property.type === 'Identifier' ? property.name : null
-  return PURE_PHASE_NAMES.some((phase) => phase === propertyName) ? propertyName : null
-}
-
 type LocalHelper = ESTree.ArrowFunctionExpression | (ESTree.Declaration & { type: string })
 
 export const noIoInPhaseBodies = defineRule({
@@ -94,11 +79,11 @@ export const noIoInPhaseBodies = defineRule({
         reportIoInBody(helper, next)
       })
     }
+
     /**
-     * `Cell.layer({ decode, ... })` carries the same pure phase bodies the chained calls
-     * carry, as spec properties instead of call arguments. The composer name is walked off
-     * the vocabulary; the property values are walked with the same inline-or-by-reference
-     * policy the chained branch applies, so a spec-authored description is judged identically.
+     * `Cell.layer({ decode, ... })` carries the pure phase bodies as spec properties, keyed by
+     * the phase names the vocabulary walks. The composer name is walked off the vocabulary too;
+     * the property values are judged inline or through the module-level helper they name.
      */
     const specPurePhaseBodiesOf = (node: ESTree.CallExpression): unknown[] => {
       const callee = node.callee
@@ -129,7 +114,7 @@ export const noIoInPhaseBodies = defineRule({
 
     /**
      * Imports are classified here rather than in an `ImportDeclaration` listener. Listeners fire in
-     * document order, so a phase call written above its own import would be judged against empty
+     * document order, so a phase body written above its own import would be judged against empty
      * sets — and with no I/O name registered the rule reports nothing at all. That is a silent pass
      * decided by line order, which is the one failure a guard must not have. `Program` sees every
      * top-level statement before any call is visited, so the sets are complete when the first call
@@ -192,24 +177,8 @@ export const noIoInPhaseBodies = defineRule({
         }
       },
       CallExpression(node: ESTree.CallExpression) {
-        const specBodies = specPurePhaseBodiesOf(node)
-        for (const body of specBodies) {
+        for (const body of specPurePhaseBodiesOf(node)) {
           reportIoInBody(body, new Set([body]))
-        }
-        if (specBodies.length > 0) return
-        if (purePhaseNameOf(node.callee, descriptionNamespaces) === null) return
-        for (const argument of node.arguments) {
-          if (argument.type === 'ArrowFunctionExpression' || argument.type === 'FunctionExpression') {
-            reportIoInBody(argument, new Set())
-            continue
-          }
-          // A body hoisted to a name and handed over by reference — `Cell.decode(transform)` — is
-          // the same phase body with one indirection. Walking only inline functions would let the
-          // rule pass a file whose I/O sits one rename away, while its message still claims to
-          // follow module-level helpers.
-          if (argument.type !== 'Identifier') continue
-          const helper = localHelpers.get(argument.name)
-          if (helper !== undefined) reportIoInBody(helper, new Set([helper]))
         }
       },
     }
