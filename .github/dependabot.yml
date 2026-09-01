@@ -98,3 +98,9 @@ updates:
           - "@commitlint/*"
           - "typescript"
         update-types: ["major"]
+
+  - package-ecosystem: nix
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
