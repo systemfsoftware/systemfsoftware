@@ -195,6 +195,20 @@ const run = (response, input) =>
   })
 `,
     },
+    {
+      name: 'Should_ReportNothing_When_RunBindingAliased',
+      code: `${CELL_IMPORT}
+${EFFECT_IMPORT}
+const myRun = Cell.run
+const c1 = Cell.layer({ read: (i) => i })
+const c2 = Cell.layer({ read: (i) => i })
+const run = Effect.gen(function*() {
+  const firstResponse = yield* myRun(c1, { id: '1' })
+  const second = yield* myRun(c2, firstResponse)
+  return second
+})
+`,
+    },
   ],
   invalid: [
     {
@@ -212,7 +226,7 @@ const runBoth = (orders) =>
     return { firstResponse }
   })
 `,
-      errors: [error()],
+      errors: [{ ...error(), line: 8 }],
     },
     {
       name: 'Should_Report_TwoRunChain_When_PipeFlatMapCallbackFeedsRun',
@@ -225,7 +239,7 @@ const run = (input) =>
     Effect.flatMap((response) => Cell.run(second, response)),
   )
 `,
-      errors: [error()],
+      errors: [{ ...error(), line: 7 }],
     },
     {
       name: 'Should_Report_TwoRunChain_When_EmptyRNoProvide',
@@ -239,7 +253,7 @@ const run = Effect.gen(function*() {
   return second
 })
 `,
-      errors: [error()],
+      errors: [{ ...error(), line: 7 }],
     },
     {
       name: 'Should_Report_TwoRunChain_When_ImportBelowCall',
@@ -253,7 +267,7 @@ const run = Effect.gen(function*() {
 ${CELL_IMPORT}
 ${EFFECT_IMPORT}
 `,
-      errors: [error()],
+      errors: [{ ...error(), line: 5 }],
     },
     {
       name: 'Should_Report_TwoRunChain_When_MemberRootedInput',
@@ -267,7 +281,7 @@ const run = Effect.gen(function*() {
   return second
 })
 `,
-      errors: [error()],
+      errors: [{ ...error(), line: 7 }],
     },
     {
       name: 'Should_Report_TwoRunChain_When_ObjectDestructuredSuccessFedOnward',
@@ -281,7 +295,7 @@ const run = Effect.gen(function*() {
   return second
 })
 `,
-      errors: [error()],
+      errors: [{ ...error(), line: 7 }],
     },
     {
       name: 'Should_Report_TwoRunChain_When_DataLastPipeCurriedFeedsPriorSuccess',
@@ -296,7 +310,68 @@ const run = Effect.gen(function*() {
   return second
 })
 `,
-      errors: [error()],
+      errors: [{ ...error(), line: 8 }],
+    },
+    {
+      name: 'Should_Report_TwoRunChain_When_DataFirstFlatMapFeedsRun',
+      code: `${CELL_IMPORT}
+${EFFECT_IMPORT}
+const first = Cell.layer({ read: (i) => i })
+const second = Cell.layer({ read: (i) => i })
+const run = (input) =>
+  Effect.flatMap(Cell.run(first, input), (response) => Cell.run(second, response))
+`,
+      errors: [{ ...error(), line: 6 }],
+    },
+    {
+      name: 'Should_Report_TwoRunChain_When_DataFirstAndThenFeedsRun',
+      code: `${CELL_IMPORT}
+${EFFECT_IMPORT}
+const first = Cell.layer({ read: (i) => i })
+const second = Cell.layer({ read: (i) => i })
+const run = (input) =>
+  Effect.andThen(Cell.run(first, input), (response) => Cell.run(second, response))
+`,
+      errors: [{ ...error(), line: 6 }],
+    },
+    {
+      name: 'Should_Report_TwoRunChain_When_DataFirstMapFeedsRun',
+      code: `${CELL_IMPORT}
+${EFFECT_IMPORT}
+const first = Cell.layer({ read: (i) => i })
+const second = Cell.layer({ read: (i) => i })
+const run = (input) =>
+  Effect.map(Cell.run(first, input), (response) => Cell.run(second, response))
+`,
+      errors: [{ ...error(), line: 6 }],
+    },
+    {
+      name: 'Should_Report_TwoRunChain_When_TapPipeStepFeedsRun',
+      code: `${CELL_IMPORT}
+${EFFECT_IMPORT}
+const first = Cell.layer({ read: (i) => i })
+const second = Cell.layer({ read: (i) => i })
+const run = (input) =>
+  Cell.run(first, input).pipe(
+    Effect.tap((response) => Cell.run(second, response)),
+  )
+`,
+      errors: [{ ...error(), line: 7 }],
+    },
+    {
+      name: 'Should_Report_TwoRunChain_When_PipeCurriedFirstBinding',
+      code: `${CELL_IMPORT}
+${EFFECT_IMPORT}
+${PIPE_IMPORT}
+const c1 = Cell.layer({ read: (i) => i })
+const c2 = Cell.layer({ read: (i) => i })
+const run = Effect.gen(function*() {
+  const first = yield* pipe(c1, Cell.run({ id: '1' }))
+  const second = yield* Cell.run(c2, first)
+  return second
+})
+`,
+      errors: [{ ...error(), line: 8 }],
     },
   ],
 })

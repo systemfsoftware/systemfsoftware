@@ -1,6 +1,12 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { isCellMemberCall, isPipeCall, pipeRootOf } from './cell.js'
+import {
+  collectNamedImportBindings,
+  collectNamespaceBindings,
+  isCellMemberCall,
+  isPipeCall,
+  pipeRootOf,
+} from './cell.js'
 import {
   BANNED_TAG_BY_SOURCE,
   DESCRIPTION_NAMESPACE,
@@ -64,11 +70,18 @@ export const noPlatformProvideServiceOnRun = defineRule({
     }
 
     const report = (call: ESTree.CallExpression, tagText: string): void => {
+      const callee = call.callee
+      const calleeText = callee.type === 'Identifier'
+        ? callee.name
+        : callee.type === 'MemberExpression' && !callee.computed &&
+            callee.object.type === 'Identifier' && callee.property.type === 'Identifier'
+        ? `${callee.object.name}.${callee.property.name}`
+        : PROVIDE_SERVICE_NAME
       context.report({
         node: call,
         messageId: 'platformProvideServiceOnRun',
         data: {
-          name: `Effect.provideService(${tagText}, …)`,
+          name: `${calleeText}(${tagText}, …)`,
           expected: PLATFORM_PROVIDE_SERVICE_EXPECTED,
           actual: PLATFORM_PROVIDE_SERVICE_ACTUAL,
           fix: PLATFORM_PROVIDE_SERVICE_FIX,
@@ -79,41 +92,17 @@ export const noPlatformProvideServiceOnRun = defineRule({
     const classifyImport = (node: ESTree.ImportDeclaration): void => {
       const source = String(node.source.value)
       if (source === MODULE_SOURCE) {
-        for (const specifier of node.specifiers) {
-          if (specifier.type === 'ImportNamespaceSpecifier') {
-            descriptionNamespaces.add(specifier.local.name)
-          } else if (
-            specifier.type === 'ImportSpecifier' &&
-            specifier.imported.type === 'Identifier' &&
-            specifier.imported.name === DESCRIPTION_NAMESPACE
-          ) {
-            descriptionNamespaces.add(specifier.local.name)
-          }
-        }
+        collectNamespaceBindings(node, DESCRIPTION_NAMESPACE, descriptionNamespaces)
         return
       }
-      if (EFFECT_SOURCES.some((effectSource) => effectSource === source)) {
-        for (const specifier of node.specifiers) {
-          if (specifier.type === 'ImportNamespaceSpecifier') {
-            effectNamespaces.add(specifier.local.name)
-          } else if (specifier.type === 'ImportSpecifier' && specifier.imported.type === 'Identifier') {
-            if (specifier.imported.name === EFFECT_NAMESPACE) effectNamespaces.add(specifier.local.name)
-            if (specifier.imported.name === PROVIDE_SERVICE_NAME) provideServiceNames.add(specifier.local.name)
-            if (specifier.imported.name === PIPE_NAME) pipeNames.add(specifier.local.name)
-          }
-        }
+      if (EFFECT_SOURCES.includes(source)) {
+        collectNamespaceBindings(node, EFFECT_NAMESPACE, effectNamespaces)
+        collectNamedImportBindings(node, PROVIDE_SERVICE_NAME, provideServiceNames)
+        collectNamedImportBindings(node, PIPE_NAME, pipeNames)
         return
       }
-      if (PIPE_SOURCES.some((pipeSource) => pipeSource === source)) {
-        for (const specifier of node.specifiers) {
-          if (
-            specifier.type === 'ImportSpecifier' &&
-            specifier.imported.type === 'Identifier' &&
-            specifier.imported.name === PIPE_NAME
-          ) {
-            pipeNames.add(specifier.local.name)
-          }
-        }
+      if (PIPE_SOURCES.includes(source)) {
+        collectNamedImportBindings(node, PIPE_NAME, pipeNames)
         return
       }
       const expectedProperty = BANNED_TAG_BY_SOURCE[source]
@@ -139,6 +128,11 @@ export const noPlatformProvideServiceOnRun = defineRule({
         }
       },
       CallExpression(node: ESTree.CallExpression) {
+        if (
+          descriptionNamespaces.size === 0 ||
+          (effectNamespaces.size === 0 && provideServiceNames.size === 0) ||
+          (tagNamespaces.size === 0 && namedTags.size === 0)
+        ) return
         if (isProvideServiceCall(node) && node.arguments.length >= 3) {
           const self = node.arguments[0]
           const tag = node.arguments[1]

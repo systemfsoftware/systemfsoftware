@@ -18,12 +18,11 @@ if (Object.values(Cell.vocabulary.shell).some((name) => name.length === 0)) {
 export const TWO_RUN_CHAIN_FIX =
   `compose the Cells with Cell.${Cell.vocabulary.shell.andThen} (or Cell.${Cell.vocabulary.shell.zip}) and Cell.${Cell.vocabulary.shell.run} once` as const
 
-export const EFFECT_MODULE = 'effect/Effect' as const
 export const EFFECT_NAMESPACE = 'Effect' as const
 export const EFFECT_SOURCES: readonly string[] = ['effect/Effect', 'effect'] as const
 export const PIPE_NAME = 'pipe' as const
 export const PIPE_SOURCES: readonly string[] = ['effect', 'effect/Function'] as const
-export const CONTINUATION_NAMES: readonly string[] = ['flatMap', 'andThen', 'map'] as const
+export const CONTINUATION_NAMES: readonly string[] = ['flatMap', 'andThen', 'map', 'tap'] as const
 
 export const TWO_RUN_CHAIN_EXPECTED =
   'a function body where each Cell.run input is independently sourced, not an identifier whose binding in the same function body is the success of a prior Cell.run' as const
@@ -38,7 +37,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Report a second Cell.run in one function body whose input flows from the success of an earlier Cell.run in that same body — including destructured bindings, Effect flatMap/andThen/map callbacks on a run-rooted chain, and both data-first and pipe-curried data-last forms. Message states the exact syntactic reach; packed-object indirection, reassignment, closure capture, imported helpers, and the self.run method form are not followed.',
+      'Report a second Cell.run in one function body whose input flows from the success of an earlier Cell.run in that same body — including destructured bindings, Effect flatMap/andThen/map/tap callbacks on a run-rooted chain, and both data-first and pipe-curried data-last forms. Message states the exact syntactic reach; packed-object indirection, reassignment, closure capture, imported helpers, aliased Cell.run bindings, and the self.run method form are not followed.',
   },
   schema: [Options],
   messages: {

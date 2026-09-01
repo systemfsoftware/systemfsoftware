@@ -21,11 +21,11 @@ const EFFECT_IMPORT = `import * as Effect from 'effect/Effect'`
 const FS_IMPORT = `import * as FileSystem from 'effect/FileSystem'`
 const PATH_IMPORT = `import * as Path from 'effect/Path'`
 
-const error = (tag: string) =>
+const error = (tag: string, callee = 'Effect.provideService') =>
   ({
     messageId: 'platformProvideServiceOnRun',
     data: {
-      name: `Effect.provideService(${tag}, …)`,
+      name: `${callee}(${tag}, …)`,
       expected: PLATFORM_PROVIDE_SERVICE_EXPECTED,
       actual: PLATFORM_PROVIDE_SERVICE_ACTUAL,
       fix: PLATFORM_PROVIDE_SERVICE_FIX,
@@ -102,6 +102,16 @@ const cell = Cell.layer({ read: (i) => i })
 const run = (fs) => cell.run({ id: '1' }).pipe(Effect.provideService(FileSystem.FileSystem, fs))
 `,
     },
+    {
+      name: 'Should_ReportNothing_When_ProvideServiceAliased',
+      code: `${CELL_IMPORT}
+${EFFECT_IMPORT}
+${FS_IMPORT}
+const myProvide = Effect.provideService
+const c = Cell.layer({ read: (i) => i })
+const run = (fs) => Cell.run(c, { id: '1' }).pipe(myProvide(FileSystem.FileSystem, fs))
+`,
+    },
   ],
   invalid: [
     {
@@ -119,7 +129,7 @@ const onMutationTestReportReady = (report, metrics) =>
     Effect.provideService(Path.Path, params.path),
   )
 `,
-      errors: [error('FileSystem.FileSystem'), error('Path.Path')],
+      errors: [{ ...error('FileSystem.FileSystem'), line: 9 }, { ...error('Path.Path'), line: 10 }],
     },
     {
       name: 'Should_Report_When_DataFirstProvideServiceOnRun',
@@ -129,7 +139,7 @@ ${FS_IMPORT}
 const c = Cell.layer({ read: (i) => i })
 const run = (fs) => Effect.provideService(Cell.run(c, { id: '1' }), FileSystem.FileSystem, fs)
 `,
-      errors: [error('FileSystem.FileSystem')],
+      errors: [{ ...error('FileSystem.FileSystem'), line: 5 }],
     },
     {
       name: 'Should_Report_When_NamedProvideServiceImport',
@@ -139,7 +149,7 @@ ${PATH_IMPORT}
 const c = Cell.layer({ read: (i) => i })
 const run = (p) => Cell.run(c, { id: '1' }).pipe(provideService(Path.Path, p))
 `,
-      errors: [error('Path.Path')],
+      errors: [{ ...error('Path.Path', 'provideService'), line: 5 }],
     },
     {
       name: 'Should_Report_When_NamedTagImport',
@@ -149,7 +159,7 @@ import { FileSystem } from 'effect/FileSystem'
 const c = Cell.layer({ read: (i) => i })
 const run = (fs) => Cell.run(c, { id: '1' }).pipe(Effect.provideService(FileSystem, fs))
 `,
-      errors: [error('FileSystem')],
+      errors: [{ ...error('FileSystem'), line: 5 }],
     },
     {
       name: 'Should_Report_When_HelperBodyContainsChain',
@@ -159,7 +169,18 @@ ${FS_IMPORT}
 const c1 = Cell.layer({ read: (i) => i })
 const runWithFs = (c, i, fs) => Cell.run(c, i).pipe(Effect.provideService(FileSystem.FileSystem, fs))
 `,
-      errors: [error('FileSystem.FileSystem')],
+      errors: [{ ...error('FileSystem.FileSystem'), line: 5 }],
+    },
+    {
+      name: 'Should_Report_When_NamedPipeRootedAtRun',
+      code: `${CELL_IMPORT}
+${EFFECT_IMPORT}
+import { pipe } from 'effect'
+${FS_IMPORT}
+const c = Cell.layer({ read: (i) => i })
+const run = (fs) => pipe(Cell.run(c, { id: '1' }), Effect.provideService(FileSystem.FileSystem, fs))
+`,
+      errors: [{ ...error('FileSystem.FileSystem'), line: 6 }],
     },
   ],
 })
