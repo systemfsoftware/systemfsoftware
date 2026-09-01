@@ -55,6 +55,8 @@ rules:
         execution order equals the order the drawn value declares, and the response is
         the write's
       - read every expectation off the drawn description value, never off
+      - the interpreter properties live in the in-source block in `src/Gen.ts`; the
+        decide property lives in `src/__tests__/DrawnDecision.workflow.property.test.ts`
       - "`Cell.vocabulary`: the generator rebuilds the description from the walked
         canonical value, so comparing the trace to the generator's own input would be
         circular"
@@ -64,10 +66,7 @@ rules:
       skips one, runs one twice, or returns something other than the write's response; a comparison against the
       generator's own input cannot catch any of those
     check: "`pnpm --filter @systemfsoftware/effect-cell-gen test` exits 0 with every
-      property running — the interpreter properties in the in-source block in
-      `src/Gen.ts`, the decide property in
-      `src/__tests__/DrawnDecision.workflow.property.test.ts` — and the expectations read
-      only the drawn value"
+      property running, and each expectation reads only the drawn value"
 ```
 
 ## Verification
