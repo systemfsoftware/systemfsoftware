@@ -12,6 +12,7 @@ const _default: {
         name: string;
     };
     rules: {
+        'in-source-test-snapshot-only': Rule;
         'in-source-test-targets-private': Rule;
         'no-test-file-in-src': Rule;
         'src-property-test-cell': Rule;
