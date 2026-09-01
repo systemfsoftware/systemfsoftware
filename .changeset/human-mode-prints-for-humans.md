@@ -1,5 +1,4 @@
 ---
-"@systemfsoftware/stryker-js-platform-node": minor
 "@systemfsoftware/stryker-js-cli": minor
 ---
 

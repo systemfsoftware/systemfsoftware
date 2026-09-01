@@ -1,6 +1,6 @@
 ---
 "@systemfsoftware/stryker-js-cli": patch
-"@systemfsoftware/stryker-js-platform-node": patch
+"@systemfsoftware/stryker-js-engine": patch
 ---
 
 A failed run now says what failed.

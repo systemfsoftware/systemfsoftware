@@ -1,6 +1,6 @@
 ---
-"@systemfsoftware/stryker-js-platform-node": major
 "@systemfsoftware/stryker-js-cli": minor
+"@systemfsoftware/stryker-js-engine": major
 ---
 
 A run's verdict now reaches the exit code, and an interrupted run reports the

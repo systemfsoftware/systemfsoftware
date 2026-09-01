@@ -1,6 +1,6 @@
 ---
-'@systemfsoftware/stryker-js-platform-node': minor
 '@systemfsoftware/stryker-js': minor
+"@systemfsoftware/stryker-js-engine": minor
 ---
 
 Checker and test-runner workers now talk over Effect's own worker RPC, and every

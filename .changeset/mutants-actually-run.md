@@ -1,6 +1,5 @@
 ---
 "@systemfsoftware/stryker-js-cli": patch
-"@systemfsoftware/stryker-js-platform-node": patch
 ---
 
 Mutants are tested against your real test runner.

@@ -346,6 +346,60 @@ const readMembers = async (runs: readonly DryRun[]): Promise<readonly WorkspaceM
     [...dirs.entries()].map(([, dir]) => readMember(`${dir}${MANIFEST_SUFFIX}`)),
   )).filter((member): member is WorkspaceMember => member !== null && dirs.get(member.name) === member.dir)
 }
+const extractBumpNames = (content: string): readonly string[] => {
+  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/m)
+  if (!match) return []
+  const names = new Set<string>()
+  for (const line of match[1].split(/\r?\n/)) {
+    const parsed = line.match(/^\s*["']?([^"'\s:]+)["']?\s*:\s*([^#\s][^#]*?)\s*(?:#.*)?$/)
+    if (parsed) names.add(parsed[1])
+  }
+  return [...names]
+}
+
+type LivenessViolation = {
+  readonly path: string
+  readonly pkg: string
+}
+
+const listPendingChangesetPaths = async (): Promise<readonly string[]> => {
+  const out: string[] = []
+  try {
+    for await (const entry of Deno.readDir('.changeset')) {
+      if (!entry.isFile) continue
+      if (!entry.name.endsWith('.md')) continue
+      if (entry.name === 'README.md') continue
+      out.push(`.changeset/${entry.name}`)
+    }
+  } catch (error) {
+    throw new Error(`cannot enumerate .changeset — refusing the empty verdict (fail closed): ${error}`)
+  }
+  return out.sort()
+}
+
+const livenessViolations = (
+  members: readonly WorkspaceMember[],
+  pending: readonly { path: string; content: string }[],
+): readonly LivenessViolation[] => {
+  const memberNames = new Set(members.map((m) => m.name))
+  const violations: LivenessViolation[] = []
+  for (const { path, content } of pending) {
+    if (path === '.changeset/README.md') continue
+    for (const pkg of extractBumpNames(content)) {
+      if (!memberNames.has(pkg)) violations.push({ path, pkg })
+    }
+  }
+  violations.sort((a, b) => a.path.localeCompare(b.path) || a.pkg.localeCompare(b.pkg))
+  return violations
+}
+
+const reportLivenessViolations = (violations: readonly LivenessViolation[]): void => {
+  for (const { path, pkg } of violations) {
+    console.error(`::error::${path} names non-member package "${pkg}" — not a workspace member`)
+  }
+  console.error('')
+  console.error('Each .changeset frontmatter key must name a live workspace package (any bump, none included).')
+}
 
 const main = async (baseArg: string | undefined): Promise<number> => {
   if (!baseArg) {
@@ -403,15 +457,24 @@ const main = async (baseArg: string | undefined): Promise<number> => {
     changesets,
   })
 
-  if (touched.length === 0) {
+  const pending = await Promise.all(
+    (await listPendingChangesetPaths()).map(async (path) => ({
+      path,
+      content: await Deno.readTextFile(path).catch(() => ''),
+    })),
+  )
+  const liveViolations = livenessViolations(members, pending)
+  if (liveViolations.length > 0) reportLivenessViolations(liveViolations)
+
+  if (touched.length === 0 && liveViolations.length === 0) {
     console.log(
       `changeset gate: no publishable package changed its turbo build hash — skipping (${members.length} member(s))`,
     )
     return 0
   }
 
-  if (missingIntent.length > 0) {
-    reportMissingIntent(missingIntent)
+  if (liveViolations.length > 0 || missingIntent.length > 0) {
+    if (missingIntent.length > 0) reportMissingIntent(missingIntent)
     return 1
   }
 
@@ -682,6 +745,58 @@ const FIXTURES: readonly { label: string; evidence: Evidence; expect: Verdict }[
     expect: { touched: ['@scope/unprivated'], missingIntent: ['@scope/unprivated'] },
   },
 ]
+const LIVENESS_FIXTURES: readonly {
+  label: string
+  members: readonly WorkspaceMember[]
+  pending: readonly { path: string; content: string }[]
+  expect: readonly LivenessViolation[]
+}[] = [
+  {
+    label: 'dead patch name fails',
+    members: MEMBERS,
+    pending: [{ path: '.changeset/dead-patch.md', content: '---\n"@scope/dead": patch\n---\nbody\n' }],
+    expect: [{ path: '.changeset/dead-patch.md', pkg: '@scope/dead' }],
+  },
+  {
+    label: 'dead none name fails (none is a bump, not absence)',
+    members: MEMBERS,
+    pending: [{ path: '.changeset/dead-none.md', content: '---\n"@scope/dead": none\n---\nbody\n' }],
+    expect: [{ path: '.changeset/dead-none.md', pkg: '@scope/dead' }],
+  },
+  {
+    label: 'live names pass',
+    members: MEMBERS,
+    pending: [
+      { path: '.changeset/live-one.md', content: '---\n"@scope/published": patch\n---\n' },
+      { path: '.changeset/live-two.md', content: '---\n"@scope/other": minor\n"@scope/plugin": major\n---\n' },
+    ],
+    expect: [],
+  },
+  {
+    label: 'an intent untouched by the PR but stale at head still fails (all-pending scope)',
+    members: MEMBERS,
+    pending: [
+      { path: '.changeset/untouched-live.md', content: '---\n"@scope/published": patch\n---\n' },
+      { path: '.changeset/stale-untouched.md', content: '---\n"@scope/dead": patch\n---\n' },
+    ],
+    expect: [{ path: '.changeset/stale-untouched.md', pkg: '@scope/dead' }],
+  },
+  {
+    label: 'README.md is ignored even when it names a non-member',
+    members: MEMBERS,
+    pending: [
+      { path: '.changeset/README.md', content: '---\n"@scope/dead": patch\n---\n' },
+      { path: '.changeset/live.md', content: '---\n"@scope/published": patch\n---\n' },
+    ],
+    expect: [],
+  },
+  {
+    label: 'a file with live and dead names reports only the dead one',
+    members: MEMBERS,
+    pending: [{ path: '.changeset/mixed.md', content: '---\n"@scope/published": patch\n"@scope/dead": minor\n---\n' }],
+    expect: [{ path: '.changeset/mixed.md', pkg: '@scope/dead' }],
+  },
+]
 
 const expectsThrow = (fn: () => unknown): boolean => {
   try {
@@ -697,6 +812,13 @@ const selftest = async (): Promise<number> => {
 
   for (const { label, evidence, expect } of FIXTURES) {
     const got = verdict(evidence)
+    if (JSON.stringify(got) !== JSON.stringify(expect)) {
+      failures.push(`  ${label}:\n    expected ${JSON.stringify(expect)}\n    got      ${JSON.stringify(got)}`)
+    }
+  }
+
+  for (const { label, members, pending, expect } of LIVENESS_FIXTURES) {
+    const got = livenessViolations(members, pending)
     if (JSON.stringify(got) !== JSON.stringify(expect)) {
       failures.push(`  ${label}:\n    expected ${JSON.stringify(expect)}\n    got      ${JSON.stringify(got)}`)
     }
@@ -835,11 +957,19 @@ importers:
   }
 
   if (failures.length > 0) {
-    console.error(`check-changeset: selftest FAILED (${failures.length}/${FIXTURES.length + checks.length + 1})\n`)
+    console.error(
+      `check-changeset: selftest FAILED (${failures.length}/${
+        FIXTURES.length + LIVENESS_FIXTURES.length + checks.length + 1
+      })\n`,
+    )
     for (const failure of failures) console.error(failure)
     return 1
   }
-  console.log(`check-changeset: selftest ok (${FIXTURES.length} verdict rows + ${checks.length + 1} mechanism rows)`)
+  console.log(
+    `check-changeset: selftest ok (${FIXTURES.length} verdict rows + ${LIVENESS_FIXTURES.length} liveness rows + ${
+      checks.length + 1
+    } mechanism rows)`,
+  )
   return 0
 }
 

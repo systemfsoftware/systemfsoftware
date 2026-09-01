@@ -28,6 +28,8 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
       - uses: ./.github/actions/install-deps
+      - name: Preflight intent consumption
+        run: corepack pnpm version -r --dry-run
       - uses: denoland/setup-deno@v2
       - name: Name the packages npm has never seen
         # OIDC cannot debut a package, so one that npm has never seen is not
@@ -162,6 +164,14 @@ jobs:
           ./scripts/tools/check-npm-publish.ts \
             --emit-filters /tmp/publish-filters.txt \
             --emit-deferred /tmp/deferred.txt
+      - name: Turbo cache
+        uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-release-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-release-
+            turbo-${{ runner.os }}-
       - name: Build
         # Necessary: every package publishes files: ["dist"] against a gitignored
         # dist/ and none carries a prepack hook, so the build is an explicit step.

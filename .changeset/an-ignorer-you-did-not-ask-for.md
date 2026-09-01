@@ -1,5 +1,5 @@
 ---
-'@systemfsoftware/stryker-js-platform-node': patch
+"@systemfsoftware/stryker-js-engine": patch
 ---
 
 An ignore plugin you did not select no longer ignores your mutants.

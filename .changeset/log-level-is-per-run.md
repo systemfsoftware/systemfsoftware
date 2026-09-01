@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/stryker-js-platform-node": major
+"@systemfsoftware/stryker-js": major
 ---
 
 The console log threshold is now scoped to the run that set it. Two runs in one

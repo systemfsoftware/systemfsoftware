@@ -1,6 +1,5 @@
 ---
 "@systemfsoftware/stryker-js-cli": minor
-"@systemfsoftware/stryker-js-platform-node": minor
 "@systemfsoftware/stryker-js-vitest-runner": minor
 ---
 

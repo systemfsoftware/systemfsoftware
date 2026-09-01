@@ -1,5 +1,5 @@
 ---
-'@systemfsoftware/stryker-js-platform-node': patch
+"@systemfsoftware/stryker-js-engine": patch
 ---
 
 A worker frame that cannot be delivered now fails the call instead of waiting forever.

@@ -1,8 +1,8 @@
 ---
 '@systemfsoftware/stryker-js-cli': patch
 '@systemfsoftware/stryker-js-html-reporter': patch
-'@systemfsoftware/stryker-js-platform-node': patch
 '@systemfsoftware/stryker-js-vitest-runner': patch
+"@systemfsoftware/stryker-js-engine": patch
 ---
 
 A mutation run writes the JSON report the `json` reporter is configured to produce.
