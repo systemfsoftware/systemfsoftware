@@ -26,7 +26,6 @@ import {
   CheckerAnsweredUnrequested,
   CheckerCommand,
   type CheckerContractBroken,
-  type CheckerDecision,
   CheckerSkippedRequested,
   checkerWorkflow,
 } from './Checker.workflow.js'
@@ -256,48 +255,6 @@ export const createCheckerFactory = (
     idGenerator,
   })
 // ---------------------------------------------------------------------------
-interface CheckPhases extends Cell.Phases {
-  readonly command: {
-    readonly checker: CheckerResourceService
-    readonly checkerName: string
-    readonly plans: readonly MutantRunPlan[]
-  }
-  readonly raw: {
-    readonly checkerName: string
-    readonly requestedIds: readonly string[]
-    readonly answers: Readonly<Record<string, CheckResult>>
-  }
-  readonly decoded: CheckerCommand
-  readonly decision: CheckerDecision
-  readonly decisionError: CheckerContractBroken
-  readonly output: Result.Result<CheckerDecision, CheckerContractBroken>
-  readonly response: readonly (readonly [MutantRunPlan, CheckResult])[]
-  readonly decodeError: CheckerContractBroken
-  readonly readError: CheckerCrash
-  readonly writeError: CheckerContractBroken
-}
-
-interface GroupPhases extends Cell.Phases {
-  readonly command: {
-    readonly checker: CheckerResourceService
-    readonly checkerName: string
-    readonly plans: readonly MutantRunPlan[]
-  }
-  readonly raw: {
-    readonly checkerName: string
-    readonly requestedIds: readonly string[]
-    readonly idGroups: readonly (readonly string[])[]
-  }
-  readonly decoded: CheckerCommand
-  readonly decision: CheckerDecision
-  readonly decisionError: CheckerContractBroken
-  readonly output: Result.Result<CheckerDecision, CheckerContractBroken>
-  readonly response: readonly (readonly MutantRunPlan[])[]
-  readonly decodeError: CheckerContractBroken
-  readonly readError: CheckerCrash
-  readonly writeError: CheckerContractBroken
-}
-
 /**
  * Ask a checker about run plans and get run plans back.
  *
@@ -315,7 +272,14 @@ export const checkPlans = (
   CheckerCrash | CheckerContractBroken
 > => {
   const description = Cell.layer({
-    read: (command: CheckPhases['command']) =>
+    read: (
+      command: {
+        readonly checker: CheckerResourceService
+        readonly checkerName: string
+        readonly plans: readonly MutantRunPlan[]
+      },
+    ) =>
+      // raw: { checkerName, requestedIds, answers } from checker
       command.checker
         .check(command.checkerName, command.plans.map((plan) => plan.mutant))
         .pipe(
@@ -325,7 +289,13 @@ export const checkPlans = (
             answers,
           })),
         ),
-    decode: (raw: CheckPhases['raw']): Result.Result<CheckerCommand, CheckerContractBroken> =>
+    decode: (
+      raw: {
+        readonly checkerName: string
+        readonly requestedIds: readonly string[]
+        readonly answers: Readonly<Record<string, CheckResult>>
+      },
+    ): Result.Result<CheckerCommand, CheckerContractBroken> =>
       Result.succeed(
         new CheckerCommand({
           checkerName: raw.checkerName,
@@ -375,7 +345,7 @@ export const checkPlans = (
           ),
       }),
   })
-  return Cell.apply(description, { checker, checkerName, plans })
+  return Cell.run(description, { checker, checkerName, plans })
 }
 
 /**
@@ -390,7 +360,14 @@ export const groupPlans = (
   CheckerCrash | CheckerContractBroken
 > => {
   const description = Cell.layer({
-    read: (command: GroupPhases['command']) =>
+    read: (
+      command: {
+        readonly checker: CheckerResourceService
+        readonly checkerName: string
+        readonly plans: readonly MutantRunPlan[]
+      },
+    ) =>
+      // raw: { checkerName, requestedIds, idGroups } from checker
       command.checker
         .group(command.checkerName, command.plans.map((plan) => plan.mutant))
         .pipe(
@@ -400,7 +377,13 @@ export const groupPlans = (
             idGroups,
           })),
         ),
-    decode: (raw: GroupPhases['raw']): Result.Result<CheckerCommand, CheckerContractBroken> =>
+    decode: (
+      raw: {
+        readonly checkerName: string
+        readonly requestedIds: readonly string[]
+        readonly idGroups: readonly (readonly string[])[]
+      },
+    ): Result.Result<CheckerCommand, CheckerContractBroken> =>
       Result.succeed(
         new CheckerCommand({
           checkerName: raw.checkerName,
@@ -453,7 +436,7 @@ export const groupPlans = (
           ),
       }),
   })
-  return Cell.apply(description, { checker, checkerName, plans })
+  return Cell.run(description, { checker, checkerName, plans })
 }
 
 export const checkGroupedPlans = (

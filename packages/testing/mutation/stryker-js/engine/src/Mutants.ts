@@ -289,19 +289,6 @@ const coverageToCommand = (
   })
 }
 
-interface PlannerPhases extends Cell.Phases {
-  readonly command: PlanMutantTestsCommand
-  readonly raw: PlanMutantTestsCommand
-  readonly decoded: PlanMutantTestsCommand
-  readonly decision: PlannedMutantTests
-  readonly decisionError: PlanMutantTestsError
-  readonly output: PlannedMutantTests
-  readonly response: readonly TestPlan[]
-  readonly decodeError: never
-  readonly readError: never
-  readonly writeError: never
-}
-
 // Not a decision: construction of the value the decision already described.
 // Sited at the edge because a `Workflow.make` body may not reference an
 // unsealed import like `Mutant`.
@@ -358,8 +345,10 @@ const materializePlan = (plan: PlannedMutantTests['plans'][number], original: Mu
   }
 }
 
-const plannerDescription: Cell.WriteDone<PlannerPhases> = Cell.layer({
-  read: (command: PlanMutantTestsCommand) => Effect.succeed(command),
+const plannerDescription = Cell.layer({
+  read: (command: PlanMutantTestsCommand) =>
+    // raw: PlanMutantTestsCommand from PlanMutantTestsCommand
+    Effect.succeed(command),
   decode: (raw: PlanMutantTestsCommand) => Result.succeed(raw),
   decide: planMutantTests,
   encode: (outcome: Result.Result<PlannedMutantTests, PlanMutantTestsError>) =>
@@ -387,7 +376,7 @@ const plannerDescription: Cell.WriteDone<PlannerPhases> = Cell.layer({
 
 export const makeMutantTestPlanner = (
   command: PlanMutantTestsCommand,
-): Effect.Effect<readonly TestPlan[], never, never> => Cell.apply(plannerDescription, command)
+): Effect.Effect<readonly TestPlan[], never, never> => Cell.run(plannerDescription, command)
 
 export const plan = makeMutantTestPlanner
 

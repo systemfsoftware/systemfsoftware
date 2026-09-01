@@ -5,22 +5,9 @@ import * as Result from 'effect/Result'
 import { expect } from 'vitest'
 import { admitOrder, OrderAdmitted, OrderRefused, OrderRequest } from './__fixtures__/admit-order.workflow.js'
 
-interface OrderBag extends Cell.Phases {
-  readonly command: OrderRequest
-  readonly raw: OrderRequest
-  readonly decoded: OrderRequest
-  readonly decision: OrderAdmitted
-  readonly decisionError: OrderRefused
-  readonly output: Result.Result<OrderAdmitted, OrderRefused>
-  readonly response: OrderRequest
-  readonly decodeError: never
-  readonly readError: never
-  readonly writeError: never
-}
-
 interface OrderPair {
-  readonly first: Cell.WriteDone<OrderBag>
-  readonly second: Cell.WriteDone<OrderBag>
+  readonly first: Cell.Cell<OrderRequest, OrderRequest, never, never>
+  readonly second: Cell.Cell<OrderRequest, OrderRequest, never, never>
   readonly trace: string[]
   readonly recorded: { secondReadRaw?: OrderRequest; secondWriteRaw?: OrderRequest }
 }
@@ -30,12 +17,13 @@ const describeOrders = (): OrderPair => {
   const recorded: { secondReadRaw?: OrderRequest; secondWriteRaw?: OrderRequest } = {}
   const first = Cell.layer({
     read: (request: OrderRequest) =>
+      // raw: OrderRequest from OrderRequest
       Effect.sync(() => {
         trace.push('first order read its request')
         return request
       }),
     decide: admitOrder,
-    write: (output: Result.Result<OrderAdmitted, OrderRefused>) =>
+    write: (output: Result.Result<OrderAdmitted, OrderRefused>, _raw: OrderRequest) =>
       Effect.sync(() => {
         trace.push('first order wrote its answer')
         const answered = Result.match(output, {
@@ -47,6 +35,7 @@ const describeOrders = (): OrderPair => {
   })
   const second = Cell.layer({
     read: (request: OrderRequest) =>
+      // raw: OrderRequest from OrderRequest
       Effect.sync(() => {
         trace.push('second order read its request')
         recorded.secondReadRaw = request
@@ -65,8 +54,8 @@ const describeOrders = (): OrderPair => {
 
 const runBoth = (orders: OrderPair) =>
   Effect.gen(function*() {
-    const firstResponse = yield* Cell.apply(orders.first, new OrderRequest({ id: 'initial-request' }))
-    yield* Cell.apply(orders.second, firstResponse)
+    const firstResponse = yield* Cell.run(orders.first, new OrderRequest({ id: 'initial-request' }))
+    yield* Cell.run(orders.second, firstResponse)
     return { firstResponse, recorded: orders.recorded, trace: orders.trace }
   })
 

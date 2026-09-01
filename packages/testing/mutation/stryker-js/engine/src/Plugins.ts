@@ -1,10 +1,8 @@
 import { Schema as S } from 'effect'
-import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
-import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
@@ -25,13 +23,7 @@ import {
   PluginNotFoundError,
   SchemaValidationContributionSchema,
 } from './Plugins.schema.js'
-import {
-  LoadPluginsCommand,
-  loadPluginsWorkflow,
-  type PluginLoadDecision,
-  type PluginLoadDecisionError,
-  PluginLoaderEntry,
-} from './Plugins.workflow.js'
+import { LoadPluginsCommand, loadPluginsWorkflow, PluginLoaderEntry } from './Plugins.workflow.js'
 
 interface ErrnoException extends Error {
   code?: string
@@ -256,28 +248,15 @@ interface PluginLoaderRawEntry {
   readonly plugins: readonly PluginContribution<PluginKind>[] | undefined
   readonly schemaContribution: Record<string, unknown> | undefined
 }
-interface PluginLoaderPhases extends Cell.Phases {
-  readonly command: readonly string[]
-  readonly raw: readonly PluginLoaderRawEntry[]
-  readonly decoded: LoadPluginsCommand
-  readonly decision: PluginLoadDecision
-  readonly decisionError: PluginLoadDecisionError
-  readonly output: PluginLoadDecision
-  readonly response: LoadedPlugins
-  readonly decodeError: never
-  readonly readError: PluginLoadFailedError
-  readonly writeError: never
-}
-
-const pluginLoaderDescription = (
-  basePath: string,
-  fileSystem: FileSystem.FileSystem,
-  path: Path.Path,
-  module: Context.Service.Shape<typeof Module>,
-): Cell.WriteDone<PluginLoaderPhases> =>
+const pluginLoaderDescription = (basePath: string) =>
   Cell.layer({
     read: (pluginDescriptors: readonly string[]) =>
+      // raw: readonly PluginLoaderRawEntry[] from pluginDescriptors
       Effect.gen(function*() {
+        // raw: PluginLoaderRawEntry[] from pluginDescriptors
+        yield* FileSystem.FileSystem
+        yield* Path.Path
+        yield* Module
         const pluginModules = yield* resolvePluginModules(pluginDescriptors)
         const loaded = yield* Effect.forEach(
           pluginModules,
@@ -301,12 +280,8 @@ const pluginLoaderDescription = (
           schemaContribution: entry.schemaContribution,
         }))
         return raw
-      }).pipe(Effect.provide(Layer.mergeAll(
-        Layer.succeed(FileSystem.FileSystem, fileSystem),
-        Layer.succeed(Path.Path, path),
-        Layer.succeed(Module, module),
-      ))),
-    decode: (raw) => {
+      }),
+    decode: (raw: readonly PluginLoaderRawEntry[]) => {
       const entries = raw.map((entry) =>
         PluginLoaderEntry.make({
           moduleName: entry.moduleName,
@@ -345,10 +320,8 @@ export function loadPlugins(
   basePath: string,
 ): Effect.Effect<LoadedPlugins, PluginLoadFailedError, FileSystem.FileSystem | Module | Path.Path> {
   return Effect.gen(function*() {
-    const fileSystem = yield* FileSystem.FileSystem
-    const path = yield* Path.Path
-    const module = yield* Module
-    return yield* Cell.apply(pluginLoaderDescription(basePath, fileSystem, path, module), pluginDescriptors)
+    const cell = pluginLoaderDescription(basePath)
+    return yield* Cell.run(cell, pluginDescriptors)
   })
 }
 
