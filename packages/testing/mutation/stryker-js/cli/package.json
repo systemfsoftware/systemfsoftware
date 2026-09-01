@@ -33,8 +33,8 @@
     "@noble/hashes": "1.8.0",
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/stryker-js": "workspace:^",
+    "@systemfsoftware/stryker-js-engine": "workspace:^",
     "@systemfsoftware/stryker-js-html-reporter": "workspace:^",
-    "@systemfsoftware/stryker-js-platform-node": "workspace:^",
     "effect": "catalog:"
   },
   "devDependencies": {
@@ -50,6 +50,7 @@
     "@systemfsoftware/stryker-test-contribution": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
+    "mutation-testing-report-schema": "catalog:stryker",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "oxlint": "catalog:oxlint",

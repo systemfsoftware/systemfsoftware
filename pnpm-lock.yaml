@@ -2044,12 +2044,12 @@ importers:
       '@systemfsoftware/stryker-js':
         specifier: workspace:^
         version: link:../stryker-js
+      '@systemfsoftware/stryker-js-engine':
+        specifier: workspace:^
+        version: link:../engine
       '@systemfsoftware/stryker-js-html-reporter':
         specifier: workspace:^
         version: link:../html-reporter
-      '@systemfsoftware/stryker-js-platform-node':
-        specifier: workspace:^
-        version: link:../platform-node
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
@@ -2096,6 +2096,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.9(vitest@4.1.10)
+      mutation-testing-report-schema:
+        specifier: catalog:stryker
+        version: 3.7.3
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)

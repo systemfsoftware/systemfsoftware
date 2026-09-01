@@ -3,11 +3,11 @@ import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import * as NodeRuntime from '@effect/platform-node/NodeRuntime'
 import * as NodeStdio from '@effect/platform-node/NodeStdio'
-import { strykerEngines } from '@systemfsoftware/stryker-js-platform-node'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Logger from 'effect/Logger'
+import cliPkgJson from '../package.json' with { type: 'json' }
 
 import { observeTerminatingSignal } from './Cli.js'
 import { strykerCliEffect } from './Cli.js'
@@ -56,7 +56,7 @@ function isSupportedNodeVersion(version: string): boolean {
 
 if (!isSupportedNodeVersion(process.version)) {
   throw new Error(
-    `Node.js version ${process.version} detected. StrykerJS requires version to match ${strykerEngines.node}. Please update your Node.js version or visit https://nodejs.org/ for additional instructions`,
+    `Node.js version ${process.version} detected. StrykerJS requires version to match ${cliPkgJson.engines.node}. Please update your Node.js version or visit https://nodejs.org/ for additional instructions`,
   )
 }
 

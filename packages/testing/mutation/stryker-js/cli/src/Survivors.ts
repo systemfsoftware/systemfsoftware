@@ -9,18 +9,15 @@ import { NodeFileSystem, NodePath } from '@effect/platform-node'
 import { sha256 } from '@noble/hashes/sha256'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils'
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { nodeModuleLayer } from '@systemfsoftware/stryker-js-platform-node'
 import {
+  type ConfigFileInvalidError,
+  type ConfigFileNotFoundError,
   ConfigFileUnreadableError,
   readConfig,
+  type ResolvedMode,
   strykerVersion,
   toRelativeNormalizedFileName,
-} from '@systemfsoftware/stryker-js-platform-node'
-import type {
-  ConfigFileInvalidError,
-  ConfigFileNotFoundError,
-  ResolvedMode,
-} from '@systemfsoftware/stryker-js-platform-node'
+} from '@systemfsoftware/stryker-js-engine'
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import { Module } from '@systemfsoftware/stryker-js/Module'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
@@ -35,6 +32,7 @@ import * as Path from 'effect/Path'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
+import { nodeModuleLayer } from './platform/node.js'
 import { PriorReportDocument as PriorReportDocumentSchema } from './Survivors.workflow.js'
 export type PriorReportDocument = S.Schema.Type<typeof PriorReportDocumentSchema>
 export type PriorReportMutant = PriorReportDocument['files'][string]['mutants'][number]
