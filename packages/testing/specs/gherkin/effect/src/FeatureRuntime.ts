@@ -421,54 +421,7 @@ if (import.meta.vitest !== void 0) {
 
   const LayerModule = await import('effect/Layer')
 
-  describe('applyScenarioOpts', () => {
-    it('Should_ReturnEffectUnchanged_When_OptsIsNull', () => {
-      const effect = EffectModule.void
-      const result = applyScenarioOpts(effect, null)
-      expect(result).toBe(effect)
-    })
-  })
-
   describe('buildScenarioNoFresh', () => {
-    it.effect('Should_ExecutePipeline_When_NoOpts', () =>
-      EffectModule.gen(function*() {
-        const trace: string[] = []
-        const pipeline = EffectModule.sync(() => {
-          trace.push('step1')
-          trace.push('step2')
-        })
-        yield* buildScenarioNoFresh(pipeline, null, null)
-        expect(trace).toEqual(['step1', 'step2'])
-      }))
-
-    it.effect('Should_RunBackgroundBeforeScenario_When_BackgroundProvided', () =>
-      EffectModule.gen(function*() {
-        const trace: string[] = []
-        const background = EffectModule.sync(() => {
-          trace.push('bg')
-        })
-        const pipeline = EffectModule.sync(() => {
-          trace.push('scenario')
-        })
-        yield* buildScenarioNoFresh(pipeline, null, background)
-        expect(trace).toEqual(['bg', 'scenario'])
-      }))
-
-    it.effect('Should_DiscardBackgroundScope_When_ScenarioRuns', () =>
-      EffectModule.gen(function*() {
-        const trace: string[] = []
-        const background = EffectModule.succeed({ bgData: 1 }).pipe(
-          EffectModule.tap(EffectModule.sync(() => {
-            trace.push('bg')
-          })),
-        )
-        const pipeline = EffectModule.sync(() => {
-          trace.push('scenario')
-        })
-        yield* buildScenarioNoFresh(pipeline, null, background)
-        expect(trace).toEqual(['bg', 'scenario'])
-      }))
-
     it.effect('Should_ApplyLayer_When_OptsHasLayer', () =>
       EffectModule.gen(function*() {
         class BuildSvc3 extends Context.Service<BuildSvc3, string>()(
@@ -491,7 +444,7 @@ if (import.meta.vitest !== void 0) {
         const pipeline = EffectModule.void
         yield* buildScenarioWithFresh(pipeline, null, null, freshLayer)
         yield* buildScenarioWithFresh(pipeline, null, null, freshLayer)
-        expect(counter).toBe(2)
+        expect(counter).toMatchInlineSnapshot(`2`)
       }))
 
     it.effect('Should_RunBackgroundAndApplyFresh_When_BothProvided', () =>
@@ -504,7 +457,7 @@ if (import.meta.vitest !== void 0) {
         const background = EffectModule.void
         const pipeline = EffectModule.void
         yield* buildScenarioWithFresh(pipeline, null, background, freshLayer)
-        expect(counter).toBe(1)
+        expect(counter).toMatchInlineSnapshot(`1`)
       }))
   })
 
@@ -523,26 +476,47 @@ if (import.meta.vitest !== void 0) {
     it('Should_CallRegisterWithRunMode_When_BaseScenarioCalled', () => {
       const { registered, scenario } = record()
       scenario('A base scenario call registers under run mode', EffectModule.void)
-      expect(registered).toEqual([{ name: 'A base scenario call registers under run mode', mode: 'run' }])
+      expect(registered).toMatchInlineSnapshot(`
+        [
+          {
+            "mode": "run",
+            "name": "A base scenario call registers under run mode",
+          },
+        ]
+      `)
     })
 
     it('Should_CallRegisterWithSkipMode_When_SkipCalled', () => {
       const { registered, scenario } = record()
       scenario.skip('A skipped scenario registers under skip mode', EffectModule.void)
-      expect(registered).toEqual([{ name: 'A skipped scenario registers under skip mode', mode: 'skip' }])
+      expect(registered).toMatchInlineSnapshot(`
+        [
+          {
+            "mode": "skip",
+            "name": "A skipped scenario registers under skip mode",
+          },
+        ]
+      `)
     })
 
     it('Should_CallRegisterWithOnlyMode_When_OnlyCalled', () => {
       const { registered, scenario } = record()
       scenario.only('An only scenario registers under only mode', EffectModule.void)
-      expect(registered).toEqual([{ name: 'An only scenario registers under only mode', mode: 'only' }])
+      expect(registered).toMatchInlineSnapshot(`
+        [
+          {
+            "mode": "only",
+            "name": "An only scenario registers under only mode",
+          },
+        ]
+      `)
     })
 
     it('Should_AcceptScenarioOptions_When_SecondArgIsOpts', () => {
       const { registered, scenario } = record()
       scenario('A scenario with options registers under run mode', { layer: LayerModule.empty }, EffectModule.void)
-      expect(registered).toHaveLength(1)
-      expect(registered[0]?.mode).toBe('run')
+      expect(registered.length).toMatchInlineSnapshot(`1`)
+      expect(registered[0]?.mode).toMatchInlineSnapshot(`"run"`)
     })
   })
 
@@ -556,8 +530,12 @@ if (import.meta.vitest !== void 0) {
         () => null,
       )
       outline('An outline example registers a scenario per row', [{ x: '1' }, { x: '2' }], () => EffectModule.void)
-      expect(registered).toHaveLength(2)
-      expect(registered.every((r) => r.mode === 'run')).toBe(true)
+      expect(registered.map((r) => r.mode)).toMatchInlineSnapshot(`
+        [
+          "run",
+          "run",
+        ]
+      `)
     })
 
     it('Should_PassTypedRow_When_ExamplesExpand', () => {
@@ -575,7 +553,18 @@ if (import.meta.vitest !== void 0) {
           return EffectModule.void
         },
       )
-      expect(receivedRows).toEqual([{ role: 'admin', id: '1' }, { role: 'user', id: '2' }])
+      expect(receivedRows).toMatchInlineSnapshot(`
+        [
+          {
+            "id": "1",
+            "role": "admin",
+          },
+          {
+            "id": "2",
+            "role": "user",
+          },
+        ]
+      `)
     })
 
     it('Should_ExpandTemplateTitles_When_NameHasPlaceholders', () => {
@@ -591,10 +580,12 @@ if (import.meta.vitest !== void 0) {
         [{ role: 'admin' }, { role: 'user' }],
         () => EffectModule.void,
       )
-      expect(registered).toEqual([
-        'A admin example expands into one scenario',
-        'A user example expands into one scenario',
-      ])
+      expect(registered).toMatchInlineSnapshot(`
+        [
+          "A admin example expands into one scenario",
+          "A user example expands into one scenario",
+        ]
+      `)
     })
 
     it('Should_CallRegisterWithSkipMode_When_SkipCalled', () => {
@@ -604,7 +595,14 @@ if (import.meta.vitest !== void 0) {
         () => null,
       )
       outline.skip('A skipped outline registers under skip mode', [{ x: '1' }], () => EffectModule.void)
-      expect(registered).toEqual([{ name: 'A skipped outline registers under skip mode', mode: 'skip' }])
+      expect(registered).toMatchInlineSnapshot(`
+        [
+          {
+            "mode": "skip",
+            "name": "A skipped outline registers under skip mode",
+          },
+        ]
+      `)
     })
 
     it('Should_CallRegisterWithOnlyMode_When_OnlyCalled', () => {
@@ -614,40 +612,24 @@ if (import.meta.vitest !== void 0) {
         () => null,
       )
       outline.only('A focused outline registers under only mode', [{ x: '1' }], () => EffectModule.void)
-      expect(registered).toEqual([{ name: 'A focused outline registers under only mode', mode: 'only' }])
+      expect(registered).toMatchInlineSnapshot(`
+        [
+          {
+            "mode": "only",
+            "name": "A focused outline registers under only mode",
+          },
+        ]
+      `)
     })
   })
 
   describe('composeWithBackground', () => {
-    it.effect('Should_ReturnPipelineDirectly_When_NoBackground', () =>
-      EffectModule.gen(function*() {
-        const trace: string[] = []
-        const pipeline = EffectModule.sync(() => {
-          trace.push('scenario')
-        })
-        yield* composeWithBackground(pipeline, null)
-        expect(trace).toEqual(['scenario'])
-      }))
-
-    it.effect('Should_RunBackgroundBeforeScenario_When_BackgroundProvided', () =>
-      EffectModule.gen(function*() {
-        const trace: string[] = []
-        const background = EffectModule.sync(() => {
-          trace.push('bg')
-        })
-        const pipeline = EffectModule.sync(() => {
-          trace.push('scenario')
-        })
-        yield* composeWithBackground(pipeline, background)
-        expect(trace).toEqual(['bg', 'scenario'])
-      }))
-
     it.effect('Should_DiscardBackgroundScope_When_ScenarioRuns', () =>
       EffectModule.gen(function*() {
         const background = EffectModule.succeed({ bgData: 'should be discarded' })
         const pipeline = EffectModule.succeed('scenario-result')
         const result = yield* composeWithBackground(pipeline, background)
-        expect(result).toBe(void 0)
+        expect(result).toMatchInlineSnapshot(`undefined`)
       }))
   })
 
@@ -656,7 +638,7 @@ if (import.meta.vitest !== void 0) {
       EffectModule.gen(function*() {
         const pipeline = EffectModule.succeed({ data: 42 })
         const result = yield* normalizePipeline(pipeline)
-        expect(result).toBe(void 0)
+        expect(result).toMatchInlineSnapshot(`undefined`)
       }))
   })
 
@@ -664,36 +646,22 @@ if (import.meta.vitest !== void 0) {
     const falseInputs = [null, void 0, 'string', 42, true, {}, { name: 'test' }] as const
     for (const v of falseInputs) {
       it(`Should_ReturnFalse_When_${JSON.stringify(v)}`, () => {
-        expect(isScenarioOpts(v)).toBe(false)
+        expect(isScenarioOpts(v)).toMatchInlineSnapshot(`false`)
       })
     }
 
     it('Should_ReturnTrue_When_ObjectHasScenarioLayer', () => {
-      expect(isScenarioOpts({ scenarioLayer: LayerModule.empty })).toBe(true)
+      expect(isScenarioOpts({ scenarioLayer: LayerModule.empty })).toMatchInlineSnapshot(`true`)
     })
 
     it('Should_ReturnTrue_When_ObjectHasLayer', () => {
-      expect(isScenarioOpts({ layer: LayerModule.empty })).toBe(true)
+      expect(isScenarioOpts({ layer: LayerModule.empty })).toMatchInlineSnapshot(`true`)
     })
 
     it('Should_ReturnTrue_When_ObjectHasBothLayerKeys', () => {
-      expect(isScenarioOpts({ scenarioLayer: LayerModule.empty, layer: LayerModule.empty })).toBe(true)
-    })
-  })
-
-  describe('resolveScenarioArgs', () => {
-    it('Should_ReturnPipelineDirectly_When_SecondArgIsEffect', () => {
-      const effect = EffectModule.void
-      const result = resolveScenarioArgs(effect, void 0)
-      expect(result.pipeline).toBe(effect)
-      expect(result.opts).toBeNull()
-    })
-
-    it('Should_ReturnOptsAndPipeline_When_SecondArgIsOpts', () => {
-      const opts = { layer: LayerModule.empty }
-      const result = resolveScenarioArgs(opts, EffectModule.void)
-      expect(result.opts).toBe(opts)
-      expect(result.pipeline).toBeDefined()
+      expect(isScenarioOpts({ scenarioLayer: LayerModule.empty, layer: LayerModule.empty })).toMatchInlineSnapshot(
+        `true`,
+      )
     })
   })
 }

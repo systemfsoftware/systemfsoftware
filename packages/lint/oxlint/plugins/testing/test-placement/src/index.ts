@@ -1,6 +1,7 @@
 import { behaviourExercisesUseCase } from './rules/behaviour-exercises-use-case.js'
 import { behaviourOneFeaturePerFile } from './rules/behaviour-one-feature-per-file.js'
 import { behaviourTestRequiresGherkin } from './rules/behaviour-test-requires-gherkin.js'
+import { inSourceTestSnapshotOnly } from './rules/in-source-test-snapshot-only.js'
 import { inSourceTestTargetsPrivate } from './rules/in-source-test-targets-private.js'
 import { noIoModuleInSourceTest } from './rules/no-io-module-in-source-test.js'
 import { noTestFileInSrc } from './rules/no-test-file-in-src.js'
@@ -15,6 +16,7 @@ const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-test-placement'
 const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
 
 const recommendedRules = {
+  [rule('in-source-test-snapshot-only')]: 'error',
   [rule('in-source-test-targets-private')]: 'error',
   [rule('no-test-file-in-src')]: 'error',
   [rule('src-property-test-cell')]: 'error',
@@ -33,6 +35,7 @@ export default {
     name: PLUGIN_NAME,
   },
   rules: {
+    'in-source-test-snapshot-only': inSourceTestSnapshotOnly,
     'in-source-test-targets-private': inSourceTestTargetsPrivate,
     'no-test-file-in-src': noTestFileInSrc,
     'src-property-test-cell': srcPropertyTestCell,

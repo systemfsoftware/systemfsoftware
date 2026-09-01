@@ -1,6 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Schema as S } from 'effect'
+import { isInsideConsequent } from './ancestors.js'
 import {
   meta,
   NO_PRIVATE_TARGET_ACTUAL,
@@ -71,18 +72,6 @@ const collectPrivateNames = (
 }
 
 type GuardRecord = { node: ESTree.IfStatement; hit: boolean }
-
-const isInsideConsequent = (
-  node: { readonly parent: ESTree.Node | null },
-  consequent: ESTree.Node,
-): boolean => {
-  const walk = (current: ESTree.Node | null): boolean => {
-    if (current === null) return false
-    if (current === consequent) return true
-    return walk(current.parent)
-  }
-  return walk(node.parent)
-}
 
 export const inSourceTestTargetsPrivate = defineRule({
   meta,

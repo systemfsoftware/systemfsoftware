@@ -769,6 +769,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.9(vitest@4.1.10)
+      '@vitest/snapshot':
+        specifier: 'catalog:'
+        version: 4.1.10
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
@@ -1042,6 +1045,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      '@vitest/snapshot':
+        specifier: 'catalog:'
+        version: 4.1.10
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
@@ -2096,6 +2102,9 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.9(vitest@4.1.10)
+      '@vitest/snapshot':
+        specifier: 'catalog:'
+        version: 4.1.10
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)
@@ -2300,6 +2309,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      '@vitest/snapshot':
+        specifier: 'catalog:'
+        version: 4.1.10
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
@@ -2519,6 +2531,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      '@vitest/snapshot':
+        specifier: 'catalog:'
+        version: 4.1.10
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112

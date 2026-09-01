@@ -30,6 +30,8 @@ tags:
 
 # Generated schema laws are tautological — author contract-derived rejection properties
 
+**Superseded in part (2026-09-01, branch `more-test-baning`).** This doc sanctions hand-written rejection-property tests in an in-source `import.meta.vitest` block when a non-exported binding exists to pin. Repo policy has since narrowed: in-source blocks hold authored inline snapshots only, and a hand-written property construct there is a lint error under `in-source-test-snapshot-only` (CONCEPTS.md **Snapshot spec**). The tautology analysis and the generated-law channel below remain live; only the in-source-property permission is revoked.
+
 ## Context
 
 `packages/hex-schema` looked verified. Every exported schema carried a generated `ruleOfSchemas` pair, the package was wired into real Stryker (`cca5f66e8e`), and the round-trip laws were green at 500/500 inputs. The repo requires 100% mutation on changed pure-core files, and the package's own `stryker.config.json` sets `high: 100, low: 100` while holding `break: 0` — a deliberate ratchet, an admission that the package was climbing toward the gate rather than sitting at it.

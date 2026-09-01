@@ -289,11 +289,17 @@ if (import.meta.vitest !== void 0) {
       killedBy: ['t1'],
       coveredBy: ['t1'],
     }
-    expect(rememberedEntryOf(mutant, previous)).toEqual({
-      mutantId: 'm1',
-      status: 'Killed',
-      killedBy: ['t1'],
-      coveredBy: ['t1'],
-    })
+    expect(rememberedEntryOf(mutant, previous)).toMatchInlineSnapshot(`
+      {
+        "coveredBy": [
+          "t1",
+        ],
+        "killedBy": [
+          "t1",
+        ],
+        "mutantId": "m1",
+        "status": "Killed",
+      }
+    `)
   })
 }

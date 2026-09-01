@@ -89,12 +89,12 @@ if (import.meta.vitest !== void 0) {
   )
 
   test('Should_RejectBothLaws_When_TheCodecDiscardsItsInput', () => {
-    expect(collapsed.roundTrips('kept')).toBe(false)
-    expect(collapsed.encodeStable('kept')).toBe(false)
+    expect(collapsed.roundTrips('kept')).toMatchInlineSnapshot(`false`)
+    expect(collapsed.encodeStable('kept')).toMatchInlineSnapshot(`false`)
   })
 
   test('Should_HoldBothLaws_When_TheValueIsTheCodecsFixedPoint', () => {
-    expect(collapsed.roundTrips('collapsed')).toBe(true)
-    expect(collapsed.encodeStable('collapsed')).toBe(true)
+    expect(collapsed.roundTrips('collapsed')).toMatchInlineSnapshot(`true`)
+    expect(collapsed.encodeStable('collapsed')).toMatchInlineSnapshot(`true`)
   })
 }

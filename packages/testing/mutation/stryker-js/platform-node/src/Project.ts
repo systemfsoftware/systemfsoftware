@@ -462,7 +462,7 @@ if (import.meta.vitest !== void 0) {
 
       const names = yield* resolveInputFileNames(ALWAYS_IGNORE, base)
 
-      expect(names.some((name) => name.endsWith('src/subject.ts'))).toBe(true)
-      expect(names.filter((name) => name.includes('node_modules'))).toEqual([])
+      expect(names.some((name) => name.endsWith('src/subject.ts'))).toMatchInlineSnapshot(`true`)
+      expect(names.filter((name) => name.includes('node_modules'))).toMatchInlineSnapshot(`[]`)
     }).pipe(Effect.provide(platform)))
 }

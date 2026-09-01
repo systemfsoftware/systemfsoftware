@@ -61,8 +61,8 @@ if (import.meta.vitest !== void 0) {
         yield* tracker.record
         yield* tracker.record
         yield* tracker.record
-        expect(yield* tracker.count).toBe(3)
-        expect(yield* tracker.isExceeded).toBe(false)
+        expect(yield* tracker.count).toMatchInlineSnapshot(`3`)
+        expect(yield* tracker.isExceeded).toMatchInlineSnapshot(`false`)
       }))
 
     it.effect('Should_Exceed_When_OneRecordPastThreshold', () =>
@@ -72,7 +72,7 @@ if (import.meta.vitest !== void 0) {
         yield* tracker.record
         yield* tracker.record
         yield* tracker.record
-        expect(yield* tracker.isExceeded).toBe(true)
+        expect(yield* tracker.isExceeded).toMatchInlineSnapshot(`true`)
       }))
 
     it.effect('Should_NotExceed_When_ExactlyAtThreshold', () =>
@@ -81,8 +81,8 @@ if (import.meta.vitest !== void 0) {
         yield* tracker.record
         yield* tracker.record
         yield* tracker.record
-        expect(yield* tracker.count).toBe(3)
-        expect(yield* tracker.isExceeded).toBe(false)
+        expect(yield* tracker.count).toMatchInlineSnapshot(`3`)
+        expect(yield* tracker.isExceeded).toMatchInlineSnapshot(`false`)
       }))
 
     it.effect('Should_Exceed_When_RecordsPastThresholdInsideOneWindow', () =>
@@ -91,8 +91,8 @@ if (import.meta.vitest !== void 0) {
         yield* tracker.record
         yield* tracker.record
         yield* tracker.record
-        expect(yield* tracker.count).toBe(3)
-        expect(yield* tracker.isExceeded).toBe(true)
+        expect(yield* tracker.count).toMatchInlineSnapshot(`3`)
+        expect(yield* tracker.isExceeded).toMatchInlineSnapshot(`true`)
       }))
 
     it.effect('Should_PruneRecord_When_ClockPassesWindow', () =>
@@ -100,7 +100,7 @@ if (import.meta.vitest !== void 0) {
         const tracker = yield* make(5, D.seconds(EDGE_WINDOW_SECONDS))
         yield* tracker.record
         yield* TestClock.adjust(D.seconds(EDGE_WINDOW_SECONDS + 1))
-        expect(yield* tracker.count).toBe(0)
+        expect(yield* tracker.count).toMatchInlineSnapshot(`0`)
       }))
 
     it.effect('Should_RetainRecord_When_ClockLandsExactlyOnWindowEdge', () =>
@@ -108,7 +108,7 @@ if (import.meta.vitest !== void 0) {
         const tracker = yield* make(5, D.seconds(EDGE_WINDOW_SECONDS))
         yield* tracker.record
         yield* TestClock.adjust(D.seconds(EDGE_WINDOW_SECONDS))
-        expect(yield* tracker.count).toBe(1)
+        expect(yield* tracker.count).toMatchInlineSnapshot(`1`)
       }))
 
     it.effect('Should_ExpireEveryRecord_When_WholeWindowElapses', () =>
@@ -117,7 +117,7 @@ if (import.meta.vitest !== void 0) {
         yield* tracker.record
         yield* tracker.record
         yield* TestClock.adjust(D.seconds(2))
-        expect(yield* tracker.count).toBe(0)
+        expect(yield* tracker.count).toMatchInlineSnapshot(`0`)
       }))
 
     it.effect('Should_TrackCount_When_WindowSlidesPastRecords', () =>
@@ -127,9 +127,9 @@ if (import.meta.vitest !== void 0) {
         yield* tracker.record
         yield* tracker.record
         yield* TestClock.adjust(D.seconds(3))
-        expect(yield* tracker.count).toBe(3)
+        expect(yield* tracker.count).toMatchInlineSnapshot(`3`)
         yield* TestClock.adjust(D.seconds(3))
-        expect(yield* tracker.count).toBe(0)
+        expect(yield* tracker.count).toMatchInlineSnapshot(`0`)
       }))
   })
 }

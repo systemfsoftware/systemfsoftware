@@ -18,7 +18,7 @@ export const UNSANCTIONED_CELL_EXPECTED =
 export const UNSANCTIONED_CELL_ACTUAL =
   'a property test under src/ whose basename is not a single-segment <stem>.workflow.property.test.ts' as const
 export const UNSANCTIONED_CELL_FIX =
-  'rename it <stem>.workflow.property.test.ts beside the workflow it covers; a kernel/policy/schema property suite has no file home under the new taxonomy — convert it to an in-source if (import.meta.vitest) block in the module it covers' as const
+  "rename it <stem>.workflow.property.test.ts beside the workflow it covers; a kernel/policy/schema property suite has no file home under the new taxonomy — delete it or move property coverage to the workflow's exported contract (in-source blocks are snapshot-only and never carry property suites)" as const
 
 export const MISSING_CELL_TEST_EXPECTED =
   'a test for every cell suffix the consumer lists in cellsRequiringTest' as const

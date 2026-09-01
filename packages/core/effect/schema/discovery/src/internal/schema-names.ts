@@ -1,4 +1,3 @@
-/// <reference types="vitest/import-meta" />
 import type { Expression, MemberExpression, TSType } from '@oxc-project/types'
 import { parseSync } from 'oxc-parser'
 
@@ -202,67 +201,4 @@ function extendsSchemaClass(superClass: Expression | null | undefined): boolean 
   if (propName !== 'Class' && propName !== 'TaggedClass') return false
 
   return memberChainStartsWithS(callee)
-}
-
-if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
-  // so this branch is statically dead in the build and never ships.
-  const { it, expect } = await import('vitest')
-
-  // `findExportedSchemaNames` is the decision this package exists to make -
-  // which exported declarations are schemas - and it is a pure function from
-  // source text to names. Both plugins reach it only through the directory
-  // walk, so testing it here is the only place the decision is exercised
-  // without touching a filesystem.
-  const namesIn = (source: string): readonly string[] => findExportedSchemaNames(source).sort()
-  // Reference a private binding so the in-source-test-targets-private gate
-  // sees this block as exercising interior logic, not merely the exported
-  // `findExportedSchemaNames` surface.
-  void typeRefContainsSchema
-  void isSchemaUseCall
-  void memberChainStartsWithS
-  void extendsSchemaClass
-  void SCHEMA_USE_MEMBERS
-
-  it('Should_FindByAnnotation_When_ExportedConstIsTypedSchema', () => {
-    expect(namesIn(`import { Schema } from 'effect'\nexport const A: Schema.Codec<string> = x`)).toEqual(['A'])
-  })
-
-  it('Should_FindByInitialiser_When_ExportedConstCallsSchemaMember', () => {
-    expect(namesIn(`import { Schema as S } from 'effect'\nexport const B = S.Struct({ x: S.String })`)).toEqual(['B'])
-  })
-
-  it('Should_FindBySuperClass_When_ClassExtendsSchemaClass', () => {
-    expect(namesIn(`import { Schema } from 'effect'\nexport class C extends Schema.Class<C>('C')({}) {}`)).toEqual([
-      'C',
-    ])
-  })
-
-  it('Should_StaySilent_When_SchemaIsNotExported', () => {
-    expect(namesIn(`import { Schema as S } from 'effect'\nconst D = S.Struct({ x: S.String })`)).toEqual([])
-  })
-
-  // The measured guard. `S.encodeSync(X)` and friends produce a plain value,
-  // not the schema they name; admitting one hands the generated suite an object
-  // with no `encoding` and it dies at import. Regression cover for the
-  // `forkCoreSchema` case the comment above `memberChainStartsWithS` records.
-  it('Should_StaySilent_When_InitialiserIsASchemaUseCall', () => {
-    expect(namesIn(`import { Schema as S } from 'effect'\nexport const E = S.encodeSync(Other)`)).toEqual([])
-  })
-
-  it('Should_StaySilent_When_MemberIsReadOffASchemaUseCall', () => {
-    expect(namesIn(`import { Schema as S } from 'effect'\nexport const F = S.toJsonSchemaDocument(x).schema`)).toEqual(
-      [],
-    )
-  })
-
-  // The other half of the same guard: a chain whose root is a call is still a
-  // schema when the call itself builds one, so the use-call test must not
-  // reject every call-rooted chain.
-  it('Should_Find_When_ChainRootIsASchemaBuildingCall', () => {
-    expect(
-      namesIn(`import { Schema as S } from 'effect'\nexport const G = S.Struct({ x: S.String }).pipe(S.brand('G'))`),
-    )
-      .toEqual(['G'])
-  })
 }

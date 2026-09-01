@@ -29,8 +29,9 @@ export const SCHEMA_SUFFIX = '.schema.test.ts' as const
  * The one property-test basename sanctioned under `src/`: a single-segment
  * stem, then `.workflow.property.test.ts`, beside the `<stem>.workflow.ts` it
  * covers. Every other test file under `src/` is banned; a kernel, policy, or
- * schema suite has no file home and becomes an in-source `import.meta.vitest`
- * block in the module it covers.
+ * schema suite has no file home — hand-written property suites live only at
+ * the workflow's exported contract and never as an in-source
+ * `import.meta.vitest` block, which is snapshot-only.
  */
 export const WORKFLOW_TEST_BASENAME = /^[^.]+\.workflow\.property\.test\.ts$/
 
