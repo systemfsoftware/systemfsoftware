@@ -24,24 +24,8 @@ process.title = 'stryker'
 const lastSignal = observeTerminatingSignal()
 
 function isSupportedNodeVersion(version: string): boolean {
-  let withoutV = version
-  if (version.startsWith('v')) {
-    withoutV = version.slice(1)
-  }
-  const dashBaseRaw = withoutV.split('-')[0]
-  let dashBase = withoutV
-  if (dashBaseRaw !== undefined) {
-    dashBase = dashBaseRaw
-  }
-  const baseRaw = dashBase.split('+')[0]
-  let base = dashBase
-  if (baseRaw !== undefined) {
-    base = baseRaw
-  }
-  const parts = base.split('.').map((p) => Number.parseInt(p, 10))
-  const major = parts[0] ?? 0
-  const minor = parts[1] ?? 0
-  const patch = parts[2] ?? 0
+  const base = version.replace(/^v/, '').split(/[-+]/)[0] ?? ''
+  const [major = 0, minor = 0, patch = 0] = base.split('.').map((p) => Number.parseInt(p, 10))
   if (Number.isNaN(major) || Number.isNaN(minor) || Number.isNaN(patch)) {
     return false
   }

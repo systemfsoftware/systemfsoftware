@@ -548,10 +548,6 @@ function readCoreEntries(): Effect.Effect<readonly string[], never, FileSystem.F
       const empty: readonly string[] = []
       return Effect.succeed(empty)
     }),
-    Effect.catchDefect(() => {
-      const empty: readonly string[] = []
-      return Effect.succeed(empty)
-    }),
   )
 }
 
@@ -1101,11 +1097,12 @@ export function strykerCliEffect(
   }).pipe(Effect.orElseSucceed(() => 2))
 }
 
+const hostRunLayer = (hostOptions: RunEnvironmentShape, queue?: Queue.Queue<RunEvent, Cause.Done>) =>
+  makeRunLayer(hostOptions, queue).pipe(Layer.provideMerge(nodePlatformLayer))
+
 const defaultRunMutationTest =
   (hostOptions: RunEnvironmentShape, queue: Queue.Queue<RunEvent, Cause.Done>): StrykerRun => (options) =>
-    Effect.scoped(
-      runMutationTest(options, makeRunLayer(hostOptions, queue).pipe(Layer.provideMerge(nodePlatformLayer))),
-    ).pipe(
+    Effect.scoped(runMutationTest(options, hostRunLayer(hostOptions, queue))).pipe(
       Effect.provideService(RunEvents, queue),
     )
 
@@ -1156,7 +1153,7 @@ export const runStrykerCli = (
           (() => {
             if (runRequest.survivors) {
               return runSurvivorsAdmission(runMutationTestImpl, stream, input.mode, runRequest.options, basePath).pipe(
-                Effect.provide(makeRunLayer(hostOptions).pipe(Layer.provideMerge(nodePlatformLayer))),
+                Effect.provide(hostRunLayer(hostOptions)),
               )
             }
             return runMutationTestImpl(runRequest.options).pipe(Effect.orDie)

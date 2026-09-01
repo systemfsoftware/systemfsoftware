@@ -5,7 +5,6 @@
  * pipeline for --survivors runs. Pure admission decision lives in
  * Survivors.workflow.ts.
  */
-import { NodeFileSystem, NodePath } from '@effect/platform-node'
 import { sha256 } from '@noble/hashes/sha256'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils'
 import { Cell } from '@systemfsoftware/effect-cell-types'
@@ -32,7 +31,7 @@ import * as Path from 'effect/Path'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { nodeModuleLayer } from './platform/node.js'
+import { nodeFsPathLayer, nodeModuleLayer } from './platform/node.js'
 import { PriorReportDocument as PriorReportDocumentSchema } from './Survivors.workflow.js'
 export type PriorReportDocument = S.Schema.Type<typeof PriorReportDocumentSchema>
 export type PriorReportMutant = PriorReportDocument['files'][string]['mutants'][number]
@@ -311,7 +310,7 @@ const survivorsAdmissionDescription = (
                   }),
                 )))
           }),
-        )).pipe(Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, nodeModuleLayer)))
+        )).pipe(Effect.provide(Layer.mergeAll(nodeFsPathLayer, nodeModuleLayer)))
     ),
     Cell.decode<AdmissionPhases>(
       ({ resolvedOptions, priorReportRaw, priorReportFound, sourceContentHashes, resolveAbsolutePath }) => {
