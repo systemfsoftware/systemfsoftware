@@ -15,7 +15,6 @@ import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { Predicate, Result } from 'effect'
 import * as Effect from 'effect/Effect'
-import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
@@ -30,8 +29,7 @@ import {
   DiagnosticWithoutFileError,
 } from './Checker.workflow.js'
 import type { TSFileNode } from './Compiler.js'
-import { createGroups } from './Compiler.js'
-import type { TypeScriptCompiler } from './Compiler.js'
+import { createGroups, TypeScriptCompiler } from './Compiler.js'
 
 const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
 
@@ -103,71 +101,57 @@ function getPrioritize(options: unknown): boolean {
   return false
 }
 
-interface CheckPhases extends Cell.Phases {
-  readonly command: CheckMutantsCommand
-  readonly raw: CheckMutantsInput
-  readonly decoded: CheckMutantsInput
-  readonly decision: CheckMutantsDecision
-  readonly decisionError: DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError
-  readonly output: Result.Result<CheckMutantsDecision, DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError>
-  readonly response: CheckMutantsDecision
-  readonly decodeError: never
-  readonly readError: CheckerFailed
-  readonly writeError: CheckerFailed
-}
-
-const makeCheckDescription = (compiler: TypeScriptCompiler['Service']): Cell.WriteDone<CheckPhases> =>
-  pipe(
-    Cell.read<CheckPhases>((command) =>
-      Effect.gen(function*() {
-        const nodesHm = yield* compiler.nodes.pipe(
-          Effect.mapError(
-            (cause) =>
-              new CheckerFailed({
-                checkerName: 'typescript',
-                mutantIds: command.mutants.map((m) => m.id),
-                cause: errorToString(cause),
-              }),
-          ),
-        )
-        const nodes: Record<string, TSFileNode> = {}
-        for (const [k, v] of nodesHm) {
-          nodes[k] = v
-        }
-        const diagnostics = yield* compiler.check([...command.mutants]).pipe(
-          Effect.mapError(
-            (cause) =>
-              new CheckerFailed({
-                checkerName: 'typescript',
-                mutantIds: command.mutants.map((m) => m.id),
-                cause: errorToString(cause),
-              }),
-          ),
-        )
-        return new CheckMutantsInput({
-          mutants: [...command.mutants],
-          diagnostics: [...diagnostics],
-          nodes,
-        })
-      })
-    ),
-    Cell.decode<CheckPhases>((raw) => Result.succeed(raw)),
-    Cell.decide<CheckPhases>(checkMutants),
-    Cell.encode<CheckPhases>((outcome) => outcome),
-    Cell.write<CheckPhases>((outcome) =>
-      Result.match(outcome, {
-        onFailure: (failure) =>
-          Effect.fail(
+const checkCell = Cell.layer({
+  read: (command: CheckMutantsCommand) =>
+    Effect.gen(function*() {
+      const compiler = yield* TypeScriptCompiler
+      const nodesHm = yield* compiler.nodes.pipe(
+        Effect.mapError(
+          (cause) =>
             new CheckerFailed({
               checkerName: 'typescript',
-              mutantIds: [],
-              cause: errorToString(failure),
+              mutantIds: command.mutants.map((m) => m.id),
+              cause: errorToString(cause),
             }),
-          ),
-        onSuccess: (decision) => Effect.succeed(decision),
+        ),
+      )
+      const nodes: Record<string, TSFileNode> = {}
+      for (const [k, v] of nodesHm) {
+        nodes[k] = v
+      }
+      const diagnostics = yield* compiler.check([...command.mutants]).pipe(
+        Effect.mapError(
+          (cause) =>
+            new CheckerFailed({
+              checkerName: 'typescript',
+              mutantIds: command.mutants.map((m) => m.id),
+              cause: errorToString(cause),
+            }),
+        ),
+      )
+      return new CheckMutantsInput({
+        mutants: [...command.mutants],
+        diagnostics: [...diagnostics],
+        nodes,
       })
-    ),
-  )
+    }),
+  decode: (raw: CheckMutantsInput) => Result.succeed(raw),
+  decide: checkMutants,
+  encode: (outcome: Result.Result<CheckMutantsDecision, DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError>) =>
+    outcome,
+  write: (outcome: Result.Result<CheckMutantsDecision, DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError>) =>
+    Result.match(outcome, {
+      onFailure: (failure) =>
+        Effect.fail(
+          new CheckerFailed({
+            checkerName: 'typescript',
+            mutantIds: [],
+            cause: errorToString(failure),
+          }),
+        ),
+      onSuccess: (decision) => Effect.succeed(decision),
+    }),
+})
 
 export function makeCheckerService({ options, compiler }: CheckerDeps): Checker['Service'] {
   const formatDiagnostic = (error: Diagnostic): Effect.Effect<string, never> =>
@@ -238,9 +222,10 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
 
     check: (mutants) =>
       Effect.gen(function*() {
-        const description = makeCheckDescription(compiler)
         const applyOnce = (group: readonly Mutant[]) =>
-          Cell.apply(description, new CheckMutantsCommand({ mutants: [...group] }))
+          Cell.run(checkCell, new CheckMutantsCommand({ mutants: [...group] })).pipe(
+            Effect.provideService(TypeScriptCompiler, compiler),
+          )
         const first = yield* applyOnce(mutants)
         let map = HashMap.empty<string, CheckResult>()
         const mergeResults = (results: CheckMutantsDecision['results']) => {
