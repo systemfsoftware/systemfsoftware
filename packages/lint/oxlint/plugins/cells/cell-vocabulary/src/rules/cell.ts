@@ -24,9 +24,25 @@ export const cellOf = (source: string, cells: readonly string[]): string | null 
   return cells.find((cell) => stem.endsWith(`.${cell}`)) ?? null
 }
 
-/** `saveOrder(...)` -> `saveOrder`; `Store.save(...)` -> `Store`. */
 export const calleeRootName = (callee: ESTree.Node): string | null => {
   if (callee.type === 'Identifier') return callee.name
   if (callee.type !== 'MemberExpression') return null
   return calleeRootName(callee.object)
+}
+
+export const isCellMemberCall = (
+  node: ESTree.Node,
+  namespaces: ReadonlySet<string>,
+  memberName: string,
+): node is ESTree.CallExpression & { callee: ESTree.MemberExpression } => {
+  if (node.type !== 'CallExpression') return false
+  const callee = node.callee
+  if (callee.type !== 'MemberExpression') return false
+  if (callee.computed) return false
+  const object = callee.object
+  const property = callee.property
+  if (object.type !== 'Identifier') return false
+  if (property.type !== 'Identifier') return false
+  if (!namespaces.has(object.name)) return false
+  return property.name === memberName
 }
