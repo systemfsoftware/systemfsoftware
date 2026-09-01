@@ -1,6 +1,5 @@
 ---
 '@systemfsoftware/stryker-js': major
-'@systemfsoftware/stryker-js-platform-node': major
 '@systemfsoftware/stryker-js-html-reporter': major
 '@systemfsoftware/stryker-js-cli': major
 '@systemfsoftware/stryker-js-instrumenter': major
@@ -10,11 +9,14 @@
 '@systemfsoftware/stryker-test-contribution': major
 ---
 
-Three packages are renamed. `plugin-api` is now `@systemfsoftware/stryker-js`, the
-language every plugin is written against. `mutation-run` is now
-`@systemfsoftware/stryker-js-platform-node`, the Node host that runs a mutation
-test. `mutation-report` is now `@systemfsoftware/stryker-js-html-reporter`.
-Install the new names and change your imports.
+The packages are renamed. `plugin-api` is now `@systemfsoftware/stryker-js`, the
+language every plugin is written against. `mutation-run` is split: the run
+itself is `@systemfsoftware/stryker-js-engine`
+(host-neutral, no Node on its manifest) and the Node process entries are
+`@systemfsoftware/stryker-js-cli`, which owns the worker files and the runtime
+gate. `mutation-report` is now `@systemfsoftware/stryker-js-html-reporter`.
+`@systemfsoftware/stryker-js-platform-node` is never published — do not install
+it. Install the new names and change your imports.
 
 Options types moved. `StrykerOptions`, `PartialStrykerOptions` and `LogLevel` are
 imported from the `Schema` export; `Mutant`, `MutantStatus`, `Position` and

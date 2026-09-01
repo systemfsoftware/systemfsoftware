@@ -2,14 +2,16 @@ import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChild
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import * as NodeStdio from '@effect/platform-node/NodeStdio'
-import { makeRunLayer, runMutationTest, strykerVersion } from '@systemfsoftware/stryker-js-platform-node'
-import type {
+import {
   ConfigFileInvalidError,
   ConfigFileNotFoundError,
   ConfigFileUnreadableError,
-  ResolvedMode,
-  RunEnvironmentShape,
-} from '@systemfsoftware/stryker-js-platform-node'
+  makeRunLayer,
+  type ResolvedMode,
+  type RunEnvironmentShape,
+  runMutationTest,
+  strykerVersion,
+} from '@systemfsoftware/stryker-js-engine'
 import { ManifestRendered, type RunEvent, RunEvents } from '@systemfsoftware/stryker-js/Run'
 import { RENDERED_OPTION_DEFAULTS } from '@systemfsoftware/stryker-js/Schema'
 import type { LogLevel, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
@@ -54,6 +56,7 @@ import {
 } from './Envelope.js'
 import { emitMachineModeOutput, isColorEnabled } from './Output.js'
 import type { OutputModeProbe, RunEventStream, RunEventStreamPort } from './Output.js'
+import { nodePlatformLayer } from './platform/node.js'
 import { DEFAULT_PROGRESS_STREAM_FILE } from './StreamFile.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 import type { StrykerRun } from './StrykerRun.js'
@@ -523,7 +526,7 @@ function readCoreEntries(): Effect.Effect<readonly string[], never, FileSystem.F
   return Effect.gen(function*() {
     const path = yield* Path.Path
     const fs = yield* FileSystem.FileSystem
-    const resolved = import.meta.resolve('@systemfsoftware/stryker-js-platform-node/package.json')
+    const resolved = import.meta.resolve('@systemfsoftware/stryker-js-engine/package.json')
     const manifestPath = yield* path.fromFileUrl(new URL(resolved))
     const raw = yield* fs.readFileString(manifestPath)
     let parsed: unknown
@@ -542,10 +545,6 @@ function readCoreEntries(): Effect.Effect<readonly string[], never, FileSystem.F
     return empty
   }).pipe(
     Effect.catchCause(() => {
-      const empty: readonly string[] = []
-      return Effect.succeed(empty)
-    }),
-    Effect.catchDefect(() => {
       const empty: readonly string[] = []
       return Effect.succeed(empty)
     }),
@@ -1098,9 +1097,12 @@ export function strykerCliEffect(
   }).pipe(Effect.orElseSucceed(() => 2))
 }
 
+const hostRunLayer = (hostOptions: RunEnvironmentShape, queue?: Queue.Queue<RunEvent, Cause.Done>) =>
+  makeRunLayer(hostOptions, queue).pipe(Layer.provideMerge(nodePlatformLayer))
+
 const defaultRunMutationTest =
   (hostOptions: RunEnvironmentShape, queue: Queue.Queue<RunEvent, Cause.Done>): StrykerRun => (options) =>
-    Effect.scoped(runMutationTest(options, makeRunLayer(hostOptions, queue))).pipe(
+    Effect.scoped(runMutationTest(options, hostRunLayer(hostOptions, queue))).pipe(
       Effect.provideService(RunEvents, queue),
     )
 
@@ -1112,7 +1114,7 @@ function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironme
     basePath: process.cwd(),
     reporterPluginModules: [
       import.meta.resolve('@systemfsoftware/stryker-js-html-reporter'),
-      import.meta.resolve('@systemfsoftware/stryker-js-platform-node/builtin-reporters'),
+      import.meta.resolve('@systemfsoftware/stryker-js-engine/builtin-reporters'),
     ],
     allowConsoleColors: isColorEnabled(mode, process.env['NO_COLOR']),
   }
@@ -1151,7 +1153,7 @@ export const runStrykerCli = (
           (() => {
             if (runRequest.survivors) {
               return runSurvivorsAdmission(runMutationTestImpl, stream, input.mode, runRequest.options, basePath).pipe(
-                Effect.provide(makeRunLayer(hostOptions)),
+                Effect.provide(hostRunLayer(hostOptions)),
               )
             }
             return runMutationTestImpl(runRequest.options).pipe(Effect.orDie)

@@ -15,9 +15,9 @@ export interface ModuleRequire {
  * feature code may use: `createRequire` and `isBuiltin`. Resolving a
  * specifier against a project directory, importing a plugin, and asking
  * whether a name is a builtin all go through this one tag; no feature module
- * touches the host module API. The Node implementation ships in
- * `@systemfsoftware/stryker-js-platform-node`; tests substitute a layer
- * returning fixed paths.
+ * touches the host module API. The Node implementation ships in the
+ * composition-root package (`@systemfsoftware/stryker-js-cli`); tests that do
+ * not need real plugin resolution substitute a layer returning fixed paths.
  *
  * @since 2.0.0
  */

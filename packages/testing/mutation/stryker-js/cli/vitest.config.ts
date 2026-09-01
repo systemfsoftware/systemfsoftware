@@ -6,9 +6,13 @@ export default defineConfig({
   plugins: [inlineSchemaTests()],
   test: {
     ...sharedConfig.test,
-    // KTD5: the container lane lives in `tests` under its own config
-    // (`test:contract`); the default `test` task stays container-free and
-    // covers the relocated unit specs and the in-source property tests.
-    include: ['src/**/*.test.ts'],
+    include: [
+      'src/**/*.test.ts',
+      'tests/checker-group-then-check.integration.test.ts',
+      'tests/exit-code.integration.test.ts',
+      'tests/remembered-attribution.integration.test.ts',
+      'tests/verdict-envelope.integration.test.ts',
+    ],
+    testTimeout: 60_000,
   },
 })

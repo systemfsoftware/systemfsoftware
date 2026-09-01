@@ -127,7 +127,8 @@ interface CorePurityProbe {
   readonly cliVersion: CliResult
 }
 
-const CORE_PACKAGE_MANIFEST = `${WORKDIR}/node_modules/@systemfsoftware/stryker-js-platform-node/package.json`
+const CORE_PACKAGE_MANIFEST = `${WORKDIR}/node_modules/@systemfsoftware/stryker-js-engine/package.json`
+const CLI_PACKAGE_MANIFEST = `${WORKDIR}/node_modules/@systemfsoftware/stryker-js-cli/package.json`
 
 /**
  * U9: core's imports used to run `guardMinimalNodeVersion()` at module scope,
@@ -146,7 +147,7 @@ const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never,
       options,
     )
     const enginesResult = yield* cli.sh(
-      `node -e "process.stdout.write(require('${CORE_PACKAGE_MANIFEST}').engines.node)"`,
+      `node -e "process.stdout.write(require('${CLI_PACKAGE_MANIFEST}').engines.node)"`,
       options,
     )
     const entries = (
@@ -154,7 +155,7 @@ const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never,
     ).filter((entry) => entry !== './package.json')
     const imports: CoreEntryImport[] = []
     for (const entry of entries) {
-      const specifier = `@systemfsoftware/stryker-js-platform-node${entry.slice(1)}`
+      const specifier = `@systemfsoftware/stryker-js-engine${entry.slice(1)}`
       // The specifier travels in the environment so a future entry's spelling
       // can never break the shell quoting of the probe command itself.
       const probe = yield* cli.sh('node --input-type=module -e "await import(process.env.CORE_ENTRY)"', {

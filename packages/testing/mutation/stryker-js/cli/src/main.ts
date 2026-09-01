@@ -3,11 +3,11 @@ import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import * as NodeRuntime from '@effect/platform-node/NodeRuntime'
 import * as NodeStdio from '@effect/platform-node/NodeStdio'
-import { strykerEngines } from '@systemfsoftware/stryker-js-platform-node'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Logger from 'effect/Logger'
+import cliPkgJson from '../package.json' with { type: 'json' }
 
 import { observeTerminatingSignal } from './Cli.js'
 import { strykerCliEffect } from './Cli.js'
@@ -24,24 +24,8 @@ process.title = 'stryker'
 const lastSignal = observeTerminatingSignal()
 
 function isSupportedNodeVersion(version: string): boolean {
-  let withoutV = version
-  if (version.startsWith('v')) {
-    withoutV = version.slice(1)
-  }
-  const dashBaseRaw = withoutV.split('-')[0]
-  let dashBase = withoutV
-  if (dashBaseRaw !== undefined) {
-    dashBase = dashBaseRaw
-  }
-  const baseRaw = dashBase.split('+')[0]
-  let base = dashBase
-  if (baseRaw !== undefined) {
-    base = baseRaw
-  }
-  const parts = base.split('.').map((p) => Number.parseInt(p, 10))
-  const major = parts[0] ?? 0
-  const minor = parts[1] ?? 0
-  const patch = parts[2] ?? 0
+  const base = version.replace(/^v/, '').split(/[-+]/)[0] ?? ''
+  const [major = 0, minor = 0, patch = 0] = base.split('.').map((p) => Number.parseInt(p, 10))
   if (Number.isNaN(major) || Number.isNaN(minor) || Number.isNaN(patch)) {
     return false
   }
@@ -56,7 +40,7 @@ function isSupportedNodeVersion(version: string): boolean {
 
 if (!isSupportedNodeVersion(process.version)) {
   throw new Error(
-    `Node.js version ${process.version} detected. StrykerJS requires version to match ${strykerEngines.node}. Please update your Node.js version or visit https://nodejs.org/ for additional instructions`,
+    `Node.js version ${process.version} detected. StrykerJS requires version to match ${cliPkgJson.engines.node}. Please update your Node.js version or visit https://nodejs.org/ for additional instructions`,
   )
 }
 
