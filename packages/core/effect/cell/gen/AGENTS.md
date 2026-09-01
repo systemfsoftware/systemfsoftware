@@ -31,7 +31,7 @@ rules:
   - id: CELL-A2
     title: The five axes come from walking a description, never from literals
     do:
-      - obtain the phase names, kinds, intra-layer order, the description package's
+      - obtain the phase names, kinds, their declared order, the description package's
         module name, and the I/O-cell classification by walking description values —
         `Cell.canonical` (the description module's exported canonical description) for
         the phase records, and the same spread for the root fields, which the built
@@ -53,15 +53,15 @@ rules:
     do:
       - assert refutable claims about `Cell.apply` over generated descriptions — phase
         execution order equals the order the drawn value declares, and the response is
-        the last layer's
+        the write's
       - read every expectation off the drawn description value, never off
       - "`Cell.vocabulary`: the generator rebuilds the description from the walked
         canonical value, so comparing the trace to the generator's own input would be
         circular"
     dont: add a behavioural test that asserts the vocabulary's contents, or a test that
       compares the interpreter's trace against a literal phase list
-    harm: the two properties exist to catch an interpreter that interleaves layers,
-      skips a phase, or returns the wrong layer's response; a comparison against the
+    harm: the two properties exist to catch an interpreter that reorders the declared phases,
+      skips one, runs one twice, or returns something other than the write's response; a comparison against the
       generator's own input cannot catch any of those
     check: "`pnpm --filter @systemfsoftware/effect-cell-gen test` exits 0 with both
       properties running, and the expectations in

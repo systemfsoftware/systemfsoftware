@@ -216,7 +216,9 @@ The mark is a phantom on the schema and never on the decoded value, because a br
 
 ### Description
 
-A record of named phases in one or more impure/pure layers, where each phase's return type carries the required member the next phase's parameter demands, so its order is a consequence of the types rather than an assertion beside them. A **phase** is one named step — a read, a decode, a decision, an encode, or a write. A **layer** is an impure segment followed by a pure segment; a site whose real order writes before it can classify is one description carrying two layers, never two composed by hand.
+A record of named phases forming one sandwich — read (impure), decode and decide (pure), encode (pure), write (impure) — where each phase's return type carries the required member the next phase's parameter demands, so its order is a consequence of the types rather than an assertion beside them. A **phase** is one named step — a read, a decode, a decision, an encode, or a write. One description is one sandwich; a site whose real order writes before it can classify is two descriptions applied in sequence by the calling `Effect.gen`, with the shell owning the binding between them — a later read that needs durable state an earlier write created reads it by re-gathering, and a response that becomes the next command travels as an ordinary generator binding.
+
+A write phase may promote a decide `Left` into `Effect.fail` when the refusal is operationally fatal to the process — that promotion is the executor's shell policy, declared by the write's own error channel, never a phase convention the seam types name.
 
 An impure phase's interior is not type-visible, so no count of I/O operations is claimed or enforced: a read may gather a product across its interior — bumping a counter and returning the resulting rate is one such product — and fan-in is expressed that way rather than by relaxing the chain. A pure phase is one expression and performs no I/O. That last sentence is a design rule, and only part of it is machine-decided: the lint rule on phase bodies reads the call graph reachable from the body through module-level helpers, so an I/O call written in the body or in a helper beside it is caught, while one reached through a closure-captured binding is not. The undecided half stays a rule the author keeps, not a claim the gate has checked.
 
@@ -224,7 +226,7 @@ The two kinds of `Left` are carried by the phase types rather than chosen by the
 
 ### Vocabulary
 
-What a description states about itself, recovered by folding the description rather than declared beside it: the phase names, each phase's purity and invocation shape, their order within a layer, the module that owns them, and which of that module's exports perform I/O. It is a value, not a table — the fold reads the same records the phase constructors wrote, so it cannot describe a description that was never built.
+What a description states about itself, recovered by folding the description rather than declared beside it: the phase names, each phase's purity and invocation shape, their order in the description, the module that owns them, and which of that module's exports perform I/O. It is a value, not a table — the fold reads the same records the phase constructors wrote, so it cannot describe a description that was never built.
 
 A vocabulary is the unit of agreement between packages. Where several packages must decide the same question the same way, each reads the vocabulary instead of restating it, and the disagreement they would otherwise have becomes impossible rather than merely unlikely.
 

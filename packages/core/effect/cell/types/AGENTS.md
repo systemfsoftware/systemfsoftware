@@ -33,7 +33,7 @@ rules:
     harm: the order is this package's whole claim and it lives in the types, so a
       green behavioural run over a widened type proves nothing about what the
       compiler now accepts; equally, the interpreter is the one place a
-      description becomes effects, so a fold that drops a layer or runs a phase
+      description becomes effects, so a fold that drops a phase or runs a phase
       twice is invisible to every type assertion
     check: "`pnpm --filter @systemfsoftware/effect-cell-types test:types` exits 0
       with each assertion observed failing once with its expect-error directive
