@@ -46,3 +46,30 @@ export const isCellMemberCall = (
   if (!namespaces.has(object.name)) return false
   return property.name === memberName
 }
+
+export const isPipeCall = (node: ESTree.Node, pipeNames: ReadonlySet<string>, memberName: string): boolean => {
+  if (node.type !== 'CallExpression') return false
+  const callee = node.callee
+  if (callee.type === 'Identifier') return pipeNames.has(callee.name)
+  if (callee.type === 'MemberExpression' && !callee.computed && callee.property.type === 'Identifier') {
+    return callee.property.name === memberName
+  }
+  return false
+}
+
+export const pipeRootOf = (
+  call: ESTree.CallExpression,
+  pipeNames: ReadonlySet<string>,
+  memberName: string,
+): ESTree.Node | null => {
+  const callee = call.callee
+  if (callee.type === 'Identifier') return call.arguments[0] ?? null
+  if (callee.type === 'MemberExpression') {
+    const object = callee.object
+    if (object.type === 'CallExpression' && isPipeCall(object, pipeNames, memberName)) {
+      return pipeRootOf(object, pipeNames, memberName)
+    }
+    return object
+  }
+  return null
+}

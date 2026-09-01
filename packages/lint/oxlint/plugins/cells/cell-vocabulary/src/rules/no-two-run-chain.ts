@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { isCellMemberCall } from './cell.js'
+import { isCellMemberCall, isPipeCall, pipeRootOf } from './cell.js'
 import {
   CONTINUATION_NAMES,
   DESCRIPTION_NAMESPACE,
@@ -73,26 +73,7 @@ export const noTwoRunChain = defineRule({
       return null
     }
 
-    const isPipeCall = (node: ESTree.Node): boolean => {
-      if (node.type !== 'CallExpression') return false
-      const callee = node.callee
-      if (callee.type === 'Identifier') return pipeNames.has(callee.name)
-      if (callee.type === 'MemberExpression' && !callee.computed && callee.property.type === 'Identifier') {
-        return callee.property.name === PIPE_NAME
-      }
-      return false
-    }
-
-    const pipeRootOf = (call: ESTree.CallExpression): ESTree.Node | null => {
-      const callee = call.callee
-      if (callee.type === 'Identifier') return call.arguments[0] ?? null
-      if (callee.type === 'MemberExpression') {
-        const object = callee.object
-        if (object.type === 'CallExpression' && isPipeCall(object)) return pipeRootOf(object)
-        return object
-      }
-      return null
-    }
+    const isPipe = (node: ESTree.Node): boolean => isPipeCall(node, pipeNames, PIPE_NAME)
 
     const isCurriedRunStep = (node: ESTree.Node): boolean =>
       node.type === 'CallExpression' && node.arguments.length === 1 && isRunCall(node)
@@ -103,7 +84,7 @@ export const noTwoRunChain = defineRule({
       }
       if (node.type !== 'CallExpression') return false
       if (isRunCall(node)) return true
-      if (!isPipeCall(node)) return false
+      if (!isPipe(node)) return false
       const last = node.arguments.at(-1)
       return last !== undefined && isCurriedRunStep(last)
     }
@@ -232,8 +213,8 @@ export const noTwoRunChain = defineRule({
           }
           return
         }
-        if (isPipeCall(node)) {
-          const root = pipeRootOf(node)
+        if (isPipe(node)) {
+          const root = pipeRootOf(node, pipeNames, PIPE_NAME)
           if (root !== null && isRunCall(root)) {
             for (const step of node.arguments) {
               if (step.type === 'CallExpression' && isContinuationCombinatorCall(step) && step.arguments.length === 1) {
