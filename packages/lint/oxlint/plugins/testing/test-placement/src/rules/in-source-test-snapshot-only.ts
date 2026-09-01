@@ -1,5 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
+import { bindingBase } from './ancestors.js'
 import {
   meta,
   NO_EMPTY_PLACEHOLDER_ACTUAL,
@@ -15,6 +16,7 @@ import {
   SNAPSHOT_ONLY_FIX,
   SNAPSHOT_ONLY_NAME,
 } from './in-source-test-snapshot-only.config.js'
+import { RUNNER_NAMES } from './path.config.js'
 import { basenameOf, isTestFile, isUnderSrc } from './path.js'
 import { isVitestGuard } from './vitest-guard.js'
 
@@ -24,10 +26,6 @@ const PROPERTY_IDENTIFIERS: Record<string, true> = {
   FastCheck: true,
   fc: true,
   Arbitrary: true,
-}
-const RUNNER_BASES: Record<string, true> = {
-  it: true,
-  test: true,
 }
 const FAST_CHECK_SPECIFIER = 'fast-check'
 const EFFECT_TESTING_SPECIFIER = 'effect/testing'
@@ -48,42 +46,9 @@ const ASSERT_SPECIFIERS: Record<string, true> = {
   'node:assert/strict': true,
 }
 
-const isInsideConsequent = (
-  node: { readonly parent: ESTree.Node | null },
-  consequent: ESTree.Node,
-): boolean => {
-  const walk = (current: ESTree.Node | null): boolean => {
-    if (current === null) return false
-    if (current === consequent) return true
-    return walk(current.parent)
-  }
-  return walk(node.parent)
-}
-
-const baseIdentifierOf = (expression: ESTree.Expression): string | undefined => {
-  if (expression.type === 'MemberExpression') return baseIdentifierOf(expression.object)
-  if (expression.type === 'Identifier') return expression.name
-  return undefined
-}
-
 const baseExpressionOf = (expression: ESTree.Expression): ESTree.Expression => {
   if (expression.type === 'MemberExpression') return baseExpressionOf(expression.object)
   return expression
-}
-
-const isInsideRuleOfSchemas = (node: { readonly parent: ESTree.Node | null }): boolean => {
-  let current: ESTree.Node | null = node.parent
-  while (current !== null) {
-    if (
-      current.type === 'CallExpression' &&
-      current.callee.type === 'Identifier' &&
-      current.callee.name === 'ruleOfSchemas'
-    ) {
-      return true
-    }
-    current = current.parent
-  }
-  return false
 }
 
 const isInTestBody = (node: { readonly parent: ESTree.Node | null }): boolean => {
@@ -98,10 +63,10 @@ const isInTestBody = (node: { readonly parent: ESTree.Node | null }): boolean =>
     ) {
       return true
     }
-    // also handle member forms like it.effect.xxx? not needed for throw body check — base is it/test
+    // member forms too: a throw inside an it.effect(...) callback is a test-body throw
     if (current.type === 'CallExpression' && current.callee.type === 'MemberExpression') {
-      const base = baseIdentifierOf(current.callee)
-      if (base !== undefined && RUNNER_BASES[base] === true) return true
+      const base = bindingBase(current.callee)
+      if (base !== undefined && RUNNER_NAMES.has(base)) return true
     }
     current = current.parent
   }
@@ -119,8 +84,26 @@ export const inSourceTestSnapshotOnly = defineRule({
 
     const guards: ESTree.IfStatement[] = []
 
-    const isInSourceBlock = (node: { readonly parent: ESTree.Node | null }): boolean =>
-      guards.some((guard) => isInsideConsequent(node, guard.consequent))
+    // One parent walk per node answers both membership questions: inside a
+    // vitest-guard consequent, and inside a ruleOfSchemas(...) generated-law call.
+    const classify = (node: { readonly parent: ESTree.Node | null }): { inBlock: boolean; inLaws: boolean } => {
+      let inBlock = false
+      let inLaws = false
+      let current = node.parent
+      while (current !== null && !(inBlock && inLaws)) {
+        if (
+          !inLaws &&
+          current.type === 'CallExpression' &&
+          current.callee.type === 'Identifier' &&
+          current.callee.name === 'ruleOfSchemas'
+        ) {
+          inLaws = true
+        }
+        if (!inBlock && guards.some((guard) => guard.consequent === current)) inBlock = true
+        current = current.parent
+      }
+      return { inBlock, inLaws }
+    }
 
     return {
       IfStatement(node: ESTree.IfStatement) {
@@ -138,10 +121,8 @@ export const inSourceTestSnapshotOnly = defineRule({
           }
         }
         if (parent.type === 'MemberExpression' && parent.property === node && !parent.computed) return
-        if (isInsideRuleOfSchemas(node)) return
-        if (!isInSourceBlock(node)) return
-        // Canonical only: computed access or alias not flagged — but Identifier reference is canonical.
-        // We already only match canonical names; alias like `const e = expect` won't be 'fc'.
+        const membership = classify(node)
+        if (!membership.inBlock || membership.inLaws) return
         context.report({
           node,
           messageId: 'propertyBan',
@@ -154,15 +135,15 @@ export const inSourceTestSnapshotOnly = defineRule({
         })
       },
       CallExpression(node: ESTree.CallExpression) {
-        if (!isInSourceBlock(node)) return
-        if (isInsideRuleOfSchemas(node)) return
+        const membership = classify(node)
+        if (!membership.inBlock || membership.inLaws) return
 
         // property-ban: it.prop / test.prop / it.effect.prop
         if (node.callee.type === 'MemberExpression' && !node.callee.computed) {
           const prop = node.callee.property
           if (prop.type === 'Identifier' && prop.name === 'prop') {
-            const base = baseIdentifierOf(node.callee.object)
-            if (base !== undefined && RUNNER_BASES[base] === true) {
+            const base = bindingBase(node.callee.object)
+            if (base !== undefined && RUNNER_NAMES.has(base)) {
               context.report({
                 node,
                 messageId: 'propertyBan',
@@ -204,8 +185,9 @@ export const inSourceTestSnapshotOnly = defineRule({
             base.callee.type === 'Identifier' &&
             base.callee.name === 'expect'
           ) {
-            // Do not flag matcher factories: already handled — base is CallExpression, not bare Identifier.
-            // If terminal is toMatchInlineSnapshot, check empty placeholder vs valid.
+            // Only an expect(...) call chain reaches here — expect.any(...) and
+            // friends have the bare `expect` identifier as base and never enter.
+            // An authored toMatchInlineSnapshot literal passes; the empty placeholder is the capture shape.
             if (terminal === 'toMatchInlineSnapshot') {
               if (node.arguments.length === 0) {
                 context.report({
@@ -236,12 +218,13 @@ export const inSourceTestSnapshotOnly = defineRule({
         }
       },
       ImportExpression(node: ESTree.ImportExpression) {
-        if (!isInSourceBlock(node)) return
+        const membership = classify(node)
+        if (!membership.inBlock) return
         if (node.source.type !== 'Literal') return
         const source = node.source.value
         if (typeof source !== 'string') return
         if (source === FAST_CHECK_SPECIFIER || (source === EFFECT_TESTING_SPECIFIER && destructuresFastCheck(node))) {
-          if (isInsideRuleOfSchemas(node)) return
+          if (membership.inLaws) return
           context.report({
             node,
             messageId: 'propertyBan',
@@ -268,7 +251,7 @@ export const inSourceTestSnapshotOnly = defineRule({
         }
       },
       ThrowStatement(node: ESTree.ThrowStatement) {
-        if (!isInSourceBlock(node)) return
+        if (!classify(node).inBlock) return
         if (!isInTestBody(node)) return
         context.report({
           node,

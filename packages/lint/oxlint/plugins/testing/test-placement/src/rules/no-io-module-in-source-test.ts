@@ -1,5 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
+import { bindingBase } from './ancestors.js'
 import {
   IO_SOURCE_TEST_ACTUAL,
   IO_SOURCE_TEST_EXPECTED,
@@ -13,19 +14,6 @@ import { isVitestGuard } from './vitest-guard.js'
 export type MessageIds = 'ioSourceTest'
 
 const isIoSpecifier = (source: string): boolean => IO_SPECIFIERS[source] === true
-
-/**
- * The binding a call is made against: the callee identifier itself, or the
- * base identifier of a member chain (`fs`, `fs.promises`) when the call is
- * `fs.readFileSync(...)` / `fs.promises.readFile(...)`. Anything else — a
- * computed call, a `super` edge, an erased type construct — performs nothing a
- * type-only import could not.
- */
-const bindingBase = (callee: ESTree.Expression): string | undefined => {
-  if (callee.type === 'MemberExpression') return bindingBase(callee.object)
-  if (callee.type === 'Identifier') return callee.name
-  return undefined
-}
 
 export const noIoModuleInSourceTest = defineRule({
   meta,

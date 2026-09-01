@@ -17,6 +17,34 @@ import { createRuleTester } from './_tester.js'
 
 const ruleTester = createRuleTester()
 
+const propertyBanError = {
+  messageId: 'propertyBan' as const,
+  data: {
+    name: PROPERTY_BAN_NAME,
+    expected: PROPERTY_BAN_EXPECTED,
+    actual: PROPERTY_BAN_ACTUAL,
+    fix: PROPERTY_BAN_FIX,
+  },
+}
+const snapshotOnlyError = {
+  messageId: 'snapshotOnly' as const,
+  data: {
+    name: SNAPSHOT_ONLY_NAME,
+    expected: SNAPSHOT_ONLY_EXPECTED,
+    actual: SNAPSHOT_ONLY_ACTUAL,
+    fix: SNAPSHOT_ONLY_FIX,
+  },
+}
+const noEmptyPlaceholderError = {
+  messageId: 'noEmptyPlaceholder' as const,
+  data: {
+    name: NO_EMPTY_PLACEHOLDER_NAME,
+    expected: NO_EMPTY_PLACEHOLDER_EXPECTED,
+    actual: NO_EMPTY_PLACEHOLDER_ACTUAL,
+    fix: NO_EMPTY_PLACEHOLDER_FIX,
+  },
+}
+
 const validSnapshotBlock = `
 const double = (n: number): number => n * 2
 if (import.meta.vitest) {
@@ -224,15 +252,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'propertyBan',
-          data: {
-            name: PROPERTY_BAN_NAME,
-            expected: PROPERTY_BAN_EXPECTED,
-            actual: PROPERTY_BAN_ACTUAL,
-            fix: PROPERTY_BAN_FIX,
-          },
-        },
+        propertyBanError,
       ],
     },
     {
@@ -245,15 +265,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'propertyBan',
-          data: {
-            name: PROPERTY_BAN_NAME,
-            expected: PROPERTY_BAN_EXPECTED,
-            actual: PROPERTY_BAN_ACTUAL,
-            fix: PROPERTY_BAN_FIX,
-          },
-        },
+        propertyBanError,
       ],
     },
     {
@@ -266,15 +278,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'propertyBan',
-          data: {
-            name: PROPERTY_BAN_NAME,
-            expected: PROPERTY_BAN_EXPECTED,
-            actual: PROPERTY_BAN_ACTUAL,
-            fix: PROPERTY_BAN_FIX,
-          },
-        },
+        propertyBanError,
       ],
     },
     {
@@ -286,15 +290,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'propertyBan',
-          data: {
-            name: PROPERTY_BAN_NAME,
-            expected: PROPERTY_BAN_EXPECTED,
-            actual: PROPERTY_BAN_ACTUAL,
-            fix: PROPERTY_BAN_FIX,
-          },
-        },
+        propertyBanError,
       ],
     },
     {
@@ -306,15 +302,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'propertyBan',
-          data: {
-            name: PROPERTY_BAN_NAME,
-            expected: PROPERTY_BAN_EXPECTED,
-            actual: PROPERTY_BAN_ACTUAL,
-            fix: PROPERTY_BAN_FIX,
-          },
-        },
+        propertyBanError,
       ],
     },
     {
@@ -326,15 +314,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'propertyBan',
-          data: {
-            name: PROPERTY_BAN_NAME,
-            expected: PROPERTY_BAN_EXPECTED,
-            actual: PROPERTY_BAN_ACTUAL,
-            fix: PROPERTY_BAN_FIX,
-          },
-        },
+        propertyBanError,
       ],
     },
     {
@@ -346,15 +326,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'propertyBan',
-          data: {
-            name: PROPERTY_BAN_NAME,
-            expected: PROPERTY_BAN_EXPECTED,
-            actual: PROPERTY_BAN_ACTUAL,
-            fix: PROPERTY_BAN_FIX,
-          },
-        },
+        propertyBanError,
       ],
     },
     {
@@ -366,15 +338,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'propertyBan',
-          data: {
-            name: PROPERTY_BAN_NAME,
-            expected: PROPERTY_BAN_EXPECTED,
-            actual: PROPERTY_BAN_ACTUAL,
-            fix: PROPERTY_BAN_FIX,
-          },
-        },
+        propertyBanError,
       ],
     },
     {
@@ -390,15 +354,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'snapshotOnly',
-          data: {
-            name: SNAPSHOT_ONLY_NAME,
-            expected: SNAPSHOT_ONLY_EXPECTED,
-            actual: SNAPSHOT_ONLY_ACTUAL,
-            fix: SNAPSHOT_ONLY_FIX,
-          },
-        },
+        snapshotOnlyError,
       ],
     },
     {
@@ -414,15 +370,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'snapshotOnly',
-          data: {
-            name: SNAPSHOT_ONLY_NAME,
-            expected: SNAPSHOT_ONLY_EXPECTED,
-            actual: SNAPSHOT_ONLY_ACTUAL,
-            fix: SNAPSHOT_ONLY_FIX,
-          },
-        },
+        snapshotOnlyError,
       ],
     },
     {
@@ -438,15 +386,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'snapshotOnly',
-          data: {
-            name: SNAPSHOT_ONLY_NAME,
-            expected: SNAPSHOT_ONLY_EXPECTED,
-            actual: SNAPSHOT_ONLY_ACTUAL,
-            fix: SNAPSHOT_ONLY_FIX,
-          },
-        },
+        snapshotOnlyError,
       ],
     },
     {
@@ -459,15 +399,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'snapshotOnly',
-          data: {
-            name: SNAPSHOT_ONLY_NAME,
-            expected: SNAPSHOT_ONLY_EXPECTED,
-            actual: SNAPSHOT_ONLY_ACTUAL,
-            fix: SNAPSHOT_ONLY_FIX,
-          },
-        },
+        snapshotOnlyError,
       ],
     },
     {
@@ -479,15 +411,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'snapshotOnly',
-          data: {
-            name: SNAPSHOT_ONLY_NAME,
-            expected: SNAPSHOT_ONLY_EXPECTED,
-            actual: SNAPSHOT_ONLY_ACTUAL,
-            fix: SNAPSHOT_ONLY_FIX,
-          },
-        },
+        snapshotOnlyError,
       ],
     },
     {
@@ -499,15 +423,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'snapshotOnly',
-          data: {
-            name: SNAPSHOT_ONLY_NAME,
-            expected: SNAPSHOT_ONLY_EXPECTED,
-            actual: SNAPSHOT_ONLY_ACTUAL,
-            fix: SNAPSHOT_ONLY_FIX,
-          },
-        },
+        snapshotOnlyError,
       ],
     },
     {
@@ -522,15 +438,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'snapshotOnly',
-          data: {
-            name: SNAPSHOT_ONLY_NAME,
-            expected: SNAPSHOT_ONLY_EXPECTED,
-            actual: SNAPSHOT_ONLY_ACTUAL,
-            fix: SNAPSHOT_ONLY_FIX,
-          },
-        },
+        snapshotOnlyError,
       ],
     },
     {
@@ -546,15 +454,7 @@ if (import.meta.vitest) {
 `,
       filename: '/repo/pkg/src/widget.ts',
       errors: [
-        {
-          messageId: 'noEmptyPlaceholder',
-          data: {
-            name: NO_EMPTY_PLACEHOLDER_NAME,
-            expected: NO_EMPTY_PLACEHOLDER_EXPECTED,
-            actual: NO_EMPTY_PLACEHOLDER_ACTUAL,
-            fix: NO_EMPTY_PLACEHOLDER_FIX,
-          },
-        },
+        noEmptyPlaceholderError,
       ],
     },
   ],
