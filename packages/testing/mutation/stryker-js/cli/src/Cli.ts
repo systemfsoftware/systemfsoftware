@@ -12,6 +12,7 @@ import {
   runMutationTest,
   strykerVersion,
 } from '@systemfsoftware/stryker-js-engine'
+import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import { ManifestRendered, type RunEvent, RunEvents } from '@systemfsoftware/stryker-js/Run'
 import { RENDERED_OPTION_DEFAULTS } from '@systemfsoftware/stryker-js/Schema'
 import type { LogLevel, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
@@ -56,11 +57,12 @@ import {
 } from './Envelope.js'
 import { emitMachineModeOutput, isColorEnabled } from './Output.js'
 import type { OutputModeProbe, RunEventStream, RunEventStreamPort } from './Output.js'
+import { emitNullScoreVerdict } from './Output.js'
 import { nodePlatformLayer } from './platform/node.js'
 import { DEFAULT_PROGRESS_STREAM_FILE } from './StreamFile.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 import type { StrykerRun } from './StrykerRun.js'
-import { runSurvivorsAdmission } from './Survivors.js'
+import { runSurvivorsAdmission, survivorMutateSpans } from './Survivors.js'
 import { SurvivorsRejection } from './Survivors.workflow.js'
 
 export { type StrykerRun }
@@ -1098,11 +1100,16 @@ export function strykerCliEffect(
 }
 
 const hostRunLayer = (hostOptions: RunEnvironmentShape, queue?: Queue.Queue<RunEvent, Cause.Done>) =>
-  makeRunLayer(hostOptions, queue).pipe(Layer.provideMerge(nodePlatformLayer))
+  Layer.mergeAll(
+    nodePlatformLayer,
+    makeRunLayer(hostOptions, queue).pipe(Layer.provide(nodePlatformLayer)),
+  )
 
 const defaultRunMutationTest =
-  (hostOptions: RunEnvironmentShape, queue: Queue.Queue<RunEvent, Cause.Done>): StrykerRun => (options) =>
-    Effect.scoped(runMutationTest(options, hostRunLayer(hostOptions, queue))).pipe(
+  (hostOptions: RunEnvironmentShape, queue: Queue.Queue<RunEvent, Cause.Done>): StrykerRun =>
+  (...args: Parameters<StrykerRun>) =>
+    Effect.scoped(runMutationTest(...args)).pipe(
+      Effect.provide(hostRunLayer(hostOptions, queue)),
       Effect.provideService(RunEvents, queue),
     )
 
@@ -1152,9 +1159,40 @@ export const runStrykerCli = (
         Match.tag('run', (runRequest) =>
           (() => {
             if (runRequest.survivors) {
-              return runSurvivorsAdmission(runMutationTestImpl, stream, input.mode, runRequest.options, basePath).pipe(
-                Effect.provide(hostRunLayer(hostOptions)),
-              )
+              return Effect.gen(function*() {
+                const { admission, resolvedOptions, priorReportPath } = yield* runSurvivorsAdmission(
+                  runRequest.options,
+                  basePath,
+                ).pipe(Effect.provide(hostRunLayer(hostOptions)))
+                return yield* Match.value(admission).pipe(
+                  Match.tag('NoSurvivors', () =>
+                    emitNullScoreVerdict(
+                      stream,
+                      input.mode,
+                      resolvedOptions.thresholds,
+                      resolvedOptions,
+                      basePath,
+                      pathService,
+                    )),
+                  Match.tag('Admitted', (admitted) => {
+                    const admittedMutants = admitted.survivors.map((s) => Mutant.make(s))
+                    const restricted: PartialStrykerOptions & {
+                      readonly survivors?: readonly Mutant[]
+                      readonly survivorsPriorReport?: string
+                      readonly mutate?: string[]
+                      readonly incremental?: boolean
+                    } = {
+                      ...resolvedOptions,
+                      survivors: admittedMutants,
+                      mutate: survivorMutateSpans(admittedMutants, basePath),
+                      survivorsPriorReport: priorReportPath,
+                      incremental: false,
+                    }
+                    return runMutationTestImpl(restricted).pipe(Effect.orDie)
+                  }),
+                  Match.exhaustive,
+                )
+              })
             }
             return runMutationTestImpl(runRequest.options).pipe(Effect.orDie)
           })()),

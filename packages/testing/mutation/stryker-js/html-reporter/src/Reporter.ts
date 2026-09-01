@@ -1,7 +1,3 @@
-/**
- * Html reporter — Cell pipeline that renders the mutation report to a file.
- */
-
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import type { MutantResult } from '@systemfsoftware/stryker-js/Mutant'
 import { writeOutputFile } from '@systemfsoftware/stryker-js/output-file'
@@ -15,27 +11,13 @@ import { ReporterFailed } from '@systemfsoftware/stryker-js/Reporter'
 import type { ReporterService } from '@systemfsoftware/stryker-js/Reporter'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
-import type * as FileSystem from 'effect/FileSystem'
-import { pipe } from 'effect/Function'
-import type * as Path from 'effect/Path'
-import type { BadArgument, PlatformError } from 'effect/PlatformError'
+import * as FileSystem from 'effect/FileSystem'
+import * as Path from 'effect/Path'
 import * as Result from 'effect/Result'
 import type * as schema from 'mutation-testing-report-schema/api'
 
-import { HtmlReportCommand, HtmlReportError } from './Reporter.schema.js'
-import { HtmlDocument, makeHtmlDocument } from './Reporter.workflow.js'
-interface HtmlReportPhases extends Cell.Phases {
-  readonly command: void
-  readonly raw: { readonly report: unknown; readonly scriptContent: string }
-  readonly decoded: HtmlReportCommand
-  readonly decision: HtmlDocument
-  readonly decisionError: HtmlReportError
-  readonly output: string
-  readonly response: void
-  readonly decodeError: unknown
-  readonly readError: PlatformError | BadArgument
-  readonly writeError: PlatformError | BadArgument
-}
+import { HtmlReportCommand } from './Reporter.schema.js'
+import { makeHtmlDocument } from './Reporter.workflow.js'
 
 export const makeHtmlReporter = (params: {
   readonly options?: ProvidedStrykerOptions
@@ -43,62 +25,59 @@ export const makeHtmlReporter = (params: {
   readonly path: Path.Path
 }): ReporterService => {
   const options = params.options
-  const fs = params.fs
-  const path = params.path
 
-  let heldReport: schema.MutationTestResult | undefined
-
-  const htmlReportDescription: Cell.WriteDone<HtmlReportPhases> = pipe(
-    Cell.read<HtmlReportPhases>(() =>
+  const htmlReporterCell = Cell.layer({
+    read: (
+      { report, metrics }: { readonly report: schema.MutationTestResult; readonly metrics: MutationTestMetricsResult },
+    ) =>
       Effect.gen(function*() {
+        const path = yield* Path.Path
+        const fs = yield* FileSystem.FileSystem
         const scriptPath = yield* path.fromFileUrl(
           new URL(import.meta.resolve('mutation-testing-elements/dist/mutation-test-elements.js')),
         )
         const scriptContent = yield* fs.readFileString(scriptPath)
-        const report: unknown = heldReport
+        void metrics
         return { report, scriptContent }
-      })
-    ),
-    Cell.decode<HtmlReportPhases>((raw) =>
-      Result.succeed(HtmlReportCommand.make({ report: raw.report, scriptContent: raw.scriptContent }))
-    ),
-    Cell.decide<HtmlReportPhases>(makeHtmlDocument),
-    Cell.encode<HtmlReportPhases>((outcome) =>
+      }),
+    decode: (raw) => Result.succeed(HtmlReportCommand.make({ report: raw.report, scriptContent: raw.scriptContent })),
+    decide: makeHtmlDocument,
+    encode: (outcome) =>
       Result.match(outcome, {
         onFailure: () => '',
         onSuccess: (doc) => doc.html,
-      })
-    ),
-    Cell.write<HtmlReportPhases>((html) =>
+      }),
+    write: (html, _raw) =>
       Effect.gen(function*() {
         if (options === undefined) return
+        const fs = yield* FileSystem.FileSystem
+        const path = yield* Path.Path
         const fileName = options.htmlReporter.fileName
         yield* Effect.logDebug(`Using file "${fileName}"`)
         yield* writeOutputFile(fs, path, fileName, html)
         const fileUrl = yield* path.toFileUrl(path.resolve(fileName))
         yield* Effect.logInfo(`Your report can be found at: ${fileUrl.href}`)
-      })
-    ),
-  )
+      }),
+  })
 
   return {
     onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
     onMutationTestingPlanReady: (_event: MutationTestingPlanReadyEvent) => Effect.void,
     onMutantTested: (_result: MutantResult) => Effect.void,
-    onMutationTestReportReady: (report: schema.MutationTestResult, _metrics: MutationTestMetricsResult) =>
-      Effect.sync(() => {
-        heldReport = report
-      }),
-    wrapUp: Effect.gen(function*() {
-      if (options === undefined) return
-      if (heldReport === undefined) return
-      yield* Cell.apply(htmlReportDescription, undefined)
-    }).pipe(
-      Effect.catchCause((cause) =>
-        Effect.fail(
-          new ReporterFailed({ reporterName: 'html', event: 'wrapUp', cause: Cause.pretty(cause) }),
-        )
+    onMutationTestReportReady: (report: schema.MutationTestResult, metrics: MutationTestMetricsResult) =>
+      Cell.run(htmlReporterCell, { report, metrics }).pipe(
+        Effect.provideService(FileSystem.FileSystem, params.fs),
+        Effect.provideService(Path.Path, params.path),
+        Effect.catchCause((cause) =>
+          Effect.fail(
+            new ReporterFailed({
+              reporterName: 'html',
+              event: 'onMutationTestReportReady',
+              cause: Cause.pretty(cause),
+            }),
+          )
+        ),
       ),
-    ),
+    wrapUp: Effect.void,
   }
 }

@@ -19,9 +19,9 @@ import {
   SurvivorsAdmission,
   SurvivorsRejection,
 } from '../Survivors.workflow.js'
-const sha256Hex: HashContent = (content) => bytesToHex(sha256(utf8ToBytes(content)))
 const stringArrayEquivalence = Equivalence.Array(Equivalence.String)
 
+const sha256Hex: HashContent = (content) => bytesToHex(sha256(utf8ToBytes(content)))
 const absPath = (file: string): string => `/work/${file}`
 
 const reportPositionArb = fc.record({
@@ -405,4 +405,24 @@ describe('sourceContentHash', () => {
       return sourceContentHash(a, sha256Hex) !== sourceContentHash(b, sha256Hex)
     },
   )
+})
+
+describe('Survivors not-found', () => {
+  it.prop('∀c_NotFound_≡Rejection', [fc.constant(null)], () =>
+    Result.match(
+      admitSurvivorsRun(
+        AdmitSurvivorsRunCommand.make({
+          priorReport: undefined,
+          currentConfig: {},
+          frameworkVersion: '1.0.0',
+          sourceContentHashes: {},
+          priorSourceHashes: {},
+          priorSurvivors: [],
+        }),
+      ),
+      {
+        onSuccess: () => false,
+        onFailure: (rejection) => S.is(SurvivorsRejection)(rejection),
+      },
+    ))
 })
