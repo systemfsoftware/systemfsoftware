@@ -23,7 +23,6 @@ import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
-import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Path from 'effect/Path'
@@ -842,20 +841,6 @@ if (import.meta.vitest !== void 0) {
   })
 }
 
-/**
- * The one impure adapter over `resolveMode` (U3): reads the process
- * environment so callers with no CLI-parsed flags — the library entry point,
- * the reporters — cannot drift into private copies of the probe and disagree
- * about the mode. Impure by nature: it reads `process.stdout.isTTY` and
- * `process.env`, and the pure decision (`resolveModeWorkflow`) stays downstream of
- * these reads.
- *
- * The tool-variable probe copies `TOOL_VARIABLES` from the environment onto
- * the command. The workflow interprets those fields; it does not read env.
- *
- * Probe I/O is `Cell.read` and the public resolve is `Cell.apply` — the
- * sandwich `Cell.read/decode/decide(Workflow.make)/encode/write`.
- */
 export interface OutputModeProbe {
   readonly detectMode: Effect.Effect<ResolvedMode, CliError.CliError>
 }
@@ -868,28 +853,8 @@ const OutputModeProbe = OutputModeProbeTag
 
 export { OutputModeProbe }
 
-/**
- * The phases of the output-mode probe, in one bag so the chain's order is
- * carried by types. The command is the already-parsed flags (empty for the
- * probe); `read` gathers the environment and TTY signal into a `ModeInput`;
- * `decode` packages the workflow command; `resolveModeWorkflow` is the pure
- * decide phase; `encode` is the identity; `write` dispatches the outcome.
- */
-interface ProbePhases extends Cell.Phases {
-  readonly command: FormatFlags
-  readonly raw: ModeInput
-  readonly decoded: ResolveModeCommand
-  readonly decision: ResolvedMode
-  readonly decisionError: ModeConflictError
-  readonly output: Result.Result<ResolvedMode, ModeConflictError>
-  readonly response: ResolvedMode
-  readonly decodeError: never
-  readonly readError: never
-  readonly writeError: ModeConflictError
-}
-
-const outputModeProbeDescription: Cell.WriteDone<ProbePhases> = pipe(
-  Cell.read<ProbePhases>((command) =>
+export const outputModeProbeCell = Cell.layer({
+  read: (command: FormatFlags) =>
     Effect.succeed(
       (() => {
         const toolVarsRecord: Partial<Record<ToolVariable, string>> = {}
@@ -921,9 +886,8 @@ const outputModeProbeDescription: Cell.WriteDone<ProbePhases> = pipe(
         }
         return result
       })(),
-    )
-  ),
-  Cell.decode<ProbePhases>((raw) =>
+    ),
+  decode: (raw) =>
     Result.succeed(
       (() => {
         const filteredToolVars: Record<string, string> = {}
@@ -961,20 +925,18 @@ const outputModeProbeDescription: Cell.WriteDone<ProbePhases> = pipe(
         }
         return ResolveModeCommand.make(commandInput)
       })(),
-    )
-  ),
-  Cell.decide<ProbePhases>(resolveModeWorkflow),
-  Cell.encode<ProbePhases>((outcome) => outcome),
-  Cell.write<ProbePhases>((outcome) =>
+    ),
+  decide: resolveModeWorkflow,
+  encode: (outcome: Result.Result<ResolvedMode, ModeConflictError>) => outcome,
+  write: (outcome) =>
     Result.match(outcome, {
       onFailure: (error) => Effect.fail(error),
       onSuccess: (mode) => Effect.succeed(mode),
-    })
-  ),
-)
+    }),
+})
 
 export const detectModeWithProbe = (flags: FormatFlags = {}): Effect.Effect<ResolvedMode, CliError.CliError> =>
-  Cell.apply(outputModeProbeDescription, flags).pipe(
+  Cell.run(outputModeProbeCell, flags).pipe(
     Effect.mapError(
       (error) =>
         CliError.InvalidValue.make({

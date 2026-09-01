@@ -2,6 +2,7 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { calleeRootName, cellOf } from './cell.js'
 import {
+  COMPOSER_NAME,
   DESCRIPTION_NAMESPACE,
   IO_CELLS,
   IO_IN_PHASE_BODY_ACTUAL,
@@ -35,21 +36,6 @@ const walk = (value: unknown, visit: (node: Walkable) => void): void => {
 const isCallExpression = (value: Walkable): value is Walkable & ESTree.CallExpression =>
   nodeType(value) === 'CallExpression'
 
-/**
- * The pure phase a call targets, or null when the callee is not one. The object must
- * be a local binding of the description module's `Cell` export — never a name that
- * merely spells like one, and never another export of the same module.
- */
-const purePhaseNameOf = (callee: ESTree.Node, namespaces: ReadonlySet<string>): string | null => {
-  if (callee.type !== 'MemberExpression') return null
-  const object = callee.object
-  if (object.type !== 'Identifier') return null
-  if (!namespaces.has(object.name)) return null
-  const property = callee.property
-  const propertyName = property.type === 'Identifier' ? property.name : null
-  return PURE_PHASE_NAMES.some((phase) => phase === propertyName) ? propertyName : null
-}
-
 type LocalHelper = ESTree.ArrowFunctionExpression | (ESTree.Declaration & { type: string })
 
 export const noIoInPhaseBodies = defineRule({
@@ -65,7 +51,7 @@ export const noIoInPhaseBodies = defineRule({
      * The closure branch follows the local binding to its declaration in the same
      * file; a helper already visited is not re-walked, so mutual recursion terminates.
      */
-    const reportIoInBody = (body: unknown, visited: ReadonlySet<LocalHelper>): void => {
+    const reportIoInBody = (body: unknown, visited: ReadonlySet<unknown>): void => {
       // No early return on an empty `ioNames`. It would be a pure optimisation — every branch below
       // already ends in a membership test that cannot match — and a branch no observation can
       // distinguish is a mutant no test can kill (OX-MG1 asks for the restructure, not the ignore).
@@ -95,8 +81,40 @@ export const noIoInPhaseBodies = defineRule({
     }
 
     /**
+     * `Cell.layer({ decode, ... })` carries the pure phase bodies as spec properties, keyed by
+     * the phase names the vocabulary walks. The composer name is walked off the vocabulary too;
+     * the property values are judged inline or through the module-level helper they name.
+     */
+    const specPurePhaseBodiesOf = (node: ESTree.CallExpression): unknown[] => {
+      const callee = node.callee
+      if (callee.type !== 'MemberExpression') return []
+      const object = callee.object
+      const property = callee.property
+      if (object.type !== 'Identifier' || !descriptionNamespaces.has(object.name)) return []
+      if (property.type !== 'Identifier' || property.name !== COMPOSER_NAME) return []
+      const spec = node.arguments[0]
+      if (spec === undefined || spec.type !== 'ObjectExpression') return []
+      const bodies: (ESTree.Expression | LocalHelper)[] = []
+      for (const member of spec.properties) {
+        if (member.type !== 'Property') continue
+        const key = member.key
+        if (key.type !== 'Identifier') continue
+        if (!PURE_PHASE_NAMES.some((phase) => phase === key.name)) continue
+        const value = member.value
+        if (value.type === 'ArrowFunctionExpression' || value.type === 'FunctionExpression') {
+          bodies.push(value)
+          continue
+        }
+        if (value.type !== 'Identifier') continue
+        const helper = localHelpers.get(value.name)
+        if (helper !== undefined) bodies.push(helper)
+      }
+      return bodies
+    }
+
+    /**
      * Imports are classified here rather than in an `ImportDeclaration` listener. Listeners fire in
-     * document order, so a phase call written above its own import would be judged against empty
+     * document order, so a phase body written above its own import would be judged against empty
      * sets — and with no I/O name registered the rule reports nothing at all. That is a silent pass
      * decided by line order, which is the one failure a guard must not have. `Program` sees every
      * top-level statement before any call is visited, so the sets are complete when the first call
@@ -159,19 +177,8 @@ export const noIoInPhaseBodies = defineRule({
         }
       },
       CallExpression(node: ESTree.CallExpression) {
-        if (purePhaseNameOf(node.callee, descriptionNamespaces) === null) return
-        for (const argument of node.arguments) {
-          if (argument.type === 'ArrowFunctionExpression' || argument.type === 'FunctionExpression') {
-            reportIoInBody(argument, new Set())
-            continue
-          }
-          // A body hoisted to a name and handed over by reference — `Cell.decode(transform)` — is
-          // the same phase body with one indirection. Walking only inline functions would let the
-          // rule pass a file whose I/O sits one rename away, while its message still claims to
-          // follow module-level helpers.
-          if (argument.type !== 'Identifier') continue
-          const helper = localHelpers.get(argument.name)
-          if (helper !== undefined) reportIoInBody(helper, new Set([helper]))
+        for (const body of specPurePhaseBodiesOf(node)) {
+          reportIoInBody(body, new Set([body]))
         }
       },
     }

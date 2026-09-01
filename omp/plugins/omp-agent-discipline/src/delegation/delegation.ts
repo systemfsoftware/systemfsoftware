@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from '@oh-my-pi/pi-coding-agent'
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { Effect, Match, pipe, Result } from 'effect'
+import { Effect, Match, Result } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import { decodeRecord, readString } from '../record.js'
 import { NoDelegateSkills } from './config.js'
@@ -8,7 +8,6 @@ import {
   CheckDelegationCommand,
   checkNoSkillDelegation,
   type CompiledGuard,
-  type DelegationImpossible,
   type DelegationVerdict,
 } from './delegation.workflow.js'
 
@@ -82,50 +81,33 @@ function loadGuard(cwd: string): Effect.Effect<CompiledGuard | null, never, NoDe
   })
 }
 
-interface DelegationPhases extends Cell.Phases {
-  readonly command: {
-    readonly cwd: string
-    readonly toolName: string
-    readonly subagentType: string
-    readonly prompt: string
-  }
-  readonly raw: CompiledGuard | null
-  readonly decoded: CheckDelegationCommand
-  readonly decision: DelegationVerdict
-  readonly decisionError: DelegationImpossible
-  readonly output: NoSkillDelegationResult
-  readonly response: NoSkillDelegationResult
-  readonly decodeError: never
-  readonly readError: never
-  readonly writeError: never
-}
+const delegationCell = (toolName: string, subagentType: string, prompt: string) =>
+  Cell.layer({
+    read: (
+      { cwd }: {
+        readonly cwd: string
+        readonly toolName: string
+        readonly subagentType: string
+        readonly prompt: string
+      },
+    ) => loadGuard(cwd),
+    decode: (guard) => Result.succeed(CheckDelegationCommand.make({ toolName, subagentType, prompt, guard })),
+    decide: checkNoSkillDelegation,
+    encode: (outcome) =>
+      Result.match(outcome, {
+        onFailure: () => undefined,
+        onSuccess: blockResult,
+      }),
+    write: (result) => Effect.succeed(result),
+  })
+
 export function runNoSkillDelegation(
   cwd: string,
   toolName: string,
   subagentType: string,
   prompt: string,
 ): Effect.Effect<NoSkillDelegationResult, never, NoDelegateSkills | FileSystem.FileSystem> {
-  return Effect.flatMap(
-    Effect.context<DisciplineContext>(),
-    (services) =>
-      Cell.apply(
-        pipe(
-          Cell.read<DelegationPhases>(({ cwd: dir }) => Effect.provideContext(loadGuard(dir), services)),
-          Cell.decode<DelegationPhases>((guard) =>
-            Result.succeed(CheckDelegationCommand.make({ toolName, subagentType, prompt, guard }))
-          ),
-          Cell.decide<DelegationPhases>(checkNoSkillDelegation),
-          Cell.encode<DelegationPhases>((outcome) =>
-            Result.match(outcome, {
-              onFailure: () => undefined,
-              onSuccess: blockResult,
-            })
-          ),
-          Cell.write<DelegationPhases>((result) => Effect.succeed(result)),
-        ),
-        { cwd, toolName, subagentType, prompt },
-      ),
-  )
+  return Cell.run(delegationCell(toolName, subagentType, prompt), { cwd, toolName, subagentType, prompt })
 }
 
 export const NoSkillDelegationExtension = (pi: ExtensionAPI, runSafe: RunSafe<DisciplineContext>): void => {

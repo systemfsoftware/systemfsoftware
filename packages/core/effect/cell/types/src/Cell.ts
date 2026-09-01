@@ -1,539 +1,278 @@
-import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
-import * as Option from 'effect/Option'
+import type { Kind as HKTKind, TypeLambda as HKTTypeLambda } from 'effect/HKT'
+import type { Layer } from 'effect/Layer'
 import * as Result from 'effect/Result'
-import { CanonicalCommand, canonicalDecide } from './CanonicalDecide.workflow.js'
+import { DESCRIPTION_MODULE, IO_CELLS, type IoCellClassification, type PhaseName } from './Facts.js'
+import type { Policy } from './Policy.js'
 import { type WorkflowBrand } from './Workflow.js'
-/**
- * The type bag. Every phase's input and output type travels in one record so that a
- * stage's own type arguments are identical across stages, which leaves the sentence
- * member as the only difference a diagnostic can report. Measured: with the payload
- * carried per-stage instead, the compiler reports the mismatch at the argument (TS2345)
- * and the sentence arrives only as a type argument; with the payload in one bag it
- * reports the missing member (TS2741) and the sentence is that member's name.
- */
-export interface Phases {
-  readonly command: unknown
-  readonly raw: unknown
-  readonly decoded: unknown
-  readonly decision: unknown
-  readonly decisionError: unknown
-  readonly output: unknown
-  readonly response: unknown
-  readonly decodeError: unknown
-  readonly readError: unknown
-  readonly writeError: unknown
-}
+
+export { DESCRIPTION_MODULE, IO_CELLS, type IoCellClassification, type PhaseName }
 
 /**
- * A read gathers what the decision needs, and may gather a product across its interior;
- * that interior is not type-visible, so no I/O count is claimed or enforced here. A step that
- * mutates in order to report — bumping a counter and returning the resulting rate — is one
- * such product, and belongs here rather than in a layer of its own.
- *
- * The context channel is pinned `never`: a phase requires nothing. Services are resolved by
- * whoever builds the description and handed to the phase as ordinary parameters, which is
- * the same edge that already gathers the read's inputs. The alternative — a `readContext`
- * member on the bag — let an author write `never` for a body that reaches for a service, and
- * nothing checked the claim: under a stage generic over `Phases` the compiler cannot see the
- * lambda's requirement at all, so the description compiled and the missing service surfaced
- * only where it was finally applied, or nowhere. Pinning it makes the lie unrepresentable
- * instead of merely discouraged, and leaves `apply`'s derived `R` honestly `never`.
+ * The nominal brand every `Cell` carries. `Cell.layer` is the only door that applies it.
  */
-export type ReadPhase<P extends Phases> = (
-  command: P['command'],
-) => Effect.Effect<P['raw'], P['readError'], never>
-
-/** Validation. Its `Left` is fatal: it reaches the derived error channel and no write runs. */
-export type DecodePhase<P extends Phases> = (
-  raw: P['raw'],
-) => Result.Result<P['decoded'], P['decodeError']>
+export const CellTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/Cell')
 
 /**
- * The decision. Its `Left` is an outcome, not a fault: both branches travel on to the write.
- *
- * The {@link WorkflowBrand} conjunct makes this the one surface a decision must cross
- * branded: only a `Workflow.make` value satisfies it, so a bare lambda handed here is
- * refused by the compiler with the brand conjunct named in the diagnostic. The `run` on
- * a `DecideNode` inherits the conjunct through this type, which keeps the interpreter's
- * fold sound — a description can only carry decisions that came through `make`.
+ * The nominal brand type of {@link CellTypeId}.
  */
-export type DecidePhase<P extends Phases> =
-  & ((
-    decoded: P['decoded'],
-  ) => Result.Result<P['decision'], P['decisionError']>)
-  & WorkflowBrand
-
-/** Shapes what the write consumes. Total, so it receives both branches of the decision. */
-export type EncodePhase<P extends Phases> = (
-  outcome: Result.Result<P['decision'], P['decisionError']>,
-) => P['output']
+export type CellTypeId = typeof CellTypeId
 
 /**
- * The write. It receives the encoded `output` and, as a second argument, the `raw` its own
- * layer's read gathered.
- *
- * `raw` is there because a write is frequently the point that persists or reports what the
- * read found, while the decision in between deliberately narrows to what it needed. Without
- * this argument such a write has no channel for it and the layer smuggles the value through
- * a closure — a `let` beside the description, assigned in the read and consulted in the
- * write, which then needs a runtime guard for a value the fold has already produced. The
- * argument is second, and a write that does not want it declares one parameter: a unary
- * function satisfies this type, so every write written before it existed is unchanged.
+ * A Cell is one sandwich: a `read` that gathers, a `decide` that refuses or rules, and a
+ * `write` that acts — compiled into a single function from command to response. The `E`
+ * channel carries the infrastructure refusals; the `R` channel carries the services the
+ * phases `yield*`, provided once by the program's composition root.
  */
-export type WritePhase<P extends Phases> = (
-  output: P['output'],
-  raw: P['raw'],
-) => Effect.Effect<P['response'], P['writeError'], never>
-
-// ---------------------------------------------------------------------------
-// the phase records — the description value is an ordered sequence of these
-// ---------------------------------------------------------------------------
-
-/**
- * The invocation shape a folding consumer must use to call a phase's `run`:
- * - `'effect'` — `run` returns an `Effect`; yield it. (read, write)
- * - `'either-fail'` — `run` returns a `Result` whose `Failure` is fatal; fail on `Failure`. (decode)
- * - `'either-pass'` — `run` returns a `Result` that travels forward whole. (decide)
- * - `'total'` — `run` is a plain total function; call it directly. (encode)
- *
- * This is structural data on the record, not one of the five axes: it lets an executing
- * consumer fold the description without knowing which phase it is looking at. The
- * interpreter's switch over `convention` is exhaustively defaulted, so a phase with an
- * invocation shape this module does not know fails at compile time at one named location.
- */
-export type Convention = 'effect' | 'either-fail' | 'either-pass' | 'total'
-
-/**
- * One phase record: `name` (the phase name, as data), `kind` (purity), `convention`
- * (the invocation shape), and the phase's `run`. Each phase type has its own record
- * interface so `run` keeps its exact signature. Nothing here discriminates on `name`:
- * the interpreter dispatches on `convention`, and other consumers read `name` as data.
- * A hand-written `_tag` is deliberately absent — a manual `_tag` member is forbidden
- * here (the schema rule prescribes `TaggedStruct`, which cannot describe a function
- * member), and an ordered sequence of phase records is not a `Match`-style tagged union.
- */
-export interface ReadNode<P extends Phases> {
-  readonly name: 'read'
-  readonly kind: 'impure'
-  readonly convention: 'effect'
-  readonly run: ReadPhase<P>
-}
-export interface DecodeNode<P extends Phases> {
-  readonly name: 'decode'
-  readonly kind: 'pure'
-  readonly convention: 'either-fail'
-  readonly run: DecodePhase<P>
-}
-export interface DecideNode<P extends Phases> {
-  readonly name: 'decide'
-  readonly kind: 'pure'
-  readonly convention: 'either-pass'
-  readonly run: DecidePhase<P>
-}
-export interface EncodeNode<P extends Phases> {
-  readonly name: 'encode'
-  readonly kind: 'pure'
-  readonly convention: 'total'
-  readonly run: EncodePhase<P>
-}
-export interface WriteNode<P extends Phases> {
-  readonly name: 'write'
-  readonly kind: 'impure'
-  readonly convention: 'effect'
-  readonly run: WritePhase<P>
-}
-
-export type Phase<P extends Phases> =
-  | ReadNode<P>
-  | DecodeNode<P>
-  | DecideNode<P>
-  | EncodeNode<P>
-  | WriteNode<P>
-
-/**
- * One impure/pure layer: its phase records in intra-layer execution order. The order is
- * data — the interpreter folds this array and runs each record as its `convention`
- * says, holding no phase sequence of its own. The stage brands are what make a legal
- * description well-ordered at build time; the value's declared order is its execution
- * order.
- */
-export interface Layer<P extends Phases> {
-  readonly phases: readonly Phase<P>[]
-}
-
-/** The description package's own module name — what an import edge would match. */
-export const DESCRIPTION_MODULE = '@systemfsoftware/effect-cell-types' as const
-
-/**
- * The I/O-cell classification: the cells whose calls are I/O, plus the non-cell module
- * sources whose calls are I/O. Written once here; a consumer folds it off the value.
- */
-export const IO_CELLS = {
-  cells: ['store', 'adapter'],
-  sources: ['effect/Clock', 'effect/System'],
-} as const
-
-/**
- * Derived from the value rather than restated beside it: a hand-written twin is a second
- * declaration of axis 5, and the two drift the moment a cell is reclassified in only one.
- */
-export type IoCellClassification = typeof IO_CELLS
-
-/**
- * The description root, carried by every stage. A consumer folds a stage value to
- * recover the description's whole vocabulary: the phase names and kinds on each
- * record, the intra-layer order in each `phases` array, the package's own module
- * name, and the I/O-cell classification. Nothing about the shape of a legal
- * description is written down anywhere else.
- */
-export interface Description<P extends Phases> {
-  readonly module: typeof DESCRIPTION_MODULE
-  readonly ioCells: IoCellClassification
-  readonly layers: readonly Layer<P>[]
+export interface Cell<in I, out A, out E = never, out R = never> {
+  readonly [CellTypeId]: CellTypeId
+  readonly run: (input: I) => Effect.Effect<A, E, R>
 }
 
 /**
- * The stages are siblings, never a hierarchy. Each carries exactly the sentence naming the
- * call that must come next, and none extends another. Measured: under a hierarchy a later
- * stage is assignable to an earlier parameter, so an inversion — decoding what was already
- * decided — compiles. As siblings both the forward skip and the backward inversion are
- * rejected, each diagnostic naming the sentence it is missing.
- *
- * The carrier is deliberately the same type on every stage — `Description` — so the
- * compiler reports the argument rather than the member only when the carrier itself is
- * wrong, and the sentence stays the name a diagnostic reports.
+ * The type lambda for {@link Cell}, admitting Cell to `Kind` positions.
  */
-export interface ReadDone<P extends Phases> extends Description<P> {
-  readonly 'call read(command) before decode(raw)': true
-}
-export interface DecodeDone<P extends Phases> extends Description<P> {
-  readonly 'call decode(raw) before decide(decoded)': true
-}
-export interface DecideDone<P extends Phases> extends Description<P> {
-  readonly 'call decide(decoded) before encode(decision)': true
-}
-export interface EncodeDone<P extends Phases> extends Description<P> {
-  readonly 'call encode(decision) before write(output)': true
-}
-/** Terminal. A description is applied from here, and a further layer opens from here. */
-export interface WriteDone<P extends Phases> extends Description<P> {
-  readonly 'call write(output) before applying the description': true
-}
-
-const READ_DONE = 'call read(command) before decode(raw)'
-const DECODE_DONE = 'call decode(raw) before decide(decoded)'
-const DECIDE_DONE = 'call decide(decoded) before encode(decision)'
-const ENCODE_DONE = 'call encode(decision) before write(output)'
-const WRITE_DONE = 'call write(output) before applying the description'
-
-/** Replaces the open layer with itself plus one more phase record. */
-const intoOpenLayer = <P extends Phases>(
-  description: Description<P>,
-  phase: Phase<P>,
-): Description<P> => {
-  const layers = description.layers
-  const last = layers[layers.length - 1]
-  return {
-    module: description.module,
-    ioCells: description.ioCells,
-    layers: [...layers.slice(0, -1), { ...last, phases: [...(last?.phases ?? []), phase] }],
-  }
+export interface TypeLambda extends HKTTypeLambda {
+  readonly type: Cell<this['In'], this['Target'], this['Out2'], this['Out1']>
 }
 
 /**
- * Opens a layer. Passing a prior `WriteDone` opens a second layer over the same bag, so a
- * call site whose real order writes before it can classify is one description carrying two
- * layers rather than two descriptions composed by hand.
- *
- * This one is not dual: it starts the chain, so on the opening layer it has no `self` to
- * receive. Every phase after it is dual, which is what lets a description be written in the
- * order it runs.
+ * A fully-applied {@link Kind} for Cell: `Kind<I, E, R, A>` is `Cell<I, A, E, R>`.
  */
-export const read = <P extends Phases>(run: ReadPhase<P>, previous?: WriteDone<P>): ReadDone<P> => ({
-  [READ_DONE]: true,
-  module: DESCRIPTION_MODULE,
-  ioCells: IO_CELLS,
-  layers: [
-    ...(previous?.layers ?? []),
-    { phases: [{ name: 'read', kind: 'impure', convention: 'effect', run }] },
-  ],
+export type Kind<I, E, R, A> = HKTKind<TypeLambda, I, E, R, A>
+
+/**
+ * The function shape a Cell publishes, read off the Cell type itself. Use it to type a
+ * capability parameter or a callback that hands a Cell's run to a shell:
+ * `Run<I, A, E, R>` is `Cell<I, A, E, R>['run']`.
+ */
+export type Run<I, A, E, R> = Cell<I, A, E, R>['run']
+
+const make = <I, A, E, R>(run: (input: I) => Effect.Effect<A, E, R>): Cell<I, A, E, R> => ({
+  [CellTypeId]: CellTypeId,
+  run,
 })
 
-/**
- * The chaining phases are dual, data-last overload declared first. Nesting the constructors
- * reads innermost-first — backwards from the order the phases run — which defeats the point of
- * a type that exists to make that order legible. In `pipe` the call site reads in phase order,
- * and the sentence still arrives as a missing member through it.
- *
- * A `Do`-notation scope binding each phase's result for later phases to read was measured as
- * an alternative: the sentence survives it, even with the scope varying per stage, because an
- * absent member is reported before type arguments are compared. It was not adopted, because a
- * scope the interpreter folds over is type-erased, and reading a phase back out of it needs an
- * assertion this design does not.
- */
-export const decode: {
-  <P extends Phases>(run: DecodePhase<P>): (previous: ReadDone<P>) => DecodeDone<P>
-  <P extends Phases>(previous: ReadDone<P>, run: DecodePhase<P>): DecodeDone<P>
-} = dual(2, <P extends Phases>(previous: ReadDone<P>, run: DecodePhase<P>): DecodeDone<P> => ({
-  [DECODE_DONE]: true,
-  ...intoOpenLayer(previous, { name: 'decode', kind: 'pure', convention: 'either-fail', run }),
-}))
+interface LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR> {
+  readonly read: (command: I) => Effect.Effect<Raw, RE, RR>
+  readonly decide: ((decoded: Raw) => Result.Result<Dec, DE>) & WorkflowBrand
+  readonly write: (output: Result.Result<Dec, DE>, raw: Raw) => Effect.Effect<Resp, WE, WR>
+}
 
-export const decide: {
-  <P extends Phases>(run: DecidePhase<P>): (previous: DecodeDone<P>) => DecideDone<P>
-  <P extends Phases>(previous: DecodeDone<P>, run: DecidePhase<P>): DecideDone<P>
-} = dual(2, <P extends Phases>(previous: DecodeDone<P>, run: DecidePhase<P>): DecideDone<P> => ({
-  [DECIDE_DONE]: true,
-  ...intoOpenLayer(previous, { name: 'decide', kind: 'pure', convention: 'either-pass', run }),
-}))
+interface LayerShortSpec<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
+  extends LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
+{
+  readonly decode?: never
+  readonly encode?: never
+}
 
-export const encode: {
-  <P extends Phases>(run: EncodePhase<P>): (previous: DecideDone<P>) => EncodeDone<P>
-  <P extends Phases>(previous: DecideDone<P>, run: EncodePhase<P>): EncodeDone<P>
-} = dual(2, <P extends Phases>(previous: DecideDone<P>, run: EncodePhase<P>): EncodeDone<P> => ({
-  [ENCODE_DONE]: true,
-  ...intoOpenLayer(previous, { name: 'encode', kind: 'pure', convention: 'total', run }),
-}))
-
-export const write: {
-  <P extends Phases>(run: WritePhase<P>): (previous: EncodeDone<P>) => WriteDone<P>
-  <P extends Phases>(previous: EncodeDone<P>, run: WritePhase<P>): WriteDone<P>
-} = dual(2, <P extends Phases>(previous: EncodeDone<P>, run: WritePhase<P>): WriteDone<P> => ({
-  [WRITE_DONE]: true,
-  ...intoOpenLayer(previous, { name: 'write', kind: 'impure', convention: 'effect', run }),
-}))
-
-/**
- * What can flow through the interpreter's fold: every phase's input and output type,
- * including the `decide` `Result` that travels forward whole. The value is threaded as
- * this union rather than `unknown` so each phase call is sound without an assertion —
- * every member is an indexed access on `Phases` (constrained `unknown`), and the only
- * constructed member, the outcome `Result`, is narrowed by a runtime guard. The phase
- * input types are not observable, so no narrower claim is possible here.
- */
-type FoldValue<P extends Phases> =
-  | P['command']
-  | P['raw']
-  | P['decoded']
-  | Result.Result<P['decision'], P['decisionError']>
-  | P['output']
-  | P['response']
-
-/**
- * The runtime guard that lets the `'total'` case call `EncodePhase` soundly: an encode
- * phase is chained only after a decide, so the value reaching it is the outcome `Result`
- * and `Result.isResult` certifies exactly that. The specific `decision`/`decisionError`
- * members are not observable at runtime, so the guard narrows to them by construction —
- * the same trust the fold places in the chain's order.
- */
-const isOutcome = <P extends Phases>(
-  value: FoldValue<P>,
-): value is Result.Result<P['decision'], P['decisionError']> => Result.isResult(value)
-
-/**
- * Runs one layer as the sandwich the value declares: the phase records run in array
- * order, each dispatched on its carried `convention`. There is no phase sequence here —
- * the order is the `phases` array and the invocation shape is the `convention` field,
- * so a description's declared order IS its execution order. The convention switch is
- * exhaustive over the union via its `never` default: a future phase with an invocation
- * shape this module does not know fails at compile time, at this one location.
- *
- * The two `Failure` rules are carried by the phase types rather than chosen here. A `decode`
- * Failure has no downstream consumer — nothing accepts `decodeError` — so its only route is a
- * failure, which is what puts it in the derived error channel. A `decide` Failure cannot be
- * unwrapped, because `EncodePhase` takes the whole `Result`, so its only route is forward as
- * a value. Neither is a decision the interpreter makes.
- *
- * Every layer reachable from a `WriteDone` was built by the five constructors in order, so
- * its last phase is a write and every slot is filled. A layer that is nonetheless empty or
- * not closed by a write is a defect in this module, never a domain outcome, so it dies —
- * the same guard the name-keyed layer used for unfilled slots. `Effect.die` returns
- * `Effect<never>`, which is why the guards cost the derived `E` and `R` nothing.
- */
-const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
-  Effect.gen(function*() {
-    const phases = layer.phases
-    const last = phases[phases.length - 1]
-    if (!last || last.name !== 'write') {
-      return yield* Effect.die(
-        new Error('effect-cell-types: a layer reached the interpreter without a write phase closing it'),
-      )
-    }
-
-    let value: FoldValue<P> = command
-    // What the read gathered, kept so the terminal write receives it as well as the
-    // encoded output. Before a read has run there is nothing gathered and the command is
-    // the only thing the layer has seen, which is what a read-less layer's write is handed.
-    let raw: FoldValue<P> = command
-    for (const phase of phases.slice(0, -1)) {
-      switch (phase.convention) {
-        case 'effect':
-          // `effect` covers both impure phases and their arities differ, so the branch
-          // narrows on the phase name rather than calling through the union.
-          if (phase.name === 'read') {
-            value = yield* phase.run(value)
-            raw = value
-            break
-          }
-          value = yield* phase.run(value, raw)
-          break
-        case 'either-fail':
-          value = yield* Result.match(phase.run(value), {
-            onFailure: Effect.fail,
-            onSuccess: Effect.succeed,
-          })
-          break
-        case 'either-pass':
-          value = phase.run(value)
-          break
-        case 'total': {
-          if (!isOutcome(value)) {
-            return yield* Effect.die(
-              new Error(
-                'effect-cell-types: an encode phase received a value that is not the decide outcome',
-              ),
-            )
-          }
-          value = phase.run(value)
-          break
-        }
-        default: {
-          const unreachable: never = phase
-          return yield* Effect.die(
-            new Error(`effect-cell-types: unknown phase convention ${String(unreachable)}`),
-          )
-        }
-      }
-    }
-    // The guard above certified that the last phase is a write; yielding its effect
-    // directly is what makes the derived success channel the layer's `response` — the
-    // fold's loop cannot see that, so the terminal write is peeled out of it.
-    return yield* last.run(value, raw)
-  })
-
-/**
- * Applies a description. The return type is deliberately not annotated: `gen` accumulates
- * `E` and `R` from the union of what is actually yielded, so an over-claimed channel is
- * unrepresentable rather than merely discouraged. Annotating it here would let this module
- * promise a failure that no phase can produce.
- *
- * The parameter keeps the terminal `WriteDone<P>` brand. It is not decoration: it is what
- * makes applying a half-built chain — a `ReadDone`, say — a compile error rather than a
- * runtime death, which `test-types/Cell.tst.ts` pins. The brand does not constrain the
- * phases array's order (a literal satisfies it in any order, which is why the interpreter
- * reads the order off the value), but it does constrain chain completion, and that is a
- * guarantee worth the narrower parameter.
- *
- * `forEach` takes no concurrency option here, so the layers run in declared order and the
- * sequence is structural rather than something a caller could pass differently; the
- * description's response is the last layer's. No scope is opened and interruptibility is
- * untouched, so a `Scope.Scope` a phase requires reaches the caller as part of the derived `R`.
- */
-export const apply = <P extends Phases>(description: WriteDone<P>, command: P['command']) =>
-  Effect.gen(function*() {
-    const responses = yield* Effect.forEach(description.layers, (layer) => runLayer(layer, command))
-    return yield* Option.match(Arr.last(responses), {
-      onNone: () =>
-        Effect.die(
-          new Error('effect-cell-types: a description reached the interpreter with no layers'),
-        ),
-      onSome: Effect.succeed,
-    })
-  })
-
-// ---------------------------------------------------------------------------
-// the vocabulary — derived by folding a canonical description, not declared twice
-// ---------------------------------------------------------------------------
-
-/** One phase's vocabulary entry: what it is called, its purity, its invocation shape. */
-export interface PhaseFact {
-  readonly name: Phase<Phases>['name']
-  readonly kind: Phase<Phases>['kind']
-  readonly convention: Convention
+interface LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>
+  extends Omit<LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>, 'decide' | 'write'>
+{
+  readonly decode: (raw: Raw) => Result.Result<Dcd, DecE>
+  readonly decide: ((decoded: Dcd) => Result.Result<Dec, DE>) & WorkflowBrand
+  readonly encode: (outcome: Result.Result<Dec, DE>) => Out
+  readonly write: (output: Out, raw: Raw) => Effect.Effect<Resp, WE, WR>
 }
 
 /**
- * The five axes as data, for a consumer that has no description of its own to fold.
+ * The interpreter. Order is the text: read, then decode, then decide, then encode, then
+ * write. The `E` channel is the sandwich's truth — read, decode, and write failures;
+ * a decide refusal is the outcome the encode and write receive, not a failure.
+ */
+const layerRunner = <I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
+  spec:
+    | LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
+    | LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>,
+): (input: I) => Effect.Effect<Resp, RE | DecE | WE, RR | WR> => {
+  if ('decode' in spec && 'encode' in spec) {
+    return (input) =>
+      Effect.gen(function*() {
+        const raw = yield* spec.read(input)
+        const decoded = yield* Result.match(spec.decode(raw), {
+          onFailure: Effect.fail,
+          onSuccess: Effect.succeed,
+        })
+        const outcome = spec.decide(decoded)
+        return yield* spec.write(spec.encode(outcome), raw)
+      })
+  }
+  return (input) =>
+    Effect.gen(function*() {
+      const raw = yield* spec.read(input)
+      const outcome = spec.decide(raw)
+      return yield* spec.write(outcome, raw)
+    })
+}
+
+/**
+ * Builds a Cell from one sandwich.
  *
- * `byKind` groups the walked phase names by their purity. It is here rather than left to
- * each consumer because which phases are pure is this module's own fact, and a consumer
- * that reconstructs it has to pick a proxy — inferring purity from the invocation shape,
- * say — which is a different axis and silently disagrees the moment a pure phase is given
- * an effectful shape or an impure one is not.
+ * Short form — `read` produces the value `decide` rules on, and the decide outcome is what
+ * `write` receives:
+ *
+ * ```ts
+ * import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
+ * import { Effect, Result } from 'effect'
+ *
+ * declare const decideAdmission: Workflow<CliArgs, Verdict, Refusal>
+ * declare class CliArgs { readonly target: string }
+ * declare class Verdict { readonly ok: boolean }
+ * declare class Refusal { readonly _tag: 'Refused' }
+ *
+ * const cell = Cell.layer({
+ *   read: (args: CliArgs) => Effect.succeed(args),
+ *   decide: decideAdmission,
+ *   write: (outcome: Result.Result<Verdict, Refusal>, raw: CliArgs) => Effect.void,
+ * })
+ * ```
+ *
+ * Long form — `decode` and `encode` adapt each side of `decide`; both are required together,
+ * and a spec carrying one without the other fails inference.
+ */
+export function layer<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>(
+  spec: LayerShortSpec<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>,
+): Cell<I, Resp, RE | WE, RR | WR>
+export function layer<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
+  spec: LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>,
+): Cell<I, Resp, RE | DecE | WE, RR | WR>
+export function layer<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
+  spec:
+    | LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
+    | LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>,
+): Cell<I, Resp, RE | DecE | WE, RR | WR> {
+  return make(layerRunner(spec))
+}
+export const run: {
+  <I>(input: I): <A, E, R>(self: Cell<I, A, E, R>) => Effect.Effect<A, E, R>
+  <I, A, E, R>(self: Cell<I, A, E, R>, input: I): Effect.Effect<A, E, R>
+} = dual(
+  2,
+  <I, A, E, R>(self: Cell<I, A, E, R>, input: I): Effect.Effect<A, E, R> => self.run(input),
+)
+
+/**
+ * Transforms the Cell's response.
+ */
+export const map: {
+  <A, B>(f: (a: A) => B): <I, E, R>(self: Cell<I, A, E, R>) => Cell<I, B, E, R>
+  <I, A, E, R, B>(self: Cell<I, A, E, R>, f: (a: A) => B): Cell<I, B, E, R>
+} = dual(
+  2,
+  <I, A, E, R, B>(self: Cell<I, A, E, R>, f: (a: A) => B): Cell<I, B, E, R> =>
+    make((input) => Effect.map(self.run(input), f)),
+)
+
+/**
+ * Transforms the Cell's input.
+ */
+export const mapInput: {
+  <I0, I>(f: (input: I0) => I): <A, E, R>(self: Cell<I, A, E, R>) => Cell<I0, A, E, R>
+  <I0, I, A, E, R>(self: Cell<I, A, E, R>, f: (input: I0) => I): Cell<I0, A, E, R>
+} = dual(
+  2,
+  <I0, I, A, E, R>(self: Cell<I, A, E, R>, f: (input: I0) => I): Cell<I0, A, E, R> =>
+    make((input: I0) => self.run(f(input))),
+)
+
+/**
+ * Feeds this Cell's response to the next Cell as its input. The error and service channels
+ * union.
+ */
+export const andThen: {
+  <B, E2, R2>(
+    that: Cell<never, B, E2, R2>,
+  ): <I, A, E, R>(self: Cell<I, A, E, R>) => Cell<I, B, E | E2, R | R2>
+  <I, A, E, R, B, E2, R2>(
+    self: Cell<I, A, E, R>,
+    that: Cell<A, B, E2, R2>,
+  ): Cell<I, B, E | E2, R | R2>
+} = dual(
+  2,
+  <I, A, E, R, B, E2, R2>(
+    self: Cell<I, A, E, R>,
+    that: Cell<A, B, E2, R2>,
+  ): Cell<I, B, E | E2, R | R2> => make((input) => Effect.flatMap(self.run(input), (response) => that.run(response))),
+)
+
+/**
+ * Runs both Cells against the same input and tuples the responses. Fails fast: when one
+ * side refuses, the other's write never runs.
+ */
+export const zip: {
+  <I, B, E2, R2>(
+    that: Cell<I, B, E2, R2>,
+  ): <A, E, R>(self: Cell<I, A, E, R>) => Cell<I, readonly [A, B], E | E2, R | R2>
+  <I, A, E, R, B, E2, R2>(
+    self: Cell<I, A, E, R>,
+    that: Cell<I, B, E2, R2>,
+  ): Cell<I, readonly [A, B], E | E2, R | R2>
+} = dual(
+  2,
+  <I, A, E, R, B, E2, R2>(
+    self: Cell<I, A, E, R>,
+    that: Cell<I, B, E2, R2>,
+  ): Cell<I, readonly [A, B], E | E2, R | R2> =>
+    make((input) => Effect.zipWith(self.run(input), that.run(input), (a, b): readonly [A, B] => [a, b])),
+)
+
+/**
+ * Provides a Layer to the Cell, eliminating the services the layer builds from `R`. This is
+ * the one composition-root elimination; the resulting Cell still demands the layer's input
+ * services. A missing provide is a compile error at the run site.
+ */
+export const provide: {
+  <RIn, LE, ROut>(
+    layer: Layer<ROut, LE, RIn>,
+  ): <I, A, E, R>(self: Cell<I, A, E, R>) => Cell<I, A, E | LE, RIn | Exclude<R, ROut>>
+  <I, A, E, R, RIn, LE, ROut>(
+    self: Cell<I, A, E, R>,
+    layer: Layer<ROut, LE, RIn>,
+  ): Cell<I, A, E | LE, RIn | Exclude<R, ROut>>
+} = dual(
+  2,
+  <I, A, E, R, RIn, LE, ROut>(
+    self: Cell<I, A, E, R>,
+    layer: Layer<ROut, LE, RIn>,
+  ): Cell<I, A, E | LE, RIn | Exclude<R, ROut>> => make((input) => Effect.provide(self.run(input), layer)),
+)
+
+/**
+ * Wraps the Cell's run in a `Policy` — retry, timeout, and their kin — preserving every
+ * channel.
+ */
+export const withPolicy: {
+  <A, E, R>(
+    policy: Policy<A, E, R>,
+  ): <I>(self: Cell<I, A, E, R>) => Cell<I, A, E, R>
+  <I, A, E, R>(
+    self: Cell<I, A, E, R>,
+    policy: Policy<A, E, R>,
+  ): Cell<I, A, E, R>
+} = dual(
+  2,
+  <I, A, E, R>(
+    self: Cell<I, A, E, R>,
+    policy: Policy<A, E, R>,
+  ): Cell<I, A, E, R> => make((input) => policy(self.run(input))),
+)
+
+/**
+ * The facts the lint plugin judges a spec body by, as a const table. The order the
+ * interpreter runs is the text of {@link layerRunner}; the table states only what a
+ * rule cannot read off a type: which phases are pure, and what counts as I/O.
  */
 export interface Vocabulary {
   readonly module: typeof DESCRIPTION_MODULE
   readonly ioCells: IoCellClassification
-  readonly phases: readonly PhaseFact[]
-  readonly byKind: Readonly<Record<PhaseFact['kind'], readonly PhaseFact['name'][]>>
-  /**
-   * The export that runs a finished description. A consumer deciding which calls on this module
-   * belong to a description needs the phases *and* the applier; without it the applier is the one
-   * name it has to write down for itself, and one restated name is enough to drift.
-   */
-  readonly applier: 'apply'
+  readonly byKind: { readonly pure: readonly PhaseName[] }
+  readonly composer: 'layer'
 }
-
-/**
- * The bag the canonical description is built with. It is `Phases` with one member
- * pinned: `decoded` is the canonical command class, because `canonicalDecide` is a
- * decider over that class and a decider's parameter is contravariant — a phase typed
- * `(decoded: unknown) => …` would demand that `unknown` be assignable to the command,
- * which it is not. Every other member stays `unknown`, so nothing else narrows.
- */
-interface CanonicalPhases extends Phases {
-  readonly decoded: CanonicalCommand
-}
-
-/**
- * A canonical description, built through the public constructors with phases that do
- * nothing. It is exported so a consumer — a generator, a lint rule, a documenter — can
- * obtain a real branded description without replaying the constructor chain: spread it
- * and substitute its phase records' `run`s. The records it carries are the same literals
- * the constructors write for real call sites, so the vocabulary below cannot drift from
- * them.
- *
- * Its order is not a choice this module makes. The stage brands admit exactly one chain, so
- * any other sequence fails to typecheck here — which is what keeps the derived order
- * non-circular: it is read off a value, and the value's shape is enforced by the types.
- */
-export const canonical: WriteDone<CanonicalPhases> = write(
-  encode(
-    decide(
-      decode(read<CanonicalPhases>(() => Effect.void), () => Result.succeed(CanonicalCommand.make({}))),
-      // The canonical's decide never resolves — the description's phases "do nothing" —
-      // but its error channel must still satisfy the tagged channel rule the brand rides
-      // on, so the decider is a `make` value whose phantom error channel is an uninhabited
-      // `S.TaggedError`.
-      canonicalDecide,
-    ),
-    () => undefined,
-  ),
-  () => Effect.void,
-)
-
-/**
- * The phase vocabulary, obtained by walking `canonical`. A consumer that needs the phase
- * names, their purity, or their order — a lint rule, a generator, a document — reads them
- * from here instead of restating them, so there is one place a phase is described and the
- * description is the place.
- */
-const WALKED_PHASES: readonly PhaseFact[] = Arr.flatMap(
-  canonical.layers,
-  (layer) => layer.phases.map(({ convention, kind, name }): PhaseFact => ({ convention, kind, name })),
-)
 
 export const vocabulary: Vocabulary = {
-  module: canonical.module,
-  ioCells: canonical.ioCells,
-  phases: WALKED_PHASES,
-  byKind: {
-    pure: WALKED_PHASES.filter((phase) => phase.kind === 'pure').map((phase) => phase.name),
-    impure: WALKED_PHASES.filter((phase) => phase.kind === 'impure').map((phase) => phase.name),
-  },
-  // The one place this name is written. `apply` is defined in this module, so naming it here is a
-  // declaration at its definition site, not a restatement beside one.
-  applier: 'apply',
+  module: DESCRIPTION_MODULE,
+  ioCells: IO_CELLS,
+  byKind: { pure: ['decode', 'decide', 'encode'] },
+  composer: 'layer',
 }

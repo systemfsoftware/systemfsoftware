@@ -1,9 +1,8 @@
-import type { StageError } from '@systemfsoftware/stryker-js-engine'
+import type { RunOutcome, StageError } from '@systemfsoftware/stryker-js-engine'
 import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import type * as Effect from 'effect/Effect'
 
-/**
- * The mutation-testing entry the CLI calls once options are parsed. Injectable
- * so tests capture the parsed options without starting a real mutation run.
- */
-export type StrykerRun = (options: PartialStrykerOptions) => Effect.Effect<unknown, StageError, never>
+export type StrykerRun = (
+  options: PartialStrykerOptions,
+  targetMutatePatterns?: string[],
+) => Effect.Effect<RunOutcome, StageError, never>

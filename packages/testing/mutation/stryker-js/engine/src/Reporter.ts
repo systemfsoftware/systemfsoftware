@@ -25,7 +25,6 @@ import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
-import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
 import * as MutableHashMap from 'effect/MutableHashMap'
@@ -42,17 +41,12 @@ import type { OpenEndLocation } from 'mutation-testing-report-schema/api'
 
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import { verdictExitClass } from '@systemfsoftware/stryker-js/ExitClass'
-import { JsonDocument, JsonReportCommand, JsonReportError, makeJsonDocument } from './JsonReport.workflow.js'
+import { JsonReportCommand, makeJsonDocument } from './JsonReport.workflow.js'
 import type { TestCoverage } from './Mutants.js'
 import type { ResolvedMode } from './output-mode.js'
 import type { Project } from './Project.js'
 import { FILE_CONCURRENCY, readOriginal } from './Project.js'
-import {
-  ClearTextDocument,
-  ClearTextReportCommand,
-  ClearTextReportError,
-  makeClearTextDocument,
-} from './Reporter.workflow.js'
+import { ClearTextReportCommand, makeClearTextDocument } from './Reporter.workflow.js'
 import type { RunOutcome } from './Run.js'
 import { strykerVersion } from './stryker-package.js'
 import { buildVerdictEnvelope, isActionableStatus } from './verdict-envelope.js'
@@ -272,19 +266,6 @@ function formatTime(timeInSeconds: number): string {
 // Clear-text reporter — stdout + debug via Cell pipeline
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface ClearTextReportPhases extends Cell.Phases {
-  readonly command: void
-  readonly raw: { readonly report: unknown; readonly metrics: unknown; readonly options: unknown }
-  readonly decoded: ClearTextReportCommand
-  readonly decision: ClearTextDocument
-  readonly decisionError: ClearTextReportError
-  readonly output: { readonly stdout: ReadonlyArray<string>; readonly debug: ReadonlyArray<string> }
-  readonly response: void
-  readonly decodeError: unknown
-  readonly readError: PlatformError
-  readonly writeError: PlatformError
-}
-
 export const makeClearTextReporter = (params: {
   readonly options?: ProvidedStrykerOptions
   readonly out?: NodeJS.WritableStream
@@ -292,22 +273,23 @@ export const makeClearTextReporter = (params: {
   const options = params.options
   const out = params.out ?? process.stdout
 
-  let heldReport: schema.MutationTestResult | undefined
-  let heldMetrics: MutationTestMetricsResult | undefined
-
-  const clearTextDescription: Cell.WriteDone<ClearTextReportPhases> = pipe(
-    Cell.read<ClearTextReportPhases>(() => Effect.succeed({ report: heldReport, metrics: heldMetrics, options })),
-    Cell.decode<ClearTextReportPhases>((raw) =>
-      S.decodeUnknownResult(ClearTextReportCommand)({ report: raw.report, metrics: raw.metrics, options: raw.options })
-    ),
-    Cell.decide<ClearTextReportPhases>(makeClearTextDocument),
-    Cell.encode<ClearTextReportPhases>((outcome) =>
+  const clearTextCell = Cell.layer({
+    read: (command: { readonly report: schema.MutationTestResult; readonly metrics: MutationTestMetricsResult }) =>
+      // raw: { report, metrics, options } from command
+      Effect.succeed({ report: command.report, metrics: command.metrics, options }),
+    decode: (
+      raw: { readonly report: unknown; readonly metrics: unknown; readonly options: unknown },
+    ): Result.Result<ClearTextReportCommand, unknown> =>
+      S.decodeUnknownResult(ClearTextReportCommand)({ report: raw.report, metrics: raw.metrics, options: raw.options }),
+    decide: makeClearTextDocument,
+    encode: (outcome) =>
       Result.match(outcome, {
         onFailure: () => ({ stdout: [] satisfies ReadonlyArray<string>, debug: [] satisfies ReadonlyArray<string> }),
         onSuccess: (doc) => ({ stdout: doc.stdout, debug: doc.debug }),
-      })
-    ),
-    Cell.write<ClearTextReportPhases>((output) =>
+      }),
+    write: (
+      output: { readonly stdout: ReadonlyArray<string>; readonly debug: ReadonlyArray<string> },
+    ): Effect.Effect<void, PlatformError, never> =>
       Effect.gen(function*() {
         for (const line of output.stdout) {
           out.write(`${line}\n`)
@@ -315,9 +297,8 @@ export const makeClearTextReporter = (params: {
         for (const line of output.debug) {
           yield* Effect.logDebug(line)
         }
-      })
-    ),
-  )
+      }),
+  })
 
   return {
     onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
@@ -326,9 +307,7 @@ export const makeClearTextReporter = (params: {
     onMutationTestReportReady: (report: schema.MutationTestResult, metrics: MutationTestMetricsResult) =>
       Effect.gen(function*() {
         if (options === undefined) return
-        heldReport = report
-        heldMetrics = metrics
-        yield* Cell.apply(clearTextDescription, undefined)
+        yield* Cell.run(clearTextCell, { report, metrics })
       }).pipe(
         Effect.catchCause((cause) =>
           Effect.fail(
@@ -348,19 +327,6 @@ export const makeClearTextReporter = (params: {
 // JSON reporter — file report via Cell pipeline
 // ═══════════════════════════════════════════════════════════════════════════
 
-interface JsonReportPhases extends Cell.Phases {
-  readonly command: void
-  readonly raw: { readonly report: schema.MutationTestResult }
-  readonly decoded: JsonReportCommand
-  readonly decision: JsonDocument
-  readonly decisionError: JsonReportError
-  readonly output: string
-  readonly response: void
-  readonly decodeError: unknown
-  readonly readError: PlatformError
-  readonly writeError: PlatformError
-}
-
 export const makeJsonReporter = (params: {
   readonly options?: ProvidedStrykerOptions
   readonly fs: FileSystem.FileSystem
@@ -370,25 +336,23 @@ export const makeJsonReporter = (params: {
   const fs = params.fs
   const path = params.path
 
-  let heldReport: schema.MutationTestResult | undefined
-
-  const jsonReportDescription: Cell.WriteDone<JsonReportPhases> = pipe(
-    Cell.read<JsonReportPhases>(() => {
-      const report = heldReport
-      if (report === undefined) {
-        return Effect.die(new Error('json reporter applied before onMutationTestReportReady'))
-      }
-      return Effect.succeed({ report })
-    }),
-    Cell.decode<JsonReportPhases>((raw) => Result.succeed(JsonReportCommand.make({ report: raw.report }))),
-    Cell.decide<JsonReportPhases>(makeJsonDocument),
-    Cell.encode<JsonReportPhases>((outcome) =>
+  const jsonReportCell = Cell.layer({
+    read: (command: { readonly report: schema.MutationTestResult }) =>
+      // raw: { report } from command
+      Effect.succeed({ report: command.report }),
+    decode: (raw: { readonly report: schema.MutationTestResult }): Result.Result<JsonReportCommand, unknown> => {
+      const result: Result.Result<JsonReportCommand, unknown> = Result.succeed(
+        JsonReportCommand.make({ report: raw.report }),
+      )
+      return result
+    },
+    decide: makeJsonDocument,
+    encode: (outcome) =>
       Result.match(outcome, {
         onFailure: () => '',
         onSuccess: (doc) => doc.json,
-      })
-    ),
-    Cell.write<JsonReportPhases>((json) =>
+      }),
+    write: (json: string) =>
       Effect.gen(function*() {
         if (options === undefined) return
         const filePath = path.normalize(options.jsonReporter.fileName)
@@ -396,9 +360,8 @@ export const makeJsonReporter = (params: {
         yield* writeOutputFile(fs, path, path.resolve(filePath), json)
         const url = yield* path.toFileUrl(path.resolve(filePath)).pipe(Effect.orDie)
         yield* Effect.logInfo(`Your report can be found at: ${url.href}`)
-      })
-    ),
-  )
+      }),
+  })
 
   return {
     onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
@@ -407,8 +370,7 @@ export const makeJsonReporter = (params: {
     onMutationTestReportReady: (report: schema.MutationTestResult, _metrics: MutationTestMetricsResult) =>
       Effect.gen(function*() {
         if (options === undefined) return
-        heldReport = report
-        yield* Cell.apply(jsonReportDescription, undefined)
+        yield* Cell.run(jsonReportCell, { report })
       }).pipe(
         Effect.catchCause((cause) =>
           Effect.fail(

@@ -25,6 +25,17 @@ const runOnce = (workDir: string, incrementalFile: string) =>
   Effect.gen(function*() {
     const path = yield* Path.Path
     const runStartedAt = yield* Clock.currentTimeMillis
+    const runLayer = Layer.mergeAll(
+      nodePlatformLayer,
+      makeRunLayer({
+        runId: generateRunId(),
+        resolvedMode: { mode: 'human', signal: 'env', stdoutIsTTY: false },
+        runStartedAt,
+        basePath: workDir,
+        reporterPluginModules: [],
+        allowConsoleColors: false,
+      }).pipe(Layer.provide(nodePlatformLayer)),
+    )
     return yield* Effect.scoped(
       runMutationTest(
         {
@@ -35,15 +46,8 @@ const runOnce = (workDir: string, incrementalFile: string) =>
           disableBail: true,
           tempDirName: path.join(workDir, '.stryker-tmp'),
         },
-        makeRunLayer({
-          runId: generateRunId(),
-          resolvedMode: { mode: 'human', signal: 'env', stdoutIsTTY: false },
-          runStartedAt,
-          basePath: workDir,
-          reporterPluginModules: [],
-          allowConsoleColors: false,
-        }).pipe(Layer.provideMerge(nodePlatformLayer)),
-      ),
+        undefined,
+      ).pipe(Effect.provide(runLayer)),
     )
   })
 

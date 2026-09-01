@@ -10,10 +10,8 @@ import { Cell, Wire } from '@systemfsoftware/effect-cell-types'
 import { Module } from '@systemfsoftware/stryker-js/Module'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
-import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
-import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Path from 'effect/Path'
 import * as Predicate from 'effect/Predicate'
@@ -1164,63 +1162,6 @@ function loadOptionsFromConfigFile(
     }),
   )
 }
-interface ConfigReaderPhases extends Cell.Phases {
-  readonly command: ReadConfigCommand
-  readonly raw: unknown
-  readonly decoded: MergeCommand
-  readonly decision: import('./Config.workflow.js').MergeResult
-  readonly decisionError: import('./Config.workflow.js').MergeError
-  readonly output: StrykerOptions
-  readonly response: StrykerOptions
-  readonly decodeError: ConfigFileInvalidError
-  readonly readError: ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError
-  readonly writeError: never
-}
-
-const configReaderDescription = (
-  cliOptions: Record<string, unknown>,
-  basePath: string,
-  services: Context.Context<FileSystem.FileSystem | Module | Path.Path>,
-): Cell.WriteDone<ConfigReaderPhases> =>
-  pipe(
-    Cell.read<ConfigReaderPhases>(() =>
-      Effect.provideContext(loadOptionsFromConfigFile(cliOptions, basePath), services)
-    ),
-    Cell.decode<ConfigReaderPhases>((raw) =>
-      Result.match(S.decodeUnknownResult(ConfigDocumentSchema)(raw), {
-        onFailure: (cause) => Result.fail(new ConfigFileInvalidError({ file: 'config', cause })),
-        onSuccess: (fileOptions) =>
-          Result.succeed(
-            new MergeCommand({
-              base: fileOptions,
-              overrides: cliOptions,
-            }),
-          ),
-      })
-    ),
-    Cell.decide<ConfigReaderPhases>(mergeConfigsWorkflow),
-    Cell.encode<ConfigReaderPhases>((outcome) =>
-      Result.match(outcome, {
-        onFailure: (error) => {
-          throw error
-        },
-        onSuccess: (result) => {
-          const decoded = S.decodeUnknownResult(StrykerOptionsSchema)(result.merged)
-          if (Result.isFailure(decoded)) {
-            const describedErrors = describeErrors(decoded.failure)
-            let headline = 'Please correct these configuration errors and try again.'
-            if (describedErrors.length === 1) {
-              headline = 'Please correct this configuration error and try again.'
-            }
-            throw new ConfigError({ message: `${headline} ${describedErrors.join(' ')}` })
-          }
-          return decoded.success
-        },
-      })
-    ),
-    Cell.write<ConfigReaderPhases>((output) => Effect.succeed(output)),
-  )
-
 export function readConfig(
   cliOptions: PartialStrykerOptions,
   basePath: string,
@@ -1230,10 +1171,42 @@ export function readConfig(
   FileSystem.FileSystem | Module | Path.Path
 > {
   return Effect.gen(function*() {
-    const services = yield* Effect.context<FileSystem.FileSystem | Module | Path.Path>()
     const cliRecord = yield* S.decodeUnknownEffect(cliOptionsRecord)(cliOptions).pipe(Effect.orDie)
-    const description = configReaderDescription(cliRecord, basePath, services)
     const command = new ReadConfigCommand({ cliOptions: cliRecord, basePath })
-    return yield* Cell.apply(description, command)
+    const cell = Cell.layer({
+      read: (cmd: ReadConfigCommand) => loadOptionsFromConfigFile(cmd.cliOptions, basePath),
+      decode: (raw: unknown) =>
+        Result.match(S.decodeUnknownResult(ConfigDocumentSchema)(raw), {
+          onFailure: (cause) => Result.fail(new ConfigFileInvalidError({ file: 'config', cause })),
+          onSuccess: (fileOptions) =>
+            Result.succeed(
+              new MergeCommand({
+                base: fileOptions,
+                overrides: cliRecord,
+              }),
+            ),
+        }),
+      decide: mergeConfigsWorkflow,
+      encode: (outcome) =>
+        Result.match(outcome, {
+          onFailure: (error) => {
+            throw error
+          },
+          onSuccess: (result) => {
+            const decoded = S.decodeUnknownResult(StrykerOptionsSchema)(result.merged)
+            if (Result.isFailure(decoded)) {
+              const describedErrors = describeErrors(decoded.failure)
+              let headline = 'Please correct these configuration errors and try again.'
+              if (describedErrors.length === 1) {
+                headline = 'Please correct this configuration error and try again.'
+              }
+              throw new ConfigError({ message: `${headline} ${describedErrors.join(' ')}` })
+            }
+            return decoded.success
+          },
+        }),
+      write: (output) => Effect.succeed(output),
+    })
+    return yield* Cell.run(cell, command)
   })
 }

@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace Cell {
-    export { Convention, DESCRIPTION_MODULE, DecideDone, DecideNode, DecidePhase, DecodeDone, DecodeNode, DecodePhase, Description, EncodeDone, EncodeNode, EncodePhase, IO_CELLS, IoCellClassification, Layer, Phase, PhaseFact, Phases, ReadDone, ReadNode, ReadPhase, Vocabulary, WriteDone, WriteNode, WritePhase, apply, canonical, decide, decode, encode, read, vocabulary, write };
+    export { Cell, CellTypeId, DESCRIPTION_MODULE, IO_CELLS, IoCellClassification, Kind$1 as Kind, PhaseName, Run, TypeLambda$1 as TypeLambda, Vocabulary, andThen, layer, map, mapInput, provide, run, vocabulary, withPolicy, zip };
 }
 
 // @public (undocumented)

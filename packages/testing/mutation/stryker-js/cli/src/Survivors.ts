@@ -13,7 +13,6 @@ import {
   type ConfigFileNotFoundError,
   ConfigFileUnreadableError,
   readConfig,
-  type ResolvedMode,
   strykerVersion,
   toRelativeNormalizedFileName,
 } from '@systemfsoftware/stryker-js-engine'
@@ -24,20 +23,13 @@ import { schema } from '@systemfsoftware/stryker-js/Mutant'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
-import { pipe } from 'effect/Function'
-import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Path from 'effect/Path'
-import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { nodeFsPathLayer, nodeModuleLayer } from './platform/node.js'
 import { PriorReportDocument as PriorReportDocumentSchema } from './Survivors.workflow.js'
 export type PriorReportDocument = S.Schema.Type<typeof PriorReportDocumentSchema>
 export type PriorReportMutant = PriorReportDocument['files'][string]['mutants'][number]
-import { emitNullScoreVerdict } from './Output.js'
-import type { RunEventStream } from './Output.js'
-import type { StrykerRun } from './StrykerRun.js'
 import {
   admitSurvivorsRun,
   AdmitSurvivorsRunCommand,
@@ -232,187 +224,78 @@ export function survivorMutateSpans(survivors: readonly Mutant[], basePath: stri
 export const SURVIVORS_REJECT_EXIT_CLASS: ExitClass = 'ConfigError'
 const hashContent: HashContent = (content) => bytesToHex(sha256(utf8ToBytes(content)))
 
-/**
- * The phases of the survivors admission, in one bag so the chain's order is
- * carried by types: resolve and read (config, prior report, source hashes),
- * package the workflow input, call the admission workflow, shape nothing, and
- * dispatch the outcome to the write. A rejection is the decide phase's
- * `Left` — an outcome, not a fault — so it travels through `encode` into the
- * write, which fails the run with it.
- */
-interface AdmissionPhases extends Cell.Phases {
-  readonly command: PartialStrykerOptions
-  readonly raw: {
-    readonly resolvedOptions: StrykerOptions
-    readonly priorReportRaw: unknown
-    readonly priorReportFound: boolean
-    readonly priorReportPath: string
-    readonly sourceContentHashes: Readonly<Record<string, string>>
-    readonly resolveAbsolutePath: ResolveAbsolutePath
-  }
-  readonly decoded: AdmitSurvivorsRunCommand
-  readonly decision: SurvivorsAdmission
-  readonly decisionError: SurvivorsRejection
-  readonly output: Result.Result<SurvivorsAdmission, SurvivorsRejection>
-  readonly response: unknown
-  /**
-   * A prior report that is present but does not decode. Fatal by construction: a decode
-   * `Left` reaches the derived error channel and no write runs, so a malformed report
-   * stops the run instead of being classified as a mismatch by the decider.
-   */
-  readonly decodeError: S.SchemaError
-  readonly readError: ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError
-  readonly writeError: SurvivorsRejection
-}
-
-/** The run context the admission's write phase dispatches on, threaded beside the decision. */
-interface AdmissionRunContext {
-  readonly resolvedOptions: StrykerOptions
-  readonly priorReportPath: string
-  readonly pathService: Path.Path
-}
-
-/**
- * The survivors admission, as a description whose phases chain by type and
- * read in the order they run. The read gathers the admission's whole input
- * product — resolved options, prior report and the current source hashes —
- * across its interior and stashes the shell context the write dispatches on
- * into the executor-owned `runContext` ref; `decode` packages exactly the
- * workflow input; `admitSurvivorsRun` is the decide phase; `encode` is the
- * identity because write receives the outcome as-is; the write reads the
- * stashed context back and dispatches the decision to the verdict/run,
- * failing the run with a rejection.
- */
-const survivorsAdmissionDescription = (
-  runMutationTest: StrykerRun,
-  stream: RunEventStream,
-  mode: ResolvedMode,
-  runContext: Ref.Ref<AdmissionRunContext | undefined>,
-  basePath: string,
-): Cell.WriteDone<AdmissionPhases> =>
-  pipe(
-    Cell.read<AdmissionPhases>((cliOptions) =>
-      Effect.flatMap(Path.Path, (pathService) =>
-        resolveSurvivorsRunOptions(cliOptions, basePath).pipe(
-          Effect.flatMap((resolvedOptions) => {
-            const priorReportPath = priorReportPathOf(resolvedOptions)
-            const resolveAbsolutePath: ResolveAbsolutePath = (file) => pathService.resolve(file)
-            return Effect.flatMap(readPriorReport(priorReportPath), (read) =>
-              Effect.flatMap(currentSourceHashesFor(priorReportFileKeys(read.raw)), (sourceContentHashes) =>
-                Ref.set(runContext, { resolvedOptions, priorReportPath, pathService }).pipe(
-                  Effect.as({
-                    resolvedOptions,
-                    priorReportRaw: read.raw,
-                    priorReportFound: read.found,
-                    priorReportPath,
-                    sourceContentHashes,
-                    resolveAbsolutePath,
-                  }),
-                )))
-          }),
-        )).pipe(Effect.provide(Layer.mergeAll(nodeFsPathLayer, nodeModuleLayer)))
-    ),
-    Cell.decode<AdmissionPhases>(
-      ({ resolvedOptions, priorReportRaw, priorReportFound, sourceContentHashes, resolveAbsolutePath }) => {
-        if (!priorReportFound) {
-          return Result.succeed(
-            AdmitSurvivorsRunCommand.make({
-              priorReport: undefined,
-              currentConfig: resolvedOptions,
-              frameworkVersion: strykerVersion,
-              sourceContentHashes,
-              priorSourceHashes: {},
-              priorSurvivors: [],
-            }),
-          )
+export const survivorsAdmissionCell = (basePath: string) =>
+  Cell.layer({
+    read: (cliOptions: PartialStrykerOptions) =>
+      Effect.gen(function*() {
+        const pathService = yield* Path.Path
+        const resolvedOptions = yield* resolveSurvivorsRunOptions(cliOptions, basePath)
+        const priorReportPath = priorReportPathOf(resolvedOptions)
+        const resolveAbsolutePath: ResolveAbsolutePath = (file) => pathService.resolve(file)
+        const read = yield* readPriorReport(priorReportPath)
+        const sourceContentHashes = yield* currentSourceHashesFor(priorReportFileKeys(read.raw))
+        return {
+          resolvedOptions,
+          priorReportRaw: read.raw,
+          priorReportFound: read.found,
+          priorReportPath,
+          sourceContentHashes,
+          resolveAbsolutePath,
         }
-        return Result.map(decodePriorReport(priorReportRaw), (document) =>
+      }),
+    decode: ({ resolvedOptions, priorReportRaw, priorReportFound, sourceContentHashes, resolveAbsolutePath }) => {
+      if (!priorReportFound) {
+        return Result.succeed(
           AdmitSurvivorsRunCommand.make({
-            priorReport: PriorReportFacts.make({
-              config: document.config ?? {},
-              frameworkVersion: document.framework?.version,
-            }),
+            priorReport: undefined,
             currentConfig: resolvedOptions,
             frameworkVersion: strykerVersion,
             sourceContentHashes,
-            priorSourceHashes: priorSourceHashes(document, hashContent),
-            priorSurvivors: extractSurvivors(document, resolveAbsolutePath),
-          }))
-      },
-    ),
-    Cell.decide<AdmissionPhases>(admitSurvivorsRun),
-    Cell.encode<AdmissionPhases>((outcome) => outcome),
-    Cell.write<AdmissionPhases>((outcome) =>
-      Effect.flatMap(Ref.get(runContext), (context) => {
-        if (context === undefined) {
-          return Effect.die('the survivors admission read must run before its write')
-        }
-        const { resolvedOptions, priorReportPath, pathService } = context
-        return Result.match(outcome, {
-          onSuccess: (decision) =>
-            Match.value(decision).pipe(
-              Match.tag(
-                'NoSurvivors',
-                () =>
-                  emitNullScoreVerdict(
-                    stream,
-                    mode,
-                    resolvedOptions.thresholds,
-                    resolvedOptions,
-                    basePath,
-                    pathService,
-                  ),
-              ),
-              Match.tag('Admitted', (admitted) => {
-                const admittedMutants = admitted.survivors.map((s) => Mutant.make(s))
-                const restricted: SurvivorsRunOptions = {
-                  ...resolvedOptions,
-                  survivors: admittedMutants,
-                  mutate: survivorMutateSpans(admittedMutants, basePath),
-                  survivorsPriorReport: priorReportPath,
-                  incremental: false,
-                }
-                return runMutationTest(restricted).pipe(Effect.orDie)
-              }),
-              Match.orElse(() => Effect.die('unreachable admission decision variant')),
-            ),
-          onFailure: (rejection) => Effect.fail(rejection),
-        })
-      })
-    ),
-  )
+            priorSourceHashes: {},
+            priorSurvivors: [],
+          }),
+        )
+      }
+      return Result.map(decodePriorReport(priorReportRaw), (document) =>
+        AdmitSurvivorsRunCommand.make({
+          priorReport: PriorReportFacts.make({
+            config: document.config ?? {},
+            frameworkVersion: document.framework?.version,
+          }),
+          currentConfig: resolvedOptions,
+          frameworkVersion: strykerVersion,
+          sourceContentHashes,
+          priorSourceHashes: priorSourceHashes(document, hashContent),
+          priorSurvivors: extractSurvivors(document, resolveAbsolutePath),
+        }))
+    },
+    decide: admitSurvivorsRun,
+    encode: (outcome: Result.Result<SurvivorsAdmission, SurvivorsRejection>) => outcome,
+    write: (outcome, raw) =>
+      Result.match(outcome, {
+        onSuccess: (admission) =>
+          Effect.succeed({
+            admission,
+            resolvedOptions: raw.resolvedOptions,
+            priorReportPath: raw.priorReportPath,
+          }),
+        onFailure: Effect.fail,
+      }),
+  })
 
-/**
- * The `--survivors` request: re-test exactly the prior report's survivor set.
- * The survivors flag was parsed as a boolean; the admission decides between
- * running the survivors and the plain pipeline. The chain's order is carried by
- * the description's phase types; the run's resolved context cell is created
- * here, beside the description it feeds.
- *
- * Two failures reach the caller, and they are not the same thing. A rejection is the
- * decision's own outcome — the run was inspected and refused. A `SchemaError` is a prior
- * report that was present and did not decode, which stops the chain before any decision
- * is made; it is in this signature because the phase types put it there, not because the
- * admission chose it.
- */
 export function runSurvivorsAdmission(
-  runMutationTest: StrykerRun,
-  stream: RunEventStream,
-  mode: ResolvedMode,
   cliOptions: PartialStrykerOptions,
   basePath: string,
 ): Effect.Effect<
-  unknown,
+  {
+    readonly admission: SurvivorsAdmission
+    readonly resolvedOptions: StrykerOptions
+    readonly priorReportPath: string
+  },
   S.SchemaError | SurvivorsRejection | ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError,
-  FileSystem.FileSystem | Path.Path
+  FileSystem.FileSystem | Path.Path | Module
 > {
-  return Effect.gen(function*() {
-    const admissionContext = yield* Ref.make<AdmissionRunContext | undefined>(undefined)
-    return yield* Cell.apply(
-      survivorsAdmissionDescription(runMutationTest, stream, mode, admissionContext, basePath),
-      cliOptions,
-    )
-  })
+  return Cell.run(survivorsAdmissionCell(basePath), cliOptions)
 }
 
 function resolveSurvivorsRunOptions(
@@ -492,9 +375,4 @@ function currentSourceHashesFor(
     ),
     (pairs) => Object.fromEntries(pairs),
   )
-}
-
-type SurvivorsRunOptions = PartialStrykerOptions & {
-  readonly survivors?: readonly Mutant[]
-  readonly survivorsPriorReport?: string
 }

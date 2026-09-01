@@ -4,7 +4,6 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { type FileDescription, Mutant as ApiMutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as Effect from 'effect/Effect'
-import { pipe } from 'effect/Function'
 import * as Predicate from 'effect/Predicate'
 import * as Result from 'effect/Result'
 
@@ -214,25 +213,8 @@ function isAst(value: unknown): value is Ast {
 }
 
 type FileSchemaType = typeof FileSchema.Type
-interface InstrumentPhases extends Cell.Phases {
-  readonly command: InstrumentCommand
-  readonly raw: {
-    readonly files: readonly FileSchemaType[]
-    readonly options: InstrumenterOptions
-    readonly asts: readonly Ast[]
-    readonly mutants: readonly ApiMutant[]
-  }
-  readonly decoded: InstrumentDecoded
-  readonly decision: InstrumentDecision
-  readonly decisionError: InstrumentError
-  readonly output: Result.Result<InstrumentDecision, InstrumentError>
-  readonly response: InstrumentResultSchema
-  readonly decodeError: InstrumentError
-  readonly readError: InstrumentError
-  readonly writeError: InstrumentError
-}
-const instrumentDescription = pipe(
-  Cell.read<InstrumentPhases>((command) =>
+const instrumentCell = Cell.layer({
+  read: (command: InstrumentCommand) =>
     Effect.gen(function*() {
       const files = command.files
       const options = command.options
@@ -267,16 +249,21 @@ const instrumentDescription = pipe(
         catch: (cause) => new InstrumentError({ message: 'Failed to instrument', cause }),
       })
       return { files, options, asts, mutants }
-    })
-  ),
-  Cell.decode<InstrumentPhases>((raw) =>
+    }),
+  decode: (
+    raw: {
+      readonly files: readonly FileSchemaType[]
+      readonly options: InstrumenterOptions
+      readonly asts: readonly Ast[]
+      readonly mutants: readonly ApiMutant[]
+    },
+  ) =>
     Result.succeed(
       InstrumentDecoded.make({ files: raw.files, options: raw.options, asts: raw.asts, mutants: raw.mutants }),
-    )
-  ),
-  Cell.decide<InstrumentPhases>(instrumentWorkflow),
-  Cell.encode<InstrumentPhases>((outcome) => outcome),
-  Cell.write<InstrumentPhases>((outcome) =>
+    ),
+  decide: instrumentWorkflow,
+  encode: (outcome: Result.Result<InstrumentDecision, InstrumentError>) => outcome,
+  write: (outcome: Result.Result<InstrumentDecision, InstrumentError>) =>
     Result.match(outcome, {
       onFailure: (error) => Effect.fail(error),
       onSuccess: (decision) =>
@@ -305,9 +292,8 @@ const instrumentDescription = pipe(
           },
           catch: (cause) => new InstrumentError({ message: 'Failed to print', cause }),
         }),
-    })
-  ),
-)
+    }),
+})
 export const instrument = (
   files: readonly File[],
   options: InstrumenterOptions,
@@ -317,5 +303,5 @@ export const instrument = (
     content: file.content,
     mutate: file.mutate,
   }))
-  return Cell.apply(instrumentDescription, InstrumentCommand.make({ files: schemaFiles, options }))
+  return Cell.run(instrumentCell, InstrumentCommand.make({ files: schemaFiles, options }))
 }

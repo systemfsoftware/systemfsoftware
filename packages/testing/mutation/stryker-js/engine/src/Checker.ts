@@ -14,7 +14,6 @@ import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import type { RunPlan as MutantRunPlan } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Effect from 'effect/Effect'
-import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as MutableHashMap from 'effect/MutableHashMap'
@@ -27,7 +26,6 @@ import {
   CheckerAnsweredUnrequested,
   CheckerCommand,
   type CheckerContractBroken,
-  type CheckerDecision,
   CheckerSkippedRequested,
   checkerWorkflow,
 } from './Checker.workflow.js'
@@ -257,48 +255,6 @@ export const createCheckerFactory = (
     idGenerator,
   })
 // ---------------------------------------------------------------------------
-interface CheckPhases extends Cell.Phases {
-  readonly command: {
-    readonly checker: CheckerResourceService
-    readonly checkerName: string
-    readonly plans: readonly MutantRunPlan[]
-  }
-  readonly raw: {
-    readonly checkerName: string
-    readonly requestedIds: readonly string[]
-    readonly answers: Readonly<Record<string, CheckResult>>
-  }
-  readonly decoded: CheckerCommand
-  readonly decision: CheckerDecision
-  readonly decisionError: CheckerContractBroken
-  readonly output: Result.Result<CheckerDecision, CheckerContractBroken>
-  readonly response: readonly (readonly [MutantRunPlan, CheckResult])[]
-  readonly decodeError: CheckerContractBroken
-  readonly readError: CheckerCrash
-  readonly writeError: CheckerContractBroken
-}
-
-interface GroupPhases extends Cell.Phases {
-  readonly command: {
-    readonly checker: CheckerResourceService
-    readonly checkerName: string
-    readonly plans: readonly MutantRunPlan[]
-  }
-  readonly raw: {
-    readonly checkerName: string
-    readonly requestedIds: readonly string[]
-    readonly idGroups: readonly (readonly string[])[]
-  }
-  readonly decoded: CheckerCommand
-  readonly decision: CheckerDecision
-  readonly decisionError: CheckerContractBroken
-  readonly output: Result.Result<CheckerDecision, CheckerContractBroken>
-  readonly response: readonly (readonly MutantRunPlan[])[]
-  readonly decodeError: CheckerContractBroken
-  readonly readError: CheckerCrash
-  readonly writeError: CheckerContractBroken
-}
-
 /**
  * Ask a checker about run plans and get run plans back.
  *
@@ -315,10 +271,15 @@ export const checkPlans = (
   readonly (readonly [MutantRunPlan, CheckResult])[],
   CheckerCrash | CheckerContractBroken
 > => {
-  const capturedPlans = plans
-  const capturedCheckerName = checkerName
-  const description = pipe(
-    Cell.read<CheckPhases>((command) =>
+  const description = Cell.layer({
+    read: (
+      command: {
+        readonly checker: CheckerResourceService
+        readonly checkerName: string
+        readonly plans: readonly MutantRunPlan[]
+      },
+    ) =>
+      // raw: { checkerName, requestedIds, answers } from checker
       command.checker
         .check(command.checkerName, command.plans.map((plan) => plan.mutant))
         .pipe(
@@ -327,9 +288,14 @@ export const checkPlans = (
             requestedIds: command.plans.map((plan) => plan.mutant.id),
             answers,
           })),
-        )
-    ),
-    Cell.decode<CheckPhases>((raw) =>
+        ),
+    decode: (
+      raw: {
+        readonly checkerName: string
+        readonly requestedIds: readonly string[]
+        readonly answers: Readonly<Record<string, CheckResult>>
+      },
+    ): Result.Result<CheckerCommand, CheckerContractBroken> =>
       Result.succeed(
         new CheckerCommand({
           checkerName: raw.checkerName,
@@ -337,18 +303,17 @@ export const checkPlans = (
           phase: 'check',
           answers: { ...raw.answers },
         }),
-      )
-    ),
-    Cell.decide<CheckPhases>(checkerWorkflow),
-    Cell.encode<CheckPhases>((outcome) => outcome),
-    Cell.write<CheckPhases>((outcome) =>
+      ),
+    decide: checkerWorkflow,
+    encode: (outcome) => outcome,
+    write: (outcome, raw) =>
       Result.match(outcome, {
         onFailure: (error) => Effect.fail(error),
         onSuccess: (decision) =>
           Match.value(decision).pipe(
             Match.tag('CheckResultDecision', (d) => {
               const byId = MutableHashMap.empty<string, MutantRunPlan>()
-              for (const plan of capturedPlans) {
+              for (const plan of plans) {
                 MutableHashMap.set(byId, plan.mutant.id, plan)
               }
               const paired: (readonly [MutantRunPlan, CheckResult])[] = []
@@ -357,7 +322,7 @@ export const checkPlans = (
                 if (Option.isNone(maybe)) {
                   return Effect.fail(
                     new CheckerSkippedRequested({
-                      checkerName: capturedCheckerName,
+                      checkerName: raw.checkerName,
                       phase: 'check',
                       missingIds: [entry.id],
                     }),
@@ -371,17 +336,16 @@ export const checkPlans = (
             Match.tag('CheckGroupDecision', () =>
               Effect.fail(
                 new CheckerSkippedRequested({
-                  checkerName: capturedCheckerName,
+                  checkerName: raw.checkerName,
                   phase: 'check',
                   missingIds: [],
                 }),
               )),
             Match.exhaustive,
           ),
-      })
-    ),
-  )
-  return Cell.apply(description, { checker, checkerName, plans })
+      }),
+  })
+  return Cell.run(description, { checker, checkerName, plans })
 }
 
 /**
@@ -395,10 +359,15 @@ export const groupPlans = (
   readonly (readonly MutantRunPlan[])[],
   CheckerCrash | CheckerContractBroken
 > => {
-  const capturedPlans = plans
-  const capturedCheckerName = checkerName
-  const description = pipe(
-    Cell.read<GroupPhases>((command) =>
+  const description = Cell.layer({
+    read: (
+      command: {
+        readonly checker: CheckerResourceService
+        readonly checkerName: string
+        readonly plans: readonly MutantRunPlan[]
+      },
+    ) =>
+      // raw: { checkerName, requestedIds, idGroups } from checker
       command.checker
         .group(command.checkerName, command.plans.map((plan) => plan.mutant))
         .pipe(
@@ -407,9 +376,14 @@ export const groupPlans = (
             requestedIds: command.plans.map((plan) => plan.mutant.id),
             idGroups,
           })),
-        )
-    ),
-    Cell.decode<GroupPhases>((raw) =>
+        ),
+    decode: (
+      raw: {
+        readonly checkerName: string
+        readonly requestedIds: readonly string[]
+        readonly idGroups: readonly (readonly string[])[]
+      },
+    ): Result.Result<CheckerCommand, CheckerContractBroken> =>
       Result.succeed(
         new CheckerCommand({
           checkerName: raw.checkerName,
@@ -417,18 +391,17 @@ export const groupPlans = (
           phase: 'group',
           idGroups: raw.idGroups.map((group) => [...group]),
         }),
-      )
-    ),
-    Cell.decide<GroupPhases>(checkerWorkflow),
-    Cell.encode<GroupPhases>((outcome) => outcome),
-    Cell.write<GroupPhases>((outcome) =>
+      ),
+    decide: checkerWorkflow,
+    encode: (outcome) => outcome,
+    write: (outcome, raw) =>
       Result.match(outcome, {
         onFailure: (error) => Effect.fail(error),
         onSuccess: (decision) =>
           Match.value(decision).pipe(
             Match.tag('CheckGroupDecision', (d) => {
               const byId = MutableHashMap.empty<string, MutantRunPlan>()
-              for (const plan of capturedPlans) {
+              for (const plan of plans) {
                 MutableHashMap.set(byId, plan.mutant.id, plan)
               }
               const groups: (readonly MutantRunPlan[])[] = []
@@ -439,7 +412,7 @@ export const groupPlans = (
                   if (Option.isNone(maybe)) {
                     return Effect.fail(
                       new CheckerSkippedRequested({
-                        checkerName: capturedCheckerName,
+                        checkerName: raw.checkerName,
                         phase: 'group',
                         missingIds: [id],
                       }),
@@ -454,17 +427,16 @@ export const groupPlans = (
             Match.tag('CheckResultDecision', () =>
               Effect.fail(
                 new CheckerSkippedRequested({
-                  checkerName: capturedCheckerName,
+                  checkerName: raw.checkerName,
                   phase: 'group',
                   missingIds: [],
                 }),
               )),
             Match.exhaustive,
           ),
-      })
-    ),
-  )
-  return Cell.apply(description, { checker, checkerName, plans })
+      }),
+  })
+  return Cell.run(description, { checker, checkerName, plans })
 }
 
 export const checkGroupedPlans = (

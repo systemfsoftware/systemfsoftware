@@ -14,18 +14,12 @@ RuleTester.it = vitest.it
 RuleTester.itOnly = vitest.it.only
 RuleTester.describe = vitest.describe
 
-const ruleTester = new RuleTester({
-  languageOptions: {
-    parserOptions: {
-      lang: 'ts',
-    },
-  },
-})
+const ruleTester = new RuleTester()
 
-// Every axis value in the fixtures below is derived from the walked vocabulary at
+// Every axis value in the fixtures below is derived from the vocabulary at
 // runtime, never spelled: the import's module name, the fixture's I/O cell suffix and
 // I/O module source all come from Cell.vocabulary, and the message's phase list comes
-// from the same fold the rule uses. If the derivation is severed, the expected data no
+// from the same import the rule uses. If the derivation is severed, the expected data no
 // longer matches the rendered message and the invalid fixtures stop reporting.
 const CELL_IMPORT = `import { Cell } from '${Cell.vocabulary.module}'`
 const storeCell = Cell.vocabulary.ioCells.cells[0]
@@ -33,10 +27,8 @@ const ioSource = Cell.vocabulary.ioCells.sources[0]
 const STORE_IMPORT = `import { findOrderRow } from './order.${storeCell}.js'`
 const CLOCK_IMPORT = `import * as Clock from '${ioSource}'`
 const EFFECT_IMPORT = `import * as Effect from 'effect/Effect'`
-const EITHER_IMPORT = `import * as Either from 'effect/Either'`
-const PIPE_IMPORT = `import { pipe } from 'effect/Function'`
 
-// The last walked entry on each axis, so the fixtures span the enumeration rather than its
+// The last entry on each axis, so the fixtures span the enumeration rather than its
 // first element: a predicate comparing against `cells[0]` instead of testing membership
 // passes every fixture above and fails only these two.
 const lastCell = Cell.vocabulary.ioCells.cells.at(-1)
@@ -44,37 +36,29 @@ const lastSource = Cell.vocabulary.ioCells.sources.at(-1)
 const LAST_CELL_IMPORT = `import { loadRow } from './order.${lastCell}.js'`
 const LAST_SOURCE_IMPORT = `import * as Io from '${lastSource}'`
 
-const PURE_PHASE_LIST = Cell.vocabulary.byKind.pure.join(', ')
-
 const error = (name: string) =>
   ({
     messageId: 'ioInPhaseBody',
     data: {
       name,
-      expected: IO_IN_PHASE_BODY_EXPECTED.replace('{{phases}}', PURE_PHASE_LIST),
-      actual: IO_IN_PHASE_BODY_ACTUAL.replace('{{phases}}', PURE_PHASE_LIST),
+      expected: IO_IN_PHASE_BODY_EXPECTED.replace('{{phases}}', Cell.vocabulary.byKind.pure.join(', ')),
+      actual: IO_IN_PHASE_BODY_ACTUAL.replace('{{phases}}', Cell.vocabulary.byKind.pure.join(', ')),
       fix: IO_IN_PHASE_BODY_FIX,
     },
   }) as const
-
-const DESCRIPTION = `${CELL_IMPORT}
-${STORE_IMPORT}
-${EFFECT_IMPORT}
-${EITHER_IMPORT}
-${PIPE_IMPORT}
-const description = pipe(
-  Cell.read((cmd) => Effect.succeed(cmd)),
-  Cell.decode((raw) => Either.right({ ...raw, seen: true })),
-  Cell.decide((decoded) => Either.right(decoded)),
-  Cell.encode((outcome) => outcome),
-  Cell.write((outcome) => Effect.succeed(outcome)),
-)`
 
 ruleTester.run('no-io-in-phase-bodies', noIoInPhaseBodies, {
   valid: [
     {
       name: 'Should_ReportNothing_When_PurePhaseBodyOnlyTransformsItsInput',
-      code: DESCRIPTION,
+      code: `${CELL_IMPORT}
+${EFFECT_IMPORT}
+const cell = Cell.layer({
+  read: (cmd) => Effect.succeed(cmd),
+  decode: (raw) => ({ ...raw, seen: true }),
+  decide: (decoded) => decoded,
+  write: (outcome) => Effect.succeed(outcome),
+})`,
       filename: 'confirm-order.executor.ts',
     },
     {
@@ -82,22 +66,22 @@ ruleTester.run('no-io-in-phase-bodies', noIoInPhaseBodies, {
       code: `${CELL_IMPORT}
 ${STORE_IMPORT}
 ${EFFECT_IMPORT}
-${EITHER_IMPORT}
-${PIPE_IMPORT}
-const description = pipe(
-  Cell.read((cmd) => Effect.succeed(findOrderRow(cmd.id))),
-  Cell.decode((raw) => Either.right(raw)),
-  Cell.decide((decoded) => Either.right(decoded)),
-  Cell.encode((outcome) => outcome),
-  Cell.write((outcome) => Effect.succeed(findOrderRow(outcome.id))),
-)`,
+const cell = Cell.layer({
+  read: (cmd) => Effect.succeed(findOrderRow(cmd.id)),
+  decode: (raw) => raw,
+  decide: (decoded) => decoded,
+  write: (outcome) => Effect.succeed(findOrderRow(outcome.id)),
+})`,
       filename: 'confirm-order.executor.ts',
     },
     {
-      name: 'Should_ReportNothing_When_PhaseMemberBelongsToAnotherModuleExport',
+      name: 'Should_ReportNothing_When_ComposerMemberBelongsToAnotherModuleExport',
       code: `import { Policy } from '@systemfsoftware/effect-cell-types'
 ${STORE_IMPORT}
-const decision = Policy.decide((decoded) => Either.right(findOrderRow(decoded.id)))`,
+const cell = Policy.layer({
+  read: (cmd) => Effect.succeed(findOrderRow(cmd.id)),
+  decode: (raw) => raw,
+})`,
       filename: 'confirm-order.executor.ts',
     },
     {
@@ -111,46 +95,64 @@ const row = findOrderRow('id-1')`,
       name: 'Should_ReportNothing_When_LocalHelperCalledFromPurePhaseHasNoIo',
       code: `${CELL_IMPORT}
 const transform = (raw) => ({ ...raw, seen: true })
-const description = Cell.decode((raw) => transform(raw))`,
+const cell = Cell.layer({
+  read: (cmd) => cmd,
+  decode: transform,
+})`,
       filename: 'confirm-order.executor.ts',
     },
     {
       name: 'Should_ReportNothing_When_ImportSourceIsNotAWalkedIoCell',
       code: `${CELL_IMPORT}
 import { decide } from './order.workflow.js'
-const description = Cell.decode((raw) => Either.right(decide(raw)))`,
+const cell = Cell.layer({
+  read: (cmd) => decide(cmd),
+})`,
       filename: 'confirm-order.executor.ts',
     },
     {
       name: 'Should_ReportNothing_When_BindingNameSpellsLikeAnIoCellWithoutTheImportEdge',
       code: `${CELL_IMPORT}
 const store = { save: (id) => id }
-const description = Cell.decode((raw) => store.save(raw.id))`,
+const cell = Cell.layer({
+  read: (cmd) => store.save(cmd.id),
+})`,
       filename: 'confirm-order.executor.ts',
     },
     {
-      name: 'Should_ReportNothing_When_PhaseCallObjectIsNotAnImportBinding',
+      name: 'Should_ReportNothing_When_ComposerObjectIsNotAnImportBinding',
       code: `${CELL_IMPORT}
 const Other = Cell
-const description = Other.decode((raw) => raw)`,
+const cell = Other.layer({
+  read: (cmd) => cmd,
+})`,
       filename: 'confirm-order.executor.ts',
     },
   ],
   invalid: [
     {
-      name: 'Should_Report_IoCellCall_When_PurePhaseBodyCallsIt',
+      name: 'Should_Report_IoCellCall_When_LayerSpecPureBodyCallsIt',
       code: `${CELL_IMPORT}
 ${STORE_IMPORT}
 ${EFFECT_IMPORT}
-${EITHER_IMPORT}
-${PIPE_IMPORT}
-const description = pipe(
-  Cell.read((cmd) => Effect.succeed(cmd)),
-  Cell.decode((raw) => Either.right({ id: findOrderRow(raw.id) })),
-  Cell.decide((decoded) => Either.right(decoded)),
-  Cell.encode((outcome) => outcome),
-  Cell.write((outcome) => Effect.succeed(outcome)),
-)`,
+const cell = Cell.layer({
+  read: (cmd) => Effect.succeed(cmd),
+  decode: (raw) => ({ id: findOrderRow(raw.id) }),
+  decide: (decoded) => decoded,
+  write: (outcome) => Effect.succeed(outcome),
+})`,
+      filename: 'confirm-order.executor.ts',
+      errors: [error('findOrderRow')],
+    },
+    {
+      name: 'Should_Report_IoCallInsideHelper_When_LayerSpecPureBodyHandsOverTheHelper',
+      code: `${CELL_IMPORT}
+${STORE_IMPORT}
+const loadRow = (id) => findOrderRow(id)
+const cell = Cell.layer({
+  read: (cmd) => cmd,
+  decode: loadRow,
+})`,
       filename: 'confirm-order.executor.ts',
       errors: [error('findOrderRow')],
     },
@@ -158,16 +160,10 @@ const description = pipe(
       name: 'Should_Report_IoSourceCall_When_PurePhaseBodyCallsIt',
       code: `${CELL_IMPORT}
 ${CLOCK_IMPORT}
-${EFFECT_IMPORT}
-${EITHER_IMPORT}
-${PIPE_IMPORT}
-const description = pipe(
-  Cell.read((cmd) => Effect.succeed(cmd)),
-  Cell.decode((raw) => Either.right(raw)),
-  Cell.decide((decoded) => Either.right(Clock.currentTimeMillis())),
-  Cell.encode((outcome) => outcome),
-  Cell.write((outcome) => Effect.succeed(outcome)),
-)`,
+const cell = Cell.layer({
+  read: (cmd) => cmd,
+  decode: (raw) => Clock.currentTimeMillis(),
+})`,
       filename: 'confirm-order.executor.ts',
       errors: [error('Clock')],
     },
@@ -175,17 +171,11 @@ const description = pipe(
       name: 'Should_Report_IoCallInsideLocalHelper_When_PurePhaseCallsTheHelper',
       code: `${CELL_IMPORT}
 ${STORE_IMPORT}
-${EFFECT_IMPORT}
-${EITHER_IMPORT}
-${PIPE_IMPORT}
 const loadRow = (id) => findOrderRow(id)
-const description = pipe(
-  Cell.read((cmd) => Effect.succeed(cmd)),
-  Cell.decode((raw) => Either.right(loadRow(raw.id))),
-  Cell.decide((decoded) => Either.right(decoded)),
-  Cell.encode((outcome) => outcome),
-  Cell.write((outcome) => Effect.succeed(outcome)),
-)`,
+const cell = Cell.layer({
+  read: (cmd) => cmd,
+  decode: (raw) => loadRow(raw.id),
+})`,
       filename: 'confirm-order.executor.ts',
       errors: [error('findOrderRow')],
     },
@@ -196,26 +186,22 @@ const description = pipe(
       name: 'Should_Report_IoCallInsideExportedHelper_When_PurePhaseCallsTheHelper',
       code: `${CELL_IMPORT}
 ${STORE_IMPORT}
-${EITHER_IMPORT}
 export const loadRow = (id) => findOrderRow(id)
-const description = Cell.decode((raw) => Either.right(loadRow(raw.id)))`,
+const cell = Cell.layer({
+  read: (cmd) => cmd,
+  decode: (raw) => loadRow(raw.id),
+})`,
       filename: 'confirm-order.executor.ts',
       errors: [error('findOrderRow')],
     },
     {
-      name: 'Should_Report_IoCellCall_When_DescriptionNamespaceImported',
+      name: 'Should_Report_IoCellCall_When_CellNamespaceImported',
       code: `import * as Description from '@systemfsoftware/effect-cell-types'
 ${STORE_IMPORT}
-${EFFECT_IMPORT}
-${EITHER_IMPORT}
-${PIPE_IMPORT}
-const description = pipe(
-  Description.read((cmd) => Effect.succeed(cmd)),
-  Description.decode((raw) => Either.right({ id: findOrderRow(raw.id) })),
-  Description.decide((decoded) => Either.right(decoded)),
-  Description.encode((outcome) => outcome),
-  Description.write((outcome) => Effect.succeed(outcome)),
-)`,
+const cell = Description.layer({
+  read: (cmd) => cmd,
+  decode: (raw) => ({ id: findOrderRow(raw.id) }),
+})`,
       filename: 'confirm-order.executor.ts',
       errors: [error('findOrderRow')],
     },
@@ -223,7 +209,9 @@ const description = pipe(
       name: 'Should_Report_IoCellCall_When_PhaseBodyIsTheCallItself',
       code: `${CELL_IMPORT}
 ${STORE_IMPORT}
-const description = Cell.decode((raw) => findOrderRow(raw))`,
+const cell = Cell.layer({
+  decode: (raw) => findOrderRow(raw),
+})`,
       filename: 'confirm-order.executor.ts',
       errors: [error('findOrderRow')],
     },
@@ -231,8 +219,9 @@ const description = Cell.decode((raw) => findOrderRow(raw))`,
       name: 'Should_Report_IoCellCall_When_CellIsTheLastWalkedEntry',
       code: `${CELL_IMPORT}
 ${LAST_CELL_IMPORT}
-${EITHER_IMPORT}
-const description = Cell.decode((raw) => Either.right(loadRow(raw)))`,
+const cell = Cell.layer({
+  decode: (raw) => loadRow(raw),
+})`,
       filename: 'confirm-order.executor.ts',
       errors: [error('loadRow')],
     },
@@ -240,8 +229,9 @@ const description = Cell.decode((raw) => Either.right(loadRow(raw)))`,
       name: 'Should_Report_IoSourceCall_When_SourceIsTheLastWalkedEntry',
       code: `${CELL_IMPORT}
 ${LAST_SOURCE_IMPORT}
-${EITHER_IMPORT}
-const description = Cell.decode((raw) => Either.right(Io.read(raw)))`,
+const cell = Cell.layer({
+  decode: (raw) => Io.read(raw),
+})`,
       filename: 'confirm-order.executor.ts',
       errors: [error('Io')],
     },
@@ -251,8 +241,9 @@ const description = Cell.decode((raw) => Either.right(Io.read(raw)))`,
       // empty sets and reported nothing — a silent pass decided by line order.
       name: 'Should_Report_IoCellCall_When_ImportFollowsThePhaseCall',
       code: `${CELL_IMPORT}
-${EITHER_IMPORT}
-const description = Cell.decode((raw) => Either.right(findOrderRow(raw)))
+const cell = Cell.layer({
+  decode: (raw) => findOrderRow(raw),
+})
 ${STORE_IMPORT}`,
       filename: 'confirm-order.executor.ts',
       errors: [error('findOrderRow')],
@@ -263,25 +254,10 @@ ${STORE_IMPORT}`,
       name: 'Should_Report_IoCellCall_When_PhaseBodyIsPassedByReference',
       code: `${CELL_IMPORT}
 ${STORE_IMPORT}
-${EITHER_IMPORT}
-const transform = (raw) => Either.right(findOrderRow(raw))
-const description = Cell.decode(transform)`,
-      filename: 'confirm-order.executor.ts',
-      errors: [error('findOrderRow')],
-    },
-    {
-      // The form every production call site actually uses: the phase is reached through an
-      // explicit type argument. Without this case the whole suite exercises only the bare
-      // call, and a rule that stopped resolving `Cell.decode<Phases>(...)` would still be
-      // green while reporting nothing in `supervisor-body.executor.ts` or
-      // `run-hooks-for-event.executor.ts`.
-      name: 'Should_Report_IoCellCall_When_PhaseIsCalledWithATypeArgument',
-      code: `${CELL_IMPORT}
-${STORE_IMPORT}
-interface Phases extends Cell.Phases {
-  readonly raw: { readonly id: string }
-}
-const description = Cell.decode<Phases>((raw) => findOrderRow(raw.id))`,
+const transform = (raw) => findOrderRow(raw)
+const cell = Cell.layer({
+  decode: transform,
+})`,
       filename: 'confirm-order.executor.ts',
       errors: [error('findOrderRow')],
     },
@@ -291,11 +267,12 @@ const description = Cell.decode<Phases>((raw) => findOrderRow(raw.id))`,
       name: 'Should_Report_IoCallInsideHelper_When_HelperIsAFunctionDeclaration',
       code: `${CELL_IMPORT}
 ${STORE_IMPORT}
-${EITHER_IMPORT}
 function loadRow(id) {
   return findOrderRow(id)
 }
-const description = Cell.decode((raw) => Either.right(loadRow(raw.id)))`,
+const cell = Cell.layer({
+  decode: (raw) => loadRow(raw),
+})`,
       filename: 'confirm-order.executor.ts',
       errors: [error('findOrderRow')],
     },
@@ -304,11 +281,12 @@ const description = Cell.decode((raw) => Either.right(loadRow(raw.id)))`,
       name: 'Should_Report_IoCallInsideHelper_When_HelperIsDefaultExported',
       code: `${CELL_IMPORT}
 ${STORE_IMPORT}
-${EITHER_IMPORT}
 export default function loadRow(id) {
   return findOrderRow(id)
 }
-const description = Cell.decode((raw) => Either.right(loadRow(raw.id)))`,
+const cell = Cell.layer({
+  decode: (raw) => loadRow(raw),
+})`,
       filename: 'confirm-order.executor.ts',
       errors: [error('findOrderRow')],
     },
@@ -317,11 +295,12 @@ const description = Cell.decode((raw) => Either.right(loadRow(raw.id)))`,
       name: 'Should_Report_IoCallInsideHelper_When_HelperIsAFunctionExpression',
       code: `${CELL_IMPORT}
 ${STORE_IMPORT}
-${EITHER_IMPORT}
 const loadRow = function (id) {
   return findOrderRow(id)
 }
-const description = Cell.decode((raw) => Either.right(loadRow(raw.id)))`,
+const cell = Cell.layer({
+  decode: (raw) => loadRow(raw),
+})`,
       filename: 'confirm-order.executor.ts',
       errors: [error('findOrderRow')],
     },
@@ -330,8 +309,10 @@ const description = Cell.decode((raw) => Either.right(loadRow(raw.id)))`,
       name: 'Should_Report_IoCellCall_When_PhaseBodyIsAFunctionExpression',
       code: `${CELL_IMPORT}
 ${STORE_IMPORT}
-const description = Cell.decode(function (raw) {
-  return findOrderRow(raw)
+const cell = Cell.layer({
+  decode: function (raw) {
+    return findOrderRow(raw)
+  },
 })`,
       filename: 'confirm-order.executor.ts',
       errors: [error('findOrderRow')],
@@ -343,9 +324,10 @@ const description = Cell.decode(function (raw) {
       name: 'Should_ReportOnce_When_ByReferenceHelperCallsItself',
       code: `${CELL_IMPORT}
 ${STORE_IMPORT}
-${EITHER_IMPORT}
-const loadRow = (id) => (id > 0 ? loadRow(id - 1) : Either.right(findOrderRow(id)))
-const description = Cell.decode(loadRow)`,
+const loadRow = (id) => (id > 0 ? loadRow(id - 1) : findOrderRow(id))
+const cell = Cell.layer({
+  decode: loadRow,
+})`,
       filename: 'confirm-order.executor.ts',
       errors: [error('findOrderRow')],
     },
@@ -357,10 +339,11 @@ const description = Cell.decode(loadRow)`,
       name: 'Should_Report_IoCall_When_WrittenInNeverInvokedNestedClosure',
       code: `${CELL_IMPORT}
 ${STORE_IMPORT}
-${EITHER_IMPORT}
-const description = Cell.decode((raw) => {
-  const unused = () => findOrderRow(raw.id)
-  return Either.right(raw)
+const cell = Cell.layer({
+  decode: (raw) => {
+    const unused = () => findOrderRow(raw.id)
+    return raw
+  },
 })`,
       filename: 'confirm-order.executor.ts',
       errors: [error('findOrderRow')],

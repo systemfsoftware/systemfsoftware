@@ -1,74 +1,81 @@
 # AGENTS.md — `@systemfsoftware/effect-cell-types`
 
-> **Delta**: Contracts for the cell types other packages build against — `Workflow<Command, Decision, Error>` with its two `never`-channel markers and its `make`, the `Cell` phase types with their chaining constructors and the `apply` interpreter, and `Policy`. Root AGENTS.md governs.
+> **Delta**: Contracts for the cell types other packages build against — `Workflow<Command, Decision, Error>` with its two `never`-channel markers and its `make`, the `Cell` spine (`Cell.layer` one-sandwich constructor, the `map`/`mapInput`/`andThen`/`zip`/`provide`/`withPolicy` arrows, `Cell.run`), and `Policy`. Root AGENTS.md governs.
 
 ## What makes this package different
 
-```yaml
+````yaml
 rules:
   - id: CELL-T1
-    title: A type surface and one interpreter, no mutation gate
-    do: keep the runtime to the phase constructors, the identity constructors, and
-      the single interpreter `apply` that folds a description and runs it
-    dont: add a stryker config or a mutation script to this package
+    title: A type surface and one inline interpreter, no mutation gate
+    do: keep the runtime to `Cell.layer`, the six arrows, `Cell.run`, and
+      `layerRunner` — the gen in `Cell.ts` that is the interpreter
+    dont: add a stryker config or a mutation script to this package, or publish
+      any phase machinery (spec-shape types beyond `layer`'s parameters, phase
+      constructors, description records) from the public surface
     harm: a mutation score measures whether the tests notice a changed decision,
       and this package holds no decision to change — every source file is a
-      contract module whose content is types plus the fold that interprets them,
-      so a surviving mutant here reports on the test suite of something else
-    check: "`git ls-files packages/effect-cell-types` names no `stryker.config.json`,
-      and `package.json` carries no mutation script"
+      contract module whose content is types plus the one function that
+      interprets them, so a surviving mutant here reports on the test suite of
+      something else
+    check: "`git ls-files packages/core/effect/cell/types` names no `stryker.config.json`,
+      and `package.json` carries no mutation script; `'apply' extends keyof typeof Cell`
+      stays false in `test-types/Cell.tst.ts`"
 
   - id: CELL-T2
     title: The type observer is mandatory; composition covers the interpreter
     do:
-      - state every claim about the phase types, their order, and the published
-        declaration as an assertion in `test-types/*.tst.ts`, run by tstyche — an
-        order the types stop rejecting fails there first
-      - verify `apply` with composition tests in `tests/` that run a real
-        description and assert which phases ran, in what order, and what reached
-        the write
-    dont: let a behavioural test stand in for a type assertion, or unit-test a
-      phase constructor in isolation — it decides nothing its return type does not
+      - state every claim about the Cell surface — layer's two spec forms, the
+        inferred error and service channels, the combinators' unions, provide's
+        narrowing — as an assertion in `test-types/*.tst.ts`, run by tstyche
+      - verify `Cell.run` with composition tests in `tests/` that run a real Cell
+        and assert what failed, what reached the write, and what came back
+    dont: let a behavioural test stand in for a type assertion, or unit-test
+      `layerRunner` in isolation — it decides nothing the Cell's type does not
       already carry
-    harm: the order is this package's whole claim and it lives in the types, so a
-      green behavioural run over a widened type proves nothing about what the
-      compiler now accepts; equally, the interpreter is the one place a
-      description becomes effects, so a fold that drops a layer or runs a phase
-      twice is invisible to every type assertion
-    check: "`pnpm --filter @systemfsoftware/effect-cell-types test:types` exits 0
-      with each assertion observed failing once with its expect-error directive
-      removed, and `test` exits 0 with at least one description run end to end"
+    harm: the channel unions are this package's whole claim and they live in the
+      types, so a green behavioural run over a widened type proves nothing about
+      what the compiler now accepts; equally, `layerRunner` is the one place a
+      spec becomes effects, so only the outcome tests can catch a skipped phase
+    check: "`pnpm --filter @systemfsoftware/effect-cell-types test:types` exits 0,
+      and `pnpm --filter @systemfsoftware/effect-cell-types test` exits 0 with at
+      least one Cell run end to end"
 
   - id: CELL-T3
-    title: This package is where a phase is described, and the only place
+    title: Order is the interpreter's text; the vocabulary is a const table
     do:
-      - "author a new phase here and nowhere else: its closure type, its node
-        record, its union member, its stage brand, its constructor, and its place
-        in `canonical` — the chain that only type-checks in one order"
-      - let `vocabulary` stay a fold of `canonical`, a description the public
-        constructors build, so the table is a walk result rather than a second
-        declaration standing beside them
-    dont: hand-write a phase table, duplicate an axis into a constant beside the
-      constructors, or import a consumer — no package that walks this value may
-      appear in this package's dependencies
-    harm: every derived consumer — the arbitrary and both lint plugins —
-      takes its whole behaviour from this value. A second declaration
-      here is the one edit that can make them all wrong at once while every one of
-      them still passes, because they would agree with each other and disagree only
-      with the constructors
-    check: review — adding a phase in `src/Cell.ts` propagates cleanly to consumers under `pnpm check:local`; only this package's own golden and type spec fail until updated
+      - keep phase order in `layerRunner`'s body — read, decode, decide, encode,
+        write, in that text, with no phase array, convention tag, or switch
+      - keep `vocabulary` a const table stating only what a rule cannot read off
+        a type: which phases are pure, and what counts as I/O
+    dont: rebuild a description object at runtime so a generator or plugin can
+      re-walk it, move order into data a fold switches on, or import a consumer
+      — no package that reads this value may appear in this package's
+      dependencies
+    harm: a data-driven fold turns order into something fixtures measure instead
+      of something the compiler holds, and the measuring fixture becomes a test
+      spy wearing a service; a re-walkable description exists only to feed that
+      spy
+    check: review — `src/` contains no `phases` assembler and no canonical Cell;
+      `vocabulary` is a literal whose every field a lint rule reads
+
   - id: CELL-T4
-    title: The integration oracle restates the vocabulary on purpose
-    do: keep the hand-written phase list in
-      `tests/interpreter.integration.test.ts` — it is an independent oracle,
-      and its whole job is to disagree with the fold when the fold is wrong
-    dont: derive it from `Cell.vocabulary`, and do not delete it as duplication
-    harm: a derived checker validated only against fixtures the same walk produced
-      cannot fail; the restatement is what makes the walk falsifiable, and it is
-      inside this package precisely so a consumer never carries an axis literal
-    check: review — the phase list in that file is written out, and the comment
-      above it says why
-```
+    title: Observation is a local closure, never a service on R
+    do:
+      - assert order once, in `tests/interpreter.integration.test.ts`, over a
+        local `trace: string[]` the phase closures push to
+      - assert outcomes through domain I/O — a `Ledger` the write appends to —
+        or through the write's own response
+    dont: put a test double on the requirements channel (`yield*` a recorder
+      Tag), quantify order as a for-all property over fixed names, or share a
+      mutable buffer between two fixture Cells to observe composition
+    harm: a spy on `R` makes the suite prove the fixture called itself — a
+      correct interpreter plus a fixture that forgets to record fails, while a
+      broken one that calls an instrumented stub passes; the oracle becomes the
+      spy, not the interpreter
+    check: review — `grep -rn "TraceRecorder\|recordSync" packages/core/effect/cell/types/src
+      test-types tests` returns nothing, and the order assertion is one scenario
+      with a file-local array
 
 ## Verification
 
@@ -81,4 +88,4 @@ pnpm --filter @systemfsoftware/effect-cell-types test
 pnpm --filter @systemfsoftware/effect-cell-types lint
 pnpm --filter @systemfsoftware/effect-cell-types api:check
 pnpm --filter @systemfsoftware/effect-cell-types attw
-```
+````

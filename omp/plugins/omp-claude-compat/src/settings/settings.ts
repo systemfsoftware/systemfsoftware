@@ -1,5 +1,5 @@
 import { Cell, Wire } from '@systemfsoftware/effect-cell-types'
-import { Context, Effect, Exit, Layer, Match, Option, pipe, Result, Schema as S } from 'effect'
+import { Context, Effect, Exit, Layer, Match, Option, Result, Schema as S } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import { homedir } from 'node:os'
 import {
@@ -20,11 +20,9 @@ import {
   type DecodedSource,
   EmptySources,
   type MergeCommand,
-  type MergedSnapshot,
   mergeEffectiveSettings,
   MergeSettingsCommand,
   NonEmptySources,
-  type SettingsDecisionError,
   type SettingsSnapshot,
 } from './settings.workflow.js'
 
@@ -542,21 +540,6 @@ interface LoadSettingsRaw {
   }[]
 }
 
-interface LoadSettingsPhases extends Cell.Phases {
-  readonly command: { readonly cwd: string; readonly homeDir: string }
-  readonly raw: LoadSettingsRaw
-  readonly decoded: MergeCommand
-  readonly decision: MergedSnapshot
-  readonly decisionError: SettingsDecisionError
-  readonly output: HookSettings | null
-  readonly response: HookSettings | null
-  readonly decodeError: never
-  readonly readError: never
-  readonly writeError: never
-  readonly readContext: FileSystem
-  readonly writeContext: never
-}
-
 const SettingsJsonWire = Wire.mint(SettingsJSON)
 
 const decodeSources = (raw: LoadSettingsRaw): Result.Result<MergeCommand, never> => {
@@ -580,41 +563,39 @@ const ClaudeSettingsLiveBase = Layer.effect(
   ClaudeSettings,
   Effect.gen(function*() {
     const sources = yield* ClaudeSettingsSources
-    const fs = yield* FileSystem
-    const fsServices = yield* Effect.context<FileSystem>()
     const capturedDescribe = sources.describe
-    const readSettingsTextsCaptured = (cwd: string, homeDir: string) =>
-      Effect.gen(function*() {
-        const { paths, pluginSources } = yield* Effect.provideContext(capturedDescribe(cwd, homeDir), fsServices)
-        const texts = yield* Effect.forEach(
-          paths,
-          (path) =>
-            Effect.map(fs.readFileString(path).pipe(Effect.orElseSucceed(() => '')), (content) => ({ path, content })),
-          { concurrency: 'unbounded' },
-        )
-        return { texts, pluginSources }
-      })
-    const loadDescriptionCaptured = pipe(
-      Cell.read<LoadSettingsPhases>(({ cwd, homeDir }: { cwd: string; homeDir: string }) =>
-        readSettingsTextsCaptured(cwd, homeDir)
-      ),
-      Cell.decode<LoadSettingsPhases>(decodeSources),
-      Cell.decide<LoadSettingsPhases>(mergeEffectiveSettings),
-      Cell.encode<LoadSettingsPhases>((outcome) =>
+    const loadCell = Cell.layer({
+      read: ({ cwd, homeDir }: { readonly cwd: string; readonly homeDir: string }) =>
+        Effect.gen(function*() {
+          const { paths, pluginSources } = yield* capturedDescribe(cwd, homeDir)
+          const fs = yield* FileSystem
+          const texts = yield* Effect.forEach(
+            paths,
+            (path) =>
+              Effect.map(
+                fs.readFileString(path).pipe(Effect.orElseSucceed(() => '')),
+                (content) => ({ path, content }),
+              ),
+            { concurrency: 'unbounded' },
+          )
+          return { texts, pluginSources }
+        }),
+      decode: decodeSources,
+      decide: mergeEffectiveSettings,
+      encode: (outcome) =>
         Result.match(outcome, {
           onFailure: () => null,
           onSuccess: snapshotSettings,
-        })
-      ),
-      Cell.write<LoadSettingsPhases>((snapshot) => Effect.succeed(snapshot)),
-    )
+        }),
+      write: (snapshot) => Effect.succeed(snapshot),
+    })
     const collectGapsCaptured = (cwd: string, homeDir: string) =>
       Effect.gen(function*() {
         const { paths, hookFiles } = yield* capturedDescribe(cwd, homeDir)
         return yield* collectSettingsGapsWithPaths([...paths, ...hookFiles], homeDir, cwd)
       })
     return ClaudeSettings.of({
-      load: (cwd, homeDir) => Cell.apply(loadDescriptionCaptured, { cwd, homeDir }),
+      load: (cwd, homeDir) => Cell.run(loadCell, { cwd, homeDir }),
       gaps: (cwd, homeDir) => collectGapsCaptured(cwd, homeDir),
     })
   }),

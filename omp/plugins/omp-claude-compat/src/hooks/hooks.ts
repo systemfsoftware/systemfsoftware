@@ -11,14 +11,12 @@ import { Cell } from '@systemfsoftware/effect-cell-types'
 import {
   Array as Arr,
   Cause,
-  Context,
   Duration,
   Effect,
   Exit,
   Fiber,
   Match,
   Option,
-  pipe,
   Ref,
   Result,
   Schema as S,
@@ -35,21 +33,14 @@ import { ClaudeSettings, ifEvaluatingEvent, matcherUnreadable } from '../setting
 import type { CommandHook, HookEntry, HookSettings } from '../settings/mod.js'
 import {
   type AdmitCommand,
-  type AdmitError,
   AdmitHooksCommand,
   admitLoadedSettings,
   type HookDispatchDecision,
   SkipHooks,
 } from './admit.workflow.js'
-import { Blocked, Continue, type HookOutcome, HookOutputFromStdout, HookResult } from './hooks.schema.js'
+import { Blocked, Continue, HookOutputFromStdout, HookResult } from './hooks.schema.js'
 import type { HookPrompt, HookSession, HookToolCall, HookToolResult } from './hooks.schema.js'
-import {
-  type HookVerdictDecision,
-  type HookVerdictFailure,
-  InterpretHookCommand,
-  interpretHookResult,
-  Warning,
-} from './hooks.workflow.js'
+import { InterpretHookCommand, interpretHookResult, Warning } from './hooks.workflow.js'
 import {
   denormalizeToolInput,
   editTargetPaths,
@@ -424,18 +415,6 @@ const AGGREGATE_CEILING_MS = 26_000
  * `Warning` outcome by `encode`, so it reaches the write as a value rather than
  * a failure.
  */
-interface HookVerdictPhases extends Cell.Phases {
-  readonly command: { readonly hook: CommandHook; readonly input: Record<string, unknown> }
-  readonly raw: HookResult
-  readonly decoded: InterpretHookCommand
-  readonly decision: HookVerdictDecision
-  readonly decisionError: HookVerdictFailure
-  readonly output: HookOutcome
-  readonly response: Option.Option<HooksForEventResult>
-  readonly decodeError: never
-  readonly readError: PlatformError
-  readonly writeError: never
-}
 const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(function*(
   entries: readonly HookEntry[],
   matchValue: string,
@@ -444,7 +423,6 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
   event: string,
 ) {
   const cwd = ctx.cwd
-  const services = yield* Effect.context<ChildProcessSpawner | Scope.Scope>()
   const ruleInput = Option.getOrElse(asToolInput(input['tool_input']), () => EMPTY_TOOL_INPUT)
   let warning: string | undefined
   let currentInput = input
@@ -452,11 +430,10 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
   // named the hook at session start, so this is a silent skip, not a report.
   const unreadableMatcher = matcherUnreadable(event)
 
-  const hookVerdictDescription = pipe(
-    Cell.read<HookVerdictPhases>(({ hook, input }) =>
-      Effect.provideContext(runHookScript(hook, input, cwd, event), services)
-    ),
-    Cell.decode<HookVerdictPhases>((raw) =>
+  const hookVerdictCell = Cell.layer({
+    read: ({ hook, input }: { readonly hook: CommandHook; readonly input: Record<string, unknown> }) =>
+      runHookScript(hook, input, cwd, event),
+    decode: (raw: HookResult) =>
       Result.succeed(
         new InterpretHookCommand({
           result: raw,
@@ -466,10 +443,9 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
             onSuccess: Option.some,
           }),
         }),
-      )
-    ),
-    Cell.decide<HookVerdictPhases>(interpretHookResult),
-    Cell.encode<HookVerdictPhases>((outcome) =>
+      ),
+    decide: interpretHookResult,
+    encode: (outcome) =>
       Match.value(
         Result.match(outcome, {
           onFailure: ({ error }) =>
@@ -481,9 +457,8 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
         Match.tag('Warning', (d) => new Continue({ warning: d.message })),
         Match.tag('Allow', (d) => new Continue({ updatedInput: d.updatedInput })),
         Match.exhaustive,
-      )
-    ),
-    Cell.write<HookVerdictPhases>((outcome) =>
+      ),
+    write: (outcome) =>
       Effect.sync(() =>
         Match.value(outcome).pipe(
           Match.tag('Blocked', (b) => Option.some({ block: true as const, reason: b.reason })),
@@ -496,9 +471,8 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
           }),
           Match.exhaustive,
         )
-      )
-    ),
-  )
+      ),
+  })
 
   for (const entry of entries) {
     if (unreadableMatcher && entry.matcher !== undefined) continue
@@ -519,15 +493,16 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
         continue
       }
 
-      const exit = yield* Cell.apply(hookVerdictDescription, { hook, input: currentInput })
+      const exit = yield* Cell.run(hookVerdictCell, { hook, input: currentInput })
       if (Option.isSome(exit)) return exit.value
     }
   }
 
-  return {
+  const result: HooksForEventResult = {
     ...(currentInput === input ? {} : { updatedInput: currentInput }),
     ...(warning !== undefined ? { warning } : {}),
-  } satisfies HooksForEventResult
+  }
+  return result
 })
 
 export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
@@ -780,20 +755,6 @@ export const runPreCompactHooks = Effect.fn('runPreCompactHooks')(function*(
   return yield* runHooksForEvent(settings.hooks.PreCompact, '', input, ctx, 'PreCompact')
 })
 
-// ── RunUserPromptSubmitHooks ──
-interface SubmitPhases extends Cell.Phases {
-  readonly command: { readonly hook: CommandHook; readonly input: Record<string, unknown> }
-  readonly raw: HookResult
-  readonly decoded: InterpretHookCommand
-  readonly decision: HookVerdictDecision
-  readonly decisionError: HookVerdictFailure
-  readonly output: { readonly blockReason: string | undefined; readonly code: number; readonly stdout: string }
-  readonly response: Option.Option<InputEventResult>
-  readonly decodeError: never
-  readonly readError: PlatformError
-  readonly writeError: never
-}
-
 export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(function*(
   settings: HookSettings,
   event: HookPrompt,
@@ -801,7 +762,6 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
 ) {
   const entries = settings.hooks.UserPromptSubmit
   const cwd = ctx.cwd
-  const services = yield* Effect.context<ChildProcessSpawner | Scope.Scope>()
   const hostBound = isHostBound(event.text)
   // Left undrained for a host-bound prompt: an async note is one-shot, so it
   // has to survive this command and reach the next model-bound prompt.
@@ -816,11 +776,10 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
     prompt: event.text,
     source: event.source,
   }
-  const submitDescription = pipe(
-    Cell.read<SubmitPhases>(({ hook, input }) =>
-      Effect.provideContext(runHookScript(hook, input, cwd, 'UserPromptSubmit'), services)
-    ),
-    Cell.decode<SubmitPhases>((raw) =>
+  const submitCell = Cell.layer({
+    read: ({ hook, input }: { readonly hook: CommandHook; readonly input: Record<string, unknown> }) =>
+      runHookScript(hook, input, cwd, 'UserPromptSubmit'),
+    decode: (raw: HookResult) =>
       Result.succeed(
         new InterpretHookCommand({
           result: raw,
@@ -830,10 +789,9 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
             onSuccess: Option.some,
           }),
         }),
-      )
-    ),
-    Cell.decide<SubmitPhases>(interpretHookResult),
-    Cell.encode<SubmitPhases>((outcome) =>
+      ),
+    decide: interpretHookResult,
+    encode: (outcome) =>
       Result.match(outcome, {
         onFailure: ({ code, stdout }) => ({ blockReason: undefined, code, stdout }),
         onSuccess: ({ verdict, code, stdout }) => ({
@@ -844,9 +802,8 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
           code,
           stdout,
         }),
-      })
-    ),
-    Cell.write<SubmitPhases>(({ blockReason, code, stdout }) =>
+      }),
+    write: ({ blockReason, code, stdout }) =>
       Effect.sync(() => {
         // Claude Code rejects the prompt on exit 2 or `decision: "block"`, feeding
         // the reason back rather than injecting stdout as context.
@@ -860,15 +817,14 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
           stdouts.push(trimmed)
         }
         return Option.none()
-      })
-    ),
-  )
+      }),
+  })
 
   for (const entry of entries) {
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
       if (hook.if !== undefined) continue
-      const exit = yield* Cell.apply(submitDescription, { hook, input })
+      const exit = yield* Cell.run(submitCell, { hook, input })
       if (Option.isSome(exit)) return exit.value
     }
   }
@@ -908,52 +864,32 @@ export type HookDispatchContext = FileSystem | ChildProcessSpawner | Scope.Scope
 
 const settingsFor = (ctx: HookSession) => Effect.flatMap(ClaudeSettings, (port) => port.load(ctx.cwd, ctx.homeDir))
 
-interface SettingsAdmitPhases<Response> extends Cell.Phases {
-  readonly command: HookSession
-  readonly raw: HookSettings | null
-  readonly decoded: AdmitCommand
-  readonly decision: HookDispatchDecision
-  readonly decisionError: AdmitError
-  readonly output: HookDispatchDecision
-  readonly response: Response
-  readonly decodeError: never
-  readonly readError: never
-  readonly writeError: PlatformError
-}
-
-const admitSettings = <Response>(
+const admitSettingsCell = <Response>(
   write: (settings: HookSettings) => Effect.Effect<Response, PlatformError, HookDispatchContext>,
   empty: Response,
-  services: Context.Context<HookDispatchContext>,
-) => {
-  let loaded: Option.Option<HookSettings> = Option.none()
-  return pipe(
-    Cell.read<SettingsAdmitPhases<Response>>((ctx) => Effect.provideContext(settingsFor(ctx), services)),
-    Cell.decode<SettingsAdmitPhases<Response>>((settings) => {
-      loaded = Option.fromNullishOr(settings)
-      return Result.succeed(admitPresent(Option.isSome(loaded)))
-    }),
-    Cell.decide<SettingsAdmitPhases<Response>>(admitLoadedSettings),
-    Cell.encode<SettingsAdmitPhases<Response>>((outcome) => Result.getOrElse(outcome, skipHooks)),
-    Cell.write<SettingsAdmitPhases<Response>>((decision) =>
+) =>
+  Cell.layer({
+    read: (ctx: HookSession) => settingsFor(ctx),
+    decode: (settings: HookSettings | null) =>
+      Result.succeed(admitPresent(Option.isSome(Option.fromNullishOr(settings)))),
+    decide: admitLoadedSettings,
+    encode: (outcome) => Result.getOrElse(outcome, skipHooks),
+    write: (decision: HookDispatchDecision, raw: HookSettings | null) =>
       Match.value(decision).pipe(
         Match.tag('SkipHooks', () => Effect.succeed(empty)),
-        Match.tag('RunHooks', () => Effect.provideContext(write(Option.getOrThrow(loaded)), services)),
+        Match.tag('RunHooks', () => {
+          const loaded = Option.fromNullishOr(raw)
+          return write(Option.getOrThrow(loaded))
+        }),
         Match.exhaustive,
-      )
-    ),
-  )
-}
+      ),
+  })
 
 const dispatchAdmit = <Response>(
   write: (settings: HookSettings) => Effect.Effect<Response, PlatformError, HookDispatchContext>,
   empty: Response,
   ctx: HookSession,
-) =>
-  Effect.flatMap(
-    Effect.context<HookDispatchContext>(),
-    (services) => Cell.apply(admitSettings(write, empty, services), ctx),
-  )
+) => Cell.run(admitSettingsCell(write, empty), ctx)
 
 export const onToolCall = (event: HookToolCall, ctx: HookSession) =>
   dispatchAdmit((settings) => runPreToolUseHooks(settings, event, ctx), undefined, ctx)
