@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/stryker-js-platform-node": major
+"@systemfsoftware/stryker-js-engine": major
 ---
 
 `--inPlace` no longer reports success after failing to put your files back.

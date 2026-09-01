@@ -1,7 +1,7 @@
 ---
-'@systemfsoftware/stryker-js-platform-node': patch
 '@systemfsoftware/stryker-js': patch
 '@systemfsoftware/stryker-js-typescript-checker': patch
+"@systemfsoftware/stryker-js-engine": patch
 ---
 
 An oversized message between the runner and a worker now fails the run with a

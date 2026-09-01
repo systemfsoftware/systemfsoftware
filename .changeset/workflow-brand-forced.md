@@ -1,6 +1,5 @@
 ---
 "@systemfsoftware/effect-cell-types": major
-"@systemfsoftware/effect-cell-gen": major
 "@systemfsoftware/omp-claude-compat": minor
 "@systemfsoftware/stryker-js-cli": minor
 ---

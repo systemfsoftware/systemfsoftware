@@ -1,5 +1,5 @@
 ---
-'@systemfsoftware/stryker-js-platform-node': patch
+"@systemfsoftware/stryker-js-engine": patch
 ---
 
 Incremental mode (`incremental: true`) reuses previous results instead of re-running every mutant.

@@ -1,7 +1,6 @@
 ---
 "@systemfsoftware/arethetypeswrong-cli": minor
 "@systemfsoftware/arethetypeswrong": minor
-"@systemfsoftware/effect-cell-gen": minor
 "@systemfsoftware/effect-cell-types": minor
 "@systemfsoftware/effect-daemon-spec": minor
 "@systemfsoftware/effect-gherkin-spec": minor
@@ -12,7 +11,6 @@
 "@systemfsoftware/rx-effect": minor
 "@systemfsoftware/stryker-plugins": minor
 "@systemfsoftware/stryker-js-cli": minor
-"@systemfsoftware/stryker-js-platform-node": minor
 "@systemfsoftware/stryker-js-typescript-checker": minor
 "@systemfsoftware/effect-atom": minor
 "@systemfsoftware/effect-atom-react": minor

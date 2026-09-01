@@ -1,5 +1,5 @@
 ---
-'@systemfsoftware/stryker-js-platform-node': patch
+"@systemfsoftware/stryker-js-engine": patch
 ---
 
 Instrumented files written into the sandbox now get `// @ts-nocheck` when `disableTypeChecks` is on (the default).

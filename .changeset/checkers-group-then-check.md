@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/stryker-js-platform-node": minor
+"@systemfsoftware/stryker-js-engine": minor
 ---
 
 Configured checkers now type-check mutants in the groups the checker returns, instead of checking the whole remaining set at once.

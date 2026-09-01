@@ -33,7 +33,6 @@
 "@systemfsoftware/stryker-js-cli": patch
 "@systemfsoftware/stryker-js-html-reporter": patch
 "@systemfsoftware/stryker-js-instrumenter": patch
-"@systemfsoftware/stryker-js-platform-node": patch
 "@systemfsoftware/stryker-js-typescript-checker": patch
 "@systemfsoftware/stryker-js-vitest-runner": patch
 "@systemfsoftware/stryker-plugins": patch

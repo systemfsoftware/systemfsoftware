@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/stryker-js-platform-node": patch
+"@systemfsoftware/stryker-js-engine": patch
 ---
 
 A run no longer hangs before testing any mutant.

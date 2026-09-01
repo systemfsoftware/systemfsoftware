@@ -1,7 +1,6 @@
 ---
 "@systemfsoftware/stryker-js": major
 "@systemfsoftware/stryker-test-contribution": minor
-"@systemfsoftware/stryker-js-platform-node": minor
 ---
 
 An evaluator now answers with the verdict it reached instead of failing to

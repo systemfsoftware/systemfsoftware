@@ -1,5 +1,5 @@
 ---
-"@systemfsoftware/stryker-js-platform-node": major
+"@systemfsoftware/stryker-js-engine": major
 ---
 
 The `command` test runner works again, and its scores mean something. Re-run any

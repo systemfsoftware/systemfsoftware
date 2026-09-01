@@ -1,7 +1,7 @@
 ---
 "@systemfsoftware/stryker-js": patch
 "@systemfsoftware/stryker-js-cli": patch
-"@systemfsoftware/stryker-js-platform-node": patch
+"@systemfsoftware/stryker-js-engine": patch
 ---
 
 A mutation run that is killed mid-way keeps every completed mutant: the JSONL progress stream is flushed after each result, and incremental mode writes remembered verdicts as they finish so the next run continues instead of starting over.
