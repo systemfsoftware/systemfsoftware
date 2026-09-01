@@ -16,7 +16,7 @@ import { makeHtmlReporter, strykerPlugins } from '@systemfsoftware/stryker-js-ht
 
 ## Related
 
-- [`@systemfsoftware/stryker-js-platform-node`][engine] — the engine that emits the events this reporter presents
+- [`@systemfsoftware/stryker-js-engine`][engine] — the engine that emits the events this reporter presents
 - [`@systemfsoftware/stryker-js-cli`][cli] — the terminal-facing half, which binds this package's `strykerPlugins`
 
 ## License

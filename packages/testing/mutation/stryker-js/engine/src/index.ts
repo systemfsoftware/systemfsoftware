@@ -36,7 +36,6 @@ export { ChildProcessCrashedError, OutOfMemoryError } from './Worker.schema.js'
 
 export { strykerVersion } from './stryker-package.js'
 
-// The ports a process entry binds to start the engine, and the wire contract
-// the parent shares with its workers.
+export type { EnginePorts } from './Run.js'
 export { connectRetry, WorkerEntries, WorkerLauncher } from './WorkerLauncher.js'
 export type { SpawnedSocketWorker, WorkerEntriesShape, WorkerLauncherShape } from './WorkerLauncher.js'

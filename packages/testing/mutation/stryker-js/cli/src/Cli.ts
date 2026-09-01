@@ -526,7 +526,7 @@ function readCoreEntries(): Effect.Effect<readonly string[], never, FileSystem.F
   return Effect.gen(function*() {
     const path = yield* Path.Path
     const fs = yield* FileSystem.FileSystem
-    const resolved = import.meta.resolve('@systemfsoftware/stryker-js-platform-node/package.json')
+    const resolved = import.meta.resolve('@systemfsoftware/stryker-js-engine/package.json')
     const manifestPath = yield* path.fromFileUrl(new URL(resolved))
     const raw = yield* fs.readFileString(manifestPath)
     let parsed: unknown

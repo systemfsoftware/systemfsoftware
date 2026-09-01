@@ -84,7 +84,7 @@ The highest pending class wins; a terminating signal outranks all of them.
 
 ## Related
 
-The mutation engine is [`@systemfsoftware/stryker-js-platform-node`][engine].
+The mutation engine is [`@systemfsoftware/stryker-js-engine`][engine].
 This package is the terminal-facing half and reaches it through an injected
 run-event sink;
 it ships a command and exposes no importable API.

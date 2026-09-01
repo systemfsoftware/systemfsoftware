@@ -12,7 +12,7 @@ const forbiddenDependencies = [
   '@vitest/coverage-v8',
   '@systemfsoftware/vitest-config',
   '@systemfsoftware/stryker-js-vitest-runner',
-  '@systemfsoftware/stryker-js-platform-node',
+  '@systemfsoftware/stryker-js-engine',
   '@systemfsoftware/stryker-js-typescript-checker',
 ]
 
