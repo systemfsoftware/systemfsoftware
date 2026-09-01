@@ -3,4 +3,4 @@
 "@systemfsoftware/arethetypeswrong-cli": none
 ---
 
-Internal build-graph bookkeeping only; nothing observable changes in either package.
+Neither package ships anything new in this release window; consumers need no action.
