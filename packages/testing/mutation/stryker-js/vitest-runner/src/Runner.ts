@@ -34,9 +34,9 @@ import {
   TestRunnerFailed,
   TestStatus,
 } from '@systemfsoftware/stryker-js/TestRunner'
+import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
-import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
@@ -60,6 +60,13 @@ import type { VitestDryRunError, VitestDryRunOutput } from './VitestDryRun.workf
 import { VitestMutantRunCommand, vitestMutantRunWorkflow } from './VitestMutantRun.workflow.js'
 import type { VitestMutantRunError, VitestMutantRunOutput } from './VitestMutantRun.workflow.js'
 
+export class VitestHarness extends Context.Service<VitestHarness, {
+  readonly setMode: (mode: 'dry-run' | 'mutant') => Effect.Effect<void, TestRunnerFailed>
+  readonly provide: (
+    key: 'hitLimit' | 'mutantActivation' | 'activeMutant',
+    value: unknown,
+  ) => Effect.Effect<void, TestRunnerFailed>
+}>()('VitestHarness') {}
 // ---------------------------------------------------------------------------
 // Test identity (from test-identity.ts) — also duplicated in stryker-setup.ts
 // which is copied verbatim into the sandbox and cannot import siblings.
@@ -669,49 +676,29 @@ export const makeVitestRunnerLayer = (
           })()
           return { rawTests, hasExternalError, externalErrorText }
         })
-      interface DryRunPhases extends Cell.Phases {
-        readonly command: DryRunOptions
-        readonly raw: {
-          readonly rawTests: readonly unknown[]
-          readonly projectRoot: string
-          readonly hasExternalError: boolean
-          readonly externalErrorText: string
-        }
-        readonly decoded: VitestDryRunCommand
-        readonly decision: VitestDryRunOutput
-        readonly decisionError: VitestDryRunError
-        readonly output: DryRunResult
-        readonly response: DryRunResult
-        readonly decodeError: unknown
-        readonly readError: TestRunnerFailed
-        readonly writeError: TestRunnerFailed
-      }
-
-      interface MutantRunPhases extends Cell.Phases {
-        readonly command: MutantRunOptions
-        readonly raw: {
-          readonly rawTests: readonly unknown[]
-          readonly projectRoot: string
-          readonly hasExternalError: boolean
-          readonly externalErrorText: string
-          readonly hitCount?: number | undefined
-          readonly hitLimit: number | undefined
-          readonly reportAllKillers: boolean
-        }
-        readonly decoded: VitestMutantRunCommand
-        readonly decision: VitestMutantRunOutput
-        readonly decisionError: VitestMutantRunError
-        readonly output: MutantRunResult
-        readonly response: MutantRunResult
-        readonly decodeError: unknown
-        readonly readError: TestRunnerFailed
-        readonly writeError: TestRunnerFailed
-      }
-      const dryRunDescription: Cell.WriteDone<DryRunPhases> = pipe(
-        Cell.read<DryRunPhases>((command) =>
+      const harnessImpl: VitestHarness['Service'] = {
+        setMode: (mode) =>
           Effect.gen(function*() {
             const ctx = yield* requireCtx
-            ctx.provide('mode', 'dry-run')
+            ctx.provide('mode', mode)
+          }),
+        provide: (key, value) =>
+          Effect.gen(function*() {
+            const ctx = yield* requireCtx
+            if (key === 'hitLimit') {
+              if (typeof value === 'number' || value === undefined) ctx.provide('hitLimit', value)
+              else ctx.provide('hitLimit', undefined)
+            } else if (key === 'mutantActivation') {
+              if (value === 'runtime' || value === 'static') ctx.provide('mutantActivation', value)
+            } else if (typeof value === 'string') ctx.provide('activeMutant', value)
+          }),
+      }
+
+      const dryRunCell = Cell.layer({
+        read: (command: DryRunOptions) =>
+          Effect.gen(function*() {
+            const harness = yield* VitestHarness
+            yield* harness.setMode('dry-run')
             const hasTestFiles = testFilesProvided(command)
             const filter: RunFilter = (() => {
               if (hasTestFiles) {
@@ -732,9 +719,15 @@ export const makeVitestRunnerLayer = (
             })()
             const { rawTests, hasExternalError, externalErrorText } = yield* collectRaw(filter satisfies RunFilter)
             return { rawTests, projectRoot: input.sandboxDirectory, hasExternalError, externalErrorText }
-          })
-        ),
-        Cell.decode<DryRunPhases>((raw) =>
+          }),
+        decode: (
+          raw: {
+            readonly rawTests: readonly unknown[]
+            readonly projectRoot: string
+            readonly hasExternalError: boolean
+            readonly externalErrorText: string
+          },
+        ) =>
           Result.succeed(
             new VitestDryRunCommand({
               rawTests: raw.rawTests,
@@ -742,10 +735,9 @@ export const makeVitestRunnerLayer = (
               hasExternalError: raw.hasExternalError,
               externalErrorText: raw.externalErrorText,
             }),
-          )
-        ),
-        Cell.decide<DryRunPhases>(vitestDryRunWorkflow),
-        Cell.encode<DryRunPhases>((outcome) =>
+          ),
+        decide: vitestDryRunWorkflow,
+        encode: (outcome: Result.Result<VitestDryRunOutput, VitestDryRunError>) =>
           Result.match(outcome, {
             onFailure: (e) => ({ status: 'error' as const, errorMessage: e.message }) satisfies DryRunResult,
             onSuccess: (out) => {
@@ -758,9 +750,8 @@ export const makeVitestRunnerLayer = (
               }
               return { status: 'complete' as const, tests } satisfies DryRunResult
             },
-          })
-        ),
-        Cell.write<DryRunPhases>((output) =>
+          }),
+        write: (output: DryRunResult, _raw: unknown) =>
           Effect.gen(function*() {
             if (output.status === 'complete') {
               const mutantCoverage = yield* readMutantCoverage.pipe(
@@ -771,17 +762,16 @@ export const makeVitestRunnerLayer = (
               if (mutantCoverage !== undefined) return { ...output, mutantCoverage } satisfies DryRunResult
             }
             return output
-          })
-        ),
-      )
-      const mutantRunDescription: Cell.WriteDone<MutantRunPhases> = pipe(
-        Cell.read<MutantRunPhases>((command) =>
+          }),
+      })
+      const mutantRunCell = Cell.layer({
+        read: (command: MutantRunOptions) =>
           Effect.gen(function*() {
-            const ctx = yield* requireCtx
-            ctx.provide('mode', 'mutant')
-            ctx.provide('hitLimit', command.hitLimit)
-            ctx.provide('mutantActivation', command.mutantActivation)
-            ctx.provide('activeMutant', command.activeMutant.id)
+            const harness = yield* VitestHarness
+            yield* harness.setMode('mutant')
+            yield* harness.provide('hitLimit', command.hitLimit)
+            yield* harness.provide('mutantActivation', command.mutantActivation)
+            yield* harness.provide('activeMutant', command.activeMutant.id)
             const { rawTests, hasExternalError, externalErrorText } = yield* collectRaw({
               testIds: (() => {
                 if (command.testFilter !== undefined) return [...command.testFilter]
@@ -819,9 +809,18 @@ export const makeVitestRunnerLayer = (
               hitLimit: command.hitLimit,
               reportAllKillers,
             }
-          })
-        ),
-        Cell.decode<MutantRunPhases>((raw) => {
+          }),
+        decode: (
+          raw: {
+            readonly rawTests: readonly unknown[]
+            readonly projectRoot: string
+            readonly hasExternalError: boolean
+            readonly externalErrorText: string
+            readonly hitCount?: number | undefined
+            readonly hitLimit: number | undefined
+            readonly reportAllKillers: boolean
+          },
+        ) => {
           const base = {
             rawTests: raw.rawTests,
             projectRoot: raw.projectRoot,
@@ -841,9 +840,9 @@ export const makeVitestRunnerLayer = (
             return Result.succeed(new VitestMutantRunCommand({ ...base, hitLimit: raw.hitLimit }))
           }
           return Result.succeed(new VitestMutantRunCommand(base))
-        }),
-        Cell.decide<MutantRunPhases>(vitestMutantRunWorkflow),
-        Cell.encode<MutantRunPhases>((outcome) =>
+        },
+        decide: vitestMutantRunWorkflow,
+        encode: (outcome: Result.Result<VitestMutantRunOutput, VitestMutantRunError>) =>
           Result.match(outcome, {
             onFailure: (e) => ({ status: 'error' as const, errorMessage: e.message }) satisfies MutantRunResult,
             onSuccess: (out) => {
@@ -881,20 +880,25 @@ export const makeVitestRunnerLayer = (
               }
               return { status: 'survived' as const, nrOfTests } satisfies MutantRunResult
             },
-          })
-        ),
-        Cell.write<MutantRunPhases>((output) => Effect.succeed(output)),
-      )
+          }),
+        write: (output: MutantRunResult, _raw: unknown) => Effect.succeed(output),
+      })
       const dryRun: TestRunner['Service']['dryRun'] = (options) =>
-        Cell.apply(dryRunDescription, options).pipe(Effect.mapError((cause) => ((() => {
-          if (cause instanceof TestRunnerFailed) return cause
-          return new TestRunnerFailed({ runnerName: 'vitest', phase: 'dryRun', cause: errorToString(cause) })
-        })())))
+        Cell.run(dryRunCell, options).pipe(
+          Effect.provideService(VitestHarness, harnessImpl),
+          Effect.mapError((cause) => ((() => {
+            if (cause instanceof TestRunnerFailed) return cause
+            return new TestRunnerFailed({ runnerName: 'vitest', phase: 'dryRun', cause: errorToString(cause) })
+          })())),
+        )
       const mutantRun: TestRunner['Service']['mutantRun'] = (options) =>
-        Cell.apply(mutantRunDescription, options).pipe(Effect.mapError((cause) => ((() => {
-          if (cause instanceof TestRunnerFailed) return cause
-          return new TestRunnerFailed({ runnerName: 'vitest', phase: 'mutantRun', cause: errorToString(cause) })
-        })())))
+        Cell.run(mutantRunCell, options).pipe(
+          Effect.provideService(VitestHarness, harnessImpl),
+          Effect.mapError((cause) => ((() => {
+            if (cause instanceof TestRunnerFailed) return cause
+            return new TestRunnerFailed({ runnerName: 'vitest', phase: 'mutantRun', cause: errorToString(cause) })
+          })())),
+        )
       const dispose: TestRunner['Service']['dispose'] = Effect.gen(function*() {
         const state = yield* getState
         if (state.ctx !== undefined) {
