@@ -1,4 +1,8 @@
 import {
+  GUARD_FORM_ACTUAL,
+  GUARD_FORM_EXPECTED,
+  GUARD_FORM_FIX,
+  GUARD_FORM_NAME,
   NO_EMPTY_PLACEHOLDER_ACTUAL,
   NO_EMPTY_PLACEHOLDER_EXPECTED,
   NO_EMPTY_PLACEHOLDER_FIX,
@@ -42,6 +46,15 @@ const noEmptyPlaceholderError = {
     expected: NO_EMPTY_PLACEHOLDER_EXPECTED,
     actual: NO_EMPTY_PLACEHOLDER_ACTUAL,
     fix: NO_EMPTY_PLACEHOLDER_FIX,
+  },
+}
+const guardFormError = {
+  messageId: 'guardForm' as const,
+  data: {
+    name: GUARD_FORM_NAME,
+    expected: GUARD_FORM_EXPECTED,
+    actual: GUARD_FORM_ACTUAL,
+    fix: GUARD_FORM_FIX,
   },
 }
 
@@ -234,6 +247,83 @@ if (import.meta.vitest !== void 0) {
   const { TestClock } = await import('effect/testing')
   it('pins', () => {
     void TestClock
+    expect(1 + 1).toMatchInlineSnapshot(\`2\`)
+  })
+}
+`,
+      filename: '/repo/pkg/src/widget.ts',
+    },
+    {
+      name: 'Should_Allow_FastCheckDestructured_When_ValueBinding',
+      code: `
+if (import.meta.vitest) {
+  const { x: FastCheck } = obj
+}
+`,
+      filename: '/repo/pkg/src/widget.ts',
+    },
+    {
+      name: 'Should_Allow_FastCheckAsObjectKey_When_InVitestGuard',
+      code: `
+if (import.meta.vitest) {
+  const obj = { FastCheck: 1, fc: 2, Arbitrary: 3 }
+  void obj
+}
+`,
+      filename: '/repo/pkg/src/widget.ts',
+    },
+    {
+      name: 'Should_Allow_FastCheckAsMemberProperty_When_InVitestGuard',
+      code: `
+if (import.meta.vitest) {
+  const x = obj.FastCheck
+  void x
+}
+`,
+      filename: '/repo/pkg/src/widget.ts',
+    },
+    {
+      name: 'Should_Allow_PropMemberCall_When_BaseNotInRunnerNames',
+      code: `
+if (import.meta.vitest) {
+  const someFn = () => {}
+  someFn.prop('x', () => {})
+}
+`,
+      filename: '/repo/pkg/src/widget.ts',
+    },
+    {
+      name: 'Should_Allow_ComputedExpectTerminal_When_InsideVitestGuard',
+      code: `
+if (import.meta.vitest) {
+  const { expect, it } = await import('vitest')
+  it('x', () => {
+    expect(1)['toBe'](2)
+  })
+}
+`,
+      filename: '/repo/pkg/src/widget.ts',
+    },
+    {
+      name: 'Should_Allow_ThrowAtGuardTop_When_NotInTestBody',
+      code: `
+if (import.meta.vitest) {
+  throw new Error('setup')
+}
+`,
+      filename: '/repo/pkg/src/widget.ts',
+    },
+    {
+      name: 'Should_Allow_Rethrow_When_PropagatingCaughtFailure',
+      code: `
+if (import.meta.vitest) {
+  const { expect, it } = await import('vitest')
+  it('propagates', () => {
+    try {
+      JSON.parse('junk')
+    } catch (err) {
+      throw err
+    }
     expect(1 + 1).toMatchInlineSnapshot(\`2\`)
   })
 }
@@ -455,6 +545,120 @@ if (import.meta.vitest) {
       filename: '/repo/pkg/src/widget.ts',
       errors: [
         noEmptyPlaceholderError,
+      ],
+    },
+    {
+      name: 'Should_Report_InterpolatedInlineSnapshot_When_TemplateLiteralComputesContent',
+      code: `
+if (import.meta.vitest) {
+  const { it, expect } = await import('vitest')
+  const tag = 'run'
+  it('folds', () => {
+    expect(tag).toMatchInlineSnapshot(\`\${tag}\`)
+  })
+}
+`,
+      filename: '/repo/pkg/src/widget.ts',
+      errors: [
+        noEmptyPlaceholderError,
+      ],
+    },
+    {
+      name: 'Should_Report_NegatedToBe_When_InsideVitestGuard',
+      code: `
+if (import.meta.vitest) {
+  const { expect, it } = await import('vitest')
+  it('x', () => {
+    expect(1).not.toBe(2)
+  })
+}
+`,
+      filename: '/repo/pkg/src/widget.ts',
+      errors: [
+        snapshotOnlyError,
+      ],
+    },
+    {
+      name: 'Should_Report_ThrowInsideItEffect_When_MemberFormRunner',
+      code: `
+if (import.meta.vitest) {
+  const { it } = await import('@effect/vitest')
+  it.effect('x', () => {
+    throw new Error('y')
+  })
+}
+`,
+      filename: '/repo/pkg/src/widget.ts',
+      errors: [
+        snapshotOnlyError,
+      ],
+    },
+    {
+      name: 'Should_Report_ShortCircuitGuard_When_LogicalAndRunsTests',
+      code: `
+import.meta.vitest && (async () => {
+  const { it } = await import('vitest')
+  it('folds', () => {})
+})()
+`,
+      filename: '/repo/pkg/src/widget.ts',
+      errors: [
+        guardFormError,
+      ],
+    },
+    {
+      name: 'Should_Report_TernaryGuard_When_ConditionalRunsTests',
+      code: `
+import.meta.vitest ? globalThis.it('folds', () => {}) : void 0
+`,
+      filename: '/repo/pkg/src/widget.ts',
+      errors: [
+        guardFormError,
+      ],
+    },
+    {
+      name: 'Should_Report_InvertedGuard_When_ElseBranchRunsTests',
+      code: `
+if (!import.meta.vitest) {
+  void 0
+} else {
+  const { it } = await import('vitest')
+  it('folds', () => {})
+}
+`,
+      filename: '/repo/pkg/src/widget.ts',
+      errors: [
+        guardFormError,
+      ],
+    },
+    {
+      name: 'Should_Report_PropertyConstruct_When_InsideRuleOfSchemasCallbackArgument',
+      code: `
+if (import.meta.vitest) {
+  ruleOfSchemas('X', async () => {
+    const { Arbitrary } = await import('fast-check')
+    void Arbitrary
+  })
+}
+`,
+      filename: '/repo/pkg/src/widget.ts',
+      errors: [
+        propertyBanError,
+        propertyBanError,
+      ],
+    },
+    {
+      name: 'Should_Report_BoundGuard_When_MetaVitestAssignedToVariable',
+      code: `
+const inVitest = import.meta.vitest
+if (inVitest) {
+  const { it } = await import('vitest')
+  it('folds', () => {})
+}
+`,
+      filename: '/repo/pkg/src/widget.ts',
+      errors: [
+        guardFormError,
       ],
     },
   ],

@@ -2,6 +2,10 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { bindingBase } from './ancestors.js'
 import {
+  GUARD_FORM_ACTUAL,
+  GUARD_FORM_EXPECTED,
+  GUARD_FORM_FIX,
+  GUARD_FORM_NAME,
   meta,
   NO_EMPTY_PLACEHOLDER_ACTUAL,
   NO_EMPTY_PLACEHOLDER_EXPECTED,
@@ -18,9 +22,9 @@ import {
 } from './in-source-test-snapshot-only.config.js'
 import { RUNNER_NAMES } from './path.config.js'
 import { basenameOf, isTestFile, isUnderSrc } from './path.js'
-import { isVitestGuard } from './vitest-guard.js'
+import { isMetaVitest, isVitestGuard } from './vitest-guard.js'
 
-export type MessageIds = 'propertyBan' | 'snapshotOnly' | 'noEmptyPlaceholder'
+export type MessageIds = 'propertyBan' | 'snapshotOnly' | 'noEmptyPlaceholder' | 'guardForm'
 
 const PROPERTY_IDENTIFIERS: Record<string, true> = {
   FastCheck: true,
@@ -86,13 +90,20 @@ export const inSourceTestSnapshotOnly = defineRule({
 
     // One parent walk per node answers both membership questions: inside a
     // vitest-guard consequent, and inside a ruleOfSchemas(...) generated-law call.
+    // The laws exemption covers the call's own arguments; a function boundary
+    // crossed on the way up means hand-written code, and the exemption ends there.
     const classify = (node: { readonly parent: ESTree.Node | null }): { inBlock: boolean; inLaws: boolean } => {
       let inBlock = false
       let inLaws = false
+      let crossedFunction = false
       let current = node.parent
       while (current !== null && !(inBlock && inLaws)) {
+        if (current.type === 'FunctionExpression' || current.type === 'ArrowFunctionExpression') {
+          crossedFunction = true
+        }
         if (
           !inLaws &&
+          !crossedFunction &&
           current.type === 'CallExpression' &&
           current.callee.type === 'Identifier' &&
           current.callee.name === 'ruleOfSchemas'
@@ -109,6 +120,33 @@ export const inSourceTestSnapshotOnly = defineRule({
       IfStatement(node: ESTree.IfStatement) {
         if (!isVitestGuard(node.test)) return
         guards.push(node)
+      },
+      MemberExpression(node: ESTree.MemberExpression) {
+        if (!isMetaVitest(node)) return
+        // Canonical positions only: the bare if-test, or one side of the
+        // comparison if-test. A short-circuit, ternary, negated, or bound
+        // reference still runs under vitest includeSource but registers no
+        // guard here, so its contents would evade every arm of this rule.
+        const parent = node.parent
+        if (parent.type === 'IfStatement' && parent.test === node) return
+        if (
+          parent.type === 'BinaryExpression' &&
+          parent.parent !== null &&
+          parent.parent.type === 'IfStatement' &&
+          parent.parent.test === parent
+        ) {
+          return
+        }
+        context.report({
+          node,
+          messageId: 'guardForm',
+          data: {
+            name: GUARD_FORM_NAME,
+            expected: GUARD_FORM_EXPECTED,
+            actual: GUARD_FORM_ACTUAL,
+            fix: GUARD_FORM_FIX,
+          },
+        })
       },
       Identifier(node: ESTree.IdentifierReference) {
         if (PROPERTY_IDENTIFIERS[node.name] !== true) return
@@ -187,9 +225,14 @@ export const inSourceTestSnapshotOnly = defineRule({
           ) {
             // Only an expect(...) call chain reaches here — expect.any(...) and
             // friends have the bare `expect` identifier as base and never enter.
-            // An authored toMatchInlineSnapshot literal passes; the empty placeholder is the capture shape.
+            // An authored toMatchInlineSnapshot literal passes; the capture
+            // shapes — no argument, or runtime interpolation — are banned.
             if (terminal === 'toMatchInlineSnapshot') {
-              if (node.arguments.length === 0) {
+              const argument = node.arguments[0]
+              if (
+                argument === undefined ||
+                (argument.type === 'TemplateLiteral' && argument.expressions.length > 0)
+              ) {
                 context.report({
                   node,
                   messageId: 'noEmptyPlaceholder',
@@ -253,6 +296,9 @@ export const inSourceTestSnapshotOnly = defineRule({
       ThrowStatement(node: ESTree.ThrowStatement) {
         if (!classify(node).inBlock) return
         if (!isInTestBody(node)) return
+        // A bare rethrow (`throw err`) propagates a caught failure; only a
+        // constructed throw is an assertion channel.
+        if (node.argument.type === 'Identifier') return
         context.report({
           node,
           messageId: 'snapshotOnly',
