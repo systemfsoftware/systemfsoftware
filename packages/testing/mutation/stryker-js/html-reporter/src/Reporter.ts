@@ -21,8 +21,6 @@ import { makeHtmlDocument } from './Reporter.workflow.js'
 
 export const makeHtmlReporter = (params: {
   readonly options?: ProvidedStrykerOptions
-  readonly fs: FileSystem.FileSystem
-  readonly path: Path.Path
 }): ReporterService => {
   const options = params.options
 
@@ -66,8 +64,6 @@ export const makeHtmlReporter = (params: {
     onMutantTested: (_result: MutantResult) => Effect.void,
     onMutationTestReportReady: (report: schema.MutationTestResult, metrics: MutationTestMetricsResult) =>
       Cell.run(htmlReporterCell, { report, metrics }).pipe(
-        Effect.provideService(FileSystem.FileSystem, params.fs),
-        Effect.provideService(Path.Path, params.path),
         Effect.catchCause((cause) =>
           Effect.fail(
             new ReporterFailed({
