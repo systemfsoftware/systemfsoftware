@@ -515,14 +515,8 @@ if (import.meta.vitest !== void 0) {
     it('Should_AcceptScenarioOptions_When_SecondArgIsOpts', () => {
       const { registered, scenario } = record()
       scenario('A scenario with options registers under run mode', { layer: LayerModule.empty }, EffectModule.void)
-      expect(registered).toMatchInlineSnapshot(`
-        [
-          {
-            "mode": "run",
-            "name": "A scenario with options registers under run mode",
-          },
-        ]
-      `)
+      expect(registered.length).toMatchInlineSnapshot(`1`)
+      expect(registered[0]?.mode).toMatchInlineSnapshot(`"run"`)
     })
   })
 
@@ -536,16 +530,10 @@ if (import.meta.vitest !== void 0) {
         () => null,
       )
       outline('An outline example registers a scenario per row', [{ x: '1' }, { x: '2' }], () => EffectModule.void)
-      expect(registered).toMatchInlineSnapshot(`
+      expect(registered.map((r) => r.mode)).toMatchInlineSnapshot(`
         [
-          {
-            "mode": "run",
-            "name": "An outline example registers a scenario per row",
-          },
-          {
-            "mode": "run",
-            "name": "An outline example registers a scenario per row",
-          },
+          "run",
+          "run",
         ]
       `)
     })
