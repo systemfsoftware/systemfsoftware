@@ -1,5 +1,5 @@
 import * as Effect from 'effect/Effect'
-import { dual } from 'effect/Function'
+import { dual, pipe } from 'effect/Function'
 import * as Result from 'effect/Result'
 import { CanonicalCommand, canonicalDecide } from './CanonicalDecide.workflow.js'
 import { type WorkflowBrand } from './Workflow.js'
@@ -284,6 +284,82 @@ export const write: {
   ioCells: self.ioCells,
   phases: [...self.phases, { name: 'write', kind: 'impure', convention: 'effect', run }],
 }))
+
+interface LayerCore<C, Raw, RE, Dec, DE, Resp, WE> {
+  readonly read: (command: C) => Effect.Effect<Raw, RE, never>
+  readonly decide: ((decoded: Raw) => Result.Result<Dec, DE>) & WorkflowBrand
+  readonly write: (output: Result.Result<Dec, DE>, raw: Raw) => Effect.Effect<Resp, WE, never>
+}
+
+interface LayerShortSpec<C, Raw, RE, Dec, DE, Resp, WE> extends LayerCore<C, Raw, RE, Dec, DE, Resp, WE> {
+  readonly decode?: never
+  readonly encode?: never
+}
+
+interface LayerLongSpec<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE> {
+  readonly read: (command: C) => Effect.Effect<Raw, RE, never>
+  readonly decode: (raw: Raw) => Result.Result<Dcd, DecE>
+  readonly decide: ((decoded: Dcd) => Result.Result<Dec, DE>) & WorkflowBrand
+  readonly encode: (outcome: Result.Result<Dec, DE>) => Out
+  readonly write: (output: Out, raw: Raw) => Effect.Effect<Resp, WE, never>
+}
+
+type LayerBag<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE> = {
+  readonly command: C
+  readonly raw: Raw
+  readonly decoded: Dcd
+  readonly decision: Dec
+  readonly decisionError: DE
+  readonly output: Out
+  readonly response: Resp
+  readonly decodeError: DecE
+  readonly readError: RE
+  readonly writeError: WE
+}
+
+const layerImpl = <C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>(
+  spec:
+    | LayerCore<C, Raw, RE, Dec, DE, Resp, WE>
+    | LayerLongSpec<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>,
+) => {
+  if ('decode' in spec && 'encode' in spec) {
+    return pipe(
+      read<LayerBag<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>>(spec.read),
+      decode<LayerBag<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>>(spec.decode),
+      decide<LayerBag<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>>(spec.decide),
+      encode<LayerBag<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>>(spec.encode),
+      write<LayerBag<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>>(spec.write),
+    )
+  }
+  return pipe(
+    read<LayerBag<C, Raw, RE, Raw, never, Dec, DE, Result.Result<Dec, DE>, Resp, WE>>(spec.read),
+    decode<LayerBag<C, Raw, RE, Raw, never, Dec, DE, Result.Result<Dec, DE>, Resp, WE>>((raw) => Result.succeed(raw)),
+    decide<LayerBag<C, Raw, RE, Raw, never, Dec, DE, Result.Result<Dec, DE>, Resp, WE>>(spec.decide),
+    encode<LayerBag<C, Raw, RE, Raw, never, Dec, DE, Result.Result<Dec, DE>, Resp, WE>>((outcome) => outcome),
+    write<LayerBag<C, Raw, RE, Raw, never, Dec, DE, Result.Result<Dec, DE>, Resp, WE>>(spec.write),
+  )
+}
+
+/**
+ * Object-spec sugar over the five constructors. The bag is inferred from the supplied
+ * phase functions, never asserted: the short form's identity decode/encode are typed
+ * against that inferred bag, where `decoded` IS `raw` and `output` IS the decide outcome
+ * by construction. A partial spec (one adapter without the other) is rejected by the
+ * `never` members, for a variable-held spec as much as for an inline literal.
+ */
+export function layer<C, Raw, RE, Dec, DE, Resp, WE>(
+  spec: LayerShortSpec<C, Raw, RE, Dec, DE, Resp, WE>,
+): WriteDone<LayerBag<C, Raw, RE, Raw, never, Dec, DE, Result.Result<Dec, DE>, Resp, WE>>
+export function layer<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>(
+  spec: LayerLongSpec<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>,
+): WriteDone<LayerBag<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>>
+export function layer<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>(
+  spec:
+    | LayerShortSpec<C, Raw, RE, Dec, DE, Resp, WE>
+    | LayerLongSpec<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>,
+) {
+  return layerImpl(spec)
+}
 
 /**
  * What can flow through the interpreter's fold: every phase's input and output type,

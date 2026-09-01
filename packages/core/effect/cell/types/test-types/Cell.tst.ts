@@ -319,3 +319,79 @@ describe('what the write receives', () => {
       .toBeAssignableTo<Cell.WritePhase<Shape>>()
   })
 })
+// The short form's bag, where decode and encode are identities: decoded IS raw and
+// output IS the decide outcome, so the write's first parameter is the `Result`.
+interface Query extends Cell.Phases {
+  readonly command: Cmd
+  readonly raw: Raw
+  readonly decoded: Raw
+  readonly decision: Decision
+  readonly decisionError: Refusal
+  readonly output: Result<Decision, Refusal>
+  readonly response: boolean
+  readonly decodeError: never
+  readonly readError: never
+  readonly writeError: never
+}
+
+declare const readQuery: Cell.ReadPhase<Query>
+declare const decideQuery: Cell.DecidePhase<Query>
+declare const writeQuery: Cell.WritePhase<Query>
+declare const writeTakingEncodedOutput: (output: Output, raw: Raw) => Effect<boolean, never, never>
+
+describe('the layer spec sugar', () => {
+  it('Should_InferTheBag_When_ShortSpecSuppliesReadDecideWrite', () => {
+    const viaSugar = Cell.layer({ read: readQuery, decide: decideQuery, write: writeQuery })
+    expect(viaSugar).type.toBeAssignableTo<Cell.WriteDone<Query>>()
+    expect(Cell.apply(viaSugar, { id: 'x' })).type.toBe<Effect<boolean, never, never>>()
+  })
+
+  it('Should_InferTheBag_When_LongSpecSuppliesAllFivePhases', () => {
+    const viaSugar = Cell.layer({
+      read: readPhase,
+      decode: decodePhase,
+      decide: decidePhase,
+      encode: encodePhase,
+      write: writePhase,
+    })
+    expect(viaSugar).type.toBeAssignableTo<Cell.WriteDone<Shape>>()
+    expect(Cell.apply(viaSugar, { id: 'x' })).type.toBe<Effect<void, DecodeErr, never>>()
+  })
+
+  it('Should_RefuseTheSpec_When_TheWriteCannotReceiveTheOutcome', () => {
+    // Positive control: the same spec shape with a write that receives the outcome.
+    expect(Cell.layer).type.toBeCallableWith({ read: readQuery, decide: decideQuery, write: writeQuery })
+
+    expect(Cell.layer).type.not.toBeCallableWith({
+      read: readQuery,
+      decide: decideQuery,
+      write: writeTakingEncodedOutput,
+    })
+
+    // A variable-held spec is refused identically: the refusal is assignability, not
+    // excess-property checking, so it does not vanish once the literal is erased.
+    const spec = { read: readQuery, decide: decideQuery, write: writeTakingEncodedOutput }
+    expect(Cell.layer).type.not.toBeCallableWith(spec)
+  })
+
+  it('Should_RefuseTheSpec_When_DecodeArrivesWithoutEncode', () => {
+    // Positive control: decode and encode supplied together are admitted.
+    expect(Cell.layer).type.toBeCallableWith({
+      read: readPhase,
+      decode: decodePhase,
+      decide: decidePhase,
+      encode: encodePhase,
+      write: writePhase,
+    })
+
+    expect(Cell.layer).type.not.toBeCallableWith({
+      read: readPhase,
+      decode: decodePhase,
+      decide: decidePhase,
+      write: writePhase,
+    })
+
+    const partialSpec = { read: readPhase, decode: decodePhase, decide: decidePhase, write: writePhase }
+    expect(Cell.layer).type.not.toBeCallableWith(partialSpec)
+  })
+})

@@ -95,6 +95,23 @@ const makeDescription = (ledger: LedgerService) =>
   )
 
 /**
+ * The same sandwich authored as a layer spec. Decode and encode are omitted, so the
+ * defaults are the identities: the read returns the decision's input directly, and the
+ * write's first argument is the decide outcome itself rather than an encoded output.
+ */
+const makeSpecDescription = (ledger: LedgerService) =>
+  Cell.layer({
+    read: (command: Command) => Effect.succeed({ length: command.id.length }),
+    decide: decideFixture,
+    write: (outcome) =>
+      Result.match(outcome, {
+        onFailure: (refused) => ledger.append(`refused:${refused.why}`).pipe(Effect.as(`refused:${refused.why}`)),
+        onSuccess: (admitted) =>
+          ledger.append(`admitted:${admitted.length}`).pipe(Effect.as(`admitted:${admitted.length}`)),
+      }),
+  })
+
+/**
  * A write that reports on the description's read as well as on the encoded output. The raw
  * arrives as the write's second argument, which is the whole point of the argument: an
  * author whose write persists or reports what the read gathered needs no `let` beside the
@@ -151,6 +168,26 @@ Feature('Applying a phase description')
           Effect.flatMap(Ledger, (ledger) =>
             Effect.map(ledger.lines, (lines) => {
               expect(lines).toEqual(['refused:too short'])
+            }))
+        ),
+      ),
+    )
+
+    scenario(
+      'A spec-built description answers what the chain-built one answers',
+      Gherkin.Do.pipe(
+        When('a description built from a layer spec is applied to a command its decision admits')(
+          'exit',
+          () =>
+            Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.apply(makeSpecDescription(ledger), { id: 'abcd' }))),
+        ),
+        Then('the run succeeds with the response the chain-built description returns')((s) => {
+          expect(s.exit).toStrictEqual(Exit.succeed('admitted:4'))
+        }),
+        And('the write recorded the decide outcome it received')(() =>
+          Effect.flatMap(Ledger, (ledger) =>
+            Effect.map(ledger.lines, (lines) => {
+              expect(lines).toEqual(['admitted:4'])
             }))
         ),
       ),
