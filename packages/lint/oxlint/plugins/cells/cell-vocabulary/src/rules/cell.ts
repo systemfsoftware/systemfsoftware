@@ -24,9 +24,86 @@ export const cellOf = (source: string, cells: readonly string[]): string | null 
   return cells.find((cell) => stem.endsWith(`.${cell}`)) ?? null
 }
 
-/** `saveOrder(...)` -> `saveOrder`; `Store.save(...)` -> `Store`. */
 export const calleeRootName = (callee: ESTree.Node): string | null => {
   if (callee.type === 'Identifier') return callee.name
   if (callee.type !== 'MemberExpression') return null
   return calleeRootName(callee.object)
+}
+
+export const isCellMemberCall = (
+  node: ESTree.Node,
+  namespaces: ReadonlySet<string>,
+  memberName: string,
+): node is ESTree.CallExpression & { callee: ESTree.MemberExpression } => {
+  if (node.type !== 'CallExpression') return false
+  const callee = node.callee
+  if (callee.type !== 'MemberExpression') return false
+  if (callee.computed) return false
+  const object = callee.object
+  const property = callee.property
+  if (object.type !== 'Identifier') return false
+  if (property.type !== 'Identifier') return false
+  if (!namespaces.has(object.name)) return false
+  return property.name === memberName
+}
+
+export const isPipeCall = (node: ESTree.Node, pipeNames: ReadonlySet<string>, memberName: string): boolean => {
+  if (node.type !== 'CallExpression') return false
+  const callee = node.callee
+  if (callee.type === 'Identifier') return pipeNames.has(callee.name)
+  if (callee.type === 'MemberExpression' && !callee.computed && callee.property.type === 'Identifier') {
+    return callee.property.name === memberName
+  }
+  return false
+}
+
+export const pipeRootOf = (
+  call: ESTree.CallExpression,
+  pipeNames: ReadonlySet<string>,
+  memberName: string,
+): ESTree.Node | null => {
+  const callee = call.callee
+  if (callee.type === 'Identifier') return call.arguments[0] ?? null
+  if (callee.type === 'MemberExpression') {
+    const object = callee.object
+    if (object.type === 'CallExpression' && isPipeCall(object, pipeNames, memberName)) {
+      return pipeRootOf(object, pipeNames, memberName)
+    }
+    return object
+  }
+  return null
+}
+
+export const collectNamespaceBindings = (
+  node: ESTree.ImportDeclaration,
+  exportedName: string,
+  out: Set<string>,
+): void => {
+  for (const specifier of node.specifiers) {
+    if (specifier.type === 'ImportNamespaceSpecifier') {
+      out.add(specifier.local.name)
+    } else if (
+      specifier.type === 'ImportSpecifier' &&
+      specifier.imported.type === 'Identifier' &&
+      specifier.imported.name === exportedName
+    ) {
+      out.add(specifier.local.name)
+    }
+  }
+}
+
+export const collectNamedImportBindings = (
+  node: ESTree.ImportDeclaration,
+  importedName: string,
+  out: Set<string>,
+): void => {
+  for (const specifier of node.specifiers) {
+    if (
+      specifier.type === 'ImportSpecifier' &&
+      specifier.imported.type === 'Identifier' &&
+      specifier.imported.name === importedName
+    ) {
+      out.add(specifier.local.name)
+    }
+  }
 }

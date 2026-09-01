@@ -261,13 +261,19 @@ export const withPolicy: {
 /**
  * The facts the lint plugin judges a spec body by, as a const table. The order the
  * interpreter runs is the text of {@link layerRunner}; the table states only what a
- * rule cannot read off a type: which phases are pure, and what counts as I/O.
+ * rule cannot read off a type: which phases are pure, what counts as I/O, and which
+ * exported names are the shell constructors (`run`, `andThen`, `zip`).
  */
 export interface Vocabulary {
   readonly module: typeof DESCRIPTION_MODULE
   readonly ioCells: IoCellClassification
   readonly byKind: { readonly pure: readonly PhaseName[] }
   readonly composer: 'layer'
+  readonly shell: {
+    readonly run: 'run'
+    readonly andThen: 'andThen'
+    readonly zip: 'zip'
+  }
 }
 
 export const vocabulary: Vocabulary = {
@@ -275,4 +281,5 @@ export const vocabulary: Vocabulary = {
   ioCells: IO_CELLS,
   byKind: { pure: ['decode', 'decide', 'encode'] },
   composer: 'layer',
+  shell: { run: 'run', andThen: 'andThen', zip: 'zip' },
 }

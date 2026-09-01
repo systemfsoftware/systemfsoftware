@@ -54,8 +54,10 @@ const describeOrders = (): OrderPair => {
 
 const runBoth = (orders: OrderPair) =>
   Effect.gen(function*() {
-    const firstResponse = yield* Cell.run(orders.first, new OrderRequest({ id: 'initial-request' }))
-    yield* Cell.run(orders.second, firstResponse)
+    const firstResponse = yield* Cell.run(
+      Cell.andThen(orders.first, orders.second),
+      new OrderRequest({ id: 'initial-request' }),
+    )
     return { firstResponse, recorded: orders.recorded, trace: orders.trace }
   })
 

@@ -237,7 +237,7 @@ An impure phase's interior is not type-visible, so no count of I/O operations is
 
 ### Vocabulary
 
-What a Cell states about itself as a const table beside the interpreter: which phases are pure, the module that owns them, and which of that module's exports perform I/O. Order is not in the table — it is the text of `layerRunner`, which nothing else restates. The table carries only what a rule cannot read off a type, so there is nothing to re-walk and no description object kept alive for consumers to fold.
+What a Cell states about itself as a const table beside the interpreter: which phases are pure, the module that owns them, which of that module's exports perform I/O, and the names of the shell constructors a composition root calls (`run`, `andThen`, `zip`). Order is not in the table — it is the text of `layerRunner`, which nothing else restates. The table carries only what a rule cannot read off a type, so there is nothing to re-walk and no description object kept alive for consumers to fold.
 
 A vocabulary is the unit of agreement between packages. Where several packages must decide the same question the same way, each reads the vocabulary instead of restating it, and the disagreement they would otherwise have becomes impossible rather than merely unlikely.
 

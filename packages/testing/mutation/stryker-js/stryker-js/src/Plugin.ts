@@ -133,10 +133,10 @@ export function composePlugins(
           namedReporters.push({ name: contribution.name, reporter })
         }
 
-        const toEach = (
+        const toEach = <E, R>(
           event: string,
-          call: (reporter: ReporterService) => Effect.Effect<void, unknown>,
-        ): Effect.Effect<void> =>
+          call: (reporter: ReporterService) => Effect.Effect<void, E, R>,
+        ): Effect.Effect<void, never, R> =>
           Effect.forEach(
             namedReporters,
             ({ name, reporter }) =>

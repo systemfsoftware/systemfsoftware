@@ -1,5 +1,7 @@
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
+import type * as FileSystem from 'effect/FileSystem'
+import type * as Path from 'effect/Path'
 import type * as schema from 'mutation-testing-report-schema/api'
 import type { MutantResult } from './Mutant.js'
 import type { TestPlan } from './Mutant.js'
@@ -74,7 +76,7 @@ export interface ReporterService {
   readonly onMutationTestReportReady: (
     report: Readonly<schema.MutationTestResult>,
     metrics: Readonly<MutationTestMetricsResult>,
-  ) => Effect.Effect<void, ReporterFailed>
+  ) => Effect.Effect<void, ReporterFailed, FileSystem.FileSystem | Path.Path>
   readonly wrapUp: Effect.Effect<void, ReporterFailed>
 }
 

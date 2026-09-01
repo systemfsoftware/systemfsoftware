@@ -1,6 +1,6 @@
 # @systemfsoftware/oxlint-plugin-cell-vocabulary
 
-Oxlint rules that decide the phase purity and I/O-cell vocabulary of a Cell description from Cell.vocabulary, and report I/O reached from the body of a phase whose kind forbids it.
+Oxlint rules that walk Cell.vocabulary to keep Cell composition honest: report I/O reached from a pure phase body, a second Cell.run fed the success of an earlier one, and FileSystem/Path provideService-d onto a Cell.run.
 
 ## Install
 
