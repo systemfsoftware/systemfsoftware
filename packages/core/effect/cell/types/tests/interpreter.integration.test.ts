@@ -1,5 +1,5 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { And, Gherkin, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
@@ -44,7 +44,7 @@ type LedgerService = Ledger['Service']
 
 /**
  * `append` suspends before it records. A real ledger is asynchronous, and without a
- * suspension point the layers are indistinguishable from concurrent ones: a fully
+ * suspension point the phases are indistinguishable from concurrent ones: a fully
  * synchronous phase never yields its fiber, so an unbounded fold happens to interleave in
  * order anyway and the ordering scenario cannot fail on a bug it should catch.
  */
@@ -88,50 +88,25 @@ const encode: Cell.EncodePhase<Bag> = (outcome) => ({
 const makeWrite = (ledger: LedgerService): Cell.WritePhase<Bag> => (output) =>
   ledger.append(output.line).pipe(Effect.as(output.line))
 
-const unreadable: Cell.ReadPhase<Bag> = () => Effect.fail({ kind: 'Malformed', bytes: 'second layer' })
-
-const makeOneLayer = (ledger: LedgerService) =>
+const makeDescription = (ledger: LedgerService) =>
   Cell.write(
     Cell.encode(Cell.decide(Cell.decode(Cell.read<Bag>(read), decode), decide), encode),
     makeWrite(ledger),
   )
 
-const makeTwoLayers = (ledger: LedgerService) =>
-  Cell.write(
-    Cell.encode(Cell.decide(Cell.decode(Cell.read(unreadable, makeOneLayer(ledger)), decode), decide), encode),
-    makeWrite(ledger),
-  )
-
 /**
- * A write that reports on its own layer's read as well as on the encoded output. The raw
- * arrives as the write's second argument, which is the whole point of the argument: a layer
- * whose write persists or reports what the read gathered needs no `let` beside the
+ * A write that reports on the description's read as well as on the encoded output. The raw
+ * arrives as the write's second argument, which is the whole point of the argument: an
+ * author whose write persists or reports what the read gathered needs no `let` beside the
  * description to carry it, and so needs no runtime guard for a value the fold already has.
  */
 const makeWriteRecordingRaw = (ledger: LedgerService): Cell.WritePhase<Bag> => (output, raw) =>
   ledger.append(`${output.line}<-${raw.bytes}`).pipe(Effect.as(output.line))
 
-const makeLayerReportingItsRaw = (ledger: LedgerService) =>
+const makeDescriptionReportingItsRaw = (ledger: LedgerService) =>
   Cell.write(
     Cell.encode(Cell.decide(Cell.decode(Cell.read<Bag>(read), decode), decide), encode),
     makeWriteRecordingRaw(ledger),
-  )
-
-/**
- * A second layer that reads back what the first layer wrote. This is the shape a call site
- * whose real order writes before it decides takes, so the ordering it depends on has to be
- * observable: run the layers concurrently and this read sees an empty ledger instead.
- */
-const makeReadsWhatWasWritten = (ledger: LedgerService): Cell.ReadPhase<Bag> => () =>
-  Effect.map(ledger.lines, (lines) => ({ bytes: lines.join('|') }))
-
-const makeSecondLayerReadsTheFirst = (ledger: LedgerService) =>
-  Cell.write(
-    Cell.encode(
-      Cell.decide(Cell.decode(Cell.read(makeReadsWhatWasWritten(ledger), makeOneLayer(ledger)), decode), decide),
-      encode,
-    ),
-    makeWrite(ledger),
   )
 
 /** Stub ledger for vocabulary folds — the fold never runs the effects. */
@@ -139,28 +114,24 @@ const stubLedger: LedgerService = {
   append: () => Effect.void,
   lines: Effect.succeed([] as readonly string[]),
 }
-const oneLayer = makeOneLayer(stubLedger)
+const oneDescription = makeDescription(stubLedger)
 
 /**
  * The vocabulary fold a consumer performs on the description value alone: phase names,
- * kinds, intra-layer order, the module name, and the I/O-cell classification all come
+ * kinds, declared order, the module name, and the I/O-cell classification all come
  * off the value — nothing is re-declared here except the expected assertions.
  */
 const axesOf = (description: Cell.WriteDone<Bag>) => {
   const phaseNames: string[] = []
   const phaseKinds: Record<string, 'pure' | 'impure'> = {}
-  const intraLayerOrder = description.layers.map((layer) =>
-    layer.phases.map((phase) => {
-      phaseKinds[phase.name] = phase.kind
-      return phase.name
-    })
-  )
-  for (const names of intraLayerOrder) {
-    for (const name of names) {
-      if (!phaseNames.includes(name)) phaseNames.push(name)
-    }
+  const declaredOrder = description.phases.map((phase) => {
+    phaseKinds[phase.name] = phase.kind
+    return phase.name
+  })
+  for (const name of declaredOrder) {
+    if (!phaseNames.includes(name)) phaseNames.push(name)
   }
-  return { module: description.module, ioCells: description.ioCells, phaseNames, phaseKinds, intraLayerOrder }
+  return { module: description.module, ioCells: description.ioCells, phaseNames, phaseKinds, declaredOrder }
 }
 
 Feature('Applying a phase description')
@@ -171,7 +142,7 @@ Feature('Applying a phase description')
       Gherkin.Do.pipe(
         When('a description is applied to a command its decision refuses')(
           'exit',
-          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.apply(makeOneLayer(ledger), { id: 'abc' }))),
+          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.apply(makeDescription(ledger), { id: 'abc' }))),
         ),
         Then('the run succeeds and its response carries the refusal')((s) => {
           expect(s.exit).toStrictEqual(Exit.succeed('refused:too short'))
@@ -190,7 +161,7 @@ Feature('Applying a phase description')
       Gherkin.Do.pipe(
         When('a description is applied to a command its decision admits')(
           'exit',
-          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.apply(makeOneLayer(ledger), { id: 'abcd' }))),
+          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.apply(makeDescription(ledger), { id: 'abcd' }))),
         ),
         Then('the run succeeds and its response carries the decision')((s) => {
           expect(s.exit).toStrictEqual(Exit.succeed('admitted:4'))
@@ -199,14 +170,14 @@ Feature('Applying a phase description')
     )
 
     scenario(
-      "A write receives the raw its own layer's read gathered",
+      "A write receives the raw the description's read gathered",
       Gherkin.Do.pipe(
         When('a description whose write reports its raw is applied')(
           'exit',
           () =>
             Effect.flatMap(
               Ledger,
-              (ledger) => Effect.exit(Cell.apply(makeLayerReportingItsRaw(ledger), { id: 'abcd' })),
+              (ledger) => Effect.exit(Cell.apply(makeDescriptionReportingItsRaw(ledger), { id: 'abcd' })),
             ),
         ),
         Then('the run succeeds with the response the write returned')((s) => {
@@ -226,7 +197,7 @@ Feature('Applying a phase description')
       Gherkin.Do.pipe(
         When('a description is applied to a command its validation rejects')(
           'exit',
-          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.apply(makeOneLayer(ledger), { id: 'bad' }))),
+          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.apply(makeDescription(ledger), { id: 'bad' }))),
         ),
         Then('the run fails with the malformed report')((s) => {
           expect(s.exit).toStrictEqual(Exit.fail({ kind: 'Malformed', bytes: 'bad' }))
@@ -235,52 +206,6 @@ Feature('Applying a phase description')
           Effect.flatMap(Ledger, (ledger) =>
             Effect.map(ledger.lines, (lines) => {
               expect(lines).toEqual([])
-            }))
-        ),
-      ),
-    )
-
-    scenario(
-      "A later layer failing leaves an earlier layer's write in place",
-      Gherkin.Do.pipe(
-        Given('a description of two layers whose second layer cannot read')(
-          'description',
-          () => Effect.flatMap(Ledger, (ledger) => Effect.succeed(makeTwoLayers(ledger))),
-        ),
-        When('it is applied to a command the first layer admits')(
-          'exit',
-          (s) => Effect.exit(Cell.apply(s.description, { id: 'abcd' })),
-        ),
-        Then("the run fails with the second layer's reading failure")((s) => {
-          expect(s.exit).toStrictEqual(Exit.fail({ kind: 'Malformed', bytes: 'second layer' }))
-        }),
-        And("the first layer's write is still recorded")(() =>
-          Effect.flatMap(Ledger, (ledger) =>
-            Effect.map(ledger.lines, (lines) => {
-              expect(lines).toEqual(['admitted:4'])
-            }))
-        ),
-      ),
-    )
-
-    scenario(
-      'A later layer reads what an earlier layer wrote',
-      Gherkin.Do.pipe(
-        Given('a description of two layers whose second layer reads the ledger')(
-          'description',
-          () => Effect.flatMap(Ledger, (ledger) => Effect.succeed(makeSecondLayerReadsTheFirst(ledger))),
-        ),
-        When('it is applied to a command the first layer admits')(
-          'exit',
-          (s) => Effect.exit(Cell.apply(s.description, { id: 'abcd' })),
-        ),
-        Then("the response is derived from the first layer's write")((s) => {
-          expect(s.exit).toStrictEqual(Exit.succeed('admitted:10'))
-        }),
-        And('both layers wrote, in order')(() =>
-          Effect.flatMap(Ledger, (ledger) =>
-            Effect.map(ledger.lines, (lines) => {
-              expect(lines).toEqual(['admitted:4', 'admitted:10'])
             }))
         ),
       ),
@@ -318,22 +243,18 @@ Feature('Applying a phase description')
 
             // Hand-built description value: the phases array is the execution order, so
             // this declared order — decode before read, decide before decode — is what
-            // the interpreter must run. The name-keyed layer the interpreter replaced
+            // the interpreter must run. The name-keyed form the interpreter replaced
             // had no order to read, so it would have run the canonical sequence instead.
             const declared: Cell.WriteDone<Bag> = {
               'call write(output) before applying the description': true,
               module: Cell.DESCRIPTION_MODULE,
               ioCells: Cell.IO_CELLS,
-              layers: [
-                {
-                  phases: [
-                    { name: 'decode', kind: 'pure', convention: 'either-fail', run: tracedDecode },
-                    { name: 'read', kind: 'impure', convention: 'effect', run: tracedRead },
-                    { name: 'decide', kind: 'pure', convention: 'either-pass', run: tracedDecide },
-                    { name: 'encode', kind: 'pure', convention: 'total', run: tracedEncode },
-                    { name: 'write', kind: 'impure', convention: 'effect', run: tracedWrite },
-                  ],
-                },
+              phases: [
+                { name: 'decode', kind: 'pure', convention: 'either-fail', run: tracedDecode },
+                { name: 'read', kind: 'impure', convention: 'effect', run: tracedRead },
+                { name: 'decide', kind: 'pure', convention: 'either-pass', run: tracedDecide },
+                { name: 'encode', kind: 'pure', convention: 'total', run: tracedEncode },
+                { name: 'write', kind: 'impure', convention: 'effect', run: tracedWrite },
               ],
             }
             return Cell.apply(declared, { id: 'abc' }).pipe(
@@ -352,9 +273,9 @@ Feature('Applying a phase description')
     scenario(
       'The description value carries the whole vocabulary',
       Gherkin.Do.pipe(
-        When('the one-layer description is folded')(
+        When('the description is folded')(
           'axes',
-          () => Effect.succeed(axesOf(oneLayer)),
+          () => Effect.succeed(axesOf(oneDescription)),
         ),
         Then('every axis is read from the value')((s) => {
           expect(s.axes.module).toBe(Cell.DESCRIPTION_MODULE)
@@ -370,7 +291,7 @@ Feature('Applying a phase description')
             encode: 'pure',
             write: 'impure',
           })
-          expect(s.axes.intraLayerOrder).toEqual([['read', 'decode', 'decide', 'encode', 'write']])
+          expect(s.axes.declaredOrder).toEqual(['read', 'decode', 'decide', 'encode', 'write'])
         }),
       ),
     )
