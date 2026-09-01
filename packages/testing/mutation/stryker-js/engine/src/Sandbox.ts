@@ -744,7 +744,7 @@ export const makeSandbox = (
         ),
       )
 
-{"1": "@ours"}
+      return description
     }
 
     return yield* Cell.apply(sandboxDescription(services), input)
