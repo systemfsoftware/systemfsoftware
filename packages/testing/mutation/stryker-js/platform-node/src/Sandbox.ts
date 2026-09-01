@@ -6,10 +6,9 @@
  * orchestration that writes project files into place, runs the optional
  * build command, and symlinks `node_modules` into the sandbox.
  *
- * The sandbox itself is a two-layer `Cell` description: the first layer
- * writes the tree and executes side effects, the second layer reads back
- * the written tree to make ordering observable. The two layers are chained
- * via `Cell.read(run, previous)` into a single `Cell.apply`.
+ * The sandbox itself is a single `Cell` sandwich: read the input, decode it
+ * into a command, decide the file plan, and write the tree — the write
+ * returns the sandbox handle.
  */
 
 import { parse } from '@std/jsonc'
@@ -568,8 +567,6 @@ export const makeSandbox = (
     const services = yield* Effect.context<
       FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope
     >()
-    let capturedInput: MakeSandboxInput | undefined
-    let capturedFileMap: Map<string, string> | undefined
 
     const buildHandle = (
       fileMap: Map<string, string>,
@@ -608,14 +605,13 @@ export const makeSandbox = (
     const sandboxDescription = (
       ctx: Context.Context<FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope>,
     ): Cell.WriteDone<SandboxPhases> => {
-      const first = pipe(
+      const description = pipe(
         Cell.read<SandboxPhases>((command) =>
           Effect.provideContext(
             Effect.gen(function*() {
               yield* Scope.Scope
               const pathService = yield* Path.Path
               const { options, workingDirectory, backupDirectory, basePath } = command
-              capturedInput = command
 
               if (options.inPlace) {
                 yield* Effect.logInfo(
@@ -669,18 +665,14 @@ export const makeSandbox = (
         ),
         Cell.decide<SandboxPhases>(sandboxWorkflow),
         Cell.encode<SandboxPhases>((outcome) => outcome),
-        Cell.write<SandboxPhases>((outcome) =>
+        Cell.write<SandboxPhases>((outcome, raw) =>
           Effect.provideContext(
             Effect.gen(function*() {
               if (Result.isFailure(outcome)) {
                 return yield* new StrykerError({ message: outcome.failure.message })
               }
               const decision = outcome.success
-              const inp = capturedInput
-              if (inp === undefined) {
-                return yield* new StrykerError({ message: 'Missing sandbox input for write' })
-              }
-              const { options, project, workingDirectory, backupDirectory, basePath } = inp
+              const { options, project, workingDirectory, backupDirectory, basePath } = raw
               const pathService = yield* Path.Path
               yield* createPreprocessor(options, basePath)(project).pipe(
                 Effect.mapError((cause) => new StrykerError({ message: 'Sandbox preprocessor failed', cause })),
@@ -710,7 +702,6 @@ export const makeSandbox = (
               )
 
               const fileMap = toFileMap(entries)
-              capturedFileMap = fileMap
 
               if (options.buildCommand !== undefined && options.buildCommand !== '') {
                 const command = options.buildCommand
@@ -753,65 +744,7 @@ export const makeSandbox = (
         ),
       )
 
-      const both = pipe(
-        Cell.read<SandboxPhases>(
-          (command) =>
-            Effect.provideContext(
-              Effect.gen(function*() {
-                const fs = yield* FileSystem.FileSystem
-                const map = capturedFileMap
-                if (map !== undefined) {
-                  for (const [, target] of map) {
-                    if (!target.startsWith(command.workingDirectory) && !command.options.inPlace) {
-                      continue
-                    }
-                    yield* fs.exists(target).pipe(Effect.orElseSucceed(() => false))
-                  }
-                } else {
-                  yield* fs.exists(command.workingDirectory).pipe(Effect.orElseSucceed(() => false))
-                }
-                return command
-              }),
-              ctx,
-            ),
-          first,
-        ),
-        Cell.decode<SandboxPhases>((raw) =>
-          Result.succeed(
-            new SandboxCommand({
-              fileEntries: [...raw.project.files].map(([name, file]) => ({
-                name,
-                hasChanges: hasChanges(file),
-              })),
-              basePath: raw.basePath,
-              workingDirectory: raw.workingDirectory,
-              backupDirectory: raw.backupDirectory,
-              inPlace: raw.options.inPlace,
-            }),
-          )
-        ),
-        Cell.decide<SandboxPhases>(sandboxWorkflow),
-        Cell.encode<SandboxPhases>((outcome) => outcome),
-        Cell.write<SandboxPhases>((outcome) =>
-          Effect.provideContext(
-            Effect.gen(function*() {
-              if (Result.isFailure(outcome)) {
-                return yield* new StrykerError({ message: outcome.failure.message })
-              }
-              const inp = capturedInput
-              const fileMap = capturedFileMap
-              if (inp === undefined || fileMap === undefined) {
-                return yield* new StrykerError({ message: 'Missing sandbox state for descriptor' })
-              }
-              const pathService = yield* Path.Path
-              return buildHandle(fileMap, inp.workingDirectory, inp.basePath, pathService)
-            }),
-            ctx,
-          )
-        ),
-      )
-
-      return both
+      return description
     }
 
     return yield* Cell.apply(sandboxDescription(services), input)
