@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/effect-cell-gen`
 
-> **Delta**: The property-test generator for Cell descriptions — a derived consumer that lives in its own package, importing `Cell` from `@systemfsoftware/effect-cell-types` and never the other way around. Root AGENTS.md governs.
+> **Delta**: The property-test generator for Cell specs — a derived consumer that lives in its own package, importing `Cell` from `@systemfsoftware/effect-cell-types` and never the other way around. Root AGENTS.md governs.
 
 ## What makes this package different
 
@@ -9,9 +9,9 @@ rules:
   - id: CELL-A1
     title: One derived consumer, dependency pointing one way
     do:
-      - keep the runtime to the single generator `Gen.description` that builds
-        descriptions by substituting drawn `run`s into the walked canonical
-        description, and the `Bag`/`DescriptionCase` types it is parameterised on
+      - keep the runtime to the single generator `Gen.specCase` that builds
+        specs by substituting drawn `run`s into the walked vocabulary
+        and the `Bag`/`SpecCase` types it is parameterised on
       - keep the dependency edge exactly
         `@systemfsoftware/effect-cell-gen -> @systemfsoftware/effect-cell-types`;
         this package imports `Cell` from there and nothing there may import this package
@@ -29,17 +29,13 @@ rules:
       and `grep -rn \"effect-cell-gen\" packages/effect-cell-types` returns nothing"
 
   - id: CELL-A2
-    title: The five axes come from walking a description, never from literals
+    title: The five axes come from walking the vocabulary, never from literals
     do:
       - obtain the phase names, kinds, their declared order, the description package's
-        module name, and the I/O-cell classification by walking description values —
-        `Cell.canonical` (the description module's exported canonical description) for
-        the phase records, and the same spread for the root fields, which the built
-        value carries
+        module name, and the I/O-cell classification by walking `Cell.vocabulary` —
+        `Cell.vocabulary.phases` for the phase records and the same object for the root fields
       - keep the convention switch exhaustive over `convention` with a `never` default,
         so a phase the interpreter does not know fails to compile here too
-    dont: restate any phase name, kind, order, module name, or I/O cell as a literal in
-      this package, or read the axes from a constant instead of a value
     harm: the description is the single place a phase is described; a generator that
       declares its own copy drifts from the interpreter it feeds, and a drift makes the
       properties pass over phases the interpreter never runs
@@ -51,33 +47,20 @@ rules:
   - id: CELL-A3
     title: The properties read their expectations off the generated value
     do:
-      - assert refutable claims about `Cell.apply` over generated descriptions — phase
+      - assert refutable claims about `Cell.run` over generated specs — phase
         execution order equals the order the drawn value declares, and the response is
-        the write's
-      - read every expectation off the drawn description value, never off
-      - the interpreter properties live in the in-source block in `src/Gen.ts`; the
+        the write's; equivalence of drawn Cell vs chain-assembled Cell holds for trace,
+        declared order, response, and failure routing
+      - read every expectation off the drawn spec value, never off a restated constant;
+        substitute phase bodies `yield*` a fresh `TraceRecorder` layer per property, no closure-captured arrays
+      - the interpreter properties (6) live in the in-source block in `src/Gen.ts`; the
         decide property lives in `src/__tests__/DrawnDecision.workflow.property.test.ts`
-      - "`Cell.vocabulary`: the generator rebuilds the description from the walked
-        canonical value, so comparing the trace to the generator's own input would be
+      - "`Cell.vocabulary`: the generator rebuilds the spec from the walked
+        vocabulary, so comparing the trace to the generator's own input would be
         circular"
-    dont: add a behavioural test that asserts the vocabulary's contents, or a test that
-      compares the interpreter's trace against a literal phase list
-    harm: the properties exist to catch an interpreter that reorders the declared phases,
-      skips one, runs one twice, or returns something other than the write's response; a comparison against the
-      generator's own input cannot catch any of those
-    check: "`pnpm --filter @systemfsoftware/effect-cell-gen test` exits 0 with every
-      property running, and each expectation reads only the drawn value"
-```
 
 ## Verification
 
 No mutation gate — see CELL-T1 of `@systemfsoftware/effect-cell-types`; this package
-holds no `*.workflow.ts` source either. The generator is verified by:
-
-```bash
-pnpm --filter @systemfsoftware/effect-cell-gen typecheck
-pnpm --filter @systemfsoftware/effect-cell-gen test
-pnpm --filter @systemfsoftware/effect-cell-gen lint
-pnpm --filter @systemfsoftware/effect-cell-gen api:check
-pnpm --filter @systemfsoftware/effect-cell-gen attw
+holds one `*.workflow.ts` (DrawnDecision) and a `Recorder.ts` service. The generator is verified by:
 ```

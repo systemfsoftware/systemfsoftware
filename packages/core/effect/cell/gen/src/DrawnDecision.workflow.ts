@@ -27,11 +27,8 @@ export class DrawnCommand extends S.TaggedClass<DrawnCommand>()('DrawnCommand', 
   value: S.Int,
 }) {}
 
-/**
- * The drawn decide run: a branded `Workflow.make` value whose body closes only over its
- * parameters, so the failure injection is decided before the boundary and the body stays
- * one exhaustive path.
- */
+export type DrawnDecisionWorkflow = Workflow.Workflow<DrawnCommand, number, DrawnDecisionError>
+
 export const drawnDecision = (trace: string[], phaseName: string, injection: DrawnInjection) =>
   Workflow.make(DrawnCommand, (command): Result.Result<number, DrawnDecisionError> => {
     trace.push(phaseName)

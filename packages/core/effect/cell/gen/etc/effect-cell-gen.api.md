@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace Gen {
-    export { Bag, DescriptionCase, DrawnFailure, description };
+    export { Bag, DrawnFailure, SpecCase, specCase };
 }
 
 // (No @packageDocumentation comment for this package)
