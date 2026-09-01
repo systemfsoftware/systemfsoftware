@@ -1,7 +1,5 @@
-import * as Arr from 'effect/Array'
 import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
-import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import { CanonicalCommand, canonicalDecide } from './CanonicalDecide.workflow.js'
 import { type WorkflowBrand } from './Workflow.js'
@@ -30,7 +28,7 @@ export interface Phases {
  * A read gathers what the decision needs, and may gather a product across its interior;
  * that interior is not type-visible, so no I/O count is claimed or enforced here. A step that
  * mutates in order to report — bumping a counter and returning the resulting rate — is one
- * such product, and belongs here rather than in a layer of its own.
+ * such product, and belongs here rather than in a sandwich of its own.
  *
  * The context channel is pinned `never`: a phase requires nothing. Services are resolved by
  * whoever builds the description and handed to the phase as ordinary parameters, which is
@@ -72,13 +70,13 @@ export type EncodePhase<P extends Phases> = (
 
 /**
  * The write. It receives the encoded `output` and, as a second argument, the `raw` its own
- * layer's read gathered.
+ * sandwich's read gathered.
  *
  * `raw` is there because a write is frequently the point that persists or reports what the
  * read found, while the decision in between deliberately narrows to what it needed. Without
- * this argument such a write has no channel for it and the layer smuggles the value through
- * a closure — a `let` beside the description, assigned in the read and consulted in the
- * write, which then needs a runtime guard for a value the fold has already produced. The
+ * this argument such a write has no channel for it and the description smuggles the value
+ * through a closure — a `let` beside the description, assigned in the read and consulted in
+ * the write, which then needs a runtime guard for a value the fold has already produced. The
  * argument is second, and a write that does not want it declares one parameter: a unary
  * function satisfies this type, so every write written before it existed is unchanged.
  */
@@ -152,17 +150,6 @@ export type Phase<P extends Phases> =
   | EncodeNode<P>
   | WriteNode<P>
 
-/**
- * One impure/pure layer: its phase records in intra-layer execution order. The order is
- * data — the interpreter folds this array and runs each record as its `convention`
- * says, holding no phase sequence of its own. The stage brands are what make a legal
- * description well-ordered at build time; the value's declared order is its execution
- * order.
- */
-export interface Layer<P extends Phases> {
-  readonly phases: readonly Phase<P>[]
-}
-
 /** The description package's own module name — what an import edge would match. */
 export const DESCRIPTION_MODULE = '@systemfsoftware/effect-cell-types' as const
 
@@ -182,16 +169,22 @@ export const IO_CELLS = {
 export type IoCellClassification = typeof IO_CELLS
 
 /**
- * The description root, carried by every stage. A consumer folds a stage value to
- * recover the description's whole vocabulary: the phase names and kinds on each
- * record, the intra-layer order in each `phases` array, the package's own module
- * name, and the I/O-cell classification. Nothing about the shape of a legal
- * description is written down anywhere else.
+ * The description root, carried by every stage. A description is one sandwich — read,
+ * decode, decide, encode, write — and its `phases` array is that sandwich in execution
+ * order. A consumer folds a stage value to recover the description's whole vocabulary:
+ * the phase names and kinds on each record, the order of the `phases` array, the
+ * package's own module name, and the I/O-cell classification. Nothing about the shape of
+ * a legal description is written down anywhere else.
+ *
+ * Composing two sandwiches — a write whose result a later read must see, a response that
+ * becomes the next command — is the calling `Effect.gen`'s job: bind one `apply`'s
+ * response, derive the next command, `apply` again. A description never carries that
+ * sequencing itself.
  */
 export interface Description<P extends Phases> {
   readonly module: typeof DESCRIPTION_MODULE
   readonly ioCells: IoCellClassification
-  readonly layers: readonly Layer<P>[]
+  readonly phases: readonly Phase<P>[]
 }
 
 /**
@@ -217,7 +210,7 @@ export interface DecideDone<P extends Phases> extends Description<P> {
 export interface EncodeDone<P extends Phases> extends Description<P> {
   readonly 'call encode(decision) before write(output)': true
 }
-/** Terminal. A description is applied from here, and a further layer opens from here. */
+/** Terminal. A description is applied from here. */
 export interface WriteDone<P extends Phases> extends Description<P> {
   readonly 'call write(output) before applying the description': true
 }
@@ -228,37 +221,16 @@ const DECIDE_DONE = 'call decide(decoded) before encode(decision)'
 const ENCODE_DONE = 'call encode(decision) before write(output)'
 const WRITE_DONE = 'call write(output) before applying the description'
 
-/** Replaces the open layer with itself plus one more phase record. */
-const intoOpenLayer = <P extends Phases>(
-  description: Description<P>,
-  phase: Phase<P>,
-): Description<P> => {
-  const layers = description.layers
-  const last = layers[layers.length - 1]
-  return {
-    module: description.module,
-    ioCells: description.ioCells,
-    layers: [...layers.slice(0, -1), { ...last, phases: [...(last?.phases ?? []), phase] }],
-  }
-}
-
 /**
- * Opens a layer. Passing a prior `WriteDone` opens a second layer over the same bag, so a
- * call site whose real order writes before it can classify is one description carrying two
- * layers rather than two descriptions composed by hand.
- *
- * This one is not dual: it starts the chain, so on the opening layer it has no `self` to
- * receive. Every phase after it is dual, which is what lets a description be written in the
- * order it runs.
+ * Opens the description. This one is not dual: it starts the chain, so it has no `self`
+ * to receive. Every phase after it is dual, which is what lets a description be written
+ * in the order it runs.
  */
-export const read = <P extends Phases>(run: ReadPhase<P>, previous?: WriteDone<P>): ReadDone<P> => ({
+export const read = <P extends Phases>(run: ReadPhase<P>): ReadDone<P> => ({
   [READ_DONE]: true,
   module: DESCRIPTION_MODULE,
   ioCells: IO_CELLS,
-  layers: [
-    ...(previous?.layers ?? []),
-    { phases: [{ name: 'read', kind: 'impure', convention: 'effect', run }] },
-  ],
+  phases: [{ name: 'read', kind: 'impure', convention: 'effect', run }],
 })
 
 /**
@@ -274,35 +246,43 @@ export const read = <P extends Phases>(run: ReadPhase<P>, previous?: WriteDone<P
  * assertion this design does not.
  */
 export const decode: {
-  <P extends Phases>(run: DecodePhase<P>): (previous: ReadDone<P>) => DecodeDone<P>
-  <P extends Phases>(previous: ReadDone<P>, run: DecodePhase<P>): DecodeDone<P>
-} = dual(2, <P extends Phases>(previous: ReadDone<P>, run: DecodePhase<P>): DecodeDone<P> => ({
+  <P extends Phases>(run: DecodePhase<P>): (self: ReadDone<P>) => DecodeDone<P>
+  <P extends Phases>(self: ReadDone<P>, run: DecodePhase<P>): DecodeDone<P>
+} = dual(2, <P extends Phases>(self: ReadDone<P>, run: DecodePhase<P>): DecodeDone<P> => ({
   [DECODE_DONE]: true,
-  ...intoOpenLayer(previous, { name: 'decode', kind: 'pure', convention: 'either-fail', run }),
+  module: self.module,
+  ioCells: self.ioCells,
+  phases: [...self.phases, { name: 'decode', kind: 'pure', convention: 'either-fail', run }],
 }))
 
 export const decide: {
-  <P extends Phases>(run: DecidePhase<P>): (previous: DecodeDone<P>) => DecideDone<P>
-  <P extends Phases>(previous: DecodeDone<P>, run: DecidePhase<P>): DecideDone<P>
-} = dual(2, <P extends Phases>(previous: DecodeDone<P>, run: DecidePhase<P>): DecideDone<P> => ({
+  <P extends Phases>(run: DecidePhase<P>): (self: DecodeDone<P>) => DecideDone<P>
+  <P extends Phases>(self: DecodeDone<P>, run: DecidePhase<P>): DecideDone<P>
+} = dual(2, <P extends Phases>(self: DecodeDone<P>, run: DecidePhase<P>): DecideDone<P> => ({
   [DECIDE_DONE]: true,
-  ...intoOpenLayer(previous, { name: 'decide', kind: 'pure', convention: 'either-pass', run }),
+  module: self.module,
+  ioCells: self.ioCells,
+  phases: [...self.phases, { name: 'decide', kind: 'pure', convention: 'either-pass', run }],
 }))
 
 export const encode: {
-  <P extends Phases>(run: EncodePhase<P>): (previous: DecideDone<P>) => EncodeDone<P>
-  <P extends Phases>(previous: DecideDone<P>, run: EncodePhase<P>): EncodeDone<P>
-} = dual(2, <P extends Phases>(previous: DecideDone<P>, run: EncodePhase<P>): EncodeDone<P> => ({
+  <P extends Phases>(run: EncodePhase<P>): (self: DecideDone<P>) => EncodeDone<P>
+  <P extends Phases>(self: DecideDone<P>, run: EncodePhase<P>): EncodeDone<P>
+} = dual(2, <P extends Phases>(self: DecideDone<P>, run: EncodePhase<P>): EncodeDone<P> => ({
   [ENCODE_DONE]: true,
-  ...intoOpenLayer(previous, { name: 'encode', kind: 'pure', convention: 'total', run }),
+  module: self.module,
+  ioCells: self.ioCells,
+  phases: [...self.phases, { name: 'encode', kind: 'pure', convention: 'total', run }],
 }))
 
 export const write: {
-  <P extends Phases>(run: WritePhase<P>): (previous: EncodeDone<P>) => WriteDone<P>
-  <P extends Phases>(previous: EncodeDone<P>, run: WritePhase<P>): WriteDone<P>
-} = dual(2, <P extends Phases>(previous: EncodeDone<P>, run: WritePhase<P>): WriteDone<P> => ({
+  <P extends Phases>(run: WritePhase<P>): (self: EncodeDone<P>) => WriteDone<P>
+  <P extends Phases>(self: EncodeDone<P>, run: WritePhase<P>): WriteDone<P>
+} = dual(2, <P extends Phases>(self: EncodeDone<P>, run: WritePhase<P>): WriteDone<P> => ({
   [WRITE_DONE]: true,
-  ...intoOpenLayer(previous, { name: 'write', kind: 'impure', convention: 'effect', run }),
+  module: self.module,
+  ioCells: self.ioCells,
+  phases: [...self.phases, { name: 'write', kind: 'impure', convention: 'effect', run }],
 }))
 
 /**
@@ -333,12 +313,12 @@ const isOutcome = <P extends Phases>(
 ): value is Result.Result<P['decision'], P['decisionError']> => Result.isResult(value)
 
 /**
- * Runs one layer as the sandwich the value declares: the phase records run in array
- * order, each dispatched on its carried `convention`. There is no phase sequence here —
- * the order is the `phases` array and the invocation shape is the `convention` field,
- * so a description's declared order IS its execution order. The convention switch is
- * exhaustive over the union via its `never` default: a future phase with an invocation
- * shape this module does not know fails at compile time, at this one location.
+ * Applies a description: runs its one sandwich as the value declares, each phase record
+ * dispatched on its carried `convention`, in `phases` array order. There is no phase
+ * sequence held beside the value — the description's declared order IS its execution
+ * order. The convention switch is exhaustive over the union via its `never` default: a
+ * future phase with an invocation shape this module does not know fails at compile time,
+ * at this one location.
  *
  * The two `Failure` rules are carried by the phase types rather than chosen here. A `decode`
  * Failure has no downstream consumer — nothing accepts `decodeError` — so its only route is a
@@ -346,26 +326,41 @@ const isOutcome = <P extends Phases>(
  * unwrapped, because `EncodePhase` takes the whole `Result`, so its only route is forward as
  * a value. Neither is a decision the interpreter makes.
  *
- * Every layer reachable from a `WriteDone` was built by the five constructors in order, so
- * its last phase is a write and every slot is filled. A layer that is nonetheless empty or
- * not closed by a write is a defect in this module, never a domain outcome, so it dies —
- * the same guard the name-keyed layer used for unfilled slots. `Effect.die` returns
- * `Effect<never>`, which is why the guards cost the derived `E` and `R` nothing.
+ * The return type is deliberately not annotated: `gen` accumulates `E` and `R` from the
+ * union of what is actually yielded, so an over-claimed channel is unrepresentable rather
+ * than merely discouraged. Annotating it here would let this module promise a failure that
+ * no phase can produce.
+ *
+ * The parameter keeps the terminal `WriteDone<P>` brand. It is not decoration: it is what
+ * makes applying a half-built chain — a `ReadDone`, say — a compile error rather than a
+ * runtime death, which `test-types/Cell.tst.ts` pins. The brand does not constrain the
+ * phases array's order (a literal satisfies it in any order, which is why the interpreter
+ * reads the order off the value), but it does constrain chain completion, and that is a
+ * guarantee worth the narrower parameter.
+ *
+ * Every description reachable from a `WriteDone` was built by the five constructors in
+ * order, so its last phase is a write and every slot is filled. A description that is
+ * nonetheless empty or not closed by a write is a defect in this module, never a domain
+ * outcome, so it dies — `Effect.die` returns `Effect<never>`, which is why the guards
+ * cost the derived `E` and `R` nothing. The response is the write's. No scope is opened
+ * and interruptibility is untouched, so a `Scope.Scope` a phase requires reaches the
+ * caller as part of the derived `R`.
  */
-const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
+export const apply = <P extends Phases>(description: WriteDone<P>, command: P['command']) =>
   Effect.gen(function*() {
-    const phases = layer.phases
+    const phases = description.phases
     const last = phases[phases.length - 1]
     if (!last || last.name !== 'write') {
       return yield* Effect.die(
-        new Error('effect-cell-types: a layer reached the interpreter without a write phase closing it'),
+        new Error('effect-cell-types: a description reached the interpreter without a write phase closing it'),
       )
     }
 
     let value: FoldValue<P> = command
     // What the read gathered, kept so the terminal write receives it as well as the
     // encoded output. Before a read has run there is nothing gathered and the command is
-    // the only thing the layer has seen, which is what a read-less layer's write is handed.
+    // the only thing the description has seen, which is what a read-less description's
+    // write is handed.
     let raw: FoldValue<P> = command
     for (const phase of phases.slice(0, -1)) {
       switch (phase.convention) {
@@ -408,39 +403,9 @@ const runLayer = <P extends Phases>(layer: Layer<P>, command: P['command']) =>
       }
     }
     // The guard above certified that the last phase is a write; yielding its effect
-    // directly is what makes the derived success channel the layer's `response` — the
-    // fold's loop cannot see that, so the terminal write is peeled out of it.
+    // directly is what makes the derived success channel the description's `response` —
+    // the fold's loop cannot see that, so the terminal write is peeled out of it.
     return yield* last.run(value, raw)
-  })
-
-/**
- * Applies a description. The return type is deliberately not annotated: `gen` accumulates
- * `E` and `R` from the union of what is actually yielded, so an over-claimed channel is
- * unrepresentable rather than merely discouraged. Annotating it here would let this module
- * promise a failure that no phase can produce.
- *
- * The parameter keeps the terminal `WriteDone<P>` brand. It is not decoration: it is what
- * makes applying a half-built chain — a `ReadDone`, say — a compile error rather than a
- * runtime death, which `test-types/Cell.tst.ts` pins. The brand does not constrain the
- * phases array's order (a literal satisfies it in any order, which is why the interpreter
- * reads the order off the value), but it does constrain chain completion, and that is a
- * guarantee worth the narrower parameter.
- *
- * `forEach` takes no concurrency option here, so the layers run in declared order and the
- * sequence is structural rather than something a caller could pass differently; the
- * description's response is the last layer's. No scope is opened and interruptibility is
- * untouched, so a `Scope.Scope` a phase requires reaches the caller as part of the derived `R`.
- */
-export const apply = <P extends Phases>(description: WriteDone<P>, command: P['command']) =>
-  Effect.gen(function*() {
-    const responses = yield* Effect.forEach(description.layers, (layer) => runLayer(layer, command))
-    return yield* Option.match(Arr.last(responses), {
-      onNone: () =>
-        Effect.die(
-          new Error('effect-cell-types: a description reached the interpreter with no layers'),
-        ),
-      onSome: Effect.succeed,
-    })
   })
 
 // ---------------------------------------------------------------------------
@@ -520,9 +485,8 @@ export const canonical: WriteDone<CanonicalPhases> = write(
  * from here instead of restating them, so there is one place a phase is described and the
  * description is the place.
  */
-const WALKED_PHASES: readonly PhaseFact[] = Arr.flatMap(
-  canonical.layers,
-  (layer) => layer.phases.map(({ convention, kind, name }): PhaseFact => ({ convention, kind, name })),
+const WALKED_PHASES: readonly PhaseFact[] = canonical.phases.map(
+  ({ convention, kind, name }): PhaseFact => ({ convention, kind, name }),
 )
 
 export const vocabulary: Vocabulary = {
