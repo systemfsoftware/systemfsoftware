@@ -1,6 +1,5 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import * as Effect from 'effect/Effect'
-import { pipe } from 'effect/Function'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as MutableHashSet from 'effect/MutableHashSet'
 import * as Option from 'effect/Option'
@@ -359,17 +358,19 @@ const materializePlan = (plan: PlannedMutantTests['plans'][number], original: Mu
   }
 }
 
-const plannerDescription = pipe(
-  Cell.read<PlannerPhases>((command: PlanMutantTestsCommand) => Effect.succeed(command)),
-  Cell.decode<PlannerPhases>((raw: PlanMutantTestsCommand) => Result.succeed(raw)),
-  Cell.decide<PlannerPhases>(planMutantTests),
-  Cell.encode<PlannerPhases>((outcome: Result.Result<PlannedMutantTests, PlanMutantTestsError>) =>
+const plannerDescription: Cell.WriteDone<PlannerPhases> = Cell.layer({
+  read: (command: PlanMutantTestsCommand) => Effect.succeed(command),
+  decode: (raw: PlanMutantTestsCommand) => Result.succeed(raw),
+  decide: planMutantTests,
+  encode: (outcome: Result.Result<PlannedMutantTests, PlanMutantTestsError>) =>
     Result.match(outcome, {
       onFailure: () => PlannedMutantTests.make({ plans: [], totalNetTime: 0 }),
       onSuccess: (decision) => decision,
-    })
-  ),
-  Cell.write<PlannerPhases>((output: PlannedMutantTests, raw: PlanMutantTestsCommand) => {
+    }),
+  write: (
+    output: PlannedMutantTests,
+    raw: PlanMutantTestsCommand,
+  ): Effect.Effect<readonly TestPlan[], never, never> => {
     const byId = new Map<string, Mutant>()
     for (const mutant of raw.mutants) {
       byId.set(mutant.id, mutant)
@@ -381,8 +382,8 @@ const plannerDescription = pipe(
       }
       return Effect.succeed(materializePlan(plan, original))
     })
-  }),
-)
+  },
+})
 
 export const makeMutantTestPlanner = (
   command: PlanMutantTestsCommand,

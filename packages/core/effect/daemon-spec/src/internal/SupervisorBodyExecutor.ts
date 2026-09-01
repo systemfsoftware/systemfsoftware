@@ -1,6 +1,6 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Array as Arr, Cause, Clock, Effect, Exit, Fiber, Match, Metric, Option, Ref, Result, Schedule } from 'effect'
-import { pipe, type Scope } from 'effect'
+import { type Scope } from 'effect'
 import { WorkerTypeId } from '../Brands.js'
 import type { SupervisorHealth } from '../DaemonHealth.schema.js'
 import { healthStateGauge, supervisorExhaustionsCounter, supervisorRestartsCounter } from '../DaemonMetrics.js'
@@ -13,13 +13,8 @@ import { allocateWorkerHealth } from './AllocateWorkerHealth.js'
 import { buildWorkerLoop } from './BuildWorkerLoop.js'
 import { type IntensityTracker, make as makeIntensity, neverExceeds } from './Intensity.js'
 import { raceForExit } from './RaceForExit.js'
-import { type DecideInput, type RestartStrategy } from './RestartDecision.schema.js'
-import {
-  decideRestart,
-  type RestartDecisionContinue,
-  type RestartDecisionExhausted,
-  type RestartDecisionRestart,
-} from './RestartDecision.workflow.js'
+import { type RestartStrategy } from './RestartDecision.schema.js'
+import { decideRestart, type RestartDecisionRestart } from './RestartDecision.workflow.js'
 import {
   ContinueSupervision,
   CooldownEpoch,
@@ -56,25 +51,6 @@ const handleRestart = <R>(
   })
 
 /**
- * The phases of the restart decision, in one bag so the chain's order is carried by types.
- */
-interface RestartPhases extends Cell.Phases {
-  readonly command: IntensityTracker
-  readonly raw: boolean
-  readonly decoded: DecideInput
-  readonly decision: RestartDecisionContinue | RestartDecisionRestart
-  readonly decisionError: RestartDecisionExhausted
-  readonly output: Result.Result<
-    RestartDecisionContinue | RestartDecisionRestart,
-    RestartDecisionExhausted
-  >
-  readonly response: EpochStep
-  readonly decodeError: never
-  readonly readError: never
-  readonly writeError: never
-}
-
-/**
  * The restart decision, as a description whose phases chain by type and read in the order
  * they run.
  *
@@ -100,20 +76,19 @@ const restartDescription = <R>(spec: {
     decision: RestartDecisionRestart,
   ) => Effect.Effect<void, never, never>
 }) =>
-  pipe(
-    Cell.read<RestartPhases>((intensity) => Effect.andThen(intensity.record, intensity.isExceeded)),
-    Cell.decode<RestartPhases>((intensityExceeded) =>
+  Cell.layer({
+    read: (intensity: IntensityTracker) => Effect.andThen(intensity.record, intensity.isExceeded),
+    decode: (intensityExceeded) =>
       Result.succeed({
         strategy: spec.strategy,
         totalChildren: spec.totalChildren,
         failedIndex: spec.failedIndex,
         exitSuccess: false,
         intensityExceeded,
-      })
-    ),
-    Cell.decide<RestartPhases>(decideRestart),
-    Cell.encode<RestartPhases>((outcome) => outcome),
-    Cell.write<RestartPhases>((outcome) =>
+      }),
+    decide: decideRestart,
+    encode: (outcome) => outcome,
+    write: (outcome) =>
       Result.match(outcome, {
         onFailure: () => handleExhausted(spec.ctx, spec.cause),
         onSuccess: (right) =>
@@ -125,9 +100,8 @@ const restartDescription = <R>(spec: {
             ),
             Match.exhaustive,
           ),
-      })
-    ),
-  )
+      }),
+  })
 
 const reopenHealthyAfterCooldown = <R>(ctx: SupervisionContext<R>): Effect.Effect<void, never, never> =>
   Effect.andThen(

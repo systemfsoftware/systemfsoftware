@@ -13,7 +13,6 @@ import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
-import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Path from 'effect/Path'
 import * as Predicate from 'effect/Predicate'
@@ -1182,11 +1181,9 @@ const configReaderDescription = (
   basePath: string,
   services: Context.Context<FileSystem.FileSystem | Module | Path.Path>,
 ): Cell.WriteDone<ConfigReaderPhases> =>
-  pipe(
-    Cell.read<ConfigReaderPhases>(() =>
-      Effect.provideContext(loadOptionsFromConfigFile(cliOptions, basePath), services)
-    ),
-    Cell.decode<ConfigReaderPhases>((raw) =>
+  Cell.layer({
+    read: () => Effect.provideContext(loadOptionsFromConfigFile(cliOptions, basePath), services),
+    decode: (raw) =>
       Result.match(S.decodeUnknownResult(ConfigDocumentSchema)(raw), {
         onFailure: (cause) => Result.fail(new ConfigFileInvalidError({ file: 'config', cause })),
         onSuccess: (fileOptions) =>
@@ -1196,10 +1193,9 @@ const configReaderDescription = (
               overrides: cliOptions,
             }),
           ),
-      })
-    ),
-    Cell.decide<ConfigReaderPhases>(mergeConfigsWorkflow),
-    Cell.encode<ConfigReaderPhases>((outcome) =>
+      }),
+    decide: mergeConfigsWorkflow,
+    encode: (outcome) =>
       Result.match(outcome, {
         onFailure: (error) => {
           throw error
@@ -1216,10 +1212,9 @@ const configReaderDescription = (
           }
           return decoded.success
         },
-      })
-    ),
-    Cell.write<ConfigReaderPhases>((output) => Effect.succeed(output)),
-  )
+      }),
+    write: (output) => Effect.succeed(output),
+  })
 
 export function readConfig(
   cliOptions: PartialStrykerOptions,

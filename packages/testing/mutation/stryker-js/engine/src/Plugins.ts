@@ -2,7 +2,6 @@ import { Schema as S } from 'effect'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
-import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
@@ -276,8 +275,8 @@ const pluginLoaderDescription = (
   path: Path.Path,
   module: Context.Service.Shape<typeof Module>,
 ): Cell.WriteDone<PluginLoaderPhases> =>
-  pipe(
-    Cell.read<PluginLoaderPhases>((pluginDescriptors) =>
+  Cell.layer({
+    read: (pluginDescriptors: readonly string[]) =>
       Effect.gen(function*() {
         const pluginModules = yield* resolvePluginModules(pluginDescriptors)
         const loaded = yield* Effect.forEach(
@@ -306,9 +305,8 @@ const pluginLoaderDescription = (
         Layer.succeed(FileSystem.FileSystem, fileSystem),
         Layer.succeed(Path.Path, path),
         Layer.succeed(Module, module),
-      )))
-    ),
-    Cell.decode<PluginLoaderPhases>((raw) => {
+      ))),
+    decode: (raw) => {
       const entries = raw.map((entry) =>
         PluginLoaderEntry.make({
           moduleName: entry.moduleName,
@@ -317,17 +315,16 @@ const pluginLoaderDescription = (
         })
       )
       return Result.succeed(LoadPluginsCommand.make({ entries }))
-    }),
-    Cell.decide<PluginLoaderPhases>(loadPluginsWorkflow),
-    Cell.encode<PluginLoaderPhases>((outcome) =>
+    },
+    decide: loadPluginsWorkflow,
+    encode: (outcome) =>
       Result.match(outcome, {
         onFailure: (error) => {
           throw error
         },
         onSuccess: (decision) => decision,
-      })
-    ),
-    Cell.write<PluginLoaderPhases>((output) =>
+      }),
+    write: (output) =>
       Effect.gen(function*() {
         for (const shadowing of output.shadowings) {
           yield* Effect.logWarning(
@@ -340,9 +337,8 @@ const pluginLoaderDescription = (
           pluginModulePaths: output.pluginModulePaths,
         }
         return loaded
-      })
-    ),
-  )
+      }),
+  })
 
 export function loadPlugins(
   pluginDescriptors: readonly string[],

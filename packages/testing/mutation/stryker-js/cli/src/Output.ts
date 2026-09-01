@@ -23,7 +23,6 @@ import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
-import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Path from 'effect/Path'
@@ -888,8 +887,8 @@ interface ProbePhases extends Cell.Phases {
   readonly writeError: ModeConflictError
 }
 
-const outputModeProbeDescription: Cell.WriteDone<ProbePhases> = pipe(
-  Cell.read<ProbePhases>((command) =>
+const outputModeProbeDescription: Cell.WriteDone<ProbePhases> = Cell.layer({
+  read: (command: FormatFlags) =>
     Effect.succeed(
       (() => {
         const toolVarsRecord: Partial<Record<ToolVariable, string>> = {}
@@ -921,9 +920,8 @@ const outputModeProbeDescription: Cell.WriteDone<ProbePhases> = pipe(
         }
         return result
       })(),
-    )
-  ),
-  Cell.decode<ProbePhases>((raw) =>
+    ),
+  decode: (raw) =>
     Result.succeed(
       (() => {
         const filteredToolVars: Record<string, string> = {}
@@ -961,17 +959,15 @@ const outputModeProbeDescription: Cell.WriteDone<ProbePhases> = pipe(
         }
         return ResolveModeCommand.make(commandInput)
       })(),
-    )
-  ),
-  Cell.decide<ProbePhases>(resolveModeWorkflow),
-  Cell.encode<ProbePhases>((outcome) => outcome),
-  Cell.write<ProbePhases>((outcome) =>
+    ),
+  decide: resolveModeWorkflow,
+  encode: (outcome: Result.Result<ResolvedMode, ModeConflictError>) => outcome,
+  write: (outcome) =>
     Result.match(outcome, {
       onFailure: (error) => Effect.fail(error),
       onSuccess: (mode) => Effect.succeed(mode),
-    })
-  ),
-)
+    }),
+})
 
 export const detectModeWithProbe = (flags: FormatFlags = {}): Effect.Effect<ResolvedMode, CliError.CliError> =>
   Cell.apply(outputModeProbeDescription, flags).pipe(

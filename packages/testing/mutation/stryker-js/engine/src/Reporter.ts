@@ -25,7 +25,6 @@ import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
-import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
 import * as MutableHashMap from 'effect/MutableHashMap'
@@ -295,19 +294,21 @@ export const makeClearTextReporter = (params: {
   let heldReport: schema.MutationTestResult | undefined
   let heldMetrics: MutationTestMetricsResult | undefined
 
-  const clearTextDescription: Cell.WriteDone<ClearTextReportPhases> = pipe(
-    Cell.read<ClearTextReportPhases>(() => Effect.succeed({ report: heldReport, metrics: heldMetrics, options })),
-    Cell.decode<ClearTextReportPhases>((raw) =>
-      S.decodeUnknownResult(ClearTextReportCommand)({ report: raw.report, metrics: raw.metrics, options: raw.options })
-    ),
-    Cell.decide<ClearTextReportPhases>(makeClearTextDocument),
-    Cell.encode<ClearTextReportPhases>((outcome) =>
+  const clearTextDescription: Cell.WriteDone<ClearTextReportPhases> = Cell.layer({
+    read: (): Effect.Effect<
+      { readonly report: unknown; readonly metrics: unknown; readonly options: unknown },
+      PlatformError,
+      never
+    > => Effect.succeed({ report: heldReport, metrics: heldMetrics, options }),
+    decode: (raw): Result.Result<ClearTextReportCommand, unknown> =>
+      S.decodeUnknownResult(ClearTextReportCommand)({ report: raw.report, metrics: raw.metrics, options: raw.options }),
+    decide: makeClearTextDocument,
+    encode: (outcome) =>
       Result.match(outcome, {
         onFailure: () => ({ stdout: [] satisfies ReadonlyArray<string>, debug: [] satisfies ReadonlyArray<string> }),
         onSuccess: (doc) => ({ stdout: doc.stdout, debug: doc.debug }),
-      })
-    ),
-    Cell.write<ClearTextReportPhases>((output) =>
+      }),
+    write: (output): Effect.Effect<void, PlatformError, never> =>
       Effect.gen(function*() {
         for (const line of output.stdout) {
           out.write(`${line}\n`)
@@ -315,9 +316,8 @@ export const makeClearTextReporter = (params: {
         for (const line of output.debug) {
           yield* Effect.logDebug(line)
         }
-      })
-    ),
-  )
+      }),
+  })
 
   return {
     onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
@@ -371,24 +371,27 @@ export const makeJsonReporter = (params: {
   const path = params.path
 
   let heldReport: schema.MutationTestResult | undefined
-
-  const jsonReportDescription: Cell.WriteDone<JsonReportPhases> = pipe(
-    Cell.read<JsonReportPhases>(() => {
+  const jsonReportDescription: Cell.WriteDone<JsonReportPhases> = Cell.layer({
+    read: (): Effect.Effect<{ readonly report: schema.MutationTestResult }, PlatformError, never> => {
       const report = heldReport
       if (report === undefined) {
         return Effect.die(new Error('json reporter applied before onMutationTestReportReady'))
       }
       return Effect.succeed({ report })
-    }),
-    Cell.decode<JsonReportPhases>((raw) => Result.succeed(JsonReportCommand.make({ report: raw.report }))),
-    Cell.decide<JsonReportPhases>(makeJsonDocument),
-    Cell.encode<JsonReportPhases>((outcome) =>
+    },
+    decode: (raw) => {
+      const result: Result.Result<JsonReportCommand, unknown> = Result.succeed(
+        JsonReportCommand.make({ report: raw.report }),
+      )
+      return result
+    },
+    decide: makeJsonDocument,
+    encode: (outcome) =>
       Result.match(outcome, {
         onFailure: () => '',
         onSuccess: (doc) => doc.json,
-      })
-    ),
-    Cell.write<JsonReportPhases>((json) =>
+      }),
+    write: (json) =>
       Effect.gen(function*() {
         if (options === undefined) return
         const filePath = path.normalize(options.jsonReporter.fileName)
@@ -396,9 +399,8 @@ export const makeJsonReporter = (params: {
         yield* writeOutputFile(fs, path, path.resolve(filePath), json)
         const url = yield* path.toFileUrl(path.resolve(filePath)).pipe(Effect.orDie)
         yield* Effect.logInfo(`Your report can be found at: ${url.href}`)
-      })
-    ),
-  )
+      }),
+  })
 
   return {
     onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,

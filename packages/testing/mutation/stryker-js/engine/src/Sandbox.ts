@@ -21,7 +21,6 @@ import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as FileSystem from 'effect/FileSystem'
-import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
@@ -605,8 +604,10 @@ export const makeSandbox = (
     const sandboxDescription = (
       ctx: Context.Context<FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope>,
     ): Cell.WriteDone<SandboxPhases> => {
-      const description = pipe(
-        Cell.read<SandboxPhases>((command) =>
+      const description = Cell.layer({
+        read: (
+          command: SandboxPhases['command'],
+        ): Effect.Effect<SandboxPhases['raw'], SandboxPhases['readError'], never> =>
           Effect.provideContext(
             Effect.gen(function*() {
               yield* Scope.Scope
@@ -647,9 +648,8 @@ export const makeSandbox = (
               return command
             }),
             ctx,
-          )
-        ),
-        Cell.decode<SandboxPhases>((raw) =>
+          ),
+        decode: (raw: SandboxPhases['raw']): Result.Result<SandboxCommand, StrykerError> =>
           Result.succeed(
             new SandboxCommand({
               fileEntries: [...raw.project.files].map(([name, file]) => ({
@@ -661,11 +661,10 @@ export const makeSandbox = (
               backupDirectory: raw.backupDirectory,
               inPlace: raw.options.inPlace,
             }),
-          )
-        ),
-        Cell.decide<SandboxPhases>(sandboxWorkflow),
-        Cell.encode<SandboxPhases>((outcome) => outcome),
-        Cell.write<SandboxPhases>((outcome, raw) =>
+          ),
+        decide: sandboxWorkflow,
+        encode: (outcome) => outcome,
+        write: (outcome, raw) =>
           Effect.provideContext(
             Effect.gen(function*() {
               if (Result.isFailure(outcome)) {
@@ -740,9 +739,8 @@ export const makeSandbox = (
               return buildHandle(fileMap, workingDirectory, basePath, pathService)
             }),
             ctx,
-          )
-        ),
-      )
+          ),
+      })
 
       return description
     }

@@ -32,7 +32,6 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as FileSystem from 'effect/FileSystem'
-import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
@@ -462,148 +461,140 @@ export type EnginePorts =
   | WorkerEntries
   | WorkerLauncher
 export const prepareLayer = (run: Layer.Layer<StageServices>): Cell.WriteDone<PreparePhases> => {
-  const description = pipe(
-    Cell.read<PreparePhases>(
-      (command) =>
-        Effect.gen(function*() {
-          const cmd = toPrepareExecutorArgs(command)
-          yield* Scope.Scope
-          const env = yield* RunEnvironment
-          const queue = yield* RunEvents
-          const coreSchema: ValidationSchemaDocument = forkCoreSchema
-          const configured = yield* readConfig(
-            cmd.cliOptions,
-            env.basePath,
-          ).pipe(
-            Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to read config', cause })),
-            Effect.tapCause(() =>
-              Effect.gen(function*() {
-                const now = yield* Clock.currentTimeMillis
-                yield* Queue.offer(queue, new PhaseEntered({ phase: 'prepare', elapsedMs: now - env.runStartedAt }))
-              }).pipe(Effect.ignore)
+  const description = Cell.layer({
+    read: (command: PrepareExecutorArgs) =>
+      Effect.gen(function*() {
+        const cmd = toPrepareExecutorArgs(command)
+        yield* Scope.Scope
+        const env = yield* RunEnvironment
+        const queue = yield* RunEvents
+        const coreSchema: ValidationSchemaDocument = forkCoreSchema
+        const configured = yield* readConfig(
+          cmd.cliOptions,
+          env.basePath,
+        ).pipe(
+          Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to read config', cause })),
+          Effect.tapCause(() =>
+            Effect.gen(function*() {
+              const now = yield* Clock.currentTimeMillis
+              yield* Queue.offer(queue, new PhaseEntered({ phase: 'prepare', elapsedMs: now - env.runStartedAt }))
+            }).pipe(Effect.ignore)
+          ),
+        )
+        const resolvedReporters = selectReporters([...configured.reporters], env.resolvedMode.mode)
+        const options: PrepareDone['options'] = {
+          ...configured,
+          reporters: resolvedReporters,
+          allowConsoleColors: env.allowConsoleColors,
+          clearTextReporter: {
+            ...configured.clearTextReporter,
+            allowColor: env.allowConsoleColors,
+          },
+        }
+        const optionsRecord: Record<string, unknown> = { ...options }
+        const pluginsValue = optionsRecord['plugins']
+        let pluginsList: string[]
+        if (Array.isArray(pluginsValue)) {
+          pluginsList = pluginsValue.filter((v): v is string => typeof v === 'string')
+        } else {
+          pluginsList = []
+        }
+        const appendPluginsValue = optionsRecord['appendPlugins']
+        let appendPluginsList: string[]
+        if (Array.isArray(appendPluginsValue)) {
+          appendPluginsList = appendPluginsValue.filter((v): v is string => typeof v === 'string')
+        } else {
+          appendPluginsList = []
+        }
+        const descriptors: readonly string[] = [...pluginsList, ...appendPluginsList, ...env.reporterPluginModules]
+        const loaded = yield* loadPlugins(descriptors, env.basePath).pipe(
+          Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to load plugins', cause })),
+        )
+        const mergedSchema = buildMergedSchema(coreSchema, loaded.schemaContributions)
+        if (loaded.schemaContributions.length > 0) {
+          const record: Record<string, unknown> = { ...options }
+          yield* validateOptions(record, mergedSchema).pipe(
+            Effect.mapError(
+              (cause) =>
+                new StageError({
+                  stage: 'prepare',
+                  reason: 'Failed to revalidate options with plugin schema',
+                  cause,
+                }),
             ),
           )
-          const resolvedReporters = selectReporters([...configured.reporters], env.resolvedMode.mode)
-          const options: PrepareDone['options'] = {
-            ...configured,
-            reporters: resolvedReporters,
-            allowConsoleColors: env.allowConsoleColors,
-            clearTextReporter: {
-              ...configured.clearTextReporter,
-              allowColor: env.allowConsoleColors,
-            },
-          }
-          const optionsRecord: Record<string, unknown> = { ...options }
-          const pluginsValue = optionsRecord['plugins']
-          let pluginsList: string[]
-          if (Array.isArray(pluginsValue)) {
-            pluginsList = pluginsValue.filter((v): v is string => typeof v === 'string')
+        }
+        const project = yield* readProject(options, cmd.targetMutatePatterns, env.basePath).pipe(
+          Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to read project', cause })),
+        )
+        const mutateCount = MutableHashMap.size(project.filesToMutate)
+        const summary = `Found ${mutateCount} of ${MutableHashMap.size(project.files)} file(s) to be mutated.`
+        if (env.resolvedMode.mode === 'human') {
+          if (env.allowConsoleColors) {
+            yield* Console.log(ansi.green(summary))
           } else {
-            pluginsList = []
+            yield* Console.log(summary)
           }
-          const appendPluginsValue = optionsRecord['appendPlugins']
-          let appendPluginsList: string[]
-          if (Array.isArray(appendPluginsValue)) {
-            appendPluginsList = appendPluginsValue.filter((v): v is string => typeof v === 'string')
-          } else {
-            appendPluginsList = []
-          }
-          const descriptors: readonly string[] = [...pluginsList, ...appendPluginsList, ...env.reporterPluginModules]
-          const loaded = yield* loadPlugins(descriptors, env.basePath).pipe(
-            Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to load plugins', cause })),
-          )
-          const mergedSchema = buildMergedSchema(coreSchema, loaded.schemaContributions)
-          if (loaded.schemaContributions.length > 0) {
-            const record: Record<string, unknown> = { ...options }
-            yield* validateOptions(record, mergedSchema).pipe(
-              Effect.mapError(
-                (cause) =>
-                  new StageError({
-                    stage: 'prepare',
-                    reason: 'Failed to revalidate options with plugin schema',
-                    cause,
-                  }),
-              ),
-            )
-          }
-          const project = yield* readProject(options, cmd.targetMutatePatterns, env.basePath).pipe(
-            Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to read project', cause })),
-          )
-          const mutateCount = MutableHashMap.size(project.filesToMutate)
-          const summary = `Found ${mutateCount} of ${MutableHashMap.size(project.files)} file(s) to be mutated.`
-          if (env.resolvedMode.mode === 'human') {
-            if (env.allowConsoleColors) {
-              yield* Console.log(ansi.green(summary))
-            } else {
-              yield* Console.log(summary)
+        } else {
+          yield* Effect.logInfo(summary)
+        }
+        const selectedIgnorers = HashSet.fromIterable(options.ignorers)
+        const contributions = yield* createAll(loaded.pluginsByKind, 'Ignore').pipe(
+          Effect.map((all) => all.filter((contribution) => HashSet.has(selectedIgnorers, contribution.name))),
+          Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to create ignorers', cause })),
+        )
+        const ignorers: readonly IgnorerService[] = yield* Effect.forEach(
+          contributions,
+          (contribution) =>
+            Effect.gen(function*() {
+              const ctx = yield* Layer.build(contribution.layer)
+              return Context.get(ctx, Ignorer)
+            }).pipe(
+              Effect.provideService(RunConfiguration, options),
+              Effect.provideService(SandboxDirectory, env.basePath),
+            ),
+        ).pipe(
+          Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to build ignorers', cause })),
+        )
+        const temporaryDirectoryPath = yield* Effect.gen(function*() {
+          const live = TemporaryDirectoryLive(options)
+          const service = yield* Effect.service(TemporaryDirectory).pipe(Effect.provide(live))
+          return service.path
+        }).pipe(
+          Effect.mapError((cause) =>
+            new StageError({ stage: 'prepare', reason: 'Failed to create temporary directory', cause })
+          ),
+        )
+        const allContributions: readonly AnyPluginContribution[] = (() => {
+          const out: Array<AnyPluginContribution> = []
+          for (const arr of HashMap.values(loaded.pluginsByKind)) {
+            for (const c of arr) {
+              out.push(c)
             }
-          } else {
-            yield* Effect.logInfo(summary)
           }
-          const selectedIgnorers = HashSet.fromIterable(options.ignorers)
-          const contributions = yield* createAll(loaded.pluginsByKind, 'Ignore').pipe(
-            Effect.map((all) => all.filter((contribution) => HashSet.has(selectedIgnorers, contribution.name))),
-            Effect.mapError((cause) =>
-              new StageError({ stage: 'prepare', reason: 'Failed to create ignorers', cause })
-            ),
-          )
-          const ignorers: readonly IgnorerService[] = yield* Effect.forEach(
-            contributions,
-            (contribution) =>
-              Effect.gen(function*() {
-                const ctx = yield* Layer.build(contribution.layer)
-                return Context.get(ctx, Ignorer)
-              }).pipe(
-                Effect.provideService(RunConfiguration, options),
-                Effect.provideService(SandboxDirectory, env.basePath),
-              ),
-          ).pipe(
-            Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to build ignorers', cause })),
-          )
-          const temporaryDirectoryPath = yield* Effect.gen(function*() {
-            const live = TemporaryDirectoryLive(options)
-            const service = yield* Effect.service(TemporaryDirectory).pipe(Effect.provide(live))
-            return service.path
-          }).pipe(
-            Effect.mapError((cause) =>
-              new StageError({ stage: 'prepare', reason: 'Failed to create temporary directory', cause })
-            ),
-          )
-          const allContributions: readonly AnyPluginContribution[] = (() => {
-            const out: Array<AnyPluginContribution> = []
-            for (const arr of HashMap.values(loaded.pluginsByKind)) {
-              for (const c of arr) {
-                out.push(c)
-              }
-            }
-            return out
-          })()
-          const plugins = composePlugins(allContributions)
-          const raw: PrepareRaw = {
-            project,
-            options,
-            temporaryDirectoryPath,
-            loaded,
-            plugins,
-            ignorers,
-          }
-          return raw
-        }).pipe(Effect.provide(run)),
-    ),
-    Cell.decode<PreparePhases>((raw) =>
-      // Constructed, not decoded from a bare object literal. `PrepareCommand` is a
-      // `TaggedClass`, so a literal without `_tag` fails its schema — and the counts come
-      // from values this process already holds, not from foreign data needing validation.
+          return out
+        })()
+        const plugins = composePlugins(allContributions)
+        const raw: PrepareRaw = {
+          project,
+          options,
+          temporaryDirectoryPath,
+          loaded,
+          plugins,
+          ignorers,
+        }
+        return raw
+      }).pipe(Effect.provide(run)),
+    decode: (raw: PrepareRaw): Result.Result<PrepareCommand, StageError> =>
       Result.succeed(
         new PrepareCommand({
           fileCount: MutableHashMap.size(raw.project.files),
           pluginCount: raw.loaded.pluginModulePaths.length,
         }),
-      )
-    ),
-    Cell.decide<PreparePhases>(prepareWorkflow),
-    Cell.encode<PreparePhases>((outcome) => outcome),
-    Cell.write<PreparePhases>((output, raw) =>
+      ),
+    decide: prepareWorkflow,
+    encode: (outcome) => outcome,
+    write: (output, raw) =>
       Effect.gen(function*() {
         const env = yield* RunEnvironment
         const now = yield* Clock.currentTimeMillis
@@ -622,9 +613,8 @@ export const prepareLayer = (run: Layer.Layer<StageServices>): Cell.WriteDone<Pr
           options: raw.options,
           temporaryDirectoryPath: raw.temporaryDirectoryPath,
         }
-      }).pipe(Effect.provide(run))
-    ),
-  )
+      }).pipe(Effect.provide(run)),
+  })
   return description
 }
 
@@ -653,81 +643,76 @@ interface InstrumentPhases extends Cell.Phases {
 export const instrumentLayer = (
   run: Layer.Layer<StageServices>,
 ): Cell.WriteDone<InstrumentPhases> => {
-  const description = pipe(
-    Cell.read<InstrumentPhases>(
-      (command) =>
-        Effect.gen(function*() {
-          const cmd = toPrepareDone(command)
-          yield* Scope.Scope
-          const env = yield* RunEnvironment
+  const description = Cell.layer({
+    read: (command: PrepareDone) =>
+      Effect.gen(function*() {
+        const cmd = toPrepareDone(command)
+        yield* Scope.Scope
+        const env = yield* RunEnvironment
 
-          const filesToMutate = yield* Effect.forEach([...MutableHashMap.values(cmd.project.filesToMutate)], (file) =>
-            toInstrumenterFile(file), {
-            concurrency: FILE_CONCURRENCY,
-          }).pipe(
-            Effect.mapError((cause) =>
-              new StageError({ stage: 'instrument', reason: 'Failed to read files to mutate', cause })
-            ),
-          )
+        const filesToMutate = yield* Effect.forEach([...MutableHashMap.values(cmd.project.filesToMutate)], (file) =>
+          toInstrumenterFile(file), {
+          concurrency: FILE_CONCURRENCY,
+        }).pipe(
+          Effect.mapError((cause) =>
+            new StageError({ stage: 'instrument', reason: 'Failed to read files to mutate', cause })
+          ),
+        )
 
-          const instrumentResult = yield* instrument(filesToMutate, {
-            ignorers: [...cmd.ignorers],
-            excludedMutations: [...cmd.options.mutator.excludedMutations],
-          }).pipe(Effect.mapError((cause) =>
-            new StageError({ stage: 'instrument', reason: 'Instrumenter failed', cause })
-          ))
+        const instrumentResult = yield* instrument(filesToMutate, {
+          ignorers: [...cmd.ignorers],
+          excludedMutations: [...cmd.options.mutator.excludedMutations],
+        }).pipe(Effect.mapError((cause) =>
+          new StageError({ stage: 'instrument', reason: 'Instrumenter failed', cause })
+        ))
 
-          const instrumentedProject = withInstrumentedFiles(cmd.project, instrumentResult.files)
+        const instrumentedProject = withInstrumentedFiles(cmd.project, instrumentResult.files)
 
-          const basePath = env.basePath
-          let workingDirectory = cmd.temporaryDirectoryPath
-          let backupDirectory = ''
-          if (cmd.options.inPlace) {
-            workingDirectory = basePath
-            backupDirectory = cmd.temporaryDirectoryPath
-          }
+        const basePath = env.basePath
+        let workingDirectory = cmd.temporaryDirectoryPath
+        let backupDirectory = ''
+        if (cmd.options.inPlace) {
+          workingDirectory = basePath
+          backupDirectory = cmd.temporaryDirectoryPath
+        }
 
-          const sandbox = yield* makeSandbox({
-            options: cmd.options,
-            project: instrumentedProject,
-            workingDirectory,
-            backupDirectory,
-            basePath,
-          }).pipe(Effect.mapError((cause) =>
-            new StageError({ stage: 'instrument', reason: 'Sandbox initialization failed', cause })
-          ))
+        const sandbox = yield* makeSandbox({
+          options: cmd.options,
+          project: instrumentedProject,
+          workingDirectory,
+          backupDirectory,
+          basePath,
+        }).pipe(Effect.mapError((cause) =>
+          new StageError({ stage: 'instrument', reason: 'Sandbox initialization failed', cause })
+        ))
 
-          const concurrency = yield* makeConcurrency(cmd.options).pipe(
-            Effect.mapError((cause) =>
-              new StageError({ stage: 'instrument', reason: 'Failed to compute concurrency', cause })
-            ),
-          )
+        const concurrency = yield* makeConcurrency(cmd.options).pipe(
+          Effect.mapError((cause) =>
+            new StageError({ stage: 'instrument', reason: 'Failed to compute concurrency', cause })
+          ),
+        )
 
-          const raw: InstrumentRaw = {
-            prev: cmd,
-            filesToMutate,
-            instrumentResult,
-            instrumentedProject,
-            sandbox,
-            concurrency,
-          }
-          return raw
-        }).pipe(Effect.provide(run)),
-    ),
-    Cell.decode<InstrumentPhases>((raw) =>
-      // Constructed, not decoded: `InstrumentCommand` is a `TaggedClass`, and a bare object
-      // literal has no `_tag` for its schema to find.
+        const raw: InstrumentRaw = {
+          prev: cmd,
+          filesToMutate,
+          instrumentResult,
+          instrumentedProject,
+          sandbox,
+          concurrency,
+        }
+        return raw
+      }).pipe(Effect.provide(run)),
+    decode: (raw: InstrumentRaw): Result.Result<InstrumentCommand, StageError> =>
       Result.succeed(
         new InstrumentCommand({
           fileCount: raw.filesToMutate.length,
           inPlace: raw.prev.options.inPlace,
           pluginCount: raw.prev.loadedPlugins.pluginModulePaths.length,
         }),
-      )
-    ),
-    Cell.decide<InstrumentPhases>(instrumentWorkflow),
-    Cell.encode<InstrumentPhases>((outcome) => outcome),
-    Cell.write<InstrumentPhases>((output, raw) =>
+      ),
+    decide: instrumentWorkflow,
+    encode: (outcome) => outcome,
+    write: (output, raw) =>
       Effect.gen(function*() {
         const env = yield* RunEnvironment
         const now = yield* Clock.currentTimeMillis
@@ -750,9 +735,8 @@ export const instrumentLayer = (
             checkers: raw.concurrency.checkers,
           },
         }
-      }).pipe(Effect.provide(run))
-    ),
-  )
+      }).pipe(Effect.provide(run)),
+  })
 
   return description
 }
@@ -779,99 +763,92 @@ interface DryRunPhases extends Cell.Phases {
 }
 
 export const dryRunLayer = (run: Layer.Layer<StageServices>): Cell.WriteDone<DryRunPhases> => {
-  const description = pipe(
-    Cell.read<DryRunPhases>(
-      (command) =>
-        Effect.gen(function*() {
-          const cmd = toInstrumentDone(command)
-          yield* Scope.Scope
-          const idGenerator = yield* IdGenerator
+  const description = Cell.layer({
+    read: (command: InstrumentDone) =>
+      Effect.gen(function*() {
+        const cmd = toInstrumentDone(command)
+        yield* Scope.Scope
+        const idGenerator = yield* IdGenerator
 
-          const reporterService: ReporterService = yield* resolveReporterService(
-            cmd.options.reporters,
-            cmd.plugins.layer,
-            cmd.options,
-            cmd.temporaryDirectoryPath,
-            (message) => new StageError({ stage: 'dryRun', reason: message }),
-          )
-          const { files, testFiles } = buildDryRunFiles(cmd)
-          const dryRunTimeout = cmd.options.dryRunTimeoutMinutes * 60 * 1000
+        const reporterService: ReporterService = yield* resolveReporterService(
+          cmd.options.reporters,
+          cmd.plugins.layer,
+          cmd.options,
+          cmd.temporaryDirectoryPath,
+          (message) => new StageError({ stage: 'dryRun', reason: message }),
+        )
+        const { files, testFiles } = buildDryRunFiles(cmd)
+        const dryRunTimeout = cmd.options.dryRunTimeoutMinutes * 60 * 1000
 
-          yield* Effect.logInfo('Starting dry run')
-          const { rawResult, capabilities, gross } = yield* Effect.scoped(
-            Effect.gen(function*() {
-              const childRunnerEffect = makeChildProcessTestRunner({
+        yield* Effect.logInfo('Starting dry run')
+        const { rawResult, capabilities, gross } = yield* Effect.scoped(
+          Effect.gen(function*() {
+            const childRunnerEffect = makeChildProcessTestRunner({
+              options: cmd.options,
+              fileDescriptions: cmd.project.fileDescriptions,
+              sandboxWorkingDirectory: cmd.sandbox.workingDirectory,
+              pluginModulePaths: [...cmd.loadedPlugins.pluginModulePaths],
+              idGenerator,
+            })
+            const runner = yield* buildTestRunner(
+              {
                 options: cmd.options,
                 fileDescriptions: cmd.project.fileDescriptions,
                 sandboxWorkingDirectory: cmd.sandbox.workingDirectory,
                 pluginModulePaths: [...cmd.loadedPlugins.pluginModulePaths],
                 idGenerator,
-              })
-              const runner = yield* buildTestRunner(
-                {
-                  options: cmd.options,
-                  fileDescriptions: cmd.project.fileDescriptions,
-                  sandboxWorkingDirectory: cmd.sandbox.workingDirectory,
-                  pluginModulePaths: [...cmd.loadedPlugins.pluginModulePaths],
-                  idGenerator,
-                  retire: Effect.void,
-                },
-                childRunnerEffect,
-              )
-              const extra: { testFiles?: string[] } = {}
-              if (testFiles !== undefined) {
-                extra.testFiles = testFiles
-              }
-              const timed = yield* Effect.timed(
-                runner
-                  .dryRun({
-                    timeout: dryRunTimeout,
-                    coverageAnalysis: cmd.options.coverageAnalysis,
-                    disableBail: cmd.options.disableBail,
-                    files,
-                    ...extra,
-                  })
-                  .pipe(
-                    Effect.mapError((cause) => new StageError({ stage: 'dryRun', reason: 'Dry run failed', cause })),
-                  ),
-              )
-              const gross: Duration.Duration = timed[0]
-              const rawResult = timed[1]
-              const capabilities = yield* runner.capabilities.pipe(
-                Effect.mapError((cause) =>
-                  new StageError({ stage: 'dryRun', reason: 'Failed to get test runner capabilities', cause })
+                retire: Effect.void,
+              },
+              childRunnerEffect,
+            )
+            const extra: { testFiles?: string[] } = {}
+            if (testFiles !== undefined) {
+              extra.testFiles = testFiles
+            }
+            const timed = yield* Effect.timed(
+              runner
+                .dryRun({
+                  timeout: dryRunTimeout,
+                  coverageAnalysis: cmd.options.coverageAnalysis,
+                  disableBail: cmd.options.disableBail,
+                  files,
+                  ...extra,
+                })
+                .pipe(
+                  Effect.mapError((cause) => new StageError({ stage: 'dryRun', reason: 'Dry run failed', cause })),
                 ),
-              )
-              return { rawResult, capabilities, gross }
-            }),
-          ).pipe(
-            Effect.mapError((cause) => {
-              if (cause instanceof StageError) {
-                return cause
-              }
-              return new StageError({ stage: 'dryRun', reason: 'Dry run failed to start test runner', cause })
-            }),
-          )
+            )
+            const gross: Duration.Duration = timed[0]
+            const rawResult = timed[1]
+            const capabilities = yield* runner.capabilities.pipe(
+              Effect.mapError((cause) =>
+                new StageError({ stage: 'dryRun', reason: 'Failed to get test runner capabilities', cause })
+              ),
+            )
+            return { rawResult, capabilities, gross }
+          }),
+        ).pipe(
+          Effect.mapError((cause) => {
+            if (cause instanceof StageError) {
+              return cause
+            }
+            return new StageError({ stage: 'dryRun', reason: 'Dry run failed to start test runner', cause })
+          }),
+        )
 
-          const normalizedRawResult = rawResult
-          const raw: DryRunRaw = {
-            prev: cmd,
-            rawResult: normalizedRawResult,
-            capabilities,
-            gross,
-            reporterService,
-          }
-          return raw
-        }).pipe(Effect.provide(run)),
-    ),
-    Cell.decode<DryRunPhases>((raw) => {
+        const normalizedRawResult = rawResult
+        const raw: DryRunRaw = {
+          prev: cmd,
+          rawResult: normalizedRawResult,
+          capabilities,
+          gross,
+          reporterService,
+        }
+        return raw
+      }).pipe(Effect.provide(run)),
+    decode: (raw: DryRunRaw): Result.Result<DryRunCommand, StageError> => {
       const rawResult = raw.rawResult
       const allowEmpty = raw.prev.options.allowEmpty
-      // `DryRunResult` is a discriminated union, so each arm reads its own members: a
-      // timeout carries a `reason` and no tests, an error carries an `errorMessage`. The
-      // statuses are the other half — the runner spells them lowercase
-      // (`CompleteDryRunResult.status` is `'complete'`) and the command's schema spells
-      // them capitalised, so without this mapping the command never validates.
       if (rawResult.status === 'complete') {
         const failedTestCount = rawResult.tests.filter((test) => test.status === 'failed').length
         return Result.succeed(
@@ -903,10 +880,10 @@ export const dryRunLayer = (run: Layer.Layer<StageServices>): Cell.WriteDone<Dry
           ...(rawResult.reason !== undefined && { reason: rawResult.reason }),
         }),
       )
-    }),
-    Cell.decide<DryRunPhases>(dryRunWorkflow),
-    Cell.encode<DryRunPhases>((outcome) => outcome),
-    Cell.write<DryRunPhases>((outcome, raw) =>
+    },
+    decide: dryRunWorkflow,
+    encode: (outcome) => outcome,
+    write: (outcome, raw) =>
       Effect.gen(function*() {
         const env = yield* RunEnvironment
         const now = yield* Clock.currentTimeMillis
@@ -967,9 +944,8 @@ export const dryRunLayer = (run: Layer.Layer<StageServices>): Cell.WriteDone<Dry
           testCoverage,
           timeOverhead: overhead,
         }
-      }).pipe(Effect.provide(run))
-    ),
-  )
+      }).pipe(Effect.provide(run)),
+  })
 
   return description
 }

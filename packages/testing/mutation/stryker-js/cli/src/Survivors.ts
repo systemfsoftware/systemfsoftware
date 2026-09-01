@@ -24,7 +24,6 @@ import { schema } from '@systemfsoftware/stryker-js/Mutant'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
-import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Path from 'effect/Path'
@@ -290,8 +289,8 @@ const survivorsAdmissionDescription = (
   runContext: Ref.Ref<AdmissionRunContext | undefined>,
   basePath: string,
 ): Cell.WriteDone<AdmissionPhases> =>
-  pipe(
-    Cell.read<AdmissionPhases>((cliOptions) =>
+  Cell.layer({
+    read: (cliOptions: PartialStrykerOptions) =>
       Effect.flatMap(Path.Path, (pathService) =>
         resolveSurvivorsRunOptions(cliOptions, basePath).pipe(
           Effect.flatMap((resolvedOptions) => {
@@ -310,39 +309,36 @@ const survivorsAdmissionDescription = (
                   }),
                 )))
           }),
-        )).pipe(Effect.provide(Layer.mergeAll(nodeFsPathLayer, nodeModuleLayer)))
-    ),
-    Cell.decode<AdmissionPhases>(
-      ({ resolvedOptions, priorReportRaw, priorReportFound, sourceContentHashes, resolveAbsolutePath }) => {
-        if (!priorReportFound) {
-          return Result.succeed(
-            AdmitSurvivorsRunCommand.make({
-              priorReport: undefined,
-              currentConfig: resolvedOptions,
-              frameworkVersion: strykerVersion,
-              sourceContentHashes,
-              priorSourceHashes: {},
-              priorSurvivors: [],
-            }),
-          )
-        }
-        return Result.map(decodePriorReport(priorReportRaw), (document) =>
+        )).pipe(Effect.provide(Layer.mergeAll(nodeFsPathLayer, nodeModuleLayer))),
+    decode: ({ resolvedOptions, priorReportRaw, priorReportFound, sourceContentHashes, resolveAbsolutePath }) => {
+      if (!priorReportFound) {
+        return Result.succeed(
           AdmitSurvivorsRunCommand.make({
-            priorReport: PriorReportFacts.make({
-              config: document.config ?? {},
-              frameworkVersion: document.framework?.version,
-            }),
+            priorReport: undefined,
             currentConfig: resolvedOptions,
             frameworkVersion: strykerVersion,
             sourceContentHashes,
-            priorSourceHashes: priorSourceHashes(document, hashContent),
-            priorSurvivors: extractSurvivors(document, resolveAbsolutePath),
-          }))
-      },
-    ),
-    Cell.decide<AdmissionPhases>(admitSurvivorsRun),
-    Cell.encode<AdmissionPhases>((outcome) => outcome),
-    Cell.write<AdmissionPhases>((outcome) =>
+            priorSourceHashes: {},
+            priorSurvivors: [],
+          }),
+        )
+      }
+      return Result.map(decodePriorReport(priorReportRaw), (document) =>
+        AdmitSurvivorsRunCommand.make({
+          priorReport: PriorReportFacts.make({
+            config: document.config ?? {},
+            frameworkVersion: document.framework?.version,
+          }),
+          currentConfig: resolvedOptions,
+          frameworkVersion: strykerVersion,
+          sourceContentHashes,
+          priorSourceHashes: priorSourceHashes(document, hashContent),
+          priorSurvivors: extractSurvivors(document, resolveAbsolutePath),
+        }))
+    },
+    decide: admitSurvivorsRun,
+    encode: (outcome: Result.Result<SurvivorsAdmission, SurvivorsRejection>) => outcome,
+    write: (outcome) =>
       Effect.flatMap(Ref.get(runContext), (context) => {
         if (context === undefined) {
           return Effect.die('the survivors admission read must run before its write')
@@ -378,9 +374,8 @@ const survivorsAdmissionDescription = (
             ),
           onFailure: (rejection) => Effect.fail(rejection),
         })
-      })
-    ),
-  )
+      }),
+  })
 
 /**
  * The `--survivors` request: re-test exactly the prior report's survivor set.
