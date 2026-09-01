@@ -1,0 +1,113 @@
+{
+  "name": "@systemfsoftware/effect-playwright",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/effect-playwright"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-playwright#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Effect-based Playwright integration — forked under systemfsoftware from Jobflow-io/effect-playwright.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "playwright",
+    "browser",
+    "automation"
+  ],
+  "type": "module",
+  "files": [
+    "dist",
+    "bin",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "effect-playwright": "./bin/cli.mjs"
+  },
+  "scripts": {
+    "build": "tsdown && pnpm api:check",
+    "clean": "rimraf dist",
+    "typecheck": "tsc --noEmit --incremental",
+    "attw": "attw --pack .",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "test": "vitest run",
+    "test:playwright": "playwright test --workers=1",
+    "api:check": "api-extractor run && api-extractor run --config api-extractor.experimental.json && api-extractor run --config api-extractor.test.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.experimental.json && api-extractor run --local --config api-extractor.test.json",
+    "prepack": "pnpm build"
+  },
+  "dependencies": {
+    "playwright-core": "^1.62.1"
+  },
+  "peerDependencies": {
+    "@playwright/test": "^1.62.1",
+    "effect": "catalog:peers"
+  },
+  "peerDependenciesMeta": {
+    "@playwright/test": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
+    "@playwright/test": "^1.62.1",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "playwright": "catalog:",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/effect-playwright.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./experimental": {
+        "types": "./dist/experimental.d.ts",
+        "default": "./dist/experimental.mjs"
+      },
+      "./test": {
+        "types": "./dist/test.d.ts",
+        "default": "./dist/test.mjs"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/effect-playwright.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./experimental": {
+      "@systemfsoftware/source": "./src/experimental/index.ts",
+      "types": "./dist/experimental.d.ts",
+      "default": "./dist/experimental.mjs"
+    },
+    "./test": {
+      "@systemfsoftware/source": "./src/test.ts",
+      "types": "./dist/test.d.ts",
+      "default": "./dist/test.mjs"
+    },
+    "./package.json": "./package.json"
+  }
+}

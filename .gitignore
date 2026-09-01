@@ -31,3 +31,6 @@ docs/cell-taxonomy/
 .mcp.json
 # direnv-managed nix dev-shell state — machine-specific
 .direnv/
+# Generated browser-test outputs (Playwright Test runner)
+test-results/
+playwright-report/
