@@ -27,16 +27,6 @@ if (import.meta.vitest) {
 }
 `
 
-const validSnapshotWithContent = `
-const double = (n: number): number => n * 2
-if (import.meta.vitest) {
-  const { expect, it } = await import('vitest')
-  it('Should_Double_When_Two', () => {
-    expect(double(2)).toMatchInlineSnapshot(\`4\`)
-  })
-}
-`
-
 ruleTester.run('in-source-test-snapshot-only', inSourceTestSnapshotOnly, {
   valid: [
     {
