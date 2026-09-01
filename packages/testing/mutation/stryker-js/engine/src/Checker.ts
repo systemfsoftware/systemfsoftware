@@ -12,9 +12,7 @@ import type { CheckResult } from '@systemfsoftware/stryker-js/Checker'
 import type { FileDescriptions } from '@systemfsoftware/stryker-js/Mutant'
 import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import type { RunPlan as MutantRunPlan } from '@systemfsoftware/stryker-js/Mutant'
-import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
-import { Schema as S } from 'effect'
 import * as Effect from 'effect/Effect'
 import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
@@ -33,6 +31,7 @@ import {
   CheckerSkippedRequested,
   checkerWorkflow,
 } from './Checker.workflow.js'
+import { encodeWorkerOptions } from './worker-options.js'
 import type { IdGeneratorShape } from './Worker.js'
 import { ChildProcessCrashedError } from './Worker.schema.js'
 import type {
@@ -203,8 +202,7 @@ export const makeCheckerChildProcess = (params: {
     const crashed = (cause: string): ChildProcessCrashedError =>
       new ChildProcessCrashedError({ pid: 0, exit: { _tag: 'Code', code: 1 }, cause })
 
-    const optionsWire = S.fromJsonString(S.toCodecJson(StrykerOptionsSchema))
-    const optionsJson = yield* S.encodeEffect(optionsWire)(params.options).pipe(Effect.orDie)
+    const optionsJson = yield* encodeWorkerOptions(params.options)
     const launcher = yield* WorkerLauncher
     const entries = yield* WorkerEntries
     const worker = yield* launcher.spawn({

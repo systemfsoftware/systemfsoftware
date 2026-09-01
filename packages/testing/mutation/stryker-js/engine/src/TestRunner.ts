@@ -13,7 +13,6 @@ import * as Layer from 'effect/Layer'
 
 import type { Policy } from '@systemfsoftware/effect-cell-types'
 import { type FileDescriptions, INSTRUMENTER_CONSTANTS } from '@systemfsoftware/stryker-js/Mutant'
-import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import {
   type CompleteDryRunResult,
@@ -26,7 +25,6 @@ import {
   TestRunnerFailed,
   toMutantRunResult,
 } from '@systemfsoftware/stryker-js/TestRunner'
-import { Schema as S } from 'effect'
 import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Duration from 'effect/Duration'
@@ -40,6 +38,7 @@ import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawne
 import * as RpcClient from 'effect/unstable/rpc/RpcClient'
 import type { RpcClientError } from 'effect/unstable/rpc/RpcClientError'
 import type { SocketError } from 'effect/unstable/socket/Socket'
+import { encodeWorkerOptions } from './worker-options.js'
 
 import { CommandRunnerUnsupportedOption } from './TestRunner.schema.js'
 import type { IdGeneratorShape } from './Worker.js'
@@ -118,8 +117,7 @@ export const makeChildProcessTestRunner = (
 > =>
   Effect.gen(function*() {
     const runnerName = params.options.testRunner
-    const optionsWire = S.fromJsonString(S.toCodecJson(StrykerOptionsSchema))
-    const optionsJson = yield* S.encodeEffect(optionsWire)(params.options).pipe(Effect.orDie)
+    const optionsJson = yield* encodeWorkerOptions(params.options)
     const launcher = yield* WorkerLauncher
     const entries = yield* WorkerEntries
     const worker = yield* launcher.spawn({

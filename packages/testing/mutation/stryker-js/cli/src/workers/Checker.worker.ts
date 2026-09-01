@@ -4,9 +4,6 @@ import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import type { ContributionOf } from '@systemfsoftware/stryker-js/Plugin'
 import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
-import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
-import { Schema as S } from 'effect'
-import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as HashMap from 'effect/HashMap'
@@ -16,8 +13,9 @@ import * as Path from 'effect/Path'
 import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization'
 import * as RpcServer from 'effect/unstable/rpc/RpcServer'
 
-import { CheckerRpcs, create, loadPlugins } from '@systemfsoftware/stryker-js-engine/worker'
+import { CheckerRpcs, create, decodeWorkerOptions, loadPlugins } from '@systemfsoftware/stryker-js-engine/worker'
 import { nodeModuleLayer } from '../platform/node.js'
+import { launchWorker, workerSocketPath } from './worker-runtime.js'
 
 const buildChecker = (
   contribution: ContributionOf<'Checker'>,
@@ -46,7 +44,7 @@ const readWorkerOptions = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const raw = yield* fs.readFileString(path.join(workerDir, 'options.json'))
-  return yield* S.decodeUnknownEffect(S.fromJsonString(S.toCodecJson(StrykerOptionsSchema)))(raw)
+  return yield* decodeWorkerOptions(raw)
 })
 
 const CheckerHandlers = CheckerRpcs.toLayer(
@@ -98,27 +96,12 @@ const CheckerHandlers = CheckerRpcs.toLayer(
   }),
 ).pipe(Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)))
 
-const socketPath = process.env['STRYKER_SOCKET']
-if (socketPath === undefined) {
-  process.stderr.write('checker worker stopped: STRYKER_SOCKET is not set\n')
-  process.exit(1)
-}
-
 const MainLayer = RpcServer.layer(CheckerRpcs).pipe(
   Layer.provide(CheckerHandlers),
   Layer.provide(RpcServer.layerProtocolSocketServer),
   Layer.provide(RpcSerialization.layerNdjson),
-  Layer.provide(NodeSocketServer.layer({ path: socketPath })),
+  Layer.provide(NodeSocketServer.layer({ path: workerSocketPath('checker worker') })),
   Layer.provide(nodeModuleLayer),
 )
 
-Effect.runFork(
-  Layer.launch(MainLayer).pipe(
-    Effect.tapCause((cause) =>
-      Effect.sync(() => {
-        process.stderr.write(`checker worker stopped: ${Cause.pretty(cause)}\n`)
-        process.exitCode = 1
-      })
-    ),
-  ),
-)
+launchWorker(MainLayer, 'checker worker')

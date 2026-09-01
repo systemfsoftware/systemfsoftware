@@ -129,10 +129,14 @@ export const nodeWorkerLauncherLayer: Layer.Layer<
   }),
 )
 
-const nodeSpawnerLayer = NodeChildProcessSpawner.layer.pipe(
-  Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
+export const nodeFsPathLayer: Layer.Layer<FileSystem.FileSystem | Path.Path> = Layer.mergeAll(
+  NodeFileSystem.layer,
+  NodePath.layer,
 )
-const nodeBase = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, nodeSpawnerLayer)
+
+const nodeSpawnerLayer = NodeChildProcessSpawner.layer.pipe(Layer.provide(nodeFsPathLayer))
+
+const nodeBase = Layer.merge(nodeFsPathLayer, nodeSpawnerLayer)
 
 /**
  * Every port the engine requires, provided from this runtime: the file

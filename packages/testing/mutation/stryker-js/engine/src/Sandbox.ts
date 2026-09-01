@@ -755,25 +755,7 @@ export const makeSandbox = (
 
       const both = pipe(
         Cell.read<SandboxPhases>(
-          (command) =>
-            Effect.provideContext(
-              Effect.gen(function*() {
-                const fs = yield* FileSystem.FileSystem
-                const map = capturedFileMap
-                if (map !== undefined) {
-                  for (const [, target] of map) {
-                    if (!target.startsWith(command.workingDirectory) && !command.options.inPlace) {
-                      continue
-                    }
-                    yield* fs.exists(target).pipe(Effect.orElseSucceed(() => false))
-                  }
-                } else {
-                  yield* fs.exists(command.workingDirectory).pipe(Effect.orElseSucceed(() => false))
-                }
-                return command
-              }),
-              ctx,
-            ),
+          (command) => Effect.provideContext(Effect.succeed(command), ctx),
           first,
         ),
         Cell.decode<SandboxPhases>((raw) =>

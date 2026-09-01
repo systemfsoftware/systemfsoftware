@@ -1,7 +1,6 @@
 import { NodeFileSystem, NodePath, NodeSocketServer } from '@effect/platform-node'
 import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
 import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
-import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import type {
   DryRunOptions,
   DryRunResult,
@@ -18,8 +17,15 @@ import * as Path from 'effect/Path'
 import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization'
 import * as RpcServer from 'effect/unstable/rpc/RpcServer'
 
-import { create, loadPlugins, MutantCoverageSchema, TestRunnerRpcs } from '@systemfsoftware/stryker-js-engine/worker'
+import {
+  create,
+  decodeWorkerOptions,
+  loadPlugins,
+  MutantCoverageSchema,
+  TestRunnerRpcs,
+} from '@systemfsoftware/stryker-js-engine/worker'
 import { nodeModuleLayer } from '../platform/node.js'
+import { launchWorker, workerSocketPath } from './worker-runtime.js'
 
 const withCoverage = (
   result: DryRunResult,
@@ -51,7 +57,7 @@ const readWorkerOptions = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const raw = yield* fs.readFileString(path.join(workerDir, 'options.json'))
-  return yield* S.decodeUnknownEffect(S.fromJsonString(S.toCodecJson(StrykerOptionsSchema)))(raw)
+  return yield* decodeWorkerOptions(raw)
 })
 
 const TestRunnerHandlers = TestRunnerRpcs.toLayer(
@@ -94,27 +100,12 @@ const TestRunnerHandlers = TestRunnerRpcs.toLayer(
   }),
 ).pipe(Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)))
 
-const socketPath = process.env['STRYKER_SOCKET']
-if (socketPath === undefined) {
-  process.stderr.write('test runner worker stopped: STRYKER_SOCKET is not set\n')
-  process.exit(1)
-}
-
 const MainLayer = RpcServer.layer(TestRunnerRpcs).pipe(
   Layer.provide(TestRunnerHandlers),
   Layer.provide(RpcServer.layerProtocolSocketServer),
   Layer.provide(RpcSerialization.layerNdjson),
-  Layer.provide(NodeSocketServer.layer({ path: socketPath })),
+  Layer.provide(NodeSocketServer.layer({ path: workerSocketPath('test runner worker') })),
   Layer.provide(nodeModuleLayer),
 )
 
-Effect.runFork(
-  Layer.launch(MainLayer).pipe(
-    Effect.tapCause((cause) =>
-      Effect.sync(() => {
-        process.stderr.write(`test runner worker stopped: ${Cause.pretty(cause)}\n`)
-        process.exitCode = 1
-      })
-    ),
-  ),
-)
+launchWorker(MainLayer, 'test runner worker')

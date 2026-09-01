@@ -189,13 +189,14 @@ const readCurrentRelativeFiles = (
   basePath: string,
 ): Effect.Effect<Record<string, string>, unknown, FileSystem.FileSystem> =>
   Effect.gen(function*() {
-    const files: Record<string, string> = {}
-    for (const name of MutableHashMap.keys(project.files)) {
-      const fileOpt = MutableHashMap.get(project.files, name)
-      if (Option.isNone(fileOpt)) continue
-      files[toRelativeNormalizedFileName(name, basePath)] = yield* readOriginal(fileOpt.value)
-    }
-    return files
+    const entries = yield* Effect.forEach(
+      MutableHashMap.values(project.files),
+      (file) =>
+        Effect.map(readOriginal(file), (content) =>
+          [toRelativeNormalizedFileName(file.name, basePath), content] as const),
+      { concurrency: FILE_CONCURRENCY },
+    )
+    return Object.fromEntries(entries)
   })
 
 const rememberedResultsOf = (
