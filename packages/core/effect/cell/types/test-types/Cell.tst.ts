@@ -132,12 +132,14 @@ describe('the shapes that stay legal', () => {
     ).type.toBe<Cell.EncodeDone<Shape>>()
   })
 
-  it('Should_OpenASecondLayer_When_ReadFollowsAWrite', () => {
-    const firstLayer = Cell.write(
+  it('Should_RejectTheSecondArgument_When_ReadFollowsAWrite', () => {
+    const someWriteDone = Cell.write(
       Cell.encode(Cell.decide(Cell.decode(Cell.read(readPhase), decodePhase), decidePhase), encodePhase),
       writePhase,
     )
-    expect(Cell.read(readPhase, firstLayer)).type.toBe<Cell.ReadDone<Shape>>()
+    // the second-layer opening form of read is deleted; read takes exactly one argument
+    // @ts-expect-error: Expected 1 arguments, but got 2
+    Cell.read(readPhase, someWriteDone)
   })
 })
 
@@ -269,10 +271,21 @@ describe('the description value is a foldable record', () => {
     expect<Cell.Description<Shape>['ioCells']>().type.toBe<typeof Cell.IO_CELLS>()
   })
 
-  it('Should_CarryOrderedPhaseRecords_When_ReadingALayer', () => {
-    expect<Cell.Description<Shape>['layers'][number]['phases']>().type.toBe<
-      readonly Cell.Phase<Shape>[]
-    >()
+  it('Should_CarryOrderedPhaseRecords_When_ReadingTheDescription', () => {
+    expect<Cell.Description<Shape>['phases']>().type.toBe<readonly Cell.Phase<Shape>[]>()
+  })
+
+  it('Should_RejectTheDeletedBagKey_When_DescriptionLiteralCarriesOne', () => {
+    // The literal is otherwise a legal description; only the dead key makes it one, and
+    // the recovered value still equals the description shape.
+    const literal: Cell.Description<Shape> = {
+      module: Cell.DESCRIPTION_MODULE,
+      ioCells: Cell.IO_CELLS,
+      phases: [],
+      // @ts-expect-error: Object literal may only specify known properties, and 'layers' does not exist in type 'Description<Shape>'
+      layers: [],
+    }
+    expect(literal).type.toBe<Cell.Description<Shape>>()
   })
 
   it('Should_CarryKindAndConvention_When_ReadingAPhaseRecord', () => {
