@@ -349,14 +349,12 @@ const readMembers = async (runs: readonly DryRun[]): Promise<readonly WorkspaceM
 const extractBumpNames = (content: string): readonly string[] => {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/m)
   if (!match) return []
-  const names: string[] = []
+  const names = new Set<string>()
   for (const line of match[1].split(/\r?\n/)) {
-    const parsed = line.match(/^\s*["']?([^"'\s:]+)["']?\s*:\s*(none|patch|minor|major)\s*$/i)
-    if (parsed) names.push(parsed[1])
+    const parsed = line.match(/^\s*["']?([^"'\s:]+)["']?\s*:\s*([^#\s][^#]*?)\s*(?:#.*)?$/)
+    if (parsed) names.add(parsed[1])
   }
-  const deduped: Record<string, true> = {}
-  for (const name of names) deduped[name] = true
-  return Object.keys(deduped)
+  return [...names]
 }
 
 type LivenessViolation = {
@@ -373,8 +371,8 @@ const listPendingChangesetPaths = async (): Promise<readonly string[]> => {
       if (entry.name === 'README.md') continue
       out.push(`.changeset/${entry.name}`)
     }
-  } catch {
-    return []
+  } catch (error) {
+    throw new Error(`cannot enumerate .changeset — refusing the empty verdict (fail closed): ${error}`)
   }
   return out.sort()
 }
@@ -383,13 +381,12 @@ const livenessViolations = (
   members: readonly WorkspaceMember[],
   pending: readonly { path: string; content: string }[],
 ): readonly LivenessViolation[] => {
-  const memberNames: Record<string, true> = {}
-  for (const m of members) memberNames[m.name] = true
+  const memberNames = new Set(members.map((m) => m.name))
   const violations: LivenessViolation[] = []
   for (const { path, content } of pending) {
     if (path === '.changeset/README.md') continue
     for (const pkg of extractBumpNames(content)) {
-      if (!memberNames[pkg]) violations.push({ path, pkg })
+      if (!memberNames.has(pkg)) violations.push({ path, pkg })
     }
   }
   violations.sort((a, b) => a.path.localeCompare(b.path) || a.pkg.localeCompare(b.pkg))
@@ -460,11 +457,12 @@ const main = async (baseArg: string | undefined): Promise<number> => {
     changesets,
   })
 
-  const pendingPaths = await listPendingChangesetPaths()
-  const pendingContents = await Promise.all(
-    pendingPaths.map((path) => Deno.readTextFile(path).catch(() => '')),
+  const pending = await Promise.all(
+    (await listPendingChangesetPaths()).map(async (path) => ({
+      path,
+      content: await Deno.readTextFile(path).catch(() => ''),
+    })),
   )
-  const pending = pendingPaths.map((path, index) => ({ path, content: pendingContents[index] }))
   const liveViolations = livenessViolations(members, pending)
   if (liveViolations.length > 0) reportLivenessViolations(liveViolations)
 
