@@ -2,6 +2,7 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { calleeRootName, cellOf } from './cell.js'
 import {
+  COMPOSER_NAME,
   DESCRIPTION_NAMESPACE,
   IO_CELLS,
   IO_IN_PHASE_BODY_ACTUAL,
@@ -65,7 +66,7 @@ export const noIoInPhaseBodies = defineRule({
      * The closure branch follows the local binding to its declaration in the same
      * file; a helper already visited is not re-walked, so mutual recursion terminates.
      */
-    const reportIoInBody = (body: unknown, visited: ReadonlySet<LocalHelper>): void => {
+    const reportIoInBody = (body: unknown, visited: ReadonlySet<unknown>): void => {
       // No early return on an empty `ioNames`. It would be a pure optimisation — every branch below
       // already ends in a membership test that cannot match — and a branch no observation can
       // distinguish is a mutant no test can kill (OX-MG1 asks for the restructure, not the ignore).
@@ -92,6 +93,38 @@ export const noIoInPhaseBodies = defineRule({
         next.add(helper)
         reportIoInBody(helper, next)
       })
+    }
+    /**
+     * `Cell.layer({ decode, ... })` carries the same pure phase bodies the chained calls
+     * carry, as spec properties instead of call arguments. The composer name is walked off
+     * the vocabulary; the property values are walked with the same inline-or-by-reference
+     * policy the chained branch applies, so a spec-authored description is judged identically.
+     */
+    const specPurePhaseBodiesOf = (node: ESTree.CallExpression): unknown[] => {
+      const callee = node.callee
+      if (callee.type !== 'MemberExpression') return []
+      const object = callee.object
+      const property = callee.property
+      if (object.type !== 'Identifier' || !descriptionNamespaces.has(object.name)) return []
+      if (property.type !== 'Identifier' || property.name !== COMPOSER_NAME) return []
+      const spec = node.arguments[0]
+      if (spec === undefined || spec.type !== 'ObjectExpression') return []
+      const bodies: (ESTree.Expression | LocalHelper)[] = []
+      for (const member of spec.properties) {
+        if (member.type !== 'Property') continue
+        const key = member.key
+        if (key.type !== 'Identifier') continue
+        if (!PURE_PHASE_NAMES.some((phase) => phase === key.name)) continue
+        const value = member.value
+        if (value.type === 'ArrowFunctionExpression' || value.type === 'FunctionExpression') {
+          bodies.push(value)
+          continue
+        }
+        if (value.type !== 'Identifier') continue
+        const helper = localHelpers.get(value.name)
+        if (helper !== undefined) bodies.push(helper)
+      }
+      return bodies
     }
 
     /**
@@ -159,6 +192,11 @@ export const noIoInPhaseBodies = defineRule({
         }
       },
       CallExpression(node: ESTree.CallExpression) {
+        const specBodies = specPurePhaseBodiesOf(node)
+        for (const body of specBodies) {
+          reportIoInBody(body, new Set([body]))
+        }
+        if (specBodies.length > 0) return
         if (purePhaseNameOf(node.callee, descriptionNamespaces) === null) return
         for (const argument of node.arguments) {
           if (argument.type === 'ArrowFunctionExpression' || argument.type === 'FunctionExpression') {

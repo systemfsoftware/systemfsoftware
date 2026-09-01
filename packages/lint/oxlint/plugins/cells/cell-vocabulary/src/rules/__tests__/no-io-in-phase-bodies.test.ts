@@ -135,8 +135,65 @@ const Other = Cell
 const description = Other.decode((raw) => raw)`,
       filename: 'confirm-order.executor.ts',
     },
+    {
+      name: 'Should_ReportNothing_When_LayerSpecPureBodiesOnlyTransform',
+      code: `${CELL_IMPORT}
+${EFFECT_IMPORT}
+const description = Cell.layer({
+  read: (cmd) => Effect.succeed(cmd),
+  decode: (raw) => ({ ...raw, seen: true }),
+  decide: (decoded) => decoded,
+  encode: (outcome) => outcome,
+  write: (outcome) => Effect.succeed(outcome),
+})`,
+      filename: 'confirm-order.executor.ts',
+    },
+    {
+      name: 'Should_ReportNothing_When_LayerSpecImpureBodyPerformsIo',
+      code: `${CELL_IMPORT}
+${STORE_IMPORT}
+${EFFECT_IMPORT}
+const description = Cell.layer({
+  read: (cmd) => Effect.succeed(findOrderRow(cmd.id)),
+  decode: (raw) => raw,
+  decide: (decoded) => decoded,
+  encode: (outcome) => outcome,
+  write: (outcome) => Effect.succeed(findOrderRow(outcome.id)),
+})`,
+      filename: 'confirm-order.executor.ts',
+    },
   ],
   invalid: [
+    {
+      name: 'Should_Report_IoCellCall_When_LayerSpecPureBodyCallsIt',
+      code: `${CELL_IMPORT}
+${STORE_IMPORT}
+${EFFECT_IMPORT}
+const description = Cell.layer({
+  read: (cmd) => Effect.succeed(cmd),
+  decode: (raw) => ({ id: findOrderRow(raw.id) }),
+  decide: (decoded) => decoded,
+  encode: (outcome) => outcome,
+  write: (outcome) => Effect.succeed(outcome),
+})`,
+      filename: 'confirm-order.executor.ts',
+      errors: [error('findOrderRow')],
+    },
+    {
+      name: 'Should_Report_IoCallInsideHelper_When_LayerSpecPureBodyHandsOverTheHelper',
+      code: `${CELL_IMPORT}
+${STORE_IMPORT}
+const loadRow = (id) => findOrderRow(id)
+const description = Cell.layer({
+  read: (cmd) => cmd,
+  decode: loadRow,
+  decide: (decoded) => decoded,
+  encode: (outcome) => outcome,
+  write: (outcome) => outcome,
+})`,
+      filename: 'confirm-order.executor.ts',
+      errors: [error('findOrderRow')],
+    },
     {
       name: 'Should_Report_IoCellCall_When_PurePhaseBodyCallsIt',
       code: `${CELL_IMPORT}

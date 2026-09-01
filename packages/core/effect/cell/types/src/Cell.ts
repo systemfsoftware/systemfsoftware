@@ -312,6 +312,7 @@ export interface Vocabulary {
   readonly phases: readonly PhaseFact[]
   readonly byKind: Readonly<Record<PhaseFact['kind'], readonly PhaseFact['name'][]>>
   readonly applier: 'apply'
+  readonly composer: 'layer'
 }
 
 interface CanonicalPhases extends Phases {
@@ -342,4 +343,5 @@ export const vocabulary: Vocabulary = {
     impure: WALKED_PHASES.filter((phase) => phase.kind === 'impure').map((phase) => phase.name),
   },
   applier: 'apply',
+  composer: 'layer',
 }

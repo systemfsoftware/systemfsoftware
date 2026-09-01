@@ -31,6 +31,8 @@ export const IO_CELLS: readonly string[] = Cell.vocabulary.ioCells.cells
 /** The non-cell module sources whose calls are I/O, walked off the vocabulary. */
 export const IO_SOURCES: readonly string[] = Cell.vocabulary.ioCells.sources
 
+export const COMPOSER_NAME: string = Cell.vocabulary.composer
+
 // A derivation that comes back empty is not a permissive rule, it is a disarmed one: every
 // predicate below is set membership, so an empty set matches nothing and the rule reports on
 // no file while still loading, still registered, still green. Refusing to load is the only
@@ -45,6 +47,11 @@ if (PURE_PHASE_NAMES.length === 0) {
 if (IO_CELLS.length === 0 && IO_SOURCES.length === 0) {
   throw new Error(
     `${DESCRIPTION_NAMESPACE}: the walked I/O classification is empty, so this rule would decide nothing`,
+  )
+}
+if (COMPOSER_NAME.length === 0) {
+  throw new Error(
+    `${DESCRIPTION_NAMESPACE}: the walked vocabulary names no composing constructor, so spec-object descriptions go unrecognised`,
   )
 }
 
