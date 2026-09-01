@@ -73,3 +73,37 @@ export const pipeRootOf = (
   }
   return null
 }
+
+export const collectNamespaceBindings = (
+  node: ESTree.ImportDeclaration,
+  exportedName: string,
+  out: Set<string>,
+): void => {
+  for (const specifier of node.specifiers) {
+    if (specifier.type === 'ImportNamespaceSpecifier') {
+      out.add(specifier.local.name)
+    } else if (
+      specifier.type === 'ImportSpecifier' &&
+      specifier.imported.type === 'Identifier' &&
+      specifier.imported.name === exportedName
+    ) {
+      out.add(specifier.local.name)
+    }
+  }
+}
+
+export const collectNamedImportBindings = (
+  node: ESTree.ImportDeclaration,
+  importedName: string,
+  out: Set<string>,
+): void => {
+  for (const specifier of node.specifiers) {
+    if (
+      specifier.type === 'ImportSpecifier' &&
+      specifier.imported.type === 'Identifier' &&
+      specifier.imported.name === importedName
+    ) {
+      out.add(specifier.local.name)
+    }
+  }
+}

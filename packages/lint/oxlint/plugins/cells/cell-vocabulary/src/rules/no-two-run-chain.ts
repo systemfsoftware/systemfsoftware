@@ -1,6 +1,13 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { isCellMemberCall, isPipeCall, pipeRootOf } from './cell.js'
+import {
+  calleeRootName,
+  collectNamedImportBindings,
+  collectNamespaceBindings,
+  isCellMemberCall,
+  isPipeCall,
+  pipeRootOf,
+} from './cell.js'
 import {
   CONTINUATION_NAMES,
   DESCRIPTION_NAMESPACE,
@@ -31,6 +38,7 @@ export const noTwoRunChain = defineRule({
     const descriptionNamespaces = new Set<string>()
     const effectNamespaces = new Set<string>()
     const pipeNames = new Set<string>()
+    const continuationNames = new Set<string>(CONTINUATION_NAMES)
 
     const scopes: Set<string>[] = []
     const continuationCallbacks = new Set<FunctionNode>()
@@ -67,14 +75,6 @@ export const noTwoRunChain = defineRule({
       }
     }
 
-    const rootIdentifierOf = (node: ESTree.Node): string | null => {
-      if (node.type === 'Identifier') return node.name
-      if (node.type === 'MemberExpression' && !node.computed) return rootIdentifierOf(node.object)
-      return null
-    }
-
-    const isPipe = (node: ESTree.Node): boolean => isPipeCall(node, pipeNames, PIPE_NAME)
-
     const isCurriedRunStep = (node: ESTree.Node): boolean =>
       node.type === 'CallExpression' && node.arguments.length === 1 && isRunCall(node)
 
@@ -84,8 +84,8 @@ export const noTwoRunChain = defineRule({
       }
       if (node.type !== 'CallExpression') return false
       if (isRunCall(node)) return true
-      if (!isPipe(node)) return false
-      const last = node.arguments.at(-1)
+      if (!isPipeCall(node, pipeNames, PIPE_NAME)) return false
+      const last = node.arguments[node.arguments.length - 1]
       return last !== undefined && isCurriedRunStep(last)
     }
 
@@ -98,7 +98,7 @@ export const noTwoRunChain = defineRule({
       return object.type === 'Identifier' &&
         effectNamespaces.has(object.name) &&
         property.type === 'Identifier' &&
-        CONTINUATION_NAMES.some((name) => name === property.name)
+        continuationNames.has(property.name)
     }
 
     const inputOf = (call: ESTree.CallExpression): ESTree.Node | null => {
@@ -110,40 +110,16 @@ export const noTwoRunChain = defineRule({
     const classifyImport = (node: ESTree.ImportDeclaration): void => {
       const source = String(node.source.value)
       if (source === MODULE_SOURCE) {
-        for (const specifier of node.specifiers) {
-          if (specifier.type === 'ImportNamespaceSpecifier') {
-            descriptionNamespaces.add(specifier.local.name)
-          } else if (
-            specifier.type === 'ImportSpecifier' &&
-            specifier.imported.type === 'Identifier' &&
-            specifier.imported.name === DESCRIPTION_NAMESPACE
-          ) {
-            descriptionNamespaces.add(specifier.local.name)
-          }
-        }
+        collectNamespaceBindings(node, DESCRIPTION_NAMESPACE, descriptionNamespaces)
         return
       }
-      if (EFFECT_SOURCES.some((effectSource) => effectSource === source)) {
-        for (const specifier of node.specifiers) {
-          if (specifier.type === 'ImportNamespaceSpecifier') {
-            effectNamespaces.add(specifier.local.name)
-          } else if (specifier.type === 'ImportSpecifier' && specifier.imported.type === 'Identifier') {
-            if (specifier.imported.name === EFFECT_NAMESPACE) effectNamespaces.add(specifier.local.name)
-            if (specifier.imported.name === PIPE_NAME) pipeNames.add(specifier.local.name)
-          }
-        }
+      if (EFFECT_SOURCES.includes(source)) {
+        collectNamespaceBindings(node, EFFECT_NAMESPACE, effectNamespaces)
+        collectNamedImportBindings(node, PIPE_NAME, pipeNames)
         return
       }
-      if (PIPE_SOURCES.some((pipeSource) => pipeSource === source)) {
-        for (const specifier of node.specifiers) {
-          if (
-            specifier.type === 'ImportSpecifier' &&
-            specifier.imported.type === 'Identifier' &&
-            specifier.imported.name === PIPE_NAME
-          ) {
-            pipeNames.add(specifier.local.name)
-          }
-        }
+      if (PIPE_SOURCES.includes(source)) {
+        collectNamedImportBindings(node, PIPE_NAME, pipeNames)
       }
     }
 
@@ -155,6 +131,10 @@ export const noTwoRunChain = defineRule({
       scopes.push(scope)
     }
 
+    const exitFunction = (): void => {
+      scopes.pop()
+    }
+
     return {
       Program(node: ESTree.Program) {
         for (const statement of node.body) {
@@ -164,30 +144,27 @@ export const noTwoRunChain = defineRule({
       ArrowFunctionExpression: enterFunction,
       FunctionDeclaration: enterFunction,
       FunctionExpression: enterFunction,
-      'ArrowFunctionExpression:exit': (): void => {
-        scopes.pop()
-      },
-      'FunctionDeclaration:exit': (): void => {
-        scopes.pop()
-      },
-      'FunctionExpression:exit': (): void => {
-        scopes.pop()
-      },
+      'ArrowFunctionExpression:exit': exitFunction,
+      'FunctionDeclaration:exit': exitFunction,
+      'FunctionExpression:exit': exitFunction,
       VariableDeclarator(node: ESTree.VariableDeclarator) {
+        if (descriptionNamespaces.size === 0) return
         const scope = scopes.at(-1)
         if (scope === undefined) return
         if (node.init !== null && runSuccessOf(node.init)) collectPatternIdentifiers(node.id, scope)
       },
       AssignmentExpression(node: ESTree.AssignmentExpression) {
+        if (scopes.length === 0) return
         const scope = scopes.at(-1)
         if (scope !== undefined && node.left.type === 'Identifier') scope.delete(node.left.name)
       },
       CallExpression(node: ESTree.CallExpression) {
+        if (descriptionNamespaces.size === 0) return
         if (isRunCall(node)) {
           const scope = scopes.at(-1)
           if (scope !== undefined) {
             const input = inputOf(node)
-            const root = input === null ? null : rootIdentifierOf(input)
+            const root = input === null ? null : calleeRootName(input)
             if (root !== null && scope.has(root)) {
               context.report({
                 node,
@@ -213,7 +190,7 @@ export const noTwoRunChain = defineRule({
           }
           return
         }
-        if (isPipe(node)) {
+        if (isPipeCall(node, pipeNames, PIPE_NAME)) {
           const root = pipeRootOf(node, pipeNames, PIPE_NAME)
           if (root !== null && isRunCall(root)) {
             for (const step of node.arguments) {

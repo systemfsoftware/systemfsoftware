@@ -54,11 +54,11 @@ const describeOrders = (): OrderPair => {
 
 const runBoth = (orders: OrderPair) =>
   Effect.gen(function*() {
-    const response = yield* Cell.run(
+    const firstResponse = yield* Cell.run(
       Cell.andThen(orders.first, orders.second),
       new OrderRequest({ id: 'initial-request' }),
     )
-    return { firstResponse: response, recorded: orders.recorded, trace: orders.trace }
+    return { firstResponse, recorded: orders.recorded, trace: orders.trace }
   })
 
 const Feature = makeFeature({ it, layer })
