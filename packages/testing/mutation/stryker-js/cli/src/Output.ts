@@ -7,9 +7,8 @@
  * Output.workflow.ts.
  */
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { generateRunId } from '@systemfsoftware/stryker-js-platform-node'
-import type { ResolvedMode } from '@systemfsoftware/stryker-js-platform-node'
-import { buildVerdictEnvelope, defaultOptions, strykerVersion } from '@systemfsoftware/stryker-js-platform-node'
+import { buildVerdictEnvelope, defaultOptions, generateRunId, strykerVersion } from '@systemfsoftware/stryker-js-engine'
+import type { ResolvedMode } from '@systemfsoftware/stryker-js-engine'
 import { schema } from '@systemfsoftware/stryker-js/Mutant'
 import {
   Heartbeat,

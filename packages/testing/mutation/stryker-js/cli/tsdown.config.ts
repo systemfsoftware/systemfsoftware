@@ -8,9 +8,11 @@ export default defineConfig({
   clean: true,
   entry: {
     main: './src/main.ts',
+    'workers/checker-worker': './src/workers/Checker.worker.ts',
+    'workers/child-process-test-runner-worker': './src/workers/child-process-test-runner-worker.ts',
   },
   exports: {
-    exclude: ['main'],
+    exclude: ['main', 'workers/checker-worker', 'workers/child-process-test-runner-worker'],
     bin: { stryker: './src/main.ts' },
   },
   deps: {

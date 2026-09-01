@@ -1,9 +1,9 @@
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { nodeModuleLayer } from '@systemfsoftware/stryker-js-platform-node'
 import { strykerPlugins } from '@systemfsoftware/stryker-js-typescript-checker'
 import { Checker } from '@systemfsoftware/stryker-js/Checker'
+import { Module } from '@systemfsoftware/stryker-js/Module'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
@@ -23,6 +23,36 @@ const fixtureRoot = Effect.gen(function*() {
 }).pipe(Effect.orDie)
 
 const Feature = makeFeature({ it, layer })
+
+const nodeModuleLayer = Layer.effect(
+  Module,
+  Effect.sync(() => {
+    const nodeModule: {
+      createRequire(
+        filename?: string | URL,
+      ): {
+        (request: string): unknown
+        resolve(request: string, options?: { paths?: string[] }): string
+      }
+      isBuiltin(moduleName: string): boolean
+    } = process.getBuiltinModule('node:module')
+    return {
+      createRequire: (filename: string | URL) => {
+        const requireFn = nodeModule.createRequire(filename)
+        const wrapped = Object.assign((request: string) => requireFn(request), {
+          resolve: (request: string, options?: { paths?: readonly string[] }) => {
+            if (options === undefined) {
+              return requireFn.resolve(request)
+            }
+            return requireFn.resolve(request, { paths: [...options.paths ?? []] })
+          },
+        })
+        return wrapped
+      },
+      isBuiltin: (moduleName: string) => nodeModule.isBuiltin(moduleName),
+    }
+  }),
+)
 
 const host = Layer.mergeAll(
   NodeFileSystem.layer,

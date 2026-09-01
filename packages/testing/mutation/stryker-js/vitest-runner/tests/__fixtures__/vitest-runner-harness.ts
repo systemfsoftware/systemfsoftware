@@ -7,7 +7,7 @@ import { Context, Effect } from 'effect'
 import * as Layer from 'effect/Layer'
 import type { Scope } from 'effect/Scope'
 
-import { nodeModuleLayer } from '@systemfsoftware/stryker-js-platform-node'
+import { Module } from '@systemfsoftware/stryker-js/Module'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { TestRunner } from '@systemfsoftware/stryker-js/TestRunner'
 import { makeVitestRunnerLayer } from '../../src/Runner.js'
@@ -20,6 +20,40 @@ import {
 
 import { TempTestDirectorySandbox } from './temp-test-directory-sandbox.js'
 
+/**
+ * Test-double of the Node `Module` adapter via `process.getBuiltinModule`:
+ * a runtime call, so no host import and the import ban holds. The harness
+ * loads real plugin modules, so a fixed-paths fake would not do.
+ */
+export const nodeModuleLayer = Layer.effect(
+  Module,
+  Effect.sync(() => {
+    const nodeModule: {
+      createRequire(
+        filename: string | URL,
+      ): {
+        (request: string): unknown
+        resolve(request: string, options?: { paths?: readonly string[] }): string
+      }
+      isBuiltin(moduleName: string): boolean
+    } = process.getBuiltinModule('node:module')
+    return {
+      createRequire: (filename: string | URL) => {
+        const requireFn = nodeModule.createRequire(filename)
+        const wrapped = Object.assign((request: string) => requireFn(request), {
+          resolve: (request: string, options?: { paths?: readonly string[] }) => {
+            if (options === undefined) {
+              return requireFn.resolve(request)
+            }
+            return requireFn.resolve(request, { paths: [...options.paths ?? []] })
+          },
+        })
+        return wrapped
+      },
+      isBuiltin: (moduleName: string) => nodeModule.isBuiltin(moduleName),
+    }
+  }),
+)
 export const resolvePath = (base: string, ...segments: ReadonlyArray<string>): string => path.resolve(base, ...segments)
 
 export const fileExists = (file: string): Promise<boolean> =>

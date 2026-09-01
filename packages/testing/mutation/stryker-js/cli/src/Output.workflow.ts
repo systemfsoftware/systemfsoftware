@@ -2,7 +2,7 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { type ResolvedMode } from '@systemfsoftware/stryker-js-platform-node'
+import type { ResolvedMode } from '@systemfsoftware/stryker-js-engine'
 
 const TOOL_VARIABLES = ['CLAUDECODE', 'CODEX_SANDBOX'] as const
 

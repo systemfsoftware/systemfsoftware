@@ -4,7 +4,7 @@
 
 ## Why this package exists
 
-The `stryker` bin's home. The engine (`@systemfsoftware/stryker-js-platform-node`) runs the mutation test; this package owns the terminal-facing half — NDJSON run-event framing on stdout, mode and colour detection, signal handling, drain-before-exit, and the classed exit code — and reaches the engine through the injected run-event sink. The bin name is `stryker`, unchanged from the engine's, so consumer script text does not move.
+The `stryker` bin's home. The engine (`@systemfsoftware/stryker-js-engine`) runs the mutation test; this package owns the terminal-facing half — NDJSON run-event framing on stdout, mode and colour detection, signal handling, drain-before-exit, and the classed exit code — and reaches the engine through the injected run-event sink. The bin name is `stryker`, unchanged from the engine's, so consumer script text does not move.
 
 ## Bin and entry point
 

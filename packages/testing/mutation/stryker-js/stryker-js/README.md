@@ -2,7 +2,7 @@
 
 The mutation-testing language — the plugin kinds, capability ports, and schemas
 a mutation run is built from, with no platform. The Node host that runs a
-mutation test lives in `@systemfsoftware/stryker-js-platform-node`.
+mutation test lives in `@systemfsoftware/stryker-js-engine`.
 
 ## Install
 
