@@ -46,19 +46,13 @@ declare const decidePhase: Cell.DecidePhase<Shape>
 declare const encodePhase: Cell.EncodePhase<Shape>
 declare const writePhase: Cell.WritePhase<Shape>
 
-// Stage fixtures for the typed-variable call shape. The measured finding is that a
-// stage reached through a variable and a stage reached inline are two distinct call
-// shapes, and a design can reject one while admitting the other.
 declare const readStage: Cell.ReadDone<Shape>
 declare const decodeStage: Cell.DecodeDone<Shape>
 declare const decideStage: Cell.DecideDone<Shape>
 
-// An effect handed to each pure slot. A pure slot's return type is a plain value or a
-// `Result`, so an effect in that position fails assignability with no lint rule involved.
 declare const decodeReturningEffect: (raw: Raw) => Effect<Decoded, DecodeErr, never>
 declare const decideReturningEffect: (decoded: Decoded) => Effect<Decision, Refusal, never>
 declare const encodeReturningEffect: (outcome: Result<Decision, Refusal>) => Effect<Output, never, never>
-// A read whose interior gathers a product: fan-in, expressed as one read step.
 declare const readGatheringProduct: (command: Cmd) => Effect<Raw, never, never>
 
 describe('the order the chain decides', () => {
@@ -125,8 +119,6 @@ describe('the shapes that stay legal', () => {
   })
 
   it('Should_Compile_When_DescriptionEndsAtEncodeWithNoWrite', () => {
-    // A query: what it shapes *is* its response, so there is no terminal write phase and
-    // the pairwise order constraint has no adjacent pair left to check.
     expect(
       Cell.encode(Cell.decide(Cell.decode(Cell.read(readPhase), decodePhase), decidePhase), encodePhase),
     ).type.toBe<Cell.EncodeDone<Shape>>()
@@ -137,7 +129,6 @@ describe('the shapes that stay legal', () => {
       Cell.encode(Cell.decide(Cell.decode(Cell.read(readPhase), decodePhase), decidePhase), encodePhase),
       writePhase,
     )
-    // the second-layer opening form of read is deleted; read takes exactly one argument
     // @ts-expect-error: Expected 1 arguments, but got 2
     Cell.read(readPhase, someWriteDone)
   })
@@ -153,9 +144,6 @@ describe('the decision error is an outcome, not a fault', () => {
   })
 })
 
-// A bag whose `decode` cannot fail but whose `decide` refuses. This is the sharpest test of
-// the two `Left` rules: `Refusal` must be absent from the derived error channel, because a
-// decide Left travels forward as a value and is never yielded as a failure.
 interface Infallible extends Cell.Phases {
   readonly command: Cmd
   readonly raw: Raw
@@ -189,10 +177,6 @@ describe('the channels the interpreter derives', () => {
     expect(Cell.apply(infallible, command)).type.toBe<Effect<boolean, never, never>>()
   })
 
-  // The pin, from both sides. A phase body that reaches for a service is refused by the phase
-  // type itself, so it is refused under a generic stage too — which is what the bag members
-  // this replaced could not do, because inside a body generic over `Phases` the compiler
-  // cannot see what the lambda required.
   it('Should_RejectReadPhase_When_BodyRequiresAService', () => {
     expect<(command: Cmd) => Effect<Raw, never, Db>>().type.not.toBeAssignableTo<
       Cell.ReadPhase<Shape>
@@ -224,7 +208,6 @@ describe('the channels the interpreter derives', () => {
   })
 
   it('Should_RequireAWrittenDescription_When_Applying', () => {
-    // `apply` takes `WriteDone<P>`; a read-only description never reaches it.
     expect(Cell.read(readPhase)).type.not.toBeAssignableTo<Cell.WriteDone<Shape>>()
   })
 })
@@ -264,8 +247,6 @@ describe('the description value is a foldable record', () => {
     expect<Cell.EncodeDone<Shape>>().type.toBeAssignableTo<Cell.Description<Shape>>()
   })
 
-  // The module and I/O-cell classification are closed vocabularies this module declares,
-  // so asserting them here cannot make a reclassification fail in a file outside it.
   it('Should_CarryModuleAndIoCells_When_ReadingTheDescriptionRoot', () => {
     expect<Cell.Description<Shape>['module']>().type.toBe<typeof Cell.DESCRIPTION_MODULE>()
     expect<Cell.Description<Shape>['ioCells']>().type.toBe<typeof Cell.IO_CELLS>()
@@ -276,8 +257,6 @@ describe('the description value is a foldable record', () => {
   })
 
   it('Should_RejectTheDeletedBagKey_When_DescriptionLiteralCarriesOne', () => {
-    // The literal is otherwise a legal description; only the dead key makes it one, and
-    // the recovered value still equals the description shape.
     const literal: Cell.Description<Shape> = {
       module: Cell.DESCRIPTION_MODULE,
       ioCells: Cell.IO_CELLS,
@@ -289,11 +268,6 @@ describe('the description value is a foldable record', () => {
   })
 
   it('Should_CarryKindAndConvention_When_ReadingAPhaseRecord', () => {
-    // `name` is not asserted here. A literal union of the names would be a second
-    // declaration of axis 1, and it would make adding a phase fail in this file rather
-    // than in the module that owns the name. `kind` and `convention` stay: they are closed
-    // vocabularies this module declares, not per-phase facts, so a new phase does not
-    // extend them.
     expect<Cell.Phase<Shape>['kind']>().type.toBe<'pure' | 'impure'>()
     expect<Cell.Phase<Shape>['convention']>().type.toBe<Cell.Convention>()
   })
@@ -304,10 +278,6 @@ describe('what the write receives', () => {
     expect<Parameters<Cell.WritePhase<Shape>>>().type.toBe<[output: Output, raw: Raw]>()
   })
 
-  // The reason the argument is second and not first. A write authored before the raw
-  // channel existed declares one parameter, and TypeScript admits a shorter function
-  // wherever a longer signature is expected — so this assertion is what says the addition
-  // is not a break for any write already written.
   it('Should_StillAdmitAUnaryWrite_When_TheWriteIgnoresTheRaw', () => {
     expect<(output: Output) => Effect<void, never, never>>().type.toBeAssignableTo<
       Cell.WritePhase<Shape>
@@ -319,8 +289,7 @@ describe('what the write receives', () => {
       .toBeAssignableTo<Cell.WritePhase<Shape>>()
   })
 })
-// The short form's bag, where decode and encode are identities: decoded IS raw and
-// output IS the decide outcome, so the write's first parameter is the `Result`.
+
 interface Query extends Cell.Phases {
   readonly command: Cmd
   readonly raw: Raw
@@ -359,7 +328,6 @@ describe('the layer spec sugar', () => {
   })
 
   it('Should_RefuseTheSpec_When_TheWriteCannotReceiveTheOutcome', () => {
-    // Positive control: the same spec shape with a write that receives the outcome.
     expect(Cell.layer).type.toBeCallableWith({ read: readQuery, decide: decideQuery, write: writeQuery })
 
     expect(Cell.layer).type.not.toBeCallableWith({
@@ -368,14 +336,11 @@ describe('the layer spec sugar', () => {
       write: writeTakingEncodedOutput,
     })
 
-    // A variable-held spec is refused identically: the refusal is assignability, not
-    // excess-property checking, so it does not vanish once the literal is erased.
     const spec = { read: readQuery, decide: decideQuery, write: writeTakingEncodedOutput }
     expect(Cell.layer).type.not.toBeCallableWith(spec)
   })
 
   it('Should_RefuseTheSpec_When_DecodeArrivesWithoutEncode', () => {
-    // Positive control: decode and encode supplied together are admitted.
     expect(Cell.layer).type.toBeCallableWith({
       read: readPhase,
       decode: decodePhase,

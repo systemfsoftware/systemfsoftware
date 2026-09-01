@@ -30,11 +30,6 @@ interface Malformed {
   readonly bytes: string
 }
 
-/**
- * The write's destination, as a port. A claim that a write did *not* run is only
- * checkable against something that records the writes that did, and a recording port keeps
- * that observation on the output rather than on interaction history.
- */
 class Ledger extends Context.Service<Ledger, {
   readonly append: (line: string) => Effect.Effect<void>
   readonly lines: Effect.Effect<readonly string[]>
@@ -42,12 +37,6 @@ class Ledger extends Context.Service<Ledger, {
 
 type LedgerService = Ledger['Service']
 
-/**
- * `append` suspends before it records. A real ledger is asynchronous, and without a
- * suspension point the phases are indistinguishable from concurrent ones: a fully
- * synchronous phase never yields its fiber, so an unbounded fold happens to interleave in
- * order anyway and the ordering scenario cannot fail on a bug it should catch.
- */
 const LedgerRecording = Layer.sync(Ledger, () => {
   const written: string[] = []
   return {
@@ -94,29 +83,19 @@ const makeDescription = (ledger: LedgerService) =>
     makeWrite(ledger),
   )
 
-/**
- * The same sandwich authored as a layer spec. Decode and encode are omitted, so the
- * defaults are the identities: the read returns the decision's input directly, and the
- * write's first argument is the decide outcome itself rather than an encoded output.
- */
 const makeSpecDescription = (ledger: LedgerService) =>
   Cell.layer({
     read: (command: Command) => Effect.succeed({ length: command.id.length }),
     decide: decideFixture,
-    write: (outcome) =>
-      Result.match(outcome, {
-        onFailure: (refused) => ledger.append(`refused:${refused.why}`).pipe(Effect.as(`refused:${refused.why}`)),
-        onSuccess: (admitted) =>
-          ledger.append(`admitted:${admitted.length}`).pipe(Effect.as(`admitted:${admitted.length}`)),
-      }),
+    write: (outcome) => {
+      const line = Result.match(outcome, {
+        onFailure: (refused) => `refused:${refused.why}`,
+        onSuccess: (admitted) => `admitted:${admitted.length}`,
+      })
+      return ledger.append(line).pipe(Effect.as(line))
+    },
   })
 
-/**
- * A write that reports on the description's read as well as on the encoded output. The raw
- * arrives as the write's second argument, which is the whole point of the argument: an
- * author whose write persists or reports what the read gathered needs no `let` beside the
- * description to carry it, and so needs no runtime guard for a value the fold already has.
- */
 const makeWriteRecordingRaw = (ledger: LedgerService): Cell.WritePhase<Bag> => (output, raw) =>
   ledger.append(`${output.line}<-${raw.bytes}`).pipe(Effect.as(output.line))
 
@@ -126,18 +105,12 @@ const makeDescriptionReportingItsRaw = (ledger: LedgerService) =>
     makeWriteRecordingRaw(ledger),
   )
 
-/** Stub ledger for vocabulary folds — the fold never runs the effects. */
 const stubLedger: LedgerService = {
   append: () => Effect.void,
   lines: Effect.succeed([] as readonly string[]),
 }
 const oneDescription = makeDescription(stubLedger)
 
-/**
- * The vocabulary fold a consumer performs on the description value alone: phase names,
- * kinds, declared order, the module name, and the I/O-cell classification all come
- * off the value — nothing is re-declared here except the expected assertions.
- */
 const axesOf = (description: Cell.WriteDone<Bag>) => {
   const phaseNames: string[] = []
   const phaseKinds: Record<string, 'pure' | 'impure'> = {}
@@ -255,9 +228,6 @@ Feature('Applying a phase description')
           'outcome',
           () => {
             const trace: string[] = []
-            // The declared order is what is under test, so each traced phase ignores
-            // its input: out of canonical order, a phase receives whatever the fold
-            // threaded, which is not its usual input type.
             const tracedRead: Cell.ReadPhase<Bag> = () =>
               Effect.sync(() => {
                 trace.push('read')
@@ -278,10 +248,6 @@ Feature('Applying a phase description')
                 return output.line
               })
 
-            // Hand-built description value: the phases array is the execution order, so
-            // this declared order — decode before read, decide before decode — is what
-            // the interpreter must run. The name-keyed form the interpreter replaced
-            // had no order to read, so it would have run the canonical sequence instead.
             const declared: Cell.WriteDone<Bag> = {
               'call write(output) before applying the description': true,
               module: Cell.DESCRIPTION_MODULE,
@@ -316,9 +282,6 @@ Feature('Applying a phase description')
         ),
         Then('every axis is read from the value')((s) => {
           expect(s.axes.module).toBe(Cell.DESCRIPTION_MODULE)
-          // Identity, not a second copy of the literals: this fails if the fold rebuilds the
-          // classification instead of carrying the one the constructors wrote. The values
-          // themselves are stated once, at the `IO_CELLS` declaration in the description module.
           expect(s.axes.ioCells).toBe(Cell.IO_CELLS)
           expect(s.axes.phaseNames).toEqual(['read', 'decode', 'decide', 'encode', 'write'])
           expect(s.axes.phaseKinds).toEqual({
@@ -333,13 +296,6 @@ Feature('Applying a phase description')
       ),
     )
 
-    /**
-     * `Cell.vocabulary` is folded off a canonical description at module load, and three
-     * packages outside this one now read their phase names, purity and order from it. The
-     * expected vocabulary is written out here so the derivation has something to disagree
-     * with: this fails if the canonical description stops covering a phase, if the fold
-     * drops one, or if someone replaces the fold with a literal that then drifts.
-     */
     scenario(
       'The exported vocabulary is the one the constructors build',
       Gherkin.Do.pipe(

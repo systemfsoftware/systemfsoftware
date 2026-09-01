@@ -60,12 +60,14 @@ rules:
         circular"
     dont: add a behavioural test that asserts the vocabulary's contents, or a test that
       compares the interpreter's trace against a literal phase list
-    harm: the two properties exist to catch an interpreter that reorders the declared phases,
+    harm: the properties exist to catch an interpreter that reorders the declared phases,
       skips one, runs one twice, or returns something other than the write's response; a comparison against the
       generator's own input cannot catch any of those
-    check: "`pnpm --filter @systemfsoftware/effect-cell-gen test` exits 0 with both
-      properties running, and the expectations in
-      `src/__tests__/drawn-decision.workflow.property.test.ts` read only the drawn value"
+    check: "`pnpm --filter @systemfsoftware/effect-cell-gen test` exits 0 with every
+      property running — the interpreter properties in the in-source block in
+      `src/Gen.ts`, the decide property in
+      `src/__tests__/DrawnDecision.workflow.property.test.ts` — and the expectations read
+      only the drawn value"
 ```
 
 ## Verification

@@ -42,10 +42,11 @@ const TEMPLATE = Cell.canonical.phases
 /** The phases whose convention admits a `Failure`, walked rather than listed. */
 const FAILABLE: readonly {
   readonly phaseIndex: number
+  readonly name: string
   readonly convention: 'either-fail' | 'either-pass'
 }[] = TEMPLATE.flatMap((phase, phaseIndex) =>
   phase.convention === 'either-fail' || phase.convention === 'either-pass'
-    ? [{ phaseIndex, convention: phase.convention }]
+    ? [{ phaseIndex, name: phase.name, convention: phase.convention }]
     : []
 )
 
@@ -60,18 +61,20 @@ const substituteSandwich = (
   return TEMPLATE.map((phase, phaseIndex) => {
     const convention = phase.convention
     switch (convention) {
-      case 'effect':
+      case 'effect': {
+        const observesWrite = phaseIndex === lastPhaseIndex
         return {
           ...phase,
           run: (input: number): Effect.Effect<number, never, never> =>
             Effect.sync(() => {
               trace.push(phase.name)
-              if (phaseIndex === lastPhaseIndex) {
+              if (observesWrite) {
                 writeObserved.push(input)
               }
               return response
             }),
         }
+      }
       case 'either-fail':
         return {
           ...phase,
@@ -128,7 +131,7 @@ export interface DescriptionCase {
   readonly writeObserved: readonly number[]
   readonly encodeObserved: readonly Result.Result<number, DrawnDecisionError>[]
   readonly failure: DrawnFailure | undefined
-  readonly lastResponse: number
+  readonly response: number
 }
 
 export const description: fc.Arbitrary<DescriptionCase> = fc
@@ -148,13 +151,9 @@ export const description: fc.Arbitrary<DescriptionCase> = fc
           if (chosen === undefined) {
             throw new Error('effect-cell-gen: a drawn failing index had no matching phase')
           }
-          const phase = TEMPLATE[chosen.phaseIndex]
-          if (phase === undefined) {
-            throw new Error('effect-cell-gen: a drawn phase index had no phase record')
-          }
           return {
             phaseIndex: chosen.phaseIndex,
-            name: phase.name,
+            name: chosen.name,
             convention: chosen.convention,
             error,
           }
@@ -180,7 +179,7 @@ export const description: fc.Arbitrary<DescriptionCase> = fc
         writeObserved,
         encodeObserved,
         failure,
-        lastResponse: drawn.writeResponse,
+        response: drawn.writeResponse,
       }
     })
   })
@@ -221,7 +220,7 @@ if (import.meta.vitest !== void 0) {
           return true
         }
         const response = yield* Cell.apply(drawn.description, drawn.command)
-        return response === drawn.lastResponse
+        return response === drawn.response
       }),
   )
 
@@ -299,7 +298,7 @@ if (import.meta.vitest !== void 0) {
         }
         const encodeObserved = drawn.encodeObserved[0]
         return (
-          outcome.success === drawn.lastResponse &&
+          outcome.success === drawn.response &&
           encodeObserved !== undefined &&
           Result.isFailure(encodeObserved) &&
           encodeObserved.failure.code === failure.error &&

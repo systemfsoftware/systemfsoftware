@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/effect-cell-types`
 
-> **Delta**: Contracts for the cell types other packages build against — `Workflow<Command, Decision, Error>` with its two `never`-channel markers and its `make`, the `Cell` phase types with their chaining constructors and the `apply` interpreter, and `Policy`. Root AGENTS.md governs.
+> **Delta**: Contracts for the cell types other packages build against — `Workflow<Command, Decision, Error>` with its two `never`-channel markers and its `make`, the `Cell` phase types with their chaining constructors and the `Cell.layer` spec sugar, the `apply` interpreter, and `Policy`. Root AGENTS.md governs.
 
 ## What makes this package different
 
