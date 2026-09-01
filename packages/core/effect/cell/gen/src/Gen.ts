@@ -225,6 +225,47 @@ if (import.meta.vitest !== void 0) {
       }),
   )
 
+  // The sugar composes the public chain: a description rebuilt from a draw's own phase
+  // runs via `Cell.layer` declares the same order, and applying both answers the same —
+  // including the failure draws, since both applications run the same substituted runs.
+  it.effect.prop(
+    '∀d_LayerSpec_≡Chain',
+    [description],
+    ([drawn]) =>
+      Effect.gen(function*() {
+        const [readNode, decodeNode, decideNode, encodeNode, writeNode] = drawn.description.phases
+        if (
+          readNode?.name !== 'read' || decodeNode?.name !== 'decode' || decideNode?.name !== 'decide' ||
+          encodeNode?.name !== 'encode' || writeNode?.name !== 'write'
+        ) {
+          return false
+        }
+        const viaSugar = Cell.layer({
+          read: readNode.run,
+          decode: decodeNode.run,
+          decide: decideNode.run,
+          encode: encodeNode.run,
+          write: writeNode.run,
+        })
+        const chainStart = drawn.trace.length
+        const chainOutcome = yield* Effect.result(Cell.apply(drawn.description, drawn.command))
+        const chainTrace = drawn.trace.slice(chainStart)
+        const sugarStart = drawn.trace.length
+        const sugarOutcome = yield* Effect.result(Cell.apply(viaSugar, drawn.command))
+        const sugarTrace = drawn.trace.slice(sugarStart)
+        return (
+          sameOrder(declaredOrderOf(viaSugar), declaredOrderOf(drawn.description)) &&
+          sameOrder(chainTrace, sugarTrace) &&
+          (
+            Result.isSuccess(chainOutcome) && Result.isSuccess(sugarOutcome)
+              ? chainOutcome.success === sugarOutcome.success
+              : Result.isFailure(chainOutcome) && Result.isFailure(sugarOutcome) &&
+                chainOutcome.failure === sugarOutcome.failure
+          )
+        )
+      }),
+  )
+
   it.effect.prop(
     '∀d_FailureEitherFail_⊥Write',
     [description],
