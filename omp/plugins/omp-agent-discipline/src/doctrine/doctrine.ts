@@ -1,16 +1,10 @@
 import type { ExtensionAPI, ExtensionContext } from '@oh-my-pi/pi-coding-agent'
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { Effect, Match, pipe, Result } from 'effect'
+import { Effect, Match, Result } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import { decodeRecord, readString } from '../record.js'
 import { DispatchDoctrineSkills } from './config.js'
-import {
-  CheckDispatchCommand,
-  checkDispatchDoctrine,
-  type DispatchDoctrineImpossible,
-  type DispatchDoctrineVerdict,
-} from './doctrine.workflow.js'
-
+import { CheckDispatchCommand, checkDispatchDoctrine, type DispatchDoctrineVerdict } from './doctrine.workflow.js'
 export const DOCTRINE_KERNEL =
   `Refuse monolithic dispatches: size the unit, specify it completely, then dispatch — or do the work inline.
 
@@ -99,59 +93,33 @@ export type DispatchDoctrineCheck = {
   readonly gate: DispatchGateResult
 }
 
-interface DoctrinePhases extends Cell.Phases {
-  readonly command: { readonly cwd: string; readonly toolName: string; readonly doctrineLoaded: boolean }
-  readonly raw: readonly string[]
-  readonly decoded: CheckDispatchCommand
-  readonly decision: DispatchDoctrineVerdict
-  readonly decisionError: DispatchDoctrineImpossible
-  readonly output: DispatchDoctrineCheck
-  readonly response: DispatchDoctrineCheck
-  readonly decodeError: never
-  readonly readError: never
-  readonly writeError: never
-}
+const doctrineCell = (toolName: string, doctrineLoaded: boolean) =>
+  Cell.layer({
+    read: ({ cwd }: { readonly cwd: string; readonly toolName: string; readonly doctrineLoaded: boolean }) =>
+      readDoctrineSkills(cwd),
+    decode: (loaded) =>
+      Result.succeed(
+        CheckDispatchCommand.make({
+          toolName,
+          doctrineLoaded,
+          gateEnabled: loaded.length > 0,
+        }),
+      ),
+    decide: checkDispatchDoctrine,
+    encode: (outcome) =>
+      Result.match(outcome, {
+        onFailure: () => undefined,
+        onSuccess: gateResult,
+      }),
+    write: (gate, raw) => Effect.succeed({ skills: raw, gate }),
+  })
 
 export function runDispatchDoctrineCheck(
   cwd: string,
   toolName: string,
   doctrineLoaded: boolean,
 ): Effect.Effect<DispatchDoctrineCheck, never, DispatchDoctrineSkills | FileSystem.FileSystem> {
-  let skills: readonly string[] = []
-  return Effect.flatMap(
-    Effect.context<DisciplineContext>(),
-    (services) =>
-      Cell.apply(
-        pipe(
-          Cell.read<DoctrinePhases>(({ cwd: dir }) =>
-            Effect.provideContext(readDoctrineSkills(dir), services).pipe(Effect.tap((loaded) =>
-              Effect.sync(() => {
-                skills = loaded
-              })
-            ))
-          ),
-          Cell.decode<DoctrinePhases>((loaded) =>
-            Result.succeed(
-              CheckDispatchCommand.make({
-                toolName,
-                doctrineLoaded,
-                gateEnabled: loaded.length > 0,
-              }),
-            )
-          ),
-          Cell.decide<DoctrinePhases>(checkDispatchDoctrine),
-          Cell.encode<DoctrinePhases>((outcome) => ({
-            skills,
-            gate: Result.match(outcome, {
-              onFailure: () => undefined,
-              onSuccess: gateResult,
-            }),
-          })),
-          Cell.write<DoctrinePhases>((check) => Effect.succeed(check)),
-        ),
-        { cwd, toolName, doctrineLoaded },
-      ),
-  )
+  return Cell.run(doctrineCell(toolName, doctrineLoaded), { cwd, toolName, doctrineLoaded })
 }
 
 const FLAG_MAP_MAX = 50
