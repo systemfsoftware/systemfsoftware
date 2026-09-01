@@ -3,7 +3,6 @@ import type * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
-import { pipe } from 'effect/Function'
 import * as Queue from 'effect/Queue'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
@@ -51,53 +50,31 @@ export interface MutationRunIo {
   readonly write: (output: RunOutput) => Effect.Effect<void, S.SchemaError, RunIdentity>
 }
 
-interface RunPhases extends Cell.Phases {
-  readonly command: RunCommand
-  readonly raw: unknown
-  readonly decoded: PlanMutationRunCommand
-  readonly decision: MutationRunPlan
-  readonly decisionError: PlanMutationRunError
-  readonly output: RunOutput
-  readonly response: void
-  readonly decodeError: S.SchemaError
-  readonly readError: S.SchemaError
-  readonly writeError: S.SchemaError
-}
-
-const mutationRunDescription = (
-  io: MutationRunIo,
-  services: Context.Context<RunIdentity>,
-): Cell.WriteDone<RunPhases> =>
-  pipe(
-    Cell.read<RunPhases>((command: RunCommand) => Effect.provideContext(io.read(command), services)),
-    Cell.decode<RunPhases>((raw: unknown) => S.decodeUnknownResult(PlanMutationRunCommand)(raw)),
-    Cell.decide<RunPhases>(planMutationRun),
-    Cell.encode<RunPhases>(
-      (outcome: Result.Result<MutationRunPlan, PlanMutationRunError>) =>
-        Result.match(outcome, {
-          onFailure: (error) =>
-            new RunOutput({
-              verdictJson: JSON.stringify({ error: error.message }),
-              exitCode: 1,
-            }),
-          onSuccess: (plan) =>
-            new RunOutput({
-              verdictJson: JSON.stringify({ mutate: plan.mutatePatterns, mutators: plan.mutatorNames }),
-              exitCode: 0,
-            }),
-        }),
-    ),
-    Cell.write<RunPhases>((output: RunOutput) => Effect.provideContext(io.write(output), services)),
-  )
+export const mutationRunDescription = (io: MutationRunIo): Cell.Cell<RunCommand, void, S.SchemaError, RunIdentity> =>
+  Cell.layer({
+    read: (command) => io.read(command),
+    decode: (raw: unknown) => S.decodeUnknownResult(PlanMutationRunCommand)(raw),
+    decide: planMutationRun,
+    encode: (outcome: Result.Result<MutationRunPlan, PlanMutationRunError>) =>
+      Result.match(outcome, {
+        onFailure: (error) =>
+          new RunOutput({
+            verdictJson: JSON.stringify({ error: error.message }),
+            exitCode: 1,
+          }),
+        onSuccess: (plan) =>
+          new RunOutput({
+            verdictJson: JSON.stringify({ mutate: plan.mutatePatterns, mutatorNames: plan.mutatorNames }),
+            exitCode: 0,
+          }),
+      }),
+    write: (output: RunOutput, _raw: unknown) => io.write(output),
+  })
 
 export const runMutationTest = (
   io: MutationRunIo,
   command: RunCommand,
-): Effect.Effect<void, S.SchemaError, RunIdentity> =>
-  Effect.gen(function*() {
-    const services = yield* Effect.context<RunIdentity>()
-    return yield* Cell.apply(mutationRunDescription(io, services), command)
-  })
+): Effect.Effect<void, S.SchemaError, RunIdentity> => Cell.run(mutationRunDescription(io), command)
 
 export const shouldKeepTempDir = (
   exit: Exit.Exit<void, PlanMutationRunError | S.SchemaError>,
