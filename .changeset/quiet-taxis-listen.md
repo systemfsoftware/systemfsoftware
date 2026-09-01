@@ -5,6 +5,7 @@
 "@systemfsoftware/stryker-js-engine": none
 "@systemfsoftware/stryker-js": none
 "@systemfsoftware/effect-schema-extensions": none
+"@systemfsoftware/omp-claude-compat": none
 "@systemfsoftware/hex-schema": none
 "@systemfsoftware/omp-agent-discipline": none
 "@systemfsoftware/stryker-js-html-reporter": none
