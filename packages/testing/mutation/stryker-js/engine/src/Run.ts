@@ -530,7 +530,7 @@ export const prepareCell = Cell.layer({
       const out = output
       if (Result.isFailure(out)) {
         const err = out.failure
-        return yield* new StageError({ stage: err.stage, reason: err.reason, cause: err })
+        return yield* Effect.fail(new StageError({ stage: err.stage, reason: err.reason, cause: err }))
       }
       return {
         project: raw.project,
@@ -631,7 +631,7 @@ export const instrumentCell = Cell.layer({
       const out = output
       if (Result.isFailure(out)) {
         const err = out.failure
-        return yield* new StageError({ stage: err.stage, reason: err.reason, cause: err })
+        return yield* Effect.fail(new StageError({ stage: err.stage, reason: err.reason, cause: err }))
       }
 
       return {
@@ -785,13 +785,15 @@ export const dryRunCell = Cell.layer({
       const out = outcome
       if (Result.isFailure(out)) {
         const err = out.failure
-        return yield* new StageError({ stage: err.stage, reason: err.reason, cause: err })
+        return yield* Effect.fail(new StageError({ stage: err.stage, reason: err.reason, cause: err }))
       }
       const prevDone = raw.prev
       const rawResult = raw.rawResult
 
       if (rawResult.status !== 'complete') {
-        return yield* new StageError({ stage: 'dryRun', reason: 'Unexpected dry-run status after decision' })
+        return yield* Effect.fail(
+          new StageError({ stage: 'dryRun', reason: 'Unexpected dry-run status after decision' }),
+        )
       }
       const tests = rawResult.tests.map((test) => {
         if (test.fileName !== undefined) {
