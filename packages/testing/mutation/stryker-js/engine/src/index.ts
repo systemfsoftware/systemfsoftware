@@ -3,8 +3,8 @@
  *
  * There is one programmatic door. A name absent from here and from the two
  * declared subpaths - `./config/base`, the preset a config file names in
- * `extends`, and `./internal/*`, the worker entry points the engine spawns by
- * path - is internal and moves without a major, whatever file it sits in.
+ * `extends`, and `./worker`, the wiring a worker entry file calls into - is
+ * internal and moves without a major, whatever file it sits in.
  */
 
 // Run the engine.

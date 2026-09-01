@@ -100,5 +100,5 @@ Licensed under [Apache 2.0][license-url].
 [license-badge]: https://img.shields.io/badge/license-Apache_2.0-blue?style=flat-square
 [license-url]: https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE
 [repo]: https://github.com/systemfsoftware/systemfsoftware
-[engine]: https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/testing/mutation/stryker-js/platform-node
+[engine]: https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/testing/mutation/stryker-js/engine
 [docs]: https://stryker-mutator.io/docs/stryker-js/configuration/
