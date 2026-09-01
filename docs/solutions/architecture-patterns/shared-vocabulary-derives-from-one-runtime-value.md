@@ -1,6 +1,7 @@
 ---
 title: "A vocabulary shared across packages must be derived from one runtime value, and the build graph decides the carrier"
 date: 2026-08-15
+last_updated: 2026-09-01
 category: architecture-patterns
 module: "effect-cell-types and its derived consumers"
 problem_type: architecture_pattern
@@ -25,7 +26,7 @@ tags:
 
 ## Context
 
-`@systemfsoftware/effect-cell-types` publishes a `Cell.layer` one-sandwich constructor whose interpreter is the text of `layerRunner`, and `Cell.vocabulary`, a const table carrying `module`, `ioCells`, `byKind.pure` and `composer`. Order is deliberately absent from the table — it is the interpreter's body, and nothing restates it. The table carries only what a rule cannot read off a type: purity, the owning module name, and the I/O-cell classification.
+`@systemfsoftware/effect-cell-types` publishes a `Cell.layer` one-sandwich constructor whose interpreter is the text of `layerRunner`, and `Cell.vocabulary`, a const table carrying `module`, `ioCells`, `byKind.pure`, `composer`, and `shell`. Order is deliberately absent from the table — it is the interpreter's body, and nothing restates it. The table carries only what a rule cannot read off a type: purity, the owning module name, the I/O-cell classification, and the names of the shell constructors a composition root calls.
 
 Packages outside the description derive their behaviour from that one value, and naming them beats counting them, because an enumeration decays quietly: the `cell-vocabulary` lint plugin deciding which calls a pure phase body may make, and every consumer whose runtime or messages name the module or the I/O surface.
 
@@ -38,6 +39,8 @@ Packages outside the description derive their behaviour from that one value, and
 **A consumer must not carry the vocabulary's own words, and the table must not carry what the types already hold.** The census is countable: a scan for phase names across each consumer's own sources returns zero, and a non-zero count names the smuggled copy that will drift. Scope the census to words the vocabulary actually owns — a word that also names something else recurs for its own reasons. The inverse holds too: a fact the compiler or the interpreter's text already states (phase order, arity, channels) never enters the table, because a table restating the text is a second declaration with no reader.
 
 **The build graph, not taste, decides how a consumer derives.** A direct import is the cheapest carrier and the default choice. When an oxlint plugin imports the description directly, it must be delivered consumer-side via `jsPlugins` (e.g. `OX-DL1`), rather than aggregated through `@systemfsoftware/oxlint-plugin-effect-dmmf` or declared as a dependency in `@systemfsoftware/oxlint-config` — which would close a cyclic build dependency.
+
+**A literal-typed field is the type check an untyped consumer cannot run.** An oxlint JS plugin walks syntax only — no program, no checker — so a rule that must recognize `Cell.run` or `Cell.andThen` otherwise holds the names as strings, and a rename on the published surface leaves the rule deciding nothing while staying green. Publishing the names as literal-typed fields (`shell: { run: 'run', … }`) moves the failure to channels that cannot stay silent: a renamed export fails the consumer's own typecheck because the literal type no longer matches, and a rule that reads a name back empty throws at plugin load rather than reporting nothing. The subtract half binds as hard as the derive half: a field no rule binds is dead published surface that seeds the next reader's expectation, so the table carries exactly the names the rules read — `shell` gained no `provide` entry for precisely that reason.
 
 ## Why This Matters
 
@@ -59,7 +62,7 @@ Count the cost before paying it. A direct import is preferred whenever possible.
 
 That is the part worth carrying away. Neither carrier is free, and the second one's cost is not visible in the diff that introduces it — it shows up later, in a package nobody has written yet. So a consumer-side carrier is only honest once something fails when the delivery is missing: here, the lint-coverage guard grew a positive check that a package owning a consumer-delivered cell also loads that cell's plugin, observed failing when one consumer's entry is removed. Trading a drift gate for a delivery gate is a fair trade; trading a drift gate for a convention is not.
 
-**The rules that read vocabulary at load.** The `cell-vocabulary` plugin derives its pure-phase set from `Cell.vocabulary.byKind.pure`, its description module from `Cell.vocabulary.module`, its I/O names from `Cell.vocabulary.ioCells`, and its composer name from `Cell.vocabulary.composer`. No rule decides on a phase-name, purity or order literal, and the sentences the messages hand a reader are interpolated from the same import — a fix message that spelled the phase list would keep promising a shape after the table changed. Reclassifying a cell or a phase changes what the rule forbids and what its message says, with no edit in the plugin.
+**The rules that read vocabulary at load.** The `cell-vocabulary` plugin derives its pure-phase set from `Cell.vocabulary.byKind.pure`, its description module from `Cell.vocabulary.module`, its I/O names from `Cell.vocabulary.ioCells`, its composer name from `Cell.vocabulary.composer`, and its shell-constructor names from `Cell.vocabulary.shell`. No rule decides on a phase-name, purity, order, or shell literal, and the sentences the messages hand a reader are interpolated from the same import — a fix message that spelled the phase list would keep promising a shape after the table changed. Reclassifying a cell or a phase, or renaming a shell constructor, changes what the rule forbids and what its message says, with no edit in the plugin.
 
 ## Related
 
