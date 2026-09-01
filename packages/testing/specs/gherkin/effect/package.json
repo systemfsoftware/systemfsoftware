@@ -52,6 +52,7 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
+    "@vitest/snapshot": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",

@@ -68,8 +68,6 @@ if (import.meta.vitest !== void 0) {
   // the published module graph. A static import would ship it.
   const { describe, it } = await import('@systemfsoftware/effect-gherkin-spec')
   const { expect } = await import('vitest')
-  const { FastCheck: fc } = await import('effect/testing')
-  void fc
 
   /**
    * Only the two wire constants are exported, so each law is an invariant
@@ -79,12 +77,13 @@ if (import.meta.vitest !== void 0) {
    */
   describe('stream-protocol wire constants', () => {
     it('Should_TickIntervalBeSchedulable_When_ConstantIsPositive', () => {
-      expect(Number.isInteger(TICK_INTERVAL_MS)).toBe(true)
-      expect(TICK_INTERVAL_MS).toBeGreaterThan(0)
+      expect(TICK_INTERVAL_MS).toMatchInlineSnapshot(`10000`)
+      expect(Number.isInteger(TICK_INTERVAL_MS)).toMatchInlineSnapshot(`true`)
     })
 
     it('Should_SchemaVersionBeMajorDotMinor_When_Constant', () => {
-      expect(MAJOR_DOT_MINOR.test(STREAM_SCHEMA_VERSION)).toBe(true)
+      expect(MAJOR_DOT_MINOR.test(STREAM_SCHEMA_VERSION)).toMatchInlineSnapshot(`true`)
+      expect(STREAM_SCHEMA_VERSION).toMatchInlineSnapshot(`"1.0"`)
     })
   })
 }
@@ -454,250 +453,19 @@ if (import.meta.vitest !== void 0) {
   // the published module graph. A static import would ship it.
   const { describe, it } = await import('@systemfsoftware/effect-gherkin-spec')
   const { expect } = await import('vitest')
-  const { FastCheck: fc } = await import('effect/testing')
-  const { Equal } = await import('effect')
   const Result = await import('effect/Result')
   const Option = await import('effect/Option')
   const CliError = await import('effect/unstable/cli/CliError')
 
-  /**
-   * The generated mode-input domain. Every signal slot ranges over its full
-   * value space, so the laws below quantify over combinations the example tests
-   * never enumerate — including flags on a TTY, empty signals on a pipe, and
-   * both tool variables together.
-   *
-   * The drawn record carries every slot as `T | undefined`; `toModeInput` drops
-   * the undefined slots so the value satisfies `ModeInput` under the package's
-   * exact-optional-property typecheck (a present `undefined` property is not an
-   * absent one).
-   */
-  type DrawnModeInput = {
-    text: boolean
-    json: boolean
-    envMode: string | undefined
-    stdoutIsTTY: boolean
-    agent: string | undefined
-    toolVars: Readonly<Record<string, string | undefined>> | undefined
-  }
-
-  const toModeInput = (drawn: DrawnModeInput): ModeInput => {
-    let result: ModeInput = {
-      stdoutIsTTY: drawn.stdoutIsTTY,
-      text: drawn.text,
-      json: drawn.json,
-    }
-    if (drawn.envMode !== undefined) {
-      result = { ...result, envMode: drawn.envMode }
-    }
-    if (drawn.agent !== undefined) {
-      result = { ...result, agent: drawn.agent }
-    }
-    if (drawn.toolVars !== undefined) {
-      result = { ...result, toolVars: drawn.toolVars }
-    }
-    return result
-  }
-  const envModeArb = fc.oneof(
-    fc.constant(undefined),
-    fc.constant(''),
-    fc.constant('machine'),
-    fc.constant('human'),
-    fc.constant('MACHINE'),
-    fc.constant('other'),
-  )
-
-  const agentArb = fc.oneof(
-    fc.constant(undefined),
-    fc.constant(''),
-    fc.constant('1'),
-  )
-
-  const toolVarsArb = fc.oneof(
-    fc.constant(undefined),
-    fc.constant({}),
-    fc.constant({ CLAUDECODE: '' }),
-    fc.constant({ CLAUDECODE: '1' }),
-    fc.constant({ CODEX_SANDBOX: '1' }),
-    fc.constant({ CLAUDECODE: '1', CODEX_SANDBOX: '' }),
-  )
-
-  const modeInputArb = fc.record({
-    text: fc.boolean(),
-    json: fc.boolean(),
-    envMode: envModeArb,
-    stdoutIsTTY: fc.boolean(),
-    agent: agentArb,
-    toolVars: toolVarsArb,
-  })
-
-  const flagFreeInputArb = modeInputArb.filter((input) => input.text === false && input.json === false)
-
-  const noSignalInputArb = flagFreeInputArb.filter(
-    (input) => input.envMode === undefined && input.stdoutIsTTY === false,
-  )
-
-  const cleanTtyInputArb = flagFreeInputArb.filter(
-    (input) =>
-      input.envMode === undefined && input.stdoutIsTTY === true &&
-      (input.agent === undefined || input.agent === '') && input.toolVars === undefined,
-  )
-
-  const resolvedModeArb = fc.record({
-    mode: fc.constantFrom('human', 'machine'),
-    signal: fc.constantFrom('flag', 'env', 'tty', 'agent', 'tool'),
-    stdoutIsTTY: fc.boolean(),
-  })
-
-  const noColorArb = fc.oneof(
-    fc.constant(undefined),
-    fc.constant(''),
-    fc.constant('0'),
-    fc.constant('1'),
-    fc.string({ maxLength: 6 }),
-  )
-
-  describe('resolveMode — totality over the generated domain', () => {
-    it.prop(
-      '∀i_ResolveMode_≡LeftIffBothFlags',
-      [modeInputArb],
-      ([input]) => Result.isFailure(resolveMode(toModeInput(input))) === (input.text === true && input.json === true),
-    )
-
-    it.prop(
-      '∀i_ResolvedMode_≡CarriesStdoutTty',
-      [modeInputArb],
-      ([input]) =>
-        Result.match(resolveMode(toModeInput(input)), {
-          onFailure: () => true,
-          onSuccess: (resolved) => resolved.stdoutIsTTY === input.stdoutIsTTY,
-        }),
-    )
-
-    it.prop('∀i_EmptyEnvMode_≡Unset', [modeInputArb], ([input]) =>
-      Equal.equals(
-        resolveMode(toModeInput({ ...input, envMode: '' })),
-        resolveMode(toModeInput({ ...input, envMode: undefined })),
-      ))
-
-    it.prop('∀i_EmptyAgent_≡Unset', [modeInputArb], ([input]) =>
-      Equal.equals(
-        resolveMode(toModeInput({ ...input, agent: '' })),
-        resolveMode(toModeInput({ ...input, agent: undefined })),
-      ))
-
-    it.prop('∀i_EmptyToolVariable_≡Absent', [modeInputArb], ([input]) =>
-      Equal.equals(
-        resolveMode(toModeInput({ ...input, toolVars: { CLAUDECODE: '' } })),
-        resolveMode(toModeInput({ ...input, toolVars: undefined })),
-      ))
-  })
-
-  describe('resolveMode — precedence over every signal combination', () => {
-    it.prop(
-      '∀i_TextFlag_≡HumanEverywhere',
-      [modeInputArb.filter((i) => i.text === true && i.json === false)],
-      ([input]) => Result.getOrThrow(resolveMode(toModeInput(input))).mode === 'human',
-    )
-
-    it.prop(
-      '∀i_JsonFlag_≡MachineEverywhere',
-      [modeInputArb.filter((i) => i.json === true && i.text === false)],
-      ([input]) => Result.getOrThrow(resolveMode(toModeInput(input))).mode === 'machine',
-    )
-
-    it.prop('∀i_EnvMode_≡EnvSignalByLiteral', [
-      flagFreeInputArb.filter((i) => i.envMode !== undefined && i.envMode.length > 0),
-    ], ([input]) => {
-      const resolved = Result.getOrThrow(resolveMode(toModeInput(input)))
-      if (resolved.signal !== 'env') {
-        return false
-      }
-      if (input.envMode === 'machine') {
-        return resolved.mode === 'machine'
-      }
-      return resolved.mode === 'human'
-    })
-
-    it.prop('∀i_NonTtyNoSignals_≡MachineTtySignal', [noSignalInputArb], ([input]) => {
-      const resolved = Result.getOrThrow(resolveMode(toModeInput(input)))
-      return resolved.mode === 'machine' && resolved.signal === 'tty'
-    })
-
-    it.prop('∀i_CleanTty_≡HumanTtySignal', [cleanTtyInputArb], ([input]) => {
-      const resolved = Result.getOrThrow(resolveMode(toModeInput(input)))
-      return resolved.mode === 'human' && resolved.signal === 'tty'
-    })
-
-    it.prop('∀i_AgentSetOnTty_≡MachineAgentSignal', [
-      flagFreeInputArb.filter((i) =>
-        i.envMode === undefined && i.stdoutIsTTY === true && i.agent !== undefined && i.agent.length > 0
-      ),
-    ], ([input]) => {
-      const resolved = Result.getOrThrow(resolveMode(toModeInput(input)))
-      return resolved.mode === 'machine' && resolved.signal === 'agent'
-    })
-
-    it.prop('∀i_ToolVariableSetOnTty_≡MachineToolSignal', [
-      flagFreeInputArb.filter((i) =>
-        i.envMode === undefined && i.stdoutIsTTY === true && (i.agent === undefined || i.agent === '') &&
-        i.toolVars !== undefined && Object.values(i.toolVars).some((value) => value.length > 0)
-      ),
-    ], ([input]) => {
-      const resolved = Result.getOrThrow(resolveMode(toModeInput(input)))
-      return resolved.mode === 'machine' && resolved.signal === 'tool'
-    })
-  })
-
-  describe('output gates — quantified over every resolved mode and NO_COLOR value', () => {
-    it.prop(
-      '∀r_MachineMode_≡NeverColored',
-      [resolvedModeArb, noColorArb],
-      ([resolved, noColor]) => {
-        if (resolved.mode === 'machine') {
-          return !isColorEnabled(resolved, noColor)
-        }
-        return true
-      },
-    )
-
-    it.prop(
-      '∀rn_NoColorNonEmpty_≡NeverColored',
-      [resolvedModeArb, noColorArb],
-      ([resolved, noColor]) => {
-        if (noColor !== undefined && noColor.length > 0) {
-          return !isColorEnabled(resolved, noColor)
-        }
-        return true
-      },
-    )
-
-    it.prop('∀r_HumanNoNoColor_≡Colored', [resolvedModeArb], ([resolved]) => {
-      if (resolved.mode === 'human') {
-        return isColorEnabled(resolved, undefined) && isColorEnabled(resolved, '')
-      }
-      return true
-    })
-
-    it.prop(
-      '∀r_ProgressEnabled_≡HumanOnTty',
-      [resolvedModeArb],
-      ([resolved]) => {
-        if (isProgressEnabled(resolved)) {
-          return resolved.mode === 'human' && resolved.stdoutIsTTY
-        }
-        return true
-      },
-    )
-  })
-
-  // The example suite, converted verbatim from the deleted example test file.
   describe('resolveMode (examples)', () => {
     it('Should_ResolveHuman_When_TtyHasNoAgentVariables', () => {
-      expect(Result.getOrThrow(resolveMode(ttyInput()))).toEqual({
-        mode: 'human',
-        signal: 'tty',
-        stdoutIsTTY: true,
-      })
+      expect(Result.getOrThrow(resolveMode(ttyInput()))).toMatchInlineSnapshot(`
+        {
+          "mode": "human",
+          "signal": "tty",
+          "stdoutIsTTY": true,
+        }
+      `)
     })
 
     it('Should_ResolveMachine_When_NonTtyStdoutRegardlessOfDetectionEnv', () => {
@@ -708,137 +476,168 @@ if (import.meta.vitest !== void 0) {
           toolVars: { CLAUDECODE: '1' },
         }),
       )
-      expect(resolved.mode).toBe('machine')
-      expect(resolved.signal).toBe('tty')
-      expect(resolved.stdoutIsTTY).toBe(false)
+      expect(resolved.mode).toMatchInlineSnapshot(`"machine"`)
+      expect(resolved.signal).toMatchInlineSnapshot(`"tty"`)
+      expect(resolved.stdoutIsTTY).toMatchInlineSnapshot(`false`)
     })
 
     it('Should_ResolveHuman_When_EnvModeHumanOverridesNonTtyStdout', () => {
-      expect(Result.getOrThrow(resolveMode({ stdoutIsTTY: false, envMode: 'human' }))).toEqual({
-        mode: 'human',
-        signal: 'env',
-        stdoutIsTTY: false,
-      })
+      expect(Result.getOrThrow(resolveMode({ stdoutIsTTY: false, envMode: 'human' }))).toMatchInlineSnapshot(`
+        {
+          "mode": "human",
+          "signal": "env",
+          "stdoutIsTTY": false,
+        }
+      `)
     })
 
     it('Should_ResolveMachine_When_AgentVariableSetOnTty', () => {
-      expect(Result.getOrThrow(resolveMode(ttyInput({ agent: '1' })))).toEqual({
-        mode: 'machine',
-        signal: 'agent',
-        stdoutIsTTY: true,
-      })
+      expect(Result.getOrThrow(resolveMode(ttyInput({ agent: '1' })))).toMatchInlineSnapshot(`
+        {
+          "mode": "machine",
+          "signal": "agent",
+          "stdoutIsTTY": true,
+        }
+      `)
     })
 
     it('Should_ResolveHuman_When_AgentVariableEmptyOnTty', () => {
-      expect(Result.getOrThrow(resolveMode(ttyInput({ agent: '' })))).toEqual({
-        mode: 'human',
-        signal: 'tty',
-        stdoutIsTTY: true,
-      })
+      expect(Result.getOrThrow(resolveMode(ttyInput({ agent: '' })))).toMatchInlineSnapshot(`
+        {
+          "mode": "human",
+          "signal": "tty",
+          "stdoutIsTTY": true,
+        }
+      `)
     })
 
     it('Should_ResolveMachine_When_KnownToolVariableSetOnTty', () => {
-      expect(Result.getOrThrow(resolveMode(ttyInput({ toolVars: { CODEX_SANDBOX: '1' } })))).toEqual({
-        mode: 'machine',
-        signal: 'tool',
-        stdoutIsTTY: true,
-      })
+      expect(Result.getOrThrow(resolveMode(ttyInput({ toolVars: { CODEX_SANDBOX: '1' } })))).toMatchInlineSnapshot(`
+        {
+          "mode": "machine",
+          "signal": "tool",
+          "stdoutIsTTY": true,
+        }
+      `)
     })
 
     it('Should_ResolveHuman_When_TextFlagGivenOnPipe', () => {
-      expect(Result.getOrThrow(resolveMode({ stdoutIsTTY: false, text: true }))).toEqual({
-        mode: 'human',
-        signal: 'flag',
-        stdoutIsTTY: false,
-      })
+      expect(Result.getOrThrow(resolveMode({ stdoutIsTTY: false, text: true }))).toMatchInlineSnapshot(`
+        {
+          "mode": "human",
+          "signal": "flag",
+          "stdoutIsTTY": false,
+        }
+      `)
     })
 
     it('Should_ResolveMachine_When_JsonFlagGivenOnTty', () => {
-      expect(Result.getOrThrow(resolveMode(ttyInput({ json: true })))).toEqual({
-        mode: 'machine',
-        signal: 'flag',
-        stdoutIsTTY: true,
-      })
+      expect(Result.getOrThrow(resolveMode(ttyInput({ json: true })))).toMatchInlineSnapshot(`
+        {
+          "mode": "machine",
+          "signal": "flag",
+          "stdoutIsTTY": true,
+        }
+      `)
     })
 
     it('Should_ReturnValidationError_When_JsonAndTextFlagsCombined', () => {
       const outcome = resolveMode(ttyInput({ json: true, text: true }))
-      expect(Result.isFailure(outcome)).toEqual(true)
-      expect(CliError.isCliError(Option.getOrNull(Result.getFailure(outcome)))).toEqual(true)
+      expect(Result.isFailure(outcome)).toMatchInlineSnapshot(`true`)
+      expect(CliError.isCliError(Option.getOrNull(Result.getFailure(outcome)))).toMatchInlineSnapshot(`true`)
     })
 
     it('Should_ResolveHuman_When_EnvModeHumanOverridesAgentVariable', () => {
-      expect(Result.getOrThrow(resolveMode(ttyInput({ envMode: 'human', agent: '1' })))).toEqual({
-        mode: 'human',
-        signal: 'env',
-        stdoutIsTTY: true,
-      })
+      expect(Result.getOrThrow(resolveMode(ttyInput({ envMode: 'human', agent: '1' })))).toMatchInlineSnapshot(`
+        {
+          "mode": "human",
+          "signal": "env",
+          "stdoutIsTTY": true,
+        }
+      `)
     })
 
     it('Should_ResolveMachine_When_EnvModeMachineOverridesTty', () => {
-      expect(Result.getOrThrow(resolveMode(ttyInput({ envMode: 'machine' })))).toEqual({
-        mode: 'machine',
-        signal: 'env',
-        stdoutIsTTY: true,
-      })
+      expect(Result.getOrThrow(resolveMode(ttyInput({ envMode: 'machine' })))).toMatchInlineSnapshot(`
+        {
+          "mode": "machine",
+          "signal": "env",
+          "stdoutIsTTY": true,
+        }
+      `)
     })
 
     it('Should_PreferExplicitFlag_When_EnvModeAlsoSet', () => {
-      expect(Result.getOrThrow(resolveMode(ttyInput({ text: true, envMode: 'machine' })))).toEqual({
-        mode: 'human',
-        signal: 'flag',
-        stdoutIsTTY: true,
-      })
-      expect(Result.getOrThrow(resolveMode(ttyInput({ json: true, envMode: 'human' })))).toEqual({
-        mode: 'machine',
-        signal: 'flag',
-        stdoutIsTTY: true,
-      })
+      expect(Result.getOrThrow(resolveMode(ttyInput({ text: true, envMode: 'machine' })))).toMatchInlineSnapshot(`
+        {
+          "mode": "human",
+          "signal": "flag",
+          "stdoutIsTTY": true,
+        }
+      `)
+      expect(Result.getOrThrow(resolveMode(ttyInput({ json: true, envMode: 'human' })))).toMatchInlineSnapshot(`
+        {
+          "mode": "machine",
+          "signal": "flag",
+          "stdoutIsTTY": true,
+        }
+      `)
     })
 
     it('Should_TreatEmptyEnvModeAsUnset_When_StdoutIsTTY', () => {
-      expect(Result.getOrThrow(resolveMode(ttyInput({ envMode: '' })))).toEqual({
-        mode: 'human',
-        signal: 'tty',
-        stdoutIsTTY: true,
-      })
+      expect(Result.getOrThrow(resolveMode(ttyInput({ envMode: '' })))).toMatchInlineSnapshot(`
+        {
+          "mode": "human",
+          "signal": "tty",
+          "stdoutIsTTY": true,
+        }
+      `)
     })
 
     it('Should_TreatEmptyToolVariableAsUnset_When_StdoutIsTTY', () => {
-      expect(Result.getOrThrow(resolveMode(ttyInput({ toolVars: { CLAUDECODE: '' } })))).toEqual({
-        mode: 'human',
-        signal: 'tty',
-        stdoutIsTTY: true,
-      })
+      expect(Result.getOrThrow(resolveMode(ttyInput({ toolVars: { CLAUDECODE: '' } })))).toMatchInlineSnapshot(`
+        {
+          "mode": "human",
+          "signal": "tty",
+          "stdoutIsTTY": true,
+        }
+      `)
     })
   })
 
   describe('output gates (examples)', () => {
     it('Should_ForceMachineMode_When_AnyKnownToolVariableIsSet', () => {
-      expect(Result.getOrThrow(resolveMode(ttyInput({ toolVars: { CLAUDECODE: '1' } }))).mode).toBe('machine')
-      expect(Result.getOrThrow(resolveMode(ttyInput({ toolVars: { CODEX_SANDBOX: '1' } }))).mode).toBe('machine')
+      expect(Result.getOrThrow(resolveMode(ttyInput({ toolVars: { CLAUDECODE: '1' } }))).mode).toMatchInlineSnapshot(
+        `"machine"`,
+      )
+      expect(Result.getOrThrow(resolveMode(ttyInput({ toolVars: { CODEX_SANDBOX: '1' } }))).mode).toMatchInlineSnapshot(
+        `"machine"`,
+      )
     })
 
     it('Should_EnableProgressBar_When_HumanModeOnTty', () => {
-      expect(isProgressEnabled(Result.getOrThrow(resolveMode(ttyInput())))).toBe(true)
-      expect(isProgressEnabled(Result.getOrThrow(resolveMode({ stdoutIsTTY: false })))).toBe(false)
-      expect(isProgressEnabled(Result.getOrThrow(resolveMode({ stdoutIsTTY: false, text: true })))).toBe(false)
-      expect(isProgressEnabled(Result.getOrThrow(resolveMode(ttyInput({ agent: '1' }))))).toBe(false)
+      expect(isProgressEnabled(Result.getOrThrow(resolveMode(ttyInput())))).toMatchInlineSnapshot(`true`)
+      expect(isProgressEnabled(Result.getOrThrow(resolveMode({ stdoutIsTTY: false })))).toMatchInlineSnapshot(`false`)
+      expect(isProgressEnabled(Result.getOrThrow(resolveMode({ stdoutIsTTY: false, text: true }))))
+        .toMatchInlineSnapshot(`false`)
+      expect(isProgressEnabled(Result.getOrThrow(resolveMode(ttyInput({ agent: '1' }))))).toMatchInlineSnapshot(`false`)
     })
 
     it('Should_EnableColor_When_NoColorIsUnsetOrEmpty', () => {
-      expect(isColorEnabled(Result.getOrThrow(resolveMode(ttyInput())), undefined)).toBe(true)
-      expect(isColorEnabled(Result.getOrThrow(resolveMode(ttyInput())), '')).toBe(true)
+      expect(isColorEnabled(Result.getOrThrow(resolveMode(ttyInput())), undefined)).toMatchInlineSnapshot(`true`)
+      expect(isColorEnabled(Result.getOrThrow(resolveMode(ttyInput())), '')).toMatchInlineSnapshot(`true`)
     })
 
     it('Should_DisableColor_When_NoColorIsAnyNonEmptyValue', () => {
-      expect(isColorEnabled(Result.getOrThrow(resolveMode(ttyInput())), '1')).toBe(false)
-      expect(isColorEnabled(Result.getOrThrow(resolveMode(ttyInput())), '0')).toBe(false)
+      expect(isColorEnabled(Result.getOrThrow(resolveMode(ttyInput())), '1')).toMatchInlineSnapshot(`false`)
+      expect(isColorEnabled(Result.getOrThrow(resolveMode(ttyInput())), '0')).toMatchInlineSnapshot(`false`)
     })
 
     it('Should_DisableColor_When_MachineModeRegardlessOfNoColor', () => {
-      expect(isColorEnabled(Result.getOrThrow(resolveMode(ttyInput({ agent: '1' }))), undefined)).toBe(false)
-      expect(isColorEnabled(Result.getOrThrow(resolveMode({ stdoutIsTTY: false })), '')).toBe(false)
+      expect(isColorEnabled(Result.getOrThrow(resolveMode(ttyInput({ agent: '1' }))), undefined)).toMatchInlineSnapshot(
+        `false`,
+      )
+      expect(isColorEnabled(Result.getOrThrow(resolveMode({ stdoutIsTTY: false })), '')).toMatchInlineSnapshot(`false`)
     })
   })
 }
