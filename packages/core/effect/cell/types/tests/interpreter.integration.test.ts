@@ -74,17 +74,8 @@ const makeCellReportingItsRaw = (ledger: LedgerService) =>
     write: (output: Output, raw: Raw) => ledger.append(`${output.line}<-${raw.bytes}`).pipe(Effect.as(output.line)),
   })
 
-// The hand-written phase list is an independent oracle, and its whole job is to
-// disagree with the fold when the fold is wrong. It is restated on purpose, not
-// derived from `Cell.vocabulary`, and it lives inside this package so a consumer
-// never carries an axis literal.
-const ORACLE_PHASES = [
-  { name: 'read', kind: 'impure', convention: 'effect' },
-  { name: 'decode', kind: 'pure', convention: 'either-fail' },
-  { name: 'decide', kind: 'pure', convention: 'either-pass' },
-  { name: 'encode', kind: 'pure', convention: 'total' },
-  { name: 'write', kind: 'impure', convention: 'effect' },
-] as const
+// The order oracle is hand-written here, one scenario over a local trace. It is the
+// only order test: the interpreter is text, and this is where a reader checks it.
 
 Feature('Running a Cell')
   .withScenarioLayer(LedgerRecording)
@@ -164,7 +155,7 @@ Feature('Running a Cell')
     )
 
     scenario(
-      'The assembler runs the sandwich in its built-in order',
+      'The interpreter runs the sandwich in its declared order',
       Gherkin.Do.pipe(
         When('a Cell with tracing phases is run')('outcome', () => {
           const trace: string[] = []
@@ -197,42 +188,12 @@ Feature('Running a Cell')
             Effect.map((exit) => ({ exit, trace })),
           )
         }),
-        Then('the phases ran exactly in the order the assembler chains them')((s) => {
+        Then('the phases ran exactly in the order the interpreter reads them')((s) => {
           expect(s.outcome.trace).toEqual(['read', 'decode', 'decide', 'encode', 'write'])
           expect(s.outcome.exit).toStrictEqual(Exit.succeed('admitted:0'))
         }),
       ),
     )
-
-    scenario(
-      'The canonical Cell runs for its phases alone',
-      Gherkin.Do.pipe(
-        When('the canonical Cell is run for a canonical command')(
-          'exit',
-          () => Effect.exit(Cell.run(Cell.canonical, new Cell.CanonicalCommand({}))),
-        ),
-        Then('the run succeeds with nothing to say')((s) => {
-          expect(s.exit).toStrictEqual(Exit.succeed(undefined))
-        }),
-      ),
-    )
-
-    scenario(
-      'The exported vocabulary is the one the oracle states',
-      Gherkin.Do.pipe(
-        When('the derived vocabulary is read')(
-          'derived',
-          () => Effect.succeed(Cell.vocabulary),
-        ),
-        Then('it states every phase, its purity and its invocation shape, in order')((s) => {
-          expect(s.derived.phases).toEqual(ORACLE_PHASES)
-          expect(s.derived.module).toBe(Cell.DESCRIPTION_MODULE)
-          expect(s.derived.ioCells).toBe(Cell.IO_CELLS)
-          expect(s.derived.composer).toBe('layer')
-        }),
-      ),
-    )
-
     scenario(
       'andThen feeds the first Cell response to the second Cell read',
       Gherkin.Do.pipe(

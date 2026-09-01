@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/oxlint-plugin-cell-vocabulary`
 
-> **Delta**: a plugin whose rule vocabulary is walked off a Cell description at load, not declared
+> **Delta**: a plugin whose rule vocabulary is read off `Cell.vocabulary` at load, not declared
 > here, and which is not keyed to a cell. Shared rule-authoring conventions:
 > `packages/oxlint-plugins/AGENTS.md`. Root AGENTS.md governs.
 

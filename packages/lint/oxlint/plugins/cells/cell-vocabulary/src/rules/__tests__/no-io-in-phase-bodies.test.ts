@@ -16,10 +16,10 @@ RuleTester.describe = vitest.describe
 
 const ruleTester = new RuleTester()
 
-// Every axis value in the fixtures below is derived from the walked vocabulary at
+// Every axis value in the fixtures below is derived from the vocabulary at
 // runtime, never spelled: the import's module name, the fixture's I/O cell suffix and
 // I/O module source all come from Cell.vocabulary, and the message's phase list comes
-// from the same fold the rule uses. If the derivation is severed, the expected data no
+// from the same import the rule uses. If the derivation is severed, the expected data no
 // longer matches the rendered message and the invalid fixtures stop reporting.
 const CELL_IMPORT = `import { Cell } from '${Cell.vocabulary.module}'`
 const storeCell = Cell.vocabulary.ioCells.cells[0]
@@ -28,7 +28,7 @@ const STORE_IMPORT = `import { findOrderRow } from './order.${storeCell}.js'`
 const CLOCK_IMPORT = `import * as Clock from '${ioSource}'`
 const EFFECT_IMPORT = `import * as Effect from 'effect/Effect'`
 
-// The last walked entry on each axis, so the fixtures span the enumeration rather than its
+// The last entry on each axis, so the fixtures span the enumeration rather than its
 // first element: a predicate comparing against `cells[0]` instead of testing membership
 // passes every fixture above and fails only these two.
 const lastCell = Cell.vocabulary.ioCells.cells.at(-1)

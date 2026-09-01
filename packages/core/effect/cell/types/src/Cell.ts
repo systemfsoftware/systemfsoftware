@@ -1,24 +1,13 @@
 import * as Effect from 'effect/Effect'
-import { dual, identity, pipe } from 'effect/Function'
+import { dual } from 'effect/Function'
 import type { Kind as HKTKind, TypeLambda as HKTTypeLambda } from 'effect/HKT'
 import type { Layer } from 'effect/Layer'
 import * as Result from 'effect/Result'
-import { CanonicalDecideError } from './CanonicalDecide.schema.js'
-import { CanonicalCommand, canonicalDecide } from './CanonicalDecide.workflow.js'
-import {
-  type Convention,
-  DESCRIPTION_MODULE,
-  IO_CELLS,
-  type IoCellClassification,
-  type PhaseKind,
-  type PhaseName,
-} from './Facts.js'
-import { decide, decode, encode, fold, read, write, type WriteDone } from './internal/phases.js'
+import { DESCRIPTION_MODULE, IO_CELLS, type IoCellClassification, type PhaseName } from './Facts.js'
 import type { Policy } from './Policy.js'
 import { type WorkflowBrand } from './Workflow.js'
 
-export { CanonicalCommand, canonicalDecide } from './CanonicalDecide.workflow.js'
-export { type Convention, DESCRIPTION_MODULE, IO_CELLS, type IoCellClassification }
+export { DESCRIPTION_MODULE, IO_CELLS, type IoCellClassification, type PhaseName }
 
 /**
  * The nominal brand every `Cell` carries. `Cell.layer` is the only door that applies it.
@@ -87,25 +76,10 @@ interface LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>
   readonly write: (output: Out, raw: Raw) => Effect.Effect<Resp, WE, WR>
 }
 
-type LayerBag<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR> = {
-  readonly command: I
-  readonly raw: Raw
-  readonly decoded: Dcd
-  readonly decision: Dec
-  readonly decisionError: DE
-  readonly output: Out
-  readonly response: Resp
-  readonly decodeError: DecE
-  readonly readError: RE
-  readonly writeError: WE
-  readonly readServices: RR
-  readonly writeServices: WR
-}
-
 /**
- * Compiles one sandwich spec into the fold runner. The `E` channel is the fold's truth —
- * read, decode, and write failures; a decide refusal is the outcome the encode and write
- * receive, not a failure.
+ * The interpreter. Order is the text: read, then decode, then decide, then encode, then
+ * write. The `E` channel is the sandwich's truth — read, decode, and write failures;
+ * a decide refusal is the outcome the encode and write receive, not a failure.
  */
 const layerRunner = <I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
   spec:
@@ -113,25 +87,23 @@ const layerRunner = <I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
     | LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>,
 ): (input: I) => Effect.Effect<Resp, RE | DecE | WE, RR | WR> => {
   if ('decode' in spec && 'encode' in spec) {
-    type Bag = LayerBag<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>
-    const description = pipe(
-      read<Bag>(spec.read),
-      decode<Bag>(spec.decode),
-      decide<Bag>(spec.decide),
-      encode<Bag>(spec.encode),
-      write<Bag>(spec.write),
-    )
-    return (input) => fold(description, input)
+    return (input) =>
+      Effect.gen(function*() {
+        const raw = yield* spec.read(input)
+        const decoded = yield* Result.match(spec.decode(raw), {
+          onFailure: Effect.fail,
+          onSuccess: Effect.succeed,
+        })
+        const outcome = spec.decide(decoded)
+        return yield* spec.write(spec.encode(outcome), raw)
+      })
   }
-  type ShortBag = LayerBag<I, Raw, RE, RR, Raw, never, Dec, DE, Result.Result<Dec, DE>, Resp, WE, WR>
-  const description = pipe(
-    read<ShortBag>(spec.read),
-    decode<ShortBag>(Result.succeed),
-    decide<ShortBag>(spec.decide),
-    encode<ShortBag>(identity),
-    write<ShortBag>(spec.write),
-  )
-  return (input) => fold(description, input)
+  return (input) =>
+    Effect.gen(function*() {
+      const raw = yield* spec.read(input)
+      const outcome = spec.decide(raw)
+      return yield* spec.write(outcome, raw)
+    })
 }
 
 /**
@@ -287,72 +259,20 @@ export const withPolicy: {
 )
 
 /**
- * A phase fact the vocabulary walk reports.
- */
-export interface PhaseFact {
-  readonly name: PhaseName
-  readonly kind: PhaseKind
-  readonly convention: Convention
-}
-
-/**
- * The frozen plugin contract: what a walk over the canonical Cell reports. Plugins read
- * these fields and nothing else.
+ * The facts the lint plugin judges a spec body by, as a const table. The order the
+ * interpreter runs is the text of {@link layerRunner}; the table states only what a
+ * rule cannot read off a type: which phases are pure, and what counts as I/O.
  */
 export interface Vocabulary {
   readonly module: typeof DESCRIPTION_MODULE
   readonly ioCells: IoCellClassification
-  readonly phases: readonly PhaseFact[]
-  readonly byKind: Readonly<Record<PhaseFact['kind'], readonly PhaseFact['name'][]>>
+  readonly byKind: { readonly pure: readonly PhaseName[] }
   readonly composer: 'layer'
 }
 
-type CanonicalBag = LayerBag<
-  CanonicalCommand,
-  void,
-  never,
-  never,
-  CanonicalCommand,
-  never,
-  undefined,
-  CanonicalDecideError,
-  undefined,
-  void,
-  never,
-  never
->
-
-const canonicalDescription: WriteDone<CanonicalBag> = pipe(
-  read<CanonicalBag>(() => Effect.void),
-  decode<CanonicalBag>(() => Result.succeed(CanonicalCommand.make({}))),
-  decide<CanonicalBag>(canonicalDecide),
-  encode<CanonicalBag>(() => undefined),
-  write<CanonicalBag>(() => Effect.void),
-)
-
-/**
- * The canonical Cell: the shape every Cell shares, run for its phases alone. The vocabulary
- * is a fold of the description this Cell was built from — never a second declaration.
- */
-export const canonical: Cell<CanonicalCommand, void> = make((input: CanonicalCommand) =>
-  fold(canonicalDescription, input)
-)
-
-const WALKED_PHASES: readonly PhaseFact[] = canonicalDescription.phases.map(
-  ({ convention, kind, name }): PhaseFact => ({ convention, kind, name }),
-)
-
-/**
- * The walk result over {@link canonical}'s phases: the table every derived consumer —
- * arbitraries and lint plugins — takes its behaviour from.
- */
 export const vocabulary: Vocabulary = {
-  module: canonicalDescription.module,
-  ioCells: canonicalDescription.ioCells,
-  phases: WALKED_PHASES,
-  byKind: {
-    pure: WALKED_PHASES.filter((phase) => phase.kind === 'pure').map((phase) => phase.name),
-    impure: WALKED_PHASES.filter((phase) => phase.kind === 'impure').map((phase) => phase.name),
-  },
+  module: DESCRIPTION_MODULE,
+  ioCells: IO_CELLS,
+  byKind: { pure: ['decode', 'decide', 'encode'] },
   composer: 'layer',
 }

@@ -9,3 +9,5 @@ Cell is one sandwich: build it with `Cell.layer` and run it with `Cell.run`.
 Phase bodies that `yield*` a service publish it on the Cell's requirements channel; provide once with `Cell.provide` or `Effect.provide`. A missing provide is a compile error at the run site.
 
 New arrows: `map`, `mapInput`, `andThen`, `zip`, `provide`, `withPolicy`. A refused decision reaches your write as the outcome value — only read, decode, and write failures fail the effect. The vocabulary drops `applier`.
+
+`Cell.canonical`, `CanonicalCommand`, `canonicalDecide`, `PhaseFact`, and the vocabulary's `phases` list and `byKind.impure` partition are removed: the vocabulary is a const table (`module`, `ioCells`, `byKind.pure`, `composer`) and `PhaseName` is now exported. Nothing else read the walked surface; a rule that wants order reads the interpreter, not the table.

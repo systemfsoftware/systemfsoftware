@@ -15,7 +15,7 @@ When both channels are inhabited, `Workflow<Command, Decision, Error>` is the fu
 `(command: Command) => Result<Decision, Error>` carrying the nominal `WorkflowBrand`
 conjunct — a phantom readonly TypeId-keyed field that no runtime property backs. The brand
 is what makes the workbook nominal: `Workflow.make` is the only constructor that applies
-it, and every surface that runs a decision — `Cell.decide` and the `DecidePhase` it
+it, and every surface that runs a decision — the `decide` member a `Cell.layer` spec
 demands — requires it, so a decision that skipped `make` is a compile error at the call
 site that would have run it, with the brand named in the diagnostic. A `never` channel does
 not silently collapse to that function: it resolves to a marker interface that no function
@@ -134,14 +134,14 @@ rejected, not allowed.
 
 All six violations fail `tsc`; the messages below are what `tsc` reports (verified against this package and `effect@4.0.0-rc.108`).
 
-| Violation                                 | `tsc` reports                                                                             | Why it is rejected                                                                                                         |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| A `Promise` return                        | `Type 'Promise<Decision>' is not assignable to type 'Result<Decision, Err>'`              | a workflow is a synchronous pure decision; async work belongs in the executor shell around it                              |
-| An `Effect` return                        | `Type 'Effect<Decision, never, never>' is not assignable to type 'Result<Decision, Err>'` | the workflow returns a value, not an effect handle; the executor runs effects and hands the workflow its input             |
-| `never` decision channel                  | `Type '...' is not assignable to type 'UninhabitedDecision'`                              | a workflow that can never produce a decision can never succeed                                                             |
-| `never` error channel                     | `Type '...' is not assignable to type 'UninhabitedError'`                                 | a workflow that cannot fail decides nothing; move it to a `*.kernel.ts`                                                    |
-| A bare decider handed to `Cell.decide`    | `Type '(command: Cmd) => Result<Dec, Err>' is not assignable to type 'WorkflowBrand'`     | only a `Workflow.make` value satisfies `DecidePhase`; a lambda that skipped `make` is not a decision a description may run |
-| A plain interface at the command position | `'Cmd' only refers to a type, but is being used as a value here`                          | the command is constrained on the value, and a declared type produces none — so there is no marker to smuggle              |
+| Violation                                 | `tsc` reports                                                                             | Why it is rejected                                                                                                               |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| A `Promise` return                        | `Type 'Promise<Decision>' is not assignable to type 'Result<Decision, Err>'`              | a workflow is a synchronous pure decision; async work belongs in the executor shell around it                                    |
+| An `Effect` return                        | `Type 'Effect<Decision, never, never>' is not assignable to type 'Result<Decision, Err>'` | the workflow returns a value, not an effect handle; the executor runs effects and hands the workflow its input                   |
+| `never` decision channel                  | `Type '...' is not assignable to type 'UninhabitedDecision'`                              | a workflow that can never produce a decision can never succeed                                                                   |
+| `never` error channel                     | `Type '...' is not assignable to type 'UninhabitedError'`                                 | a workflow that cannot fail decides nothing; move it to a `*.kernel.ts`                                                          |
+| A bare decider in a `Cell.layer` spec     | `Type '(command: Cmd) => Result<Dec, Err>' is not assignable to type 'WorkflowBrand'`     | only a `Workflow.make` value satisfies the `decide` member; a lambda that skipped `make` is not a decision a description may run |
+| A plain interface at the command position | `'Cmd' only refers to a type, but is being used as a value here`                          | the command is constrained on the value, and a declared type produces none — so there is no marker to smuggle                    |
 
 The two `never` cases are where the content-vs-filename distinction pays off. `Workflow<C, never, E>` resolves to `UninhabitedDecision` and `Workflow<C, D, never>` to `UninhabitedError` — interfaces whose only property is required and whose _type_ is the remediation, so the compile error points at the fix:
 

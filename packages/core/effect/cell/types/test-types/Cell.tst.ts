@@ -272,17 +272,19 @@ describe('the variance the Cell carries', () => {
   })
 })
 
-describe('the vocabulary and the canonical', () => {
-  it('Should_TypeCanonical_When_ReadingTheValue', () => {
-    expect(Cell.canonical).type.toBe<Cell.Cell<Cell.CanonicalCommand, void>>()
+describe('the vocabulary table', () => {
+  it('Should_CarryTheComposerAndPureFacts_When_ReadingTheVocabulary', () => {
+    expect<Cell.Vocabulary['composer']>().type.toBe<'layer'>()
+    expect<Cell.Vocabulary['byKind']>().type.toBe<{ readonly pure: readonly Cell.PhaseName[] }>()
   })
 
-  it('Should_CarryTheComposer_When_ReadingTheVocabulary', () => {
-    expect<Cell.Vocabulary['composer']>().type.toBe<'layer'>()
-    expect<Cell.Vocabulary['phases']>().type.toBe<readonly Cell.PhaseFact[]>()
-    expect<Cell.Vocabulary['byKind']>().type.toBe<
-      Readonly<Record<Cell.PhaseFact['kind'], readonly Cell.PhaseFact['name'][]>>
-    >()
+  it('Should_HaveNoCanonicalOrWalk_When_TheTableBecameAConst', () => {
+    type HasCanonical = 'canonical' extends keyof typeof Cell ? true : false
+    type HasCanonicalCommand = 'CanonicalCommand' extends keyof typeof Cell ? true : false
+    type HasPhaseFact = 'PhaseFact' extends keyof typeof Cell ? true : false
+    expect<HasCanonical>().type.toBe<false>()
+    expect<HasCanonicalCommand>().type.toBe<false>()
+    expect<HasPhaseFact>().type.toBe<false>()
   })
 
   it('Should_HaveNoApplier_When_TheApplyEntryWasDeleted', () => {
@@ -296,10 +298,12 @@ describe('the vocabulary and the canonical', () => {
     type HasWriteDone = 'WriteDone' extends keyof typeof Cell ? true : false
     type HasDescription = 'Description' extends keyof typeof Cell ? true : false
     type HasLayers = 'layers' extends keyof Cell.Vocabulary ? true : false
+    type HasPhasesField = 'phases' extends keyof Cell.Vocabulary ? true : false
     expect<HasApply>().type.toBe<false>()
     expect<HasPhases>().type.toBe<false>()
     expect<HasWriteDone>().type.toBe<false>()
     expect<HasDescription>().type.toBe<false>()
     expect<HasLayers>().type.toBe<false>()
+    expect<HasPhasesField>().type.toBe<false>()
   })
 })
