@@ -6,12 +6,7 @@ import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
-import {
-  Admitted,
-  decide as decideFixture,
-  type Decoded,
-  type Refused,
-} from './__fixtures__/InterpreterDecide.workflow.js'
+import { Admitted, decide as decideFixture, Decoded, type Refused } from './__fixtures__/InterpreterDecide.workflow.js'
 import { tracedDecide as tracedDecideFixture } from './__fixtures__/InterpreterTracedDecide.workflow.js'
 
 const Feature = makeFeature({ it, layer })
@@ -40,99 +35,66 @@ type LedgerService = Ledger['Service']
 const LedgerRecording = Layer.sync(Ledger, () => {
   const written: string[] = []
   return {
-    append: (line) => Effect.map(Effect.yieldNow, () => void written.push(line)),
-    lines: Effect.sync(() => [...written]),
+    append: (line: string) =>
+      Effect.sync(() => {
+        written.push(line)
+      }),
+    lines: Effect.sync(() => written),
   }
 })
 
-interface Bag extends Cell.Phases {
-  readonly command: Command
-  readonly raw: Raw
-  readonly decoded: Decoded
-  readonly decision: Admitted
-  readonly decisionError: Refused
-  readonly output: Output
-  readonly response: string
-  readonly decodeError: Malformed
-  readonly readError: Malformed
-  readonly writeError: never
-}
+const read = (command: Command) => Effect.succeed({ bytes: command.id })
 
-const read: Cell.ReadPhase<Bag> = (command) => Effect.succeed({ bytes: command.id })
-
-const decode: Cell.DecodePhase<Bag> = (raw) =>
+const decode = (raw: Raw): Result.Result<Decoded, Malformed> =>
   raw.bytes === 'bad'
     ? Result.fail({ kind: 'Malformed', bytes: raw.bytes })
-    : Result.succeed({ length: raw.bytes.length })
+    : Result.succeed(new Decoded({ length: raw.bytes.length }))
 
-const decide: Cell.DecidePhase<Bag> = decideFixture
+const encode = (outcome: Result.Result<Admitted, Refused>): Output =>
+  Result.match(outcome, {
+    onSuccess: (admitted) => ({ line: `admitted:${admitted.length}` }),
+    onFailure: (refused) => ({ line: `refused:${refused.why}` }),
+  })
 
-const encode: Cell.EncodePhase<Bag> = (outcome) => ({
-  line: Result.match(outcome, {
-    onFailure: (refused) => `refused:${refused.why}`,
-    onSuccess: (admitted) => `admitted:${admitted.length}`,
-  }),
-})
-
-const makeWrite = (ledger: LedgerService): Cell.WritePhase<Bag> => (output) =>
-  ledger.append(output.line).pipe(Effect.as(output.line))
-
-const makeDescription = (ledger: LedgerService) =>
-  Cell.write(
-    Cell.encode(Cell.decide(Cell.decode(Cell.read<Bag>(read), decode), decide), encode),
-    makeWrite(ledger),
-  )
-
-const makeSpecDescription = (ledger: LedgerService) =>
+const makeCell = (ledger: LedgerService) =>
   Cell.layer({
-    read: (command: Command) => Effect.succeed({ length: command.id.length }),
+    read,
+    decode,
     decide: decideFixture,
-    write: (outcome) => {
-      const line = Result.match(outcome, {
-        onFailure: (refused) => `refused:${refused.why}`,
-        onSuccess: (admitted) => `admitted:${admitted.length}`,
-      })
-      return ledger.append(line).pipe(Effect.as(line))
-    },
+    encode,
+    write: (output: Output) => ledger.append(output.line).pipe(Effect.as(output.line)),
   })
 
-const makeWriteRecordingRaw = (ledger: LedgerService): Cell.WritePhase<Bag> => (output, raw) =>
-  ledger.append(`${output.line}<-${raw.bytes}`).pipe(Effect.as(output.line))
-
-const makeDescriptionReportingItsRaw = (ledger: LedgerService) =>
-  Cell.write(
-    Cell.encode(Cell.decide(Cell.decode(Cell.read<Bag>(read), decode), decide), encode),
-    makeWriteRecordingRaw(ledger),
-  )
-
-const stubLedger: LedgerService = {
-  append: () => Effect.void,
-  lines: Effect.succeed([] as readonly string[]),
-}
-const oneDescription = makeDescription(stubLedger)
-
-const axesOf = (description: Cell.WriteDone<Bag>) => {
-  const phaseNames: string[] = []
-  const phaseKinds: Record<string, 'pure' | 'impure'> = {}
-  const declaredOrder = description.phases.map((phase) => {
-    phaseKinds[phase.name] = phase.kind
-    return phase.name
+const makeCellReportingItsRaw = (ledger: LedgerService) =>
+  Cell.layer({
+    read,
+    decode,
+    decide: decideFixture,
+    encode,
+    write: (output: Output, raw: Raw) => ledger.append(`${output.line}<-${raw.bytes}`).pipe(Effect.as(output.line)),
   })
-  for (const name of declaredOrder) {
-    if (!phaseNames.includes(name)) phaseNames.push(name)
-  }
-  return { module: description.module, ioCells: description.ioCells, phaseNames, phaseKinds, declaredOrder }
-}
 
-Feature('Applying a phase description')
+// The hand-written phase list is an independent oracle, and its whole job is to
+// disagree with the fold when the fold is wrong. It is restated on purpose, not
+// derived from `Cell.vocabulary`, and it lives inside this package so a consumer
+// never carries an axis literal.
+const ORACLE_PHASES = [
+  { name: 'read', kind: 'impure', convention: 'effect' },
+  { name: 'decode', kind: 'pure', convention: 'either-fail' },
+  { name: 'decide', kind: 'pure', convention: 'either-pass' },
+  { name: 'encode', kind: 'pure', convention: 'total' },
+  { name: 'write', kind: 'impure', convention: 'effect' },
+] as const
+
+Feature('Running a Cell')
   .withScenarioLayer(LedgerRecording)
   .body(({ scenario }) => {
     scenario(
       'A refused decision is written as the outcome rather than raised as a failure',
       Gherkin.Do.pipe(
-        When('a description is applied to a command its decision refuses')(
+        When('a Cell is run for a command its decision refuses')(
           'exit',
-          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.apply(makeDescription(ledger), { id: 'abc' }))),
+          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.run(makeCell(ledger), { id: 'abc' }))),
         ),
         Then('the run succeeds and its response carries the refusal')((s) => {
           expect(s.exit).toStrictEqual(Exit.succeed('refused:too short'))
@@ -147,31 +109,11 @@ Feature('Applying a phase description')
     )
 
     scenario(
-      'A spec-built description answers what the chain-built one answers',
-      Gherkin.Do.pipe(
-        When('a description built from a layer spec is applied to a command its decision admits')(
-          'exit',
-          () =>
-            Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.apply(makeSpecDescription(ledger), { id: 'abcd' }))),
-        ),
-        Then('the run succeeds with the response the chain-built description returns')((s) => {
-          expect(s.exit).toStrictEqual(Exit.succeed('admitted:4'))
-        }),
-        And('the write recorded the decide outcome it received')(() =>
-          Effect.flatMap(Ledger, (ledger) =>
-            Effect.map(ledger.lines, (lines) => {
-              expect(lines).toEqual(['admitted:4'])
-            }))
-        ),
-      ),
-    )
-
-    scenario(
       'An admitted decision is written as the outcome',
       Gherkin.Do.pipe(
-        When('a description is applied to a command its decision admits')(
+        When('a Cell is run for a command its decision admits')(
           'exit',
-          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.apply(makeDescription(ledger), { id: 'abcd' }))),
+          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.run(makeCell(ledger), { id: 'abcd' }))),
         ),
         Then('the run succeeds and its response carries the decision')((s) => {
           expect(s.exit).toStrictEqual(Exit.succeed('admitted:4'))
@@ -180,14 +122,14 @@ Feature('Applying a phase description')
     )
 
     scenario(
-      "A write receives the raw the description's read gathered",
+      'A write receives the raw the read gathered',
       Gherkin.Do.pipe(
-        When('a description whose write reports its raw is applied')(
+        When('a Cell whose write reports its raw is run')(
           'exit',
           () =>
             Effect.flatMap(
               Ledger,
-              (ledger) => Effect.exit(Cell.apply(makeDescriptionReportingItsRaw(ledger), { id: 'abcd' })),
+              (ledger) => Effect.exit(Cell.run(makeCellReportingItsRaw(ledger), { id: 'abcd' })),
             ),
         ),
         Then('the run succeeds with the response the write returned')((s) => {
@@ -205,9 +147,9 @@ Feature('Applying a phase description')
     scenario(
       'A malformed reading fails the run before anything is written',
       Gherkin.Do.pipe(
-        When('a description is applied to a command its validation rejects')(
+        When('a Cell is run for a command its validation rejects')(
           'exit',
-          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.apply(makeDescription(ledger), { id: 'bad' }))),
+          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.run(makeCell(ledger), { id: 'bad' }))),
         ),
         Then('the run fails with the malformed report')((s) => {
           expect(s.exit).toStrictEqual(Exit.fail({ kind: 'Malformed', bytes: 'bad' }))
@@ -222,97 +164,123 @@ Feature('Applying a phase description')
     )
 
     scenario(
-      'A description runs its phases in the order the value declares',
+      'The assembler runs the sandwich in its built-in order',
       Gherkin.Do.pipe(
-        When('a description declaring the phases out of canonical order is applied')(
-          'outcome',
-          () => {
-            const trace: string[] = []
-            const tracedRead: Cell.ReadPhase<Bag> = () =>
+        When('a Cell with tracing phases is run')('outcome', () => {
+          const trace: string[] = []
+          const traced = Cell.layer({
+            read: (command: Command) =>
               Effect.sync(() => {
                 trace.push('read')
-                return { bytes: 'traced' }
-              })
-            const tracedDecode: Cell.DecodePhase<Bag> = () => {
+                return { bytes: command.id }
+              }),
+            decode: (raw: Raw) => {
               trace.push('decode')
-              return Result.succeed({ length: 0 })
-            }
-            const tracedDecide: Cell.DecidePhase<Bag> = tracedDecideFixture(trace, new Admitted({ length: 0 }))
-            const tracedEncode: Cell.EncodePhase<Bag> = () => {
+              return Result.succeed(new Decoded({ length: raw.bytes.length }))
+            },
+            decide: tracedDecideFixture(trace, new Admitted({ length: 0 })),
+            encode: (outcome: Result.Result<Admitted, Refused>) => {
               trace.push('encode')
-              return { line: 'declared' }
-            }
-            const tracedWrite: Cell.WritePhase<Bag> = (output) =>
+              return Result.match(outcome, {
+                onSuccess: (admitted) => ({ line: `admitted:${admitted.length}` }),
+                onFailure: (refused) => ({ line: `refused:${refused.why}` }),
+              })
+            },
+            write: (output: Output) =>
               Effect.sync(() => {
                 trace.push('write')
                 return output.line
-              })
-
-            const declared: Cell.WriteDone<Bag> = {
-              'call write(output) before applying the description': true,
-              module: Cell.DESCRIPTION_MODULE,
-              ioCells: Cell.IO_CELLS,
-              phases: [
-                { name: 'decode', kind: 'pure', convention: 'either-fail', run: tracedDecode },
-                { name: 'read', kind: 'impure', convention: 'effect', run: tracedRead },
-                { name: 'decide', kind: 'pure', convention: 'either-pass', run: tracedDecide },
-                { name: 'encode', kind: 'pure', convention: 'total', run: tracedEncode },
-                { name: 'write', kind: 'impure', convention: 'effect', run: tracedWrite },
-              ],
-            }
-            return Cell.apply(declared, { id: 'abc' }).pipe(
-              Effect.exit,
-              Effect.map((exit) => ({ exit, trace })),
-            )
-          },
-        ),
-        Then('the phases ran exactly in the declared order')((s) => {
-          expect(s.outcome.trace).toEqual(['decode', 'read', 'decide', 'encode', 'write'])
-          expect(s.outcome.exit).toStrictEqual(Exit.succeed('declared'))
-        }),
-      ),
-    )
-
-    scenario(
-      'The description value carries the whole vocabulary',
-      Gherkin.Do.pipe(
-        When('the description is folded')(
-          'axes',
-          () => Effect.succeed(axesOf(oneDescription)),
-        ),
-        Then('every axis is read from the value')((s) => {
-          expect(s.axes.module).toBe(Cell.DESCRIPTION_MODULE)
-          expect(s.axes.ioCells).toBe(Cell.IO_CELLS)
-          expect(s.axes.phaseNames).toEqual(['read', 'decode', 'decide', 'encode', 'write'])
-          expect(s.axes.phaseKinds).toEqual({
-            read: 'impure',
-            decode: 'pure',
-            decide: 'pure',
-            encode: 'pure',
-            write: 'impure',
+              }),
           })
-          expect(s.axes.declaredOrder).toEqual(['read', 'decode', 'decide', 'encode', 'write'])
+          return Cell.run(traced, { id: 'abc' }).pipe(
+            Effect.exit,
+            Effect.map((exit) => ({ exit, trace })),
+          )
+        }),
+        Then('the phases ran exactly in the order the assembler chains them')((s) => {
+          expect(s.outcome.trace).toEqual(['read', 'decode', 'decide', 'encode', 'write'])
+          expect(s.outcome.exit).toStrictEqual(Exit.succeed('admitted:0'))
         }),
       ),
     )
 
     scenario(
-      'The exported vocabulary is the one the constructors build',
+      'The canonical Cell runs for its phases alone',
+      Gherkin.Do.pipe(
+        When('the canonical Cell is run for a canonical command')(
+          'exit',
+          () => Effect.exit(Cell.run(Cell.canonical, new Cell.CanonicalCommand({}))),
+        ),
+        Then('the run succeeds with nothing to say')((s) => {
+          expect(s.exit).toStrictEqual(Exit.succeed(undefined))
+        }),
+      ),
+    )
+
+    scenario(
+      'The exported vocabulary is the one the oracle states',
       Gherkin.Do.pipe(
         When('the derived vocabulary is read')(
           'derived',
           () => Effect.succeed(Cell.vocabulary),
         ),
         Then('it states every phase, its purity and its invocation shape, in order')((s) => {
-          expect(s.derived.phases).toEqual([
-            { name: 'read', kind: 'impure', convention: 'effect' },
-            { name: 'decode', kind: 'pure', convention: 'either-fail' },
-            { name: 'decide', kind: 'pure', convention: 'either-pass' },
-            { name: 'encode', kind: 'pure', convention: 'total' },
-            { name: 'write', kind: 'impure', convention: 'effect' },
-          ])
+          expect(s.derived.phases).toEqual(ORACLE_PHASES)
           expect(s.derived.module).toBe(Cell.DESCRIPTION_MODULE)
           expect(s.derived.ioCells).toBe(Cell.IO_CELLS)
+          expect(s.derived.composer).toBe('layer')
+        }),
+      ),
+    )
+
+    scenario(
+      'andThen feeds the first Cell response to the second Cell read',
+      Gherkin.Do.pipe(
+        When('two Cells are chained and run for an admitted command')(
+          'lines',
+          () =>
+            Effect.flatMap(Ledger, (ledger) => {
+              const first = makeCell(ledger)
+              const second = Cell.layer({
+                read: (line: string) => Effect.succeed(new Decoded({ length: line.length })),
+                decide: decideFixture,
+                write: (outcome: Result.Result<Admitted, Refused>, raw: Decoded) => {
+                  const line = Result.match(outcome, {
+                    onSuccess: (admitted) => `second:admitted:${admitted.length}:${raw.length}`,
+                    onFailure: (refused) => `second:refused:${refused.why}`,
+                  })
+                  return ledger.append(line).pipe(Effect.as(line))
+                },
+              })
+              const chained = Cell.andThen(first, second)
+              return Effect.map(Cell.run(chained, { id: 'abcd' }), (response) => ({ response }))
+            }),
+        ),
+        Then('the run answers with the second Cell response')((s) => {
+          expect(s.lines.response).toBe('second:admitted:10:10')
+        }),
+        And('both writes landed in order')(() =>
+          Effect.flatMap(Ledger, (ledger) =>
+            Effect.map(ledger.lines, (lines) => {
+              expect(lines).toEqual(['admitted:4', 'second:admitted:10:10'])
+            }))
+        ),
+      ),
+    )
+
+    scenario(
+      'zip runs both Cells against the same input and tuples the responses',
+      Gherkin.Do.pipe(
+        When('a Cell is zipped with a twin and run')(
+          'exit',
+          () =>
+            Effect.flatMap(Ledger, (ledger) => {
+              const zipped = Cell.zip(makeCell(ledger), makeCell(ledger))
+              return Effect.exit(Cell.run(zipped, { id: 'abcd' }))
+            }),
+        ),
+        Then('both responses arrive as a tuple')((s) => {
+          expect(s.exit).toStrictEqual(Exit.succeed(['admitted:4', 'admitted:4'] as const))
         }),
       ),
     )

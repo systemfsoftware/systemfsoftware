@@ -1,4 +1,4 @@
-import { Cell, type Workflow } from '@systemfsoftware/effect-cell-types'
+import { type Workflow } from '@systemfsoftware/effect-cell-types'
 import type { Result } from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
@@ -37,11 +37,9 @@ type CallableTagError = Record<'_tag', () => void>
 
 declare const cmd: Cmd
 declare const decision: Dec | Alt
-declare const decideInhabited: (command: Cmd) => Result<Dec, Err>
 declare const decidePromiseOverTagged: (command: TaggedCmd) => Promise<Dec>
 declare const decideValueOverTagged: (command: TaggedCmd) => Dec
 declare const totallyDecided: Workflow.Workflow<Cmd, boolean, never>
-declare const madeDecide: Workflow.Workflow<Cmd, Dec, Err>
 
 // The command channel is keyed on the command VALUE, so these fixtures are the
 // arguments `make` receives. The negatives are `declare`d rather than written:
@@ -53,17 +51,6 @@ declare const decideOverUnrelated: (command: { readonly nope: boolean }) => Resu
 declare const PlainCmdCtor: new(value: number) => { readonly value: number }
 declare const objectLiteralCmd: { readonly value: number }
 declare const primitiveCmd: number
-
-/**
- * A bag whose decide phase is the exact shape of `decideInhabited`, so the brand is the
- * only thing `Cell.decide` can be objecting to. `Err` carries a `_tag`, so the channel
- * check that would otherwise refuse an untagged error is out of the picture.
- */
-interface Shape extends Cell.Phases {
-  readonly decoded: Cmd
-  readonly decision: Dec
-  readonly decisionError: Err
-}
 
 describe('the four contractual claims', () => {
   it('Should_BeExactDeciderFunction_When_BothChannelsInhabited', () => {
@@ -155,21 +142,6 @@ describe('the constructor compiled evidence', () => {
   })
 })
 
-describe('the brand Cell.decide demands', () => {
-  it('Should_RefuseBareDecider_When_DecidePhaseIsDemanded', () => {
-    // A bare decider carries no brand, so the diagnostic names the conjunct it lacks —
-    // Workflow.make is the only door.
-    // @ts-expect-error: is not assignable to type 'WorkflowBrand'
-    Cell.decide<Shape>(decideInhabited)
-  })
-
-  it('Should_AcceptMakeValue_When_DecidePhaseIsDemanded', () => {
-    expect<Cell.DecidePhase<Shape>>().type.toBe<((decoded: Cmd) => Result<Dec, Err>) & Workflow.WorkflowBrand>()
-    expect<Cell.DecidePhase<Shape>>().type.toBeCallableWith(cmd)
-    expect<typeof Cell.decide<Shape>>().type.toBeCallableWith(madeDecide)
-  })
-})
-
 describe('the command channel the value constrains', () => {
   it('Should_RefuseInterfaceAtTheCommandPosition_When_TheCommandIsAPlainInterface', () => {
     // The load-bearing claim, and the reason enforcement moved to the value: a
@@ -178,7 +150,7 @@ describe('the command channel the value constrains', () => {
     // interface is assignable to the command parameter, so there is nothing to
     // smuggle a marker into.
     expect<Cmd>().type.not.toBeAssignableTo<Parameters<typeof Workflow.make>[0]>()
-    expect<Shape>().type.not.toBeAssignableTo<Parameters<typeof Workflow.make>[0]>()
+    expect<Result<never, never>>().type.not.toBeAssignableTo<Parameters<typeof Workflow.make>[0]>()
   })
 
   it('Should_AcceptTaggedClassCommand_When_PassedAtTheCommandPosition', () => {

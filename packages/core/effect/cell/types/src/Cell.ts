@@ -1,191 +1,94 @@
 import * as Effect from 'effect/Effect'
 import { dual, identity, pipe } from 'effect/Function'
+import type { Kind as HKTKind, TypeLambda as HKTTypeLambda } from 'effect/HKT'
+import type { Layer } from 'effect/Layer'
 import * as Result from 'effect/Result'
+import { CanonicalDecideError } from './CanonicalDecide.schema.js'
 import { CanonicalCommand, canonicalDecide } from './CanonicalDecide.workflow.js'
+import {
+  type Convention,
+  DESCRIPTION_MODULE,
+  IO_CELLS,
+  type IoCellClassification,
+  type PhaseKind,
+  type PhaseName,
+} from './Facts.js'
+import { decide, decode, encode, fold, read, write, type WriteDone } from './internal/phases.js'
+import type { Policy } from './Policy.js'
 import { type WorkflowBrand } from './Workflow.js'
 
-export interface Phases {
-  readonly command: unknown
-  readonly raw: unknown
-  readonly decoded: unknown
-  readonly decision: unknown
-  readonly decisionError: unknown
-  readonly output: unknown
-  readonly response: unknown
-  readonly decodeError: unknown
-  readonly readError: unknown
-  readonly writeError: unknown
+export { CanonicalCommand, canonicalDecide } from './CanonicalDecide.workflow.js'
+export { type Convention, DESCRIPTION_MODULE, IO_CELLS, type IoCellClassification }
+
+/**
+ * The nominal brand every `Cell` carries. `Cell.layer` is the only door that applies it.
+ */
+export const CellTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/Cell')
+
+/**
+ * The nominal brand type of {@link CellTypeId}.
+ */
+export type CellTypeId = typeof CellTypeId
+
+/**
+ * A Cell is one sandwich: a `read` that gathers, a `decide` that refuses or rules, and a
+ * `write` that acts — compiled into a single function from command to response. The `E`
+ * channel carries the infrastructure refusals; the `R` channel carries the services the
+ * phases `yield*`, provided once by the program's composition root.
+ */
+export interface Cell<in I, out A, out E = never, out R = never> {
+  readonly [CellTypeId]: CellTypeId
+  readonly run: (input: I) => Effect.Effect<A, E, R>
 }
 
-export type ReadPhase<P extends Phases> = (
-  command: P['command'],
-) => Effect.Effect<P['raw'], P['readError'], never>
-
-export type DecodePhase<P extends Phases> = (
-  raw: P['raw'],
-) => Result.Result<P['decoded'], P['decodeError']>
-
-export type DecidePhase<P extends Phases> =
-  & ((
-    decoded: P['decoded'],
-  ) => Result.Result<P['decision'], P['decisionError']>)
-  & WorkflowBrand
-
-export type EncodePhase<P extends Phases> = (
-  outcome: Result.Result<P['decision'], P['decisionError']>,
-) => P['output']
-
-export type WritePhase<P extends Phases> = (
-  output: P['output'],
-  raw: P['raw'],
-) => Effect.Effect<P['response'], P['writeError'], never>
-
-export type Convention = 'effect' | 'either-fail' | 'either-pass' | 'total'
-
-export interface ReadNode<P extends Phases> {
-  readonly name: 'read'
-  readonly kind: 'impure'
-  readonly convention: 'effect'
-  readonly run: ReadPhase<P>
-}
-export interface DecodeNode<P extends Phases> {
-  readonly name: 'decode'
-  readonly kind: 'pure'
-  readonly convention: 'either-fail'
-  readonly run: DecodePhase<P>
-}
-export interface DecideNode<P extends Phases> {
-  readonly name: 'decide'
-  readonly kind: 'pure'
-  readonly convention: 'either-pass'
-  readonly run: DecidePhase<P>
-}
-export interface EncodeNode<P extends Phases> {
-  readonly name: 'encode'
-  readonly kind: 'pure'
-  readonly convention: 'total'
-  readonly run: EncodePhase<P>
-}
-export interface WriteNode<P extends Phases> {
-  readonly name: 'write'
-  readonly kind: 'impure'
-  readonly convention: 'effect'
-  readonly run: WritePhase<P>
+/**
+ * The type lambda for {@link Cell}, admitting Cell to `Kind` positions.
+ */
+export interface TypeLambda extends HKTTypeLambda {
+  readonly type: Cell<this['In'], this['Target'], this['Out2'], this['Out1']>
 }
 
-export type Phase<P extends Phases> =
-  | ReadNode<P>
-  | DecodeNode<P>
-  | DecideNode<P>
-  | EncodeNode<P>
-  | WriteNode<P>
+/**
+ * A fully-applied {@link Kind} for Cell: `Kind<I, E, R, A>` is `Cell<I, A, E, R>`.
+ */
+export type Kind<I, E, R, A> = HKTKind<TypeLambda, I, E, R, A>
 
-export const DESCRIPTION_MODULE = '@systemfsoftware/effect-cell-types' as const
+/**
+ * The function shape a Cell publishes, read off the Cell type itself. Use it to type a
+ * capability parameter or a callback that hands a Cell's run to a shell:
+ * `Run<I, A, E, R>` is `Cell<I, A, E, R>['run']`.
+ */
+export type Run<I, A, E, R> = Cell<I, A, E, R>['run']
 
-export const IO_CELLS = {
-  cells: ['store', 'adapter'],
-  sources: ['effect/Clock', 'effect/System'],
-} as const
-
-export type IoCellClassification = typeof IO_CELLS
-
-export interface Description<P extends Phases> {
-  readonly module: typeof DESCRIPTION_MODULE
-  readonly ioCells: IoCellClassification
-  readonly phases: readonly Phase<P>[]
-}
-
-export interface ReadDone<P extends Phases> extends Description<P> {
-  readonly 'call read(command) before decode(raw)': true
-}
-export interface DecodeDone<P extends Phases> extends Description<P> {
-  readonly 'call decode(raw) before decide(decoded)': true
-}
-export interface DecideDone<P extends Phases> extends Description<P> {
-  readonly 'call decide(decoded) before encode(decision)': true
-}
-export interface EncodeDone<P extends Phases> extends Description<P> {
-  readonly 'call encode(decision) before write(output)': true
-}
-export interface WriteDone<P extends Phases> extends Description<P> {
-  readonly 'call write(output) before applying the description': true
-}
-
-const READ_DONE = 'call read(command) before decode(raw)'
-const DECODE_DONE = 'call decode(raw) before decide(decoded)'
-const DECIDE_DONE = 'call decide(decoded) before encode(decision)'
-const ENCODE_DONE = 'call encode(decision) before write(output)'
-const WRITE_DONE = 'call write(output) before applying the description'
-
-export const read = <P extends Phases>(run: ReadPhase<P>): ReadDone<P> => ({
-  [READ_DONE]: true,
-  module: DESCRIPTION_MODULE,
-  ioCells: IO_CELLS,
-  phases: [{ name: 'read', kind: 'impure', convention: 'effect', run }],
+const make = <I, A, E, R>(run: (input: I) => Effect.Effect<A, E, R>): Cell<I, A, E, R> => ({
+  [CellTypeId]: CellTypeId,
+  run,
 })
 
-export const decode: {
-  <P extends Phases>(run: DecodePhase<P>): (self: ReadDone<P>) => DecodeDone<P>
-  <P extends Phases>(self: ReadDone<P>, run: DecodePhase<P>): DecodeDone<P>
-} = dual(2, <P extends Phases>(self: ReadDone<P>, run: DecodePhase<P>): DecodeDone<P> => ({
-  [DECODE_DONE]: true,
-  module: self.module,
-  ioCells: self.ioCells,
-  phases: [...self.phases, { name: 'decode', kind: 'pure', convention: 'either-fail', run }],
-}))
-
-export const decide: {
-  <P extends Phases>(run: DecidePhase<P>): (self: DecodeDone<P>) => DecideDone<P>
-  <P extends Phases>(self: DecodeDone<P>, run: DecidePhase<P>): DecideDone<P>
-} = dual(2, <P extends Phases>(self: DecodeDone<P>, run: DecidePhase<P>): DecideDone<P> => ({
-  [DECIDE_DONE]: true,
-  module: self.module,
-  ioCells: self.ioCells,
-  phases: [...self.phases, { name: 'decide', kind: 'pure', convention: 'either-pass', run }],
-}))
-
-export const encode: {
-  <P extends Phases>(run: EncodePhase<P>): (self: DecideDone<P>) => EncodeDone<P>
-  <P extends Phases>(self: DecideDone<P>, run: EncodePhase<P>): EncodeDone<P>
-} = dual(2, <P extends Phases>(self: DecideDone<P>, run: EncodePhase<P>): EncodeDone<P> => ({
-  [ENCODE_DONE]: true,
-  module: self.module,
-  ioCells: self.ioCells,
-  phases: [...self.phases, { name: 'encode', kind: 'pure', convention: 'total', run }],
-}))
-
-export const write: {
-  <P extends Phases>(run: WritePhase<P>): (self: EncodeDone<P>) => WriteDone<P>
-  <P extends Phases>(self: EncodeDone<P>, run: WritePhase<P>): WriteDone<P>
-} = dual(2, <P extends Phases>(self: EncodeDone<P>, run: WritePhase<P>): WriteDone<P> => ({
-  [WRITE_DONE]: true,
-  module: self.module,
-  ioCells: self.ioCells,
-  phases: [...self.phases, { name: 'write', kind: 'impure', convention: 'effect', run }],
-}))
-
-interface LayerCore<C, Raw, RE, Dec, DE, Resp, WE> {
-  readonly read: (command: C) => Effect.Effect<Raw, RE, never>
+interface LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR> {
+  readonly read: (command: I) => Effect.Effect<Raw, RE, RR>
   readonly decide: ((decoded: Raw) => Result.Result<Dec, DE>) & WorkflowBrand
-  readonly write: (output: Result.Result<Dec, DE>, raw: Raw) => Effect.Effect<Resp, WE, never>
+  readonly write: (output: Result.Result<Dec, DE>, raw: Raw) => Effect.Effect<Resp, WE, WR>
 }
 
-interface LayerShortSpec<C, Raw, RE, Dec, DE, Resp, WE> extends LayerCore<C, Raw, RE, Dec, DE, Resp, WE> {
+interface LayerShortSpec<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
+  extends LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
+{
   readonly decode?: never
   readonly encode?: never
 }
 
-interface LayerLongSpec<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>
-  extends Omit<LayerCore<C, Raw, RE, Dec, DE, Resp, WE>, 'decide' | 'write'>
+interface LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>
+  extends Omit<LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>, 'decide' | 'write'>
 {
   readonly decode: (raw: Raw) => Result.Result<Dcd, DecE>
   readonly decide: ((decoded: Dcd) => Result.Result<Dec, DE>) & WorkflowBrand
   readonly encode: (outcome: Result.Result<Dec, DE>) => Out
-  readonly write: (output: Out, raw: Raw) => Effect.Effect<Resp, WE, never>
+  readonly write: (output: Out, raw: Raw) => Effect.Effect<Resp, WE, WR>
 }
 
-type LayerBag<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE> = {
-  readonly command: C
+type LayerBag<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR> = {
+  readonly command: I
   readonly raw: Raw
   readonly decoded: Dcd
   readonly decision: Dec
@@ -195,153 +98,261 @@ type LayerBag<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE> = {
   readonly decodeError: DecE
   readonly readError: RE
   readonly writeError: WE
+  readonly readServices: RR
+  readonly writeServices: WR
 }
 
-const layerImpl = <C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>(
+/**
+ * Compiles one sandwich spec into the fold runner. The `E` channel is the fold's truth —
+ * read, decode, and write failures; a decide refusal is the outcome the encode and write
+ * receive, not a failure.
+ */
+const layerRunner = <I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
   spec:
-    | LayerCore<C, Raw, RE, Dec, DE, Resp, WE>
-    | LayerLongSpec<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>,
-) => {
+    | LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
+    | LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>,
+): (input: I) => Effect.Effect<Resp, RE | DecE | WE, RR | WR> => {
   if ('decode' in spec && 'encode' in spec) {
-    return pipe(
-      read<LayerBag<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>>(spec.read),
-      decode<LayerBag<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>>(spec.decode),
-      decide<LayerBag<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>>(spec.decide),
-      encode<LayerBag<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>>(spec.encode),
-      write<LayerBag<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>>(spec.write),
+    type Bag = LayerBag<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>
+    const description = pipe(
+      read<Bag>(spec.read),
+      decode<Bag>(spec.decode),
+      decide<Bag>(spec.decide),
+      encode<Bag>(spec.encode),
+      write<Bag>(spec.write),
     )
+    return (input) => fold(description, input)
   }
-  return pipe(
-    read<LayerBag<C, Raw, RE, Raw, never, Dec, DE, Result.Result<Dec, DE>, Resp, WE>>(spec.read),
-    decode<LayerBag<C, Raw, RE, Raw, never, Dec, DE, Result.Result<Dec, DE>, Resp, WE>>(Result.succeed),
-    decide<LayerBag<C, Raw, RE, Raw, never, Dec, DE, Result.Result<Dec, DE>, Resp, WE>>(spec.decide),
-    encode<LayerBag<C, Raw, RE, Raw, never, Dec, DE, Result.Result<Dec, DE>, Resp, WE>>(identity),
-    write<LayerBag<C, Raw, RE, Raw, never, Dec, DE, Result.Result<Dec, DE>, Resp, WE>>(spec.write),
+  type ShortBag = LayerBag<I, Raw, RE, RR, Raw, never, Dec, DE, Result.Result<Dec, DE>, Resp, WE, WR>
+  const description = pipe(
+    read<ShortBag>(spec.read),
+    decode<ShortBag>(Result.succeed),
+    decide<ShortBag>(spec.decide),
+    encode<ShortBag>(identity),
+    write<ShortBag>(spec.write),
   )
+  return (input) => fold(description, input)
 }
 
-export function layer<C, Raw, RE, Dec, DE, Resp, WE>(
-  spec: LayerShortSpec<C, Raw, RE, Dec, DE, Resp, WE>,
-): WriteDone<LayerBag<C, Raw, RE, Raw, never, Dec, DE, Result.Result<Dec, DE>, Resp, WE>>
-export function layer<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>(
-  spec: LayerLongSpec<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>,
-): WriteDone<LayerBag<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>>
-export function layer<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>(
+/**
+ * Builds a Cell from one sandwich.
+ *
+ * Short form — `read` produces the value `decide` rules on, and the decide outcome is what
+ * `write` receives:
+ *
+ * ```ts
+ * import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
+ * import { Effect, Result } from 'effect'
+ *
+ * declare const decideAdmission: Workflow<CliArgs, Verdict, Refusal>
+ * declare class CliArgs { readonly target: string }
+ * declare class Verdict { readonly ok: boolean }
+ * declare class Refusal { readonly _tag: 'Refused' }
+ *
+ * const cell = Cell.layer({
+ *   read: (args: CliArgs) => Effect.succeed(args),
+ *   decide: decideAdmission,
+ *   write: (outcome: Result.Result<Verdict, Refusal>, raw: CliArgs) => Effect.void,
+ * })
+ * ```
+ *
+ * Long form — `decode` and `encode` adapt each side of `decide`; both are required together,
+ * and a spec carrying one without the other fails inference.
+ */
+export function layer<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>(
+  spec: LayerShortSpec<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>,
+): Cell<I, Resp, RE | WE, RR | WR>
+export function layer<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
+  spec: LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>,
+): Cell<I, Resp, RE | DecE | WE, RR | WR>
+export function layer<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
   spec:
-    | LayerShortSpec<C, Raw, RE, Dec, DE, Resp, WE>
-    | LayerLongSpec<C, Raw, RE, Dcd, DecE, Dec, DE, Out, Resp, WE>,
-) {
-  return layerImpl(spec)
+    | LayerCore<I, Raw, RE, RR, Dec, DE, Resp, WE, WR>
+    | LayerLongSpec<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>,
+): Cell<I, Resp, RE | DecE | WE, RR | WR> {
+  return make(layerRunner(spec))
 }
+export const run: {
+  <I>(input: I): <A, E, R>(self: Cell<I, A, E, R>) => Effect.Effect<A, E, R>
+  <I, A, E, R>(self: Cell<I, A, E, R>, input: I): Effect.Effect<A, E, R>
+} = dual(
+  2,
+  <I, A, E, R>(self: Cell<I, A, E, R>, input: I): Effect.Effect<A, E, R> => self.run(input),
+)
 
-type FoldValue<P extends Phases> =
-  | P['command']
-  | P['raw']
-  | P['decoded']
-  | Result.Result<P['decision'], P['decisionError']>
-  | P['output']
-  | P['response']
+/**
+ * Transforms the Cell's response.
+ */
+export const map: {
+  <A, B>(f: (a: A) => B): <I, E, R>(self: Cell<I, A, E, R>) => Cell<I, B, E, R>
+  <I, A, E, R, B>(self: Cell<I, A, E, R>, f: (a: A) => B): Cell<I, B, E, R>
+} = dual(
+  2,
+  <I, A, E, R, B>(self: Cell<I, A, E, R>, f: (a: A) => B): Cell<I, B, E, R> =>
+    make((input) => Effect.map(self.run(input), f)),
+)
 
-const isOutcome = <P extends Phases>(
-  value: FoldValue<P>,
-): value is Result.Result<P['decision'], P['decisionError']> => Result.isResult(value)
+/**
+ * Transforms the Cell's input.
+ */
+export const mapInput: {
+  <I0, I>(f: (input: I0) => I): <A, E, R>(self: Cell<I, A, E, R>) => Cell<I0, A, E, R>
+  <I0, I, A, E, R>(self: Cell<I, A, E, R>, f: (input: I0) => I): Cell<I0, A, E, R>
+} = dual(
+  2,
+  <I0, I, A, E, R>(self: Cell<I, A, E, R>, f: (input: I0) => I): Cell<I0, A, E, R> =>
+    make((input: I0) => self.run(f(input))),
+)
 
-export const apply = <P extends Phases>(description: WriteDone<P>, command: P['command']) =>
-  Effect.gen(function*() {
-    const phases = description.phases
-    const last = phases[phases.length - 1]
-    if (!last || last.name !== 'write') {
-      return yield* Effect.die(
-        new Error('effect-cell-types: a description reached the interpreter without a write phase closing it'),
-      )
-    }
+/**
+ * Feeds this Cell's response to the next Cell as its input. The error and service channels
+ * union.
+ */
+export const andThen: {
+  <B, E2, R2>(
+    that: Cell<never, B, E2, R2>,
+  ): <I, A, E, R>(self: Cell<I, A, E, R>) => Cell<I, B, E | E2, R | R2>
+  <I, A, E, R, B, E2, R2>(
+    self: Cell<I, A, E, R>,
+    that: Cell<A, B, E2, R2>,
+  ): Cell<I, B, E | E2, R | R2>
+} = dual(
+  2,
+  <I, A, E, R, B, E2, R2>(
+    self: Cell<I, A, E, R>,
+    that: Cell<A, B, E2, R2>,
+  ): Cell<I, B, E | E2, R | R2> => make((input) => Effect.flatMap(self.run(input), (response) => that.run(response))),
+)
 
-    let value: FoldValue<P> = command
-    let raw: FoldValue<P> = command
-    for (const phase of phases) {
-      if (phase === last) break
-      switch (phase.convention) {
-        case 'effect':
-          if (phase.name === 'read') {
-            value = yield* phase.run(value)
-            raw = value
-            break
-          }
-          value = yield* phase.run(value, raw)
-          break
-        case 'either-fail':
-          value = yield* Result.match(phase.run(value), {
-            onFailure: Effect.fail,
-            onSuccess: Effect.succeed,
-          })
-          break
-        case 'either-pass':
-          value = phase.run(value)
-          break
-        case 'total': {
-          if (!isOutcome(value)) {
-            return yield* Effect.die(
-              new Error(
-                'effect-cell-types: an encode phase received a value that is not the decide outcome',
-              ),
-            )
-          }
-          value = phase.run(value)
-          break
-        }
-        default: {
-          const unreachable: never = phase
-          return yield* Effect.die(
-            new Error(`effect-cell-types: unknown phase convention ${String(unreachable)}`),
-          )
-        }
-      }
-    }
-    return yield* last.run(value, raw)
-  })
+/**
+ * Runs both Cells against the same input and tuples the responses. Fails fast: when one
+ * side refuses, the other's write never runs.
+ */
+export const zip: {
+  <I, B, E2, R2>(
+    that: Cell<I, B, E2, R2>,
+  ): <A, E, R>(self: Cell<I, A, E, R>) => Cell<I, readonly [A, B], E | E2, R | R2>
+  <I, A, E, R, B, E2, R2>(
+    self: Cell<I, A, E, R>,
+    that: Cell<I, B, E2, R2>,
+  ): Cell<I, readonly [A, B], E | E2, R | R2>
+} = dual(
+  2,
+  <I, A, E, R, B, E2, R2>(
+    self: Cell<I, A, E, R>,
+    that: Cell<I, B, E2, R2>,
+  ): Cell<I, readonly [A, B], E | E2, R | R2> =>
+    make((input) => Effect.zipWith(self.run(input), that.run(input), (a, b): readonly [A, B] => [a, b])),
+)
 
+/**
+ * Provides a Layer to the Cell, eliminating the services the layer builds from `R`. This is
+ * the one composition-root elimination; the resulting Cell still demands the layer's input
+ * services. A missing provide is a compile error at the run site.
+ */
+export const provide: {
+  <RIn, LE, ROut>(
+    layer: Layer<ROut, LE, RIn>,
+  ): <I, A, E, R>(self: Cell<I, A, E, R>) => Cell<I, A, E | LE, RIn | Exclude<R, ROut>>
+  <I, A, E, R, RIn, LE, ROut>(
+    self: Cell<I, A, E, R>,
+    layer: Layer<ROut, LE, RIn>,
+  ): Cell<I, A, E | LE, RIn | Exclude<R, ROut>>
+} = dual(
+  2,
+  <I, A, E, R, RIn, LE, ROut>(
+    self: Cell<I, A, E, R>,
+    layer: Layer<ROut, LE, RIn>,
+  ): Cell<I, A, E | LE, RIn | Exclude<R, ROut>> => make((input) => Effect.provide(self.run(input), layer)),
+)
+
+/**
+ * Wraps the Cell's run in a `Policy` — retry, timeout, and their kin — preserving every
+ * channel.
+ */
+export const withPolicy: {
+  <A, E, R>(
+    policy: Policy<A, E, R>,
+  ): <I>(self: Cell<I, A, E, R>) => Cell<I, A, E, R>
+  <I, A, E, R>(
+    self: Cell<I, A, E, R>,
+    policy: Policy<A, E, R>,
+  ): Cell<I, A, E, R>
+} = dual(
+  2,
+  <I, A, E, R>(
+    self: Cell<I, A, E, R>,
+    policy: Policy<A, E, R>,
+  ): Cell<I, A, E, R> => make((input) => policy(self.run(input))),
+)
+
+/**
+ * A phase fact the vocabulary walk reports.
+ */
 export interface PhaseFact {
-  readonly name: Phase<Phases>['name']
-  readonly kind: Phase<Phases>['kind']
+  readonly name: PhaseName
+  readonly kind: PhaseKind
   readonly convention: Convention
 }
 
+/**
+ * The frozen plugin contract: what a walk over the canonical Cell reports. Plugins read
+ * these fields and nothing else.
+ */
 export interface Vocabulary {
   readonly module: typeof DESCRIPTION_MODULE
   readonly ioCells: IoCellClassification
   readonly phases: readonly PhaseFact[]
   readonly byKind: Readonly<Record<PhaseFact['kind'], readonly PhaseFact['name'][]>>
-  readonly applier: 'apply'
   readonly composer: 'layer'
 }
 
-interface CanonicalPhases extends Phases {
-  readonly decoded: CanonicalCommand
-}
+type CanonicalBag = LayerBag<
+  CanonicalCommand,
+  void,
+  never,
+  never,
+  CanonicalCommand,
+  never,
+  undefined,
+  CanonicalDecideError,
+  undefined,
+  void,
+  never,
+  never
+>
 
-export const canonical: WriteDone<CanonicalPhases> = write(
-  encode(
-    decide(
-      decode(read<CanonicalPhases>(() => Effect.void), () => Result.succeed(CanonicalCommand.make({}))),
-      canonicalDecide,
-    ),
-    () => undefined,
-  ),
-  () => Effect.void,
+const canonicalDescription: WriteDone<CanonicalBag> = pipe(
+  read<CanonicalBag>(() => Effect.void),
+  decode<CanonicalBag>(() => Result.succeed(CanonicalCommand.make({}))),
+  decide<CanonicalBag>(canonicalDecide),
+  encode<CanonicalBag>(() => undefined),
+  write<CanonicalBag>(() => Effect.void),
 )
 
-const WALKED_PHASES: readonly PhaseFact[] = canonical.phases.map(
+/**
+ * The canonical Cell: the shape every Cell shares, run for its phases alone. The vocabulary
+ * is a fold of the description this Cell was built from — never a second declaration.
+ */
+export const canonical: Cell<CanonicalCommand, void> = make((input: CanonicalCommand) =>
+  fold(canonicalDescription, input)
+)
+
+const WALKED_PHASES: readonly PhaseFact[] = canonicalDescription.phases.map(
   ({ convention, kind, name }): PhaseFact => ({ convention, kind, name }),
 )
 
+/**
+ * The walk result over {@link canonical}'s phases: the table every derived consumer —
+ * arbitraries and lint plugins — takes its behaviour from.
+ */
 export const vocabulary: Vocabulary = {
-  module: canonical.module,
-  ioCells: canonical.ioCells,
+  module: canonicalDescription.module,
+  ioCells: canonicalDescription.ioCells,
   phases: WALKED_PHASES,
   byKind: {
     pure: WALKED_PHASES.filter((phase) => phase.kind === 'pure').map((phase) => phase.name),
     impure: WALKED_PHASES.filter((phase) => phase.kind === 'impure').map((phase) => phase.name),
   },
-  applier: 'apply',
   composer: 'layer',
 }

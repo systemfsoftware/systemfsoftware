@@ -1,7 +1,8 @@
-import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
 import type { Effect } from 'effect/Effect'
 import * as EffectModule from 'effect/Effect'
 import { pipe } from 'effect/Function'
+import type { Layer } from 'effect/Layer'
 import type { Result } from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
@@ -26,135 +27,11 @@ interface Output {
 interface DecodeErr {
   readonly malformed: string
 }
-
-interface Shape extends Cell.Phases {
-  readonly command: Cmd
-  readonly raw: Raw
-  readonly decoded: Decoded
-  readonly decision: Decision
-  readonly decisionError: Refusal
-  readonly output: Output
-  readonly response: void
-  readonly decodeError: DecodeErr
-  readonly readError: never
-  readonly writeError: never
+interface ReadErr {
+  readonly offline: true
 }
-
-declare const readPhase: Cell.ReadPhase<Shape>
-declare const decodePhase: Cell.DecodePhase<Shape>
-declare const decidePhase: Cell.DecidePhase<Shape>
-declare const encodePhase: Cell.EncodePhase<Shape>
-declare const writePhase: Cell.WritePhase<Shape>
-
-declare const readStage: Cell.ReadDone<Shape>
-declare const decodeStage: Cell.DecodeDone<Shape>
-declare const decideStage: Cell.DecideDone<Shape>
-
-declare const decodeReturningEffect: (raw: Raw) => Effect<Decoded, DecodeErr, never>
-declare const decideReturningEffect: (decoded: Decoded) => Effect<Decision, Refusal, never>
-declare const encodeReturningEffect: (outcome: Result<Decision, Refusal>) => Effect<Output, never, never>
-declare const readGatheringProduct: (command: Cmd) => Effect<Raw, never, never>
-
-describe('the order the chain decides', () => {
-  it('Should_Compile_When_PhasesAreSuppliedInOrder', () => {
-    expect(
-      Cell.write(
-        Cell.encode(Cell.decide(Cell.decode(Cell.read(readPhase), decodePhase), decidePhase), encodePhase),
-        writePhase,
-      ),
-    ).type.toBe<Cell.WriteDone<Shape>>()
-  })
-
-  it('Should_NameTheSkippedPhase_When_DecideFollowsReadInline', () => {
-    // @ts-expect-error: call decode(raw) before decide(decoded)
-    Cell.decide(Cell.read(readPhase), decidePhase)
-  })
-
-  it('Should_NameTheSkippedPhase_When_DecideFollowsReadThroughAVariable', () => {
-    // @ts-expect-error: call decode(raw) before decide(decoded)
-    Cell.decide(readStage, decidePhase)
-  })
-
-  it('Should_NameTheInvertedPhase_When_DecodeFollowsDecideInline', () => {
-    // @ts-expect-error: call read(command) before decode(raw)
-    Cell.decode(Cell.decide(Cell.decode(Cell.read(readPhase), decodePhase), decidePhase), decodePhase)
-  })
-
-  it('Should_NameTheInvertedPhase_When_DecodeFollowsDecideThroughAVariable', () => {
-    // @ts-expect-error: call read(command) before decode(raw)
-    Cell.decode(decideStage, decodePhase)
-  })
-
-  it('Should_NameTheSkippedPhase_When_WriteFollowsDecodeInline', () => {
-    // @ts-expect-error: call encode(decision) before write(output)
-    Cell.write(Cell.decode(Cell.read(readPhase), decodePhase), writePhase)
-  })
-})
-
-describe('the pure slots refuse an effect', () => {
-  it('Should_RejectEffectReturningDecode_When_SlotRequiresResult', () => {
-    expect<typeof Cell.decode<Shape>>().type.not.toBeCallableWith(readStage, decodeReturningEffect)
-  })
-
-  it('Should_RejectEffectReturningDecide_When_SlotRequiresResult', () => {
-    expect<typeof Cell.decide<Shape>>().type.not.toBeCallableWith(decodeStage, decideReturningEffect)
-  })
-
-  it('Should_RejectEffectReturningEncode_When_SlotRequiresAPlainValue', () => {
-    expect<typeof Cell.encode<Shape>>().type.not.toBeCallableWith(decideStage, encodeReturningEffect)
-  })
-
-  it('Should_AcceptResultReturningDecode_When_SlotRequiresResult', () => {
-    expect<typeof Cell.decode<Shape>>().type.toBeCallableWith(readStage, decodePhase)
-  })
-})
-
-describe('the shapes that stay legal', () => {
-  it('Should_Compile_When_ReadGathersAProductInOneStep', () => {
-    expect<typeof Cell.read<Shape>>().type.toBeCallableWith(readGatheringProduct)
-  })
-
-  it('Should_Compile_When_DescriptionCarriesOneReadOnly', () => {
-    expect(Cell.read(readPhase)).type.toBe<Cell.ReadDone<Shape>>()
-  })
-
-  it('Should_Compile_When_DescriptionEndsAtEncodeWithNoWrite', () => {
-    expect(
-      Cell.encode(Cell.decide(Cell.decode(Cell.read(readPhase), decodePhase), decidePhase), encodePhase),
-    ).type.toBe<Cell.EncodeDone<Shape>>()
-  })
-
-  it('Should_RejectTheSecondArgument_When_ReadFollowsAWrite', () => {
-    const someWriteDone = Cell.write(
-      Cell.encode(Cell.decide(Cell.decode(Cell.read(readPhase), decodePhase), decidePhase), encodePhase),
-      writePhase,
-    )
-    // @ts-expect-error: Expected 1 arguments, but got 2
-    Cell.read(readPhase, someWriteDone)
-  })
-})
-
-describe('the decision error is an outcome, not a fault', () => {
-  it('Should_HandBothBranchesToEncode_When_DecideReturnsResult', () => {
-    expect<Cell.EncodePhase<Shape>>().type.toBe<(outcome: Result<Decision, Refusal>) => Output>()
-  })
-
-  it('Should_KeepDecodeErrorSeparate_When_DecisionErrorIsAnOutcome', () => {
-    expect<Cell.DecodePhase<Shape>>().type.toBe<(raw: Raw) => Result<Decoded, DecodeErr>>()
-  })
-})
-
-interface Infallible extends Cell.Phases {
-  readonly command: Cmd
-  readonly raw: Raw
-  readonly decoded: Decoded
-  readonly decision: Decision
-  readonly decisionError: Refusal
-  readonly output: Output
-  readonly response: boolean
-  readonly decodeError: never
-  readonly readError: never
-  readonly writeError: never
+interface WriteErr {
+  readonly full: true
 }
 
 interface Db {
@@ -163,200 +40,266 @@ interface Db {
 interface Bus {
   readonly emit: (line: string) => void
 }
-
-declare const infallible: Cell.WriteDone<Infallible>
-declare const plain: Cell.WriteDone<Shape>
-declare const command: Cmd
-
-describe('the channels the interpreter derives', () => {
-  it('Should_CarryDecodeFailure_When_DecodeCanFail', () => {
-    expect(Cell.apply(plain, command)).type.toBe<Effect<void, DecodeErr, never>>()
-  })
-
-  it('Should_OmitDecisionError_When_DecideReturnsAnErrorVariant', () => {
-    expect(Cell.apply(infallible, command)).type.toBe<Effect<boolean, never, never>>()
-  })
-
-  it('Should_RejectReadPhase_When_BodyRequiresAService', () => {
-    expect<(command: Cmd) => Effect<Raw, never, Db>>().type.not.toBeAssignableTo<
-      Cell.ReadPhase<Shape>
-    >()
-  })
-
-  it('Should_RejectWritePhase_When_BodyRequiresAService', () => {
-    expect<(output: Output, raw: Raw) => Effect<void, never, Bus>>().type.not.toBeAssignableTo<
-      Cell.WritePhase<Shape>
-    >()
-  })
-
-  it('Should_YieldNever_When_ServiceIsClosedOverOutsideThePhase', () => {
-    const db: Db = { query: () => 'closed' }
-    const bus: Bus = { emit: () => {} }
-    const closedRead: Cell.ReadPhase<Shape> = (cmd) => EffectModule.succeed({ bytes: db.query() + cmd.id })
-    const closedWrite: Cell.WritePhase<Shape> = (output) => {
-      bus.emit(output.line)
-      return EffectModule.succeed(undefined)
-    }
-    const description = pipe(
-      Cell.read<Shape>(closedRead),
-      Cell.decode(decodePhase),
-      Cell.decide(decidePhase),
-      Cell.encode(encodePhase),
-      Cell.write(closedWrite),
-    )
-    expect(Cell.apply(description, command)).type.toBe<Effect<void, DecodeErr, never>>()
-  })
-
-  it('Should_RequireAWrittenDescription_When_Applying', () => {
-    expect(Cell.read(readPhase)).type.not.toBeAssignableTo<Cell.WriteDone<Shape>>()
-  })
-})
-
-describe('the order the chain decides, written in pipe', () => {
-  it('Should_Compile_When_PhasesArePipedInOrder', () => {
-    expect(
-      pipe(
-        Cell.read<Shape>(readPhase),
-        Cell.decode(decodePhase),
-        Cell.decide(decidePhase),
-        Cell.encode(encodePhase),
-        Cell.write(writePhase),
-      ),
-    ).type.toBe<Cell.WriteDone<Shape>>()
-  })
-
-  it('Should_NameTheSkippedPhase_When_DecidePipedAfterRead', () => {
-    // @ts-expect-error: call decode(raw) before decide(decoded)
-    pipe(Cell.read<Shape>(readPhase), Cell.decide(decidePhase))
-  })
-
-  it('Should_NameTheInvertedPhase_When_DecodePipedAfterDecide', () => {
-    // @ts-expect-error: call read(command) before decode(raw)
-    pipe(decideStage, Cell.decode(decodePhase))
-  })
-
-  it('Should_KeepTheDataFirstCallStyle_When_ConsumerDoesNotPipe', () => {
-    expect(Cell.decode(readStage, decodePhase)).type.toBe<Cell.DecodeDone<Shape>>()
-  })
-})
-
-describe('the description value is a foldable record', () => {
-  it('Should_CarryTheVocabulary_When_AnyStageIsFolded', () => {
-    expect<Cell.WriteDone<Shape>>().type.toBeAssignableTo<Cell.Description<Shape>>()
-    expect<Cell.ReadDone<Shape>>().type.toBeAssignableTo<Cell.Description<Shape>>()
-    expect<Cell.EncodeDone<Shape>>().type.toBeAssignableTo<Cell.Description<Shape>>()
-  })
-
-  it('Should_CarryModuleAndIoCells_When_ReadingTheDescriptionRoot', () => {
-    expect<Cell.Description<Shape>['module']>().type.toBe<typeof Cell.DESCRIPTION_MODULE>()
-    expect<Cell.Description<Shape>['ioCells']>().type.toBe<typeof Cell.IO_CELLS>()
-  })
-
-  it('Should_CarryOrderedPhaseRecords_When_ReadingTheDescription', () => {
-    expect<Cell.Description<Shape>['phases']>().type.toBe<readonly Cell.Phase<Shape>[]>()
-  })
-
-  it('Should_RejectTheDeletedBagKey_When_DescriptionLiteralCarriesOne', () => {
-    const literal: Cell.Description<Shape> = {
-      module: Cell.DESCRIPTION_MODULE,
-      ioCells: Cell.IO_CELLS,
-      phases: [],
-      // @ts-expect-error: Object literal may only specify known properties, and 'layers' does not exist in type 'Description<Shape>'
-      layers: [],
-    }
-    expect(literal).type.toBe<Cell.Description<Shape>>()
-  })
-
-  it('Should_CarryKindAndConvention_When_ReadingAPhaseRecord', () => {
-    expect<Cell.Phase<Shape>['kind']>().type.toBe<'pure' | 'impure'>()
-    expect<Cell.Phase<Shape>['convention']>().type.toBe<Cell.Convention>()
-  })
-})
-
-describe('what the write receives', () => {
-  it('Should_HandTheWriteTheRaw_When_ItDeclaresASecondParameter', () => {
-    expect<Parameters<Cell.WritePhase<Shape>>>().type.toBe<[output: Output, raw: Raw]>()
-  })
-
-  it('Should_StillAdmitAUnaryWrite_When_TheWriteIgnoresTheRaw', () => {
-    expect<(output: Output) => Effect<void, never, never>>().type.toBeAssignableTo<
-      Cell.WritePhase<Shape>
-    >()
-  })
-
-  it('Should_RefuseTheWrite_When_ItsSecondParameterIsNotTheRaw', () => {
-    expect<(output: Output, raw: Decoded) => Effect<void, never, never>>().type.not
-      .toBeAssignableTo<Cell.WritePhase<Shape>>()
-  })
-})
-
-interface Query extends Cell.Phases {
-  readonly command: Cmd
-  readonly raw: Raw
-  readonly decoded: Raw
-  readonly decision: Decision
-  readonly decisionError: Refusal
-  readonly output: Result<Decision, Refusal>
-  readonly response: boolean
-  readonly decodeError: never
-  readonly readError: never
-  readonly writeError: never
+interface Clock {
+  readonly now: () => number
 }
 
-declare const readQuery: Cell.ReadPhase<Query>
-declare const decideQuery: Cell.DecidePhase<Query>
-declare const writeQuery: Cell.WritePhase<Query>
-declare const writeTakingEncodedOutput: (output: Output, raw: Raw) => Effect<boolean, never, never>
+declare const read: (command: Cmd) => Effect<Raw, never, never>
+declare const readFailing: (command: Cmd) => Effect<Raw, ReadErr, never>
+declare const readNeedingDb: (command: Cmd) => Effect<Raw, never, Db>
+declare const readNeedingDbAndClock: (command: Cmd) => Effect<Raw, never, Db | Clock>
+declare const readNeedingClock: (command: Cmd) => Effect<Raw, never, Clock>
+declare const decode: (raw: Raw) => Result<Decoded, DecodeErr>
+declare const decideOverRaw: Workflow.Workflow<Raw, Decision, Refusal>
+declare const decideOverDecoded: Workflow.Workflow<Decoded, Decision, Refusal>
+declare const decideUnbranded: (decoded: Raw) => Result<Decision, Refusal>
+declare const encode: (outcome: Result<Decision, Refusal>) => Output
 
-describe('the layer spec sugar', () => {
-  it('Should_InferTheBag_When_ShortSpecSuppliesReadDecideWrite', () => {
-    const viaSugar = Cell.layer({ read: readQuery, decide: decideQuery, write: writeQuery })
-    expect(viaSugar).type.toBeAssignableTo<Cell.WriteDone<Query>>()
-    expect(Cell.apply(viaSugar, { id: 'x' })).type.toBe<Effect<boolean, never, never>>()
+// The short-form write receives the decide outcome; the long-form write receives whatever
+// the encode produced. Two fixture families keep the two forms honest.
+declare const writeOutcome: (outcome: Result<Decision, Refusal>, raw: Raw) => Effect<void, never, never>
+declare const writeOutcomeFailing: (outcome: Result<Decision, Refusal>, raw: Raw) => Effect<void, WriteErr, never>
+declare const writeOutcomeUnary: (outcome: Result<Decision, Refusal>) => Effect<void, never, never>
+declare const writeOutcomeWrongRaw: (outcome: Result<Decision, Refusal>, raw: Decoded) => Effect<void, never, never>
+declare const writeOutcomeNeedingBus: (outcome: Result<Decision, Refusal>, raw: Raw) => Effect<void, never, Bus>
+declare const writeOutput: (output: Output, raw: Raw) => Effect<void, never, never>
+
+declare const command: Cmd
+
+declare const dbLayer: Layer<Db, never, never>
+declare const failingDbLayer: Layer<Db, ReadErr, never>
+declare const clockLayer: Layer<Clock, never, never>
+declare const dbFromClock: Layer<Db, never, Clock>
+
+declare const outputCell: Cell.Cell<Output, boolean, WriteErr, Bus>
+declare const twinCell: Cell.Cell<Cmd, boolean, WriteErr, Bus>
+declare const voidCell: Cell.Cell<void, boolean, WriteErr, Bus>
+
+describe('the sandwich the layer builds', () => {
+  it('Should_InferTheCell_When_ShortSpecSuppliesReadDecideWrite', () => {
+    const cell = Cell.layer({ read, decide: decideOverRaw, write: writeOutcome })
+    expect(cell).type.toBe<Cell.Cell<Cmd, void, never, never>>()
   })
 
-  it('Should_InferTheBag_When_LongSpecSuppliesAllFivePhases', () => {
-    const viaSugar = Cell.layer({
-      read: readPhase,
-      decode: decodePhase,
-      decide: decidePhase,
-      encode: encodePhase,
-      write: writePhase,
-    })
-    expect(viaSugar).type.toBeAssignableTo<Cell.WriteDone<Shape>>()
-    expect(Cell.apply(viaSugar, { id: 'x' })).type.toBe<Effect<void, DecodeErr, never>>()
+  it('Should_InferTheCell_When_LongSpecSuppliesAllFivePhases', () => {
+    const cell = Cell.layer({ read, decode, decide: decideOverDecoded, encode, write: writeOutput })
+    expect(cell).type.toBe<Cell.Cell<Cmd, void, DecodeErr, never>>()
   })
 
-  it('Should_RefuseTheSpec_When_TheWriteCannotReceiveTheOutcome', () => {
-    expect(Cell.layer).type.toBeCallableWith({ read: readQuery, decide: decideQuery, write: writeQuery })
-
-    expect(Cell.layer).type.not.toBeCallableWith({
-      read: readQuery,
-      decide: decideQuery,
-      write: writeTakingEncodedOutput,
-    })
-
-    const spec = { read: readQuery, decide: decideQuery, write: writeTakingEncodedOutput }
-    expect(Cell.layer).type.not.toBeCallableWith(spec)
+  it('Should_UnionTheErrorChannel_When_ReadAndWriteCanFail', () => {
+    const cell = Cell.layer({ read: readFailing, decide: decideOverRaw, write: writeOutcomeFailing })
+    expect(cell).type.toBe<Cell.Cell<Cmd, void, ReadErr | WriteErr, never>>()
   })
 
-  it('Should_RefuseTheSpec_When_DecodeArrivesWithoutEncode', () => {
-    expect(Cell.layer).type.toBeCallableWith({
-      read: readPhase,
-      decode: decodePhase,
-      decide: decidePhase,
-      encode: encodePhase,
-      write: writePhase,
-    })
+  it('Should_PublishTheReadServices_When_TheReadRequiresAService', () => {
+    const cell = Cell.layer({ read: readNeedingDb, decide: decideOverRaw, write: writeOutcome })
+    expect(cell).type.toBe<Cell.Cell<Cmd, void, never, Db>>()
+  })
 
-    expect(Cell.layer).type.not.toBeCallableWith({
-      read: readPhase,
-      decode: decodePhase,
-      decide: decidePhase,
-      write: writePhase,
-    })
+  it('Should_UnionTheServices_When_BothImpurePhasesRequire', () => {
+    const cell = Cell.layer({ read: readNeedingDb, decide: decideOverRaw, write: writeOutcomeNeedingBus })
+    expect(cell).type.toBe<Cell.Cell<Cmd, void, never, Db | Bus>>()
+  })
 
-    const partialSpec = { read: readPhase, decode: decodePhase, decide: decidePhase, write: writePhase }
-    expect(Cell.layer).type.not.toBeCallableWith(partialSpec)
+  it('Should_KeepTheDecideRefusalAnOutcome_When_NamingTheErrorChannel', () => {
+    // The decide refusal is the value the write receives, so Refusal appears in no
+    // error channel — only the read and write errors do.
+    const cell = Cell.layer({ read: readFailing, decide: decideOverRaw, write: writeOutcomeFailing })
+    expect(cell).type.not.toBeAssignableTo<Cell.Cell<Cmd, void, Refusal, never>>()
+  })
+})
+
+describe('the refusals the layer keeps', () => {
+  it('Should_NameTheMissingEncode_When_DecodeArrivesWithoutEncode', () => {
+    expect<typeof Cell.layer>().type.not.toBeCallableWith({
+      read,
+      decode,
+      decide: decideOverDecoded,
+      write: writeOutput,
+    })
+  })
+
+  it('Should_NameTheMissingDecode_When_EncodeArrivesWithoutDecode', () => {
+    expect<typeof Cell.layer>().type.not.toBeCallableWith({
+      read,
+      decide: decideOverDecoded,
+      encode,
+      write: writeOutput,
+    })
+  })
+
+  it('Should_RefuseTheSpec_When_TheDecideIsNotAWorkflow', () => {
+    expect<typeof Cell.layer>().type.not.toBeCallableWith({ read, decide: decideUnbranded, write: writeOutcome })
+  })
+
+  it('Should_RefuseTheSpec_When_TheWriteSecondParameterIsNotTheRaw', () => {
+    expect<typeof Cell.layer>().type.not.toBeCallableWith({ read, decide: decideOverRaw, write: writeOutcomeWrongRaw })
+  })
+
+  it('Should_RefuseTheDecide_When_ItsInputIsNotTheReadRaw', () => {
+    expect<typeof Cell.layer>().type.not.toBeCallableWith({ read, decide: decideOverDecoded, write: writeOutcome })
+  })
+
+  it('Should_AdmitAUnaryWrite_When_TheWriteIgnoresTheOutcome', () => {
+    const cell = Cell.layer({ read, decide: decideOverRaw, write: writeOutcomeUnary })
+    expect(cell).type.toBe<Cell.Cell<Cmd, void, never, never>>()
+  })
+
+  it('Should_AcceptTheLongSpec_When_AllFivePhasesArrive', () => {
+    expect<typeof Cell.layer>().type.toBeCallableWith({
+      read,
+      decode,
+      decide: decideOverDecoded,
+      encode,
+      write: writeOutput,
+    })
+  })
+
+  it('Should_AcceptTheShortSpec_When_ThreePhasesArrive', () => {
+    expect<typeof Cell.layer>().type.toBeCallableWith({ read, decide: decideOverRaw, write: writeOutcome })
+  })
+})
+
+describe('the run the Cell publishes', () => {
+  it('Should_RunTheCell_When_CalledDataFirst', () => {
+    const cell = Cell.layer({ read, decide: decideOverRaw, write: writeOutcome })
+    expect(Cell.run(cell, command)).type.toBe<Effect<void, never, never>>()
+  })
+
+  it('Should_RunTheCell_When_TheInputIsBoundFirst', () => {
+    const cell = Cell.layer({ read, decide: decideOverRaw, write: writeOutcome })
+    const withInput = Cell.run(command)
+    expect(withInput(cell)).type.toBe<Effect<void, never, never>>()
+  })
+
+  it('Should_HideTheNeverServices_When_TheCellNeedsNone', () => {
+    expect<Cell.Run<Cmd, void, never, never>>().type.toBe<(input: Cmd) => Effect<void, never>>()
+  })
+
+  it('Should_HandTheRunToTheShell_When_TheCellIsProvided', () => {
+    const cell = Cell.layer({ read, decide: decideOverRaw, write: writeOutcome })
+    const capability: (input: Cmd) => Effect<void, never> = cell.run
+    expect(capability).type.toBe<(input: Cmd) => Effect<void, never>>()
+  })
+
+  it('Should_KeepTheServicesVisible_When_TheCellNeedsThem', () => {
+    expect<Cell.Cell<Cmd, void, never, Db>>().type.not.toBeAssignableTo<(input: Cmd) => Effect<void, never>>()
+  })
+})
+
+describe('the provide that clears the services', () => {
+  it('Should_NarrowRToNever_When_TheOneServiceIsProvided', () => {
+    const cell = Cell.layer({ read: readNeedingDb, decide: decideOverRaw, write: writeOutcome })
+    const provided = pipe(cell, Cell.provide(dbLayer))
+    expect(provided).type.toBe<Cell.Cell<Cmd, void, never, never>>()
+    expect(Cell.run(provided, command)).type.toBe<Effect<void, never, never>>()
+  })
+
+  it('Should_UnionTheLayerError_When_TheLayerCanFail', () => {
+    const cell = Cell.layer({ read: readNeedingDb, decide: decideOverRaw, write: writeOutcome })
+    const provided = pipe(cell, Cell.provide(failingDbLayer))
+    expect(provided).type.toBe<Cell.Cell<Cmd, void, ReadErr, never>>()
+  })
+
+  it('Should_KeepTheLayerInputs_When_TheLayerNeedsServices', () => {
+    const cell = Cell.layer({ read: readNeedingClock, decide: decideOverRaw, write: writeOutcome })
+    const provided = pipe(cell, Cell.provide(dbFromClock))
+    expect(provided).type.toBe<Cell.Cell<Cmd, void, never, Clock>>()
+  })
+
+  it('Should_NarrowOnlyTheProvidedService_When_ChainingProvides', () => {
+    const cell = Cell.layer({ read: readNeedingDbAndClock, decide: decideOverRaw, write: writeOutcome })
+    const once = pipe(cell, Cell.provide(dbLayer))
+    expect(once).type.toBe<Cell.Cell<Cmd, void, never, Clock>>()
+    const twice = pipe(once, Cell.provide(clockLayer))
+    expect(twice).type.toBe<Cell.Cell<Cmd, void, never, never>>()
+  })
+
+  it('Should_DemandTheProvide_When_TheShellRunsTheCell', () => {
+    const cell = Cell.layer({ read: readNeedingDb, decide: decideOverRaw, write: writeOutcome })
+    const runInShell = EffectModule.provide(Cell.run(cell, command), dbLayer)
+    expect(runInShell).type.toBe<Effect<void, never, never>>()
+  })
+})
+
+describe('the combinators', () => {
+  it('Should_TransformTheResponse_When_Mapping', () => {
+    const mapped = pipe(outputCell, Cell.map((verdict: boolean): number => (verdict ? 1 : 0)))
+    expect(mapped).type.toBe<Cell.Cell<Output, number, WriteErr, Bus>>()
+  })
+
+  it('Should_TransformTheInput_When_MappingInput', () => {
+    const remapped = pipe(outputCell, Cell.mapInput((s: string) => ({ line: s })))
+    expect(remapped).type.toBe<Cell.Cell<string, boolean, WriteErr, Bus>>()
+  })
+
+  it('Should_FeedTheResponseToTheNext_When_AndThenChains', () => {
+    const chained = pipe(Cell.layer({ read, decide: decideOverRaw, write: writeOutcome }), Cell.andThen(voidCell))
+    expect(chained).type.toBe<Cell.Cell<Cmd, boolean, WriteErr, Bus>>()
+  })
+
+  it('Should_TupleTheResponses_When_Zipping', () => {
+    const zipped = pipe(Cell.layer({ read, decide: decideOverRaw, write: writeOutcome }), Cell.zip(twinCell))
+    expect(zipped).type.toBe<Cell.Cell<Cmd, readonly [void, boolean], WriteErr, Bus>>()
+  })
+
+  it('Should_PreserveEveryChannel_When_PolicyWraps', () => {
+    const policy = <A, E, R>(self: Effect<A, E, R>): Effect<A, E, R> => self
+    const wrapped = pipe(Cell.layer({ read, decide: decideOverRaw, write: writeOutcome }), Cell.withPolicy(policy))
+    expect(wrapped).type.toBe<Cell.Cell<Cmd, void, never, never>>()
+  })
+})
+
+describe('the variance the Cell carries', () => {
+  it('Should_AcceptTheWiderCommandCell_When_TheNarrowerIsExpected', () => {
+    expect<Cell.Cell<Cmd, void, never, never>>().type.toBeAssignableTo<Cell.Cell<{ id: string }, void, never, never>>()
+  })
+
+  it('Should_AcceptTheWiderResponse_When_TheNarrowerIsExpected', () => {
+    expect<Cell.Cell<Cmd, boolean, never, never>>().type.toBeAssignableTo<
+      Cell.Cell<Cmd, boolean | void, never, never>
+    >()
+  })
+
+  it('Should_AcceptTheWiderError_When_TheNarrowerIsExpected', () => {
+    expect<Cell.Cell<Cmd, void, WriteErr, never>>().type.toBeAssignableTo<
+      Cell.Cell<Cmd, void, WriteErr | ReadErr, never>
+    >()
+  })
+
+  it('Should_AcceptTheWiderServices_When_TheNarrowerIsExpected', () => {
+    expect<Cell.Cell<Cmd, void, never, Bus>>().type.toBeAssignableTo<Cell.Cell<Cmd, void, never, Bus | Clock>>()
+  })
+})
+
+describe('the vocabulary and the canonical', () => {
+  it('Should_TypeCanonical_When_ReadingTheValue', () => {
+    expect(Cell.canonical).type.toBe<Cell.Cell<Cell.CanonicalCommand, void>>()
+  })
+
+  it('Should_CarryTheComposer_When_ReadingTheVocabulary', () => {
+    expect<Cell.Vocabulary['composer']>().type.toBe<'layer'>()
+    expect<Cell.Vocabulary['phases']>().type.toBe<readonly Cell.PhaseFact[]>()
+    expect<Cell.Vocabulary['byKind']>().type.toBe<
+      Readonly<Record<Cell.PhaseFact['kind'], readonly Cell.PhaseFact['name'][]>>
+    >()
+  })
+
+  it('Should_HaveNoApplier_When_TheApplyEntryWasDeleted', () => {
+    type HasApplier = 'applier' extends keyof Cell.Vocabulary ? true : false
+    expect<HasApplier>().type.toBe<false>()
+  })
+
+  it('Should_ExposeNoBagMachinery_When_TheAssemblerWentInternal', () => {
+    type HasApply = 'apply' extends keyof typeof Cell ? true : false
+    type HasPhases = 'Phases' extends keyof typeof Cell ? true : false
+    type HasWriteDone = 'WriteDone' extends keyof typeof Cell ? true : false
+    type HasDescription = 'Description' extends keyof typeof Cell ? true : false
+    type HasLayers = 'layers' extends keyof Cell.Vocabulary ? true : false
+    expect<HasApply>().type.toBe<false>()
+    expect<HasPhases>().type.toBe<false>()
+    expect<HasWriteDone>().type.toBe<false>()
+    expect<HasDescription>().type.toBe<false>()
+    expect<HasLayers>().type.toBe<false>()
   })
 })
