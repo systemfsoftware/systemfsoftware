@@ -208,7 +208,7 @@ const superviseChild = <R>(
             if (childIntensityBudgetDone) {
               return StopEpoch.make()
             }
-            return yield* Cell.apply(
+            return yield* Cell.run(
               restartDescription({
                 strategy: 'one_for_one',
                 failedIndex: idx,
@@ -292,7 +292,7 @@ const runGroup = <R>(
             if (childIntensityBudgetDone) {
               return StopEpoch.make()
             }
-            return yield* Cell.apply(
+            return yield* Cell.run(
               restartDescription({
                 strategy,
                 failedIndex: failedIdx,
