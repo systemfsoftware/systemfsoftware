@@ -94,6 +94,17 @@ The pnpm-native release model the repo uses since leaving semantic-release (2026
 
 Because the manifest version is what npm carries, the first release of a package publishes that string verbatim — there is no "dev" placeholder convention here. Adopting semantic-release's `0.0.0-development` placeholder would ship `0.0.0-development` as a package's literal debut version.
 
+### intent liveness
+
+The property that every pending `.changeset/` intent names only packages that
+are live workspace members at the tree being judged — any bump class, `none`
+included. The changeset gate checks it for every pending intent at head on
+every PR, so a package deletion that does not sweep the intents naming it
+fails that PR instead of failing the Release. The verdict extracts frontmatter
+key names liberally (any scalar value, comments included) and filters by
+membership — under-extraction is the only fatal direction — and treats an
+unreadable pending set as failure, never as "nothing stale".
+
 ### Release PR
 
 The pull request (`changeset-release/main`, opened by the Release workflow on push to `main`) that carries the version bumps produced by consuming `.changeset/` intents. Merging it runs the gate, then the publish job, which publishes via npm OIDC trusted publishing with provenance and tags each released package. It can only open when workflow permissions allow GitHub Actions to create pull requests.
