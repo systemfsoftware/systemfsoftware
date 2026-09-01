@@ -271,7 +271,16 @@ export const survivorsAdmissionCell = (basePath: string) =>
     },
     decide: admitSurvivorsRun,
     encode: (outcome: Result.Result<SurvivorsAdmission, SurvivorsRejection>) => outcome,
-    write: (outcome, _raw) => Effect.succeed(outcome),
+    write: (outcome, raw) =>
+      Result.match(outcome, {
+        onSuccess: (admission) =>
+          Effect.succeed({
+            admission,
+            resolvedOptions: raw.resolvedOptions,
+            priorReportPath: raw.priorReportPath,
+          }),
+        onFailure: Effect.fail,
+      }),
   })
 
 export function runSurvivorsAdmission(
@@ -286,22 +295,7 @@ export function runSurvivorsAdmission(
   S.SchemaError | SurvivorsRejection | ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError,
   FileSystem.FileSystem | Path.Path | Module
 > {
-  const cell = survivorsAdmissionCell(basePath)
-  return Effect.flatMap(
-    Effect.flatMap(Cell.run(cell, cliOptions), (result) =>
-      Result.match(result, {
-        onSuccess: (admission) => Effect.succeed(admission),
-        onFailure: (rejection) => Effect.fail(rejection),
-      })),
-    (admission) =>
-      Effect.gen(function*() {
-        const pathService = yield* Path.Path
-        const resolvedOptions = yield* resolveSurvivorsRunOptions(cliOptions, basePath)
-        const priorReportPath = priorReportPathOf(resolvedOptions)
-        void pathService
-        return { admission, resolvedOptions, priorReportPath }
-      }),
-  )
+  return Cell.run(survivorsAdmissionCell(basePath), cliOptions)
 }
 
 function resolveSurvivorsRunOptions(

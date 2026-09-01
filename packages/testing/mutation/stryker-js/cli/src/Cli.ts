@@ -1100,10 +1100,7 @@ export function strykerCliEffect(
 }
 
 const hostRunLayer = (hostOptions: RunEnvironmentShape, queue?: Queue.Queue<RunEvent, Cause.Done>) =>
-  Layer.mergeAll(
-    nodePlatformLayer,
-    makeRunLayer(hostOptions, queue).pipe(Layer.provide(nodePlatformLayer)),
-  )
+  makeRunLayer(hostOptions, queue).pipe(Layer.provideMerge(nodePlatformLayer))
 
 const defaultRunMutationTest =
   (hostOptions: RunEnvironmentShape, queue: Queue.Queue<RunEvent, Cause.Done>): StrykerRun =>
