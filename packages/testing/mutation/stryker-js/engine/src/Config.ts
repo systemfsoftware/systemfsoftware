@@ -1173,13 +1173,8 @@ export function readConfig(
   return Effect.gen(function*() {
     const cliRecord = yield* S.decodeUnknownEffect(cliOptionsRecord)(cliOptions).pipe(Effect.orDie)
     const command = new ReadConfigCommand({ cliOptions: cliRecord, basePath })
-    // Workaround: MergeCommand overrides needs cliOptions, but decode currently uses empty overrides.
-    // Instead, we construct Cell that captures cliRecord via closure for decode.
-    // Simpler: create per-call Cell that closes over cliRecord.
     const cell = Cell.layer({
-      read: (_cmd: ReadConfigCommand) =>
-        // raw: unknown from ReadConfigCommand
-        loadOptionsFromConfigFile(cliRecord, basePath),
+      read: (cmd: ReadConfigCommand) => loadOptionsFromConfigFile(cmd.cliOptions, basePath),
       decode: (raw: unknown) =>
         Result.match(S.decodeUnknownResult(ConfigDocumentSchema)(raw), {
           onFailure: (cause) => Result.fail(new ConfigFileInvalidError({ file: 'config', cause })),
