@@ -4,6 +4,75 @@
 
 ```ts
 
+import { Arbitrary } from 'effect/testing/FastCheck';
+
+// @public (undocumented)
+export const catalog: {
+    readonly laws: typeof laws;
+    readonly contract: typeof contract;
+    readonly refuseHomes: {
+        readonly invalidSocketPath: <A>(home: (socketPath: string) => A) => RefuseHomes<A>;
+        readonly sshParentConflict: <A>(home: (sshTreePath: string) => A) => RefuseHomes<A>;
+        readonly reservedEnvFile: <A>(home: (envFilePath: string) => A) => RefuseHomes<A>;
+        readonly quadletDir: <A>(home: (quadletPath: string) => A) => RefuseHomes<A>;
+    };
+};
+
+// @public (undocumented)
+export const contract: <A, R>(cases: readonly PublishedCase<A, R>[]) => PublishedCases<A, R>;
+
+// @public (undocumented)
+export const laws: <A, R>(spec: LawsSpec<A, R>) => Promise<void>;
+
+// @public (undocumented)
+export interface LawsSpec<A, R> {
+    // (undocumented)
+    readonly id: string;
+    // (undocumented)
+    readonly inverse?: ((result: R) => A) | undefined;
+    // (undocumented)
+    readonly published?: PublishedCases<A, R> | undefined;
+    // (undocumented)
+    readonly refused: (result: R) => boolean;
+    // (undocumented)
+    readonly reserved: RefuseHomes<A>;
+    // (undocumented)
+    readonly run: (input: A) => R;
+}
+
+// @public (undocumented)
+export interface PublishedCase<A, R> {
+    // (undocumented)
+    readonly expect: Readonly<Record<string, unknown>>;
+    // (undocumented)
+    readonly input: A;
+    // (undocumented)
+    readonly label: string;
+    // (undocumented)
+    readonly project: (result: R) => Readonly<Record<string, unknown>>;
+}
+
+// @public (undocumented)
+export interface PublishedCases<A, R> {
+    // (undocumented)
+    readonly [publishedCasesBrand]: 'published-cases';
+    // (undocumented)
+    readonly cases: readonly PublishedCase<A, R>[];
+}
+
+// @public (undocumented)
+export type RefuseHomes<A> = Arbitrary<A> & {
+    readonly [refuseHomesBrand]: 'refuse-homes';
+};
+
+// @public
+export const refuseHomes: {
+    readonly invalidSocketPath: <A>(home: (socketPath: string) => A) => RefuseHomes<A>;
+    readonly sshParentConflict: <A>(home: (sshTreePath: string) => A) => RefuseHomes<A>;
+    readonly reservedEnvFile: <A>(home: (envFilePath: string) => A) => RefuseHomes<A>;
+    readonly quadletDir: <A>(home: (quadletPath: string) => A) => RefuseHomes<A>;
+};
+
 // (No @packageDocumentation comment for this package)
 
 ```

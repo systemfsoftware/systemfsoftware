@@ -28,7 +28,7 @@ export default defineConfig({
     devExports: '@systemfsoftware/source',
     customExports: injectApiExtractorTypes,
   },
-  deps: { onlyBundle: false },
+  deps: { neverBundle: true },
   tsconfig: './tsconfig.build.json',
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   clean: false,
