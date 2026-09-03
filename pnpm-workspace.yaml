@@ -115,6 +115,7 @@ packages:
   - packages/lint/oxlint/plugins/effect/*
   - packages/toolchain/*
   - omp/packages/*
+  - agent-plugins/oxlint-guard-hook
   - omp/plugins/*
 config:
   confirm-modules-purge: false

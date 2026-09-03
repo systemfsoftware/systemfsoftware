@@ -1,0 +1,36 @@
+{
+  "agent-plugins/oxlint-guard-hook/src/__tests__/lint-edit.workflow.property.test.ts": [
+    "agent-plugins/oxlint-guard-hook/src/constants.ts",
+    "agent-plugins/oxlint-guard-hook/src/flow.schema.ts",
+    "agent-plugins/oxlint-guard-hook/src/lint-edit.workflow.ts"
+  ],
+  "agent-plugins/oxlint-guard-hook/src/adapters.ts": [
+    "agent-plugins/oxlint-guard-hook/src/constants.ts",
+    "agent-plugins/oxlint-guard-hook/src/flow.schema.ts"
+  ],
+  "agent-plugins/oxlint-guard-hook/src/constants.ts": [],
+  "agent-plugins/oxlint-guard-hook/src/execute.ts": [
+    "agent-plugins/oxlint-guard-hook/src/constants.ts",
+    "agent-plugins/oxlint-guard-hook/src/flow.schema.ts",
+    "agent-plugins/oxlint-guard-hook/src/verdict.ts"
+  ],
+  "agent-plugins/oxlint-guard-hook/src/flow.schema.ts": [],
+  "agent-plugins/oxlint-guard-hook/src/lint-edit.ts": [
+    "agent-plugins/oxlint-guard-hook/src/execute.ts",
+    "agent-plugins/oxlint-guard-hook/src/flow.schema.ts",
+    "agent-plugins/oxlint-guard-hook/src/lint-edit.workflow.ts"
+  ],
+  "agent-plugins/oxlint-guard-hook/src/lint-edit.workflow.ts": [
+    "agent-plugins/oxlint-guard-hook/src/constants.ts",
+    "agent-plugins/oxlint-guard-hook/src/flow.schema.ts"
+  ],
+  "agent-plugins/oxlint-guard-hook/src/main.ts": [
+    "agent-plugins/oxlint-guard-hook/src/adapters.ts",
+    "agent-plugins/oxlint-guard-hook/src/constants.ts",
+    "agent-plugins/oxlint-guard-hook/src/flow.schema.ts",
+    "agent-plugins/oxlint-guard-hook/src/lint-edit.ts"
+  ],
+  "agent-plugins/oxlint-guard-hook/src/verdict.ts": [
+    "agent-plugins/oxlint-guard-hook/src/flow.schema.ts"
+  ]
+}

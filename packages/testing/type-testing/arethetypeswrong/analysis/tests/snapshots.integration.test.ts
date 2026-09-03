@@ -3,6 +3,8 @@ import { checkPackage, ProblemKindSchema, withTypesCompanion } from '@systemfsof
 import { recipes } from '@systemfsoftware/arethetypeswrong-recipes'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect, Exit } from 'effect'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { expect } from 'vitest'
 const Feature = makeFeature({ it, layer })
 
@@ -41,11 +43,13 @@ Feature('The analysis of a synthetic package reproduces its recorded outcome', {
               return yield* checkPackage(pkg)
             })),
           Then('the recorded snapshot still matches the canonical analysis')(({ analysis }) =>
-            Effect.promise(() =>
-              expect(JSON.stringify(analysis, null, 2) + '\n').toMatchFileSnapshot(
-                `./__fixtures__/snapshots/${recipeKey}.json`,
+            Effect.promise(async () => {
+              const recorded = readFileSync(
+                fileURLToPath(new URL(`./__fixtures__/snapshots/${recipeKey}.json`, import.meta.url)),
+                'utf8',
               )
-            )
+              expect(JSON.stringify(analysis, null, 2) + '\n').toBe(recorded)
+            })
           ),
           Then('the analysis reports the problem kind the recipe is named for')(({ analysis }) =>
             Effect.sync(() => {

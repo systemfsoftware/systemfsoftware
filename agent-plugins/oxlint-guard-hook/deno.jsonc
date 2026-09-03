@@ -1,0 +1,21 @@
+{
+  "nodeModulesDir": "none",
+  "imports": {
+    "@effect/vitest": "npm:@effect/vitest@4.0.0-rc.112",
+    "vitest": "npm:vitest@^4",
+    "@effect/platform-deno": "npm:@effect/platform-deno@4.0.0-rc.112",
+    "effect": "npm:effect@4.0.0-rc.112",
+    "@systemfsoftware/effect-cell-types": "npm:@systemfsoftware/effect-cell-types@5.0.1",
+  },
+  "tasks": {
+    "lint:oxlint": "../../node_modules/.bin/oxlint -c ./oxlint.config.ts --tsconfig ./tsconfig.json --type-aware --type-check -f unix ./src/",
+  },
+  "publish": {
+    "exclude": ["**"],
+  },
+  "lint": {
+    "rules": {
+      "tags": ["recommended"],
+    },
+  },
+}
