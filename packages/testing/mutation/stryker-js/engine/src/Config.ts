@@ -3,7 +3,7 @@
  *
  * One module per capability: config file discovery, `extends` resolution,
  * validation, freezing, serializability, file matching, and warning gating.
- * The pure merge kernel lives in `Config.kernel.ts`; schemas live in
+ * The pure merge helper lives below; schemas live in
  * `Config.schema.ts`.
  */
 import { Wire } from '@systemfsoftware/effect-cell-types'
@@ -19,7 +19,6 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { Minimatch, minimatch } from 'minimatch'
 
-import { mergeRecords } from './Config.kernel.js'
 import {
   ConfigDocumentSchema,
   ConfigError,
@@ -33,6 +32,35 @@ import { IGNORE_PATTERN_CHARACTER, MUTATION_RANGE_REGEX } from './Project.ignore
 import { StrykerError } from './stryker-error.schema.js'
 import { isCommandRunner } from './TestRunner.js'
 import { getAvailableParallelism } from './Worker.js'
+
+export function mergeRecords(
+  base: object,
+  overrides: object,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  Object.assign(out, base)
+  for (const [key, overrideValueAny] of Object.entries(overrides)) {
+    const overrideValue: unknown = overrideValueAny
+    if (key === '__proto__') continue
+    if (overrideValue === undefined) continue
+    const baseValue: unknown = out[key]
+    if (
+      baseValue === undefined ||
+      typeof baseValue !== 'object' ||
+      typeof overrideValue !== 'object' ||
+      baseValue === null ||
+      overrideValue === null ||
+      Array.isArray(baseValue) ||
+      Array.isArray(overrideValue)
+    ) {
+      out[key] = overrideValue
+    } else {
+      const merged = mergeRecords(baseValue, overrideValue)
+      out[key] = merged
+    }
+  }
+  return out
+}
 
 /**
  * Config-file names the rebuild removed, mapped to their remediation.

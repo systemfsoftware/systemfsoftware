@@ -9,6 +9,8 @@ import {
   RunInterrupted,
   RunOk,
   RunOutcomeCommand,
+  type RunOutcomeDecision,
+  type RunOutcomeError,
   runOutcomeWorkflow,
   RunParseFailed,
   RunSurvivorsRejected,
@@ -27,6 +29,16 @@ const classCode = (exitClass: 'VerdictFail' | 'ConfigError' | 'RuntimeError' | '
   return 4
 }
 
+const isRunFailed = (
+  result: Result.Result<RunOutcomeDecision, RunOutcomeError>,
+  code: number,
+  diagnostic: string | undefined,
+): boolean =>
+  Result.isSuccess(result) &&
+  S.is(RunFailed)(result.success) &&
+  result.success.code === code &&
+  result.success.diagnostic === diagnostic
+
 describe('runOutcomeWorkflow', () => {
   it.prop('∀c_Command_≡TaggedOutcome', [S.toArbitrary(RunOutcomeCommand)(fc)], ([command]) => {
     const result = runOutcomeWorkflow(command)
@@ -37,12 +49,7 @@ describe('runOutcomeWorkflow', () => {
     if (command.succeeded) {
       if (command.successExitClass !== undefined) {
         const code = classCode(command.successExitClass)
-        return (
-          Result.isSuccess(result) &&
-          S.is(RunFailed)(result.success) &&
-          result.success.code === code &&
-          result.success.diagnostic === command.diagnostic
-        )
+        return isRunFailed(result, code, command.diagnostic)
       }
       return Result.isSuccess(result) && S.is(RunOk)(result.success) && result.success.help === false
     }
@@ -90,18 +97,8 @@ describe('runOutcomeWorkflow', () => {
         )
       }
       const code = classCode(command.highestExitClass)
-      return (
-        Result.isSuccess(result) &&
-        S.is(RunFailed)(result.success) &&
-        result.success.code === code &&
-        result.success.diagnostic === command.diagnostic
-      )
+      return isRunFailed(result, code, command.diagnostic)
     }
-    return (
-      Result.isSuccess(result) &&
-      S.is(RunFailed)(result.success) &&
-      result.success.code === 1 &&
-      result.success.diagnostic === command.diagnostic
-    )
+    return isRunFailed(result, 1, command.diagnostic)
   })
 })

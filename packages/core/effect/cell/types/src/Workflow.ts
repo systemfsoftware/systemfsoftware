@@ -34,7 +34,7 @@ export interface UninhabitedDecision {
 /** Marker a workflow resolves to when its error channel is `never`. */
 export interface UninhabitedError {
   readonly __WORKFLOW_ERROR_CHANNEL_IS_NEVER__:
-    'this workflow cannot fail, so it decides nothing; give it an error variant or move it to a *.kernel.ts'
+    'this workflow cannot fail, so it decides nothing; give it an error variant or fold the function into its owning module'
 }
 
 /** Marker a workflow resolves to when its error channel carries no tag to dispatch on. */
@@ -46,7 +46,7 @@ export interface UntaggedError {
 /** Marker a workflow resolves to when its decision channel is a single variant. A decision chooses between at least two distinguishable outcomes. */
 export interface SingleVariantDecision {
   readonly __WORKFLOW_DECISION_CHANNEL_HAS_ONE_VARIANT__:
-    'this workflow decides one outcome, which is not a decision; add the variant it chooses between, or move the function to a *.kernel.ts'
+    'this workflow decides one outcome, which is not a decision; add the variant it chooses between, or fold the function into its owning module'
 }
 
 /** Marker a workflow resolves to when a decision variant carries no tag to dispatch on. */

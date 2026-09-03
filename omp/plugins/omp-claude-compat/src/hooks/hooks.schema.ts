@@ -66,6 +66,26 @@ export class Continue extends S.TaggedClass<Continue>()(
 export const HookOutcome = S.Union([Blocked, Continue])
 export type HookOutcome = S.Schema.Type<typeof HookOutcome>
 
+export class AdmitHooksCommand extends S.TaggedClass<AdmitHooksCommand>()('AdmitHooksCommand', {
+  present: S.Boolean,
+}) {}
+
+const HookDispatchDecisionTypeId: unique symbol = Symbol.for(
+  '@systemfsoftware/omp-claude-compat/HookDispatchDecision',
+)
+type HookDispatchDecisionTypeId = typeof HookDispatchDecisionTypeId
+
+export class SkipHooks extends S.TaggedClass<SkipHooks>()('SkipHooks', {}) {
+  readonly [HookDispatchDecisionTypeId] = HookDispatchDecisionTypeId
+}
+
+export class RunHooks extends S.TaggedClass<RunHooks>()('RunHooks', {}) {
+  readonly [HookDispatchDecisionTypeId] = HookDispatchDecisionTypeId
+}
+
+export type AdmitCommand = InstanceType<typeof AdmitHooksCommand>
+export type HookDispatchDecision = InstanceType<typeof SkipHooks> | InstanceType<typeof RunHooks>
+
 /**
  * The slice of the harness these operations actually depend on. Narrowing here
  * keeps the executor off the full `ExtensionContext` union surface and lets a

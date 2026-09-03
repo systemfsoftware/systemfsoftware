@@ -129,26 +129,15 @@ function classify(command: RunOutcomeCommand): RunOutcomeDecision | RunOutcomeEr
   return RunFailed.make({ code: 1, diagnostic: command.diagnostic })
 }
 
-function succeedOutcome(decision: RunOutcomeDecision): Result.Result<RunOutcomeDecision, RunOutcomeError> {
-  return Result.succeed(decision)
-}
-
-function failOutcome(error: RunOutcomeError): Result.Result<RunOutcomeDecision, RunOutcomeError> {
-  return Result.fail(error)
-}
-
-function runOutcomeDecision(
-  command: RunOutcomeCommand,
-): Result.Result<RunOutcomeDecision, RunOutcomeError> {
-  return Match.value(classify(command)).pipe(
-    Match.tag('RunOk', succeedOutcome),
-    Match.tag('RunParseFailed', succeedOutcome),
-    Match.tag('RunSurvivorsRejected', succeedOutcome),
-    Match.tag('RunConfigFailed', succeedOutcome),
-    Match.tag('RunFailed', succeedOutcome),
-    Match.tag('RunInterrupted', failOutcome),
-    Match.exhaustive,
-  )
-}
-
-export const runOutcomeWorkflow = Workflow.make(RunOutcomeCommand, runOutcomeDecision)
+export const runOutcomeWorkflow = Workflow.make(
+  RunOutcomeCommand,
+  (command): Result.Result<RunOutcomeDecision, RunOutcomeError> =>
+    Match.value(classify(command)).pipe(
+      Match.tag('RunInterrupted', (error) => Result.fail(error)),
+      Match.when(
+        (outcome): outcome is RunOutcomeDecision => !(outcome instanceof RunInterrupted),
+        (decision) => Result.succeed(decision),
+      ),
+      Match.exhaustive,
+    ),
+)

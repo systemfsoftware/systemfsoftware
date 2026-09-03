@@ -229,13 +229,6 @@ const rememberedResultsOf = (
   return settled
 }
 
-/**
- * Split a decided plan list into the runs to execute and the results already settled.
- *
- * The plan itself is computed in `Mutants.kernel.ts`, which is where the timeout budget,
- * the test filter, the activation kind and the hit limit are computed. This edge does the
- * one thing the kernel cannot: nothing here computes anything.
- */
 const partitionPlans = (
   plans: readonly TestPlan[],
 ): { coveredPlans: MutantRunPlan[]; earlyResults: MutantResult[] } => {

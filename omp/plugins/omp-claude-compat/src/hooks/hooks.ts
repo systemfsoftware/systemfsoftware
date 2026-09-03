@@ -31,15 +31,31 @@ import { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner
 import { homedir } from 'node:os'
 import { ClaudeSettings, ifEvaluatingEvent, matcherUnreadable } from '../settings/mod.js'
 import type { CommandHook, HookEntry, HookSettings } from '../settings/mod.js'
+
 import {
-  type AdmitCommand,
   AdmitHooksCommand,
-  admitLoadedSettings,
-  type HookDispatchDecision,
+  Blocked,
+  Continue,
+  HookOutputFromStdout,
+  HookResult,
+  RunHooks,
   SkipHooks,
-} from './admit.workflow.js'
-import { Blocked, Continue, HookOutputFromStdout, HookResult } from './hooks.schema.js'
-import type { HookPrompt, HookSession, HookToolCall, HookToolResult } from './hooks.schema.js'
+} from './hooks.schema.js'
+import type {
+  AdmitCommand,
+  HookDispatchDecision,
+  HookPrompt,
+  HookSession,
+  HookToolCall,
+  HookToolResult,
+} from './hooks.schema.js'
+/** Whether loaded settings admit hook dispatch at all. */
+export const admitLoadedSettings = (command: AdmitCommand): HookDispatchDecision =>
+  Match.value(command.present).pipe(
+    Match.when(true, () => new RunHooks()),
+    Match.when(false, () => new SkipHooks()),
+    Match.exhaustive,
+  )
 import { InterpretHookCommand, interpretHookResult, Warning } from './hooks.workflow.js'
 import {
   denormalizeToolInput,
@@ -870,32 +886,23 @@ export type HookDispatchContext = FileSystem | ChildProcessSpawner | Scope.Scope
 
 const settingsFor = (ctx: HookSession) => Effect.flatMap(ClaudeSettings, (port) => port.load(ctx.cwd, ctx.homeDir))
 
-const admitSettingsCell = <Response>(
-  write: (settings: HookSettings) => Effect.Effect<Response, PlatformError, HookDispatchContext>,
-  empty: Response,
-) =>
-  Cell.layer({
-    read: (ctx: HookSession) => settingsFor(ctx),
-    decode: (settings: HookSettings | null) =>
-      Result.succeed(admitPresent(Option.isSome(Option.fromNullishOr(settings)))),
-    decide: admitLoadedSettings,
-    encode: (outcome) => Result.getOrElse(outcome, skipHooks),
-    write: (decision: HookDispatchDecision, raw: HookSettings | null) =>
-      Match.value(decision).pipe(
-        Match.tag('SkipHooks', () => Effect.succeed(empty)),
-        Match.tag('RunHooks', () => {
-          const loaded = Option.fromNullishOr(raw)
-          return write(Option.getOrThrow(loaded))
-        }),
-        Match.exhaustive,
-      ),
-  })
-
 const dispatchAdmit = <Response>(
   write: (settings: HookSettings) => Effect.Effect<Response, PlatformError, HookDispatchContext>,
   empty: Response,
   ctx: HookSession,
-) => Cell.run(admitSettingsCell(write, empty), ctx)
+) =>
+  Effect.flatMap(
+    settingsFor(ctx),
+    (settings) =>
+      Match.value(admitLoadedSettings(admitPresent(Option.isSome(Option.fromNullishOr(settings))))).pipe(
+        Match.tag('SkipHooks', () => Effect.succeed(empty)),
+        Match.tag('RunHooks', () => {
+          const loaded = Option.fromNullishOr(settings)
+          return write(Option.getOrThrow(loaded))
+        }),
+        Match.exhaustive,
+      ),
+  )
 
 export const onToolCall = (event: HookToolCall, ctx: HookSession) =>
   dispatchAdmit((settings) => runPreToolUseHooks(settings, event, ctx), undefined, ctx)

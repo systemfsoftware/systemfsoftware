@@ -7,11 +7,10 @@ import * as Predicate from 'effect/Predicate'
 
 import type { IgnorerService } from '@systemfsoftware/stryker-js/Ignorer'
 import type { MutateDescription } from '@systemfsoftware/stryker-js/Mutant'
-import { decideInstrument } from './Instrument.kernel.js'
 import {
   FileSchema,
   InstrumentCommand,
-  type InstrumentDecision,
+  InstrumentDecision,
   InstrumentDecoded,
   type InstrumenterOptions,
   InstrumentError,
@@ -283,6 +282,13 @@ const printDecision = (
       return InstrumentResultSchema.make({ files: outFiles, mutants: decision.mutants })
     },
     catch: (cause) => new InstrumentError({ message: 'Failed to print', cause }),
+  })
+
+export const decideInstrument = (decoded: InstrumentDecoded): InstrumentDecision =>
+  InstrumentDecision.make({
+    files: decoded.files,
+    mutants: decoded.mutants,
+    asts: decoded.asts,
   })
 
 export const instrument = (

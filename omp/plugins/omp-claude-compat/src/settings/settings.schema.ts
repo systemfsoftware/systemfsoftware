@@ -93,6 +93,42 @@ const LiftFlatSettingsACL = SettingsFlat.pipe(
 
 export const SettingsJSON = S.Union([SettingsWrapped, LiftFlatSettingsACL])
 
+const SettingsSourceFields = S.Struct({
+  settings: SettingsJSON,
+  managed: S.Boolean,
+  pluginRoot: S.optional(S.String),
+})
+export type DecodedSource = S.Schema.Type<typeof SettingsSourceFields>
+
+export class EmptySources extends S.TaggedClass<EmptySources>()('EmptySources', {}) {}
+
+export class NonEmptySources extends S.TaggedClass<NonEmptySources>()('NonEmptySources', {
+  sources: S.Array(SettingsSourceFields).pipe(S.check(S.isNonEmpty())),
+}) {}
+
+export class MergeSettingsCommand extends S.TaggedClass<MergeSettingsCommand>()('MergeSettingsCommand', {
+  pack: S.Union([EmptySources, NonEmptySources]),
+}) {}
+
+const SettingsSnapshotTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-claude-compat/SettingsSnapshot')
+type SettingsSnapshotTypeId = typeof SettingsSnapshotTypeId
+
+export class EmptySnapshot extends S.TaggedClass<EmptySnapshot>()('EmptySnapshot', {}) {
+  readonly [SettingsSnapshotTypeId] = SettingsSnapshotTypeId
+}
+
+export class LoadedSnapshot extends S.TaggedClass<LoadedSnapshot>()('LoadedSnapshot', {
+  settings: SettingsJSON,
+}) {
+  readonly [SettingsSnapshotTypeId] = SettingsSnapshotTypeId
+}
+
+export const SettingsSnapshot = S.Union([EmptySnapshot, LoadedSnapshot])
+export type SettingsSnapshot = S.Schema.Type<typeof SettingsSnapshot>
+
+export type MergeCommand = InstanceType<typeof MergeSettingsCommand>
+export type MergedSnapshot = SettingsSnapshot
+
 export interface HookCoverageRow {
   readonly event: string
   readonly reason: string

@@ -38,7 +38,7 @@ import {
   type ResolveModeDecision,
   resolveModeWorkflow,
 } from './Output.workflow.js'
-import type { FailedRunOutcome, RunOutcomeDecision, RunOutcomeError } from './RunOutcome.workflow.js'
+import { type FailedRunOutcome, RunOk, type RunOutcomeDecision, type RunOutcomeError } from './RunOutcome.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 /**
  * The wire protocol constants of the machine-mode NDJSON run-event stream.
@@ -1088,10 +1088,10 @@ export function emitMachineModeOutput(
               yield* emitNullScoreVerdict(stream, mode, defaults.thresholds, {}, basePath, pathService)
             }
           })),
-        Match.tag('RunParseFailed', (failed) => offerFailureEnvelope(stream, failed, captured)),
-        Match.tag('RunSurvivorsRejected', (failed) => offerFailureEnvelope(stream, failed, captured)),
-        Match.tag('RunConfigFailed', (failed) => offerFailureEnvelope(stream, failed, captured)),
-        Match.tag('RunFailed', (failed) => offerFailureEnvelope(stream, failed, captured)),
+        Match.when(
+          (d): d is Exclude<RunOutcomeDecision, RunOk> => !(d instanceof RunOk),
+          (failed) => offerFailureEnvelope(stream, failed, captured),
+        ),
         Match.exhaustive,
       )
     }

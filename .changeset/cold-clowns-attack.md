@@ -2,4 +2,4 @@
 "@systemfsoftware/stryker-js-engine": major
 ---
 
-Workflow decision channels are now tagged unions of at least two Schema tagged classes sharing one family TypeId. Total merge/project/report workflows moved to plain kernel functions with identical signatures; DryRun splits into DryRunPassed|DryRunFailed; MutationTest kind becomes three decision variants; Checker carries the family brand
+Decision channels are now tagged unions of at least two Schema tagged classes sharing one family TypeId: the dry-run observation splits into DryRunPassed and DryRunFailed, the mutation-run verdict becomes three variants, and shouldKeepTempDir accepts any failure channel instead of only S.SchemaError
