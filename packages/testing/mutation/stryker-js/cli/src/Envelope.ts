@@ -536,15 +536,23 @@ export function buildErrorEnvelope(
   argv: readonly string[],
 ): ErrorEnvelope {
   const result = classifyRunOutcome(exit, signalFromCode(code), argv)
-  if (Result.isSuccess(result)) {
-    return {
-      schemaVersion: STREAM_SCHEMA_VERSION,
-      code,
-      error: capturedOrUnknown(captured),
-      remediation: DEFAULT_REMEDIATION,
-    }
-  }
-  return shapeEnvelope(result.failure, captured)
+  return Result.match(result, {
+    onFailure: (failure) => shapeEnvelope(failure, captured),
+    onSuccess: (decision) =>
+      Match.value(decision).pipe(
+        Match.tag('RunOk', () => ({
+          schemaVersion: STREAM_SCHEMA_VERSION,
+          code,
+          error: capturedOrUnknown(captured),
+          remediation: DEFAULT_REMEDIATION,
+        })),
+        Match.tag('RunParseFailed', (failed) => shapeEnvelope(failed, captured)),
+        Match.tag('RunSurvivorsRejected', (failed) => shapeEnvelope(failed, captured)),
+        Match.tag('RunConfigFailed', (failed) => shapeEnvelope(failed, captured)),
+        Match.tag('RunFailed', (failed) => shapeEnvelope(failed, captured)),
+        Match.exhaustive,
+      ),
+  })
 }
 
 // Console capture (U6)

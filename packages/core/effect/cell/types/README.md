@@ -16,7 +16,7 @@ When both channels are inhabited, `Workflow<Command, Decision, Error>` is the fu
 conjunct — a phantom readonly TypeId-keyed field that no runtime property backs. The brand
 is what makes the workbook nominal: `Workflow.make` is the only constructor that applies
 it, and every surface that runs a decision — the `decide` member a `Cell.layer` spec
-demands — requires it, A `never` channel does
+demands — requires it, so a decision that skipped `make` is a compile error at the call site that would have run it, with the brand named in the diagnostic. A `never` channel does
 not silently collapse to that function: it resolves to a marker interface that no function
 can satisfy, so the mistake is a compile error with the remediation attached (below). The
 success channel is shaped the same way: `Workflow.make` refuses a decision channel that is

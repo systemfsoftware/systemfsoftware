@@ -70,7 +70,7 @@ export const runMutationTest = (
   })
 
 export const shouldKeepTempDir = (
-  exit: Exit.Exit<void, S.SchemaError>,
+  exit: Exit.Exit<void, unknown>,
   cleanTempDir: 'always' | boolean,
 ): boolean => Exit.isFailure(exit) && cleanTempDir !== 'always'
 
