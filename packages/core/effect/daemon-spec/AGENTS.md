@@ -16,6 +16,6 @@ Supervision-tree daemons for Effect-TS. Root `AGENTS.md` governs.
 
 ```bash
 pnpm --filter @systemfsoftware/effect-daemon-spec typecheck
-pnpm --filter @systemfsoftware/effect-daemon-spec test:run
+pnpm --filter @systemfsoftware/effect-daemon-spec test
 pnpm --filter @systemfsoftware/effect-daemon-spec api:check
 ```
