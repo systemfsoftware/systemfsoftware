@@ -37,22 +37,22 @@ ruleTester.run('tests-import-public-api', testsImportPublicApi, {
       code: `import { Foo } from '../internal/Foo.js'\n`,
     },
     {
-      name: 'Should_StaySilent_When_FixtureHelperUnderSrcReexportsSrc',
+      name: 'Should_StaySilent_When_UnderSrcFileReexportsSrc',
       filename: '/repo/pkg/src/rules/__tests__/helper.ts',
       code: `export { x } from '../src/mod.js'\n`,
     },
     {
-      name: 'Should_StaySilent_When_TstFileUnderSrcTypeImportsSrc',
+      name: 'Should_StaySilent_When_UnderSrcFileTypeImportsSrc',
       filename: '/repo/pkg/src/rules/__tests__/AstNode.tst.ts',
       code: `import type { X } from '../src/Thing.js'\n`,
     },
     {
-      name: 'Should_StaySilent_When_DunderTestsHelperUnderSrcImportsSrc',
+      name: 'Should_StaySilent_When_UnderSrcFileImportsSrc',
       filename: '/repo/pkg/src/rules/__tests__/helper.ts',
       code: `import { x } from '../src/mod.js'\n`,
     },
     {
-      name: 'Should_StaySilent_When_FixtureUnderSrcDynamicImportReachesSrc',
+      name: 'Should_StaySilent_When_UnderSrcFileDynamicImportsSrc',
       filename: '/repo/pkg/src/rules/__tests__/loader.ts',
       code: `const mod = await import('../src/mod.js')\n`,
     },

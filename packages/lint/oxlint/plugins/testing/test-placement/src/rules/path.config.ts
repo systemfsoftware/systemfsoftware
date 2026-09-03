@@ -3,18 +3,12 @@ export const TEST_BASENAME = /\.(?:test|spec)\.[cm]?tsx?$/
 export const SANCTIONED_TEST_DIRS: ReadonlySet<string> = new Set(['tests'])
 
 /**
- * The package-root test trees whose entire subtree binds the public API.
- * Every file under `tests/` or `__tests__/`, at any depth and regardless of
- * basename, may not relative-import `src` or climb into an `internal` folder.
- */
-export const TEST_TREE_DIRS: ReadonlySet<string> = new Set(['tests', '__tests__'])
-
-/**
  * The only test location sanctioned under `src/`. A workflow property test
  * earns colocation with the workflow it covers, but not adjacency: it lives in
  * a `__tests__` directory beside that workflow, never as a sibling file.
  */
 export const NESTED_TEST_DIR = '__tests__' as const
+export const TEST_TREE_DIRS: ReadonlySet<string> = new Set([...SANCTIONED_TEST_DIRS, NESTED_TEST_DIR])
 
 export const PROPERTY_SUFFIX = '.property.test.ts' as const
 export const INTEGRATION_SUFFIX = '.integration.test.ts' as const
