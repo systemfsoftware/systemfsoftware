@@ -1,5 +1,6 @@
-import { mintPublishedCases, type PublishedCase, type PublishedCases, type RefuseHomes } from './brand.js'
+import { type LiteralBounded, type PublishedCase, type PublishedCases, type RefuseHomes } from './brand.js'
 import { refuseHomes } from './generators.js'
+import { mintPublishedCases } from './internal/mint.js'
 
 export interface LawsSpec<A, R> {
   readonly id: string
@@ -10,8 +11,9 @@ export interface LawsSpec<A, R> {
   readonly inverse?: ((result: R) => A) | undefined
 }
 
-export const contract = <A, R>(cases: readonly PublishedCase<A, R>[]): PublishedCases<A, R> => mintPublishedCases(cases)
-
+export const contract = <A, R, const E extends LiteralBounded<E>>(
+  cases: readonly PublishedCase<A, R, E>[],
+): PublishedCases<A, R> => mintPublishedCases(cases)
 // Static runner imports cannot work here: the runner must exist only where the
 // guard is truthy, so the published module graph stays vitest-free.
 export const laws = async <A, R>(spec: LawsSpec<A, R>): Promise<void> => {

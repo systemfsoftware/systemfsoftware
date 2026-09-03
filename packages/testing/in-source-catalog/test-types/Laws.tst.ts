@@ -14,6 +14,7 @@ type RegistryDecision =
 declare const decideRegistrySlot: (input: RegistryInput) => RegistryDecision
 declare const refused: (result: RegistryDecision) => boolean
 declare const joinPath: (...parts: string[]) => string
+declare const pinnedBySomeCaller: string
 
 const licensed = {
   id: 'decideRegistrySlot',
@@ -25,6 +26,15 @@ const licensed = {
   })),
   refused,
 } as const
+
+const authoredCases = [
+  {
+    label: 'primary',
+    input: { tenant: 'widgets', tier: 'primary', slot: 'widgets' },
+    project: (decision: RegistryDecision) => (decision.ok ? { root: decision.root, readOnly: decision.readOnly } : {}),
+    expect: { root: '/var/lib/registry', readOnly: true },
+  },
+] as const
 
 describe('the laws surface admits only minted values', () => {
   it('Should_RegisterTheLicensedSpec_When_EverySlotIsMinted', () => {
@@ -46,6 +56,14 @@ describe('the laws surface admits only minted values', () => {
     expect(catalog.laws).type.not.toBeCallableWith({ id: 'x', run: decideRegistrySlot, refused })
   })
 
+  it('Should_RejectOmittedRefused_When_TheSpecLeavesItOut', () => {
+    expect(catalog.laws).type.not.toBeCallableWith({
+      id: 'x',
+      run: decideRegistrySlot,
+      reserved: licensed.reserved,
+    })
+  })
+
   it('Should_RejectUnmintedPublished_When_RawCasesArePassed', () => {
     expect(catalog.laws).type.not.toBeCallableWith({
       ...licensed,
@@ -61,20 +79,36 @@ describe('the laws surface admits only minted values', () => {
       },
     })
   })
+})
+
+describe('the contract constructor rejects derived expectations', () => {
+  it('Should_MintTheContract_When_ExpectationsAreLiterals', () => {
+    expect(catalog.contract).type.toBeCallableWith(authoredCases)
+  })
 
   it('Should_RejectDerivedExpectations_When_JoinPathReconstructsTheContract', () => {
-    expect(catalog.laws).type.not.toBeCallableWith({
-      ...licensed,
-      published: {
-        cases: [
-          {
-            label: 'primary',
-            input: { tenant: 'widgets', tier: 'primary', slot: 'widgets' },
-            project: (decision: RegistryDecision) => (decision.ok ? { root: decision.root } : {}),
-            expect: { root: joinPath('/var/lib', 'registry') },
-          },
-        ],
+    expect(catalog.contract).type.not.toBeCallableWith([
+      {
+        label: 'primary',
+        input: { tenant: 'widgets', tier: 'primary', slot: 'widgets' },
+        project: (
+          decision: RegistryDecision,
+        ) => (decision.ok ? { root: decision.root, readOnly: decision.readOnly } : {}),
+        expect: { root: joinPath('/var/lib', 'registry'), readOnly: true },
       },
-    })
+    ])
+  })
+
+  it('Should_RejectWideVariables_When_AnExpectationIsNotALiteral', () => {
+    expect(catalog.contract).type.not.toBeCallableWith([
+      {
+        label: 'primary',
+        input: { tenant: 'widgets', tier: 'primary', slot: 'widgets' },
+        project: (
+          decision: RegistryDecision,
+        ) => (decision.ok ? { root: decision.root, readOnly: decision.readOnly } : {}),
+        expect: { root: pinnedBySomeCaller, readOnly: true },
+      },
+    ])
   })
 })

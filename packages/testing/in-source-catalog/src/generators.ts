@@ -1,5 +1,6 @@
 import { FastCheck as fc } from 'effect/testing'
-import { mintRefuseHomes, type RefuseHomes } from './brand.js'
+import { type RefuseHomes } from './brand.js'
+import { mintRefuseHomes } from './internal/mint.js'
 
 const homeFromStemSuffix = (suffix: string) => <A>(home: (path: string) => A): RefuseHomes<A> =>
   mintRefuseHomes(fc.string({ minLength: 1 }).map((stem) => `${stem}${suffix}`).map(home))

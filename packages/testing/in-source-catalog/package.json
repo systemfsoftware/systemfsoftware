@@ -65,6 +65,7 @@
   },
   "peerDependencies": {
     "@effect/vitest": "catalog:peers",
+    "effect": "catalog:peers",
     "fast-check": "*",
     "vitest": "*"
   },
