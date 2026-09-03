@@ -9,9 +9,18 @@ export class AdmitHooksCommand extends S.TaggedClass<AdmitHooksCommand>()('Admit
   present: S.Boolean,
 }) {}
 
-export class SkipHooks extends S.TaggedClass<SkipHooks>()('SkipHooks', {}) {}
+const HookDispatchDecisionTypeId: unique symbol = Symbol.for(
+  '@systemfsoftware/omp-claude-compat/HookDispatchDecision',
+)
+type HookDispatchDecisionTypeId = typeof HookDispatchDecisionTypeId
 
-export class RunHooks extends S.TaggedClass<RunHooks>()('RunHooks', {}) {}
+export class SkipHooks extends S.TaggedClass<SkipHooks>()('SkipHooks', {}) {
+  readonly [HookDispatchDecisionTypeId] = HookDispatchDecisionTypeId
+}
+
+export class RunHooks extends S.TaggedClass<RunHooks>()('RunHooks', {}) {
+  readonly [HookDispatchDecisionTypeId] = HookDispatchDecisionTypeId
+}
 
 export type AdmitCommand = InstanceType<typeof AdmitHooksCommand>
 export type HookDispatchDecision = InstanceType<typeof SkipHooks> | InstanceType<typeof RunHooks>

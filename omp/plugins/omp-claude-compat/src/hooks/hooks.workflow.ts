@@ -83,14 +83,35 @@ const EXIT_KINDS = ['ExitBlock', 'ExitDecisionJson', 'ExitNoDecision', 'ExitOthe
  * (`HookOutcome`) stay in `HookDispatcher.schema.ts`; these are the verdict,
  * not the run.
  */
-export class Block extends S.TaggedClass<Block>()('Block', { reason: S.String }) {}
+const HookVerdictTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-claude-compat/HookVerdict')
+type HookVerdictTypeId = typeof HookVerdictTypeId
+
+export class Block extends S.TaggedClass<Block>()('Block', {
+  reason: S.String,
+  code: S.Number,
+  stdout: S.String,
+}) {
+  readonly [HookVerdictTypeId] = HookVerdictTypeId
+}
 
 export class Allow extends S.TaggedClass<Allow>()(
   'Allow',
-  { updatedInput: S.optional(S.Record(S.String, S.Unknown)) },
-) {}
+  {
+    updatedInput: S.optional(S.Record(S.String, S.Unknown)),
+    code: S.Number,
+    stdout: S.String,
+  },
+) {
+  readonly [HookVerdictTypeId] = HookVerdictTypeId
+}
 
-export class Warning extends S.TaggedClass<Warning>()('Warning', { message: S.String }) {}
+export class Warning extends S.TaggedClass<Warning>()('Warning', {
+  message: S.String,
+  code: S.Number,
+  stdout: S.String,
+}) {
+  readonly [HookVerdictTypeId] = HookVerdictTypeId
+}
 
 export const HookDecision = S.Union([Block, Allow, Warning])
 export type HookDecision = S.Schema.Type<typeof HookDecision>
@@ -122,12 +143,6 @@ export class HookVerdictError extends S.TaggedError<HookVerdictError>()('HookVer
   readonly [HookVerdictErrorTypeId] = HookVerdictErrorTypeId
 }
 
-export interface HookVerdictDecision {
-  readonly verdict: HookDecision
-  readonly code: number
-  readonly stdout: string
-}
-
 const HookVerdictFailure = S.TaggedStruct('HookVerdictFailure', {
   error: HookVerdictError,
   code: S.Finite,
@@ -137,15 +152,18 @@ export type HookVerdictFailure = S.Schema.Type<typeof HookVerdictFailure>
 
 export const interpretHookResult = Workflow.make(
   InterpretHookCommand,
-  (command): Result.Result<HookVerdictDecision, HookVerdictFailure> => {
+  (command): Result.Result<HookDecision, HookVerdictFailure> => {
     const { code, stdout } = command.result
     return Result.mapBoth(
       Match.value(exitKindOf(code, stdout)).pipe(
         Match.when(
           'ExitBlock',
-          () => Result.succeed(new Block({ reason: blockReason(command.result.stderr, command.event) })),
+          () =>
+            Result.succeed(
+              new Block({ reason: blockReason(command.result.stderr, command.event), code, stdout }),
+            ),
         ),
-        Match.when('ExitNoDecision', () => Result.succeed(new Allow({}))),
+        Match.when('ExitNoDecision', () => Result.succeed(new Allow({ code, stdout }))),
         Match.when('ExitDecisionJson', () =>
           Option.match(command.parsed, {
             onNone: () => Result.fail(new HookVerdictError({ raw: stdout })),
@@ -160,24 +178,31 @@ export const interpretHookResult = Workflow.make(
                         parsed.reason,
                         command.event,
                       ),
+                      code,
+                      stdout,
                     }),
                   )),
                 Match.when('allow', () =>
-                  Result.succeed(new Allow({ updatedInput: parsed.hookSpecificOutput?.updatedInput }))),
+                  Result.succeed(
+                    new Allow({ updatedInput: parsed.hookSpecificOutput?.updatedInput, code, stdout }),
+                  )),
                 Match.exhaustive,
               ),
           })),
         Match.when('ExitOther', () =>
           Match.value(stderrVerdict(command.result.stderr)).pipe(
-            Match.when('warning', () => Result.succeed(new Warning({ message: spokenStderr(command.result.stderr) }))),
-            Match.when('allow', () => Result.succeed(new Allow({}))),
+            Match.when(
+              'warning',
+              () => Result.succeed(new Warning({ message: spokenStderr(command.result.stderr), code, stdout })),
+            ),
+            Match.when('allow', () => Result.succeed(new Allow({ code, stdout }))),
             Match.exhaustive,
           )),
         Match.exhaustive,
       ),
       {
         onFailure: (error) => HookVerdictFailure.make({ error, code, stdout }),
-        onSuccess: (verdict) => ({ verdict, code, stdout }),
+        onSuccess: (verdict) => verdict,
       },
     )
   },

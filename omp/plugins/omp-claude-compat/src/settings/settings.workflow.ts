@@ -26,11 +26,18 @@ export class MergeSettingsCommand extends S.TaggedClass<MergeSettingsCommand>()(
   pack: S.Union([EmptySources, NonEmptySources]),
 }) {}
 
-export class EmptySnapshot extends S.TaggedClass<EmptySnapshot>()('EmptySnapshot', {}) {}
+const SettingsSnapshotTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-claude-compat/SettingsSnapshot')
+type SettingsSnapshotTypeId = typeof SettingsSnapshotTypeId
+
+export class EmptySnapshot extends S.TaggedClass<EmptySnapshot>()('EmptySnapshot', {}) {
+  readonly [SettingsSnapshotTypeId] = SettingsSnapshotTypeId
+}
 
 export class LoadedSnapshot extends S.TaggedClass<LoadedSnapshot>()('LoadedSnapshot', {
   settings: SettingsJSON,
-}) {}
+}) {
+  readonly [SettingsSnapshotTypeId] = SettingsSnapshotTypeId
+}
 
 export const SettingsSnapshot = S.Union([EmptySnapshot, LoadedSnapshot])
 export type SettingsSnapshot = S.Schema.Type<typeof SettingsSnapshot>

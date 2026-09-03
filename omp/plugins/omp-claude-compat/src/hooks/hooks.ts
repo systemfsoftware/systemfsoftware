@@ -448,9 +448,13 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
     encode: (outcome) =>
       Match.value(
         Result.match(outcome, {
-          onFailure: ({ error }) =>
-            new Warning({ message: `Hook exited 0 but produced invalid JSON: ${error.raw.slice(0, 200)}` }),
-          onSuccess: ({ verdict }) => verdict,
+          onFailure: ({ error, code, stdout }) =>
+            new Warning({
+              message: `Hook exited 0 but produced invalid JSON: ${error.raw.slice(0, 200)}`,
+              code,
+              stdout,
+            }),
+          onSuccess: (verdict) => verdict,
         }),
       ).pipe(
         Match.tag('Block', (d) => new Blocked({ reason: d.reason })),
@@ -794,13 +798,15 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
     encode: (outcome) =>
       Result.match(outcome, {
         onFailure: ({ code, stdout }) => ({ blockReason: undefined, code, stdout }),
-        onSuccess: ({ verdict, code, stdout }) => ({
-          blockReason: Match.value(verdict).pipe(
+        onSuccess: (decision) => ({
+          blockReason: Match.value(decision).pipe(
             Match.tag('Block', (b) => b.reason),
-            Match.orElse(() => undefined),
+            Match.tag('Allow', () => undefined),
+            Match.tag('Warning', () => undefined),
+            Match.exhaustive,
           ),
-          code,
-          stdout,
+          code: decision.code,
+          stdout: decision.stdout,
         }),
       }),
     write: ({ blockReason, code, stdout }) =>
