@@ -16,6 +16,7 @@ import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { Predicate, Result } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as HashMap from 'effect/HashMap'
+import * as Match from 'effect/Match'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import { DiagnosticCategory } from 'typescript/unstable/sync'
@@ -238,21 +239,26 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
           }
         }
         mergeResults(first.results)
-        if (first.needsRetest.length > 0) {
-          yield* applyOnce([])
-        }
-        const originals: Record<string, Mutant> = {}
-        for (const m of mutants) {
-          originals[m.id] = m
-        }
-        for (const pending of first.needsRetest) {
-          const original = originals[pending.id]
-          if (original === undefined) {
-            continue
-          }
-          const one = yield* applyOnce([original])
-          mergeResults(one.results)
-        }
+        yield* Match.value(first).pipe(
+          Match.tag('CheckFinished', () => Effect.void),
+          Match.tag('RetestRequired', (retest) =>
+            Effect.gen(function*() {
+              yield* applyOnce([])
+              const originals: Record<string, Mutant> = {}
+              for (const m of mutants) {
+                originals[m.id] = m
+              }
+              for (const pending of retest.needsRetest) {
+                const original = originals[pending.id]
+                if (original === undefined) {
+                  continue
+                }
+                const one = yield* applyOnce([original])
+                mergeResults(one.results)
+              }
+            })),
+          Match.exhaustive,
+        )
         return map
       }),
 

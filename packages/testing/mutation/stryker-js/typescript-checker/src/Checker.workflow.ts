@@ -59,10 +59,29 @@ type MutantDecoded = S.Schema.Type<typeof Mutant>
 type DiagnosticDecoded = S.Schema.Type<typeof DiagnosticSchema>
 type NodeDecoded = NodeDecodedShape
 type MutantCheckStatus = { readonly status: 'passed' } | { readonly status: 'compileError'; readonly reason: string }
-export interface CheckMutantsDecision {
-  readonly results: Readonly<Record<string, MutantCheckStatus>>
-  readonly needsRetest: readonly MutantDecoded[]
+
+const CheckMutantsTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-typescript-checker/CheckMutants')
+type CheckMutantsTypeId = typeof CheckMutantsTypeId
+
+const MutantCheckStatusSchema = S.Union([
+  S.Struct({ status: S.Literal('passed') }),
+  S.Struct({ status: S.Literal('compileError'), reason: S.String }),
+])
+
+export class CheckFinished extends S.TaggedClass<CheckFinished>()('CheckFinished', {
+  results: S.Record(S.String, MutantCheckStatusSchema),
+}) {
+  readonly [CheckMutantsTypeId] = CheckMutantsTypeId
 }
+
+export class RetestRequired extends S.TaggedClass<RetestRequired>()('RetestRequired', {
+  results: S.Record(S.String, MutantCheckStatusSchema),
+  needsRetest: S.Array(Mutant),
+}) {
+  readonly [CheckMutantsTypeId] = CheckMutantsTypeId
+}
+
+export type CheckMutantsDecision = CheckFinished | RetestRequired
 
 const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
 
@@ -141,7 +160,7 @@ const buildResult = (
   const diagnostics = input.diagnostics
   const nodes = input.nodes
   if (mutants.length === 0) {
-    return Result.succeed({ results: {}, needsRetest: [] })
+    return Result.succeed(CheckFinished.make({ results: {} }))
   }
   const first = mutants[0]
   if (first === undefined || nodes[normalizeFileName(first.fileName)] === undefined) {
@@ -149,7 +168,7 @@ const buildResult = (
     for (const m of mutants) {
       results[m.id] = { status: 'passed' }
     }
-    return Result.succeed({ results, needsRetest: [] })
+    return Result.succeed(CheckFinished.make({ results }))
   }
   const classified = classifyDiagnosticsPure(diagnostics, mutants, nodes)
   if (Result.isFailure(classified)) {
@@ -169,7 +188,10 @@ const buildResult = (
       results[m.id] = { status: 'passed' }
     }
   }
-  return Result.succeed({ results, needsRetest })
+  if (needsRetest.length === 0) {
+    return Result.succeed(CheckFinished.make({ results }))
+  }
+  return Result.succeed(RetestRequired.make({ results, needsRetest: [...needsRetest] }))
 }
 
 export const checkMutants = Workflow.make(CheckMutantsInput, (input: CheckMutantsInput) => buildResult(input))
