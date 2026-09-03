@@ -6,6 +6,5 @@ export default defineConfig({
   ignorePatterns: [
     ...(all.ignorePatterns ?? []),
     'tests/__fixtures__/fixtures/**',
-    'tests/__fixtures__/reuse-project/**',
   ],
 })
