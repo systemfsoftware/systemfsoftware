@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { basenameOf, isTestFile, isUnderSrc } from './path.js'
+import { basenameOf, isInTestTree, isTestFile, isUnderSrc } from './path.js'
 import { meta, REACH_IN_ACTUAL, REACH_IN_EXPECTED, REACH_IN_FIX } from './tests-import-public-api.config.js'
 
 const isForbiddenRelativeSpecifier = (value: string): boolean => {
@@ -23,7 +23,7 @@ export const testsImportPublicApi = defineRule({
   meta,
   create(context: Context) {
     if (isUnderSrc(context.filename)) return {}
-    if (!isTestFile(basenameOf(context.filename))) return {}
+    if (!isTestFile(basenameOf(context.filename)) && !isInTestTree(context.filename)) return {}
 
     const reportIfForbidden = (sourceNode: ESTree.Node): void => {
       const value = specifierOf(sourceNode)
