@@ -100,9 +100,6 @@ const makeCellDecideMalformed = (ledger: LedgerService) =>
     write: (output: Output) => ledger.append(output.line).pipe(Effect.as(output.line)),
   })
 
-// The order oracle is hand-written here, one scenario over a local trace. It is the
-// only order test: the interpreter is text, and this is where a reader checks it.
-
 Feature('Running a Cell')
   .withScenarioLayer(LedgerRecording)
   .body(({ scenario }) => {

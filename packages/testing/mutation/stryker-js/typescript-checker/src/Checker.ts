@@ -1,11 +1,3 @@
-/**
- * Checker — capability that validates mutants against the TypeScript compiler.
- *
- * Bridges the checker plugin protocol (`@systemfsoftware/stryker-js/Checker`)
- * to the compiler service and the pure `checkMutants` workflow. Diagnostics
- * are classified without I/O; the file graph is sourced from the compiler.
- */
-
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Checker } from '@systemfsoftware/stryker-js/Checker'
 import { CheckerFailed } from '@systemfsoftware/stryker-js/Checker'
@@ -34,8 +26,6 @@ import { createGroups, TypeScriptCompiler } from './Compiler.js'
 
 const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
 
-// ── plugin options ───────────────────────────────────────────────────────
-
 export interface TypescriptCheckerPluginOptions {
   typescriptChecker?: {
     prioritizePerformanceOverAccuracy?: boolean
@@ -44,8 +34,6 @@ export interface TypescriptCheckerPluginOptions {
 
 export interface TypescriptCheckerOptionsWithStrykerOptions extends TypescriptCheckerPluginOptions, StrykerOptions {}
 
-// ── declaration source mapping ───────────────────────────────────────────
-
 const findSourceMapRegex = /\/\/# sourceMappingURL=(.+)$/m
 
 export function getSourceMappingURL(content: string): string | undefined {
@@ -53,10 +41,6 @@ export function getSourceMappingURL(content: string): string | undefined {
   return findSourceMapRegex.exec(content)?.[1]
 }
 
-/**
- * Pure grouping decision: separates mutants inside the project graph from
- * those outside it, honouring `prioritizePerformanceOverAccuracy`.
- */
 export function partitionMutantsForGrouping(
   mutants: readonly Mutant[],
   nodes: MutableHashMap.MutableHashMap<string, TSFileNode>,
@@ -76,8 +60,6 @@ export function partitionMutantsForGrouping(
   }
   return { inside, outside }
 }
-
-// ── checker wiring ───────────────────────────────────────────────────────
 
 interface CheckerDeps {
   readonly options: unknown

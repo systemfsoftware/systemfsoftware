@@ -1,6 +1,3 @@
-/**
- * VitestMutantRun workflow — pure result-mapping for the mutant-run phase.
- */
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -8,10 +5,6 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
 import type { TestStatus } from '@systemfsoftware/stryker-js/TestRunner'
-
-// ---------------------------------------------------------------------------
-// Command / Output
-// ---------------------------------------------------------------------------
 
 export class VitestMutantRunCommand extends S.TaggedClass<VitestMutantRunCommand>()('VitestMutantRunCommand', {
   rawTests: S.Array(S.Unknown),
@@ -76,10 +69,6 @@ export class VitestDryRunOutput extends S.TaggedClass<VitestDryRunOutput>()('Vit
 }) {}
 
 type TaskState = 'pass' | 'fail' | 'skip' | 'todo' | 'run' | 'queued' | 'only' | undefined
-
-// ---------------------------------------------------------------------------
-// Pure helpers duplicated from dry-run (workflow files cannot import siblings)
-// ---------------------------------------------------------------------------
 
 const recordOption = (value: unknown): Option.Option<Record<string, unknown>> =>
   S.decodeUnknownOption(S.Record(S.String, S.Unknown))(value)
@@ -186,12 +175,6 @@ const toRawTestIdRaw = (test: unknown): string => {
   return `${filepath}#${collectTestNameRaw(test)}`
 }
 
-/**
- * A test id is `<file>#<test name>`, and the file is reported relative to the
- * project root so an id is stable across machines and sandbox directories.
- * Vitest reports an absolute path, so the root prefix is stripped here rather
- * than resolved — a decision body has no path service and needs none.
- */
 const normalizeTestIdRaw = (id: string, projectRoot: string): string => {
   const hash = id.indexOf('#')
   if (hash === -1) {
@@ -398,15 +381,6 @@ const decideVitestDryRun = (command: VitestDryRunCommand): Result.Result<VitestD
     ),
   )
 
-// ---------------------------------------------------------------------------
-// Mutant-run decision — pure dispatch, no let/Reflect/if
-// ---------------------------------------------------------------------------
-
-/**
- * The hit-limit cutoff: `Some` iff both numbers are present AND the count
- * strictly exceeds the limit. The boundary is `>` and not `>=` on purpose —
- * `hitCount === hitLimit` is the last permitted hit, not one too many.
- */
 const hitLimitReason = (
   hitCount: number | undefined,
   hitLimit: number | undefined,

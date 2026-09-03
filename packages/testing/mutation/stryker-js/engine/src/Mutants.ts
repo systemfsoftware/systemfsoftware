@@ -14,10 +14,6 @@ import type { PreviousFileRecord, PreviousMutantRecord, PreviousTestFileRecord }
 
 export const HIT_LIMIT_FACTOR = 100
 
-// ---------------------------------------------------------------------------
-// Diff statistics
-// ---------------------------------------------------------------------------
-
 export interface DiffChanges {
   readonly added: number
   readonly removed: number
@@ -79,10 +75,6 @@ export const diffStatisticsDetailedReport = (stats: Readonly<DiffStatistics>): r
 
 export const diffStatisticsTotalsReport = (stats: Readonly<DiffStatistics>): string =>
   `${MutableHashMap.size(stats.changesByFile)} files changed (${diffChangesToString(stats.total)})`
-
-// ---------------------------------------------------------------------------
-// Test coverage
-// ---------------------------------------------------------------------------
 
 export interface TestCoverage {
   readonly testsByMutantId: MutableHashMap.MutableHashMap<string, MutableHashSet.MutableHashSet<TestResult>>
@@ -507,9 +499,6 @@ const materializeMutant = (
   })
 }
 
-// Not a decision: materializes the final `TestPlan` shape from the decision's
-// data. The decision chose Run vs EarlyResult and every runOptions field;
-// this builds the `Mutant` values it described.
 const materializePlan = (plan: TestPlan, original: Mutant): MutantTestPlan => {
   if (plan.plan === 'EarlyResult') {
     return { plan: 'EarlyResult', mutant: materializeMutant(original, plan) }
@@ -569,10 +558,6 @@ export const decidePlans = (
   )
   return makeMutantTestPlanner(command)
 }
-
-// ---------------------------------------------------------------------------
-// Incremental differ (Cell sandwich + backwards compat)
-// ---------------------------------------------------------------------------
 
 export interface IncrementalDiffResult {
   readonly mutants: readonly Mutant[]

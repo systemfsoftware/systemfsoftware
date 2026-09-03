@@ -19,7 +19,6 @@ const describeOrders = (): OrderPair => {
   const recorded: { secondReadRaw?: OrderRequest; secondWriteRaw?: OrderRequest } = {}
   const first = Cell.layer({
     read: (request: OrderRequest) =>
-      // raw: OrderRequest from OrderRequest
       Effect.sync(() => {
         trace.push('first order read its request')
         return request
@@ -37,7 +36,6 @@ const describeOrders = (): OrderPair => {
   })
   const second = Cell.layer({
     read: (request: OrderRequest) =>
-      // raw: OrderRequest from OrderRequest
       Effect.sync(() => {
         trace.push('second order read its request')
         recorded.secondReadRaw = request
@@ -70,7 +68,6 @@ const describeSingleOrder = (): SingleOrder => {
   const trace: string[] = []
   const cell = Cell.layer({
     read: (request: OrderRequest) =>
-      // raw: OrderRequest from OrderRequest
       Effect.sync(() => {
         trace.push('single order read its request')
         return request

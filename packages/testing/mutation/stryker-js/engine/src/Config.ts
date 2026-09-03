@@ -1,11 +1,3 @@
-/**
- * Config capability — reading and resolving the run's configuration.
- *
- * One module per capability: config file discovery, `extends` resolution,
- * validation, freezing, serializability, file matching, and warning gating.
- * The pure merge helper lives below; schemas live in
- * `Config.schema.ts`.
- */
 import { Wire } from '@systemfsoftware/effect-cell-types'
 import { Module } from '@systemfsoftware/stryker-js/Module'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
@@ -62,9 +54,6 @@ export function mergeRecords(
   return out
 }
 
-/**
- * Config-file names the rebuild removed, mapped to their remediation.
- */
 export const REMOVED_OPTIONS: Record<string, string> = {
   'dots': 'the "dots" reporter was removed; use "clear-text" instead',
   'event-recorder':
@@ -77,8 +66,6 @@ export const REMOVED_OPTIONS: Record<string, string> = {
 
 const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
 export const optionsPath = (...path: string[]): string => path.join('.')
-
-// ── config-file-formats ─────────────────────────────────────────────
 
 const combine = (
   prefixes: string[],
@@ -110,8 +97,6 @@ export const DEFAULT_CONFIG_FILE_NAMES = Object.freeze(
     JAVASCRIPT: 'stryker.config.mjs',
   } as const,
 )
-
-// ── config-freeze ───────────────────────────────────────────────────
 
 export type Primitive = boolean | number | string | null | undefined
 
@@ -173,8 +158,6 @@ export function deepFreeze(target: unknown): unknown {
       return target
   }
 }
-
-// ── config-serializability ──────────────────────────────────────────
 
 export interface UnserializableDescription {
   path: string[]
@@ -256,8 +239,6 @@ export function findUnserializables(
   }
 }
 
-// ── is-warning-enabled ──────────────────────────────────────────────
-
 type KnownKeys<T> = keyof {
   [P in keyof T as string extends P ? never : number extends P ? never : P]: T[P]
 }
@@ -274,8 +255,6 @@ export function isWarningEnabled(
     return warningOptions[warningType] === true
   }
 }
-
-// ── file-matcher ────────────────────────────────────────────────────
 
 const DEFAULT_GLOB = '**/*.{js,ts,jsx,tsx,html,vue,mjs,mts,cts,cjs}'
 
@@ -312,8 +291,6 @@ export function matchesFile(
 ): boolean {
   return createFileMatcher(pattern, pathService, allowHiddenFiles)(fileName)
 }
-
-// ── validation-errors ───────────────────────────────────────────────
 
 const PATH_LINE = /^at\s+(\[.*\])$/
 const PATH_SEGMENT = /\["([^"]*)"\]|\[(\d+)\]/g
@@ -419,19 +396,6 @@ export type ExtendsStepDecision =
   | ResolveTag & { readonly specifier: string; readonly directory: string; readonly state: ExtendsStepState }
   | RefusedTag & { readonly reason: ExtendsRefusalReason; readonly file: string }
 
-/**
- * Merge a child config over a parent's resolved options.
- *
- * Arrays and non-records are replaced wholesale except for `plugins`, which is
- * appended, with the first occurrence of a descriptor winning.
- *
- * `plugins` is the one array that APPENDS to the parent's rather than
- * replacing it. An explicit `"plugins": []` cannot mean empty without breaking
- * every inheriting config — a child that names no plugins would wipe the
- * parent's, and every config that inherits from a preset would have to
- * redeclare the preset's plugins to keep them. The append preserves the
- * preset's plugins and lets the child add or deduplicate.
- */
 export function mergeConfigs(
   parent: PartialStrykerOptions,
   child: PartialStrykerOptions,
@@ -529,8 +493,6 @@ export const decideExtendsStep = (
     Match.orElse((): ExtendsStepDecision => ({ ...RefusedTag, reason: 'non-string-extends', file })),
   )
 }
-
-// ── resolve-extends ─────────────────────────────────────────────────
 
 export function readConfigFile(
   configFile: string,
@@ -645,15 +607,11 @@ export function resolveExtends(
   })
 }
 
-// ── options-validator ───────────────────────────────────────────────
-
 export type ValidationSchemaDocument = {
   readonly properties?: unknown
   readonly [key: string]: unknown
 }
 
-// JSON Schema document for the fork's option surface — a *use* of forkOptionsSchema, not a declaration.
-// Config.schema.ts declares forkOptionsSchema; this module builds the document where the boundary is crossed.
 export const forkCoreSchema: Record<string, unknown> = S.toJsonSchemaDocument(forkOptionsSchema).schema
 
 const decodeOptions = S.decodeUnknownResult(StrykerOptionsSchema, { errors: 'all' })
@@ -1033,9 +991,7 @@ export const defaultOptions: Effect.Effect<Immutable<StrykerOptions>, never, nev
   (opts) => deepFreeze(opts),
 )
 
-// ── config-reader ───────────────────────────────────────────────────
-
-const cliOptionsRecord = Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown))) // plugin sections are foreign by design
+const cliOptionsRecord = Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown)))
 
 export const CONFIG_SYNTAX_HELP = `
 Example of how a config file should look:

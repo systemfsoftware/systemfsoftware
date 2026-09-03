@@ -1,15 +1,3 @@
-/**
- * Sandbox — capability that prepares and manages the mutation sandbox.
- *
- * Owns the file-preprocessor family (disabling type checks and rewriting
- * tsconfig references), the scoped temporary directory, and the sandbox
- * orchestration that writes project files into place, runs the optional
- * build command, and symlinks `node_modules` into the sandbox.
- *
- * The sandbox pipeline reads the input, plans the file tree, and writes it —
- * the write returns the sandbox handle.
- */
-
 import { parse } from '@std/jsonc'
 import { disableTypeChecks } from '@systemfsoftware/stryker-js-instrumenter'
 import { errorToString, normalizeFileName } from '@systemfsoftware/stryker-js/Mutant'
@@ -46,8 +34,6 @@ import type { Project } from './Project.js'
 import { ExtendsArraySchema, type TSConfig, TsConfigParseError, TsConfigSchema } from './Sandbox.schema.js'
 import { StrykerError } from './stryker-error.schema.js'
 
-// ── Public handles ──────────────────────────────────────────────────────────
-
 export interface SandboxHandle {
   readonly workingDirectory: string
   readonly sandboxFileFor: (fileName: string) => string
@@ -61,8 +47,6 @@ export interface MakeSandboxInput {
   readonly backupDirectory: string
   readonly basePath: string
 }
-
-// ── File preprocessor family (one family serving one capability) ────────────
 
 /**
  * A preprocessor refines files before they are written to the sandbox.
@@ -121,9 +105,6 @@ const makeDisableTypeChecksPreprocessor =
     })
   }
 
-/**
- * Parses a JSONC string into a typed tsconfig.
- */
 export function parseTsConfig(
   fileName: string,
   jsonText: string,
@@ -313,12 +294,6 @@ const createPreprocessor = (
     makeTSConfigPreprocessor(options, basePath),
   ])
 
-// ── Temporary directory ────────────────────────────────────────────────────
-
-/**
- * Scoped temporary directory. Created inside a `Scope`; its finalizer
- * decides from the run's `Exit` whether to keep it.
- */
 export interface TemporaryDirectoryShape {
   readonly path: string
 }
@@ -327,11 +302,6 @@ export class TemporaryDirectory extends Context.Service<TemporaryDirectory, Temp
   '@systemfsoftware/stryker-js-engine/TemporaryDirectory',
 ) {}
 
-/**
- * Layer that creates the temp directory under `options.tempDirName` and
- * registers a finalizer that reads the `Exit`. The prefix is `backup-`
- * when `inPlace` is enabled and `sandbox-` otherwise.
- */
 export const TemporaryDirectoryLive = (
   options: StrykerOptions,
 ): Layer.Layer<TemporaryDirectory, PlatformError, FileSystem.FileSystem | Path.Path> =>
@@ -376,8 +346,6 @@ export const TemporaryDirectoryLive = (
       return { path: tmp }
     }),
   )
-
-// ── Sandbox orchestration ──────────────────────────────────────────────────
 
 const toFileMap = (entries: readonly (readonly [string, string])[]): Map<string, string> => new Map(entries)
 
@@ -484,10 +452,6 @@ const symlinkJunction = (
     yield* fsService.symlink(to, from)
   })
 
-/**
- * Move the contents of `from` into `to`, merging rather than replacing, which is
- * what restoring a backup over a working tree needs.
- */
 const moveDirectoryRecursive = (
   from: string,
   to: string,
@@ -667,6 +631,5 @@ export const makeSandbox = (
     return buildHandle(fileMap, workingDirectory, basePath, pathService)
   })
 
-// Re-export preprocessor factory for callers that previously imported via sandbox/index
 export { createPreprocessor }
 export type { FilePreprocessor }

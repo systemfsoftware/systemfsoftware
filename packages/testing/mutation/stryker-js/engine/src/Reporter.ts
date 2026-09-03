@@ -65,15 +65,9 @@ const writeOutputFile = (
     yield* fs.writeFileString(fileName, content)
   })
 
-// ─── re-export broadcast / strict for callers that imported via reporting/ ──
-
 export { broadcastReporter }
 export type { NamedReporter } from '@systemfsoftware/stryker-js/Reporter'
 export type StrictReporter = ReporterService
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Progress bar — view over ProgressTally ticks
-// ═══════════════════════════════════════════════════════════════════════════
 
 export type ProgressBarState = {
   readonly format: string
@@ -143,10 +137,6 @@ function formatBar(
   }
   return out
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Progress keeper — tally over DryRun / Plan / MutantTested events
-// ═══════════════════════════════════════════════════════════════════════════
 
 export type ProgressTally = {
   readonly survived: number
@@ -923,10 +913,6 @@ export function renderClearText(
   return { stdout, debug }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Clear-text reporter — stdout + debug
-// ═══════════════════════════════════════════════════════════════════════════
-
 export const makeClearTextReporter = (params: {
   readonly options?: ProvidedStrykerOptions
   readonly out?: NodeJS.WritableStream
@@ -977,10 +963,6 @@ export const makeClearTextReporter = (params: {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// JSON reporter — file report
-// ═══════════════════════════════════════════════════════════════════════════
-
 export const makeJsonReporter = (params: {
   readonly options?: ProvidedStrykerOptions
   readonly fs: FileSystem.FileSystem
@@ -1023,10 +1005,6 @@ export const makeJsonReporter = (params: {
     wrapUp: Effect.void,
   }
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Progress bar reporter — terminal bar onMutantTested
-// ═══════════════════════════════════════════════════════════════════════════
 
 export const makeProgressBarReporter = (params: {
   readonly out?: NodeJS.WritableStream
@@ -1116,10 +1094,6 @@ export const makeProgressBarReporter = (params: {
 
     return reporter
   })
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Progress stream reporter — NDJSON run events for machine mode
-// ═══════════════════════════════════════════════════════════════════════════
 
 export type RunEvent =
   | { kind: 'plan'; total: number }
@@ -1224,19 +1198,6 @@ export const makeProgressStreamReporter = (
     return reporter
   })
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Report location — 0-based run positions <-> 1-based schema positions
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Positions cross the report boundary in both directions, so both conversions
- * live here. They were split across two modules - the encode half beside the
- * result mapping, the decode half beside file selection - which put the two
- * halves of one correspondence out of each other's sight.
- *
- * Encoding adds one to each axis: a run counts lines and columns from zero, the
- * report schema counts from one.
- */
 export const toSchemaPosition = (pos: Position): schema.Position => ({
   column: pos.column + 1,
   line: pos.line + 1,
@@ -1247,10 +1208,6 @@ export const toSchemaLocation = (location: Location): schema.Location => ({
   end: toSchemaPosition(location.end),
 })
 
-/**
- * Decoding rebuilds the position from its two axes, dropping whatever else the
- * report carried on the object.
- */
 function reportPositionToStrykerPosition({ line, column }: Position): Position {
   return { line, column }
 }
@@ -1271,10 +1228,6 @@ export function reportLocationToStrykerLocation({ start, end }: Location): Locat
     end: reportPositionToStrykerPosition(end),
   }
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Report mapping — check/run results -> MutantResult + report helpers
-// ═══════════════════════════════════════════════════════════════════════════
 
 export const checkStatusToMutantStatus = (
   _status: Exclude<CheckStatus, 'passed'>,
@@ -1411,46 +1364,12 @@ export const normalizeReportFileName = (
   return ''
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Reporter selection — which reporters may run, given the output mode
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Which reporters may run, given the output mode.
- *
- * Machine mode keeps stdout exclusively for the NDJSON stream, so a reporter
- * that writes prose there cannot run: a progress bar or a score table
- * interleaved into the protocol makes every line after it unparseable, and the
- * consumer has no way to tell the difference between that and a malformed run.
- * The file reporters are unaffected — they write to disk, never to stdout, and a
- * machine consumer wants their output.
- *
- * Human mode has no NDJSON channel, so the `progress-stream` reporter is inert
- * and the human reporter `clear-text` runs instead. The substitution preserves
- * the user's other reporters (`html`, `json`, …) and their order, and is
- * idempotent.
- *
- * This is the ONLY gate on reporter selection by mode. The alternative, letting
- * each reporter decide whether to render, puts the same decision in as many
- * places as there are reporters and lets them disagree; and a reporter that
- * renders nothing is indistinguishable from one that failed.
- */
 const STDOUT_REPORTERS: ReadonlySet<string> = new Set(['clear-text', 'progress'])
 
-/** The reporter that carries the machine protocol. Inert in human mode. */
 const STREAM_REPORTER = 'progress-stream'
 
-/** The human reporter that renders the score table and mutant details. */
 const HUMAN_REPORTER = 'clear-text'
 
-/**
- * Narrows the configured reporter list to those the mode permits.
- *
- * Pure: names in, names out. Order is preserved so a consumer reading the
- * resolved options sees its own list, minus what the mode forbids.
- * Human mode substitutes `progress-stream` -> `clear-text`, deduplicated to
- * keep the operation idempotent.
- */
 export function selectReporters(
   configured: readonly string[],
   mode: 'human' | 'machine',
@@ -1478,10 +1397,6 @@ export function selectReporters(
   }
   return [...permitted, STREAM_REPORTER]
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Mutation reporting — collects results, builds report, fans out to reporters
-// ═══════════════════════════════════════════════════════════════════════════
 
 const STRYKER_FRAMEWORK: Readonly<Pick<schema.FrameworkInformation, 'branding' | 'name' | 'version'>> = Object.freeze({
   branding: {
@@ -1777,14 +1692,6 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
 
   const ManifestSchema = S.Struct({ version: S.optional(S.String) })
 
-  /**
-   * One dependency's installed version, or nothing.
-   *
-   * The specifier is resolved against this module with `import.meta.resolve` — a standard ESM
-   * builtin — and its manifest is read through the
-   * platform FileSystem. Every failure is contained here and reported as `Option.none`,
-   * because a framework the project does not install is the normal case, not an error.
-   */
   const readManifestVersion = (
     fs: FileSystem.FileSystem,
     pathService: Path.Path,

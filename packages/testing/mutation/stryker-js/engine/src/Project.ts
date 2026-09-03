@@ -91,14 +91,6 @@ function globToRegExp(pattern: string): RegExp {
   return new RegExp(`^${build(0, '')}$`)
 }
 
-/**
- * Resolve a configured pattern against the project root.
- *
- * Input file names arrive absolute, because they are what the reader found on disk and
- * what every later read opens. Patterns arrive relative, because that is how a user
- * writes them in `stryker.config.json`. Matching the two directly never succeeds, so the
- * pattern is the side that moves.
- */
 function resolveAgainstBase(basePath: string, pattern: string): string {
   const normalized = normalizeFileName(pattern)
   if (normalized.startsWith('/')) {
@@ -136,9 +128,7 @@ function createPureMatcher(
     return (): boolean => false
   }
   const regex = globToRegExp(resolveAgainstBase(basePath, relative))
-  // Whether a file is hidden is judged on the pattern as written and on the path below the
-  // project root: directories above the root are not the project's business, and resolving
-  // the pattern would put their dots into the answer.
+
   const patternHasDot = relative.includes('.')
   const base = `${trimTrailingSlashes(normalizeFileName(basePath))}/`
   return (fileName: string): boolean => {
@@ -444,7 +434,6 @@ export const decodeIncrementalReport = (raw: unknown): Result.Result<unknown, In
     onSuccess: (decoded) => Result.succeed(reshape(decoded)),
   })
 
-/** `JSON.parse` hands back `any`; the annotation is what forces a decode downstream. */
 const parseJson = (text: string): unknown => JSON.parse(text)
 
 export const FILE_CONCURRENCY = 24
@@ -629,12 +618,6 @@ export function withInstrumentedFiles(
   return next
 }
 
-/**
- * Walks the tree under `basePath`, honouring the ignore rules as it descends so
- * an ignored directory is never entered. The rules are applied in order and a
- * negated rule re-includes, which is why inclusion is tracked per entry rather
- * than short-circuited on the first match.
- */
 function resolveInputFileNames(
   ignoreRules: readonly string[],
   basePath: string,
@@ -731,11 +714,6 @@ function resolveInputFileNames(
   })
 }
 
-/**
- * Reads the prior report. A missing file is not a failure — it means every
- * mutant is new — so only that one reason resolves to `undefined`; any other
- * read error still fails the run rather than silently discarding history.
- */
 function readIncrementalReport(
   incremental: boolean,
   incrementalFile: string,
@@ -769,10 +747,6 @@ function readIncrementalReport(
   })
 }
 
-/**
- * Reads the project: which files exist, which of them are mutated, which are
- * tests, and what the previous run concluded.
- */
 export function readProject(
   options: StrykerOptions,
   targetMutatePatterns: readonly string[] | undefined,
@@ -818,8 +792,6 @@ export function readProject(
     })()
     const decision = selectFiles(selection)
 
-    // A pattern the user wrote themselves that selects nothing is almost always
-    // a mistake; the defaults selecting nothing is normal and stays quiet.
     if (!stringArrayEquivalence(mutatePatterns, defaults.mutate)) {
       yield* Effect.forEach(mutatePatterns, (pattern) =>
         Effect.gen(function*() {

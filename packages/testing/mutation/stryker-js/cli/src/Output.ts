@@ -1,11 +1,5 @@
 /// <reference types="vitest/import-meta" />
-/**
- * Output — the machine/human output capability.
- *
- * The NDJSON run-event stream, wire protocol constants, mode resolution probes,
- * and machine-mode terminal output. Pure mode resolution lives in
- * Output.workflow.ts.
- */
+
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { buildVerdictEnvelope, defaultOptions, generateRunId, strykerVersion } from '@systemfsoftware/stryker-js-engine'
 import type { ResolvedMode } from '@systemfsoftware/stryker-js-engine'
@@ -40,46 +34,19 @@ import {
 } from './Output.workflow.js'
 import { type FailedRunOutcome, type RunOutcomeDecision, type RunOutcomeError } from './RunOutcome.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
-/**
- * The wire protocol constants of the machine-mode NDJSON run-event stream.
- * Domain-blind: the stream adapter frames with them and the transport closes
- * terminal lines with the schema version, so each constant has exactly one
- * declaration and no other module may hard-code it.
- */
 
-/**
- * The stream schema version (R21), carried by the header and the error
- * terminal event. Independent of the report schema version: consumers ignore
- * unknown `kind` values and unknown fields, so a new event type is an
- * additive change.
- */
 export { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 
-/**
- * The heartbeat interval (R19), matching Terraform's `apply_progress`
- * cadence: long enough that a slow phase is not noisy, short enough that a
- * consumer can tell "slow" from "hung" without waiting for a mutant event.
- */
 export const TICK_INTERVAL_MS = 10_000
 
-/** The version shape the law pins. */
 const MAJOR_DOT_MINOR = /^\d+\.\d+$/
 
 if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
-  // so this branch is statically dead in the build and the runner never enters
-  // the published module graph. A static import would ship it.
   const { describe, it } = await import('@systemfsoftware/effect-gherkin-spec')
   const { expect } = await import('vitest')
   const { FastCheck: fc } = await import('effect/testing')
   void fc
 
-  /**
-   * Only the two wire constants are exported, so each law is an invariant
-   * over the single defined value rather than a quantified relation: a value
-   * change (a non-positive tick, a version that stops being `N.N`) is exactly
-   * the bug these pin.
-   */
   describe('stream-protocol wire constants', () => {
     it('Should_TickIntervalBeSchedulable_When_ConstantIsPositive', () => {
       expect(Number.isInteger(TICK_INTERVAL_MS)).toBe(true)
@@ -317,14 +284,7 @@ export const makeRunEventStream = (
       }),
       closeAndDrain: Effect.gen(function*() {
         state.terminalWritten = true
-        // `end`, never `shutdown` and never `interrupt`. Shutdown clears the buffered
-        // messages and finalizes the queue at once, so every event still buffered —
-        // including the terminal one every consumer parses for — is discarded before the
-        // drain can write it. `interrupt` keeps the buffer but ends the queue with an
-        // interrupt cause, and the join below then re-raises it into the caller, losing the
-        // exit code the run already decided. `end` completes the queue with `Cause.Done`,
-        // which `Stream.fromQueue` reads as end-of-stream: the buffer drains and the
-        // terminal event is the last line on stdout.
+
         yield* Queue.end(queue)
         if (drainFiber !== null) {
           yield* Fiber.join(drainFiber)
@@ -357,7 +317,6 @@ export interface ModeInput extends FormatFlags {
   readonly toolVars?: Readonly<Partial<Record<ToolVariable, string | undefined>>>
 }
 
-/** The single projection from the resolved-mode decision union back to the legacy record shape. */
 const decisionToResolvedMode = (decision: ResolveModeDecision): ResolvedMode =>
   Match.value(decision).pipe(
     Match.tag(
@@ -371,15 +330,6 @@ const decisionToResolvedMode = (decision: ResolveModeDecision): ResolvedMode =>
     Match.exhaustive,
   )
 
-/**
- * Resolves the output mode by R4 precedence. Pure — reads nothing, so it is
- * fully testable; the caller supplies every input once at startup. The
- * mutually-exclusive-flags case is a caller error, returned as a `failure` so
- * the function stays total.
- *
- * Delegates to the workflow's pure decision so the Cell sandwich has a single
- * source of truth.
- */
 export function resolveMode(input: ModeInput): Result.Result<ResolvedMode, CliError.CliError> {
   let commandInput: {
     readonly stdoutIsTTY: boolean
@@ -430,22 +380,10 @@ export function resolveMode(input: ModeInput): Result.Result<ResolvedMode, CliEr
   return Result.succeed(decisionToResolvedMode(result.success))
 }
 
-/**
- * The progress bar's gate. Human mode on a non-TTY stdout (AE1) must not leak
- * its control sequences into a pipe, and machine mode keeps stdout clean for
- * the verdict envelope (R5). Decided from the resolved mode's own detection
- * data — never a second `isTTY` probe.
- */
 export function isProgressEnabled(resolved: ResolvedMode): boolean {
   return resolved.mode === 'human' && resolved.stdoutIsTTY
 }
 
-/**
- * The log colouriser's gate (R8). Machine mode never emits colour, so a
- * harness merging `2>&1` is not handed escape sequences it must strip, and
- * `NO_COLOR` is honoured for the human path per the convention: any value
- * other than an unset or empty variable disables colour.
- */
 export function isColorEnabled(resolved: ResolvedMode, noColor: string | undefined): boolean {
   if (resolved.mode !== 'human') {
     return false
@@ -459,16 +397,12 @@ export function isColorEnabled(resolved: ResolvedMode, noColor: string | undefin
   return false
 }
 
-/** The example suite's canonical TTY input. */
 const ttyInput = (overrides: Partial<ModeInput> = {}): ModeInput => ({
   stdoutIsTTY: true,
   ...overrides,
 })
 
 if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
-  // so this branch is statically dead in the build and the runner never enters
-  // the published module graph. A static import would ship it.
   const { describe, it } = await import('@systemfsoftware/effect-gherkin-spec')
   const { expect } = await import('vitest')
   const { FastCheck: fc } = await import('effect/testing')
@@ -477,17 +411,6 @@ if (import.meta.vitest !== void 0) {
   const Option = await import('effect/Option')
   const CliError = await import('effect/unstable/cli/CliError')
 
-  /**
-   * The generated mode-input domain. Every signal slot ranges over its full
-   * value space, so the laws below quantify over combinations the example tests
-   * never enumerate — including flags on a TTY, empty signals on a pipe, and
-   * both tool variables together.
-   *
-   * The drawn record carries every slot as `T | undefined`; `toModeInput` drops
-   * the undefined slots so the value satisfies `ModeInput` under the package's
-   * exact-optional-property typecheck (a present `undefined` property is not an
-   * absent one).
-   */
   type DrawnModeInput = {
     text: boolean
     json: boolean
@@ -707,7 +630,6 @@ if (import.meta.vitest !== void 0) {
     )
   })
 
-  // The example suite, converted verbatim from the deleted example test file.
   describe('resolveMode (examples)', () => {
     it('Should_ResolveHuman_When_TtyHasNoAgentVariables', () => {
       expect(Result.getOrThrow(resolveMode(ttyInput()))).toEqual({
@@ -975,15 +897,6 @@ export const OutputModeProbeLive: Layer.Layer<OutputModeProbeTag> = Layer.succee
   }),
 )
 
-/**
- * Machine mode emits the U4 verdict envelope for a run that produced no
- * mutants and no report file: a `--survivors` run with zero survivors (AE3)
- * or a successful `--dryRunOnly` run that ended before the mutation
- * pipeline. The envelope carries a null score and an empty mutant list and is
- * written as the terminal `verdict` line of the stdout stream (U6), carrying
- * the run id the stream header already opened with (KTD11 — never a fresh
- * id). Human mode prints nothing (the sink drops in human mode).
- */
 export function emitNullScoreVerdict(
   stream: RunEventStream,
   mode: ResolvedMode,
@@ -1017,19 +930,6 @@ export function emitNullScoreVerdict(
   )
 }
 
-/**
- * Emits the machine-mode output from the run's finalizer — it runs on
- * success, failure and interruption alike (R30): a failed run writes the
- * `error` terminal event as the last line of the stdout stream; a successful
- * run whose only console output was the framework's help/version rendering
- * emits that captured document as the `help` terminal event, so `--help` in
- * machine mode never leaks an ANSI document. A successful run with an empty
- * buffer (the normal verdict path) emits nothing extra — the run already
- * wrote its terminal `verdict` line through the same module — unless the
- * stream is still open, which means the run never reached a verdict (the
- * `--dryRunOnly` early return): then a null-score `verdict` closes the
- * stream so the last stdout line is always a terminal event (R5).
- */
 function offerFailureEnvelope(
   stream: RunEventStream,
   failed: FailedRunOutcome,

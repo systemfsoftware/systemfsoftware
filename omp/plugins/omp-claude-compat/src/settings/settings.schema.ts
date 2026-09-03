@@ -14,14 +14,6 @@ const CommandHook = S.Struct({
   pluginRoot: S.optional(S.String),
 })
 
-/**
- * Transports Claude Code defines that this bridge cannot execute yet.
- *
- * They are accepted so a legitimate settings file still decodes: rejecting the
- * entry made the whole struct fail, the union fell through to the flat branch,
- * and every hook in the file was silently dropped. The dispatcher skips these
- * and the unsupported types are surfaced at session start.
- */
 const UnsupportedHook = S.Struct({
   type: S.Literals(['http', 'mcp_tool', 'prompt', 'agent']),
 })
@@ -72,16 +64,10 @@ export const HookCoverageSchema = S.Struct({
 const SettingsFlat = S.Struct({
   ...HookGroups.fields,
   disableAllHooks: S.optional(S.Boolean),
-  // A wrapped file that failed to decode must NOT land here. Without this the
-  // union falls through, `hooks` is ignored as an excess key, and a malformed
-  // settings file decodes to an empty one — silently disabling every hook.
+
   hooks: S.optional(S.Never),
 })
 
-/**
- * Lift the flat settings shape under `hooks`. Decode-only: the bridge reads
- * settings.json and never writes it back, so encoding has no meaning here.
- */
 const LiftFlatSettingsACL = SettingsFlat.pipe(
   S.decodeTo(S.toType(SettingsWrapped), {
     decode: SchemaGetter.transformOrFail(({ disableAllHooks, ...hooks }) =>
@@ -151,7 +137,7 @@ export interface DisableSource {
 
 export interface SettingsSource {
   readonly settings: HookSettings
-  /** Read from the managed-settings path, which downstream files may not disable. */
+
   readonly managed: boolean
   readonly pluginRoot?: string
 }

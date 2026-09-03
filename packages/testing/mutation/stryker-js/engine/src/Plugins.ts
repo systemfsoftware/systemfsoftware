@@ -410,10 +410,6 @@ function hasValidationSchemaContribution(module: unknown): module is SchemaValid
   return S.is(SchemaValidationContributionSchema)(module)
 }
 
-// ---------------------------------------------------------------------------
-// Creator — typed accessors over the loaded graph
-// ---------------------------------------------------------------------------
-
 function findPlugin<K extends PluginKind>(
   pluginsByKind: HashMap.HashMap<PluginKind, readonly AnyPluginContribution[]>,
   kind: K,

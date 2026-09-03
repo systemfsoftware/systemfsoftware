@@ -1,6 +1,3 @@
-/**
- * Instrument — the instrument capability: file/mutant types and the instrument entry point.
- */
 import { type FileDescription, Mutant as ApiMutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as Effect from 'effect/Effect'
 import * as Predicate from 'effect/Predicate'
@@ -22,7 +19,6 @@ import { type Ast, AstFormat, type HtmlAst, type ScriptAst, type SvelteAst } fro
 import { createMutantCollector, transform } from './Transformer.js'
 import type { TransformerOptions } from './Transformer.js'
 
-// ---- File ----
 export interface File extends FileDescription {
   name: string
   content: string
@@ -33,13 +29,11 @@ export interface InstrumentResult {
 }
 
 export type { InstrumenterOptions }
-// Mutant identity, application and API mapping live with the mutators — this
-// module only orchestrates the pipeline.
+
 import { spanOf } from './estree.js'
 import { toApiMutant } from './Mutator.js'
 import { type SpannedComment } from './Syntax.js'
 
-// ---- disable-type-checks ----
 const commentDirectiveRegEx = /^(\s*)@(ts-[a-z-]+).*$/
 const tsDirectiveLikeRegEx = /@(ts-[a-z-]+)/
 const startingCommentRegex = /(^\s*\/\*.*?\*\/)/gs

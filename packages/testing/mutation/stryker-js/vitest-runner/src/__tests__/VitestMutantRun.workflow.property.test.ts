@@ -27,16 +27,6 @@ const tagOf = (result: Result.Result<VitestMutantRunOutput, VitestMutantRunError
     Match.exhaustive,
   )
 
-/**
- * The sampled command with named fields overridden, rebuilt through the class
- * constructor rather than spread from the instance. Spreading an instance drops
- * its prototype — the result is still structurally assignable, so nothing would
- * fail, and the suite would quietly stop exercising the command it claims to.
- *
- * `hitCount` and `hitLimit` are always overridden: leaving a sampled value in
- * place would let the hit-limit cutoff fire when the property means to test the
- * dry-run mapping, or miss it when the property means to test the cutoff.
- */
 const commandWith = (
   input: VitestMutantRunCommand,
   override: {

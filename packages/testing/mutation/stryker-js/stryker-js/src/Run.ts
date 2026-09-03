@@ -39,15 +39,6 @@ export const planMutationRun = (command: PlanMutationRunCommand): MutationRunPla
     mutatorNames: firstNonEmpty(command.availableMutators, command.configMutatorNames),
   })
 
-/**
- * Where a run's events go.
- *
- * The error channel carries `Cause.Done`, the graceful completion signal: a finished run
- * ends the queue, and `Stream.fromQueue` excludes `Done` from its own error channel, so the
- * consumer sees end-of-stream. Interrupting the queue instead would end it with an
- * interrupt cause, and joining the drain would then re-raise that into the caller and lose
- * the exit code the run had already decided.
- */
 export class RunEvents extends Context.Service<RunEvents, Queue.Queue<RunEvent, Cause.Done>>()(
   '~@systemfsoftware/stryker-js/RunEvents',
 ) {}

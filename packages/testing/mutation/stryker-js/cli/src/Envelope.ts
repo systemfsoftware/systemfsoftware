@@ -1,12 +1,3 @@
-/**
- * Envelope — the failure envelope and console capture leaf.
- *
- * Extracted from Cli.ts to break the import cycle Cli <-> Output.
- * Both Cli and Output import from this leaf, so neither depends on the other
- * for these values. This file imports only from external packages and from
- * StreamVersion (leaf) and Survivors.workflow (leaf), never from Cli or Output
- * themselves.
- */
 import { ExitClass, highestExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import { causeText } from '@systemfsoftware/stryker-js/Mutant'
 import * as Cause from 'effect/Cause'
@@ -555,7 +546,6 @@ export function buildErrorEnvelope(
   })
 }
 
-// Console capture (U6)
 const capturedConsoleChunks: string[] = []
 const countByLabel = new Map<string, number>()
 const timeByLabel = new Map<string, bigint>()

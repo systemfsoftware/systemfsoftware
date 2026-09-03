@@ -5,10 +5,6 @@ import { Workflow } from '@systemfsoftware/effect-cell-types'
 
 const TOOL_VARIABLES = ['CLAUDECODE', 'CODEX_SANDBOX'] as const
 
-/**
- * The command of the output-mode workflow: a schema class, because `Workflow.make`
- * derives the command type from it and pins the error channel at the construction site.
- */
 export class ResolveModeCommand extends S.TaggedClass<ResolveModeCommand>()('ResolveModeCommand', {
   stdoutIsTTY: S.Boolean,
   text: S.optional(S.Boolean),
@@ -21,12 +17,6 @@ export class ResolveModeCommand extends S.TaggedClass<ResolveModeCommand>()('Res
 const ResolveModeTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-cli/ResolveMode')
 type ResolveModeTypeId = typeof ResolveModeTypeId
 
-/**
- * The conflict error for mutually exclusive format flags. Defined locally so the
- * workflow decision remains pure — the sealed effect surface does not include
- * `effect/unstable/cli/CliError`, so the decision returns this local error and
- * the shell maps it to `CliError.InvalidValue` at the boundary.
- */
 export class ModeConflictError extends S.TaggedError<ModeConflictError>()('ModeConflictError', {
   option: S.String,
   value: S.String,

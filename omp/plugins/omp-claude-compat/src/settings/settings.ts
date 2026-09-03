@@ -35,11 +35,6 @@ import {
   type SettingsSnapshot,
 } from './settings.schema.js'
 
-/**
- * Resolve one effective hook set. Claude Code protects managed hooks: a
- * `disableAllHooks` outside managed settings must not switch them off, and only
- * a managed one turns everything off.
- */
 function mergeSettings(sources: readonly DecodedSource[]): HookSettings {
   const hooks = {
     PreToolUse: [] as HookEntry[],

@@ -1,13 +1,3 @@
-/**
- * Runner — the vitest test-runner capability.
- *
- * Wraps Vitest's node API as an Effect `TestRunner` service: start/close
- * lifecycle, dry/mutant execution, coverage collection,
- * and sandbox self-alias resolution. Pure dry-run result mapping lives in
- * this module below; mutant-run decisions live in
- * `VitestMutantRun.workflow.ts`; schema declarations live in
- * `Runner.schema.ts`.
- */
 import type * as PathType from 'effect/Path'
 import type { RunMode, RunnerTestCase, RunnerTestSuite, TaskState as VitestTaskState } from 'vitest'
 import { createVitest as createVitestOriginal } from 'vitest/node'
@@ -70,10 +60,6 @@ export class VitestHarness extends Context.Service<VitestHarness, {
     value: unknown,
   ) => Effect.Effect<void, TestRunnerFailed>
 }>()('VitestHarness') {}
-// ---------------------------------------------------------------------------
-// Test identity (from test-identity.ts) — also duplicated in stryker-setup.ts
-// which is copied verbatim into the sandbox and cannot import siblings.
-// ---------------------------------------------------------------------------
 
 export function collectTestName({ name, suite }: { name: string; suite?: RunnerTestSuite }): string {
   const nameParts = [name]
@@ -88,10 +74,6 @@ export function collectTestName({ name, suite }: { name: string; suite?: RunnerT
 export function toRawTestId(test: RunnerTestCase): string {
   return `${test.file.filepath}#${collectTestName(test)}`
 }
-
-// ---------------------------------------------------------------------------
-// Task mapping (from vitest-task-mapping.ts)
-// ---------------------------------------------------------------------------
 
 function convertTaskStateToTestStatus(taskState: VitestTaskState | undefined, testMode: RunMode): TestStatus {
   if (testMode === 'skip') return 'skipped'
@@ -186,18 +168,9 @@ export function isErrorCodeError(error: unknown): error is Error & { code: strin
   return false
 }
 
-/** @see https://github.com/vitest-dev/vitest/blob/main/packages/vitest/src/node/errors.ts */
 export const VITEST_ERROR_CODES = Object.freeze({ FILES_NOT_FOUND: 'VITEST_FILES_NOT_FOUND' })
 
-// ---------------------------------------------------------------------------
-// Dry-run result mapping (pure: raw vitest payloads to run results)
-// ---------------------------------------------------------------------------
-
 type TaskState = 'pass' | 'fail' | 'skip' | 'todo' | 'run' | 'queued' | 'only' | undefined
-
-// ---------------------------------------------------------------------------
-// Pure helpers — single concern, no branching density
-// ---------------------------------------------------------------------------
 
 const recordOption = (value: unknown): Option.Option<Record<string, unknown>> =>
   S.decodeUnknownOption(S.Record(S.String, S.Unknown))(value)
@@ -304,12 +277,6 @@ const toRawTestIdRaw = (test: unknown): string => {
   return `${filepath}#${collectTestNameRaw(test)}`
 }
 
-/**
- * A test id is `<file>#<test name>`, and the file is reported relative to the
- * project root so an id is stable across machines and sandbox directories.
- * Vitest reports an absolute path, so the root prefix is stripped here rather
- * than resolved — a decision body has no path service and needs none.
- */
 const normalizeTestIdRaw = (id: string, projectRoot: string): string => {
   const hash = id.indexOf('#')
   if (hash === -1) {
@@ -504,10 +471,6 @@ export const decideVitestDryRun = (command: VitestDryRunCommand): VitestDryRunOu
   return DryRunComplete.make({ testsJson: JSON.stringify(tests) })
 }
 
-// ---------------------------------------------------------------------------
-// Sandbox self-aliases (from sandbox-self-aliases.ts)
-// ---------------------------------------------------------------------------
-
 export const SOURCE_CONDITION = '@systemfsoftware/source'
 
 const sourceTargetOf = (entry: ExportEntry): string | undefined => {
@@ -578,12 +541,6 @@ export const readSandboxSelfAliases = (
     })
   })
 
-/**
- * Vite records a package specifier as a bare dep. Vitest related-mode then
- * joins that specifier onto the project root, misses the file, and reports
- * zero tests. Returning the sandbox source path from `resolveId` makes the
- * dep a real filesystem path related-mode can walk.
- */
 export const sandboxSelfPlugin = (
   aliases: readonly SandboxAlias[],
 ): { readonly name: string; readonly enforce: 'pre'; readonly resolveId: (source: string) => string | undefined } => ({
@@ -594,10 +551,6 @@ export const sandboxSelfPlugin = (
     return undefined
   },
 })
-
-// ---------------------------------------------------------------------------
-// Vitest resolver (from vitest-wrapper.ts)
-// ---------------------------------------------------------------------------
 
 export interface ResolvedVitest {
   createVitest: typeof createVitestOriginal

@@ -1,26 +1,9 @@
-/**
- * Checker — pure decisions for the Checker capability.
- *
- * Two joins a checker can get wrong: pairing check results back to the plans
- * they were asked about, and resolving id groups back to plans. Both fail the
- * same two ways — unrequested ids and missing ids — and each carries its own
- * tag so a caller matches on the failure rather than parsing ids out of a message.
- */
-
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import type { CheckResult } from '@systemfsoftware/stryker-js/Checker'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
-/**
- * A checker answered about a mutant nobody asked it about.
- *
- * Separate from the missing-result case because they mean opposite things: this
- * one says the checker invented work, the other says it dropped work. Reporting
- * both as one failure loses the only fact that tells you which plugin bug you
- * are looking at.
- */
 export class CheckerAnsweredUnrequested extends S.TaggedError<CheckerAnsweredUnrequested>()(
   'CheckerAnsweredUnrequested',
   {
@@ -31,12 +14,6 @@ export class CheckerAnsweredUnrequested extends S.TaggedError<CheckerAnsweredUnr
   },
 ) {}
 
-/**
- * A checker did not answer about mutants it was asked about.
- *
- * Silently dropping these would mark them as needing no test, so an unchecked
- * mutant would be reported as covered.
- */
 export class CheckerSkippedRequested extends S.TaggedError<CheckerSkippedRequested>()(
   'CheckerSkippedRequested',
   {
@@ -46,7 +23,6 @@ export class CheckerSkippedRequested extends S.TaggedError<CheckerSkippedRequest
   },
 ) {}
 
-/** Either way a checker can break its side of the contract. */
 export type CheckerContractBroken = CheckerAnsweredUnrequested | CheckerSkippedRequested
 
 const isCheckResult = (_value: unknown): _value is CheckResult => true

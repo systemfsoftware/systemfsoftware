@@ -1,10 +1,3 @@
-/**
- * Checker — pure check decision.
- *
- * `Workflow.make` lives here and only here. The workflow receives a fully
- * decoded input (mutants + diagnostics + file graph) and produces results plus
- * `needsRetest` without touching I/O.
- */
 import { Wire, Workflow } from '@systemfsoftware/effect-cell-types'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as Result from 'effect/Result'
@@ -30,7 +23,6 @@ const DiagnosticSchema = Wire.wire({
   text: Wire.mint(S.String),
 })
 
-// TSFileNode graph: foreign compiler shape admitted via suspend
 interface NodeDecodedShape {
   readonly fileName: string
   readonly parents: readonly NodeDecodedShape[]

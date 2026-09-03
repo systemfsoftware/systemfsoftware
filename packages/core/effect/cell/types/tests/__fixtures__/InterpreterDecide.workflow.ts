@@ -3,29 +3,10 @@ import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
-/**
- * The decoded command. An untagged `Schema.Class`, so the interpreter's decode
- * phase keeps returning a plain record: the constraint `Workflow.make` applies is
- * on the command argument it receives, not on what decode produces.
- *
- * Declared here because this is the owning single-segment `<stem>.workflow.ts`,
- * which `schema-declaration-location` admits.
- */
 export class Decoded extends S.Class<Decoded>('Decoded')({
   length: S.Int,
 }) {}
 
-/**
- * The decide channels, declared as schema classes. A refusal is a decision outcome
- * in the Cell's semantics — the write phase receives it — so it lives on the
- * decision channel as `Rejected`; the decider's genuine failure mode is a command
- * it cannot decide at all: a negative length is an undecidable command for a
- * length classification, refused as `Malformed`.
- *
- * The two decision variants share one family brand, as the success-channel
- * constraint demands: `Workflow.make` refuses a decision channel that is not a
- * tagged union of at least two schema tagged classes carrying the same TypeId.
- */
 const DecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/tests/InterpreterDecide')
 type DecisionTypeId = typeof DecisionTypeId
 

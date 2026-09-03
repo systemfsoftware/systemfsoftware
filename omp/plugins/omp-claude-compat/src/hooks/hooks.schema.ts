@@ -13,10 +13,6 @@ export const ParsedHookOutputSchema = S.Struct({
     }),
   ),
 }).pipe(
-  // The wire is JSON, which cannot carry a present-but-undefined optional key,
-  // so the law domain is the wire-representable subset: every optional key
-  // present with a real value. Mirror of CompiledGuard's `toArbitrary` in
-  // omp-agent-discipline — the arbitrary is the codec's honest input space.
   S.annotate({
     toArbitrary: () => (fc) =>
       fc.record({
@@ -33,11 +29,6 @@ export const ParsedHookOutputSchema = S.Struct({
 )
 export type ParsedHookOutput = S.Schema.Type<typeof ParsedHookOutputSchema>
 
-/**
- * The crossing at the hook boundary: the child process's stdout (foreign wire
- * bytes) into the parsed decision object. Declared beside the schema it
- * produces; the shell applies it where the boundary is crossed.
- */
 export const HookOutputFromStdout = S.String.pipe(
   S.decodeTo(S.toType(ParsedHookOutputSchema), {
     decode: SchemaGetter.transformOrFail((stdout) =>
@@ -49,10 +40,6 @@ export const HookOutputFromStdout = S.String.pipe(
   }),
 )
 
-/**
- * The hook run's raw wire: what the child process returned and what the run
- * needs to interpret it.
- */
 export const HookResult = S.Struct({ code: S.Number, stdout: S.String, stderr: S.String })
 export type HookResult = S.Schema.Type<typeof HookResult>
 
@@ -86,11 +73,6 @@ export class RunHooks extends S.TaggedClass<RunHooks>()('RunHooks', {}) {
 export type AdmitCommand = InstanceType<typeof AdmitHooksCommand>
 export type HookDispatchDecision = InstanceType<typeof SkipHooks> | InstanceType<typeof RunHooks>
 
-/**
- * The slice of the harness these operations actually depend on. Narrowing here
- * keeps the executor off the full `ExtensionContext` union surface and lets a
- * caller — production or test — supply exactly what is used, with no cast.
- */
 export interface HookSession {
   readonly cwd: string
   readonly homeDir: string
@@ -101,7 +83,7 @@ export interface HookSession {
 export interface HookToolCall {
   readonly toolName: string
   readonly toolCallId: string
-  /** The harness types this per tool, so it is decoded rather than asserted. */
+
   readonly input: object
 }
 

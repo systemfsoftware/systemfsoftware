@@ -1,7 +1,3 @@
-/**
- * Html reporter declarations — the wire types for the html report pipeline.
- */
-
 import { Wire } from '@systemfsoftware/effect-cell-types'
 import * as S from 'effect/Schema'
 const MutationTestResultSchema = Wire.mint(S.Unknown)

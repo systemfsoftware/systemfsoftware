@@ -88,8 +88,6 @@ import { IdGenerator } from './Worker.js'
 import { layer as idGeneratorLayer } from './Worker.js'
 import { WorkerEntries, WorkerLauncher } from './WorkerLauncher.js'
 
-// ── RunEnvironment ───────────────────────────────────────────────────────
-
 export interface RunEnvironmentShape {
   readonly runId: string
   readonly resolvedMode: ResolvedMode
@@ -102,8 +100,6 @@ export interface RunEnvironmentShape {
 export class RunEnvironment extends Context.Service<RunEnvironment, RunEnvironmentShape>()(
   '@systemfsoftware/stryker-js-engine/RunEnvironment',
 ) {}
-
-// ── Stage result types ───────────────────────────────────────────────────
 
 export interface PrepareDone {
   readonly project: Project
@@ -138,8 +134,6 @@ export interface PrepareExecutorArgs {
   cliOptions: PartialStrykerOptions
   targetMutatePatterns: string[] | undefined
 }
-
-// ── Helpers ──────────────────────────────────────────────────────────────
 
 const isRecord = Predicate.isObject
 const buildMergedSchema = (
@@ -265,20 +259,9 @@ function isMutantStatus(s: string): s is ValidMutantStatus {
   return VALID_MUTANT_STATUS_SET.has(s)
 }
 
-/**
- * The reporting surface wants `coveredBy` and `static` as present keys, which a
- * `Mutant` may omit. Assigned onto a real instance rather than spread into a new
- * object: `Mutant` is a tagged class, so spreading drops its `_tag` and its
- * prototype and the report then carries a plain object claiming to be a mutant.
- */
 const toReportedMutant = (mutant: Mutant): MutantTestCoverage =>
   Object.assign(mutant, { coveredBy: mutant.coveredBy, static: mutant.static })
 
-/**
- * A run either configures checkers or it does not, and with none there is no
- * pool to build. Extracted from the mutation-test write body so that body stays
- * inside its branching budget.
- */
 const makeCheckerPool = (
   prev: DryRunDone,
   idGenerator: Parameters<typeof createCheckerFactory>[3],
@@ -351,7 +334,6 @@ const resolveReporterService = <E>(
     }
     return maybeReporter.value
   })
-// ── Layer builders ───────────────────────────────────────────────────────
 
 export type StageServices =
   | ChildProcessSpawner.ChildProcessSpawner
@@ -516,7 +498,6 @@ interface InstrumentRaw {
 export const instrumentCell = Cell.layer({
   read: (command: PrepareDone) =>
     Effect.gen(function*() {
-      // raw: InstrumentRaw from PrepareDone
       yield* Scope.Scope
       const env = yield* RunEnvironment
 
@@ -618,7 +599,6 @@ export interface DryRunRaw {
 export const dryRunCell = Cell.layer({
   read: (command: InstrumentDone) =>
     Effect.gen(function*() {
-      // raw: DryRunRaw from InstrumentDone
       yield* Scope.Scope
       const idGenerator = yield* IdGenerator
 
@@ -1121,9 +1101,7 @@ export const makeRunLayer = (
     ),
   )
 }
-/**
- * The pipeline runs prepare as a plain stage, then the deciding cells.
- */
+
 export const runMutationTest = (
   cliOptions: PartialStrykerOptions,
   targetMutatePatterns?: string[],
