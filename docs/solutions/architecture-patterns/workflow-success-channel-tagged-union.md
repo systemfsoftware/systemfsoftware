@@ -11,7 +11,7 @@ applies_when:
   - Authoring or editing a decision channel passed to Workflow.make
   - Migrating a workflow whose success channel is a single class, a plain record, or a bare scalar
   - Deciding whether a file belongs on the *.workflow.ts surface at all
-tags: [effect-ts, workflow, tagged-union, typeid, family-brand, match-exhaustive, kernel]
+tags: [effect-ts, workflow, tagged-union, typeid, family-brand, match-exhaustive, declassify]
 ---
 
 # Workflow Success Channel Must Be a Branded Tagged Union
@@ -66,12 +66,10 @@ Every site migrates up the ladder, never skipping a rung:
   from a `{ testCount, failedTestCount }` record; `Instrument.workflow.ts` —
   `InPlaceInstrument | EphemeralInstrument`, which also killed a
   `backupDirectoryHint: ''` sentinel).
-- **Declassify** — a workflow with genuinely one outcome is not a decision. The file leaves
-  the `*.workflow.ts` surface for a plain `*.kernel.ts` function with the same logic and
-  signature (`Config.kernel.ts`, `Project.kernel.ts`, `Run.kernel.ts`,
-  `JsonReport.kernel.ts`, `IncrementalDiff.kernel.ts`, `IncrementalReport.kernel.ts`,
-  `Reporter.kernel.ts`, `Sandbox.kernel.ts` in the engine and the sibling packages' kernels).
-  Never invent a producer-less variant to satisfy the count.
+- **Declassify** — a workflow with genuinely one outcome is not a decision. The logic folds
+  into a plain function inside its owning module with the same logic and signature (the
+  engine's single-outcome helpers and their siblings in the neighbouring packages'
+  owning modules). Never invent a producer-less variant to satisfy the count.
 
 Error channels keep their own rules (`S.TaggedError`, inhabited). A refusal the consumer
 renders is a **decision** — promote it to the success union; a genuinely undecidable input
@@ -100,8 +98,8 @@ Two toolchain facts shape the enforcement surface:
 
 - Every `*.workflow.ts` file: `Workflow.make` demands the shape, so compliance is
   construction-time, not review-time.
-- When a "workflow" can produce exactly one outcome, declassify it to a kernel instead of
-  stretching a union.
+- When a "workflow" can produce exactly one outcome, fold it into a plain function inside
+  its owning module instead of stretching a union.
 - When a consumer branches on a field of an aggregate decision, split the aggregate into
   variants named by the branch.
 

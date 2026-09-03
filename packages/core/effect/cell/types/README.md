@@ -142,7 +142,8 @@ All six violations fail `tsc`; the messages below are what `tsc` reports (verifi
 | A `Promise` return                        | `Type 'Promise<Decision>' is not assignable to type 'Result<Decision, Err>'`              | a workflow is a synchronous pure decision; async work belongs in the executor shell around it                                    |
 | An `Effect` return                        | `Type 'Effect<Decision, never, never>' is not assignable to type 'Result<Decision, Err>'` | the workflow returns a value, not an effect handle; the executor runs effects and hands the workflow its input                   |
 | `never` decision channel                  | `Type '...' is not assignable to type 'UninhabitedDecision'`                              | a workflow that can never produce a decision can never succeed                                                                   |
-| `never` error channel                     | `Type '...' is not assignable to type 'UninhabitedError'`                                 | a workflow that cannot fail decides nothing; move it to a `*.kernel.ts`                                                          |
+| `never` error channel                     | `Type '...' is not assignable to type 'UninhabitedError'`                                 | a workflow that cannot fail decides nothing; fold the function into its owning module                                            |
+| An untagged error variant                 | `Type '...' is not assignable to type 'UntaggedError'`                                    | an error variant needs a `_tag` a consumer can dispatch on; declare the errors as `S.TaggedError` instances                      |
 | A single-variant decision channel         | `Type '...' is not assignable to type 'SingleVariantDecision'`                            | a decision chooses between at least two distinguishable outcomes; one variant is a calculation wearing a decision's shape        |
 | An untagged decision variant              | `Type '...' is not assignable to type 'UntaggedDecision'`                                 | a decision variant needs a `_tag` a consumer can dispatch on; declare the variants as `S.TaggedClass` instances                  |
 | Decision variants with no shared TypeId   | `Type '...' is not assignable to type 'UnsharedTypeId'`                                   | one decision family carries one TypeId — a `Symbol.for` brand on every variant class                                             |
@@ -159,12 +160,22 @@ export interface UninhabitedDecision {
 
 export interface UninhabitedError {
   readonly __WORKFLOW_ERROR_CHANNEL_IS_NEVER__:
-    'this workflow cannot fail, so it decides nothing; give it an error variant or move it to a *.kernel.ts'
+    'this workflow cannot fail, so it decides nothing; give it an error variant or fold the function into its owning module'
+}
+
+export interface UntaggedError {
+  readonly __WORKFLOW_ERROR_CHANNEL_CARRIES_NO_TAG__:
+    'this error carries no _tag the consumer can dispatch on; declare it as an S.TaggedError'
 }
 
 export interface SingleVariantDecision {
   readonly __WORKFLOW_DECISION_CHANNEL_HAS_ONE_VARIANT__:
-    'this workflow decides one outcome, which is not a decision; add the variant it chooses between, or move the function to a *.kernel.ts'
+    'this workflow decides one outcome, which is not a decision; add the variant it chooses between, or fold the function into its owning module'
+}
+
+export interface UntaggedDecision {
+  readonly __WORKFLOW_DECISION_CHANNEL_CARRIES_NO_TAG__:
+    'a decision variant carries no _tag the consumer can dispatch on; declare the variants as S.TaggedClass instances'
 }
 
 export interface UnsharedTypeId {
@@ -227,7 +238,7 @@ const decide = Workflow.make(
 // tsc: Type 'Result<Decision, unknown>' is not assignable to type 'Result<Decision, Err>'
 ```
 
-If the workflow genuinely cannot fail, the error channel says so — and that is a `*.kernel.ts`, not a workflow.
+If the workflow genuinely cannot fail, the error channel says so — and that is a plain function inside its owning module, not a workflow.
 
 ## A wrong channel breaks the whole consumer cone
 
