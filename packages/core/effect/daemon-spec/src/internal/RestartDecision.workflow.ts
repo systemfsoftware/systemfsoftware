@@ -1,8 +1,11 @@
+/// <reference types="vitest/importMeta" />
 import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { catalog } from '@systemfsoftware/in-source-catalog'
 import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
+import { FastCheck as fc } from 'effect/testing'
 import { DecideInput } from './RestartDecision.schema.js'
 
 /**
@@ -93,11 +96,9 @@ export const decideRestart = Workflow.make(
 )
 
 if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
+  // Dynamic by necessity: tsdown defines the vitest collection flag as `undefined`, so this
   // branch is statically dead in the build and never enters the published module graph.
   const { it } = await import('@effect/vitest')
-  const { expect } = await import('vitest')
-  const { FastCheck: fc } = await import('effect/testing')
 
   /**
    * A supervision tree with a failed child: a total, and a failed index inside it. The schema's
@@ -145,14 +146,60 @@ if (import.meta.vitest !== void 0) {
   )
 
   /**
-   * `indices: S.NonEmptyArray(S.Int)` puts both refinements on one array node under v4, so
-   * cannot explain an empty array as the failure of a single check, and a generator that
-   * asserted directly against the decoder just below, which is the only honest split.
+   * The refusal region is the intensity conjunction: the exit is a failure and the restart
+   * intensity budget is spent. Every independent field is quantified — strategy, tree size,
+   * failed index — so a mutant that narrows the refusing conjunction on any free axis dies.
    */
-
-  it('Should_RefuseTheDecision_When_TheRestartCarriesNoIndices', () => {
-    const decoded = S.decodeUnknownExit(RestartDecisionRestart)({ _tag: 'Restart', indices: [] })
-    expect(decoded._tag).toBe('Failure')
+  await catalog.laws({
+    id: 'decideRestart',
+    run: decideRestart,
+    reserved: catalog.refuseHomes.region(
+      fc
+        .record(
+          {
+            strategy: fc.constantFrom(...RESTART_STRATEGIES),
+            totalChildren: fc.integer({ min: 1, max: 32 }),
+            failedIndex: fc.integer({ min: 0, max: 31 }),
+            exitSuccess: fc.constant(false),
+            intensityExceeded: fc.constant(true),
+          },
+          { noNullPrototype: true },
+        )
+        .map((shape) => DecideInput.make({ ...shape, failedIndex: shape.failedIndex % shape.totalChildren })),
+    ),
+    refused: Result.isFailure,
+    published: catalog.contract([
+      {
+        label: 'continue',
+        input: DecideInput.make({
+          strategy: 'one_for_one',
+          totalChildren: 3,
+          failedIndex: 1,
+          exitSuccess: true,
+          intensityExceeded: true,
+        }),
+        project: (result: RestartDecisionOutcome) => {
+          if (Result.isFailure(result)) return { tag: 'refused' }
+          return { tag: result.success._tag }
+        },
+        expect: { tag: 'Continue' },
+      },
+      {
+        label: 'restart',
+        input: DecideInput.make({
+          strategy: 'one_for_one',
+          totalChildren: 3,
+          failedIndex: 1,
+          exitSuccess: false,
+          intensityExceeded: false,
+        }),
+        project: (result: RestartDecisionOutcome) => {
+          if (Result.isFailure(result)) return { tag: 'refused' }
+          return { tag: result.success._tag }
+        },
+        expect: { tag: 'Restart' },
+      },
+    ]),
   })
 
   /**
@@ -161,17 +208,14 @@ if (import.meta.vitest !== void 0) {
    * that drops the field from the class leaves every `decide` result undispatchable,
    * which is what this observes.
    */
-  it('Should_CarryTheDecisionBrand_When_DecidingARestart', () => {
+  it.prop('∀t_Restart_=BrandTypeId', [tree], ([[total, failedIndex]]) => {
     const decided = decideRestart({
       strategy: 'one_for_one',
-      totalChildren: 3,
-      failedIndex: 1,
+      totalChildren: total,
+      failedIndex,
       exitSuccess: false,
       intensityExceeded: false,
     })
-    expect(Result.isSuccess(decided)).toBe(true)
-    if (Result.isSuccess(decided)) {
-      expect(decided.success[RestartDecisionTypeId]).toBe(RestartDecisionTypeId)
-    }
+    return Result.isSuccess(decided) && decided.success[RestartDecisionTypeId] === RestartDecisionTypeId
   })
 }

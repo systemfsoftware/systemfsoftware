@@ -1,4 +1,5 @@
 import { Schema } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import { MAX_CHILDREN_CEILING } from '../SupervisorDynamic.js'
 
 /** @internal */
@@ -62,12 +63,11 @@ export class DecideInput extends Schema.Class<DecideInput>('DecideInput')(Decide
 const OVERSHOOT = 8
 
 if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
+  // Dynamic by necessity: tsdown defines the vitest collection flag as `undefined`,
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
   const { it } = await import('@systemfsoftware/effect-gherkin-spec')
   const { Exit, Option, Result } = await import('effect')
-  const { FastCheck: fc } = await import('effect/testing')
   const { RestartDecisionRestart } = await import('./RestartDecision.workflow.js')
 
   const decodeOf = (input: unknown) => Schema.decodeUnknownResult(DecideInput)(input)

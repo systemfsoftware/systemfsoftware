@@ -3,6 +3,7 @@ import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
+import { FastCheck as fc } from 'effect/testing'
 
 const DiffChangesSchema = S.Struct({ added: S.Finite, removed: S.Finite })
 const DiffStatisticsSchema = S.Struct({
@@ -270,30 +271,78 @@ const decideIncremental = (
 export const incrementalDifferWorkflow = Workflow.make(IncrementalDiffCommand, (command) => decideIncremental(command))
 
 if (import.meta.vitest !== void 0) {
-  const { expect, it } = await import('vitest')
+  // Dynamic runner imports: static imports would put the test runner into the published module graph.
+  const { it } = await import('@effect/vitest')
 
-  it('Should_KeepKilledBy_When_BuildingARememberedEntry', () => {
-    const location = { start: { line: 1, column: 0 }, end: { line: 1, column: 1 } }
+  const location = { start: { line: 1, column: 0 }, end: { line: 1, column: 1 } }
+
+  const equalOptionStrings = (
+    actual: ReadonlyArray<string> | undefined,
+    wanted: ReadonlyArray<string> | undefined,
+  ): boolean => {
+    if (actual === undefined || wanted === undefined) {
+      return actual === wanted
+    }
+    return actual.length === wanted.length && actual.every((value, index) => value === wanted[index])
+  }
+
+  const previousOf = (input: {
+    readonly status: string
+    readonly testsCompleted: number | undefined
+    readonly coveredBy: Array<string> | undefined
+    readonly killedBy: Array<string> | undefined
+  }) => {
+    const previous: {
+      mutatorName: string
+      replacement: string
+      location: { start: { line: number; column: number }; end: { line: number; column: number } }
+      status: string
+      testsCompleted?: number
+      coveredBy?: Array<string>
+      killedBy?: Array<string>
+    } = { mutatorName: 'BooleanLiteral', replacement: 'false', location, status: input.status }
+    if (input.testsCompleted !== undefined) {
+      previous.testsCompleted = input.testsCompleted
+    }
+    if (input.coveredBy !== undefined) {
+      previous.coveredBy = input.coveredBy
+    }
+    if (input.killedBy !== undefined) {
+      previous.killedBy = input.killedBy
+    }
+    return previous
+  }
+
+  const rememberedInput = fc.record({
+    id: fc.string(),
+    status: fc.string(),
+    testsCompleted: fc.option(fc.integer({ min: 0, max: 1000 }), { nil: undefined }),
+    coveredBy: fc.option(fc.array(fc.string(), { maxLength: 4 }), { nil: undefined }),
+    killedBy: fc.option(fc.array(fc.string(), { maxLength: 4 }), { nil: undefined }),
+  })
+
+  it.prop('∀m_Remembered_=ProjectedFields', [rememberedInput], ([input]) => {
     const mutant = new Mutant({
-      id: 'm1',
+      id: input.id,
       fileName: '/proj/src/a.ts',
       mutatorName: 'BooleanLiteral',
       replacement: 'false',
       location,
     })
-    const previous = {
-      mutatorName: 'BooleanLiteral',
-      replacement: 'false',
-      location,
-      status: 'Killed',
-      killedBy: ['t1'],
-      coveredBy: ['t1'],
-    }
-    expect(rememberedEntryOf(mutant, previous)).toEqual({
-      mutantId: 'm1',
-      status: 'Killed',
-      killedBy: ['t1'],
-      coveredBy: ['t1'],
-    })
+    const previous = previousOf(input)
+    const entry = rememberedEntryOf(mutant, previous)
+    if (entry.mutantId !== mutant.id) return false
+    if (entry.status !== previous.status) return false
+    if (entry.testsCompleted !== previous.testsCompleted) return false
+    if (!equalOptionStrings(entry.coveredBy, previous.coveredBy)) return false
+    if (!equalOptionStrings(entry.killedBy, previous.killedBy)) return false
+    const actualKeys = Object.keys(entry).sort()
+    const projectedKeys = [
+      'mutantId',
+      ...Object.keys(previous).filter(
+        (key) => key !== 'mutatorName' && key !== 'replacement' && key !== 'location',
+      ),
+    ].sort()
+    return actualKeys.join(',') === projectedKeys.join(',')
   })
 }

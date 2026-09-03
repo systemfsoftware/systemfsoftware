@@ -1,0 +1,84 @@
+{
+  "name": "@systemfsoftware/in-source-catalog",
+  "license": "Apache-2.0",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/testing/in-source-catalog"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/testing/in-source-catalog#readme",
+  "bugs": {
+    "url": "https://github.com/systemfsoftware/systemfsoftware/issues"
+  },
+  "description": "In-source test laws with library-owned generators — catalog.laws is the only in-source authoring surface in adopting packages.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "property-testing",
+    "fast-check",
+    "vitest",
+    "law-testing",
+    "in-source",
+    "tautology",
+    "typescript"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/in-source-catalog.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown && pnpm api:check",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
+    "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "quartet": "node tests/__fixtures__/quartet-driver.ts",
+    "attw": "attw --pack ."
+  },
+  "devDependencies": {
+    "@systemfsoftware/oxlint-plugin-test-placement": "workspace:*",
+    "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "tsdown": "catalog:",
+    "tstyche": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@effect/vitest": "catalog:peers",
+    "effect": "catalog:peers",
+    "fast-check": "*",
+    "vitest": "*"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/in-source-catalog.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}

@@ -1,4 +1,3 @@
-import { DynamicLimitExceeded } from '@systemfsoftware/effect-daemon-spec'
 import { run } from '@systemfsoftware/effect-daemon-spec'
 import { Daemon } from '@systemfsoftware/effect-daemon-spec'
 import { dynamic } from '@systemfsoftware/effect-daemon-spec'
@@ -78,7 +77,11 @@ Feature('Dynamic Supervisor')
           })),
         Then('the result is Left DynamicLimitExceeded')((s) =>
           Effect.sync(() => {
-            expect(s.result).toEqual(Result.fail(DynamicLimitExceeded.make({ limit: 2 })))
+            expect(Result.isFailure(s.result)).toBe(true)
+            if (Result.isFailure(s.result)) {
+              expect(s.result.failure._tag).toBe('DynamicLimitExceeded')
+              expect(s.result.failure.limit).toBe(2)
+            }
           })
         ),
       ),
@@ -271,7 +274,11 @@ Feature('Dynamic Supervisor')
             yield* s.ctx.acquired.await
             expect(yield* s.ctx.handle.count).toBe(1)
             const atCapacity = yield* s.ctx.handle.startChild(void 0).pipe(Effect.result)
-            expect(atCapacity).toEqual(Result.fail(DynamicLimitExceeded.make({ limit: 1 })))
+            expect(Result.isFailure(atCapacity)).toBe(true)
+            if (Result.isFailure(atCapacity)) {
+              expect(atCapacity.failure._tag).toBe('DynamicLimitExceeded')
+              expect(atCapacity.failure.limit).toBe(1)
+            }
             yield* s.ctx.handle.stopChild(firstRef)
             yield* firstRef.removed
             expect(yield* s.ctx.handle.count).toBe(0)
@@ -506,7 +513,11 @@ Feature('Dynamic Supervisor')
         And('a 4th child fails with DynamicLimitExceeded')((s) =>
           Effect.gen(function*() {
             const result = yield* s.handle.startChild(void 0).pipe(Effect.result)
-            expect(result).toEqual(Result.fail(DynamicLimitExceeded.make({ limit: 3 })))
+            expect(Result.isFailure(result)).toBe(true)
+            if (Result.isFailure(result)) {
+              expect(result.failure._tag).toBe('DynamicLimitExceeded')
+              expect(result.failure.limit).toBe(3)
+            }
           })
         ),
       ),

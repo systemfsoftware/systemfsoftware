@@ -1,6 +1,8 @@
 import { behaviourExercisesUseCase } from './rules/behaviour-exercises-use-case.js'
 import { behaviourOneFeaturePerFile } from './rules/behaviour-one-feature-per-file.js'
 import { behaviourTestRequiresGherkin } from './rules/behaviour-test-requires-gherkin.js'
+import { evictionPurity } from './rules/eviction-purity.js'
+import { inSourceTestLawsOnly } from './rules/in-source-test-laws-only.js'
 import { inSourceTestTargetsPrivate } from './rules/in-source-test-targets-private.js'
 import { noIoModuleInSourceTest } from './rules/no-io-module-in-source-test.js'
 import { noTestFileInSrc } from './rules/no-test-file-in-src.js'
@@ -43,6 +45,8 @@ export default {
     'behaviour-one-feature-per-file': behaviourOneFeaturePerFile,
     'tests-dir-helpers-in-fixtures': testsDirHelpersInFixtures,
     'no-io-module-in-source-test': noIoModuleInSourceTest,
+    'eviction-purity': evictionPurity,
+    'in-source-test-laws-only': inSourceTestLawsOnly,
     'tests-import-public-api': testsImportPublicApi,
   },
   configs: {

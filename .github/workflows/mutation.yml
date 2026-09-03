@@ -153,7 +153,7 @@ jobs:
           path: |
             ${{ matrix.package }}/reports/mutation-part.json
             ${{ matrix.package }}/reports/mutation-report.json
-            ${{ matrix.package }}/reports/mutation-stream.jsonl
+            ${{ matrix.package }}/reports/mutation-stream.*
           if-no-files-found: ignore
           retention-days: 1
 

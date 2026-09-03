@@ -54,7 +54,7 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
   scenario(
     'An empty row set yields no scenarios',
     Effect.sync(() => {
-      expect(expandOutline('some name', [])).toEqual(Result.succeed([]))
+      expect(Result.getOrThrow(expandOutline('some name', []))).toEqual([])
     }),
   )
 
@@ -72,10 +72,9 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
     'A missing template tag in a row is reported as an error',
     Effect.sync(() => {
       const result = expandOutline('<a> and <b>', [{ a: 'only-a' }])
-      expect(result).toEqual(
-        Result.fail(
-          'scenarioOutline: template tag <b> has no matching row key on row 0 (available: a)',
-        ),
+      if (!Result.isFailure(result)) throw new Error('Expected Result.failure but got Result.success')
+      expect(result.failure).toBe(
+        'scenarioOutline: template tag <b> has no matching row key on row 0 (available: a)',
       )
     }),
   )
@@ -87,10 +86,9 @@ Feature('Scenario outline — template expansion').body(({ scenario, scenarioOut
         { user: 'a', thing: 'x' },
         { user: 'b' },
       ])
-      expect(result).toEqual(
-        Result.fail(
-          'scenarioOutline: template tag <thing> has no matching row key on row 1 (available: user)',
-        ),
+      if (!Result.isFailure(result)) throw new Error('Expected Result.failure but got Result.success')
+      expect(result.failure).toBe(
+        'scenarioOutline: template tag <thing> has no matching row key on row 1 (available: user)',
       )
     }),
   )

@@ -29,14 +29,14 @@ Feature('LeaderLock Contract')
         ),
         Then('the result is Some(result)')((s) =>
           Effect.sync(() => {
-            expect(s.result).toEqual(Option.some(42))
+            expect(Option.getOrUndefined(s.result)).toBe(42)
           })
         ),
         And('after completion, key "task-1" is available again')(() =>
           Effect.gen(function*() {
             const lock = yield* LeaderLock
             const out = yield* lock.withLock('task-1', Effect.succeed('again'))
-            expect(out).toEqual(Option.some('again'))
+            expect(Option.getOrUndefined(out)).toBe('again')
           })
         ),
       ),
@@ -62,7 +62,7 @@ Feature('LeaderLock Contract')
         ),
         Then('the result is None')((s) =>
           Effect.sync(() => {
-            expect(s.result).toEqual(Option.none())
+            expect(Option.isNone(s.result)).toBe(true)
           })
         ),
         And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.holder)),
@@ -120,7 +120,8 @@ Feature('LeaderLock Contract')
         ),
         Then('the call returns None without firing the timeout')((s) =>
           Effect.sync(() => {
-            expect(s.result).toEqual(Result.succeed(Option.none()))
+            expect(Result.isSuccess(s.result)).toBe(true)
+            if (Result.isSuccess(s.result)) expect(Option.isNone(s.result.success)).toBe(true)
           })
         ),
         And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.holder)),
@@ -143,8 +144,8 @@ Feature('LeaderLock Contract')
           })),
         Then('both return Some')((s) =>
           Effect.sync(() => {
-            expect(s.a).toEqual(Option.some('a-result'))
-            expect(s.b).toEqual(Option.some('b-result'))
+            expect(Option.getOrUndefined(s.a)).toBe('a-result')
+            expect(Option.getOrUndefined(s.b)).toBe('b-result')
           })
         ),
       ),
@@ -163,14 +164,15 @@ Feature('LeaderLock Contract')
         ),
         Then('the call fails with the inner failure value')((s) =>
           Effect.sync(() => {
-            expect(s.failed).toEqual(Result.fail('boom'))
+            expect(Result.isFailure(s.failed)).toBe(true)
+            if (Result.isFailure(s.failed)) expect(s.failed.failure).toBe('boom')
           })
         ),
         And('the lock is released for the next caller')(() =>
           Effect.gen(function*() {
             const lock = yield* LeaderLock
             const out = yield* lock.withLock('task-1', Effect.succeed('ok'))
-            expect(out).toEqual(Option.some('ok'))
+            expect(Option.getOrUndefined(out)).toBe('ok')
           })
         ),
       ),
@@ -194,7 +196,7 @@ Feature('LeaderLock Contract')
           Effect.gen(function*() {
             const lock = yield* LeaderLock
             const out = yield* lock.withLock('task-1', Effect.succeed('ok'))
-            expect(out).toEqual(Option.some('ok'))
+            expect(Option.getOrUndefined(out)).toBe('ok')
           })
         ),
       ),

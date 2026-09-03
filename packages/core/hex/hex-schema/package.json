@@ -47,6 +47,7 @@
     "mutation:full": "stryker run --force"
   },
   "devDependencies": {
+    "@systemfsoftware/oxlint-plugin-test-placement": "workspace:*",
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",

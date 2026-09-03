@@ -1,5 +1,6 @@
-/// <reference types="vitest/import-meta" />
+/// <reference types="vitest/importMeta" />
 import { Schema } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import { MAX_CHILDREN_CEILING } from './SupervisorDynamic.js'
 
 export const IntensityConfig = Schema.Struct({
@@ -63,7 +64,6 @@ const decodesSupervisorPolicy = Schema.decodeUnknownExit(SupervisorPolicyConfig)
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
   const { Duration, Exit } = await import('effect')
-  const { FastCheck: fc } = await import('effect/testing')
 
   // An over- or under-cap integer shares the integer/bound node, so it cannot
   // discriminate under v4's per-node weakening; it is still a refusal contract.

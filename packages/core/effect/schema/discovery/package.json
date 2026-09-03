@@ -45,12 +45,15 @@
     "oxc-parser": "catalog:"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-test-placement": "workspace:*",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
+    "effect": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",

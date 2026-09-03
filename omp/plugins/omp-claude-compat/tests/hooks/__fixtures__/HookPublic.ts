@@ -1,5 +1,5 @@
 export type { HookDispatchResult } from '../../../src/hooks/mod.js'
-export { onSessionStart, onToolCall, onToolResult } from '../../../src/hooks/mod.js'
+export { detachIn, onSessionStart, onToolCall, onToolResult } from '../../../src/hooks/mod.js'
 export type { HookSession, HookToolCall } from '../../../src/hooks/mod.js'
 import { Effect, Layer, Scope } from 'effect'
 import { ClaudeSettingsLive } from '../../../src/settings/mod.js'

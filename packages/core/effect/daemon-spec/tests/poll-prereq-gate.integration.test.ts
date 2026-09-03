@@ -27,7 +27,7 @@ const readyStaysClosed = (await_: Effect.Effect<void>) =>
     Effect.result,
     Effect.tap((result) =>
       Effect.sync(() => {
-        expect(result).toEqual(Result.fail(expect.anything()))
+        expect(Result.isFailure(result)).toBe(true)
       })
     ),
     Effect.asVoid,

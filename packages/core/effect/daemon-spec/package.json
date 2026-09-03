@@ -50,6 +50,7 @@
     "attw": "attw --pack ."
   },
   "dependencies": {
+    "@systemfsoftware/in-source-catalog": "workspace:*",
     "@systemfsoftware/effect-cell-types": "workspace:^"
   },
   "devDependencies": {
@@ -61,6 +62,7 @@
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-test-placement": "workspace:*",
     "@systemfsoftware/stryker-js-cli": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",

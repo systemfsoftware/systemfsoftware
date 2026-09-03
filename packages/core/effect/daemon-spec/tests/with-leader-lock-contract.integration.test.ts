@@ -1,5 +1,5 @@
 import { Noop } from '@systemfsoftware/effect-daemon-spec'
-import { LeaderLock, LeaderLockNotAcquired, withLeaderLock } from '@systemfsoftware/effect-daemon-spec'
+import { LeaderLock, withLeaderLock } from '@systemfsoftware/effect-daemon-spec'
 import type { LeaderLockAcquireError, LeaderLockOptions } from '@systemfsoftware/effect-daemon-spec'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
@@ -75,7 +75,11 @@ Feature('withLeaderLock Combinator Contract')
         ),
         Then('the call fails because the lock could not be acquired for key "task"')((s) =>
           Effect.sync(() => {
-            expect(s.error).toEqual(Result.fail(LeaderLockNotAcquired.make({ key: 'task' })))
+            expect(Result.isFailure(s.error)).toBe(true)
+            if (Result.isFailure(s.error)) {
+              expect(s.error.failure._tag).toBe('LeaderLockNotAcquired')
+              expect(s.error.failure.key).toBe('task')
+            }
           })
         ),
         And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.holder)),
@@ -115,7 +119,8 @@ Feature('withLeaderLock Combinator Contract')
         ),
         Then('the call fails with the original "boom" value')((s) =>
           Effect.sync(() => {
-            expect(s.error).toEqual(Result.fail('boom'))
+            expect(Result.isFailure(s.error)).toBe(true)
+            if (Result.isFailure(s.error)) expect(s.error.failure).toBe('boom')
           })
         ),
       ),

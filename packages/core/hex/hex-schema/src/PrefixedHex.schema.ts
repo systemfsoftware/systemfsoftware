@@ -1,5 +1,6 @@
 /// <reference types="vitest/import-meta" />
 import { type Brand, Schema as S, SchemaTransformation } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import { addHexPrefix, stripHexPrefix } from './PrefixedHex.js'
 import { StrictHex } from './StrictHex.schema.js'
 
@@ -23,13 +24,11 @@ export type PrefixedHex = S.Schema.Type<typeof PrefixedHex>
 const decode = S.decodeUnknownExit(PrefixedHex)
 
 if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
-  // so this branch is statically dead in the build and the runner never enters
-  // the published module graph. A static import would ship it.
-  const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect/testing')
+  // Dynamic by necessity: tsdown defines the vitest collection flag as `undefined`,
+  // so this branch is statically dead in the build and never enters the published
+  // module graph. A static import would ship it.
+  const { it, expectTypeOf } = await import('@effect/vitest')
   const { Exit } = await import('effect')
-  const { expectTypeOf } = await import('vitest')
 
   /**
    * The `0x` prefix is a *joint* contract with the body in v4's AST — no

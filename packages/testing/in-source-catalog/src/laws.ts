@@ -1,0 +1,63 @@
+import { type LiteralBounded, type PublishedCase, type PublishedCases, type RefuseHomes } from './brand.js'
+import { refuseHomes } from './generators.js'
+import { mintPublishedCases } from './internal/mint.js'
+
+export type LawsSpec<A, R> =
+  | {
+    readonly id: string
+    readonly run: (input: A) => R
+    readonly reserved: RefuseHomes<A>
+    readonly refused: (result: R) => boolean
+    readonly published: PublishedCases<A, R>
+    readonly inverse?: ((result: R) => A) | undefined
+  }
+  | {
+    readonly id: string
+    readonly run: (input: A) => R
+    readonly reserved: RefuseHomes<A>
+    readonly refused: (result: R) => boolean
+    readonly published?: undefined
+    readonly inverse?: undefined
+  }
+
+export const contract = <A, R, const E extends LiteralBounded<E>>(
+  cases: readonly PublishedCase<A, R, E>[],
+): PublishedCases<A, R> => mintPublishedCases(cases)
+
+// Static runner imports cannot work here: the runner must exist only where the
+// guard is truthy, so the published module graph stays vitest-free.
+export const laws = async <A, R>(spec: LawsSpec<A, R>): Promise<void> => {
+  const { it } = await import('@effect/vitest')
+  const { expect } = await import('vitest')
+  const { id, run, reserved, refused, published, inverse } = spec
+  const name: string = id
+  if (inverse !== undefined && published === undefined) {
+    throw new Error(
+      `laws(${name}): an inverse is only licensed beside a published contract — nothing would pin the round-trip`,
+    )
+  }
+
+  it.prop(`∀${name}_refuses_reserved`, [reserved], ([input]) => refused(run(input)))
+
+  for (const testCase of published?.cases ?? []) {
+    it(`${name}_publishes_${testCase.label}`, () => {
+      const result = run(testCase.input)
+      expect(refused(result)).toBe(false)
+      expect(testCase.project(result)).toStrictEqual(testCase.expect)
+    })
+  }
+
+  const inverses: ReadonlyArray<(result: R) => A> = inverse === undefined ? [] : [inverse]
+  for (const roundTrip of inverses) {
+    for (const testCase of published?.cases ?? []) {
+      it(`${name}_round_trips_${testCase.label}`, () => {
+        const result = run(testCase.input)
+        const again = run(roundTrip(result))
+        expect(refused(again)).toBe(false)
+        expect(testCase.project(again)).toStrictEqual(testCase.project(result))
+      })
+    }
+  }
+}
+
+export const catalog = { laws, contract, refuseHomes } as const
