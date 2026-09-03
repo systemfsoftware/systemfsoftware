@@ -72,6 +72,8 @@ export const TEST_VOCABULARY_CALLS: Record<string, true> = {
 
 export const VITEST_SOURCE_PREFIXES: readonly string[] = ['vitest', 'vitest/', '@effect/vitest', '@effect/vitest/']
 
+export const DYNAMIC_ONLY_SOURCES: readonly string[] = ['effect/testing', 'effect/testing/']
+
 export const GUARD_TOKEN_PATTERN = /import\.meta\.vitest/
 
 export const meta = {

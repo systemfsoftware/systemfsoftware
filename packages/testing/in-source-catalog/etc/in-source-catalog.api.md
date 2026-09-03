@@ -11,16 +11,11 @@ export const catalog: {
     readonly laws: typeof laws;
     readonly contract: typeof contract;
     readonly refuseHomes: {
-        readonly invalidSocketPath: <A>(home: (path: string) => A) => RefuseHomes<A>;
-        readonly sshParentConflict: <A>(home: (path: string) => A) => RefuseHomes<A>;
         readonly reservedEnvFile: <A>(home: (path: string) => A) => RefuseHomes<A>;
-        readonly quadletDir: <A>(home: (path: string) => A) => RefuseHomes<A>;
         readonly region: typeof region;
     };
 };
 
-// Warning: (ae-forgotten-export) The symbol "LiteralBounded" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
 export const contract: <A, R, const E extends LiteralBounded<E>>(cases: readonly PublishedCase<A, R, E>[]) => PublishedCases<A, R>;
 
@@ -28,20 +23,24 @@ export const contract: <A, R, const E extends LiteralBounded<E>>(cases: readonly
 export const laws: <A, R>(spec: LawsSpec<A, R>) => Promise<void>;
 
 // @public (undocumented)
-export interface LawsSpec<A, R> {
-    // (undocumented)
+export type LawsSpec<A, R> = {
     readonly id: string;
-    // (undocumented)
-    readonly inverse?: ((result: R) => A) | undefined;
-    // (undocumented)
-    readonly published?: PublishedCases<A, R> | undefined;
-    // (undocumented)
-    readonly refused: (result: R) => boolean;
-    // (undocumented)
-    readonly reserved: RefuseHomes<A>;
-    // (undocumented)
     readonly run: (input: A) => R;
-}
+    readonly reserved: RefuseHomes<A>;
+    readonly refused: (result: R) => boolean;
+    readonly published: PublishedCases<A, R>;
+    readonly inverse?: ((result: R) => A) | undefined;
+} | {
+    readonly id: string;
+    readonly run: (input: A) => R;
+    readonly reserved: RefuseHomes<A>;
+    readonly refused: (result: R) => boolean;
+    readonly published?: undefined;
+    readonly inverse?: undefined;
+};
+
+// @public (undocumented)
+export type LiteralBounded<E> = { readonly [K in keyof E]: E[K] extends string ? string extends E[K] ? never : string | number | boolean : E[K] extends number ? number extends E[K] ? never : string | number | boolean : E[K] extends boolean ? boolean extends E[K] ? never : string | number | boolean : never; };
 
 // @public (undocumented)
 export interface PublishedCase<A, R, E extends LiteralBounded<E>> {
@@ -56,11 +55,21 @@ export interface PublishedCase<A, R, E extends LiteralBounded<E>> {
 }
 
 // @public (undocumented)
+export interface PublishedCaseRuntime<A, R> {
+    // (undocumented)
+    readonly expect: Readonly<Record<string, unknown>>;
+    // (undocumented)
+    readonly input: A;
+    // (undocumented)
+    readonly label: string;
+    // (undocumented)
+    readonly project: (result: R) => Record<string, unknown>;
+}
+
+// @public (undocumented)
 export interface PublishedCases<A, R> {
     // (undocumented)
     readonly [publishedCasesBrand]: 'published-cases';
-    // Warning: (ae-forgotten-export) The symbol "PublishedCaseRuntime" needs to be exported by the entry point index.d.ts
-    //
     // (undocumented)
     readonly cases: readonly PublishedCaseRuntime<A, R>[];
 }
@@ -72,16 +81,12 @@ export type RefuseHomes<A> = Arbitrary<A> & {
 
 // @public (undocumented)
 export const refuseHomes: {
-    readonly invalidSocketPath: <A>(home: (path: string) => A) => RefuseHomes<A>;
-    readonly sshParentConflict: <A>(home: (path: string) => A) => RefuseHomes<A>;
     readonly reservedEnvFile: <A>(home: (path: string) => A) => RefuseHomes<A>;
-    readonly quadletDir: <A>(home: (path: string) => A) => RefuseHomes<A>;
     readonly region: typeof region;
 };
 
-// Warnings were encountered during analysis:
-//
-// dist/index.d.ts:65:5 - (ae-forgotten-export) The symbol "region" needs to be exported by the entry point index.d.ts
+// @public
+export const region: <A>(refusingInputs: Arbitrary<A>) => RefuseHomes<A>;
 
 // (No @packageDocumentation comment for this package)
 

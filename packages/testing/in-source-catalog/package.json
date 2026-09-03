@@ -45,6 +45,7 @@
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "quartet": "node tests/__fixtures__/quartet-driver.ts",
     "attw": "attw --pack ."
   },
   "devDependencies": {

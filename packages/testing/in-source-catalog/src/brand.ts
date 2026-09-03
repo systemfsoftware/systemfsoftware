@@ -7,14 +7,15 @@ export type RefuseHomes<A> = Arbitrary<A> & {
   readonly [refuseHomesBrand]: 'refuse-homes'
 }
 
-type IsLiteralType<T> = T extends string ? string extends T ? false : true
-  : T extends number ? number extends T ? false : true
-  : T extends boolean ? boolean extends T ? false : true
-  : false
-
-type Primitive = string | number | boolean
-
-export type LiteralBounded<E> = { readonly [K in keyof E]: IsLiteralType<E[K]> extends true ? Primitive : never }
+export type LiteralBounded<E> = {
+  readonly [K in keyof E]: E[K] extends string ? string extends E[K] ? never
+    : string | number | boolean
+    : E[K] extends number ? number extends E[K] ? never
+      : string | number | boolean
+    : E[K] extends boolean ? boolean extends E[K] ? never
+      : string | number | boolean
+    : never
+}
 
 export interface PublishedCase<A, R, E extends LiteralBounded<E>> {
   readonly label: string

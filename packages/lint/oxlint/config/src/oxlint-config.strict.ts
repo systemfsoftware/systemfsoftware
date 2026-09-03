@@ -14,6 +14,8 @@ import { defineConfig } from 'oxlint'
 export default defineConfig({
   extends: [base],
 
+  jsPlugins: [import.meta.resolve('@systemfsoftware/oxlint-plugin-test-placement')],
+
   rules: {
     // A condition that cannot change the outcome is a dead branch: the mutation
     // gate reports it as a survivor that no test can kill.
@@ -25,5 +27,9 @@ export default defineConfig({
 
     // `!` asserts away precisely the null the type system is warning about.
     'typescript/no-non-null-assertion': 'error',
+
+    // Org-wide activation for strict consumers; adopting packages' own configs stay as the explicit per-package declaration.
+    '@systemfsoftware/oxlint-plugin-test-placement/eviction-purity': 'error',
+    '@systemfsoftware/oxlint-plugin-test-placement/in-source-test-laws-only': 'error',
   },
 })

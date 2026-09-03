@@ -4,7 +4,6 @@
 "@systemfsoftware/effect-atom": none
 "@systemfsoftware/effect-atom-react": none
 "@systemfsoftware/effect-cell-types": none
-"@systemfsoftware/effect-daemon-spec": none
 "@systemfsoftware/effect-gherkin-spec": none
 "@systemfsoftware/effect-memfs": none
 "@systemfsoftware/effect-schema-bounded-union": none

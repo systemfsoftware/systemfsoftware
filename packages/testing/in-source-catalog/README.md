@@ -13,14 +13,20 @@ is the canonical `import.meta.vitest` guard token wrapped around the laws call.
 
 ## Refuse homes
 
-The built-in families cover the common ceremony refusals (reserved env files,
-socket paths, ssh parents, quadlet dirs). When a decision's refusing region is
-domain-shaped — a conjunction only your schema knows — `refuseHomes.region`
-licenses it: hand the catalog an arbitrary over the refusing inputs, quantified
-over every independent field (`fc.constantFrom` for the alternatives, integer
-ranges for the magnitudes, `fc.constant` only for the flag that IS the
-refusing condition). A single fixed point is a literal list in arbitrary
-clothing; the quantification is what makes a narrowing mutant die.
+The built-in family covers the common ceremony refusal (reserved env files).
+When a decision's refusing region is domain-shaped — a conjunction only your
+schema knows — `refuseHomes.region` licenses it: hand the catalog an arbitrary
+over the refusing inputs, quantified over every independent field
+(`fc.constantFrom` for the alternatives, integer ranges for the magnitudes,
+`fc.constant` only for the flag that IS the refusing condition). `region`
+rejects a degenerate arbitrary at registration: 8 samples producing fewer
+than 2 distinct values throws.
+
+## Published contracts
+
+Published expectations come from the named contract table. Wide-string
+recomputation in published slots is a tsc error; literal-typed helper output
+is a documented guardrail boundary enforced by review and the sabotage quartet.
 
 ## Adoption
 

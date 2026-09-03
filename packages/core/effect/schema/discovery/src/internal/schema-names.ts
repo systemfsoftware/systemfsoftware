@@ -1,5 +1,6 @@
 /// <reference types="vitest/import-meta" />
 import type { Expression, MemberExpression, TSType } from '@oxc-project/types'
+import { FastCheck as fc } from 'effect/testing'
 import { parseSync } from 'oxc-parser'
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
@@ -208,8 +209,8 @@ if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: the bundler folds the collection guard to
   // undefined, so this branch is dead in the published build and the runner
   // never ships. A static import would put the runner in the module graph.
+  // FastCheck, by contrast, is runner-free and imports statically above.
   const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect/testing')
 
   // `findExportedSchemaNames` is the decision this package exists to make -
   // which exported declarations are schemas - and it is a pure function from

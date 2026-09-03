@@ -1,5 +1,6 @@
 /// <reference types="vitest/import-meta" />
 import { type Brand, Schema as S, SchemaTransformation } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import { HexString } from './HexString.schema.js'
 
 const hexToColon = (hex: string): string => (hex.match(/.{1,2}/g) ?? []).map((byte) => byte.toUpperCase()).join(':')
@@ -28,9 +29,7 @@ if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines the vitest collection flag as `undefined`,
   // so this branch is statically dead in the build and never enters the published
   // module graph. A static import would ship it.
-  const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect/testing')
-  const { expectTypeOf } = await import('vitest')
+  const { it, expectTypeOf } = await import('@effect/vitest')
 
   /**
    * The one law the generated `ruleOfSchemas` pair cannot state: `hexToColon`

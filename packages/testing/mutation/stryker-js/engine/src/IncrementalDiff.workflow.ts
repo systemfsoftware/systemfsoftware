@@ -3,6 +3,7 @@ import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
+import { FastCheck as fc } from 'effect/testing'
 
 const DiffChangesSchema = S.Struct({ added: S.Finite, removed: S.Finite })
 const DiffStatisticsSchema = S.Struct({
@@ -272,7 +273,6 @@ export const incrementalDifferWorkflow = Workflow.make(IncrementalDiffCommand, (
 if (import.meta.vitest !== void 0) {
   // Dynamic runner imports: static imports would put the test runner into the published module graph.
   const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect/testing')
 
   const location = { start: { line: 1, column: 0 }, end: { line: 1, column: 1 } }
 

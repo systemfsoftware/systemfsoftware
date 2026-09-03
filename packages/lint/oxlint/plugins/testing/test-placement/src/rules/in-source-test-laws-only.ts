@@ -5,6 +5,7 @@ import {
   COMMENT_TOKEN_EXPECTED,
   COMMENT_TOKEN_FIX,
   COMMENT_TOKEN_NAME,
+  DYNAMIC_ONLY_SOURCES,
   EXPORTED_CALLEE_ACTUAL,
   EXPORTED_CALLEE_EXPECTED,
   EXPORTED_CALLEE_FIX,
@@ -57,6 +58,9 @@ type GuardRecord = { node: ESTree.IfStatement }
 
 const isVitestSource = (value: unknown): boolean =>
   typeof value === 'string' && VITEST_SOURCE_PREFIXES.some((prefix) => value === prefix || value.startsWith(prefix))
+
+const isDynamicOnlySource = (value: unknown): boolean =>
+  typeof value === 'string' && DYNAMIC_ONLY_SOURCES.some((prefix) => value === prefix || value.startsWith(prefix))
 
 const isVoidZero = (node: ESTree.Node): boolean => node.type === 'UnaryExpression' && node.operator === 'void'
 
@@ -150,31 +154,24 @@ const isRuleOfSchemasCall = (callee: ESTree.Node): boolean =>
   callee.type === 'Identifier' && callee.name === 'ruleOfSchemas'
 
 /**
- * True when a callee chain is rooted at `ruleOfSchemas` — `ruleOfSchemas(...)`
- * itself and any `ruleOfSchemas(...).forEach(...)` and friends. The generated
- * channel's registrations chain off the root call, so both the statement
- * grammar and the ancestor check key on this.
+ * True when a callee chain is rooted at `rootName` — `rootName(...)` itself
+ * and any `rootName(...).forEach(...)` and friends. The generated and
+ * type-level channels chain registrations off their root call, so both the
+ * statement grammar and the ancestor check key on this. One hop of chaining
+ * is not the limit here — the walk follows the full member/call spine; the
+ * one-hop limit noted elsewhere applies only to run-binding alias resolution.
  */
-const isRuleOfSchemasRooted = (callee: ESTree.Node): boolean => {
-  if (isRuleOfSchemasCall(callee)) return true
+const isRootedAt = (rootName: string) => (callee: ESTree.Node): boolean => {
+  if (callee.type === 'Identifier' && callee.name === rootName) return true
   if (callee.type !== 'MemberExpression') return false
   const object = callee.object
-  if (object.type === 'CallExpression') return isRuleOfSchemasRooted(object.callee)
-  return isRuleOfSchemasRooted(object)
+  if (object.type === 'CallExpression') return isRootedAt(rootName)(object.callee)
+  return isRootedAt(rootName)(object)
 }
 
-/**
- * Type-level assertions of the generated channel: `expectTypeOf<...>()` and
- * matchers chained off it. They erase at runtime, so they state no behavioural
- * expectation the laws channel could own.
- */
-const isExpectTypeOfRooted = (callee: ESTree.Node): boolean => {
-  if (callee.type === 'Identifier' && callee.name === 'expectTypeOf') return true
-  if (callee.type !== 'MemberExpression') return false
-  const object = callee.object
-  if (object.type === 'CallExpression') return isExpectTypeOfRooted(object.callee)
-  return isExpectTypeOfRooted(object)
-}
+const isRuleOfSchemasRooted = isRootedAt('ruleOfSchemas')
+
+const isExpectTypeOfRooted = isRootedAt('expectTypeOf')
 
 /**
  * The kernel-property channel: an `it.prop(...)` / `test.prop(...)`
@@ -202,6 +199,8 @@ export const inSourceTestLawsOnly = defineRule({
     const importedNames = new Set<string>()
     /** name -> whether the export is `@internal`-marked (unpublished surface) */
     const exportedNames = new Map<string, boolean>()
+    /** module-local const targets for one-hop run-alias resolution */
+    const aliasTargets = new Map<string, ESTree.Node>()
     const canonicalGuards: GuardRecord[] = []
     /**
      * True when the module is the generated channel's implementation side —
@@ -237,10 +236,55 @@ export const inSourceTestLawsOnly = defineRule({
       return false
     }
 
+    const rootIdentifierOf = (node: ESTree.Node): string | undefined => {
+      if (node.type === 'Identifier') return node.name
+      if (node.type !== 'MemberExpression') return undefined
+      let current: ESTree.Node = node.object
+      while (current.type === 'MemberExpression') current = current.object
+      return current.type === 'Identifier' ? current.name : undefined
+    }
+
+    const isPublishedBinding = (name: string): boolean => {
+      const binding = exportedNames.get(name)
+      if (binding === true) return false
+      return binding === false || importedNames.has(name)
+    }
+
+    const aliasRootOf = (name: string): string | undefined => {
+      const init = aliasTargets.get(name)
+      if (init === undefined) return undefined
+      if (init.type === 'Identifier') return init.name
+      if (init.type === 'MemberExpression') return rootIdentifierOf(init)
+      return undefined
+    }
+
+    const reportExportedCallee = (node: ESTree.Node): void => {
+      context.report({
+        node,
+        messageId: 'exportedCallee',
+        data: {
+          name: EXPORTED_CALLEE_NAME,
+          expected: EXPORTED_CALLEE_EXPECTED,
+          actual: EXPORTED_CALLEE_ACTUAL,
+          fix: EXPORTED_CALLEE_FIX,
+        },
+      })
+    }
+
     return {
       Program(node: ESTree.Program) {
         collectImportedNames(node.body, importedNames)
         collectExportedNames(node.body, exportedNames, isInternalAt)
+        for (const statement of node.body) {
+          if (statement.type !== 'VariableDeclaration') continue
+          for (const declarator of statement.declarations) {
+            if (declarator.id.type !== 'Identifier') continue
+            const init = declarator.init
+            if (init?.type === 'Identifier' || init?.type === 'MemberExpression') {
+              aliasTargets.set(declarator.id.name, init)
+            }
+          }
+        }
         if (exportedNames.has('ruleOfSchemas')) isChannelImplementation = true
         for (const comment of context.sourceCode.getAllComments()) {
           if (GUARD_TOKEN_PATTERN.test(comment.value)) {
@@ -279,7 +323,21 @@ export const inSourceTestLawsOnly = defineRule({
         }
       },
       ImportExpression(node: ESTree.ImportExpression) {
-        if (node.source.type !== 'Literal' || !isVitestSource(node.source.value)) return
+        if (node.source.type !== 'Literal') return
+        if (isDynamicOnlySource(node.source.value)) {
+          context.report({
+            node,
+            messageId: 'vitestImport',
+            data: {
+              name: VITEST_IMPORT_NAME,
+              expected: VITEST_IMPORT_EXPECTED,
+              actual: VITEST_IMPORT_ACTUAL,
+              fix: VITEST_IMPORT_FIX,
+            },
+          })
+          return
+        }
+        if (!isVitestSource(node.source.value)) return
         // The property and generated channels load their runner inside the
         // guard, where the branch is dead in the published build — the same
         // dynamics the laws call itself uses.
@@ -401,30 +459,59 @@ export const inSourceTestLawsOnly = defineRule({
       ObjectExpression(node: ESTree.ObjectExpression) {
         if (node.parent?.type !== 'CallExpression' || !isLawsCall(node.parent.callee)) return
         for (const property of node.properties) {
-          if (
-            property.type === 'Property' &&
-            property.key.type === 'Identifier' &&
-            property.key.name === 'run' &&
-            property.value.type === 'Identifier'
-          ) {
-            const binding = exportedNames.get(property.value.name)
+          if (property.type !== 'Property' || property.key.type !== 'Identifier' || property.key.name !== 'run') {
+            continue
+          }
+          const value = property.value
+          if (value.type === 'Identifier') {
             // An `@internal`-marked export is module-private in every sense
             // that reaches a consumer: stripInternal drops it from the
             // published dts, so no integration suite outside the module can
             // exercise it directly.
-            if (binding === true) continue
-            if (binding === false || importedNames.has(property.value.name)) {
-              context.report({
-                node: property,
-                messageId: 'exportedCallee',
-                data: {
-                  name: EXPORTED_CALLEE_NAME,
-                  expected: EXPORTED_CALLEE_EXPECTED,
-                  actual: EXPORTED_CALLEE_ACTUAL,
-                  fix: EXPORTED_CALLEE_FIX,
-                },
-              })
+            if (exportedNames.get(value.name) === true) continue
+            if (isPublishedBinding(value.name)) {
+              reportExportedCallee(property)
+              continue
             }
+            // One hop of alias resolution only: `const ref = exported; run: ref`.
+            const resolved = aliasRootOf(value.name)
+            if (resolved !== undefined && isPublishedBinding(resolved)) reportExportedCallee(property)
+            continue
+          }
+          if (value.type === 'MemberExpression') {
+            const root = rootIdentifierOf(value)
+            if (root === undefined) continue
+            if (exportedNames.get(root) === true) continue
+            if (isPublishedBinding(root)) reportExportedCallee(property)
+            continue
+          }
+          if (value.type === 'ArrowFunctionExpression' && value.body.type === 'CallExpression') {
+            const callee = value.body.callee
+            if (callee.type === 'Identifier') {
+              if (exportedNames.get(callee.name) === true) continue
+              if (isPublishedBinding(callee.name)) {
+                reportExportedCallee(property)
+                continue
+              }
+              const resolved = aliasRootOf(callee.name)
+              if (resolved !== undefined && isPublishedBinding(resolved)) reportExportedCallee(property)
+              continue
+            }
+            if (callee.type === 'MemberExpression') {
+              const root = rootIdentifierOf(callee)
+              if (root === undefined) continue
+              if (exportedNames.get(root) === true) continue
+              if (isPublishedBinding(root)) reportExportedCallee(property)
+            }
+          }
+        }
+      },
+      VariableDeclaration(node: ESTree.VariableDeclaration) {
+        for (const declarator of node.declarations) {
+          if (declarator.id.type !== 'Identifier') continue
+          const init = declarator.init
+          if (init?.type === 'Identifier' || init?.type === 'MemberExpression') {
+            aliasTargets.set(declarator.id.name, init)
           }
         }
       },

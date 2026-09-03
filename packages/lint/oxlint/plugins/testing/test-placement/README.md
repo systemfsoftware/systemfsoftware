@@ -24,9 +24,13 @@ Oxlint rules enforcing test placement and sanctioned suffixes, following the `pl
 | `*.workflow.property.test.ts` | Property  | none — pure core         | ONLY under `src/`  |
 | `*.integration.test.ts`       | Behaviour | permitted, at ports only | NEVER under `src/` |
 
+## Exemption semantics
+
+A `run` bound to an `@internal`-marked export is accepted because `stripInternal` drops it from the published dts. The runtime value remains importable; the marking is the author's declaration of test-only intent.
+
 ## Enrollment
 
-The rules are turned on by `@systemfsoftware/oxlint-config/base`, which spreads `@systemfsoftware/oxlint-plugin-effect-dmmf`'s recommended set; that aggregate re-exports all nine under the `@systemfsoftware/effect-dmmf/` namespace, so a package extending only `base` already enforces them. `strict` adds three TypeScript rules and nothing from this plugin. Neither preset registers this plugin standalone in `jsPlugins`, so its own `recommended` config is never the thing being loaded.
+The rules are turned on by `@systemfsoftware/oxlint-config/base`, which spreads `@systemfsoftware/oxlint-plugin-effect-dmmf`'s recommended set; that aggregate re-exports all nine under the `@systemfsoftware/effect-dmmf/` namespace, so a package extending only `base` already enforces them. `strict` adds three TypeScript rules and activates `eviction-purity` and `in-source-test-laws-only` at `error`. Neither preset registers this plugin standalone in `jsPlugins`, so its own `recommended` config is never the thing being loaded.
 
 ## Testing
 

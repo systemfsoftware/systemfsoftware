@@ -1,6 +1,7 @@
-/// <reference types="vitest/import-meta" />
+/// <reference types="vitest/importMeta" />
 import { Latch, Schema as S } from 'effect'
 import type { Effect } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 
 export class DynamicLimitExceeded extends S.TaggedError<DynamicLimitExceeded>()(
   'DynamicLimitExceeded',
@@ -39,7 +40,6 @@ export type ChildRef = {
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
   const { Exit } = await import('effect')
-  const { FastCheck: fc } = await import('effect/testing')
 
   const negative = fc.integer({ min: -100, max: -1 })
 

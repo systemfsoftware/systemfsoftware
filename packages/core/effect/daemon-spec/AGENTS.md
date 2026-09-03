@@ -43,6 +43,13 @@
 
 - **DS-V1 — no hand-written codec-law properties here.** `grep -rnE 'S\.equivalence' packages/effect-daemon-spec/src` returns nothing; rely on the injected law tests (contract: `packages/effect-schema-vite/AGENTS.md`).
 
+## Testing
+
+- This package adopts the in-source laws channel: in-source coverage is authored only through `catalog.laws` inside the canonical `if (import.meta.vitest !== void 0)` guard (gate: `in-source-test-laws-only`, run `lint` below).
+- Runtime dependency on `@systemfsoftware/in-source-catalog` (gate: `package.json#dependencies`; the guard call resolves through it).
+- Enabled rules in `oxlint.config.ts`: `test-placement/in-source-test-laws-only`, `test-placement/eviction-purity` (gate: `lint` below).
+- Exported-function coverage lives in `tests/` as `*.integration.test.ts` via the package entry or a `tests/__fixtures__` bridge, never a relative `../src/` import (gate: `tests-import-public-api`); a quantified `it.prop` of an exported function has no home there, so pin the equivalence with example scenarios instead (gate: `test-suffix-outside-src` + `property-file-purity`, run `lint` below).
+
 ## Verification
 
 - Types: `pnpm --filter @systemfsoftware/effect-daemon-spec typecheck`

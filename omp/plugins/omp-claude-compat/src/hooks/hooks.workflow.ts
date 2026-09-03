@@ -1,5 +1,6 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Match, Option, Result, Schema as S } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import { HookResult } from './hooks.schema.js'
 import { ParsedHookOutputSchema } from './hooks.schema.js'
 
@@ -72,7 +73,6 @@ const parsedBlockReason = (
   const stated = permissionDecision === 'deny' ? permissionDecisionReason : reason
   return stated === undefined || stated.trim() === '' ? `Blocked by ${event} hook` : stated
 }
-
 /** The closed tag set the workflow dispatches on. */
 const EXIT_KINDS = ['ExitBlock', 'ExitDecisionJson', 'ExitNoDecision', 'ExitOther'] as const
 
@@ -184,10 +184,10 @@ export const interpretHookResult = Workflow.make(
 )
 
 if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
-  // branch is statically dead in the build and never enters the published module graph.
+  // Dynamic by necessity: tsdown defines the vitest collection flag as
+  // `undefined`, so this branch is statically dead in the build and never
+  // enters the published module graph.
   const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect/testing')
 
   /**
    * The decision's observer.

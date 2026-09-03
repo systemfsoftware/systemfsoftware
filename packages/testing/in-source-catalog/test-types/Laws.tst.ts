@@ -112,3 +112,47 @@ describe('the contract constructor rejects derived expectations', () => {
     ])
   })
 })
+
+describe('the contract gate is a guardrail, not a proof', () => {
+  // Documented boundary: recomputing a published value into a wide string is a
+  // type error, while a helper that preserves literal types passes the gate and
+  // is caught by review and the sabotage quartet instead.
+  const join = <A extends string, B extends string>(a: A, b: B): `${A}/${B}` => `${a}/${b}`
+
+  it('Should_AcceptLiteralTypedHelperOutput_When_TheGateIsAGuardrail', () => {
+    expect(catalog.contract).type.toBeCallableWith([
+      {
+        label: 'primary',
+        input: { tenant: 'widgets', tier: 'primary', slot: 'widgets' },
+        project: (decision: RegistryDecision) =>
+          decision.ok ? { root: decision.root, readOnly: decision.readOnly } : {},
+        expect: { root: join('/var/lib', 'registry'), readOnly: true },
+      },
+    ])
+  })
+})
+
+describe('the inverse is only licensed beside a published contract', () => {
+  it('Should_RejectInverseWithoutPublished_When_PublishedIsAbsent', () => {
+    expect(catalog.laws).type.not.toBeCallableWith({
+      ...licensed,
+      inverse: (result: RegistryDecision) => ({
+        tenant: 'widgets',
+        tier: 'primary',
+        slot: result.ok ? result.root : 'widgets',
+      }),
+    })
+  })
+
+  it('Should_RegisterInverseWithPublished_When_BothArePresent', () => {
+    expect(catalog.laws).type.toBeCallableWith({
+      ...licensed,
+      published: catalog.contract(authoredCases),
+      inverse: (result: RegistryDecision) => ({
+        tenant: 'widgets',
+        tier: 'primary',
+        slot: result.ok ? result.root : 'widgets',
+      }),
+    })
+  })
+})

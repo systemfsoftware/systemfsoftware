@@ -1,5 +1,6 @@
 /// <reference types="vitest/import-meta" />
 import { Schema as S } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 import type { FastCheck } from 'effect/testing'
 
 export const boundedUnion = <
@@ -64,8 +65,6 @@ if (import.meta.vitest !== void 0) {
   // module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
   const { Exit, Match } = await import('effect')
-  const { Schema: S } = await import('effect')
-  const { FastCheck: fc } = await import('effect/testing')
 
   /**
    * `ruleOfSchemas` covers a schema's codec laws; the arbitrary `boundedUnion`

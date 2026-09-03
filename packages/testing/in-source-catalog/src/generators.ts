@@ -11,15 +11,20 @@ const homeFromStemSuffix = (suffix: string) => <A>(home: (path: string) => A): R
  * refuse, quantified over every free dimension of the command. The library
  * cannot know a domain's refusing shape — it owns the quantification, the
  * brand, and the detection law; the caller owns only which region refuses.
- * A `fc.constant` of one point is a literal list in arbitrary clothing: pin
- * every independent field with its own generator.
+ * Registration rejects a degenerate arbitrary: 8 samples producing fewer
+ * than 2 distinct values throws.
  */
-export const region = <A>(refusingInputs: Arbitrary<A>): RefuseHomes<A> => mintRefuseHomes(refusingInputs)
+export const region = <A>(refusingInputs: Arbitrary<A>): RefuseHomes<A> => {
+  const samples = fc.sample(refusingInputs, { numRuns: 8 })
+  if (new Set(samples.map((sample) => fc.stringify(sample))).size < 2) {
+    throw new Error(
+      'region(...) received a degenerate arbitrary: 8 samples produced <2 distinct values; a refusal region must quantify',
+    )
+  }
+  return mintRefuseHomes(refusingInputs)
+}
 
 export const refuseHomes = {
-  invalidSocketPath: homeFromStemSuffix('\u0000'),
-  sshParentConflict: homeFromStemSuffix('/.ssh/id_ed25519'),
   reservedEnvFile: homeFromStemSuffix('/secrets.env'),
-  quadletDir: homeFromStemSuffix('/quadlets/unit.container'),
   region,
 } as const

@@ -1,3 +1,5 @@
+import { FastCheck as fc } from 'effect/testing'
+
 /** @internal */
 export const isWithinWindow = (now: number, windowMillis: number) => (t: number): boolean => now - t <= windowMillis
 
@@ -25,7 +27,6 @@ export const exceedsRestarts = (count: number, restarts: number): boolean => cou
 
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect/testing')
 
   const nowArb = fc.integer({ min: 0, max: 1_000_000 })
   const windowArb = fc.integer({ min: 0, max: 100_000 })

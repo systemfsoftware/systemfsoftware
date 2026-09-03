@@ -3,6 +3,7 @@ import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Result from 'effect/Result'
 import type * as Scope from 'effect/Scope'
+import { FastCheck as fc } from 'effect/testing'
 import type { GherkinEffect, ScopeIdentifiers, ScopeMap, ScopeServices } from './DoNotation.js'
 import { expandOutline } from './OutlineExpand.js'
 import { StepError } from './StepError.schema.js'
@@ -18,7 +19,7 @@ export type RegisterMode = 'run' | 'skip' | 'only'
 
 const applyScenarioOpts = <R, A, E>(
   effect: Effect.Effect<A, E, R>,
-  opts: ScenarioOptions<never, never> | null,
+  opts: ScenarioOptions<never, never> | null | undefined,
 ): Effect.Effect<A, E, R> => {
   if (opts?.scenarioLayer !== void 0 && opts.layer !== void 0) {
     return effect.pipe(
@@ -412,4 +413,52 @@ export const createScenarioWithFresh = <RShared = never, RFresh = never, RFreshR
     'only',
   )
   return Object.assign(base, { skip, only })
+}
+
+// Kernel properties for the module-private helpers below. Each property
+// quantifies its domain with arbitraries and returns a boolean, so the
+// runner stays behind the dynamic import and out of the published graph.
+if (import.meta.vitest !== void 0) {
+  const { it } = await import('@effect/vitest')
+
+  it.prop(
+    '∀o_NullOpts_≡Identity',
+    [fc.constantFrom(null, void 0), fc.integer()],
+    ([opts, value]) => {
+      const effect = Effect.succeed(value)
+      return applyScenarioOpts(effect, opts) === effect
+    },
+  )
+
+  it.prop(
+    '∀p_Pipeline_≡Void',
+    [fc.oneof(fc.constant(void 0), fc.integer(), fc.string(), fc.boolean())],
+    ([value]) => Effect.runSync(normalizePipeline(Effect.succeed(value))) === void 0,
+  )
+
+  it.prop(
+    '∀v_NonOpts_≡False',
+    [
+      fc.oneof(
+        fc.constantFrom(null, void 0),
+        fc.string(),
+        fc.integer(),
+        fc.boolean(),
+        fc.constant({}),
+      ),
+    ],
+    ([value]) => isScenarioOpts(value) === false,
+  )
+
+  it.prop(
+    '∀s_ScenarioOpts_≡True',
+    [
+      fc.oneof(
+        fc.record({ scenarioLayer: fc.constant(Layer.empty) }),
+        fc.record({ layer: fc.constant(Layer.empty) }),
+        fc.record({ scenarioLayer: fc.constant(Layer.empty), layer: fc.constant(Layer.empty) }),
+      ),
+    ],
+    ([opts]) => isScenarioOpts(opts) === true,
+  )
 }

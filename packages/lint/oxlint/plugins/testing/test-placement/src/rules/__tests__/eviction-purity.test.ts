@@ -197,6 +197,19 @@ it('pins the wrapped literal', () => {
 `,
       filename: TESTS_FILE,
     },
+    {
+      name: 'Should_StaySilent_When_ExpectedBindingHoldsALiteral',
+      code: `
+import { expect, it } from 'vitest'
+
+it('pins the host path', () => {
+  const m = bindMount(validInput())
+  const expected = '/var/lib/registry'
+  expect(m.hostPath).toBe(expected)
+})
+`,
+      filename: TESTS_FILE,
+    },
   ],
   invalid: [
     {
@@ -307,6 +320,33 @@ import { expect, it } from 'vitest'
 it('pins the env path', () => {
   const m = bindMount(validInput())
   expect(m.envPath.includes('secrets.env')).toBe(false)
+})
+`,
+      filename: TESTS_FILE,
+      errors: [vacuous()],
+    },
+    {
+      name: 'Should_Report_When_ExpectedBindingRecomputesWithSameCallee',
+      code: `
+import { joinPath } from './support.js'
+import { expect, it } from 'vitest'
+
+it('pins the host path', () => {
+  const m = bindMount(validInput())
+  const expected = joinPath(dir, name)
+  expect(m.hostPath).toBe(expected)
+})
+`,
+      filename: TESTS_FILE,
+      errors: [reconstruction()],
+    },
+    {
+      name: 'Should_Report_When_SingleLevelReceiverPinsAnUnwrittenValue',
+      code: `
+import { expect, it } from 'vitest'
+
+it('pins the env path', () => {
+  expect(envPath.includes('secrets.env')).toBe(false)
 })
 `,
       filename: TESTS_FILE,

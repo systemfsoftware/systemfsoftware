@@ -74,8 +74,10 @@ export const evictionPurity = defineRule({
     const testBodies: ESTree.Node[] = []
     const importedNames = new Set<string>()
     const declaredFunctionNames = new Set<string>()
+    const recomputingNames = new Set<string>()
 
     const isReconstructedExpected = (node: ESTree.Node): boolean => {
+      if (node.type === 'Identifier') return recomputingNames.has(node.name)
       if (node.type !== 'CallExpression') return false
       if (node.callee.type === 'Identifier') {
         if (node.callee.name === 'expect') return false
@@ -131,9 +133,14 @@ export const evictionPurity = defineRule({
         for (const declarator of node.declarations) {
           if (declarator.id.type !== 'Identifier') continue
           if (declarator.init === null || declarator.init === undefined) continue
-          if (declarator.init.type !== 'Literal') continue
-          if (typeof declarator.init.value !== 'string') continue
-          constLiterals.set(declarator.id.name, declarator.init.value)
+          if (declarator.init.type === 'Literal') {
+            if (typeof declarator.init.value !== 'string') continue
+            constLiterals.set(declarator.id.name, declarator.init.value)
+            continue
+          }
+          if (declarator.init.type === 'CallExpression' && isReconstructedExpected(declarator.init)) {
+            recomputingNames.add(declarator.id.name)
+          }
         }
       },
       CallExpression(node: ESTree.CallExpression) {
@@ -208,7 +215,6 @@ export const evictionPurity = defineRule({
         if (actual.type !== 'CallExpression' || actual.callee.type !== 'MemberExpression') return
         if (actual.callee.property.type !== 'Identifier') return
         if (!SUBSTRING_METHODS[actual.callee.property.name]) return
-        if (actual.callee.object.type !== 'MemberExpression') return
         const [pinned] = actual.arguments
         if (pinned === undefined || pinned.type !== 'Literal' || typeof pinned.value !== 'string') {
           return

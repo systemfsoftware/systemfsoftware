@@ -1,5 +1,6 @@
 /// <reference types="vitest/import-meta" />
 import { Schema as S } from 'effect'
+import { FastCheck as fc } from 'effect/testing'
 
 export const StrictHex = S.String.pipe(
   S.check(S.isPattern(/^[0-9a-f]*$/)),
@@ -17,7 +18,6 @@ if (import.meta.vitest !== void 0) {
   // so this branch is statically dead in the build and never enters the published
   // module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect/testing')
   const { Exit } = await import('effect')
 
   /**

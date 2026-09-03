@@ -25,12 +25,6 @@ interface RegistrySlot {
   readonly readOnly: boolean
 }
 
-const tierForRoot = (root: string): string =>
-  Match.value(root).pipe(
-    Match.when('/var/lib/registry', () => 'primary'),
-    Match.orElse(() => 'secondary'),
-  )
-
 const refusedCommand = DecideRegistrySlotCommand.make({ tenant: 'widgets', tier: 'primary', slot: 'refused.env' })
 
 /** @internal */
@@ -49,6 +43,22 @@ export const decideRegistrySlot = Workflow.make(
 )
 
 if (import.meta.vitest !== void 0) {
+  const published = catalog.contract([
+    {
+      label: 'primary',
+      input: DecideRegistrySlotCommand.make({ tenant: 'widgets', tier: 'primary', slot: 'widgets' }),
+      project: (result: Result.Result<RegistrySlot, SlotRefused>) =>
+        Result.isSuccess(result) ? { root: result.success.root, readOnly: result.success.readOnly } : {},
+      expect: { root: '/var/lib/registry', readOnly: true },
+    },
+    {
+      label: 'secondary',
+      input: DecideRegistrySlotCommand.make({ tenant: 'widgets', tier: 'secondary', slot: 'widgets' }),
+      project: (result: Result.Result<RegistrySlot, SlotRefused>) =>
+        Result.isSuccess(result) ? { root: result.success.root, readOnly: result.success.readOnly } : {},
+      expect: { root: '/var/opt/registry', readOnly: true },
+    },
+  ])
   await catalog.laws({
     id: 'decideRegistrySlot',
     run: decideRegistrySlot,
@@ -56,29 +66,11 @@ if (import.meta.vitest !== void 0) {
       DecideRegistrySlotCommand.make({ tenant: 'widgets', tier: 'primary', slot: envFilePath })
     ),
     refused: Result.isFailure,
-    published: catalog.contract([
-      {
-        label: 'primary',
-        input: DecideRegistrySlotCommand.make({ tenant: 'widgets', tier: 'primary', slot: 'widgets' }),
-        project: (result: Result.Result<RegistrySlot, SlotRefused>) =>
-          Result.isSuccess(result) ? { root: result.success.root, readOnly: result.success.readOnly } : {},
-        expect: { root: '/var/lib/registry', readOnly: true },
-      },
-      {
-        label: 'secondary',
-        input: DecideRegistrySlotCommand.make({ tenant: 'widgets', tier: 'secondary', slot: 'widgets' }),
-        project: (result: Result.Result<RegistrySlot, SlotRefused>) =>
-          Result.isSuccess(result) ? { root: result.success.root, readOnly: result.success.readOnly } : {},
-        expect: { root: '/var/opt/registry', readOnly: true },
-      },
-    ]),
+    published,
     inverse: (result: Result.Result<RegistrySlot, SlotRefused>) =>
       Result.isSuccess(result)
-        ? DecideRegistrySlotCommand.make({
-          tenant: 'widgets',
-          tier: tierForRoot(result.success.root),
-          slot: 'widgets',
-        })
+        ? published.cases.find((testCase) => testCase.expect['root'] === result.success.root)?.input ??
+          refusedCommand
         : refusedCommand,
   })
 }

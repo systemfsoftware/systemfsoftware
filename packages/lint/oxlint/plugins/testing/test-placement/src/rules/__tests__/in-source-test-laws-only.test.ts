@@ -198,9 +198,10 @@ export const run: (tester: Tester) => void = (tester) => tester('pins', () => {}
     {
       name: 'Should_StaySilent_When_GuardHoldsPropertyChannel',
       code: `
+import { FastCheck as fc } from 'effect/testing'
+
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect/testing')
 
   const trees = fc.integer({ min: 1, max: 32 }).chain((total) =>
     fc.tuple(fc.constant(total), fc.integer({ min: 0, max: total - 1 }))
@@ -245,6 +246,17 @@ if (import.meta.vitest !== void 0) {
     refused: (result) => !result.ok,
   })
 }
+`,
+      filename: SRC_FILE,
+    },
+    {
+      name: 'Should_StaySilent_When_EffectTestingIsImportedStatically',
+      code: `
+import { FastCheck as fc } from 'effect/testing'
+
+const decideMount = (input: { unit: string }) => ({ ok: true, unit: input.unit })
+
+export const arbitraryUnit = fc.string()
 `,
       filename: SRC_FILE,
     },
@@ -452,6 +464,74 @@ if (import.meta.vitest !== void 0) {
 `,
       filename: SRC_FILE,
       errors: [vitestImport()],
+    },
+    {
+      name: 'Should_ReportDynamicTestingImport_When_EffectTestingLoadsInsideTheGuard',
+      code: `
+if (import.meta.vitest !== void 0) {
+  const { FastCheck: fc } = await import('effect/testing')
+}
+`,
+      filename: SRC_FILE,
+      errors: [vitestImport()],
+    },
+    {
+      name: 'Should_ReportExportedCallee_When_RunBindsAMemberOfAnImport',
+      code: `
+import { catalog } from '@systemfsoftware/in-source-catalog'
+import * as someModule from './decide.js'
+
+if (import.meta.vitest !== void 0) {
+  await catalog.laws({
+    id: 'decideMount',
+    run: someModule.decideMount,
+    reserved: catalog.refuseHomes.reservedEnvFile((envFilePath: string) => ({ unit: envFilePath })),
+    refused: (result) => !result.ok,
+  })
+}
+`,
+      filename: SRC_FILE,
+      errors: [exportedCallee()],
+    },
+    {
+      name: 'Should_ReportExportedCallee_When_RunBindsAnAliasOfAnExport',
+      code: `
+import { catalog } from '@systemfsoftware/in-source-catalog'
+
+export const exportedDecide = (input: { unit: string }) => ({ ok: true, unit: input.unit })
+
+const internalRef = exportedDecide
+
+if (import.meta.vitest !== void 0) {
+  await catalog.laws({
+    id: 'decideMount',
+    run: internalRef,
+    reserved: catalog.refuseHomes.reservedEnvFile((envFilePath: string) => ({ unit: envFilePath })),
+    refused: (result) => !result.ok,
+  })
+}
+`,
+      filename: SRC_FILE,
+      errors: [exportedCallee()],
+    },
+    {
+      name: 'Should_ReportExportedCallee_When_RunWrapsAnExportInAnArrow',
+      code: `
+import { catalog } from '@systemfsoftware/in-source-catalog'
+
+export const exportedDecide = (input: { unit: string }) => ({ ok: true, unit: input.unit })
+
+if (import.meta.vitest !== void 0) {
+  await catalog.laws({
+    id: 'decideMount',
+    run: (input: { unit: string }) => exportedDecide(input),
+    reserved: catalog.refuseHomes.reservedEnvFile((envFilePath: string) => ({ unit: envFilePath })),
+    refused: (result) => !result.ok,
+  })
+}
+`,
+      filename: SRC_FILE,
+      errors: [exportedCallee()],
     },
   ],
 })
