@@ -1,24 +1,22 @@
 /**
- * Instrument — the instrument capability: Cell description, file/mutant types and the instrument entry point.
+ * Instrument — the instrument capability: file/mutant types and the instrument entry point.
  */
-import { Cell } from '@systemfsoftware/effect-cell-types'
 import { type FileDescription, Mutant as ApiMutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as Effect from 'effect/Effect'
 import * as Predicate from 'effect/Predicate'
-import * as Result from 'effect/Result'
 
 import type { IgnorerService } from '@systemfsoftware/stryker-js/Ignorer'
 import type { MutateDescription } from '@systemfsoftware/stryker-js/Mutant'
+import { decideInstrument } from './Instrument.kernel.js'
 import {
   FileSchema,
   InstrumentCommand,
-  InstrumentDecision,
+  type InstrumentDecision,
   InstrumentDecoded,
   type InstrumenterOptions,
   InstrumentError,
   InstrumentResult as InstrumentResultSchema,
-} from './Instrument.workflow.js'
-import { instrumentWorkflow } from './Instrument.workflow.js'
+} from './Instrument.schema.js'
 import { createParser, getFormat } from './Parser.js'
 import { print } from './Printer.js'
 import { type Ast, AstFormat, type HtmlAst, type ScriptAst, type SvelteAst } from './Syntax.js'
@@ -213,95 +211,100 @@ function isAst(value: unknown): value is Ast {
 }
 
 type FileSchemaType = typeof FileSchema.Type
-const instrumentCell = Cell.layer({
-  read: (command: InstrumentCommand) =>
-    Effect.gen(function*() {
-      const files = command.files
-      const options = command.options
-      const parse = createParser()
-      const asts: Ast[] = []
-      for (const { name, content } of files) {
-        const ast = yield* Effect.tryPromise({
-          try: () => parse(content, name),
-          catch: (cause) => new InstrumentError({ message: `Failed to parse ${name}`, cause }),
-        })
-        asts.push(ast)
+const readCollected = (
+  command: InstrumentCommand,
+): Effect.Effect<
+  {
+    readonly files: readonly FileSchemaType[]
+    readonly options: InstrumenterOptions
+    readonly asts: readonly Ast[]
+    readonly mutants: readonly ApiMutant[]
+  },
+  InstrumentError
+> =>
+  Effect.gen(function*() {
+    const files = command.files
+    const options = command.options
+    const parse = createParser()
+    const asts: Ast[] = []
+    for (const { name, content } of files) {
+      const ast = yield* Effect.tryPromise({
+        try: () => parse(content, name),
+        catch: (cause) => new InstrumentError({ message: `Failed to parse ${name}`, cause }),
+      })
+      asts.push(ast)
+    }
+    const collector = createMutantCollector()
+    const workAsts: readonly Ast[] = asts.filter(isAst)
+    for (let i = 0; i < workAsts.length; i++) {
+      const ast = workAsts[i]
+      const file = files[i]
+      if (ast === undefined || file === undefined) {
+        continue
       }
-      const collector = createMutantCollector()
-      const workAsts: readonly Ast[] = asts.filter(isAst)
-      for (let i = 0; i < workAsts.length; i++) {
-        const ast = workAsts[i]
-        const file = files[i]
-        if (ast === undefined || file === undefined) {
+      yield* Effect.try({
+        try: () =>
+          transform(ast, collector, {
+            options: toTransformerOptions(options),
+            mutateDescription: toOneBasedLineNumber(file.mutate),
+          }),
+        catch: (cause) => new InstrumentError({ message: `Failed to transform ${file.name}`, cause }),
+      })
+    }
+    const mutants: readonly ApiMutant[] = yield* Effect.try({
+      try: () => collector.map(toApiMutant),
+      catch: (cause) => new InstrumentError({ message: 'Failed to instrument', cause }),
+    })
+    return { files, options, asts, mutants }
+  })
+
+const printDecision = (
+  decision: InstrumentDecision,
+): Effect.Effect<InstrumentResultSchema, InstrumentError> =>
+  Effect.try({
+    try: () => {
+      const files = decision.files
+      const asts: readonly unknown[] = decision.asts
+      const outFiles: FileSchemaType[] = []
+      const isAstValue = (value: unknown): value is Ast =>
+        typeof value === 'object' && value !== null && 'format' in value && 'root' in value
+      for (let i = 0; i < asts.length; i++) {
+        const maybeAst: unknown = asts[i]
+        const maybeFile: FileSchemaType | undefined = files[i]
+        if (maybeAst === undefined || maybeFile === undefined) {
           continue
         }
-        yield* Effect.try({
-          try: () =>
-            transform(ast, collector, {
-              options: toTransformerOptions(options),
-              mutateDescription: toOneBasedLineNumber(file.mutate),
-            }),
-          catch: (cause) => new InstrumentError({ message: `Failed to transform ${file.name}`, cause }),
-        })
+        if (!isAstValue(maybeAst)) {
+          continue
+        }
+        const ast: Ast = maybeAst
+        const file: FileSchemaType = maybeFile
+        const mutatedContent = print(ast)
+        outFiles.push({ name: file.name, mutate: file.mutate, content: mutatedContent })
       }
-      const mutants: readonly ApiMutant[] = yield* Effect.try({
-        try: () => collector.map(toApiMutant),
-        catch: (cause) => new InstrumentError({ message: 'Failed to instrument', cause }),
-      })
-      return { files, options, asts, mutants }
-    }),
-  decode: (
-    raw: {
-      readonly files: readonly FileSchemaType[]
-      readonly options: InstrumenterOptions
-      readonly asts: readonly Ast[]
-      readonly mutants: readonly ApiMutant[]
+      return InstrumentResultSchema.make({ files: outFiles, mutants: decision.mutants })
     },
-  ) =>
-    Result.succeed(
-      InstrumentDecoded.make({ files: raw.files, options: raw.options, asts: raw.asts, mutants: raw.mutants }),
-    ),
-  decide: instrumentWorkflow,
-  encode: (outcome: Result.Result<InstrumentDecision, InstrumentError>) => outcome,
-  write: (outcome: Result.Result<InstrumentDecision, InstrumentError>) =>
-    Result.match(outcome, {
-      onFailure: (error) => Effect.fail(error),
-      onSuccess: (decision) =>
-        Effect.try({
-          try: () => {
-            const files = decision.files
-            const asts: readonly unknown[] = decision.asts
-            const outFiles: FileSchemaType[] = []
-            const isAstValue = (value: unknown): value is Ast =>
-              typeof value === 'object' && value !== null && 'format' in value && 'root' in value
-            for (let i = 0; i < asts.length; i++) {
-              const maybeAst: unknown = asts[i]
-              const maybeFile: FileSchemaType | undefined = files[i]
-              if (maybeAst === undefined || maybeFile === undefined) {
-                continue
-              }
-              if (!isAstValue(maybeAst)) {
-                continue
-              }
-              const ast: Ast = maybeAst
-              const file: FileSchemaType = maybeFile
-              const mutatedContent = print(ast)
-              outFiles.push({ name: file.name, mutate: file.mutate, content: mutatedContent })
-            }
-            return InstrumentResultSchema.make({ files: outFiles, mutants: decision.mutants })
-          },
-          catch: (cause) => new InstrumentError({ message: 'Failed to print', cause }),
-        }),
-    }),
-})
+    catch: (cause) => new InstrumentError({ message: 'Failed to print', cause }),
+  })
+
 export const instrument = (
   files: readonly File[],
   options: InstrumenterOptions,
-): Effect.Effect<InstrumentResultSchema, InstrumentError> => {
-  const schemaFiles: FileSchemaType[] = files.map((file) => ({
-    name: file.name,
-    content: file.content,
-    mutate: file.mutate,
-  }))
-  return Cell.run(instrumentCell, InstrumentCommand.make({ files: schemaFiles, options }))
-}
+): Effect.Effect<InstrumentResultSchema, InstrumentError> =>
+  Effect.gen(function*() {
+    const schemaFiles: FileSchemaType[] = files.map((file) => ({
+      name: file.name,
+      content: file.content,
+      mutate: file.mutate,
+    }))
+    const collected = yield* readCollected(InstrumentCommand.make({ files: schemaFiles, options }))
+    const decision = decideInstrument(
+      InstrumentDecoded.make({
+        files: collected.files,
+        options: collected.options,
+        asts: collected.asts,
+        mutants: collected.mutants,
+      }),
+    )
+    return yield* printDecision(decision)
+  })

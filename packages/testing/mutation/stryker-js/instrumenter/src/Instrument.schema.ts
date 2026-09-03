@@ -1,16 +1,5 @@
-/**
- * Instrument.workflow — pure decision for the instrument capability.
- *
- * The heavy lifting (AST traversal, mutant collection, code generation)
- * happens in `Instrument.ts`'s read phase, which is allowed to be stateful.
- * This decision receives the already-collected mutants as data and wraps them
- * into the decision type. All helpers and schemas live in this file so the
- * decision body only reaches parameters, const locals, same-file declarations,
- * and the sealed pure effect surface.
- */
-import { Wire, Workflow } from '@systemfsoftware/effect-cell-types'
+import { Wire } from '@systemfsoftware/effect-cell-types'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
 export class InstrumentError
@@ -48,9 +37,7 @@ export const FileSchema = S.Struct({
   mutate: MutateDescriptionSchema,
 })
 
-// IgnorerService is a runtime plugin service, not a serializable schema
 const IgnorerSchema = Wire.mint(S.Unknown)
-// AST shapes are external data from the read phase, not declared here
 const AstSchema = Wire.mint(S.Unknown)
 
 const InstrumenterOptionsSchema = Wire.wire({
@@ -83,15 +70,3 @@ export class InstrumentResult extends S.TaggedClass<InstrumentResult>()('Instrum
   files: S.Array(FileSchema),
   mutants: S.Array(Mutant),
 }) {}
-
-export const instrumentWorkflow = Workflow.make(
-  InstrumentDecoded,
-  (decoded: InstrumentDecoded): Result.Result<InstrumentDecision, InstrumentError> =>
-    Result.succeed(
-      InstrumentDecision.make({
-        files: decoded.files,
-        mutants: decoded.mutants,
-        asts: decoded.asts,
-      }),
-    ),
-)
