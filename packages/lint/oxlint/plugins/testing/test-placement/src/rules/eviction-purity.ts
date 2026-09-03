@@ -42,14 +42,19 @@ export type MessageIds =
  *   rule does not prove the callee is the SUT's own helper, so a contract
  *   literal in the expected slot is the only clean shape.
  * - dummy-marker self-assertion: `expect(<Identifier>).toBe(<string literal>)`
- *   where the identifier either matches `__private*Marker` or names a `const`
+ *   where the identifier either matches `__private*Marker` (the name alone
+ *   flags it — a differing literal does not clean it up) or names a `const`
  *   declared in the same file with that identical literal. A literal pinned
- *   against an undeclared or differently-valued binding is clean.
+ *   against an undeclared or differently-valued binding is clean. Only
+ *   locally declared `const` string literals register, so a marker imported
+ *   across modules, or a non-string literal, escapes this arm.
  * - silent early return: `if (<anything>) return` (bare, argument-free —
  *   directly or as a statement of a consequent block) whose `IfStatement`
- *   sits inside an `it(...)`/`test(...)` inline callback. Focused variants
- *   (`it.only`, `test.skip`) are not recognised as test bodies. A guard that
- *   throws, or a return carrying a value, is clean.
+ *   sits inside an `it(...)`/`test(...)` inline callback. Only the bare
+ *   identifiers are recognised: `it.only`, `it.skip`, `it.todo`, `xit`,
+ *   `fit`, and all `describe`-level bodies are not, and a silent return
+ *   inside them escapes. A guard that throws, or a return carrying a value,
+ *   is clean.
  * - vacuous predicate: `expect(<member>.<includes|toContain>(<string>)).toBe|toEqual|toStrictEqual(false)`,
  *   or the same actual with `.toBeFalsy()`. The same pin asserted to `true`
  *   is clean — the rule keys on the boolean-false comparison, not on the
