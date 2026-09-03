@@ -3,6 +3,13 @@ import type { Result } from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
 import { CommandRefused, StructCmd, TaggedCmd, UntaggedCmd } from '../tests/__fixtures__/Command.schema.js'
+import {
+  Decision,
+  DecisionError,
+  DecisionOne,
+  DecisionTwo,
+  LoneDecision,
+} from '../tests/__fixtures__/Decision.schema.js'
 import { decideTagged } from '../tests/__fixtures__/TaggedCommand.workflow.js'
 import { decideWidened } from '../tests/__fixtures__/WidenedCommand.workflow.js'
 
@@ -25,6 +32,18 @@ interface Err {
   readonly code: number
 }
 
+// An untagged member: no _tag at all, so no consumer can dispatch on it.
+interface UntaggedMember {
+  readonly value: number
+}
+
+// A member whose tag is present but not dispatchable.
+interface NumericTagMember {
+  readonly _tag: number
+}
+
+declare const decideLone: (command: TaggedCmd) => Result<LoneDecision, CommandRefused>
+
 /**
  * The three shapes a bare key-presence test admits and a dispatchable-tag test refuses. Each is
  * spelled through `Record` rather than a `_tag` property signature, so these fixtures pin the
@@ -45,8 +64,8 @@ declare const totallyDecided: Workflow.Workflow<Cmd, boolean, never>
 // arguments `make` receives. The negatives are `declare`d rather than written:
 // a plain class, an object literal and a primitive need no runtime value to be
 // refused, and this file declares none.
-declare const decideOverTagged: (command: TaggedCmd) => Result<Dec, Err>
-declare const decideOverUntagged: (command: UntaggedCmd) => Result<Dec, Err>
+declare const decideOverTagged: (command: TaggedCmd) => Result<Decision, DecisionError>
+declare const decideOverUntagged: (command: UntaggedCmd) => Result<Decision, DecisionError>
 declare const decideOverUnrelated: (command: { readonly nope: boolean }) => Result<Dec, Err>
 declare const PlainCmdCtor: new(value: number) => { readonly value: number }
 declare const objectLiteralCmd: { readonly value: number }
@@ -113,8 +132,8 @@ describe('the constructor compiled evidence', () => {
     expect<typeof Workflow.make>().type.not.toBeCallableWith(decideOverTagged)
   })
 
-  it('Should_CollapseToUnknown_When_BothChannelsInhabitedAndErrorTagged', () => {
-    expect<Workflow.Inhabited<Dec, Err>>().type.toBe<unknown>()
+  it('Should_CollapseToUnknown_When_ChannelsInhabitedAndShaped', () => {
+    expect<Workflow.Inhabited<Decision, DecisionError>>().type.toBe<unknown>()
   })
 
   it('Should_DemandUninhabitedErrorMarker_When_ErrorChannelIsNever', () => {
@@ -126,19 +145,59 @@ describe('the constructor compiled evidence', () => {
   })
 
   it('Should_DemandUntaggedErrorMarker_When_ErrorChannelCarriesNoTag', () => {
-    expect<Workflow.Inhabited<Dec, Error>>().type.toBe<Workflow.UntaggedError>()
+    expect<Workflow.Inhabited<Decision, Error>>().type.toBe<Workflow.UntaggedError>()
   })
 
   it('Should_DemandUntaggedErrorMarker_When_TagIsNotAString', () => {
-    expect<Workflow.Inhabited<Dec, NumericTagError>>().type.toBe<Workflow.UntaggedError>()
+    expect<Workflow.Inhabited<Decision, NumericTagError>>().type.toBe<Workflow.UntaggedError>()
   })
 
   it('Should_DemandUntaggedErrorMarker_When_TagIsOptional', () => {
-    expect<Workflow.Inhabited<Dec, OptionalTagError>>().type.toBe<Workflow.UntaggedError>()
+    expect<Workflow.Inhabited<Decision, OptionalTagError>>().type.toBe<Workflow.UntaggedError>()
   })
 
   it('Should_DemandUntaggedErrorMarker_When_TagHoldsACallable', () => {
-    expect<Workflow.Inhabited<Dec, CallableTagError>>().type.toBe<Workflow.UntaggedError>()
+    expect<Workflow.Inhabited<Decision, CallableTagError>>().type.toBe<Workflow.UntaggedError>()
+  })
+})
+
+describe('the success channel the union constrains', () => {
+  it('Should_AcceptTwoBrandedTaggedClasses_When_TheDecisionIsAUnion', () => {
+    expect<Workflow.Inhabited<Decision, DecisionError>>().type.toBe<unknown>()
+    expect<Workflow.Inhabited<DecisionOne | DecisionTwo, DecisionError>>().type.toBe<unknown>()
+  })
+
+  it('Should_RefuseOneVariant_When_TheDecisionIsASingleClass', () => {
+    expect<Workflow.Inhabited<LoneDecision, DecisionError>>().type.toBe<Workflow.SingleVariantDecision>()
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(TaggedCmd, decideLone)
+  })
+
+  // The shared-TypeId *negatives* (unbranded union, divergent brands) are not asserted here:
+  // the assertion compiler leaves the symbol-keyed `keyof` of an intersection deferred, so the
+  // negative leg resolves `unknown` under tstyche. The refusal is real under the package's own
+  // `tsc` (src-files gate, TS 7) and is observed red-first at every migrated site whose family
+  // brand is wrong — U6's compiler sweep is the failing observer for the negatives.
+
+  it('Should_RefuseAnUntaggedMember_When_TheUnionCarriesNoTagToDispatch', () => {
+    expect<Workflow.Inhabited<DecisionOne | UntaggedMember, Err>>().type.toBe<Workflow.UntaggedDecision>()
+  })
+
+  it('Should_RefuseANonStringTag_When_TheMemberCannotBeDispatchedOn', () => {
+    expect<Workflow.Inhabited<DecisionOne | NumericTagMember, Err>>().type.toBe<Workflow.UntaggedDecision>()
+  })
+
+  it('Should_KeepPrecedence_When_TheNeverLegsFire', () => {
+    expect<Workflow.Inhabited<never, Err>>().type.toBe<Workflow.UninhabitedDecision>()
+    expect<Workflow.Inhabited<Dec | Alt, never>>().type.toBe<Workflow.UninhabitedError>()
+  })
+
+  it('Should_ReAnchorTheCollapseClaim_When_TheUnionWearsTheFamilyBrand', () => {
+    // The pre-existing claim pinned unbranded interfaces to `unknown`; under the shape legs the
+    // same unbranded union resolves to the unshared-TypeId marker, and the collapse is asserted
+    // on the branded fixture union instead — observed red against the old machinery.
+    expect<Workflow.Workflow<Cmd, Decision, DecisionError>>().type.toBe<
+      ((command: Cmd) => Result<Decision, DecisionError>) & Workflow.WorkflowBrand
+    >()
   })
 })
 

@@ -43,6 +43,65 @@ export interface UntaggedError {
     'this error carries no _tag the consumer can dispatch on; declare it as an S.TaggedError'
 }
 
+/** Marker a workflow resolves to when its decision channel is a single variant. A decision chooses between at least two distinguishable outcomes. */
+export interface SingleVariantDecision {
+  readonly __WORKFLOW_DECISION_CHANNEL_HAS_ONE_VARIANT__:
+    'this workflow decides one outcome, which is not a decision; add the variant it chooses between, or move the function to a *.kernel.ts'
+}
+
+/** Marker a workflow resolves to when a decision variant carries no tag to dispatch on. */
+export interface UntaggedDecision {
+  readonly __WORKFLOW_DECISION_CHANNEL_CARRIES_NO_TAG__:
+    'a decision variant carries no _tag the consumer can dispatch on; declare the variants as S.TaggedClass instances'
+}
+
+/** Marker a workflow resolves to when its decision variants do not share one TypeId — the family brand. */
+export interface UnsharedTypeId {
+  readonly __WORKFLOW_DECISION_VARIANTS_DO_NOT_SHARE_A_TYPE_ID__:
+    'the decision variants must share one TypeId — a Symbol.for family brand on each variant class'
+}
+
+/**
+ * The intersection of the union members, read by the decision-shape tests.
+ */
+type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (k: infer I) => void ? I
+  : never
+
+/**
+ * `false` when `T` is exactly one member — the whole union is assignable to that member — `true`
+ * when `T` is a genuine union whose members each fail to consume the whole. The distribution
+ * runs over `U`, the full union captured before the check, so the tested side stays whole.
+ */
+type AtLeastTwoDistinct<T, U = T> = U extends unknown ? [T] extends [U] ? false : true : never
+
+/**
+ * `true` when every member carries a `_tag` holding a string; a member with no `_tag`, or a
+ * non-string one, turns the distributive result into `boolean`.
+ */
+type TaggedMembers<D> = D extends unknown ? '_tag' extends keyof D ? [D['_tag']] extends [string] ? true : false : false
+  : never
+
+/**
+ * The symbol-keyed properties every member carries. A key `K` qualifies as the shared TypeId
+ * only when its intersected value is the key type itself — the `readonly [T]: T` family-brand
+ * idiom — and every member satisfies the property. Anything else filters the key out. The
+ * `keyof` of the filtered map is empty exactly when no symbol-keyed family brand is common to
+ * every member.
+ */
+type SharedTypeId<D, I = UnionToIntersection<D>> = [
+  keyof {
+    [K in keyof I as I[K] extends K ? (D extends { readonly [P in K]: K } ? K : never) : never]: 0
+  },
+] extends [never] ? UnsharedTypeId : unknown
+
+/**
+ * `unknown` when the decision channel is a tagged union of at least two variants sharing one
+ * TypeId, the marker naming the first defect otherwise. Shape only — presence, not force.
+ */
+type DecisionShape<D> = AtLeastTwoDistinct<D> extends false ? SingleVariantDecision
+  : boolean extends TaggedMembers<D> ? UntaggedDecision
+  : SharedTypeId<D>
+
 /**
  * A decider whose channels are both inhabited, or the marker naming which channel is not.
  *
@@ -79,7 +138,7 @@ type DispatchableTag<E> = '_tag' extends keyof E ? [E['_tag']] extends [string] 
  */
 export type Inhabited<Decision, DecisionError> = [Decision] extends [never] ? UninhabitedDecision
   : [DecisionError] extends [never] ? UninhabitedError
-  : DispatchableTag<DecisionError>
+  : DecisionShape<Decision> & DispatchableTag<DecisionError>
 
 /**
  * Builds a workflow from the command's schema class and a decider over that class's
