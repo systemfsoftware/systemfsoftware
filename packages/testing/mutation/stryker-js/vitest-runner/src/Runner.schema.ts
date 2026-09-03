@@ -99,3 +99,21 @@ export const VitestNodeModuleSchema = S.declare(
 
 /** The `package.json` document of a resolved vitest package. */
 export const VitestPackageSchema = S.Struct({ version: S.String })
+
+export class VitestDryRunCommand extends S.TaggedClass<VitestDryRunCommand>()('VitestDryRunCommand', {
+  rawTests: S.Array(S.Unknown),
+  projectRoot: S.String,
+  hasExternalError: S.Boolean,
+  externalErrorText: S.String,
+}) {}
+
+export class DryRunComplete extends S.TaggedClass<DryRunComplete>()('Complete', {
+  testsJson: S.String,
+}) {}
+
+export class DryRunExternalError extends S.TaggedClass<DryRunExternalError>()('Error', {
+  testsJson: S.String,
+  errorMessage: S.String,
+}) {}
+
+export type VitestDryRunOutcome = DryRunComplete | DryRunExternalError

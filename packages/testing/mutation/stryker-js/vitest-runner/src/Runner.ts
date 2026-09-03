@@ -2,9 +2,9 @@
  * Runner — the vitest test-runner capability.
  *
  * Wraps Vitest's node API as an Effect `TestRunner` service: start/close
- * lifecycle, dry/mutant execution with Cell pipelines, coverage collection,
+ * lifecycle, dry/mutant execution, coverage collection,
  * and sandbox self-alias resolution. Pure result mapping is delegated to
- * `VitestDryRun.workflow.ts` and `VitestMutantRun.workflow.ts`; schema
+ * `VitestDryRun.kernel.ts` and `VitestMutantRun.workflow.ts`; schema
  * declarations live in `Runner.schema.ts`.
  */
 import type * as PathType from 'effect/Path'
@@ -23,7 +23,6 @@ import {
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import {
   type BaseTestResult,
-  type DryRunOptions,
   DryRunResult,
   type MutantCoverage as DryRunMutantCoverage,
   type MutantRunOptions,
@@ -38,6 +37,7 @@ import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Ref from 'effect/Ref'
@@ -51,12 +51,13 @@ import {
   MutantCoverageMetaSchema,
   MutantCoverageShapeSchema,
   PackageManifest,
+  VitestDryRunCommand,
+  type VitestDryRunOutcome,
   VitestNodeModuleSchema,
   VitestPackageSchema,
   VitestSectionSchema,
 } from './Runner.schema.js'
-import { VitestDryRunCommand, vitestDryRunWorkflow } from './VitestDryRun.workflow.js'
-import type { VitestDryRunError, VitestDryRunOutput } from './VitestDryRun.workflow.js'
+import { decideVitestDryRun } from './VitestDryRun.kernel.js'
 import { VitestMutantRunCommand, vitestMutantRunWorkflow } from './VitestMutantRun.workflow.js'
 import type { VitestMutantRunError, VitestMutantRunOutput } from './VitestMutantRun.workflow.js'
 
@@ -694,76 +695,6 @@ export const makeVitestRunnerLayer = (
           }),
       }
 
-      const dryRunCell = Cell.layer({
-        read: (command: DryRunOptions) =>
-          Effect.gen(function*() {
-            const harness = yield* VitestHarness
-            yield* harness.setMode('dry-run')
-            const hasTestFiles = testFilesProvided(command)
-            const filter: RunFilter = (() => {
-              if (hasTestFiles) {
-                return {
-                  testFiles: [...(command.testFiles ?? [])],
-                  relatedFiles: (() => {
-                    if (command.files !== undefined) return [...command.files]
-                    return undefined
-                  })(),
-                }
-              }
-              return {
-                relatedFiles: (() => {
-                  if (command.files !== undefined) return [...command.files]
-                  return undefined
-                })(),
-              }
-            })()
-            const { rawTests, hasExternalError, externalErrorText } = yield* collectRaw(filter satisfies RunFilter)
-            return { rawTests, projectRoot: input.sandboxDirectory, hasExternalError, externalErrorText }
-          }),
-        decode: (
-          raw: {
-            readonly rawTests: readonly unknown[]
-            readonly projectRoot: string
-            readonly hasExternalError: boolean
-            readonly externalErrorText: string
-          },
-        ) =>
-          Result.succeed(
-            new VitestDryRunCommand({
-              rawTests: raw.rawTests,
-              projectRoot: raw.projectRoot,
-              hasExternalError: raw.hasExternalError,
-              externalErrorText: raw.externalErrorText,
-            }),
-          ),
-        decide: vitestDryRunWorkflow,
-        encode: (outcome: Result.Result<VitestDryRunOutput, VitestDryRunError>) =>
-          Result.match(outcome, {
-            onFailure: (e) => ({ status: 'error' as const, errorMessage: e.message }) satisfies DryRunResult,
-            onSuccess: (out) => {
-              const raw: unknown = JSON.parse(out.testsJson)
-              let tests: readonly TestResult[]
-              if (Array.isArray(raw)) tests = raw.filter(isTestResultLike)
-              else tests = []
-              if (out.status === 'Error') {
-                return { status: 'error' as const, errorMessage: out.errorMessage ?? 'unknown' } satisfies DryRunResult
-              }
-              return { status: 'complete' as const, tests } satisfies DryRunResult
-            },
-          }),
-        write: (output: DryRunResult, _raw: unknown) =>
-          Effect.gen(function*() {
-            if (output.status === 'complete') {
-              const mutantCoverage = yield* readMutantCoverage.pipe(
-                Effect.mapError((cause) =>
-                  new TestRunnerFailed({ runnerName: 'vitest', phase: 'dryRun', cause: errorToString(cause) })
-                ),
-              )
-              if (mutantCoverage !== undefined) return { ...output, mutantCoverage } satisfies DryRunResult
-            }
-            return output
-          }),
-      })
       const mutantRunCell = Cell.layer({
         read: (command: MutantRunOptions) =>
           Effect.gen(function*() {
@@ -855,36 +786,100 @@ export const makeVitestRunnerLayer = (
                 parsed = []
               }
               const nrOfTests: number = parsed.length
-              if (out.status === 'Error') {
-                return {
-                  status: 'error' as const,
-                  errorMessage: out.errorMessage ?? 'unknown',
-                } satisfies MutantRunResult
-              }
-              if (out.status === 'Timeout') {
-                if (out.reason === undefined) {
-                  return { status: 'timeout' as const } satisfies MutantRunResult
-                }
-                return { status: 'timeout' as const, reason: out.reason } satisfies MutantRunResult
-              }
-              if (out.status === 'Killed') {
-                return {
-                  status: 'killed' as const,
-                  failureMessage: out.failureMessage ?? '',
-                  killedBy: (() => {
-                    if (out.killerIds !== undefined) return [...out.killerIds]
-                    return []
-                  })(),
-                  nrOfTests,
-                } satisfies MutantRunResult
-              }
-              return { status: 'survived' as const, nrOfTests } satisfies MutantRunResult
+              return Match.value(out).pipe(
+                Match.tag(
+                  'Error',
+                  (error) =>
+                    ({
+                      status: 'error' as const,
+                      errorMessage: error.errorMessage ?? 'unknown',
+                    }) satisfies MutantRunResult,
+                ),
+                Match.tag('Timeout', (timeout) =>
+                  (() => {
+                    if (timeout.reason === undefined) {
+                      return { status: 'timeout' as const } satisfies MutantRunResult
+                    }
+                    return { status: 'timeout' as const, reason: timeout.reason } satisfies MutantRunResult
+                  })()),
+                Match.tag(
+                  'Killed',
+                  (killed) =>
+                    ({
+                      status: 'killed' as const,
+                      failureMessage: killed.failureMessage ?? '',
+                      killedBy: (() => {
+                        if (killed.killerIds !== undefined) return [...killed.killerIds]
+                        return []
+                      })(),
+                      nrOfTests,
+                    }) satisfies MutantRunResult,
+                ),
+                Match.tag(
+                  'Survived',
+                  () => ({ status: 'survived' as const, nrOfTests }) satisfies MutantRunResult,
+                ),
+                Match.exhaustive,
+              )
             },
           }),
         write: (output: MutantRunResult, _raw: unknown) => Effect.succeed(output),
       })
       const dryRun: TestRunner['Service']['dryRun'] = (options) =>
-        Cell.run(dryRunCell, options).pipe(
+        Effect.gen(function*() {
+          const harness = yield* VitestHarness
+          yield* harness.setMode('dry-run')
+          const hasTestFiles = testFilesProvided(options)
+          const filter: RunFilter = (() => {
+            if (hasTestFiles) {
+              return {
+                testFiles: [...(options.testFiles ?? [])],
+                relatedFiles: (() => {
+                  if (options.files !== undefined) return [...options.files]
+                  return undefined
+                })(),
+              }
+            }
+            return {
+              relatedFiles: (() => {
+                if (options.files !== undefined) return [...options.files]
+                return undefined
+              })(),
+            }
+          })()
+          const { rawTests, hasExternalError, externalErrorText } = yield* collectRaw(filter satisfies RunFilter)
+          const decision: VitestDryRunOutcome = decideVitestDryRun(
+            new VitestDryRunCommand({
+              rawTests,
+              projectRoot: input.sandboxDirectory,
+              hasExternalError,
+              externalErrorText,
+            }),
+          )
+          const result: DryRunResult = Match.value(decision).pipe(
+            Match.tag(
+              'Error',
+              (error) => ({ status: 'error' as const, errorMessage: error.errorMessage }) satisfies DryRunResult,
+            ),
+            Match.tag('Complete', (complete) => {
+              const raw: unknown = JSON.parse(complete.testsJson)
+              let tests: readonly TestResult[]
+              if (Array.isArray(raw)) tests = raw.filter(isTestResultLike)
+              else tests = []
+              return { status: 'complete' as const, tests } satisfies DryRunResult
+            }),
+            Match.exhaustive,
+          )
+          if (result.status === 'complete') {
+            const mutantCoverage = yield* readMutantCoverage.pipe(
+              Effect.mapError((cause) =>
+                new TestRunnerFailed({ runnerName: 'vitest', phase: 'dryRun', cause: errorToString(cause) })
+              ),
+            )
+            if (mutantCoverage !== undefined) return { ...result, mutantCoverage } satisfies DryRunResult
+          }
+          return result
+        }).pipe(
           Effect.provideService(VitestHarness, harnessImpl),
           Effect.mapError((cause) => ((() => {
             if (cause instanceof TestRunnerFailed) return cause

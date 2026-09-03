@@ -1,38 +1,18 @@
 /**
- * VitestDryRun workflow — pure result-mapping for the dry-run phase.
+ * VitestDryRun kernel — pure result-mapping for the dry-run phase.
  *
- * Every function here is pure: it maps raw vitest task payloads to
- * Stryker run results without touching the filesystem or spawning
- * processes. Impure orchestration lives in `Runner.ts`.
+ * A total mapping, not a workflow: every input maps to a verdict (complete or
+ * external error) and no abort path exists, so the outcome is a bare tagged
+ * union rather than an Either. Every function here is pure: it maps raw vitest
+ * task payloads to Stryker run results without touching the filesystem or
+ * spawning processes. Impure orchestration lives in `Runner.ts`.
  */
-import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
-import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
 import type { TestStatus } from '@systemfsoftware/stryker-js/TestRunner'
-
-// ---------------------------------------------------------------------------
-// Command / Output
-// ---------------------------------------------------------------------------
-
-export class VitestDryRunCommand extends S.TaggedClass<VitestDryRunCommand>()('VitestDryRunCommand', {
-  rawTests: S.Array(S.Unknown),
-  projectRoot: S.String,
-  hasExternalError: S.Boolean,
-  externalErrorText: S.String,
-}) {}
-
-export class VitestDryRunOutput extends S.TaggedClass<VitestDryRunOutput>()('VitestDryRunOutput', {
-  status: S.Literals(['Complete', 'Error']),
-  testsJson: S.String,
-  errorMessage: S.optional(S.String),
-}) {}
-
-export class VitestDryRunError extends S.TaggedError<VitestDryRunError>()('VitestDryRunError', {
-  message: S.String,
-}) {}
+import { DryRunComplete, DryRunExternalError, VitestDryRunCommand, type VitestDryRunOutcome } from './Runner.schema.js'
 
 type TaskState = 'pass' | 'fail' | 'skip' | 'todo' | 'run' | 'queued' | 'only' | undefined
 
@@ -333,31 +313,27 @@ const convertTestRaw = (
   )
 }
 
-const decideVitestDryRun = (command: VitestDryRunCommand): Result.Result<VitestDryRunOutput, VitestDryRunError> => {
+export const decideVitestDryRun = (command: VitestDryRunCommand): VitestDryRunOutcome => {
   const tests = command.rawTests.map((t) => convertTestRaw(t, command.projectRoot))
   const hasFailure = tests.some((t) => t.status === 'failed')
   return Match.value({ hasFailure, hasExternalError: command.hasExternalError }).pipe(
+    Match.when({ hasFailure: false, hasExternalError: true }, () =>
+      DryRunExternalError.make({
+        testsJson: JSON.stringify(tests),
+        errorMessage: `An error occurred outside of a test run: ${command.externalErrorText}`,
+      })),
     Match.when(
-      { hasFailure: false, hasExternalError: true },
-      (): Result.Result<VitestDryRunOutput, VitestDryRunError> =>
-        Result.succeed(
-          VitestDryRunOutput.make({
-            status: 'Error',
-            testsJson: JSON.stringify(tests),
-            errorMessage: `An error occurred outside of a test run: ${command.externalErrorText}`,
-          }),
-        ),
+      { hasFailure: false, hasExternalError: false },
+      () => DryRunComplete.make({ testsJson: JSON.stringify(tests) }),
     ),
-    Match.orElse((): Result.Result<VitestDryRunOutput, VitestDryRunError> =>
-      Result.succeed(
-        VitestDryRunOutput.make({
-          status: 'Complete',
-          testsJson: JSON.stringify(tests),
-          errorMessage: undefined,
-        }),
-      )
+    Match.when(
+      { hasFailure: true, hasExternalError: false },
+      () => DryRunComplete.make({ testsJson: JSON.stringify(tests) }),
     ),
+    Match.when(
+      { hasFailure: true, hasExternalError: true },
+      () => DryRunComplete.make({ testsJson: JSON.stringify(tests) }),
+    ),
+    Match.exhaustive,
   )
 }
-
-export const vitestDryRunWorkflow = Workflow.make(VitestDryRunCommand, decideVitestDryRun)

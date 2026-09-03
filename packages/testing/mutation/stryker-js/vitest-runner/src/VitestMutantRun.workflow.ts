@@ -23,18 +23,44 @@ export class VitestMutantRunCommand extends S.TaggedClass<VitestMutantRunCommand
   reportAllKillers: S.Boolean,
 }) {}
 
-export class VitestMutantRunOutput extends S.TaggedClass<VitestMutantRunOutput>()('VitestMutantRunOutput', {
-  status: S.Literals(['Killed', 'Survived', 'Timeout', 'Error']),
+const VitestMutantRunTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-vitest-runner/VitestMutantRun')
+type VitestMutantRunTypeId = typeof VitestMutantRunTypeId
+
+export class MutantKilled extends S.TaggedClass<MutantKilled>()('Killed', {
   testsJson: S.String,
-  errorMessage: S.optional(S.String),
   killerIds: S.optional(S.Array(S.String)),
   failureMessage: S.optional(S.String),
+}) {
+  readonly [VitestMutantRunTypeId] = VitestMutantRunTypeId
+}
+
+export class MutantSurvived extends S.TaggedClass<MutantSurvived>()('Survived', {
+  testsJson: S.String,
+}) {
+  readonly [VitestMutantRunTypeId] = VitestMutantRunTypeId
+}
+
+export class MutantTimeout extends S.TaggedClass<MutantTimeout>()('Timeout', {
+  testsJson: S.String,
   reason: S.optional(S.String),
-}) {}
+}) {
+  readonly [VitestMutantRunTypeId] = VitestMutantRunTypeId
+}
+
+export class MutantDryError extends S.TaggedClass<MutantDryError>()('Error', {
+  testsJson: S.String,
+  errorMessage: S.optional(S.String),
+}) {
+  readonly [VitestMutantRunTypeId] = VitestMutantRunTypeId
+}
+
+export type VitestMutantRunOutput = MutantKilled | MutantSurvived | MutantTimeout | MutantDryError
 
 export class VitestMutantRunError extends S.TaggedError<VitestMutantRunError>()('VitestMutantRunError', {
   message: S.String,
-}) {}
+}) {
+  readonly [VitestMutantRunTypeId] = VitestMutantRunTypeId
+}
 
 export class VitestDryRunCommand extends S.TaggedClass<VitestDryRunCommand>()('VitestDryRunCommand', {
   rawTests: S.Array(S.Unknown),
@@ -402,12 +428,8 @@ const decideVitestMutantRun = (
       hit,
     ): Result.Result<VitestMutantRunOutput, VitestMutantRunError> =>
       Result.succeed(
-        VitestMutantRunOutput.make({
-          status: 'Timeout',
+        MutantTimeout.make({
           testsJson: '[]',
-          errorMessage: undefined,
-          killerIds: undefined,
-          failureMessage: undefined,
           reason: hit.value,
         }),
       )),
@@ -435,12 +457,9 @@ const decideVitestMutantRun = (
           return Match.value(dry.status === 'Error').pipe(
             Match.when(true, (): Result.Result<VitestMutantRunOutput, VitestMutantRunError> =>
               Result.succeed(
-                VitestMutantRunOutput.make({
-                  status: 'Error',
+                MutantDryError.make({
                   testsJson: '[]',
                   errorMessage: dry.errorMessage,
-                  killerIds: undefined,
-                  failureMessage: undefined,
                 }),
               )),
             Match.when(false, (): Result.Result<VitestMutantRunOutput, VitestMutantRunError> => {
@@ -470,10 +489,8 @@ const decideVitestMutantRun = (
                           onSome: (k): string | undefined => k.failureMessage,
                         })
                         return Result.succeed(
-                          VitestMutantRunOutput.make({
-                            status: 'Killed',
+                          MutantKilled.make({
                             testsJson: dry.testsJson,
-                            errorMessage: undefined,
                             killerIds: killed.map((t) => t.id),
                             failureMessage,
                           }),
@@ -490,10 +507,8 @@ const decideVitestMutantRun = (
                             true,
                             (): Result.Result<VitestMutantRunOutput, VitestMutantRunError> =>
                               Result.succeed(
-                                VitestMutantRunOutput.make({
-                                  status: 'Killed',
+                                MutantKilled.make({
                                   testsJson: dry.testsJson,
-                                  errorMessage: undefined,
                                   killerIds: Option.match(first, {
                                     onNone: (): readonly string[] | undefined => undefined,
                                     onSome: (k): readonly string[] => [k.id],
@@ -506,10 +521,8 @@ const decideVitestMutantRun = (
                             false,
                             (): Result.Result<VitestMutantRunOutput, VitestMutantRunError> =>
                               Result.succeed(
-                                VitestMutantRunOutput.make({
-                                  status: 'Killed',
+                                MutantKilled.make({
                                   testsJson: dry.testsJson,
-                                  errorMessage: undefined,
                                   killerIds: Option.getOrUndefined(
                                     Option.match(first, {
                                       onNone: (): Option.Option<readonly string[]> => Option.none(),
@@ -528,12 +541,8 @@ const decideVitestMutantRun = (
                 ),
                 Match.when(false, (): Result.Result<VitestMutantRunOutput, VitestMutantRunError> =>
                   Result.succeed(
-                    VitestMutantRunOutput.make({
-                      status: 'Survived',
+                    MutantSurvived.make({
                       testsJson: dry.testsJson,
-                      errorMessage: undefined,
-                      killerIds: undefined,
-                      failureMessage: undefined,
                     }),
                   )),
                 Match.exhaustive,
