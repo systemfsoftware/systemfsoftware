@@ -11,15 +11,17 @@ export const catalog: {
     readonly laws: typeof laws;
     readonly contract: typeof contract;
     readonly refuseHomes: {
-        readonly invalidSocketPath: <A>(home: (socketPath: string) => A) => RefuseHomes<A>;
-        readonly sshParentConflict: <A>(home: (sshTreePath: string) => A) => RefuseHomes<A>;
-        readonly reservedEnvFile: <A>(home: (envFilePath: string) => A) => RefuseHomes<A>;
-        readonly quadletDir: <A>(home: (quadletPath: string) => A) => RefuseHomes<A>;
+        readonly invalidSocketPath: <A>(home: (path: string) => A) => RefuseHomes<A>;
+        readonly sshParentConflict: <A>(home: (path: string) => A) => RefuseHomes<A>;
+        readonly reservedEnvFile: <A>(home: (path: string) => A) => RefuseHomes<A>;
+        readonly quadletDir: <A>(home: (path: string) => A) => RefuseHomes<A>;
     };
 };
 
+// Warning: (ae-forgotten-export) The symbol "LiteralBounded" needs to be exported by the entry point index.d.ts
+//
 // @public (undocumented)
-export const contract: <A, R>(cases: readonly PublishedCase<A, R>[]) => PublishedCases<A, R>;
+export const contract: <A, R, const E extends LiteralBounded<E>>(cases: readonly PublishedCase<A, R, E>[]) => PublishedCases<A, R>;
 
 // @public (undocumented)
 export const laws: <A, R>(spec: LawsSpec<A, R>) => Promise<void>;
@@ -41,23 +43,25 @@ export interface LawsSpec<A, R> {
 }
 
 // @public (undocumented)
-export interface PublishedCase<A, R> {
+export interface PublishedCase<A, R, E extends LiteralBounded<E>> {
     // (undocumented)
-    readonly expect: Readonly<Record<string, unknown>>;
+    readonly expect: E;
     // (undocumented)
     readonly input: A;
     // (undocumented)
     readonly label: string;
     // (undocumented)
-    readonly project: (result: R) => Readonly<Record<string, unknown>>;
+    readonly project: (result: R) => Record<string, unknown>;
 }
 
 // @public (undocumented)
 export interface PublishedCases<A, R> {
     // (undocumented)
     readonly [publishedCasesBrand]: 'published-cases';
+    // Warning: (ae-forgotten-export) The symbol "PublishedCaseRuntime" needs to be exported by the entry point index.d.ts
+    //
     // (undocumented)
-    readonly cases: readonly PublishedCase<A, R>[];
+    readonly cases: readonly PublishedCaseRuntime<A, R>[];
 }
 
 // @public (undocumented)
@@ -65,12 +69,12 @@ export type RefuseHomes<A> = Arbitrary<A> & {
     readonly [refuseHomesBrand]: 'refuse-homes';
 };
 
-// @public
+// @public (undocumented)
 export const refuseHomes: {
-    readonly invalidSocketPath: <A>(home: (socketPath: string) => A) => RefuseHomes<A>;
-    readonly sshParentConflict: <A>(home: (sshTreePath: string) => A) => RefuseHomes<A>;
-    readonly reservedEnvFile: <A>(home: (envFilePath: string) => A) => RefuseHomes<A>;
-    readonly quadletDir: <A>(home: (quadletPath: string) => A) => RefuseHomes<A>;
+    readonly invalidSocketPath: <A>(home: (path: string) => A) => RefuseHomes<A>;
+    readonly sshParentConflict: <A>(home: (path: string) => A) => RefuseHomes<A>;
+    readonly reservedEnvFile: <A>(home: (path: string) => A) => RefuseHomes<A>;
+    readonly quadletDir: <A>(home: (path: string) => A) => RefuseHomes<A>;
 };
 
 // (No @packageDocumentation comment for this package)
