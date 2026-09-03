@@ -24,7 +24,6 @@ import * as S from 'effect/Schema'
 import * as CliError from 'effect/unstable/cli/CliError'
 import {
   type FailedRunOutcome,
-  RunOk,
   RunOutcomeCommand,
   type RunOutcomeDecision,
   type RunOutcomeError,
@@ -541,10 +540,10 @@ export function buildErrorEnvelope(
     onFailure: (failure) => shapeEnvelope(failure, captured),
     onSuccess: (decision) =>
       Match.value(decision).pipe(
-        Match.when(
-          (d): d is Exclude<RunOutcomeDecision, RunOk> => !(d instanceof RunOk),
-          (failed) => shapeEnvelope(failed, captured),
-        ),
+        Match.tag('RunParseFailed', (failed) => shapeEnvelope(failed, captured)),
+        Match.tag('RunSurvivorsRejected', (failed) => shapeEnvelope(failed, captured)),
+        Match.tag('RunConfigFailed', (failed) => shapeEnvelope(failed, captured)),
+        Match.tag('RunFailed', (failed) => shapeEnvelope(failed, captured)),
         Match.tag('RunOk', () => ({
           schemaVersion: STREAM_SCHEMA_VERSION,
           code,
