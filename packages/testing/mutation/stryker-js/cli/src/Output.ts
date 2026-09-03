@@ -32,8 +32,13 @@ import * as Stdio from 'effect/Stdio'
 import * as Stream from 'effect/Stream'
 import * as CliError from 'effect/unstable/cli/CliError'
 import { readCapturedConsole, shapeEnvelope } from './Envelope.js'
-import { ModeConflictError, ResolveModeCommand, resolveModeWorkflow } from './Output.workflow.js'
-import type { RunOk, RunOutcomeError } from './RunOutcome.workflow.js'
+import {
+  ModeConflictError,
+  ResolveModeCommand,
+  type ResolveModeDecision,
+  resolveModeWorkflow,
+} from './Output.workflow.js'
+import type { FailedRunOutcome, RunOutcomeDecision, RunOutcomeError } from './RunOutcome.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 /**
  * The wire protocol constants of the machine-mode NDJSON run-event stream.
@@ -408,7 +413,19 @@ export function resolveMode(input: ModeInput): Result.Result<ResolvedMode, CliEr
       }),
     )
   }
-  return Result.succeed(result.success)
+  return Result.succeed(
+    Match.value(result.success).pipe(
+      Match.tag(
+        'HumanOutput',
+        (human): ResolvedMode => ({ mode: 'human', signal: human.signal, stdoutIsTTY: human.stdoutIsTTY }),
+      ),
+      Match.tag(
+        'MachineOutput',
+        (machine): ResolvedMode => ({ mode: 'machine', signal: machine.signal, stdoutIsTTY: machine.stdoutIsTTY }),
+      ),
+      Match.exhaustive,
+    ),
+  )
 }
 
 /**
@@ -927,7 +944,19 @@ export const outputModeProbeCell = Cell.layer({
       })(),
     ),
   decide: resolveModeWorkflow,
-  encode: (outcome: Result.Result<ResolvedMode, ModeConflictError>) => outcome,
+  encode: (outcome: Result.Result<ResolveModeDecision, ModeConflictError>) =>
+    Result.map(outcome, (decision): ResolvedMode =>
+      Match.value(decision).pipe(
+        Match.tag(
+          'HumanOutput',
+          (human): ResolvedMode => ({ mode: 'human', signal: human.signal, stdoutIsTTY: human.stdoutIsTTY }),
+        ),
+        Match.tag(
+          'MachineOutput',
+          (machine): ResolvedMode => ({ mode: 'machine', signal: machine.signal, stdoutIsTTY: machine.stdoutIsTTY }),
+        ),
+        Match.exhaustive,
+      )),
   write: (outcome) =>
     Result.match(outcome, {
       onFailure: (error) => Effect.fail(error),
@@ -1010,53 +1039,71 @@ export function emitNullScoreVerdict(
  * `--dryRunOnly` early return): then a null-score `verdict` closes the
  * stream so the last stdout line is always a terminal event (R5).
  */
+function offerFailureEnvelope(
+  stream: RunEventStream,
+  failed: FailedRunOutcome,
+  captured: string,
+): Effect.Effect<void, never, never> {
+  const envelope = shapeEnvelope(failed, captured)
+  return Queue.offer(
+    stream.queue,
+    RunFailed.make({
+      schemaVersion: envelope.schemaVersion,
+      code: envelope.code,
+      error: envelope.error,
+      remediation: envelope.remediation,
+    }),
+  )
+}
+
 export function emitMachineModeOutput(
   stream: RunEventStream,
   mode: ResolvedMode,
-  outcome: Result.Result<RunOk, RunOutcomeError>,
+  outcome: Result.Result<RunOutcomeDecision, RunOutcomeError>,
   basePath: string,
   pathService: Path.Path,
 ): Effect.Effect<void, never, never> {
   return Effect.gen(function*() {
     const captured = readCapturedConsole()
     if (Result.isSuccess(outcome)) {
-      if (outcome.success.help) {
-        yield* Queue.offer(
-          stream.queue,
-          HelpRendered.make({
-            schemaVersion: STREAM_SCHEMA_VERSION,
-            code: 0,
-            help: captured,
-          }),
-        )
-        return
-      }
-      if (captured.length > 0) {
-        yield* Queue.offer(
-          stream.queue,
-          HelpRendered.make({
-            schemaVersion: STREAM_SCHEMA_VERSION,
-            code: 0,
-            help: captured,
-          }),
-        )
-        return
-      }
-      if (stream.isOpen()) {
-        const defaults = yield* defaultOptions
-        yield* emitNullScoreVerdict(stream, mode, defaults.thresholds, {}, basePath, pathService)
-      }
-      return
+      const decision = outcome.success
+      return yield* Match.value(decision).pipe(
+        Match.tag('RunOk', (ok): Effect.Effect<void, never, never> =>
+          Effect.gen(function*() {
+            if (ok.help) {
+              yield* Queue.offer(
+                stream.queue,
+                HelpRendered.make({
+                  schemaVersion: STREAM_SCHEMA_VERSION,
+                  code: 0,
+                  help: captured,
+                }),
+              )
+              return
+            }
+            if (captured.length > 0) {
+              yield* Queue.offer(
+                stream.queue,
+                HelpRendered.make({
+                  schemaVersion: STREAM_SCHEMA_VERSION,
+                  code: 0,
+                  help: captured,
+                }),
+              )
+              return
+            }
+            if (stream.isOpen()) {
+              const defaults = yield* defaultOptions
+              yield* emitNullScoreVerdict(stream, mode, defaults.thresholds, {}, basePath, pathService)
+            }
+          })),
+        Match.tag('RunParseFailed', (failed) => offerFailureEnvelope(stream, failed, captured)),
+        Match.tag('RunSurvivorsRejected', (failed) => offerFailureEnvelope(stream, failed, captured)),
+        Match.tag('RunConfigFailed', (failed) => offerFailureEnvelope(stream, failed, captured)),
+        Match.tag('RunFailed', (failed) => offerFailureEnvelope(stream, failed, captured)),
+        Match.exhaustive,
+      )
     }
-    const envelope = shapeEnvelope(outcome.failure, captured)
-    yield* Queue.offer(
-      stream.queue,
-      RunFailed.make({
-        schemaVersion: envelope.schemaVersion,
-        code: envelope.code,
-        error: envelope.error,
-        remediation: envelope.remediation,
-      }),
-    )
+    return yield* offerFailureEnvelope(stream, outcome.failure, captured)
   })
 }

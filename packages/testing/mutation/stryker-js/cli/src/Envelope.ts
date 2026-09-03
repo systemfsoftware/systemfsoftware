@@ -22,15 +22,28 @@ import * as Predicate from 'effect/Predicate'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import * as CliError from 'effect/unstable/cli/CliError'
-import { type RunOk, RunOutcomeCommand, type RunOutcomeError, runOutcomeWorkflow } from './RunOutcome.workflow.js'
+import {
+  type FailedRunOutcome,
+  RunOutcomeCommand,
+  type RunOutcomeDecision,
+  type RunOutcomeError,
+  runOutcomeWorkflow,
+} from './RunOutcome.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 import { SurvivorsRejection } from './Survivors.workflow.js'
 
 const CONFIG_CODE = 2
 
-export function runOutcomeCode(result: Result.Result<RunOk, RunOutcomeError>): number {
+export function runOutcomeCode(result: Result.Result<RunOutcomeDecision, FailedRunOutcome>): number {
   if (Result.isSuccess(result)) {
-    return 0
+    return Match.value(result.success).pipe(
+      Match.tag('RunOk', () => 0),
+      Match.tag('RunParseFailed', () => CONFIG_CODE),
+      Match.tag('RunSurvivorsRejected', () => CONFIG_CODE),
+      Match.tag('RunConfigFailed', () => CONFIG_CODE),
+      Match.tag('RunFailed', (failed) => failed.code),
+      Match.exhaustive,
+    )
   }
   return Match.value(result.failure).pipe(
     Match.tag('RunInterrupted', (error) => error.code),
@@ -441,7 +454,7 @@ export function gatherRunOutcome(
   })
 }
 
-function errorText(error: RunOutcomeError, captured: string): string {
+function errorText(error: FailedRunOutcome, captured: string): string {
   return Match.value(error).pipe(
     Match.tag('RunParseFailed', (failed) => {
       if (failed.unrecognized !== undefined) {
@@ -478,7 +491,7 @@ function errorText(error: RunOutcomeError, captured: string): string {
   )
 }
 
-function remediationText(error: RunOutcomeError): string {
+function remediationText(error: FailedRunOutcome): string {
   return Match.value(error).pipe(
     Match.tag('RunInterrupted', (failed) => {
       if (failed.code > 128) {
@@ -504,7 +517,7 @@ function remediationText(error: RunOutcomeError): string {
   )
 }
 
-export function shapeEnvelope(error: RunOutcomeError, captured: string): ErrorEnvelope {
+export function shapeEnvelope(error: FailedRunOutcome, captured: string): ErrorEnvelope {
   return {
     schemaVersion: STREAM_SCHEMA_VERSION,
     code: runOutcomeCode(Result.fail(error)),
@@ -517,7 +530,7 @@ export function classifyRunOutcome(
   exit: Exit.Exit<unknown, unknown>,
   signal: number | null,
   argv: readonly string[],
-): Result.Result<RunOk, RunOutcomeError> {
+): Result.Result<RunOutcomeDecision, RunOutcomeError> {
   return runOutcomeWorkflow(gatherRunOutcome(exit, signal, argv))
 }
 
