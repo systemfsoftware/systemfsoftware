@@ -632,29 +632,42 @@ function isValidExpression(path: TraversePath): boolean {
   }
 }
 
-/**
- * Places the mutants with a conditional expression: `global.activeMutant === 1? mutatedCode : originalCode`;
- */
+export function unwrapParenthesizedExpression(node: Node): Node {
+  let current = node
+  while (nodeType(current) === 'ParenthesizedExpression') {
+    const wrapper: unknown = current
+    if (typeof wrapper !== 'object' || wrapper === null || !('expression' in wrapper)) {
+      break
+    }
+    const inner = wrapper.expression as Node
+    if (inner === undefined || inner === null) {
+      break
+    }
+    current = inner
+  }
+  return current
+}
+
 export const expressionMutantPlacer: MutantPlacer = {
   name: 'expressionMutantPlacer',
   canPlace(path) {
     return path.isExpression() && isValidExpression(path)
   },
   place(path, appliedMutants) {
-    // Make sure anonymous functions and classes keep their 'name' property
     let expression = nameIfAnonymous(path)
-
-    // Add the mutation coverage expression
     expression = mutationCoverageSequenceExpression(
       appliedMutants.keys(),
       expression,
     )
-
-    // Now apply the mutants
     for (const [mutant, appliedMutant] of appliedMutants) {
       expression = conditionalExpression(
         mutantTestExpression(mutant.id),
-        nodeOfKind(mutant, appliedMutant, isExpressionKind, 'an expression') as Expression,
+        nodeOfKind(
+          mutant,
+          unwrapParenthesizedExpression(appliedMutant),
+          isExpressionKind,
+          'an expression',
+        ) as Expression,
         expression,
       )
     }
