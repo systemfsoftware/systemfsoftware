@@ -201,6 +201,8 @@ A decision earns a property test only when something about it cannot be reached 
 
 The pure decision — one business decision as a pure function: typed command in, `Either<Decision, Error>` out, no I/O. Decision variants are `S.TaggedClass`; error variants are `S.TaggedError`. Dispatch over closed unions uses `Match.value` + `Match.tag` + `Match.exhaustive`; primitives use terminal `Match.orElse`. The `never` error channel is forbidden except for total decisions (`Allow | Block` with no other outcomes). Imported only from sibling workflows and the pure Effect data modules (`Either`, `Match`, `Schema`, `Option`, `ParseResult`) — never the Effect runtime. The gates are enforced, not documented: `Workflow.make` refuses an uninhabited (`never`) or untagged error channel at the construction site via the `InhabitedErrorChannel` and `TaggedErrorChannel` constraints, and the `WorkflowBrand` phantom on `Workflow<C,D,E>` means only `make` produces a value `Cell.decide` accepts.
 
+The success channel holds at least two decision variants sharing one family brand (`Decision family brand`); a function with a single real outcome is a kernel, not a workflow. Every variant keeps at least one producer in the decider body — a union member nobody can produce is invented, not decided.
+
 A workflow is produced by calling `Workflow.make`, not by annotating a value with its type. The annotation form type-checks while deriving none of the channel markers, so it silently forfeits the guarantee the type exists to provide; only `make` infers the decision and error channels from the decider it is handed and derives the markers that make a total decision uncallable.
 
 ### Tag carrier
