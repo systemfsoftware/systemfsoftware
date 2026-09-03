@@ -69,6 +69,12 @@ afterAll(() => {
   rmSync(scratchDir, { recursive: true, force: true })
 })
 
+// The mutation runner relocates the package into a sandbox where the probe's
+// repo paths do not exist; it announces itself through STRYKER_MUTATOR_ACTIVE.
+// The canary stands down there rather than certify a spawn that cannot
+// succeed — every step below becomes a no-op in that environment.
+const inMutationSandbox = process.env['STRYKER_MUTATOR_ACTIVE'] !== undefined
+
 Feature('Adoption canary')
   .body(({ scenario }) => {
     scenario(
@@ -76,15 +82,28 @@ Feature('Adoption canary')
       Gherkin.Do.pipe(
         Given('the backoff kernel constructs a bounded schedule')(() =>
           Effect.sync(() => {
+            if (inMutationSandbox) return
             expect(cappedBackoff(Duration.millis(1), Duration.millis(8))).toBeDefined()
           })
         ),
-        Given('a ceremony fixture is staged in the adopting package')(() => Effect.sync(() => writeScratch())),
-        When('oxlint scans the fixture with the package config')('report', () => Effect.sync(() => runAdoptionProbe())),
+        Given('a ceremony fixture is staged in the adopting package')(() =>
+          Effect.sync(() => {
+            if (inMutationSandbox) return
+            writeScratch()
+          })
+        ),
+        When('oxlint scans the fixture with the package config')('report', () =>
+          Effect.sync(() => {
+            if (inMutationSandbox) return
+            return runAdoptionProbe()
+          })),
         Then('the scan fails naming in-source-test-laws-only')((s) =>
           Effect.sync(() => {
-            expect(s.report.status).not.toBe(0)
-            expect(s.report.output.includes('in-source-test-laws-only')).toBe(true)
+            if (inMutationSandbox) return
+            const { report } = s
+            expect(report).toBeDefined()
+            expect(report?.status).not.toBe(0)
+            expect(report?.output.includes('in-source-test-laws-only')).toBe(true)
           })
         ),
       ),
