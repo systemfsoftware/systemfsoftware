@@ -1,5 +1,6 @@
 ---
 "@systemfsoftware/oxlint-plugin-test-placement": minor
+"@systemfsoftware/oxlint-plugin-effect-dmmf": patch
 "@systemfsoftware/all": patch
 ---
 
