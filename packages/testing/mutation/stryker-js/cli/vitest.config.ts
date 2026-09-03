@@ -10,9 +10,12 @@ export default defineConfig({
       'src/**/*.test.ts',
       'tests/checker-group-then-check.integration.test.ts',
       'tests/exit-code.integration.test.ts',
+      'tests/output-mode-resolution.integration.test.ts',
+      'tests/output-wire-constants.integration.test.ts',
       'tests/remembered-attribution.integration.test.ts',
       'tests/verdict-envelope.integration.test.ts',
     ],
+    includeSource: ['src/**/*.ts'],
     testTimeout: 60_000,
   },
 })

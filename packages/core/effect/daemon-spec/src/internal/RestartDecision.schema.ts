@@ -62,7 +62,7 @@ export class DecideInput extends Schema.Class<DecideInput>('DecideInput')(Decide
 const OVERSHOOT = 8
 
 if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
+  // Dynamic by necessity: tsdown defines the vitest collection flag as `undefined`,
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
   const { it } = await import('@systemfsoftware/effect-gherkin-spec')

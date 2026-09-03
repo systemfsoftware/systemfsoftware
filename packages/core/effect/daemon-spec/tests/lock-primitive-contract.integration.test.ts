@@ -1,5 +1,4 @@
 import { LockPrimitive } from '@systemfsoftware/effect-daemon-spec'
-import { LockPrimitiveError } from '@systemfsoftware/effect-daemon-spec'
 import { it, layer } from '@systemfsoftware/effect-gherkin-spec'
 import { And, Gherkin, Given, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Duration, Effect, Fiber, Result } from 'effect'
@@ -229,9 +228,12 @@ Feature('Lock Primitive Contract')
         ),
         Then('the call surfaces an infrastructure failure for the requested key')((s) =>
           Effect.sync(() => {
-            expect(s.error).toEqual(
-              Result.fail(LockPrimitiveError.make({ key: 'any-key', cause: 'infrastructure unavailable' })),
-            )
+            expect(Result.isFailure(s.error)).toBe(true)
+            if (Result.isFailure(s.error)) {
+              expect(s.error.failure._tag).toBe('LockPrimitiveError')
+              expect(s.error.failure.key).toBe('any-key')
+              expect(s.error.failure.cause).toBe('infrastructure unavailable')
+            }
           })
         ),
       ),
@@ -269,7 +271,8 @@ Feature('Lock Primitive Contract')
         ),
         Then('the acquisition returns false within the timeout')((s) =>
           Effect.sync(() => {
-            expect(s.result).toEqual(Result.succeed(false))
+            expect(Result.isSuccess(s.result)).toBe(true)
+            if (Result.isSuccess(s.result)) expect(s.result.success).toBe(false)
           })
         ),
         And('the holder fiber is interrupted')((s) => Fiber.interrupt(s.holder)),

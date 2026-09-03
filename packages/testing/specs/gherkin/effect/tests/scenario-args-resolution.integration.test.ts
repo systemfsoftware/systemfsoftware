@@ -19,11 +19,10 @@ Feature('Scenario registration — argument resolution').body(({ scenario }) => 
     Effect.gen(function*() {
       const { pipeline } = resolveScenarioArgs<never>(void 0, void 0)
       const result = yield* Effect.result(pipeline)
-      expect(result).toEqual(
-        Result.fail(
-          StepError.make({ keyword: 'scenario', text: 'pipeline or options required', cause: void 0 }),
-        ),
-      )
+      if (!Result.isFailure(result)) throw new Error('Expected Result.failure but got Result.success')
+      expect(result.failure).toBeInstanceOf(StepError)
+      expect(result.failure.keyword).toBe('scenario')
+      expect(result.failure.text).toBe('pipeline or options required')
     }),
   )
 
@@ -32,15 +31,10 @@ Feature('Scenario registration — argument resolution').body(({ scenario }) => 
     Effect.gen(function*() {
       const { pipeline } = resolveScenarioArgs<never>({ layer: Layer.empty }, void 0)
       const result = yield* Effect.result(pipeline)
-      expect(result).toEqual(
-        Result.fail(
-          StepError.make({
-            keyword: 'scenario',
-            text: 'pipeline is required when options are provided',
-            cause: void 0,
-          }),
-        ),
-      )
+      if (!Result.isFailure(result)) throw new Error('Expected Result.failure but got Result.success')
+      expect(result.failure).toBeInstanceOf(StepError)
+      expect(result.failure.keyword).toBe('scenario')
+      expect(result.failure.text).toBe('pipeline is required when options are provided')
     }),
   )
 })

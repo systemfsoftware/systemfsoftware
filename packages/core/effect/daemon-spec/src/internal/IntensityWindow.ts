@@ -24,68 +24,59 @@ export const recordTimestamp = (
 export const exceedsRestarts = (count: number, restarts: number): boolean => count > restarts
 
 if (import.meta.vitest !== void 0) {
-  const { describe, expect, it } = await import('vitest')
+  const { it } = await import('@effect/vitest')
+  const { FastCheck: fc } = await import('effect/testing')
 
-  describe('isWithinWindow', () => {
-    it('Should_ReturnTrue_When_DeltaEqualsWindow', () => {
-      expect(isWithinWindow(100, 10)(90)).toBe(true)
-    })
+  const nowArb = fc.integer({ min: 0, max: 1_000_000 })
+  const windowArb = fc.integer({ min: 0, max: 100_000 })
+  const stampArb = fc.integer({ min: -1_000_000, max: 1_000_000 })
 
-    it('Should_ReturnTrue_When_DeltaLessThanWindow', () => {
-      expect(isWithinWindow(100, 10)(95)).toBe(true)
-    })
+  /**
+   * The window is inclusive: a timestamp exactly windowMillis old is still
+   * within, one millisecond older is out.
+   */
+  it.prop(
+    '∀nt_IsWithinWindow_=Inclusive',
+    [nowArb, windowArb, stampArb],
+    ([now, windowMillis, t]) =>
+      isWithinWindow(now, windowMillis)(t) === (now - t <= windowMillis) &&
+      isWithinWindow(now, windowMillis)(now - windowMillis) === true,
+  )
 
-    it('Should_ReturnFalse_When_DeltaExceedsWindow', () => {
-      expect(isWithinWindow(100, 10)(89)).toBe(false)
-      expect(isWithinWindow(100, 10)(0)).toBe(false)
-    })
-  })
+  /**
+   * Pruning keeps exactly the entries still within the window, in original order.
+   * Pinned against both the private helper (which owns the filter) and an
+   * independent filter expression, so neither side can drift unnoticed.
+   */
+  it.prop(
+    '∀ts_Prune_=KeepWithin',
+    [fc.array(stampArb, { maxLength: 16 }), nowArb, windowArb],
+    ([ts, now, windowMillis]) => {
+      const pruned = pruneTimestamps(ts, now, windowMillis)
+      const kept = keepWithin(now, windowMillis)(ts)
+      const expected = ts.filter((t) => now - t <= windowMillis)
+      return pruned.length === expected.length && pruned.every((t, i) => t === expected[i]) &&
+        pruned.every((t, i) => t === kept[i])
+    },
+  )
 
-  describe('pruneTimestamps', () => {
-    it('Should_KeepAll_When_AllWithinWindow', () => {
-      expect(pruneTimestamps([95, 96, 97], 100, 10)).toEqual([95, 96, 97])
-      expect(keepWithin(100, 10)([95, 96, 97])).toEqual([95, 96, 97])
-    })
+  /** Recording prepends now after pruning the expired entries. */
+  it.prop(
+    '∀ts_Record_=PrependPruned',
+    [fc.array(stampArb, { maxLength: 16 }), nowArb, windowArb],
+    ([ts, now, windowMillis]) => {
+      const recorded = recordTimestamp(ts, now, windowMillis)
+      const pruned = pruneTimestamps(ts, now, windowMillis)
+      return recorded.length === pruned.length + 1 && recorded[0] === now &&
+        recorded.slice(1).every((t, i) => t === pruned[i])
+    },
+  )
 
-    it('Should_DropExpired_When_DeltaExceedsWindow', () => {
-      expect(pruneTimestamps([50, 90, 95], 100, 10)).toEqual([90, 95])
-    })
-
-    it('Should_KeepBoundaryEntry_When_DeltaEqualsWindow', () => {
-      expect(pruneTimestamps([90, 95], 100, 10)).toEqual([90, 95])
-    })
-
-    it('Should_DropBoundaryMinusOne_When_DeltaIsOneAboveWindow', () => {
-      expect(pruneTimestamps([89, 90], 100, 10)).toEqual([90])
-    })
-
-    it('Should_ReturnEmpty_When_AllExpired', () => {
-      expect(pruneTimestamps([0, 10, 20], 100, 5)).toEqual([])
-    })
-  })
-
-  describe('recordTimestamp', () => {
-    it('Should_PrependNow_When_RecordingNew', () => {
-      expect(recordTimestamp([95], 100, 10)).toEqual([100, 95])
-    })
-
-    it('Should_PruneExpired_When_RecordingNew', () => {
-      expect(recordTimestamp([50, 95], 100, 10)).toEqual([100, 95])
-    })
-  })
-
-  describe('exceedsRestarts', () => {
-    it('Should_ReturnTrue_When_CountStrictlyExceedsRestarts', () => {
-      expect(exceedsRestarts(6, 5)).toBe(true)
-    })
-
-    it('Should_ReturnFalse_When_CountEqualsRestarts', () => {
-      expect(exceedsRestarts(5, 5)).toBe(false)
-    })
-
-    it('Should_ReturnFalse_When_CountBelowRestarts', () => {
-      expect(exceedsRestarts(0, 5)).toBe(false)
-      expect(exceedsRestarts(4, 5)).toBe(false)
-    })
-  })
+  /** The restart budget trips only strictly past the limit. */
+  it.prop(
+    '∀cr_Exceeds_=StrictGreater',
+    [fc.integer({ min: 0, max: 64 }), fc.integer({ min: 0, max: 64 })],
+    ([count, restarts]) =>
+      exceedsRestarts(count, restarts) === (count > restarts) && exceedsRestarts(restarts, restarts) === false,
+  )
 }

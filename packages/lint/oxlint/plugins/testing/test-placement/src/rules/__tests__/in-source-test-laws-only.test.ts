@@ -185,6 +185,69 @@ export {}
 `,
       filename: SRC_FILE,
     },
+    {
+      name: 'Should_StaySilent_When_VitestTypesAreTypeOnlyImports',
+      code: `
+import type { it as EffectIt } from '@effect/vitest'
+import type { Tester } from 'vitest'
+
+export const run: (tester: Tester) => void = (tester) => tester('pins', () => {})
+`,
+      filename: SRC_FILE,
+    },
+    {
+      name: 'Should_StaySilent_When_GuardHoldsPropertyChannel',
+      code: `
+if (import.meta.vitest !== void 0) {
+  const { it } = await import('@effect/vitest')
+  const { FastCheck: fc } = await import('effect/testing')
+
+  const trees = fc.integer({ min: 1, max: 32 }).chain((total) =>
+    fc.tuple(fc.constant(total), fc.integer({ min: 0, max: total - 1 }))
+  )
+
+  it.prop('∀t_KernelHolds', [trees], ([total, failedIndex]) => restartIndicesFor('one_for_one', failedIndex, total).length === 1)
+}
+`,
+      filename: SRC_FILE,
+    },
+    {
+      name: 'Should_StaySilent_When_GeneratedChannelRegistersLaws',
+      code: `
+import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'
+
+if (import.meta.vitest !== void 0) {
+  const { expect, it: test } = await import('vitest')
+
+  ruleOfSchemas('Hexish', Hexish).forEach(({ schema, law }) => {
+    test.prop(law, [schema.toArbitrary()], ([value]) => {
+      expect(schema.decode(value)).toBeTruthy()
+      return true
+    })
+  })
+}
+`,
+      filename: SRC_FILE,
+    },
+    {
+      name: 'Should_StaySilent_When_RunBindsAnInternalExport',
+      code: `
+import { catalog } from '@systemfsoftware/in-source-catalog'
+
+/** @internal */
+export const decideMount = (input: { unit: string }) => ({ ok: true, unit: input.unit })
+
+if (import.meta.vitest !== void 0) {
+  await catalog.laws({
+    id: 'decideMount',
+    run: decideMount,
+    reserved: catalog.refuseHomes.reservedEnvFile((envFilePath: string) => ({ unit: envFilePath })),
+    refused: (result) => !result.ok,
+  })
+}
+`,
+      filename: SRC_FILE,
+    },
   ],
   invalid: [
     {
@@ -206,18 +269,6 @@ const decideMount = (input: { unit: string }) => ({ ok: true })
 `,
       filename: SRC_FILE,
       errors: [vitestImport()],
-    },
-    {
-      name: 'Should_ReportDynamicVitestImport_When_ModuleLoadsTheRunnerLazily',
-      code: `
-const decideMount = (input: { unit: string }) => ({ ok: true })
-
-if (import.meta.vitest !== void 0) {
-  const { it } = await import('vitest')
-}
-`,
-      filename: SRC_FILE,
-      errors: [guardBody(), vitestImport()],
     },
     {
       name: 'Should_ReportHandAuthoredTest_When_ItCallAppearsInSrc',
@@ -348,6 +399,59 @@ if (import.meta.vitest !== void 0) {
 `,
       filename: SRC_FILE,
       errors: [exportedCallee()],
+    },
+    {
+      name: 'Should_ReportEffectCase_When_GuardUsesItEffect',
+      code: `
+if (import.meta.vitest !== void 0) {
+  const { it } = await import('@effect/vitest')
+
+  it.effect('Should_Track_When_Recording', () => tracker.record)
+}
+`,
+      filename: SRC_FILE,
+      errors: [vocabulary(), guardBody()],
+    },
+    {
+      name: 'Should_ReportDescribe_When_WrappingPropertyRegistrations',
+      code: `
+if (import.meta.vitest !== void 0) {
+  const { describe, it } = await import('vitest')
+
+  describe('isWithinWindow', () => {
+    it.prop('∀t_Window', [fc.integer()], (n) => n + 0 === n)
+  })
+}
+`,
+      filename: SRC_FILE,
+      errors: [vocabulary(), guardBody()],
+    },
+    {
+      name: 'Should_ReportExpect_When_UsedInsideAPropertyPredicate',
+      code: `
+if (import.meta.vitest !== void 0) {
+  const { expect, it } = await import('vitest')
+
+  it.prop('∀t_Kernel', [fc.integer()], (n) => {
+    expect(kernel(n)).toBe(n)
+    return true
+  })
+}
+`,
+      filename: SRC_FILE,
+      errors: [vocabulary()],
+    },
+    {
+      name: 'Should_ReportGuardImport_When_RunnerLoadsOutsideTheGuard',
+      code: `
+const { it } = await import('vitest')
+
+if (import.meta.vitest !== void 0) {
+  it.prop('∀t_Outside', [fc.integer()], (n) => n >= 0)
+}
+`,
+      filename: SRC_FILE,
+      errors: [vitestImport()],
     },
   ],
 })

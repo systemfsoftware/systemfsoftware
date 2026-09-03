@@ -3,7 +3,10 @@ import { defineConfig } from 'oxlint'
 
 export default defineConfig({
   extends: [base],
+  jsPlugins: [import.meta.resolve('@systemfsoftware/oxlint-plugin-test-placement')],
   rules: {
+    '@systemfsoftware/oxlint-plugin-test-placement/eviction-purity': 'error',
+    '@systemfsoftware/oxlint-plugin-test-placement/in-source-test-laws-only': 'error',
     'yoda': 'error',
   },
 

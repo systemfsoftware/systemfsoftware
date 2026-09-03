@@ -117,7 +117,7 @@ Feature('Poll Worker Lifecycle')
             Effect.result,
             Effect.tap((result) =>
               Effect.sync(() => {
-                expect(result).toEqual(Result.fail(expect.anything()))
+                expect(Result.isFailure(result)).toBe(true)
               })
             ),
             Effect.asVoid,
@@ -148,7 +148,7 @@ Feature('Poll Worker Lifecycle')
             Effect.result,
             Effect.tap((result) =>
               Effect.sync(() => {
-                expect(result).toEqual(Result.fail(expect.anything()))
+                expect(Result.isFailure(result)).toBe(true)
               })
             ),
             Effect.asVoid,
@@ -209,7 +209,7 @@ Feature('Poll Worker Lifecycle')
             Effect.result,
             Effect.tap((result) =>
               Effect.sync(() => {
-                expect(result).toEqual(Result.fail(expect.anything()))
+                expect(Result.isFailure(result)).toBe(true)
               })
             ),
             Effect.asVoid,

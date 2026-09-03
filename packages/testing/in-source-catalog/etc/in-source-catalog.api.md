@@ -15,6 +15,7 @@ export const catalog: {
         readonly sshParentConflict: <A>(home: (path: string) => A) => RefuseHomes<A>;
         readonly reservedEnvFile: <A>(home: (path: string) => A) => RefuseHomes<A>;
         readonly quadletDir: <A>(home: (path: string) => A) => RefuseHomes<A>;
+        readonly region: typeof region;
     };
 };
 
@@ -75,7 +76,12 @@ export const refuseHomes: {
     readonly sshParentConflict: <A>(home: (path: string) => A) => RefuseHomes<A>;
     readonly reservedEnvFile: <A>(home: (path: string) => A) => RefuseHomes<A>;
     readonly quadletDir: <A>(home: (path: string) => A) => RefuseHomes<A>;
+    readonly region: typeof region;
 };
+
+// Warnings were encountered during analysis:
+//
+// dist/index.d.ts:65:5 - (ae-forgotten-export) The symbol "region" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

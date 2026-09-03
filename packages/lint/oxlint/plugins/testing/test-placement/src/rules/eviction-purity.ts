@@ -37,10 +37,15 @@ export type MessageIds =
  * conservative — what each arm matches is exactly what its predicate below
  * tests, no more:
  *
- * - same-callee reconstruction: `expect(<actual>).toBe|toEqual|toStrictEqual(<CallExpression>)`
- *   (with one optional `.not`). Any call in the expected slot counts — the
- *   rule does not prove the callee is the SUT's own helper, so a contract
- *   literal in the expected slot is the only clean shape.
+ * - same-callee reconstruction: `expect(<actual>).toBe|toEqual|toStrictEqual(<call>)`
+ *   (with one optional `.not`) where the expected call replays a helper the
+ *   actual side shares — a bare imported function or a local function
+ *   binding applied to authored inputs. Namespace constructors
+ *   (`Result.fail(...)`, `Option.some(...)`, `StepError.make(...)`) wrap
+ *   authored literals rather than recomputing them, so they are clean
+ *   unless an argument itself recomputes; the asymmetric matcher factories
+ *   (`expect.objectContaining`, `expect.any`) assert structure and are
+ *   clean by nature.
  * - dummy-marker self-assertion: `expect(<Identifier>).toBe(<string literal>)`
  *   where the identifier either matches `__private*Marker` (the name alone
  *   flags it — a differing literal does not clean it up) or names a `const`
@@ -67,6 +72,20 @@ export const evictionPurity = defineRule({
 
     const constLiterals = new Map<string, string>()
     const testBodies: ESTree.Node[] = []
+    const importedNames = new Set<string>()
+    const declaredFunctionNames = new Set<string>()
+
+    const isReconstructedExpected = (node: ESTree.Node): boolean => {
+      if (node.type !== 'CallExpression') return false
+      if (node.callee.type === 'Identifier') {
+        if (node.callee.name === 'expect') return false
+        return importedNames.has(node.callee.name) || declaredFunctionNames.has(node.callee.name)
+      }
+      if (node.callee.type === 'MemberExpression') {
+        return node.arguments.some((argument) => argument.type !== 'SpreadElement' && isReconstructedExpected(argument))
+      }
+      return false
+    }
 
     const isInsideTestBody = (node: ESTree.Node): boolean => {
       let current: ESTree.Node | null = node.parent
@@ -86,6 +105,28 @@ export const evictionPurity = defineRule({
     }
 
     return {
+      Program(node: ESTree.Program) {
+        for (const statement of node.body) {
+          if (statement.type === 'ImportDeclaration') {
+            for (const specifier of statement.specifiers) {
+              importedNames.add(specifier.local.name)
+            }
+          }
+          if (statement.type === 'VariableDeclaration') {
+            for (const declarator of statement.declarations) {
+              if (
+                declarator.id.type === 'Identifier' &&
+                declarator.init !== null &&
+                declarator.init !== undefined &&
+                (declarator.init.type === 'ArrowFunctionExpression' ||
+                  declarator.init.type === 'FunctionExpression')
+              ) {
+                declaredFunctionNames.add(declarator.id.name)
+              }
+            }
+          }
+        }
+      },
       VariableDeclaration(node: ESTree.VariableDeclaration) {
         for (const declarator of node.declarations) {
           if (declarator.id.type !== 'Identifier') continue
@@ -128,7 +169,7 @@ export const evictionPurity = defineRule({
         if (
           EQUALITY_MATCHERS[matcher] === true &&
           expected !== undefined &&
-          expected.type === 'CallExpression'
+          isReconstructedExpected(expected)
         ) {
           context.report({
             node: expected,

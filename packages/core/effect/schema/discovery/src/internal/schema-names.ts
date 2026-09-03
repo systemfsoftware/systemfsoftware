@@ -205,9 +205,11 @@ function extendsSchemaClass(superClass: Expression | null | undefined): boolean 
 }
 
 if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
-  // so this branch is statically dead in the build and never ships.
-  const { it, expect } = await import('vitest')
+  // Dynamic by necessity: the bundler folds the collection guard to
+  // undefined, so this branch is dead in the published build and the runner
+  // never ships. A static import would put the runner in the module graph.
+  const { it } = await import('@effect/vitest')
+  const { FastCheck: fc } = await import('effect/testing')
 
   // `findExportedSchemaNames` is the decision this package exists to make -
   // which exported declarations are schemas - and it is a pure function from
@@ -215,54 +217,149 @@ if (import.meta.vitest !== void 0) {
   // walk, so testing it here is the only place the decision is exercised
   // without touching a filesystem.
   const namesIn = (source: string): readonly string[] => findExportedSchemaNames(source).sort()
-  // Reference a private binding so the in-source-test-targets-private gate
-  // sees this block as exercising interior logic, not merely the exported
-  // `findExportedSchemaNames` surface.
-  void typeRefContainsSchema
-  void isSchemaUseCall
-  void memberChainStartsWithS
-  void extendsSchemaClass
-  void SCHEMA_USE_MEMBERS
 
-  it('Should_FindByAnnotation_When_ExportedConstIsTypedSchema', () => {
-    expect(namesIn(`import { Schema } from 'effect'\nexport const A: Schema.Codec<string> = x`)).toEqual(['A'])
-  })
+  // Fresh exported identifiers per draw, so every property below quantifies
+  // rather than pins a single literal. Keywords and the template
+  // collaborators can never be drawn: a keyword would not parse, and a
+  // shadowed import would test shadowing instead of discovery.
+  const RESERVED: Record<string, true> = {
+    Other: true,
+    S: true,
+    Schema: true,
+    as: true,
+    break: true,
+    case: true,
+    catch: true,
+    class: true,
+    const: true,
+    continue: true,
+    debugger: true,
+    default: true,
+    delete: true,
+    do: true,
+    else: true,
+    enum: true,
+    export: true,
+    extends: true,
+    false: true,
+    finally: true,
+    for: true,
+    from: true,
+    function: true,
+    get: true,
+    if: true,
+    implements: true,
+    import: true,
+    in: true,
+    instanceof: true,
+    interface: true,
+    let: true,
+    new: true,
+    null: true,
+    of: true,
+    package: true,
+    private: true,
+    protected: true,
+    public: true,
+    return: true,
+    set: true,
+    static: true,
+    super: true,
+    switch: true,
+    this: true,
+    throw: true,
+    true: true,
+    try: true,
+    type: true,
+    typeof: true,
+    var: true,
+    void: true,
+    while: true,
+    with: true,
+    x: true,
+    yield: true,
+  }
+  const freshName = fc
+    .stringMatching(/^[A-Za-z][A-Za-z0-9]*$/)
+    .filter((s) => s.length <= 24 && RESERVED[s] !== true)
 
-  it('Should_FindByInitialiser_When_ExportedConstCallsSchemaMember', () => {
-    expect(namesIn(`import { Schema as S } from 'effect'\nexport const B = S.Struct({ x: S.String })`)).toEqual(['B'])
-  })
+  // Annotated codec form: goes through typeRefContainsSchema.
+  it.prop(
+    '∀n_Annot_=Found',
+    [freshName],
+    ([name]) =>
+      namesIn(`import { Schema } from 'effect'\nexport const ${name}: Schema.Codec<string> = x`).includes(name),
+  )
 
-  it('Should_FindBySuperClass_When_ClassExtendsSchemaClass', () => {
-    expect(namesIn(`import { Schema } from 'effect'\nexport class C extends Schema.Class<C>('C')({}) {}`)).toEqual([
-      'C',
-    ])
-  })
+  // Member-call init: goes through initRefersToSchema and memberChainStartsWithS.
+  it.prop(
+    '∀n_StructInit_=Found',
+    [freshName],
+    ([name]) =>
+      namesIn(`import { Schema as S } from 'effect'\nexport const ${name} = S.Struct({ x: S.String })`).includes(
+        name,
+      ),
+  )
 
-  it('Should_StaySilent_When_SchemaIsNotExported', () => {
-    expect(namesIn(`import { Schema as S } from 'effect'\nconst D = S.Struct({ x: S.String })`)).toEqual([])
-  })
+  // Class form: goes through extendsSchemaClass.
+  it.prop(
+    '∀n_ClassExtends_=Found',
+    [freshName],
+    ([name]) =>
+      namesIn(`import { Schema } from 'effect'\nexport class ${name} extends Schema.Class<${name}>('${name}')({}) {}`)
+        .includes(name),
+  )
 
-  // The measured guard. `S.encodeSync(X)` and friends produce a plain value,
-  // not the schema they name; admitting one hands the generated suite an object
-  // with no `encoding` and it dies at import. Regression cover for the
-  // `forkCoreSchema` case the comment above `memberChainStartsWithS` records.
-  it('Should_StaySilent_When_InitialiserIsASchemaUseCall', () => {
-    expect(namesIn(`import { Schema as S } from 'effect'\nexport const E = S.encodeSync(Other)`)).toEqual([])
-  })
+  // The export gate, not the shape, decides: an unexported const stays silent.
+  it.prop(
+    '∀n_Private_¬Found',
+    [freshName],
+    ([name]) => namesIn(`import { Schema as S } from 'effect'\nconst ${name} = S.Struct({ x: S.String })`).length === 0,
+  )
 
-  it('Should_StaySilent_When_MemberIsReadOffASchemaUseCall', () => {
-    expect(namesIn(`import { Schema as S } from 'effect'\nexport const F = S.toJsonSchemaDocument(x).schema`)).toEqual(
-      [],
-    )
-  })
+  // The measured guard. A schema-use call such as encodeSync produces a plain
+  // value, not the schema it names, so it goes through isSchemaUseCall and
+  // memberChainStartsWithS and stays silent; admitting it would hand the
+  // generated suite an object with no encoding and die at import. (The
+  // use-call names below are source text under test, parsed but never run.)
+  it.prop(
+    '∀n_EncodeUse_¬Found',
+    [freshName],
+    ([name]) =>
+      namesIn(`import { Schema as S } from 'effect'\nexport const ${name} = S.encodeSync(Other)`).length === 0,
+  )
+
+  it.prop(
+    '∀n_UseMember_¬Found',
+    [freshName],
+    ([name]) =>
+      namesIn(`import { Schema as S } from 'effect'\nexport const ${name} = S.toJsonSchemaDocument(x).schema`)
+        .length ===
+        0,
+  )
+
+  // The whole enumerated table stays silent in both init and member-read
+  // positions: exercises SCHEMA_USE_MEMBERS itself, plus isSchemaUseCall
+  // and memberChainStartsWithS, for every member rather than one literal.
+  const useMember = fc.constantFrom(...Object.keys(SCHEMA_USE_MEMBERS))
+  it.prop(
+    '∀m_UseCall_¬Found',
+    [useMember, freshName],
+    ([member, name]) =>
+      namesIn(`import { Schema as S } from 'effect'\nexport const ${name} = S.${member}(Other)`).length === 0 &&
+      namesIn(`import { Schema as S } from 'effect'\nexport const ${name} = S.${member}(x).schema`).length === 0,
+  )
 
   // The other half of the same guard: a chain whose root is a call is still a
   // schema when the call itself builds one, so the use-call test must not
   // reject every call-rooted chain.
-  it('Should_Find_When_ChainRootIsASchemaBuildingCall', () => {
-    expect(
-      namesIn(`import { Schema as S } from 'effect'\nexport const G = S.Struct({ x: S.String }).pipe(S.brand('G'))`),
-    )
-      .toEqual(['G'])
-  })
+  it.prop(
+    '∀n_CallRoot_=Found',
+    [freshName],
+    ([name]) =>
+      namesIn(
+        `import { Schema as S } from 'effect'\nexport const ${name} = S.Struct({ x: S.String }).pipe(S.brand('G'))`,
+      )
+        .includes(name),
+  )
 }

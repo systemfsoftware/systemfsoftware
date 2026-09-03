@@ -75,10 +75,11 @@ const isMeta = (node: ESTree.Node): boolean =>
  */
 const isCanonicalGuardTest = (test: ESTree.Node): boolean => {
   if (test.type !== 'BinaryExpression' || (test.operator !== '!==' && test.operator !== '===')) return false
-  const metaSide = isMeta(test.left) ? test.left : isMeta(test.right) ? test.right : undefined
-  if (metaSide === undefined) return false
-  const other = metaSide === test.left ? test.right : test.left
-  return isVoidZero(other)
+
+  return (
+    (isMeta(test.left) && isVoidZero(test.right)) ||
+    (isMeta(test.right) && isVoidZero(test.left))
+  )
 }
 
 const isLawsCall = (callee: ESTree.Node): boolean =>
@@ -90,24 +91,31 @@ const isLawsCall = (callee: ESTree.Node): boolean =>
 
 const collectExportedNames = (
   body: readonly (ESTree.Statement | ESTree.ModuleDeclaration)[],
-  out: Set<string>,
+  out: Map<string, boolean>,
+  isInternalAt: (statement: ESTree.Node) => boolean,
 ): void => {
   for (const statement of body) {
     if (statement.type === 'ExportNamedDeclaration') {
+      const internal = isInternalAt(statement)
       if (statement.declaration?.type === 'VariableDeclaration') {
         for (const declarator of statement.declaration.declarations) {
-          if (declarator.id.type === 'Identifier') out.add(declarator.id.name)
+          if (declarator.id.type === 'Identifier') out.set(declarator.id.name, internal)
         }
       }
-      if (statement.declaration?.type === 'FunctionDeclaration' && statement.declaration.id !== null) {
-        out.add(statement.declaration.id.name)
+      if (statement.declaration?.type === 'FunctionDeclaration' && statement.declaration.id) {
+        out.set(statement.declaration.id.name, internal)
       }
-      if (statement.declaration?.type === 'ClassDeclaration' && statement.declaration.id !== null) {
-        out.add(statement.declaration.id.name)
+      if (statement.declaration?.type === 'ClassDeclaration' && statement.declaration.id) {
+        out.set(statement.declaration.id.name, internal)
       }
+      if (statement.declaration?.type === 'TSTypeAliasDeclaration') out.set(statement.declaration.id.name, internal)
+      if (statement.declaration?.type === 'TSInterfaceDeclaration') out.set(statement.declaration.id.name, internal)
       for (const specifier of statement.specifiers) {
-        if (specifier.local.type === 'Identifier') out.add(specifier.local.name)
+        if (specifier.local.type === 'Identifier') out.set(specifier.local.name, internal)
       }
+    }
+    if (statement.type === 'ExportDefaultDeclaration' && statement.declaration.type === 'Identifier') {
+      out.set(statement.declaration.name, false)
     }
   }
 }
@@ -117,10 +125,9 @@ const collectImportedNames = (
   out: Set<string>,
 ): void => {
   for (const statement of body) {
-    if (statement.type === 'ImportDeclaration') {
-      for (const specifier of statement.specifiers) {
-        out.add(specifier.local.name)
-      }
+    if (statement.type !== 'ImportDeclaration') continue
+    for (const specifier of statement.specifiers) {
+      out.add(specifier.local.name)
     }
   }
 }
@@ -134,6 +141,58 @@ const isLawsRegistration = (statement: ESTree.Node): boolean =>
   statement.expression.argument.type === 'CallExpression' &&
   isLawsCall(statement.expression.argument.callee)
 
+/**
+ * The generated schema channel: a `ruleOfSchemas(...)` registration. Inside
+ * its callbacks the library-owned `it`/`expect` machinery is the sanctioned
+ * vocabulary; the same calls anywhere else are the ceremony this rule bans.
+ */
+const isRuleOfSchemasCall = (callee: ESTree.Node): boolean =>
+  callee.type === 'Identifier' && callee.name === 'ruleOfSchemas'
+
+/**
+ * True when a callee chain is rooted at `ruleOfSchemas` — `ruleOfSchemas(...)`
+ * itself and any `ruleOfSchemas(...).forEach(...)` and friends. The generated
+ * channel's registrations chain off the root call, so both the statement
+ * grammar and the ancestor check key on this.
+ */
+const isRuleOfSchemasRooted = (callee: ESTree.Node): boolean => {
+  if (isRuleOfSchemasCall(callee)) return true
+  if (callee.type !== 'MemberExpression') return false
+  const object = callee.object
+  if (object.type === 'CallExpression') return isRuleOfSchemasRooted(object.callee)
+  return isRuleOfSchemasRooted(object)
+}
+
+/**
+ * Type-level assertions of the generated channel: `expectTypeOf<...>()` and
+ * matchers chained off it. They erase at runtime, so they state no behavioural
+ * expectation the laws channel could own.
+ */
+const isExpectTypeOfRooted = (callee: ESTree.Node): boolean => {
+  if (callee.type === 'Identifier' && callee.name === 'expectTypeOf') return true
+  if (callee.type !== 'MemberExpression') return false
+  const object = callee.object
+  if (object.type === 'CallExpression') return isExpectTypeOfRooted(object.callee)
+  return isExpectTypeOfRooted(object)
+}
+
+/**
+ * The kernel-property channel: an `it.prop(...)` / `test.prop(...)`
+ * registration inside the canonical guard — the sanctioned home for pure
+ * quantified coverage that is not a decision-core law.
+ */
+const isPropertyRegistration = (node: ESTree.CallExpression): boolean =>
+  node.callee.type === 'MemberExpression' &&
+  node.callee.property.type === 'Identifier' &&
+  node.callee.property.name === 'prop' &&
+  node.callee.object.type === 'Identifier' &&
+  (node.callee.object.name === 'it' || node.callee.object.name === 'test')
+
+const RUNNER_SOURCES: readonly string[] = ['vitest', 'vitest/', '@effect/vitest', '@effect/vitest/']
+
+const isRunnerSource = (value: unknown): boolean =>
+  typeof value === 'string' && RUNNER_SOURCES.some((prefix) => value === prefix || value.startsWith(prefix))
+
 export const inSourceTestLawsOnly = defineRule({
   meta,
   create(context: Context) {
@@ -141,13 +200,48 @@ export const inSourceTestLawsOnly = defineRule({
     if (!isUnderSrc(filename) || isTestFile(basenameOf(filename))) return {}
 
     const importedNames = new Set<string>()
-    const exportedNames = new Set<string>()
+    /** name -> whether the export is `@internal`-marked (unpublished surface) */
+    const exportedNames = new Map<string, boolean>()
     const canonicalGuards: GuardRecord[] = []
+    /**
+     * True when the module is the generated channel's implementation side —
+     * it exports `ruleOfSchemas` itself. Its runner import is static by API
+     * contract (consumers call it synchronously from their own guards), and
+     * its self-check coverage rides the same machinery it hands out, so the
+     * consumer-facing arms stand down for the whole file.
+     */
+    let isChannelImplementation = false
+
+    const isInternalAt = (statement: ESTree.Node): boolean =>
+      context.sourceCode
+        .getCommentsBefore(statement)
+        .some((comment) => comment.value.includes('@internal'))
+
+    const ancestorOf = (node: ESTree.Node): ESTree.Node | undefined => node.parent ?? undefined
+
+    const isInsideCanonicalGuard = (node: ESTree.Node): boolean => {
+      let current: ESTree.Node | undefined = ancestorOf(node)
+      while (current !== undefined) {
+        if (current.type === 'IfStatement' && canonicalGuards.some((guard) => guard.node === current)) return true
+        current = ancestorOf(current)
+      }
+      return false
+    }
+
+    const isInsideRuleOfSchemas = (node: ESTree.Node): boolean => {
+      let current: ESTree.Node | undefined = ancestorOf(node)
+      while (current !== undefined) {
+        if (current.type === 'CallExpression' && isRuleOfSchemasRooted(current.callee)) return true
+        current = ancestorOf(current)
+      }
+      return false
+    }
 
     return {
       Program(node: ESTree.Program) {
         collectImportedNames(node.body, importedNames)
-        collectExportedNames(node.body, exportedNames)
+        collectExportedNames(node.body, exportedNames, isInternalAt)
+        if (exportedNames.has('ruleOfSchemas')) isChannelImplementation = true
         for (const comment of context.sourceCode.getAllComments()) {
           if (GUARD_TOKEN_PATTERN.test(comment.value)) {
             context.report({
@@ -164,6 +258,13 @@ export const inSourceTestLawsOnly = defineRule({
         }
       },
       ImportDeclaration(node: ESTree.ImportDeclaration) {
+        // A type-only import is erased at compile time: nothing of the runner
+        // reaches the published module graph, so the runtime-coupling
+        // rationale does not apply to it.
+        if (node.importKind === 'type') return
+        // The channel implementation's runner import is static by API
+        // contract: consumers call its registrations synchronously.
+        if (isChannelImplementation) return
         if (node.source.type === 'Literal' && isVitestSource(node.source.value)) {
           context.report({
             node: node.source,
@@ -178,31 +279,38 @@ export const inSourceTestLawsOnly = defineRule({
         }
       },
       ImportExpression(node: ESTree.ImportExpression) {
-        if (node.source.type === 'Literal' && isVitestSource(node.source.value)) {
-          context.report({
-            node,
-            messageId: 'vitestImport',
-            data: {
-              name: VITEST_IMPORT_NAME,
-              expected: VITEST_IMPORT_EXPECTED,
-              actual: VITEST_IMPORT_ACTUAL,
-              fix: VITEST_IMPORT_FIX,
-            },
-          })
-        }
+        if (node.source.type !== 'Literal' || !isVitestSource(node.source.value)) return
+        // The property and generated channels load their runner inside the
+        // guard, where the branch is dead in the published build — the same
+        // dynamics the laws call itself uses.
+        if (isInsideCanonicalGuard(node) && isRunnerSource(node.source.value)) return
+        context.report({
+          node,
+          messageId: 'vitestImport',
+          data: {
+            name: VITEST_IMPORT_NAME,
+            expected: VITEST_IMPORT_EXPECTED,
+            actual: VITEST_IMPORT_ACTUAL,
+            fix: VITEST_IMPORT_FIX,
+          },
+        })
       },
       CallExpression(node: ESTree.CallExpression) {
+        if (isRuleOfSchemasCall(node.callee)) return
+        const insideGeneratedChannel = isInsideRuleOfSchemas(node)
         if (node.callee.type === 'Identifier' && TEST_VOCABULARY_CALLS[node.callee.name] === true) {
-          context.report({
-            node,
-            messageId: 'testVocabulary',
-            data: {
-              name: TEST_VOCABULARY_NAME,
-              expected: TEST_VOCABULARY_EXPECTED,
-              actual: TEST_VOCABULARY_ACTUAL,
-              fix: TEST_VOCABULARY_FIX,
-            },
-          })
+          if (!insideGeneratedChannel && !isChannelImplementation) {
+            context.report({
+              node,
+              messageId: 'testVocabulary',
+              data: {
+                name: TEST_VOCABULARY_NAME,
+                expected: TEST_VOCABULARY_EXPECTED,
+                actual: TEST_VOCABULARY_ACTUAL,
+                fix: TEST_VOCABULARY_FIX,
+              },
+            })
+          }
           return
         }
         if (
@@ -225,7 +333,12 @@ export const inSourceTestLawsOnly = defineRule({
         if (
           node.callee.type === 'MemberExpression' &&
           node.callee.object.type === 'Identifier' &&
-          TEST_VOCABULARY_CALLS[node.callee.object.name] === true
+          TEST_VOCABULARY_CALLS[node.callee.object.name] === true &&
+          !(
+            (isPropertyRegistration(node) &&
+              (isInsideCanonicalGuard(node) || insideGeneratedChannel)) ||
+            isChannelImplementation
+          )
         ) {
           context.report({
             node,
@@ -292,26 +405,59 @@ export const inSourceTestLawsOnly = defineRule({
             property.type === 'Property' &&
             property.key.type === 'Identifier' &&
             property.key.name === 'run' &&
-            property.value.type === 'Identifier' &&
-            (exportedNames.has(property.value.name) || importedNames.has(property.value.name))
+            property.value.type === 'Identifier'
           ) {
-            context.report({
-              node: property,
-              messageId: 'exportedCallee',
-              data: {
-                name: EXPORTED_CALLEE_NAME,
-                expected: EXPORTED_CALLEE_EXPECTED,
-                actual: EXPORTED_CALLEE_ACTUAL,
-                fix: EXPORTED_CALLEE_FIX,
-              },
-            })
+            const binding = exportedNames.get(property.value.name)
+            // An `@internal`-marked export is module-private in every sense
+            // that reaches a consumer: stripInternal drops it from the
+            // published dts, so no integration suite outside the module can
+            // exercise it directly.
+            if (binding === true) continue
+            if (binding === false || importedNames.has(property.value.name)) {
+              context.report({
+                node: property,
+                messageId: 'exportedCallee',
+                data: {
+                  name: EXPORTED_CALLEE_NAME,
+                  expected: EXPORTED_CALLEE_EXPECTED,
+                  actual: EXPORTED_CALLEE_ACTUAL,
+                  fix: EXPORTED_CALLEE_FIX,
+                },
+              })
+            }
           }
         }
       },
       'Program:exit'() {
+        if (isChannelImplementation) return
         for (const guard of canonicalGuards) {
           for (const statement of guardBodyStatements(guard.node.consequent)) {
             if (isLawsRegistration(statement)) continue
+            if (statement.type === 'VariableDeclaration') continue
+            if (statement.type === 'ExpressionStatement') {
+              const expression = statement.expression
+              if (expression.type === 'AwaitExpression') {
+                const argument = expression.argument
+                if (argument.type !== 'CallExpression') continue
+                if (
+                  isPropertyRegistration(argument) ||
+                  isExpectTypeOfRooted(argument.callee) ||
+                  isRuleOfSchemasRooted(argument.callee) ||
+                  isInsideRuleOfSchemas(argument)
+                ) {
+                  continue
+                }
+              }
+              if (expression.type !== 'CallExpression') continue
+              if (
+                isPropertyRegistration(expression) ||
+                isExpectTypeOfRooted(expression.callee) ||
+                isRuleOfSchemasRooted(expression.callee) ||
+                isInsideRuleOfSchemas(expression)
+              ) {
+                continue
+              }
+            }
             context.report({
               node: statement,
               messageId: 'guardBodyNotLaws',

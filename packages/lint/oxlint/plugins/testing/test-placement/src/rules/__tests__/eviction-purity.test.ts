@@ -164,11 +164,45 @@ export const run = (m: { ok: boolean }): void => {
 `,
       filename: SRC_FILE,
     },
+    {
+      name: 'Should_StaySilent_When_NamespaceConstructorWrapsAuthoredLiterals',
+      code: `
+import { expect, it } from 'vitest'
+
+it('pins the refusal', () => {
+  expect(mount(input)).toEqual(Result.fail(SlotRefused.make({ why: 'reserved env file' })))
+})
+`,
+      filename: TESTS_FILE,
+    },
+    {
+      name: 'Should_StaySilent_When_MatcherFactoryAssertsStructure',
+      code: `
+import { expect, it } from 'vitest'
+
+it('pins the shape', () => {
+  expect(mount(input)).toEqual(expect.objectContaining({ root: '/var/lib/registry' }))
+})
+`,
+      filename: TESTS_FILE,
+    },
+    {
+      name: 'Should_StaySilent_When_NamespaceExpectedContainsNoRecomputation',
+      code: `
+import { expect, it } from 'vitest'
+
+it('pins the wrapped literal', () => {
+  expect(state).toEqual(Option.some({ count: 0 }))
+})
+`,
+      filename: TESTS_FILE,
+    },
   ],
   invalid: [
     {
       name: 'Should_Report_When_ExpectedRebuildsValueWithSameCallee',
       code: `
+import { joinPath } from './support.js'
 import { expect, it } from 'vitest'
 
 it('pins the host path', () => {
@@ -182,6 +216,7 @@ it('pins the host path', () => {
     {
       name: 'Should_Report_When_NegatedExpectedRebuildsValueWithSameCallee',
       code: `
+import { joinPath } from './support.js'
 import { expect, it } from 'vitest'
 
 it('pins the host path', () => {
@@ -195,6 +230,7 @@ it('pins the host path', () => {
     {
       name: 'Should_Report_When_E2eSuffixedFileRebuildsExpected',
       code: `
+import { joinPath } from './support.js'
 import { expect, it } from 'vitest'
 
 it('pins the host path', () => {

@@ -11,5 +11,24 @@ Laws are licensed only where a refusal boundary or a named published contract
 exists; the adopting-package census sorts blocks into adopt and evict. Collection
 is the canonical `import.meta.vitest` guard token wrapped around the laws call.
 
+## Refuse homes
+
+The built-in families cover the common ceremony refusals (reserved env files,
+socket paths, ssh parents, quadlet dirs). When a decision's refusing region is
+domain-shaped — a conjunction only your schema knows — `refuseHomes.region`
+licenses it: hand the catalog an arbitrary over the refusing inputs, quantified
+over every independent field (`fc.constantFrom` for the alternatives, integer
+ranges for the magnitudes, `fc.constant` only for the flag that IS the
+refusing condition). A single fixed point is a literal list in arbitrary
+clothing; the quantification is what makes a narrowing mutant die.
+
+## Adoption
+
+An adopting package enables the pair of `@systemfsoftware/oxlint-plugin-test-placement`
+rules from its own lint config. Inside the canonical guard the laws call, the
+property channel (`it.prop`), and the generated `ruleOfSchemas` channel are the
+sanctioned vocabulary; hand `it`/`describe`/`expect` and snapshots are the
+ceremony the channel replaces.
+
 Status: pre-1.0 ALPHA. The laws core lands with the package's first feature
 change; this scaffold ships the build and publish shape.

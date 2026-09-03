@@ -55,10 +55,13 @@ export const boundedUnion = <
 /** Seeds per sampling property. */
 const SEEDS = 25
 
+/** Fixture schemas and anchors live in `./ExprFixture.schema.js`: the guard body holds no `type` aliases, and hand-written `_tag` members are forbidden, so the anchors are derived from fixture schemas there. */
+import type { Binary, Call, Conditional, Expr, Member } from './ExprFixture.schema.js'
+
 if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
-  // so this branch is statically dead in the build and the runner never enters
-  // the published module graph. A static import would ship it.
+  // Dynamic by necessity: tsdown defines the vitest collection flag as `undefined`,
+  // so this branch is statically dead in the build and never enters the published
+  // module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
   const { Exit, Match } = await import('effect')
   const { Schema: S } = await import('effect')
@@ -71,37 +74,7 @@ if (import.meta.vitest !== void 0) {
    * is quantified over every seed rather than recorded at one.
    */
 
-  /**
-   * The recursive members keep hand-written anchors for their recursive fields:
-   * deriving the whole type from its own schema const (`type Binary =
-   * S.Schema.Type<typeof Binary>` with the const annotated `: S.Codec<Binary>`)
-   * is circular (TS2502/TS2456), and leaving the const unannotated cannot be
-   * inferred (TS7022).
-   *
-   * The tag is no part of that constraint. Each variant's non-recursive half is
-   * its own `S.TaggedStruct`, which nothing recursive mentions and the type can
-   * therefore derive from; only the self-referencing fields stay declared by
-   * hand. So no `_tag` is written in a type position, and the runtime schema
-   * spreads the base's fields rather than restating the tag.
-   */
-  const BinaryBase = S.TaggedStruct('Binary', { op: S.String })
-  const MemberBase = S.TaggedStruct('Member', {})
-  const ConditionalBase = S.TaggedStruct('Conditional', {})
-  const CallBase = S.TaggedStruct('Call', {})
-
-  type Binary = S.Schema.Type<typeof BinaryBase> & { readonly left: Expr; readonly right: Expr }
-  type Member = S.Schema.Type<typeof MemberBase> & { readonly object: Expr; readonly property: Expr }
-  type Conditional = S.Schema.Type<typeof ConditionalBase> & {
-    readonly test: Expr
-    readonly consequent: Expr
-    readonly alternate: Expr
-  }
-  type Call = S.Schema.Type<typeof CallBase> & { readonly callee: Expr; readonly args: readonly Expr[] }
-
-  type Expr = Lit | Id | Binary | Member | Conditional | Call
-
-  const Lit = S.TaggedStruct('Lit', { value: S.Finite })
-  const Id = S.TaggedStruct('Id', { name: S.String })
+  const { BinaryBase, CallBase, ConditionalBase, Id, Lit, MemberBase } = await import('./ExprFixture.schema.js')
 
   const Binary: S.Codec<Binary> = S.suspend((): S.Codec<Binary> =>
     S.Struct({ ...BinaryBase.fields, left: Expr, right: Expr })
@@ -120,9 +93,6 @@ if (import.meta.vitest !== void 0) {
   const RECUR = [Binary, Member, Conditional, Call] as const
 
   const Expr: S.Codec<Expr> = boundedUnion('Expr', { base: BASE, recur: RECUR })
-
-  type Lit = S.Schema.Type<typeof Lit>
-  type Id = S.Schema.Type<typeof Id>
 
   /**
    * The default `maxDepth` is 2, and depth counts recursive *descents*: a root
