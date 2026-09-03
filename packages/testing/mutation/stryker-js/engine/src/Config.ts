@@ -3,10 +3,10 @@
  *
  * One module per capability: config file discovery, `extends` resolution,
  * validation, freezing, serializability, file matching, and warning gating.
- * The pure merge decision lives in `Config.workflow.ts` so `Workflow.make`
- * stays behind its gate; schemas live in `Config.schema.ts`.
+ * The pure merge kernel lives in `Config.kernel.ts`; schemas live in
+ * `Config.schema.ts`.
  */
-import { Cell, Wire } from '@systemfsoftware/effect-cell-types'
+import { Wire } from '@systemfsoftware/effect-cell-types'
 import { Module } from '@systemfsoftware/stryker-js/Module'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
@@ -19,6 +19,7 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { Minimatch, minimatch } from 'minimatch'
 
+import { mergeRecords } from './Config.kernel.js'
 import {
   ConfigDocumentSchema,
   ConfigError,
@@ -27,9 +28,7 @@ import {
   ConfigFileUnreadableError,
   forkOptionsSchema,
   ImportedModuleSchema,
-  ReadConfigCommand,
 } from './Config.schema.js'
-import { MergeCommand, mergeConfigsWorkflow } from './Config.workflow.js'
 import { IGNORE_PATTERN_CHARACTER, MUTATION_RANGE_REGEX } from './Project.ignore.js'
 import { StrykerError } from './stryker-error.schema.js'
 import { isCommandRunner } from './TestRunner.js'
@@ -1172,41 +1171,21 @@ export function readConfig(
 > {
   return Effect.gen(function*() {
     const cliRecord = yield* S.decodeUnknownEffect(cliOptionsRecord)(cliOptions).pipe(Effect.orDie)
-    const command = new ReadConfigCommand({ cliOptions: cliRecord, basePath })
-    const cell = Cell.layer({
-      read: (cmd: ReadConfigCommand) => loadOptionsFromConfigFile(cmd.cliOptions, basePath),
-      decode: (raw: unknown) =>
-        Result.match(S.decodeUnknownResult(ConfigDocumentSchema)(raw), {
-          onFailure: (cause) => Result.fail(new ConfigFileInvalidError({ file: 'config', cause })),
-          onSuccess: (fileOptions) =>
-            Result.succeed(
-              new MergeCommand({
-                base: fileOptions,
-                overrides: cliRecord,
-              }),
-            ),
-        }),
-      decide: mergeConfigsWorkflow,
-      encode: (outcome) =>
-        Result.match(outcome, {
-          onFailure: (error) => {
-            throw error
-          },
-          onSuccess: (result) => {
-            const decoded = S.decodeUnknownResult(StrykerOptionsSchema)(result.merged)
-            if (Result.isFailure(decoded)) {
-              const describedErrors = describeErrors(decoded.failure)
-              let headline = 'Please correct these configuration errors and try again.'
-              if (describedErrors.length === 1) {
-                headline = 'Please correct this configuration error and try again.'
-              }
-              throw new ConfigError({ message: `${headline} ${describedErrors.join(' ')}` })
-            }
-            return decoded.success
-          },
-        }),
-      write: (output) => Effect.succeed(output),
+    const fileRecord = yield* loadOptionsFromConfigFile(cliRecord, basePath)
+    const fileOptions = yield* Result.match(S.decodeUnknownResult(ConfigDocumentSchema)(fileRecord), {
+      onFailure: (cause) => Effect.fail(new ConfigFileInvalidError({ file: 'config', cause })),
+      onSuccess: (options) => Effect.succeed(options),
     })
-    return yield* Cell.run(cell, command)
+    const merged = mergeRecords(fileOptions, cliRecord)
+    const decoded = S.decodeUnknownResult(StrykerOptionsSchema)(merged)
+    if (Result.isFailure(decoded)) {
+      const describedErrors = describeErrors(decoded.failure)
+      let headline = 'Please correct these configuration errors and try again.'
+      if (describedErrors.length === 1) {
+        headline = 'Please correct this configuration error and try again.'
+      }
+      throw new ConfigError({ message: `${headline} ${describedErrors.join(' ')}` })
+    }
+    return decoded.success
   })
 }

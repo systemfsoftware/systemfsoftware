@@ -1,39 +1,16 @@
-/**
- * Plugins capability — pure decision for loading plugins.
- *
- * Collects plugin module paths and decides which contributions shadow which,
- * which schemas to merge, and which modules to keep.
- */
-
-import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { PluginKind } from '@systemfsoftware/stryker-js/Plugin'
-import type { PluginContribution } from '@systemfsoftware/stryker-js/Plugin'
 import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
-import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
 
-const isPluginContribution = (_value: unknown): _value is PluginContribution<PluginKind> => true
-const PluginContributionSchema = S.Unknown.pipe(S.refine(isPluginContribution))
+import type { PluginKind } from '@systemfsoftware/stryker-js/Plugin'
+import type { PluginContribution } from '@systemfsoftware/stryker-js/Plugin'
 
-export class PluginLoaderEntry extends S.Class<PluginLoaderEntry>('PluginLoaderEntry')({
-  moduleName: S.String,
-  plugins: S.optional(S.Array(PluginContributionSchema)),
-  schemaContribution: S.optional(S.Record(S.String, S.Unknown)),
-}) {}
+export interface PluginLoaderEntryLike {
+  readonly moduleName: string
+  readonly plugins: readonly PluginContribution<PluginKind>[] | undefined
+  readonly schemaContribution: Record<string, unknown> | undefined
+}
 
-export class LoadPluginsCommand extends S.Class<LoadPluginsCommand>('LoadPluginsCommand')({
-  entries: S.Array(PluginLoaderEntry),
-}) {}
-
-export class PluginLoadDecisionError extends S.TaggedError<PluginLoadDecisionError>()(
-  'PluginLoadDecisionError',
-  {
-    message: S.String,
-  },
-) {}
-
-export interface PluginLoadDecision {
+export interface PluginLoadPlan {
   readonly schemaContributions: readonly Record<string, unknown>[]
   readonly pluginsByKind: HashMap.HashMap<PluginKind, readonly PluginContribution<PluginKind>[]>
   readonly pluginModulePaths: readonly string[]
@@ -45,7 +22,7 @@ export interface PluginLoadDecision {
   }[]
 }
 
-const buildPluginLoadDecision = (entries: readonly PluginLoaderEntry[]): PluginLoadDecision => {
+export const buildPluginLoadPlan = (entries: readonly PluginLoaderEntryLike[]): PluginLoadPlan => {
   const shadowingState = entries.reduce<{
     readonly seen: HashMap.HashMap<string, number>
     readonly shadowings: readonly {
@@ -124,9 +101,3 @@ const buildPluginLoadDecision = (entries: readonly PluginLoaderEntry[]): PluginL
     shadowings: shadowingState.shadowings,
   }
 }
-
-export const loadPluginsWorkflow = Workflow.make(
-  LoadPluginsCommand,
-  (command: LoadPluginsCommand): Result.Result<PluginLoadDecision, PluginLoadDecisionError> =>
-    Result.succeed(buildPluginLoadDecision(command.entries)),
-)

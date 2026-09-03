@@ -60,13 +60,20 @@ export class CheckerCommand extends S.TaggedClass<CheckerCommand>()('CheckerComm
   answers: S.optional(S.Record(S.String, CheckResultSchema)),
 }) {}
 
+const CheckerDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-engine/CheckerDecision')
+type CheckerDecisionTypeId = typeof CheckerDecisionTypeId
+
 export class CheckGroupDecision extends S.TaggedClass<CheckGroupDecision>()('CheckGroupDecision', {
   groups: S.Array(S.Array(S.String)),
-}) {}
+}) {
+  readonly [CheckerDecisionTypeId] = CheckerDecisionTypeId
+}
 
 export class CheckResultDecision extends S.TaggedClass<CheckResultDecision>()('CheckResultDecision', {
   pairs: S.Array(S.Struct({ id: S.String, result: CheckResultSchema })),
-}) {}
+}) {
+  readonly [CheckerDecisionTypeId] = CheckerDecisionTypeId
+}
 
 export type CheckerDecision = CheckGroupDecision | CheckResultDecision
 

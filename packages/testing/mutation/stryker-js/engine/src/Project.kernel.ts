@@ -1,9 +1,10 @@
-import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
+
+import { IncrementalReportError, IncrementalReportSchema } from './IncrementalReport.schema.js'
 
 const IGNORE_PATTERN_CHARACTER = '!'
 
@@ -13,36 +14,18 @@ const DEFAULT_GLOB = '**/*.{js,ts,jsx,tsx,html,vue,mjs,mts,cts,cjs}'
 
 const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
 
-const PositionSchema = S.Struct({
-  line: S.Finite,
-  column: S.Finite,
-})
+export interface FileSelectionInput {
+  readonly inputFileNames: readonly string[]
+  readonly mutatePatterns: readonly string[]
+  readonly targetMutatePatterns?: readonly string[]
+  readonly testFilePatterns: readonly string[]
+  readonly basePath: string
+}
 
-const LocationSchema = S.Struct({
-  start: PositionSchema,
-  end: PositionSchema,
-})
-
-const FileDescriptionSchema = S.Struct({
-  mutate: S.Union([S.Boolean, S.Array(LocationSchema)]),
-})
-
-export class FileSelectionCommand extends S.TaggedClass<FileSelectionCommand>()('FileSelectionCommand', {
-  inputFileNames: S.Array(S.String),
-  mutatePatterns: S.Array(S.String),
-  targetMutatePatterns: S.optional(S.Array(S.String)),
-  testFilePatterns: S.Array(S.String),
-  basePath: S.String,
-}) {}
-
-export class FileSelectionDecision extends S.TaggedClass<FileSelectionDecision>()('FileSelectionDecision', {
-  fileDescriptions: S.Record(S.String, FileDescriptionSchema),
-  testFiles: S.Array(S.String),
-}) {}
-
-export class FileSelectionError extends S.TaggedError<FileSelectionError>()('FileSelectionError', {
-  message: S.String,
-}) {}
+export interface SelectedFiles {
+  readonly fileDescriptions: Record<string, { readonly mutate: boolean | readonly Location[] }>
+  readonly testFiles: readonly string[]
+}
 
 type Location = {
   readonly start: { readonly line: number; readonly column: number }
@@ -365,28 +348,88 @@ function resolveTestFilesPure(
   return Array.from(HashSet.fromIterable(allMatched))
 }
 
-function decide(command: FileSelectionCommand): Result.Result<FileSelectionDecision, FileSelectionError> {
-  try {
-    const fileDescriptions = resolveFileDescriptionsPure(
-      command.inputFileNames,
-      command.mutatePatterns,
-      command.targetMutatePatterns,
-      command.basePath,
-    )
-    const testFiles = resolveTestFilesPure(command.inputFileNames, command.testFilePatterns, command.basePath)
-    return Result.succeed(
-      new FileSelectionDecision({
-        fileDescriptions,
-        testFiles,
-      }),
-    )
-  } catch {
-    return Result.fail(
-      new FileSelectionError({
-        message: 'Unknown error',
-      }),
-    )
-  }
+export const selectFiles = (input: FileSelectionInput): SelectedFiles => ({
+  fileDescriptions: resolveFileDescriptionsPure(
+    input.inputFileNames,
+    input.mutatePatterns,
+    input.targetMutatePatterns,
+    input.basePath,
+  ),
+  testFiles: resolveTestFilesPure(input.inputFileNames, input.testFilePatterns, input.basePath),
+})
+
+type DecodedReport = typeof IncrementalReportSchema.Type
+
+interface ReportPosition {
+  readonly line: number
+  readonly column: number
 }
 
-export const fileSelectionWorkflow = Workflow.make(FileSelectionCommand, decide)
+const toPosition = (position: ReportPosition): ReportPosition => ({
+  line: position.line,
+  column: position.column,
+})
+
+const toLocation = (
+  location: { readonly start: ReportPosition; readonly end: ReportPosition },
+): { readonly start: ReportPosition; readonly end: ReportPosition } => ({
+  start: toPosition(location.start),
+  end: toPosition(location.end),
+})
+
+const toOpenEndLocation = (
+  location: { readonly start: ReportPosition; readonly end?: ReportPosition | undefined },
+): { readonly start: ReportPosition; readonly end?: ReportPosition } =>
+  Option.match(Option.fromUndefinedOr(location.end), {
+    onNone: () => ({ start: toPosition(location.start) }),
+    onSome: (end) => ({ start: toPosition(location.start), end: toPosition(end) }),
+  })
+
+const withMappedMutantLocations = (report: DecodedReport): DecodedReport['files'] =>
+  Object.fromEntries(
+    Object.entries(report.files).map(([fileName, file]) => [
+      fileName,
+      {
+        ...file,
+        mutants: file.mutants.map((mutant) => ({ ...mutant, location: toLocation(mutant.location) })),
+      },
+    ]),
+  )
+
+const withMappedTestLocations = (testFiles: NonNullable<DecodedReport['testFiles']>): DecodedReport['testFiles'] =>
+  Object.fromEntries(
+    Object.entries(testFiles).map(([fileName, file]) => [
+      fileName,
+      {
+        ...file,
+        tests: file.tests.map((test) =>
+          Option.match(Option.fromUndefinedOr(test.location), {
+            onNone: () => ({ ...test }),
+            onSome: (location) => ({ ...test, location: toOpenEndLocation(location) }),
+          })
+        ),
+      },
+    ]),
+  )
+
+const reshape = (decoded: DecodedReport): DecodedReport =>
+  Option.match(Option.fromUndefinedOr(decoded.testFiles), {
+    onNone: (): DecodedReport => ({ ...decoded, files: withMappedMutantLocations(decoded) }),
+    onSome: (testFiles): DecodedReport => ({
+      ...decoded,
+      files: withMappedMutantLocations(decoded),
+      testFiles: withMappedTestLocations(testFiles),
+    }),
+  })
+
+export const decodeIncrementalReport = (raw: unknown): Result.Result<unknown, IncrementalReportError> =>
+  Result.match(S.decodeUnknownResult(IncrementalReportSchema)(raw), {
+    onFailure: () =>
+      Result.fail(
+        new IncrementalReportError({
+          message:
+            'The incremental report is not a mutation testing report; delete it or re-run without --incremental.',
+        }),
+      ),
+    onSuccess: (decoded) => Result.succeed(reshape(decoded)),
+  })

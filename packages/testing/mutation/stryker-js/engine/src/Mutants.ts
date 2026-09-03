@@ -1,28 +1,17 @@
-import { Cell } from '@systemfsoftware/effect-cell-types'
 import * as Effect from 'effect/Effect'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as MutableHashSet from 'effect/MutableHashSet'
 import * as Option from 'effect/Option'
-import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import type { CoverageData, TestPlan } from '@systemfsoftware/stryker-js/Mutant'
 import type { CompleteDryRunResult, TestResult } from '@systemfsoftware/stryker-js/TestRunner'
 
+import { computeIncrementalDiff } from './IncrementalDiff.kernel.js'
 import { toRelativeNormalizedFileName } from './IncrementalDiff.paths.js'
-import {
-  IncrementalDiffCommand,
-  incrementalDifferWorkflow,
-  PreviousFilesSchema,
-  PreviousTestFilesSchema,
-} from './IncrementalDiff.workflow.js'
-import {
-  planMutantTests,
-  PlanMutantTestsCommand,
-  type PlanMutantTestsError,
-  PlannedMutantTests,
-} from './Mutants.workflow.js'
+import { PreviousFilesSchema, PreviousTestFilesSchema } from './IncrementalDiff.schema.js'
+import { planMutantTests, type PlanMutantTestsInput, type TestPlan as PlannedTest } from './Mutants.kernel.js'
 
 export const HIT_LIMIT_FACTOR = 100
 
@@ -226,10 +215,6 @@ export const testCoverageFrom = (
   }
 }
 
-// ---------------------------------------------------------------------------
-// Mutant test planner (Cell sandwich)
-// ---------------------------------------------------------------------------
-
 export const calculateTotalTime = (testResults: Iterable<TestResult>): number =>
   [...testResults].reduce((acc, test) => acc + test.timeSpentMs, 0)
 
@@ -248,7 +233,7 @@ const coverageToCommand = (
   timeOverheadMS: number,
   globalTestFilter: string[] | undefined,
   sandboxFileByName: Record<string, string>,
-): PlanMutantTestsCommand => {
+): PlanMutantTestsInput => {
   const hitsByMutantId: Record<string, number> = {}
   for (const [k, v] of testCoverage.hitsByMutantId) {
     hitsByMutantId[k] = v
@@ -275,7 +260,7 @@ const coverageToCommand = (
     timeSpentAllTests += result.timeSpentMs
   }
 
-  return PlanMutantTestsCommand.make({
+  return {
     mutants: [...mutants],
     timeOverheadMS,
     timeSpentAllTests,
@@ -286,12 +271,9 @@ const coverageToCommand = (
     sandboxFileByName,
     ...(staticCoverage !== undefined && { staticCoverage }),
     ...(globalTestFilter !== undefined && { globalTestFilter: [...globalTestFilter] }),
-  })
+  }
 }
 
-// Not a decision: construction of the value the decision already described.
-// Sited at the edge because a `Workflow.make` body may not reference an
-// unsealed import like `Mutant`.
 const materializeMutant = (
   original: Mutant,
   decided: {
@@ -323,7 +305,7 @@ const materializeMutant = (
 // Not a decision: materializes the final `TestPlan` shape from the decision's
 // data. The decision chose Run vs EarlyResult and every runOptions field;
 // this builds the `Mutant` values it described.
-const materializePlan = (plan: PlannedMutantTests['plans'][number], original: Mutant): TestPlan => {
+const materializePlan = (plan: PlannedTest, original: Mutant): TestPlan => {
   if (plan.plan === 'EarlyResult') {
     return { plan: 'EarlyResult', mutant: materializeMutant(original, plan) }
   }
@@ -345,38 +327,22 @@ const materializePlan = (plan: PlannedMutantTests['plans'][number], original: Mu
   }
 }
 
-const plannerDescription = Cell.layer({
-  read: (command: PlanMutantTestsCommand) =>
-    // raw: PlanMutantTestsCommand from PlanMutantTestsCommand
-    Effect.succeed(command),
-  decode: (raw: PlanMutantTestsCommand) => Result.succeed(raw),
-  decide: planMutantTests,
-  encode: (outcome: Result.Result<PlannedMutantTests, PlanMutantTestsError>) =>
-    Result.match(outcome, {
-      onFailure: () => PlannedMutantTests.make({ plans: [], totalNetTime: 0 }),
-      onSuccess: (decision) => decision,
-    }),
-  write: (
-    output: PlannedMutantTests,
-    raw: PlanMutantTestsCommand,
-  ): Effect.Effect<readonly TestPlan[], never, never> => {
-    const byId = new Map<string, Mutant>()
-    for (const mutant of raw.mutants) {
-      byId.set(mutant.id, mutant)
-    }
-    return Effect.forEach(output.plans, (plan) => {
-      const original = byId.get(plan.mutantId)
-      if (original === undefined) {
-        return Effect.die(new Error(`planner returned an unknown mutant id: ${plan.mutantId}`))
-      }
-      return Effect.succeed(materializePlan(plan, original))
-    })
-  },
-})
-
 export const makeMutantTestPlanner = (
-  command: PlanMutantTestsCommand,
-): Effect.Effect<readonly TestPlan[], never, never> => Cell.run(plannerDescription, command)
+  command: PlanMutantTestsInput,
+): Effect.Effect<readonly TestPlan[], never, never> => {
+  const { plans } = planMutantTests(command)
+  const byId = new Map<string, Mutant>()
+  for (const mutant of command.mutants) {
+    byId.set(mutant.id, mutant)
+  }
+  return Effect.forEach(plans, (plan) => {
+    const original = byId.get(plan.mutantId)
+    if (original === undefined) {
+      return Effect.die(new Error(`planner returned an unknown mutant id: ${plan.mutantId}`))
+    }
+    return Effect.succeed(materializePlan(plan, original))
+  })
+}
 
 export const plan = makeMutantTestPlanner
 
@@ -466,7 +432,7 @@ export const incrementalDiff = (
     force?: boolean
   }>,
 ): IncrementalDiffResult => {
-  const command = IncrementalDiffCommand.make({
+  const output = computeIncrementalDiff({
     basePath: input.basePath,
     currentMutants: [...input.currentMutants],
     previousFiles: previousFilesOf(input.incrementalReport),
@@ -476,28 +442,20 @@ export const incrementalDiff = (
     coveringTestFilesByMutantId: coveringTestFilesByMutantId(input.testCoverage, input.basePath),
     force: input.force ?? false,
   })
-  return Result.match(incrementalDifferWorkflow(command), {
-    onSuccess: (decision) => ({
-      mutants: decision.mutants,
-      remembered: decision.remembered,
-      mutantStatistics: {
-        changesByFile: MutableHashMap.fromIterable(
-          Object.entries(decision.mutantStatistics.changesByFile),
-        ),
-        total: decision.mutantStatistics.total,
-      },
-      testStatistics: {
-        changesByFile: MutableHashMap.fromIterable(
-          Object.entries(decision.testStatistics.changesByFile),
-        ),
-        total: decision.testStatistics.total,
-      },
-    }),
-    onFailure: () => ({
-      mutants: [...input.currentMutants],
-      remembered: [],
-      mutantStatistics: { changesByFile: MutableHashMap.empty<string, DiffChanges>(), total: { added: 0, removed: 0 } },
-      testStatistics: { changesByFile: MutableHashMap.empty<string, DiffChanges>(), total: { added: 0, removed: 0 } },
-    }),
-  })
+  return {
+    mutants: output.mutants,
+    remembered: output.remembered,
+    mutantStatistics: {
+      changesByFile: MutableHashMap.fromIterable(
+        Object.entries(output.mutantStatistics.changesByFile),
+      ),
+      total: output.mutantStatistics.total,
+    },
+    testStatistics: {
+      changesByFile: MutableHashMap.fromIterable(
+        Object.entries(output.testStatistics.changesByFile),
+      ),
+      total: output.testStatistics.total,
+    },
+  }
 }

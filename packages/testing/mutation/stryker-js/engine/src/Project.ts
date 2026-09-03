@@ -13,9 +13,8 @@ import { Minimatch } from 'minimatch'
 import type { MutationTestResult } from 'mutation-testing-report-schema/api'
 
 import { defaultOptions } from './Config.js'
-import { IncrementalReportCommand, incrementalReportWorkflow } from './IncrementalReport.workflow.js'
 import { ALWAYS_IGNORE, IGNORE_PATTERN_CHARACTER } from './Project.ignore.js'
-import { FileSelectionCommand, fileSelectionWorkflow } from './Project.workflow.js'
+import { decodeIncrementalReport, type FileSelectionInput, selectFiles } from './Project.kernel.js'
 
 /** `JSON.parse` hands back `any`; the annotation is what forces a decode downstream. */
 const parseJson = (text: string): unknown => JSON.parse(text)
@@ -332,11 +331,7 @@ function readIncrementalReport(
       return undefined
     }
     const parsed = yield* Effect.try(() => parseJson(contents))
-    const decision = yield* Effect.fromResult(incrementalReportWorkflow(new IncrementalReportCommand({ raw: parsed })))
-    // The decision carries the report as `unknown` because the schema that
-    // typed it is a Wire schema for foreign data, whose inferred type cannot be
-    // named across this module boundary. Decoding already proved the shape.
-    const rawReport: unknown = decision.report
+    const rawReport: unknown = yield* Effect.fromResult(decodeIncrementalReport(parsed))
     const isMutationTestResult = (_value: unknown): _value is MutationTestResult | undefined => true
     if (!isMutationTestResult(rawReport)) {
       throw new Error('Invalid incremental report shape')
@@ -381,19 +376,19 @@ export function readProject(
   return Effect.gen(function*() {
     const inputFileNames = yield* resolveInputFileNames(ignoreRules, basePath)
     const defaults = yield* defaultOptions
-    const selection = ((): FileSelectionCommand => {
+    const selection = ((): FileSelectionInput => {
       if (targetMutatePatterns === undefined) {
-        return new FileSelectionCommand({ inputFileNames, mutatePatterns, testFilePatterns, basePath })
+        return { inputFileNames, mutatePatterns, testFilePatterns, basePath }
       }
-      return new FileSelectionCommand({
+      return {
         inputFileNames,
         mutatePatterns,
         testFilePatterns,
         basePath,
         targetMutatePatterns,
-      })
+      }
     })()
-    const decision = yield* Effect.fromResult(fileSelectionWorkflow(selection))
+    const decision = selectFiles(selection)
 
     // A pattern the user wrote themselves that selects nothing is almost always
     // a mistake; the defaults selecting nothing is normal and stays quiet.
@@ -407,13 +402,13 @@ export function readProject(
             }
             return pattern
           })()
-          const probe = new FileSelectionCommand({
+          const probe: FileSelectionInput = {
             inputFileNames,
             mutatePatterns: [inner],
             testFilePatterns: [],
             basePath,
-          })
-          const probed = yield* Effect.fromResult(fileSelectionWorkflow(probe))
+          }
+          const probed = selectFiles(probe)
           if (Object.keys(probed.fileDescriptions).length > 0) {
             return
           }
@@ -427,13 +422,13 @@ export function readProject(
 
     yield* Effect.forEach(testFilePatterns, (pattern) =>
       Effect.gen(function*() {
-        const probe = new FileSelectionCommand({
+        const probe: FileSelectionInput = {
           inputFileNames,
           mutatePatterns: [],
           testFilePatterns: [pattern],
           basePath,
-        })
-        const probed = yield* Effect.fromResult(fileSelectionWorkflow(probe))
+        }
+        const probed = selectFiles(probe)
         if (probed.testFiles.length === 0) {
           yield* Effect.logWarning(`Glob pattern "${pattern}" did not match any test files.`)
         }

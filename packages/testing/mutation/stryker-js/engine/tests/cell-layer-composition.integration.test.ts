@@ -3,7 +3,7 @@ import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoft
 import * as Effect from 'effect/Effect'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
-import { admitOrder, OrderAdmitted, OrderRefused, OrderRequest } from './__fixtures__/admit-order.workflow.js'
+import { admitOrder, type OrderDecision, OrderRefused, OrderRequest } from './__fixtures__/admit-order.workflow.js'
 
 interface OrderPair {
   readonly first: Cell.Cell<OrderRequest, OrderRequest, never, never>
@@ -23,7 +23,7 @@ const describeOrders = (): OrderPair => {
         return request
       }),
     decide: admitOrder,
-    write: (output: Result.Result<OrderAdmitted, OrderRefused>, _raw: OrderRequest) =>
+    write: (output: Result.Result<OrderDecision, OrderRefused>, _raw: OrderRequest) =>
       Effect.sync(() => {
         trace.push('first order wrote its answer')
         const answered = Result.match(output, {
@@ -42,7 +42,7 @@ const describeOrders = (): OrderPair => {
         return request
       }),
     decide: admitOrder,
-    write: (output: Result.Result<OrderAdmitted, OrderRefused>, raw: OrderRequest) =>
+    write: (output: Result.Result<OrderDecision, OrderRefused>, raw: OrderRequest) =>
       Effect.sync(() => {
         trace.push('second order wrote its answer')
         recorded.secondWriteRaw = raw

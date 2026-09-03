@@ -14,11 +14,25 @@ export class InstrumentCommand extends S.TaggedClass<InstrumentCommand>()('Instr
   pluginCount: S.Finite,
 }) {}
 
-export class InstrumentDecision extends S.TaggedClass<InstrumentDecision>()('InstrumentDecision', {
+const InstrumentDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-engine/InstrumentDecision')
+type InstrumentDecisionTypeId = typeof InstrumentDecisionTypeId
+
+export class InPlaceInstrument extends S.TaggedClass<InPlaceInstrument>()('InPlaceInstrument', {
   workingDirectoryHint: S.String,
   backupDirectoryHint: S.String,
   fileCount: S.Finite,
-}) {}
+}) {
+  readonly [InstrumentDecisionTypeId] = InstrumentDecisionTypeId
+}
+
+export class EphemeralInstrument extends S.TaggedClass<EphemeralInstrument>()('EphemeralInstrument', {
+  workingDirectoryHint: S.String,
+  fileCount: S.Finite,
+}) {
+  readonly [InstrumentDecisionTypeId] = InstrumentDecisionTypeId
+}
+
+export type InstrumentDecision = InPlaceInstrument | EphemeralInstrument
 
 export const instrumentWorkflow = Workflow.make(
   InstrumentCommand,
@@ -29,7 +43,7 @@ export const instrumentWorkflow = Workflow.make(
     return Match.value(command.inPlace).pipe(
       Match.when(true, () =>
         Result.succeed(
-          new InstrumentDecision({
+          new InPlaceInstrument({
             workingDirectoryHint: 'inPlace',
             backupDirectoryHint: 'backup',
             fileCount: command.fileCount,
@@ -37,9 +51,8 @@ export const instrumentWorkflow = Workflow.make(
         )),
       Match.when(false, () =>
         Result.succeed(
-          new InstrumentDecision({
+          new EphemeralInstrument({
             workingDirectoryHint: 'temp',
-            backupDirectoryHint: '',
             fileCount: command.fileCount,
           }),
         )),

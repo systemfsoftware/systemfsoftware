@@ -26,7 +26,7 @@ export * from './verdict-envelope.js'
 export { toRelativeNormalizedFileName } from './IncrementalDiff.paths.js'
 // The decoder for a persisted incremental file — adopter-facing surface, not wiring: the
 // reader decodes through it and adopts it as the wire contract of the on-disk report.
-export { IncrementalReportSchema } from './IncrementalReport.workflow.js'
+export { IncrementalReportSchema } from './IncrementalReport.schema.js'
 
 // The failure identities a caller can catch (the config-read failures already
 // arrive through ./config/config-resolution above).

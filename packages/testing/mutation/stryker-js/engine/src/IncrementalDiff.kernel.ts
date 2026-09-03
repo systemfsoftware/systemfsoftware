@@ -1,80 +1,45 @@
 /// <reference types="vitest/import-meta" />
-import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
 
-const DiffChangesSchema = S.Struct({ added: S.Finite, removed: S.Finite })
-const DiffStatisticsSchema = S.Struct({
-  changesByFile: S.Record(S.String, DiffChangesSchema),
-  total: DiffChangesSchema,
-})
+import { toRelativeNormalizedFileName } from './IncrementalDiff.paths.js'
+import type { PreviousFileRecord, PreviousMutantRecord, PreviousTestFileRecord } from './IncrementalDiff.schema.js'
 
-const PositionSchema = S.Struct({ line: S.Finite, column: S.Finite })
-const PreviousLocationSchema = S.Struct({ start: PositionSchema, end: PositionSchema })
+export interface RememberedMutant {
+  readonly mutantId: string
+  readonly status: string
+  readonly testsCompleted?: number | undefined
+  readonly coveredBy?: readonly string[] | undefined
+  readonly killedBy?: readonly string[] | undefined
+}
 
-const PreviousMutantSchema = S.Struct({
-  mutatorName: S.String,
-  replacement: S.String,
-  location: PreviousLocationSchema,
-  status: S.String,
-  testsCompleted: S.optional(S.Finite),
-  coveredBy: S.optional(S.Array(S.String)),
-  killedBy: S.optional(S.Array(S.String)),
-})
+export interface DiffStatisticsLike {
+  readonly changesByFile: Record<string, { readonly added: number; readonly removed: number }>
+  readonly total: { readonly added: number; readonly removed: number }
+}
 
-const PreviousFileSchema = S.Struct({
-  source: S.optional(S.String),
-  mutants: S.optional(S.Array(PreviousMutantSchema)),
-})
+export interface IncrementalDiffInput {
+  readonly basePath: string
+  readonly currentMutants: readonly Mutant[]
+  readonly previousFiles: Record<string, PreviousFileRecord>
+  readonly previousTestFiles: Record<string, PreviousTestFileRecord>
+  readonly currentRelativeFiles: Record<string, string>
+  readonly testIdsByRelativeFile: Record<string, readonly string[]>
+  readonly coveringTestFilesByMutantId: Record<string, readonly string[]>
+  readonly force: boolean
+}
 
-const PreviousTestFileSchema = S.Struct({
-  source: S.optional(S.String),
-})
-
-const RememberedMutantSchema = S.Struct({
-  mutantId: S.String,
-  status: S.String,
-  testsCompleted: S.optional(S.Finite),
-  coveredBy: S.optional(S.Array(S.String)),
-  killedBy: S.optional(S.Array(S.String)),
-})
-
-export const PreviousFilesSchema = S.Record(S.String, PreviousFileSchema)
-export const PreviousTestFilesSchema = S.Record(S.String, PreviousTestFileSchema)
-
-export class IncrementalDiffCommand extends S.TaggedClass<IncrementalDiffCommand>()('IncrementalDiffCommand', {
-  basePath: S.String,
-  currentMutants: S.Array(Mutant),
-  previousFiles: PreviousFilesSchema,
-  previousTestFiles: PreviousTestFilesSchema,
-  currentRelativeFiles: S.Record(S.String, S.String),
-  testIdsByRelativeFile: S.Record(S.String, S.Array(S.String)),
-  coveringTestFilesByMutantId: S.Record(S.String, S.Array(S.String)),
-  force: S.Boolean,
-}) {}
-
-export class IncrementalDiffDecision extends S.TaggedClass<IncrementalDiffDecision>()('IncrementalDiffDecision', {
-  mutants: S.Array(Mutant),
-  remembered: S.Array(RememberedMutantSchema),
-  mutantStatistics: DiffStatisticsSchema,
-  testStatistics: DiffStatisticsSchema,
-}) {}
-
-export class IncrementalDiffError extends S.TaggedError<IncrementalDiffError>()('IncrementalDiffError', {
-  message: S.String,
-}) {}
-
-type PreviousFile = S.Schema.Type<typeof PreviousFileSchema>
-type PreviousTestFile = S.Schema.Type<typeof PreviousTestFileSchema>
-type PreviousMutant = S.Schema.Type<typeof PreviousMutantSchema>
-type RememberedMutant = S.Schema.Type<typeof RememberedMutantSchema>
+export interface IncrementalDiffOutput {
+  readonly mutants: readonly Mutant[]
+  readonly remembered: readonly RememberedMutant[]
+  readonly mutantStatistics: DiffStatisticsLike
+  readonly testStatistics: DiffStatisticsLike
+}
 
 const REMEMBERED_STATUS: ReadonlySet<string> = new Set(['Killed', 'Survived', 'Timeout', 'NoCoverage', 'Ignored'])
 
 const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
 
-const toRelativeNormalizedFileName = (fileName: string | undefined, basePath: string): string => {
+const toRelativeNormalized = (fileName: string | undefined, basePath: string): string => {
   const raw = fileName ?? ''
   if (raw.startsWith(basePath)) {
     return normalizeFileName(raw.slice(basePath.length).replace(/^\/+/, ''))
@@ -109,7 +74,7 @@ const previousMutantKey = (mutant: KeyedMutant): string =>
   )
 
 const changedSourceFiles = (
-  previousFiles: Readonly<Record<string, PreviousFile>>,
+  previousFiles: Readonly<Record<string, PreviousFileRecord>>,
   currentRelativeFiles: Readonly<Record<string, string>>,
 ): readonly string[] =>
   Object.entries(previousFiles)
@@ -117,7 +82,7 @@ const changedSourceFiles = (
     .map(([name]) => name)
 
 const changedTestFiles = (
-  previousTestFiles: Readonly<Record<string, PreviousTestFile>>,
+  previousTestFiles: Readonly<Record<string, PreviousTestFileRecord>>,
   currentRelativeFiles: Readonly<Record<string, string>>,
   testIdsByRelativeFile: Readonly<Record<string, readonly string[]>>,
 ): readonly string[] =>
@@ -126,10 +91,10 @@ const changedTestFiles = (
   )
 
 const findRemembered = (
-  previousFiles: Readonly<Record<string, PreviousFile>>,
+  previousFiles: Readonly<Record<string, PreviousFileRecord>>,
   file: string,
   key: string,
-): PreviousMutant | undefined => {
+): PreviousMutantRecord | undefined => {
   const candidates = previousFiles[file]?.mutants ?? []
   return candidates.find((candidate) => previousMutantKey(candidate) === key)
 }
@@ -142,16 +107,16 @@ const hasChangedCoverage = (
 
 const decideForMutant = (
   mutant: Mutant,
-  command: IncrementalDiffCommand,
+  input: IncrementalDiffInput,
   changedFiles: readonly string[],
   changedTests: readonly string[],
-): { readonly kind: 'run' } | { readonly kind: 'remembered'; readonly previous: PreviousMutant } => {
-  const file = toRelativeNormalizedFileName(mutant.fileName, command.basePath)
+): { readonly kind: 'run' } | { readonly kind: 'remembered'; readonly previous: PreviousMutantRecord } => {
+  const file = toRelativeNormalized(mutant.fileName, input.basePath)
   if (changedFiles.includes(file)) return { kind: 'run' }
-  const previous = findRemembered(command.previousFiles, file, currentMutantKey(mutant))
+  const previous = findRemembered(input.previousFiles, file, currentMutantKey(mutant))
   if (previous === undefined) return { kind: 'run' }
   if (!REMEMBERED_STATUS.has(previous.status)) return { kind: 'run' }
-  if (hasChangedCoverage(mutant.id, command.coveringTestFilesByMutantId, changedTests)) return { kind: 'run' }
+  if (hasChangedCoverage(mutant.id, input.coveringTestFilesByMutantId, changedTests)) return { kind: 'run' }
   return { kind: 'remembered', previous }
 }
 
@@ -180,7 +145,7 @@ const statisticsOf = (addedFiles: readonly string[], removedFiles: readonly stri
 }
 
 const testStatisticsOf = (
-  previousTestFiles: Readonly<Record<string, PreviousTestFile>>,
+  previousTestFiles: Readonly<Record<string, PreviousTestFileRecord>>,
   testIdsByRelativeFile: Readonly<Record<string, readonly string[]>>,
 ) => {
   const currentTestFiles = Object.keys(testIdsByRelativeFile)
@@ -190,10 +155,10 @@ const testStatisticsOf = (
 }
 
 const removedMutantFiles = (
-  command: IncrementalDiffCommand,
+  input: IncrementalDiffInput,
   currentKeysByFile: Readonly<Record<string, readonly string[]>>,
 ): readonly string[] =>
-  Object.entries(command.previousFiles).flatMap(([file, previous]) => {
+  Object.entries(input.previousFiles).flatMap(([file, previous]) => {
     const keys = currentKeysByFile[file]
     const removed = (previous.mutants ?? []).filter((candidate) => {
       if (keys === undefined) return true
@@ -202,7 +167,7 @@ const removedMutantFiles = (
     return removed.map(() => file)
   })
 
-const rememberedEntryOf = (mutant: Mutant, previous: PreviousMutant): RememberedMutant => {
+const rememberedEntryOf = (mutant: Mutant, previous: PreviousMutantRecord): RememberedMutant => {
   const entry: RememberedMutant = { mutantId: mutant.id, status: previous.status }
   if (previous.testsCompleted !== undefined) {
     Object.assign(entry, { testsCompleted: previous.testsCompleted })
@@ -216,58 +181,50 @@ const rememberedEntryOf = (mutant: Mutant, previous: PreviousMutant): Remembered
   return entry
 }
 
-const decideIncremental = (
-  command: IncrementalDiffCommand,
-): Result.Result<IncrementalDiffDecision, IncrementalDiffError> => {
-  if (command.force) {
-    const added = command.currentMutants.map((mutant) =>
-      toRelativeNormalizedFileName(mutant.fileName, command.basePath)
-    )
-    return Result.succeed(
-      IncrementalDiffDecision.make({
-        mutants: [...command.currentMutants],
-        remembered: [],
-        mutantStatistics: statisticsOf(added, []),
-        testStatistics: testStatisticsOf(command.previousTestFiles, command.testIdsByRelativeFile),
-      }),
-    )
+export const computeIncrementalDiff = (
+  input: IncrementalDiffInput,
+): IncrementalDiffOutput => {
+  if (input.force) {
+    const added = input.currentMutants.map((mutant) => toRelativeNormalizedFileName(mutant.fileName, input.basePath))
+    return {
+      mutants: [...input.currentMutants],
+      remembered: [],
+      mutantStatistics: statisticsOf(added, []),
+      testStatistics: testStatisticsOf(input.previousTestFiles, input.testIdsByRelativeFile),
+    }
   }
-  const changedFiles = changedSourceFiles(command.previousFiles, command.currentRelativeFiles)
+  const changedFiles = changedSourceFiles(input.previousFiles, input.currentRelativeFiles)
   const changedTests = changedTestFiles(
-    command.previousTestFiles,
-    command.currentRelativeFiles,
-    command.testIdsByRelativeFile,
+    input.previousTestFiles,
+    input.currentRelativeFiles,
+    input.testIdsByRelativeFile,
   )
   const toRun: Mutant[] = []
   const remembered: RememberedMutant[] = []
   const addedFiles: string[] = []
-  for (const mutant of command.currentMutants) {
-    const decision = decideForMutant(mutant, command, changedFiles, changedTests)
+  for (const mutant of input.currentMutants) {
+    const decision = decideForMutant(mutant, input, changedFiles, changedTests)
     if (decision.kind === 'run') {
       toRun.push(mutant)
-      addedFiles.push(toRelativeNormalizedFileName(mutant.fileName, command.basePath))
+      addedFiles.push(toRelativeNormalizedFileName(mutant.fileName, input.basePath))
       continue
     }
     remembered.push(rememberedEntryOf(mutant, decision.previous))
   }
-  const currentKeysByFile = command.currentMutants.reduce<Record<string, string[]>>((acc, mutant) => {
-    const file = toRelativeNormalizedFileName(mutant.fileName, command.basePath)
+  const currentKeysByFile = input.currentMutants.reduce<Record<string, string[]>>((acc, mutant) => {
+    const file = toRelativeNormalizedFileName(mutant.fileName, input.basePath)
     const keys = acc[file] ?? []
     acc[file] = [...keys, currentMutantKey(mutant)]
     return acc
   }, {})
-  const removedFiles = removedMutantFiles(command, currentKeysByFile)
-  return Result.succeed(
-    IncrementalDiffDecision.make({
-      mutants: toRun,
-      remembered,
-      mutantStatistics: statisticsOf(addedFiles, removedFiles),
-      testStatistics: testStatisticsOf(command.previousTestFiles, command.testIdsByRelativeFile),
-    }),
-  )
+  const removedFiles = removedMutantFiles(input, currentKeysByFile)
+  return {
+    mutants: toRun,
+    remembered,
+    mutantStatistics: statisticsOf(addedFiles, removedFiles),
+    testStatistics: testStatisticsOf(input.previousTestFiles, input.testIdsByRelativeFile),
+  }
 }
-
-export const incrementalDifferWorkflow = Workflow.make(IncrementalDiffCommand, (command) => decideIncremental(command))
 
 if (import.meta.vitest !== void 0) {
   const { expect, it } = await import('vitest')

@@ -1,36 +1,10 @@
-import { Workflow } from '@systemfsoftware/effect-cell-types'
 import type { Position } from '@systemfsoftware/stryker-js/Mutant'
 import type { Metrics, MetricsResult, MutationTestMetricsResult } from '@systemfsoftware/stryker-js/Reporter'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Predicate from 'effect/Predicate'
-import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
 import type * as schema from 'mutation-testing-report-schema/api'
 
 type ProvidedStrykerOptions = StrykerOptions
-
-const isMutationTestResult = (_value: unknown): _value is schema.MutationTestResult => true
-const isMutationTestMetricsResult = (_value: unknown): _value is MutationTestMetricsResult => true
-const isStrykerOptions = (_value: unknown): _value is StrykerOptions => true
-
-const MutationTestResultSchema = S.declare(isMutationTestResult)
-const MutationTestMetricsResultSchema = S.declare(isMutationTestMetricsResult)
-const StrykerOptionsSchema = S.declare(isStrykerOptions)
-
-export class ClearTextReportCommand extends S.TaggedClass<ClearTextReportCommand>()('ClearTextReportCommand', {
-  report: MutationTestResultSchema,
-  metrics: MutationTestMetricsResultSchema,
-  options: StrykerOptionsSchema,
-}) {}
-
-export class ClearTextDocument extends S.TaggedClass<ClearTextDocument>()('ClearTextDocument', {
-  stdout: S.Array(S.String),
-  debug: S.Array(S.String),
-}) {}
-
-export class ClearTextReportError extends S.TaggedError<ClearTextReportError>()('ClearTextReportError', {
-  message: S.String,
-}) {}
 
 // ─── ansi ────────────────────────────────────────────────────────────────
 
@@ -684,7 +658,7 @@ function scoreTable(
   return drawClearTextScoreTable(metrics.systemUnderTestMetrics, options)
 }
 
-function renderClearText(
+export function renderClearText(
   report: schema.MutationTestResult,
   metrics: MutationTestMetricsResult,
   options: ProvidedStrykerOptions,
@@ -710,13 +684,3 @@ function renderClearText(
   if (table !== undefined) stdout.push(table)
   return { stdout, debug }
 }
-
-// ─── workflow ─────────────────────────────────────────────────────────
-
-export const makeClearTextDocument = Workflow.make(
-  ClearTextReportCommand,
-  (command: ClearTextReportCommand): Result.Result<ClearTextDocument, ClearTextReportError> => {
-    const { stdout, debug } = renderClearText(command.report, command.metrics, command.options)
-    return Result.succeed(ClearTextDocument.make({ stdout: [...stdout], debug: [...debug] }))
-  },
-)

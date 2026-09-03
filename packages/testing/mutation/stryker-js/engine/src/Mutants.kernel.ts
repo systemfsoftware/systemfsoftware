@@ -1,86 +1,62 @@
-import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import type { MutantStatus } from '@systemfsoftware/stryker-js/Mutant'
-import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
 
 const HIT_LIMIT_FACTOR = 100
 
-const PlannerOptionsSchema = S.Struct({
-  disableBail: S.Boolean,
-  timeoutMS: S.Finite,
-  timeoutFactor: S.Finite,
-  ignoreStatic: S.Boolean,
-})
+export interface PlannerOptions {
+  readonly disableBail: boolean
+  readonly timeoutMS: number
+  readonly timeoutFactor: number
+  readonly ignoreStatic: boolean
+}
 
-export class PlanMutantTestsCommand extends S.TaggedClass<PlanMutantTestsCommand>()('PlanMutantTestsCommand', {
-  mutants: S.Array(Mutant),
-  timeOverheadMS: S.Finite,
-  timeSpentAllTests: S.Finite,
-  globalTestFilter: S.optional(S.Array(S.String)),
-  hitsByMutantId: S.Record(S.String, S.Finite),
-  staticCoverage: S.optional(S.Record(S.String, S.Finite)),
-  testsByMutantId: S.Record(S.String, S.Array(S.String)),
-  testTimeById: S.Record(S.String, S.Finite),
-  options: PlannerOptionsSchema,
-  /**
-   * Where each mutated file lives inside the sandbox, gathered by the caller.
-   *
-   * The sandbox directory is decided at run time, so the decision cannot compute this and
-   * is handed it instead. Without it the planned run options carry no path and no caller
-   * can execute them.
-   */
-  sandboxFileByName: S.Record(S.String, S.String),
-}) {}
+export interface PlanMutantTestsInput {
+  readonly mutants: readonly Mutant[]
+  readonly timeOverheadMS: number
+  readonly timeSpentAllTests: number
+  readonly globalTestFilter?: readonly string[]
+  readonly hitsByMutantId: Record<string, number>
+  readonly staticCoverage?: Record<string, number>
+  readonly testsByMutantId: Record<string, readonly string[]>
+  readonly testTimeById: Record<string, number>
+  readonly options: PlannerOptions
+  readonly sandboxFileByName: Record<string, string>
+}
 
-const DecidedRunOptionsSchema = S.Struct({
-  mutantActivation: S.Literals(['runtime', 'static']),
-  timeout: S.Finite,
-  sandboxFileName: S.String,
-  disableBail: S.Boolean,
-  reloadEnvironment: S.Boolean,
-  testFilter: S.optionalKey(S.Array(S.String)),
-  hitLimit: S.optionalKey(S.Finite),
-})
+export interface DecidedRunOptions {
+  readonly mutantActivation: 'runtime' | 'static'
+  readonly timeout: number
+  readonly sandboxFileName: string
+  readonly disableBail: boolean
+  readonly reloadEnvironment: boolean
+  readonly testFilter?: readonly string[]
+  readonly hitLimit?: number
+}
 
-const RunPlanSchema = S.Struct({
-  plan: S.Literal('Run'),
-  mutantId: S.String,
-  netTime: S.Finite,
-  runOptions: DecidedRunOptionsSchema,
-  static: S.optional(S.Boolean),
-  coveredBy: S.optional(S.Array(S.String)),
-})
+export interface RunTestPlan {
+  readonly plan: 'Run'
+  readonly mutantId: string
+  readonly netTime: number
+  readonly runOptions: DecidedRunOptions
+  readonly static?: boolean
+  readonly coveredBy?: readonly string[]
+}
 
-const EarlyResultPlanSchema = S.Struct({
-  plan: S.Literal('EarlyResult'),
-  mutantId: S.String,
-  status: S.Literals([
-    'Killed',
-    'Survived',
-    'NoCoverage',
-    'Timeout',
-    'CompileError',
-    'RuntimeError',
-    'Ignored',
-    'Pending',
-  ]),
-  statusReason: S.optional(S.String),
-  static: S.optional(S.Boolean),
-  coveredBy: S.optional(S.Array(S.String)),
-})
+export interface EarlyResultTestPlan {
+  readonly plan: 'EarlyResult'
+  readonly mutantId: string
+  readonly status: MutantStatus
+  readonly statusReason?: string
+  readonly static?: boolean
+  readonly coveredBy?: readonly string[]
+}
 
-const TestPlanSchema = S.Union([EarlyResultPlanSchema, RunPlanSchema])
+export type TestPlan = EarlyResultTestPlan | RunTestPlan
 
-export class PlannedMutantTests extends S.TaggedClass<PlannedMutantTests>()('PlannedMutantTests', {
-  plans: S.Array(TestPlanSchema),
-  totalNetTime: S.Finite,
-}) {}
-
-export class PlanMutantTestsError extends S.TaggedError<PlanMutantTestsError>()('PlanMutantTestsError', {
-  message: S.String,
-  detail: S.String,
-}) {}
+export interface PlannedTestPlans {
+  readonly plans: readonly TestPlan[]
+  readonly totalNetTime: number
+}
 
 const hasCoverage = (staticCoverage: Record<string, number> | undefined): boolean => {
   if (staticCoverage === undefined) {
@@ -139,12 +115,12 @@ const getTestFilter = (globalFilter: readonly string[] | undefined): string[] | 
 
 const toRunPlan = (
   mutant: Mutant,
-  command: PlanMutantTestsCommand,
+  command: PlanMutantTestsInput,
   netTime: number,
   testFilter: readonly string[] | undefined,
   isStatic: boolean | undefined,
   coveredBy: readonly string[] | undefined,
-): S.Schema.Type<typeof RunPlanSchema> => {
+): RunTestPlan => {
   const disableBail = command.options.disableBail
   const timeoutMS = command.options.timeoutMS
   const timeoutFactor = command.options.timeoutFactor
@@ -178,7 +154,7 @@ const toEarlyResultPlan = (
   status: MutantStatus,
   statusReason: string | undefined,
   coveredBy: readonly string[] | undefined,
-): S.Schema.Type<typeof EarlyResultPlanSchema> => ({
+): EarlyResultTestPlan => ({
   plan: 'EarlyResult',
   mutantId: mutant.id,
   status,
@@ -190,8 +166,8 @@ const toEarlyResultPlan = (
 
 const decidePlanForMutant = (
   mutant: Mutant,
-  command: PlanMutantTestsCommand,
-): S.Schema.Type<typeof TestPlanSchema> => {
+  command: PlanMutantTestsInput,
+): TestPlan => {
   const isStatic = hasStaticCoverage(command.staticCoverage, mutant.id)
   if (mutant.status !== undefined) {
     const coveredBy = getCoveredBy(mutant)
@@ -217,9 +193,9 @@ const decidePlanForMutant = (
   return toRunPlan(mutant, command, command.timeSpentAllTests, testFilter, undefined, undefined)
 }
 
-const decidePlanMutantTests = (
-  command: PlanMutantTestsCommand,
-): Result.Result<PlannedMutantTests, PlanMutantTestsError> => {
+export const planMutantTests = (
+  command: PlanMutantTestsInput,
+): PlannedTestPlans => {
   const plans = command.mutants.map((mutant) => decidePlanForMutant(mutant, command))
   const totalNetTime = plans.reduce((acc, plan) => {
     if (plan.plan === 'Run') {
@@ -227,16 +203,8 @@ const decidePlanMutantTests = (
     }
     return acc
   }, 0)
-  return Result.succeed(
-    PlannedMutantTests.make({
-      plans,
-      totalNetTime,
-    }),
-  )
+  return {
+    plans,
+    totalNetTime,
+  }
 }
-
-export const planMutantTests = Workflow.make(
-  PlanMutantTestsCommand,
-  (command: PlanMutantTestsCommand): Result.Result<PlannedMutantTests, PlanMutantTestsError> =>
-    decidePlanMutantTests(command),
-)
