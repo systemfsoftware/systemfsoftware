@@ -10,8 +10,11 @@ import {
   DecisionTwo,
   LoneDecision,
 } from '../tests/__fixtures__/Decision.schema.js'
-import { decideTagged } from '../tests/__fixtures__/TaggedCommand.workflow.js'
-import { decideWidened } from '../tests/__fixtures__/WidenedCommand.workflow.js'
+import { decideTagged, type FixtureDecision } from '../tests/__fixtures__/TaggedCommand.workflow.js'
+import {
+  decideWidened,
+  type WidenedDecision as WidenedFixtureDecision,
+} from '../tests/__fixtures__/WidenedCommand.workflow.js'
 
 interface Cmd {
   readonly _tag: 'Cmd'
@@ -222,7 +225,7 @@ describe('the command channel the value constrains', () => {
 
   it('Should_ExposeEveryCommandFieldAndTag_When_CommandIsATaggedClass', () => {
     expect<typeof decideTagged>().type.toBe<
-      ((command: TaggedCmd) => Result<number, CommandRefused>) & Workflow.WorkflowBrand
+      ((command: TaggedCmd) => Result<FixtureDecision, CommandRefused>) & Workflow.WorkflowBrand
     >()
     expect<TaggedCmd['value']>().type.toBe<number>()
     expect<TaggedCmd['_tag']>().type.toBe<'TaggedCmd'>()
@@ -254,7 +257,7 @@ describe('the command channel the value constrains', () => {
     // is asserted on the resulting type, not merely accepted, because a channel
     // that silently became `unknown` would reopen the hole the unit closes.
     expect<typeof decideWidened>().type.toBe<
-      ((command: TaggedCmd) => Result<number, CommandRefused>) & Workflow.WorkflowBrand
+      ((command: TaggedCmd) => Result<WidenedFixtureDecision, CommandRefused>) & Workflow.WorkflowBrand
     >()
   })
 })

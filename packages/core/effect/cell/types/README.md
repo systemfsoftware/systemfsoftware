@@ -16,10 +16,13 @@ When both channels are inhabited, `Workflow<Command, Decision, Error>` is the fu
 conjunct — a phantom readonly TypeId-keyed field that no runtime property backs. The brand
 is what makes the workbook nominal: `Workflow.make` is the only constructor that applies
 it, and every surface that runs a decision — the `decide` member a `Cell.layer` spec
-demands — requires it, so a decision that skipped `make` is a compile error at the call
-site that would have run it, with the brand named in the diagnostic. A `never` channel does
+demands — requires it, A `never` channel does
 not silently collapse to that function: it resolves to a marker interface that no function
-can satisfy, so the mistake is a compile error with the remediation attached (below).
+can satisfy, so the mistake is a compile error with the remediation attached (below). The
+success channel is shaped the same way: `Workflow.make` refuses a decision channel that is
+not a tagged union of at least two schema tagged classes sharing one TypeId — a single
+outcome, an untagged variant, or variants with divergent family brands each resolve to a
+marker interface whose property name is the remediation.
 
 ## The constructor
 
@@ -140,6 +143,9 @@ All six violations fail `tsc`; the messages below are what `tsc` reports (verifi
 | An `Effect` return                        | `Type 'Effect<Decision, never, never>' is not assignable to type 'Result<Decision, Err>'` | the workflow returns a value, not an effect handle; the executor runs effects and hands the workflow its input                   |
 | `never` decision channel                  | `Type '...' is not assignable to type 'UninhabitedDecision'`                              | a workflow that can never produce a decision can never succeed                                                                   |
 | `never` error channel                     | `Type '...' is not assignable to type 'UninhabitedError'`                                 | a workflow that cannot fail decides nothing; move it to a `*.kernel.ts`                                                          |
+| A single-variant decision channel         | `Type '...' is not assignable to type 'SingleVariantDecision'`                            | a decision chooses between at least two distinguishable outcomes; one variant is a calculation wearing a decision's shape        |
+| An untagged decision variant              | `Type '...' is not assignable to type 'UntaggedDecision'`                                 | a decision variant needs a `_tag` a consumer can dispatch on; declare the variants as `S.TaggedClass` instances                  |
+| Decision variants with no shared TypeId   | `Type '...' is not assignable to type 'UnsharedTypeId'`                                   | one decision family carries one TypeId — a `Symbol.for` brand on every variant class                                             |
 | A bare decider in a `Cell.layer` spec     | `Type '(command: Cmd) => Result<Dec, Err>' is not assignable to type 'WorkflowBrand'`     | only a `Workflow.make` value satisfies the `decide` member; a lambda that skipped `make` is not a decision a description may run |
 | A plain interface at the command position | `'Cmd' only refers to a type, but is being used as a value here`                          | the command is constrained on the value, and a declared type produces none — so there is no marker to smuggle                    |
 
@@ -154,6 +160,16 @@ export interface UninhabitedDecision {
 export interface UninhabitedError {
   readonly __WORKFLOW_ERROR_CHANNEL_IS_NEVER__:
     'this workflow cannot fail, so it decides nothing; give it an error variant or move it to a *.kernel.ts'
+}
+
+export interface SingleVariantDecision {
+  readonly __WORKFLOW_DECISION_CHANNEL_HAS_ONE_VARIANT__:
+    'this workflow decides one outcome, which is not a decision; add the variant it chooses between, or move the function to a *.kernel.ts'
+}
+
+export interface UnsharedTypeId {
+  readonly __WORKFLOW_DECISION_VARIANTS_DO_NOT_SHARE_A_TYPE_ID__:
+    'the decision variants must share one TypeId — a Symbol.for family brand on each variant class'
 }
 ```
 

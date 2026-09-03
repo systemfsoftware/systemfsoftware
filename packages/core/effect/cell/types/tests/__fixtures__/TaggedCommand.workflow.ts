@@ -1,7 +1,26 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
 
 import { CommandRefused, TaggedCmd } from './Command.schema.js'
+
+const FixtureDecisionTypeId: unique symbol = Symbol.for(
+  '@systemfsoftware/effect-cell-types/tests/TaggedCommand/Decision',
+)
+
+export class DecisionOne extends S.TaggedClass<DecisionOne>()('DecisionOne', {
+  value: S.Int,
+}) {
+  readonly [FixtureDecisionTypeId] = FixtureDecisionTypeId
+}
+
+export class DecisionTwo extends S.TaggedClass<DecisionTwo>()('DecisionTwo', {
+  reason: S.String,
+}) {
+  readonly [FixtureDecisionTypeId] = FixtureDecisionTypeId
+}
+
+export type FixtureDecision = DecisionOne | DecisionTwo
 
 /**
  * The canonical two-argument construction, and the compile-level proof of the
@@ -14,5 +33,6 @@ import { CommandRefused, TaggedCmd } from './Command.schema.js'
  */
 export const decideTagged = Workflow.make(
   TaggedCmd,
-  (command: TaggedCmd): Result.Result<number, CommandRefused> => Result.succeed(command.value),
+  (command: TaggedCmd): Result.Result<FixtureDecision, CommandRefused> =>
+    Result.succeed(new DecisionOne({ value: command.value })),
 )

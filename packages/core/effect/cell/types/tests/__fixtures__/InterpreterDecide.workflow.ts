@@ -16,26 +16,48 @@ export class Decoded extends S.Class<Decoded>('Decoded')({
 }) {}
 
 /**
- * The decide channels, declared as schema classes: the decision is a
- * `TaggedClass` and the refusal a `TaggedError`. Both carry the `_tag` the
- * branded `Workflow.make` demands of an error channel without any member being
- * hand-written, and neither needs the second hand-rolled discriminant the `kind`
- * field used to be.
+ * The decide channels, declared as schema classes. A refusal is a decision outcome
+ * in the Cell's semantics — the write phase receives it — so it lives on the
+ * decision channel as `Rejected`; the decider's genuine failure mode is a command
+ * it cannot decide at all: a negative length is an undecidable command for a
+ * length classification, refused as `Malformed`.
+ *
+ * The two decision variants share one family brand, as the success-channel
+ * constraint demands: `Workflow.make` refuses a decision channel that is not a
+ * tagged union of at least two schema tagged classes carrying the same TypeId.
  */
+const DecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/tests/InterpreterDecide')
+type DecisionTypeId = typeof DecisionTypeId
+
 export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {
   length: S.Number,
-}) {}
+}) {
+  readonly [DecisionTypeId] = DecisionTypeId
+}
 
-export class Refused extends S.TaggedError<Refused>()('Refused', {
+export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {
   why: S.String,
-}) {}
+}) {
+  readonly [DecisionTypeId] = DecisionTypeId
+}
+
+export class Malformed extends S.TaggedError<Malformed>()('Malformed', {
+  length: S.Int,
+}) {
+  readonly [DecisionTypeId] = DecisionTypeId
+}
 
 export const decide = Workflow.make(
   Decoded,
-  (decoded: Decoded): Result.Result<Admitted, Refused> =>
-    Match.value(decoded.length > 3).pipe(
-      Match.when(true, () => Result.succeed(new Admitted({ length: decoded.length }))),
-      Match.when(false, () => Result.fail(new Refused({ why: 'too short' }))),
+  (decoded: Decoded): Result.Result<Admitted | Rejected, Malformed> =>
+    Match.value(decoded.length < 0).pipe(
+      Match.when(true, () => Result.fail(new Malformed({ length: decoded.length }))),
+      Match.when(false, () =>
+        Match.value(decoded.length > 3).pipe(
+          Match.when(true, () => Result.succeed(new Admitted({ length: decoded.length }))),
+          Match.when(false, () => Result.succeed(new Rejected({ why: 'too short' }))),
+          Match.exhaustive,
+        )),
       Match.exhaustive,
     ),
 )

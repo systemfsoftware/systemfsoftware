@@ -4,9 +4,16 @@ import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
-import { Admitted, decide as decideFixture, Decoded, type Refused } from './__fixtures__/InterpreterDecide.workflow.js'
+import {
+  Admitted,
+  decide as decideFixture,
+  Decoded,
+  type Malformed as DecideMalformed,
+  Rejected,
+} from './__fixtures__/InterpreterDecide.workflow.js'
 import { tracedDecide as tracedDecideFixture } from './__fixtures__/InterpreterTracedDecide.workflow.js'
 
 const Feature = makeFeature({ it, layer })
@@ -50,10 +57,15 @@ const decode = (raw: Raw): Result.Result<Decoded, Malformed> =>
     ? Result.fail({ kind: 'Malformed', bytes: raw.bytes })
     : Result.succeed(new Decoded({ length: raw.bytes.length }))
 
-const encode = (outcome: Result.Result<Admitted, Refused>): Output =>
+const encode = (outcome: Result.Result<Admitted | Rejected, DecideMalformed>): Output =>
   Result.match(outcome, {
-    onSuccess: (admitted) => ({ line: `admitted:${admitted.length}` }),
-    onFailure: (refused) => ({ line: `refused:${refused.why}` }),
+    onSuccess: (decision) =>
+      Match.value(decision).pipe(
+        Match.tag('Admitted', (admitted) => ({ line: `admitted:${admitted.length}` })),
+        Match.tag('Rejected', (rejected) => ({ line: `refused:${rejected.why}` })),
+        Match.exhaustive,
+      ),
+    onFailure: (malformed) => ({ line: `malformed:${malformed.length}` }),
   })
 
 const makeCell = (ledger: LedgerService) =>
@@ -170,11 +182,16 @@ Feature('Running a Cell')
               return Result.succeed(new Decoded({ length: raw.bytes.length }))
             },
             decide: tracedDecideFixture(trace, new Admitted({ length: 0 })),
-            encode: (outcome: Result.Result<Admitted, Refused>) => {
+            encode: (outcome: Result.Result<Admitted | Rejected, DecideMalformed>) => {
               trace.push('encode')
               return Result.match(outcome, {
-                onSuccess: (admitted) => ({ line: `admitted:${admitted.length}` }),
-                onFailure: (refused) => ({ line: `refused:${refused.why}` }),
+                onSuccess: (decision) =>
+                  Match.value(decision).pipe(
+                    Match.tag('Admitted', (admitted) => ({ line: `admitted:${admitted.length}` })),
+                    Match.tag('Rejected', (rejected) => ({ line: `refused:${rejected.why}` })),
+                    Match.exhaustive,
+                  ),
+                onFailure: (malformed) => ({ line: `malformed:${malformed.length}` }),
               })
             },
             write: (output: Output) =>
@@ -205,10 +222,18 @@ Feature('Running a Cell')
               const second = Cell.layer({
                 read: (line: string) => Effect.succeed(new Decoded({ length: line.length })),
                 decide: decideFixture,
-                write: (outcome: Result.Result<Admitted, Refused>, raw: Decoded) => {
+                write: (outcome: Result.Result<Admitted | Rejected, DecideMalformed>, raw: Decoded) => {
                   const line = Result.match(outcome, {
-                    onSuccess: (admitted) => `second:admitted:${admitted.length}:${raw.length}`,
-                    onFailure: (refused) => `second:refused:${refused.why}`,
+                    onSuccess: (decision) =>
+                      Match.value(decision).pipe(
+                        Match.tag(
+                          'Admitted',
+                          (admitted) => `second:admitted:${admitted.length}:${raw.length}`,
+                        ),
+                        Match.tag('Rejected', (rejected) => `second:refused:${rejected.why}`),
+                        Match.exhaustive,
+                      ),
+                    onFailure: (malformed) => `second:malformed:${malformed.length}`,
                   })
                   return ledger.append(line).pipe(Effect.as(line))
                 },
