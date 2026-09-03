@@ -211,6 +211,12 @@ A carrier earns its keep only where the literal has a second consumer — a runt
 
 What a carrier does **not** do bounds where it can be the answer, and the bound is wider than it first looks. A carrier is structural — the derived type is a plain intersection, so a hand-written object literal satisfies it, no constructor is forced and no field is validated. So is every alternative in this channel: a `Schema.TaggedClass` instance type is `S["Type"] & Brand` with `Brand = {}`, and an object literal assigned to one compiles — measured, by an `@ts-expect-error` on that assignment being reported unused. `[ClassTypeId]` rides the runtime prototype, not the declared instance type. No tagged declaration here is unforgeable, `Data.TaggedEnum` and the schema class family alike. What a schema buys over a carrier is a codec and a tag derived from one declaration, never protection from a fabricated value; refusing a fabricated value is a constraint on an argument position, and a brand that merely records a constructor ran is provenance rather than a proposition (`docs/solutions/architecture-patterns/constructor-rule-boundary.md`).
 
+### Decision family brand
+
+The one TypeId every variant of a workflow's success channel shares: a module-scope `Symbol.for` const and a `readonly [T]` instance field repeated on each `S.TaggedClass` variant. One family per decision union — `RestartDecisionTypeId` and `DelegationVerdictTypeId` are instances. It is what `Match.tag`'s closed union and the runtime brand laws observe, and distinct from Effect's own static schema `TypeId`, which is one constant shared by every class in the runtime and discriminates nothing.
+
+_Avoid:_ calling it "the schema TypeId" — that name belongs to Effect's constant, which cannot be shared by exactly one decision family.
+
 ### Cell constructor
 
 A `make` a cell type exposes so that authors produce that cell by calling it rather than by annotating a value. Its force lives entirely in the parameter type — what the author hands in — and it earns existence only by computing something the author could not write: inferring the cell's channels from the argument and deriving markers from them. A constructor whose rejections all follow from its parameter type alone computes nothing an annotation would not, and is ceremony rather than enforcement.
