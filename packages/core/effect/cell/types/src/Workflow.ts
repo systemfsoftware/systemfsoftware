@@ -97,8 +97,13 @@ type SharedTypeId<D, I = UnionToIntersection<D>> = [
 /**
  * `unknown` when the decision channel is a tagged union of at least two variants sharing one
  * TypeId, the marker naming the first defect otherwise. Shape only — presence, not force.
+ *
+ * The guard resolves `unknown` while the compiler is still unifying the decider's `D` from the
+ * `Result` conjunct — a conditional in parameter position sees the inference variable before it
+ * settles, and the shape legs must degrade to acceptance there or every construction refuses.
  */
-type DecisionShape<D> = AtLeastTwoDistinct<D> extends false ? SingleVariantDecision
+type DecisionShape<D> = [unknown] extends [D] ? unknown
+  : AtLeastTwoDistinct<D> extends false ? SingleVariantDecision
   : boolean extends TaggedMembers<D> ? UntaggedDecision
   : SharedTypeId<D>
 
