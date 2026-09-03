@@ -316,24 +316,11 @@ const convertTestRaw = (
 export const decideVitestDryRun = (command: VitestDryRunCommand): VitestDryRunOutcome => {
   const tests = command.rawTests.map((t) => convertTestRaw(t, command.projectRoot))
   const hasFailure = tests.some((t) => t.status === 'failed')
-  return Match.value({ hasFailure, hasExternalError: command.hasExternalError }).pipe(
-    Match.when({ hasFailure: false, hasExternalError: true }, () =>
-      DryRunExternalError.make({
-        testsJson: JSON.stringify(tests),
-        errorMessage: `An error occurred outside of a test run: ${command.externalErrorText}`,
-      })),
-    Match.when(
-      { hasFailure: false, hasExternalError: false },
-      () => DryRunComplete.make({ testsJson: JSON.stringify(tests) }),
-    ),
-    Match.when(
-      { hasFailure: true, hasExternalError: false },
-      () => DryRunComplete.make({ testsJson: JSON.stringify(tests) }),
-    ),
-    Match.when(
-      { hasFailure: true, hasExternalError: true },
-      () => DryRunComplete.make({ testsJson: JSON.stringify(tests) }),
-    ),
-    Match.exhaustive,
-  )
+  if (hasFailure === false && command.hasExternalError) {
+    return DryRunExternalError.make({
+      testsJson: JSON.stringify(tests),
+      errorMessage: `An error occurred outside of a test run: ${command.externalErrorText}`,
+    })
+  }
+  return DryRunComplete.make({ testsJson: JSON.stringify(tests) })
 }
