@@ -1,16 +1,4 @@
-/**
- * Html reporter workflow — pure document construction.
- */
-
-import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
-
-import { HtmlReportCommand, HtmlReportError } from './Reporter.schema.js'
-
-export class HtmlDocument extends S.TaggedClass<HtmlDocument>()('HtmlDocument', {
-  html: S.String,
-}) {}
+import { HtmlDocument, HtmlReportCommand } from './Reporter.schema.js'
 
 function escapeHtmlTags(json: string): string {
   return json.replace(/</g, '<"+"')
@@ -44,10 +32,5 @@ function buildReportHtml(report: unknown, scriptContent: string): string {
   </html>`
 }
 
-export const makeHtmlDocument = Workflow.make(
-  HtmlReportCommand,
-  (command: HtmlReportCommand): Result.Result<HtmlDocument, HtmlReportError> => {
-    const html = buildReportHtml(command.report, command.scriptContent)
-    return Result.succeed(HtmlDocument.make({ html }))
-  },
-)
+export const buildHtmlDocument = (command: HtmlReportCommand): HtmlDocument =>
+  HtmlDocument.make({ html: buildReportHtml(command.report, command.scriptContent) })
