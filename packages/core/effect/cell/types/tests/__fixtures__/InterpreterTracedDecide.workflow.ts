@@ -1,6 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
-import { Admitted, Decoded, type Malformed, type Rejected } from './InterpreterDecide.workflow.js'
+import { type Admitted, Decoded, type Malformed, type Rejected } from './InterpreterDecide.workflow.js'
 
 /**
  * The traced decider. It takes the decision as data so the body references only
@@ -8,8 +9,12 @@ import { Admitted, Decoded, type Malformed, type Rejected } from './InterpreterD
  * because `Workflow.make` now derives the command channel from the class it is
  * handed — a zero-argument decider can no longer express a command at all.
  */
-export const tracedDecide = (trace: string[], admitted: Admitted) =>
+export const tracedDecide = (trace: string[], admitted: Admitted, rejected: Rejected) =>
   Workflow.make(Decoded, (_command: Decoded): Result.Result<Admitted | Rejected, Malformed> => {
     trace.push('decide')
-    return Result.succeed(admitted)
+    return Match.value(_command.length === -1).pipe(
+      Match.when(true, () => Result.succeed(rejected)),
+      Match.when(false, () => Result.succeed(admitted)),
+      Match.exhaustive,
+    )
   })

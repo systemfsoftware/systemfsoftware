@@ -11,7 +11,7 @@ import {
   Admitted,
   decide as decideFixture,
   Decoded,
-  type Malformed as DecideMalformed,
+  Malformed as DecideMalformed,
   Rejected,
 } from './__fixtures__/InterpreterDecide.workflow.js'
 import { tracedDecide as tracedDecideFixture } from './__fixtures__/InterpreterTracedDecide.workflow.js'
@@ -84,6 +84,20 @@ const makeCellReportingItsRaw = (ledger: LedgerService) =>
     decide: decideFixture,
     encode,
     write: (output: Output, raw: Raw) => ledger.append(`${output.line}<-${raw.bytes}`).pipe(Effect.as(output.line)),
+  })
+
+const decodeDecideMalformed = (raw: Raw): Result.Result<Decoded, Malformed> =>
+  raw.bytes === 'decide-bad'
+    ? Result.succeed(new Decoded({ length: -1 }))
+    : decode(raw)
+
+const makeCellDecideMalformed = (ledger: LedgerService) =>
+  Cell.layer({
+    read,
+    decode: decodeDecideMalformed,
+    decide: decideFixture,
+    encode,
+    write: (output: Output) => ledger.append(output.line).pipe(Effect.as(output.line)),
   })
 
 // The order oracle is hand-written here, one scenario over a local trace. It is the
@@ -167,6 +181,33 @@ Feature('Running a Cell')
     )
 
     scenario(
+      'A decide-phase malformed is encoded as the outcome rather than raised as a failure',
+      Gherkin.Do.pipe(
+        When('a Cell is run for a command its decider cannot decide')(
+          'exit',
+          () =>
+            Effect.flatMap(
+              Ledger,
+              (ledger) => Effect.exit(Cell.run(makeCellDecideMalformed(ledger), { id: 'decide-bad' })),
+            ),
+        ),
+        Then('the run succeeds and its response carries the decide-phase malformed')((s) => {
+          expect(s.exit).toStrictEqual(Exit.succeed('malformed:-1'))
+          expect(s.exit).not.toStrictEqual(Exit.fail({ kind: 'Malformed', bytes: 'decide-bad' }))
+          expect(decideFixture(new Decoded({ length: -1 }))).toStrictEqual(
+            Result.fail(new DecideMalformed({ length: -1 })),
+          )
+        }),
+        And('the encoded malformed reached the write')(() =>
+          Effect.flatMap(Ledger, (ledger) =>
+            Effect.map(ledger.lines, (lines) => {
+              expect(lines).toEqual(['malformed:-1'])
+            }))
+        ),
+      ),
+    )
+
+    scenario(
       'The interpreter runs the sandwich in its declared order',
       Gherkin.Do.pipe(
         When('a Cell with tracing phases is run')('outcome', () => {
@@ -181,7 +222,7 @@ Feature('Running a Cell')
               trace.push('decode')
               return Result.succeed(new Decoded({ length: raw.bytes.length }))
             },
-            decide: tracedDecideFixture(trace, new Admitted({ length: 0 })),
+            decide: tracedDecideFixture(trace, new Admitted({ length: 0 }), new Rejected({ why: 'traced refusal' })),
             encode: (outcome: Result.Result<Admitted | Rejected, DecideMalformed>) => {
               trace.push('encode')
               return Result.match(outcome, {

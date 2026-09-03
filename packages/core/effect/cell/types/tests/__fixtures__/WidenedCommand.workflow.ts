@@ -1,4 +1,5 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
@@ -24,5 +25,9 @@ export type WidenedDecision = WidenedOne | WidenedTwo
 
 export const decideWidened = Workflow.make(
   TaggedCmd,
-  (_command: unknown): Result.Result<WidenedDecision, CommandRefused> => Result.succeed(new WidenedOne({ value: 0 })),
+  (_command: unknown): Result.Result<WidenedDecision, CommandRefused> =>
+    Match.value(_command).pipe(
+      Match.when({ value: 0 }, () => Result.succeed(new WidenedTwo({ reason: 'zero' }))),
+      Match.orElse(() => Result.succeed(new WidenedOne({ value: 0 }))),
+    ),
 )

@@ -1,4 +1,5 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
@@ -34,5 +35,9 @@ export type FixtureDecision = DecisionOne | DecisionTwo
 export const decideTagged = Workflow.make(
   TaggedCmd,
   (command: TaggedCmd): Result.Result<FixtureDecision, CommandRefused> =>
-    Result.succeed(new DecisionOne({ value: command.value })),
+    Match.value(command.value === 0).pipe(
+      Match.when(true, () => Result.succeed(new DecisionTwo({ reason: 'zero' }))),
+      Match.when(false, () => Result.succeed(new DecisionOne({ value: command.value }))),
+      Match.exhaustive,
+    ),
 )
