@@ -1,3 +1,4 @@
+/// <reference types="vitest/importMeta" />
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { Match, Option, Result, Schema as S } from 'effect'
 import { FastCheck as fc } from 'effect/testing'

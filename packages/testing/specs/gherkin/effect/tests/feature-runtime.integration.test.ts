@@ -6,7 +6,7 @@ import {
   resolveScenarioArgs,
   StepError,
 } from '@systemfsoftware/effect-gherkin-spec'
-import { Context, Effect, Layer } from 'effect'
+import { Context, Effect, Layer, Option } from 'effect'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
@@ -317,6 +317,106 @@ Feature('Feature runtime — scenario composition and registration').body(({ sce
       const withOpts = resolveScenarioArgs(opts, Effect.void)
       expect(withOpts.opts).toBe(opts)
       expect(withOpts.pipeline).toBeDefined()
+    }),
+  )
+  scenario(
+    'A scenario layer option provides its services to the body',
+    Effect.gen(function*() {
+      const rec = makeRecorder()
+      const restore = rec.stubDescribe()
+      let observed: number | undefined
+      try {
+        rec.subject()('a suite for the scenario layer option').body(({ scenario: inner }) => {
+          inner(
+            'a scenario body reads the scenario layer service',
+            { scenarioLayer: Layer.succeed(FreshSvc, 42) },
+            Effect.gen(function*() {
+              observed = yield* FreshSvc
+            }),
+          )
+        })
+      } finally {
+        restore()
+      }
+      yield* Effect.promise(() => Effect.runPromise(rec.registrations[0]?.thunk() ?? Effect.void))
+      expect(observed).toBe(42)
+    }),
+  )
+
+  scenario(
+    'An extra layer option provides its services to the body',
+    Effect.gen(function*() {
+      const rec = makeRecorder()
+      const restore = rec.stubDescribe()
+      let observed: string | undefined
+      try {
+        rec.subject()('a suite for the extra layer option').body(({ scenario: inner }) => {
+          inner(
+            'a scenario body reads the extra layer service',
+            { layer: Layer.succeed(RuntimeSvc, 'extra') },
+            Effect.gen(function*() {
+              observed = yield* RuntimeSvc
+            }),
+          )
+        })
+      } finally {
+        restore()
+      }
+      yield* Effect.promise(() => Effect.runPromise(rec.registrations[0]?.thunk() ?? Effect.void))
+      expect(observed).toBe('extra')
+    }),
+  )
+
+  scenario(
+    'Both layer options merge their services into one body context',
+    Effect.gen(function*() {
+      const rec = makeRecorder()
+      const restore = rec.stubDescribe()
+      let observedNumber: number | undefined
+      let observedString: string | undefined
+      try {
+        rec.subject()('a suite for merged layer options').body(({ scenario: inner }) => {
+          inner(
+            'a scenario body reads services from both merged layers',
+            {
+              scenarioLayer: Layer.succeed(FreshSvc, 42),
+              layer: Layer.succeed(RuntimeSvc, 'extra'),
+            },
+            Effect.gen(function*() {
+              observedNumber = yield* FreshSvc
+              observedString = yield* RuntimeSvc
+            }),
+          )
+        })
+      } finally {
+        restore()
+      }
+      yield* Effect.promise(() => Effect.runPromise(rec.registrations[0]?.thunk() ?? Effect.void))
+      expect(observedNumber).toBe(42)
+      expect(observedString).toBe('extra')
+    }),
+  )
+
+  scenario(
+    'A scenario authored without options provides nothing beyond the feature context',
+    Effect.gen(function*() {
+      const rec = makeRecorder()
+      const restore = rec.stubDescribe()
+      let observedAbsent: boolean | undefined
+      try {
+        rec.subject()('a suite without options').body(({ scenario: inner }) => {
+          inner(
+            'a scenario body finds no service outside its options',
+            Effect.gen(function*() {
+              observedAbsent = Option.isNone(yield* Effect.serviceOption(FreshSvc))
+            }),
+          )
+        })
+      } finally {
+        restore()
+      }
+      yield* Effect.promise(() => Effect.runPromise(rec.registrations[0]?.thunk() ?? Effect.void))
+      expect(observedAbsent).toBe(true)
     }),
   )
 })
