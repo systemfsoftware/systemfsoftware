@@ -35,22 +35,17 @@ import { SurvivorsRejection } from './Survivors.workflow.js'
 const CONFIG_CODE = 2
 
 export function runOutcomeCode(result: Result.Result<RunOutcomeDecision, FailedRunOutcome>): number {
-  if (Result.isSuccess(result)) {
-    return Match.value(result.success).pipe(
-      Match.tag('RunOk', () => 0),
-      Match.tag('RunParseFailed', () => CONFIG_CODE),
-      Match.tag('RunSurvivorsRejected', () => CONFIG_CODE),
-      Match.tag('RunConfigFailed', () => CONFIG_CODE),
-      Match.tag('RunFailed', (failed) => failed.code),
-      Match.exhaustive,
-    )
-  }
-  return Match.value(result.failure).pipe(
+  const outcome: RunOutcomeDecision | RunOutcomeError = Result.match(result, {
+    onSuccess: (success) => success,
+    onFailure: (failure) => failure,
+  })
+  return Match.value(outcome).pipe(
+    Match.tag('RunOk', () => 0),
     Match.tag('RunInterrupted', (error) => error.code),
     Match.tag('RunParseFailed', () => CONFIG_CODE),
     Match.tag('RunSurvivorsRejected', () => CONFIG_CODE),
     Match.tag('RunConfigFailed', () => CONFIG_CODE),
-    Match.tag('RunFailed', (error) => error.code),
+    Match.tag('RunFailed', (failed) => failed.code),
     Match.exhaustive,
   )
 }

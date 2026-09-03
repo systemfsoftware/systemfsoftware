@@ -357,6 +357,20 @@ export interface ModeInput extends FormatFlags {
   readonly toolVars?: Readonly<Partial<Record<ToolVariable, string | undefined>>>
 }
 
+/** The single projection from the resolved-mode decision union back to the legacy record shape. */
+const decisionToResolvedMode = (decision: ResolveModeDecision): ResolvedMode =>
+  Match.value(decision).pipe(
+    Match.tag(
+      'HumanOutput',
+      (human): ResolvedMode => ({ mode: 'human', signal: human.signal, stdoutIsTTY: human.stdoutIsTTY }),
+    ),
+    Match.tag(
+      'MachineOutput',
+      (machine): ResolvedMode => ({ mode: 'machine', signal: machine.signal, stdoutIsTTY: machine.stdoutIsTTY }),
+    ),
+    Match.exhaustive,
+  )
+
 /**
  * Resolves the output mode by R4 precedence. Pure — reads nothing, so it is
  * fully testable; the caller supplies every input once at startup. The
@@ -413,19 +427,7 @@ export function resolveMode(input: ModeInput): Result.Result<ResolvedMode, CliEr
       }),
     )
   }
-  return Result.succeed(
-    Match.value(result.success).pipe(
-      Match.tag(
-        'HumanOutput',
-        (human): ResolvedMode => ({ mode: 'human', signal: human.signal, stdoutIsTTY: human.stdoutIsTTY }),
-      ),
-      Match.tag(
-        'MachineOutput',
-        (machine): ResolvedMode => ({ mode: 'machine', signal: machine.signal, stdoutIsTTY: machine.stdoutIsTTY }),
-      ),
-      Match.exhaustive,
-    ),
-  )
+  return Result.succeed(decisionToResolvedMode(result.success))
 }
 
 /**
@@ -945,18 +947,7 @@ export const outputModeProbeCell = Cell.layer({
     ),
   decide: resolveModeWorkflow,
   encode: (outcome: Result.Result<ResolveModeDecision, ModeConflictError>) =>
-    Result.map(outcome, (decision): ResolvedMode =>
-      Match.value(decision).pipe(
-        Match.tag(
-          'HumanOutput',
-          (human): ResolvedMode => ({ mode: 'human', signal: human.signal, stdoutIsTTY: human.stdoutIsTTY }),
-        ),
-        Match.tag(
-          'MachineOutput',
-          (machine): ResolvedMode => ({ mode: 'machine', signal: machine.signal, stdoutIsTTY: machine.stdoutIsTTY }),
-        ),
-        Match.exhaustive,
-      )),
+    Result.map(outcome, decisionToResolvedMode),
   write: (outcome) =>
     Result.match(outcome, {
       onFailure: (error) => Effect.fail(error),

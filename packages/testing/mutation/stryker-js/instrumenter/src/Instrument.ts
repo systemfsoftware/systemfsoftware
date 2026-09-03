@@ -266,15 +266,13 @@ const printDecision = (
       const files = decision.files
       const asts: readonly unknown[] = decision.asts
       const outFiles: FileSchemaType[] = []
-      const isAstValue = (value: unknown): value is Ast =>
-        typeof value === 'object' && value !== null && 'format' in value && 'root' in value
       for (let i = 0; i < asts.length; i++) {
         const maybeAst: unknown = asts[i]
         const maybeFile: FileSchemaType | undefined = files[i]
         if (maybeAst === undefined || maybeFile === undefined) {
           continue
         }
-        if (!isAstValue(maybeAst)) {
+        if (!isAst(maybeAst)) {
           continue
         }
         const ast: Ast = maybeAst

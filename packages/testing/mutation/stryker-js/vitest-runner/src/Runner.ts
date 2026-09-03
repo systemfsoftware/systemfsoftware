@@ -777,15 +777,15 @@ export const makeVitestRunnerLayer = (
           Result.match(outcome, {
             onFailure: (e) => ({ status: 'error' as const, errorMessage: e.message }) satisfies MutantRunResult,
             onSuccess: (out) => {
-              let parsed: readonly { id: string }[]
-              try {
-                const raw: unknown = JSON.parse(out.testsJson)
-                if (Array.isArray(raw)) parsed = raw.filter(isIdRecord)
-                else parsed = []
-              } catch {
-                parsed = []
+              const nrOfTests = (): number => {
+                try {
+                  const raw: unknown = JSON.parse(out.testsJson)
+                  if (Array.isArray(raw)) return raw.filter(isIdRecord).length
+                  return 0
+                } catch {
+                  return 0
+                }
               }
-              const nrOfTests: number = parsed.length
               return Match.value(out).pipe(
                 Match.tag(
                   'Error',
@@ -812,12 +812,12 @@ export const makeVitestRunnerLayer = (
                         if (killed.killerIds !== undefined) return [...killed.killerIds]
                         return []
                       })(),
-                      nrOfTests,
+                      nrOfTests: nrOfTests(),
                     }) satisfies MutantRunResult,
                 ),
                 Match.tag(
                   'Survived',
-                  () => ({ status: 'survived' as const, nrOfTests }) satisfies MutantRunResult,
+                  () => ({ status: 'survived' as const, nrOfTests: nrOfTests() }) satisfies MutantRunResult,
                 ),
                 Match.exhaustive,
               )

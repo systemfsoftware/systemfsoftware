@@ -601,29 +601,16 @@ export const instrumentCell = Cell.layer({
         const err = out.failure
         return yield* Effect.fail(new StageError({ stage: err.stage, reason: err.reason, cause: err }))
       }
-      return Match.value(out.success).pipe(
-        Match.tag('InPlaceInstrument', () => ({
-          ...raw.prev,
-          project: raw.instrumentedProject,
-          mutants: raw.instrumentResult.mutants,
-          sandbox: raw.sandbox,
-          concurrency: {
-            testRunners: raw.concurrency.testRunners,
-            checkers: raw.concurrency.checkers,
-          },
-        })),
-        Match.tag('EphemeralInstrument', () => ({
-          ...raw.prev,
-          project: raw.instrumentedProject,
-          mutants: raw.instrumentResult.mutants,
-          sandbox: raw.sandbox,
-          concurrency: {
-            testRunners: raw.concurrency.testRunners,
-            checkers: raw.concurrency.checkers,
-          },
-        })),
-        Match.exhaustive,
-      )
+      return {
+        ...raw.prev,
+        project: raw.instrumentedProject,
+        mutants: raw.instrumentResult.mutants,
+        sandbox: raw.sandbox,
+        concurrency: {
+          testRunners: raw.concurrency.testRunners,
+          checkers: raw.concurrency.checkers,
+        },
+      }
     }),
 })
 
