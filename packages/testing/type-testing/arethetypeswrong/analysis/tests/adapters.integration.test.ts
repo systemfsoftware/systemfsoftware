@@ -1,16 +1,15 @@
-/* oxlint-disable @systemfsoftware/effect-dmmf/tests-import-public-api -- these adapters are package-private; the test binds them from source to prove the private wiring works */
 import { PackageStore, PackageStoreStub } from '@systemfsoftware/arethetypeswrong'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { createPackage, packPackage } from '@systemfsoftware/npm-package'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
-// oxlint-disable-next-line @systemfsoftware/oxlint-plugin-effect-dmmf/tests-import-public-api -- package-private service, reached from source on purpose
+// oxlint-disable-next-line @systemfsoftware/effect-dmmf/tests-import-public-api -- package-private service, reached from source on purpose
 import { LexerAdapter, LexerAdapterStub } from '../src/LexerAdapter.js'
-// oxlint-disable-next-line @systemfsoftware/oxlint-plugin-effect-dmmf/tests-import-public-api -- package-private service, reached from source on purpose
+// oxlint-disable-next-line @systemfsoftware/effect-dmmf/tests-import-public-api -- package-private service, reached from source on purpose
 import { ResolverAdapter, ResolverAdapterStub } from '../src/ResolverAdapter.js'
-// oxlint-disable-next-line @systemfsoftware/oxlint-plugin-effect-dmmf/tests-import-public-api -- package-private service, reached from source on purpose
+// oxlint-disable-next-line @systemfsoftware/effect-dmmf/tests-import-public-api -- package-private service, reached from source on purpose
 import { TarballAdapter, TarballAdapterLive, TarballAdapterStub } from '../src/TarballAdapter.js'
-// oxlint-disable-next-line @systemfsoftware/oxlint-plugin-effect-dmmf/tests-import-public-api -- package-private service, reached from source on purpose
+// oxlint-disable-next-line @systemfsoftware/effect-dmmf/tests-import-public-api -- package-private service, reached from source on purpose
 import { TypescriptAdapter, TypescriptAdapterStub } from '../src/TypescriptAdapter.js'
 
 const Feature = makeFeature({ it, layer })
