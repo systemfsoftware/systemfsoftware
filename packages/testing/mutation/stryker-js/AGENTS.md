@@ -1,6 +1,10 @@
 # AGENTS.md — `packages/testing/mutation/stryker-js/`
 
-The mutation-testing engine. Sub-package leaves (`cli/`, `instrumenter/`, `mutation-run/`, `mutation-report/`, `plugin-api/`, `typescript-checker/`, `vitest-runner/`) carry the per-package deltas.
+The mutation-testing engine subtree. Owned outright (REPO-O1): we publish and change these packages; the originating `@stryker-mutator` project is history, never governance. Sub-package leaves carry per-package deltas.
 
-- **These packages are ours, full stop (`REPO-O1`).** They began as a port of `@stryker-mutator`, which is history and never governance: we publish them, we change them, we do not contribute anything back, and we preserve mergeability with nothing. Refactor them like any other package in the workspace. Where a leaf holds to the originating project's strictness or idioms, that is a deliberate choice, not a constraint — and never a reason to call one of these packages a fork or to call anything upstream of it.
-- **Rebuild (`pnpm build`) after any source change in `mutation-run/` or `mutation-report/`** — the CLI package and programmatic API users consume their built `dist/` (every export resolves through `./dist/*.mjs`), so an unbuilt edit tests the previous version.
+## Rules
+
+| ID        | Rule                                                                                                                                                      | Gate                                                                                                                                                                 |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **SJ-R1** | Rebuild (`pnpm build`) after any source change in a package consumed via built `dist/` — an unbuilt edit tests the previous version.                      | `review`                                                                                                                                                             |
+| **SJ-R2** | Only `cli/` carries a `stryker.config.json` in this subtree; every other package is an adapter or holds no mutation-enrolled decision — never enroll one. | `git ls-files 'packages/testing/mutation/stryker-js/**/stryker.config.json'` returns exactly the `cli/` entry (fixtures excluded); `pnpm check:stryker-mutate-scope` |

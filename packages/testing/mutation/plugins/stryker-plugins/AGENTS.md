@@ -1,13 +1,19 @@
 # AGENTS.md — `@systemfsoftware/stryker-plugins`
 
-> **Delta**: Stryker mutation-testing plugins for Effect-TS.
+Stryker plugins for Effect-TS: ignores proven-equivalent mutants on Schema declarations (brands, `TaggedClass`/`TaggedError` tags). Root `AGENTS.md` governs.
 
-Ignores equivalent mutants on Effect Schema declarations — brands, `TaggedClass`/`TaggedError` tags. Prevents false-positive mutation scores that inflate without catching real bugs.
+## Rules
 
-**Key invariants:**
+| ID      | Rule                                                                                              | Gate                                                  |
+| ------- | ------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| **SP1** | An ignored mutant is proven-equivalent: mutating the tag/brand field produces identical behavior. | `pnpm --filter @systemfsoftware/stryker-plugins test` |
+| **SP2** | Every new ignore pattern arrives with a test demonstrating the equivalent mutant.                 | `pnpm --filter @systemfsoftware/stryker-plugins test` |
+| **SP3** | Hook into Stryker's `resolveMutant` pipeline only; never bypass other mutation stages.            | `review`                                              |
 
-- Ignored mutants MUST be proven-equivalent: mutating the tag/brand field produces identical behavior
-- Any new ignore pattern MUST include a test demonstrating the equivalent mutant
-- Plugin hooks into Stryker's `resolveMutant` pipeline — don't bypass other mutation stages
-- Score reflects behavioral coverage, not data-declaration coverage
-- **SP-V1 — no hand-written codec-law properties here.** `grep -rnE 'S\.equivalence' packages/stryker-plugins/src` returns nothing; rely on the injected law tests (contract: `packages/effect-schema-vite/AGENTS.md`).
+## Verification
+
+```bash
+pnpm --filter @systemfsoftware/stryker-plugins typecheck
+pnpm --filter @systemfsoftware/stryker-plugins test
+pnpm --filter @systemfsoftware/stryker-plugins lint
+```
