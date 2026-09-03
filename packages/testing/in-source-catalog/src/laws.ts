@@ -14,6 +14,7 @@ export interface LawsSpec<A, R> {
 export const contract = <A, R, const E extends LiteralBounded<E>>(
   cases: readonly PublishedCase<A, R, E>[],
 ): PublishedCases<A, R> => mintPublishedCases(cases)
+
 // Static runner imports cannot work here: the runner must exist only where the
 // guard is truthy, so the published module graph stays vitest-free.
 export const laws = async <A, R>(spec: LawsSpec<A, R>): Promise<void> => {

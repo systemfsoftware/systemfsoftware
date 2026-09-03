@@ -25,6 +25,14 @@ interface RegistrySlot {
   readonly readOnly: boolean
 }
 
+const tierForRoot = (root: string): string =>
+  Match.value(root).pipe(
+    Match.when('/var/lib/registry', () => 'primary'),
+    Match.orElse(() => 'secondary'),
+  )
+
+const refusedCommand = DecideRegistrySlotCommand.make({ tenant: 'widgets', tier: 'primary', slot: 'refused.env' })
+
 /** @internal */
 export const decideRegistrySlot = Workflow.make(
   DecideRegistrySlotCommand,
@@ -56,6 +64,21 @@ if (import.meta.vitest !== void 0) {
           Result.isSuccess(result) ? { root: result.success.root, readOnly: result.success.readOnly } : {},
         expect: { root: '/var/lib/registry', readOnly: true },
       },
+      {
+        label: 'secondary',
+        input: DecideRegistrySlotCommand.make({ tenant: 'widgets', tier: 'secondary', slot: 'widgets' }),
+        project: (result: Result.Result<RegistrySlot, SlotRefused>) =>
+          Result.isSuccess(result) ? { root: result.success.root, readOnly: result.success.readOnly } : {},
+        expect: { root: '/var/opt/registry', readOnly: true },
+      },
     ]),
+    inverse: (result: Result.Result<RegistrySlot, SlotRefused>) =>
+      Result.isSuccess(result)
+        ? DecideRegistrySlotCommand.make({
+          tenant: 'widgets',
+          tier: tierForRoot(result.success.root),
+          slot: 'widgets',
+        })
+        : refusedCommand,
   })
 }
