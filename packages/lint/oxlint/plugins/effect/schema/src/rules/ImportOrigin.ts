@@ -88,6 +88,9 @@ export interface ImportOrigin {
 export const originMemberSequence = (origin: ImportOrigin): readonly string[] =>
   origin.importedName === null ? origin.path : [origin.importedName, ...origin.path]
 
+export const isSchemaVocabularyOrigin = (origin: ImportOrigin): boolean =>
+  origin.source === 'effect/Schema' || (origin.source === 'effect' && origin.importedName === 'Schema')
+
 interface ScopeLike {
   readonly upper: ScopeLike | null
   readonly references: readonly {
