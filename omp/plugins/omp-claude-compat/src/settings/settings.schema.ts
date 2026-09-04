@@ -52,17 +52,6 @@ export const SettingsWrapped = S.Struct({
 
 export type HookSettings = S.Schema.Type<typeof SettingsWrapped>
 
-export const HookCoverageRowSchema = S.Struct({ event: S.String, reason: S.String })
-
-export const HookCoverageSchema = S.Struct({
-  unrecognized: S.Array(HookCoverageRowSchema),
-  notCarried: S.Array(HookCoverageRowSchema),
-  matcherNotEvaluable: S.Array(HookCoverageRowSchema),
-  matcherOutOfReach: S.Array(HookCoverageRowSchema),
-  shadowed: S.Array(HookCoverageRowSchema),
-  disabled: S.Array(HookCoverageRowSchema),
-})
-
 const SettingsFlat = S.Struct({
   ...HookGroups.fields,
   disableAllHooks: S.optional(S.Boolean),
@@ -137,9 +126,4 @@ export interface DisableSource {
   readonly label: string
 }
 
-export interface SettingsSource {
-  readonly settings: HookSettings
-
-  readonly managed: boolean
-  readonly pluginRoot?: string
-}
+export type SettingsSource = DecodedSource

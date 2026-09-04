@@ -581,11 +581,7 @@ interface SettingsFileText {
 
 interface LoadSettingsRaw {
   readonly texts: readonly SettingsFileText[]
-  readonly pluginSources: readonly {
-    readonly settings: HookSettings
-    readonly managed: boolean
-    readonly pluginRoot?: string
-  }[]
+  readonly pluginSources: readonly SettingsSource[]
 }
 
 const SettingsJsonWire = Wire.mint(SettingsJSON)
