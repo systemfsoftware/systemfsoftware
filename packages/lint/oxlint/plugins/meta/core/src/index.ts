@@ -7,16 +7,13 @@
 
 import type { Rule } from '@oxlint/plugins'
 import effectNative from '@systemfsoftware/oxlint-plugin-effect-native'
+import tagDiscipline from '@systemfsoftware/oxlint-plugin-tag-discipline'
 
 import { banClasses } from './rules/ban-classes.js'
 import { banErrorString } from './rules/ban-error-string.js'
 import { internalExportJsdoc } from './rules/internal-export-jsdoc.js'
 import { noBarrels } from './rules/no-barrels.js'
-import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.js'
-import { noContextGenericTag } from './rules/no-context-generic-tag.js'
-import { noDirectTagAccess } from './rules/no-direct-tag-access.js'
 import { noDomainBranchingDensity } from './rules/no-domain-branching-density.js'
-import { noEitherTagAssertions } from './rules/no-either-tag-assertions.js'
 import { noInlineDestructuredType } from './rules/no-inline-destructured-type.js'
 import { noInternalJsdocOutside } from './rules/no-internal-jsdoc-outside.js'
 import { noIoBoundaryTests } from './rules/no-io-boundary-tests.js'
@@ -57,15 +54,13 @@ const recommendedFrom = (source: SourcePlugin): Record<string, 'error'> => {
  */
 const recommendedRules = {
   [rule('ban-error-string')]: 'error',
-  [rule('no-context-generic-tag')]: 'error',
-  [rule('no-direct-tag-access')]: 'error',
   [rule('no-domain-branching-density')]: 'error',
-  [rule('no-either-tag-assertions')]: 'error',
   [rule('no-io-boundary-tests')]: 'error',
   [rule('internal-export-jsdoc')]: 'error',
 
   [rule('no-internal-jsdoc-outside')]: 'error',
   ...recommendedFrom(effectNative),
+  ...recommendedFrom(tagDiscipline),
 } as const
 
 export default {
@@ -76,16 +71,13 @@ export default {
     'ban-classes': banClasses,
     'ban-error-string': banErrorString,
     'no-barrels': noBarrels,
-    'no-bodyless-status-assertion': noBodylessStatusAssertion,
-    'no-context-generic-tag': noContextGenericTag,
     'no-inline-destructured-type': noInlineDestructuredType,
     'internal-export-jsdoc': internalExportJsdoc,
     'no-internal-jsdoc-outside': noInternalJsdocOutside,
     'no-io-boundary-tests': noIoBoundaryTests,
-    'no-direct-tag-access': noDirectTagAccess,
-    'no-either-tag-assertions': noEitherTagAssertions,
     'no-domain-branching-density': noDomainBranchingDensity,
     ...effectNative.rules,
+    ...tagDiscipline.rules,
   },
   configs: {
     recommended: {
