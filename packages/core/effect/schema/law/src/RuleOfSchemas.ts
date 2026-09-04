@@ -59,11 +59,9 @@ export const ruleOfSchemas = <A, I>(
   const { encodeStable, roundTrips } = lawsOf(schema)
   const arbitrary = S.toArbitrary(schema)(fc)
 
-  const budget = { fastCheck: { numRuns: 25 } }
+  it.prop(`∀x_${name}Enc_=x`, [arbitrary], ([value]) => encodeStable(value))
 
-  it.prop(`∀x_${name}Enc_=x`, [arbitrary], ([value]) => encodeStable(value), budget)
-
-  it.prop(`∀x_${name}_=x`, [arbitrary], ([value]) => roundTrips(value), budget)
+  it.prop(`∀x_${name}_=x`, [arbitrary], ([value]) => roundTrips(value))
 }
 
 if (import.meta.vitest !== void 0) {
