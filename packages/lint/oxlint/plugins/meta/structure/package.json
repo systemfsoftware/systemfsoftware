@@ -1,6 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-structure",
   "license": "Apache-2.0",
+  "private": true,
   "version": "0.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
@@ -26,9 +27,6 @@
     "property-testing"
   ],
   "type": "module",
-  "files": [
-    "dist"
-  ],
   "exports": {
     ".": {
       "types": "./dist/oxlint-plugin-structure.d.ts",
@@ -44,7 +42,6 @@
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
   },
@@ -74,8 +71,5 @@
   "peerDependencies": {
     "effect": "catalog:peers",
     "typescript": ">=5.0.0"
-  },
-  "publishConfig": {
-    "provenance": true
   }
 }

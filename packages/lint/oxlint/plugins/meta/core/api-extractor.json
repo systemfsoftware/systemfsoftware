@@ -2,7 +2,11 @@
   "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
   "projectFolder": ".",
   "mainEntryPointFilePath": "<projectFolder>/dist/index.d.ts",
-  "bundledPackages": [],
+  "bundledPackages": [
+    "@systemfsoftware/oxlint-plugin-effect-native",
+    "@systemfsoftware/oxlint-plugin-structure",
+    "@systemfsoftware/oxlint-plugin-tag-discipline"
+  ],
   "compiler": {
     "tsconfigFilePath": "<projectFolder>/tsconfig.build.json"
   },

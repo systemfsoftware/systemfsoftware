@@ -22,16 +22,16 @@ const _default: {
         'no-new-worker-with-wasm-import': Rule;
         'ban-classes': Rule;
         'ban-error-string': Rule;
-        'no-barrels': Rule;
-        'no-bodyless-status-assertion': Rule;
-        'no-context-generic-tag': Rule;
-        'no-inline-destructured-type': Rule;
         'internal-export-jsdoc': Rule;
+        'no-barrels': Rule;
+        'no-domain-branching-density': Rule;
+        'no-inline-destructured-type': Rule;
         'no-internal-jsdoc-outside': Rule;
         'no-io-boundary-tests': Rule;
+        'no-bodyless-status-assertion': Rule;
+        'no-context-generic-tag': Rule;
         'no-direct-tag-access': Rule;
         'no-either-tag-assertions': Rule;
-        'no-domain-branching-density': Rule;
     };
     configs: {
         recommended: {
