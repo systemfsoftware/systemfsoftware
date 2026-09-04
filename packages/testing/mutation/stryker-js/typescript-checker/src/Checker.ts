@@ -1,11 +1,3 @@
-/**
- * Checker — capability that validates mutants against the TypeScript compiler.
- *
- * Bridges the checker plugin protocol (`@systemfsoftware/stryker-js/Checker`)
- * to the compiler service and the pure `checkMutants` workflow. Diagnostics
- * are classified without I/O; the file graph is sourced from the compiler.
- */
-
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Checker } from '@systemfsoftware/stryker-js/Checker'
 import { CheckerFailed } from '@systemfsoftware/stryker-js/Checker'
@@ -16,6 +8,7 @@ import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { Predicate, Result } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as HashMap from 'effect/HashMap'
+import * as Match from 'effect/Match'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import { DiagnosticCategory } from 'typescript/unstable/sync'
@@ -33,8 +26,6 @@ import { createGroups, TypeScriptCompiler } from './Compiler.js'
 
 const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
 
-// ── plugin options ───────────────────────────────────────────────────────
-
 export interface TypescriptCheckerPluginOptions {
   typescriptChecker?: {
     prioritizePerformanceOverAccuracy?: boolean
@@ -43,8 +34,6 @@ export interface TypescriptCheckerPluginOptions {
 
 export interface TypescriptCheckerOptionsWithStrykerOptions extends TypescriptCheckerPluginOptions, StrykerOptions {}
 
-// ── declaration source mapping ───────────────────────────────────────────
-
 const findSourceMapRegex = /\/\/# sourceMappingURL=(.+)$/m
 
 export function getSourceMappingURL(content: string): string | undefined {
@@ -52,10 +41,6 @@ export function getSourceMappingURL(content: string): string | undefined {
   return findSourceMapRegex.exec(content)?.[1]
 }
 
-/**
- * Pure grouping decision: separates mutants inside the project graph from
- * those outside it, honouring `prioritizePerformanceOverAccuracy`.
- */
 export function partitionMutantsForGrouping(
   mutants: readonly Mutant[],
   nodes: MutableHashMap.MutableHashMap<string, TSFileNode>,
@@ -75,8 +60,6 @@ export function partitionMutantsForGrouping(
   }
   return { inside, outside }
 }
-
-// ── checker wiring ───────────────────────────────────────────────────────
 
 interface CheckerDeps {
   readonly options: unknown
@@ -238,21 +221,26 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
           }
         }
         mergeResults(first.results)
-        if (first.needsRetest.length > 0) {
-          yield* applyOnce([])
-        }
-        const originals: Record<string, Mutant> = {}
-        for (const m of mutants) {
-          originals[m.id] = m
-        }
-        for (const pending of first.needsRetest) {
-          const original = originals[pending.id]
-          if (original === undefined) {
-            continue
-          }
-          const one = yield* applyOnce([original])
-          mergeResults(one.results)
-        }
+        yield* Match.value(first).pipe(
+          Match.tag('CheckFinished', () => Effect.void),
+          Match.tag('RetestRequired', (retest) =>
+            Effect.gen(function*() {
+              yield* applyOnce([])
+              const originals: Record<string, Mutant> = {}
+              for (const m of mutants) {
+                originals[m.id] = m
+              }
+              for (const pending of retest.needsRetest) {
+                const original = originals[pending.id]
+                if (original === undefined) {
+                  continue
+                }
+                const one = yield* applyOnce([original])
+                mergeResults(one.results)
+              }
+            })),
+          Match.exhaustive,
+        )
         return map
       }),
 

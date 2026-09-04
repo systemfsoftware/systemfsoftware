@@ -137,5 +137,6 @@ const decision = Either.match(verdict, {
 ## See Also
 
 - The `Workflow` constructor's `Inhabited` / `UninhabitedError` / `UntaggedError` refusals — the enforcement that gives this document its gates
+- The success-channel twin of this document — the tagged-union / shared-TypeId constraint on the decision channel — is enforced by the `SingleVariantDecision`, `UntaggedDecision`, and `UnsharedTypeId` refusals of the same constructor
 - `CONSTITUTION.md` §I.3 (Each Error Its Own Variant) and §III.3 (Mutation Is the Measure)
 - `packages/effect-daemon-spec/src/leader-lock.schema.ts` — reference usage of `S.TaggedError` in the monorepo

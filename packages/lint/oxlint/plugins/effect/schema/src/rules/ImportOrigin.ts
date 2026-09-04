@@ -54,7 +54,8 @@ import type { ESTree } from '@oxlint/plugins'
  * (schema-declaration-location does exactly that).
  *
  * The resolver is deliberately self-contained (no import of `MakeBoundary.ts`):
- * it is mirrored byte-identically into the core plugin, which cannot depend on
+ * it is mirrored byte-identically into the structure plugin (canonical home),
+ * which cannot depend on
  * the effect-workflow package, and any plugin that gates on import origin
  * (make-boundary, schema-declaration-location) imports this
  * single contract. `getScope` is the scope-lookup closure

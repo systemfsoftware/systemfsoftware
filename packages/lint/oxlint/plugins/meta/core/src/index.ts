@@ -5,30 +5,30 @@
  * All rules are AST-only (no type-aware features) for maximum compatibility.
  */
 
-import { banClasses } from './rules/ban-classes.js'
-import { banErrorString } from './rules/ban-error-string.js'
-import { internalExportJsdoc } from './rules/internal-export-jsdoc.js'
-import { noBarrels } from './rules/no-barrels.js'
-import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.js'
-import { noContextGenericTag } from './rules/no-context-generic-tag.js'
-import { noDateNowInEffect } from './rules/no-date-now-in-effect.js'
-import { noDirectTagAccess } from './rules/no-direct-tag-access.js'
-import { noDomainBranchingDensity } from './rules/no-domain-branching-density.js'
-import { noEitherTagAssertions } from './rules/no-either-tag-assertions.js'
-import { noInlineDestructuredType } from './rules/no-inline-destructured-type.js'
-import { noInternalJsdocOutside } from './rules/no-internal-jsdoc-outside.js'
-import { noIoBoundaryTests } from './rules/no-io-boundary-tests.js'
-import { noLoggingInCatch } from './rules/no-logging-in-catch.js'
-import { noNativeMapInEffect } from './rules/no-native-map-in-effect.js'
-import { noNativeSetInEffect } from './rules/no-native-set-in-effect.js'
-import { noNativeSetIntervalInEffect } from './rules/no-native-setinterval-in-effect.js'
-import { noNativeSetTimeoutInEffect } from './rules/no-native-settimeout-in-effect.js'
-import { noNewPromiseInEffect } from './rules/no-new-promise-in-effect.js'
-import { noNewWorkerWithWasmImport } from './rules/no-new-worker-with-wasm-import.js'
+import type { Rule } from '@oxlint/plugins'
+import effectNative from '@systemfsoftware/oxlint-plugin-effect-native'
+import structure from '@systemfsoftware/oxlint-plugin-structure'
+import tagDiscipline from '@systemfsoftware/oxlint-plugin-tag-discipline'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin'
 
-const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
+interface SourcePlugin {
+  readonly meta: { readonly name: string }
+  readonly rules: Record<string, Rule>
+  readonly configs?: { readonly recommended?: { readonly rules?: Record<string, string> } }
+}
+
+// Recommend only what each source itself recommends, never everything in `rules`.
+const recommendedFrom = (source: SourcePlugin): Record<string, 'error'> => {
+  const recommended: Record<string, 'error'> = {}
+  const sourceRecommended = source.configs?.recommended?.rules ?? {}
+  for (const ruleName of Object.keys(source.rules)) {
+    if (`${source.meta.name}/${ruleName}` in sourceRecommended) {
+      recommended[`${PLUGIN_NAME}/${ruleName}`] = 'error'
+    }
+  }
+  return recommended
+}
 
 /**
  * The rules this plugin recommends, so a consumer preset can derive the set
@@ -43,23 +43,9 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
  * enables those by name; recommending them here would fire on their first file.
  */
 const recommendedRules = {
-  [rule('ban-error-string')]: 'error',
-  [rule('no-context-generic-tag')]: 'error',
-  [rule('no-date-now-in-effect')]: 'error',
-  [rule('no-direct-tag-access')]: 'error',
-  [rule('no-domain-branching-density')]: 'error',
-  [rule('no-either-tag-assertions')]: 'error',
-  [rule('no-io-boundary-tests')]: 'error',
-  [rule('no-logging-in-catch')]: 'error',
-  [rule('no-native-map-in-effect')]: 'error',
-  [rule('no-native-set-in-effect')]: 'error',
-  [rule('no-native-setinterval-in-effect')]: 'error',
-  [rule('no-native-settimeout-in-effect')]: 'error',
-  [rule('no-new-promise-in-effect')]: 'error',
-  [rule('no-new-worker-with-wasm-import')]: 'error',
-  [rule('internal-export-jsdoc')]: 'error',
-
-  [rule('no-internal-jsdoc-outside')]: 'error',
+  ...recommendedFrom(effectNative),
+  ...recommendedFrom(structure),
+  ...recommendedFrom(tagDiscipline),
 } as const
 
 export default {
@@ -67,26 +53,9 @@ export default {
     name: PLUGIN_NAME,
   },
   rules: {
-    'ban-classes': banClasses,
-    'ban-error-string': banErrorString,
-    'no-barrels': noBarrels,
-    'no-bodyless-status-assertion': noBodylessStatusAssertion,
-    'no-context-generic-tag': noContextGenericTag,
-    'no-date-now-in-effect': noDateNowInEffect,
-    'no-inline-destructured-type': noInlineDestructuredType,
-    'internal-export-jsdoc': internalExportJsdoc,
-    'no-internal-jsdoc-outside': noInternalJsdocOutside,
-    'no-io-boundary-tests': noIoBoundaryTests,
-    'no-logging-in-catch': noLoggingInCatch,
-    'no-new-promise-in-effect': noNewPromiseInEffect,
-    'no-new-worker-with-wasm-import': noNewWorkerWithWasmImport,
-    'no-direct-tag-access': noDirectTagAccess,
-    'no-either-tag-assertions': noEitherTagAssertions,
-    'no-domain-branching-density': noDomainBranchingDensity,
-    'no-native-map-in-effect': noNativeMapInEffect,
-    'no-native-set-in-effect': noNativeSetInEffect,
-    'no-native-setinterval-in-effect': noNativeSetIntervalInEffect,
-    'no-native-settimeout-in-effect': noNativeSetTimeoutInEffect,
+    ...effectNative.rules,
+    ...structure.rules,
+    ...tagDiscipline.rules,
   },
   configs: {
     recommended: {

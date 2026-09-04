@@ -1,4 +1,3 @@
-/// <reference types="vitest/import-meta" />
 import * as Effect from 'effect/Effect'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as MutableHashSet from 'effect/MutableHashSet'
@@ -6,28 +5,14 @@ import * as Option from 'effect/Option'
 import * as S from 'effect/Schema'
 
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import type { CoverageData, TestPlan } from '@systemfsoftware/stryker-js/Mutant'
+import type { CoverageData, MutantStatus, TestPlan as MutantTestPlan } from '@systemfsoftware/stryker-js/Mutant'
 import type { CompleteDryRunResult, TestResult } from '@systemfsoftware/stryker-js/TestRunner'
 
 import { toRelativeNormalizedFileName } from './IncrementalDiff.paths.js'
-import {
-  IncrementalDiffCommand,
-  IncrementalDiffDecision,
-  PlanMutantTestsCommand,
-  PlannedMutantTests,
-  type PreviousFile,
-  PreviousFilesSchema,
-  type PreviousMutant,
-  type PreviousTestFile,
-  PreviousTestFilesSchema,
-  type RememberedMutant,
-} from './Mutants.schema.js'
+import { PreviousFilesSchema, PreviousTestFilesSchema } from './IncrementalDiff.schema.js'
+import type { PreviousFileRecord, PreviousMutantRecord, PreviousTestFileRecord } from './IncrementalDiff.schema.js'
 
 export const HIT_LIMIT_FACTOR = 100
-
-// ---------------------------------------------------------------------------
-// Diff statistics
-// ---------------------------------------------------------------------------
 
 export interface DiffChanges {
   readonly added: number
@@ -40,7 +25,6 @@ export interface DiffStatistics {
   readonly changesByFile: MutableHashMap.MutableHashMap<string, DiffChanges>
   readonly total: DiffChanges
 }
-type PlannedPlan = PlannedMutantTests['plans'][number]
 const ZERO = 0
 const ONE = 1
 export const emptyDiffChanges = (): DiffChanges => ({ added: ZERO, removed: ZERO })
@@ -91,10 +75,6 @@ export const diffStatisticsDetailedReport = (stats: Readonly<DiffStatistics>): r
 
 export const diffStatisticsTotalsReport = (stats: Readonly<DiffStatistics>): string =>
   `${MutableHashMap.size(stats.changesByFile)} files changed (${diffChangesToString(stats.total)})`
-
-// ---------------------------------------------------------------------------
-// Test coverage
-// ---------------------------------------------------------------------------
 
 export interface TestCoverage {
   readonly testsByMutantId: MutableHashMap.MutableHashMap<string, MutableHashSet.MutableHashSet<TestResult>>
@@ -226,10 +206,6 @@ export const testCoverageFrom = (
   }
 }
 
-// ---------------------------------------------------------------------------
-// Mutant test planner (Cell sandwich)
-// ---------------------------------------------------------------------------
-
 export const calculateTotalTime = (testResults: Iterable<TestResult>): number =>
   [...testResults].reduce((acc, test) => acc + test.timeSpentMs, 0)
 
@@ -241,62 +217,69 @@ export const toTestIds = (testResults: Iterable<TestResult>): string[] => {
   return out
 }
 
-const coverageToCommand = (
-  mutants: readonly Mutant[],
-  testCoverage: TestCoverage,
-  options: { disableBail: boolean; timeoutMS: number; timeoutFactor: number; ignoreStatic: boolean },
-  timeOverheadMS: number,
-  globalTestFilter: string[] | undefined,
-  sandboxFileByName: Record<string, string>,
-): PlanMutantTestsCommand => {
-  const hitsByMutantId: Record<string, number> = {}
-  for (const [k, v] of testCoverage.hitsByMutantId) {
-    hitsByMutantId[k] = v
-  }
-
-  const testsByMutantId: Record<string, string[]> = {}
-  for (const [mutantId, tests] of testCoverage.testsByMutantId) {
-    const ids: string[] = []
-    for (const t of tests) {
-      ids.push(t.id)
-    }
-    testsByMutantId[mutantId] = ids
-  }
-
-  const testTimeById: Record<string, number> = {}
-  for (const [id, result] of testCoverage.testsById) {
-    testTimeById[id] = result.timeSpentMs
-  }
-
-  const staticCoverage = testCoverage.staticCoverage
-
-  let timeSpentAllTests = 0
-  for (const result of MutableHashMap.values(testCoverage.testsById)) {
-    timeSpentAllTests += result.timeSpentMs
-  }
-
-  return PlanMutantTestsCommand.make({
-    mutants: [...mutants],
-    timeOverheadMS,
-    timeSpentAllTests,
-    hitsByMutantId,
-    testsByMutantId,
-    testTimeById,
-    options,
-    sandboxFileByName,
-    ...(staticCoverage !== undefined && { staticCoverage }),
-    ...(globalTestFilter !== undefined && { globalTestFilter: [...globalTestFilter] }),
-  })
+export interface PlannerOptions {
+  readonly disableBail: boolean
+  readonly timeoutMS: number
+  readonly timeoutFactor: number
+  readonly ignoreStatic: boolean
 }
 
-const hasPlanCoverage = (staticCoverage: Record<string, number> | undefined): boolean => {
+export interface PlanMutantTestsInput {
+  readonly mutants: readonly Mutant[]
+  readonly timeOverheadMS: number
+  readonly timeSpentAllTests: number
+  readonly globalTestFilter?: readonly string[]
+  readonly hitsByMutantId: Record<string, number>
+  readonly staticCoverage?: Record<string, number>
+  readonly testsByMutantId: Record<string, readonly string[]>
+  readonly testTimeById: Record<string, number>
+  readonly options: PlannerOptions
+  readonly sandboxFileByName: Record<string, string>
+}
+
+export interface DecidedRunOptions {
+  readonly mutantActivation: 'runtime' | 'static'
+  readonly timeout: number
+  readonly sandboxFileName: string
+  readonly disableBail: boolean
+  readonly reloadEnvironment: boolean
+  readonly testFilter?: readonly string[]
+  readonly hitLimit?: number
+}
+
+export interface RunTestPlan {
+  readonly plan: 'Run'
+  readonly mutantId: string
+  readonly netTime: number
+  readonly runOptions: DecidedRunOptions
+  readonly static?: boolean
+  readonly coveredBy?: readonly string[]
+}
+
+export interface EarlyResultTestPlan {
+  readonly plan: 'EarlyResult'
+  readonly mutantId: string
+  readonly status: MutantStatus
+  readonly statusReason?: string
+  readonly static?: boolean
+  readonly coveredBy?: readonly string[]
+}
+
+export type TestPlan = EarlyResultTestPlan | RunTestPlan
+
+export interface PlannedTestPlans {
+  readonly plans: readonly TestPlan[]
+  readonly totalNetTime: number
+}
+
+const hasCoverageForPlan = (staticCoverage: Record<string, number> | undefined): boolean => {
   if (staticCoverage === undefined) {
     return false
   }
   return Object.keys(staticCoverage).length > 0
 }
 
-const hasPlanStaticCoverage = (staticCoverage: Record<string, number> | undefined, mutantId: string): boolean => {
+const hasStaticCoverageForPlan = (staticCoverage: Record<string, number> | undefined, mutantId: string): boolean => {
   if (staticCoverage === undefined) {
     return false
   }
@@ -346,12 +329,12 @@ const getTestFilter = (globalFilter: readonly string[] | undefined): string[] | 
 
 const toRunPlan = (
   mutant: Mutant,
-  command: PlanMutantTestsCommand,
+  command: PlanMutantTestsInput,
   netTime: number,
   testFilter: readonly string[] | undefined,
   isStatic: boolean | undefined,
   coveredBy: readonly string[] | undefined,
-): PlannedPlan => {
+): RunTestPlan => {
   const disableBail = command.options.disableBail
   const timeoutMS = command.options.timeoutMS
   const timeoutFactor = command.options.timeoutFactor
@@ -382,10 +365,10 @@ const toRunPlan = (
 const toEarlyResultPlan = (
   mutant: Mutant,
   isStatic: boolean | undefined,
-  status: NonNullable<Mutant['status']>,
+  status: MutantStatus,
   statusReason: string | undefined,
   coveredBy: readonly string[] | undefined,
-): PlannedPlan => ({
+): EarlyResultTestPlan => ({
   plan: 'EarlyResult',
   mutantId: mutant.id,
   status,
@@ -397,14 +380,14 @@ const toEarlyResultPlan = (
 
 const decidePlanForMutant = (
   mutant: Mutant,
-  command: PlanMutantTestsCommand,
-): PlannedPlan => {
-  const isStatic = hasPlanStaticCoverage(command.staticCoverage, mutant.id)
+  command: PlanMutantTestsInput,
+): TestPlan => {
+  const isStatic = hasStaticCoverageForPlan(command.staticCoverage, mutant.id)
   if (mutant.status !== undefined) {
     const coveredBy = getCoveredBy(mutant)
     return toEarlyResultPlan(mutant, isStatic, mutant.status, mutant.statusReason, coveredBy)
   }
-  if (hasPlanCoverage(command.staticCoverage)) {
+  if (hasCoverageForPlan(command.staticCoverage)) {
     const tests = command.testsByMutantId[mutant.id] ?? []
     const coveredBy = [...tests]
     const ignoreStatic = command.options.ignoreStatic
@@ -419,13 +402,14 @@ const decidePlanForMutant = (
     const testFilter = getTestFilter(command.globalTestFilter)
     return toRunPlan(mutant, command, command.timeSpentAllTests, testFilter, isStatic, coveredBy)
   }
+
   const testFilter = getTestFilter(command.globalTestFilter)
   return toRunPlan(mutant, command, command.timeSpentAllTests, testFilter, undefined, undefined)
 }
 
-const decidePlanMutantTests = (
-  command: PlanMutantTestsCommand,
-): PlannedMutantTests => {
+export const planMutantTests = (
+  command: PlanMutantTestsInput,
+): PlannedTestPlans => {
   const plans = command.mutants.map((mutant) => decidePlanForMutant(mutant, command))
   const totalNetTime = plans.reduce((acc, plan) => {
     if (plan.plan === 'Run') {
@@ -433,15 +417,60 @@ const decidePlanMutantTests = (
     }
     return acc
   }, 0)
-  return PlannedMutantTests.make({
+  return {
     plans,
     totalNetTime,
-  })
+  }
 }
 
-// Not a decision: construction of the value the decision already described.
-// Sited at the edge because a `Workflow.make` body may not reference an
-// unsealed import like `Mutant`.
+const coverageToCommand = (
+  mutants: readonly Mutant[],
+  testCoverage: TestCoverage,
+  options: { disableBail: boolean; timeoutMS: number; timeoutFactor: number; ignoreStatic: boolean },
+  timeOverheadMS: number,
+  globalTestFilter: string[] | undefined,
+  sandboxFileByName: Record<string, string>,
+): PlanMutantTestsInput => {
+  const hitsByMutantId: Record<string, number> = {}
+  for (const [k, v] of testCoverage.hitsByMutantId) {
+    hitsByMutantId[k] = v
+  }
+
+  const testsByMutantId: Record<string, string[]> = {}
+  for (const [mutantId, tests] of testCoverage.testsByMutantId) {
+    const ids: string[] = []
+    for (const t of tests) {
+      ids.push(t.id)
+    }
+    testsByMutantId[mutantId] = ids
+  }
+
+  const testTimeById: Record<string, number> = {}
+  for (const [id, result] of testCoverage.testsById) {
+    testTimeById[id] = result.timeSpentMs
+  }
+
+  const staticCoverage = testCoverage.staticCoverage
+
+  let timeSpentAllTests = 0
+  for (const result of MutableHashMap.values(testCoverage.testsById)) {
+    timeSpentAllTests += result.timeSpentMs
+  }
+
+  return {
+    mutants: [...mutants],
+    timeOverheadMS,
+    timeSpentAllTests,
+    hitsByMutantId,
+    testsByMutantId,
+    testTimeById,
+    options,
+    sandboxFileByName,
+    ...(staticCoverage !== undefined && { staticCoverage }),
+    ...(globalTestFilter !== undefined && { globalTestFilter: [...globalTestFilter] }),
+  }
+}
+
 const materializeMutant = (
   original: Mutant,
   decided: {
@@ -470,10 +499,7 @@ const materializeMutant = (
   })
 }
 
-// Not a decision: materializes the final `TestPlan` shape from the decision's
-// data. The decision chose Run vs EarlyResult and every runOptions field;
-// this builds the `Mutant` values it described.
-const materializePlan = (plan: PlannedPlan, original: Mutant): TestPlan => {
+const materializePlan = (plan: TestPlan, original: Mutant): MutantTestPlan => {
   if (plan.plan === 'EarlyResult') {
     return { plan: 'EarlyResult', mutant: materializeMutant(original, plan) }
   }
@@ -496,14 +522,14 @@ const materializePlan = (plan: PlannedPlan, original: Mutant): TestPlan => {
 }
 
 export const makeMutantTestPlanner = (
-  command: PlanMutantTestsCommand,
-): Effect.Effect<readonly TestPlan[], never, never> => {
-  const output = decidePlanMutantTests(command)
+  command: PlanMutantTestsInput,
+): Effect.Effect<readonly MutantTestPlan[], never, never> => {
+  const { plans } = planMutantTests(command)
   const byId = new Map<string, Mutant>()
   for (const mutant of command.mutants) {
     byId.set(mutant.id, mutant)
   }
-  return Effect.forEach(output.plans, (plan) => {
+  return Effect.forEach(plans, (plan) => {
     const original = byId.get(plan.mutantId)
     if (original === undefined) {
       return Effect.die(new Error(`planner returned an unknown mutant id: ${plan.mutantId}`))
@@ -521,7 +547,7 @@ export const decidePlans = (
   timeOverheadMS: number,
   globalTestFilter: string[] | undefined,
   sandboxFileByName: Record<string, string>,
-): Effect.Effect<readonly TestPlan[], never, never> => {
+): Effect.Effect<readonly MutantTestPlan[], never, never> => {
   const command = coverageToCommand(
     mutants,
     testCoverage,
@@ -533,12 +559,60 @@ export const decidePlans = (
   return makeMutantTestPlanner(command)
 }
 
-const REMEMBERED_STATUS: Record<string, true> = {
-  Killed: true,
-  Survived: true,
-  Timeout: true,
-  NoCoverage: true,
-  Ignored: true,
+export interface IncrementalDiffResult {
+  readonly mutants: readonly Mutant[]
+  readonly remembered: readonly {
+    readonly mutantId: string
+    readonly status: string
+    readonly testsCompleted?: number | undefined
+    readonly coveredBy?: readonly string[] | undefined
+    readonly killedBy?: readonly string[] | undefined
+  }[]
+  readonly mutantStatistics: DiffStatistics
+  readonly testStatistics: DiffStatistics
+}
+
+export interface RememberedMutant {
+  readonly mutantId: string
+  readonly status: string
+  readonly testsCompleted?: number | undefined
+  readonly coveredBy?: readonly string[] | undefined
+  readonly killedBy?: readonly string[] | undefined
+}
+
+export interface DiffStatisticsLike {
+  readonly changesByFile: Record<string, { readonly added: number; readonly removed: number }>
+  readonly total: { readonly added: number; readonly removed: number }
+}
+
+export interface IncrementalDiffInput {
+  readonly basePath: string
+  readonly currentMutants: readonly Mutant[]
+  readonly previousFiles: Record<string, PreviousFileRecord>
+  readonly previousTestFiles: Record<string, PreviousTestFileRecord>
+  readonly currentRelativeFiles: Record<string, string>
+  readonly testIdsByRelativeFile: Record<string, readonly string[]>
+  readonly coveringTestFilesByMutantId: Record<string, readonly string[]>
+  readonly force: boolean
+}
+
+export interface IncrementalDiffOutput {
+  readonly mutants: readonly Mutant[]
+  readonly remembered: readonly RememberedMutant[]
+  readonly mutantStatistics: DiffStatisticsLike
+  readonly testStatistics: DiffStatisticsLike
+}
+
+const REMEMBERED_STATUS: ReadonlySet<string> = new Set(['Killed', 'Survived', 'Timeout', 'NoCoverage', 'Ignored'])
+
+const normalizeDiffFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
+
+const toRelativeNormalized = (fileName: string | undefined, basePath: string): string => {
+  const raw = fileName ?? ''
+  if (raw.startsWith(basePath)) {
+    return normalizeDiffFileName(raw.slice(basePath.length).replace(/^\/+/, ''))
+  }
+  return normalizeDiffFileName(raw)
 }
 
 type KeyLocation = { readonly line: number; readonly column: number }
@@ -568,7 +642,7 @@ const previousMutantKey = (mutant: KeyedMutant): string =>
   )
 
 const changedSourceFiles = (
-  previousFiles: Readonly<Record<string, PreviousFile>>,
+  previousFiles: Readonly<Record<string, PreviousFileRecord>>,
   currentRelativeFiles: Readonly<Record<string, string>>,
 ): readonly string[] =>
   Object.entries(previousFiles)
@@ -576,7 +650,7 @@ const changedSourceFiles = (
     .map(([name]) => name)
 
 const changedTestFiles = (
-  previousTestFiles: Readonly<Record<string, PreviousTestFile>>,
+  previousTestFiles: Readonly<Record<string, PreviousTestFileRecord>>,
   currentRelativeFiles: Readonly<Record<string, string>>,
   testIdsByRelativeFile: Readonly<Record<string, readonly string[]>>,
 ): readonly string[] =>
@@ -585,10 +659,10 @@ const changedTestFiles = (
   )
 
 const findRemembered = (
-  previousFiles: Readonly<Record<string, PreviousFile>>,
+  previousFiles: Readonly<Record<string, PreviousFileRecord>>,
   file: string,
   key: string,
-): PreviousMutant | undefined => {
+): PreviousMutantRecord | undefined => {
   const candidates = previousFiles[file]?.mutants ?? []
   return candidates.find((candidate) => previousMutantKey(candidate) === key)
 }
@@ -601,16 +675,16 @@ const hasChangedCoverage = (
 
 const decideForMutant = (
   mutant: Mutant,
-  command: IncrementalDiffCommand,
+  input: IncrementalDiffInput,
   changedFiles: readonly string[],
   changedTests: readonly string[],
-): { readonly kind: 'run' } | { readonly kind: 'remembered'; readonly previous: PreviousMutant } => {
-  const file = toRelativeNormalizedFileName(mutant.fileName, command.basePath)
+): { readonly kind: 'run' } | { readonly kind: 'remembered'; readonly previous: PreviousMutantRecord } => {
+  const file = toRelativeNormalized(mutant.fileName, input.basePath)
   if (changedFiles.includes(file)) return { kind: 'run' }
-  const previous = findRemembered(command.previousFiles, file, currentMutantKey(mutant))
+  const previous = findRemembered(input.previousFiles, file, currentMutantKey(mutant))
   if (previous === undefined) return { kind: 'run' }
-  if (REMEMBERED_STATUS[previous.status] !== true) return { kind: 'run' }
-  if (hasChangedCoverage(mutant.id, command.coveringTestFilesByMutantId, changedTests)) return { kind: 'run' }
+  if (!REMEMBERED_STATUS.has(previous.status)) return { kind: 'run' }
+  if (hasChangedCoverage(mutant.id, input.coveringTestFilesByMutantId, changedTests)) return { kind: 'run' }
   return { kind: 'remembered', previous }
 }
 
@@ -639,7 +713,7 @@ const statisticsOf = (addedFiles: readonly string[], removedFiles: readonly stri
 }
 
 const testStatisticsOf = (
-  previousTestFiles: Readonly<Record<string, PreviousTestFile>>,
+  previousTestFiles: Readonly<Record<string, PreviousTestFileRecord>>,
   testIdsByRelativeFile: Readonly<Record<string, readonly string[]>>,
 ) => {
   const currentTestFiles = Object.keys(testIdsByRelativeFile)
@@ -649,10 +723,10 @@ const testStatisticsOf = (
 }
 
 const removedMutantFiles = (
-  command: IncrementalDiffCommand,
+  input: IncrementalDiffInput,
   currentKeysByFile: Readonly<Record<string, readonly string[]>>,
 ): readonly string[] =>
-  Object.entries(command.previousFiles).flatMap(([file, previous]) => {
+  Object.entries(input.previousFiles).flatMap(([file, previous]) => {
     const keys = currentKeysByFile[file]
     const removed = (previous.mutants ?? []).filter((candidate) => {
       if (keys === undefined) return true
@@ -661,7 +735,7 @@ const removedMutantFiles = (
     return removed.map(() => file)
   })
 
-const rememberedEntryOf = (mutant: Mutant, previous: PreviousMutant): RememberedMutant => {
+const rememberedEntryOf = (mutant: Mutant, previous: PreviousMutantRecord): RememberedMutant => {
   const entry: RememberedMutant = { mutantId: mutant.id, status: previous.status }
   if (previous.testsCompleted !== undefined) {
     Object.assign(entry, { testsCompleted: previous.testsCompleted })
@@ -675,68 +749,49 @@ const rememberedEntryOf = (mutant: Mutant, previous: PreviousMutant): Remembered
   return entry
 }
 
-const decideIncremental = (
-  command: IncrementalDiffCommand,
-): IncrementalDiffDecision => {
-  if (command.force) {
-    const added = command.currentMutants.map((mutant) =>
-      toRelativeNormalizedFileName(mutant.fileName, command.basePath)
-    )
-    return IncrementalDiffDecision.make({
-      mutants: [...command.currentMutants],
+export const computeIncrementalDiff = (
+  input: IncrementalDiffInput,
+): IncrementalDiffOutput => {
+  if (input.force) {
+    const added = input.currentMutants.map((mutant) => toRelativeNormalizedFileName(mutant.fileName, input.basePath))
+    return {
+      mutants: [...input.currentMutants],
       remembered: [],
       mutantStatistics: statisticsOf(added, []),
-      testStatistics: testStatisticsOf(command.previousTestFiles, command.testIdsByRelativeFile),
-    })
+      testStatistics: testStatisticsOf(input.previousTestFiles, input.testIdsByRelativeFile),
+    }
   }
-  const changedFiles = changedSourceFiles(command.previousFiles, command.currentRelativeFiles)
+  const changedFiles = changedSourceFiles(input.previousFiles, input.currentRelativeFiles)
   const changedTests = changedTestFiles(
-    command.previousTestFiles,
-    command.currentRelativeFiles,
-    command.testIdsByRelativeFile,
+    input.previousTestFiles,
+    input.currentRelativeFiles,
+    input.testIdsByRelativeFile,
   )
   const toRun: Mutant[] = []
   const remembered: RememberedMutant[] = []
   const addedFiles: string[] = []
-  for (const mutant of command.currentMutants) {
-    const decision = decideForMutant(mutant, command, changedFiles, changedTests)
+  for (const mutant of input.currentMutants) {
+    const decision = decideForMutant(mutant, input, changedFiles, changedTests)
     if (decision.kind === 'run') {
       toRun.push(mutant)
-      addedFiles.push(toRelativeNormalizedFileName(mutant.fileName, command.basePath))
+      addedFiles.push(toRelativeNormalizedFileName(mutant.fileName, input.basePath))
       continue
     }
     remembered.push(rememberedEntryOf(mutant, decision.previous))
   }
-  const currentKeysByFile = command.currentMutants.reduce<Record<string, string[]>>((acc, mutant) => {
-    const file = toRelativeNormalizedFileName(mutant.fileName, command.basePath)
+  const currentKeysByFile = input.currentMutants.reduce<Record<string, string[]>>((acc, mutant) => {
+    const file = toRelativeNormalizedFileName(mutant.fileName, input.basePath)
     const keys = acc[file] ?? []
     acc[file] = [...keys, currentMutantKey(mutant)]
     return acc
   }, {})
-  const removedFiles = removedMutantFiles(command, currentKeysByFile)
-  return IncrementalDiffDecision.make({
+  const removedFiles = removedMutantFiles(input, currentKeysByFile)
+  return {
     mutants: toRun,
     remembered,
     mutantStatistics: statisticsOf(addedFiles, removedFiles),
-    testStatistics: testStatisticsOf(command.previousTestFiles, command.testIdsByRelativeFile),
-  })
-}
-
-// ---------------------------------------------------------------------------
-// Incremental differ (Cell sandwich + backwards compat)
-// ---------------------------------------------------------------------------
-
-export interface IncrementalDiffResult {
-  readonly mutants: readonly Mutant[]
-  readonly remembered: readonly {
-    readonly mutantId: string
-    readonly status: string
-    readonly testsCompleted?: number | undefined
-    readonly coveredBy?: readonly string[] | undefined
-    readonly killedBy?: readonly string[] | undefined
-  }[]
-  readonly mutantStatistics: DiffStatistics
-  readonly testStatistics: DiffStatistics
+    testStatistics: testStatisticsOf(input.previousTestFiles, input.testIdsByRelativeFile),
+  }
 }
 
 const previousFilesOf = (rawReport: unknown): S.Schema.Type<typeof PreviousFilesSchema> => {
@@ -789,7 +844,7 @@ export const incrementalDiff = (
     force?: boolean
   }>,
 ): IncrementalDiffResult => {
-  const command = IncrementalDiffCommand.make({
+  const output = computeIncrementalDiff({
     basePath: input.basePath,
     currentMutants: [...input.currentMutants],
     previousFiles: previousFilesOf(input.incrementalReport),
@@ -799,21 +854,20 @@ export const incrementalDiff = (
     coveringTestFilesByMutantId: coveringTestFilesByMutantId(input.testCoverage, input.basePath),
     force: input.force ?? false,
   })
-  const decision = decideIncremental(command)
   return {
-    mutants: decision.mutants,
-    remembered: decision.remembered,
+    mutants: output.mutants,
+    remembered: output.remembered,
     mutantStatistics: {
       changesByFile: MutableHashMap.fromIterable(
-        Object.entries(decision.mutantStatistics.changesByFile),
+        Object.entries(output.mutantStatistics.changesByFile),
       ),
-      total: decision.mutantStatistics.total,
+      total: output.mutantStatistics.total,
     },
     testStatistics: {
       changesByFile: MutableHashMap.fromIterable(
-        Object.entries(decision.testStatistics.changesByFile),
+        Object.entries(output.testStatistics.changesByFile),
       ),
-      total: decision.testStatistics.total,
+      total: output.testStatistics.total,
     },
   }
 }

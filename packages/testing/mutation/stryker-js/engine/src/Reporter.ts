@@ -7,7 +7,6 @@ import type {
   Position,
 } from '@systemfsoftware/stryker-js/Mutant'
 import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
-import { writeOutputFile } from '@systemfsoftware/stryker-js/output-file'
 import type { AnyPluginContribution, PluginKind } from '@systemfsoftware/stryker-js/Plugin'
 import type {
   DryRunCompletedEvent,
@@ -32,6 +31,7 @@ import * as Layer from 'effect/Layer'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
+import type { PlatformError } from 'effect/PlatformError'
 import * as Predicate from 'effect/Predicate'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
@@ -48,22 +48,26 @@ import type { ResolvedMode } from './output-mode.js'
 import type { Project } from './Project.js'
 import { FILE_CONCURRENCY, readOriginal } from './Project.js'
 import { ansi } from './Reporter.ansi.js'
-import { ClearTextDocument, ClearTextReportCommand, JsonDocument, JsonReportCommand } from './Reporter.schema.js'
+import { ClearTextReportCommand } from './Reporter.schema.js'
 import type { RunOutcome } from './Run.js'
 import { strykerVersion } from './stryker-package.js'
 import { buildVerdictEnvelope, isActionableStatus } from './verdict-envelope.js'
 const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
 type ProvidedStrykerOptions = StrykerOptions
-
-// ─── re-export broadcast / strict for callers that imported via reporting/ ──
+const writeOutputFile = (
+  fs: FileSystem.FileSystem,
+  path: Path.Path,
+  fileName: string,
+  content: string,
+): Effect.Effect<void, PlatformError, never> =>
+  Effect.gen(function*() {
+    yield* fs.makeDirectory(path.dirname(fileName), { recursive: true })
+    yield* fs.writeFileString(fileName, content)
+  })
 
 export { broadcastReporter }
 export type { NamedReporter } from '@systemfsoftware/stryker-js/Reporter'
 export type StrictReporter = ReporterService
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Progress bar — view over ProgressTally ticks
-// ═══════════════════════════════════════════════════════════════════════════
 
 export type ProgressBarState = {
   readonly format: string
@@ -133,10 +137,6 @@ function formatBar(
   }
   return out
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Progress keeper — tally over DryRun / Plan / MutantTested events
-// ═══════════════════════════════════════════════════════════════════════════
 
 export type ProgressTally = {
   readonly survived: number
@@ -254,16 +254,24 @@ function formatTime(timeInSeconds: number): string {
   return '<1m'
 }
 
-// ─── evicted report decisions (previously workflow files, now plain functions) ───
+const codes = {
+  red: '\u001b[31m',
+  green: '\u001b[32m',
+  yellow: '\u001b[33m',
+  grey: '\u001b[90m',
+  cyan: '\u001b[36m',
+  greenBright: '\u001b[92m',
+  redBright: '\u001b[91m',
+  blueBright: '\u001b[94m',
+} as const
 
-function buildJsonReport(report: schema.MutationTestResult): string {
-  return JSON.stringify(report, null, 0)
+type AnsiColor = keyof typeof codes
+
+const reset = '\u001b[39m'
+
+function wrap(color: AnsiColor, text: string): string {
+  return `${codes[color]}${text}${reset}`
 }
-
-export const buildJsonDocument = (command: JsonReportCommand): JsonDocument =>
-  JsonDocument.make({ json: buildJsonReport(command.report) })
-
-// ─── render-text ───────────────────────────────────────────────────────
 
 const KNOWN_EMOJI: Record<string, true> = {
   '✅': true,
@@ -315,8 +323,6 @@ function stringWidth(input: string): number {
     return acc + 1
   }, 0)
 }
-
-// ─── clear-text score table ────────────────────────────────────────────
 
 type MutationScoreThresholds = ProvidedStrykerOptions['thresholds']
 
@@ -703,8 +709,6 @@ const drawClearTextScoreTable = (
   ].join(EOL)
 }
 
-// ─── clear-text render ─────────────────────────────────────────────────
-
 function sourceLocation(fileName: string, position: Position, allowColor: boolean): string {
   const file = (() => {
     if (allowColor) {
@@ -714,13 +718,13 @@ function sourceLocation(fileName: string, position: Position, allowColor: boolea
   })()
   const line = (() => {
     if (allowColor) {
-      return ansi.wrap('yellow', String(position.line))
+      return wrap('yellow', String(position.line))
     }
     return String(position.line)
   })()
   const col = (() => {
     if (allowColor) {
-      return ansi.wrap('yellow', String(position.column))
+      return wrap('yellow', String(position.column))
     }
     return String(position.column)
   })()
@@ -882,7 +886,7 @@ function scoreTable(
   return drawClearTextScoreTable(metrics.systemUnderTestMetrics, options)
 }
 
-function renderClearText(
+export function renderClearText(
   report: schema.MutationTestResult,
   metrics: MutationTestMetricsResult,
   options: ProvidedStrykerOptions,
@@ -909,21 +913,32 @@ function renderClearText(
   return { stdout, debug }
 }
 
-export const buildClearTextDocument = (command: ClearTextReportCommand): ClearTextDocument => {
-  const { stdout, debug } = renderClearText(command.report, command.metrics, command.options)
-  return ClearTextDocument.make({ stdout: [...stdout], debug: [...debug] })
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Clear-text reporter — stdout + debug via Cell pipeline
-// ═══════════════════════════════════════════════════════════════════════════
-
 export const makeClearTextReporter = (params: {
   readonly options?: ProvidedStrykerOptions
   readonly out?: NodeJS.WritableStream
 }): ReporterService => {
   const options = params.options
   const out = params.out ?? process.stdout
+
+  const runClearText = (
+    command: { readonly report: schema.MutationTestResult; readonly metrics: MutationTestMetricsResult },
+  ) =>
+    Effect.gen(function*() {
+      const decoded = yield* Result.match(
+        S.decodeUnknownResult(ClearTextReportCommand)({ report: command.report, metrics: command.metrics, options }),
+        {
+          onFailure: (cause) => Effect.fail(cause),
+          onSuccess: (value) => Effect.succeed(value),
+        },
+      )
+      const { stdout, debug } = renderClearText(decoded.report, decoded.metrics, decoded.options)
+      for (const line of stdout) {
+        out.write(`${line}\n`)
+      }
+      for (const line of debug) {
+        yield* Effect.logDebug(line)
+      }
+    })
 
   return {
     onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
@@ -932,14 +947,7 @@ export const makeClearTextReporter = (params: {
     onMutationTestReportReady: (report: schema.MutationTestResult, metrics: MutationTestMetricsResult) =>
       Effect.gen(function*() {
         if (options === undefined) return
-        const command = yield* S.decodeUnknownEffect(ClearTextReportCommand)({ report, metrics, options })
-        const doc = buildClearTextDocument(command)
-        for (const line of doc.stdout) {
-          out.write(`${line}\n`)
-        }
-        for (const line of doc.debug) {
-          yield* Effect.logDebug(line)
-        }
+        yield* runClearText({ report, metrics })
       }).pipe(
         Effect.catchCause((cause) =>
           Effect.fail(
@@ -955,10 +963,6 @@ export const makeClearTextReporter = (params: {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// JSON reporter — file report via Cell pipeline
-// ═══════════════════════════════════════════════════════════════════════════
-
 export const makeJsonReporter = (params: {
   readonly options?: ProvidedStrykerOptions
   readonly fs: FileSystem.FileSystem
@@ -968,6 +972,17 @@ export const makeJsonReporter = (params: {
   const fs = params.fs
   const path = params.path
 
+  const runJsonReport = (command: { readonly report: schema.MutationTestResult }) =>
+    Effect.gen(function*() {
+      if (options === undefined) return
+      const json = JSON.stringify(command.report, null, 0)
+      const filePath = path.normalize(options.jsonReporter.fileName)
+      yield* Effect.logDebug(`Using relative path ${filePath}`)
+      yield* writeOutputFile(fs, path, path.resolve(filePath), json)
+      const url = yield* path.toFileUrl(path.resolve(filePath)).pipe(Effect.orDie)
+      yield* Effect.logInfo(`Your report can be found at: ${url.href}`)
+    })
+
   return {
     onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
     onMutationTestingPlanReady: (_event: MutationTestingPlanReadyEvent) => Effect.void,
@@ -975,12 +990,7 @@ export const makeJsonReporter = (params: {
     onMutationTestReportReady: (report: schema.MutationTestResult, _metrics: MutationTestMetricsResult) =>
       Effect.gen(function*() {
         if (options === undefined) return
-        const doc = buildJsonDocument(JsonReportCommand.make({ report }))
-        const filePath = path.normalize(options.jsonReporter.fileName)
-        yield* Effect.logDebug(`Using relative path ${filePath}`)
-        yield* writeOutputFile(fs, path, path.resolve(filePath), doc.json)
-        const url = yield* path.toFileUrl(path.resolve(filePath)).pipe(Effect.orDie)
-        yield* Effect.logInfo(`Your report can be found at: ${url.href}`)
+        yield* runJsonReport({ report })
       }).pipe(
         Effect.catchCause((cause) =>
           Effect.fail(
@@ -995,10 +1005,6 @@ export const makeJsonReporter = (params: {
     wrapUp: Effect.void,
   }
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Progress bar reporter — terminal bar onMutantTested
-// ═══════════════════════════════════════════════════════════════════════════
 
 export const makeProgressBarReporter = (params: {
   readonly out?: NodeJS.WritableStream
@@ -1088,10 +1094,6 @@ export const makeProgressBarReporter = (params: {
 
     return reporter
   })
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Progress stream reporter — NDJSON run events for machine mode
-// ═══════════════════════════════════════════════════════════════════════════
 
 export type RunEvent =
   | { kind: 'plan'; total: number }
@@ -1196,19 +1198,6 @@ export const makeProgressStreamReporter = (
     return reporter
   })
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Report location — 0-based run positions <-> 1-based schema positions
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Positions cross the report boundary in both directions, so both conversions
- * live here. They were split across two modules - the encode half beside the
- * result mapping, the decode half beside file selection - which put the two
- * halves of one correspondence out of each other's sight.
- *
- * Encoding adds one to each axis: a run counts lines and columns from zero, the
- * report schema counts from one.
- */
 export const toSchemaPosition = (pos: Position): schema.Position => ({
   column: pos.column + 1,
   line: pos.line + 1,
@@ -1219,10 +1208,6 @@ export const toSchemaLocation = (location: Location): schema.Location => ({
   end: toSchemaPosition(location.end),
 })
 
-/**
- * Decoding rebuilds the position from its two axes, dropping whatever else the
- * report carried on the object.
- */
 function reportPositionToStrykerPosition({ line, column }: Position): Position {
   return { line, column }
 }
@@ -1243,10 +1228,6 @@ export function reportLocationToStrykerLocation({ start, end }: Location): Locat
     end: reportPositionToStrykerPosition(end),
   }
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Report mapping — check/run results -> MutantResult + report helpers
-// ═══════════════════════════════════════════════════════════════════════════
 
 export const checkStatusToMutantStatus = (
   _status: Exclude<CheckStatus, 'passed'>,
@@ -1383,46 +1364,12 @@ export const normalizeReportFileName = (
   return ''
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Reporter selection — which reporters may run, given the output mode
-// ═══════════════════════════════════════════════════════════════════════════
-
-/**
- * Which reporters may run, given the output mode.
- *
- * Machine mode keeps stdout exclusively for the NDJSON stream, so a reporter
- * that writes prose there cannot run: a progress bar or a score table
- * interleaved into the protocol makes every line after it unparseable, and the
- * consumer has no way to tell the difference between that and a malformed run.
- * The file reporters are unaffected — they write to disk, never to stdout, and a
- * machine consumer wants their output.
- *
- * Human mode has no NDJSON channel, so the `progress-stream` reporter is inert
- * and the human reporter `clear-text` runs instead. The substitution preserves
- * the user's other reporters (`html`, `json`, …) and their order, and is
- * idempotent.
- *
- * This is the ONLY gate on reporter selection by mode. The alternative, letting
- * each reporter decide whether to render, puts the same decision in as many
- * places as there are reporters and lets them disagree; and a reporter that
- * renders nothing is indistinguishable from one that failed.
- */
 const STDOUT_REPORTERS: ReadonlySet<string> = new Set(['clear-text', 'progress'])
 
-/** The reporter that carries the machine protocol. Inert in human mode. */
 const STREAM_REPORTER = 'progress-stream'
 
-/** The human reporter that renders the score table and mutant details. */
 const HUMAN_REPORTER = 'clear-text'
 
-/**
- * Narrows the configured reporter list to those the mode permits.
- *
- * Pure: names in, names out. Order is preserved so a consumer reading the
- * resolved options sees its own list, minus what the mode forbids.
- * Human mode substitutes `progress-stream` -> `clear-text`, deduplicated to
- * keep the operation idempotent.
- */
 export function selectReporters(
   configured: readonly string[],
   mode: 'human' | 'machine',
@@ -1450,10 +1397,6 @@ export function selectReporters(
   }
   return [...permitted, STREAM_REPORTER]
 }
-
-// ═══════════════════════════════════════════════════════════════════════════
-// Mutation reporting — collects results, builds report, fans out to reporters
-// ═══════════════════════════════════════════════════════════════════════════
 
 const STRYKER_FRAMEWORK: Readonly<Pick<schema.FrameworkInformation, 'branding' | 'name' | 'version'>> = Object.freeze({
   branding: {
@@ -1749,14 +1692,6 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
 
   const ManifestSchema = S.Struct({ version: S.optional(S.String) })
 
-  /**
-   * One dependency's installed version, or nothing.
-   *
-   * The specifier is resolved against this module with `import.meta.resolve` — a standard ESM
-   * builtin — and its manifest is read through the
-   * platform FileSystem. Every failure is contained here and reported as `Option.none`,
-   * because a framework the project does not install is the normal case, not an error.
-   */
   const readManifestVersion = (
     fs: FileSystem.FileSystem,
     pathService: Path.Path,

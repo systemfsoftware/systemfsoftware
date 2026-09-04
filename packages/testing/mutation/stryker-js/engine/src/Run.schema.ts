@@ -51,3 +51,8 @@ export class StageError extends S.TaggedError<StageError>(TypeId)('StageError', 
     return base
   }
 }
+
+export class PrepareError extends S.TaggedError<PrepareError>()('PrepareError', {
+  stage: S.Literal('prepare'),
+  reason: S.String,
+}) {}

@@ -8,7 +8,7 @@ import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Predicate from 'effect/Predicate'
 
-import { PluginKind } from '@systemfsoftware/stryker-js/Plugin'
+import type { PluginKind } from '@systemfsoftware/stryker-js/Plugin'
 import type { AnyPluginContribution, ContributionOf, PluginContribution } from '@systemfsoftware/stryker-js/Plugin'
 
 import { Module } from '@systemfsoftware/stryker-js/Module'
@@ -16,14 +16,19 @@ import { defaultOptions, importModule } from './Config.js'
 import { StrykerError } from './stryker-error.schema.js'
 
 import {
-  PluginLoaderEntry,
   PluginLoadFailedError,
   PluginModuleSchema,
   PluginNotFoundError,
   SchemaValidationContributionSchema,
 } from './Plugins.schema.js'
 
-export interface PluginLoadDecision {
+export interface PluginLoaderEntryLike {
+  readonly moduleName: string
+  readonly plugins: readonly PluginContribution<PluginKind>[] | undefined
+  readonly schemaContribution: Record<string, unknown> | undefined
+}
+
+export interface PluginLoadPlan {
   readonly schemaContributions: readonly Record<string, unknown>[]
   readonly pluginsByKind: HashMap.HashMap<PluginKind, readonly PluginContribution<PluginKind>[]>
   readonly pluginModulePaths: readonly string[]
@@ -35,7 +40,7 @@ export interface PluginLoadDecision {
   }[]
 }
 
-const buildPluginLoadDecision = (entries: readonly PluginLoaderEntry[]): PluginLoadDecision => {
+export const buildPluginLoadPlan = (entries: readonly PluginLoaderEntryLike[]): PluginLoadPlan => {
   const shadowingState = entries.reduce<{
     readonly seen: HashMap.HashMap<string, number>
     readonly shadowings: readonly {
@@ -333,6 +338,11 @@ function loadPlugin(
   })
 }
 
+interface PluginLoaderRawEntry {
+  readonly moduleName: string
+  readonly plugins: readonly PluginContribution<PluginKind>[] | undefined
+  readonly schemaContribution: Record<string, unknown> | undefined
+}
 export function loadPlugins(
   pluginDescriptors: readonly string[],
   basePath: string,
@@ -358,28 +368,25 @@ export function loadPlugins(
         ),
       { concurrency: 'unbounded' },
     ).pipe(Effect.map((arr) => arr.filter(Predicate.isNotNullish)))
-    const entries = loaded.map((entry) =>
-      PluginLoaderEntry.make({
-        moduleName: entry.moduleName,
-        plugins: entry.plugins,
-        schemaContribution: entry.schemaContribution,
-      })
-    )
-    const decision = buildPluginLoadDecision(entries)
-    for (const shadowing of decision.shadowings) {
+    const entries: readonly PluginLoaderRawEntry[] = loaded.map((entry) => ({
+      moduleName: entry.moduleName,
+      plugins: entry.plugins,
+      schemaContribution: entry.schemaContribution,
+    }))
+    const plan = buildPluginLoadPlan(entries)
+    for (const shadowing of plan.shadowings) {
       yield* Effect.logWarning(
         `Plugin "${shadowing.name}" of kind "${shadowing.kind}" at index ${shadowing.winnerIndex} shadows plugin at index ${shadowing.shadowedIndex}.`,
       )
     }
     const result: LoadedPlugins = {
-      schemaContributions: decision.schemaContributions,
-      pluginsByKind: decision.pluginsByKind,
-      pluginModulePaths: decision.pluginModulePaths,
+      schemaContributions: plan.schemaContributions,
+      pluginsByKind: plan.pluginsByKind,
+      pluginModulePaths: plan.pluginModulePaths,
     }
     return result
   })
 }
-
 function parsePluginExpression(pluginExpression: string): { org: string; pkg: string } {
   const parts = pluginExpression.split('/')
   const first = parts[0]
@@ -402,10 +409,6 @@ function isPluginModule(module: unknown): module is PluginModule {
 function hasValidationSchemaContribution(module: unknown): module is SchemaValidationContribution {
   return S.is(SchemaValidationContributionSchema)(module)
 }
-
-// ---------------------------------------------------------------------------
-// Creator — typed accessors over the loaded graph
-// ---------------------------------------------------------------------------
 
 function findPlugin<K extends PluginKind>(
   pluginsByKind: HashMap.HashMap<PluginKind, readonly AnyPluginContribution[]>,

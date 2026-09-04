@@ -1,12 +1,3 @@
-/**
- * Envelope — the failure envelope and console capture leaf.
- *
- * Extracted from Cli.ts to break the import cycle Cli <-> Output.
- * Both Cli and Output import from this leaf, so neither depends on the other
- * for these values. This file imports only from external packages and from
- * StreamVersion (leaf) and admit-survivors-run.workflow (leaf), never from Cli or Output
- * themselves.
- */
 import { ExitClass, highestExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import { causeText } from '@systemfsoftware/stryker-js/Mutant'
 import * as Cause from 'effect/Cause'
@@ -25,24 +16,27 @@ import * as CliError from 'effect/unstable/cli/CliError'
 import { SurvivorsRejection } from './admit-survivors-run.workflow.js'
 import {
   classifyRunOutcome as classifyRunOutcomeWorkflow,
-  type RunOk,
+  type FailedRunOutcome,
   RunOutcomeCommand,
+  type RunOutcomeDecision,
   type RunOutcomeError,
 } from './classify-run-outcome.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 
 const CONFIG_CODE = 2
 
-export function runOutcomeCode(result: Result.Result<RunOk, RunOutcomeError>): number {
-  if (Result.isSuccess(result)) {
-    return 0
-  }
-  return Match.value(result.failure).pipe(
+export function runOutcomeCode(result: Result.Result<RunOutcomeDecision, FailedRunOutcome>): number {
+  const outcome: RunOutcomeDecision | RunOutcomeError = Result.match(result, {
+    onSuccess: (success) => success,
+    onFailure: (failure) => failure,
+  })
+  return Match.value(outcome).pipe(
+    Match.tag('RunOk', () => 0),
     Match.tag('RunInterrupted', (error) => error.code),
     Match.tag('RunParseFailed', () => CONFIG_CODE),
     Match.tag('RunSurvivorsRejected', () => CONFIG_CODE),
     Match.tag('RunConfigFailed', () => CONFIG_CODE),
-    Match.tag('RunFailed', (error) => error.code),
+    Match.tag('RunFailed', (failed) => failed.code),
     Match.exhaustive,
   )
 }
@@ -446,7 +440,7 @@ export function gatherRunOutcome(
   })
 }
 
-function errorText(error: RunOutcomeError, captured: string): string {
+function errorText(error: FailedRunOutcome, captured: string): string {
   return Match.value(error).pipe(
     Match.tag('RunParseFailed', (failed) => {
       if (failed.unrecognized !== undefined) {
@@ -483,7 +477,7 @@ function errorText(error: RunOutcomeError, captured: string): string {
   )
 }
 
-function remediationText(error: RunOutcomeError): string {
+function remediationText(error: FailedRunOutcome): string {
   return Match.value(error).pipe(
     Match.tag('RunInterrupted', (failed) => {
       if (failed.code > 128) {
@@ -509,7 +503,7 @@ function remediationText(error: RunOutcomeError): string {
   )
 }
 
-export function shapeEnvelope(error: RunOutcomeError, captured: string): ErrorEnvelope {
+export function shapeEnvelope(error: FailedRunOutcome, captured: string): ErrorEnvelope {
   return {
     schemaVersion: STREAM_SCHEMA_VERSION,
     code: runOutcomeCode(Result.fail(error)),
@@ -522,7 +516,7 @@ export function classifyRunOutcome(
   exit: Exit.Exit<unknown, unknown>,
   signal: number | null,
   argv: readonly string[],
-): Result.Result<RunOk, RunOutcomeError> {
+): Result.Result<RunOutcomeDecision, RunOutcomeError> {
   return classifyRunOutcomeWorkflow(gatherRunOutcome(exit, signal, argv))
 }
 
@@ -533,18 +527,25 @@ export function buildErrorEnvelope(
   argv: readonly string[],
 ): ErrorEnvelope {
   const result = classifyRunOutcome(exit, signalFromCode(code), argv)
-  if (Result.isSuccess(result)) {
-    return {
-      schemaVersion: STREAM_SCHEMA_VERSION,
-      code,
-      error: capturedOrUnknown(captured),
-      remediation: DEFAULT_REMEDIATION,
-    }
-  }
-  return shapeEnvelope(result.failure, captured)
+  return Result.match(result, {
+    onFailure: (failure) => shapeEnvelope(failure, captured),
+    onSuccess: (decision) =>
+      Match.value(decision).pipe(
+        Match.tag('RunParseFailed', (failed) => shapeEnvelope(failed, captured)),
+        Match.tag('RunSurvivorsRejected', (failed) => shapeEnvelope(failed, captured)),
+        Match.tag('RunConfigFailed', (failed) => shapeEnvelope(failed, captured)),
+        Match.tag('RunFailed', (failed) => shapeEnvelope(failed, captured)),
+        Match.tag('RunOk', () => ({
+          schemaVersion: STREAM_SCHEMA_VERSION,
+          code,
+          error: capturedOrUnknown(captured),
+          remediation: DEFAULT_REMEDIATION,
+        })),
+        Match.exhaustive,
+      ),
+  })
 }
 
-// Console capture (U6)
 const capturedConsoleChunks: string[] = []
 const countByLabel = new Map<string, number>()
 const timeByLabel = new Map<string, bigint>()

@@ -47,7 +47,8 @@ function buildReportHtml(report: unknown, scriptContent: string): string {
   </body>
   </html>`
 }
-export const makeHtmlDocument = (command: HtmlReportCommand): HtmlDocument =>
+
+export const buildHtmlDocument = (command: HtmlReportCommand): HtmlDocument =>
   HtmlDocument.make({ html: buildReportHtml(command.report, command.scriptContent) })
 
 export const makeHtmlReporter = (params: {
@@ -57,45 +58,26 @@ export const makeHtmlReporter = (params: {
 }): ReporterService => {
   const options = params.options
 
-  const readReport = (
-    { report, metrics }: { readonly report: schema.MutationTestResult; readonly metrics: MutationTestMetricsResult },
-  ) =>
-    Effect.gen(function*() {
-      const path = yield* Path.Path
-      const fs = yield* FileSystem.FileSystem
-      const scriptPath = yield* path.fromFileUrl(
-        new URL(import.meta.resolve('mutation-testing-elements/dist/mutation-test-elements.js')),
-      )
-      const scriptContent = yield* fs.readFileString(scriptPath)
-      void metrics
-      return { report, scriptContent }
-    })
-  const decodeReport = (raw: { readonly report: schema.MutationTestResult; readonly scriptContent: string }) =>
-    HtmlReportCommand.make({ report: raw.report, scriptContent: raw.scriptContent })
-  const encodeReport = (doc: HtmlDocument): string => doc.html
-  const writeReport = (html: string) =>
-    Effect.gen(function*() {
-      if (options === undefined) return
-      const fs = yield* FileSystem.FileSystem
-      const path = yield* Path.Path
-      const fileName = options.htmlReporter.fileName
-      yield* Effect.logDebug(`Using file "${fileName}"`)
-      yield* writeOutputFile(fs, path, fileName, html)
-      const fileUrl = yield* path.toFileUrl(path.resolve(fileName))
-      yield* Effect.logInfo(`Your report can be found at: ${fileUrl.href}`)
-    })
-
   return {
     onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
     onMutationTestingPlanReady: (_event: MutationTestingPlanReadyEvent) => Effect.void,
     onMutantTested: (_result: MutantResult) => Effect.void,
     onMutationTestReportReady: (report: schema.MutationTestResult, metrics: MutationTestMetricsResult) =>
       Effect.gen(function*() {
-        const raw = yield* readReport({ report, metrics })
-        const decoded = decodeReport(raw)
-        const doc = makeHtmlDocument(decoded)
-        const html = encodeReport(doc)
-        yield* writeReport(html)
+        const path = yield* Path.Path
+        const fs = yield* FileSystem.FileSystem
+        const scriptPath = yield* path.fromFileUrl(
+          new URL(import.meta.resolve('mutation-testing-elements/dist/mutation-test-elements.js')),
+        )
+        const scriptContent = yield* fs.readFileString(scriptPath)
+        void metrics
+        const html = buildHtmlDocument(HtmlReportCommand.make({ report, scriptContent })).html
+        if (options === undefined) return
+        const fileName = options.htmlReporter.fileName
+        yield* Effect.logDebug(`Using file "${fileName}"`)
+        yield* writeOutputFile(fs, path, fileName, html)
+        const fileUrl = yield* path.toFileUrl(path.resolve(fileName))
+        yield* Effect.logInfo(`Your report can be found at: ${fileUrl.href}`)
       }).pipe(
         Effect.provideService(FileSystem.FileSystem, params.fs),
         Effect.provideService(Path.Path, params.path),

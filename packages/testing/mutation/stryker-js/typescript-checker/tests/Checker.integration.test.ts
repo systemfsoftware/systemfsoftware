@@ -225,4 +225,52 @@ Feature('Typechecking mutants')
         ),
       ),
     )
+
+    scenario(
+      'A group error blamed on neither mutant alone rechecks each mutant alone',
+      Gherkin.Do.pipe(
+        Given('the sample project has a todo list')('todo', () =>
+          Effect.gen(function*() {
+            const fs = yield* FileSystem.FileSystem
+            const path = yield* Path.Path
+            const root = yield* fixtureRoot
+            return yield* fs.readFileString(path.join(root, 'src/todo.ts'))
+          })),
+        Given('the TypeScript checker is ready on that project')('sut', () => openChecker),
+        When('two type-breaking changes in that file are checked together')(
+          'actual',
+          ({ sut, todo }) =>
+            Effect.gen(function*() {
+              const path = yield* Path.Path
+              const root = yield* fixtureRoot
+              const fileName = path.join(root, 'src', 'todo.ts')
+              return yield* sut.check([
+                locate(
+                  todo,
+                  fileName,
+                  'TodoList.allTodos.push(newItem)',
+                  '"This should not be a string"',
+                  'firstBreaks',
+                ),
+                locate(
+                  todo,
+                  fileName,
+                  'let newItem = new Todo(name, description, false)',
+                  'let newItem = "broken"',
+                  'secondBreaks',
+                ),
+              ])
+            }),
+        ),
+        Then('each change is reported as a typecheck failure')(({ actual }) =>
+          Effect.sync(() => {
+            expect(HashMap.size(actual)).toBe(2)
+            for (const id of ['firstBreaks', 'secondBreaks']) {
+              const result = HashMap.get(actual, id)
+              expect(Option.isSome(result) && result.value.status === 'compileError').toBe(true)
+            }
+          })
+        ),
+      ),
+    )
   })

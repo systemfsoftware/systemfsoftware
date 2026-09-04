@@ -14,14 +14,6 @@ const CommandHook = S.Struct({
   pluginRoot: S.optional(S.String),
 })
 
-/**
- * Transports Claude Code defines that this bridge cannot execute yet.
- *
- * They are accepted so a legitimate settings file still decodes: rejecting the
- * entry made the whole struct fail, the union fell through to the flat branch,
- * and every hook in the file was silently dropped. The dispatcher skips these
- * and the unsupported types are surfaced at session start.
- */
 const UnsupportedHook = S.Struct({
   type: S.Literals(['http', 'mcp_tool', 'prompt', 'agent']),
 })
@@ -34,21 +26,23 @@ export type HookCommand = S.Schema.Type<typeof HookCommand>
 
 export const HookEntry = S.Struct({
   matcher: S.optional(S.String),
-  hooks: S.Array(HookCommand),
+  hooks: S.Array(HookCommand).pipe(S.check(S.isMaxLength(3))),
 })
 
 export type HookEntry = S.Schema.Type<typeof HookEntry>
 
+const hookEntries = () => S.Array(HookEntry).pipe(S.check(S.isMaxLength(3)))
+
 const HookGroups = S.Struct({
-  PreToolUse: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  PostToolUse: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  PostToolUseFailure: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  UserPromptSubmit: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  Stop: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  SessionStart: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  SessionEnd: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  PreCompact: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  PostCompact: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  PreToolUse: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  PostToolUse: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  PostToolUseFailure: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  UserPromptSubmit: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  Stop: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  SessionStart: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  SessionEnd: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  PreCompact: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  PostCompact: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
 })
 
 export const SettingsWrapped = S.Struct({
@@ -58,30 +52,13 @@ export const SettingsWrapped = S.Struct({
 
 export type HookSettings = S.Schema.Type<typeof SettingsWrapped>
 
-export const HookCoverageRowSchema = S.Struct({ event: S.String, reason: S.String })
-
-export const HookCoverageSchema = S.Struct({
-  unrecognized: S.Array(HookCoverageRowSchema),
-  notCarried: S.Array(HookCoverageRowSchema),
-  matcherNotEvaluable: S.Array(HookCoverageRowSchema),
-  matcherOutOfReach: S.Array(HookCoverageRowSchema),
-  shadowed: S.Array(HookCoverageRowSchema),
-  disabled: S.Array(HookCoverageRowSchema),
-})
-
 const SettingsFlat = S.Struct({
   ...HookGroups.fields,
   disableAllHooks: S.optional(S.Boolean),
-  // A wrapped file that failed to decode must NOT land here. Without this the
-  // union falls through, `hooks` is ignored as an excess key, and a malformed
-  // settings file decodes to an empty one — silently disabling every hook.
+
   hooks: S.optional(S.Never),
 })
 
-/**
- * Lift the flat settings shape under `hooks`. Decode-only: the bridge reads
- * settings.json and never writes it back, so encoding has no meaning here.
- */
 const LiftFlatSettingsACL = SettingsFlat.pipe(
   S.decodeTo(S.toType(SettingsWrapped), {
     decode: SchemaGetter.transformOrFail(({ disableAllHooks, ...hooks }) =>
@@ -92,6 +69,42 @@ const LiftFlatSettingsACL = SettingsFlat.pipe(
 )
 
 export const SettingsJSON = S.Union([SettingsWrapped, LiftFlatSettingsACL])
+
+const SettingsSourceFields = S.Struct({
+  settings: SettingsJSON,
+  managed: S.Boolean,
+  pluginRoot: S.optional(S.String),
+})
+export type DecodedSource = S.Schema.Type<typeof SettingsSourceFields>
+
+export class EmptySources extends S.TaggedClass<EmptySources>()('EmptySources', {}) {}
+
+export class NonEmptySources extends S.TaggedClass<NonEmptySources>()('NonEmptySources', {
+  sources: S.Array(SettingsSourceFields).pipe(S.check(S.isNonEmpty()), S.check(S.isMaxLength(8))),
+}) {}
+
+export class MergeSettingsCommand extends S.TaggedClass<MergeSettingsCommand>()('MergeSettingsCommand', {
+  pack: S.Union([EmptySources, NonEmptySources]),
+}) {}
+
+const SettingsSnapshotTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-claude-compat/SettingsSnapshot')
+type SettingsSnapshotTypeId = typeof SettingsSnapshotTypeId
+
+export class EmptySnapshot extends S.TaggedClass<EmptySnapshot>()('EmptySnapshot', {}) {
+  readonly [SettingsSnapshotTypeId] = SettingsSnapshotTypeId
+}
+
+export class LoadedSnapshot extends S.TaggedClass<LoadedSnapshot>()('LoadedSnapshot', {
+  settings: SettingsJSON,
+}) {
+  readonly [SettingsSnapshotTypeId] = SettingsSnapshotTypeId
+}
+
+export const SettingsSnapshot = S.Union([EmptySnapshot, LoadedSnapshot])
+export type SettingsSnapshot = S.Schema.Type<typeof SettingsSnapshot>
+
+export type MergeCommand = InstanceType<typeof MergeSettingsCommand>
+export type MergedSnapshot = SettingsSnapshot
 
 export interface HookCoverageRow {
   readonly event: string
@@ -113,9 +126,4 @@ export interface DisableSource {
   readonly label: string
 }
 
-export interface SettingsSource {
-  readonly settings: HookSettings
-  /** Read from the managed-settings path, which downstream files may not disable. */
-  readonly managed: boolean
-  readonly pluginRoot?: string
-}
+export type SettingsSource = DecodedSource

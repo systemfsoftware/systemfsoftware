@@ -33,6 +33,9 @@
     "oxlint-tsgolint": "catalog:oxlint"
   },
   "devDependencies": {
+    "@systemfsoftware/oxlint-plugin-effect-native": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-structure": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-tag-discipline": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
     "rimraf": "catalog:",

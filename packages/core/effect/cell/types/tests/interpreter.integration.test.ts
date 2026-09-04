@@ -4,15 +4,17 @@ import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
 import {
   admitDecodedCommand as decideFixture,
   Admitted,
   Decoded,
-  Refused,
+  Malformed as DecideMalformed,
+  Rejected,
 } from './__fixtures__/admit-decoded-command.workflow.js'
-import { admitTracedCommand as admitTracedCommandFixture } from './__fixtures__/admit-traced-command.workflow.js'
+import { admitTracedCommand as tracedDecideFixture } from './__fixtures__/admit-traced-command.workflow.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -55,10 +57,15 @@ const decode = (raw: Raw): Result.Result<Decoded, Malformed> =>
     ? Result.fail({ kind: 'Malformed', bytes: raw.bytes })
     : Result.succeed(new Decoded({ length: raw.bytes.length }))
 
-const encode = (outcome: Result.Result<Admitted, Refused>): Output =>
+const encode = (outcome: Result.Result<Admitted | Rejected, DecideMalformed>): Output =>
   Result.match(outcome, {
-    onSuccess: (admitted) => ({ line: `admitted:${admitted.length}` }),
-    onFailure: (refused) => ({ line: `refused:${refused.why}` }),
+    onSuccess: (decision) =>
+      Match.value(decision).pipe(
+        Match.tag('Admitted', (admitted) => ({ line: `admitted:${admitted.length}` })),
+        Match.tag('Rejected', (rejected) => ({ line: `refused:${rejected.why}` })),
+        Match.exhaustive,
+      ),
+    onFailure: (malformed) => ({ line: `malformed:${malformed.length}` }),
   })
 
 const makeCell = (ledger: LedgerService) =>
@@ -79,8 +86,19 @@ const makeCellReportingItsRaw = (ledger: LedgerService) =>
     write: (output: Output, raw: Raw) => ledger.append(`${output.line}<-${raw.bytes}`).pipe(Effect.as(output.line)),
   })
 
-// The order oracle is hand-written here, one scenario over a local trace. It is the
-// only order test: the interpreter is text, and this is where a reader checks it.
+const decodeDecideMalformed = (raw: Raw): Result.Result<Decoded, Malformed> =>
+  raw.bytes === 'decide-bad'
+    ? Result.succeed(new Decoded({ length: -1 }))
+    : decode(raw)
+
+const makeCellDecideMalformed = (ledger: LedgerService) =>
+  Cell.layer({
+    read,
+    decode: decodeDecideMalformed,
+    decide: decideFixture,
+    encode,
+    write: (output: Output) => ledger.append(output.line).pipe(Effect.as(output.line)),
+  })
 
 Feature('Running a Cell')
   .withScenarioLayer(LedgerRecording)
@@ -159,42 +177,72 @@ Feature('Running a Cell')
       ),
     )
 
-    const makeTracedCell = (trace: string[]) =>
-      Cell.layer({
-        read: (command: Command) =>
-          Effect.sync(() => {
-            trace.push('read')
-            return { bytes: command.id }
-          }),
-        decode: (raw: Raw) => {
-          trace.push('decode')
-          return Result.succeed(new Decoded({ length: raw.bytes.length }))
-        },
-        decide: admitTracedCommandFixture(trace, new Admitted({ length: 0 }), new Refused({ why: 'too long' })),
-        encode: (outcome: Result.Result<Admitted, Refused>) => {
-          trace.push('encode')
-          return Result.match(outcome, {
-            onSuccess: (admitted) => ({ line: `admitted:${admitted.length}` }),
-            onFailure: (refused) => ({ line: `refused:${refused.why}` }),
-          })
-        },
-        write: (output: Output) =>
-          Effect.sync(() => {
-            trace.push('write')
-            return output.line
-          }),
-      })
-    const runTraced = (id: string) => {
-      const trace: string[] = []
-      return Cell.run(makeTracedCell(trace), { id }).pipe(
-        Effect.exit,
-        Effect.map((exit) => ({ exit, trace })),
-      )
-    }
+    scenario(
+      'A decide-phase malformed is encoded as the outcome rather than raised as a failure',
+      Gherkin.Do.pipe(
+        When('a Cell is run for a command its decider cannot decide')(
+          'exit',
+          () =>
+            Effect.flatMap(
+              Ledger,
+              (ledger) => Effect.exit(Cell.run(makeCellDecideMalformed(ledger), { id: 'decide-bad' })),
+            ),
+        ),
+        Then('the run succeeds and its response carries the decide-phase malformed')((s) => {
+          expect(s.exit).toStrictEqual(Exit.succeed('malformed:-1'))
+          expect(s.exit).not.toStrictEqual(Exit.fail({ kind: 'Malformed', bytes: 'decide-bad' }))
+          expect(decideFixture(new Decoded({ length: -1 }))).toStrictEqual(
+            Result.fail(new DecideMalformed({ length: -1 })),
+          )
+        }),
+        And('the encoded malformed reached the write')(() =>
+          Effect.flatMap(Ledger, (ledger) =>
+            Effect.map(ledger.lines, (lines) => {
+              expect(lines).toEqual(['malformed:-1'])
+            }))
+        ),
+      ),
+    )
+
     scenario(
       'The interpreter runs the sandwich in its declared order',
       Gherkin.Do.pipe(
-        When('a Cell with tracing phases is run')('outcome', () => runTraced('abc')),
+        When('a Cell with tracing phases is run')('outcome', () => {
+          const trace: string[] = []
+          const traced = Cell.layer({
+            read: (command: Command) =>
+              Effect.sync(() => {
+                trace.push('read')
+                return { bytes: command.id }
+              }),
+            decode: (raw: Raw) => {
+              trace.push('decode')
+              return Result.succeed(new Decoded({ length: raw.bytes.length }))
+            },
+            decide: tracedDecideFixture(trace, new Admitted({ length: 0 }), new Rejected({ why: 'traced refusal' })),
+            encode: (outcome: Result.Result<Admitted | Rejected, DecideMalformed>) => {
+              trace.push('encode')
+              return Result.match(outcome, {
+                onSuccess: (decision) =>
+                  Match.value(decision).pipe(
+                    Match.tag('Admitted', (admitted) => ({ line: `admitted:${admitted.length}` })),
+                    Match.tag('Rejected', (rejected) => ({ line: `refused:${rejected.why}` })),
+                    Match.exhaustive,
+                  ),
+                onFailure: (malformed) => ({ line: `malformed:${malformed.length}` }),
+              })
+            },
+            write: (output: Output) =>
+              Effect.sync(() => {
+                trace.push('write')
+                return output.line
+              }),
+          })
+          return Cell.run(traced, { id: 'abc' }).pipe(
+            Effect.exit,
+            Effect.map((exit) => ({ exit, trace })),
+          )
+        }),
         Then('the phases ran exactly in the order the interpreter reads them')((s) => {
           expect(s.outcome.trace).toEqual(['read', 'decode', 'decide', 'encode', 'write'])
           expect(s.outcome.exit).toStrictEqual(Exit.succeed('admitted:0'))
@@ -202,11 +250,46 @@ Feature('Running a Cell')
       ),
     )
     scenario(
-      'A refusal the decision returns is encoded, not thrown',
+      'A refusal the decision returns is written as the outcome, not raised',
       Gherkin.Do.pipe(
-        When('a Cell with tracing phases is run for an over-long command')('outcome', () => runTraced('a'.repeat(101))),
-        Then('the refusal travelled the failure channel into the write')((s) => {
-          expect(s.outcome.exit).toStrictEqual(Exit.succeed('refused:too long'))
+        When('a Cell with tracing phases is run for an over-long command')(
+          'exit',
+          () => {
+            const trace: string[] = []
+            const traced = Cell.layer({
+              read: (command: Command) =>
+                Effect.sync(() => {
+                  trace.push('read')
+                  return { bytes: command.id }
+                }),
+              decode: (raw: Raw) => {
+                trace.push('decode')
+                return Result.succeed(new Decoded({ length: raw.bytes.length }))
+              },
+              decide: tracedDecideFixture(trace, new Admitted({ length: 0 }), new Rejected({ why: 'too long' })),
+              encode: (outcome: Result.Result<Admitted | Rejected, DecideMalformed>) => {
+                trace.push('encode')
+                return Result.match(outcome, {
+                  onSuccess: (decision) =>
+                    Match.value(decision).pipe(
+                      Match.tag('Admitted', (admitted) => ({ line: `admitted:${admitted.length}` })),
+                      Match.tag('Rejected', (rejected) => ({ line: `refused:${rejected.why}` })),
+                      Match.exhaustive,
+                    ),
+                  onFailure: (malformed) => ({ line: `malformed:${malformed.length}` }),
+                })
+              },
+              write: (output: Output) =>
+                Effect.sync(() => {
+                  trace.push('write')
+                  return output.line
+                }),
+            })
+            return Effect.exit(Cell.run(traced, { id: 'a'.repeat(101) }))
+          },
+        ),
+        Then('the run succeeds and its response carries the refusal')((s) => {
+          expect(s.exit).toStrictEqual(Exit.succeed('refused:too long'))
         }),
       ),
     )
@@ -221,10 +304,18 @@ Feature('Running a Cell')
               const second = Cell.layer({
                 read: (line: string) => Effect.succeed(new Decoded({ length: line.length })),
                 decide: decideFixture,
-                write: (outcome: Result.Result<Admitted, Refused>, raw: Decoded) => {
+                write: (outcome: Result.Result<Admitted | Rejected, DecideMalformed>, raw: Decoded) => {
                   const line = Result.match(outcome, {
-                    onSuccess: (admitted) => `second:admitted:${admitted.length}:${raw.length}`,
-                    onFailure: (refused) => `second:refused:${refused.why}`,
+                    onSuccess: (decision) =>
+                      Match.value(decision).pipe(
+                        Match.tag(
+                          'Admitted',
+                          (admitted) => `second:admitted:${admitted.length}:${raw.length}`,
+                        ),
+                        Match.tag('Rejected', (rejected) => `second:refused:${rejected.why}`),
+                        Match.exhaustive,
+                      ),
+                    onFailure: (malformed) => `second:malformed:${malformed.length}`,
                   })
                   return ledger.append(line).pipe(Effect.as(line))
                 },

@@ -35,12 +35,10 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "build": "tsdown && pnpm api:check",
+    "build": "tsdown && pnpm api:check && node scripts/check-dist-no-private-imports.mjs",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "mutation": "stryker run",
-    "mutation:full": "stryker run --force",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "api:check": "api-extractor run",
@@ -53,11 +51,9 @@
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
-    "@systemfsoftware/stryker-js-cli": "catalog:stryker",
-    "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
-    "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
-    "@systemfsoftware/stryker-plugins": "catalog:stryker",
-    "@systemfsoftware/stryker-test-contribution": "catalog:stryker",
+    "@systemfsoftware/oxlint-plugin-effect-native": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-structure": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-tag-discipline": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",

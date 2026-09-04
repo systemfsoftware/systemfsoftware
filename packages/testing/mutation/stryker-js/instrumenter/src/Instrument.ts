@@ -1,6 +1,3 @@
-/**
- * Instrument — the instrument capability: Cell description, file/mutant types and the instrument entry point.
- */
 import { type FileDescription, Mutant as ApiMutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as Effect from 'effect/Effect'
 import * as Predicate from 'effect/Predicate'
@@ -22,7 +19,6 @@ import { type Ast, AstFormat, type HtmlAst, type ScriptAst, type SvelteAst } fro
 import { createMutantCollector, transform } from './Transformer.js'
 import type { TransformerOptions } from './Transformer.js'
 
-// ---- File ----
 export interface File extends FileDescription {
   name: string
   content: string
@@ -33,13 +29,11 @@ export interface InstrumentResult {
 }
 
 export type { InstrumenterOptions }
-// Mutant identity, application and API mapping live with the mutators — this
-// module only orchestrates the pipeline.
+
 import { spanOf } from './estree.js'
 import { toApiMutant } from './Mutator.js'
 import { type SpannedComment } from './Syntax.js'
 
-// ---- disable-type-checks ----
 const commentDirectiveRegEx = /^(\s*)@(ts-[a-z-]+).*$/
 const tsDirectiveLikeRegEx = /@(ts-[a-z-]+)/
 const startingCommentRegex = /(^\s*\/\*.*?\*\/)/gs
@@ -210,9 +204,17 @@ function isAst(value: unknown): value is Ast {
 }
 
 type FileSchemaType = typeof FileSchema.Type
-const decideInstrument = (decoded: InstrumentDecoded): InstrumentDecision =>
-  InstrumentDecision.make({ files: decoded.files, mutants: decoded.mutants, asts: decoded.asts })
-const readInstrument = (command: InstrumentCommand) =>
+const readCollected = (
+  command: InstrumentCommand,
+): Effect.Effect<
+  {
+    readonly files: readonly FileSchemaType[]
+    readonly options: InstrumenterOptions
+    readonly asts: readonly Ast[]
+    readonly mutants: readonly ApiMutant[]
+  },
+  InstrumentError
+> =>
   Effect.gen(function*() {
     const files = command.files
     const options = command.options
@@ -248,26 +250,22 @@ const readInstrument = (command: InstrumentCommand) =>
     })
     return { files, options, asts, mutants }
   })
-const decodeInstrument = (raw: {
-  readonly files: readonly FileSchemaType[]
-  readonly options: InstrumenterOptions
-  readonly asts: readonly Ast[]
-  readonly mutants: readonly ApiMutant[]
-}) => InstrumentDecoded.make({ files: raw.files, options: raw.options, asts: raw.asts, mutants: raw.mutants })
-const writeInstrument = (decision: InstrumentDecision) =>
+
+const printDecision = (
+  decision: InstrumentDecision,
+): Effect.Effect<InstrumentResultSchema, InstrumentError> =>
   Effect.try({
     try: () => {
       const files = decision.files
       const asts: readonly unknown[] = decision.asts
       const outFiles: FileSchemaType[] = []
-      const isAstValue = isAst
       for (let i = 0; i < asts.length; i++) {
         const maybeAst: unknown = asts[i]
         const maybeFile: FileSchemaType | undefined = files[i]
         if (maybeAst === undefined || maybeFile === undefined) {
           continue
         }
-        if (!isAstValue(maybeAst)) {
+        if (!isAst(maybeAst)) {
           continue
         }
         const ast: Ast = maybeAst
@@ -279,6 +277,14 @@ const writeInstrument = (decision: InstrumentDecision) =>
     },
     catch: (cause) => new InstrumentError({ message: 'Failed to print', cause }),
   })
+
+export const decideInstrument = (decoded: InstrumentDecoded): InstrumentDecision =>
+  InstrumentDecision.make({
+    files: decoded.files,
+    mutants: decoded.mutants,
+    asts: decoded.asts,
+  })
+
 export const instrument = (
   files: readonly File[],
   options: InstrumenterOptions,
@@ -289,8 +295,14 @@ export const instrument = (
       content: file.content,
       mutate: file.mutate,
     }))
-    const raw = yield* readInstrument(InstrumentCommand.make({ files: schemaFiles, options }))
-    const decoded = decodeInstrument(raw)
-    const decision = decideInstrument(decoded)
-    return yield* writeInstrument(decision)
+    const collected = yield* readCollected(InstrumentCommand.make({ files: schemaFiles, options }))
+    const decision = decideInstrument(
+      InstrumentDecoded.make({
+        files: collected.files,
+        options: collected.options,
+        asts: collected.asts,
+        mutants: collected.mutants,
+      }),
+    )
+    return yield* printDecision(decision)
   })

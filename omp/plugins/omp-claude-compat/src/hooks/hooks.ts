@@ -31,15 +31,31 @@ import { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner
 import { homedir } from 'node:os'
 import { ClaudeSettings, ifEvaluatingEvent, matcherUnreadable } from '../settings/mod.js'
 import type { CommandHook, HookEntry, HookSettings } from '../settings/mod.js'
+
 import {
-  type AdmitCommand,
   AdmitHooksCommand,
-  admitLoadedSettings,
-  type HookDispatchDecision,
+  Blocked,
+  Continue,
+  HookOutputFromStdout,
+  HookResult,
+  RunHooks,
   SkipHooks,
-} from './admit-loaded-settings.workflow.js'
-import { Blocked, Continue, HookOutputFromStdout, HookResult } from './hooks.schema.js'
-import type { HookPrompt, HookSession, HookToolCall, HookToolResult } from './hooks.schema.js'
+} from './hooks.schema.js'
+import type {
+  AdmitCommand,
+  HookDispatchDecision,
+  HookPrompt,
+  HookSession,
+  HookToolCall,
+  HookToolResult,
+} from './hooks.schema.js'
+
+export const admitLoadedSettings = (command: AdmitCommand): HookDispatchDecision =>
+  Match.value(command.present).pipe(
+    Match.when(true, () => new RunHooks()),
+    Match.when(false, () => new SkipHooks()),
+    Match.exhaustive,
+  )
 import { InterpretHookCommand, interpretHookResult, Warning } from './interpret-hook-result.workflow.js'
 import {
   denormalizeToolInput,
@@ -56,21 +72,8 @@ import { ToolInputRecord } from './wire.schema.js'
 export const skipHooks = (): HookDispatchDecision => new SkipHooks()
 export const admitPresent = (present: boolean): AdmitCommand => new AdmitHooksCommand({ present })
 
-/** The stdout crossing applied where the boundary is crossed. */
 const parseHookOutput = S.decodeUnknownExit(HookOutputFromStdout)
 
-/**
- * Claude Code hands `UserPromptSubmit` stdout to the model in a separate
- * `additionalContext` field. OMP's `InputEventResult` has none, so this bridge
- * fakes it by prefixing the prompt text — and the host parses slash, bash,
- * python and yield-queue prompts off their opening characters before a model
- * is involved. A prefix demotes a command to prose: `/compact` plus a hook
- * note becomes `note\n\n/compact`, which no longer opens with `/`.
- *
- * Over-classifying is safe, under-classifying is not: a prompt wrongly called
- * host-bound takes its context one turn late, while one wrongly called
- * model-bound loses the command outright. Widen the list on doubt.
- */
 const HOST_COMMAND_PREFIXES: readonly string[] = [
   '/',
   '!',
@@ -89,13 +92,6 @@ const HOST_COMMAND_PREFIXES: readonly string[] = [
 const isHostBound = (text: string): boolean =>
   HOST_COMMAND_PREFIXES.some((prefix) => `${text.trimStart()} `.startsWith(prefix))
 
-/**
- * Shared-state quarantine: an async hook outlives the dispatch that started
- * it, so its context has nowhere to return to. Claude Code delivers that
- * context on the following conversation turn; with nowhere to hold it the
- * context is simply lost, which is the whole point of running the hook.
- * Bounded so a runaway or looping hook cannot grow it without limit.
- */
 const PENDING_CAP = 64
 
 const pending: Ref.Ref<string[]> = Ref.makeUnsafe<string[]>([])
@@ -110,17 +106,6 @@ const recordAsyncHookContext = (context: string): void => {
 
 const drainAsyncHookContext = (): readonly string[] => Effect.runSync(Ref.getAndSet(pending, []))
 
-// ── Deadline ──
-/**
- * Run `self` detached in `scope`, giving up on the result after `deadline`
- * without giving up on the work.
- *
- * `Effect.timeout` interrupts what it wraps, so timing out the work itself
- * cancels it. Here the deadline wraps only the join, and the fibre belongs to
- * `scope` rather than the caller - observing a fibre does not own it. The
- * caller stops waiting; the work runs on until `scope` closes, which is the
- * one thing that interrupts it and runs its finalisers.
- */
 export const detachIn = <A, E, R>(
   self: Effect.Effect<A, E, R>,
   scope: Scope.Scope,
@@ -135,7 +120,6 @@ export const detachIn = <A, E, R>(
     Effect.map((result) => Option.getOrElse(result, options.onDeadline)),
   )
 
-/** The fallback the deadline laws below hand to `onDeadline`. */
 const onGaveUp: LazyArg<string> = () => 'gave-up'
 
 if (import.meta.vitest !== void 0) {
@@ -143,11 +127,6 @@ if (import.meta.vitest !== void 0) {
   const { Effect, Exit, Fiber, Ref, Scope } = await import('effect')
   const { FastCheck: fc, TestClock } = await import('effect/testing')
 
-  /**
-   * Each case forks a fibre and drives the clock, so these cost far more than a
-   * pure predicate: the default 100 runs overruns vitest's timeout once the
-   * suite is running files in parallel.
-   */
   const budget = { fastCheck: { numRuns: 25 }, timeout: 30_000 }
 
   const deadlineMs = fc.integer({ min: 1, max: 10_000 })
@@ -249,13 +228,10 @@ if (import.meta.vitest !== void 0) {
   })
 }
 
-// ── HookPayload ──
-
 export const EMPTY_TOOL_INPUT: Record<string, unknown> = {}
 
 export const asToolInput = S.decodeUnknownOption(ToolInputRecord)
 
-// ── HookFeedback ──
 export interface HooksForEventResult {
   readonly block?: boolean
   readonly reason?: string
@@ -268,7 +244,6 @@ export type FeedbackOnlyResult = Omit<HooksForEventResult, 'block' | 'reason'>
 export const blockAsFeedback = (result: HooksForEventResult): FeedbackOnlyResult =>
   result.reason === undefined ? {} : { warning: result.reason }
 
-// ── RunHookScript ──
 const CLAUDE_EVENT_DEFAULT_SECONDS: Readonly<Record<string, number>> = {
   UserPromptSubmit: 30,
 }
@@ -299,7 +274,6 @@ const SHELL_INVOCATION = {
   powershell: ['powershell', '-Command'],
 } as const satisfies Record<string, readonly [string, string]>
 
-/** The hook payload's wire contract, declared once and used in both directions. */
 const encodeHookPayload = S.encodeSync(S.fromJsonString(ToolInputRecord))
 
 export const runHookScript = Effect.fn('runHookScript')(function*(
@@ -313,10 +287,6 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
   const { timeoutMs, capNote } = resolveHookBudget(hook.timeout, event, callerIsWaiting)
   const stdinText = encodeHookPayload(input)
 
-  // `args` selects the exec form: spawn the binary directly so no shell ever
-  // interprets the command or its arguments. Otherwise the hook picks its own
-  // interpreter, and running a bash hook under `sh` silently changes its
-  // meaning wherever /bin/sh is not bash.
   const [shell, evalFlag] = SHELL_INVOCATION[hook.shell ?? 'sh']
   const pluginRoot = hook.pluginRoot
   const expand = (value: string) =>
@@ -337,8 +307,6 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
     ? ChildProcess.make(shell, [evalFlag, expand(hook.command)], options)
     : ChildProcess.make(expand(hook.command), hook.args.map(expand), options)
 
-  // Detached whole: the stdout/stderr drain travels with the child, so
-  // abandoning the wait never leaves it writing into a pipe nobody reads.
   const hookScope = yield* Scope.Scope
   const run = Effect.scoped(
     Effect.uninterruptibleMask((restore) =>
@@ -367,7 +335,6 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
       })
     ),
   ).pipe(
-    // Past the deadline no joiner is left to surface a failure.
     Effect.tapCause((cause) => Effect.logWarning(`hook ${hook.command} failed`, cause)),
   )
 
@@ -377,11 +344,6 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
   })
 })
 
-// ── SuperviseFork ──
-/**
- * Nothing awaits a forked hook, so an unhandled failure here reaches no one:
- * a mistyped exec-form command would fail to spawn in total silence.
- */
 export const superviseFork = <E, R>(
   hook: Effect.Effect<HookResult, E, R>,
   ctx: HookSession,
@@ -403,18 +365,8 @@ export const superviseFork = <E, R>(
     }),
   )
 
-// ── RunHooksForEvent ──
 const AGGREGATE_CEILING_MS = 26_000
 
-/**
- * The per-hook verdict chain, in one bag so the phase order is carried by
- * types: run the hook script (read), wrap the raw result for the workflow
- * (decode), interpret it (decide), fold both channels into the outcome the
- * site acts on (encode), and sequence the loop from that outcome (write).
- * The workflow's `Left` — a malformed decision JSON — is folded into a
- * `Warning` outcome by `encode`, so it reaches the write as a value rather than
- * a failure.
- */
 const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(function*(
   entries: readonly HookEntry[],
   matchValue: string,
@@ -426,8 +378,7 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
   const ruleInput = Option.getOrElse(asToolInput(input['tool_input']), () => EMPTY_TOOL_INPUT)
   let warning: string | undefined
   let currentInput = input
-  // A matcher this event cannot evaluate must not behave as a match. U3 already
-  // named the hook at session start, so this is a silent skip, not a report.
+
   const unreadableMatcher = matcherUnreadable(event)
 
   const hookVerdictCell = Cell.layer({
@@ -448,9 +399,13 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
     encode: (outcome) =>
       Match.value(
         Result.match(outcome, {
-          onFailure: ({ error }) =>
-            new Warning({ message: `Hook exited 0 but produced invalid JSON: ${error.raw.slice(0, 200)}` }),
-          onSuccess: ({ verdict }) => verdict,
+          onFailure: ({ error, code, stdout }) =>
+            new Warning({
+              message: `Hook exited 0 but produced invalid JSON: ${error.raw.slice(0, 200)}`,
+              code,
+              stdout,
+            }),
+          onSuccess: (verdict) => verdict,
         }),
       ).pipe(
         Match.tag('Block', (d) => new Blocked({ reason: d.reason })),
@@ -481,8 +436,6 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
       if (hook.if !== undefined) {
-        // `if` is a permission rule over a tool call, so only a tool event can
-        // satisfy one. Elsewhere a hook that sets `if` never runs.
         if (!ifEvaluatingEvent(event)) continue
         if (!matchesPermissionRule(hook.if, matchValue, ruleInput, cwd)) continue
       }
@@ -518,7 +471,6 @@ export const runHooksForEvent = Effect.fn('runHooksForEvent')(function*(
   )
 })
 
-// ── RunLifecycleHooks ──
 export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(
   function*(entries: readonly HookEntry[], ctx: HookSession, event: string) {
     const cwd = ctx.cwd
@@ -542,7 +494,6 @@ export const runLifecycleHooks = Effect.fn('runLifecycleHooks')(
   },
 )
 
-// ── RunPreToolUseHooks ──
 export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
   settings: HookSettings,
   event: HookToolCall,
@@ -569,9 +520,6 @@ export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
     }
   }
 
-  // One OMP `edit` can name many files; Claude Code's `Edit` names exactly one.
-  // Dispatch the chain once per target so a guard sees every path: populating
-  // only the first lets an innocent leading section screen a forbidden one.
   const targets = editTargetPaths(claudeToolName, toolInput)
   const payloads = targets.length === 0
     ? [toolInput]
@@ -596,16 +544,13 @@ export const runPreToolUseHooks = Effect.fn('runPreToolUseHooks')(function*(
     lastResult = result
   }
 
-  // Only a single-target call has an unambiguous rewrite target, and the delta
-  // must go back under the key names OMP reads — the forward pass renamed them.
   const updated = payloads.length === 1 ? lastResult.updatedInput?.['tool_input'] : undefined
-  // Merged in place: OMP reads the rewrite back off the very object it passed.
+
   Object.assign(event.input, denormalizeToolInput(rawInput, updated))
 
   return undefined
 })
 
-// ── RunPostToolUseHooks ──
 export const runPostToolUseHooks = Effect.fn('runPostToolUseHooks')(function*(
   settings: HookSettings,
   event: HookToolResult,
@@ -643,11 +588,9 @@ export const runPostToolUseHooks = Effect.fn('runPostToolUseHooks')(function*(
   return firstWarning === undefined ? lastResult : { ...lastResult, warning: firstWarning }
 })
 
-// ── RunPostToolUseFailureHooks ──
 const asTextBlocks = S.decodeUnknownOption(S.Array(S.Struct({ text: S.optional(S.String) })))
 const asPlainText = S.decodeUnknownOption(S.String)
 
-/** Claude Code documents `error` as a string; OMP carries content blocks. */
 const errorText = (content: unknown): string =>
   Option.match(asTextBlocks(content), {
     onSome: (blocks) => blocks.flatMap((block) => block.text === undefined ? [] : [block.text]).join('\n'),
@@ -664,7 +607,7 @@ export const runPostToolUseFailureHooks = Effect.fn('runPostToolUseFailureHooks'
     claudeToolName,
     Option.getOrElse(asToolInput(event.input), () => EMPTY_TOOL_INPUT),
   )
-  // No per-target fan-out: a tool that failed edited nothing.
+
   const input: Record<string, unknown> = {
     ...sessionIds(() => ctx.sessionManager.getSessionId()),
     tool_name: claudeToolName,
@@ -684,7 +627,6 @@ export const runPostToolUseFailureHooks = Effect.fn('runPostToolUseFailureHooks'
   return feedback
 })
 
-// ── RunToolResultHooks ──
 export const runToolResultHooks = Effect.fn('runToolResultHooks')(function*(
   settings: HookSettings,
   event: HookToolResult,
@@ -696,7 +638,6 @@ export const runToolResultHooks = Effect.fn('runToolResultHooks')(function*(
   return feedback
 })
 
-// ── RunSessionStartHooks ──
 export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
   settings: HookSettings,
   reason: string,
@@ -729,7 +670,6 @@ export const runSessionStartHooks = Effect.fn('runSessionStartHooks')(function*(
   }
 })
 
-// ── RunSessionSwitchHooks ──
 export const runSessionSwitchHooks = Effect.fn('runSessionSwitchHooks')(function*(
   settings: HookSettings,
   reason: string,
@@ -739,12 +679,6 @@ export const runSessionSwitchHooks = Effect.fn('runSessionSwitchHooks')(function
   yield* runSessionStartHooks(settings, reason, ctx)
 })
 
-// ── RunPreCompactHooks ──
-/**
- * The matcher this event documents is `trigger` (manual vs auto), which OMP's
- * payload does not carry — U4's gate skips any hook that declares one, so only
- * unscoped hooks reach here and `matchValue` is never consulted.
- */
 export const runPreCompactHooks = Effect.fn('runPreCompactHooks')(function*(
   settings: HookSettings,
   ctx: HookSession,
@@ -763,8 +697,7 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
   const entries = settings.hooks.UserPromptSubmit
   const cwd = ctx.cwd
   const hostBound = isHostBound(event.text)
-  // Left undrained for a host-bound prompt: an async note is one-shot, so it
-  // has to survive this command and reach the next model-bound prompt.
+
   const pending = Match.value(hostBound).pipe(
     Match.when(true, (): readonly string[] => []),
     Match.when(false, () => drainAsyncHookContext()),
@@ -794,19 +727,19 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
     encode: (outcome) =>
       Result.match(outcome, {
         onFailure: ({ code, stdout }) => ({ blockReason: undefined, code, stdout }),
-        onSuccess: ({ verdict, code, stdout }) => ({
-          blockReason: Match.value(verdict).pipe(
+        onSuccess: (decision) => ({
+          blockReason: Match.value(decision).pipe(
             Match.tag('Block', (b) => b.reason),
-            Match.orElse(() => undefined),
+            Match.tag('Allow', () => undefined),
+            Match.tag('Warning', () => undefined),
+            Match.exhaustive,
           ),
-          code,
-          stdout,
+          code: decision.code,
+          stdout: decision.stdout,
         }),
       }),
     write: ({ blockReason, code, stdout }) =>
       Effect.sync(() => {
-        // Claude Code rejects the prompt on exit 2 or `decision: "block"`, feeding
-        // the reason back rather than injecting stdout as context.
         if (blockReason !== undefined) {
           ctx.ui.notify(`Prompt blocked by UserPromptSubmit hook: ${blockReason}`, 'error')
           return Option.some({ handled: true } satisfies InputEventResult)
@@ -842,9 +775,6 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
     return delivered
   }
 
-  // The hooks still ran, so a block still blocks; only the context is dropped.
-  // Re-holding this run's stdout would duplicate it — unlike an async note,
-  // these hooks re-run on the next prompt and produce it fresh.
   return Match.value(hostBound).pipe(
     Match.when(true, () => undefined),
     Match.when(false, deliver),
@@ -852,7 +782,6 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
   )
 })
 
-// ── HookDispatcherExecutor ──
 export type HookDispatchResult =
   | ToolCallEventResult
   | ToolResultEventResult
@@ -864,32 +793,23 @@ export type HookDispatchContext = FileSystem | ChildProcessSpawner | Scope.Scope
 
 const settingsFor = (ctx: HookSession) => Effect.flatMap(ClaudeSettings, (port) => port.load(ctx.cwd, ctx.homeDir))
 
-const admitSettingsCell = <Response>(
-  write: (settings: HookSettings) => Effect.Effect<Response, PlatformError, HookDispatchContext>,
-  empty: Response,
-) =>
-  Cell.layer({
-    read: (ctx: HookSession) => settingsFor(ctx),
-    decode: (settings: HookSettings | null) =>
-      Result.succeed(admitPresent(Option.isSome(Option.fromNullishOr(settings)))),
-    decide: admitLoadedSettings,
-    encode: (outcome) => Result.getOrElse(outcome, skipHooks),
-    write: (decision: HookDispatchDecision, raw: HookSettings | null) =>
-      Match.value(decision).pipe(
-        Match.tag('SkipHooks', () => Effect.succeed(empty)),
-        Match.tag('RunHooks', () => {
-          const loaded = Option.fromNullishOr(raw)
-          return write(Option.getOrThrow(loaded))
-        }),
-        Match.exhaustive,
-      ),
-  })
-
 const dispatchAdmit = <Response>(
   write: (settings: HookSettings) => Effect.Effect<Response, PlatformError, HookDispatchContext>,
   empty: Response,
   ctx: HookSession,
-) => Cell.run(admitSettingsCell(write, empty), ctx)
+) =>
+  Effect.flatMap(
+    settingsFor(ctx),
+    (settings) =>
+      Match.value(admitLoadedSettings(admitPresent(Option.isSome(Option.fromNullishOr(settings))))).pipe(
+        Match.tag('SkipHooks', () => Effect.succeed(empty)),
+        Match.tag('RunHooks', () => {
+          const loaded = Option.fromNullishOr(settings)
+          return write(Option.getOrThrow(loaded))
+        }),
+        Match.exhaustive,
+      ),
+  )
 
 export const onToolCall = (event: HookToolCall, ctx: HookSession) =>
   dispatchAdmit((settings) => runPreToolUseHooks(settings, event, ctx), undefined, ctx)
@@ -985,18 +905,12 @@ export const onSessionShutdown = (ctx: HookSession) =>
 export const onSessionStop = (ctx: HookSession) =>
   dispatchAdmit((settings) => runLifecycleHooks(settings.hooks.Stop, ctx, 'Stop'), undefined, ctx)
 
-// ── HookDispatcherHandler ──
 const HANDLER_CEILING_MS = 28_000
 
 export const HookDispatcherTask = (
   pi: ExtensionAPI,
   runSafe: <A, E>(effect: Effect.Effect<A, E, HookDispatchContext>) => Promise<A>,
 ): void => {
-  /**
-   * The ceiling and the failure re-raise are the same for every event, so they
-   * are applied to the handler's own effect. Each `pi.on` registration already
-   * names which handler runs, so its result type is the handler's, not a union.
-   */
   const bounded = async <A, E>(effect: Effect.Effect<A, E, HookDispatchContext>): Promise<A | undefined> => {
     const timed = Effect.gen(function*() {
       const outcome = yield* Effect.result(effect)

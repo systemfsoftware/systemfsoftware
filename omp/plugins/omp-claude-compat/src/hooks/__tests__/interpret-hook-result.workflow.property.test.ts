@@ -50,12 +50,12 @@ const commandOf = (result: { readonly code: number; readonly stdout: string; rea
 describe('interpretHookResult (PBT)', () => {
   it.prop('∀stdout_Exit0AndBlankStdout_→Allow', [blankStdout, event], ([stdout, ev]) => {
     const verdict = interpretHookResult(commandOf({ code: 0, stdout, stderr: '' }, ev))
-    return Result.isSuccess(verdict) && verdict.success.verdict._tag === 'Allow'
+    return Result.isSuccess(verdict) && verdict.success._tag === 'Allow'
   })
 
   it.prop('∀stdout_Exit0AndPlainTextStdout_→Allow', [plainStdout, event], ([stdout, ev]) => {
     const verdict = interpretHookResult(commandOf({ code: 0, stdout, stderr: '' }, ev))
-    return Result.isSuccess(verdict) && verdict.success.verdict._tag === 'Allow'
+    return Result.isSuccess(verdict) && verdict.success._tag === 'Allow'
   })
 
   it.prop('∀stdout_Exit0AndMalformedDecisionJson_→VerdictError', [malformedJson, event], ([stdout, ev]) => {
@@ -65,8 +65,8 @@ describe('interpretHookResult (PBT)', () => {
 
   it.prop('∀stderr_Exit2_→BlockCarryingStderr', [stderrText, event], ([stderr, ev]) => {
     const verdict = interpretHookResult(commandOf({ code: 2, stdout: '', stderr }, ev))
-    return Result.isSuccess(verdict) && verdict.success.verdict._tag === 'Block' &&
-      verdict.success.verdict.reason === stderr.trim()
+    return Result.isSuccess(verdict) && verdict.success._tag === 'Block' &&
+      verdict.success.reason === stderr.trim()
   })
 
   it.prop('∀stdout_Exit2IgnoresStdout_→Block', [fc.oneof(blankStdout, plainStdout, malformedJson), event], ([
@@ -74,8 +74,8 @@ describe('interpretHookResult (PBT)', () => {
     ev,
   ]) => {
     const verdict = interpretHookResult(commandOf({ code: 2, stdout, stderr: 'denied' }, ev))
-    return Result.isSuccess(verdict) && verdict.success.verdict._tag === 'Block' &&
-      verdict.success.verdict.reason === 'denied'
+    return Result.isSuccess(verdict) && verdict.success._tag === 'Block' &&
+      verdict.success.reason === 'denied'
   })
 
   it.prop('∀reason_Exit0AndDenyDecision_→Block', [stderrText, event], ([reason, ev]) => {
@@ -83,8 +83,8 @@ describe('interpretHookResult (PBT)', () => {
       hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: reason },
     })
     const verdict = interpretHookResult(commandOf({ code: 0, stdout, stderr: '' }, ev))
-    return Result.isSuccess(verdict) && verdict.success.verdict._tag === 'Block' &&
-      verdict.success.verdict.reason === reason
+    return Result.isSuccess(verdict) && verdict.success._tag === 'Block' &&
+      verdict.success.reason === reason
   })
 
   it.prop('∀code_NonStandardExitWithStderr_→Warning', [nonStandardExit, stderrText, event], ([
@@ -93,20 +93,20 @@ describe('interpretHookResult (PBT)', () => {
     ev,
   ]) => {
     const verdict = interpretHookResult(commandOf({ code, stdout: '', stderr }, ev))
-    return Result.isSuccess(verdict) && verdict.success.verdict._tag === 'Warning' &&
-      verdict.success.verdict.message === stderr.trim()
+    return Result.isSuccess(verdict) && verdict.success._tag === 'Warning' &&
+      verdict.success.message === stderr.trim()
   })
 
   it.prop('∀code_NonStandardExitWithoutStderr_→Allow', [nonStandardExit, blankStdout, event], ([code, stderr, ev]) => {
     const verdict = interpretHookResult(commandOf({ code, stdout: '', stderr }, ev))
-    return Result.isSuccess(verdict) && verdict.success.verdict._tag === 'Allow'
+    return Result.isSuccess(verdict) && verdict.success._tag === 'Allow'
   })
 
   it.prop('∀value_Exit0AndUpdatedInput_→AllowCarriesUpdatedInput', [stderrText, event], ([value, ev]) => {
     const stdout = JSON.stringify({ hookSpecificOutput: { updatedInput: { tool_input: { content: value } } } })
     const verdict = interpretHookResult(commandOf({ code: 0, stdout, stderr: '' }, ev))
-    return Result.isSuccess(verdict) && verdict.success.verdict._tag === 'Allow' &&
-      JSON.stringify(verdict.success.verdict.updatedInput) === JSON.stringify({ tool_input: { content: value } })
+    return Result.isSuccess(verdict) && verdict.success._tag === 'Allow' &&
+      JSON.stringify(verdict.success.updatedInput) === JSON.stringify({ tool_input: { content: value } })
   })
 
   it.prop('∀code_NonStandardExitIgnoresStdoutJson_→AllowWithoutUpdatedInput', [
@@ -116,8 +116,8 @@ describe('interpretHookResult (PBT)', () => {
   ], ([code, value, ev]) => {
     const stdout = JSON.stringify({ hookSpecificOutput: { updatedInput: { tool_input: { content: value } } } })
     const verdict = interpretHookResult(commandOf({ code, stdout, stderr: '' }, ev))
-    return Result.isSuccess(verdict) && verdict.success.verdict._tag === 'Allow' &&
-      verdict.success.verdict.updatedInput === undefined
+    return Result.isSuccess(verdict) && verdict.success._tag === 'Allow' &&
+      verdict.success.updatedInput === undefined
   })
 
   it.prop('∀value_Exit0DenyWithUpdatedInput_→BlockNotAllow', [stderrText, event], ([value, ev]) => {
@@ -125,7 +125,7 @@ describe('interpretHookResult (PBT)', () => {
       hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: value, updatedInput: { a: '1' } },
     })
     const verdict = interpretHookResult(commandOf({ code: 0, stdout, stderr: '' }, ev))
-    return Result.isSuccess(verdict) && verdict.success.verdict._tag === 'Block'
+    return Result.isSuccess(verdict) && verdict.success._tag === 'Block'
   })
 
   it.prop('∀prefix_Exit0AndDecisionJsonBehindBlankSpace_→Block', [leadingBlank, stderrText, event], ([
@@ -137,29 +137,29 @@ describe('interpretHookResult (PBT)', () => {
       hookSpecificOutput: { permissionDecision: 'deny', permissionDecisionReason: reason },
     })
     const verdict = interpretHookResult(commandOf({ code: 0, stdout, stderr: '' }, ev))
-    return Result.isSuccess(verdict) && verdict.success.verdict._tag === 'Block' &&
-      verdict.success.verdict.reason === reason
+    return Result.isSuccess(verdict) && verdict.success._tag === 'Block' &&
+      verdict.success.reason === reason
   })
 
   it.prop('∀reason_Exit0AndTopLevelBlockDecision_→Block', [stderrText, event], ([reason, ev]) => {
     const stdout = JSON.stringify({ decision: 'block', reason })
     const verdict = interpretHookResult(commandOf({ code: 0, stdout, stderr: '' }, ev))
-    return Result.isSuccess(verdict) && verdict.success.verdict._tag === 'Block' &&
-      verdict.success.verdict.reason === reason
+    return Result.isSuccess(verdict) && verdict.success._tag === 'Block' &&
+      verdict.success.reason === reason
   })
 
   it.prop('∀event_Exit0AndDenyWithoutReason_→BlockNamingTheEvent', [event], ([ev]) => {
     const stdout = JSON.stringify({ hookSpecificOutput: { permissionDecision: 'deny' } })
     const verdict = interpretHookResult(commandOf({ code: 0, stdout, stderr: '' }, ev))
-    return Result.isSuccess(verdict) && verdict.success.verdict._tag === 'Block' &&
-      verdict.success.verdict.reason === `Blocked by ${ev} hook`
+    return Result.isSuccess(verdict) && verdict.success._tag === 'Block' &&
+      verdict.success.reason === `Blocked by ${ev} hook`
   })
 
   it.prop('∀event_Exit0AndTopLevelBlockWithoutReason_→BlockNamingTheEvent', [event], ([ev]) => {
     const stdout = JSON.stringify({ decision: 'block' })
     const verdict = interpretHookResult(commandOf({ code: 0, stdout, stderr: '' }, ev))
-    return Result.isSuccess(verdict) && verdict.success.verdict._tag === 'Block' &&
-      verdict.success.verdict.reason === `Blocked by ${ev} hook`
+    return Result.isSuccess(verdict) && verdict.success._tag === 'Block' &&
+      verdict.success.reason === `Blocked by ${ev} hook`
   })
 })
 

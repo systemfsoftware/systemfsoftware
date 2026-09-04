@@ -25,7 +25,7 @@ jobs:
     name: abort on mid-run merge conflict
     needs: conflicts
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 55
     permissions:
       contents: read
       actions: write
@@ -109,7 +109,7 @@ jobs:
       - name: Mutation
         id: mutation
         continue-on-error: true
-        timeout-minutes: 25
+        timeout-minutes: 15
         run: corepack pnpm turbo mutation --filter=./${{ matrix.package }} --log-order=stream --output-logs=errors-only
 
       - name: Require a mutation report

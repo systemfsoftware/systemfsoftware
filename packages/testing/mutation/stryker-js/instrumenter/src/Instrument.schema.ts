@@ -1,6 +1,3 @@
-/**
- * Instrument declarations — the wire types for the instrument pipeline.
- */
 import { Wire } from '@systemfsoftware/effect-cell-types'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as S from 'effect/Schema'
@@ -40,9 +37,7 @@ export const FileSchema = S.Struct({
   mutate: MutateDescriptionSchema,
 })
 
-// IgnorerService is a runtime plugin service, not a serializable schema
 const IgnorerSchema = Wire.mint(S.Unknown)
-// AST shapes are external data from the read phase, not declared here
 const AstSchema = Wire.mint(S.Unknown)
 
 const InstrumenterOptionsSchema = Wire.wire({

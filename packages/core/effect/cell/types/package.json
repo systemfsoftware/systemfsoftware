@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/core/effect/cell/types#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Type-level contracts for the repo's cell taxonomy, starting with the Workflow decision channel — branded Workflow<C, D, E> types plus a runtime make constructor every effect kernel can share.",
+  "description": "Type-level contracts for the repo's cell taxonomy, starting with the Workflow decision channel — branded Workflow<C, D, E> types plus a runtime make constructor shared across the repo's cells.",
   "keywords": [
     "effect",
     "effect-ts",

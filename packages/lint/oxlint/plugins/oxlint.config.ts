@@ -54,9 +54,7 @@ export default defineConfig({
   // exercised through real source by the RuleTester suite beside it, and this repo's
   // plugin convention is RuleTester over unit-testing internals. That deletion is
   // deferred, not declined -- `src/rules/*.ts` is inside the package's mutate scope,
-  // so removing a test needs the mutation gate to show it costs no kills, and that
-  // gate cannot run today (`@systemfsoftware/stryker-js-core` resolves to a directory
-  // with a `dist/` but no `package.json`, so `stryker run` cannot find its binary).
+  // so removing a test needs the mutation gate to show it costs no kills.
   overrides: [
     {
       files: ['testing/test-placement/src/rules/__tests__/_guards.test.ts'],
