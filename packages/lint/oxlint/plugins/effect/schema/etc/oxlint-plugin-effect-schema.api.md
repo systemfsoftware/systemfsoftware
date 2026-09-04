@@ -16,10 +16,10 @@ const _default: {
         'ban-data-taggederror': Rule;
         'no-manual-tag-member': Rule;
         'no-manual-tag-property': Rule;
+        'schema-checked-element-named': Rule;
         'schema-declaration-location': Rule;
         'schema-filter-constructive-generation': Rule;
         'schema-file-exports-schemas-only': Rule;
-        'schema-checked-element-named': Rule;
     };
     configs: {
         recommended: {

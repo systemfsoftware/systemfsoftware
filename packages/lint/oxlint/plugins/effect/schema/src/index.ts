@@ -16,10 +16,10 @@ const recommendedRules = {
   [rule('ban-data-taggederror')]: 'error',
   [rule('no-manual-tag-member')]: 'error',
   [rule('no-manual-tag-property')]: 'error',
+  [rule('schema-checked-element-named')]: 'error',
   [rule('schema-declaration-location')]: 'error',
   [rule('schema-filter-constructive-generation')]: 'error',
   [rule('schema-file-exports-schemas-only')]: 'error',
-  [rule('schema-checked-element-named')]: 'error',
 } as const
 
 export default {
@@ -31,10 +31,10 @@ export default {
     'ban-data-taggederror': banDataTaggedError,
     'no-manual-tag-member': noManualTagMember,
     'no-manual-tag-property': noManualTagProperty,
+    'schema-checked-element-named': schemaCheckedElementNamed,
     'schema-declaration-location': schemaDeclarationLocation,
     'schema-filter-constructive-generation': schemaFilterConstructiveGeneration,
     'schema-file-exports-schemas-only': schemaFileExportsSchemasOnly,
-    'schema-checked-element-named': schemaCheckedElementNamed,
   },
   configs: {
     recommended: {
