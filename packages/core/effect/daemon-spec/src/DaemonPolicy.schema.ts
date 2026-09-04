@@ -52,7 +52,16 @@ export const MaxChildren = Schema.Int.pipe(
 export type MaxChildren = typeof MaxChildren.Type
 
 const CapOutsideSpan = Schema.Int.pipe(
-  Schema.check(Schema.makeFilter((children) => children < 1 || children > MAX_CHILDREN_CEILING)),
+  Schema.check(
+    Schema.makeFilter((children) => children < 1 || children > MAX_CHILDREN_CEILING, {
+      arbitrary: {
+        candidate: {
+          weight: 20,
+          make: (fc) => fc.oneof(fc.integer({ max: 0 }), fc.integer({ min: MAX_CHILDREN_CEILING + 1 })),
+        },
+      },
+    }),
+  ),
 )
 
 const decodesChildRestart = Schema.decodeUnknownExit(ChildPolicyConfig)

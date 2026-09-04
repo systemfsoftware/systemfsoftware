@@ -2,7 +2,17 @@ import { parse, stringify } from '@std/toml'
 import { Effect, Schema, SchemaGetter, SchemaIssue } from 'effect'
 
 export const Policy = Schema.Record(
-  Schema.String.pipe(Schema.check(Schema.makeFilter((key) => key !== '__proto__'))),
+  Schema.String.pipe(
+    Schema.check(
+      Schema.makeFilter((key) => key !== '__proto__', {
+        arbitrary: {
+          candidate: {
+            make: (fc) => fc.string().map((key) => (key === '__proto__' ? `${key}!` : key)),
+          },
+        },
+      }),
+    ),
+  ),
   Schema.Array(Schema.String),
 ).pipe(
   Schema.brand('Policy'),

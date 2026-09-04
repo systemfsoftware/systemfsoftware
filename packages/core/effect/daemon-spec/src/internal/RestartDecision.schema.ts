@@ -47,7 +47,26 @@ const DecideInputBase = Schema.Struct({
   exitSuccess: Schema.Boolean,
   intensityExceeded: Schema.Boolean,
 }).pipe(
-  Schema.check(Schema.makeFilter(failedIndexAddressesAChild, { message: BOUND_MESSAGE })),
+  Schema.check(
+    Schema.makeFilter(failedIndexAddressesAChild, {
+      message: BOUND_MESSAGE,
+      arbitrary: {
+        candidate: {
+          weight: 20,
+          make: (fc) =>
+            fc.integer({ min: 1, max: MAX_CHILDREN_CEILING }).chain((totalChildren) =>
+              fc.record({
+                strategy: fc.constantFrom('one_for_one', 'one_for_all', 'rest_for_one'),
+                totalChildren: fc.constant(totalChildren),
+                failedIndex: fc.integer({ min: 0, max: totalChildren - 1 }),
+                exitSuccess: fc.boolean(),
+                intensityExceeded: fc.boolean(),
+              })
+            ),
+        },
+      },
+    }),
+  ),
 )
 
 /**
