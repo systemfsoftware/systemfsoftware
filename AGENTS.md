@@ -12,13 +12,12 @@ Startup: confirm working directory and active task; run `pnpm check:local` and r
 
 Load docs on-demand when triggers fire; do not perform eager multi-spec reads at startup.
 
-| Doc                        | Trigger                                                      |
-| -------------------------- | ------------------------------------------------------------ |
-| `CONSTITUTION.md`          | architecture changes, rule authoring, or design disputes     |
-| `CONSTITUTION-ARTICLES.md` | editing source files (pure core, types, boundaries, testing) |
-| `CONCEPTS.md`              | domain vocabulary, taxonomy, or convention lookup            |
-| `.github/AGENTS.md`        | CI check failure or workflow modification                    |
-| `docs/solutions/`          | researching past decisions, postmortems, or known patterns   |
+| Doc                 | Trigger                                                    |
+| ------------------- | ---------------------------------------------------------- |
+| `CONSTITUTION.md`   | architecture changes, rule authoring, or design disputes   |
+| `CONCEPTS.md`       | domain vocabulary, taxonomy, or convention lookup          |
+| `.github/AGENTS.md` | CI check failure or workflow modification                  |
+| `docs/solutions/`   | researching past decisions, postmortems, or known patterns |
 
 ## Stack & Conventions
 
@@ -32,12 +31,12 @@ Load docs on-demand when triggers fire; do not perform eager multi-spec reads at
 | Surface       | Examples                                                                                                | Rule                                                                                            |
 | ------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | **Evaluator** | `scripts/guards/check-changeset.ts`, `@systemfsoftware/stryker-test-contribution`, `.github/workflows/` | Its own commit, never shared with the work it judges; gate observed red before and green after. |
-| **Doctrine**  | `CONSTITUTION.md`, `CONSTITUTION-ARTICLES.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`      | Editable, but never an input to a gate.                                                         |
+| **Doctrine**  | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`                                  | Editable, but never an input to a gate.                                                         |
 | **Editable**  | `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                                                  | Edit freely; `CONST-E4` governs loosening constraints.                                          |
 
 ## Directory Map
 
-Root doctrine files `CONSTITUTION.md`, `CONSTITUTION-ARTICLES.md`, `CONCEPTS.md`. Run `pnpm map` for current packages, publish targets, and leaf coverage.
+Root doctrine files `CONSTITUTION.md`, `CONCEPTS.md`. Run `pnpm map` for current packages, publish targets, and leaf coverage.
 
 | Directory        | What it is                                                     | Governance                               |
 | ---------------- | -------------------------------------------------------------- | ---------------------------------------- |
