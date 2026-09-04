@@ -1,27 +1,26 @@
 {
-  "name": "@systemfsoftware/oxlint-plugin",
+  "name": "@systemfsoftware/oxlint-plugin-effect-native",
   "license": "Apache-2.0",
-  "version": "2.1.3",
+  "version": "0.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/lint/oxlint/plugins/meta/core"
+    "directory": "packages/lint/oxlint/plugins/meta/effect-native"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/lint/oxlint/plugins/meta/core#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/lint/oxlint/plugins/meta/effect-native#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Oxlint rules for Effect-TS — enforce a pure functional core and imperative shell: ban classes and string errors, forbid native Date/Promise/timers in Effect, require pipeable composition.",
+  "description": "Oxlint rules for native APIs in Effect: ban Date, Map, Set, timers, Promise, Worker, and catch logging where Effect is imported.",
   "keywords": [
     "oxlint",
     "oxlint-plugin",
     "oxc",
+    "lint",
     "linter",
     "lint-rules",
     "effect",
     "effect-ts",
-    "functional-programming",
-    "static-analysis",
-    "typescript"
+    "property-testing"
   ],
   "type": "module",
   "files": [
@@ -29,7 +28,7 @@
   ],
   "exports": {
     ".": {
-      "types": "./dist/oxlint-plugin.d.ts",
+      "types": "./dist/oxlint-plugin-effect-native.d.ts",
       "default": "./dist/index.mjs"
     },
     "./package.json": "./package.json"
@@ -48,8 +47,7 @@
   },
   "dependencies": {
     "@oxc-project/types": "^0.140.0",
-    "@oxlint/plugins": "catalog:oxlint",
-    "@systemfsoftware/oxlint-plugin-effect-native": "workspace:^"
+    "@oxlint/plugins": "catalog:oxlint"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
