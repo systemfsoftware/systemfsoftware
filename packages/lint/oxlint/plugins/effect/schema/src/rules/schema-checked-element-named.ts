@@ -23,9 +23,11 @@ const COLLECTION_MEMBERS: Readonly<Record<string, true>> = {
   Array: true,
   Record: true,
   Tuple: true,
-  Set: true,
-  Map: true,
   Union: true,
+  ReadonlySet: true,
+  HashSet: true,
+  ReadonlyMap: true,
+  HashMap: true,
 }
 
 const MAX_WALK_DEPTH = 32
@@ -67,11 +69,24 @@ const findFirstCheck = (
 ): ESTree.CallExpression | null => {
   if (depth > MAX_WALK_DEPTH) return null
   const current = unwrapExpression(node)
-  if (current.type === 'Identifier' || current.type === 'MemberExpression') return null
   if (current.type === 'ArrayExpression') {
     for (const element of current.elements) {
       if (element === null) continue
       const found = findFirstCheck(element.type === 'SpreadElement' ? element.argument : element, getScope, depth + 1)
+      if (found !== null) return found
+    }
+    return null
+  }
+  if (current.type === 'LogicalExpression') {
+    for (const branch of [current.left, current.right]) {
+      const found = findFirstCheck(branch, getScope, depth + 1)
+      if (found !== null) return found
+    }
+    return null
+  }
+  if (current.type === 'ConditionalExpression') {
+    for (const branch of [current.consequent, current.alternate]) {
+      const found = findFirstCheck(branch, getScope, depth + 1)
       if (found !== null) return found
     }
     return null
@@ -83,19 +98,6 @@ const findFirstCheck = (
     if (argument.type === 'SpreadElement') {
       const found = findFirstCheck(argument.argument, getScope, depth + 1)
       if (found !== null) return found
-      continue
-    }
-    const unwrapped = unwrapExpression(argument)
-    if (unwrapped.type === 'ObjectExpression') {
-      if (calleeMember !== 'Record' && calleeMember !== 'Map') continue
-      for (const property of unwrapped.properties) {
-        const found = findFirstCheck(
-          property.type === 'SpreadElement' ? property.argument : property.value,
-          getScope,
-          depth + 1,
-        )
-        if (found !== null) return found
-      }
       continue
     }
     const found = findFirstCheck(argument, getScope, depth + 1)

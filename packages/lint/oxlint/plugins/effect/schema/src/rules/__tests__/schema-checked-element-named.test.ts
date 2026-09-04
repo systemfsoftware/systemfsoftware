@@ -85,7 +85,20 @@ const Result = S.NullOr(S.String.pipe(S.check((v) => true)))`,
     {
       name: 'Should_Pass_When_UnionArrayMembersCarryNoCheck',
       code: `import { Schema as S } from 'effect'
-const Result = S.Union([S.String, S.Number])`,
+const Result = S.Union([S.String, S.Number], { mode: 'anyOf' })`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+    },
+    {
+      name: 'Should_Pass_When_SpreadElementIsNamedBinding',
+      code: `import { Schema as S } from 'effect'
+const members = [S.String, S.Number]
+const Result = S.Union(...members)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+    },
+    {
+      name: 'Should_Pass_When_CheckSitsInDroppedSequenceSlot',
+      code: `import { Schema as S } from 'effect'
+const Result = S.Array((S.String.pipe(S.check((v) => true)), S.String))`,
       filename: '/repo/pkg/src/domain.schema.ts',
     },
   ],
@@ -107,7 +120,7 @@ const Result = S.Array(S.String.check((v) => true))`,
     {
       name: 'Should_Fail_Only_When_SecondTupleElementCarriesCheck',
       code: `import { Schema as S } from 'effect'
-const Result = S.Tuple(S.String, S.Struct({ name: S.String }).pipe(S.check((v) => true)))`,
+const Result = S.Tuple([S.String, S.Struct({ name: S.String }).pipe(S.check((v) => true))])`,
       filename: '/repo/pkg/src/domain.schema.ts',
       errors: [error('Tuple')],
     },
@@ -127,9 +140,9 @@ const Result = S.Union([Wire.mint(Wire.mint(S.Finite).pipe(S.check(S.isGreaterTh
       errors: [error('Union'), error('Union')],
     },
     {
-      name: 'Should_Fail_When_RecordValueCarriesCheck',
+      name: 'Should_Fail_When_RecordKeyCarriesCheck',
       code: `import { Schema as S } from 'effect'
-const Result = S.Record({ key: S.String, value: S.Struct({ name: S.String }).pipe(S.check((v) => true)) })`,
+const Result = S.Record(S.String.pipe(S.check((v) => true)), S.Array(S.String))`,
       filename: '/repo/pkg/src/domain.schema.ts',
       errors: [error('Record')],
     },
@@ -141,18 +154,54 @@ const Result = S.Record(S.String, S.String.pipe(S.check((v) => true)))`,
       errors: [error('Record')],
     },
     {
-      name: 'Should_Fail_When_SetElementCarriesCheck',
+      name: 'Should_Fail_When_ReadonlySetElementCarriesCheck',
       code: `import { Schema as S } from 'effect'
-const Result = S.Set(S.Struct({ name: S.String }).pipe(S.check((v) => true)))`,
+const Result = S.ReadonlySet(S.Struct({ name: S.String }).pipe(S.check((v) => true)))`,
       filename: '/repo/pkg/src/domain.schema.ts',
-      errors: [error('Set')],
+      errors: [error('ReadonlySet')],
     },
     {
-      name: 'Should_Fail_When_MapValueCarriesCheck',
+      name: 'Should_Fail_When_HashSetElementCarriesCheck',
       code: `import { Schema as S } from 'effect'
-const Result = S.Map({ key: S.String, value: S.Struct({ name: S.String }).pipe(S.check((v) => true)) })`,
+const Result = S.HashSet(S.Struct({ name: S.String }).pipe(S.check((v) => true)))`,
       filename: '/repo/pkg/src/domain.schema.ts',
-      errors: [error('Map')],
+      errors: [error('HashSet')],
+    },
+    {
+      name: 'Should_Fail_When_ReadonlyMapValueCarriesCheck',
+      code: `import { Schema as S } from 'effect'
+const Result = S.ReadonlyMap(S.String, S.Struct({ name: S.String }).pipe(S.check((v) => true)))`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [error('ReadonlyMap')],
+    },
+    {
+      name: 'Should_Fail_When_HashMapValueCarriesCheck',
+      code: `import { Schema as S } from 'effect'
+const Result = S.HashMap(S.String, S.Struct({ name: S.String }).pipe(S.check((v) => true)))`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [error('HashMap')],
+    },
+    {
+      name: 'Should_Fail_When_ConditionalBranchCarriesCheck',
+      code: `import { Schema as S } from 'effect'
+declare const useLong: boolean
+const Result = S.Array(useLong ? S.String.pipe(S.check((v) => true)) : S.String)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [error('Array')],
+    },
+    {
+      name: 'Should_Fail_When_LogicalBranchCarriesCheck',
+      code: `import { Schema as S } from 'effect'
+const Result = S.Array(S.String || S.String.pipe(S.check((v) => true)))`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [error('Array')],
+    },
+    {
+      name: 'Should_Fail_When_InlineArrayLiteralSpreadCarriesCheck',
+      code: `import { Schema as S } from 'effect'
+const Result = S.Union(...[S.String, S.Struct({ name: S.String }).pipe(S.check((v) => true))])`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [error('Union')],
     },
     {
       name: 'Should_Fail_When_NamedBaseGainsInlineCheck',
