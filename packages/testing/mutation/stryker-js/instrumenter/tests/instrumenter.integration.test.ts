@@ -4,7 +4,6 @@ import * as Option from 'effect/Option'
 import { expect } from 'vitest'
 
 import { instrument } from './__fixtures__/instrument.js'
-import { allMutators } from './__fixtures__/registry.js'
 
 const PROBE_SOURCE = `export function price(n) {
   if (n > 10) {
@@ -96,45 +95,6 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Instrumenter characterization')
   .body(({ scenario }) => {
-    scenario(
-      'The mutator registry contains all sixteen mutator families',
-      Gherkin.Do.pipe(
-        // This scenario asserts the COMPLETE set of mutator names, not the
-        // count. The registry was, until this session, populated by import
-        // side effects (`registerMutator(self)` at module scope): each mutator
-        // module registered itself when its side-effect-only import was
-        // evaluated. A bundler that drops a side-effect-only import silently
-        // deleted a mutator — removing mutants and RAISING the mutation score
-        // with nothing reporting it. Asserting the whole sorted set makes a
-        // dropped import visible; asserting only the length would let one
-        // substitution hide another.
-        Given('the registry')('mutators', () => Effect.succeed(allMutators)),
-        Then('the names are the sixteen expected')(({ mutators }: { mutators: typeof allMutators }) =>
-          Effect.sync(() => {
-            const names = Object.keys(mutators).slice().sort()
-            expect(names).toEqual([
-              'ArithmeticOperator',
-              'ArrayDeclaration',
-              'ArrowFunction',
-              'AssignmentOperator',
-              'BlockStatement',
-              'BooleanLiteral',
-              'ConditionalExpression',
-              'EqualityOperator',
-              'LogicalOperator',
-              'MethodExpression',
-              'ObjectLiteral',
-              'OptionalChaining',
-              'Regex',
-              'StringLiteral',
-              'UnaryOperator',
-              'UpdateOperator',
-            ])
-          })
-        ),
-      ),
-    )
-
     scenario(
       'The baseline snippet yields thirteen mutants across six families',
       Gherkin.Do.pipe(

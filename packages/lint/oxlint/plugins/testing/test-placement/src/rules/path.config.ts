@@ -8,6 +8,7 @@ export const SANCTIONED_TEST_DIRS: ReadonlySet<string> = new Set(['tests'])
  * a `__tests__` directory beside that workflow, never as a sibling file.
  */
 export const NESTED_TEST_DIR = '__tests__' as const
+export const TEST_TREE_DIRS: ReadonlySet<string> = new Set([...SANCTIONED_TEST_DIRS, NESTED_TEST_DIR])
 
 export const PROPERTY_SUFFIX = '.property.test.ts' as const
 export const INTEGRATION_SUFFIX = '.integration.test.ts' as const

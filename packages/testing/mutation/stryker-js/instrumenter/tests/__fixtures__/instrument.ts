@@ -1,1 +1,1 @@
-export { instrument } from '../../src/index.js'
+export { instrument } from '@systemfsoftware/stryker-js-instrumenter'

@@ -1,12 +1,12 @@
+import type { ScenarioFn } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
-import type { ScenarioFn } from '../../src/FeatureRuntime.js'
 
 declare const scenario: ScenarioFn
 
 // Compile-time denial: a DAMP title must not typecheck. The functions are never
-// invoked — the @ts-expect-error directives are verified by `pnpm typecheck` and
-// by the tstyche lane, so any regression that lets a DAMP title compile surfaces
-// as an unused-directive error.
+// invoked — the @ts-expect-error directives are verified by `pnpm typecheck`, so
+// any regression that lets a DAMP title compile surfaces as an unused-directive
+// error.
 
 const denyUnderscoreTitle = (): void => {
   // @ts-expect-error scenario titles are prose, never DAMP Should_[Behavior]_When_[Condition]

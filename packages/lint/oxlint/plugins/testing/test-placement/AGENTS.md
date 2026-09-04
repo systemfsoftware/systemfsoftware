@@ -2,7 +2,7 @@
 
 > Shared rule-authoring conventions: `packages/lint/oxlint/plugins/AGENTS.md`.
 
-This package ships eight rules enforcing where tests may live and which test suffixes are sanctioned. All eight reach a package through `@systemfsoftware/oxlint-config/base`, which spreads `@systemfsoftware/oxlint-plugin-effect-dmmf`'s recommended set and re-exports them under the `@systemfsoftware/effect-dmmf/` namespace; `strict` adds nothing from this plugin, and neither preset loads it standalone.
+This package ships eight rules enforcing where tests may live and which test suffixes are sanctioned. All eight reach a package through `@systemfsoftware/oxlint-config/base`, which spreads `@systemfsoftware/oxlint-plugin-effect-dmmf`'s recommended set and re-exports them under the `@systemfsoftware/effect-dmmf/` namespace; `strict` adds nothing from this plugin, and neither preset loads it standalone. The `tests-import-public-api` rule binds every file under the package-root `tests/` or `__tests__/` trees, regardless of basename — enforced by each package's `lint` task.
 
 ```yaml
 - id: TP1

@@ -27,14 +27,39 @@ ruleTester.run('tests-import-public-api', testsImportPublicApi, {
       code: `import { x } from './__fixtures__/x.js'\n`,
     },
     {
+      name: 'Should_StaySilent_When_SiblingInternalDirHasNoClimb',
+      filename: '/repo/pkg/tests/a.integration.test.ts',
+      code: `import { x } from './internal/helper.js'\n`,
+    },
+    {
       name: 'Should_StaySilent_When_ColocatedSrcTestImportsInternal',
       filename: '/repo/pkg/src/foo/__tests__/foo.workflow.property.test.ts',
       code: `import { Foo } from '../internal/Foo.js'\n`,
     },
     {
-      name: 'Should_StaySilent_When_SiblingInternalDirHasNoClimb',
-      filename: '/repo/pkg/tests/a.integration.test.ts',
-      code: `import { x } from './internal/helper.js'\n`,
+      name: 'Should_StaySilent_When_UnderSrcFileReexportsSrc',
+      filename: '/repo/pkg/src/rules/__tests__/helper.ts',
+      code: `export { x } from '../src/mod.js'\n`,
+    },
+    {
+      name: 'Should_StaySilent_When_UnderSrcFileTypeImportsSrc',
+      filename: '/repo/pkg/src/rules/__tests__/AstNode.tst.ts',
+      code: `import type { X } from '../src/Thing.js'\n`,
+    },
+    {
+      name: 'Should_StaySilent_When_UnderSrcFileImportsSrc',
+      filename: '/repo/pkg/src/rules/__tests__/helper.ts',
+      code: `import { x } from '../src/mod.js'\n`,
+    },
+    {
+      name: 'Should_StaySilent_When_UnderSrcFileDynamicImportsSrc',
+      filename: '/repo/pkg/src/rules/__tests__/loader.ts',
+      code: `const mod = await import('../src/mod.js')\n`,
+    },
+    {
+      name: 'Should_StaySilent_When_PlainFileOutsideTestTreeImportsSrc',
+      filename: '/repo/pkg/lib/helper.ts',
+      code: `import { x } from '../src/mod.js'\n`,
     },
   ],
   invalid: [
@@ -73,6 +98,30 @@ ruleTester.run('tests-import-public-api', testsImportPublicApi, {
       filename: '/repo/pkg/tests/a.integration.test.ts',
       code: `import { x } from '../internal/helper.js'\n`,
       errors: reachIn('../internal/helper.js'),
+    },
+    {
+      name: 'Should_Report_When_FixtureHelperReexportsSrc',
+      filename: '/repo/pkg/tests/__fixtures__/helper.ts',
+      code: `export { x } from '../src/mod.js'\n`,
+      errors: reachIn('../src/mod.js'),
+    },
+    {
+      name: 'Should_Report_When_TstFileTypeImportsSrc',
+      filename: '/repo/pkg/tests/AstNode.tst.ts',
+      code: `import type { X } from '../src/Thing.js'\n`,
+      errors: reachIn('../src/Thing.js'),
+    },
+    {
+      name: 'Should_Report_When_DunderTestsHelperImportsSrc',
+      filename: '/repo/pkg/__tests__/helper.ts',
+      code: `import { x } from '../src/mod.js'\n`,
+      errors: reachIn('../src/mod.js'),
+    },
+    {
+      name: 'Should_Report_When_FixtureDynamicImportReachesSrc',
+      filename: '/repo/pkg/tests/__fixtures__/loader.ts',
+      code: `const mod = await import('../src/mod.js')\n`,
+      errors: reachIn('../src/mod.js'),
     },
   ],
 })

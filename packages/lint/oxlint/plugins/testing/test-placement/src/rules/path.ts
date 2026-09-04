@@ -1,5 +1,5 @@
 import { Array as A, Schema as S } from 'effect'
-import { SANCTIONED_TEST_DIRS, TEST_BASENAME } from './path.config.js'
+import { SANCTIONED_TEST_DIRS, TEST_BASENAME, TEST_TREE_DIRS } from './path.config.js'
 
 const PathSegments = S.NonEmptyArray(S.String)
 
@@ -15,6 +15,13 @@ export const isUnderSrc = (filename: string): boolean => directoriesOf(filename)
 
 export const isInSanctionedTestDir = (filename: string): boolean =>
   directoriesOf(filename).some((segment) => SANCTIONED_TEST_DIRS.has(segment))
+
+export const isInTestsImportScope = (filename: string): boolean => {
+  const segments = segmentsOf(filename)
+  const directories = A.initNonEmpty(segments)
+  if (directories.some((segment) => segment === 'src')) return false
+  return isTestFile(A.lastNonEmpty(segments)) || directories.some((segment) => TEST_TREE_DIRS.has(segment))
+}
 
 export const isInConfiguredTestDir = (filename: string, dirs: readonly string[]): boolean =>
   directoriesOf(filename).some((segment) => dirs.includes(segment))

@@ -41,7 +41,6 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },
@@ -57,7 +56,6 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "tstyche": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
