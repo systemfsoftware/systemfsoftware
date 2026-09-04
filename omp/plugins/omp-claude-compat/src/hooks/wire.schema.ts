@@ -12,43 +12,45 @@ import { Schema as S } from 'effect'
  * change, and translating it would produce a hook payload claiming an edit that is not
  * there.
  */
-export const OmpEdits = S.Array(
-  S.Struct({ old_text: S.optional(S.Unknown), new_text: S.optional(S.Unknown) }).pipe(
-    S.check(
-      S.makeFilter((entry) => 'old_text' in entry || 'new_text' in entry, {
-        arbitrary: {
-          candidate: {
-            make: (fc) =>
-              fc.oneof(
-                fc.record({ old_text: fc.anything() }),
-                fc.record({ new_text: fc.anything() }),
-                fc.record({ old_text: fc.anything(), new_text: fc.anything() }),
-              ),
-          },
+export const OmpEdit = S.Struct({ old_text: S.optional(S.Unknown), new_text: S.optional(S.Unknown) }).pipe(
+  S.check(
+    S.makeFilter((entry) => 'old_text' in entry || 'new_text' in entry, {
+      arbitrary: {
+        candidate: {
+          make: (fc) =>
+            fc.oneof(
+              fc.record({ old_text: fc.anything() }),
+              fc.record({ new_text: fc.anything() }),
+              fc.record({ old_text: fc.anything(), new_text: fc.anything() }),
+            ),
         },
-      }),
-    ),
+      },
+    }),
   ),
-).pipe(S.check(S.isNonEmpty()))
-
-export const ClaudeEdits = S.Array(
-  S.Struct({ old_string: S.optional(S.Unknown), new_string: S.optional(S.Unknown) }).pipe(
-    S.check(
-      S.makeFilter((entry) => 'old_string' in entry || 'new_string' in entry, {
-        arbitrary: {
-          candidate: {
-            make: (fc) =>
-              fc.oneof(
-                fc.record({ old_string: fc.anything() }),
-                fc.record({ new_string: fc.anything() }),
-                fc.record({ old_string: fc.anything(), new_string: fc.anything() }),
-              ),
-          },
-        },
-      }),
-    ),
-  ),
+  S.annotate({ identifier: 'OmpEdit' }),
 )
+
+export const OmpEdits = S.Array(OmpEdit).pipe(S.check(S.isNonEmpty()))
+
+export const ClaudeEdit = S.Struct({ old_string: S.optional(S.Unknown), new_string: S.optional(S.Unknown) }).pipe(
+  S.check(
+    S.makeFilter((entry) => 'old_string' in entry || 'new_string' in entry, {
+      arbitrary: {
+        candidate: {
+          make: (fc) =>
+            fc.oneof(
+              fc.record({ old_string: fc.anything() }),
+              fc.record({ new_string: fc.anything() }),
+              fc.record({ old_string: fc.anything(), new_string: fc.anything() }),
+            ),
+        },
+      },
+    }),
+  ),
+  S.annotate({ identifier: 'ClaudeEdit' }),
+)
+
+export const ClaudeEdits = S.Array(ClaudeEdit)
 
 /** The tool-input payload as the hook boundary sees it: an opaque record. */
 export const ToolInputRecord = S.Record(S.String, S.Unknown)

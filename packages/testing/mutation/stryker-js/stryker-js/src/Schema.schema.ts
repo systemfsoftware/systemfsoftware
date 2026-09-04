@@ -124,6 +124,12 @@ const WarningOptions = openStruct({
   unserializableOptions: defaulted(Wire.mint(S.Boolean), true),
   slow: defaulted(Wire.mint(S.Boolean), true),
 })
+const ConcurrencyCount = Wire.mint(
+  Wire.mint(S.Finite).pipe(S.check(S.isGreaterThanOrEqualTo(1))),
+)
+const ConcurrencyPercent = Wire.mint(
+  Wire.mint(S.String).pipe(S.check(S.isPattern(/^(100|[1-9]?[0-9])%$/))),
+)
 
 // ---------------------------------------------------------------------------
 // The option set
@@ -138,8 +144,8 @@ export const StrykerOptionsSchema = S.StructWithRest(
     concurrency: S.optional(
       Wire.mint(
         S.Union([
-          Wire.mint(Wire.mint(S.Finite).pipe(S.check(S.isGreaterThanOrEqualTo(1)))),
-          Wire.mint(Wire.mint(S.String).pipe(S.check(S.isPattern(/^(100|[1-9]?[0-9])%$/)))),
+          ConcurrencyCount,
+          ConcurrencyPercent,
         ]),
       ),
     ),

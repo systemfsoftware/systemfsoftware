@@ -2,6 +2,7 @@ import { banEffectSchemaImports } from './rules/ban-@-effect-schema-imports.js'
 import { banDataTaggedError } from './rules/ban-data-taggederror.js'
 import { noManualTagMember } from './rules/no-manual-tag-member.js'
 import { noManualTagProperty } from './rules/no-manual-tag-property.js'
+import { schemaCheckedElementNamed } from './rules/schema-checked-element-named.js'
 import { schemaDeclarationLocation } from './rules/schema-declaration-location.js'
 import { schemaFileExportsSchemasOnly } from './rules/schema-file-exports-schemas-only.js'
 import { schemaFilterConstructiveGeneration } from './rules/schema-filter-constructive-generation.js'
@@ -18,6 +19,7 @@ const recommendedRules = {
   [rule('schema-declaration-location')]: 'error',
   [rule('schema-filter-constructive-generation')]: 'error',
   [rule('schema-file-exports-schemas-only')]: 'error',
+  [rule('schema-checked-element-named')]: 'error',
 } as const
 
 export default {
@@ -32,6 +34,7 @@ export default {
     'schema-declaration-location': schemaDeclarationLocation,
     'schema-filter-constructive-generation': schemaFilterConstructiveGeneration,
     'schema-file-exports-schemas-only': schemaFileExportsSchemasOnly,
+    'schema-checked-element-named': schemaCheckedElementNamed,
   },
   configs: {
     recommended: {

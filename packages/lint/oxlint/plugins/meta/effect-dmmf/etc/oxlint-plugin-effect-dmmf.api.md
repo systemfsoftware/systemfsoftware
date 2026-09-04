@@ -19,6 +19,7 @@ const _default: {
         'schema-declaration-location': Rule;
         'schema-filter-constructive-generation': Rule;
         'schema-file-exports-schemas-only': Rule;
+        'schema-checked-element-named': Rule;
         'make-file-location': Rule;
         'workflow-match-exhaustive': Rule;
         'make-body-purity': Rule;
