@@ -252,6 +252,16 @@ export const collectMakeBoundaries = (context: Context): readonly MakeBoundary[]
   return boundaries
 }
 
+export const hasMakeBoundary = (context: Context): boolean => {
+  let found = false
+  walk(context.sourceCode.ast, context.sourceCode.visitorKeys, (node) => {
+    if (found || !isCallExpression(node)) return
+    const origin = resolveImportOrigin(node.callee, context.sourceCode.getScope)
+    if (origin !== null && isMakeBoundaryOrigin(origin)) found = true
+  })
+  return found
+}
+
 /** True when `node` descends from (or is) the body — the argument-slot containment test. */
 export const isWithinBody = (node: ESTree.Node, body: MakeBodyKind): boolean =>
   node.start >= body.start && node.end <= body.end

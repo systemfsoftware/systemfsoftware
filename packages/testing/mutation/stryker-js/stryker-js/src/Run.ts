@@ -24,33 +24,19 @@ import {
   VerdictReached,
 } from './Run.schema.js'
 
-const selectMutatePatterns = (
-  target: ReadonlyArray<string>,
-  fallback: ReadonlyArray<string>,
-): ReadonlyArray<string> => {
-  if (target.length > 0) {
-    return [...target]
+const selectFallback = <T>(preferred: ReadonlyArray<T>, fallback: ReadonlyArray<T>): ReadonlyArray<T> => {
+  if (preferred.length > 0) {
+    return [...preferred]
   }
   return [...fallback]
 }
-
-const selectMutatorNames = (
-  available: ReadonlyArray<string>,
-  fallback: ReadonlyArray<string>,
-): ReadonlyArray<string> => {
-  if (available.length > 0) {
-    return [...available]
-  }
-  return [...fallback]
-}
-
 /**
  * Evicted plan decision: a total map with a dead error channel, so it
  * returns the plan directly instead of a `Result`.
  */
 export const planMutationRun = (command: PlanMutationRunCommand): MutationRunPlan => {
-  const mutatePatterns = selectMutatePatterns(command.targetMutatePatterns, command.configMutatePatterns)
-  const mutatorNames = selectMutatorNames(command.availableMutators, command.configMutatorNames)
+  const mutatePatterns = selectFallback(command.targetMutatePatterns, command.configMutatePatterns)
+  const mutatorNames = selectFallback(command.availableMutators, command.configMutatorNames)
   return MutationRunPlan.make({
     mutatePatterns,
     mutatorNames,

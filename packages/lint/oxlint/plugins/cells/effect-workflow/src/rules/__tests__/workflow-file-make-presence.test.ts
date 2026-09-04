@@ -53,5 +53,22 @@ ruleTester.run('workflow-file-make-presence', workflowFileMakePresence, {
         },
       ],
     },
+    {
+      name: 'Should_Report_When_MakeOriginIsForeign',
+      code:
+        `const LocalWorkflow = { make: (body: unknown) => body }\nexport const admitOrder = LocalWorkflow.make((input: number) => input)`,
+      filename: '/repo/pkg/src/admit-order.workflow.ts',
+      errors: [
+        {
+          messageId: 'workflowFileWithoutMake',
+          data: {
+            name: 'admit-order.workflow.ts',
+            expected: WITHOUT_MAKE_EXPECTED,
+            actual: WITHOUT_MAKE_ACTUAL,
+            fix: WITHOUT_MAKE_FIX,
+          },
+        },
+      ],
+    },
   ],
 })

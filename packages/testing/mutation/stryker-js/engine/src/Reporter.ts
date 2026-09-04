@@ -7,6 +7,7 @@ import type {
   Position,
 } from '@systemfsoftware/stryker-js/Mutant'
 import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
+import { writeOutputFile } from '@systemfsoftware/stryker-js/output-file'
 import type { AnyPluginContribution, PluginKind } from '@systemfsoftware/stryker-js/Plugin'
 import type {
   DryRunCompletedEvent,
@@ -31,7 +32,6 @@ import * as Layer from 'effect/Layer'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
-import type { PlatformError } from 'effect/PlatformError'
 import * as Predicate from 'effect/Predicate'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
@@ -47,23 +47,13 @@ import type { TestCoverage } from './Mutants.js'
 import type { ResolvedMode } from './output-mode.js'
 import type { Project } from './Project.js'
 import { FILE_CONCURRENCY, readOriginal } from './Project.js'
-import { JsonDocument, JsonReportCommand } from './Reporter.schema.js'
-import { ClearTextDocument, ClearTextReportCommand } from './Reporter.schema.js'
+import { ansi } from './Reporter.ansi.js'
+import { ClearTextDocument, ClearTextReportCommand, JsonDocument, JsonReportCommand } from './Reporter.schema.js'
 import type { RunOutcome } from './Run.js'
 import { strykerVersion } from './stryker-package.js'
 import { buildVerdictEnvelope, isActionableStatus } from './verdict-envelope.js'
 const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
 type ProvidedStrykerOptions = StrykerOptions
-const writeOutputFile = (
-  fs: FileSystem.FileSystem,
-  path: Path.Path,
-  fileName: string,
-  content: string,
-): Effect.Effect<void, PlatformError, never> =>
-  Effect.gen(function*() {
-    yield* fs.makeDirectory(path.dirname(fileName), { recursive: true })
-    yield* fs.writeFileString(fileName, content)
-  })
 
 // ─── re-export broadcast / strict for callers that imported via reporting/ ──
 
@@ -272,39 +262,6 @@ function buildJsonReport(report: schema.MutationTestResult): string {
 
 export const buildJsonDocument = (command: JsonReportCommand): JsonDocument =>
   JsonDocument.make({ json: buildJsonReport(command.report) })
-
-// ─── ansi ────────────────────────────────────────────────────────────────
-
-const codes = {
-  red: '\u001b[31m',
-  green: '\u001b[32m',
-  yellow: '\u001b[33m',
-  grey: '\u001b[90m',
-  cyan: '\u001b[36m',
-  greenBright: '\u001b[92m',
-  redBright: '\u001b[91m',
-  blueBright: '\u001b[94m',
-} as const
-
-type AnsiColor = keyof typeof codes
-
-const reset = '\u001b[39m'
-
-function wrap(color: AnsiColor, text: string): string {
-  return `${codes[color]}${text}${reset}`
-}
-
-const ansi = {
-  wrap,
-  red: (text: string): string => wrap('red', text),
-  green: (text: string): string => wrap('green', text),
-  yellow: (text: string): string => wrap('yellow', text),
-  grey: (text: string): string => wrap('grey', text),
-  cyan: (text: string): string => wrap('cyan', text),
-  greenBright: (text: string): string => wrap('greenBright', text),
-  redBright: (text: string): string => wrap('redBright', text),
-  blueBright: (text: string): string => wrap('blueBright', text),
-}
 
 // ─── render-text ───────────────────────────────────────────────────────
 
@@ -757,13 +714,13 @@ function sourceLocation(fileName: string, position: Position, allowColor: boolea
   })()
   const line = (() => {
     if (allowColor) {
-      return wrap('yellow', String(position.line))
+      return ansi.wrap('yellow', String(position.line))
     }
     return String(position.line)
   })()
   const col = (() => {
     if (allowColor) {
-      return wrap('yellow', String(position.column))
+      return ansi.wrap('yellow', String(position.column))
     }
     return String(position.column)
   })()

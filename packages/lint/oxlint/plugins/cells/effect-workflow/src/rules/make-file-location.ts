@@ -11,13 +11,9 @@ import {
   WORKFLOW_FILE_BASENAME,
 } from './make-file-location.config.js'
 import { collectMakeBoundaries } from './MakeBoundary.js'
+import { basenameOf } from './ValueExports.js'
 
 export type MessageIds = 'makeOutsideWorkflowFile' | 'secondMakeInFile'
-
-const basenameOf = (filename: string): string => {
-  const segments = filename.split('/')
-  return segments[segments.length - 1] ?? filename
-}
 
 /**
  * The construction-site rule: `Workflow.make` is the trigger, the filename is

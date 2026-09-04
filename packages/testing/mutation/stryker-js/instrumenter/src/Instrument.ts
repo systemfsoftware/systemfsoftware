@@ -260,8 +260,7 @@ const writeInstrument = (decision: InstrumentDecision) =>
       const files = decision.files
       const asts: readonly unknown[] = decision.asts
       const outFiles: FileSchemaType[] = []
-      const isAstValue = (value: unknown): value is Ast =>
-        typeof value === 'object' && value !== null && 'format' in value && 'root' in value
+      const isAstValue = isAst
       for (let i = 0; i < asts.length; i++) {
         const maybeAst: unknown = asts[i]
         const maybeFile: FileSchemaType | undefined = files[i]

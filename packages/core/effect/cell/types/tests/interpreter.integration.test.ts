@@ -159,43 +159,54 @@ Feature('Running a Cell')
       ),
     )
 
+    const makeTracedCell = (trace: string[]) =>
+      Cell.layer({
+        read: (command: Command) =>
+          Effect.sync(() => {
+            trace.push('read')
+            return { bytes: command.id }
+          }),
+        decode: (raw: Raw) => {
+          trace.push('decode')
+          return Result.succeed(new Decoded({ length: raw.bytes.length }))
+        },
+        decide: admitTracedCommandFixture(trace, new Admitted({ length: 0 }), new Refused({ why: 'too long' })),
+        encode: (outcome: Result.Result<Admitted, Refused>) => {
+          trace.push('encode')
+          return Result.match(outcome, {
+            onSuccess: (admitted) => ({ line: `admitted:${admitted.length}` }),
+            onFailure: (refused) => ({ line: `refused:${refused.why}` }),
+          })
+        },
+        write: (output: Output) =>
+          Effect.sync(() => {
+            trace.push('write')
+            return output.line
+          }),
+      })
+    const runTraced = (id: string) => {
+      const trace: string[] = []
+      return Cell.run(makeTracedCell(trace), { id }).pipe(
+        Effect.exit,
+        Effect.map((exit) => ({ exit, trace })),
+      )
+    }
     scenario(
       'The interpreter runs the sandwich in its declared order',
       Gherkin.Do.pipe(
-        When('a Cell with tracing phases is run')('outcome', () => {
-          const trace: string[] = []
-          const traced = Cell.layer({
-            read: (command: Command) =>
-              Effect.sync(() => {
-                trace.push('read')
-                return { bytes: command.id }
-              }),
-            decode: (raw: Raw) => {
-              trace.push('decode')
-              return Result.succeed(new Decoded({ length: raw.bytes.length }))
-            },
-            decide: admitTracedCommandFixture(trace, new Admitted({ length: 0 }), new Refused({ why: 'too long' })),
-            encode: (outcome: Result.Result<Admitted, Refused>) => {
-              trace.push('encode')
-              return Result.match(outcome, {
-                onSuccess: (admitted) => ({ line: `admitted:${admitted.length}` }),
-                onFailure: (refused) => ({ line: `refused:${refused.why}` }),
-              })
-            },
-            write: (output: Output) =>
-              Effect.sync(() => {
-                trace.push('write')
-                return output.line
-              }),
-          })
-          return Cell.run(traced, { id: 'abc' }).pipe(
-            Effect.exit,
-            Effect.map((exit) => ({ exit, trace })),
-          )
-        }),
+        When('a Cell with tracing phases is run')('outcome', () => runTraced('abc')),
         Then('the phases ran exactly in the order the interpreter reads them')((s) => {
           expect(s.outcome.trace).toEqual(['read', 'decode', 'decide', 'encode', 'write'])
           expect(s.outcome.exit).toStrictEqual(Exit.succeed('admitted:0'))
+        }),
+      ),
+    )
+    scenario(
+      'A refusal the decision returns is encoded, not thrown',
+      Gherkin.Do.pipe(
+        When('a Cell with tracing phases is run for an over-long command')('outcome', () => runTraced('a'.repeat(101))),
+        Then('the refusal travelled the failure channel into the write')((s) => {
+          expect(s.outcome.exit).toStrictEqual(Exit.succeed('refused:too long'))
         }),
       ),
     )

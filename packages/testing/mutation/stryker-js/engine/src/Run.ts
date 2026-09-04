@@ -391,7 +391,6 @@ export type EnginePorts =
 export const prepareCell = Cell.layer({
   read: (command: PrepareExecutorArgs) =>
     Effect.gen(function*() {
-      // raw: PrepareRaw from PrepareExecutorArgs
       yield* Scope.Scope
       const env = yield* RunEnvironment
       const queue = yield* RunEvents
@@ -555,7 +554,6 @@ interface InstrumentRaw {
 export const instrumentCell = Cell.layer({
   read: (command: PrepareDone) =>
     Effect.gen(function*() {
-      // raw: InstrumentRaw from PrepareDone
       yield* Scope.Scope
       const env = yield* RunEnvironment
 
@@ -658,7 +656,6 @@ export interface DryRunRaw {
 export const dryRunCell = Cell.layer({
   read: (command: InstrumentDone) =>
     Effect.gen(function*() {
-      // raw: DryRunRaw from InstrumentDone
       yield* Scope.Scope
       const idGenerator = yield* IdGenerator
 

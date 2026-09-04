@@ -40,6 +40,7 @@ export interface DiffStatistics {
   readonly changesByFile: MutableHashMap.MutableHashMap<string, DiffChanges>
   readonly total: DiffChanges
 }
+type PlannedPlan = PlannedMutantTests['plans'][number]
 const ZERO = 0
 const ONE = 1
 export const emptyDiffChanges = (): DiffChanges => ({ added: ZERO, removed: ZERO })
@@ -350,7 +351,7 @@ const toRunPlan = (
   testFilter: readonly string[] | undefined,
   isStatic: boolean | undefined,
   coveredBy: readonly string[] | undefined,
-): S.Schema.Type<typeof PlannedMutantTests>['plans'][number] => {
+): PlannedPlan => {
   const disableBail = command.options.disableBail
   const timeoutMS = command.options.timeoutMS
   const timeoutFactor = command.options.timeoutFactor
@@ -384,7 +385,7 @@ const toEarlyResultPlan = (
   status: NonNullable<Mutant['status']>,
   statusReason: string | undefined,
   coveredBy: readonly string[] | undefined,
-): S.Schema.Type<typeof PlannedMutantTests>['plans'][number] => ({
+): PlannedPlan => ({
   plan: 'EarlyResult',
   mutantId: mutant.id,
   status,
@@ -397,7 +398,7 @@ const toEarlyResultPlan = (
 const decidePlanForMutant = (
   mutant: Mutant,
   command: PlanMutantTestsCommand,
-): S.Schema.Type<typeof PlannedMutantTests>['plans'][number] => {
+): PlannedPlan => {
   const isStatic = hasPlanStaticCoverage(command.staticCoverage, mutant.id)
   if (mutant.status !== undefined) {
     const coveredBy = getCoveredBy(mutant)
@@ -472,7 +473,7 @@ const materializeMutant = (
 // Not a decision: materializes the final `TestPlan` shape from the decision's
 // data. The decision chose Run vs EarlyResult and every runOptions field;
 // this builds the `Mutant` values it described.
-const materializePlan = (plan: PlannedMutantTests['plans'][number], original: Mutant): TestPlan => {
+const materializePlan = (plan: PlannedPlan, original: Mutant): TestPlan => {
   if (plan.plan === 'EarlyResult') {
     return { plan: 'EarlyResult', mutant: materializeMutant(original, plan) }
   }

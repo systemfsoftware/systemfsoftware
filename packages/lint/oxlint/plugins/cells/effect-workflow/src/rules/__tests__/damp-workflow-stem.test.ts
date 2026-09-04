@@ -149,6 +149,11 @@ ruleTester.run('damp-workflow-stem', dampWorkflowStem, {
       code: 'export const order = 1',
       filename: '/repo/pkg/src/place.order.workflow.ts',
     },
+    {
+      name: 'Should_SkipMismatch_When_FileExportsTwoValues',
+      code: 'export const prepareWorkflow = 1\nexport const otherThing = 2',
+      filename: workflow('prepare-run'),
+    },
   ],
   invalid: [
     {

@@ -16,7 +16,6 @@ import { defaultOptions, importModule } from './Config.js'
 import { StrykerError } from './stryker-error.schema.js'
 
 import {
-  LoadPluginsCommand,
   PluginLoaderEntry,
   PluginLoadFailedError,
   PluginModuleSchema,
@@ -366,9 +365,7 @@ export function loadPlugins(
         schemaContribution: entry.schemaContribution,
       })
     )
-    const decision = buildPluginLoadDecision(
-      new LoadPluginsCommand({ entries }).entries,
-    )
+    const decision = buildPluginLoadDecision(entries)
     for (const shadowing of decision.shadowings) {
       yield* Effect.logWarning(
         `Plugin "${shadowing.name}" of kind "${shadowing.kind}" at index ${shadowing.winnerIndex} shadows plugin at index ${shadowing.shadowedIndex}.`,
