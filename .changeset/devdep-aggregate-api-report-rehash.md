@@ -30,4 +30,4 @@
 "@systemfsoftware/stryker-test-contribution": none
 ---
 
-No consumer-visible change: these packages re-hash only because their oxlint plugin aggregate's API report is a build input; the shipped artifacts are unchanged.
+No consumer-visible change: each package ships the same artifacts as before.
