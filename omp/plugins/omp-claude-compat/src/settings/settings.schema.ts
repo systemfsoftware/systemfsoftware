@@ -26,21 +26,23 @@ export type HookCommand = S.Schema.Type<typeof HookCommand>
 
 export const HookEntry = S.Struct({
   matcher: S.optional(S.String),
-  hooks: S.Array(HookCommand),
+  hooks: S.Array(HookCommand).pipe(S.check(S.isMaxLength(3))),
 })
 
 export type HookEntry = S.Schema.Type<typeof HookEntry>
 
+const hookEntries = () => S.Array(HookEntry).pipe(S.check(S.isMaxLength(3)))
+
 const HookGroups = S.Struct({
-  PreToolUse: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  PostToolUse: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  PostToolUseFailure: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  UserPromptSubmit: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  Stop: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  SessionStart: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  SessionEnd: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  PreCompact: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
-  PostCompact: S.Array(HookEntry).pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  PreToolUse: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  PostToolUse: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  PostToolUseFailure: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  UserPromptSubmit: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  Stop: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  SessionStart: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  SessionEnd: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  PreCompact: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
+  PostCompact: hookEntries().pipe(S.withDecodingDefaultTypeKey(Effect.succeed([]))),
 })
 
 export const SettingsWrapped = S.Struct({
@@ -89,7 +91,7 @@ export type DecodedSource = S.Schema.Type<typeof SettingsSourceFields>
 export class EmptySources extends S.TaggedClass<EmptySources>()('EmptySources', {}) {}
 
 export class NonEmptySources extends S.TaggedClass<NonEmptySources>()('NonEmptySources', {
-  sources: S.Array(SettingsSourceFields).pipe(S.check(S.isNonEmpty())),
+  sources: S.Array(SettingsSourceFields).pipe(S.check(S.isNonEmpty()), S.check(S.isMaxLength(8))),
 }) {}
 
 export class MergeSettingsCommand extends S.TaggedClass<MergeSettingsCommand>()('MergeSettingsCommand', {
