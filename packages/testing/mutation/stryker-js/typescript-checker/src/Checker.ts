@@ -20,14 +20,14 @@ import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import { DiagnosticCategory } from 'typescript/unstable/sync'
 import type { Diagnostic } from 'typescript/unstable/sync'
-import { CheckMutantsCommand } from './Checker.schema.js'
 import {
   checkMutants,
   type CheckMutantsDecision,
   CheckMutantsInput,
   DiagnosticInUnrelatedFileError,
   DiagnosticWithoutFileError,
-} from './Checker.workflow.js'
+} from './check-mutants.workflow.js'
+import { CheckMutantsCommand } from './Checker.schema.js'
 import type { TSFileNode } from './Compiler.js'
 import { createGroups, TypeScriptCompiler } from './Compiler.js'
 

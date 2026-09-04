@@ -50,21 +50,22 @@ import * as Semaphore from 'effect/Semaphore'
 import * as Stream from 'effect/Stream'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 
+import { admitMutationTest, MutationTestDecision, MutationTestError } from './admit-mutation-test.workflow.js'
 import type { CheckerResourceService } from './Checker.js'
 import { checkGroupedPlans, createCheckerFactory } from './Checker.js'
 import { forkCoreSchema, readConfig, validateOptions, type ValidationSchemaDocument } from './Config.js'
-import { DryRunCommand, dryRunWorkflow } from './DryRun.workflow.js'
+import { dryRun, DryRunCommand } from './dry-run.workflow.js'
 import { REMEMBERED_REASON, toRelativeNormalizedFileName } from './IncrementalDiff.paths.js'
-import { InstrumentCommand, instrumentWorkflow } from './Instrument.workflow.js'
 import { decidePlans, incrementalDiff } from './Mutants.js'
 import type { TestCoverage } from './Mutants.js'
 import { testCoverageFrom } from './Mutants.js'
 import { MutationTestCommand } from './MutationTest.schema.js'
-import { MutationTestDecision, MutationTestError, mutationTestWorkflow } from './MutationTest.workflow.js'
 import type { ResolvedMode } from './output-mode.js'
+import { InstrumentCommand, planInstrumentation } from './plan-instrumentation.workflow.js'
 import { createAll } from './Plugins.js'
 import { loadPlugins } from './Plugins.js'
 import type { LoadedPlugins } from './Plugins.js'
+import { PrepareCommand, prepareRun } from './prepare-run.workflow.js'
 import type { Project } from './Project.js'
 import { readProject } from './Project.js'
 import { FILE_CONCURRENCY, readOriginal, toInstrumenterFile } from './Project.js'
@@ -75,7 +76,6 @@ import { toSchemaLocation } from './Reporter.js'
 import { normalizeReportFileName } from './Reporter.js'
 import { selectReporters } from './Reporter.js'
 import { StageError } from './Run.schema.js'
-import { PrepareCommand, prepareWorkflow } from './Run.workflow.js'
 import { makeSandbox } from './Sandbox.js'
 import type { SandboxHandle } from './Sandbox.js'
 import { TemporaryDirectory } from './Sandbox.js'
@@ -233,7 +233,7 @@ const rememberedResultsOf = (
 /**
  * Split a decided plan list into the runs to execute and the results already settled.
  *
- * The plan itself is decided in `Mutants.workflow.ts`, which is where the timeout budget,
+ * The plan itself is decided in `Mutants.ts`, which is where the timeout budget,
  * the test filter, the activation kind and the hit limit are computed. This edge does the
  * one thing a decision cannot: nothing here decides anything.
  */
@@ -519,7 +519,7 @@ export const prepareCell = Cell.layer({
         pluginCount: raw.loaded.pluginModulePaths.length,
       }),
     ),
-  decide: prepareWorkflow,
+  decide: prepareRun,
   encode: (outcome) => outcome,
   write: (output, raw) =>
     Effect.gen(function*() {
@@ -619,7 +619,7 @@ export const instrumentCell = Cell.layer({
         pluginCount: raw.prev.loadedPlugins.pluginModulePaths.length,
       }),
     ),
-  decide: instrumentWorkflow,
+  decide: planInstrumentation,
   encode: (outcome) => outcome,
   write: (output, raw) =>
     Effect.gen(function*() {
@@ -773,7 +773,7 @@ export const dryRunCell = Cell.layer({
       }),
     )
   },
-  decide: dryRunWorkflow,
+  decide: dryRun,
   encode: (outcome) => outcome,
   write: (outcome, raw) =>
     Effect.gen(function*() {
@@ -862,7 +862,7 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
         isZero: raw.prev.dryRunResult.tests.length === 0,
       }),
     ),
-  decide: mutationTestWorkflow,
+  decide: admitMutationTest,
   encode: (outcome) => outcome,
   write: (
     outcome: Result.Result<MutationTestDecision, MutationTestError>,

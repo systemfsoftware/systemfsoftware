@@ -77,4 +77,4 @@ function modeDecision(
   return r4(command)
 }
 
-export const resolveModeWorkflow = Workflow.make(ResolveModeCommand, modeDecision)
+export const resolveOutputMode = Workflow.make(ResolveModeCommand, modeDecision)

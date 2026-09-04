@@ -23,12 +23,12 @@ import * as Scope from 'effect/Scope'
 
 import * as RpcClient from 'effect/unstable/rpc/RpcClient'
 import {
+  admitCheckerAnswer,
   CheckerAnsweredUnrequested,
   CheckerCommand,
   type CheckerContractBroken,
   CheckerSkippedRequested,
-  checkerWorkflow,
-} from './Checker.workflow.js'
+} from './admit-checker-answer.workflow.js'
 import { encodeWorkerOptions } from './worker-options.js'
 import type { IdGeneratorShape } from './Worker.js'
 import { ChildProcessCrashedError } from './Worker.schema.js'
@@ -304,7 +304,7 @@ export const checkPlans = (
           answers: { ...raw.answers },
         }),
       ),
-    decide: checkerWorkflow,
+    decide: admitCheckerAnswer,
     encode: (outcome) => outcome,
     write: (outcome, raw) =>
       Result.match(outcome, {
@@ -392,7 +392,7 @@ export const groupPlans = (
           idGroups: raw.idGroups.map((group) => [...group]),
         }),
       ),
-    decide: checkerWorkflow,
+    decide: admitCheckerAnswer,
     encode: (outcome) => outcome,
     write: (outcome, raw) =>
       Result.match(outcome, {

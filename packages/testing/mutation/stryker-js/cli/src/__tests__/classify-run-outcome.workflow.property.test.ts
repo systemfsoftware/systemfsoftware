@@ -4,15 +4,15 @@ import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
 
 import {
+  classifyRunOutcome,
   RunConfigFailed,
   RunFailed,
   RunInterrupted,
   RunOk,
   RunOutcomeCommand,
-  runOutcomeWorkflow,
   RunParseFailed,
   RunSurvivorsRejected,
-} from '../RunOutcome.workflow.js'
+} from '../classify-run-outcome.workflow.js'
 
 const classCode = (exitClass: 'VerdictFail' | 'ConfigError' | 'RuntimeError' | 'InternalError'): number => {
   if (exitClass === 'VerdictFail') {
@@ -27,9 +27,9 @@ const classCode = (exitClass: 'VerdictFail' | 'ConfigError' | 'RuntimeError' | '
   return 4
 }
 
-describe('runOutcomeWorkflow', () => {
+describe('classifyRunOutcome', () => {
   it.prop('∀c_Command_≡TaggedOutcome', [S.toArbitrary(RunOutcomeCommand)(fc)], ([command]) => {
-    const result = runOutcomeWorkflow(command)
+    const result = classifyRunOutcome(command)
     if (command.signal !== undefined) {
       const code = 128 + command.signal
       return Result.isFailure(result) && S.is(RunInterrupted)(result.failure) && result.failure.code === code

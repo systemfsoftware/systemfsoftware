@@ -134,4 +134,4 @@ function runOutcomeDecision(
   )
 }
 
-export const runOutcomeWorkflow = Workflow.make(RunOutcomeCommand, runOutcomeDecision)
+export const classifyRunOutcome = Workflow.make(RunOutcomeCommand, runOutcomeDecision)

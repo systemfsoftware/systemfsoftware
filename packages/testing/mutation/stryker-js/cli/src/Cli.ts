@@ -38,6 +38,7 @@ import * as CliError from 'effect/unstable/cli/CliError'
 import * as Command from 'effect/unstable/cli/Command'
 import * as Flag from 'effect/unstable/cli/Flag'
 import * as GlobalFlag from 'effect/unstable/cli/GlobalFlag'
+import { SurvivorsRejection } from './admit-survivors-run.workflow.js'
 import type { CliRequest } from './Cli.schema.js'
 import {
   buildErrorEnvelope,
@@ -63,7 +64,6 @@ import { DEFAULT_PROGRESS_STREAM_FILE } from './StreamFile.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 import type { StrykerRun } from './StrykerRun.js'
 import { runSurvivorsAdmission, survivorMutateSpans } from './Survivors.js'
-import { SurvivorsRejection } from './Survivors.workflow.js'
 
 export { type StrykerRun }
 export {

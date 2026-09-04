@@ -4,7 +4,7 @@
  *
  * The NDJSON run-event stream, wire protocol constants, mode resolution probes,
  * and machine-mode terminal output. Pure mode resolution lives in
- * Output.workflow.ts.
+ * resolve-output-mode.workflow.ts.
  */
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { buildVerdictEnvelope, defaultOptions, generateRunId, strykerVersion } from '@systemfsoftware/stryker-js-engine'
@@ -31,9 +31,9 @@ import * as Result from 'effect/Result'
 import * as Stdio from 'effect/Stdio'
 import * as Stream from 'effect/Stream'
 import * as CliError from 'effect/unstable/cli/CliError'
+import type { RunOk, RunOutcomeError } from './classify-run-outcome.workflow.js'
 import { readCapturedConsole, shapeEnvelope } from './Envelope.js'
-import { ModeConflictError, ResolveModeCommand, resolveModeWorkflow } from './Output.workflow.js'
-import type { RunOk, RunOutcomeError } from './RunOutcome.workflow.js'
+import { ModeConflictError, ResolveModeCommand, resolveOutputMode } from './resolve-output-mode.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 /**
  * The wire protocol constants of the machine-mode NDJSON run-event stream.
@@ -396,7 +396,7 @@ export function resolveMode(input: ModeInput): Result.Result<ResolvedMode, CliEr
     }
   }
   const command = ResolveModeCommand.make(commandInput)
-  const result = resolveModeWorkflow(command)
+  const result = resolveOutputMode(command)
   if (Result.isFailure(result)) {
     const conflict = result.failure
     return Result.fail(
@@ -926,7 +926,7 @@ export const outputModeProbeCell = Cell.layer({
         return ResolveModeCommand.make(commandInput)
       })(),
     ),
-  decide: resolveModeWorkflow,
+  decide: resolveOutputMode,
   encode: (outcome: Result.Result<ResolvedMode, ModeConflictError>) => outcome,
   write: (outcome) =>
     Result.match(outcome, {

@@ -10,7 +10,7 @@ import { CommandRefused, TaggedCmd } from './Command.schema.js'
  * hole, so the type test asserts the resulting channel rather than merely
  * accepting the call.
  */
-export const decideWidened = Workflow.make(
+export const refuseWidenedCommand = Workflow.make(
   TaggedCmd,
   (_command: unknown): Result.Result<number, CommandRefused> => Result.succeed(0),
 )

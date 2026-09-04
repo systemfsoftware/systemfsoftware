@@ -389,4 +389,4 @@ function decide(command: FileSelectionCommand): Result.Result<FileSelectionDecis
   }
 }
 
-export const fileSelectionWorkflow = Workflow.make(FileSelectionCommand, decide)
+export const selectFiles = Workflow.make(FileSelectionCommand, decide)

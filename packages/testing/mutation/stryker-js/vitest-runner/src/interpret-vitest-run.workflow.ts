@@ -1,5 +1,5 @@
 /**
- * VitestMutantRun workflow — pure result-mapping for the mutant-run phase.
+ * interpret-vitest-run workflow — pure result-mapping for the mutant-run phase.
  */
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'
@@ -548,4 +548,4 @@ const decideVitestMutantRun = (
     Match.exhaustive,
   )
 
-export const vitestMutantRunWorkflow = Workflow.make(VitestMutantRunCommand, decideVitestMutantRun)
+export const interpretVitestRun = Workflow.make(VitestMutantRunCommand, decideVitestMutantRun)

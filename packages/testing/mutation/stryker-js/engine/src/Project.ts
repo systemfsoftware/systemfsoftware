@@ -13,9 +13,9 @@ import { Minimatch } from 'minimatch'
 import type { MutationTestResult } from 'mutation-testing-report-schema/api'
 
 import { defaultOptions } from './Config.js'
-import { IncrementalReportCommand, incrementalReportWorkflow } from './IncrementalReport.workflow.js'
 import { ALWAYS_IGNORE, IGNORE_PATTERN_CHARACTER } from './Project.ignore.js'
-import { FileSelectionCommand, fileSelectionWorkflow } from './Project.workflow.js'
+import { FileSelectionCommand, selectFiles } from './select-files.workflow.js'
+import { IncrementalReportCommand, validateIncrementalReport } from './validate-incremental-report.workflow.js'
 
 /** `JSON.parse` hands back `any`; the annotation is what forces a decode downstream. */
 const parseJson = (text: string): unknown => JSON.parse(text)
@@ -332,7 +332,7 @@ function readIncrementalReport(
       return undefined
     }
     const parsed = yield* Effect.try(() => parseJson(contents))
-    const decision = yield* Effect.fromResult(incrementalReportWorkflow(new IncrementalReportCommand({ raw: parsed })))
+    const decision = yield* Effect.fromResult(validateIncrementalReport(new IncrementalReportCommand({ raw: parsed })))
     // The decision carries the report as `unknown` because the schema that
     // typed it is a Wire schema for foreign data, whose inferred type cannot be
     // named across this module boundary. Decoding already proved the shape.
@@ -393,7 +393,7 @@ export function readProject(
         targetMutatePatterns,
       })
     })()
-    const decision = yield* Effect.fromResult(fileSelectionWorkflow(selection))
+    const decision = yield* Effect.fromResult(selectFiles(selection))
 
     // A pattern the user wrote themselves that selects nothing is almost always
     // a mistake; the defaults selecting nothing is normal and stays quiet.
@@ -413,7 +413,7 @@ export function readProject(
             testFilePatterns: [],
             basePath,
           })
-          const probed = yield* Effect.fromResult(fileSelectionWorkflow(probe))
+          const probed = yield* Effect.fromResult(selectFiles(probe))
           if (Object.keys(probed.fileDescriptions).length > 0) {
             return
           }
@@ -433,7 +433,7 @@ export function readProject(
           testFilePatterns: [pattern],
           basePath,
         })
-        const probed = yield* Effect.fromResult(fileSelectionWorkflow(probe))
+        const probed = yield* Effect.fromResult(selectFiles(probe))
         if (probed.testFiles.length === 0) {
           yield* Effect.logWarning(`Glob pattern "${pattern}" did not match any test files.`)
         }

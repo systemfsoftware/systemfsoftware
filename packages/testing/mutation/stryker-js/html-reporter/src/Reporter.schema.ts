@@ -11,6 +11,6 @@ export class HtmlReportCommand extends S.TaggedClass<HtmlReportCommand>()('HtmlR
   scriptContent: S.String,
 }) {}
 
-export class HtmlReportError extends S.TaggedError<HtmlReportError>()('HtmlReportError', {
-  message: S.String,
+export class HtmlDocument extends S.TaggedClass<HtmlDocument>()('HtmlDocument', {
+  html: S.String,
 }) {}

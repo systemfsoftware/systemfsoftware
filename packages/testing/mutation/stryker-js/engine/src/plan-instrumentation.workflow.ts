@@ -20,7 +20,7 @@ export class InstrumentDecision extends S.TaggedClass<InstrumentDecision>()('Ins
   fileCount: S.Finite,
 }) {}
 
-export const instrumentWorkflow = Workflow.make(
+export const planInstrumentation = Workflow.make(
   InstrumentCommand,
   (command: InstrumentCommand): Result.Result<InstrumentDecision, InstrumentError> => {
     if (command.fileCount === 0) {

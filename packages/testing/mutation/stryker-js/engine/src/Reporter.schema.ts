@@ -19,18 +19,10 @@ export class ClearTextDocument extends S.TaggedClass<ClearTextDocument>()('Clear
   debug: S.Array(S.String),
 }) {}
 
-export class ClearTextReportError extends S.TaggedError<ClearTextReportError>()('ClearTextReportError', {
-  message: S.String,
-}) {}
-
 export class JsonReportCommand extends S.TaggedClass<JsonReportCommand>()('JsonReportCommand', {
   report: MutationTestResultSchema,
 }) {}
 
 export class JsonDocument extends S.TaggedClass<JsonDocument>()('JsonDocument', {
   json: S.String,
-}) {}
-
-export class JsonReportError extends S.TaggedError<JsonReportError>()('JsonReportError', {
-  message: S.String,
 }) {}

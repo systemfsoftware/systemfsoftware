@@ -12,8 +12,10 @@ import {
   HelpRendered,
   ManifestRendered,
   MutantTested,
+  MutationRunPlan,
   PhaseEntered,
   PlanKnown,
+  PlanMutationRunCommand,
   RunCommand,
   RunEvent,
   RunFailed,
@@ -21,7 +23,39 @@ import {
   RunStarted,
   VerdictReached,
 } from './Run.schema.js'
-import { MutationRunPlan, planMutationRun, PlanMutationRunCommand, PlanMutationRunError } from './Run.workflow.js'
+
+const selectMutatePatterns = (
+  target: ReadonlyArray<string>,
+  fallback: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+  if (target.length > 0) {
+    return [...target]
+  }
+  return [...fallback]
+}
+
+const selectMutatorNames = (
+  available: ReadonlyArray<string>,
+  fallback: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+  if (available.length > 0) {
+    return [...available]
+  }
+  return [...fallback]
+}
+
+/**
+ * Evicted plan decision: a total map with a dead error channel, so it
+ * returns the plan directly instead of a `Result`.
+ */
+export const planMutationRun = (command: PlanMutationRunCommand): MutationRunPlan => {
+  const mutatePatterns = selectMutatePatterns(command.targetMutatePatterns, command.configMutatePatterns)
+  const mutatorNames = selectMutatorNames(command.availableMutators, command.configMutatorNames)
+  return MutationRunPlan.make({
+    mutatePatterns,
+    mutatorNames,
+  })
+}
 
 /**
  * Where a run's events go.
@@ -50,26 +84,23 @@ export interface MutationRunIo {
   readonly write: (output: RunOutput) => Effect.Effect<void, S.SchemaError, RunIdentity>
 }
 
-export const mutationRunDescription = (io: MutationRunIo): Cell.Cell<RunCommand, void, S.SchemaError, RunIdentity> =>
-  Cell.layer({
-    read: (command) => io.read(command),
-    decode: (raw: unknown) => S.decodeUnknownResult(PlanMutationRunCommand)(raw),
-    decide: planMutationRun,
-    encode: (outcome: Result.Result<MutationRunPlan, PlanMutationRunError>) =>
-      Result.match(outcome, {
-        onFailure: (error) =>
-          new RunOutput({
-            verdictJson: JSON.stringify({ error: error.message }),
-            exitCode: 1,
-          }),
-        onSuccess: (plan) =>
-          new RunOutput({
-            verdictJson: JSON.stringify({ mutate: plan.mutatePatterns, mutatorNames: plan.mutatorNames }),
-            exitCode: 0,
-          }),
-      }),
-    write: (output: RunOutput, _raw: unknown) => io.write(output),
-  })
+export const mutationRunDescription = (io: MutationRunIo): Cell.Cell<RunCommand, void, S.SchemaError, RunIdentity> => ({
+  [Cell.CellTypeId]: Cell.CellTypeId,
+  run: (command) =>
+    Effect.gen(function*() {
+      const raw = yield* io.read(command)
+      const decoded = yield* Result.match(S.decodeUnknownResult(PlanMutationRunCommand)(raw), {
+        onFailure: Effect.fail,
+        onSuccess: Effect.succeed,
+      })
+      const plan = planMutationRun(decoded)
+      const output = new RunOutput({
+        verdictJson: JSON.stringify({ mutate: plan.mutatePatterns, mutatorNames: plan.mutatorNames }),
+        exitCode: 0,
+      })
+      return yield* io.write(output)
+    }),
+})
 
 export const runMutationTest = (
   io: MutationRunIo,
@@ -77,7 +108,7 @@ export const runMutationTest = (
 ): Effect.Effect<void, S.SchemaError, RunIdentity> => Cell.run(mutationRunDescription(io), command)
 
 export const shouldKeepTempDir = (
-  exit: Exit.Exit<void, PlanMutationRunError | S.SchemaError>,
+  exit: Exit.Exit<void, S.SchemaError>,
   cleanTempDir: 'always' | boolean,
 ): boolean => Exit.isFailure(exit) && cleanTempDir !== 'always'
 

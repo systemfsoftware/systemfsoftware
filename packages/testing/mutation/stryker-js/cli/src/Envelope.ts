@@ -4,7 +4,7 @@
  * Extracted from Cli.ts to break the import cycle Cli <-> Output.
  * Both Cli and Output import from this leaf, so neither depends on the other
  * for these values. This file imports only from external packages and from
- * StreamVersion (leaf) and Survivors.workflow (leaf), never from Cli or Output
+ * StreamVersion (leaf) and admit-survivors-run.workflow (leaf), never from Cli or Output
  * themselves.
  */
 import { ExitClass, highestExitClass } from '@systemfsoftware/stryker-js/ExitClass'
@@ -22,9 +22,14 @@ import * as Predicate from 'effect/Predicate'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import * as CliError from 'effect/unstable/cli/CliError'
-import { type RunOk, RunOutcomeCommand, type RunOutcomeError, runOutcomeWorkflow } from './RunOutcome.workflow.js'
+import { SurvivorsRejection } from './admit-survivors-run.workflow.js'
+import {
+  classifyRunOutcome as classifyRunOutcomeWorkflow,
+  type RunOk,
+  RunOutcomeCommand,
+  type RunOutcomeError,
+} from './classify-run-outcome.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
-import { SurvivorsRejection } from './Survivors.workflow.js'
 
 const CONFIG_CODE = 2
 
@@ -518,7 +523,7 @@ export function classifyRunOutcome(
   signal: number | null,
   argv: readonly string[],
 ): Result.Result<RunOk, RunOutcomeError> {
-  return runOutcomeWorkflow(gatherRunOutcome(exit, signal, argv))
+  return classifyRunOutcomeWorkflow(gatherRunOutcome(exit, signal, argv))
 }
 
 export function buildErrorEnvelope(

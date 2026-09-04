@@ -180,7 +180,7 @@ export class IncrementalReportError extends S.TaggedError<IncrementalReportError
   message: S.String,
 }) {}
 
-export const incrementalReportWorkflow = Workflow.make(
+export const validateIncrementalReport = Workflow.make(
   IncrementalReportCommand,
   (command: IncrementalReportCommand): Result.Result<IncrementalReportDecision, IncrementalReportError> =>
     Option.match(Option.fromUndefinedOr(command.raw), {

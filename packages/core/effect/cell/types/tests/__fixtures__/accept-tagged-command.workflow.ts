@@ -12,7 +12,7 @@ import { CommandRefused, TaggedCmd } from './Command.schema.js'
  * a construction only there, one per file, and names this exact home for a
  * workflow only a test uses.
  */
-export const decideTagged = Workflow.make(
+export const acceptTaggedCommand = Workflow.make(
   TaggedCmd,
   (command: TaggedCmd): Result.Result<number, CommandRefused> => Result.succeed(command.value),
 )

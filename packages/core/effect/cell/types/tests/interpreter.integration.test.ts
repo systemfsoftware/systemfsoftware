@@ -6,8 +6,13 @@ import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
-import { Admitted, decide as decideFixture, Decoded, type Refused } from './__fixtures__/InterpreterDecide.workflow.js'
-import { tracedDecide as tracedDecideFixture } from './__fixtures__/InterpreterTracedDecide.workflow.js'
+import {
+  admitDecodedCommand as decideFixture,
+  Admitted,
+  Decoded,
+  Refused,
+} from './__fixtures__/admit-decoded-command.workflow.js'
+import { admitTracedCommand as admitTracedCommandFixture } from './__fixtures__/admit-traced-command.workflow.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -169,7 +174,7 @@ Feature('Running a Cell')
               trace.push('decode')
               return Result.succeed(new Decoded({ length: raw.bytes.length }))
             },
-            decide: tracedDecideFixture(trace, new Admitted({ length: 0 })),
+            decide: admitTracedCommandFixture(trace, new Admitted({ length: 0 }), new Refused({ why: 'too long' })),
             encode: (outcome: Result.Result<Admitted, Refused>) => {
               trace.push('encode')
               return Result.match(outcome, {

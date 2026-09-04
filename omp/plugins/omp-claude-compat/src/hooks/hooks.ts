@@ -37,10 +37,10 @@ import {
   admitLoadedSettings,
   type HookDispatchDecision,
   SkipHooks,
-} from './admit.workflow.js'
+} from './admit-loaded-settings.workflow.js'
 import { Blocked, Continue, HookOutputFromStdout, HookResult } from './hooks.schema.js'
 import type { HookPrompt, HookSession, HookToolCall, HookToolResult } from './hooks.schema.js'
-import { InterpretHookCommand, interpretHookResult, Warning } from './hooks.workflow.js'
+import { InterpretHookCommand, interpretHookResult, Warning } from './interpret-hook-result.workflow.js'
 import {
   denormalizeToolInput,
   editTargetPaths,

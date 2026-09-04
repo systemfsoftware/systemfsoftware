@@ -87,7 +87,7 @@ if (import.meta.vitest !== void 0) {
   const { it } = await import('@systemfsoftware/effect-gherkin-spec')
   const { Exit, Option, Result } = await import('effect')
   const { FastCheck: fc } = await import('effect/testing')
-  const { RestartDecisionRestart } = await import('./RestartDecision.workflow.js')
+  const { RestartDecisionRestart } = await import('./choose-restart-strategy.workflow.js')
 
   const decodeOf = (input: unknown) => Schema.decodeUnknownResult(DecideInput)(input)
 

@@ -16,7 +16,7 @@ export class PrepareDecision extends S.TaggedClass<PrepareDecision>()('PrepareDe
   fileCount: S.Finite,
 }) {}
 
-export const prepareWorkflow = Workflow.make(
+export const prepareRun = Workflow.make(
   PrepareCommand,
   (command: PrepareCommand): Result.Result<PrepareDecision, PrepareError> => {
     if (command.fileCount === 0) {

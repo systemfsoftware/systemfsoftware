@@ -3,7 +3,7 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
 
-import { ResolveModeCommand, resolveModeWorkflow } from '../Output.workflow.js'
+import { ResolveModeCommand, resolveOutputMode } from '../resolve-output-mode.workflow.js'
 
 const CONFLICT_EXPECTED = 'the "--format text" and "--json" flags are mutually exclusive — use one or the other'
 
@@ -24,9 +24,9 @@ const envSet = (command: ResolveModeCommand): boolean => command.envMode !== und
 
 const agentSet = (command: ResolveModeCommand): boolean => command.agent !== undefined && command.agent.length > 0
 
-describe('resolveModeWorkflow', () => {
+describe('resolveOutputMode', () => {
   it.prop('∀c_Command_≡R4Mode', [S.toArbitrary(ResolveModeCommand)(fc)], ([command]) => {
-    const result = resolveModeWorkflow(command)
+    const result = resolveOutputMode(command)
     if (command.text === true && command.json === true) {
       return (
         Result.isFailure(result) &&

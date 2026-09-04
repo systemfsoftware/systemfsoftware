@@ -2,9 +2,9 @@ import { type Workflow } from '@systemfsoftware/effect-cell-types'
 import type { Result } from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
+import { acceptTaggedCommand } from '../tests/__fixtures__/accept-tagged-command.workflow.js'
 import { CommandRefused, StructCmd, TaggedCmd, UntaggedCmd } from '../tests/__fixtures__/Command.schema.js'
-import { decideTagged } from '../tests/__fixtures__/TaggedCommand.workflow.js'
-import { decideWidened } from '../tests/__fixtures__/WidenedCommand.workflow.js'
+import { refuseWidenedCommand } from '../tests/__fixtures__/refuse-widened-command.workflow.js'
 
 interface Cmd {
   readonly _tag: 'Cmd'
@@ -162,7 +162,7 @@ describe('the command channel the value constrains', () => {
   })
 
   it('Should_ExposeEveryCommandFieldAndTag_When_CommandIsATaggedClass', () => {
-    expect<typeof decideTagged>().type.toBe<
+    expect<typeof acceptTaggedCommand>().type.toBe<
       ((command: TaggedCmd) => Result<number, CommandRefused>) & Workflow.WorkflowBrand
     >()
     expect<TaggedCmd['value']>().type.toBe<number>()
@@ -194,7 +194,7 @@ describe('the command channel the value constrains', () => {
     // does not degrade the published command channel, which stays the class. This
     // is asserted on the resulting type, not merely accepted, because a channel
     // that silently became `unknown` would reopen the hole the unit closes.
-    expect<typeof decideWidened>().type.toBe<
+    expect<typeof refuseWidenedCommand>().type.toBe<
       ((command: TaggedCmd) => Result<number, CommandRefused>) & Workflow.WorkflowBrand
     >()
   })

@@ -12,7 +12,6 @@
  */
 
 import { parse } from '@std/jsonc'
-import { Cell } from '@systemfsoftware/effect-cell-types'
 import { disableTypeChecks } from '@systemfsoftware/stryker-js-instrumenter'
 import { errorToString, normalizeFileName } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
@@ -45,9 +44,64 @@ import {
 } from './Project.js'
 import type { ProjectFile } from './Project.js'
 import type { Project } from './Project.js'
-import { ExtendsArraySchema, type TSConfig, TsConfigParseError, TsConfigSchema } from './Sandbox.schema.js'
-import { SandboxCommand, sandboxWorkflow } from './Sandbox.workflow.js'
+import {
+  ExtendsArraySchema,
+  SandboxCommand,
+  SandboxDecision,
+  type TSConfig,
+  TsConfigParseError,
+  TsConfigSchema,
+} from './Sandbox.schema.js'
 import { StrykerError } from './stryker-error.schema.js'
+
+const relativeOf = (basePath: string, fileName: string): string => {
+  if (fileName === basePath) {
+    return ''
+  }
+  if (fileName.startsWith(`${basePath}/`)) {
+    return fileName.slice(basePath.length + 1)
+  }
+  if (fileName.startsWith(basePath)) {
+    const trimmed = fileName.slice(basePath.length)
+    if (trimmed.startsWith('/')) {
+      return trimmed.slice(1)
+    }
+    return trimmed
+  }
+  return fileName
+}
+
+const joinPosix = (dir: string, relative: string): string => {
+  if (relative.length === 0) {
+    return dir
+  }
+  if (dir.endsWith('/')) {
+    return `${dir}${relative}`
+  }
+  return `${dir}/${relative}`
+}
+
+const targetFor = (
+  inPlace: boolean,
+  name: string,
+  basePath: string,
+  workingDirectory: string,
+): string => {
+  if (inPlace) {
+    return name
+  }
+  const relative = relativeOf(basePath, name)
+  return joinPosix(workingDirectory, relative)
+}
+
+const decideSandbox = (command: SandboxCommand): SandboxDecision =>
+  new SandboxDecision({
+    entries: command.fileEntries.map((entry) => ({
+      original: entry.name,
+      target: targetFor(command.inPlace, entry.name, command.basePath, command.workingDirectory),
+      needsBackup: entry.hasChanges && command.inPlace,
+    })),
+  })
 
 // ── Public handles ──────────────────────────────────────────────────────────
 
@@ -583,138 +637,111 @@ export const makeSandbox = (
       return { workingDirectory: wd, sandboxFileFor, originalFileFor }
     }
 
-    const sandboxCell = Cell.layer({
-      read: (command: MakeSandboxInput) =>
-        // raw: MakeSandboxInput from MakeSandboxInput
+    yield* Scope.Scope
+    const pathService = yield* Path.Path
+    const { options, workingDirectory, backupDirectory, basePath, project } = input
+    if (options.inPlace) {
+      yield* Effect.logInfo(
+        `In place mode is enabled, Stryker will be overriding YOUR files. Find your backup at: ${
+          pathService.relative(basePath, backupDirectory)
+        }`,
+      )
+    } else {
+      yield* Effect.logDebug(`Creating a sandbox for files in ${workingDirectory}`)
+    }
+    if (options.inPlace && backupDirectory) {
+      const capturedBackup = backupDirectory
+      const capturedWorking = workingDirectory
+      const capturedBase = basePath
+      yield* Effect.addFinalizer(() =>
         Effect.gen(function*() {
-          yield* Scope.Scope
-          const pathService = yield* Path.Path
-          const { options, workingDirectory, backupDirectory, basePath } = command
-
-          if (options.inPlace) {
-            yield* Effect.logInfo(
-              `In place mode is enabled, Stryker will be overriding YOUR files. Find your backup at: ${
-                pathService.relative(basePath, backupDirectory)
-              }`,
-            )
-          } else {
-            yield* Effect.logDebug(`Creating a sandbox for files in ${workingDirectory}`)
+          const fs = yield* FileSystem.FileSystem
+          const p = yield* Path.Path
+          if (!(yield* fs.exists(capturedBackup))) {
+            return
           }
-
-          if (options.inPlace && backupDirectory) {
-            const capturedBackup = backupDirectory
-            const capturedWorking = workingDirectory
-            const capturedBase = basePath
-            yield* Effect.addFinalizer(() =>
-              Effect.gen(function*() {
-                const fs = yield* FileSystem.FileSystem
-                const p = yield* Path.Path
-                if (!(yield* fs.exists(capturedBackup))) {
-                  return
-                }
-                yield* Effect.logInfo(
-                  `Resetting your original files from ${p.relative(capturedBase, capturedBackup)}.`,
-                )
-                yield* moveDirectoryRecursive(capturedBackup, capturedWorking).pipe(
-                  Effect.orDie,
-                )
-              }).pipe(Effect.orDie)
-            )
-          }
-
-          return command
-        }),
-      decode: (raw: MakeSandboxInput): Result.Result<SandboxCommand, StrykerError> =>
-        Result.succeed(
-          new SandboxCommand({
-            fileEntries: [...raw.project.files].map(([name, file]) => ({
-              name,
-              hasChanges: hasChanges(file),
-            })),
-            basePath: raw.basePath,
-            workingDirectory: raw.workingDirectory,
-            backupDirectory: raw.backupDirectory,
-            inPlace: raw.options.inPlace,
-          }),
-        ),
-      decide: sandboxWorkflow,
-      encode: (outcome) => outcome,
-      write: (outcome, raw) =>
-        Effect.gen(function*() {
-          if (Result.isFailure(outcome)) {
-            return yield* new StrykerError({ message: outcome.failure.message })
-          }
-          const decision = outcome.success
-          const { options, project, workingDirectory, backupDirectory, basePath } = raw
-          const pathService = yield* Path.Path
-          yield* createPreprocessor(options, basePath)(project).pipe(
-            Effect.mapError((cause) => new StrykerError({ message: 'Sandbox preprocessor failed', cause })),
+          yield* Effect.logInfo(
+            `Resetting your original files from ${p.relative(capturedBase, capturedBackup)}.`,
           )
-          const entries: Array<readonly [string, string]> = yield* Effect.forEach(
-            decision.entries,
-            (
-              { original }: { readonly original: string; readonly target: string; readonly needsBackup: boolean },
-            ): Effect.Effect<
-              readonly [string, string],
-              PlatformError | StrykerError,
-              FileSystem.FileSystem | Path.Path
-            > => {
-              const fileOpt = MutableHashMap.get(project.files, original)
-              if (Option.isNone(fileOpt)) {
-                return Effect.fail(
-                  new StrykerError({ message: `Cannot find project file for ${original}` }),
-                )
-              }
-              const file = fileOpt.value
-              return Effect.map(
-                sandboxFile(original, file, workingDirectory, backupDirectory, basePath, options),
-                (target): readonly [string, string] => [original, target],
-              )
-            },
-            { concurrency: FILE_CONCURRENCY, discard: false },
+          yield* moveDirectoryRecursive(capturedBackup, capturedWorking).pipe(
+            Effect.orDie,
           )
-
-          const fileMap = toFileMap(entries)
-
-          if (options.buildCommand !== undefined && options.buildCommand !== '') {
-            const command = options.buildCommand
-            const dir = workingDirectory
-            yield* Effect.logInfo(`Running build command "${command}" in "${dir}".`).pipe(
-              Effect.andThen(() => runBuildCommandIn(command, dir)),
-            )
-          }
-
-          const shouldSymlink = options.symlinkNodeModules && !options.inPlace
-          if (shouldSymlink) {
-            const tempDirName = options.tempDirName
-            yield* Effect.logDebug('Start symlink node_modules')
-            const nodeModulesList = yield* findNodeModulesList(basePath, tempDirName)
-            if (nodeModulesList.length === 0) {
-              yield* Effect.logDebug(
-                `Could not find a node_modules folder to symlink into the sandbox directory. Search "${basePath}" and its parent directories`,
+        }).pipe(Effect.orDie)
+      )
+    }
+    const decision = decideSandbox(
+      new SandboxCommand({
+        fileEntries: [...project.files].map(([name, file]) => ({
+          name,
+          hasChanges: hasChanges(file),
+        })),
+        basePath,
+        workingDirectory,
+        backupDirectory,
+        inPlace: options.inPlace,
+      }),
+    )
+    yield* createPreprocessor(options, basePath)(project).pipe(
+      Effect.mapError((cause) => new StrykerError({ message: 'Sandbox preprocessor failed', cause })),
+    )
+    const entries: Array<readonly [string, string]> = yield* Effect.forEach(
+      decision.entries,
+      (
+        { original }: { readonly original: string; readonly target: string; readonly needsBackup: boolean },
+      ): Effect.Effect<
+        readonly [string, string],
+        PlatformError | StrykerError,
+        FileSystem.FileSystem | Path.Path
+      > => {
+        const fileOpt = MutableHashMap.get(project.files, original)
+        if (Option.isNone(fileOpt)) {
+          return Effect.fail(
+            new StrykerError({ message: `Cannot find project file for ${original}` }),
+          )
+        }
+        const file = fileOpt.value
+        return Effect.map(
+          sandboxFile(original, file, workingDirectory, backupDirectory, basePath, options),
+          (target): readonly [string, string] => [original, target],
+        )
+      },
+      { concurrency: FILE_CONCURRENCY, discard: false },
+    )
+    const fileMap = toFileMap(entries)
+    if (options.buildCommand !== undefined && options.buildCommand !== '') {
+      const command = options.buildCommand
+      const dir = workingDirectory
+      yield* Effect.logInfo(`Running build command "${command}" in "${dir}".`).pipe(
+        Effect.andThen(() => runBuildCommandIn(command, dir)),
+      )
+    }
+    const shouldSymlink = options.symlinkNodeModules && !options.inPlace
+    if (shouldSymlink) {
+      const tempDirName = options.tempDirName
+      yield* Effect.logDebug('Start symlink node_modules')
+      const nodeModulesList = yield* findNodeModulesList(basePath, tempDirName)
+      if (nodeModulesList.length === 0) {
+        yield* Effect.logDebug(
+          `Could not find a node_modules folder to symlink into the sandbox directory. Search "${basePath}" and its parent directories`,
+        )
+      } else {
+        for (const nodeModules of nodeModulesList) {
+          const resolvedTo = pathService.resolve(pathService.join(basePath, nodeModules))
+          const resolvedFrom = pathService.join(workingDirectory, nodeModules)
+          yield* Effect.logDebug(`Create symlink from ${resolvedTo} to ${resolvedFrom}`)
+          yield* symlinkJunction(resolvedTo, resolvedFrom).pipe(
+            Effect.catch((_error) =>
+              Effect.logWarning(
+                `Unexpected error while trying to symlink "${nodeModules}" in sandbox directory.`,
               )
-            } else {
-              for (const nodeModules of nodeModulesList) {
-                const resolvedTo = pathService.resolve(pathService.join(basePath, nodeModules))
-                const resolvedFrom = pathService.join(workingDirectory, nodeModules)
-                yield* Effect.logDebug(`Create symlink from ${resolvedTo} to ${resolvedFrom}`)
-                yield* symlinkJunction(resolvedTo, resolvedFrom).pipe(
-                  Effect.catch((_error) =>
-                    Effect.logWarning(
-                      `Unexpected error while trying to symlink "${nodeModules}" in sandbox directory.`,
-                    )
-                  ),
-                )
-              }
-            }
-          } else {
-            yield* Effect.logDebug('Start symlink node_modules')
-          }
-          return buildHandle(fileMap, workingDirectory, basePath, pathService)
-        }),
-    })
-
-    return yield* Cell.run(sandboxCell, input)
+            ),
+          )
+        }
+      }
+    } else {
+      yield* Effect.logDebug('Start symlink node_modules')
+    }
+    return buildHandle(fileMap, workingDirectory, basePath, pathService)
   })
 
 // Re-export preprocessor factory for callers that previously imported via sandbox/index

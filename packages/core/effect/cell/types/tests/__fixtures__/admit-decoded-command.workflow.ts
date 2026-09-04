@@ -30,7 +30,7 @@ export class Refused extends S.TaggedError<Refused>()('Refused', {
   why: S.String,
 }) {}
 
-export const decide = Workflow.make(
+export const admitDecodedCommand = Workflow.make(
   Decoded,
   (decoded: Decoded): Result.Result<Admitted, Refused> =>
     Match.value(decoded.length > 3).pipe(

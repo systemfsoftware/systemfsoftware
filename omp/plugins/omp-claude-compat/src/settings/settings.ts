@@ -14,8 +14,6 @@ import {
   WRAPPED_SHADOW_REASON,
 } from './events.js'
 import type { BridgedEvent } from './events.js'
-import { SettingsJSON } from './settings.schema.js'
-import type { DisableSource, HookCoverage, HookCoverageRow, HookSettings, SettingsSource } from './settings.schema.js'
 import {
   type DecodedSource,
   EmptySources,
@@ -24,7 +22,9 @@ import {
   MergeSettingsCommand,
   NonEmptySources,
   type SettingsSnapshot,
-} from './settings.workflow.js'
+} from './merge-effective-settings.workflow.js'
+import { SettingsJSON } from './settings.schema.js'
+import type { DisableSource, HookCoverage, HookCoverageRow, HookSettings, SettingsSource } from './settings.schema.js'
 
 export const packMergeCommand = (sources: readonly DecodedSource[]): MergeCommand => {
   const first = sources[0]

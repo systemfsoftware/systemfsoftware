@@ -3,10 +3,9 @@
  *
  * One module per capability: config file discovery, `extends` resolution,
  * validation, freezing, serializability, file matching, and warning gating.
- * The pure merge decision lives in `Config.workflow.ts` so `Workflow.make`
- * stays behind its gate; schemas live in `Config.schema.ts`.
+ * The pure merge decision lives here; schemas live in `Config.schema.ts`.
  */
-import { Cell, Wire } from '@systemfsoftware/effect-cell-types'
+import { Wire } from '@systemfsoftware/effect-cell-types'
 import { Module } from '@systemfsoftware/stryker-js/Module'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
@@ -27,13 +26,57 @@ import {
   ConfigFileUnreadableError,
   forkOptionsSchema,
   ImportedModuleSchema,
+  MergeCommand,
+  MergeResult,
   ReadConfigCommand,
 } from './Config.schema.js'
-import { MergeCommand, mergeConfigsWorkflow } from './Config.workflow.js'
 import { IGNORE_PATTERN_CHARACTER, MUTATION_RANGE_REGEX } from './Project.ignore.js'
 import { StrykerError } from './stryker-error.schema.js'
 import { isCommandRunner } from './TestRunner.js'
 import { getAvailableParallelism } from './Worker.js'
+
+/**
+ * Pure record merge for config documents.
+ *
+ * Merge is associative, right-biased on scalar collision, and recursive on
+ * plain objects. Arrays and non-records are replaced wholesale (right wins).
+ * `null` handling and `plugins` deduplication are in `Config.ts:mergeConfigs`,
+ * which adds config-specific rules on top. This file is the generic associative
+ * merge the property test covers.
+ */
+function mergeRecords(
+  base: object,
+  overrides: object,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  Object.assign(out, base)
+  for (const [key, overrideValueAny] of Object.entries(overrides)) {
+    const overrideValue: unknown = overrideValueAny
+    if (key === '__proto__') continue
+    if (overrideValue === undefined) continue
+    const baseValue: unknown = out[key]
+    if (
+      baseValue === undefined ||
+      typeof baseValue !== 'object' ||
+      typeof overrideValue !== 'object' ||
+      baseValue === null ||
+      overrideValue === null ||
+      Array.isArray(baseValue) ||
+      Array.isArray(overrideValue)
+    ) {
+      out[key] = overrideValue
+    } else {
+      const merged = mergeRecords(baseValue, overrideValue)
+      out[key] = merged
+    }
+  }
+  return out
+}
+
+export const mergeConfigDocuments = (command: MergeCommand): MergeResult => {
+  const merged = mergeRecords(command.base, command.overrides)
+  return new MergeResult({ merged })
+}
 
 /**
  * Config-file names the rebuild removed, mapped to their remediation.
@@ -1173,40 +1216,25 @@ export function readConfig(
   return Effect.gen(function*() {
     const cliRecord = yield* S.decodeUnknownEffect(cliOptionsRecord)(cliOptions).pipe(Effect.orDie)
     const command = new ReadConfigCommand({ cliOptions: cliRecord, basePath })
-    const cell = Cell.layer({
-      read: (cmd: ReadConfigCommand) => loadOptionsFromConfigFile(cmd.cliOptions, basePath),
-      decode: (raw: unknown) =>
-        Result.match(S.decodeUnknownResult(ConfigDocumentSchema)(raw), {
-          onFailure: (cause) => Result.fail(new ConfigFileInvalidError({ file: 'config', cause })),
-          onSuccess: (fileOptions) =>
-            Result.succeed(
-              new MergeCommand({
-                base: fileOptions,
-                overrides: cliRecord,
-              }),
-            ),
-        }),
-      decide: mergeConfigsWorkflow,
-      encode: (outcome) =>
-        Result.match(outcome, {
-          onFailure: (error) => {
-            throw error
-          },
-          onSuccess: (result) => {
-            const decoded = S.decodeUnknownResult(StrykerOptionsSchema)(result.merged)
-            if (Result.isFailure(decoded)) {
-              const describedErrors = describeErrors(decoded.failure)
-              let headline = 'Please correct these configuration errors and try again.'
-              if (describedErrors.length === 1) {
-                headline = 'Please correct this configuration error and try again.'
-              }
-              throw new ConfigError({ message: `${headline} ${describedErrors.join(' ')}` })
-            }
-            return decoded.success
-          },
-        }),
-      write: (output) => Effect.succeed(output),
-    })
-    return yield* Cell.run(cell, command)
+    const raw = yield* loadOptionsFromConfigFile(command.cliOptions, basePath)
+    const fileOptions = yield* S.decodeUnknownEffect(ConfigDocumentSchema)(raw).pipe(
+      Effect.mapError((cause) => new ConfigFileInvalidError({ file: 'config', cause })),
+    )
+    const result = mergeConfigDocuments(
+      new MergeCommand({
+        base: fileOptions,
+        overrides: cliRecord,
+      }),
+    )
+    const decoded = S.decodeUnknownResult(StrykerOptionsSchema)(result.merged)
+    if (Result.isFailure(decoded)) {
+      const describedErrors = describeErrors(decoded.failure)
+      let headline = 'Please correct these configuration errors and try again.'
+      if (describedErrors.length === 1) {
+        headline = 'Please correct this configuration error and try again.'
+      }
+      throw new ConfigError({ message: `${headline} ${describedErrors.join(' ')}` })
+    }
+    return decoded.success
   })
 }

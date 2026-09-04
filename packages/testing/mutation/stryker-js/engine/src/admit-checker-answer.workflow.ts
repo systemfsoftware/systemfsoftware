@@ -145,7 +145,7 @@ const evaluateCheckResult = (
   return Result.succeed(new CheckResultDecision({ pairs }))
 }
 
-export const checkerWorkflow = Workflow.make(
+export const admitCheckerAnswer = Workflow.make(
   CheckerCommand,
   (command: CheckerCommand): Result.Result<CheckerDecision, CheckerContractBroken> =>
     Match.value(command.phase).pipe(
