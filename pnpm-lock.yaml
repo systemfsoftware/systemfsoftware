@@ -1236,6 +1236,15 @@ importers:
         specifier: catalog:oxlint
         version: 7.0.2001
     devDependencies:
+      '@systemfsoftware/oxlint-plugin-effect-native':
+        specifier: workspace:^
+        version: link:../plugins/meta/effect-native
+      '@systemfsoftware/oxlint-plugin-structure':
+        specifier: workspace:^
+        version: link:../plugins/meta/structure
+      '@systemfsoftware/oxlint-plugin-tag-discipline':
+        specifier: workspace:^
+        version: link:../plugins/meta/tag-discipline
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../../toolchain/tsconfig
