@@ -1,0 +1,12 @@
+{
+  "version": "0.1.0",
+  "nodeModulesDir": "auto",
+  "tasks": {
+    "test": "deno run --allow-read=CONSTITUTION.md --allow-run=git scripts/validate-constitution.ts",
+    "prepare": "git config core.hooksPath .husky"
+  },
+  "imports": {
+    "@std/yaml": "jsr:@std/yaml@^1.2.0",
+    "@commitlint/config-conventional": "npm:@commitlint/config-conventional@^21.2.0"
+  }
+}
