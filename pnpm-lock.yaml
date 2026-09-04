@@ -1615,9 +1615,6 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
         version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
@@ -1700,9 +1697,6 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
         version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
@@ -1761,9 +1755,6 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
         version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
