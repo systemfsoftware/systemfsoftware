@@ -17,6 +17,7 @@ const _default: {
         'no-manual-tag-member': Rule;
         'no-manual-tag-property': Rule;
         'schema-declaration-location': Rule;
+        'schema-filter-constructive-generation': Rule;
         'schema-file-exports-schemas-only': Rule;
         'make-file-location': Rule;
         'workflow-match-exhaustive': Rule;
