@@ -28,6 +28,12 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
  *   already reports.
  * - `workflow-file-export-topology` - exactly one non-schema value export;
  *   re-exports forbidden. Enrolled in recommended after in-tree cutover.
+ * - `damp-workflow-stem` - the stem of a `<stem>.workflow.ts` file is a
+ *   kebab phrase of 2-5 lowercase tokens whose camelCase equals the file's
+ *   single value export. Enrolled in recommended after in-tree cutover.
+ * - `workflow-file-make-presence` - a `<stem>.workflow.ts` file constructs
+ *   its decision with `Workflow.make`. Enrolled in recommended after
+ *   in-tree cutover.
  */
 const recommendedRules = {
   [rule('make-file-location')]: 'error',
@@ -35,6 +41,8 @@ const recommendedRules = {
   [rule('make-body-purity')]: 'error',
   [rule('make-command-schema')]: 'error',
   [rule('workflow-file-export-topology')]: 'error',
+  [rule('damp-workflow-stem')]: 'error',
+  [rule('workflow-file-make-presence')]: 'error',
 } as const
 
 export default {
