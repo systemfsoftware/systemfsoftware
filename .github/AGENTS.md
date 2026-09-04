@@ -5,17 +5,14 @@ Read this file when a check fails, not before.
 ## Architecture
 
 - **`check:ci` and `check:contract` are the two definitions of the gate.** `package.json#scripts.check:ci` defines the container-free gate, `package.json#scripts.check:contract` defines the integration/contract gate; `.github/workflows/reusable-checks.yml` invokes the former, `.github/workflows/reusable-contract.yml` invokes the latter. CI workflows enumerate no check steps. Gate: `pnpm check:ci` / `pnpm check:contract` exit codes.
-- **Each CI lane owns its turbo cache key prefix** (`turbo-<os>-checks-<sha>` in `reusable-checks.yml`, `turbo-<os>-contract-<sha>` in `reusable-contract.yml`, `turbo-<os>-release-<sha>` in `.github/workflows/release.yml`). actions/cache keys are immutable, so lanes sharing a primary key race: the faster contract lane's partial save claims the key and the gate's lint/test entries are silently dropped — every non-build task then misses on every run.
-- **`Release` is push-triggered and phase is derived from repository state.** Every phase hangs off `push` to `main`; nothing hangs off a pull-request event, because merging the Release PR with branch deletion destroys `refs/pull/<n>/merge` and GitHub cancels the queued run with zero jobs. `scripts/tools/plan-release.mjs` reads durable state instead and prints `phase=`:
-  1. `publish` — some `name@v<version>` tag is absent from `origin`. Runs both gates (`pnpm check:ci` + `pnpm check:contract`), builds, publishes via npm OIDC trusted publishing with provenance, tags, and creates a GitHub Release per package from `.changeset/changelogs/`.
-  2. `version` — nothing owed, but pending `.changeset/` intents exist. `pnpm version -r` consumes them and opens a Release PR (`changeset-release/main`). The job dispatches CI for the branch via `gh workflow run ci.yml --ref changeset-release/main` so required checks start automatically.
+- **Each CI lane owns its turbo cache key prefix** (`turbo-<os>-checks-<sha>`, `turbo-<os>-contract-<sha>`, `turbo-<os>-release-<sha>`). actions/cache keys are immutable: lanes sharing a primary key race, and the faster lane's partial save silently drops the slower lane's entries.
+- **`Release` is push-triggered; phase is derived from repository state** by `scripts/tools/plan-release.mjs` (`phase=`):
+  1. `publish` — some `name@v<version>` tag is absent from `origin`. Runs both gates, builds, publishes via npm OIDC trusted publishing, tags, creates GitHub Releases.
+  2. `version` — pending `.changeset/` intents exist. `pnpm version -r` consumes them and opens the Release PR (`changeset-release/main`), dispatching CI for that branch.
   3. `none` — neither.
-
-  Owed publishes drain first, deliberately. Both conditions can hold at once, and consuming intents first destroys the owed release: `pnpm version -r` bumps over it, so the owed version stops being any package's local version, drops out of the this-cycle set, and becomes unreachable with its authored changelog orphaned. Draining only delays intent consumption to the next push.
-
-  Merging the Release PR is itself a push to `main`, so it re-plans into `publish`. A publish that fails leaves the tags absent, so the next push re-plans into `publish` and retries only what is still owed. Never re-trigger a release by hand.
-- **A never-published package is deferred, never released.** OIDC cannot debut a package, so the publish job excludes it from publish, tag and release — and the `plan` job subtracts it from the owed set, because counting a package this pipeline can never release would pin the phase at `publish` forever and starve every pending intent. The run still ends red naming it; the remedy is a maintainer's (`pnpm publish:unpublished`, then register the trusted publisher), never CI's.
-- **`changeset-check.yml` enforces release intent.** Fails if a publishable package's turbo `build` hash changed without an intent, or if any pending `.changeset/` intent names a non-live workspace member (all bump classes, `none` included) — via `scripts/guards/check-changeset.ts`.
+- **Owed publishes drain before intents are consumed.** Consuming intents first bumps over an owed version and makes it unreachable with its changelog orphaned. A failed publish leaves tags absent, so the next push re-plans into `publish` and retries only what is owed — never re-trigger a release by hand.
+- **A never-published package is deferred, never released** (OIDC cannot debut a package); the remedy is a maintainer's `pnpm publish:unpublished` plus trusted-publisher registration, never CI's.
+- **`changeset-check.yml` enforces release intent** via `scripts/guards/check-changeset.ts`: fails if a publishable package's turbo `build` hash changed without an intent, or if any pending intent names a non-live workspace member.
 
 ## Local Reproduction
 

@@ -1,11 +1,20 @@
 # AGENTS.md — `@systemfsoftware/stryker-js-engine`
 
-> **Location:** `packages/testing/mutation/stryker-js/engine/` — host-neutral mutation engine. Ports in, run out. No Node.
+Host-neutral mutation engine: ports in, run out, no Node. Parent: `packages/testing/mutation/stryker-js/AGENTS.md`.
 
-This package is owned outright (`REPO-O1`).
+## Rules
 
-Deltas from root:
+| ID      | Rule                                                                                                                                                   | Gate                                                                         |
+| ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------- |
+| **EN1** | Zero `@effect/platform-*` in the manifest and no `engines` field — the engine names no runtime; a process entry (the CLI) binds the layers.            | `pnpm --filter @systemfsoftware/stryker-js-engine attw` plus a manifest read |
+| **EN2** | `makeRunLayer` requires `FileSystem`, `Path`, `ChildProcessSpawner`, `Module`, and a socket port as arguments; it never provides a default Node layer. | `review`                                                                     |
+| **EN3** | Workers are addressed by `entryUrl`, never by an engine-owned file; worker entry files are the CLI's dist entries.                                     | `review`                                                                     |
 
-- **Zero `@effect/platform-*` on the manifest and no `engines` field.** The engine names no runtime; a process entry (the CLI) binds the layers. Gate: `pnpm --filter @systemfsoftware/stryker-js-engine attw` plus a manifest read — `dependencies` carries none of those names.
-- **`makeRunLayer` builds the run; it does not provide Node.** It requires `FileSystem`, `Path`, `ChildProcessSpawner`, `Module`, and a socket port as arguments. Gate: `review` — a default Node layer inside the engine is rejected.
-- **Workers are addressed by `entryUrl`, never by an engine-owned file.** The worker entry files are the CLI's dist entries. Gate: `review`.
+## Verification
+
+```bash
+pnpm --filter @systemfsoftware/stryker-js-engine build
+pnpm --filter @systemfsoftware/stryker-js-engine typecheck
+pnpm --filter @systemfsoftware/stryker-js-engine test
+pnpm --filter @systemfsoftware/stryker-js-engine lint
+```

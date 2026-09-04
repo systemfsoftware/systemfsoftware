@@ -1,29 +1,18 @@
 # AGENTS.md — `@systemfsoftware/effect-schema-law`
 
-Single entry `.` exposing `ruleOfSchemas`. A recursive union whose generation must terminate belongs to `@systemfsoftware/effect-schema-bounded-union`. Usage and install are in `README.md`.
+Single entry `.` exposing `ruleOfSchemas`: round-trip identity (`decode(encode(x)) === x`) and encode stability (`encode(decode(encoded))` matches the original encoded form). A recursive union whose generation must terminate belongs to `@systemfsoftware/effect-schema-bounded-union`. Usage: `README.md`. Root `AGENTS.md` governs.
 
-## What the Laws Enforce
+## Rules
 
-```yaml
-rules:
-  - id: LAW-L1
-    title: Round-trip identity — decode(encode(x)) === x
-    do: for every Type-side value, encoding then decoding recovers the original
-    dont: ship a codec that loses information in either direction
-    harm: encode-then-decode produces a different value than the input
-    check: "`pnpm --filter @systemfsoftware/effect-schema-law test` exits 0 — the suite pins the predicate against a codec that decodes every input to one value, so a predicate that cannot say no cannot pass"
+| ID         | Rule                                                                                                                                                                                                                                                     | Gate                                                                                                                                                                         |
+| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **LAW-L1** | The law predicates must be able to say no: the suite pins them against a codec that decodes every input to one value, so a vacuous predicate fails.                                                                                                      | `pnpm --filter @systemfsoftware/effect-schema-law test` exits 0                                                                                                              |
+| **LAW-L2** | Errors are exempt: law-test schemas that model data (structs, unions, branded values, `Schema.Class`/`TaggedClass`); never call `ruleOfSchemas` on a `Schema.TaggedError` — its `cause` is routinely `S.Unknown`, which carries no round-trip guarantee. | `pnpm --filter @systemfsoftware/effect-schema-vite test` exits 0 — its integration suite declares a `TaggedError` beside data schemas and asserts the discovered set exactly |
 
-  - id: LAW-L2
-    title: Encode stability — encode(decode(encoded)) matches the original encoded form
-    do: canonical encoded values survive a decode→encode roundtrip unchanged
-    dont: claim wire-format stability for a subtractive transform without verifying
-    harm: encoded output from the codec differs from input the caller provided
-    check: "`pnpm --filter @systemfsoftware/effect-schema-law test` exits 0 — the same collapsing codec pins this predicate"
+## Verification
 
-  - id: LAW-L3
-    title: Errors are exempt — a failure value is not a codec
-    do: law-test schemas that model data — structs, unions, branded values, and `Schema.Class` / `Schema.TaggedClass` declarations
-    dont: call ruleOfSchemas on a `Schema.TaggedError`
-    harm: an error is a failure value, not a two-way codec; its `cause` field is routinely `S.Unknown`, which carries no round-trip guarantee
-    check: "`pnpm --filter @systemfsoftware/effect-schema-vite test` exits 0 — its integration suite declares a `Schema.TaggedError` beside five data schemas and asserts the discovered set with an exact `toEqual`, so the error joining the set reddens the suite"
+```bash
+pnpm --filter @systemfsoftware/effect-schema-law typecheck
+pnpm --filter @systemfsoftware/effect-schema-law test
+pnpm --filter @systemfsoftware/effect-schema-law lint
 ```
