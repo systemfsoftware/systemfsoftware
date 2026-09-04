@@ -7,20 +7,10 @@
 
 import type { Rule } from '@oxlint/plugins'
 import effectNative from '@systemfsoftware/oxlint-plugin-effect-native'
+import structure from '@systemfsoftware/oxlint-plugin-structure'
 import tagDiscipline from '@systemfsoftware/oxlint-plugin-tag-discipline'
 
-import { banClasses } from './rules/ban-classes.js'
-import { banErrorString } from './rules/ban-error-string.js'
-import { internalExportJsdoc } from './rules/internal-export-jsdoc.js'
-import { noBarrels } from './rules/no-barrels.js'
-import { noDomainBranchingDensity } from './rules/no-domain-branching-density.js'
-import { noInlineDestructuredType } from './rules/no-inline-destructured-type.js'
-import { noInternalJsdocOutside } from './rules/no-internal-jsdoc-outside.js'
-import { noIoBoundaryTests } from './rules/no-io-boundary-tests.js'
-
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin'
-
-const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
 
 interface SourcePlugin {
   readonly meta: { readonly name: string }
@@ -53,13 +43,8 @@ const recommendedFrom = (source: SourcePlugin): Record<string, 'error'> => {
  * enables those by name; recommending them here would fire on their first file.
  */
 const recommendedRules = {
-  [rule('ban-error-string')]: 'error',
-  [rule('no-domain-branching-density')]: 'error',
-  [rule('no-io-boundary-tests')]: 'error',
-  [rule('internal-export-jsdoc')]: 'error',
-
-  [rule('no-internal-jsdoc-outside')]: 'error',
   ...recommendedFrom(effectNative),
+  ...recommendedFrom(structure),
   ...recommendedFrom(tagDiscipline),
 } as const
 
@@ -68,15 +53,8 @@ export default {
     name: PLUGIN_NAME,
   },
   rules: {
-    'ban-classes': banClasses,
-    'ban-error-string': banErrorString,
-    'no-barrels': noBarrels,
-    'no-inline-destructured-type': noInlineDestructuredType,
-    'internal-export-jsdoc': internalExportJsdoc,
-    'no-internal-jsdoc-outside': noInternalJsdocOutside,
-    'no-io-boundary-tests': noIoBoundaryTests,
-    'no-domain-branching-density': noDomainBranchingDensity,
     ...effectNative.rules,
+    ...structure.rules,
     ...tagDiscipline.rules,
   },
   configs: {
