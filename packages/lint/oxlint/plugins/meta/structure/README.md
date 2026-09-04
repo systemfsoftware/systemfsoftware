@@ -19,7 +19,7 @@ Oxlint rules for module structure and export hygiene — classes stay out except
 
 ## Kernels
 
-`src/rules/` also vendors four shared kernel modules — `ImportOrigin.ts`, `MakeBoundary.ts`, `internal-jsdoc.ts`, `internal-path.ts` — imported by the rules above. Plugin packages ship standalone, so kernels are vendored per package rather than shared; the byte-identical mirrors are pinned by `make-boundary-kernel-drift.test.ts` in `@systemfsoftware/oxlint-plugin-effect-workflow`.
+`src/rules/` also vendors four shared kernel modules — `ImportOrigin.ts`, `MakeBoundary.ts`, `internal-jsdoc.ts`, `internal-path.ts` — imported by the rules above. Plugin packages ship standalone, so kernels are vendored per package rather than shared. `MakeBoundary.ts` and `ImportOrigin.ts` are mirrored byte-identically into `@systemfsoftware/oxlint-plugin-effect-workflow`, and that mirror is pinned by `make-boundary-kernel-drift.test.ts`; `internal-jsdoc.ts` and `internal-path.ts` are single copies owned by this package.
 
 ## Enrollment
 

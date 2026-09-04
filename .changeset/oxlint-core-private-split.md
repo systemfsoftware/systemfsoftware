@@ -35,4 +35,4 @@
   "@systemfsoftware/stryker-test-contribution": none
 ---
 
-Internal restructuring of the oxlint core plugin: its twenty rules now live in three private workspace packages that are bundled into the published aggregate, which keeps the single public plugin package, the same exported surface, and every consumer-facing rule id unchanged. No published artifact changes; the build hashes move because the workspace lockfile and the aggregate's bundle inputs moved.
+Internal restructuring of the oxlint core plugin: its twenty rules now live in three private workspace packages that are bundled into the published aggregate, which keeps the single public plugin package, the same exported surface, and every consumer-facing rule id unchanged.
