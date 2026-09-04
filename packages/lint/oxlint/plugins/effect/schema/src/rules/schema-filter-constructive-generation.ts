@@ -1,7 +1,10 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { isSchemaVocabularyOrigin, resolveImportOrigin } from './ImportOrigin.js'
+import { isSchemaVocabularyOrigin, originMemberSequence, resolveImportOrigin } from './ImportOrigin.js'
 import {
+  CHECK_SITE_NAME,
+  EXPORTED_FIX,
+  EXPORTED_NAME,
   LEGACY_ACTUAL,
   LEGACY_EXPECTED,
   LEGACY_FIX,
@@ -30,7 +33,7 @@ const isNotSpread = (node: ESTree.Node | ESTree.SpreadElement): node is ESTree.N
 const vocabularyMemberOf = (node: ESTree.Node, getScope: GetScope): string | null => {
   const origin = resolveImportOrigin(node, getScope)
   if (origin === null || !isSchemaVocabularyOrigin(origin)) return null
-  const sequence = origin.importedName === null ? origin.path : [origin.importedName, ...origin.path]
+  const sequence = originMemberSequence(origin)
   return sequence[sequence.length - 1] ?? null
 }
 
@@ -95,15 +98,65 @@ const localInitOf = (identifier: IdentifierNode, getScope: GetScope, node: ESTre
   return null
 }
 
-const receiverHasOverride = (receiver: ESTree.Node, getScope: GetScope): boolean => {
-  if (receiver.type === 'Identifier') {
-    const init = localInitOf(receiver, getScope, receiver)
-    return init !== null && carriesNodeOverride(init, 0)
+/**
+ * An override silences the gate only when the chain it rides on is a schema
+ * chain: it bottoms out at the Schema vocabulary or at a local const whose
+ * initializer is one. A foreign object that happens to have an `annotate`
+ * method carrying a `toArbitrary` key (`builder.annotate({ toArbitrary })`)
+ * never silences the gate — that shape is a silencer, not an override.
+ */
+const tracesToSchema = (node: ESTree.Node | null, getScope: GetScope, depth: number): boolean => {
+  if (node === null || depth > MAX_WALK_DEPTH) return false
+  if (node.type === 'CallExpression') {
+    return tracesToSchema(node.callee.type === 'MemberExpression' ? node.callee.object : null, getScope, depth + 1)
   }
-  return carriesNodeOverride(receiver, 0)
+  if (node.type === 'MemberExpression') return tracesToSchema(node.object, getScope, depth + 1)
+  if (node.type === 'Identifier') {
+    const origin = resolveImportOrigin(node, getScope)
+    if (origin !== null) return isSchemaVocabularyOrigin(origin)
+    const init = localInitOf(node, getScope, node)
+    return init !== null && tracesToSchema(init, getScope, depth + 1)
+  }
+  return false
 }
 
-const inspectCheckArgument = (context: Context, argument: ESTree.Node, getScope: GetScope): void => {
+const receiverHasOverride = (receiver: ESTree.Node, getScope: GetScope): boolean => {
+  const base = receiver.type === 'Identifier' ? localInitOf(receiver, getScope, receiver) : receiver
+  if (base === null) return false
+  return carriesNodeOverride(base, 0) && tracesToSchema(base, getScope, 0)
+}
+
+const reportFilter = (
+  context: Context,
+  filterCall: ESTree.CallExpression,
+  name: string,
+  missingFix: string,
+): void => {
+  const second = filterCall.arguments[1]
+  const annotations = second !== undefined && isNotSpread(second) ? second : null
+  const verdict = hasConstructiveMetadata(annotations)
+  if (verdict === 'no') {
+    context.report({
+      node: filterCall,
+      messageId: 'filterDiscards',
+      data: { name, expected: MISSING_EXPECTED, actual: MISSING_ACTUAL, fix: missingFix },
+    })
+  }
+  if (verdict === 'legacy') {
+    context.report({
+      node: filterCall,
+      messageId: 'legacyArbitraryFunction',
+      data: { name, expected: LEGACY_EXPECTED, actual: LEGACY_ACTUAL, fix: LEGACY_FIX },
+    })
+  }
+}
+
+const inspectCheckArgument = (
+  context: Context,
+  argument: ESTree.Node,
+  getScope: GetScope,
+  exportedNames: ReadonlySet<string>,
+): void => {
   let filterCall: ESTree.CallExpression | null = null
   if (argument.type === 'CallExpression' && argument.callee.type === 'MemberExpression') {
     const member = argument.callee.property
@@ -118,51 +171,56 @@ const inspectCheckArgument = (context: Context, argument: ESTree.Node, getScope:
     const init = localInitOf(argument, getScope, argument)
     if (init !== null && init.type === 'CallExpression') {
       const member = vocabularyMemberOf(init.callee, getScope)
-      if (member === 'makeFilter' || member === 'makeFilterGroup') filterCall = init
+      if (member === 'makeFilter' || member === 'makeFilterGroup') {
+        if (exportedNames.has(argument.name)) return
+        filterCall = init
+      }
     }
   }
   if (filterCall === null) return
-  const second = filterCall.arguments[1]
-  const annotations = second !== undefined && isNotSpread(second) ? second : null
-  const verdict = hasConstructiveMetadata(annotations)
-  if (verdict === 'no') {
-    context.report({
-      node: filterCall,
-      messageId: 'filterDiscards',
-      data: {
-        name: 'a filter declared in this file',
-        expected: MISSING_EXPECTED,
-        actual: MISSING_ACTUAL,
-        fix: MISSING_FIX,
-      },
-    })
-  }
-  if (verdict === 'legacy') {
-    context.report({
-      node: filterCall,
-      messageId: 'legacyArbitraryFunction',
-      data: {
-        name: 'a filter declared in this file',
-        expected: LEGACY_EXPECTED,
-        actual: LEGACY_ACTUAL,
-        fix: LEGACY_FIX,
-      },
-    })
-  }
+  reportFilter(context, filterCall, CHECK_SITE_NAME, MISSING_FIX)
 }
 
 export const schemaFilterConstructiveGeneration = defineRule({
   meta,
   create(context: Context) {
     const getScope: GetScope = context.sourceCode.getScope
+    const exportedNames = new Set<string>()
     return {
+      Program(node: ESTree.Program) {
+        for (const statement of node.body) {
+          if (statement.type !== 'ExportNamedDeclaration') continue
+          const declaration = statement.declaration
+          if (declaration !== null && declaration.type === 'VariableDeclaration') {
+            for (const declarator of declaration.declarations) {
+              if (declarator.id.type === 'Identifier') exportedNames.add(declarator.id.name)
+            }
+          }
+          for (const specifier of statement.specifiers) {
+            if (specifier.local.type === 'Identifier') exportedNames.add(specifier.local.name)
+          }
+        }
+      },
+      VariableDeclarator(node: ESTree.VariableDeclarator) {
+        if (node.id.type !== 'Identifier' || !exportedNames.has(node.id.name)) return
+        const init = node.init
+        if (init === null || init === undefined || init.type !== 'CallExpression') return
+        const member = vocabularyMemberOf(init.callee, getScope)
+        if (member !== 'makeFilter' && member !== 'makeFilterGroup') return
+        reportFilter(context, init, EXPORTED_NAME, EXPORTED_FIX)
+      },
       CallExpression(node: ESTree.CallExpression) {
-        if (node.callee.type !== 'MemberExpression' || node.callee.computed) return
-        const property = node.callee.property
-        if (property.type !== 'Identifier' || property.name !== 'check') return
-        if (receiverHasOverride(node.callee.object, getScope)) return
+        if (node.callee.type === 'MemberExpression' && !node.callee.computed) {
+          const property = node.callee.property
+          if (property.type !== 'Identifier' || property.name !== 'check') return
+          if (receiverHasOverride(node.callee.object, getScope)) return
+        } else if (node.callee.type === 'Identifier') {
+          if (vocabularyMemberOf(node.callee, getScope) !== 'check') return
+        } else {
+          return
+        }
         for (const argument of node.arguments) {
-          if (isNotSpread(argument)) inspectCheckArgument(context, argument, getScope)
+          if (isNotSpread(argument)) inspectCheckArgument(context, argument, getScope, exportedNames)
         }
       },
     }
