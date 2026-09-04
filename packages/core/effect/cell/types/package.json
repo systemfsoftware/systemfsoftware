@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-cell-types",
   "license": "Apache-2.0",
-  "version": "5.0.2",
+  "version": "6.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
