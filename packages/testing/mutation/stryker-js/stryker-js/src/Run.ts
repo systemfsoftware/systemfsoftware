@@ -1,4 +1,3 @@
-import { Cell } from '@systemfsoftware/effect-cell-types'
 import type * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
@@ -12,8 +11,10 @@ import {
   HelpRendered,
   ManifestRendered,
   MutantTested,
+  MutationRunPlan,
   PhaseEntered,
   PlanKnown,
+  PlanMutationRunCommand,
   RunCommand,
   RunEvent,
   RunFailed,
@@ -21,17 +22,23 @@ import {
   RunStarted,
   VerdictReached,
 } from './Run.schema.js'
-import { MutationRunPlan, planMutationRun, PlanMutationRunCommand, PlanMutationRunError } from './Run.workflow.js'
 
-/**
- * Where a run's events go.
- *
- * The error channel carries `Cause.Done`, the graceful completion signal: a finished run
- * ends the queue, and `Stream.fromQueue` excludes `Done` from its own error channel, so the
- * consumer sees end-of-stream. Interrupting the queue instead would end it with an
- * interrupt cause, and joining the drain would then re-raise that into the caller and lose
- * the exit code the run had already decided.
- */
+const firstNonEmpty = (
+  preferred: ReadonlyArray<string>,
+  fallback: ReadonlyArray<string>,
+): ReadonlyArray<string> => {
+  if (preferred.length > 0) {
+    return [...preferred]
+  }
+  return [...fallback]
+}
+
+export const planMutationRun = (command: PlanMutationRunCommand): MutationRunPlan =>
+  MutationRunPlan.make({
+    mutatePatterns: firstNonEmpty(command.targetMutatePatterns, command.configMutatePatterns),
+    mutatorNames: firstNonEmpty(command.availableMutators, command.configMutatorNames),
+  })
+
 export class RunEvents extends Context.Service<RunEvents, Queue.Queue<RunEvent, Cause.Done>>()(
   '~@systemfsoftware/stryker-js/RunEvents',
 ) {}
@@ -50,34 +57,27 @@ export interface MutationRunIo {
   readonly write: (output: RunOutput) => Effect.Effect<void, S.SchemaError, RunIdentity>
 }
 
-export const mutationRunDescription = (io: MutationRunIo): Cell.Cell<RunCommand, void, S.SchemaError, RunIdentity> =>
-  Cell.layer({
-    read: (command) => io.read(command),
-    decode: (raw: unknown) => S.decodeUnknownResult(PlanMutationRunCommand)(raw),
-    decide: planMutationRun,
-    encode: (outcome: Result.Result<MutationRunPlan, PlanMutationRunError>) =>
-      Result.match(outcome, {
-        onFailure: (error) =>
-          new RunOutput({
-            verdictJson: JSON.stringify({ error: error.message }),
-            exitCode: 1,
-          }),
-        onSuccess: (plan) =>
-          new RunOutput({
-            verdictJson: JSON.stringify({ mutate: plan.mutatePatterns, mutatorNames: plan.mutatorNames }),
-            exitCode: 0,
-          }),
-      }),
-    write: (output: RunOutput, _raw: unknown) => io.write(output),
-  })
-
 export const runMutationTest = (
   io: MutationRunIo,
   command: RunCommand,
-): Effect.Effect<void, S.SchemaError, RunIdentity> => Cell.run(mutationRunDescription(io), command)
+): Effect.Effect<void, S.SchemaError, RunIdentity> =>
+  Effect.gen(function*() {
+    const raw = yield* io.read(command)
+    const planCommand = yield* Result.match(S.decodeUnknownResult(PlanMutationRunCommand)(raw), {
+      onFailure: (error) => Effect.fail(error),
+      onSuccess: (decoded) => Effect.succeed(decoded),
+    })
+    const plan = planMutationRun(planCommand)
+    return yield* io.write(
+      new RunOutput({
+        verdictJson: JSON.stringify({ mutate: plan.mutatePatterns, mutatorNames: plan.mutatorNames }),
+        exitCode: 0,
+      }),
+    )
+  })
 
 export const shouldKeepTempDir = (
-  exit: Exit.Exit<void, PlanMutationRunError | S.SchemaError>,
+  exit: Exit.Exit<void, unknown>,
   cleanTempDir: 'always' | boolean,
 ): boolean => Exit.isFailure(exit) && cleanTempDir !== 'always'
 

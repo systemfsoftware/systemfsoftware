@@ -3,7 +3,7 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
 
-import { ResolveModeCommand, resolveModeWorkflow } from '../Output.workflow.js'
+import { HumanOutput, MachineOutput, ResolveModeCommand, resolveModeWorkflow } from '../Output.workflow.js'
 
 const CONFLICT_EXPECTED = 'the "--format text" and "--json" flags are mutually exclusive — use one or the other'
 
@@ -38,7 +38,7 @@ describe('resolveModeWorkflow', () => {
     if (command.text === true) {
       return (
         Result.isSuccess(result) &&
-        result.success.mode === 'human' &&
+        S.is(HumanOutput)(result.success) &&
         result.success.signal === 'flag' &&
         result.success.stdoutIsTTY === command.stdoutIsTTY
       )
@@ -46,7 +46,7 @@ describe('resolveModeWorkflow', () => {
     if (command.json === true) {
       return (
         Result.isSuccess(result) &&
-        result.success.mode === 'machine' &&
+        S.is(MachineOutput)(result.success) &&
         result.success.signal === 'flag' &&
         result.success.stdoutIsTTY === command.stdoutIsTTY
       )
@@ -55,14 +55,14 @@ describe('resolveModeWorkflow', () => {
       if (command.envMode === 'machine') {
         return (
           Result.isSuccess(result) &&
-          result.success.mode === 'machine' &&
+          S.is(MachineOutput)(result.success) &&
           result.success.signal === 'env' &&
           result.success.stdoutIsTTY === command.stdoutIsTTY
         )
       }
       return (
         Result.isSuccess(result) &&
-        result.success.mode === 'human' &&
+        S.is(HumanOutput)(result.success) &&
         result.success.signal === 'env' &&
         result.success.stdoutIsTTY === command.stdoutIsTTY
       )
@@ -70,7 +70,7 @@ describe('resolveModeWorkflow', () => {
     if (!command.stdoutIsTTY) {
       return (
         Result.isSuccess(result) &&
-        result.success.mode === 'machine' &&
+        S.is(MachineOutput)(result.success) &&
         result.success.signal === 'tty' &&
         result.success.stdoutIsTTY === false
       )
@@ -78,7 +78,7 @@ describe('resolveModeWorkflow', () => {
     if (agentSet(command)) {
       return (
         Result.isSuccess(result) &&
-        result.success.mode === 'machine' &&
+        S.is(MachineOutput)(result.success) &&
         result.success.signal === 'agent' &&
         result.success.stdoutIsTTY === true
       )
@@ -86,14 +86,14 @@ describe('resolveModeWorkflow', () => {
     if (hasNonemptyTool(command)) {
       return (
         Result.isSuccess(result) &&
-        result.success.mode === 'machine' &&
+        S.is(MachineOutput)(result.success) &&
         result.success.signal === 'tool' &&
         result.success.stdoutIsTTY === true
       )
     }
     return (
       Result.isSuccess(result) &&
-      result.success.mode === 'human' &&
+      S.is(HumanOutput)(result.success) &&
       result.success.signal === 'tty' &&
       result.success.stdoutIsTTY === true
     )

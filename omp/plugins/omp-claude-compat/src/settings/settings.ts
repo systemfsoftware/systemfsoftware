@@ -1,5 +1,5 @@
-import { Cell, Wire } from '@systemfsoftware/effect-cell-types'
-import { Context, Effect, Exit, Layer, Match, Option, Result, Schema as S } from 'effect'
+import { Wire } from '@systemfsoftware/effect-cell-types'
+import { Context, Effect, Exit, Layer, Match, Option, Schema as S } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import { homedir } from 'node:os'
 import {
@@ -15,16 +15,64 @@ import {
 } from './events.js'
 import type { BridgedEvent } from './events.js'
 import { SettingsJSON } from './settings.schema.js'
-import type { DisableSource, HookCoverage, HookCoverageRow, HookSettings, SettingsSource } from './settings.schema.js'
+import type {
+  DisableSource,
+  HookCoverage,
+  HookCoverageRow,
+  HookEntry,
+  HookSettings,
+  SettingsSource,
+} from './settings.schema.js'
 import {
   type DecodedSource,
+  EmptySnapshot,
   EmptySources,
+  LoadedSnapshot,
   type MergeCommand,
-  mergeEffectiveSettings,
+  type MergedSnapshot,
   MergeSettingsCommand,
   NonEmptySources,
   type SettingsSnapshot,
-} from './settings.workflow.js'
+} from './settings.schema.js'
+
+function mergeSettings(sources: readonly DecodedSource[]): HookSettings {
+  const hooks = {
+    PreToolUse: [] as HookEntry[],
+    PostToolUse: [] as HookEntry[],
+    PostToolUseFailure: [] as HookEntry[],
+    UserPromptSubmit: [] as HookEntry[],
+    SessionStart: [] as HookEntry[],
+    SessionEnd: [] as HookEntry[],
+    Stop: [] as HookEntry[],
+    PreCompact: [] as HookEntry[],
+    PostCompact: [] as HookEntry[],
+  }
+  if (sources.some((s) => s.managed && s.settings.disableAllHooks === true)) return { hooks }
+  const disabledDownstream = sources.some((s) => !s.managed && s.settings.disableAllHooks === true)
+
+  for (const source of sources) {
+    if (disabledDownstream && !source.managed) continue
+    for (const event of ALL_HOOK_EVENTS) {
+      const pluginRoot = source.pluginRoot
+      const entries = pluginRoot === undefined
+        ? source.settings.hooks[event]
+        : source.settings.hooks[event].map((entry) => ({
+          ...entry,
+          hooks: entry.hooks.map((hook) => hook.type === 'command' ? { ...hook, pluginRoot } : hook),
+        }))
+      hooks[event] = hooks[event].concat(entries)
+    }
+  }
+
+  return { hooks }
+}
+
+export const mergeEffectiveSettings = (command: MergeCommand): MergedSnapshot =>
+  Match.value(command.pack).pipe(
+    Match.tag('EmptySources', () => new EmptySnapshot()),
+    Match.tag('NonEmptySources', (pack) => new LoadedSnapshot({ settings: mergeSettings(pack.sources) })),
+    Match.exhaustive,
+  )
 
 export const packMergeCommand = (sources: readonly DecodedSource[]): MergeCommand => {
   const first = sources[0]
@@ -533,69 +581,58 @@ interface SettingsFileText {
 
 interface LoadSettingsRaw {
   readonly texts: readonly SettingsFileText[]
-  readonly pluginSources: readonly {
-    readonly settings: HookSettings
-    readonly managed: boolean
-    readonly pluginRoot?: string
-  }[]
+  readonly pluginSources: readonly SettingsSource[]
 }
 
 const SettingsJsonWire = Wire.mint(SettingsJSON)
 
-const decodeSources = (raw: LoadSettingsRaw): Result.Result<MergeCommand, never> => {
-  const fromFiles = raw.texts.flatMap(({ path, content }) => {
-    if (content === '') return []
-    const jsonOrError = S.decodeUnknownExit(S.fromJsonString(S.Record(S.String, S.Unknown)))(content)
-    if (Exit.isFailure(jsonOrError)) return []
-    const decoded = S.decodeUnknownExit(SettingsJsonWire)(jsonOrError.value)
-    if (Exit.isFailure(decoded)) return []
-    return [
-      {
-        settings: decoded.value,
-        managed: path === MANAGED_SETTINGS_PATH,
-      },
-    ]
-  })
-  return Result.succeed(packMergeCommand([...fromFiles, ...raw.pluginSources]))
-}
+const decodeSources = (raw: LoadSettingsRaw): HookSettings | null =>
+  snapshotSettings(
+    mergeEffectiveSettings(packMergeCommand([
+      ...raw.texts.flatMap(({ path, content }) => {
+        if (content === '') return []
+        const jsonOrError = S.decodeUnknownExit(S.fromJsonString(S.Record(S.String, S.Unknown)))(content)
+        if (Exit.isFailure(jsonOrError)) return []
+        const decoded = S.decodeUnknownExit(SettingsJsonWire)(jsonOrError.value)
+        if (Exit.isFailure(decoded)) return []
+        return [
+          {
+            settings: decoded.value,
+            managed: path === MANAGED_SETTINGS_PATH,
+          },
+        ]
+      }),
+      ...raw.pluginSources,
+    ])),
+  )
 
 const ClaudeSettingsLiveBase = Layer.effect(
   ClaudeSettings,
   Effect.gen(function*() {
     const sources = yield* ClaudeSettingsSources
     const capturedDescribe = sources.describe
-    const loadCell = Cell.layer({
-      read: ({ cwd, homeDir }: { readonly cwd: string; readonly homeDir: string }) =>
-        Effect.gen(function*() {
-          const { paths, pluginSources } = yield* capturedDescribe(cwd, homeDir)
-          const fs = yield* FileSystem
-          const texts = yield* Effect.forEach(
-            paths,
-            (path) =>
-              Effect.map(
-                fs.readFileString(path).pipe(Effect.orElseSucceed(() => '')),
-                (content) => ({ path, content }),
-              ),
-            { concurrency: 'unbounded' },
-          )
-          return { texts, pluginSources }
-        }),
-      decode: decodeSources,
-      decide: mergeEffectiveSettings,
-      encode: (outcome) =>
-        Result.match(outcome, {
-          onFailure: () => null,
-          onSuccess: snapshotSettings,
-        }),
-      write: (snapshot) => Effect.succeed(snapshot),
-    })
+    const loadSettings = ({ cwd, homeDir }: { readonly cwd: string; readonly homeDir: string }) =>
+      Effect.gen(function*() {
+        const { paths, pluginSources } = yield* capturedDescribe(cwd, homeDir)
+        const fs = yield* FileSystem
+        const texts = yield* Effect.forEach(
+          paths,
+          (path) =>
+            Effect.map(
+              fs.readFileString(path).pipe(Effect.orElseSucceed(() => '')),
+              (content) => ({ path, content }),
+            ),
+          { concurrency: 'unbounded' },
+        )
+        return decodeSources({ texts, pluginSources })
+      })
     const collectGapsCaptured = (cwd: string, homeDir: string) =>
       Effect.gen(function*() {
         const { paths, hookFiles } = yield* capturedDescribe(cwd, homeDir)
         return yield* collectSettingsGapsWithPaths([...paths, ...hookFiles], homeDir, cwd)
       })
     return ClaudeSettings.of({
-      load: (cwd, homeDir) => Cell.run(loadCell, { cwd, homeDir }),
+      load: (cwd, homeDir) => loadSettings({ cwd, homeDir }),
       gaps: (cwd, homeDir) => collectGapsCaptured(cwd, homeDir),
     })
   }),

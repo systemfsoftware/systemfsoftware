@@ -7,10 +7,8 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Predicate from 'effect/Predicate'
-import * as Result from 'effect/Result'
 
-import { Cell } from '@systemfsoftware/effect-cell-types'
-import { PluginKind } from '@systemfsoftware/stryker-js/Plugin'
+import type { PluginKind } from '@systemfsoftware/stryker-js/Plugin'
 import type { AnyPluginContribution, ContributionOf, PluginContribution } from '@systemfsoftware/stryker-js/Plugin'
 
 import { Module } from '@systemfsoftware/stryker-js/Module'
@@ -23,7 +21,104 @@ import {
   PluginNotFoundError,
   SchemaValidationContributionSchema,
 } from './Plugins.schema.js'
-import { LoadPluginsCommand, loadPluginsWorkflow, PluginLoaderEntry } from './Plugins.workflow.js'
+
+export interface PluginLoaderEntryLike {
+  readonly moduleName: string
+  readonly plugins: readonly PluginContribution<PluginKind>[] | undefined
+  readonly schemaContribution: Record<string, unknown> | undefined
+}
+
+export interface PluginLoadPlan {
+  readonly schemaContributions: readonly Record<string, unknown>[]
+  readonly pluginsByKind: HashMap.HashMap<PluginKind, readonly PluginContribution<PluginKind>[]>
+  readonly pluginModulePaths: readonly string[]
+  readonly shadowings: readonly {
+    readonly kind: PluginKind
+    readonly name: string
+    readonly shadowedIndex: number
+    readonly winnerIndex: number
+  }[]
+}
+
+export const buildPluginLoadPlan = (entries: readonly PluginLoaderEntryLike[]): PluginLoadPlan => {
+  const shadowingState = entries.reduce<{
+    readonly seen: HashMap.HashMap<string, number>
+    readonly shadowings: readonly {
+      readonly kind: PluginKind
+      readonly name: string
+      readonly shadowedIndex: number
+      readonly winnerIndex: number
+    }[]
+  }>(
+    (acc, entry, index) =>
+      Option.match(Option.fromUndefinedOr(entry.plugins), {
+        onNone: () => acc,
+        onSome: (plugins) =>
+          plugins.reduce(
+            (inner, plugin) => {
+              const key = `${plugin.kind}:${plugin.name}`
+              const previousOption = HashMap.get(inner.seen, key)
+              const nextShadowings = Option.match(previousOption, {
+                onNone: () => inner.shadowings,
+                onSome: (prev) => [
+                  ...inner.shadowings,
+                  {
+                    kind: plugin.kind,
+                    name: plugin.name,
+                    shadowedIndex: prev,
+                    winnerIndex: index,
+                  },
+                ],
+              })
+              return {
+                seen: HashMap.set(inner.seen, key, index),
+                shadowings: nextShadowings,
+              }
+            },
+            acc,
+          ),
+      }),
+    { seen: HashMap.empty<string, number>(), shadowings: [] },
+  )
+
+  const pluginsByKind = entries.reduce<HashMap.HashMap<PluginKind, readonly PluginContribution<PluginKind>[]>>(
+    (map, entry) =>
+      Option.match(Option.fromUndefinedOr(entry.plugins), {
+        onNone: () => map,
+        onSome: (plugins) =>
+          plugins.reduce(
+            (inner, plugin) =>
+              Option.match(HashMap.get(inner, plugin.kind), {
+                onNone: () => HashMap.set(inner, plugin.kind, [plugin]),
+                onSome: (existing) => HashMap.set(inner, plugin.kind, [...existing, plugin]),
+              }),
+            map,
+          ),
+      }),
+    HashMap.empty<PluginKind, readonly PluginContribution<PluginKind>[]>(),
+  )
+
+  const pluginModulePaths = entries.flatMap((entry) =>
+    Option.match(Option.fromUndefinedOr(entry.plugins), {
+      onNone: () => [],
+      onSome: () => [entry.moduleName],
+    })
+  )
+
+  const schemaContributions = entries.flatMap((entry) =>
+    Option.match(Option.fromUndefinedOr(entry.schemaContribution), {
+      onNone: () => [],
+      onSome: (value) => [value],
+    })
+  )
+
+  return {
+    schemaContributions,
+    pluginsByKind,
+    pluginModulePaths,
+    shadowings: shadowingState.shadowings,
+  }
+}
 
 interface ErrnoException extends Error {
   code?: string
@@ -248,83 +343,50 @@ interface PluginLoaderRawEntry {
   readonly plugins: readonly PluginContribution<PluginKind>[] | undefined
   readonly schemaContribution: Record<string, unknown> | undefined
 }
-const pluginLoaderDescription = (basePath: string) =>
-  Cell.layer({
-    read: (pluginDescriptors: readonly string[]) =>
-      // raw: readonly PluginLoaderRawEntry[] from pluginDescriptors
-      Effect.gen(function*() {
-        // raw: PluginLoaderRawEntry[] from pluginDescriptors
-        yield* FileSystem.FileSystem
-        yield* Path.Path
-        yield* Module
-        const pluginModules = yield* resolvePluginModules(pluginDescriptors)
-        const loaded = yield* Effect.forEach(
-          pluginModules,
-          (moduleName: string) =>
-            loadPlugin(moduleName, basePath).pipe(
-              Effect.map((plugin) => {
-                if (plugin === undefined) {
-                  return undefined
-                }
-                return {
-                  ...plugin,
-                  moduleName,
-                }
-              }),
-            ),
-          { concurrency: 'unbounded' },
-        ).pipe(Effect.map((arr) => arr.filter(Predicate.isNotNullish)))
-        const raw: readonly PluginLoaderRawEntry[] = loaded.map((entry) => ({
-          moduleName: entry.moduleName,
-          plugins: entry.plugins,
-          schemaContribution: entry.schemaContribution,
-        }))
-        return raw
-      }),
-    decode: (raw: readonly PluginLoaderRawEntry[]) => {
-      const entries = raw.map((entry) =>
-        PluginLoaderEntry.make({
-          moduleName: entry.moduleName,
-          plugins: entry.plugins,
-          schemaContribution: entry.schemaContribution,
-        })
-      )
-      return Result.succeed(LoadPluginsCommand.make({ entries }))
-    },
-    decide: loadPluginsWorkflow,
-    encode: (outcome) =>
-      Result.match(outcome, {
-        onFailure: (error) => {
-          throw error
-        },
-        onSuccess: (decision) => decision,
-      }),
-    write: (output) =>
-      Effect.gen(function*() {
-        for (const shadowing of output.shadowings) {
-          yield* Effect.logWarning(
-            `Plugin "${shadowing.name}" of kind "${shadowing.kind}" at index ${shadowing.winnerIndex} shadows plugin at index ${shadowing.shadowedIndex}.`,
-          )
-        }
-        const loaded: LoadedPlugins = {
-          schemaContributions: output.schemaContributions,
-          pluginsByKind: output.pluginsByKind,
-          pluginModulePaths: output.pluginModulePaths,
-        }
-        return loaded
-      }),
-  })
-
 export function loadPlugins(
   pluginDescriptors: readonly string[],
   basePath: string,
 ): Effect.Effect<LoadedPlugins, PluginLoadFailedError, FileSystem.FileSystem | Module | Path.Path> {
   return Effect.gen(function*() {
-    const cell = pluginLoaderDescription(basePath)
-    return yield* Cell.run(cell, pluginDescriptors)
+    yield* FileSystem.FileSystem
+    yield* Path.Path
+    yield* Module
+    const pluginModules = yield* resolvePluginModules(pluginDescriptors)
+    const loaded = yield* Effect.forEach(
+      pluginModules,
+      (moduleName: string) =>
+        loadPlugin(moduleName, basePath).pipe(
+          Effect.map((plugin) => {
+            if (plugin === undefined) {
+              return undefined
+            }
+            return {
+              ...plugin,
+              moduleName,
+            }
+          }),
+        ),
+      { concurrency: 'unbounded' },
+    ).pipe(Effect.map((arr) => arr.filter(Predicate.isNotNullish)))
+    const entries: readonly PluginLoaderRawEntry[] = loaded.map((entry) => ({
+      moduleName: entry.moduleName,
+      plugins: entry.plugins,
+      schemaContribution: entry.schemaContribution,
+    }))
+    const plan = buildPluginLoadPlan(entries)
+    for (const shadowing of plan.shadowings) {
+      yield* Effect.logWarning(
+        `Plugin "${shadowing.name}" of kind "${shadowing.kind}" at index ${shadowing.winnerIndex} shadows plugin at index ${shadowing.shadowedIndex}.`,
+      )
+    }
+    const result: LoadedPlugins = {
+      schemaContributions: plan.schemaContributions,
+      pluginsByKind: plan.pluginsByKind,
+      pluginModulePaths: plan.pluginModulePaths,
+    }
+    return result
   })
 }
-
 function parsePluginExpression(pluginExpression: string): { org: string; pkg: string } {
   const parts = pluginExpression.split('/')
   const first = parts[0]
@@ -347,10 +409,6 @@ function isPluginModule(module: unknown): module is PluginModule {
 function hasValidationSchemaContribution(module: unknown): module is SchemaValidationContribution {
   return S.is(SchemaValidationContributionSchema)(module)
 }
-
-// ---------------------------------------------------------------------------
-// Creator — typed accessors over the loaded graph
-// ---------------------------------------------------------------------------
 
 function findPlugin<K extends PluginKind>(
   pluginsByKind: HashMap.HashMap<PluginKind, readonly AnyPluginContribution[]>,

@@ -17,10 +17,23 @@ export class DryRunCommand extends S.TaggedClass<DryRunCommand>()('DryRunCommand
   reason: S.optional(S.String),
 }) {}
 
-export class DryRunDecision extends S.TaggedClass<DryRunDecision>()('DryRunDecision', {
+const DryRunDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-engine/DryRunDecision')
+type DryRunDecisionTypeId = typeof DryRunDecisionTypeId
+
+export class DryRunPassed extends S.TaggedClass<DryRunPassed>()('DryRunPassed', {
+  testCount: S.Finite,
+}) {
+  readonly [DryRunDecisionTypeId] = DryRunDecisionTypeId
+}
+
+export class DryRunFailed extends S.TaggedClass<DryRunFailed>()('DryRunFailed', {
   testCount: S.Finite,
   failedTestCount: S.Finite,
-}) {}
+}) {
+  readonly [DryRunDecisionTypeId] = DryRunDecisionTypeId
+}
+
+export type DryRunDecision = DryRunPassed | DryRunFailed
 
 const decideComplete = (command: DryRunCommand): Result.Result<DryRunDecision, DryRunError> => {
   if (command.testCount === 0 && command.allowEmpty === false) {
@@ -32,17 +45,16 @@ const decideComplete = (command: DryRunCommand): Result.Result<DryRunDecision, D
     )
   }
   if (command.failedTestCount > 0) {
-    return Result.fail(
-      new DryRunError({
-        stage: 'dryRun',
-        reason: 'There were failed tests in the initial test run.',
+    return Result.succeed(
+      new DryRunFailed({
+        testCount: command.testCount,
+        failedTestCount: command.failedTestCount,
       }),
     )
   }
   return Result.succeed(
-    new DryRunDecision({
+    new DryRunPassed({
       testCount: command.testCount,
-      failedTestCount: command.failedTestCount,
     }),
   )
 }

@@ -1,6 +1,3 @@
-/**
- * VitestMutantRun workflow — pure result-mapping for the mutant-run phase.
- */
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -8,10 +5,6 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
 import type { TestStatus } from '@systemfsoftware/stryker-js/TestRunner'
-
-// ---------------------------------------------------------------------------
-// Command / Output
-// ---------------------------------------------------------------------------
 
 export class VitestMutantRunCommand extends S.TaggedClass<VitestMutantRunCommand>()('VitestMutantRunCommand', {
   rawTests: S.Array(S.Unknown),
@@ -23,18 +16,44 @@ export class VitestMutantRunCommand extends S.TaggedClass<VitestMutantRunCommand
   reportAllKillers: S.Boolean,
 }) {}
 
-export class VitestMutantRunOutput extends S.TaggedClass<VitestMutantRunOutput>()('VitestMutantRunOutput', {
-  status: S.Literals(['Killed', 'Survived', 'Timeout', 'Error']),
+const VitestMutantRunTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-vitest-runner/VitestMutantRun')
+type VitestMutantRunTypeId = typeof VitestMutantRunTypeId
+
+export class MutantKilled extends S.TaggedClass<MutantKilled>()('Killed', {
   testsJson: S.String,
-  errorMessage: S.optional(S.String),
   killerIds: S.optional(S.Array(S.String)),
   failureMessage: S.optional(S.String),
+}) {
+  readonly [VitestMutantRunTypeId] = VitestMutantRunTypeId
+}
+
+export class MutantSurvived extends S.TaggedClass<MutantSurvived>()('Survived', {
+  testsJson: S.String,
+}) {
+  readonly [VitestMutantRunTypeId] = VitestMutantRunTypeId
+}
+
+export class MutantTimeout extends S.TaggedClass<MutantTimeout>()('Timeout', {
+  testsJson: S.String,
   reason: S.optional(S.String),
-}) {}
+}) {
+  readonly [VitestMutantRunTypeId] = VitestMutantRunTypeId
+}
+
+export class MutantDryError extends S.TaggedClass<MutantDryError>()('Error', {
+  testsJson: S.String,
+  errorMessage: S.optional(S.String),
+}) {
+  readonly [VitestMutantRunTypeId] = VitestMutantRunTypeId
+}
+
+export type VitestMutantRunOutput = MutantKilled | MutantSurvived | MutantTimeout | MutantDryError
 
 export class VitestMutantRunError extends S.TaggedError<VitestMutantRunError>()('VitestMutantRunError', {
   message: S.String,
-}) {}
+}) {
+  readonly [VitestMutantRunTypeId] = VitestMutantRunTypeId
+}
 
 export class VitestDryRunCommand extends S.TaggedClass<VitestDryRunCommand>()('VitestDryRunCommand', {
   rawTests: S.Array(S.Unknown),
@@ -50,10 +69,6 @@ export class VitestDryRunOutput extends S.TaggedClass<VitestDryRunOutput>()('Vit
 }) {}
 
 type TaskState = 'pass' | 'fail' | 'skip' | 'todo' | 'run' | 'queued' | 'only' | undefined
-
-// ---------------------------------------------------------------------------
-// Pure helpers duplicated from dry-run (workflow files cannot import siblings)
-// ---------------------------------------------------------------------------
 
 const recordOption = (value: unknown): Option.Option<Record<string, unknown>> =>
   S.decodeUnknownOption(S.Record(S.String, S.Unknown))(value)
@@ -160,12 +175,6 @@ const toRawTestIdRaw = (test: unknown): string => {
   return `${filepath}#${collectTestNameRaw(test)}`
 }
 
-/**
- * A test id is `<file>#<test name>`, and the file is reported relative to the
- * project root so an id is stable across machines and sandbox directories.
- * Vitest reports an absolute path, so the root prefix is stripped here rather
- * than resolved — a decision body has no path service and needs none.
- */
 const normalizeTestIdRaw = (id: string, projectRoot: string): string => {
   const hash = id.indexOf('#')
   if (hash === -1) {
@@ -372,15 +381,6 @@ const decideVitestDryRun = (command: VitestDryRunCommand): Result.Result<VitestD
     ),
   )
 
-// ---------------------------------------------------------------------------
-// Mutant-run decision — pure dispatch, no let/Reflect/if
-// ---------------------------------------------------------------------------
-
-/**
- * The hit-limit cutoff: `Some` iff both numbers are present AND the count
- * strictly exceeds the limit. The boundary is `>` and not `>=` on purpose —
- * `hitCount === hitLimit` is the last permitted hit, not one too many.
- */
 const hitLimitReason = (
   hitCount: number | undefined,
   hitLimit: number | undefined,
@@ -402,12 +402,8 @@ const decideVitestMutantRun = (
       hit,
     ): Result.Result<VitestMutantRunOutput, VitestMutantRunError> =>
       Result.succeed(
-        VitestMutantRunOutput.make({
-          status: 'Timeout',
+        MutantTimeout.make({
           testsJson: '[]',
-          errorMessage: undefined,
-          killerIds: undefined,
-          failureMessage: undefined,
           reason: hit.value,
         }),
       )),
@@ -435,12 +431,9 @@ const decideVitestMutantRun = (
           return Match.value(dry.status === 'Error').pipe(
             Match.when(true, (): Result.Result<VitestMutantRunOutput, VitestMutantRunError> =>
               Result.succeed(
-                VitestMutantRunOutput.make({
-                  status: 'Error',
+                MutantDryError.make({
                   testsJson: '[]',
                   errorMessage: dry.errorMessage,
-                  killerIds: undefined,
-                  failureMessage: undefined,
                 }),
               )),
             Match.when(false, (): Result.Result<VitestMutantRunOutput, VitestMutantRunError> => {
@@ -470,10 +463,8 @@ const decideVitestMutantRun = (
                           onSome: (k): string | undefined => k.failureMessage,
                         })
                         return Result.succeed(
-                          VitestMutantRunOutput.make({
-                            status: 'Killed',
+                          MutantKilled.make({
                             testsJson: dry.testsJson,
-                            errorMessage: undefined,
                             killerIds: killed.map((t) => t.id),
                             failureMessage,
                           }),
@@ -490,10 +481,8 @@ const decideVitestMutantRun = (
                             true,
                             (): Result.Result<VitestMutantRunOutput, VitestMutantRunError> =>
                               Result.succeed(
-                                VitestMutantRunOutput.make({
-                                  status: 'Killed',
+                                MutantKilled.make({
                                   testsJson: dry.testsJson,
-                                  errorMessage: undefined,
                                   killerIds: Option.match(first, {
                                     onNone: (): readonly string[] | undefined => undefined,
                                     onSome: (k): readonly string[] => [k.id],
@@ -506,10 +495,8 @@ const decideVitestMutantRun = (
                             false,
                             (): Result.Result<VitestMutantRunOutput, VitestMutantRunError> =>
                               Result.succeed(
-                                VitestMutantRunOutput.make({
-                                  status: 'Killed',
+                                MutantKilled.make({
                                   testsJson: dry.testsJson,
-                                  errorMessage: undefined,
                                   killerIds: Option.getOrUndefined(
                                     Option.match(first, {
                                       onNone: (): Option.Option<readonly string[]> => Option.none(),
@@ -528,12 +515,8 @@ const decideVitestMutantRun = (
                 ),
                 Match.when(false, (): Result.Result<VitestMutantRunOutput, VitestMutantRunError> =>
                   Result.succeed(
-                    VitestMutantRunOutput.make({
-                      status: 'Survived',
+                    MutantSurvived.make({
                       testsJson: dry.testsJson,
-                      errorMessage: undefined,
-                      killerIds: undefined,
-                      failureMessage: undefined,
                     }),
                   )),
                 Match.exhaustive,

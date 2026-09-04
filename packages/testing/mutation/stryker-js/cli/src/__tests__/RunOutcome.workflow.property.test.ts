@@ -9,6 +9,8 @@ import {
   RunInterrupted,
   RunOk,
   RunOutcomeCommand,
+  type RunOutcomeDecision,
+  type RunOutcomeError,
   runOutcomeWorkflow,
   RunParseFailed,
   RunSurvivorsRejected,
@@ -27,6 +29,16 @@ const classCode = (exitClass: 'VerdictFail' | 'ConfigError' | 'RuntimeError' | '
   return 4
 }
 
+const isRunFailed = (
+  result: Result.Result<RunOutcomeDecision, RunOutcomeError>,
+  code: number,
+  diagnostic: string | undefined,
+): boolean =>
+  Result.isSuccess(result) &&
+  S.is(RunFailed)(result.success) &&
+  result.success.code === code &&
+  result.success.diagnostic === diagnostic
+
 describe('runOutcomeWorkflow', () => {
   it.prop('∀c_Command_≡TaggedOutcome', [S.toArbitrary(RunOutcomeCommand)(fc)], ([command]) => {
     const result = runOutcomeWorkflow(command)
@@ -37,12 +49,7 @@ describe('runOutcomeWorkflow', () => {
     if (command.succeeded) {
       if (command.successExitClass !== undefined) {
         const code = classCode(command.successExitClass)
-        return (
-          Result.isFailure(result) &&
-          S.is(RunFailed)(result.failure) &&
-          result.failure.code === code &&
-          result.failure.diagnostic === command.diagnostic
-        )
+        return isRunFailed(result, code, command.diagnostic)
       }
       return Result.isSuccess(result) && S.is(RunOk)(result.success) && result.success.help === false
     }
@@ -52,56 +59,46 @@ describe('runOutcomeWorkflow', () => {
     if (command.helpErrorCount !== undefined) {
       if (command.helpErrorCount > 0) {
         return (
-          Result.isFailure(result) &&
-          S.is(RunParseFailed)(result.failure) &&
-          result.failure.unrecognized === command.unrecognized
+          Result.isSuccess(result) &&
+          S.is(RunParseFailed)(result.success) &&
+          result.success.unrecognized === command.unrecognized
         )
       }
       return Result.isSuccess(result) && S.is(RunOk)(result.success) && result.success.help === true
     }
     if (command.cliError) {
       return (
-        Result.isFailure(result) &&
-        S.is(RunParseFailed)(result.failure) &&
-        result.failure.unrecognized === command.unrecognized
+        Result.isSuccess(result) &&
+        S.is(RunParseFailed)(result.success) &&
+        result.success.unrecognized === command.unrecognized
       )
     }
     if (command.survivorsReason !== undefined) {
       return (
-        Result.isFailure(result) &&
-        S.is(RunSurvivorsRejected)(result.failure) &&
-        result.failure.reason === command.survivorsReason &&
-        result.failure.diagnostic === command.survivorsDiagnostic
+        Result.isSuccess(result) &&
+        S.is(RunSurvivorsRejected)(result.success) &&
+        result.success.reason === command.survivorsReason &&
+        result.success.diagnostic === command.survivorsDiagnostic
       )
     }
     if (command.schemaError) {
       return (
-        Result.isFailure(result) &&
-        S.is(RunConfigFailed)(result.failure) &&
-        result.failure.detail === command.configDetail
+        Result.isSuccess(result) &&
+        S.is(RunConfigFailed)(result.success) &&
+        result.success.detail === command.configDetail
       )
     }
     if (command.highestExitClass !== undefined) {
       if (command.highestExitClass === 'ConfigError') {
         return (
-          Result.isFailure(result) &&
-          S.is(RunConfigFailed)(result.failure) &&
-          result.failure.detail === command.configDetail
+          Result.isSuccess(result) &&
+          S.is(RunConfigFailed)(result.success) &&
+          result.success.detail === command.configDetail
         )
       }
       const code = classCode(command.highestExitClass)
-      return (
-        Result.isFailure(result) &&
-        S.is(RunFailed)(result.failure) &&
-        result.failure.code === code &&
-        result.failure.diagnostic === command.diagnostic
-      )
+      return isRunFailed(result, code, command.diagnostic)
     }
-    return (
-      Result.isFailure(result) &&
-      S.is(RunFailed)(result.failure) &&
-      result.failure.code === 1 &&
-      result.failure.diagnostic === command.diagnostic
-    )
+    return isRunFailed(result, 1, command.diagnostic)
   })
 })

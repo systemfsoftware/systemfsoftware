@@ -1,9 +1,5 @@
 // oxlint-disable typescript/no-unsafe-type-assertion typescript/no-unnecessary-type-assertion
-// ^ Mutant placers build and graft plain ESTree nodes; the shapes the placers
-// construct are guaranteed by construction, not by the type system.
-/**
- * Transformer — traverses ASTs, asks mutators for mutants and placers to instrument them.
- */
+
 import { type IgnorerService, type NodePath as IgnorerNodePath } from '@systemfsoftware/stryker-js/Ignorer'
 import { INSTRUMENTER_CONSTANTS as ID } from '@systemfsoftware/stryker-js/Mutant'
 import { type MutateDescription, type Position } from '@systemfsoftware/stryker-js/Mutant'
@@ -304,7 +300,6 @@ function toIgnorerPath(path: TraversePath): IgnorerNodePath {
       return nodeType(node) === 'ObjectExpression'
     },
     isCallExpression(): boolean {
-      // estree: optional calls are CallExpression{optional:true}
       return nodeType(node) === 'CallExpression'
     },
     isClassProperty(): boolean {
@@ -336,20 +331,10 @@ export function isTypeNode(path: TraversePath): boolean {
   )
 }
 
-/**
- * Determines whether or not it is a declare variable statement node.
- * @example
- * declare const foo: 'foo';
- */
 function isDeclareVariableStatement(node: Node): boolean {
   return nodeType(node) === 'VariableDeclaration' && 'declare' in node && node.declare === true
 }
 
-/**
- * Determines whether or not a node is a string literal that is the name of a module.
- * @example
- * declare module "express" {};
- */
 function isDeclareModule(node: Node): boolean {
   return nodeType(node) === 'TSModuleDeclaration' && 'declare' in node && node.declare === true
 }
@@ -387,23 +372,12 @@ export function isImportDeclaration(path: TraversePath): boolean {
   )
 }
 
-/**
- * returns syntax for `global.activeMutant === $mutantId`
- * @param mutantId The id of the mutant to switch
- */
 export function mutantTestExpression(
   mutantId: string,
 ): Expression {
   return callExpression(identifier(IS_MUTANT_ACTIVE_HELPER), [stringLiteral(mutantId)])
 }
 
-/**
- * Returns a sequence of mutation coverage counters with an optional last expression.
- *
- * @example (global.__coverMutant__(0, 1), 40 + 2)
- * @param mutants The mutants for which covering syntax needs to be generated
- * @param targetExpression The original expression
- */
 export function mutationCoverageSequenceExpression(
   mutants: Iterable<Mutant>,
   targetExpression?: Expression,
@@ -424,10 +398,6 @@ export interface MutantPlacer {
   place(path: TraversePath, appliedMutants: Map<Mutant, Node>): void
 }
 
-/**
- * Verifies the placer's claim: `canPlace` established the node kind, so a
- * mismatch here means the placer was handed a mutant it never accepted.
- */
 export function nodeOfKind(
   mutant: Mutant,
   node: Node,
@@ -464,14 +434,6 @@ export function throwPlacementError(
   throw new Error(errorMessage)
 }
 
-/**
- * Will set the identifier of anonymous function expressions if is located in a variable declaration.
- * Will treat input as readonly. Returns undefined if not needed.
- * @example
- * const a = function() { }
- * becomes
- * const a = function a() {}
- */
 function classOrFunctionExpressionNamedIfNeeded(
   path: TraversePath,
 ): Expression | undefined {
@@ -504,14 +466,6 @@ function classOrFunctionExpressionNamedIfNeeded(
   return
 }
 
-/**
- * Will set the identifier of anonymous arrow function expressions if is located in a variable declaration.
- * Will treat input as readonly. Returns undefined if not needed.
- * @example
- * const a = () => { }
- * becomes
- * const a = (() => { const a = () => {}; return a; })()
- */
 function arrowFunctionExpressionNamedIfNeeded(
   path: TraversePath,
 ): Expression | undefined {
@@ -555,7 +509,6 @@ function isMemberOrNonNullExpression(path: TraversePath | null): boolean {
 }
 
 function isMemberExpressionNode(path: TraversePath | null): boolean {
-  // estree: optional member access is MemberExpression{optional:true}
   return nodeType(path?.node) === 'MemberExpression'
 }
 
@@ -576,30 +529,10 @@ function isValidExpression(path: TraversePath): boolean {
     !isPartOfAssignmentExpression()
   )
 
-  /**
-   * Determines if the expression is property of an object.
-   * @example
-   * const a = {
-   *  'foo': 'bar' // 'foo' here is an object property
-   * };
-   */
   function isObjectPropertyKey() {
     return parentNode.type === 'Property' && parentNode.key === path.node
   }
 
-  /**
-   * Determines if the expression is part of a call/member chain.
-   * @example
-   * // bar is part of chain, foo is NOT part of the chain:
-   * foo.bar.baz();
-   * foo.bar?.baz()
-   * foo.bar;
-   * foo.bar!;
-   * foo.bar();
-   * foo?.bar();
-   * baz[foo.bar()]
-   * bar?.baz[0]
-   */
   function isPartOfChain() {
     return (
       isMemberOrCallOrNonNullExpression(path) &&
@@ -610,51 +543,51 @@ function isValidExpression(path: TraversePath): boolean {
     )
   }
 
-  /**
-   * Determines if the expression is part of a delete expression.
-   * @returns true if the expression is part of a delete expression
-   * @example
-   * delete foo.bar;
-   */
   function isPartOfDeleteExpression() {
     return parentNode.type === 'UnaryExpression' && parentNode.operator === 'delete'
   }
 
-  /**
-   * Determines if the expression is part of an assignment expression.
-   * @returns true if the expression is part of an assignment expression
-   * @example
-   * foo.bar = 42;
-   * initialNodes.filter((n) => n.id === 'tiptilt')[0].className = tiptiltState;
-   */
   function isPartOfAssignmentExpression() {
     return parentNode.type === 'AssignmentExpression' && parentNode.left === path.node
   }
 }
 
-/**
- * Places the mutants with a conditional expression: `global.activeMutant === 1? mutatedCode : originalCode`;
- */
+export function unwrapParenthesizedExpression(node: Node): Node {
+  let current = node
+  while (nodeType(current) === 'ParenthesizedExpression') {
+    const wrapper: unknown = current
+    if (typeof wrapper !== 'object' || wrapper === null || !('expression' in wrapper)) {
+      break
+    }
+    const inner = wrapper.expression as Node
+    if (inner === undefined || inner === null) {
+      break
+    }
+    current = inner
+  }
+  return current
+}
+
 export const expressionMutantPlacer: MutantPlacer = {
   name: 'expressionMutantPlacer',
   canPlace(path) {
     return path.isExpression() && isValidExpression(path)
   },
   place(path, appliedMutants) {
-    // Make sure anonymous functions and classes keep their 'name' property
     let expression = nameIfAnonymous(path)
-
-    // Add the mutation coverage expression
     expression = mutationCoverageSequenceExpression(
       appliedMutants.keys(),
       expression,
     )
-
-    // Now apply the mutants
     for (const [mutant, appliedMutant] of appliedMutants) {
       expression = conditionalExpression(
         mutantTestExpression(mutant.id),
-        nodeOfKind(mutant, appliedMutant, isExpressionKind, 'an expression') as Expression,
+        nodeOfKind(
+          mutant,
+          unwrapParenthesizedExpression(appliedMutant),
+          isExpressionKind,
+          'an expression',
+        ) as Expression,
         expression,
       )
     }
@@ -662,10 +595,6 @@ export const expressionMutantPlacer: MutantPlacer = {
   },
 }
 
-/**
- * Mutant placer that places mutants in statements that allow it.
- * It uses an `if` statement to do so
- */
 export const statementMutantPlacer: MutantPlacer = {
   name: 'statementMutantPlacer',
   canPlace(path) {
@@ -697,16 +626,7 @@ export const statementMutantPlacer: MutantPlacer = {
     }
   },
 }
-/**
- * Places the mutants with consequent of a SwitchCase node. Uses an if-statement to do so.
- * @example
- *  case 'foo':
- *    if (stryMutAct_9fa48(0)) {} else {
- *      stryCov_9fa48(0);
- *      console.log('bar');
- *      break;
- *   }
- */
+
 export const switchCaseMutantPlacer: MutantPlacer = {
   name: 'switchCaseMutantPlacer',
   canPlace(path) {
@@ -898,11 +818,6 @@ export const strykerPlugins: readonly unknown[] = []
 
 export const frameworkPluginsFileUrl = import.meta.url
 
-/**
- * The instrumentation header: parsed once with oxc, frozen, shared. The
- * `globalThis` implementation is based on core-js's — see
- * https://github.com/stryker-mutator/stryker-js/issues/4035
- */
 const parsedInstrumentationHeader = parseSync(
   'instrumenter-header.js',
   `// @ts-nocheck
@@ -966,7 +881,6 @@ export function placeHeaderIfNeeded(
   root: Program,
 ): void {
   if (hasPlacedMutants(mutantCollector, originFileName) && options.noHeader !== true) {
-    // Be sure to leave comments like `// @flow` in.
     placeHeader(root)
   }
 }
@@ -1089,9 +1003,6 @@ export const transformSvelte: AstTransformer<'svelte'> = (
     })
 
   if (hasPlacedMutants(mutantCollector, originFileName)) {
-    // We need to place the instrumentation header inside the `<script context="module">` script
-    // If there already is a module script, place it there. If not, we need to add it.
-
     if (!root.moduleScript) {
       root.moduleScript = {
         ast: {
@@ -1138,8 +1049,6 @@ export const transformScript: AstTransformer<ScriptFormat> = (
 ) => {
   const lineTable = buildLineTable(rawContent)
 
-  // oxc ships comments flat; the directive pass reads `leadingComments`, so
-  // fold the flat list into the tree once (and give each comment a loc).
   attachComments(root, comments as readonly AttachedComment[], lineTable)
 
   const placementMap: PlacementMap = new Map()
