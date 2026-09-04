@@ -2,11 +2,7 @@
   "$schema": "https://developer.microsoft.com/json-schemas/api-extractor/v7/api-extractor.schema.json",
   "projectFolder": ".",
   "mainEntryPointFilePath": "<projectFolder>/dist/index.d.ts",
-  "bundledPackages": [
-    "@systemfsoftware/oxlint-plugin-effect-native",
-    "@systemfsoftware/oxlint-plugin-structure",
-    "@systemfsoftware/oxlint-plugin-tag-discipline"
-  ],
+  "bundledPackages": [],
   "compiler": {
     "tsconfigFilePath": "<projectFolder>/tsconfig.build.json"
   },
@@ -14,15 +10,15 @@
     "enabled": true,
     "reportFolder": "<projectFolder>/etc/",
     "reportTempFolder": "<projectFolder>/temp/",
-    "reportFileName": "oxlint-plugin.api.md"
+    "reportFileName": "oxlint-plugin-tag-discipline.api.md"
   },
   "docModel": {
     "enabled": false
   },
   "dtsRollup": {
     "enabled": true,
-    "untrimmedFilePath": "<projectFolder>/dist/oxlint-plugin-untrimmed.d.ts",
-    "publicTrimmedFilePath": "<projectFolder>/dist/oxlint-plugin.d.ts"
+    "untrimmedFilePath": "<projectFolder>/dist/oxlint-plugin-tag-discipline-untrimmed.d.ts",
+    "publicTrimmedFilePath": "<projectFolder>/dist/oxlint-plugin-tag-discipline.d.ts"
   },
   "tsdocMetadata": {
     "enabled": false
