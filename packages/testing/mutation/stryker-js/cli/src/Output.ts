@@ -25,14 +25,18 @@ import * as Result from 'effect/Result'
 import * as Stdio from 'effect/Stdio'
 import * as Stream from 'effect/Stream'
 import * as CliError from 'effect/unstable/cli/CliError'
+import {
+  type FailedRunOutcome,
+  type RunOutcomeDecision,
+  type RunOutcomeError,
+} from './classify-run-outcome.workflow.js'
 import { readCapturedConsole, shapeEnvelope } from './Envelope.js'
 import {
   ModeConflictError,
   ResolveModeCommand,
   type ResolveModeDecision,
-  resolveModeWorkflow,
-} from './Output.workflow.js'
-import { type FailedRunOutcome, type RunOutcomeDecision, type RunOutcomeError } from './RunOutcome.workflow.js'
+  resolveOutputMode,
+} from './resolve-output-mode.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 
 export { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
@@ -365,7 +369,7 @@ export function resolveMode(input: ModeInput): Result.Result<ResolvedMode, CliEr
     }
   }
   const command = ResolveModeCommand.make(commandInput)
-  const result = resolveModeWorkflow(command)
+  const result = resolveOutputMode(command)
   if (Result.isFailure(result)) {
     const conflict = result.failure
     return Result.fail(
@@ -867,7 +871,7 @@ export const outputModeProbeCell = Cell.layer({
         return ResolveModeCommand.make(commandInput)
       })(),
     ),
-  decide: resolveModeWorkflow,
+  decide: resolveOutputMode,
   encode: (outcome: Result.Result<ResolveModeDecision, ModeConflictError>) =>
     Result.map(outcome, decisionToResolvedMode),
   write: (outcome) =>

@@ -8,12 +8,12 @@ import {
   InPlaceInstrument,
   InstrumentCommand,
   InstrumentError,
-  instrumentWorkflow,
-} from '../Instrument.workflow.js'
+  planInstrumentation,
+} from '../plan-instrumentation.workflow.js'
 
 const InstrumentDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-engine/InstrumentDecision')
 
-describe('instrumentWorkflow', () => {
+describe('planInstrumentation', () => {
   it.prop(
     '∀d_Brand_∈Decision',
     [
@@ -25,7 +25,7 @@ describe('instrumentWorkflow', () => {
     ([decision]) => Object.getOwnPropertySymbols(decision).includes(InstrumentDecisionTypeId),
   )
   it.prop('∀c_Command_≡Decision', [S.toArbitrary(InstrumentCommand)(fc)], ([command]) => {
-    const result = instrumentWorkflow(command)
+    const result = planInstrumentation(command)
     if (command.fileCount === 0) {
       return Result.isFailure(result) && S.is(InstrumentError)(result.failure)
     }

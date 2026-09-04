@@ -12,7 +12,7 @@ import {
   DiagnosticInUnrelatedFileError,
   DiagnosticWithoutFileError,
   RetestRequired,
-} from '../Checker.workflow.js'
+} from '../check-mutants.workflow.js'
 
 const CHECK_MUTANTS_FAMILY = Symbol.for('@systemfsoftware/stryker-js-typescript-checker/CheckMutants')
 

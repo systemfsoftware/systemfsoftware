@@ -56,7 +56,7 @@ export const admitLoadedSettings = (command: AdmitCommand): HookDispatchDecision
     Match.when(false, () => new SkipHooks()),
     Match.exhaustive,
   )
-import { InterpretHookCommand, interpretHookResult, Warning } from './hooks.workflow.js'
+import { InterpretHookCommand, interpretHookResult, Warning } from './interpret-hook-result.workflow.js'
 import {
   denormalizeToolInput,
   editTargetPaths,

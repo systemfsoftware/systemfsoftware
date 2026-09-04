@@ -8,13 +8,13 @@ import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
 import {
+  admitDecodedCommand as decideFixture,
   Admitted,
-  decide as decideFixture,
   Decoded,
   Malformed as DecideMalformed,
   Rejected,
-} from './__fixtures__/InterpreterDecide.workflow.js'
-import { tracedDecide as tracedDecideFixture } from './__fixtures__/InterpreterTracedDecide.workflow.js'
+} from './__fixtures__/admit-decoded-command.workflow.js'
+import { admitTracedCommand as tracedDecideFixture } from './__fixtures__/admit-traced-command.workflow.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -246,6 +246,50 @@ Feature('Running a Cell')
         Then('the phases ran exactly in the order the interpreter reads them')((s) => {
           expect(s.outcome.trace).toEqual(['read', 'decode', 'decide', 'encode', 'write'])
           expect(s.outcome.exit).toStrictEqual(Exit.succeed('admitted:0'))
+        }),
+      ),
+    )
+    scenario(
+      'A refusal the decision returns is written as the outcome, not raised',
+      Gherkin.Do.pipe(
+        When('a Cell with tracing phases is run for an over-long command')(
+          'exit',
+          () => {
+            const trace: string[] = []
+            const traced = Cell.layer({
+              read: (command: Command) =>
+                Effect.sync(() => {
+                  trace.push('read')
+                  return { bytes: command.id }
+                }),
+              decode: (raw: Raw) => {
+                trace.push('decode')
+                return Result.succeed(new Decoded({ length: raw.bytes.length }))
+              },
+              decide: tracedDecideFixture(trace, new Admitted({ length: 0 }), new Rejected({ why: 'too long' })),
+              encode: (outcome: Result.Result<Admitted | Rejected, DecideMalformed>) => {
+                trace.push('encode')
+                return Result.match(outcome, {
+                  onSuccess: (decision) =>
+                    Match.value(decision).pipe(
+                      Match.tag('Admitted', (admitted) => ({ line: `admitted:${admitted.length}` })),
+                      Match.tag('Rejected', (rejected) => ({ line: `refused:${rejected.why}` })),
+                      Match.exhaustive,
+                    ),
+                  onFailure: (malformed) => ({ line: `malformed:${malformed.length}` }),
+                })
+              },
+              write: (output: Output) =>
+                Effect.sync(() => {
+                  trace.push('write')
+                  return output.line
+                }),
+            })
+            return Effect.exit(Cell.run(traced, { id: 'a'.repeat(101) }))
+          },
+        ),
+        Then('the run succeeds and its response carries the refusal')((s) => {
+          expect(s.exit).toStrictEqual(Exit.succeed('refused:too long'))
         }),
       ),
     )

@@ -59,7 +59,7 @@ const decideComplete = (command: DryRunCommand): Result.Result<DryRunDecision, D
   )
 }
 
-export const dryRunWorkflow = Workflow.make(
+export const dryRun = Workflow.make(
   DryRunCommand,
   (command: DryRunCommand): Result.Result<DryRunDecision, DryRunError> =>
     Match.value(command.status).pipe(

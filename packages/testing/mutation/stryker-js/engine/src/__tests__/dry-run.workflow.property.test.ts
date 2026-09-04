@@ -3,11 +3,11 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
 
-import { DryRunCommand, DryRunError, DryRunFailed, DryRunPassed, dryRunWorkflow } from '../DryRun.workflow.js'
+import { dryRun, DryRunCommand, DryRunError, DryRunFailed, DryRunPassed } from '../dry-run.workflow.js'
 
 const DryRunDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-engine/DryRunDecision')
 
-describe('dryRunWorkflow', () => {
+describe('dryRun', () => {
   it.prop(
     '∀d_Brand_∈Decision',
     [
@@ -19,7 +19,7 @@ describe('dryRunWorkflow', () => {
     ([decision]) => Object.getOwnPropertySymbols(decision).includes(DryRunDecisionTypeId),
   )
   it.prop('∀c_Command_≡Decision', [S.toArbitrary(DryRunCommand)(fc)], ([command]) => {
-    const result = dryRunWorkflow(command)
+    const result = dryRun(command)
     if (command.status === 'Error') {
       return (
         Result.isFailure(result) &&

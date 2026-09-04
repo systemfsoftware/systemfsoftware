@@ -60,6 +60,14 @@ export class ReadConfigCommand extends S.TaggedClass<ReadConfigCommand>()('ReadC
   basePath: S.String,
 }) {}
 
+export class MergeCommand extends S.TaggedClass<MergeCommand>()('MergeCommand', {
+  base: S.Record(S.String, S.Unknown),
+  overrides: S.Record(S.String, S.Unknown),
+}) {}
+
+export class MergeResult extends S.TaggedClass<MergeResult>()('MergeResult', {
+  merged: S.Record(S.String, S.Unknown),
+}) {}
 export const survivorsPriorReport = S.optionalKey(
   S.String.pipe(
     S.annotate({

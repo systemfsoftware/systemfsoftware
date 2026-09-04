@@ -13,15 +13,15 @@ import * as Predicate from 'effect/Predicate'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import * as CliError from 'effect/unstable/cli/CliError'
+import { SurvivorsRejection } from './admit-survivors-run.workflow.js'
 import {
+  classifyRunOutcome as classifyRunOutcomeWorkflow,
   type FailedRunOutcome,
   RunOutcomeCommand,
   type RunOutcomeDecision,
   type RunOutcomeError,
-  runOutcomeWorkflow,
-} from './RunOutcome.workflow.js'
+} from './classify-run-outcome.workflow.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
-import { SurvivorsRejection } from './Survivors.workflow.js'
 
 const CONFIG_CODE = 2
 
@@ -517,7 +517,7 @@ export function classifyRunOutcome(
   signal: number | null,
   argv: readonly string[],
 ): Result.Result<RunOutcomeDecision, RunOutcomeError> {
-  return runOutcomeWorkflow(gatherRunOutcome(exit, signal, argv))
+  return classifyRunOutcomeWorkflow(gatherRunOutcome(exit, signal, argv))
 }
 
 export function buildErrorEnvelope(

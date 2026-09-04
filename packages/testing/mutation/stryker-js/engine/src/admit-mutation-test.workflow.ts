@@ -37,7 +37,7 @@ const toKind = (command: MutationTestCommand): 'DryRunOnly' | 'NoTests' | 'Proce
   return 'Proceed'
 }
 
-export const mutationTestWorkflow = Workflow.make(
+export const admitMutationTest = Workflow.make(
   MutationTestCommand,
   (command: MutationTestCommand): Result.Result<MutationTestDecision, MutationTestError> => {
     if (command.testCount < 0) {

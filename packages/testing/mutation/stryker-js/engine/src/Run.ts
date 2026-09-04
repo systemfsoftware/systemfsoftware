@@ -49,19 +49,19 @@ import * as Semaphore from 'effect/Semaphore'
 import * as Stream from 'effect/Stream'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 
+import { admitMutationTest, MutationTestError } from './admit-mutation-test.workflow.js'
+import type { MutationTestDecision } from './admit-mutation-test.workflow.js'
 import type { CheckerResourceService } from './Checker.js'
 import { checkGroupedPlans, createCheckerFactory } from './Checker.js'
 import { forkCoreSchema, readConfig, validateOptions, type ValidationSchemaDocument } from './Config.js'
-import { DryRunCommand, dryRunWorkflow } from './DryRun.workflow.js'
+import { dryRun, DryRunCommand } from './dry-run.workflow.js'
 import { REMEMBERED_REASON, toRelativeNormalizedFileName } from './IncrementalDiff.paths.js'
-import { InstrumentCommand, instrumentWorkflow } from './Instrument.workflow.js'
 import { decidePlans, incrementalDiff } from './Mutants.js'
 import type { TestCoverage } from './Mutants.js'
 import { testCoverageFrom } from './Mutants.js'
 import { MutationTestCommand } from './MutationTest.schema.js'
-import { MutationTestError, mutationTestWorkflow } from './MutationTest.workflow.js'
-import type { MutationTestDecision } from './MutationTest.workflow.js'
 import type { ResolvedMode } from './output-mode.js'
+import { InstrumentCommand, planInstrumentation } from './plan-instrumentation.workflow.js'
 import { createAll } from './Plugins.js'
 import { loadPlugins } from './Plugins.js'
 import type { LoadedPlugins } from './Plugins.js'
@@ -561,7 +561,7 @@ export const instrumentCell = Cell.layer({
         pluginCount: raw.prev.loadedPlugins.pluginModulePaths.length,
       }),
     ),
-  decide: instrumentWorkflow,
+  decide: planInstrumentation,
   encode: (outcome) => outcome,
   write: (output, raw) =>
     Effect.gen(function*() {
@@ -713,7 +713,7 @@ export const dryRunCell = Cell.layer({
       }),
     )
   },
-  decide: dryRunWorkflow,
+  decide: dryRun,
   encode: (outcome) => outcome,
   write: (outcome, raw) =>
     Effect.gen(function*() {
@@ -816,7 +816,7 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
         isZero: raw.prev.dryRunResult.tests.length === 0,
       }),
     ),
-  decide: mutationTestWorkflow,
+  decide: admitMutationTest,
   encode: (outcome) => outcome,
   write: (
     outcome: Result.Result<MutationTestDecision, MutationTestError>,

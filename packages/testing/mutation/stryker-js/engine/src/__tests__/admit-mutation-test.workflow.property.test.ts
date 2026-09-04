@@ -3,18 +3,18 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
 
-import { MutationTestCommand } from '../MutationTest.schema.js'
 import {
+  admitMutationTest,
   MutationTestDryRunOnly,
   MutationTestError,
   MutationTestNoTests,
   MutationTestProceed,
-  mutationTestWorkflow,
-} from '../MutationTest.workflow.js'
+} from '../admit-mutation-test.workflow.js'
+import { MutationTestCommand } from '../MutationTest.schema.js'
 
 const MutationTestDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-engine/MutationTestDecision')
 
-describe('mutationTestWorkflow', () => {
+describe('admitMutationTest', () => {
   it.prop(
     '∀d_Brand_∈Decision',
     [
@@ -27,7 +27,7 @@ describe('mutationTestWorkflow', () => {
     ([decision]) => Object.getOwnPropertySymbols(decision).includes(MutationTestDecisionTypeId),
   )
   it.prop('∀c_Command_≡Decision', [S.toArbitrary(MutationTestCommand)(fc)], ([command]) => {
-    const result = mutationTestWorkflow(command)
+    const result = admitMutationTest(command)
     if (command.testCount < 0) {
       return Result.isFailure(result) && S.is(MutationTestError)(result.failure)
     }

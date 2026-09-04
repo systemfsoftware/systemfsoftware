@@ -8,8 +8,6 @@ import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
 
-import { SURVIVORS_RUN_FIRST_REMEDIATION } from '../Survivors.js'
-import { extractSurvivors, type HashContent, priorSourceHashes, sourceContentHash } from '../Survivors.js'
 import {
   admitSurvivorsRun,
   AdmitSurvivorsRunCommand,
@@ -18,7 +16,9 @@ import {
   PriorReportFacts,
   SurvivorsAdmission,
   SurvivorsRejection,
-} from '../Survivors.workflow.js'
+} from '../admit-survivors-run.workflow.js'
+import { SURVIVORS_RUN_FIRST_REMEDIATION } from '../Survivors.js'
+import { extractSurvivors, type HashContent, priorSourceHashes, sourceContentHash } from '../Survivors.js'
 const stringArrayEquivalence = Equivalence.Array(Equivalence.String)
 
 const sha256Hex: HashContent = (content) => bytesToHex(sha256(utf8ToBytes(content)))

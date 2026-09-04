@@ -35,6 +35,8 @@ import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
+import { interpretVitestRun, VitestMutantRunCommand } from './interpret-vitest-run.workflow.js'
+import type { VitestMutantRunError, VitestMutantRunOutput } from './interpret-vitest-run.workflow.js'
 import {
   CoverageDecodeFailed,
   DryRunComplete,
@@ -50,8 +52,6 @@ import {
   VitestPackageSchema,
   VitestSectionSchema,
 } from './Runner.schema.js'
-import { VitestMutantRunCommand, vitestMutantRunWorkflow } from './VitestMutantRun.workflow.js'
-import type { VitestMutantRunError, VitestMutantRunOutput } from './VitestMutantRun.workflow.js'
 
 export class VitestHarness extends Context.Service<VitestHarness, {
   readonly setMode: (mode: 'dry-run' | 'mutant') => Effect.Effect<void, TestRunnerFailed>
@@ -1042,7 +1042,7 @@ export const makeVitestRunnerLayer = (
           }
           return Result.succeed(new VitestMutantRunCommand(base))
         },
-        decide: vitestMutantRunWorkflow,
+        decide: interpretVitestRun,
         encode: (outcome: Result.Result<VitestMutantRunOutput, VitestMutantRunError>) =>
           Result.match(outcome, {
             onFailure: (e) => ({ status: 'error' as const, errorMessage: e.message }) satisfies MutantRunResult,

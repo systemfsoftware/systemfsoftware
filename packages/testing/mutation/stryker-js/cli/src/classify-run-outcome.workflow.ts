@@ -129,7 +129,7 @@ function classify(command: RunOutcomeCommand): RunOutcomeDecision | RunOutcomeEr
   return RunFailed.make({ code: 1, diagnostic: command.diagnostic })
 }
 
-export const runOutcomeWorkflow = Workflow.make(
+export const classifyRunOutcome = Workflow.make(
   RunOutcomeCommand,
   (command): Result.Result<RunOutcomeDecision, RunOutcomeError> =>
     Match.value(classify(command)).pipe(

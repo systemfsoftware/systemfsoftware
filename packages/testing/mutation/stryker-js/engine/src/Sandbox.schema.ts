@@ -74,3 +74,16 @@ export type TSConfig = S.Schema.Type<typeof TsConfigSchema>
 
 /** A tsconfig `extends` entry list: the array form of `extends`. */
 export const ExtendsArraySchema = S.Array(S.String)
+export class SandboxCommand extends S.TaggedClass<SandboxCommand>()('SandboxCommand', {
+  fileEntries: S.Array(S.Struct({ name: S.String, hasChanges: S.Boolean })),
+  basePath: S.String,
+  workingDirectory: S.String,
+  backupDirectory: S.String,
+  inPlace: S.Boolean,
+}) {}
+
+export class SandboxDecision extends S.TaggedClass<SandboxDecision>()('SandboxDecision', {
+  entries: S.Array(
+    S.Struct({ original: S.String, target: S.String, needsBackup: S.Boolean }),
+  ),
+}) {}

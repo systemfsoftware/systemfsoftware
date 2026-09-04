@@ -3,13 +3,13 @@ import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Effect, Match, Result } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import { decodeRecord, readString } from '../record.js'
-import { NoDelegateSkills } from './config.js'
 import {
   CheckDelegationCommand,
   checkNoSkillDelegation,
   type CompiledGuard,
   type DelegationVerdict,
-} from './delegation.workflow.js'
+} from './check-no-skill-delegation.workflow.js'
+import { NoDelegateSkills } from './config.js'
 
 export type BlockResult = {
   readonly block: true

@@ -2,6 +2,10 @@ import { type Workflow } from '@systemfsoftware/effect-cell-types'
 import type { Result } from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
+import {
+  acceptTaggedCommand as decideTagged,
+  type FixtureDecision,
+} from '../tests/__fixtures__/accept-tagged-command.workflow.js'
 import { CommandRefused, StructCmd, TaggedCmd, UntaggedCmd } from '../tests/__fixtures__/Command.schema.js'
 import {
   Decision,
@@ -10,11 +14,10 @@ import {
   DecisionTwo,
   LoneDecision,
 } from '../tests/__fixtures__/Decision.schema.js'
-import { decideTagged, type FixtureDecision } from '../tests/__fixtures__/TaggedCommand.workflow.js'
 import {
-  decideWidened,
+  refuseWidenedCommand as decideWidened,
   type WidenedDecision as WidenedFixtureDecision,
-} from '../tests/__fixtures__/WidenedCommand.workflow.js'
+} from '../tests/__fixtures__/refuse-widened-command.workflow.js'
 
 interface Cmd {
   readonly _tag: 'Cmd'

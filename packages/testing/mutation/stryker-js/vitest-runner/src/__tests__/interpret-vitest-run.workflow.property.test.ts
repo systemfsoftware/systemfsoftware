@@ -5,6 +5,7 @@ import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
 
 import {
+  interpretVitestRun,
   MutantDryError,
   MutantKilled,
   MutantSurvived,
@@ -12,8 +13,7 @@ import {
   VitestMutantRunCommand,
   VitestMutantRunError,
   type VitestMutantRunOutput,
-  vitestMutantRunWorkflow,
-} from '../VitestMutantRun.workflow.js'
+} from '../interpret-vitest-run.workflow.js'
 
 const VITEST_MUTANT_RUN_FAMILY = Symbol.for('@systemfsoftware/stryker-js-vitest-runner/VitestMutantRun')
 
@@ -70,12 +70,12 @@ const testsIn = (
   return { ids, failed }
 }
 
-describe('vitestMutantRunWorkflow', () => {
+describe('interpretVitestRun', () => {
   it.prop(
     '∀c_Decision_≡BrandedAndKnown',
     [Schema.toArbitrary(VitestMutantRunCommand)(fc)],
     ([input]) => {
-      const result = vitestMutantRunWorkflow(input)
+      const result = interpretVitestRun(input)
       const tag = tagOf(result)
       const known = tag === 'Killed' ||
         tag === 'Survived' ||
@@ -101,7 +101,7 @@ describe('vitestMutantRunWorkflow', () => {
     ],
     ([input, hitLimit, extra]) => {
       const hitCount = hitLimit + extra
-      const result = vitestMutantRunWorkflow(commandWith(input, { hitCount, hitLimit }))
+      const result = interpretVitestRun(commandWith(input, { hitCount, hitLimit }))
       if (!Result.isSuccess(result)) {
         return false
       }
@@ -120,7 +120,7 @@ describe('vitestMutantRunWorkflow', () => {
     '→e_ExternalErrorAlone_=DryError',
     [Schema.toArbitrary(VitestMutantRunCommand)(fc)],
     ([input]) => {
-      const result = vitestMutantRunWorkflow(
+      const result = interpretVitestRun(
         commandWith(input, {
           rawTests: [],
           hasExternalError: true,
@@ -150,7 +150,7 @@ describe('vitestMutantRunWorkflow', () => {
       fc.string({ maxLength: 32 }),
     ],
     ([input, name, message]) => {
-      const result = vitestMutantRunWorkflow(
+      const result = interpretVitestRun(
         commandWith(input, {
           rawTests: [
             {
@@ -192,7 +192,7 @@ describe('vitestMutantRunWorkflow', () => {
     '→t_PassedTest_=Survived',
     [Schema.toArbitrary(VitestMutantRunCommand)(fc), fc.string({ minLength: 1, maxLength: 24 })],
     ([input, name]) => {
-      const result = vitestMutantRunWorkflow(
+      const result = interpretVitestRun(
         commandWith(input, {
           rawTests: [
             {

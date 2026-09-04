@@ -3,8 +3,12 @@ import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Effect, Match, Result } from 'effect'
 import * as FileSystem from 'effect/FileSystem'
 import { decodeRecord, readString } from '../record.js'
+import {
+  CheckDispatchCommand,
+  checkDispatchDoctrine,
+  type DispatchDoctrineVerdict,
+} from './check-dispatch-doctrine.workflow.js'
 import { DispatchDoctrineSkills } from './config.js'
-import { CheckDispatchCommand, checkDispatchDoctrine, type DispatchDoctrineVerdict } from './doctrine.workflow.js'
 export const DOCTRINE_KERNEL =
   `Refuse monolithic dispatches: size the unit, specify it completely, then dispatch — or do the work inline.
 

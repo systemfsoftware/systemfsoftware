@@ -3,7 +3,7 @@ import { Exit, Option, Result } from 'effect'
 import { Schema as S } from 'effect'
 import { FastCheck as fc } from 'effect/testing'
 import { HookOutputFromStdout, type ParsedHookOutput } from '../hooks.schema.js'
-import { InterpretHookCommand, interpretHookResult } from '../hooks.workflow.js'
+import { InterpretHookCommand, interpretHookResult } from '../interpret-hook-result.workflow.js'
 
 const parseHookOutput = S.decodeUnknownExit(HookOutputFromStdout)
 

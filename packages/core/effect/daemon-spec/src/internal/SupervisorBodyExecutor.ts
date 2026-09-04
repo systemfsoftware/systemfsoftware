@@ -11,10 +11,10 @@ import type { BootedChild, Supervision, SupervisionContext } from '../Supervisio
 import { allocateSupervisorHealth } from './AllocateSupervisorHealth.js'
 import { allocateWorkerHealth } from './AllocateWorkerHealth.js'
 import { buildWorkerLoop } from './BuildWorkerLoop.js'
+import { chooseRestartStrategy, type RestartDecisionRestart } from './choose-restart-strategy.workflow.js'
 import { type IntensityTracker, make as makeIntensity, neverExceeds } from './Intensity.js'
 import { raceForExit } from './RaceForExit.js'
 import { type RestartStrategy } from './RestartDecision.schema.js'
-import { decideRestart, type RestartDecisionRestart } from './RestartDecision.workflow.js'
 import {
   ContinueSupervision,
   CooldownEpoch,
@@ -86,7 +86,7 @@ const restartDescription = <R>(spec: {
         exitSuccess: false,
         intensityExceeded,
       }),
-    decide: decideRestart,
+    decide: chooseRestartStrategy,
     encode: (outcome) => outcome,
     write: (outcome) =>
       Result.match(outcome, {

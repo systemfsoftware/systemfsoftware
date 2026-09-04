@@ -531,4 +531,4 @@ const decideVitestMutantRun = (
     Match.exhaustive,
   )
 
-export const vitestMutantRunWorkflow = Workflow.make(VitestMutantRunCommand, decideVitestMutantRun)
+export const interpretVitestRun = Workflow.make(VitestMutantRunCommand, decideVitestMutantRun)

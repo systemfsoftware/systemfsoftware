@@ -76,7 +76,7 @@ export type RestartDecisionWorkflow = Workflow.Workflow<
 >
 
 /** @internal */
-export const decideRestart = Workflow.make(
+export const chooseRestartStrategy = Workflow.make(
   DecideInput,
   (command): RestartDecisionOutcome =>
     Match.value(command).pipe(
@@ -162,7 +162,7 @@ if (import.meta.vitest !== void 0) {
    * which is what this observes.
    */
   it('Should_CarryTheDecisionBrand_When_DecidingARestart', () => {
-    const decided = decideRestart({
+    const decided = chooseRestartStrategy({
       strategy: 'one_for_one',
       totalChildren: 3,
       failedIndex: 1,

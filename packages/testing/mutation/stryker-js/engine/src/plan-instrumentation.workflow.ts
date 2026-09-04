@@ -34,7 +34,7 @@ export class EphemeralInstrument extends S.TaggedClass<EphemeralInstrument>()('E
 
 export type InstrumentDecision = InPlaceInstrument | EphemeralInstrument
 
-export const instrumentWorkflow = Workflow.make(
+export const planInstrumentation = Workflow.make(
   InstrumentCommand,
   (command: InstrumentCommand): Result.Result<InstrumentDecision, InstrumentError> => {
     if (command.fileCount === 0) {

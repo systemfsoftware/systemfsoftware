@@ -28,7 +28,7 @@ export class Malformed extends S.TaggedError<Malformed>()('Malformed', {
   readonly [DecisionTypeId] = DecisionTypeId
 }
 
-export const decide = Workflow.make(
+export const admitDecodedCommand = Workflow.make(
   Decoded,
   (decoded: Decoded): Result.Result<Admitted | Rejected, Malformed> =>
     Match.value(decoded.length < 0).pipe(

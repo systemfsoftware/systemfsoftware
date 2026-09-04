@@ -3,7 +3,7 @@
  *
  * The prior-report decoding, source hashing, mutant conversion, and admission
  * pipeline for --survivors runs. Pure admission decision lives in
- * Survivors.workflow.ts.
+ * admit-survivors-run.workflow.ts.
  */
 import { sha256 } from '@noble/hashes/sha256'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils'
@@ -27,7 +27,7 @@ import * as Match from 'effect/Match'
 import * as Path from 'effect/Path'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { PriorReportDocument as PriorReportDocumentSchema } from './Survivors.workflow.js'
+import { PriorReportDocument as PriorReportDocumentSchema } from './admit-survivors-run.workflow.js'
 export type PriorReportDocument = S.Schema.Type<typeof PriorReportDocumentSchema>
 export type PriorReportMutant = PriorReportDocument['files'][string]['mutants'][number]
 import {
@@ -36,7 +36,7 @@ import {
   PriorReportFacts,
   type SurvivorsAdmission,
   SurvivorsRejection,
-} from './Survivors.workflow.js'
+} from './admit-survivors-run.workflow.js'
 
 export const DEFAULT_SURVIVORS_PRIOR_REPORT = 'reports/mutation-report.json'
 
