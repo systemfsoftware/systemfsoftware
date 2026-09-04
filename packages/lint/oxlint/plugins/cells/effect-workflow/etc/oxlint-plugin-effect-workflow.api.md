@@ -12,11 +12,13 @@ const _default: {
         name: string;
     };
     rules: {
+        'damp-workflow-stem': Rule;
         'make-file-location': Rule;
         'workflow-match-exhaustive': Rule;
         'make-body-purity': Rule;
         'make-command-schema': Rule;
         'workflow-file-export-topology': Rule;
+        'workflow-file-make-presence': Rule;
     };
     configs: {
         recommended: {

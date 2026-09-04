@@ -1,7 +1,9 @@
+import { dampWorkflowStem } from './rules/damp-workflow-stem.js'
 import { makeBodyPurity } from './rules/make-body-purity.js'
 import { makeCommandSchema } from './rules/make-command-schema.js'
 import { makeFileLocation } from './rules/make-file-location.js'
 import { workflowFileExportTopology } from './rules/workflow-file-export-topology.js'
+import { workflowFileMakePresence } from './rules/workflow-file-make-presence.js'
 import { workflowMatchExhaustive } from './rules/workflow-match-exhaustive.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-effect-workflow'
@@ -40,11 +42,13 @@ export default {
     name: PLUGIN_NAME,
   },
   rules: {
+    'damp-workflow-stem': dampWorkflowStem,
     'make-file-location': makeFileLocation,
     'workflow-match-exhaustive': workflowMatchExhaustive,
     'make-body-purity': makeBodyPurity,
     'make-command-schema': makeCommandSchema,
     'workflow-file-export-topology': workflowFileExportTopology,
+    'workflow-file-make-presence': workflowFileMakePresence,
   },
   configs: {
     recommended: {
