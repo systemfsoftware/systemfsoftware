@@ -1096,6 +1096,10 @@
     - verdict-reaches-the-exit-code
     - worker-calls-are-declared-not-guessed
     - worker-calls-no-longer-lose-their-replies
+"@systemfsoftware/stryker-js-engine@0.3.0":
+  dir: packages/testing/mutation/stryker-js/engine
+  intents:
+    - silly-coins-shine
 "@systemfsoftware/stryker-js-html-reporter@0.1.0":
   dir: packages/testing/mutation/stryker-js/html-reporter
   intents:
