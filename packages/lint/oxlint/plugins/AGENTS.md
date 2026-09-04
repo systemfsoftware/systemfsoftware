@@ -21,6 +21,10 @@ Shared rule-authoring conventions for every oxlint plugin in this subtree. Root 
 | **OX-IN1** | `configs.recommended` contains only `rules`; never `plugins`.                                                                                                                                                                                                                                              | `review` — `Object.keys(configs.recommended)` is `['rules']`                                                                                                                                                       |
 | **OX-RT1** | An enabled-but-unwanted rule is `off`, NEVER `warn` — a `warn` rule still runs and still costs per-file time. Population is gated on aggregate false positives and runtime, not rule count.                                                                                                                | `review`                                                                                                                                                                                                           |
 
+## Topology
+
+`meta/core` (`@systemfsoftware/oxlint-plugin`) is the family's only public package: a re-key aggregate that imports the three private leaves and re-registers their rules under its own namespace, so consumer rule ids and the public name stay stable. The leaves — `meta/effect-native`, `meta/tag-discipline`, `meta/structure` — are `private: true`, bundled into the aggregate's dist as devDependencies (types inlined via `bundledPackages`), and each owns a `stryker.config.json` for its own mutation cell; the aggregate owns none. A split motivated by an internal budget (mutation wall-clock, build time) stays private and inlined; minting a public name is a consumer-side cohesion decision.
+
 ## Verification
 
 `pnpm --filter <pkg> typecheck && pnpm --filter <pkg> test && pnpm --filter <pkg> lint` per package; root `pnpm check:local` after any change.
