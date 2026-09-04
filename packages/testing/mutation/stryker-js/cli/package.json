@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/stryker-js-cli",
-  "version": "4.0.3",
+  "version": "5.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
@@ -50,9 +50,9 @@
     "@systemfsoftware/stryker-test-contribution": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
-    "mutation-testing-report-schema": "catalog:stryker",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "mutation-testing-report-schema": "catalog:stryker",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "testcontainers": "catalog:",

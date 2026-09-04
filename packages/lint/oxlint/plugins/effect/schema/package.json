@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-effect-schema",
   "license": "Apache-2.0",
-  "version": "5.0.1",
+  "version": "5.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
