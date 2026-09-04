@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { type ImportOrigin, resolveImportOrigin } from './ImportOrigin.js'
+import { isSchemaVocabularyOrigin, resolveImportOrigin } from './ImportOrigin.js'
 import {
   ACTUAL,
   EXPECTED,
@@ -139,9 +139,6 @@ const schemaMemberNameOf = (member: ESTree.Node, getScope: GetScope): string | n
   if (origin.source === 'effect' && origin.importedName === 'Schema') return origin.path[0] ?? null
   return null
 }
-
-const isSchemaVocabularyOrigin = (origin: ImportOrigin): boolean =>
-  origin.source === 'effect/Schema' || (origin.source === 'effect' && origin.importedName === 'Schema')
 
 /** TS expression wrappers that carry a chain without changing what it denotes. */
 const unwrap = (node: ESTree.Node): ESTree.Node => {

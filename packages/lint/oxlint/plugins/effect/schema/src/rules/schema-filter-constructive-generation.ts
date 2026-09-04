@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { resolveImportOrigin } from './ImportOrigin.js'
+import { isSchemaVocabularyOrigin, resolveImportOrigin } from './ImportOrigin.js'
 import {
   LEGACY_ACTUAL,
   LEGACY_EXPECTED,
@@ -27,12 +27,9 @@ const isScopeLike = (value: unknown): value is ScopeLike =>
 
 const isNotSpread = (node: ESTree.Node | ESTree.SpreadElement): node is ESTree.Node => node.type !== 'SpreadElement'
 
-const isVocabularyOrigin = (origin: { readonly source: string; readonly importedName: string | null }): boolean =>
-  origin.source === 'effect/Schema' || (origin.source === 'effect' && origin.importedName === 'Schema')
-
 const vocabularyMemberOf = (node: ESTree.Node, getScope: GetScope): string | null => {
   const origin = resolveImportOrigin(node, getScope)
-  if (origin === null || !isVocabularyOrigin(origin)) return null
+  if (origin === null || !isSchemaVocabularyOrigin(origin)) return null
   const sequence = origin.importedName === null ? origin.path : [origin.importedName, ...origin.path]
   return sequence[sequence.length - 1] ?? null
 }
