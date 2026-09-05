@@ -1,6 +1,26 @@
 #!/usr/bin/env sh
-# Refuse a push whose refs do not contain remote main.
-# Local main is not the source of truth — fetch the remote tip.
-# stderr from the script is the gate's product output.
 set -e
-./scripts/guards/check-remote-main.ts "$@"
+remote=origin
+
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+if [ "$branch" != "main" ]; then
+  exit 0
+fi
+
+main_sha=$(git ls-remote --heads "$remote" main 2>/dev/null | cut -f1)
+if [ -z "$main_sha" ]; then
+  exit 0
+fi
+
+if ! git cat-file -e "$main_sha^{commit}" 2>/dev/null; then
+  git fetch --quiet "$remote" main || {
+    echo "pre-push: could not fetch $remote main." >&2
+    exit 1
+  }
+fi
+
+if ! git merge-base --is-ancestor "$main_sha" HEAD; then
+  echo "pre-push: main is behind $remote/main ($main_sha)." >&2
+  echo "Rebase or merge $remote/main before pushing main." >&2
+  exit 1
+fi
