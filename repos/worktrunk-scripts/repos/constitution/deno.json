@@ -1,0 +1,10 @@
+{
+  "version": "0.1.0",
+  "tasks": {
+    "test": "deno run --allow-read=CONSTITUTION.md,CONSTITUTION-ARTICLES.md --allow-run=git scripts/validate-constitution.ts",
+    "prepare": "git config core.hooksPath .husky"
+  },
+  "imports": {
+    "@std/yaml": "jsr:@std/yaml@^1.2.0"
+  }
+}
