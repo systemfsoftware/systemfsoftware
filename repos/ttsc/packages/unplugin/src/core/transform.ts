@@ -12,14 +12,31 @@ import {
   type FilesystemPathIdentityContext,
   type FilesystemPathIdentityOperations,
   createFilesystemPathIdentityContext,
+  resolveFilesystemPath,
 } from "ttsc/path-identity";
 import type { TransformResult } from "unplugin";
 
 import type { ResolvedTtscUnpluginOptions } from "./options";
 import {
+  findNearestProjectTsconfig,
+  isIgnoredProjectDirectory,
+} from "./projectDiscovery";
+import {
+  CONFIG_DIR_TEMPLATE_LIST_OPTIONS,
+  CONFIG_DIR_TEMPLATE_SCALAR_OPTIONS,
+  type ITtscProjectMembershipPolicy,
+  PERMISSIVE_PROJECT_MEMBERSHIP_POLICY,
   absolutizePathsTarget,
+  mergeMembershipPolicyOverlay,
   readEffectiveTsconfigPaths,
+  readEffectiveTsconfigTemplateCompilerOptions,
+  readEffectiveTsconfigTemplateFileSpecs,
+  readProjectMembershipPolicy,
+  readTsconfigSourceSnapshot,
+  resolveConfigDirTemplatePath,
 } from "./tsconfigPaths";
+
+const TTSC_SEMANTIC_CONFIG_PATH = "TTSC_SEMANTIC_CONFIG_PATH";
 
 /**
  * The normalised transform result type that this module produces.
@@ -34,27 +51,72 @@ export type TtscTransformResult = Exclude<
 >;
 
 /**
- * Normalised alias entry used when building the `paths` overlay for the
- * generated tsconfig. Derived from either a Vite array alias or a webpack/
- * Rspack object alias.
+ * One alias entry as the host declared it, before anything decides whether a
+ * tsconfig `paths` map can express it.
+ *
+ * Both of Vite's spellings reach here, the `{ "@": "/src" }` object and the `{
+ * find, replacement }` array, and only Vite's: `aliases` is populated in
+ * `vite.configResolved` alone, and every other adapter passes `undefined`. (The
+ * previous wording credited the object form to webpack and Rspack, which never
+ * supply one.)
+ *
+ * `find` is `unknown` rather than `string` because Vite's array form accepts a
+ * `RegExp`, and narrowing it here is what used to drop that form before the one
+ * place that could report the drop ever saw it (samchon/ttsc#1315).
  */
-export interface TtscTransformAlias {
-  /** The alias key (module specifier prefix). */
-  find: string;
+interface TtscDeclaredAlias {
+  /** The alias key, as declared: a module specifier prefix, or a `RegExp`. */
+  find: unknown;
   /** Absolute or cwd-relative path that the alias points to. */
   replacement: string;
 }
 
-/** One directory's cheap project-membership identity at generation time. */
+/** One directory's project-membership identity at generation time. */
 interface TtscProjectDirectorySnapshot {
   /** Absolute directory spelling used by the project walk. */
   path: string;
-  /** Metadata signature that changes when its immediate membership changes. */
+  /**
+   * Whether this directory's subtree can hold a program input.
+   *
+   * A directory that cannot is still walked and still watched, so a source
+   * appearing in it later is noticed, but it takes no part in the membership
+   * comparison. That is what lets a bundler create its output directory and
+   * fill it without voiding a generation no compiler input touched, for any
+   * output directory rather than for fifteen names (samchon/ttsc#1307).
+   */
+  relevant: boolean;
+  /**
+   * Digest of the entries the walk itself considers: every immediate child the
+   * ignore list does not drop, with its kind.
+   *
+   * Deliberately not the directory's own metadata. A directory's stamp moves
+   * whenever _any_ entry is added or removed, including the ones the walk
+   * exists to ignore, so a bundler emitting into `dist/` — or merely creating
+   * that directory for the first time — moved the project root's stamp and
+   * voided a generation that no compiler input had touched. The ignore list
+   * only protects the generation if the membership proof honours it too.
+   */
   signature: string;
+}
+
+/** One project-walk observation that could not prove a coherent snapshot. */
+interface TtscProjectWalkFailure {
+  kind:
+    | "directory-changed-during-walk"
+    | "directory-metadata-unavailable"
+    | "directory-read-failed"
+    | "file-changed-during-read"
+    | "file-read-failed";
+  /** Absolute lexical spelling observed by the walk. */
+  path: string;
 }
 
 /** Generation-scoped directory watchers used to detect membership changes. */
 interface TtscProjectMutationTracker {
+  /** Absolute paths named by generation-time mutation events. */
+  changes: Set<string>;
+  /** Whether additional event paths were discarded after the witness bound. */
+  changesOmitted: boolean;
   close: () => void;
   /**
    * Absolute spellings whose creation, change or removal this tracker would
@@ -82,6 +144,180 @@ interface TtscProjectMutationTracker {
   settle?: Promise<void>;
 }
 
+/** One reason a whole-project transform cannot become a reusable generation. */
+interface TtscGenerationProofFailure {
+  domain: "external" | "graph" | "host" | "project";
+  /** Machine-readable failure class printed verbatim in terminal diagnostics. */
+  kind: string;
+  /** Optional producer detail, such as the native compiler observation failure. */
+  detail?: string;
+  /** Absolute lexical spelling of the input or directory that failed proof. */
+  path?: string;
+}
+
+/** Bounded proof witnesses for one transform attempt. */
+interface TtscGenerationProofFailures {
+  entries: TtscGenerationProofFailure[];
+  omitted: number;
+  seen: Set<string>;
+}
+
+/** Filesystem state that may authorize replacing one terminal failed generation. */
+interface TtscFailedGenerationValidation {
+  /** Last attempted generation, retained only as a comparison baseline. */
+  cached: TtscCachedProjectTransform;
+  /** Input keys whose content can affect the generation, or the whole walk. */
+  declaredInputs: ReadonlySet<string> | undefined;
+  /** Fingerprints of every out-of-walk and exact host input. */
+  inputStates: ReadonlyMap<string, string>;
+  /** Unmodified on-disk project hashes before the in-memory source overlay. */
+  projectInputHashes: Readonly<Record<string, string>>;
+  /** Coherence and exact failure state of the final project walk. */
+  projectWalkComplete: boolean;
+  projectWalkFailures: string;
+}
+
+/**
+ * A verdict about one generation that later deliveries replay instead of
+ * repeating the whole compile behind it.
+ *
+ * The two kinds are replayed on different evidence, and each carries its own: a
+ * pass verdict knows the pass it belongs to, and an unstable generation knows
+ * the recorded environment it was proven against.
+ */
+abstract class TtscTerminalGenerationError extends Error {}
+
+/**
+ * The compile succeeded and produced no output for one requested module,
+ * because the program does not contain it.
+ *
+ * Not a terminal generation error, and deliberately not a build failure. It is
+ * a fact about one file, and the answer to it is to leave that file to the host
+ * (samchon/ttsc#1308). It is a distinct type rather than a message match so the
+ * decision travels as a type: `@ttsc/metro` used to recognise this case by
+ * searching the message text for "did not return output", which is how one
+ * product came to hold two different answers to one condition.
+ */
+class TtscMissingProgramOutputError extends Error {
+  /** The module the bundler asked for. */
+  public readonly file: string;
+  /** The project config whose program does not contain it. */
+  public readonly tsconfig: string;
+  public constructor(file: string, tsconfig: string) {
+    super(
+      `ttsc: ${file} is not part of the program described by ${tsconfig}, so it was left untransformed. Add it to that project's "include" if ttsc plugins should apply to it.`,
+    );
+    this.name = "TtscMissingProgramOutputError";
+    this.file = file;
+    this.tsconfig = tsconfig;
+  }
+}
+
+/**
+ * A bounded proof failure that stays authoritative until its inputs change.
+ *
+ * This is the adapter failing to _obtain_ a coherent snapshot — a race it lost
+ * — so a later attempt may well succeed with the same inputs. It is retried
+ * when its recorded environment moves, and a new delivery epoch grants it the
+ * one fresh attempt the per-pass cache clear used to give it
+ * (samchon/ttsc#1300).
+ */
+class TtscUnstableGenerationError extends TtscTerminalGenerationError {
+  public readonly validation: TtscFailedGenerationValidation;
+
+  public constructor(
+    message: string,
+    validation: TtscFailedGenerationValidation,
+  ) {
+    super(message);
+    this.name = "TtscUnstableGenerationError";
+    this.validation = validation;
+  }
+}
+
+/**
+ * A compile this pass already attempted, whose envelope failed outright.
+ *
+ * The envelope cannot say whether the host reported diagnostics about the
+ * project or failed to run at all: an ordinary type error arrives as an
+ * `"exception"` carrying the compiler's own diagnostic text, exactly as a
+ * crashed host would. Sniffing that message to tell the two apart would be a
+ * guess, so the adapter uses the one boundary it genuinely owns. Inside a pass
+ * the answer is already settled, so every later module replays it instead of
+ * repeating a whole-project transform to reach the same verdict, which is what
+ * made a single broken save cost one compile per delivered module
+ * (samchon/ttsc#1303).
+ *
+ * The scope is exactly the pass. A host whose `buildStart` repeats drops the
+ * verdict at its next rebuild, so a transient host failure costs that one
+ * rebuild. A host with no pass boundary never retains one at all and keeps
+ * retrying on its very next delivery. Between them sits a host that opens
+ * exactly one pass for its whole process — Bun's runtime plugin, and a Vite dev
+ * server configured with `server.watch: null` — where the verdict lasts the
+ * session. That follows from what those hosts already publish about themselves,
+ * that their session is one immutable load session and the remedy for changed
+ * inputs is to restart, and it is the deliberate trade: without it, one type
+ * error costs such a session a whole-project compile per delivered module,
+ * which is the workload samchon/ttsc#970 is about.
+ *
+ * It carries the original error's message, stack and `cause` rather than
+ * replacing them, so what a bundler reports is what it reported before the
+ * verdict existed.
+ */
+class TtscPassVerdictError extends TtscTerminalGenerationError {
+  /** The delivery pass this verdict belongs to, and its whole scope. */
+  public readonly epoch: number;
+
+  public constructor(original: unknown, epoch: number) {
+    super(
+      original instanceof Error
+        ? original.message
+        : formatUnknownError(original),
+      { cause: original },
+    );
+    if (original instanceof Error) {
+      this.name = original.name;
+      if (original.stack !== undefined) this.stack = original.stack;
+    } else {
+      this.name = "TtscPassVerdictError";
+    }
+    this.epoch = epoch;
+  }
+}
+
+/** Proof witnesses retained beside a compiler result without extending its API. */
+const TRANSFORM_GENERATION_FAILURES = new WeakMap<
+  ITtscCompilerTransformation,
+  TtscGenerationProofFailures
+>();
+
+/** Retry baselines retained only for attempts that could not be published. */
+const TRANSFORM_FAILED_GENERATION_VALIDATIONS = new WeakMap<
+  ITtscCompilerTransformation,
+  TtscFailedGenerationValidation
+>();
+
+/** Internal retained clock-probe ownership for published generations. */
+const TRANSFORM_CLOCK_REFERENCE_DIRECTORIES = new WeakMap<
+  TtscCachedProjectTransform,
+  string
+>();
+
+/** Cache promises whose unchanged terminal verdict may be replayed. */
+const TERMINAL_TRANSFORM_GENERATIONS = new WeakMap<
+  Promise<TtscCachedProjectTransform>,
+  TtscTerminalGenerationError
+>();
+
+/** Maximum witnesses printed and retained for each failed transform attempt. */
+const MAX_GENERATION_PROOF_FAILURES = 8;
+
+/** Maximum exact mutation paths kept after a tracker already proved a change. */
+const MAX_GENERATION_MUTATION_PATHS = 8;
+
+/** One retry absorbs a transient watch write without admitting an infinite loop. */
+const TRANSFORM_GENERATION_ATTEMPTS = 2;
+
 /**
  * A single entry in the project transform cache.
  *
@@ -93,6 +329,11 @@ interface TtscProjectMutationTracker {
  * graph-free envelopes retain complete-snapshot validation.
  */
 export interface TtscCachedProjectTransform {
+  /** Predicate-preserving compiler proofs for external candidate spellings. */
+  externalInputObservations?: Record<
+    string,
+    ITtscCompilerTransformation.IInputObservation
+  >;
   /**
    * SHA-256 hash of every input the compiler reported outside the project walk
    * (keyed by filesystem identity), captured at the time of the transform.
@@ -139,6 +380,28 @@ export interface TtscCachedProjectTransform {
    */
   inputHashes: Record<string, string>;
   /**
+   * What the resolved configuration admitted into this generation's program.
+   *
+   * Recorded per generation rather than read per validation because it is a
+   * property of the configuration the compile ran under, so a later delivery
+   * must judge membership by the same rule the compile did. A tsconfig edit
+   * that changes the rule also changes a declared input, which replaces the
+   * generation and its policy together.
+   */
+  membershipPolicy: ITtscProjectMembershipPolicy;
+  /**
+   * Files already reported as absent from the program, and the pass that
+   * reporting belongs to, so the notice is one per file per pass rather than
+   * one per delivery.
+   */
+  missingOutputReported?: Set<string>;
+  missingOutputEpoch?: number;
+  /**
+   * The project config this generation compiled, so a module the program does
+   * not contain can be told which program that was.
+   */
+  tsconfig: string;
+  /**
    * Metadata signature of each {@link inputHashes} entry whose hash was proven
    * against an unracing read of the file on disk, in a tick the observed
    * filesystem's clock had provably left ({@link stampSeparable}).
@@ -149,6 +412,13 @@ export interface TtscCachedProjectTransform {
    * disk bytes against the recorded hash, and may record a signature then.
    */
   inputSignatures?: Record<string, string>;
+  /**
+   * Raw source hash of every readable key in the transform output, keyed by
+   * filesystem identity. Unlike {@link inputHashes}, this includes source
+   * outputs outside the project walk without adding arbitrary output keys to
+   * the complete project snapshot.
+   */
+  sourceHashes?: Record<string, string>;
   /** Metadata snapshot of every directory in the stable generation walk. */
   projectDirectories?: TtscProjectDirectorySnapshot[];
   /** Live notification state for universal host-input changes. */
@@ -183,6 +453,8 @@ export interface TtscCachedProjectTransform {
   hostInputValidation?: TtscHostInputValidation;
   /** Live notification state for file/directory creation, deletion, and rename. */
   projectMutationTracker?: TtscProjectMutationTracker;
+  /** Whether a generated wrapper and its source config graph stayed coherent. */
+  configStateComplete?: boolean;
   /**
    * Whether the generation-time project walk observed every directory and file
    * it attempted to snapshot. An incomplete walk may never authorize narrow
@@ -194,18 +466,49 @@ export interface TtscCachedProjectTransform {
   /** Raw compiler output returned by {@link TtscCompiler.transform}. */
   result: ITtscCompilerTransformation;
   /**
+   * The delivery epoch this generation is currently settled against, or
+   * `undefined` for a generation no epoch has proven.
+   *
+   * Set when the generation is compiled, and again whenever a later epoch's
+   * first delivery proves the whole generation still matches the filesystem.
+   * While it equals the cache's current epoch, each module's first delivery is
+   * settled by the supplied source alone, exactly as it was when every pass
+   * compiled its own generation (samchon/ttsc#1300).
+   */
+  deliveryEpoch?: number;
+  /**
+   * Whether this generation's non-error diagnostics have been surfaced at all,
+   * and the epoch they were last surfaced in.
+   *
+   * The diagnostics describe one compile of one program, so they belong to the
+   * generation rather than to a delivery; a pass that reuses a retained
+   * generation still surfaces them once, because a build's warnings are part of
+   * what that build reports (samchon/ttsc#1304). The two fields are separate so
+   * a persistent host, whose epoch is `undefined`, still reports the first
+   * time.
+   */
+  diagnosticsReported?: boolean;
+  diagnosticsEpoch?: number;
+  /**
    * Files already delivered from this generation, keyed by filesystem identity.
-   * Build-scoped caches use this to skip persistent validation only for a
-   * module's first delivery inside the current build.
+   * A cache with a delivery epoch uses this to skip persistent validation only
+   * for a module's first delivery inside the current pass; the set is cleared
+   * whenever a new epoch's gate re-proves the generation.
    */
   servedFiles?: Set<string>;
+  /**
+   * Absolute path of the adapter-owned scratch directory used for this
+   * generation. It is disposed after compilation, so none of its compiler,
+   * resolver, or plugin artifacts can be a persistent cache or watch input.
+   */
+  scratchDirectory?: string;
   /**
    * Absolute path of the generated temp-dir tsconfig this compile ran against,
    * when an alias/compiler-options overlay required one. The compiler reports
    * it in the envelope's `graph.configs` chain, but it is disposed right after
    * the compile, so registering it as a watch input would invalidate every
-   * bundler cache snapshot on the next build; watch derivation must skip
-   * exactly this path.
+   * bundler cache snapshot on the next build; watch derivation must skip this
+   * path. {@link scratchDirectory} owns the wider disposable-input bound.
    */
   temporaryTsconfig?: string;
 }
@@ -284,10 +587,30 @@ const TRANSFORM_RESULT_FILESYSTEM = new WeakMap<
 >();
 
 /**
- * Caches whose owner has declared a real per-build lifecycle by calling
- * {@link beginTtscTransformBuild} before transforms begin.
+ * The current delivery epoch of each cache whose owner has declared a real
+ * per-pass lifecycle by calling {@link beginTtscTransformBuild}.
+ *
+ * A _delivery epoch_ is one bundler pass: the window inside which each module
+ * is requested at most once, so its first delivery may be settled against the
+ * state the pass started from. It is deliberately not the same fact as whether
+ * the generation is still valid, which the recorded snapshot answers.
+ * Conflating the two is what made every host with a repeating `buildStart` —
+ * webpack and Rspack watch, Rollup and Rolldown watch, `vite build --watch`,
+ * esbuild rebuild — discard a perfectly good whole-project compile on every
+ * edit (samchon/ttsc#1300).
+ *
+ * Absent from the map means persistent validation: a host with no pass boundary
+ * at all (a watching Vite dev server, Metro, the Turbopack loader), where every
+ * delivery proves the generation for itself.
  */
-const BUILD_SCOPED_TRANSFORM_CACHES = new WeakSet<TtscTransformCache>();
+const TRANSFORM_CACHE_EPOCHS = new WeakMap<TtscTransformCache, number>();
+
+/** The pass a delivery belongs to, or `undefined` under persistent validation. */
+function transformCacheEpoch(
+  cache: TtscTransformCache | undefined,
+): number | undefined {
+  return cache === undefined ? undefined : TRANSFORM_CACHE_EPOCHS.get(cache);
+}
 
 function createHostPathIdentityContext(
   filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
@@ -350,28 +673,41 @@ function resultFilesystem(
 }
 
 /**
- * Start a host build, clearing its prior generation and enabling constant-time
- * first delivery for modules compiled during this build.
+ * Open a new delivery pass, enabling constant-time first delivery for every
+ * module this pass asks for.
  *
- * Hosts without a guaranteed build-start callback use persistent validation
- * unless they have another immutable lifecycle. Bun runtime setup, for example,
+ * This deliberately retains the cached generation. The pass boundary is a
+ * statement about _deliveries_ — each module is requested at most once inside
+ * it — not about whether the compiled program is still correct, which the
+ * generation's own recorded snapshot answers and which
+ * {@link matchesCachedSource} proves once at the pass's first delivery. Clearing
+ * here instead made a host whose `buildStart` repeats recompile the whole
+ * project on every rebuild even when no compiler input had changed
+ * (samchon/ttsc#1300). Use {@link resetTtscTransformCache} to actually discard a
+ * generation and its watchers.
+ *
+ * Hosts without a guaranteed pass boundary use persistent validation unless
+ * they have another immutable lifecycle. Bun runtime setup, for example,
  * defines one process-scoped module-loading session.
  */
 export function beginTtscTransformBuild(cache: TtscTransformCache): void {
-  clearTtscTransformCache(cache);
-  BUILD_SCOPED_TRANSFORM_CACHES.add(cache);
+  TRANSFORM_CACHE_EPOCHS.set(
+    cache,
+    (TRANSFORM_CACHE_EPOCHS.get(cache) ?? 0) + 1,
+  );
 }
 
 /**
- * Clear a cache and return it to persistent validation mode.
+ * Discard every generation, dispose its watchers, and return the cache to
+ * persistent validation mode.
  *
- * This is distinct from {@link beginTtscTransformBuild}: hosts such as Vite's
- * development server may invoke `buildStart` only once for a process that spans
- * many edits, so that callback cannot authorize build-scoped shortcuts.
+ * This is the unconditional lifecycle boundary, and it is distinct from
+ * {@link beginTtscTransformBuild}: a pass ending is not a reason to throw a
+ * proven compile away, while a session ending is.
  */
 export function resetTtscTransformCache(cache: TtscTransformCache): void {
   clearTtscTransformCache(cache);
-  BUILD_SCOPED_TRANSFORM_CACHES.delete(cache);
+  TRANSFORM_CACHE_EPOCHS.delete(cache);
 }
 
 /** Dispose generation-owned filesystem resources before clearing a cache. */
@@ -387,40 +723,97 @@ function clearTtscTransformCache(cache: TtscTransformCache): void {
  * What the generation already knows about one derived watch input, handed to
  * the adapter so it does not rederive it per input per delivery.
  *
- * Both facts are generation state: the identity is the memoized
- * {@link pathIdentityKey} of the input, and `missing` is the existence the
- * generation recorded and every cache hit revalidates. An adapter that computes
- * them itself pays a `realpath`, a case-sensitivity directory listing, and an
- * `existsSync` for every input of every delivered module, which is O(modules x
- * inputs) for one build (samchon/ttsc#1246).
+ * All facts are generation state: the identity is the memoized
+ * {@link pathIdentityKey} of the input, `missing` preserves the original public
+ * existence contract, and `unavailable` distinguishes a failed file predicate
+ * from ordinary absence. An adapter that computes them itself pays a
+ * `realpath`, a case-sensitivity directory listing, and an `existsSync` for
+ * every input of every delivered module, which is O(modules x inputs) for one
+ * build (samchon/ttsc#1246).
  */
 export interface TtscWatchInputEvidence {
   /** Memoized filesystem identity of the input. */
   identity: string;
-  /** Whether the generation recorded this input as absent. */
+  /** Whether the generation recorded this input as unavailable as a file. */
   missing: boolean;
+  /** The generation state Metro can compare with its main-process baseline. */
+  state?: TtscWatchInputState;
+  /** Which unavailable predicate must become true before invalidation. */
+  unavailable?: "missing" | "not-file";
+}
+
+/** Exact generation state behind one derived watch input. */
+export type TtscWatchInputState =
+  | {
+      /** A project-walk or dependency-only input read as ordinary host bytes. */
+      codec: "host";
+      hash: string;
+    }
+  | {
+      /** A realized compiler-graph input, including its physical target. */
+      codec: "graph";
+      hash: string;
+      realpath: string | null;
+    }
+  | {
+      /** The exact compiler predicates observed for a resolver input. */
+      codec: "predicates";
+      observation: ITtscCompilerTransformation.IInputObservation;
+    };
+
+/** Main-process file predicate used only by project discovery. */
+export interface TtscWatchInputFileBaseline {
+  fileExists: boolean;
+  identity: string;
+}
+
+/** Main-process state broad enough to compare every watch-input codec. */
+export interface TtscWatchInputBaseline extends TtscWatchInputFileBaseline {
+  directoryExists: boolean;
+  graphHash: string;
+  graphReadHash: string | null;
+  hostHash: string;
+  realpath: { ok: false; path?: never } | { ok: true; path: string };
+  stat: "directory" | "file" | "missing";
+}
+
+/** Baseline shape stored for either a discovery predicate or a full input. */
+export type TtscWatchInputKeyBaseline =
+  | TtscWatchInputFileBaseline
+  | TtscWatchInputBaseline;
+
+/** One derived input and its optional generation proof. */
+export interface TtscWatchInput {
+  evidence?: TtscWatchInputEvidence;
+  file: string;
 }
 
 /**
  * Hooks the bundler adapter passes into {@link transformTtsc} so transform
- * side-channels (plugin-reported dependencies and host resolution candidates)
- * reach the bundler without leaking extra fields on the returned
- * `TransformResult`.
+ * side-channels (plugin-reported dependencies and host resolver inputs) reach
+ * the bundler without leaking extra fields on the returned `TransformResult`.
  */
 export interface TtscTransformHooks {
   /**
    * Invoked once per absolute watch-input path derived for the transformed file
    * `F`: the plugin-reported `dependencies[F]` list unioned with the host-owned
    * reference graph's contribution — the reachability closure of `graph.edges`
-   * from `F`, the `graph.globals` files, the `graph.configs` chain, and missing
-   * higher-priority `graph.candidates` — or, for a file the envelope declared
-   * `dependenciesComplete`, only `dependencies[F]`, `graph.candidates`, and the
-   * universal `graph.configs` chain. Adapters forward this to the bundler's
+   * from `F`, the `graph.globals` files, the `graph.configs` chain, importer
+   * `graph.candidates`, and universal `graph.resolutionInputs`. For a file the
+   * envelope declared `dependenciesComplete`, only `dependencies[F]`,
+   * `graph.candidates`, `graph.resolutionInputs`, and the universal
+   * `graph.configs` chain remain. Adapters forward this to the bundler's
    * `addWatchFile` so type-only inputs participate in watch-mode and
    * persistent-cache invalidation. See {@link selectWatchInputs} for the exact
    * derivation.
    */
   addWatchFile?: (file: string, evidence?: TtscWatchInputEvidence) => void;
+  /**
+   * Batched form of {@link addWatchFile}. When supplied, the transform calls it
+   * once per delivered module and does not call `addWatchFile` for that
+   * module.
+   */
+  addWatchFiles?: (inputs: readonly TtscWatchInput[]) => void;
   /**
    * Invoked when the plugin declared the transformed file volatile (the
    * envelope's `volatile` list): its output depends on non-file inputs that no
@@ -446,8 +839,7 @@ export interface TtscTransformHooks {
  * @param id - Bundler module id (may carry a query string or virtual prefix).
  * @param source - Current file content supplied by the bundler.
  * @param options - Resolved plugin options.
- * @param aliases - Raw bundler alias configuration (Vite array or webpack
- *   object).
+ * @param aliases - Raw Vite alias configuration (object or array).
  * @param cache - Optional project cache. Callers with a real `buildStart`
  *   boundary declare it through {@link beginTtscTransformBuild}; other hosts
  *   retain persistent validation.
@@ -486,10 +878,35 @@ export async function transformTtsc(
   });
 
   for (;;) {
+    // Read once per iteration, before the cache is consulted, so a delivery
+    // belongs to the pass that was current when it started examining the
+    // generation. A pass opened while this one awaits an in-flight compile is
+    // picked up by the next iteration, which is the one that runs when the
+    // entry it awaited turns out to have been superseded.
+    const epoch = transformCacheEpoch(cache);
     let transformed = cache?.get(key);
     if (transformed !== undefined) {
-      // A rejected in-flight generation must not stay cached: evict it (only if
-      // it is still the current entry) so a later call re-runs the transform.
+      const terminal = TERMINAL_TRANSFORM_GENERATIONS.get(transformed);
+      if (terminal !== undefined) {
+        // A terminal verdict is an answer about one observed environment, not an
+        // invitation for every later module to repeat the whole compile.
+        if (
+          replaysTerminalGeneration(terminal, epoch, {
+            currentFile: file,
+            currentSource: source,
+            filesystem,
+          })
+        ) {
+          throw terminal;
+        }
+        evictGeneration(cache, key, transformed);
+        if (cache?.get(key) !== undefined) {
+          continue;
+        }
+        transformed = undefined;
+      }
+    }
+    if (transformed !== undefined) {
       const cached = await awaitOrEvict(cache, key, transformed);
       TRANSFORM_RESULT_FILESYSTEM.set(cached.result, filesystem);
       // While this caller awaited the old Promise, another caller may have
@@ -497,9 +914,7 @@ export async function transformTtsc(
       if (cache?.get(key) !== transformed) {
         continue;
       }
-      const buildScoped =
-        cache !== undefined && BUILD_SCOPED_TRANSFORM_CACHES.has(cache);
-      if (!buildScoped) {
+      if (epoch === undefined) {
         await settleProjectMutationEvents(cached);
         if (cache?.get(key) !== transformed) {
           continue;
@@ -514,16 +929,35 @@ export async function transformTtsc(
           projectRoot: cached.projectRoot,
           result: cached.result,
         }) &&
-        matchesCachedSource(cached, file, source, buildScoped)
+        matchesCachedSource(cached, file, source, epoch)
       ) {
-        reportSuccessDiagnostics(cached.result);
+        reportSuccessDiagnostics(cached, epoch);
         // A resolved `"exception"` / `"failure"` envelope makes this throw;
-        // that is a failed generation too, so evict before surfacing it.
-        const code = selectOrEvict(cache, key, transformed, {
-          file,
-          projectRoot: cached.projectRoot,
-          result: cached.result,
-        });
+        // that is a failed generation too, so it is retained for this pass or
+        // evicted outside one before being surfaced.
+        let code: string;
+        try {
+          code = selectOrEvict(cache, key, transformed, epoch, {
+            file,
+            projectRoot: cached.projectRoot,
+            result: cached.result,
+            tsconfig: cached.tsconfig,
+          });
+        } catch (error) {
+          if (!(error instanceof TtscMissingProgramOutputError)) {
+            notifyFailedGenerationInputs(hooks, cached);
+            throw error;
+          }
+          // The compile is fine and simply has nothing for this module, so the
+          // module goes back to the host untransformed rather than failing the
+          // build (samchon/ttsc#1308). Its project config and selection inputs
+          // still decide whether a later generation will contain this module,
+          // so hosts must receive the same universal watch-input batch.
+          reportMissingProgramOutput(cached, error, epoch);
+          notifyWatchInputs(hooks, cached, file);
+          markCachedSourceServed(cached, file);
+          return undefined;
+        }
         notifyWatchInputs(hooks, cached, file);
         markCachedSourceServed(cached, file);
         return createTransformResult(source, code);
@@ -544,6 +978,10 @@ export async function transformTtsc(
         compilerOptions: options.compilerOptions,
         currentFile: file,
         currentSource: source,
+        // Stamp the pass this compile was started for, not the one it happens
+        // to finish in: a boundary crossed mid-compile leaves the generation
+        // belonging to the earlier pass, so the next pass re-proves it.
+        deliveryEpoch: epoch,
         filesystem,
         plugins: options.plugins,
         trackProjectMembership: cache !== undefined,
@@ -557,12 +995,25 @@ export async function transformTtsc(
       continue;
     }
     const { projectRoot, result } = cached;
-    reportSuccessDiagnostics(result);
-    const code = selectOrEvict(cache, key, generation, {
-      file,
-      projectRoot,
-      result,
-    });
+    reportSuccessDiagnostics(cached, epoch);
+    let code: string;
+    try {
+      code = selectOrEvict(cache, key, generation, epoch, {
+        file,
+        projectRoot,
+        result,
+        tsconfig: cached.tsconfig,
+      });
+    } catch (error) {
+      if (!(error instanceof TtscMissingProgramOutputError)) {
+        notifyFailedGenerationInputs(hooks, cached);
+        throw error;
+      }
+      reportMissingProgramOutput(cached, error, epoch);
+      notifyWatchInputs(hooks, cached, file);
+      markCachedSourceServed(cached, file);
+      return undefined;
+    }
     notifyWatchInputs(hooks, cached, file);
     markCachedSourceServed(cached, file);
     if (
@@ -575,13 +1026,15 @@ export async function transformTtsc(
 }
 
 /**
- * Await a cached generation, evicting it on rejection.
+ * Await a cached generation, retaining only terminal proof failures.
  *
  * The cache stores the in-flight transform Promise before it settles so
- * concurrent callers share one compilation. A rejected generation must not
- * remain the authoritative cached result, or a transient toolchain/host failure
- * becomes permanent for a long-lived worker. Eviction is identity-guarded so a
- * newer generation another caller installed under the same key survives.
+ * concurrent callers share one compilation. Ordinary compiler and host
+ * rejections are evicted so a transient failure cannot become permanent. A
+ * bounded stabilization failure is different: it already spent its retry and
+ * repeating it for every later module recreates the issue this gate prevents.
+ * It stays authoritative until its retained input baseline changes or the cache
+ * owner starts a new lifecycle.
  */
 async function awaitOrEvict(
   cache: TtscTransformCache | undefined,
@@ -591,33 +1044,157 @@ async function awaitOrEvict(
   try {
     return await generation;
   } catch (error) {
-    evictGeneration(cache, key, generation);
+    if (
+      error instanceof TtscUnstableGenerationError &&
+      cache?.get(key) === generation
+    ) {
+      TERMINAL_TRANSFORM_GENERATIONS.set(generation, error);
+    } else {
+      evictGeneration(cache, key, generation);
+    }
     throw error;
   }
 }
 
 /**
- * Extract the transformed source, evicting the generation when the result is a
- * host `"exception"` or compiler `"failure"` (which makes
- * {@link selectTransformedSource} throw). Such a failed generation must not be
- * replayed to later callers of an unchanged module.
+ * Extract the transformed source, and decide what a throwing generation is.
+ *
+ * {@link selectTransformedSource} throws for two different reasons, and only one
+ * of them is about the generation. A host `"exception"` or a compiler
+ * `"failure"` means the compile produced nothing for anyone: inside a pass that
+ * verdict is retained and replayed, because evicting it made every remaining
+ * module repeat the whole-project transform only to reach the identical answer
+ * (samchon/ttsc#1303), and outside a pass it keeps being evicted so a
+ * long-lived worker retries on its very next delivery exactly as before.
+ *
+ * A `"success"` envelope that has no output for the module asking is the other
+ * reason, and it is a fact about that one file: an ordinary condition for a
+ * module the bundle reaches and the tsconfig program does not contain. It is
+ * neither retained nor evicted. The error reaches the caller, and the
+ * generation, which compiled perfectly well for every other module, stays.
  */
 function selectOrEvict(
   cache: TtscTransformCache | undefined,
   key: string,
   generation: Promise<TtscCachedProjectTransform>,
+  epoch: number | undefined,
   props: {
     file: string;
     projectRoot: string;
     result: ITtscCompilerTransformation;
+    tsconfig: string;
   },
 ): string {
   try {
     return selectTransformedSource(props);
   } catch (error) {
-    evictGeneration(cache, key, generation);
+    const verdict = retainPassVerdict(
+      cache,
+      key,
+      generation,
+      epoch,
+      props.result,
+      error,
+    );
+    if (verdict !== undefined) {
+      throw verdict;
+    }
+    // A generation that compiled fine and simply has no output for the module
+    // asking is not a failed generation. Discarding it made every later module
+    // recompile the whole project to reach the same answer, which is the cost
+    // samchon/ttsc#1303 is about, for a bundle that merely reaches a file the
+    // tsconfig program does not contain.
+    if (props.result.type !== "success") {
+      evictGeneration(cache, key, generation);
+    }
     throw error;
   }
+}
+
+/**
+ * Retain the verdict of a compile this pass already attempted, or return
+ * `undefined` when nothing may be retained.
+ *
+ * Only inside a delivery pass. A pass is the window in which every delivery is
+ * settled against the state the pass started from, so an attempt it already
+ * made is part of that state and the remaining modules replay it rather than
+ * each repeating a whole-project transform to reach the same answer. Outside a
+ * pass there is no such window, and a long-lived worker must keep retrying on
+ * its very next delivery so a transient host failure never becomes permanent.
+ */
+function retainPassVerdict(
+  cache: TtscTransformCache | undefined,
+  key: string,
+  generation: Promise<TtscCachedProjectTransform>,
+  epoch: number | undefined,
+  result: ITtscCompilerTransformation,
+  error: unknown,
+): TtscTerminalGenerationError | undefined {
+  // Only an envelope that failed outright is a statement about the generation.
+  // `selectTransformedSource` also throws for a file the compile simply has no
+  // output for, which is an ordinary condition for a module the bundle reaches
+  // but the tsconfig program does not contain, and which says nothing about the
+  // other modules. Retaining that would fail the whole pass, naming a file none
+  // of them asked about.
+  if (
+    result.type === "success" ||
+    epoch === undefined ||
+    cache?.get(key) !== generation
+  ) {
+    return undefined;
+  }
+  const existing = TERMINAL_TRANSFORM_GENERATIONS.get(generation);
+  if (existing !== undefined) {
+    return existing;
+  }
+  const verdict = new TtscPassVerdictError(error, epoch);
+  TERMINAL_TRANSFORM_GENERATIONS.set(generation, verdict);
+  return verdict;
+}
+
+/**
+ * Whether a terminal verdict still answers for this delivery.
+ *
+ * Inside the pass that produced or confirmed it, it is replayed without
+ * re-probing anything: the pass settles every delivery against the state it
+ * started from, so re-walking the project once per module would spend exactly
+ * the cost this gate exists to remove.
+ *
+ * Across passes the two kinds part company. A pass verdict is dropped, because
+ * a new pass is the first boundary at which the host itself claims something
+ * may have changed, and the compile it stood for was never proven against a
+ * recorded environment. An unstable generation was, so it keeps its own rule:
+ * one fresh attempt per pass, and otherwise replayed until that recorded
+ * environment provably moves.
+ */
+function replaysTerminalGeneration(
+  terminal: TtscTerminalGenerationError,
+  epoch: number | undefined,
+  props: {
+    currentFile: string;
+    currentSource: string;
+    filesystem: TtscTransformFilesystemOperations;
+  },
+): boolean {
+  if (terminal instanceof TtscPassVerdictError) {
+    // A pass verdict has no recorded environment to re-confirm against, so the
+    // pass that produced it is its whole scope.
+    return epoch !== undefined && terminal.epoch === epoch;
+  }
+  if (!(terminal instanceof TtscUnstableGenerationError)) {
+    return false;
+  }
+  // An unstable generation does have one, and confirming it per delivery is the
+  // behaviour its own contract describes, so the pass does not cache that
+  // answer. A new pass still grants the fresh attempt the per-pass cache clear
+  // used to give it.
+  if (
+    epoch !== undefined &&
+    terminal.validation.cached.deliveryEpoch !== epoch
+  ) {
+    return false;
+  }
+  return !failedGenerationEnvironmentChanged(terminal.validation, props);
 }
 
 /**
@@ -637,7 +1214,7 @@ function evictGeneration(
   }
 }
 
-/** Close one generation's directory watchers exactly once. */
+/** Release one generation's watchers and retained clock probe exactly once. */
 function disposeCachedTransform(cached: TtscCachedProjectTransform): void {
   const trackers = [
     cached.projectMutationTracker,
@@ -647,7 +1224,21 @@ function disposeCachedTransform(cached: TtscCachedProjectTransform): void {
   cached.projectMutationTracker = undefined;
   cached.hostInputMutationTracker = undefined;
   cached.candidateMutationTracker = undefined;
-  for (const tracker of trackers) tracker?.close();
+  const clockReferenceDirectory =
+    TRANSFORM_CLOCK_REFERENCE_DIRECTORIES.get(cached);
+  TRANSFORM_CLOCK_REFERENCE_DIRECTORIES.delete(cached);
+  for (const tracker of trackers) {
+    try {
+      tracker?.close();
+    } catch {
+      // Disposal is scheduled behind fulfilled generation Promises, so it has
+      // no caller that can recover from a close failure. Keep releasing every
+      // independent resource and leave no rejected cleanup Promise behind.
+    }
+  }
+  if (clockReferenceDirectory !== undefined) {
+    disposeFilesystemClockReference(clockReferenceDirectory);
+  }
 }
 
 /**
@@ -706,7 +1297,7 @@ interface TtscEnvelopeDerivation {
    * mirroring the historical scan). `undefined` until the first key miss.
    */
   dependencyIndex?: Map<string, unknown>;
-  /** Per-file memo of the final derived watch-input list. */
+  /** Per lexical delivered-module spelling memo of its final watch-input list. */
   readonly watchInputs: Map<string, string[]>;
   /**
    * Lazily built project-walk keys of the envelope's declared inputs, and
@@ -763,36 +1354,39 @@ interface TtscEnvelopeGraphIndexes {
   readonly edges: Map<string, string[]>;
   /** Identity of each direct-edge source -> its absolute spelling. */
   readonly spellings: Map<string, string>;
-  /** Resolution-candidate entries in envelope order, sources pre-identified. */
+  /** Importer-owned resolver-input entries, sources pre-identified. */
   readonly candidates: { source: string; files: string[] }[];
   /** Resolved absolute `graph.globals` and `graph.configs` members. */
   readonly globals: string[];
   readonly configs: string[];
-  /** Every realized/candidate graph path, keyed by filesystem identity. */
-  readonly members: Set<string>;
+  /** Resolver inputs whose state affects every source file. */
+  readonly resolutionInputs: string[];
+  /** Every realized or resolver-input path, keyed by lexical spelling. */
+  readonly memberSpellings: Set<string>;
   /**
-   * Members the envelope reported only under `graph.candidates`, keyed by
-   * filesystem identity.
-   *
-   * A superseding candidate is by construction a path the compiler did not
-   * select, and usually one it never read at all: resolution stopped at the
-   * target that won, and the host enumerates the higher-priority spellings so
-   * that one appearing later can invalidate the generation. Such a path has no
-   * compile-time read to prove, so it carries the evidence a plugin-declared
-   * dependency path carries (the state recorded when the envelope was produced)
-   * instead of a compiler proof it can never have.
-   *
-   * A candidate that is also a realized input (an edge endpoint, a global, or a
-   * config) is absent from this set and keeps the realized standard.
+   * Predicate-only resolver inputs, keyed by absolute lexical spelling. These
+   * are exact compiler calls but need not carry file content, for example a
+   * failed file predicate or automatic type-root directory enumeration. A path
+   * that is also a realized edge, global, config, or source keeps the stronger
+   * realized-file standard.
    */
   readonly speculative: Set<string>;
-  /** Compiler-time proof for graph members, keyed by filesystem identity. */
+  /** Compiler-time legacy proof keyed by absolute lexical spelling. */
   readonly inputProofs: Map<
     string,
     { hash: string | null; path: string; realpath: string | null }
   >;
-  /** Aliased graph proof keys that reported contradictory generation states. */
+  /** Native compiler-observation failure keyed by absolute lexical spelling. */
+  readonly inputProofFailures: Map<string, string>;
+  /** Graph proof spellings that reported contradictory generation states. */
   readonly inputProofConflicts: Set<string>;
+  /** Predicate-preserving proofs keyed by absolute lexical spelling. */
+  readonly inputObservations: Map<
+    string,
+    ITtscCompilerTransformation.IInputObservation
+  >;
+  /** Absolute spellings whose predicate proof is malformed or contradictory. */
+  readonly inputObservationConflicts: Set<string>;
 }
 
 /**
@@ -840,16 +1434,22 @@ function envelopeGraphIndexes(
   if (state.graph !== undefined) {
     return state.graph;
   }
+  const platform = resultFilesystem(props.result).platform ?? process.platform;
+  const pathApi = platform === "win32" ? path.win32 : path.posix;
   const built: TtscEnvelopeGraphIndexes = {
     edges: new Map(),
     spellings: new Map(),
     candidates: [],
     globals: [],
     configs: [],
-    members: new Set(),
+    resolutionInputs: [],
+    memberSpellings: new Set(),
     speculative: new Set(),
     inputProofs: new Map(),
+    inputProofFailures: new Map(),
     inputProofConflicts: new Set(),
+    inputObservations: new Map(),
+    inputObservationConflicts: new Set(),
   };
   const graph =
     props.result.type === "exception" ? undefined : props.result.graph;
@@ -860,7 +1460,7 @@ function envelopeGraphIndexes(
       }
       const absolute = path.resolve(props.projectRoot, source);
       const identity = derivationIdentity(state, absolute);
-      built.members.add(identity);
+      built.memberSpellings.add(absolute);
       built.spellings.set(identity, absolute);
       const entries = built.edges.get(identity) ?? [];
       entries.push(
@@ -871,7 +1471,11 @@ function envelopeGraphIndexes(
           )
           .map((target) => {
             const absoluteTarget = path.resolve(props.projectRoot, target);
-            built.members.add(derivationIdentity(state, absoluteTarget));
+            const targetIdentity = derivationIdentity(state, absoluteTarget);
+            built.memberSpellings.add(absoluteTarget);
+            if (!built.spellings.has(targetIdentity)) {
+              built.spellings.set(targetIdentity, absoluteTarget);
+            }
             return absoluteTarget;
           }),
       );
@@ -880,7 +1484,9 @@ function envelopeGraphIndexes(
     built.globals.push(...selectListedFiles(props.projectRoot, graph.globals));
     built.configs.push(...selectListedFiles(props.projectRoot, graph.configs));
     for (const input of [...built.globals, ...built.configs]) {
-      built.members.add(derivationIdentity(state, input));
+      const identity = derivationIdentity(state, input);
+      built.memberSpellings.add(path.resolve(input));
+      if (!built.spellings.has(identity)) built.spellings.set(identity, input);
     }
     const candidateEntries = Object.entries(graph.candidates ?? {}).filter(
       (entry) => Array.isArray(entry[1]),
@@ -890,11 +1496,24 @@ function envelopeGraphIndexes(
     // candidate could be classified speculative before a later entry proves
     // the same path is a realized source.
     for (const [source] of candidateEntries) {
-      built.members.add(
-        derivationIdentity(state, path.resolve(props.projectRoot, source)),
-      );
+      const absoluteSource = path.resolve(props.projectRoot, source);
+      const identity = derivationIdentity(state, absoluteSource);
+      built.memberSpellings.add(absoluteSource);
+      if (!built.spellings.has(identity)) {
+        built.spellings.set(identity, absoluteSource);
+      }
     }
-    const realized = new Set(built.members);
+    const realized = new Set(built.memberSpellings);
+    built.resolutionInputs.push(
+      ...selectListedFiles(props.projectRoot, graph.resolutionInputs),
+    );
+    for (const input of built.resolutionInputs) {
+      const spelling = path.resolve(input);
+      const identity = derivationIdentity(state, input);
+      if (!realized.has(spelling)) built.speculative.add(spelling);
+      built.memberSpellings.add(spelling);
+      if (!built.spellings.has(identity)) built.spellings.set(identity, input);
+    }
     for (const [source, candidates] of candidateEntries) {
       built.candidates.push({
         source: derivationIdentity(
@@ -905,15 +1524,62 @@ function envelopeGraphIndexes(
       });
       for (const candidate of candidates) {
         if (typeof candidate !== "string" || candidate.length === 0) continue;
-        const identity = derivationIdentity(
-          state,
-          path.resolve(props.projectRoot, candidate),
-        );
+        const absoluteCandidate = path.resolve(props.projectRoot, candidate);
+        const identity = derivationIdentity(state, absoluteCandidate);
         // Edges, globals, configs, and every candidate source are folded in
         // above, so a path absent from that set is one the envelope reported
         // only as a candidate.
-        if (!realized.has(identity)) built.speculative.add(identity);
-        built.members.add(identity);
+        if (!realized.has(absoluteCandidate)) {
+          built.speculative.add(absoluteCandidate);
+        }
+        built.memberSpellings.add(absoluteCandidate);
+        if (!built.spellings.has(identity)) {
+          built.spellings.set(identity, absoluteCandidate);
+        }
+      }
+    }
+    const transformSourceSpellings = new Set<string>();
+    if (props.result.type === "success") {
+      for (const output of Object.keys(props.result.typescript)) {
+        if (!isDeclarationFile(output)) {
+          const absoluteOutput = path.resolve(props.projectRoot, output);
+          transformSourceSpellings.add(absoluteOutput);
+        }
+      }
+    }
+    for (const [input, reported] of Object.entries(
+      graph.inputObservations ?? {},
+    )) {
+      if (input.length === 0) continue;
+      const absolute = path.resolve(props.projectRoot, input);
+      const spelling = path.resolve(absolute);
+      if (
+        !built.memberSpellings.has(spelling) &&
+        !transformSourceSpellings.has(spelling)
+      ) {
+        continue;
+      }
+      const normalized = normalizeGraphInputObservation(reported, platform);
+      if (normalized === undefined) {
+        built.inputObservationConflicts.add(spelling);
+        if (!built.inputProofFailures.has(spelling)) {
+          built.inputProofFailures.set(spelling, "malformed-observation");
+        }
+        continue;
+      }
+      const previous = built.inputObservations.get(spelling);
+      const merged =
+        previous === undefined
+          ? normalized
+          : mergeGraphInputObservations(previous, normalized);
+      if (merged === undefined) {
+        built.inputObservations.delete(spelling);
+        built.inputObservationConflicts.add(spelling);
+        if (!built.inputProofFailures.has(spelling)) {
+          built.inputProofFailures.set(spelling, "conflicting-observation");
+        }
+      } else if (!built.inputObservationConflicts.has(spelling)) {
+        built.inputObservations.set(spelling, merged);
       }
     }
     for (const [input, hash] of Object.entries(graph.inputHashes ?? {})) {
@@ -933,20 +1599,27 @@ function envelopeGraphIndexes(
       if (
         reportedRealpath !== null &&
         (typeof reportedRealpath !== "string" ||
-          !path.isAbsolute(reportedRealpath))
+          !pathApi.isAbsolute(reportedRealpath))
       ) {
         continue;
       }
       const absolute = path.resolve(props.projectRoot, input);
-      const identity = derivationIdentity(state, absolute);
-      if (!built.members.has(identity)) continue;
+      const spelling = path.resolve(absolute);
+      if (
+        !built.memberSpellings.has(spelling) &&
+        !transformSourceSpellings.has(spelling)
+      ) {
+        continue;
+      }
       const proof = {
         hash,
         path: absolute,
         realpath:
-          reportedRealpath === null ? null : path.resolve(reportedRealpath),
+          reportedRealpath === null
+            ? null
+            : resolveFilesystemPath(reportedRealpath, platform),
       };
-      const previous = built.inputProofs.get(identity);
+      const previous = built.inputProofs.get(spelling);
       if (
         previous !== undefined &&
         (previous.hash !== proof.hash ||
@@ -956,15 +1629,265 @@ function envelopeGraphIndexes(
             state.identityContext,
           ))
       ) {
-        built.inputProofs.delete(identity);
-        built.inputProofConflicts.add(identity);
-      } else if (!built.inputProofConflicts.has(identity)) {
-        built.inputProofs.set(identity, proof);
+        built.inputProofs.delete(spelling);
+        built.inputProofConflicts.add(spelling);
+      } else if (!built.inputProofConflicts.has(spelling)) {
+        built.inputProofs.set(spelling, proof);
+      }
+    }
+    for (const [input, reason] of Object.entries(
+      graph.inputProofFailures ?? {},
+    )) {
+      if (typeof reason !== "string" || !/^[a-z0-9-]{1,64}$/.test(reason)) {
+        continue;
+      }
+      const absolute = path.resolve(props.projectRoot, input);
+      const spelling = path.resolve(absolute);
+      if (
+        !built.memberSpellings.has(spelling) &&
+        !transformSourceSpellings.has(spelling)
+      ) {
+        continue;
+      }
+      const observation = built.inputObservations.get(spelling);
+      const legacyProjection =
+        observation === undefined
+          ? undefined
+          : legacyProjectionOfGraphInputObservation(observation);
+      if (
+        built.speculative.has(spelling) &&
+        !built.inputProofs.has(spelling) &&
+        legacyProjection?.failure === reason
+      ) {
+        continue;
+      }
+      if (built.inputObservations.has(spelling)) {
+        built.inputObservations.delete(spelling);
+        built.inputObservationConflicts.add(spelling);
+      }
+      if (built.inputProofs.has(spelling)) {
+        built.inputProofs.delete(spelling);
+        built.inputProofConflicts.add(spelling);
+      }
+      if (!built.inputProofFailures.has(spelling)) {
+        built.inputProofFailures.set(spelling, reason);
       }
     }
   }
   state.graph = built;
   return built;
+}
+
+/** Normalize one untrusted predicate proof without filling missing predicates. */
+function normalizeGraphInputObservation(
+  value: unknown,
+  platform: NodeJS.Platform = process.platform,
+): ITtscCompilerTransformation.IInputObservation | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+  const entry = value as Record<string, unknown>;
+  const observation: ITtscCompilerTransformation.IInputObservation = {};
+  if (Object.prototype.hasOwnProperty.call(entry, "accessibleEntries")) {
+    const accessible = entry.accessibleEntries;
+    if (
+      typeof accessible !== "object" ||
+      accessible === null ||
+      Array.isArray(accessible)
+    ) {
+      return undefined;
+    }
+    const lists = accessible as Record<string, unknown>;
+    if (
+      !Array.isArray(lists.directories) ||
+      !lists.directories.every(
+        (name): name is string => typeof name === "string",
+      ) ||
+      !Array.isArray(lists.files) ||
+      !lists.files.every((name): name is string => typeof name === "string")
+    ) {
+      return undefined;
+    }
+    observation.accessibleEntries = {
+      directories: [...lists.directories],
+      files: [...lists.files],
+    };
+  }
+  if (Object.prototype.hasOwnProperty.call(entry, "fileExists")) {
+    if (typeof entry.fileExists !== "boolean") return undefined;
+    observation.fileExists = entry.fileExists;
+  }
+  if (Object.prototype.hasOwnProperty.call(entry, "directoryExists")) {
+    if (typeof entry.directoryExists !== "boolean") return undefined;
+    observation.directoryExists = entry.directoryExists;
+  }
+  if (Object.prototype.hasOwnProperty.call(entry, "stat")) {
+    if (
+      entry.stat !== "missing" &&
+      entry.stat !== "file" &&
+      entry.stat !== "directory"
+    ) {
+      return undefined;
+    }
+    observation.stat = entry.stat;
+  }
+  if (Object.prototype.hasOwnProperty.call(entry, "readFile")) {
+    const read = entry.readFile;
+    if (typeof read !== "object" || read === null || Array.isArray(read)) {
+      return undefined;
+    }
+    const result = read as Record<string, unknown>;
+    if (result.ok === false && result.hash === undefined) {
+      observation.readFile = { ok: false };
+    } else if (
+      result.ok === true &&
+      typeof result.hash === "string" &&
+      /^[0-9a-f]{64}$/.test(result.hash)
+    ) {
+      observation.readFile = { hash: result.hash, ok: true };
+    } else {
+      return undefined;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(entry, "realpath")) {
+    const realpath = entry.realpath;
+    if (
+      typeof realpath !== "object" ||
+      realpath === null ||
+      Array.isArray(realpath)
+    ) {
+      return undefined;
+    }
+    const result = realpath as Record<string, unknown>;
+    if (result.ok === false && result.path === undefined) {
+      observation.realpath = { ok: false };
+    } else if (
+      result.ok === true &&
+      typeof result.path === "string" &&
+      (platform === "win32" ? path.win32 : path.posix).isAbsolute(result.path)
+    ) {
+      observation.realpath = {
+        ok: true,
+        path: resolveFilesystemPath(result.path, platform),
+      };
+    } else {
+      return undefined;
+    }
+  }
+  return Object.keys(observation).length !== 0 &&
+    graphInputObservationCompatible(observation)
+    ? observation
+    : undefined;
+}
+
+/** Join duplicate lexical keys only when every repeated predicate agrees. */
+function mergeGraphInputObservations(
+  left: ITtscCompilerTransformation.IInputObservation,
+  right: ITtscCompilerTransformation.IInputObservation,
+): ITtscCompilerTransformation.IInputObservation | undefined {
+  for (const property of [
+    "accessibleEntries",
+    "directoryExists",
+    "fileExists",
+    "readFile",
+    "realpath",
+    "stat",
+  ] as const) {
+    if (
+      left[property] !== undefined &&
+      right[property] !== undefined &&
+      JSON.stringify(left[property]) !== JSON.stringify(right[property])
+    ) {
+      return undefined;
+    }
+  }
+  const merged = { ...left, ...right };
+  return graphInputObservationCompatible(merged) ? merged : undefined;
+}
+
+/** Whether one predicate set can describe a single stable filesystem state. */
+function graphInputObservationCompatible(
+  observation: ITtscCompilerTransformation.IInputObservation,
+): boolean {
+  const { accessibleEntries, directoryExists, fileExists, readFile, stat } =
+    observation;
+  const hasAccessibleEntries =
+    accessibleEntries !== undefined &&
+    (accessibleEntries.directories.length !== 0 ||
+      accessibleEntries.files.length !== 0);
+  if (
+    hasAccessibleEntries &&
+    (fileExists === true ||
+      directoryExists === false ||
+      (stat !== undefined && stat !== "directory") ||
+      readFile?.ok === true)
+  ) {
+    return false;
+  }
+  if (fileExists === true && directoryExists === true) return false;
+  if (
+    stat === "directory" &&
+    (fileExists === true || directoryExists === false)
+  ) {
+    return false;
+  }
+  if (stat === "file" && (fileExists === false || directoryExists === true)) {
+    return false;
+  }
+  if (stat === "missing" && (fileExists === true || directoryExists === true)) {
+    return false;
+  }
+  if (
+    readFile?.ok === true &&
+    (fileExists === false ||
+      directoryExists === true ||
+      (stat !== undefined && stat !== "file"))
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Reconstruct a legacy hash/realpath pair only when the rich predicates prove
+ * that projection without collapsing an unreadable file or failed file probe
+ * into generic absence.
+ */
+function legacyProjectionOfGraphInputObservation(
+  observation: ITtscCompilerTransformation.IInputObservation,
+):
+  | { failure?: undefined; hash: string | null; realpath: string | null }
+  | { failure: string } {
+  if (observation.readFile?.ok === true) {
+    return observation.realpath?.ok === true
+      ? {
+          hash: observation.readFile.hash,
+          realpath: observation.realpath.path,
+        }
+      : { failure: "realpath-unavailable" };
+  }
+  const directory =
+    observation.stat === "directory" || observation.directoryExists === true;
+  if (directory) {
+    return observation.realpath?.ok === true
+      ? {
+          hash: hashText("ttsc:host-input:directory\0"),
+          realpath: observation.realpath.path,
+        }
+      : { failure: "realpath-unavailable" };
+  }
+  const file = observation.stat === "file" || observation.fileExists === true;
+  if (file) {
+    return { failure: "content-unavailable" };
+  }
+  const missing =
+    observation.stat === "missing" ||
+    observation.fileExists === false ||
+    observation.directoryExists === false ||
+    observation.readFile?.ok === false;
+  return missing
+    ? { hash: null, realpath: null }
+    : { failure: "unsupported-input-kind" };
 }
 
 /**
@@ -1010,6 +1933,106 @@ function collectDeclaredIdentities(
 }
 
 /**
+ * Register the failed generation's project and external inputs so the host can
+ * observe the fix.
+ *
+ * A successful delivery registers the derived watch inputs, which is how a
+ * type-only file that no bundler graph contains still invalidates the modules
+ * depending on it. A failed one used to register nothing: `selectWatchInputs`
+ * returns an empty list for an `"exception"` envelope, and the throw happens
+ * before `notifyWatchInputs` is reached at all. When the failing compile is the
+ * first of a watching session, that leaves no channel through which the fix can
+ * arrive: the user repairs a file the bundler does not track, nothing is
+ * invalidated, and the error stays on screen (samchon/ttsc#1312).
+ *
+ * A failure envelope can retain exact external input spellings from its graph
+ * and host metadata. A pre-transform typecheck failure may have no graph yet;
+ * its structured diagnostics, or the host's standard diagnostic lines when it
+ * could return only an exception, still name the external files that need a
+ * repair. The cost is paid only on a failure, and only until the next compile
+ * succeeds and narrows the set back to the derived inputs.
+ */
+function notifyFailedGenerationInputs(
+  hooks: TtscTransformHooks | undefined,
+  cached: TtscCachedProjectTransform,
+): void {
+  const addWatchFile = hooks?.addWatchFile;
+  const addWatchFiles = hooks?.addWatchFiles;
+  if (addWatchFile === undefined && addWatchFiles === undefined) {
+    return;
+  }
+  const inputs: TtscWatchInput[] = [];
+  const seen = new Set<string>();
+  const append = (input: string): void => {
+    const spelling = path.resolve(input);
+    if (
+      seen.has(spelling) ||
+      isTransformScratchInput(spelling, cached.scratchDirectory)
+    ) {
+      return;
+    }
+    seen.add(spelling);
+    // No evidence, deliberately. A failed generation is replayed for the rest
+    // of its pass without re-proving its inputs, so the adapter must observe
+    // the current availability itself.
+    inputs.push({ file: spelling });
+  };
+  for (const key of Object.keys(cached.inputHashes)) {
+    append(path.resolve(cached.projectRoot, key));
+  }
+  // The project walk deliberately excludes node_modules and cannot reach
+  // sibling-project or out-of-root inputs. The generation already retained
+  // their exact lexical spellings, so keep that ownership on the failure path
+  // instead of deriving a narrower second answer.
+  for (const input of cached.externalInputPaths ?? []) {
+    append(input);
+  }
+  if (cached.result.type === "failure") {
+    for (const diagnostic of cached.result.diagnostics) {
+      if (typeof diagnostic.file === "string" && diagnostic.file.length !== 0) {
+        append(path.resolve(cached.projectRoot, diagnostic.file));
+      }
+    }
+  } else if (cached.result.type === "exception") {
+    for (const diagnostic of selectExceptionDiagnosticFiles(
+      cached.result.error,
+    )) {
+      append(path.resolve(cached.projectRoot, diagnostic));
+    }
+  }
+  if (addWatchFiles !== undefined) {
+    addWatchFiles(inputs);
+    return;
+  }
+  for (const input of inputs) {
+    addWatchFile!(input.file);
+  }
+}
+
+/**
+ * Extract file spellings only from the two standard TypeScript diagnostic
+ * forms.
+ */
+function selectExceptionDiagnosticFiles(error: unknown): string[] {
+  const files: string[] = [];
+  for (const line of formatUnknownError(error).split(/\r?\n/)) {
+    const colon =
+      /^(.+):\d+:\d+\s+-\s+(?:error|warning|suggestion|message)\s+TS\d+:\s+.+$/i.exec(
+        line,
+      );
+    const parenthesized =
+      /^(.+?)\(\d+,\d+\):\s+(?:error|warning|suggestion|message)\s+TS\d+:\s+.+$/i.exec(
+        line,
+      );
+    const file = colon?.[1] ?? parenthesized?.[1];
+    if (file !== undefined && file.trim().length !== 0) {
+      files.push(file.trim());
+    }
+  }
+  return files;
+}
+
+/**
  * Forward every derived watch input for `file` to the adapter's `addWatchFile`
  * hook: the plugin-reported `dependencies[file]` list unioned with the
  * host-owned reference graph's contribution (`reach(edges, file)`, `globals`,
@@ -1018,8 +2041,9 @@ function collectDeclaredIdentities(
  * Envelope keys mirror the `typescript` keys (project-relative); values may be
  * project-relative or absolute. Every path is absolutized against the project
  * root and deduplicated; the file itself is dropped (the bundler already
- * watches the module it transforms), and so is the disposed temp-dir tsconfig
- * (see {@link TtscCachedProjectTransform.temporaryTsconfig}).
+ * watches the module it transforms), and so is every path in the disposed
+ * transform scratch tree (see
+ * {@link TtscCachedProjectTransform.scratchDirectory}).
  */
 function notifyWatchInputs(
   hooks: TtscTransformHooks | undefined,
@@ -1027,37 +2051,94 @@ function notifyWatchInputs(
   file: string,
 ): void {
   const addWatchFile = hooks?.addWatchFile;
-  if (addWatchFile === undefined) {
+  const addWatchFiles = hooks?.addWatchFiles;
+  if (addWatchFile === undefined && addWatchFiles === undefined) {
     return;
   }
   const state = envelopeDerivation(cached);
   const external = cached.externalInputHashes ?? {};
-  for (const input of selectWatchInputs({
+  const inputs = selectWatchInputs({
     file,
     projectRoot: cached.projectRoot,
     result: cached.result,
+    scratchDirectory: cached.scratchDirectory,
     temporaryTsconfig: cached.temporaryTsconfig,
-  })) {
+  }).map((input): TtscWatchInput => {
     // Hand the adapter the identity this generation already resolved and the
-    // existence state it already recorded. Both are memoized per generation,
-    // while an adapter deriving them itself pays a `realpath`, a directory
-    // listing, and an `existsSync` per input on every delivery of every module
-    // (samchon/ttsc#1246).
+    // exact state it already recorded. Both are memoized per generation, while
+    // an adapter deriving them itself pays repeated filesystem reads and can
+    // accidentally attach a later state to an earlier transform.
     const identity = derivationIdentity(state, input);
-    addWatchFile(input, {
+    const spelling = path.resolve(input);
+    const observation = cached.externalInputObservations?.[spelling];
+    const missing =
+      observation?.fileExists === false ||
+      state.graph?.inputProofs.get(spelling)?.hash === null ||
+      external[identity] === MISSING_INPUT_STATE;
+    const projectKey = toProjectKey(
+      cached.projectRoot,
+      input,
+      state.identityContext,
+    );
+    const externalHash = Object.prototype.hasOwnProperty.call(
+      external,
       identity,
-      missing: external[identity] === MISSING_INPUT_STATE,
-    });
+    )
+      ? external[identity]
+      : undefined;
+    const projectHash = Object.prototype.hasOwnProperty.call(
+      cached.inputHashes,
+      projectKey,
+    )
+      ? cached.inputHashes[projectKey]
+      : undefined;
+    const graphRealpaths = cached.externalInputRealpaths ?? {};
+    const stateEvidence: TtscWatchInputState | undefined =
+      observation !== undefined
+        ? { codec: "predicates", observation }
+        : externalHash !== undefined &&
+            Object.prototype.hasOwnProperty.call(graphRealpaths, identity)
+          ? {
+              codec: "graph",
+              hash: externalHash,
+              realpath: graphRealpaths[identity] ?? null,
+            }
+          : externalHash !== undefined
+            ? { codec: "host", hash: externalHash }
+            : projectHash !== undefined
+              ? { codec: "host", hash: projectHash }
+              : undefined;
+    return {
+      file: input,
+      evidence: {
+        identity,
+        missing,
+        ...(stateEvidence === undefined ? {} : { state: stateEvidence }),
+        unavailable:
+          observation?.fileExists === false
+            ? "not-file"
+            : missing
+              ? "missing"
+              : undefined,
+      },
+    };
+  });
+  if (addWatchFiles !== undefined) {
+    addWatchFiles(inputs);
+    return;
+  }
+  for (const input of inputs) {
+    addWatchFile!(input.file, input.evidence);
   }
 }
 
 /**
  * Derive the absolute, deduplicated watch-input list for a single file.
  *
- * By default the derivation is a union: `dependencies[file] ∪ reach(edges,
- * file) ∪ globals ∪ configs`. The plugin-reported list can only widen the
- * host-owned language-semantic bound, never narrow it. Resolution candidates
- * remain part of that host-owned bound in both modes.
+ * By default the derivation unions plugin dependencies, the reachable graph,
+ * globals, configs, importer resolver inputs, and universal resolver inputs.
+ * The plugin-reported list can only widen the host-owned language-semantic
+ * bound, never narrow it. Resolver inputs remain in that bound in both modes.
  *
  * An envelope that lists `file` in `dependenciesComplete` narrows it to
  * `dependencies[file] ∪ configs`: the plugin declared its reported list the
@@ -1069,15 +2150,18 @@ function notifyWatchInputs(
  * volatile keeps the baseline: the two declarations contradict, so the
  * conservative one wins.
  *
- * The derived list is a pure function of the envelope and the file's filesystem
- * identity, so it is computed at most once per generation per file: sibling and
- * repeated deliveries replay the per-envelope memo ({@link envelopeDerivation})
- * instead of re-walking the graph. Returns an empty list on exceptions.
+ * The derived list is a pure function of the envelope and the delivered file's
+ * normalized lexical spelling. Graph traversal uses its filesystem identity,
+ * but lexical inputs exclude only that exact spelling, so two aliases of one
+ * source require distinct lists. Repeated deliveries of one spelling replay the
+ * per-envelope memo ({@link envelopeDerivation}) instead of re-walking the
+ * graph. Returns an empty list on exceptions.
  */
 function selectWatchInputs(props: {
   file: string;
   projectRoot: string;
   result: ITtscCompilerTransformation;
+  scratchDirectory?: string;
   temporaryTsconfig?: string;
 }): string[] {
   if (props.result.type === "exception") {
@@ -1085,12 +2169,13 @@ function selectWatchInputs(props: {
   }
   const state = envelopeDerivation(props);
   const fileIdentity = derivationIdentity(state, props.file);
-  const memoized = state.watchInputs.get(fileIdentity);
+  const fileSpelling = path.resolve(props.file);
+  const memoized = state.watchInputs.get(fileSpelling);
   if (memoized !== undefined) {
     return memoized;
   }
   const derived = deriveWatchInputs(state, props, fileIdentity);
-  state.watchInputs.set(fileIdentity, derived);
+  state.watchInputs.set(fileSpelling, derived);
   return derived;
 }
 
@@ -1101,6 +2186,7 @@ function deriveWatchInputs(
     file: string;
     projectRoot: string;
     result: ITtscCompilerTransformation;
+    scratchDirectory?: string;
     temporaryTsconfig?: string;
   },
   fileIdentity: string,
@@ -1123,6 +2209,7 @@ function deriveWatchInputs(
     if (
       spelling === currentSpelling ||
       spelling === temporarySpelling ||
+      isTransformScratchInput(spelling, props.scratchDirectory) ||
       lexicalSeen.has(spelling)
     ) {
       return;
@@ -1132,6 +2219,7 @@ function deriveWatchInputs(
     output.push(input);
   };
   const appendPhysical = (input: string): void => {
+    if (isTransformScratchInput(input, props.scratchDirectory)) return;
     const identity = derivationIdentity(state, input);
     if (excluded.has(identity) || physicalSeen.has(identity)) return;
     physicalSeen.add(identity);
@@ -1146,7 +2234,7 @@ function deriveWatchInputs(
       !isVolatileFile(state, props),
   }))
     appendPhysical(input);
-  // Resolution candidates, plugin dependencies, and universal host inputs
+  // Resolver inputs, plugin dependencies, and universal host inputs
   // preserve lexical aliases. Physical deduplication would collapse
   // `alias/selection.cjs` into the selected target path, so a bundler would
   // watch only the target and miss a symlink/junction retarget.
@@ -1167,14 +2255,14 @@ function selectHostInputs(props: {
 }
 
 /**
- * Return the module-resolution paths that can supersede a currently resolved
- * module reachable from `file`. They remain host-owned even when a plugin
- * declares `dependenciesComplete`: plugin code cannot vouch for a compiler
- * resolution change that occurs without any plugin input changing.
+ * Return exact importer-owned and universal resolver inputs for `file`. They
+ * remain host-owned even when a plugin declares `dependenciesComplete`: plugin
+ * code cannot vouch for a compiler resolution or automatic type change that
+ * occurs without any plugin input changing.
  *
- * Candidate entries and their source identities come from the shared
- * per-envelope state, so one delivery scans only the candidates themselves
- * instead of re-resolving every candidate source.
+ * Importer entries and their source identities come from the shared
+ * per-envelope state, so one delivery scans only the recorded inputs instead of
+ * re-resolving every source.
  */
 function selectResolutionCandidateInputs(
   graph: TtscEnvelopeGraphIndexes,
@@ -1185,10 +2273,7 @@ function selectResolutionCandidateInputs(
     result: ITtscCompilerTransformation;
   },
 ): string[] {
-  if (
-    props.result.type === "exception" ||
-    props.result.graph?.candidates === undefined
-  ) {
+  if (props.result.type === "exception" || props.result.graph === undefined) {
     return [];
   }
   const reachable = new Set(
@@ -1196,7 +2281,8 @@ function selectResolutionCandidateInputs(
       derivationIdentity(state, source),
     ),
   );
-  const output: string[] = [];
+  const output: string[] = [...graph.resolutionInputs];
+  if (props.result.graph.candidates === undefined) return output;
   for (const entry of graph.candidates) {
     if (!reachable.has(entry.source)) {
       continue;
@@ -1371,9 +2457,11 @@ function declaresCompleteDependencies(
 }
 
 /**
- * Extract the absolute, deduplicated dependency list for a single file from the
- * compiler result. Mirrors {@link selectTransformedSource}'s key lookup: fast
- * project-relative match first, then a per-envelope identity index. Returns an
+ * Extract the absolute, lexical-spelling-deduplicated dependency list for a
+ * single file from the compiler result. Mirrors
+ * {@link selectTransformedSource}'s key lookup: fast project-relative match
+ * first, then a per-envelope identity index. Distinct lexical aliases must
+ * survive so bundlers observe a later symlink or junction retarget. Returns an
  * empty list on exceptions or when the plugin reported nothing.
  */
 function selectFileDependencies(props: {
@@ -1410,17 +2498,15 @@ function selectFileDependencies(props: {
   }
   const output: string[] = [];
   const seen = new Set<string>();
-  const fileIdentity = derivationIdentity(state, props.file);
   for (const entry of entries) {
     if (typeof entry !== "string" || entry.length === 0) {
       continue;
     }
     const absolute = path.resolve(props.projectRoot, entry);
-    const identity = derivationIdentity(state, absolute);
-    if (identity === fileIdentity || seen.has(identity)) {
+    if (seen.has(absolute)) {
       continue;
     }
-    seen.add(identity);
+    seen.add(absolute);
     output.push(absolute);
   }
   return output;
@@ -1462,11 +2548,24 @@ export function stripQuery(id: string): string {
 }
 
 /**
- * Returns `true` for TypeScript declaration files (`.d.ts`, `.d.mts`,
- * `.d.cts`).
+ * Returns `true` for every declaration-file spelling TypeScript-Go accepts.
+ * Besides the standard `.d.ts`, `.d.mts`, and `.d.cts` forms, TypeScript-Go
+ * treats an arbitrary-extension source such as `styles.d.css.ts` as a
+ * declaration file too.
  */
 export function isDeclarationFile(id: string): boolean {
-  return id.endsWith(".d.ts") || id.endsWith(".d.mts") || id.endsWith(".d.cts");
+  // Module ids can cross process/platform boundaries (for example, a Windows
+  // id inspected by a POSIX host). TypeScript-Go normalizes both separators
+  // before taking the basename, so a `.d.` directory component must not turn
+  // an ordinary source into a declaration file.
+  const normalized = id.replaceAll("\\", "/");
+  const base = normalized.slice(normalized.lastIndexOf("/") + 1);
+  return (
+    base.endsWith(".d.ts") ||
+    base.endsWith(".d.mts") ||
+    base.endsWith(".d.cts") ||
+    (base.endsWith(".ts") && base.includes(".d."))
+  );
 }
 
 /**
@@ -1502,33 +2601,59 @@ export function createTransformResult(
  * state.
  *
  * Always compares the current module's in-memory source with the generation
- * snapshot. A cache whose owner called {@link beginTtscTransformBuild} can use
- * that comparison alone for a stable generation's first module delivery in the
- * current build. An incomplete generation may not take this shortcut: otherwise
- * a sibling output captured during a filesystem race could still be served
- * once. Later graph-bearing requests validate the file's derived input set and
- * project membership; graph-free envelopes conservatively re-hash the complete
- * project and out-of-walk snapshots. Any mismatch forces a complete
+ * snapshot. A cache with a delivery epoch can use that comparison alone for a
+ * stable generation's first delivery of each module in the current pass, once
+ * the pass's own first delivery has proven the whole generation still matches
+ * the filesystem. An incomplete generation may not take this shortcut:
+ * otherwise a sibling output captured during a filesystem race could still be
+ * served once. Later graph-bearing requests validate the file's derived input
+ * set and project membership; graph-free envelopes conservatively re-hash the
+ * complete project and out-of-walk snapshots. Any mismatch forces a complete
  * re-transform.
  */
 function matchesCachedSource(
   cached: TtscCachedProjectTransform,
   file: string,
   source: string,
-  buildScoped: boolean,
+  epoch: number | undefined,
 ): boolean {
   const identities = envelopeDerivation(cached).identityContext;
   const currentKey = toProjectKey(cached.projectRoot, file, identities);
-  if (cached.inputHashes[currentKey] !== hashText(source)) {
+  const identity = pathIdentityKey(file, identities);
+  const expected =
+    cached.sourceHashes?.[identity] ??
+    cached.inputHashes[currentKey] ??
+    cached.externalInputHashes?.[identity];
+  if (expected !== hashText(source)) {
     return false;
   }
-  if (
-    buildScoped &&
-    cached.projectSnapshotComplete === true &&
-    !cached.servedFiles?.has(pathIdentityKey(file, identities))
-  ) {
-    return true;
+  if (epoch !== undefined && cached.projectSnapshotComplete === true) {
+    if (cached.deliveryEpoch !== epoch) {
+      // The pass's first delivery. The generation was settled against an
+      // earlier pass, so prove the whole of it once — every input the envelope
+      // declares, the directory membership, the universal host inputs, and the
+      // out-of-walk snapshot — before any of this pass's deliveries may be
+      // settled against it. That proof is what a per-pass recompile used to buy
+      // (samchon/ttsc#1300), at a walk instead of a compile.
+      refreshFilesystemClockReference(
+        TRANSFORM_CLOCK_REFERENCE_DIRECTORIES.get(cached),
+        resultFilesystem(cached.result),
+      );
+      if (!matchesCompleteInputSnapshot(cached, currentKey, source)) {
+        return false;
+      }
+      cached.deliveryEpoch = epoch;
+      cached.servedFiles?.clear();
+      return true;
+    }
+    if (!cached.servedFiles?.has(identity)) {
+      return true;
+    }
   }
+  refreshFilesystemClockReference(
+    TRANSFORM_CLOCK_REFERENCE_DIRECTORIES.get(cached),
+    resultFilesystem(cached.result),
+  );
   if (
     cached.result.type !== "exception" &&
     cached.result.graph !== undefined &&
@@ -1583,6 +2708,7 @@ function matchesNarrowPersistentInputs(
     file,
     projectRoot: cached.projectRoot,
     result: cached.result,
+    scratchDirectory: cached.scratchDirectory,
     temporaryTsconfig: cached.temporaryTsconfig,
   });
   for (const input of inputs) {
@@ -1601,20 +2727,21 @@ function matchesNarrowPersistentInputs(
 
 /**
  * Validate one derived input against the generation, skipping the content read
- * while the recorded metadata signature still holds.
+ * while the recorded metadata signature still holds and its freshly minted
+ * clock reference remains safe.
  *
  * Sibling deliveries of one generation share most of their derived inputs, and
  * `graph.globals` is shared by every one of them, so re-reading and re-hashing
  * the whole derived set per delivery multiplies one generation's proven bytes
  * by the module count. The derived set is proven the same way the universal
  * descriptor inputs are ({@link matchesUniversalHostInputs}), under the same
- * rules: an unchanged signature stands in for the content comparison, and any
- * signature change falls back to the full comparison. A signature is recorded
- * only around a read nothing raced, only for a recorded state that came from
- * reading the input rather than from failing to, and only while the observed
- * filesystem's own clock has provably left the stamp's tick
- * ({@link stampSeparable}), so a same-length rewrite inside that tick cannot
- * hide behind an unchanged signature.
+ * rules: a currently separable unchanged signature stands in for the content
+ * comparison, and any signature or clock-ordering change falls back to the full
+ * comparison. A signature is recorded only around a read nothing raced, only
+ * for a recorded state that came from reading the input rather than from
+ * failing to, and only while the observed filesystem's own clock has provably
+ * left the stamp's tick ({@link stampSeparable}), so a same-length rewrite
+ * inside that tick cannot hide behind an unchanged signature.
  *
  * The signature carries the physical identity of both the lexical path and its
  * link target ({@link inputMetadataSignature}), so retargeting a symlink or
@@ -1625,6 +2752,17 @@ function matchesProvenInput(
   state: TtscEnvelopeDerivation,
   input: string,
 ): boolean {
+  const observation = cached.externalInputObservations?.[path.resolve(input)];
+  if (observation !== undefined) {
+    if (
+      observation.fileExists === false &&
+      Object.keys(observation).length === 1 &&
+      notifiesAbsence(cached, input)
+    ) {
+      return true;
+    }
+    return matchesRecordedInput(cached, input);
+  }
   const slot = inputSignatureSlot(cached, state, input);
   if (slot === undefined) {
     return matchesRecordedInput(cached, input);
@@ -1639,7 +2777,11 @@ function matchesProvenInput(
   }
   const filesystem = resultFilesystem(cached.result);
   const before = inputMetadataEvidence(input, filesystem);
-  if (before !== undefined && slot.signatures[slot.key] === before.signature) {
+  if (
+    before !== undefined &&
+    before.separable &&
+    slot.signatures[slot.key] === before.signature
+  ) {
     return true;
   }
   if (!matchesRecordedInput(cached, input)) {
@@ -1701,6 +2843,9 @@ function inputSignatureSlot(
   | { key: string; recorded: string; signatures: Record<string, string> }
   | undefined {
   const identity = derivationIdentity(state, input);
+  if (cached.externalInputObservations?.[path.resolve(input)] !== undefined) {
+    return undefined;
+  }
   const external = cached.externalInputHashes ?? {};
   if (Object.prototype.hasOwnProperty.call(external, identity)) {
     // The recorded hash is identity-keyed because aliases of one physical file
@@ -1760,7 +2905,8 @@ function matchesUniversalHostInputEntries(
     const evidence = inputMetadataEvidence(entry.path, filesystem);
     if (
       entry.signature !== undefined &&
-      evidence?.signature === entry.signature
+      evidence?.signature === entry.signature &&
+      (entry.strict === true || evidence.separable)
     )
       continue;
     if (entry.strict === true) return false;
@@ -1839,9 +2985,13 @@ function isMissingPathError(error: unknown): boolean {
 function captureUniversalHostInputValidation(
   cached: TtscCachedProjectTransform,
   currentFile: string,
-): TtscHostInputValidation | undefined {
+): {
+  failures: TtscGenerationProofFailures;
+  validation?: TtscHostInputValidation;
+} {
   const filesystem = resultFilesystem(cached.result);
   const state = envelopeDerivation(cached);
+  const failures = createGenerationProofFailures();
   const validation: TtscHostInputValidation = {
     entries: new Map(),
     covered: new Set(),
@@ -1851,6 +3001,7 @@ function captureUniversalHostInputValidation(
     filesystem,
     projectRoot: cached.projectRoot,
     result: cached.result,
+    scratchDirectory: cached.scratchDirectory,
     temporaryTsconfig: cached.temporaryTsconfig,
   })) {
     const generationHashes =
@@ -1868,7 +3019,14 @@ function captureUniversalHostInputValidation(
     let readable = false;
     if (expected === undefined) {
       const current = path.resolve(currentFile);
-      if (path.resolve(input) !== current) return undefined;
+      if (path.resolve(input) !== current) {
+        recordGenerationProofFailure(failures, {
+          domain: "host",
+          kind: "content-proof-missing",
+          path: input,
+        });
+        return { failures };
+      }
       // The current module may be supplied from an unsaved editor buffer. Its
       // generation snapshot is overlaid below from `currentSource`, so a disk
       // fingerprint would be both unavailable and the wrong authority. The
@@ -1877,7 +3035,12 @@ function captureUniversalHostInputValidation(
     } else {
       const current = hostInputStateHash(input, filesystem);
       if (expected !== current) {
-        return undefined;
+        recordGenerationProofFailure(failures, {
+          domain: "host",
+          kind: "content-changed",
+          path: input,
+        });
+        return { failures };
       }
       // A path both sides agree they could not read carries no bytes for a
       // signature to stand for. It still belongs in the manifest, so the
@@ -1897,14 +3060,38 @@ function captureUniversalHostInputValidation(
           state.identityContext,
         )
       ) {
-        return undefined;
+        recordGenerationProofFailure(failures, {
+          domain: "host",
+          kind: Object.prototype.hasOwnProperty.call(
+            generationRealpaths,
+            absoluteInput,
+          )
+            ? "realpath-changed"
+            : "realpath-proof-missing",
+          path: input,
+        });
+        return { failures };
       }
     }
     validation.covered.add(path.resolve(input));
     const before = inputMetadataEvidence(input, filesystem);
-    if (!matchesRecordedInput(cached, input)) return undefined;
+    if (!matchesRecordedInput(cached, input)) {
+      recordGenerationProofFailure(failures, {
+        domain: "host",
+        kind: "snapshot-mismatch",
+        path: input,
+      });
+      return { failures };
+    }
     const after = inputMetadataSignature(input, filesystem);
-    if (before?.signature !== after) return undefined;
+    if (before?.signature !== after) {
+      recordGenerationProofFailure(failures, {
+        domain: "host",
+        kind: "changed-during-validation",
+        path: input,
+      });
+      return { failures };
+    }
     if (before !== undefined) {
       // Do not key this manifest by physical identity. A symlink/junction
       // spelling and its selected target deliberately share that identity,
@@ -1924,7 +3111,14 @@ function captureUniversalHostInputValidation(
     const probe = missingPathProbe(input, filesystem);
     if (probe.blocker !== undefined) {
       const signature = inputMetadataSignature(probe.blocker, filesystem);
-      if (signature === undefined) return undefined;
+      if (signature === undefined) {
+        recordGenerationProofFailure(failures, {
+          domain: "host",
+          kind: "blocker-metadata-unavailable",
+          path: probe.blocker,
+        });
+        return { failures };
+      }
       // A blocker proves a kind and an identity, not content: it is the
       // non-directory ancestor that makes everything below it unreachable, and
       // it cannot stop being that without its metadata moving. So it keeps a
@@ -1956,7 +3150,7 @@ function captureUniversalHostInputValidation(
     );
   }
   cached.hostInputValidation = validation;
-  return validation;
+  return { failures, validation };
 }
 
 /**
@@ -1972,8 +3166,8 @@ function captureUniversalHostInputValidation(
 const MISSING_INPUT_STATE = "missing";
 
 /**
- * The highest stamp each observed filesystem clock has provably minted, keyed
- * by the operations object that observes it and, inside, by reporting device.
+ * The current stamp an adapter-owned probe has minted, keyed by the operations
+ * object that observes it and, inside, by reporting device.
  *
  * A filesystem stamps a write once per clock tick, so two same-length writes
  * inside one tick are indistinguishable by metadata alone. A signature may
@@ -1981,72 +3175,46 @@ const MISSING_INPUT_STATE = "missing";
  * it, and that guarantee needs a reference instant the observed filesystem
  * itself produced: once some stamp on the same device is strictly newer than an
  * input's modification stamp, that input's tick is provably over, so any later
- * write must mint a newer stamp and move the signature. That is git's
- * racily-clean index rule, adapted to a read-only contract: where git compares
- * entries against the index file's own timestamp, this floor accumulates every
- * stamp the cache-owned operations report, seeded per generation by
- * {@link mintFilesystemClockReference}.
+ * write must mint a newer stamp and move the signature. This adapts git's
+ * racily-clean index rule: both sides of the comparison come from the same
+ * reporting device, and the newer side is a write the adapter itself made.
  *
- * The process clock never participates: both sides of every comparison are
- * stamps the same filesystem clock minted, at the same granularity, so a
- * filesystem clock running behind (or ahead of) the host process changes
- * nothing.
+ * A timestamp merely observed on another input cannot advance the reference.
+ * Tools may assign modification times, and a filesystem clock can move
+ * backwards independently of the process clock. Neither a passive historical
+ * maximum nor `Date.now()` proves what stamp a write would mint now. The probe
+ * is therefore rewritten immediately before every validation that may reuse a
+ * content signature, and its previous reference is cleared before the write. A
+ * failed refresh or a different reporting device declines the optimization and
+ * retains the content comparison (samchon/ttsc#1344).
  *
- * Accumulating observed stamps is deliberately weaker than git's own reference,
- * which is a single stamp git minted itself. A stamp this floor accepts may
- * instead have been _set_ rather than minted, and a set stamp is dangerous only
- * when it lands in the future: the floor is a maximum, so a restored past stamp
- * never raises it. One future-dated file — a stamp-preserving extraction or
- * copy from a machine whose clock ran ahead — pushes its device's floor past
- * the present and reopens the same-tick window for every other input on that
- * device until the clock catches up. A clock that jumps backwards strands the
- * floor above the present the same way, a different hazard from the constant
- * offset the paragraph above is about: an offset moves both operands together
- * and changes nothing, a jump moves only the present.
- *
- * The minted probe is not enough on its own to replace observed stamps: it
- * lands on the scratch volume, which is frequently not the inputs' volume (a
- * project on `D:` with `TEMP` on `C:`), and a probe-only floor would then
- * decline every _content_ signature, so every input carrying bytes would be
- * re-read on every delivery. A strict blocker keeps its signature either way,
- * because it proves a kind rather than content. Observed stamps keep the common
- * case working; the probe covers the case they cannot, a tree whose files were
- * all written inside one tick.
+ * The probe lives in an adapter-owned temporary directory outside the project.
+ * That directory may be on another volume, such as `C:` when a project lives on
+ * `D:`. Such a split-volume generation safely keeps reading content because no
+ * same-device reference exists; it never substitutes a process-clock guess or
+ * writes a probe into the user's project.
  */
-const FILESYSTEM_CLOCK_FLOORS = new WeakMap<
+const FILESYSTEM_CLOCK_REFERENCES = new WeakMap<
   TtscTransformFilesystemOperations,
   Map<bigint, bigint>
 >();
 
-/** Return one observed filesystem's per-device clock floor, creating it. */
-function filesystemClockFloors(
+/** Return one observed filesystem's current per-device references. */
+function filesystemClockReferences(
   filesystem: TtscTransformFilesystemOperations,
 ): Map<bigint, bigint> {
-  let floors = FILESYSTEM_CLOCK_FLOORS.get(filesystem);
-  if (floors === undefined) {
-    floors = new Map();
-    FILESYSTEM_CLOCK_FLOORS.set(filesystem, floors);
+  let references = FILESYSTEM_CLOCK_REFERENCES.get(filesystem);
+  if (references === undefined) {
+    references = new Map();
+    FILESYSTEM_CLOCK_REFERENCES.set(filesystem, references);
   }
-  return floors;
-}
-
-/** Raise a device's clock floor with the stamps one observation reported. */
-function observeFilesystemClock(
-  filesystem: TtscTransformFilesystemOperations,
-  stats: fs.BigIntStats,
-): void {
-  const floors = filesystemClockFloors(filesystem);
-  const stamp = stats.mtimeNs > stats.ctimeNs ? stats.mtimeNs : stats.ctimeNs;
-  const current = floors.get(stats.dev);
-  if (current === undefined || stamp > current) {
-    floors.set(stats.dev, stamp);
-  }
+  return references;
 }
 
 /**
  * Report whether a later write to the observed path is guaranteed to move its
- * modification stamp: the device's clock floor holds a stamp strictly newer, so
- * the tick that minted the stamp is provably over. The floor was observed
+ * modification stamp: the device's current probe holds a stamp strictly newer,
+ * so the tick that minted the stamp is provably over. The probe was written
  * before the caller's content read began, which is the ordering the guarantee
  * needs — a stamp minted before the read proves every post-read write lands in
  * a newer tick.
@@ -2055,42 +3223,62 @@ function stampSeparable(
   filesystem: TtscTransformFilesystemOperations,
   stats: fs.BigIntStats,
 ): boolean {
-  const floor = filesystemClockFloors(filesystem).get(stats.dev);
-  return floor !== undefined && stats.mtimeNs < floor;
+  const reference = filesystemClockReferences(filesystem).get(stats.dev);
+  return reference !== undefined && stats.mtimeNs < reference;
 }
 
 /**
- * Mint a reference instant for this generation and feed it into the observed
- * filesystem's clock floor.
+ * Replace every prior clock proof with one reference minted by a fresh write.
  *
- * The scratch directory is a write the adapter already owns, deliberately
+ * The reference directory is storage the adapter already owns, deliberately
  * outside the project root, so stamping a probe file there produces a
  * freshly-minted "now" without touching the user's project — the analogue of
  * git writing its index. The probe is observed through the cache-owned
  * operations and keyed by the device those operations report, so it only ever
- * separates stamps on the filesystem that actually minted it; when the scratch
- * volume differs from the inputs' volume, or the observed filesystem cannot see
- * the probe at all, nothing is proven and signature recording simply stays
- * declined until passively observed stamps separate an input on their own.
+ * separates stamps on the filesystem that actually minted it. When its volume
+ * differs from the inputs' volume, or the observed filesystem cannot see the
+ * probe at all, nothing is proven and content comparison continues.
  *
- * Relocating the scratch directory onto the inputs' volume would make the probe
- * universal, but it would also move every compiler and plugin temporary write
- * into the project's parent (frequently a monorepo root or a home directory)
- * for those layouts. That is a product decision about where ttsc writes, not a
- * property of this rule, so the cross-volume case degrades to more reads here
- * rather than being bought with it.
+ * Forcing the reference onto the inputs' volume would require writing into the
+ * user's project or an otherwise unowned neighboring directory. That is not a
+ * valid price for this optimization, so the cross-volume case degrades to more
+ * reads instead.
  */
-function mintFilesystemClockReference(
-  scratchDirectory: string,
+function refreshFilesystemClockReference(
+  referenceDirectory: string | undefined,
   filesystem: TtscTransformFilesystemOperations,
 ): void {
+  const references = filesystemClockReferences(filesystem);
+  references.clear();
+  if (referenceDirectory === undefined) return;
   try {
-    const probe = path.join(scratchDirectory, "clock-reference");
-    fs.writeFileSync(probe, "");
-    observeFilesystemClock(filesystem, filesystem.lstat(probe));
+    const probe = path.join(referenceDirectory, "clock-reference");
+    fs.writeFileSync(probe, `${process.hrtime.bigint()}\n`);
+    const stats = filesystem.lstat(probe);
+    if (stats.isFile()) {
+      references.set(stats.dev, stats.mtimeNs);
+    }
   } catch {
-    // The absence of a reference declines signature recording; it never
-    // invalidates a generation.
+    // A failed refresh leaves no reference, so content comparison continues.
+    references.clear();
+  }
+}
+
+/** Remove only the known probe and its now-empty owned directory. */
+function disposeFilesystemClockReference(referenceDirectory: string): void {
+  try {
+    fs.rmSync(path.join(referenceDirectory, "clock-reference"), {
+      force: true,
+    });
+  } catch {
+    // The probe may already have disappeared; the directory removal below is
+    // still safe because it is deliberately non-recursive.
+  }
+  try {
+    fs.rmdirSync(referenceDirectory);
+  } catch {
+    // Eviction schedules cleanup without awaiting its Promise. A foreign entry
+    // or a concurrent removal leaves, at worst, an empty temporary directory.
   }
 }
 
@@ -2125,12 +3313,10 @@ function inputMetadataEvidence(
 ): TtscInputMetadataEvidence | undefined {
   try {
     const link = filesystem.lstat(file);
-    observeFilesystemClock(filesystem, link);
     let target = link;
     if (link.isSymbolicLink()) {
       try {
         target = filesystem.statBigInt(file);
-        observeFilesystemClock(filesystem, target);
       } catch {
         // Keep a broken link in the existing-input manifest. Its own metadata
         // stays stable while the target is missing, and the first successful
@@ -2201,7 +3387,21 @@ function graphInputStateHash(
   file: string,
   filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
 ): string | null {
+  const kind = compilerStatKind(file, filesystem);
+  const readHash = graphInputReadHash(file, filesystem, kind);
+  if (readHash !== null) return readHash;
+  return kind === "directory" ? hashText("ttsc:host-input:directory\0") : null;
+}
+
+/** Hash only a successful compiler-style ReadFile result, without kind fallback. */
+function graphInputReadHash(
+  file: string,
+  filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
+  observedKind?: "directory" | "file" | "missing",
+): string | null {
+  const kind = observedKind ?? compilerStatKind(file, filesystem);
   try {
+    if (kind === "directory") return null;
     const bytes = filesystem.readFile(file);
     if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) {
       const even = bytes.subarray(
@@ -2226,13 +3426,178 @@ function graphInputStateHash(
         : bytes;
     return hashText(content);
   } catch {
-    try {
-      return filesystem.stat(file).isDirectory()
-        ? hashText("ttsc:host-input:directory\0")
-        : null;
-    } catch {
-      return null;
+    return null;
+  }
+}
+
+/** Current result of TypeScript-Go's Stat predicate. */
+function compilerStatKind(
+  file: string,
+  filesystem: TtscTransformFilesystemOperations,
+): "directory" | "file" | "missing" {
+  try {
+    return filesystem.stat(file).isDirectory() ? "directory" : "file";
+  } catch {
+    return "missing";
+  }
+}
+
+/** Return the exact recorded predicates that no longer hold for one spelling. */
+function graphInputObservationFailures(
+  file: string,
+  observation: ITtscCompilerTransformation.IInputObservation,
+  filesystem: TtscTransformFilesystemOperations,
+  identities: FilesystemPathIdentityContext,
+): string[] {
+  const failures: string[] = [];
+  if (observation.accessibleEntries !== undefined) {
+    const current = compilerAccessibleEntries(file, filesystem);
+    if (
+      JSON.stringify(current) !== JSON.stringify(observation.accessibleEntries)
+    ) {
+      failures.push("accessible-entries-changed");
     }
+  }
+  const kind =
+    observation.fileExists !== undefined ||
+    observation.directoryExists !== undefined ||
+    observation.stat !== undefined ||
+    observation.readFile !== undefined
+      ? compilerStatKind(file, filesystem)
+      : undefined;
+  if (
+    observation.fileExists !== undefined &&
+    (kind === "file") !== observation.fileExists
+  ) {
+    failures.push("file-exists-changed");
+  }
+  if (
+    observation.directoryExists !== undefined &&
+    (kind === "directory") !== observation.directoryExists
+  ) {
+    failures.push("directory-exists-changed");
+  }
+  if (observation.stat !== undefined && kind !== observation.stat) {
+    failures.push("stat-changed");
+  }
+  if (observation.readFile !== undefined) {
+    const currentHash = graphInputReadHash(file, filesystem, kind);
+    if (
+      (observation.readFile.ok && currentHash !== observation.readFile.hash) ||
+      (!observation.readFile.ok && currentHash !== null)
+    ) {
+      failures.push("read-file-changed");
+    }
+  }
+  if (observation.realpath !== undefined) {
+    const currentRealpath = compilerInputRealpathObservation(file, filesystem);
+    if (
+      observation.realpath.ok !== currentRealpath.ok ||
+      (observation.realpath.ok &&
+        currentRealpath.ok &&
+        !sameHostInputRealpath(
+          observation.realpath.path,
+          currentRealpath.path,
+          identities,
+        ))
+    ) {
+      failures.push("realpath-changed");
+    }
+  }
+  return failures;
+}
+
+/** Replay TypeScript-Go's accessible-entry classification and sorted order. */
+function compilerAccessibleEntries(
+  directory: string,
+  filesystem: TtscTransformFilesystemOperations,
+): NonNullable<
+  ITtscCompilerTransformation.IInputObservation["accessibleEntries"]
+> {
+  const directories: string[] = [];
+  const files: string[] = [];
+  const pathApi = filesystem.platform === "win32" ? path.win32 : path.posix;
+  let entries: fs.Dirent[];
+  try {
+    entries = filesystem.readdir(directory);
+  } catch {
+    return { directories, files };
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      directories.push(entry.name);
+      continue;
+    }
+    if (entry.isFile()) {
+      files.push(entry.name);
+      continue;
+    }
+    if (!entry.isSymbolicLink()) continue;
+    try {
+      const target = filesystem.stat(pathApi.join(directory, entry.name));
+      if (target.isDirectory()) directories.push(entry.name);
+      else if (target.isFile()) files.push(entry.name);
+    } catch {
+      // TypeScript-Go omits inaccessible and broken linked entries.
+    }
+  }
+  directories.sort();
+  files.sort();
+  return { directories, files };
+}
+
+/** Validate one predicate-preserving graph proof against a filesystem view. */
+export function validateGraphInputObservation(
+  file: string,
+  observation: ITtscCompilerTransformation.IInputObservation,
+  filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
+): string[] {
+  const normalized = normalizeGraphInputObservation(
+    observation,
+    filesystem.platform,
+  );
+  if (normalized === undefined) return ["proof-conflict"];
+  return graphInputObservationFailures(
+    file,
+    normalized,
+    filesystem,
+    createHostPathIdentityContext(filesystem),
+  );
+}
+
+/** Whether every compiler-time predicate still returns its recorded value. */
+function matchesGraphInputObservation(
+  file: string,
+  observation: ITtscCompilerTransformation.IInputObservation,
+  filesystem: TtscTransformFilesystemOperations,
+  identities: FilesystemPathIdentityContext,
+): boolean {
+  return (
+    graphInputObservationFailures(file, observation, filesystem, identities)
+      .length === 0
+  );
+}
+
+/** Replay TypeScript-Go's Realpath result, including its lexical fallback. */
+function compilerInputRealpathObservation(
+  file: string,
+  filesystem: TtscTransformFilesystemOperations,
+): NonNullable<ITtscCompilerTransformation.IInputObservation["realpath"]> {
+  try {
+    const realpath = filesystem.realpath(file);
+    return realpath.length === 0
+      ? { ok: false }
+      : {
+          ok: true,
+          path: resolveFilesystemPath(realpath, filesystem.platform),
+        };
+  } catch {
+    // TypeScript-Go's OS and io filesystems return the cleaned input spelling
+    // when native realpath resolution fails; they do not expose the failure.
+    return {
+      ok: true,
+      path: resolveFilesystemPath(file, filesystem.platform),
+    };
   }
 }
 
@@ -2335,6 +3700,12 @@ function matchesCompleteInputSnapshot(
     cached.inputSignatures === undefined
       ? undefined
       : { hashes: cached.inputHashes, signatures: cached.inputSignatures },
+    {
+      // Judge membership by the rule the compile ran under, and read only the
+      // inputs this comparison actually consults.
+      declaredKeys: declaredInputs,
+      policy: cached.membershipPolicy,
+    },
   );
   if (!walkSnapshotComplete(current, declaredInputs)) {
     return false;
@@ -2347,7 +3718,9 @@ function matchesCompleteInputSnapshot(
   ) {
     return false;
   }
-  current.hashes[currentKey] = hashText(source);
+  if (Object.prototype.hasOwnProperty.call(cached.inputHashes, currentKey)) {
+    current.hashes[currentKey] = hashText(source);
+  }
   if (!sameHashes(cached.inputHashes, current.hashes, declaredInputs)) {
     return false;
   }
@@ -2413,6 +3786,9 @@ function matchesExternalInputRealpaths(
   const state = envelopeDerivation(cached);
   const filesystem = resultFilesystem(cached.result);
   for (const input of cached.externalInputPaths ?? []) {
+    if (cached.externalInputObservations?.[path.resolve(input)] !== undefined) {
+      continue;
+    }
     const identity = derivationIdentity(state, input);
     if (!Object.prototype.hasOwnProperty.call(expected, identity)) continue;
     if (
@@ -2430,26 +3806,44 @@ function matchesExternalInputRealpaths(
 
 /**
  * Capture external-input hashes without attaching post-compile state to an
- * earlier graph. Graph members must carry compiler-time proof and still match
- * it now; plugin-declared dependency-only paths retain the historical
- * post-compile snapshot because their own protocol does not claim generation
- * fingerprints.
+ * earlier graph. Graph members and out-of-walk transformed sources must carry
+ * compiler-time proof and still match it now; plugin-declared dependency-only
+ * paths retain the historical post-compile snapshot because their own protocol
+ * does not claim generation fingerprints.
  */
 function captureExternalInputSnapshot(
   cached: TtscCachedProjectTransform,
   paths: readonly string[],
 ): {
   complete: boolean;
+  failures: TtscGenerationProofFailures;
   hashes: Record<string, string>;
+  observations: Record<string, ITtscCompilerTransformation.IInputObservation>;
   realpaths: Record<string, string | null>;
   signatures: Record<string, string>;
 } {
   const state = envelopeDerivation(cached);
   const filesystem = resultFilesystem(cached.result);
   const graph = envelopeGraphIndexes(state, cached);
+  // A non-declaration transform output is a compiler-realized source even when
+  // a malformed or legacy graph omitted its node. Its output was computed from
+  // compiler-time bytes, so a post-compile host read cannot prove coherence.
+  const transformSourceSpellings = new Set<string>();
+  if (cached.result.type === "success") {
+    for (const output of Object.keys(cached.result.typescript)) {
+      if (!isDeclarationFile(output)) {
+        transformSourceSpellings.add(path.resolve(cached.projectRoot, output));
+      }
+    }
+  }
   const hashes: Record<string, string> = {};
+  const observations: Record<
+    string,
+    ITtscCompilerTransformation.IInputObservation
+  > = {};
   const realpaths: Record<string, string | null> = {};
   const signatures: Record<string, string> = {};
+  const failures = createGenerationProofFailures();
   let complete = true;
   // Sandwich every read between two metadata signatures. Only a signature that
   // survived its own read, and whose stamp's tick the filesystem's clock has
@@ -2467,32 +3861,93 @@ function captureExternalInputSnapshot(
   };
   for (const input of paths) {
     const identity = derivationIdentity(state, input);
-    // A member the envelope reported only as a resolution candidate falls
+    const spelling = path.resolve(input);
+    const predicateObservation = graph.inputObservations.get(spelling);
+    const predicateConflict = graph.inputObservationConflicts.has(spelling);
+    if (
+      graph.speculative.has(spelling) &&
+      (predicateObservation !== undefined || predicateConflict)
+    ) {
+      if (predicateConflict || predicateObservation === undefined) {
+        complete = false;
+        recordGenerationProofFailure(failures, {
+          domain: "external",
+          kind: "graph-proof-conflict",
+          detail: graph.inputProofFailures.get(spelling),
+          path: input,
+        });
+        continue;
+      }
+      const mismatches = graphInputObservationFailures(
+        input,
+        predicateObservation,
+        filesystem,
+        state.identityContext,
+      );
+      if (mismatches.length !== 0) complete = false;
+      for (const kind of mismatches) {
+        recordGenerationProofFailure(failures, {
+          domain: "external",
+          kind: `graph-${kind}`,
+          path: input,
+        });
+      }
+      observations[spelling] = predicateObservation;
+      continue;
+    }
+    // A member the envelope reported only as a resolver input falls
     // through to the recorded-state branch below, the same evidence a
     // plugin-declared dependency path carries. Its absence still invalidates
     // the generation when it appears, because `missing` is recorded state.
+    const realizedTransformSource = transformSourceSpellings.has(spelling);
     const speculativeOnly =
-      graph.speculative.has(identity) &&
-      !graph.inputProofs.has(identity) &&
-      !graph.inputProofConflicts.has(identity);
-    if (graph.members.has(identity) && !speculativeOnly) {
-      const proof = graph.inputProofs.get(identity);
-      if (proof === undefined || graph.inputProofConflicts.has(identity)) {
+      !realizedTransformSource &&
+      graph.speculative.has(spelling) &&
+      !graph.inputProofs.has(spelling) &&
+      !graph.inputProofConflicts.has(spelling) &&
+      !graph.inputProofFailures.has(spelling);
+    if (
+      (realizedTransformSource || graph.memberSpellings.has(spelling)) &&
+      !speculativeOnly
+    ) {
+      const proof = graph.inputProofs.get(spelling);
+      if (proof === undefined || graph.inputProofConflicts.has(spelling)) {
         complete = false;
+        recordGenerationProofFailure(failures, {
+          domain: "external",
+          kind: graph.inputProofConflicts.has(spelling)
+            ? "graph-proof-conflict"
+            : "graph-proof-missing",
+          detail: graph.inputProofFailures.get(spelling),
+          path: input,
+        });
         continue;
       }
       const before = inputMetadataEvidence(input, filesystem);
       const currentHash = graphInputStateHash(input, filesystem);
+      const currentRealpath = hostInputRealpath(input, filesystem);
       const after = inputMetadataSignature(input, filesystem);
-      if (
-        currentHash !== proof.hash ||
-        !sameHostInputRealpath(
-          proof.realpath,
-          hostInputRealpath(input, filesystem),
-          state.identityContext,
-        )
-      ) {
+      const realpathMatches = sameHostInputRealpath(
+        proof.realpath,
+        currentRealpath,
+        state.identityContext,
+      );
+      if (currentHash !== proof.hash || !realpathMatches) {
         complete = false;
+        if (currentHash !== proof.hash) {
+          recordGenerationProofFailure(failures, {
+            domain: "external",
+            kind: "graph-content-changed",
+            path: input,
+          });
+        }
+        if (!realpathMatches) {
+          recordGenerationProofFailure(failures, {
+            domain: "external",
+            kind: "graph-realpath-changed",
+            path: input,
+          });
+        }
       } else if (currentHash !== null) {
         // The recorded hash is the compiler's own proof, so a signature may
         // only stand for it once the current bytes were shown to match it.
@@ -2510,53 +3965,160 @@ function captureExternalInputSnapshot(
     hashes[identity] = hash ?? MISSING_INPUT_STATE;
     if (hash !== null) record(input, before, after);
   }
-  return { complete, hashes, realpaths, signatures };
+  return {
+    complete,
+    failures,
+    hashes,
+    observations,
+    realpaths,
+    signatures,
+  };
 }
 
-/** Verify every graph member still has the state read by the compiler. */
-function matchesCompilerGraphInputProofs(
+/** Explain every graph member that no longer matches the compiler's state. */
+function compilerGraphInputProofFailures(
   cached: TtscCachedProjectTransform,
-): boolean {
+): TtscGenerationProofFailures {
+  const failures = createGenerationProofFailures();
   if (
     cached.result.type === "exception" ||
     cached.result.graph === undefined ||
     (cached.result.graph.inputHashes === undefined &&
-      cached.result.graph.inputRealpaths === undefined)
+      cached.result.graph.inputObservations === undefined &&
+      cached.result.graph.inputRealpaths === undefined &&
+      cached.result.graph.inputProofFailures === undefined)
   ) {
     // Legacy sidecars remain compatible for ordinary in-project graphs. Their
     // out-of-walk members are still rejected by captureExternalInputSnapshot,
     // where a post-compile snapshot cannot prove the compiler's generation.
-    return true;
+    return failures;
   }
   const state = envelopeDerivation(cached);
   const filesystem = resultFilesystem(cached.result);
   const graph = envelopeGraphIndexes(state, cached);
-  if (graph.inputProofConflicts.size !== 0) {
-    return false;
+  const predicateSpellings = new Set<string>();
+  const predicateConflictSpellings = new Set<string>();
+  for (const [spelling, observation] of graph.inputObservations) {
+    predicateSpellings.add(spelling);
+    for (const kind of graphInputObservationFailures(
+      spelling,
+      observation,
+      filesystem,
+      state.identityContext,
+    )) {
+      recordGenerationProofFailure(failures, {
+        domain: "graph",
+        kind,
+        path: spelling,
+      });
+    }
   }
-  for (const identity of graph.members) {
-    const proof = graph.inputProofs.get(identity);
-    // A speculative candidate has no compile-time read to prove. Requiring one
-    // would void every generation of every project whose resolution passes over
-    // a higher-priority spelling, which is every project with a dependency
-    // typed by a declaration file (samchon/ttsc#1245). It is validated instead
-    // against the state {@link captureExternalInputSnapshot} recorded for it.
-    if (proof === undefined && graph.speculative.has(identity)) {
+  for (const spelling of graph.inputObservationConflicts) {
+    predicateSpellings.add(spelling);
+    predicateConflictSpellings.add(spelling);
+    recordGenerationProofFailure(failures, {
+      domain: "graph",
+      kind: "proof-conflict",
+      detail: graph.inputProofFailures.get(spelling),
+      path: spelling,
+    });
+  }
+  for (const spelling of graph.memberSpellings) {
+    const proof = graph.inputProofs.get(spelling);
+    if (isTransformScratchInput(spelling, cached.scratchDirectory)) {
+      continue;
+    }
+    if (predicateConflictSpellings.has(spelling)) {
+      continue;
+    }
+    if (graph.inputProofConflicts.has(spelling)) {
+      recordGenerationProofFailure(failures, {
+        domain: "graph",
+        kind: "proof-conflict",
+        detail: graph.inputProofFailures.get(spelling),
+        path: spelling,
+      });
+      continue;
+    }
+    if (graph.inputProofFailures.has(spelling)) {
+      recordGenerationProofFailure(failures, {
+        domain: "graph",
+        kind: "proof-missing",
+        detail: graph.inputProofFailures.get(spelling),
+        path: spelling,
+      });
+      continue;
+    }
+    const observation = graph.inputObservations.get(spelling);
+    if (observation !== undefined && proof !== undefined) {
+      const projection = legacyProjectionOfGraphInputObservation(observation);
+      if (
+        projection.failure !== undefined ||
+        projection.hash !== proof.hash ||
+        !sameHostInputRealpath(
+          projection.realpath,
+          proof.realpath,
+          state.identityContext,
+        )
+      ) {
+        recordGenerationProofFailure(failures, {
+          domain: "graph",
+          kind: "proof-conflict",
+          detail: projection.failure,
+          path: spelling,
+        });
+      }
+      // The rich predicates were already replayed above. Their legacy
+      // projection is an internal producer-consistency check, never a reason
+      // to read the same filesystem input again. A projection that cannot
+      // represent the observation is itself inconsistent with a supplied
+      // legacy proof, rather than permission to trust either representation.
       continue;
     }
     if (
-      proof === undefined ||
-      graphInputStateHash(proof.path, filesystem) !== proof.hash ||
+      graph.speculative.has(spelling) &&
+      predicateSpellings.has(spelling) &&
+      !graph.inputProofFailures.has(spelling)
+    ) {
+      continue;
+    }
+    // A legacy sidecar can report a resolver candidate without a compiler
+    // predicate. Validate it against the generation snapshot instead.
+    if (proof === undefined && graph.speculative.has(spelling)) {
+      continue;
+    }
+    if (proof === undefined) {
+      recordGenerationProofFailure(failures, {
+        domain: "graph",
+        kind: "proof-missing",
+        detail: graph.inputProofFailures.get(spelling),
+        path: spelling,
+      });
+      continue;
+    }
+    const currentHash = graphInputStateHash(proof.path, filesystem);
+    if (currentHash !== proof.hash) {
+      recordGenerationProofFailure(failures, {
+        domain: "graph",
+        kind: "content-changed",
+        path: proof.path,
+      });
+    }
+    if (
       !sameHostInputRealpath(
         proof.realpath,
         hostInputRealpath(proof.path, filesystem),
         state.identityContext,
       )
     ) {
-      return false;
+      recordGenerationProofFailure(failures, {
+        domain: "graph",
+        kind: "realpath-changed",
+        path: proof.path,
+      });
     }
   }
-  return true;
+  return failures;
 }
 
 /** Compare one derived input with the snapshot that owned it at generation. */
@@ -2578,6 +4140,15 @@ function matchesRecordedInput(
     ? cached.inputHashes[projectKey]
     : undefined;
   const identity = derivationIdentity(state, input);
+  const observation = cached.externalInputObservations?.[path.resolve(input)];
+  if (observation !== undefined) {
+    return matchesGraphInputObservation(
+      input,
+      observation,
+      filesystem,
+      state.identityContext,
+    );
+  }
   const externalHash = (cached.externalInputHashes ?? {})[identity];
   const externalRealpaths = cached.externalInputRealpaths;
   const graphInput =
@@ -2631,9 +4202,45 @@ export function collectProjectInputHashes(
   projectRoot: string,
   identities: FilesystemPathIdentityContext = createHostPathIdentityContext(),
   filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
+  policy?: ITtscProjectMembershipPolicy,
 ): Record<string, string> {
-  return collectProjectInputSnapshot(projectRoot, identities, filesystem)
-    .hashes;
+  return collectProjectInputHashSnapshot(
+    projectRoot,
+    identities,
+    filesystem,
+    policy,
+  ).hashes;
+}
+
+/** One project-walk hash set together with its completeness proof. */
+export interface TtscProjectInputHashSnapshot {
+  complete: boolean;
+  hashes: Record<string, string>;
+}
+
+/**
+ * Hash the project walk and retain whether every attempted directory and file
+ * was observed coherently. Cache-key hosts must reject an incomplete set.
+ */
+export function collectProjectInputHashSnapshot(
+  projectRoot: string,
+  identities: FilesystemPathIdentityContext = createHostPathIdentityContext(),
+  filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
+  policy?: ITtscProjectMembershipPolicy,
+): TtscProjectInputHashSnapshot {
+  const snapshot = collectProjectInputSnapshot(
+    projectRoot,
+    identities,
+    filesystem,
+    undefined,
+    {
+      policy,
+    },
+  );
+  return {
+    complete: snapshot.complete && snapshot.directoryComplete,
+    hashes: snapshot.hashes,
+  };
 }
 
 /** Hash project files and snapshot the directory topology in one walk. */
@@ -2645,6 +4252,16 @@ function collectProjectInputSnapshot(
     hashes: Record<string, string>;
     signatures: Record<string, string>;
   },
+  options?: {
+    /**
+     * Restrict hashing to these project keys. Supplied by a validating caller,
+     * which compares over exactly this set, and omitted by a capturing one,
+     * which has no generation to compare against yet.
+     */
+    declaredKeys?: ReadonlySet<string>;
+    /** What the resolved configuration admits into the program. */
+    policy?: ITtscProjectMembershipPolicy;
+  },
 ): {
   complete: boolean;
   directoryComplete: boolean;
@@ -2653,25 +4270,41 @@ function collectProjectInputSnapshot(
   projectDirectories: TtscProjectDirectorySnapshot[];
   provenSignatures: Record<string, string>;
   unstableFiles: Set<string>;
+  walkFailures: TtscProjectWalkFailure[];
 } {
   const hashes: Record<string, string> = {};
   const fileSignatures: Record<string, string> = {};
   const provenSignatures: Record<string, string> = {};
   const unstableFiles = new Set<string>();
   let attributed = true;
-  const walked = walkProjectInputs(projectRoot, filesystem);
+  const walked = walkProjectInputs(projectRoot, filesystem, options?.policy);
+  const walkFailures = [...walked.failures];
   let complete = walked.complete;
   for (const file of walked.files) {
     try {
-      const before = inputMetadataEvidence(file, filesystem);
       const key = toProjectKey(projectRoot, file, identities);
+      // A caller validating a generation compares hashes over that
+      // generation's declared inputs alone (`sameHashes` takes the declared key
+      // set), so reading anything else is work whose result is never consulted.
+      // Skipping it is what keeps a directory full of emitted files from
+      // costing a read per file on the pass that first sees them
+      // (samchon/ttsc#1307). Capture passes supply no restriction and still
+      // record the whole walk.
+      if (
+        options?.declaredKeys !== undefined &&
+        !options.declaredKeys.has(key)
+      ) {
+        continue;
+      }
+      const before = inputMetadataEvidence(file, filesystem);
       // A file whose signature still equals the one captured around the read
       // that produced the recorded hash carries that content, so the whole
-      // project does not have to be re-read to prove one delivery. A signature
-      // that was already proven stays proven: its stamp has not moved since the
-      // clock provably left its tick.
+      // project does not have to be re-read to prove one delivery. Recheck the
+      // clock ordering as well: rollback can make a formerly safe floor unable
+      // to answer for a new write (samchon/ttsc#1344).
       if (
         before !== undefined &&
+        before.separable &&
         proven !== undefined &&
         proven.signatures[key] === before.signature &&
         Object.prototype.hasOwnProperty.call(proven.hashes, key)
@@ -2691,6 +4324,7 @@ function collectProjectInputSnapshot(
       ) {
         complete = false;
         unstableFiles.add(key);
+        walkFailures.push({ kind: "file-changed-during-read", path: file });
       } else {
         fileSignatures[key] = after;
         // Only a signature whose stamp's tick the filesystem's clock provably
@@ -2705,6 +4339,7 @@ function collectProjectInputSnapshot(
       // File watchers may observe a transform while another process is moving
       // or deleting files. The missing key invalidates older cache entries.
       complete = false;
+      walkFailures.push({ kind: "file-read-failed", path: file });
       try {
         unstableFiles.add(toProjectKey(projectRoot, file, identities));
       } catch {
@@ -2722,12 +4357,14 @@ function collectProjectInputSnapshot(
     projectDirectories: walked.directories,
     provenSignatures,
     unstableFiles,
+    walkFailures,
   };
 }
 
 /**
- * Enumerate every regular file under `root`, skipping well-known output and
- * tooling directories (see {@link isIgnoredProjectDirectory}).
+ * Enumerate every regular file under `root`, skipping the directories no
+ * configuration can name ({@link isIgnoredProjectDirectory}) and the ones the
+ * resolved configuration excludes ({@link isExcludedProjectDirectory}).
  *
  * Uses an iterative DFS instead of `fs.readdirSync` recursion to avoid
  * unbounded call-stack depth on deep project trees. The result is sorted so
@@ -2736,20 +4373,36 @@ function collectProjectInputSnapshot(
 function walkProjectInputs(
   root: string,
   filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
+  policy: ITtscProjectMembershipPolicy = PERMISSIVE_PROJECT_MEMBERSHIP_POLICY,
 ): {
   complete: boolean;
   directories: TtscProjectDirectorySnapshot[];
+  failures: TtscProjectWalkFailure[];
   files: string[];
 } {
   let complete = true;
-  const directories: TtscProjectDirectorySnapshot[] = [];
+  const failures: TtscProjectWalkFailure[] = [];
   const files: string[] = [];
+  // Collected in one pass, then digested in a second. A directory's digest has
+  // to know whether each child directory can hold program inputs, and the walk
+  // learns that only after descending, so the two cannot be one pass.
+  const visited: {
+    childDirectories: string[];
+    entries: { name: string; kind: string; possible: boolean }[];
+    ownInput: boolean;
+    path: string;
+    stable: string | undefined;
+  }[] = [];
   const stack = [root];
   while (stack.length !== 0) {
     const current = stack.pop()!;
     const before = projectDirectorySignature(current, filesystem);
     if (before === undefined) {
       complete = false;
+      failures.push({
+        kind: "directory-metadata-unavailable",
+        path: current,
+      });
       continue;
     }
     let entries: fs.Dirent[];
@@ -2757,49 +4410,128 @@ function walkProjectInputs(
       entries = filesystem.readdir(current);
     } catch {
       complete = false;
+      failures.push({ kind: "directory-read-failed", path: current });
       continue;
     }
     const after = projectDirectorySignature(current, filesystem);
     if (after === undefined || before !== after) {
       complete = false;
+      failures.push({
+        kind:
+          after === undefined
+            ? "directory-metadata-unavailable"
+            : "directory-changed-during-walk",
+        path: current,
+      });
     }
-    directories.push({
+    const visit = {
+      childDirectories: [] as string[],
+      entries: [] as { name: string; kind: string; possible: boolean }[],
+      ownInput: false,
       path: current,
       // If membership moved during enumeration, force the next delivery to
       // replace this generation instead of blessing a torn directory/file
       // snapshot as stable.
-      signature:
+      stable:
         after !== undefined && before === after
-          ? after
+          ? undefined
           : `unstable:${before}:${after ?? "missing"}`,
-    });
+    };
     for (const entry of entries) {
       if (isIgnoredProjectDirectory(entry.name)) {
         continue;
       }
       const file = path.join(current, entry.name);
+      if (entry.isDirectory() && isExcludedProjectDirectory(file, policy)) {
+        continue;
+      }
+      const possible = isPossibleProgramEntry(entry, policy);
+      visit.entries.push({
+        kind: [
+          entry.isDirectory(),
+          entry.isFile(),
+          entry.isSymbolicLink(),
+        ].join(":"),
+        name: entry.name,
+        possible,
+      });
       if (entry.isDirectory()) {
+        visit.childDirectories.push(file);
         stack.push(file);
-      } else if (entry.isFile()) {
+      } else if (entry.isFile() && possible) {
+        // Only a file that could enter the program is hashed. A file that
+        // could not is either irrelevant to every generation, or it is one the
+        // compiler actually read, in which case the graph reports it and
+        // `isProjectWalkPath` now agrees it is out of the walk, so it is
+        // recorded and proven by the out-of-walk snapshot instead. Hashing an
+        // emitted tree here bought nothing and cost a read per file, including
+        // in `@ttsc/metro`, whose fingerprint re-keys every transformed file
+        // (samchon/ttsc#1307).
         files.push(file);
+        visit.ownInput = true;
       }
     }
+    visited.push(visit);
   }
+
+  // A directory matters to program membership only if its subtree can hold a
+  // program input. Propagate that up from the directories that hold one, so a
+  // bundler creating `out/` and filling it with JavaScript a project admitting
+  // none can never compile is not a membership change at any level: not in the
+  // directory itself, and not in the parent that now lists it
+  // (samchon/ttsc#1307).
+  const byPath = new Map(visited.map((visit) => [visit.path, visit]));
+  const relevant = new Set<string>();
+  for (const visit of visited) {
+    if (!visit.ownInput) {
+      continue;
+    }
+    let current: string | undefined = visit.path;
+    while (current !== undefined && !relevant.has(current)) {
+      relevant.add(current);
+      const parent = path.dirname(current);
+      current = parent === current || !byPath.has(parent) ? undefined : parent;
+    }
+  }
+
+  const directories: TtscProjectDirectorySnapshot[] = visited.map((visit) => {
+    const membership = visit.entries
+      .filter(
+        (entry) =>
+          entry.possible &&
+          (!visit.childDirectories.includes(
+            path.join(visit.path, entry.name),
+          ) ||
+            relevant.has(path.join(visit.path, entry.name))),
+      )
+      .map((entry) => `${entry.name}:${entry.kind}`);
+    return {
+      path: visit.path,
+      relevant: relevant.has(visit.path),
+      signature:
+        visit.stable ??
+        hashText(membership.sort().join(String.fromCharCode(0))),
+    };
+  });
   directories.sort((left, right) => left.path.localeCompare(right.path));
   files.sort();
-  return { complete, directories, files };
+  return { complete, directories, failures, files };
 }
 
-/** Return a cheap identity for one directory's immediate membership. */
+/**
+ * Return a directory's metadata stamp, used to detect that its membership moved
+ * _while_ the walk was enumerating it.
+ *
+ * This is the right instrument for that job and the wrong one for comparing two
+ * generations: it moves for ignored entries too. {@link walkProjectInputs}
+ * records the filtered membership digest for the comparison instead.
+ */
 function projectDirectorySignature(
   directory: string,
   filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
 ): string | undefined {
   try {
     const stats = filesystem.statBigInt(directory);
-    // Directory stamps are minted by the same clock as file stamps, so every
-    // walk observation also raises the clock floor that separates them.
-    observeFilesystemClock(filesystem, stats);
     if (!stats.isDirectory()) {
       return undefined;
     }
@@ -2821,14 +4553,31 @@ function sameProjectDirectories(
   left: readonly TtscProjectDirectorySnapshot[],
   right: readonly TtscProjectDirectorySnapshot[],
 ): boolean {
-  return (
-    left.length === right.length &&
-    left.every(
-      (directory, index) =>
-        directory.path === right[index]?.path &&
-        directory.signature === right[index]?.signature,
-    )
-  );
+  // Compare only the directories that can hold program inputs, on either side.
+  // A directory irrelevant on both is not part of the program's membership at
+  // all, so its appearance, disappearance or churn says nothing: that is a
+  // bundler's output tree. One that gained or lost relevance is present in the
+  // comparison from the side where it counts, and so is caught.
+  const select = (
+    snapshots: readonly TtscProjectDirectorySnapshot[],
+  ): Map<string, TtscProjectDirectorySnapshot> =>
+    new Map(
+      snapshots
+        .filter((directory) => directory.relevant)
+        .map((directory) => [directory.path, directory]),
+    );
+  const leftRelevant = select(left);
+  const rightRelevant = select(right);
+  const paths = new Set([...leftRelevant.keys(), ...rightRelevant.keys()]);
+  for (const location of paths) {
+    if (
+      leftRelevant.get(location)?.signature !==
+      rightRelevant.get(location)?.signature
+    ) {
+      return false;
+    }
+  }
+  return true;
 }
 
 /**
@@ -2856,12 +4605,33 @@ function openDirectoryWatch(
   return { close: () => watcher.close() };
 }
 
+/** Detach and close every watcher, then preserve the first cleanup failure. */
+function closeDirectoryWatches(watchers: { close: () => void }[]): void {
+  const owned = watchers.splice(0);
+  let failed = false;
+  let failure: unknown;
+  for (const watcher of owned) {
+    try {
+      watcher.close();
+    } catch (error) {
+      if (!failed) {
+        failed = true;
+        failure = error;
+      }
+    }
+  }
+  if (failed) throw failure;
+}
+
 /** Watch every walked directory for membership changes after generation. */
 async function createProjectMutationTracker(
   directories: readonly TtscProjectDirectorySnapshot[],
   filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
+  policy: ITtscProjectMembershipPolicy = PERMISSIVE_PROJECT_MEMBERSHIP_POLICY,
 ): Promise<TtscProjectMutationTracker> {
   const tracker: TtscProjectMutationTracker = {
+    changes: new Set(),
+    changesOmitted: false,
     close: () => undefined,
     failed: false,
     membershipChanged: false,
@@ -2872,22 +4642,45 @@ async function createProjectMutationTracker(
       directories.map((directory) => ({ directory: directory.path })),
       false,
       filesystem,
+      (location, filename) =>
+        reportsProgramMembership(
+          path.join(location, filename),
+          filename,
+          policy,
+          filesystem,
+        ),
     );
     return tracker;
   }
   const watchers: { close: () => void }[] = [];
-  tracker.close = () => {
-    for (const watcher of watchers) watcher.close();
-    watchers.length = 0;
-  };
+  tracker.close = () => closeDirectoryWatches(watchers);
   for (const directory of directories) {
     try {
       watchers.push(
         openDirectoryWatch(
           filesystem,
           directory.path,
-          (eventType) => {
-            if (eventType === "rename") tracker.membershipChanged = true;
+          (eventType, filename) => {
+            if (eventType !== "rename") {
+              return;
+            }
+            if (
+              filename !== null &&
+              !reportsProgramMembership(
+                path.join(directory.path, filename),
+                filename,
+                policy,
+                filesystem,
+              )
+            ) {
+              return;
+            }
+            recordProjectMutation(
+              tracker,
+              filename === null
+                ? directory.path
+                : path.join(directory.path, filename),
+            );
           },
           () => {
             tracker.failed = true;
@@ -2939,6 +4732,8 @@ async function createHostInputMutationTracker(
     names: [...location.names],
   }));
   const tracker: TtscProjectMutationTracker = {
+    changes: new Set(),
+    changesOmitted: false,
     close: () => undefined,
     // Coverage is the caller's claim, and it is required rather than derived
     // from the input list: an input is watched by its exact name here, but only
@@ -2960,10 +4755,7 @@ async function createHostInputMutationTracker(
     return tracker;
   }
   const watchers: { close: () => void }[] = [];
-  tracker.close = () => {
-    for (const watcher of watchers) watcher.close();
-    watchers.length = 0;
-  };
+  tracker.close = () => closeDirectoryWatches(watchers);
   for (const location of locations) {
     try {
       const names = new Set(location.names);
@@ -2981,7 +4773,12 @@ async function createHostInputMutationTracker(
                 ? null
                 : normalizeHostInputName(filename, caseSensitive);
             if (reported === null || names.has(reported)) {
-              tracker.membershipChanged = true;
+              recordProjectMutation(
+                tracker,
+                filename === null
+                  ? location.directory
+                  : path.join(location.directory, filename),
+              );
             }
           },
           () => {
@@ -2996,6 +4793,104 @@ async function createHostInputMutationTracker(
   return tracker;
 }
 
+/**
+ * Whether a path lies inside a directory the configuration excludes.
+ *
+ * Lexical, exactly like the walk and like {@link isProjectWalkPath}, and for the
+ * reason that predicate states: walk membership is lexical, so resolving a path
+ * to physical identity first would collapse two spellings the walk keeps apart
+ * and claim it covered a subtree it never followed. A junction whose target the
+ * walk hashes under its own name is exactly that, and canonicalizing here would
+ * suppress every event in it.
+ *
+ * `strictly` excludes an exact match, for the case where the excluded entry
+ * names a file rather than a directory: `exclude` accepts one, the walk applies
+ * exclusion to directories alone, so that file is still hashed and its events
+ * must keep counting.
+ */
+function insideExcludedProjectDirectory(
+  location: string,
+  policy: ITtscProjectMembershipPolicy,
+  strictly: boolean,
+): boolean {
+  if (policy.excludedDirectories.length === 0) {
+    return false;
+  }
+  const resolved = path.resolve(location);
+  return policy.excludedDirectories.some((excluded) => {
+    const target = path.resolve(excluded);
+    if (strictly && target === resolved) {
+      return false;
+    }
+    return pathIsWithin(resolved, target);
+  });
+}
+
+/**
+ * Whether one directory event can be a change to the program's membership.
+ *
+ * The live tracker has to answer the same question the membership digest does,
+ * or the two disagree about the same project: a bundler writing content-hashed
+ * output fires a rename per rebuild, and treating that as membership kept the
+ * cost samchon/ttsc#1307 removes on every host that has no build boundary,
+ * which is every host the narrow path exists for.
+ *
+ * A name that could be a program input counts, unless it sits under a directory
+ * the walk never descends into. A name that could not still counts when the
+ * path is now a directory, because the walk's watches were opened for the
+ * directories that existed when the generation was captured, so a directory
+ * created since is not watched and the sources that may appear in it would
+ * otherwise be invisible. A directory the configuration excludes is the
+ * exception: the walk cannot see inside it, so the tracker must not either, or
+ * emptying and recreating an `outDir` costs a compile per build. An event whose
+ * name the host did not report is unattributable and always counts.
+ */
+function reportsProgramMembership(
+  location: string,
+  filename: string,
+  policy: ITtscProjectMembershipPolicy,
+  filesystem: TtscTransformFilesystemOperations,
+): boolean {
+  if (isPossibleProgramFileName(filename, policy)) {
+    // A name the program could admit. It still says nothing if it lies inside a
+    // directory the walk never descends into, because the digest cannot see
+    // there either and the tracker must not be the one side that reacts.
+    return !insideExcludedProjectDirectory(location, policy, true);
+  }
+  let directory: boolean;
+  try {
+    directory = filesystem.lstat(location).isDirectory();
+  } catch {
+    // Gone again, or unreadable. Its name could not have been a program input,
+    // and a directory removed under this one reports its own contents leaving
+    // through the watch that was opened on it.
+    return false;
+  }
+  if (!directory) {
+    return false;
+  }
+  // A directory counts, because it can hold sources and the tracker is not
+  // watching it yet, unless the configuration says the program does not contain
+  // it. Emptying and recreating an `outDir`, which is what `emptyOutDir` and
+  // `output.clean` do on every build, would otherwise void the generation once
+  // per build on every host that has no build boundary.
+  return !insideExcludedProjectDirectory(location, policy, false);
+}
+
+/** Record enough exact mutation evidence without retaining an event stream. */
+function recordProjectMutation(
+  tracker: TtscProjectMutationTracker,
+  changed: string,
+): void {
+  tracker.membershipChanged = true;
+  if (tracker.changes.has(changed)) return;
+  if (tracker.changes.size < MAX_GENERATION_MUTATION_PATHS) {
+    tracker.changes.add(changed);
+  } else {
+    tracker.changesOmitted = true;
+  }
+}
+
 interface WindowsProjectMutationBroker {
   child: ChildProcess;
   /** Round-trips awaiting the child's reply, by request id. */
@@ -3008,7 +4903,24 @@ interface WindowsProjectMutationBroker {
   trackers: Map<
     number,
     {
+      /**
+       * Whether one named event can be a program membership change. Present
+       * only for the project-directory tracker, which watches whole directories
+       * and so has to narrow what it hears; the trackers that watch exact names
+       * have already narrowed theirs by construction.
+       */
+      membership?: (location: string, filename: string) => boolean;
       ready: () => void;
+      /**
+       * The walk's own spelling for each canonical directory the child watches,
+       * so a reported event can be translated back before anything compares it
+       * with a path the walk or the configuration produced.
+       *
+       * Required, not optional. A registration that forgot it would fall back
+       * to the child's canonical spelling and silently reintroduce the mismatch
+       * this map exists to remove, with no type error and no failing test.
+       */
+      spellings: ReadonlyMap<string, string>;
       tracker: TtscProjectMutationTracker;
     }
   >;
@@ -3033,8 +4945,21 @@ async function registerWindowsProjectMutationTracker(
   locations: readonly WindowsMutationLocation[],
   allEvents: boolean,
   filesystem: TtscTransformFilesystemOperations,
+  /**
+   * Optional filter for the project-directory tracker, whose events have to be
+   * narrowed to program membership exactly as the in-process watcher's are. The
+   * name-watching trackers pass none, since they already watch exact names.
+   */
+  membership?: (location: string, filename: string) => boolean,
 ): Promise<void> {
   const broker = getWindowsProjectMutationBroker();
+  // The child watches canonical directories, and reports its events under that
+  // spelling. Everything else in the adapter speaks the walk's own spelling,
+  // which on Windows can be an 8.3 short form of the same directory, so keep
+  // the way back: a filter that compared the child's spelling against the
+  // configuration's would be comparing two names for one directory that share
+  // no common prefix (samchon/ttsc#1307).
+  const spellings = new Map<string, string>();
   const normalized = locations.map((location) => {
     let directory: string;
     try {
@@ -3042,6 +4967,7 @@ async function registerWindowsProjectMutationTracker(
     } catch {
       directory = path.resolve(location.directory);
     }
+    spellings.set(directory, location.directory);
     return {
       directory,
       ...(location.names === undefined ? {} : { names: location.names }),
@@ -3055,21 +4981,48 @@ async function registerWindowsProjectMutationTracker(
   const ready = new Promise<void>((resolve) => {
     resolveReady = resolve;
   });
-  broker.trackers.set(id, { ready: resolveReady, tracker });
+  broker.trackers.set(id, {
+    membership,
+    ready: resolveReady,
+    spellings,
+    tracker,
+  });
   tracker.drain = () => drainWindowsProjectMutationBroker(broker);
   tracker.close = () => {
     const active = broker.trackers.get(id);
     if (active === undefined) return;
     broker.trackers.delete(id);
     active.ready();
-    broker.child.send?.({ id, op: "remove" });
+    let failed = false;
+    let failure: unknown;
+    try {
+      broker.child.send?.({ id, op: "remove" });
+    } catch (error) {
+      failed = true;
+      failure = error;
+    }
     if (broker.trackers.size === 0) {
-      broker.child.disconnect?.();
-      broker.child.kill();
       if (windowsProjectMutationBroker === broker) {
         windowsProjectMutationBroker = undefined;
       }
+      try {
+        broker.child.disconnect?.();
+      } catch (error) {
+        if (!failed) {
+          failed = true;
+          failure = error;
+        }
+      }
+      try {
+        broker.child.kill();
+      } catch (error) {
+        if (!failed) {
+          failed = true;
+          failure = error;
+        }
+      }
     }
+    if (failed) throw failure;
   };
   broker.child.send?.({
     allEvents,
@@ -3128,8 +5081,10 @@ function getWindowsProjectMutationBroker(): WindowsProjectMutationBroker {
   child.on("message", (message: unknown) => {
     if (message === null || typeof message !== "object") return;
     const record = message as {
+      directory?: string;
       drained?: boolean;
       failed?: boolean;
+      filename?: string | null;
       id?: number;
       ready?: boolean;
     };
@@ -3147,7 +5102,27 @@ function getWindowsProjectMutationBroker(): WindowsProjectMutationBroker {
     if (record.failed === true) registration.tracker.failed = true;
     if (record.ready === true) registration.ready();
     if (record.ready !== true && record.failed !== true) {
-      registration.tracker.membershipChanged = true;
+      if (typeof record.directory === "string") {
+        // The walk's spelling for this directory, which is what every
+        // comparison and every recorded witness downstream expects.
+        const reported =
+          registration.spellings.get(record.directory) ?? record.directory;
+        if (
+          typeof record.filename === "string" &&
+          registration.membership !== undefined &&
+          !registration.membership(reported, record.filename)
+        ) {
+          return;
+        }
+        recordProjectMutation(
+          registration.tracker,
+          typeof record.filename === "string"
+            ? path.join(reported, record.filename)
+            : reported,
+        );
+      } else {
+        registration.tracker.membershipChanged = true;
+      }
     }
   });
   windowsProjectMutationBroker = broker;
@@ -3238,7 +5213,7 @@ const WINDOWS_WATCH_BROKER_SOURCE = [
   "      const names = location.names === undefined ? undefined : new Set(location.names.map((name) => name.toLowerCase()));",
   "      const watcher = fs.watch(location.directory, { persistent: false }, (event, filename) => {",
   "        const matches = names === undefined || filename === null || names.has(String(filename).toLowerCase());",
-  '        if (matches && (message.allEvents || event === "rename")) process.send?.({ id: message.id });',
+  '        if (matches && (message.allEvents || event === "rename")) process.send?.({ directory: location.directory, filename: filename === null ? null : String(filename), id: message.id });',
   "      });",
   '      watcher.on("error", () => process.send?.({ failed: true, id: message.id }));',
   "      watchers.push(watcher);",
@@ -3351,6 +5326,7 @@ export function isProjectWalkPath(
   file: string,
   _identities: FilesystemPathIdentityContext = createHostPathIdentityContext(),
   filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
+  policy: ITtscProjectMembershipPolicy = PERMISSIVE_PROJECT_MEMBERSHIP_POLICY,
 ): boolean {
   // Walk membership is lexical. Resolving `file` to physical identity first
   // would turn `root/alias/value.ts` into `root/target/value.ts`, hide the
@@ -3367,7 +5343,20 @@ export function isProjectWalkPath(
     return false;
   }
   const segments = relative.split(path.sep);
-  if (segments.some(isIgnoredProjectDirectory)) {
+  // The last segment is the file itself, which the walk names rather than
+  // descends into, so only the directory components decide walk membership.
+  if (segments.slice(0, -1).some(isIgnoredProjectDirectory)) {
+    return false;
+  }
+  if (isExcludedProjectDirectory(path.dirname(path.resolve(file)), policy)) {
+    return false;
+  }
+  // The walk hashes only files that could enter the program, so a path it does
+  // not hash is out of the walk by definition. Answering otherwise would leave
+  // a graph input the compiler really read in neither snapshot: absent from
+  // `inputHashes` because the walk skipped it, and absent from the out-of-walk
+  // snapshot because this predicate claimed the walk covered it.
+  if (!isPossibleProgramFileName(path.basename(file), policy)) {
     return false;
   }
   let current = resolvedRoot;
@@ -3417,10 +5406,251 @@ export function collectExternalInputHashes(
   return hashes;
 }
 
+/** Capture the stable file predicate used by implicit project discovery. */
+export function captureWatchInputFileBaseline(
+  file: string,
+  filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
+): TtscWatchInputFileBaseline | undefined {
+  const capture = (): TtscWatchInputFileBaseline => {
+    const identities = createHostPathIdentityContext(filesystem);
+    let fileExists = false;
+    try {
+      fileExists = filesystem.stat(file).isFile();
+    } catch {
+      // Project discovery rejects every candidate not proven to be a file.
+    }
+    return {
+      fileExists,
+      identity: pathIdentityKey(file, identities),
+    };
+  };
+  try {
+    const before = capture();
+    const after = capture();
+    return stableStringify(before) === stableStringify(after)
+      ? after
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Capture one stable main-process baseline that can be compared with any
+ * generation-owned watch-input evidence. Two equal broad observations are
+ * required so a cache key never publishes a torn path state.
+ */
+export function captureWatchInputBaseline(
+  file: string,
+  filesystem: TtscTransformFilesystemOperations = DEFAULT_FILESYSTEM_OPERATIONS,
+): TtscWatchInputBaseline | undefined {
+  const capture = (): TtscWatchInputBaseline => {
+    const identities = createHostPathIdentityContext(filesystem);
+    const stat = compilerStatKind(file, filesystem);
+    return {
+      directoryExists: stat === "directory",
+      fileExists: stat === "file",
+      graphHash: graphInputStateHash(file, filesystem) ?? MISSING_INPUT_STATE,
+      graphReadHash: graphInputReadHash(file, filesystem),
+      hostHash: hostInputStateHash(file, filesystem) ?? MISSING_INPUT_STATE,
+      identity: pathIdentityKey(file, identities),
+      realpath: compilerInputRealpathObservation(file, filesystem),
+      stat,
+    };
+  };
+  try {
+    const before = capture();
+    const after = capture();
+    return stableStringify(before) === stableStringify(after)
+      ? after
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Compare generation evidence with the main process's exact key baseline. */
+export function watchInputEvidenceMatchesBaseline(
+  evidence: TtscWatchInputEvidence,
+  baseline: TtscWatchInputKeyBaseline,
+): boolean {
+  if (
+    !isWatchInputKeyBaseline(baseline) ||
+    evidence.identity !== baseline.identity ||
+    evidence.state === undefined
+  ) {
+    return false;
+  }
+  const broad = broadWatchInputBaseline(baseline);
+  if (evidence.state.codec === "host") {
+    return broad !== undefined && evidence.state.hash === broad.hostHash;
+  }
+  const identities = createHostPathIdentityContext();
+  if (evidence.state.codec === "graph") {
+    return (
+      broad !== undefined &&
+      evidence.state.hash === broad.graphHash &&
+      sameHostInputRealpath(
+        evidence.state.realpath,
+        broad.realpath.ok ? broad.realpath.path : null,
+        identities,
+      )
+    );
+  }
+  const observation = evidence.state.observation;
+  if (
+    observation.fileExists !== undefined &&
+    observation.fileExists !== baseline.fileExists
+  ) {
+    return false;
+  }
+  if (
+    observation.directoryExists !== undefined &&
+    (broad === undefined ||
+      observation.directoryExists !== broad.directoryExists)
+  ) {
+    return false;
+  }
+  if (
+    observation.stat !== undefined &&
+    (broad === undefined || observation.stat !== broad.stat)
+  ) {
+    return false;
+  }
+  if (
+    observation.readFile !== undefined &&
+    (broad === undefined ||
+      (observation.readFile.ok &&
+        observation.readFile.hash !== broad.graphReadHash) ||
+      (!observation.readFile.ok && broad.graphReadHash !== null))
+  ) {
+    return false;
+  }
+  if (observation.realpath !== undefined) {
+    if (broad === undefined) {
+      return false;
+    }
+    if (observation.realpath.ok !== broad.realpath.ok) {
+      return false;
+    }
+    if (
+      observation.realpath.ok &&
+      broad.realpath.ok &&
+      !sameHostInputRealpath(
+        observation.realpath.path,
+        broad.realpath.path,
+        identities,
+      )
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Validate the complete narrow or broad shape stored in a key baseline. */
+export function isWatchInputKeyBaseline(
+  baseline: unknown,
+): baseline is TtscWatchInputKeyBaseline {
+  if (!isPlainRecord(baseline)) return false;
+  const keys = Object.keys(baseline).sort();
+  if (
+    typeof baseline.fileExists !== "boolean" ||
+    typeof baseline.identity !== "string" ||
+    !isAbsoluteFilesystemPath(baseline.identity)
+  ) {
+    return false;
+  }
+  if (stableStringify(keys) === stableStringify(["fileExists", "identity"])) {
+    return true;
+  }
+  if (
+    stableStringify(keys) !==
+    stableStringify([
+      "directoryExists",
+      "fileExists",
+      "graphHash",
+      "graphReadHash",
+      "hostHash",
+      "identity",
+      "realpath",
+      "stat",
+    ])
+  ) {
+    return false;
+  }
+  if (
+    typeof baseline.directoryExists !== "boolean" ||
+    !isWatchInputStateHash(baseline.graphHash) ||
+    !(
+      baseline.graphReadHash === null || isContentHash(baseline.graphReadHash)
+    ) ||
+    !isWatchInputStateHash(baseline.hostHash) ||
+    !isWatchInputRealpathBaseline(baseline.realpath) ||
+    (baseline.stat !== "directory" &&
+      baseline.stat !== "file" &&
+      baseline.stat !== "missing")
+  ) {
+    return false;
+  }
+  return (
+    baseline.fileExists === (baseline.stat === "file") &&
+    baseline.directoryExists === (baseline.stat === "directory")
+  );
+}
+
+/** Whether an unknown value is one ordinary JSON object. */
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+/** Whether one identity can name an absolute path on either supported syntax. */
+function isAbsoluteFilesystemPath(value: string): boolean {
+  return path.posix.isAbsolute(value) || path.win32.isAbsolute(value);
+}
+
+/** Whether a serialized hash is a content digest. */
+function isContentHash(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
+/** Whether a baseline state is either a digest or the missing marker. */
+function isWatchInputStateHash(value: unknown): value is string {
+  return value === MISSING_INPUT_STATE || isContentHash(value);
+}
+
+/** Validate the serialized Realpath predicate as an exact discriminated union. */
+function isWatchInputRealpathBaseline(
+  value: unknown,
+): value is TtscWatchInputBaseline["realpath"] {
+  if (!isPlainRecord(value) || typeof value.ok !== "boolean") return false;
+  const keys = Object.keys(value).sort();
+  if (value.ok === false) {
+    return stableStringify(keys) === stableStringify(["ok"]);
+  }
+  return (
+    stableStringify(keys) === stableStringify(["ok", "path"]) &&
+    typeof value.path === "string" &&
+    isAbsoluteFilesystemPath(value.path)
+  );
+}
+
+/** Return a broad baseline after the complete entry has been validated. */
+function broadWatchInputBaseline(
+  baseline: TtscWatchInputKeyBaseline,
+): TtscWatchInputBaseline | undefined {
+  return "directoryExists" in baseline ? baseline : undefined;
+}
+
 /**
  * Re-check a cached mixed graph/dependency input set with its owning codec,
  * reusing the recorded hash of any input whose metadata signature still holds
- * and reporting the signatures this pass captured.
+ * under a freshly minted same-device reference and reporting the signatures
+ * this pass captured.
  *
  * The caller adopts those signatures only once every input is proven unchanged,
  * so a signature never outlives the content comparison that justified it.
@@ -3446,6 +5676,20 @@ function matchesCachedExternalInputs(cached: TtscCachedProjectTransform): {
     Object.keys(cached.externalInputHashes ?? {})) {
     const identity = derivationIdentity(state, file);
     const spelling = path.resolve(file);
+    const observation = cached.externalInputObservations?.[spelling];
+    if (observation !== undefined) {
+      if (
+        !matchesGraphInputObservation(
+          file,
+          observation,
+          filesystem,
+          state.identityContext,
+        )
+      ) {
+        matches = false;
+      }
+      continue;
+    }
     // Reuse the recorded hash of an out-of-walk input whose signature still
     // equals the one captured around the read that proved it. The signature is
     // keyed by this exact spelling, so an alias of the same physical file
@@ -3455,6 +5699,7 @@ function matchesCachedExternalInputs(cached: TtscCachedProjectTransform): {
       before !== undefined &&
       Object.prototype.hasOwnProperty.call(recordedSignatures, spelling) &&
       Object.prototype.hasOwnProperty.call(recordedHashes, identity) &&
+      before.separable &&
       before.signature === recordedSignatures[spelling]
     ) {
       continue;
@@ -3483,12 +5728,13 @@ function matchesCachedExternalInputs(cached: TtscCachedProjectTransform): {
 
 /**
  * Derive the absolute out-of-walk input set of a whole project transform: the
- * union of every reference-graph member (edge keys and targets, globals, the
- * config chain) and every plugin-reported dependency, minus everything the
- * project walk already hashes and the disposed temp-dir tsconfig. These are the
- * inputs {@link matchesCachedSource}'s walk cannot see. Resolution candidates
- * that are still missing remain in this set even under the project root: the
- * first walk cannot hash a file that has not been created yet.
+ * union of every transformed source key, reference-graph member (edge keys and
+ * targets, globals, the config chain), and plugin-reported dependency, minus
+ * everything the project walk already hashes and the disposed transform scratch
+ * tree. These are the inputs {@link matchesCachedSource}'s walk cannot see.
+ * Resolution candidates that are still missing remain in this set even under
+ * the project root: the first walk cannot hash a file that has not been created
+ * yet.
  *
  * A `dependenciesComplete` declaration deliberately does not narrow the stored
  * set: other files in the same whole-project result can still own the omitted
@@ -3498,8 +5744,10 @@ function matchesCachedExternalInputs(cached: TtscCachedProjectTransform): {
  */
 function selectExternalInputPaths(props: {
   filesystem?: TtscTransformFilesystemOperations;
+  membershipPolicy: ITtscProjectMembershipPolicy;
   projectRoot: string;
   result: ITtscCompilerTransformation;
+  scratchDirectory?: string;
   temporaryTsconfig?: string;
 }): string[] {
   if (props.result.type === "exception") {
@@ -3510,6 +5758,18 @@ function selectExternalInputPaths(props: {
   const identities = createHostPathIdentityContext(filesystem);
   const resolutionCandidates = new Set<string>();
   const graph = props.result.graph;
+  const graphState = envelopeDerivation({
+    projectRoot: props.projectRoot,
+    result: props.result,
+  });
+  const graphIndexes = envelopeGraphIndexes(graphState, {
+    projectRoot: props.projectRoot,
+    result: props.result,
+  });
+  // Every transform output key names the source file whose transformed text it
+  // carries. Keep an out-of-walk source in the external snapshot instead of
+  // injecting it into the project-walk key universe (samchon/ttsc#252).
+  members.push(...Object.keys(props.result.typescript));
   if (graph !== undefined) {
     for (const [source, targets] of Object.entries(graph.edges ?? {})) {
       members.push(source);
@@ -3517,7 +5777,11 @@ function selectExternalInputPaths(props: {
         members.push(...targets);
       }
     }
-    for (const listed of [graph.globals, graph.configs]) {
+    for (const listed of [
+      graph.globals,
+      graph.configs,
+      graph.resolutionInputs,
+    ]) {
       if (Array.isArray(listed)) {
         members.push(...listed);
       }
@@ -3532,7 +5796,12 @@ function selectExternalInputPaths(props: {
         }
         const absolute = path.resolve(props.projectRoot, candidate);
         members.push(candidate);
-        resolutionCandidates.add(pathIdentityKey(absolute, identities));
+        resolutionCandidates.add(path.resolve(absolute));
+      }
+    }
+    for (const input of graph.resolutionInputs ?? []) {
+      if (typeof input === "string" && input.length !== 0) {
+        resolutionCandidates.add(path.resolve(props.projectRoot, input));
       }
     }
   }
@@ -3548,9 +5817,7 @@ function selectExternalInputPaths(props: {
         // Plugin discovery inputs deliberately include absent config and
         // resolution probes. A project walk cannot snapshot a path that does
         // not exist yet, even when its spelling lies below projectRoot.
-        resolutionCandidates.add(
-          pathIdentityKey(path.resolve(props.projectRoot, input), identities),
-        );
+        resolutionCandidates.add(path.resolve(props.projectRoot, input));
       }
     }
   }
@@ -3567,13 +5834,23 @@ function selectExternalInputPaths(props: {
     const absolute = path.resolve(props.projectRoot, member);
     const spelling = path.resolve(absolute);
     const identity = pathIdentityKey(absolute, identities);
+    const observation = graphIndexes.inputObservations.get(spelling);
     const missingCandidate =
-      resolutionCandidates.has(identity) && !filesystem.exists(absolute);
+      resolutionCandidates.has(spelling) &&
+      (observation?.fileExists === false ||
+        (observation === undefined && !filesystem.exists(absolute)));
     if (
       identity === excluded ||
+      isTransformScratchInput(absolute, props.scratchDirectory) ||
       seen.has(spelling) ||
       (!missingCandidate &&
-        isProjectWalkPath(props.projectRoot, absolute, identities, filesystem))
+        isProjectWalkPath(
+          props.projectRoot,
+          absolute,
+          identities,
+          filesystem,
+          props.membershipPolicy,
+        ))
     ) {
       continue;
     }
@@ -3607,6 +5884,7 @@ function selectNotifiableAbsentInputs(props: {
   filesystem: TtscTransformFilesystemOperations;
   projectRoot: string;
   result: ITtscCompilerTransformation;
+  scratchDirectory?: string;
   temporaryTsconfig?: string;
 }): { candidates: string[]; watched: string[] } {
   const empty = { candidates: [], watched: [] };
@@ -3618,6 +5896,14 @@ function selectNotifiableAbsentInputs(props: {
     return empty;
   }
   const identities = createHostPathIdentityContext(props.filesystem);
+  const graphState = envelopeDerivation({
+    projectRoot: props.projectRoot,
+    result: props.result,
+  });
+  const graphIndexes = envelopeGraphIndexes(graphState, {
+    projectRoot: props.projectRoot,
+    result: props.result,
+  });
   const excluded =
     props.temporaryTsconfig === undefined
       ? undefined
@@ -3631,7 +5917,10 @@ function selectNotifiableAbsentInputs(props: {
   // them. Sharing a set would let one silently answer for the other.
   const seen = new Set<string>();
   const chain = new Set<string>();
-  for (const candidates of Object.values(graph.candidates ?? {})) {
+  for (const candidates of [
+    ...Object.values(graph.candidates ?? {}),
+    graph.resolutionInputs ?? [],
+  ]) {
     if (!Array.isArray(candidates)) {
       continue;
     }
@@ -3641,11 +5930,16 @@ function selectNotifiableAbsentInputs(props: {
       }
       const absolute = path.resolve(props.projectRoot, candidate);
       const spelling = path.resolve(absolute);
+      const observation = graphIndexes.inputObservations.get(spelling);
+      const absentAsFile =
+        observation?.fileExists === false ||
+        (observation === undefined && !props.filesystem.exists(absolute));
       if (
         seen.has(spelling) ||
+        isTransformScratchInput(absolute, props.scratchDirectory) ||
         (excluded !== undefined &&
           pathIdentityKey(absolute, identities) === excluded) ||
-        props.filesystem.exists(absolute)
+        !absentAsFile
       ) {
         continue;
       }
@@ -3755,23 +6049,44 @@ function insideProject(directory: string, projectRoot: string): boolean {
  */
 const NOTIFIABLE_ABSENCE_DIRECTORY_LIMIT = 512;
 
-function isIgnoredProjectDirectory(name: string): boolean {
-  return (
-    name === ".git" ||
-    name === ".ttsc" ||
-    name === ".cache" ||
-    name === ".next" ||
-    name === ".nuxt" ||
-    name === ".svelte-kit" ||
-    name === ".turbo" ||
-    name === ".vite" ||
-    name === "build" ||
-    name === "coverage" ||
-    name === "dist" ||
-    name === "node_modules" ||
-    name === "out" ||
-    name === "temp" ||
-    name === "tmp"
+/**
+ * Whether the resolved configuration keeps this directory out of the program.
+ *
+ * Compared by physical containment rather than by name, so `outDir: "./dist"`
+ * excludes that one directory instead of every directory called `dist` at every
+ * depth, which is the distinction the name list could not draw.
+ */
+function isExcludedProjectDirectory(
+  directory: string,
+  policy: ITtscProjectMembershipPolicy,
+): boolean {
+  return insideExcludedProjectDirectory(directory, policy, false);
+}
+
+/**
+ * Whether this entry could enter the program, and so whether its appearance or
+ * removal is a membership change.
+ *
+ * A directory always could, since it can hold sources. A file could only if it
+ * carries an extension the resolved configuration admits, which is what makes a
+ * bundle emitted beside the sources invisible to a project that compiles no
+ * JavaScript.
+ */
+function isPossibleProgramEntry(
+  entry: fs.Dirent,
+  policy: ITtscProjectMembershipPolicy,
+): boolean {
+  return entry.isFile() ? isPossibleProgramFileName(entry.name, policy) : true;
+}
+
+/** The same question for a bare file name, for callers holding no `Dirent`. */
+function isPossibleProgramFileName(
+  name: string,
+  policy: ITtscProjectMembershipPolicy,
+): boolean {
+  const lowered = name.toLowerCase();
+  return policy.inputExtensions.some((extension) =>
+    lowered.endsWith(extension),
   );
 }
 
@@ -3825,7 +6140,7 @@ function walkSnapshotComplete(
   snapshot: {
     complete: boolean;
     directoryComplete: boolean;
-    unstableFiles: Set<string>;
+    unstableFiles: ReadonlySet<string>;
   },
   declared: ReadonlySet<string> | undefined,
 ): boolean {
@@ -3841,6 +6156,136 @@ function walkSnapshotComplete(
   return true;
 }
 
+/** Preserve exact project-walk and mutation witnesses for one failed attempt. */
+function recordProjectSnapshotFailures(
+  failures: TtscGenerationProofFailures,
+  props: {
+    before: ReturnType<typeof collectProjectInputSnapshot>;
+    candidateTracker?: TtscProjectMutationTracker;
+    declared: ReadonlySet<string> | undefined;
+    hostInputTracker?: TtscProjectMutationTracker;
+    identities: FilesystemPathIdentityContext;
+    projectRoot: string;
+    snapshot: ReturnType<typeof collectProjectInputSnapshot>;
+    tracker?: TtscProjectMutationTracker;
+  },
+): void {
+  const recordWalk = (
+    snapshot: ReturnType<typeof collectProjectInputSnapshot>,
+  ): void => {
+    for (const failure of snapshot.walkFailures) {
+      if (failure.kind.startsWith("file-") && props.declared !== undefined) {
+        try {
+          const key = toProjectKey(
+            props.projectRoot,
+            failure.path,
+            props.identities,
+          );
+          if (!props.declared.has(key)) continue;
+        } catch {
+          // An unidentifiable failed input taints the complete project walk.
+        }
+      }
+      recordGenerationProofFailure(failures, {
+        domain: "project",
+        kind: failure.kind,
+        path: failure.path,
+      });
+    }
+  };
+  recordWalk(props.before);
+  recordWalk(props.snapshot);
+
+  const keys =
+    props.declared ??
+    new Set([
+      ...Object.keys(props.before.hashes),
+      ...Object.keys(props.snapshot.hashes),
+    ]);
+  for (const key of keys) {
+    if (props.before.hashes[key] !== props.snapshot.hashes[key]) {
+      recordGenerationProofFailure(failures, {
+        domain: "project",
+        kind: "input-content-changed",
+        path: path.resolve(props.projectRoot, key),
+      });
+    }
+    if (
+      props.before.fileSignatures[key] !== props.snapshot.fileSignatures[key]
+    ) {
+      recordGenerationProofFailure(failures, {
+        domain: "project",
+        kind: "input-metadata-changed",
+        path: path.resolve(props.projectRoot, key),
+      });
+    }
+  }
+
+  const leftDirectories = new Map(
+    props.before.projectDirectories.map((entry) => [
+      entry.path,
+      entry.signature,
+    ]),
+  );
+  const rightDirectories = new Map(
+    props.snapshot.projectDirectories.map((entry) => [
+      entry.path,
+      entry.signature,
+    ]),
+  );
+  for (const directory of new Set([
+    ...leftDirectories.keys(),
+    ...rightDirectories.keys(),
+  ])) {
+    if (leftDirectories.get(directory) !== rightDirectories.get(directory)) {
+      recordGenerationProofFailure(failures, {
+        domain: "project",
+        kind: "directory-membership-changed",
+        path: directory,
+      });
+    }
+  }
+
+  const recordTracker = (
+    tracker: TtscProjectMutationTracker | undefined,
+    kind: string,
+  ): void => {
+    if (tracker?.membershipChanged !== true) return;
+    if (tracker.changes.size === 0) {
+      recordGenerationProofFailure(failures, {
+        domain: "project",
+        kind,
+        path: props.projectRoot,
+      });
+      return;
+    }
+    for (const changed of tracker.changes) {
+      recordGenerationProofFailure(failures, {
+        domain: "project",
+        kind,
+        path: changed,
+      });
+    }
+    if (tracker.changesOmitted) {
+      failures.omitted = Math.min(
+        Number.MAX_SAFE_INTEGER,
+        failures.omitted + 1,
+      );
+    }
+  };
+  recordTracker(props.tracker, "project-membership-event");
+  recordTracker(props.hostInputTracker, "host-input-event");
+  recordTracker(props.candidateTracker, "candidate-event");
+
+  if (failures.entries.length === 0) {
+    recordGenerationProofFailure(failures, {
+      domain: "project",
+      kind: "snapshot-incomplete",
+      path: props.projectRoot,
+    });
+  }
+}
+
 /** {@link selectDeclaredProjectInputKeys} memoized per envelope generation. */
 function declaredProjectInputKeys(
   state: TtscEnvelopeDerivation,
@@ -3851,6 +6296,7 @@ function declaredProjectInputKeys(
       identities: state.identityContext,
       projectRoot: cached.projectRoot,
       result: cached.result,
+      scratchDirectory: cached.scratchDirectory,
     });
     state.declaredInputKeysBuilt = true;
   }
@@ -3867,6 +6313,7 @@ function selectDeclaredProjectInputKeys(props: {
   identities: FilesystemPathIdentityContext;
   projectRoot: string;
   result: ITtscCompilerTransformation;
+  scratchDirectory?: string;
 }): Set<string> | undefined {
   if (props.result.type === "exception" || props.result.graph === undefined) {
     return undefined;
@@ -3875,13 +6322,9 @@ function selectDeclaredProjectInputKeys(props: {
   const keys = new Set<string>();
   const add = (entry: unknown): void => {
     if (typeof entry !== "string" || entry.length === 0) return;
-    keys.add(
-      toProjectKey(
-        props.projectRoot,
-        path.resolve(props.projectRoot, entry),
-        props.identities,
-      ),
-    );
+    const absolute = path.resolve(props.projectRoot, entry);
+    if (isTransformScratchInput(absolute, props.scratchDirectory)) return;
+    keys.add(toProjectKey(props.projectRoot, absolute, props.identities));
   };
   for (const [source, targets] of Object.entries(graph.edges ?? {})) {
     add(source);
@@ -3891,6 +6334,8 @@ function selectDeclaredProjectInputKeys(props: {
     for (const input of graph.globals) add(input);
   if (Array.isArray(graph.configs))
     for (const input of graph.configs) add(input);
+  if (Array.isArray(graph.resolutionInputs))
+    for (const input of graph.resolutionInputs) add(input);
   for (const [source, candidates] of Object.entries(graph.candidates ?? {})) {
     add(source);
     if (Array.isArray(candidates)) for (const entry of candidates) add(entry);
@@ -3905,52 +6350,294 @@ function selectDeclaredProjectInputKeys(props: {
   return keys;
 }
 
-/**
- * Project roots already told they cannot reuse a compile, so a build reports
- * the condition once instead of once per module.
- */
-const REPORTED_UNREUSABLE_GENERATIONS = new Set<string>();
+/** Create an empty bounded witness collection for one transform attempt. */
+function createGenerationProofFailures(): TtscGenerationProofFailures {
+  return { entries: [], omitted: 0, seen: new Set() };
+}
+
+/** Retain one unique proof witness without allowing diagnostics to grow freely. */
+function recordGenerationProofFailure(
+  failures: TtscGenerationProofFailures,
+  failure: TtscGenerationProofFailure,
+): void {
+  const key = JSON.stringify([
+    failure.domain,
+    failure.kind,
+    failure.path,
+    failure.detail,
+  ]);
+  if (failures.seen.has(key)) return;
+  if (failures.entries.length < MAX_GENERATION_PROOF_FAILURES) {
+    // `seen` follows the same bound as `entries`: retaining every discarded
+    // identity would make a bounded diagnostic an unbounded memory sink.
+    failures.seen.add(key);
+    failures.entries.push(failure);
+  } else {
+    failures.omitted = Math.min(Number.MAX_SAFE_INTEGER, failures.omitted + 1);
+  }
+}
+
+/** Fold one bounded witness collection into another. */
+function mergeGenerationProofFailures(
+  target: TtscGenerationProofFailures,
+  source: TtscGenerationProofFailures,
+): void {
+  for (const failure of source.entries) {
+    recordGenerationProofFailure(target, failure);
+  }
+  target.omitted = Math.min(
+    Number.MAX_SAFE_INTEGER,
+    target.omitted + source.omitted,
+  );
+}
+
+/** Hash the declared-input-relevant failure shape without retaining it. */
+function projectWalkFailureFingerprint(
+  snapshot: {
+    complete: boolean;
+    directoryComplete: boolean;
+    unstableFiles: ReadonlySet<string>;
+    walkFailures: readonly TtscProjectWalkFailure[];
+  },
+  declared: ReadonlySet<string> | undefined,
+  projectRoot: string,
+  identities: FilesystemPathIdentityContext,
+): string {
+  const relevantUnstableFiles =
+    declared === undefined
+      ? [...snapshot.unstableFiles]
+      : [...snapshot.unstableFiles].filter((key) => declared.has(key));
+  const relevantFailures = snapshot.walkFailures.filter((failure) => {
+    if (!failure.kind.startsWith("file-")) return true;
+    if (declared === undefined) return true;
+    try {
+      return declared.has(toProjectKey(projectRoot, failure.path, identities));
+    } catch {
+      return true;
+    }
+  });
+  return hashText(
+    JSON.stringify({
+      complete: walkSnapshotComplete(snapshot, declared),
+      directoryComplete: snapshot.directoryComplete,
+      failures: relevantFailures
+        .map((failure) => `${failure.kind}\0${path.resolve(failure.path)}`)
+        .sort(),
+      unstableFiles: relevantUnstableFiles.sort(),
+    }),
+  );
+}
+
+/** Compact state of one exact out-of-walk input in a failed generation. */
+function failedGenerationInputState(
+  input: string,
+  filesystem: TtscTransformFilesystemOperations,
+): string {
+  let directory = "not-directory";
+  try {
+    if (filesystem.stat(input).isDirectory()) {
+      directory = hashText(
+        filesystem
+          .readdir(input)
+          .map((entry) =>
+            [
+              entry.name,
+              entry.isDirectory(),
+              entry.isFile(),
+              entry.isSymbolicLink(),
+            ].join(":"),
+          )
+          .sort()
+          .join("\0"),
+      );
+    }
+  } catch {
+    directory = "unavailable";
+  }
+  return hashText(
+    JSON.stringify([
+      inputMetadataSignature(input, filesystem) ?? "missing",
+      hostInputStateHash(input, filesystem) ?? MISSING_INPUT_STATE,
+      hostInputRealpath(input, filesystem),
+      directory,
+    ]),
+  );
+}
+
+/** Snapshot every input outside the project walk that could change a retry. */
+function captureFailedGenerationInputStates(
+  cached: TtscCachedProjectTransform,
+  failures: TtscGenerationProofFailures,
+): ReadonlyMap<string, string> {
+  const filesystem = resultFilesystem(cached.result);
+  const inputs = new Set(
+    (cached.externalInputPaths ?? []).map((input) => path.resolve(input)),
+  );
+  for (const input of selectPersistentHostInputs({
+    filesystem,
+    projectRoot: cached.projectRoot,
+    result: cached.result,
+    scratchDirectory: cached.scratchDirectory,
+    temporaryTsconfig: cached.temporaryTsconfig,
+  })) {
+    inputs.add(path.resolve(input));
+  }
+  for (const failure of failures.entries) {
+    if (failure.path !== undefined) inputs.add(path.resolve(failure.path));
+  }
+  return new Map(
+    [...inputs]
+      .sort()
+      .map((input) => [input, failedGenerationInputState(input, filesystem)]),
+  );
+}
+
+/** Capture source baselines for project and out-of-walk transform outputs. */
+function captureTransformSourceHashes(
+  cached: TtscCachedProjectTransform,
+  currentFile: string,
+  currentSourceHash: string,
+): Record<string, string> {
+  const filesystem = resultFilesystem(cached.result);
+  const identities = envelopeDerivation(cached).identityContext;
+  const hashes: Record<string, string> = {};
+  if (cached.result.type === "success") {
+    for (const output of Object.keys(cached.result.typescript)) {
+      const file = path.resolve(cached.projectRoot, output);
+      const hash = hostInputStateHash(file, filesystem);
+      if (hash !== null) hashes[pathIdentityKey(file, identities)] = hash;
+    }
+  }
+  hashes[pathIdentityKey(currentFile, identities)] = currentSourceHash;
+  return hashes;
+}
 
 /**
- * Report, once per project root, that a generation cannot be reused.
+ * Whether a terminal proof failure's observed environment actually changed.
  *
- * Every module of the build then recompiles the whole project, so the condition
- * is the difference between one compile and one compile per module. It stayed
- * invisible for the whole life of samchon/ttsc#970: consumers saw only a build
- * that never finished, and each investigation had to rediscover the cause from
- * outside. A named reason turns the next occurrence into a bug report instead
- * of an archaeology session.
+ * This is deliberately a confirmation test: inability to re-probe retains the
+ * old verdict instead of turning every module request into another compile.
+ * Cache lifecycle reset remains the unconditional recovery boundary.
  */
-function reportUnreusableGeneration(
-  cached: TtscCachedProjectTransform,
-  evidence: {
-    externalInputs: boolean;
-    graphProofs: boolean;
-    universalInputs: boolean;
-    walkStable: boolean;
+function failedGenerationEnvironmentChanged(
+  validation: TtscFailedGenerationValidation,
+  props: {
+    currentFile: string;
+    currentSource: string;
+    filesystem: TtscTransformFilesystemOperations;
   },
-): void {
-  const missing = [
-    ...(evidence.walkStable ? [] : ["a stable project snapshot"]),
-    ...(evidence.graphProofs ? [] : ["compiler proofs for its graph inputs"]),
-    ...(evidence.externalInputs
-      ? []
-      : ["a complete out-of-walk input snapshot"]),
-    ...(evidence.universalInputs ? [] : ["a universal host-input manifest"]),
-  ];
-  const key = `${cached.projectRoot}\0${missing.join(",")}`;
-  if (REPORTED_UNREUSABLE_GENERATIONS.has(key)) {
-    return;
+): boolean {
+  try {
+    const identities = envelopeDerivation(validation.cached).identityContext;
+    const currentSourceHash = hashText(props.currentSource);
+    const expectedSourceHash =
+      validation.cached.sourceHashes?.[
+        pathIdentityKey(props.currentFile, identities)
+      ];
+    if (
+      expectedSourceHash !== undefined &&
+      expectedSourceHash !== currentSourceHash
+    ) {
+      return true;
+    }
+    const current = collectProjectInputSnapshot(
+      validation.cached.projectRoot,
+      identities,
+      props.filesystem,
+      undefined,
+      { policy: validation.cached.membershipPolicy },
+    );
+    if (
+      validation.projectWalkComplete !==
+        walkSnapshotComplete(current, validation.declaredInputs) ||
+      validation.projectWalkFailures !==
+        projectWalkFailureFingerprint(
+          current,
+          validation.declaredInputs,
+          validation.cached.projectRoot,
+          identities,
+        ) ||
+      !sameHashes(
+        validation.projectInputHashes,
+        current.hashes,
+        validation.declaredInputs,
+      ) ||
+      !sameProjectDirectories(
+        validation.cached.projectDirectories ?? [],
+        current.projectDirectories,
+      )
+    ) {
+      return true;
+    }
+    for (const [input, recorded] of validation.inputStates) {
+      if (failedGenerationInputState(input, props.filesystem) !== recorded) {
+        return true;
+      }
+    }
+    return false;
+  } catch {
+    return false;
   }
-  REPORTED_UNREUSABLE_GENERATIONS.add(key);
-  process.stderr.write(
-    `ttsc: the transform cache cannot reuse this project's compile, so every ` +
-      `module recompiles the whole project.\n` +
-      `  project: ${cached.projectRoot}\n` +
-      `  missing: ${missing.join("; ")}\n` +
-      `  Please report this at https://github.com/samchon/ttsc/issues with ` +
-      `this message.\n`,
+}
+
+/** Render one input without leaking source content or control characters. */
+function formatGenerationFailurePath(
+  projectRoot: string,
+  input: string,
+): string {
+  const absolute = path.resolve(input);
+  const relative = path.relative(projectRoot, absolute);
+  const display =
+    relative === ""
+      ? "."
+      : relative !== ".." &&
+          !relative.startsWith(`..${path.sep}`) &&
+          !path.isAbsolute(relative)
+        ? relative
+        : absolute;
+  return JSON.stringify(display.split(path.sep).join("/"));
+}
+
+/** Build the terminal error shared by every waiter of an unstable generation. */
+function createUnstableGenerationError(
+  projectRoot: string,
+  attempts: readonly TtscGenerationProofFailures[],
+  validation: TtscFailedGenerationValidation,
+): TtscUnstableGenerationError {
+  const lines = [
+    `ttsc: could not capture a reusable transform generation after ${attempts.length} attempts.`,
+    `  project: ${projectRoot}`,
+  ];
+  attempts.forEach((failures, index) => {
+    lines.push(`  attempt ${index + 1}:`);
+    if (failures.entries.length === 0) {
+      lines.push("    - project/generation-proof-incomplete");
+    }
+    for (const failure of failures.entries) {
+      const input =
+        failure.path === undefined
+          ? ""
+          : `: ${formatGenerationFailurePath(projectRoot, failure.path)}`;
+      const detail =
+        failure.detail === undefined
+          ? ""
+          : ` (producer: ${JSON.stringify(failure.detail)})`;
+      lines.push(`    - ${failure.domain}/${failure.kind}${input}${detail}`);
+    }
+    if (failures.omitted !== 0) {
+      lines.push(
+        `    - ... ${failures.omitted} additional witness(es) omitted`,
+      );
+    }
+  });
+  lines.push(
+    "  Stop writes to the listed inputs before compilation, or fix the producer that omitted or contradicted the listed proof.",
   );
+  // The failed snapshot remains useful as immutable retry evidence, but it can
+  // never serve a module. Release every live resource before its terminal
+  // verdict is retained in the cache.
+  disposeCachedTransform(validation.cached);
+  return new TtscUnstableGenerationError(lines.join("\n"), validation);
 }
 
 function hashText(input: string | Buffer): string {
@@ -3962,6 +6649,59 @@ async function transformProject(props: {
   compilerOptions: Record<string, unknown>;
   currentFile: string;
   currentSource: string;
+  /**
+   * Delivery pass this compile was started for; see
+   * {@link TtscCachedProjectTransform.deliveryEpoch}.
+   */
+  deliveryEpoch?: number;
+  filesystem: TtscTransformFilesystemOperations;
+  plugins?: ResolvedTtscUnpluginOptions["plugins"];
+  trackProjectMembership: boolean;
+  tsconfig: string;
+}): Promise<TtscCachedProjectTransform> {
+  const attempts: TtscGenerationProofFailures[] = [];
+  for (let attempt = 0; attempt < TRANSFORM_GENERATION_ATTEMPTS; attempt += 1) {
+    const cached = await captureTransformGeneration(props);
+    if (
+      cached.configStateComplete !== false &&
+      (!props.trackProjectMembership ||
+        cached.result.type !== "success" ||
+        cached.projectSnapshotComplete === true)
+    ) {
+      return cached;
+    }
+    attempts.push(
+      TRANSFORM_GENERATION_FAILURES.get(cached.result) ??
+        createGenerationProofFailures(),
+    );
+    if (attempt + 1 === TRANSFORM_GENERATION_ATTEMPTS) {
+      const validation = TRANSFORM_FAILED_GENERATION_VALIDATIONS.get(
+        cached.result,
+      );
+      if (validation === undefined) {
+        disposeCachedTransform(cached);
+        throw new Error(
+          "ttsc: failed transform generation has no retry validation baseline",
+        );
+      }
+      throw createUnstableGenerationError(
+        path.dirname(props.tsconfig),
+        attempts,
+        validation,
+      );
+    }
+    disposeCachedTransform(cached);
+  }
+  throw new Error("ttsc: transform generation retry loop did not terminate");
+}
+
+/** Capture one whole-project transform attempt and all of its reuse proofs. */
+async function captureTransformGeneration(props: {
+  aliasPaths: Record<string, string[]>;
+  compilerOptions: Record<string, unknown>;
+  currentFile: string;
+  currentSource: string;
+  deliveryEpoch?: number;
   filesystem: TtscTransformFilesystemOperations;
   plugins?: ResolvedTtscUnpluginOptions["plugins"];
   trackProjectMembership: boolean;
@@ -3972,26 +6712,69 @@ async function transformProject(props: {
     projectRoot,
     props.filesystem,
   );
+  let clockReferenceDirectory: string | undefined;
+  let retainClockReferenceDirectory = false;
   let tracker: TtscProjectMutationTracker | undefined;
   let retainTracker = false;
   let hostInputTracker: TtscProjectMutationTracker | undefined;
   let candidateTracker: TtscProjectMutationTracker | undefined;
   let retainHostInputTracker = false;
   let retainCandidateTracker = false;
+  let captured: TtscCachedProjectTransform | undefined;
   try {
-    const configured = createTransformTsconfig(props, scratchDirectory);
+    if (props.trackProjectMembership) {
+      try {
+        clockReferenceDirectory = createTransformScratchDirectory(
+          projectRoot,
+          props.filesystem,
+        );
+      } catch {
+        // A retained probe is an optimization. The live compiler scratch can
+        // still authorize capture, and later validations will compare bytes.
+      }
+    }
+    const materializesConfig =
+      Object.keys(props.compilerOptions).length !== 0 ||
+      Object.keys(props.aliasPaths).length !== 0;
+    const tsconfigState = readTransformTsconfigState(
+      props.tsconfig,
+      materializesConfig,
+    );
+    const configured = createTransformTsconfig(
+      props,
+      scratchDirectory,
+      tsconfigState,
+    );
     const temporaryTsconfig =
       configured.path === props.tsconfig ? undefined : configured.path;
+    const compilerEnvironment = transformScratchEnvironment(scratchDirectory);
+    if (temporaryTsconfig === undefined) {
+      delete compilerEnvironment[TTSC_SEMANTIC_CONFIG_PATH];
+    } else {
+      compilerEnvironment[TTSC_SEMANTIC_CONFIG_PATH] = props.tsconfig;
+    }
     const identities = createHostPathIdentityContext(props.filesystem);
+    // Read from the project's own tsconfig rather than the generated one: a
+    // relative `outDir` is anchored at the config that declares it, and the
+    // generated config lives in a system temp directory. The caller's
+    // compiler-options overlay still wins, since it wins for the compile too.
+    const membershipPolicy = mergeMembershipPolicyOverlay(
+      tsconfigState.membershipPolicy,
+      props.compilerOptions,
+      projectRoot,
+    );
     const before = collectProjectInputSnapshot(
       projectRoot,
       identities,
       props.filesystem,
+      undefined,
+      { policy: membershipPolicy },
     );
     tracker = props.trackProjectMembership
       ? await createProjectMutationTracker(
           before.projectDirectories,
           props.filesystem,
+          membershipPolicy,
         )
       : undefined;
     const result = withTransformScratchEnvironment(scratchDirectory, () =>
@@ -4007,18 +6790,26 @@ async function transformProject(props: {
         plugins: props.plugins,
         projectRoot,
         tsconfig: configured.path,
-        env: transformScratchEnvironment(scratchDirectory),
+        env: compilerEnvironment,
       }).transform(),
     );
     TRANSFORM_RESULT_FILESYSTEM.set(result, props.filesystem);
+    const configStable =
+      tsconfigState.signature === undefined ||
+      tsconfigState.signature ===
+        readTransformTsconfigState(props.tsconfig, true).signature;
     // Mint the generation's clock reference after the compile and before any
     // signature-recording read below, so every input written before the
     // compile sits in a provably finished tick when its signature is captured.
-    mintFilesystemClockReference(scratchDirectory, props.filesystem);
+    refreshFilesystemClockReference(
+      clockReferenceDirectory ?? scratchDirectory,
+      props.filesystem,
+    );
     const persistentHostInputs = selectPersistentHostInputs({
       filesystem: props.filesystem,
       projectRoot,
       result,
+      scratchDirectory,
       temporaryTsconfig,
     });
     // The generation's absent resolution candidates, which get a watcher of
@@ -4034,6 +6825,7 @@ async function transformProject(props: {
           filesystem: props.filesystem,
           projectRoot,
           result,
+          scratchDirectory,
           temporaryTsconfig,
         })
       : { candidates: [], watched: [] };
@@ -4065,14 +6857,18 @@ async function transformProject(props: {
         : undefined;
     const externalInputPaths = selectExternalInputPaths({
       filesystem: props.filesystem,
+      membershipPolicy,
       projectRoot,
       result,
+      scratchDirectory,
       temporaryTsconfig,
     });
     const inputSnapshot = collectProjectInputSnapshot(
       projectRoot,
       identities,
       props.filesystem,
+      undefined,
+      { policy: membershipPolicy },
     );
     // Whether the recorded snapshot describes one coherent state of the
     // project. A membership event during the compile taints it exactly like an
@@ -4083,8 +6879,10 @@ async function transformProject(props: {
       identities,
       projectRoot,
       result,
+      scratchDirectory,
     });
     const walkStable =
+      configStable &&
       walkSnapshotComplete(before, declaredInputs) &&
       walkSnapshotComplete(inputSnapshot, declaredInputs) &&
       sameHashes(before.hashes, inputSnapshot.hashes, declaredInputs) &&
@@ -4111,57 +6909,116 @@ async function transformProject(props: {
       props.currentFile,
       identities,
     );
-    inputSnapshot.hashes[currentFileKey] = hashText(props.currentSource);
-    // That overlay makes this one key the only recorded hash a disk signature
-    // cannot stand for: the bytes it names came from the bundler, not the file.
-    delete inputSnapshot.provenSignatures[currentFileKey];
+    const currentSourceHash = hashText(props.currentSource);
+    const projectInputHashes = { ...inputSnapshot.hashes };
+    if (
+      Object.prototype.hasOwnProperty.call(inputSnapshot.hashes, currentFileKey)
+    ) {
+      inputSnapshot.hashes[currentFileKey] = currentSourceHash;
+      // That overlay makes this one key the only recorded hash a disk signature
+      // cannot stand for: the bytes it names came from the bundler, not the file.
+      delete inputSnapshot.provenSignatures[currentFileKey];
+    }
     const cached: TtscCachedProjectTransform = {
+      // The pass this compile was started for. Its snapshot describes the
+      // project as of this compile, so it is settled for this pass and any
+      // later pass must re-prove it.
+      ...(props.deliveryEpoch === undefined
+        ? {}
+        : { deliveryEpoch: props.deliveryEpoch }),
       // Capture the out-of-walk input hashes while the generation is fresh so
       // cache validation can re-check them; computed before dispose so the
-      // exclusion of the temp-dir tsconfig is the only reason it never keys.
+      // scratch-tree exclusion is the only reason its disposed artifacts never
+      // key the persistent generation.
       externalInputHashes: {},
       externalInputRealpaths: {},
       externalInputPaths,
+      configStateComplete: configStable,
       inputHashes: inputSnapshot.hashes,
       inputSignatures: inputSnapshot.provenSignatures,
+      membershipPolicy,
       projectDirectories: inputSnapshot.projectDirectories,
+      tsconfig: props.tsconfig,
       projectSnapshotComplete: false,
       projectRoot,
       result,
+      scratchDirectory,
       servedFiles: new Set(),
       // Remember the generated temp-dir tsconfig (disposed below) so watch
       // derivation can drop it from the envelope's config chain; a registered
       // but deleted file would invalidate every persistent-cache snapshot.
       ...(temporaryTsconfig === undefined ? {} : { temporaryTsconfig }),
     };
+    cached.sourceHashes = captureTransformSourceHashes(
+      cached,
+      props.currentFile,
+      currentSourceHash,
+    );
     const externalInputSnapshot = captureExternalInputSnapshot(
       cached,
       externalInputPaths,
     );
     cached.externalInputHashes = externalInputSnapshot.hashes;
+    cached.externalInputObservations = externalInputSnapshot.observations;
     cached.externalInputRealpaths = externalInputSnapshot.realpaths;
     cached.externalInputSignatures = externalInputSnapshot.signatures;
     // Evaluate every half, rather than short-circuiting, so a generation that
     // cannot be reused can say which evidence it lacked. The extra work runs
     // only on the failing path, where the alternative is recompiling the whole
     // project for every remaining module.
-    const graphProofs = matchesCompilerGraphInputProofs(cached);
-    const universalInputs =
-      captureUniversalHostInputValidation(cached, props.currentFile) !==
-      undefined;
+    const failures = createGenerationProofFailures();
+    if (!configStable) {
+      recordGenerationProofFailure(failures, {
+        domain: "project",
+        kind: "config-state-changed",
+        path: props.tsconfig,
+      });
+    }
+    if (!walkStable) {
+      recordProjectSnapshotFailures(failures, {
+        before,
+        candidateTracker,
+        declared: declaredInputs,
+        hostInputTracker,
+        identities,
+        projectRoot,
+        snapshot: inputSnapshot,
+        tracker,
+      });
+    }
+    const graphFailures = compilerGraphInputProofFailures(cached);
+    mergeGenerationProofFailures(failures, graphFailures);
+    mergeGenerationProofFailures(failures, externalInputSnapshot.failures);
+    const universalInputCapture = captureUniversalHostInputValidation(
+      cached,
+      props.currentFile,
+    );
+    mergeGenerationProofFailures(failures, universalInputCapture.failures);
+    const graphProofs =
+      graphFailures.entries.length === 0 && graphFailures.omitted === 0;
+    const universalInputs = universalInputCapture.validation !== undefined;
     const stableProjectSnapshot =
       walkStable &&
       graphProofs &&
       externalInputSnapshot.complete &&
       universalInputs;
-    // Only a caching host loses anything here: without a cache every delivery
-    // compiles by design, so an unprovable generation costs it nothing.
-    if (!stableProjectSnapshot && props.trackProjectMembership) {
-      reportUnreusableGeneration(cached, {
-        externalInputs: externalInputSnapshot.complete,
-        graphProofs,
-        universalInputs,
-        walkStable,
+    if (!stableProjectSnapshot) {
+      TRANSFORM_GENERATION_FAILURES.set(result, failures);
+      TRANSFORM_FAILED_GENERATION_VALIDATIONS.set(result, {
+        cached,
+        declaredInputs,
+        inputStates: captureFailedGenerationInputStates(cached, failures),
+        projectInputHashes,
+        projectWalkComplete: walkSnapshotComplete(
+          inputSnapshot,
+          declaredInputs,
+        ),
+        projectWalkFailures: projectWalkFailureFingerprint(
+          inputSnapshot,
+          declaredInputs,
+          projectRoot,
+          identities,
+        ),
       });
     }
     cached.projectSnapshotComplete = stableProjectSnapshot;
@@ -4185,45 +7042,150 @@ async function transformProject(props: {
     retainTracker = notifying && tracker !== undefined;
     retainHostInputTracker = notifying && hostInputTracker !== undefined;
     retainCandidateTracker = notifying && candidateTracker !== undefined;
-    return cached;
+    if (clockReferenceDirectory !== undefined) {
+      retainClockReferenceDirectory = true;
+    }
+    captured = cached;
   } finally {
+    let cleanupFailed = false;
+    let cleanupFailure: unknown;
     try {
-      if (!retainTracker && tracker !== undefined) {
-        tracker.close();
-      }
-    } finally {
       try {
-        if (!retainHostInputTracker && hostInputTracker !== undefined) {
-          hostInputTracker.close();
+        if (!retainTracker && tracker !== undefined) {
+          tracker.close();
         }
       } finally {
         try {
-          if (!retainCandidateTracker && candidateTracker !== undefined) {
-            candidateTracker.close();
+          if (!retainHostInputTracker && hostInputTracker !== undefined) {
+            hostInputTracker.close();
           }
         } finally {
-          fs.rmSync(scratchDirectory, { force: true, recursive: true });
+          try {
+            if (!retainCandidateTracker && candidateTracker !== undefined) {
+              candidateTracker.close();
+            }
+          } finally {
+            try {
+              fs.rmSync(scratchDirectory, { force: true, recursive: true });
+            } finally {
+              if (
+                !retainClockReferenceDirectory &&
+                clockReferenceDirectory !== undefined
+              ) {
+                disposeFilesystemClockReference(clockReferenceDirectory);
+              }
+            }
+          }
         }
       }
+    } catch (error) {
+      cleanupFailed = true;
+      cleanupFailure = error;
+    }
+    if (cleanupFailed) {
+      // The generation never leaves this function when local cleanup fails.
+      // Close everything that was waiting to transfer, without letting a
+      // secondary teardown error replace the first failure.
+      for (const retained of [
+        retainTracker ? tracker : undefined,
+        retainHostInputTracker ? hostInputTracker : undefined,
+        retainCandidateTracker ? candidateTracker : undefined,
+      ]) {
+        try {
+          retained?.close();
+        } catch {
+          // Continue releasing the other generation-owned resources.
+        }
+      }
+      if (
+        retainClockReferenceDirectory &&
+        clockReferenceDirectory !== undefined
+      ) {
+        disposeFilesystemClockReference(clockReferenceDirectory);
+      }
+      throw cleanupFailure;
     }
   }
+  if (captured === undefined) {
+    throw new Error("ttsc: transform generation capture produced no result");
+  }
+  if (clockReferenceDirectory !== undefined) {
+    TRANSFORM_CLOCK_REFERENCE_DIRECTORIES.set(
+      captured,
+      clockReferenceDirectory,
+    );
+  }
+  return captured;
 }
 
-/** Exclude the disposed overlay tsconfig from live host-input tracking. */
+/** Exclude disposed transform scratch from live host-input tracking. */
 function selectPersistentHostInputs(props: {
   filesystem: TtscTransformFilesystemOperations;
   projectRoot: string;
   result: ITtscCompilerTransformation;
+  scratchDirectory?: string;
   temporaryTsconfig?: string;
 }): string[] {
   if (props.result.type === "exception") return [];
   const inputs = selectListedFiles(props.projectRoot, props.result.hostInputs);
-  if (props.temporaryTsconfig === undefined) return inputs;
+  if (
+    props.scratchDirectory === undefined &&
+    props.temporaryTsconfig === undefined
+  )
+    return inputs;
   const identities = createHostPathIdentityContext(props.filesystem);
-  const temporary = pathIdentityKey(props.temporaryTsconfig, identities);
-  return inputs.filter(
-    (input) => pathIdentityKey(input, identities) !== temporary,
-  );
+  const temporary =
+    props.temporaryTsconfig === undefined
+      ? undefined
+      : pathIdentityKey(props.temporaryTsconfig, identities);
+  return inputs.filter((input) => {
+    if (isTransformScratchInput(input, props.scratchDirectory)) return false;
+    return pathIdentityKey(input, identities) !== temporary;
+  });
+}
+
+interface ITransformTsconfigState {
+  effectivePaths: Record<string, string[]>;
+  membershipPolicy: ITtscProjectMembershipPolicy;
+  signature?: string;
+  templateCompilerOptions: Record<string, unknown>;
+  templateFileSpecs: Record<string, unknown>;
+}
+
+/** Read every wrapper-dependent view and bind it to one config-chain state. */
+function readTransformTsconfigState(
+  tsconfig: string,
+  materializesConfig: boolean,
+): ITransformTsconfigState {
+  const membershipPolicy = readProjectMembershipPolicy(tsconfig);
+  if (!materializesConfig) {
+    return {
+      effectivePaths: {},
+      membershipPolicy,
+      templateCompilerOptions: {},
+      templateFileSpecs: {},
+    };
+  }
+  const effectivePaths = readEffectiveTsconfigPaths(tsconfig);
+  const templateCompilerOptions =
+    readEffectiveTsconfigTemplateCompilerOptions(tsconfig);
+  const templateFileSpecs = readEffectiveTsconfigTemplateFileSpecs(tsconfig);
+  const sources = readTsconfigSourceSnapshot(tsconfig);
+  return {
+    effectivePaths,
+    membershipPolicy,
+    signature: hashText(
+      JSON.stringify({
+        effectivePaths,
+        membershipPolicy,
+        sources,
+        templateCompilerOptions,
+        templateFileSpecs,
+      }),
+    ),
+    templateCompilerOptions,
+    templateFileSpecs,
+  };
 }
 
 function createTransformTsconfig(
@@ -4233,24 +7195,34 @@ function createTransformTsconfig(
     tsconfig: string;
   },
   scratchDirectory: string,
+  state: ITransformTsconfigState,
 ): { path: string } {
-  const compilerOptions = normalizeCompilerOptionsForGeneratedTsconfig(
+  const overlay = normalizeCompilerOptionsForGeneratedTsconfig(
     {
       ...props.compilerOptions,
-      ...createAliasCompilerOptions(props),
+      ...createAliasCompilerOptions(props, state.effectivePaths),
     },
     path.dirname(props.tsconfig),
   );
-  if (Object.keys(compilerOptions).length === 0) {
+  if (Object.keys(overlay).length === 0) {
     return { path: props.tsconfig };
   }
 
+  // A `${configDir}` value survives every `extends` hop and binds only at the
+  // final consumer. The scratch wrapper would therefore move it out of the
+  // project even for an unrelated overlay. Re-state only those inherited
+  // values as absolute paths so the wrapper remains semantically transparent.
+  const compilerOptions = {
+    ...state.templateCompilerOptions,
+    ...overlay,
+  };
   const file = path.join(scratchDirectory, "tsconfig.json");
   fs.writeFileSync(
     file,
     JSON.stringify(
       {
         extends: normalizePath(props.tsconfig),
+        ...state.templateFileSpecs,
         compilerOptions,
       },
       null,
@@ -4344,6 +7316,17 @@ function pathIsWithin(child: string, parent: string): boolean {
   );
 }
 
+/** Whether an input is owned by the disposable transform scratch tree. */
+function isTransformScratchInput(
+  input: string,
+  scratchDirectory: string | undefined,
+): boolean {
+  return (
+    scratchDirectory !== undefined &&
+    pathIsWithin(path.resolve(input), path.resolve(scratchDirectory))
+  );
+}
+
 /** Route all compiler/plugin scratch to one owned directory outside project. */
 function transformScratchEnvironment(directory: string): NodeJS.ProcessEnv {
   return {
@@ -4398,16 +7381,18 @@ function normalizeCompilerOptionsForGeneratedTsconfig(
 ): Record<string, unknown> {
   const output = { ...compilerOptions };
   // Scalar path fields: resolve each against the original tsconfig directory.
-  for (const key of ["declarationDir", "outDir", "rootDir"]) {
+  for (const key of CONFIG_DIR_TEMPLATE_SCALAR_OPTIONS) {
     if (typeof output[key] === "string") {
-      output[key] = path.resolve(tsconfigDir, output[key]);
+      output[key] = resolveConfigDirTemplatePath(tsconfigDir, output[key]);
     }
   }
   // Array path fields: resolve each element individually.
-  for (const key of ["rootDirs", "typeRoots"]) {
+  for (const key of CONFIG_DIR_TEMPLATE_LIST_OPTIONS) {
     if (Array.isArray(output[key])) {
       output[key] = output[key].map((entry) =>
-        typeof entry === "string" ? path.resolve(tsconfigDir, entry) : entry,
+        typeof entry === "string"
+          ? resolveConfigDirTemplatePath(tsconfigDir, entry)
+          : entry,
       );
     }
   }
@@ -4467,17 +7452,20 @@ function normalizePluginConfigForGeneratedTsconfig(
  * No `baseUrl` is emitted: TypeScript-Go removed the option (TS5102), and all
  * targets are absolute so none is needed.
  */
-function createAliasCompilerOptions(props: {
-  aliasPaths: Record<string, string[]>;
-  compilerOptions: Record<string, unknown>;
-  tsconfig: string;
-}): Record<string, unknown> {
+function createAliasCompilerOptions(
+  props: {
+    aliasPaths: Record<string, string[]>;
+    compilerOptions: Record<string, unknown>;
+    tsconfig: string;
+  },
+  effectivePaths: Record<string, string[]>,
+): Record<string, unknown> {
   if (Object.keys(props.aliasPaths).length === 0) {
     return {};
   }
   return {
     paths: {
-      ...readEffectiveTsconfigPaths(props.tsconfig),
+      ...effectivePaths,
       ...readPaths(props.compilerOptions.paths),
       ...props.aliasPaths,
     },
@@ -4513,10 +7501,40 @@ function readPaths(value: unknown): Record<string, string[]> {
 function createAliasPaths(aliases: unknown): Record<string, string[]> {
   const paths: Record<string, string[]> = {};
   for (const alias of normalizeAliases(aliases)) {
-    if (typeof alias.find !== "string" || alias.find.length === 0) {
+    if (typeof alias.find !== "string") {
+      // Vite's array form accepts a `RegExp` find, and `{ find: /^~/ }` is a
+      // common way to spell a prefix alias. A tsconfig `paths` map has no
+      // regular-expression form, so there is nothing to translate it into
+      // (samchon/ttsc#1315). Reducing the simple prefix cases to a string is
+      // possible in principle and deliberately not done: telling `/^~/` from
+      // `/^~(?=\/)/` or `/^@app/` — which matches `@apple` too — means
+      // implementing enough of a regular-expression engine that a wrong
+      // reduction becomes likely, and a mistranslated alias resolves imports to
+      // the wrong file silently, which is worse than not forwarding it.
+      //
+      // Not reported, unlike the wildcard below, and that asymmetry is the
+      // whole point: Vite merges two `RegExp` aliases of its own into every
+      // resolved config, `/^\/?@vite\/env/` and `/^\/?@vite\/client/`. Measured
+      // on a bare project with no user aliases at all, `resolve.alias` has
+      // exactly those two entries under both `serve` and `build`, so a report
+      // on this form would fire twice for every Vite user in every build, name
+      // aliases they never wrote, and say nothing about their configuration.
+      // A diagnostic that cannot distinguish the user's input from the host's
+      // is noise, and noise is what teaches people to stop reading the channel
+      // the out-of-program report depends on. The documentation carries this
+      // form instead, in both README and guide.
+      continue;
+    }
+    if (alias.find.length === 0) {
       continue;
     }
     if (alias.find.includes("*")) {
+      // A `paths` key reads `*` as its own wildcard, so forwarding a `find`
+      // that already contains one cannot preserve the caller's meaning.
+      reportUntranslatableAlias(
+        JSON.stringify(alias.find),
+        'a "paths" key already reads "*" as its own wildcard',
+      );
       continue;
     }
     const key = alias.find.replace(/\/+$/, "");
@@ -4534,9 +7552,54 @@ function createAliasPaths(aliases: unknown): Record<string, string[]> {
   return paths;
 }
 
-function normalizeAliases(aliases: unknown): TtscTransformAlias[] {
+/**
+ * Alias descriptions already reported in this process.
+ *
+ * The message is about configuration rather than about a module:
+ * `resolve.alias` is resolved once and then consulted on every delivery, so
+ * reporting per delivery would repeat one statement about the config for every
+ * file in the bundle. Keyed by the description, so a Vite dev server that
+ * reloads its config reports again only when the alias itself changed.
+ */
+const REPORTED_UNTRANSLATABLE_ALIASES = new Set<string>();
+
+/**
+ * Tell the user once that an alias they declared is not reaching the compile.
+ *
+ * A dropped alias is not silent in its consequence — the compile resolves
+ * through the tsconfig's own `paths`, and a module that resolves for the
+ * bundler but not for the compiler surfaces as the out-of-program report
+ * (samchon/ttsc#1308) — but that report names the module, not the alias, so the
+ * user cannot learn from it that a configuration they wrote was ignored.
+ *
+ * Only the wildcard form reaches here. Every entry it names was written by the
+ * user, because nothing injects one; the `RegExp` form is left to the
+ * documentation precisely because Vite does inject those, and
+ * {@link createAliasPaths} carries that measurement.
+ */
+function reportUntranslatableAlias(description: string, reason: string): void {
+  if (REPORTED_UNTRANSLATABLE_ALIASES.has(description)) {
+    return;
+  }
+  REPORTED_UNTRANSLATABLE_ALIASES.add(description);
+  process.stderr.write(
+    `ttsc: the Vite alias ${description} was not forwarded to the compile, because ${reason}. Declare it in your tsconfig's "paths" if ttsc must resolve through it.\n`,
+  );
+}
+
+/**
+ * Collect the host's declared aliases without deciding which of them can be
+ * expressed as `paths`.
+ *
+ * That decision belongs to {@link createAliasPaths} alone. It used to be split:
+ * this function's type guard required a string `find` and dropped Vite's
+ * `RegExp` form before `createAliasPaths` ever saw it, which left
+ * `createAliasPaths`'s own non-string branch unreachable and put the drop
+ * somewhere nothing could report it (samchon/ttsc#1315).
+ */
+function normalizeAliases(aliases: unknown): TtscDeclaredAlias[] {
   if (Array.isArray(aliases)) {
-    return aliases.filter(isAlias);
+    return aliases.filter(isDeclaredAlias);
   }
   if (typeof aliases === "object" && aliases !== null) {
     return Object.entries(aliases)
@@ -4594,13 +7657,12 @@ function isRelativeSpecifier(value: string): boolean {
   );
 }
 
-function isAlias(value: unknown): value is TtscTransformAlias {
+function isDeclaredAlias(value: unknown): value is TtscDeclaredAlias {
   return (
     typeof value === "object" &&
     value !== null &&
     "find" in value &&
     "replacement" in value &&
-    typeof value.find === "string" &&
     typeof value.replacement === "string"
   );
 }
@@ -4618,6 +7680,7 @@ function selectTransformedSource(props: {
   file: string;
   projectRoot: string;
   result: ITtscCompilerTransformation;
+  tsconfig: string;
 }): string {
   if (props.result.type === "exception") {
     throw new Error(formatUnknownError(props.result.error));
@@ -4648,20 +7711,68 @@ function selectTransformedSource(props: {
   if (source !== undefined) {
     return source;
   }
-  throw new Error(`ttsc transform did not return output for ${props.file}`);
+  throw new TtscMissingProgramOutputError(props.file, props.tsconfig);
 }
 
 /**
- * Forward non-fatal plugin diagnostics to stderr.
+ * Tell the user once that a module was left untransformed, and why.
+ *
+ * The condition is ordinary and the build continues, but it must never be
+ * silent: a file the program does not contain keeps whatever plugin syntax it
+ * carries, so a typia `assert<T>()` in it becomes a runtime failure rather than
+ * a build failure. One line per file per generation per pass, on the channel
+ * the generation's other non-fatal diagnostics already use, so a bundle that
+ * reaches many such files does not repeat itself per delivery.
+ */
+function reportMissingProgramOutput(
+  cached: TtscCachedProjectTransform,
+  error: TtscMissingProgramOutputError,
+  epoch: number | undefined,
+): void {
+  const reported = (cached.missingOutputReported ??= new Set<string>());
+  if (cached.missingOutputEpoch !== epoch) {
+    cached.missingOutputEpoch = epoch;
+    reported.clear();
+  }
+  if (reported.has(error.file)) {
+    return;
+  }
+  reported.add(error.file);
+  process.stderr.write(`${error.message}
+`);
+}
+
+/**
+ * Forward non-fatal plugin diagnostics to stderr, once per generation per pass.
  *
  * A `success` result may still carry warnings or informational messages from
- * plugins. These are surfaced via stderr rather than throwing so the build
- * continues. Failures and exceptions are handled by the caller.
+ * plugins — `@ttsc/lint` reports every rule below error severity this way.
+ * These are surfaced via stderr rather than throwing so the build continues.
+ * Failures and exceptions are handled by the caller.
+ *
+ * They describe one compile of one program, so writing them per delivery
+ * printed the same warning once per module and scaled the noise with exactly
+ * the reuse the cache exists to provide (samchon/ttsc#1304). A pass that reuses
+ * a retained generation still surfaces them once, because a build's warnings
+ * are part of what that build reports; a host with no pass boundary surfaces
+ * them once per generation, which is the same rule with one pass.
  */
-function reportSuccessDiagnostics(result: ITtscCompilerTransformation): void {
+function reportSuccessDiagnostics(
+  cached: TtscCachedProjectTransform,
+  epoch: number | undefined,
+): void {
+  const result = cached.result;
   if (result.type !== "success" || result.diagnostics === undefined) {
     return;
   }
+  if (
+    cached.diagnosticsReported === true &&
+    cached.diagnosticsEpoch === epoch
+  ) {
+    return;
+  }
+  cached.diagnosticsReported = true;
+  cached.diagnosticsEpoch = epoch;
   const text = formatDiagnostics(result.diagnostics);
   if (text.length !== 0) {
     process.stderr.write(`${text}\n`);
@@ -4687,7 +7798,7 @@ function formatDiagnostics(diagnostics: ITtscCompilerDiagnostic[]): string {
         diag.line === undefined
           ? undefined
           : `${diag.line}:${diag.character ?? 1}`,
-        diag.messageText,
+        stripTerminalEscapes(diag.messageText),
       ]
         .filter((part) => part !== undefined && part !== "")
         .join(": "),
@@ -4697,7 +7808,7 @@ function formatDiagnostics(diagnostics: ITtscCompilerDiagnostic[]): string {
 
 function formatUnknownError(error: unknown): string {
   if (error instanceof Error) {
-    return error.message;
+    return stripTerminalEscapes(error.message);
   }
   if (
     typeof error === "object" &&
@@ -4705,9 +7816,33 @@ function formatUnknownError(error: unknown): string {
     "message" in error &&
     typeof error.message === "string"
   ) {
-    return error.message;
+    return stripTerminalEscapes(error.message);
   }
-  return String(error);
+  return stripTerminalEscapes(String(error));
+}
+
+/**
+ * Remove terminal colour and cursor sequences from text the adapter surfaces.
+ *
+ * An ordinary type error reaches the adapter as an `"exception"` envelope whose
+ * `error` is the host's own rendered output, colour and all, and the envelope
+ * carries no structured diagnostics to format instead. What the adapter hands
+ * back is not going to a terminal: it becomes the `Error` a bundler reports, so
+ * it lands in a Vite overlay, a webpack error report or a CI annotation, where
+ * the escapes render as literal noise around the file and line the reader needs
+ * (samchon/ttsc#1312).
+ *
+ * The colour originates in the host's rendering rather than in anything this
+ * adapter configures, so this is the adapter-side repair, applied to every
+ * message it surfaces rather than to one call site.
+ */
+function stripTerminalEscapes(text: string): string {
+  // Built from a char code so no control byte lives in this source file, and
+  // written with `[[]` (a class holding one literal bracket) so the pattern
+  // needs no backslash escapes to survive the string it is assembled from.
+  const escape = String.fromCharCode(27);
+  const controlSequence = new RegExp(escape + "[[][0-9;?]*[ -/]*[@-~]", "g");
+  return text.replace(controlSequence, "");
 }
 
 /**
@@ -4715,9 +7850,9 @@ function formatUnknownError(error: unknown): string {
  *
  * If `tsconfig` is supplied it is returned as-is (absolute) or resolved from
  * `process.cwd()` (relative). Otherwise the function walks ancestor directories
- * starting at `file`'s directory, returning the first `tsconfig.json` found.
- * Falls back to `<cwd>/tsconfig.json` when no ancestor contains one; the
- * compiler will error if that file does not exist, which is the correct
+ * starting at `file`'s directory, returning the first `tsconfig.json` proven to
+ * be a file. Falls back to `<cwd>/tsconfig.json` when no ancestor contains one;
+ * the compiler will error if that file does not exist, which is the correct
  * behavior for a mis-configured project.
  */
 function resolveTsconfig(
@@ -4731,18 +7866,9 @@ function resolveTsconfig(
       : path.resolve(process.cwd(), tsconfig);
   }
 
-  let current = path.dirname(file);
-  while (true) {
-    const candidate = path.join(current, "tsconfig.json");
-    if (filesystem.exists(candidate)) {
-      return candidate;
-    }
-    const parent = path.dirname(current);
-    // Reached filesystem root, stop walking.
-    if (parent === current) {
-      break;
-    }
-    current = parent;
+  const discovered = findNearestProjectTsconfig(path.dirname(file), filesystem);
+  if (discovered !== undefined) {
+    return discovered;
   }
   return path.resolve(process.cwd(), "tsconfig.json");
 }
