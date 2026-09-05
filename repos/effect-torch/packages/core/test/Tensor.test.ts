@@ -1,7 +1,7 @@
 import { describe, expect } from "@effect/vitest"
 import * as assert from "@effect/vitest/utils"
 import { Effect, Exit } from "effect"
-import { Gradient, Loss, Tensor } from "../src/index.ts"
+import { Gradient, Loss, Runtime, Tensor } from "../src/index.ts"
 import { deep, floatDtype, floats, onDevices, TOL } from "./utils/devices.ts"
 
 const values = (t: Tensor.Any) =>
@@ -245,6 +245,45 @@ onDevices("Tensor", (device) => (it) => {
       }))
   })
 
+  describe("expose", () => {
+    const matrix = Tensor.fromTypedArray(new Float32Array([1, 2, 3, 4, 5, 6]), [2, 3])
+
+    it.effect("is a value-preserving identity in ordinary execution", () =>
+      Effect.gen(function*() {
+        const exposed = yield* Tensor.expose(yield* matrix, "layers.0.hidden")
+        deep(exposed.shape, [2, 3])
+        deep(yield* values(exposed), [1, 2, 3, 4, 5, 6])
+      }))
+
+    it.effect("exposures discovers named tensors from the graph root", () =>
+      Effect.gen(function*() {
+        const a = yield* matrix
+        const mid = yield* Tensor.expose(yield* Tensor.add(a, a), "layers.0.hidden")
+        const out = yield* Tensor.expose(yield* Tensor.mul(mid, a), "layers.1.hidden")
+        const runtime = yield* Runtime.Runtime
+        const found = yield* runtime.exposures(out)
+        deep(found.map(({ name }) => name), ["layers.1.hidden", "layers.0.hidden"])
+        deep(found[0]!.tensor.shape, [2, 3])
+        // The discovered handle is the wrapped tensor: executable with values.
+        deep(yield* values(found[1]!.tensor), [2, 4, 6, 8, 10, 12])
+        deep(yield* values(found[0]!.tensor), [2, 8, 18, 32, 50, 72])
+      }))
+
+    it.effect("rejects empty and duplicate exposure names", () =>
+      Effect.gen(function*() {
+        const empty = yield* Effect.exit(Effect.flatMap(matrix, (m) => Tensor.expose(m, "")))
+        assert.assertTrue(Exit.isFailure(empty))
+        const a = yield* matrix
+        const root = yield* Tensor.add(
+          yield* Tensor.expose(a, "dup"),
+          yield* Tensor.expose(a, "dup")
+        )
+        const runtime = yield* Runtime.Runtime
+        const duplicate = yield* Effect.exit(runtime.exposures(root))
+        assert.assertTrue(Exit.isFailure(duplicate))
+      }))
+  })
+
   describe("composition", () => {
     it.effect("matmul(eye) roundtrip and deep chains compute once", () =>
       Effect.gen(function*() {
@@ -478,6 +517,14 @@ onDevices("Tensor", (device) => (it) => {
         deep(normalized.shape, [2, 2, 4])
         deep(yield* values(normalized), expected(false))
         deep(yield* values(yield* Tensor.rmsNorm(input, weight, eps)), expected(true))
+
+        const wide = yield* Tensor.ones([2, 1024], { dtype: floatDtype })
+        const wideValues = yield* values(yield* Tensor.rmsNorm(wide, undefined, eps))
+        const wideExpected = 1 / Math.sqrt(1 + eps)
+        expect(wideValues).toHaveLength(2048)
+        for (const value of wideValues) {
+          expect(Math.abs(value - wideExpected)).toBeLessThan(TOL)
+        }
       }))
 
     it.effect("rmsNorm validates input and weight shapes", () =>
@@ -850,7 +897,7 @@ onDevices("Tensor", (device) => (it) => {
         const m = yield* Tensor.fromTypedArray(floats([1, 2, 3, 4]), [2, 2])
         deep(yield* values(yield* Tensor.trace(m)), [5])
       }))
-    if (device === "cpu") {
+    if (device !== "metal") {
       it.effect("inverse/det/solve", () =>
         Effect.gen(function*() {
           const a = yield* Tensor.fromTypedArray(floats([4, 1, 1, 3]), [2, 2])

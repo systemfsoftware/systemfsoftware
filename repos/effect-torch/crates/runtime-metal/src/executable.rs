@@ -1,65 +1,66 @@
 //! Executable planning and execution for the Metal backend.
 //!
-//! This module lowers a compiler-prepared program
-//! ([`PreparedProgram`]) into an immutable [`MetalExecutable`] and runs
-//! it against caller-supplied bindings. Compilation is a one-shot,
-//! fail-loud pipeline:
+//! This module lowers a compiler-prepared [`PreparedProgram`] into an
+//! immutable [`MetalExecutable`] and runs it with caller bindings. Compilation
+//! runs once and returns errors immediately.
 //!
-//! 1. **Lowering** — the [`CompilerDriver`] walks the graph in
-//!    evaluation order and the [`Lowerer`] maps each semantic node to a
-//!    [`MetalOp`], recording value metadata, storage classes
-//!    ([`MetalValueStorage`]), constants, and bindings.
-//! 2. **Physical planning** — every operation gets an exact
-//!    [`MetalCommandPlan`] (the fused kernels' `*_requirements` types)
-//!    plus scratch/staging/status resource specs
-//!    ([`plan_command_resources`]), and the memory planner assigns each
-//!    value a [`Location`] inside shared workspace segments.
-//! 3. **Pipeline preparation** — every pipeline the physical plan can
-//!    reference is warmed up front (`MetalPreparedArtifacts` counts
-//!    them), so execution never blocks on the Metal shader compiler.
-//! 4. **Publication** — constants and compile-time submissions are
-//!    drained before the artifact becomes visible to callers.
+//! 1. The [`CompilerDriver`] walks the graph in evaluation order. The
+//!    [`Lowerer`] maps each semantic node to a [`MetalOp`] and records value
+//!    metadata, [`MetalValueStorage`] classes, constants, and bindings.
+//! 2. Each operation gets a [`MetalCommandPlan`] from its fused kernel
+//!    `*_requirements`, plus scratch, staging, and status resources from
+//!    [`plan_command_resources`]. The memory planner assigns each value a
+//!    [`Location`] in shared workspace segments.
+//! 3. Compilation warms every pipeline the physical plan can reference and
+//!    records the count in `MetalPreparedArtifacts`. Execution therefore does
+//!    not block on the Metal shader compiler.
+//! 4. Publication drains constants and compile-time submissions before callers
+//!    can access the artifact.
 //!
 //! ## Execution
 //!
-//! [`execute_with_commit`] validates the invocation against the
-//! program signature (counts, dtypes, placements, zero-offset
-//! contiguity), acquires workspace segments per the memory plan,
-//! resolves every value to a concrete buffer, then walks the
-//! **physical command stream** ([`MetalPhysicalCommand`]):
+//! [`execute_with_commit`] validates counts, dtypes, placements, and zero-offset
+//! contiguity against the program signature. It acquires workspace segments
+//! from the memory plan, resolves each value to a buffer, and walks the
+//! [`MetalPhysicalCommand`] stream.
 //!
-//! - `Encode(id)` dispatches one operation into the current command
-//!   buffer via [`execute_op_into`].
-//! - `StatusGate(id)` + `Commit` close the current command buffer
-//!   after a status-producing kernel (cross-entropy, quantized
-//!   embedding), so its device-side status word is readable on the
-//!   host while later commands keep encoding; the deferred checks run
-//!   after the final fence in command order.
-//! - `Complete` must be last — the stream is validated for exactly one
-//!   terminal completion.
+//! - `Encode(id)` calls [`execute_op_into`] to dispatch one operation into the
+//!   current command buffer.
+//! - `StatusGate(id)` followed by `Commit` closes the command buffer after a
+//!   status-producing cross-entropy or quantized embedding kernel. The host can
+//!   then read its status word while later commands continue encoding. Deferred
+//!   checks run in command order after the final fence.
+//! - `Complete` must be the stream's single final command.
 //!
-//! GPU synchronization happens **unconditionally** before any segment
-//! or output owner is released, and backend submission failures take
-//! precedence over host errors, panics (caught and re-raised as
-//! errors), and cancellation.
+//! The runtime always synchronizes the GPU before releasing segment or output
+//! owners. Backend submission failures take precedence over host errors,
+//! cancellation, and panics caught and returned as errors.
+//! [`execute_stateful_deferred`] is the exception: prefill chunk loops encode
+//! onto one shared stream and return [`PendingExecution`]. It keeps the
+//! workspace lease and resolved values alive until one batched drain fences the
+//! stream.
 //!
 //! ## Cancellation
 //!
-//! The [`CancellationFlag`] is polled before validation, before every
-//! encoded command, and again after synchronization; a set flag aborts
-//! with `"operation aborted"`. For stateful execution an additional
-//! `commit_allowed` gate runs after the GPU work completes.
+//! The runtime polls [`CancellationFlag`] before validation, before each
+//! encoded command, and after synchronization. A set flag returns
+//! `"operation aborted"`. Stateful execution also checks `commit_allowed`
+//! after GPU work completes, or after encoding on the deferred path.
 //!
 //! ## State transactions
 //!
-//! Decode executables carry a [`KvStateSchema`] and run against a
-//! [`MetalDecodeContext`] holding per-slot [`SeqState`]. Kernels write
-//! their next-state (KV slab rows, KDA state, conv window) into
-//! invocation-owned transaction buffers; only after the whole program
-//! succeeds does [`commit_state_transactions`] copy them into the
-//! slots' canonical state and advance cursors, so a failed or
-//! cancelled invocation never corrupts live decode state. Slot locking
-//! order is fixed (index order) and evictions apply only after commit.
+//! Decode executables carry a [`KvStateSchema`] and use per-slot [`SeqState`]
+//! from [`MetalDecodeContext`]. Kernels write next-state KV slab rows, KDA
+//! state, and convolution windows into invocation-owned transaction buffers.
+//! After the program succeeds, [`commit_state_transactions`] copies them into
+//! canonical slot state and advances cursors. Failed or cancelled invocations
+//! cannot corrupt live decode state. Slots lock in index order, and evictions
+//! apply only after commit.
+//!
+//! The deferred path encodes GPU-ordered copies on the chunk's stream after its
+//! kernels and before the next chunk's readers. Cursor commits and evictions
+//! apply immediately, allowing consecutive chunks to pipeline without a host
+//! fence.
 
 use crate::value::Value;
 use crate::{
@@ -77,7 +78,9 @@ use effect_torch_compiler::{
     COMPILE_SUBMISSION_PHASE, PHYSICAL_PLANNING_PHASE, PIPELINE_PREPARATION_PHASE,
     PUBLICATION_PHASE,
 };
-use effect_torch_graph::{node_children, CrossEntropyReduction, PositionOffset, RotaryLayout};
+use effect_torch_graph::{
+    node_children, CrossEntropyReduction, Device, KvAttentionMode, PositionOffset, RotaryLayout,
+};
 use effect_torch_runtime::{
     Buffer, CancellationFlag, DType, ExecutableDiagnostics, GgmlKQuant, InstructionId,
     InvocationMemoryReport, Location, MemoryPlan, NativeMemorySpace, ProgramSignature,
@@ -118,10 +121,9 @@ pub(crate) struct ConvGeometry {
     pub kernel: usize,
 }
 
-/// Static schema of a decode executable's recurrent state: the KV
-/// pool shape and paging parameters plus the KDA and conv geometries.
-/// Compiled into the executable and compared against the decode
-/// context at invocation time — a mismatch is a hard error.
+/// Static recurrent-state schema for a decode executable. It contains the KV
+/// pool shape, paging parameters, and KDA and convolution geometries. Each
+/// invocation compares it with the decode context and rejects mismatches.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct KvStateSchema {
     pub max_tokens: usize,
@@ -129,6 +131,9 @@ pub(crate) struct KvStateSchema {
     pub kv_dtype: DType,
     pub window: Option<usize>,
     pub batch: usize,
+    /// Number of independent rows traced in the graph. Dense execution uses
+    /// `batch`; packed verification may use more rows over the same sequences.
+    pub graph_batch: usize,
     pub layers: usize,
     pub kv_heads: usize,
     pub head_dim: usize,
@@ -148,8 +153,8 @@ impl KvStateSchema {
                 "compile: KV max_tokens must be positive and divisible by block_size".to_string(),
             );
         }
-        if self.batch == 0 {
-            return Err("compile: KV batch must be positive".to_string());
+        if self.batch == 0 || self.graph_batch < self.batch {
+            return Err("compile: KV physical and graph batch geometry is invalid".to_string());
         }
         if !matches!(
             self.kv_dtype,
@@ -270,9 +275,29 @@ pub(crate) trait MetalDecodeContext {
     fn schema(&self) -> &KvStateSchema;
     /// All sequence slots (one per batch row), locked in index order.
     fn slots(&self) -> &[Arc<Mutex<SeqState>>];
+    /// Physical batch lane occupied by the compact request slot.
+    fn active_lane(&self, request_index: usize) -> usize {
+        request_index
+    }
+    /// State bound to a physical batch lane, if that lane is active.
+    fn physical_slot(&self, lane: usize) -> Option<&Arc<Mutex<SeqState>>> {
+        self.slots().get(lane)
+    }
     /// Number of slots actively participating in this invocation.
     fn active_batch(&self) -> usize {
         self.slots().len()
+    }
+    /// Absolute position offset for every graph row.
+    fn position_offsets(&self) -> Result<Vec<usize>, String> {
+        let mut offsets = vec![0; self.schema().graph_batch];
+        for request in 0..self.active_batch() {
+            let lane = self.active_lane(request);
+            offsets[lane] = self.slots()[request]
+                .lock()
+                .map_err(|error| format!("decode position: sequence lock poisoned: {error}"))?
+                .cursor;
+        }
+        Ok(offsets)
     }
     /// Uploads/prepares the cursor state before dispatch.
     fn prepare_state(&self, cursor: &crate::run::MetalTensor) -> Result<(), String>;
@@ -284,7 +309,9 @@ pub(crate) trait MetalDecodeContext {
         plan: &KvAttentionPlan,
         staging: &[crate::run::MetalTensor],
     ) -> Result<(), String>;
-    /// Non-allocating paged attention dispatch for one layer.
+    /// Non-allocating paged attention dispatch for one layer. `scratch`
+    /// carries the planned split partial-records workspace (exactly one
+    /// tensor when the plan splits the decode, empty otherwise).
     #[allow(clippy::too_many_arguments)]
     fn kv_attention_into(
         &self,
@@ -294,8 +321,10 @@ pub(crate) trait MetalDecodeContext {
         v: &crate::run::MetalTensor,
         scale: f64,
         window: Option<usize>,
+        mode: KvAttentionMode,
         output: &crate::run::MetalTensor,
         staging: &[crate::run::MetalTensor],
+        scratch: &[crate::run::MetalTensor],
     ) -> Result<(), String>;
     /// Drops table blocks before the absolute index `start` (applied
     /// only after a successful commit).
@@ -567,6 +596,7 @@ pub(super) enum MetalOp {
         scale: f64,
         layer: u32,
         window: Option<usize>,
+        mode: KvAttentionMode,
     },
     RotaryEmbedding {
         theta: f64,
@@ -585,6 +615,10 @@ pub(super) enum MetalOp {
     QuantizedLinear {
         codec: GgmlKQuant,
         weight_shape: [usize; 2],
+    },
+    QuantizedLinearGroup {
+        codec: GgmlKQuant,
+        weight_shapes: Box<[[usize; 2]]>,
     },
     QuantizedEmbedding {
         codec: GgmlKQuant,
@@ -741,6 +775,7 @@ impl MetalOp {
                 "linear_native"
             }
             Self::QuantizedLinear { .. } => "quantized_linear",
+            Self::QuantizedLinearGroup { .. } => "quantized_linear_grouped",
             Self::QuantizedEmbedding { .. } => "quantized_embedding",
             Self::LayerNorm { .. } | Self::LayerNormBackward { .. } => "layer_norm_native",
             Self::RmsNorm { .. } => "rms_norm_native",
@@ -929,6 +964,7 @@ pub(super) enum MetalCommandPlan {
     ShortConvBackwardW(crate::shortconv::BackwardWRequirements),
     Rotary(crate::rotary::RotaryRequirements),
     QuantizedLinear(crate::quantized::LinearRequirements),
+    QuantizedLinearGroup(crate::quantized::GroupedLinearRequirements),
     QuantizedEmbedding(crate::quantized::EmbeddingRequirements),
     KvAttention(KvAttentionPlan),
 }
@@ -942,6 +978,11 @@ pub(super) struct KvAttentionPlan {
     pub(crate) kv_heads: usize,
     pub(crate) time: usize,
     pub(crate) head_dim: usize,
+    pub(crate) mode: KvAttentionMode,
+    /// Flash-decoding split count: > 1 (fixed 8) only for causal
+    /// one-token decode, where a partial + combine kernel pair runs;
+    /// 1 keeps the single row-parallel kernel.
+    pub(crate) splits: usize,
 }
 
 /// One chunk-shape variant of the chunked-head CE forward: the gemm
@@ -1110,10 +1151,106 @@ fn declaration_layout(value: &MetalValueMetadata) -> effect_torch_runtime::Layou
     effect_torch_runtime::Layout::contiguous(value.shape.to_vec())
 }
 
-/// Computes the exact plan (fused-kernel requirements plus
-/// scratch/staging/status resources) of one lowered command. This is
-/// the heart of physical planning: every byte and every pipeline an
-/// invocation can touch is fixed here, before any execution.
+/// Merges independent decode-time quantized linears that share an input and
+/// codec into one `QuantizedLinearGroup` command
+/// (2..=4 members, bias-free, non-MMA packed-dot shapes only). Member
+/// outputs stay distinct outputs of the merged command; an intervening
+/// instruction that writes the shared input or a member weight stops
+/// the scan, so reordered members never observe a stale or future
+/// value. Liveness is computed after this pass, so member releases
+/// stay exact.
+fn group_quantized_linear_commands(
+    instructions: &mut Vec<MetalCommand>,
+    values: &[MetalValueMetadata],
+) {
+    fn candidate(
+        command: &MetalCommand,
+        values: &[MetalValueMetadata],
+    ) -> Option<(GgmlKQuant, [usize; 2], ValueId)> {
+        let MetalInstruction::Operation {
+            op:
+                MetalOp::QuantizedLinear {
+                    codec,
+                    weight_shape,
+                },
+            ..
+        } = &command.kind
+        else {
+            return None;
+        };
+        // Biased projections (three inputs) are never grouped.
+        if command.inputs.len() != 2 || command.outputs.len() != 1 {
+            return None;
+        }
+        let input = command.inputs[0].value;
+        let metadata = values.get(input.index())?;
+        if metadata.shape.len() < 2 || metadata.shape.last() != Some(&weight_shape[1]) {
+            return None;
+        }
+        let vectors = metadata.shape[..metadata.shape.len() - 1]
+            .iter()
+            .product::<usize>();
+        // Only non-MMA packed-dot decode shapes group.
+        if vectors == 0 || vectors >= 8 {
+            return None;
+        }
+        Some((*codec, *weight_shape, input))
+    }
+
+    let mut index = 0;
+    while index < instructions.len() {
+        let Some((codec, weight_shape, input)) = candidate(&instructions[index], values) else {
+            index += 1;
+            continue;
+        };
+        let mut members = vec![index];
+        let mut weights = vec![instructions[index].inputs[1].value];
+        let mut weight_shapes = vec![weight_shape];
+        let mut outputs = vec![instructions[index].outputs[0].value];
+        let mut scan = index + 1;
+        while scan < instructions.len() && members.len() < 4 {
+            let command = &instructions[scan];
+            if command
+                .outputs
+                .iter()
+                .any(|output| output.value == input || weights.contains(&output.value))
+            {
+                break;
+            }
+            if let Some((member_codec, member_shape, member_input)) = candidate(command, values) {
+                let output = command.outputs[0].value;
+                if member_codec == codec && member_input == input && !outputs.contains(&output) {
+                    members.push(scan);
+                    weights.push(command.inputs[1].value);
+                    weight_shapes.push(member_shape);
+                    outputs.push(output);
+                }
+            }
+            scan += 1;
+        }
+        if members.len() >= 2 {
+            let command = &mut instructions[index];
+            command.kind = MetalInstruction::Operation {
+                op: MetalOp::QuantizedLinearGroup {
+                    codec,
+                    weight_shapes: weight_shapes.into_boxed_slice(),
+                },
+                plan: MetalCommandPlan::Direct,
+                release: Box::new([]),
+                random_seed_token: 0,
+            };
+            command.inputs = std::iter::once(ValueUse::read(input))
+                .chain(weights.iter().copied().map(ValueUse::read))
+                .collect();
+            command.outputs = outputs.iter().copied().map(OutputDecl::new).collect();
+            for &member in members[1..].iter().rev() {
+                instructions.remove(member);
+            }
+        }
+        index += 1;
+    }
+}
+
 fn plan_command_resources(
     command: &MetalCommand,
     values: &[MetalValueMetadata],
@@ -1688,6 +1825,38 @@ fn plan_command_resources(
                 *weight_shape,
             )?);
         }
+        MetalOp::QuantizedLinearGroup {
+            codec,
+            weight_shapes,
+        } => {
+            let x = input(0)?;
+            if command.inputs.len() != weight_shapes.len() + 1
+                || command.outputs.len() != weight_shapes.len()
+            {
+                return Err(
+                    "compile: quantized linear group arity does not match its members".to_string(),
+                );
+            }
+            let mut members = Vec::with_capacity(weight_shapes.len());
+            for (index, weight_shape) in weight_shapes.iter().enumerate() {
+                let weight = input(1 + index)?;
+                let member_output = output(index)?;
+                members.push(quantized::linear_requirements(
+                    &x.shape,
+                    x.dtype,
+                    &weight.shape,
+                    weight.dtype,
+                    None,
+                    &member_output.shape,
+                    member_output.dtype,
+                    *codec,
+                    *weight_shape,
+                )?);
+            }
+            resources.plan = MetalCommandPlan::QuantizedLinearGroup(
+                quantized::grouped_linear_requirements(&members)?,
+            );
+        }
         MetalOp::QuantizedEmbedding {
             codec,
             weight_shape,
@@ -2012,7 +2181,7 @@ fn plan_command_resources(
             }
         }
         MetalOp::AdamW { .. } | MetalOp::AdamWGroup { .. } | MetalOp::Sgd { .. } => {}
-        MetalOp::KvAttention { layer, .. } => {
+        MetalOp::KvAttention { layer, mode, .. } => {
             let q = input(0)?;
             let k = input(1)?;
             if q.shape.len() < 3 || q.dtype != DType::F32 {
@@ -2021,6 +2190,7 @@ fn plan_command_resources(
                 );
             }
             let rank = q.shape.len();
+            let time = q.shape[rank - 2];
             let plan = KvAttentionPlan {
                 batch: q.shape[..rank - 3]
                     .iter()
@@ -2028,8 +2198,14 @@ fn plan_command_resources(
                     .ok_or_else(|| "compile: KV attention batch size overflow".to_string())?,
                 query_heads: q.shape[rank - 3],
                 kv_heads: k.shape[rank - 3],
-                time: q.shape[rank - 2],
+                time,
                 head_dim: q.shape[rank - 1],
+                mode: *mode,
+                splits: if *mode == KvAttentionMode::Causal && time == 1 {
+                    8
+                } else {
+                    1
+                },
             };
             if plan.time == 0 || plan.head_dim > 128 {
                 return Err(format!(
@@ -2040,7 +2216,7 @@ fn plan_command_resources(
             let schema = state_schema.ok_or_else(|| {
                 "compile: paged KV attention requires an explicit state schema".to_string()
             })?;
-            if plan.batch != schema.batch
+            if plan.batch != schema.graph_batch
                 || plan.kv_heads != schema.kv_heads
                 || plan.head_dim != schema.head_dim
                 || (*layer as usize) >= schema.layers
@@ -2052,7 +2228,7 @@ fn plan_command_resources(
                     plan.kv_heads,
                     plan.head_dim,
                     layer,
-                    schema.batch,
+                    schema.graph_batch,
                     schema.kv_heads,
                     schema.head_dim,
                     schema.layers
@@ -2061,14 +2237,21 @@ fn plan_command_resources(
             resources.staging.extend([
                 staging(
                     "kv_block_table",
-                    &[schema.batch, schema.max_blocks()],
+                    &[schema.graph_batch, schema.max_blocks()],
                     DType::U32,
                 ),
-                staging("kv_context_lengths", &[schema.batch], DType::U32),
-                staging("kv_block_bases", &[schema.batch], DType::U32),
-                staging("kv_token_advances", &[schema.batch], DType::U32),
-                staging("kv_padding", &[schema.batch], DType::U32),
+                staging("kv_context_lengths", &[schema.graph_batch], DType::U32),
+                staging("kv_block_bases", &[schema.graph_batch], DType::U32),
+                staging("kv_token_advances", &[schema.graph_batch], DType::U32),
+                staging("kv_padding", &[schema.graph_batch], DType::U32),
             ]);
+            if plan.splits > 1 {
+                resources.scratch.push(scratch(
+                    "kv_attention_split_partials",
+                    &[plan.batch, plan.query_heads, plan.splits, plan.head_dim + 2],
+                    DType::F32,
+                ));
+            }
             resources.plan = MetalCommandPlan::KvAttention(plan);
         }
         MetalOp::Conv1d {
@@ -2239,6 +2422,10 @@ pub(super) struct MetalExecutable {
     pub program: Arc<LoweredProgram<MetalInstruction, NativeMemorySpace, MetalLoweredValue>>,
     /// Physical execution stream (see [`MetalPhysicalCommand`]).
     pub physical: Box<[MetalPhysicalCommand]>,
+    /// Per-physical-command mark: the command's results feed only program
+    /// output 0 (the logits row), so headless invocations may skip it.
+    /// See [`mark_head_only_commands`].
+    head_only: Box<[bool]>,
     /// Compile-time prepared pipelines.
     pub prepared: MetalPreparedArtifacts,
     /// Tensor input bindings (declared + generated).
@@ -2261,6 +2448,85 @@ pub(super) struct MetalExecutable {
     /// Memory report of the most recent invocation (observability).
     pub last_invocation_memory: Mutex<Option<InvocationMemoryReport>>,
     state_cursor: Option<ValueId>,
+}
+
+/// Marks encode commands whose results feed only output 0, the logits row of a
+/// last-token-row prefill program. A headless prefill chunk skips those commands
+/// when it does not finish a prompt. Decode-state effects and tap outputs still
+/// run, but the LM head and its epilogue do not. Reverse liveness over every
+/// output except 0 and every state-effect instruction determines the mark.
+/// Callers choose whether to skip marked commands for each invocation.
+fn mark_head_only_commands(
+    program: &LoweredProgram<MetalInstruction, NativeMemorySpace, MetalLoweredValue>,
+    physical: &[MetalPhysicalCommand],
+    storage: &[MetalValueStorage],
+) -> Box<[bool]> {
+    let mut live = vec![false; program.values.len()];
+    // Consumers reference derived view values (slices/reshapes), while the
+    // producer instruction owns the alias source: liveness must flow through
+    // the alias chain or the producing op is wrongly marked head-only.
+    fn mark_live(live: &mut [bool], storage: &[MetalValueStorage], mut value: ValueId) {
+        loop {
+            if live[value.index()] {
+                break;
+            }
+            live[value.index()] = true;
+            match storage.get(value.index()) {
+                Some(MetalValueStorage::Alias { source, .. }) => value = *source,
+                _ => break,
+            }
+        }
+    }
+    for output in program.outputs.iter().skip(1) {
+        mark_live(&mut live, storage, *output);
+    }
+    let mut instruction_live = vec![false; program.instructions.len()];
+    // Instructions are in topological order, so one reverse pass exacts
+    // liveness: forced-live (state side effects) or producing a live
+    // value makes every consumed value live.
+    for instruction in program.instructions.iter().rev() {
+        // Only encodable operations force liveness; prepare/finalize
+        // markers name every program output without producing anything.
+        let forced = instruction.kind.operation().is_some()
+            && (instruction.effects.has_side_effects
+                || !instruction.state.is_empty()
+                || matches!(
+                    instruction.kind.operation().map(|(op, _)| op),
+                    Some(MetalOp::KvAttention { .. })
+                ));
+        let produces_live = instruction
+            .outputs
+            .iter()
+            .any(|output| live[output.value.index()])
+            || instruction
+                .state
+                .iter()
+                .any(|use_| live[use_.value.index()]);
+        let is_live = forced || produces_live;
+        instruction_live[instruction.id.index()] = is_live;
+        if is_live {
+            for use_ in instruction
+                .inputs
+                .iter()
+                .chain(instruction.staging.iter())
+                .chain(instruction.status.iter())
+                .chain(instruction.scratch.iter())
+            {
+                mark_live(&mut live, storage, use_.value);
+            }
+        }
+    }
+    physical
+        .iter()
+        .map(|command| match command {
+            MetalPhysicalCommand::Encode(id) => {
+                !instruction_live.get(id.index()).copied().unwrap_or(false)
+            }
+            MetalPhysicalCommand::StatusGate(_)
+            | MetalPhysicalCommand::Commit
+            | MetalPhysicalCommand::Complete => false,
+        })
+        .collect()
 }
 
 fn program_instruction<'a>(
@@ -3063,7 +3329,7 @@ impl<'a> Lowerer<'a> {
                         if is_state_cursor {
                             let schema = self.state_schema.expect("state cursor has a schema");
                             let expected_shape = if schema.cursor_tensor {
-                                vec![schema.batch]
+                                vec![schema.graph_batch]
                             } else {
                                 Vec::new()
                             };
@@ -3075,9 +3341,9 @@ impl<'a> Lowerer<'a> {
                         }
                         let padded = self.padded_slot == Some(*slot)
                             && matches!(source, MetalDeclaredSource::Tensor(_))
-                            && self
-                                .state_schema
-                                .is_some_and(|schema| node.shape.first() == Some(&schema.batch));
+                            && self.state_schema.is_some_and(|schema| {
+                                node.shape.first() == Some(&schema.graph_batch)
+                            });
                         let value = self.value(
                             &node.shape,
                             node.dtype,
@@ -3166,7 +3432,9 @@ impl<'a> Lowerer<'a> {
             NodeKind::LayerNormBackwardOut { of, index } => {
                 return self.selector(node, of, *index as usize);
             }
-            NodeKind::StopGradient { a } | NodeKind::Checkpoint { a } => {
+            NodeKind::StopGradient { a }
+            | NodeKind::Checkpoint { a }
+            | NodeKind::Expose { a, .. } => {
                 let value = self.child_value(a)?;
                 self.node_values.insert(node.id, Box::new([value]));
                 return Ok(());
@@ -3174,6 +3442,17 @@ impl<'a> Lowerer<'a> {
             NodeKind::Reshape { a, shape } => {
                 let source = self.child_value(a)?;
                 let value = self.alias_value(source, shape, format!("{}_reshape", node.id))?;
+                self.node_values.insert(node.id, Box::new([value]));
+                return Ok(());
+            }
+            // A permute that reorders only extent-1 axes is a contiguous
+            // no-op: alias it like a reshape instead of emitting a kernel.
+            NodeKind::Permute { a, dims }
+                if effect_torch_graph::permute_moves_only_unit_axes(&a.shape, dims) =>
+            {
+                let source = self.child_value(a)?;
+                let value =
+                    self.alias_value(source, &node.shape, format!("{}_permute", node.id))?;
                 self.node_values.insert(node.id, Box::new([value]));
                 return Ok(());
             }
@@ -3386,11 +3665,13 @@ impl<'a> Lowerer<'a> {
                 scale,
                 layer,
                 window,
+                mode,
                 ..
             } => MetalOp::KvAttention {
                 scale: *scale,
                 layer: *layer,
                 window: *window,
+                mode: *mode,
             },
             NodeKind::RotaryEmbedding {
                 x,
@@ -3628,7 +3909,8 @@ impl<'a> Lowerer<'a> {
             | NodeKind::AdamWOut { .. }
             | NodeKind::SgdOut { .. }
             | NodeKind::StopGradient { .. }
-            | NodeKind::Checkpoint { .. } => {
+            | NodeKind::Checkpoint { .. }
+            | NodeKind::Expose { .. } => {
                 unreachable!("zero-command nodes return before operation lowering")
             }
         };
@@ -3642,6 +3924,7 @@ impl<'a> Lowerer<'a> {
         outputs: Vec<ValueId>,
         driver: &mut CompilerDriver<'_>,
     ) -> Result<(MetalExecutable, Vec<Value>, Vec<usize>), String> {
+        group_quantized_linear_commands(&mut self.instructions, &self.values);
         if let Some(cursor) = self.state_cursor {
             self.instructions.insert(
                 0,
@@ -4169,6 +4452,16 @@ impl<'a> Lowerer<'a> {
                         quantized::warm_linear_exact(requirements)?;
                         pipeline_count += requirements.pipeline_count;
                     }
+                    MetalOp::QuantizedLinearGroup { .. } => {
+                        let MetalCommandPlan::QuantizedLinearGroup(requirements) = command_plan
+                        else {
+                            return Err(
+                                "compile: quantized linear group plan is missing".to_string()
+                            );
+                        };
+                        quantized::warm_linear_grouped_exact(requirements)?;
+                        pipeline_count += requirements.pipeline_count;
+                    }
                     MetalOp::QuantizedEmbedding { .. } => {
                         let MetalCommandPlan::QuantizedEmbedding(requirements) = command_plan
                         else {
@@ -4479,7 +4772,7 @@ impl<'a> Lowerer<'a> {
                         shortconv::warm_forward_exact(requirements)?;
                         pipeline_count += requirements.pipeline_count;
                     }
-                    MetalOp::KvAttention { scale, .. } => {
+                    MetalOp::KvAttention { scale, mode, .. } => {
                         let query = &self.values[command.inputs[0].index()];
                         let key = &self.values[command.inputs[1].index()];
                         let rank = query.shape.len();
@@ -4488,7 +4781,35 @@ impl<'a> Lowerer<'a> {
                             query.shape[rank - 3],
                             key.shape[rank - 3],
                             *scale,
+                            query.shape[rank - 2],
                         )?;
+                        if let MetalCommandPlan::KvAttention(plan) = command_plan {
+                            if plan.splits > 1 {
+                                pipeline_count += crate::paged::warm_all_split(
+                                    query.shape[rank - 1],
+                                    query.shape[rank - 3],
+                                    key.shape[rank - 3],
+                                    *scale,
+                                    plan.splits,
+                                )?;
+                            }
+                        }
+                        if *mode == KvAttentionMode::BidirectionalBlock {
+                            crate::paged::warm_attention_block(
+                                query.shape[rank - 1],
+                                query.shape[rank - 3],
+                                key.shape[rank - 3],
+                                self.state_schema
+                                    .as_ref()
+                                    .ok_or_else(|| {
+                                        "compile: block attention requires state schema".to_string()
+                                    })?
+                                    .kv_dtype,
+                                *scale,
+                                query.shape[rank - 2],
+                            )?;
+                            pipeline_count += 1;
+                        }
                     }
                     MetalOp::RotaryEmbedding {
                         layout,
@@ -4882,7 +5203,8 @@ impl<'a> Lowerer<'a> {
                             let layout =
                                 effect_torch_runtime::Layout::contiguous(vec![input.shape[2]]);
                             crate::kernels::warm_copy_layout(&layout, input.dtype)?;
-                            pipeline_count += usize::from(layout.numel() != 0);
+                            crate::kernels::warm_fill(&[input.shape[2]], 0.0, input.dtype)?;
+                            pipeline_count += 2 * usize::from(layout.numel() != 0);
                         }
                     }
                     MetalOp::Reduce { op, dims, keepdims } => {
@@ -5048,11 +5370,13 @@ impl<'a> Lowerer<'a> {
             },
             MetalInstruction::name,
         );
+        let head_only = mark_head_only_commands(&program, &physical, &self.storage);
         Ok((
             MetalExecutable {
                 signature: driver.prepared().signature.clone(),
                 program,
                 physical: physical.into_boxed_slice(),
+                head_only,
                 prepared: MetalPreparedArtifacts { pipeline_count },
                 bindings: self.bindings.into_boxed_slice(),
                 scalar_bindings: self.scalar_bindings.into_boxed_slice(),
@@ -5178,10 +5502,19 @@ fn validate_prepared_generated_bindings(
 
 /// Loads one immutable value snapshot for each generated leaf in semantic order.
 pub(super) fn load_generated_bindings(index: &GraphIndex) -> Result<Vec<Value>, String> {
-    if index.order.iter().any(|node| !node.device.is_metal())
-        || index.slots.iter().any(|slot| !slot.device.is_metal())
+    let selected_device = Device::Metal(device::MetalDevice::get().ordinal());
+    if index
+        .order
+        .iter()
+        .any(|node| !node.device.same_device(&selected_device))
+        || index
+            .slots
+            .iter()
+            .any(|slot| !slot.device.same_device(&selected_device))
     {
-        return Err("compile: graph contains an unsupported device".to_string());
+        return Err(format!(
+            "compile: Metal runtime selected {selected_device}, but the graph uses another device"
+        ));
     }
     index
         .leaves
@@ -5305,10 +5638,18 @@ pub(super) fn compile_prepared_with_state(
     validate_prepared_generated_bindings(index, generated_bindings)?;
     let mut driver = CompilerDriver::new(program)?;
     let slots = index.slots.to_vec();
-    if index.order.iter().any(|node| !node.device.is_metal())
-        || slots.iter().any(|slot| !slot.device.is_metal())
+    let selected_device = Device::Metal(device::MetalDevice::get().ordinal());
+    if index
+        .order
+        .iter()
+        .any(|node| !node.device.same_device(&selected_device))
+        || slots
+            .iter()
+            .any(|slot| !slot.device.same_device(&selected_device))
     {
-        return Err("compile: graph contains an unsupported device".to_string());
+        return Err(format!(
+            "compile: Metal runtime selected {selected_device}, but the graph uses another device"
+        ));
     }
     // Constructor constants lowered below dispatch Metal kernels. Their
     // submission is owned and drained before the artifact can be published or
@@ -5669,16 +6010,29 @@ fn validate_conv_destination(
     )
 }
 
-/// Publishes the results of a successful stateful invocation: copies
-/// each state transaction (KDA state tiles, conv windows) into the
-/// slots' canonical state tensors, then commits cursors and applies
-/// window evictions. Runs only after every kernel, deferred check, and
-/// the cancellation gate have passed, so failed invocations never
-/// mutate live decode state.
+/// How state-transaction copies reach the slots' canonical tensors.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum TransactionCopyMode {
+    /// Host memcpy after a full GPU fence (the synchronous path).
+    Host,
+    /// Device copies encoded on the current stream, ordered after this
+    /// invocation's kernels and before the next deferred invocation's
+    /// readers by the stream's per-dispatch barriers (the deferred path).
+    Device,
+}
+
+/// Publishes a successful stateful invocation. It copies each KDA state tile
+/// and convolution window into canonical slot state, commits cursors, and
+/// applies window evictions. [`TransactionCopyMode::Host`] runs only after all
+/// kernels, deferred checks, and the cancellation gate pass.
+/// [`TransactionCopyMode::Device`] runs after the deferred path encodes the
+/// invocation's kernels. It encodes GPU-ordered state copies and applies only
+/// cursor and eviction metadata on the host.
 fn commit_state_transactions(
     executable: &MetalExecutable,
     resolved: &[Option<Value>],
     context: Option<&dyn MetalDecodeContext>,
+    mode: TransactionCopyMode,
 ) -> Result<(), String> {
     let context = context.ok_or_else(|| "state commit requires a decode context".to_string())?;
     let mut states = context
@@ -5713,7 +6067,9 @@ fn commit_state_transactions(
                     .checked_mul(geometry.head_dim)
                     .and_then(|value| value.checked_mul(geometry.value_dim))
                     .ok_or_else(|| "KDA state transaction size overflow".to_string())?;
-                for (batch_index, state) in states.iter().take(context.active_batch()).enumerate() {
+                for (request_index, state) in states.iter().take(context.active_batch()).enumerate()
+                {
+                    let batch_index = context.active_lane(request_index);
                     let destination = state
                         .kda_states
                         .get(*layer as usize)
@@ -5740,7 +6096,9 @@ fn commit_state_transactions(
                     .saturating_sub(1)
                     .checked_mul(geometry.channels)
                     .ok_or_else(|| "conv state transaction size overflow".to_string())?;
-                for (batch_index, state) in states.iter().take(context.active_batch()).enumerate() {
+                for (request_index, state) in states.iter().take(context.active_batch()).enumerate()
+                {
+                    let batch_index = context.active_lane(request_index);
                     let destination = state
                         .conv_states
                         .get(*layer as usize)
@@ -5772,17 +6130,51 @@ fn commit_state_transactions(
             _ => {}
         }
     }
-    for copy in copies {
-        // SAFETY: `transaction_copy` verified both views are contiguous,
-        // dtype/shape-compatible, and fully in bounds of their buffers,
-        // and both buffers are shared-storage host-visible allocations.
-        // Source (invocation-owned transaction buffer) and destination
-        // (slot state) never overlap: the memory planner places
-        // transaction buffers in workspace segments disjoint from the
-        // externally owned state tensors. The GPU is fully synchronized
-        // before this point, so no in-flight kernel aliases either side.
-        unsafe {
-            std::ptr::copy_nonoverlapping(copy.source, copy.destination, copy.bytes);
+    match mode {
+        TransactionCopyMode::Host => {
+            for copy in &copies {
+                // SAFETY: `transaction_copy` verified both views are
+                // contiguous, dtype/shape-compatible, and fully in bounds of
+                // their buffers, and both buffers are shared-storage
+                // host-visible allocations. Source (invocation-owned
+                // transaction buffer) and destination (slot state) never
+                // overlap: the memory planner places transaction buffers in
+                // workspace segments disjoint from the externally owned
+                // state tensors. The GPU is fully synchronized before this
+                // point, so no in-flight kernel aliases either side.
+                unsafe {
+                    std::ptr::copy_nonoverlapping(
+                        copy.source
+                            .contents_ptr()
+                            .cast::<u8>()
+                            .add(copy.source_offset),
+                        copy.destination
+                            .contents_ptr()
+                            .cast::<u8>()
+                            .add(copy.destination_offset),
+                        copy.bytes,
+                    );
+                }
+            }
+        }
+        TransactionCopyMode::Device => {
+            // GPU-ordered copies on the current stream: each is dispatched
+            // after this invocation's kernels (which write the sources) and
+            // before the next deferred invocation's readers of the canonical
+            // state, with ordering provided by the stream's per-dispatch
+            // barriers and cross-buffer ordering events. The pending
+            // execution keeps every source buffer alive until the drain.
+            let metal = device::MetalDevice::get();
+            for copy in &copies {
+                crate::kernels::copy_bytes_into(
+                    metal,
+                    &copy.source,
+                    copy.source_offset,
+                    &copy.destination,
+                    copy.destination_offset,
+                    copy.bytes,
+                )?;
+            }
         }
     }
     for (index, state) in states.iter_mut().take(context.active_batch()).enumerate() {
@@ -5798,17 +6190,22 @@ fn commit_state_transactions(
     Ok(())
 }
 
-/// A validated host-side copy of one state transaction: raw byte
-/// pointers plus length, produced by [`transaction_copy`].
+/// A validated copy of one state transaction: buffer handles plus byte
+/// ranges, produced by [`transaction_copy`]. No raw pointers are stored
+/// so the plan can cross the deferral boundary; the host path recomputes
+/// pointers after the GPU fence, the device path binds the buffers to a
+/// copy kernel.
 struct TransactionCopy {
-    source: *const u8,
-    destination: *mut u8,
+    source: Arc<device::Buffer>,
+    source_offset: usize,
+    destination: Arc<device::Buffer>,
+    destination_offset: usize,
     bytes: usize,
 }
 
 /// Validates a state-transaction copy (same dtype/shape, contiguous,
-/// in bounds) and snapshots the raw host pointers for the batched copy
-/// in [`commit_state_transactions`].
+/// in bounds) and snapshots the buffers and byte ranges for the batched
+/// copy in [`commit_state_transactions`].
 fn transaction_copy(
     source: &crate::run::MetalTensor,
     destination: &crate::run::MetalTensor,
@@ -5845,21 +6242,10 @@ fn transaction_copy(
         return Err("state transaction copy exceeds its buffer".to_string());
     }
     Ok(TransactionCopy {
-        // SAFETY: the bounds checks above prove
-        // `[offset, offset + bytes)` lies within each buffer's
-        // allocation; `contents_ptr()` on these shared-storage buffers
-        // is a valid host pointer for the whole allocation. The raw
-        // pointers are used only by the batched copy in
-        // `commit_state_transactions`, which runs after GPU
-        // synchronization and before either buffer can be released.
-        source: unsafe { source.buffer.contents_ptr().cast::<u8>().add(source_offset) },
-        destination: unsafe {
-            destination
-                .buffer
-                .contents_ptr()
-                .cast::<u8>()
-                .add(destination_offset)
-        },
+        source: source.buffer.clone(),
+        source_offset,
+        destination: destination.buffer.clone(),
+        destination_offset,
         bytes,
     })
 }
@@ -6028,6 +6414,7 @@ pub(super) fn execute(
         kv,
         None,
         None,
+        false,
     )? {
         ExecutionOutput::Values(outputs) => Ok(outputs),
         ExecutionOutput::Sampled(_) => unreachable!("ordinary execution returned samples"),
@@ -6051,9 +6438,45 @@ pub(super) fn execute_with_scalars(
         None,
         None,
         None,
+        false,
     )? {
         ExecutionOutput::Values(outputs) => Ok(outputs),
         ExecutionOutput::Sampled(_) => unreachable!("ordinary execution returned samples"),
+    }
+}
+
+/// Selects one leading logical row for a later executable binding without a
+/// host round trip. Row zero remains a zero-copy view when its offset is zero;
+/// other rows are materialized by a device copy because executable bindings
+/// require contiguous, zero-offset storage.
+#[allow(dead_code)] // Used by the N-API DAG code and Metal tests.
+pub(super) fn route_leading_row(value: &Value, row: usize) -> Result<(Value, bool), String> {
+    let tensor = value.as_metal()?;
+    let rows = tensor
+        .layout
+        .shape()
+        .first()
+        .copied()
+        .ok_or_else(|| "route: cannot select a row from a scalar".to_string())?;
+    if row >= rows {
+        return Err(format!(
+            "route: row {row} is outside leading dimension {rows}"
+        ));
+    }
+    let layout = effect_torch_runtime::Layout::new(
+        tensor.layout.shape()[1..].to_vec(),
+        tensor.layout.strides()[1..].to_vec(),
+        tensor.layout.offset() + row * tensor.layout.strides()[0],
+    );
+    let view = crate::run::MetalTensor {
+        buffer: tensor.buffer.clone(),
+        layout,
+        dtype: tensor.dtype,
+    };
+    if view.layout.offset() == 0 && view.layout.is_contiguous() {
+        Ok((Value(view), false))
+    } else {
+        Ok((Value(metal_ops::contiguous(&view)?), true))
     }
 }
 
@@ -6067,6 +6490,7 @@ pub(super) fn execute_stateful(
     cancelled: &CancellationFlag,
     kv: &dyn MetalDecodeContext,
     commit_allowed: &dyn Fn() -> bool,
+    headless: bool,
 ) -> Result<Vec<Value>, String> {
     match execute_with_commit(
         executable,
@@ -6077,6 +6501,7 @@ pub(super) fn execute_stateful(
         Some(kv),
         Some(commit_allowed),
         None,
+        headless,
     )? {
         ExecutionOutput::Values(outputs) => Ok(outputs),
         ExecutionOutput::Sampled(_) => unreachable!("ordinary execution returned samples"),
@@ -6104,22 +6529,51 @@ pub(super) fn execute_stateful_sampled(
         Some(kv),
         Some(commit_allowed),
         Some(sampling),
+        false,
     )? {
         ExecutionOutput::Sampled(tokens) => Ok(tokens),
         ExecutionOutput::Values(_) => unreachable!("sampled execution returned tensor outputs"),
     }
 }
 
-fn execute_with_commit(
+/// Everything one encoded-but-not-yet-drained invocation owns: the
+/// acquired workspace segments, the resolved value table, the deferred
+/// host checks, the sampling result allocation, the dispatch outcome,
+/// and (for the synchronous path) the submission guard that drains on
+/// drop. Kept whole until the final fence so no buffer the GPU may
+/// still touch is recycled early.
+struct PreparedExecution {
+    resolved: Vec<Option<Value>>,
+    sampling_result: Option<crate::run::MetalTensor>,
+    sampling_encoded: usize,
+    ce_checks: Vec<DeferredCeCheck>,
+    quantized_embedding_checks: Vec<DeferredQuantizedEmbeddingCheck>,
+    dispatch_result: Result<(), String>,
+    _resources: crate::workspace::InvocationResources,
+    _submission: Option<device::MetalSubmissionGuard<'static>>,
+}
+
+/// Validates, resolves, and encodes one invocation without any host
+/// fence: every physical command is dispatched and the outcome is
+/// packaged as a [`PreparedExecution`]. When `submission` is `None` an
+/// owned explicit submission is opened (and stored in the result); when
+/// `Some`, the caller's stream is used so consecutive deferred
+/// invocations pipeline on one Metal submission. A `headless` invocation
+/// skips commands marked by [`mark_head_only_commands`] (the LM-head
+/// chain); program output 0 then holds unwritten buffer contents and
+/// must not be consumed.
+#[allow(clippy::too_many_arguments)]
+fn prepare_execution(
     executable: &MetalExecutable,
     declared_bindings: &[Value],
     generated_bindings: &[Value],
     scalar_bindings: &[f64],
     cancelled: &CancellationFlag,
     kv: Option<&dyn MetalDecodeContext>,
-    commit_allowed: Option<&dyn Fn() -> bool>,
     sampling: Option<&[effect_torch_runtime::SamplingOptions]>,
-) -> Result<ExecutionOutput, String> {
+    submission: Option<&device::MetalSubmissionGuard<'_>>,
+    headless: bool,
+) -> Result<PreparedExecution, String> {
     if cancelled.load(Ordering::Relaxed) {
         return Err("operation aborted".to_string());
     }
@@ -6127,7 +6581,12 @@ fn execute_with_commit(
         if sampling.is_empty() {
             return Err("sample: at least one sampling option is required".to_string());
         }
-        if sampling.len() > executable.program.outputs.len() {
+        if sampling.len() > executable.program.outputs.len()
+            || kv.is_some_and(|context| {
+                (0..sampling.len())
+                    .any(|request| context.active_lane(request) >= executable.program.outputs.len())
+            })
+        {
             return Err(format!(
                 "sample: got {} sampling options for {} program outputs",
                 sampling.len(),
@@ -6308,7 +6767,8 @@ fn execute_with_commit(
     let metal = device::MetalDevice::get();
     let sampling_result = if let Some(sampling) = sampling {
         for (index, options) in sampling.iter().copied().enumerate() {
-            let output = executable.program.outputs[index];
+            let output_index = kv.map_or(index, |context| context.active_lane(index));
+            let output = executable.program.outputs[output_index];
             let logits = resolved
                 .get(output.index())
                 .and_then(Option::as_ref)
@@ -6331,7 +6791,10 @@ fn execute_with_commit(
     };
     let mut ce_checks = Vec::new();
     let mut quantized_embedding_checks = Vec::new();
-    let _submission = metal.begin_submission()?;
+    let owned_submission = match submission {
+        Some(_) => None,
+        None => Some(metal.begin_submission()?),
+    };
     let invocation_nonce = INVOCATION_NONCE.fetch_add(1, Ordering::AcqRel);
     let mut sampling_encoded = 0;
     let dispatch_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -6343,12 +6806,15 @@ fn execute_with_commit(
                 let mut last_encoded = None;
                 let mut pending_status_gate = None;
                 let mut completed = false;
-                for physical in &executable.physical {
+                for (command_index, physical) in executable.physical.iter().enumerate() {
                     if completed {
                         return Err("physical completion is not final".to_string());
                     }
                     match *physical {
                         MetalPhysicalCommand::Encode(id) => {
+                            if headless && executable.head_only[command_index] {
+                                continue;
+                            }
                             if pending_status_gate.is_some() {
                                 return Err(
                                     "physical status gate is missing its command-buffer commit"
@@ -6418,6 +6884,17 @@ fn execute_with_commit(
                                 &status,
                                 &state,
                                 kv,
+                                if matches!(op, MetalOp::LastTokenRow) {
+                                    command.outputs.first().and_then(|output| {
+                                        executable
+                                            .program
+                                            .outputs
+                                            .iter()
+                                            .position(|value| *value == output.value)
+                                    })
+                                } else {
+                                    None
+                                },
                                 &mut ce_checks,
                                 &mut quantized_embedding_checks,
                                 random_seed(invocation_nonce, *random_seed_token),
@@ -6453,7 +6930,8 @@ fn execute_with_commit(
                 }
                 if let (Some(sampling), Some(result)) = (sampling, sampling_result.as_ref()) {
                     for (index, options) in sampling.iter().copied().enumerate() {
-                        let output = executable.program.outputs[index];
+                        let output_index = kv.map_or(index, |context| context.active_lane(index));
+                        let output = executable.program.outputs[output_index];
                         let logits = resolved
                             .get(output.index())
                             .and_then(Option::as_ref)
@@ -6469,6 +6947,35 @@ fn execute_with_commit(
             },
         )
     }));
+    let dispatch_result = match dispatch_result {
+        Ok(result) => result,
+        Err(payload) => Err(panic_message(payload)),
+    };
+    Ok(PreparedExecution {
+        resolved,
+        sampling_result,
+        sampling_encoded,
+        ce_checks,
+        quantized_embedding_checks,
+        dispatch_result,
+        _resources: resources,
+        _submission: owned_submission,
+    })
+}
+
+/// Synchronous completion of a [`PreparedExecution`]: one full GPU fence,
+/// the deferred host checks in command order, the dispatch outcome, the
+/// cancellation/commit gates, and (for stateful invocations) the host-side
+/// state-transaction commit. Backend submission failures take precedence
+/// over host errors, panics, and cancellation.
+fn finish_prepared(
+    prepared: PreparedExecution,
+    executable: &MetalExecutable,
+    cancelled: &CancellationFlag,
+    commit_allowed: Option<&dyn Fn() -> bool>,
+    kv: Option<&dyn MetalDecodeContext>,
+) -> Result<ExecutionOutput, String> {
+    let metal = device::MetalDevice::get();
     // Synchronize unconditionally before any segment or output owner can be
     // released. Backend submission failures take precedence over host errors,
     // panics, and cancellation.
@@ -6476,23 +6983,20 @@ fn execute_with_commit(
     gpu_result?;
     // Status command buffers retain their boundaries, but one final fence is
     // sufficient for every deferred host check in command order.
-    let sampled_tokens = if let Some(result) = sampling_result.as_ref() {
-        let ce_result = run_ce_checks(&ce_checks);
+    let sampled_tokens = if let Some(result) = prepared.sampling_result.as_ref() {
+        let ce_result = run_ce_checks(&prepared.ce_checks);
         let quantized_embedding_result =
-            run_quantized_embedding_checks(&quantized_embedding_checks);
-        let sampled_result = read_sampling_results(result, sampling_encoded);
+            run_quantized_embedding_checks(&prepared.quantized_embedding_checks);
+        let sampled_result = read_sampling_results(result, prepared.sampling_encoded);
         ce_result?;
         quantized_embedding_result?;
         Some(sampled_result?)
     } else {
-        run_ce_checks(&ce_checks)?;
-        run_quantized_embedding_checks(&quantized_embedding_checks)?;
+        run_ce_checks(&prepared.ce_checks)?;
+        run_quantized_embedding_checks(&prepared.quantized_embedding_checks)?;
         None
     };
-    match dispatch_result {
-        Ok(result) => result?,
-        Err(payload) => return Err(panic_message(payload)),
-    }
+    prepared.dispatch_result?;
     if cancelled.load(Ordering::Relaxed) {
         return Err("operation aborted".to_string());
     }
@@ -6500,7 +7004,12 @@ fn execute_with_commit(
         return Err("operation aborted".to_string());
     }
     if kv.is_some() {
-        commit_state_transactions(executable, &resolved, kv)?;
+        commit_state_transactions(
+            executable,
+            &prepared.resolved,
+            kv,
+            TransactionCopyMode::Host,
+        )?;
     }
     if let Some(tokens) = sampled_tokens {
         Ok(ExecutionOutput::Sampled(tokens))
@@ -6510,13 +7019,198 @@ fn execute_with_commit(
             .outputs
             .iter()
             .map(|value| {
-                resolved[value.index()]
+                prepared.resolved[value.index()]
                     .as_ref()
                     .cloned()
                     .ok_or_else(|| format!("internal error: output value {value} is unavailable"))
             })
             .collect::<Result<Vec<_>, _>>()
             .map(ExecutionOutput::Values)
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn execute_with_commit(
+    executable: &MetalExecutable,
+    declared_bindings: &[Value],
+    generated_bindings: &[Value],
+    scalar_bindings: &[f64],
+    cancelled: &CancellationFlag,
+    kv: Option<&dyn MetalDecodeContext>,
+    commit_allowed: Option<&dyn Fn() -> bool>,
+    sampling: Option<&[effect_torch_runtime::SamplingOptions]>,
+    headless: bool,
+) -> Result<ExecutionOutput, String> {
+    let prepared = prepare_execution(
+        executable,
+        declared_bindings,
+        generated_bindings,
+        scalar_bindings,
+        cancelled,
+        kv,
+        sampling,
+        None,
+        headless,
+    )?;
+    finish_prepared(prepared, executable, cancelled, commit_allowed, kv)
+}
+
+/// One invocation whose GPU work is encoded but not yet fenced. Owns the
+/// invocation's workspace lease and resolved values so nothing the GPU may
+/// still touch is recycled before [`PendingExecution::drain_batch`] (or the
+/// drop fence). State transactions were already encoded as GPU-ordered
+/// device copies and the CPU-side cursor commits applied, so only the host
+/// checks remain.
+pub(crate) struct PendingExecution {
+    prepared: PreparedExecution,
+    outputs: Vec<Value>,
+    drained: std::cell::Cell<bool>,
+}
+
+impl PendingExecution {
+    /// The program outputs, available immediately: GPU-ordered consumers
+    /// (a deferred replay executable) may bind them before the drain, host
+    /// readers must wait for it.
+    pub(crate) fn outputs(&self) -> &[Value] {
+        &self.outputs
+    }
+
+    /// Runs this pending's deferred host checks in command order. Call only
+    /// after the stream fence.
+    fn run_host_checks(&self) -> Result<(), String> {
+        run_ce_checks(&self.prepared.ce_checks)?;
+        run_quantized_embedding_checks(&self.prepared.quantized_embedding_checks)
+    }
+
+    /// Fences the stream once, finishes each pending in order, and releases its
+    /// workspace. On failure it returns the error and safely drops the remaining
+    /// pendings after the fence. Optimistically committed CPU cursor metadata
+    /// may then be inconsistent, so the session returns an error as the
+    /// synchronous path would.
+    pub(crate) fn drain_batch(pendings: Vec<PendingExecution>) -> Result<(), String> {
+        if pendings.is_empty() {
+            return Ok(());
+        }
+        let gpu_result = device::MetalDevice::get().synchronize();
+        for pending in &pendings {
+            pending.drained.set(true);
+        }
+        gpu_result?;
+        for pending in &pendings {
+            pending.run_host_checks()?;
+        }
+        Ok(())
+    }
+
+    /// Fences the stream and returns this pending's outputs.
+    #[cfg(test)]
+    pub(crate) fn drain(mut self) -> Result<Vec<Value>, String> {
+        let gpu_result = device::MetalDevice::get().synchronize();
+        self.drained.set(true);
+        gpu_result?;
+        self.run_host_checks()?;
+        Ok(std::mem::take(&mut self.outputs))
+    }
+}
+
+impl Drop for PendingExecution {
+    /// A pending abandoned without a drain (error paths between chunks)
+    /// fences the stream first so its workspace and resolved values are
+    /// never recycled underneath in-flight GPU work.
+    fn drop(&mut self) {
+        if !self.drained.get() {
+            let _ = device::MetalDevice::get().synchronize();
+        }
+    }
+}
+
+/// Executes a stateful invocation without a host fence: validates,
+/// resolves, and dispatches every physical command onto the caller's
+/// submission stream, encodes the state transactions as GPU-ordered
+/// device copies (so the next deferred chunk's kernels read canonical
+/// state in stream order), applies the CPU-side cursor commits and
+/// evictions immediately, and returns a [`PendingExecution`] that keeps
+/// the workspace and resolved values alive until the drain.
+///
+/// Unlike the synchronous path there is no sampling support and the
+/// `commit_allowed`/cancellation gates are evaluated right after encoding
+/// (prefill passes an always-true gate); a gate failure finishes the
+/// invocation synchronously without committing. Dispatch (encoding)
+/// failures also fence immediately, preserving the synchronous path's
+/// GPU-failure precedence.
+pub(crate) fn execute_stateful_deferred(
+    executable: &MetalExecutable,
+    declared_bindings: &[Value],
+    generated_bindings: &[Value],
+    cancelled: &CancellationFlag,
+    kv: &dyn MetalDecodeContext,
+    commit_allowed: &dyn Fn() -> bool,
+    submission: &device::MetalSubmissionGuard<'_>,
+    headless: bool,
+) -> Result<PendingExecution, String> {
+    let prepared = match prepare_execution(
+        executable,
+        declared_bindings,
+        generated_bindings,
+        &[],
+        cancelled,
+        Some(kv),
+        None,
+        Some(submission),
+        headless,
+    ) {
+        Ok(prepared) => prepared,
+        Err(error) => {
+            // Fence before releasing anything the earlier deferred chunks
+            // may still have in flight on this stream.
+            let _ = device::MetalDevice::get().synchronize();
+            return Err(error);
+        }
+    };
+    if prepared.dispatch_result.is_err() || cancelled.load(Ordering::Relaxed) || !commit_allowed() {
+        // The synchronous finisher fences, runs deferred checks in order, and
+        // returns the dispatch error. It does not commit state because one of
+        // the gates above failed.
+        let result = finish_prepared(
+            prepared,
+            executable,
+            cancelled,
+            Some(commit_allowed),
+            Some(kv),
+        );
+        return Err(result
+            .err()
+            .unwrap_or_else(|| "operation aborted".to_string()));
+    }
+    let deferred = (|| {
+        commit_state_transactions(
+            executable,
+            &prepared.resolved,
+            Some(kv),
+            TransactionCopyMode::Device,
+        )?;
+        executable
+            .program
+            .outputs
+            .iter()
+            .map(|value| {
+                prepared.resolved[value.index()]
+                    .as_ref()
+                    .cloned()
+                    .ok_or_else(|| format!("internal error: output value {value} is unavailable"))
+            })
+            .collect::<Result<Vec<_>, _>>()
+    })();
+    match deferred {
+        Ok(outputs) => Ok(PendingExecution {
+            prepared,
+            outputs,
+            drained: std::cell::Cell::new(false),
+        }),
+        Err(error) => {
+            let _ = device::MetalDevice::get().synchronize();
+            Err(error)
+        }
     }
 }
 
@@ -6531,6 +7225,7 @@ fn execute_op_into(
     status: &[Value],
     state: &[Value],
     kv: Option<&dyn MetalDecodeContext>,
+    decode_lane: Option<usize>,
     ce_checks: &mut Vec<DeferredCeCheck>,
     quantized_embedding_checks: &mut Vec<DeferredQuantizedEmbeddingCheck>,
     random_seed: u64,
@@ -7265,10 +7960,10 @@ fn execute_op_into(
             let rank = q.layout.shape().len();
             let time = q.layout.shape()[rank - 2];
             let batch = q.layout.shape()[..rank - 3].iter().product::<usize>();
-            if batch != context.slots().len() || time == 0 {
+            if batch != context.schema().batch || time == 0 {
                 return Err(format!(
                     "kda recurrence shape has batch {batch} and time {time} for {} decode slots",
-                    context.slots().len()
+                    context.schema().batch
                 ));
             }
             let view = |value: &Value,
@@ -7298,7 +7993,10 @@ fn execute_op_into(
             };
             let state_next_root = state_tensors[0];
             let mask_root = staging.first().map(Value::as_metal).transpose()?;
-            for (batch_index, slot) in context.slots().iter().enumerate() {
+            for batch_index in 0..context.schema().batch {
+                let Some(slot) = context.physical_slot(batch_index) else {
+                    continue;
+                };
                 let state = slot
                     .lock()
                     .map_err(|error| format!("kda recurrence sequence lock poisoned: {error}"))?;
@@ -7489,10 +8187,10 @@ fn execute_op_into(
             let rank = source.layout.shape().len();
             let time = source.layout.shape()[rank - 2];
             let batch = source.layout.shape()[..rank - 2].iter().product::<usize>();
-            if batch != context.slots().len() || time == 0 {
+            if batch != context.schema().batch || time == 0 {
                 return Err(format!(
                     "conv state shape has batch {batch} and time {time} for {} decode slots",
-                    context.slots().len()
+                    context.schema().batch
                 ));
             }
             let MetalCommandPlan::ShortConvState(_) = plan else {
@@ -7519,7 +8217,10 @@ fn execute_op_into(
                     })
                 };
             let state_next_root = state_tensors[0];
-            for (batch_index, slot) in context.slots().iter().enumerate() {
+            for batch_index in 0..context.schema().batch {
+                let Some(slot) = context.physical_slot(batch_index) else {
+                    continue;
+                };
                 let state = slot
                     .lock()
                     .map_err(|error| format!("conv state sequence lock poisoned: {error}"))?;
@@ -7567,6 +8268,7 @@ fn execute_op_into(
             scale,
             layer,
             window,
+            mode,
         } => {
             let MetalCommandPlan::KvAttention(requirements) = plan else {
                 return Err("KV attention is missing exact paged requirements".to_string());
@@ -7587,6 +8289,10 @@ fn execute_op_into(
                 .iter()
                 .map(|value| value.as_metal().cloned())
                 .collect::<Result<Vec<_>, _>>()?;
+            let kv_scratch_tensors = scratch
+                .iter()
+                .map(|value| value.as_metal().cloned())
+                .collect::<Result<Vec<_>, _>>()?;
             context.kv_attention_into(
                 *layer,
                 query,
@@ -7594,8 +8300,10 @@ fn execute_op_into(
                 input(2)?.as_metal()?,
                 *scale,
                 *window,
+                *mode,
                 output(0)?.as_metal()?,
                 &staging_tensors,
+                &kv_scratch_tensors,
             )
         }
         MetalOp::RotaryEmbedding {
@@ -7608,14 +8316,7 @@ fn execute_op_into(
                 kv.ok_or_else(|| {
                     "rotary embedding: cursor offset requires a decode context".to_string()
                 })?
-                .slots()
-                .iter()
-                .map(|slot| {
-                    slot.lock().map(|state| state.cursor).map_err(|error| {
-                        format!("rotary embedding: sequence lock poisoned: {error}")
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()?
+                .position_offsets()?
             } else {
                 vec![0]
             };
@@ -7698,6 +8399,25 @@ fn execute_op_into(
                 output(0)?.as_metal()?,
                 requirements,
             )
+        }
+        MetalOp::QuantizedLinearGroup { .. } => {
+            let MetalCommandPlan::QuantizedLinearGroup(requirements) = plan else {
+                return Err("quantized linear group is missing exact requirements".to_string());
+            };
+            if inputs.len() != requirements.members.len() + 1
+                || outputs.len() != requirements.members.len()
+            {
+                return Err(
+                    "quantized linear group arity does not match its requirements".to_string(),
+                );
+            }
+            let members = requirements
+                .members
+                .iter()
+                .enumerate()
+                .map(|(index, _)| Ok((inputs[1 + index].as_metal()?, outputs[index].as_metal()?)))
+                .collect::<Result<Vec<_>, String>>()?;
+            quantized::linear_grouped_into(input(0)?.as_metal()?, &members, requirements)
         }
         MetalOp::QuantizedEmbedding { .. } => {
             let MetalCommandPlan::QuantizedEmbedding(requirements) = plan else {
@@ -8060,10 +8780,11 @@ fn execute_op_into(
                 ));
             }
             let (time, width) = (shape[1], shape[2]);
-            let advance = context
-                .slots()
-                .first()
-                .ok_or_else(|| "last token row requires a decode slot".to_string())?
+            let lane = decode_lane.unwrap_or(0);
+            let Some(slot) = context.physical_slot(lane) else {
+                return metal_ops::fill_into(0.0, output(0)?.as_metal()?);
+            };
+            let advance = slot
                 .lock()
                 .map_err(|error| format!("last token row sequence lock poisoned: {error}"))?
                 .advance;
@@ -8225,6 +8946,53 @@ fn execute_op_into(
 mod tests {
     use super::*;
     use effect_torch_graph::{Device, LeafSlot};
+
+    #[test]
+    fn compilation_rejects_a_different_metal_ordinal() {
+        let root = Node::new(NodeKind::Zeros {
+            shape: vec![1],
+            dtype: DType::F32,
+            device: Device::Metal(device::MetalDevice::get().ordinal() + 1),
+        })
+        .unwrap();
+        let error = compile(
+            &[root],
+            CompileOptions::default(),
+            1024,
+            MetalEnvironment {
+                private_intermediates: false,
+                mma: false,
+            },
+        )
+        .err()
+        .unwrap();
+        assert!(error.contains("but the graph uses another device"));
+    }
+
+    #[test]
+    fn routed_leading_rows_use_view_then_device_copy() {
+        let source = Value(crate::run::MetalTensor::from_f32(
+            device::MetalDevice::get(),
+            vec![1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
+            vec![2, 3],
+        ));
+        let (first, first_copied) = route_leading_row(&source, 0).unwrap();
+        assert!(!first_copied);
+        assert_eq!(first.shape(), &[3]);
+        assert!(Arc::ptr_eq(
+            &source.as_metal().unwrap().buffer,
+            &first.as_metal().unwrap().buffer
+        ));
+
+        let (second, second_copied) = route_leading_row(&source, 1).unwrap();
+        assert!(second_copied);
+        assert_eq!(second.shape(), &[3]);
+        assert!(!Arc::ptr_eq(
+            &source.as_metal().unwrap().buffer,
+            &second.as_metal().unwrap().buffer
+        ));
+        assert_eq!(second.to_f32_vec().unwrap(), vec![4.0, 5.0, 6.0]);
+    }
 
     fn leaf(values: Vec<f32>) -> Arc<Node> {
         let length = values.len();
@@ -8559,6 +9327,232 @@ mod tests {
     }
 
     #[test]
+    fn quantized_linear_group_merges_same_input_same_codec_decode_projections() {
+        let fixtures = quantized_fixtures();
+        let q4 = fixtures
+            .iter()
+            .find(|fixture| fixture.codec == GgmlKQuant::Q4K)
+            .unwrap();
+        let q2 = fixtures
+            .iter()
+            .find(|fixture| fixture.codec == GgmlKQuant::Q2K)
+            .unwrap();
+        let columns = 512usize;
+        let input = leaf_shape(vec![0.5; columns], vec![1, columns]);
+        let projection = |fixture: &QuantizedFixture, rows: usize| {
+            let packed = fixture
+                .bytes
+                .iter()
+                .copied()
+                .cycle()
+                .take(rows * fixture.bytes.len() * (columns / 256))
+                .collect::<Vec<_>>();
+            Node::new(NodeKind::QuantizedLinear {
+                x: input.clone(),
+                weight: leaf_u8(&packed, vec![rows, fixture.bytes.len() * (columns / 256)]),
+                bias: None,
+                codec: fixture.codec,
+                weight_shape: [rows, columns],
+            })
+            .unwrap()
+        };
+        // Muse-Glimmer order: Q and gate share a codec but are
+        // separated by the K/V pair of another codec.
+        let q = projection(q4, 2);
+        let k = projection(q2, 3);
+        let v = projection(q2, 4);
+        let gate = projection(q4, 5);
+        let compilation = compile_graph(&[q, k, v, gate], false);
+        let commands = compilation.executable.commands();
+        assert_eq!(commands.len(), 2);
+        for (command, (codec, rows)) in commands
+            .iter()
+            .zip([(GgmlKQuant::Q4K, vec![2, 5]), (GgmlKQuant::Q2K, vec![3, 4])])
+        {
+            let (op, plan) = operation(command);
+            let MetalOp::QuantizedLinearGroup { .. } = op else {
+                panic!("expected a grouped quantized linear, got {}", op.name());
+            };
+            let MetalCommandPlan::QuantizedLinearGroup(requirements) = plan else {
+                panic!("expected grouped quantized linear requirements");
+            };
+            assert_eq!(requirements.codec, codec);
+            assert_eq!(
+                requirements
+                    .members
+                    .iter()
+                    .map(|member| member.rows)
+                    .collect::<Vec<_>>(),
+                rows
+            );
+            assert_eq!(command.inputs.len(), 3);
+            assert_eq!(command.outputs.len(), 2);
+        }
+    }
+
+    #[test]
+    fn quantized_linear_group_is_not_formed_for_unsupported_shapes() {
+        let fixture = quantized_fixtures()
+            .into_iter()
+            .find(|fixture| fixture.codec == GgmlKQuant::Q4K)
+            .unwrap();
+        let columns = 512usize;
+        let projection = |x: Arc<Node>, codec: GgmlKQuant, bias: bool| {
+            let encoded_row_bytes = codec.encoded_row_bytes(columns).unwrap();
+            let packed = fixture
+                .bytes
+                .iter()
+                .copied()
+                .cycle()
+                .take(2 * encoded_row_bytes)
+                .collect::<Vec<_>>();
+            Node::new(NodeKind::QuantizedLinear {
+                x,
+                weight: leaf_u8(&packed, vec![2, encoded_row_bytes]),
+                bias: bias.then(|| leaf_shape(vec![0.25, -0.5], vec![2])),
+                codec,
+                weight_shape: [2, columns],
+            })
+            .unwrap()
+        };
+        let count_plain = |compilation: &MetalCompilation| {
+            compilation
+                .executable
+                .commands()
+                .iter()
+                .filter(|command| matches!(operation(command).0, MetalOp::QuantizedLinear { .. }))
+                .count()
+        };
+
+        // Mixed codecs never group.
+        let input = leaf_shape(vec![0.5; columns], vec![1, columns]);
+        let compilation = compile_graph(
+            &[
+                projection(input.clone(), GgmlKQuant::Q4K, false),
+                projection(input, GgmlKQuant::Q6K, false),
+            ],
+            false,
+        );
+        assert_eq!(count_plain(&compilation), 2);
+
+        // Biased members never group.
+        let input = leaf_shape(vec![0.5; columns], vec![1, columns]);
+        let compilation = compile_graph(
+            &[
+                projection(input.clone(), GgmlKQuant::Q4K, true),
+                projection(input, GgmlKQuant::Q4K, false),
+            ],
+            false,
+        );
+        assert_eq!(count_plain(&compilation), 2);
+
+        // MMA prefill shapes (vectors >= 8) never group.
+        let input = leaf_shape(vec![0.5; 16 * columns], vec![16, columns]);
+        let compilation = compile_graph(
+            &[
+                projection(input.clone(), GgmlKQuant::Q4K, false),
+                projection(input, GgmlKQuant::Q4K, false),
+            ],
+            false,
+        );
+        assert_eq!(count_plain(&compilation), 2);
+
+        // Dependent inputs never group.
+        let input = leaf_shape(vec![0.5; columns], vec![1, columns]);
+        let encoded_row_bytes = GgmlKQuant::Q4K.encoded_row_bytes(columns).unwrap();
+        let wide = fixture
+            .bytes
+            .iter()
+            .copied()
+            .cycle()
+            .take(columns * encoded_row_bytes)
+            .collect::<Vec<_>>();
+        let first = Node::new(NodeKind::QuantizedLinear {
+            x: input,
+            weight: leaf_u8(&wide, vec![columns, encoded_row_bytes]),
+            bias: None,
+            codec: GgmlKQuant::Q4K,
+            weight_shape: [columns, columns],
+        })
+        .unwrap();
+        let compilation = compile_graph(
+            &[first.clone(), projection(first, GgmlKQuant::Q4K, false)],
+            false,
+        );
+        assert_eq!(count_plain(&compilation), 2);
+    }
+
+    #[test]
+    fn quantized_linear_grouped_execution_matches_reference_values() {
+        for fixture in quantized_fixtures() {
+            let columns = 512usize;
+            let decoded = fixture
+                .expected()
+                .into_iter()
+                .cycle()
+                .take(columns)
+                .collect::<Vec<_>>();
+            for vectors in [1usize, 4] {
+                let input_values = (0..vectors * columns)
+                    .map(|index| ((index * 7 + index / columns * 3) % 17) as f32 * 0.125 - 1.0)
+                    .collect::<Vec<_>>();
+                let input = leaf_shape(input_values.clone(), vec![vectors, columns]);
+                let mut roots = Vec::new();
+                for rows in [2usize, 3] {
+                    let packed = fixture
+                        .bytes
+                        .iter()
+                        .copied()
+                        .cycle()
+                        .take(rows * fixture.bytes.len() * (columns / 256))
+                        .collect::<Vec<_>>();
+                    roots.push(
+                        Node::new(NodeKind::QuantizedLinear {
+                            x: input.clone(),
+                            weight: leaf_u8(
+                                &packed,
+                                vec![rows, fixture.bytes.len() * (columns / 256)],
+                            ),
+                            bias: None,
+                            codec: fixture.codec,
+                            weight_shape: [rows, columns],
+                        })
+                        .unwrap(),
+                    );
+                }
+                let compilation = compile_graph(&roots, false);
+                let commands = compilation.executable.commands();
+                assert_eq!(
+                    commands.len(),
+                    1,
+                    "{} should form one group",
+                    fixture.codec.name()
+                );
+                let (op, plan) = operation(commands[0]);
+                assert!(matches!(op, MetalOp::QuantizedLinearGroup { .. }));
+                let MetalCommandPlan::QuantizedLinearGroup(requirements) = plan else {
+                    panic!("expected grouped quantized linear requirements");
+                };
+                assert_eq!(requirements.members.len(), 2);
+
+                let actual = run(&compilation);
+                for (root, rows) in actual.iter().zip([2usize, 3]) {
+                    let actual = root.to_f32_vec().unwrap();
+                    let mut expected = Vec::with_capacity(vectors * rows);
+                    for vector in 0..vectors {
+                        let dot = input_values[vector * columns..(vector + 1) * columns]
+                            .iter()
+                            .zip(&decoded)
+                            .fold(0.0f32, |sum, (&input, &weight)| sum + input * weight);
+                        expected.extend(std::iter::repeat_n(dot, rows));
+                    }
+                    assert_quantized_close(&actual, &expected);
+                }
+            }
+        }
+    }
+
+    #[test]
     fn quantized_embedding_executes_every_codec_for_u32_and_i64_indexes() {
         for fixture in quantized_fixtures() {
             let expected_row = fixture.expected();
@@ -8745,7 +9739,7 @@ mod tests {
             shape: vec![2],
             value: 2.0,
             dtype: DType::F32,
-            device: Device::Metal,
+            device: Device::Metal(0),
         })
         .unwrap();
         let root = Node::new(NodeKind::Add {
@@ -8768,13 +9762,13 @@ mod tests {
             slot: 0,
             shape: vec![2],
             dtype: DType::F32,
-            device: Device::Metal,
+            device: Device::Metal(0),
         })
         .unwrap();
         let scalar = Node::new(NodeKind::ScalarInput {
             slot: 1,
             dtype: DType::F32,
-            device: Device::Metal,
+            device: Device::Metal(0),
         })
         .unwrap();
         let root = Node::new(NodeKind::Add {
@@ -8838,7 +9832,7 @@ mod tests {
                     slot,
                     shape: vec![batch, 1, 2, 4],
                     dtype: DType::F32,
-                    device: Device::Metal,
+                    device: Device::Metal(0),
                 })
                 .unwrap()
             };
@@ -8855,7 +9849,7 @@ mod tests {
                 weight: Node::new(NodeKind::Zeros {
                     shape: vec![128, 6],
                     dtype: DType::F32,
-                    device: Device::Metal,
+                    device: Device::Metal(0),
                 })
                 .unwrap(),
                 seq_len: 2,
@@ -8882,6 +9876,7 @@ mod tests {
                     kv_dtype: DType::F32,
                     window: None,
                     batch,
+                    graph_batch: batch,
                     layers: geometry.layers,
                     kv_heads: geometry.kv_heads,
                     head_dim: geometry.head_dim,
@@ -8929,7 +9924,7 @@ mod tests {
             slot: 0,
             shape: vec![2, 2],
             dtype: DType::F32,
-            device: Device::Metal,
+            device: Device::Metal(0),
         })
         .unwrap();
         let root = Node::new(NodeKind::Neg { a: input }).unwrap();
@@ -8966,7 +9961,7 @@ mod tests {
             slot: 0,
             shape: vec![2, 2],
             dtype: DType::F32,
-            device: Device::Metal,
+            device: Device::Metal(0),
         })
         .unwrap();
         let root = Node::new(NodeKind::Add {
@@ -8980,6 +9975,7 @@ mod tests {
             kv_dtype: DType::F32,
             window: None,
             batch: 2,
+            graph_batch: 2,
             layers: 0,
             kv_heads: 0,
             head_dim: 0,
@@ -9015,6 +10011,7 @@ mod tests {
             &CancellationFlag::new(),
             &context,
             &|| true,
+            false,
         )
         .unwrap();
         assert_eq!(output[0].to_f32_vec().unwrap(), [3.0, 4.0, 1.0, 1.0]);
@@ -9139,7 +10136,7 @@ mod tests {
         let random = Node::new(NodeKind::Randn {
             shape: vec![16],
             dtype: DType::F32,
-            device: Device::Metal,
+            device: Device::Metal(0),
         })
         .unwrap();
         let compilation = compile_graph(&[random.clone(), random], false);
@@ -9521,7 +10518,7 @@ mod tests {
         let random = Node::new(NodeKind::Randn {
             shape: vec![16],
             dtype: DType::F32,
-            device: Device::Metal,
+            device: Device::Metal(0),
         })
         .unwrap();
         let roots = [deterministic, random];
@@ -9803,6 +10800,7 @@ mod tests {
                 kv_dtype: DType::F32,
                 window: None,
                 batch: 1,
+                graph_batch: 1,
                 layers: 0,
                 kv_heads: 0,
                 head_dim: 0,
@@ -9964,6 +10962,7 @@ mod tests {
             scale: 1.0,
             layer: 0,
             window: None,
+            mode: KvAttentionMode::Causal,
         })
         .unwrap();
         let error = compile(
@@ -9984,6 +10983,7 @@ mod tests {
             kv_dtype: DType::F16,
             window: None,
             batch: 1,
+            graph_batch: 1,
             layers: 1,
             kv_heads: 1,
             head_dim: 2,
@@ -10014,7 +11014,7 @@ mod tests {
         let cursor = Node::new(NodeKind::ScalarInput {
             slot: 0,
             dtype: DType::I64,
-            device: Device::Metal,
+            device: Device::Metal(0),
         })
         .unwrap();
         let positions = Node::new(NodeKind::Arange {
@@ -10022,7 +11022,7 @@ mod tests {
             end: 4.0,
             step: 1.0,
             dtype: DType::I64,
-            device: Device::Metal,
+            device: Device::Metal(0),
         })
         .unwrap();
         let root = Node::new(NodeKind::Add {
@@ -10039,6 +11039,7 @@ mod tests {
                 kv_dtype: DType::F32,
                 window: None,
                 batch: 1,
+                graph_batch: 1,
                 layers: 0,
                 kv_heads: 0,
                 head_dim: 0,
@@ -10362,6 +11363,7 @@ mod tests {
                 kv_dtype: DType::F32,
                 window: None,
                 batch: 2,
+                graph_batch: 2,
                 layers: 0,
                 kv_heads: 0,
                 head_dim: 0,
@@ -10422,6 +11424,7 @@ mod tests {
                 kv_dtype: DType::F32,
                 window: None,
                 batch: 2,
+                graph_batch: 2,
                 layers: 0,
                 kv_heads: 0,
                 head_dim: 0,
@@ -10487,8 +11490,10 @@ mod tests {
             _v: &crate::run::MetalTensor,
             _scale: f64,
             _window: Option<usize>,
+            _mode: KvAttentionMode,
             _output: &crate::run::MetalTensor,
             _staging: &[crate::run::MetalTensor],
+            _scratch: &[crate::run::MetalTensor],
         ) -> Result<(), String> {
             Err("unexpected KV attention".to_string())
         }
@@ -10508,6 +11513,7 @@ mod tests {
             kv_dtype: DType::F32,
             window: None,
             batch: 1,
+            graph_batch: 1,
             layers: 0,
             kv_heads: 0,
             head_dim: 0,
@@ -10531,6 +11537,30 @@ mod tests {
                 kda_states: Vec::new(),
                 conv_states: Vec::new(),
             }))],
+        }
+    }
+
+    fn last_token_row_context_for_lanes(advances: &[usize]) -> TestDecodeContext {
+        let mut schema = last_token_row_schema();
+        schema.batch = advances.len();
+        schema.graph_batch = advances.len();
+        TestDecodeContext {
+            schema,
+            slots: advances
+                .iter()
+                .map(|advance| {
+                    Arc::new(Mutex::new(SeqState {
+                        blocks: Vec::with_capacity(4),
+                        head: 0,
+                        cursor: 0,
+                        advance: *advance,
+                        last_hash: 0,
+                        pending: Vec::new(),
+                        kda_states: Vec::new(),
+                        conv_states: Vec::new(),
+                    }))
+                })
+                .collect(),
         }
     }
 
@@ -10563,6 +11593,7 @@ mod tests {
             &CancellationFlag::new(),
             &context,
             &|| true,
+            false,
         )
         .unwrap();
         assert_eq!(outputs.len(), 1);
@@ -10586,9 +11617,11 @@ mod tests {
             ),
         })
         .unwrap();
-        let compilation =
-            compile_graph_with_state(&[first, second], false, last_token_row_schema());
-        let context = last_token_row_context(2);
+        let mut schema = last_token_row_schema();
+        schema.batch = 2;
+        schema.graph_batch = 2;
+        let compilation = compile_graph_with_state(&[first, second], false, schema);
+        let context = last_token_row_context_for_lanes(&[3, 2]);
 
         let tokens = execute_stateful_sampled(
             &compilation.executable,
@@ -10603,8 +11636,10 @@ mod tests {
 
         assert_eq!(tokens, [3, 1]);
         let state = context.slots[0].lock().unwrap();
-        assert_eq!(state.cursor, 2);
+        assert_eq!(state.cursor, 3);
         assert_eq!(state.advance, 0);
+        drop(state);
+        assert_eq!(context.slots[1].lock().unwrap().cursor, 2);
     }
 
     #[test]
@@ -10735,6 +11770,7 @@ mod tests {
                 &CancellationFlag::new(),
                 &context,
                 &|| true,
+                false,
             )
             .err()
             .unwrap();
@@ -10767,6 +11803,7 @@ mod tests {
             kv_dtype: DType::F32,
             window: None,
             batch: 1,
+            graph_batch: 1,
             layers: 0,
             kv_heads: 0,
             head_dim: 0,
@@ -10808,6 +11845,7 @@ mod tests {
             &CancellationFlag::new(),
             &context,
             &|| true,
+            false,
         )
         .err()
         .unwrap();
@@ -10822,10 +11860,273 @@ mod tests {
             &CancellationFlag::new(),
             &context,
             &|| false,
+            false,
         )
         .err()
         .unwrap();
         assert_eq!(error, "operation aborted");
+        assert_eq!(persistent.read_f32().unwrap(), vec![0.0; 4]);
+        let state = context.slots[0].lock().unwrap();
+        assert_eq!(state.cursor, 0);
+        assert_eq!(state.advance, 1);
+    }
+
+    fn kda_recurrence_compilation_and_context(
+        initial: Vec<f32>,
+    ) -> (MetalCompilation, TestDecodeContext, crate::run::MetalTensor) {
+        let q = leaf_shape(vec![0.2, 0.4], vec![1, 1, 1, 2]);
+        let recurrence = Node::new(NodeKind::KdaRecurrence {
+            q: q.clone(),
+            k: q.clone(),
+            v: q,
+            log_decay: leaf_shape(vec![-0.1, -0.2], vec![1, 1, 1, 2]),
+            beta: leaf_shape(vec![0.5], vec![1, 1, 1, 1]),
+            scale: 0.5,
+            layer: 0,
+        })
+        .unwrap();
+        let schema = KvStateSchema {
+            max_tokens: 64,
+            block_size: 16,
+            kv_dtype: DType::F32,
+            window: None,
+            batch: 1,
+            graph_batch: 1,
+            layers: 0,
+            kv_heads: 0,
+            head_dim: 0,
+            kda: KdaGeometry {
+                layers: 1,
+                heads: 1,
+                head_dim: 2,
+                value_dim: 2,
+            },
+            conv: ConvGeometry::default(),
+            cursor_slot: u32::MAX,
+            cursor_tensor: false,
+        };
+        let compilation = compile_graph_with_state(&[recurrence], false, schema);
+        let persistent =
+            crate::run::MetalTensor::from_f32(device::MetalDevice::get(), initial, vec![1, 2, 2]);
+        let context = TestDecodeContext {
+            schema,
+            slots: vec![Arc::new(Mutex::new(SeqState {
+                blocks: Vec::with_capacity(4),
+                head: 0,
+                cursor: 0,
+                advance: 1,
+                last_hash: 0,
+                pending: Vec::new(),
+                kda_states: vec![persistent.clone()],
+                conv_states: Vec::new(),
+            }))],
+        };
+        (compilation, context, persistent)
+    }
+
+    #[test]
+    fn headless_execution_skips_the_logits_chain_but_commits_state() {
+        let compilation = compile_last_token_row();
+        // The last-token selector is the only encode and feeds only output 0.
+        let marked = compilation
+            .executable
+            .physical
+            .iter()
+            .zip(compilation.executable.head_only.iter())
+            .filter(|(command, mark)| **mark && matches!(command, MetalPhysicalCommand::Encode(_)))
+            .count();
+        assert_eq!(
+            marked,
+            1,
+            "marks={:?} effects={:?}",
+            compilation.executable.head_only,
+            compilation
+                .executable
+                .program
+                .instructions
+                .iter()
+                .map(|i| (
+                    i.kind.name(),
+                    i.effects.has_side_effects,
+                    i.state.len(),
+                    i.outputs.len()
+                ))
+                .collect::<Vec<_>>()
+        );
+        let context = last_token_row_context(2);
+        let outputs = execute_stateful(
+            &compilation.executable,
+            &[],
+            &compilation.generated_bindings,
+            &CancellationFlag::new(),
+            &context,
+            &|| true,
+            true,
+        )
+        .unwrap();
+        // Output 0's producer was skipped: the value exists (its buffer was
+        // planned) but must be treated as unwritten by headless callers.
+        assert_eq!(outputs.len(), 1);
+        assert_eq!(outputs[0].shape(), &[4]);
+        // State commits and cursor bookkeeping still happen.
+        assert_eq!(context.slots[0].lock().unwrap().cursor, 2);
+    }
+
+    #[test]
+    fn unit_axis_permute_is_aliased_without_a_kernel() {
+        let input = leaf_shape((0..8).map(|value| value as f32).collect(), vec![2, 1, 2, 2]);
+        let permute = Node::new(NodeKind::Permute {
+            a: input,
+            dims: vec![0, 2, 1, 3],
+        })
+        .unwrap();
+        let compilation = compile_graph(&[permute], false);
+        // No transpose kernel: the alias leaves zero encodes in the program.
+        assert!(compilation
+            .executable
+            .physical
+            .iter()
+            .all(|command| !matches!(command, MetalPhysicalCommand::Encode(_))));
+        let outputs = run(&compilation);
+        assert_eq!(outputs[0].shape(), &[2, 2, 1, 2]);
+        assert_eq!(
+            outputs[0].to_f32_vec().unwrap(),
+            [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]
+        );
+    }
+
+    #[test]
+    fn real_permute_still_encodes_a_kernel() {
+        let input = leaf_shape((0..6).map(|value| value as f32).collect(), vec![2, 3]);
+        let permute = Node::new(NodeKind::Permute {
+            a: input,
+            dims: vec![1, 0],
+        })
+        .unwrap();
+        let compilation = compile_graph(&[permute], false);
+        assert!(compilation
+            .executable
+            .physical
+            .iter()
+            .any(|command| matches!(command, MetalPhysicalCommand::Encode(_))));
+        let outputs = run(&compilation);
+        assert_eq!(outputs[0].shape(), &[3, 2]);
+        assert_eq!(
+            outputs[0].to_f32_vec().unwrap(),
+            [0.0, 3.0, 1.0, 4.0, 2.0, 5.0]
+        );
+    }
+
+    #[test]
+    fn head_only_liveness_flows_through_alias_views() {
+        // The neg consumes a reshaped (zero-copy alias) view of the relu
+        // output; reshape introduces no instruction, so liveness must walk
+        // the alias chain to keep the relu unmarked.
+        let leaf = leaf_shape((0..12).map(|value| value as f32).collect(), vec![1, 3, 4]);
+        let relu = Node::new(NodeKind::Relu { a: leaf.clone() }).unwrap();
+        let view = Node::new(NodeKind::Reshape {
+            a: relu,
+            shape: vec![3, 4],
+        })
+        .unwrap();
+        let neg = Node::new(NodeKind::Neg { a: view }).unwrap();
+        let head = Node::new(NodeKind::LastTokenRow { a: leaf }).unwrap();
+        let compilation = compile_graph(&[head, neg], false);
+        let marked: Vec<&MetalPhysicalCommand> = compilation
+            .executable
+            .physical
+            .iter()
+            .zip(compilation.executable.head_only.iter())
+            .filter(|(_, mark)| **mark)
+            .map(|(command, _)| command)
+            .collect();
+        assert_eq!(marked.len(), 1, "only the head chain is head-eligible");
+        assert!(matches!(marked[0], MetalPhysicalCommand::Encode(_)));
+    }
+
+    #[test]
+    fn deferred_stateful_executions_pipeline_and_commit_like_the_synchronous_path() {
+        let (compilation, sync_context, sync_persistent) =
+            kda_recurrence_compilation_and_context(vec![0.0; 4]);
+        // Synchronous baseline: two sequential committed invocations.
+        let mut expected_outputs = Vec::new();
+        for _ in 0..2 {
+            expected_outputs = execute_stateful(
+                &compilation.executable,
+                &[],
+                &compilation.generated_bindings,
+                &CancellationFlag::new(),
+                &sync_context,
+                &|| true,
+                false,
+            )
+            .unwrap();
+            sync_context.slots[0].lock().unwrap().advance = 1;
+        }
+        let expected_state = sync_persistent.read_f32().unwrap();
+        assert_eq!(sync_context.slots[0].lock().unwrap().cursor, 2);
+
+        let (compilation, deferred_context, deferred_persistent) =
+            kda_recurrence_compilation_and_context(vec![0.0; 4]);
+        let submission = device::MetalDevice::get().begin_submission().unwrap();
+        let first = execute_stateful_deferred(
+            &compilation.executable,
+            &[],
+            &compilation.generated_bindings,
+            &CancellationFlag::new(),
+            &deferred_context,
+            &|| true,
+            &submission,
+            false,
+        )
+        .unwrap();
+        // CPU-side cursor metadata commits immediately, before the fence.
+        assert_eq!(deferred_context.slots[0].lock().unwrap().cursor, 1);
+        deferred_context.slots[0].lock().unwrap().advance = 1;
+        let second = execute_stateful_deferred(
+            &compilation.executable,
+            &[],
+            &compilation.generated_bindings,
+            &CancellationFlag::new(),
+            &deferred_context,
+            &|| true,
+            &submission,
+            false,
+        )
+        .unwrap();
+        assert_eq!(deferred_context.slots[0].lock().unwrap().cursor, 2);
+        // One fence finishes the first chunk; the second (whose KDA initial
+        // state depends on the first chunk's GPU-ordered transaction copy)
+        // drains right after.
+        PendingExecution::drain_batch(vec![first]).unwrap();
+        let outputs = second.drain().unwrap();
+        drop(submission);
+        assert_eq!(deferred_persistent.read_f32().unwrap(), expected_state);
+        assert_eq!(outputs.len(), expected_outputs.len());
+        for (output, expected) in outputs.iter().zip(&expected_outputs) {
+            assert_eq!(output.to_f32_vec().unwrap(), expected.to_f32_vec().unwrap());
+        }
+    }
+
+    #[test]
+    fn deferred_commit_gate_failure_aborts_without_committing() {
+        let (compilation, context, persistent) =
+            kda_recurrence_compilation_and_context(vec![0.0; 4]);
+        let submission = device::MetalDevice::get().begin_submission().unwrap();
+        let error = execute_stateful_deferred(
+            &compilation.executable,
+            &[],
+            &compilation.generated_bindings,
+            &CancellationFlag::new(),
+            &context,
+            &|| false,
+            &submission,
+            false,
+        )
+        .err()
+        .unwrap();
+        assert_eq!(error, "operation aborted");
+        drop(submission);
         assert_eq!(persistent.read_f32().unwrap(), vec![0.0; 4]);
         let state = context.slots[0].lock().unwrap();
         assert_eq!(state.cursor, 0);
@@ -10876,7 +12177,7 @@ mod tests {
         let random = Node::new(NodeKind::Randn {
             shape: vec![32],
             dtype: DType::F32,
-            device: Device::Metal,
+            device: Device::Metal(0),
         })
         .unwrap();
         let compilation = compile_graph(&[random], false);
@@ -10898,7 +12199,7 @@ mod tests {
             slot: 0,
             shape: vec![2],
             dtype: DType::F32,
-            device: Device::Metal,
+            device: Device::Metal(0),
         })
         .unwrap();
         let output = Node::new(NodeKind::Neg { a: input }).unwrap();

@@ -1,23 +1,22 @@
 import * as BackendApple from "@effect-torch/backend-apple-native"
-import { Checkpoint, LearningRate, Loss, Optimizer, Sampler, Tensor, Trainer } from "@effect-torch/core"
+import { Checkpoint, LearningRate, Loss, Model, Optimizer, Sampler, Tensor, Trainer } from "@effect-torch/core"
 import { NodeRuntime } from "@effect/platform-node"
 import { Duration, Effect } from "effect"
 import fs from "node:fs"
 import { BLOCK, CHECKPOINT, createGpt, heldOutLoss, loadBin, loadTokenizer, saveParams, windows } from "./model.js"
 
-// FineWeb pilot training over the u16 token streams produced by prepare.ts.
-// `CKPT` is a resumable training archive; after training, `CHECKPOINT` is a
-// separate bare-parameter artifact consumed by generate.ts and other model
-// loaders.
+// FineWeb pilot training over the u16 token streams that prepare.ts produces.
+// `CKPT` is a resumable training archive. After training, `CHECKPOINT` holds
+// separate bare parameters for generate.ts and other model loaders.
 //
-// Every checkpoint chunk atomically replaces one safetensors file containing
-// parameters, AdamW tensor state, global step, and the sampler's current
-// permutation/cursor. Resume preserves the remaining draws in that permutation,
-// but JavaScript RNG state is not persisted, so later epoch reshuffles need not
-// match an uninterrupted run. The archive also carries no model, optimizer,
-// learning-rate, or code-version provenance; those must remain compatible.
-// FINEWEB_STEPS and FINEWEB_CHECKPOINT_EVERY are parsed with Number and receive
-// no explicit finite/positive-integer validation in this script.
+// Each checkpoint write atomically replaces one safetensors file. The file holds
+// parameters, AdamW tensor state, the global step, and the sampler's current
+// permutation and cursor. Resume uses the unused entries in that permutation.
+// It does not restore JavaScript RNG state, so later epoch reshuffles may differ
+// from an uninterrupted run. The archive does not record the model, optimizer,
+// learning rate, or code version. Those must remain compatible. The script
+// parses FINEWEB_STEPS and FINEWEB_CHECKPOINT_EVERY with Number but does not
+// check that they are finite positive integers.
 
 const TRAIN_BIN = new URL("../data/fineweb-train.bin", import.meta.url).pathname
 const VAL_BIN = new URL("../data/fineweb-val.bin", import.meta.url).pathname
@@ -41,7 +40,7 @@ const program = Effect.gen(function*() {
 
   yield* Effect.log("1) creating model")
   const model = yield* createGpt(tokenizer.vocabSize)
-  const params0 = yield* model.init
+  const params0 = yield* Model.initialize(model)
   const total = params0.reduce((sum, param) => sum + param.shape.reduce((a, b) => a * b, 1), 0)
   yield* Effect.log(`  total: ${total.toLocaleString()} parameters`)
 
@@ -67,9 +66,9 @@ const program = Effect.gen(function*() {
       )
   })
 
-  // A training archive takes precedence over a fresh initialization. Restore
-  // validates the saved token geometry and resumes the current permutation;
-  // it cannot reproduce a future reshuffle because Math.random is not saved.
+  // Load a training archive before using fresh parameters. Restore checks the
+  // saved token geometry and resumes the current permutation. It cannot
+  // reproduce a future reshuffle because checkpoints do not save Math.random.
   const samplerConfig = { length: train.length, block: BLOCK, batch: BATCH }
   let params = params0
   let step = 0
@@ -119,4 +118,4 @@ const program = Effect.gen(function*() {
   yield* saveParams(model, params, CHECKPOINT)
 })
 
-NodeRuntime.runMain(program.pipe(Effect.provide(BackendApple.layer)))
+NodeRuntime.runMain(program.pipe(Effect.provide(BackendApple.layer())))
