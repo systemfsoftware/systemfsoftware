@@ -1,10 +1,10 @@
-// Stateful single-sequence decode microbenchmark with random initialized
-// weights. Model/parameter initialization, inference compilation, prompt
-// prefill, and eight greedy warmup steps are outside the timed region. Every
-// measured iteration includes one recurrent/KV decode, full-vocabulary host
-// readback, JavaScript argmax, and output release; native execute already waits
-// for device completion. This is latency methodology, not batched device-only
-// kernel throughput.
+// Stateful single-sequence decode microbenchmark with randomly initialized
+// weights. Model and parameter initialization, inference compilation, prompt
+// prefill, and eight greedy warmup steps run before timing. Each measured
+// iteration runs one recurrent/KV decode, reads the full vocabulary back to the
+// host, computes argmax in JavaScript, and releases the output. Native execution
+// already waits for the device. This measures per-token latency, not batched
+// device-only kernel throughput.
 
 import * as BackendApple from "@effect-torch/backend-apple-native"
 import { Model, Tensor } from "@effect-torch/core"
@@ -15,15 +15,20 @@ import { createKdaGpt, loadTokenizer } from "./model.js"
 const program = Effect.scoped(Effect.gen(function*() {
   const tokenizer = yield* loadTokenizer
   const model = yield* createKdaGpt(tokenizer.vocabSize)
-  const params = yield* Tensor.compute(yield* model.init)
+  const params = yield* Tensor.compute(yield* Model.initialize(model))
   yield* Tensor.clearAllScoped(params)
-  const inference = yield* Model.inference(model, params, { maxTokens: 4096, blockSize: 16, attentionWindow: 256 })
+  const inference = yield* Model.inference(model, params, {
+    maxTokens: 4096,
+    blockSize: 16,
+    prefillChunks: [16],
+    attentionWindow: 256
+  })
   const gen = yield* Effect.acquireRelease(
-    inference.generation(),
+    inference.execution(),
     (gen) => Effect.ignore(gen.close())
   )
   const encoded = yield* tokenizer.encode("The history of the printing press is a long one")
-  const entry = yield* gen.add(yield* Tensor.fromTypedArray(encoded.data, [1, encoded.shape[0]]))
+  const entry = (yield* gen.add([yield* Tensor.fromTypedArray(encoded.data, [1, encoded.shape[0]])]))[0]!
   let logits = entry.logits
   const argmax = (vals: Array<number>) => vals.reduce((best, v, j) => (v > vals[best] ? j : best), 0)
   // Warm the fixed decode artifact and backend pipelines before timing.
@@ -41,4 +46,4 @@ const program = Effect.scoped(Effect.gen(function*() {
   const ms = (Date.now() - t0) / N
   yield* Effect.log(`${ms.toFixed(2)} ms/token (${(1000 / ms).toFixed(1)} tok/s)`)
 }))
-NodeRuntime.runMain(program.pipe(Effect.provide(BackendApple.layer)))
+NodeRuntime.runMain(program.pipe(Effect.provide(BackendApple.layer())))

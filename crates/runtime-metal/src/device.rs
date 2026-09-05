@@ -1,39 +1,36 @@
-//! Metal device singleton, buffer pool allocator, encoder/submission
-//! management, and pipeline cache.
+//! Metal device singleton, buffer pool, submission manager, and pipeline cache.
 //!
 //! # Ownership model
 //!
-//! - [`MetalDevice`] is created once (`MetalDevice::get`) and owns the
+//! - [`MetalDevice::get`] creates [`MetalDevice`] once. It owns the
 //!   `MTLDevice`, one shared `MTLCommandQueue`, the bucketed buffer pool,
-//!   the pipeline cache, and a registry of live submission contexts.
-//! - [`Buffer`] wraps an `MTLBuffer` plus a byte `base` offset: planned
-//!   slices share one physical allocation and one `BufferUsage` token.
-//!   Every physical allocation is reference-counted through `BufferUsage`,
-//!   which also tracks how many pending/in-flight command buffers can
-//!   still touch the storage.
-//! - Encoding happens inside a `SubmissionContext` (explicit via
-//!   `begin_submission`, or an implicit per-thread one). Each context owns
-//!   its `EncoderManager`: one open command buffer + compute encoder at a
-//!   time, committed when full, on demand, or at synchronize.
+//!   the pipeline cache, and live submission contexts.
+//! - [`Buffer`] wraps an `MTLBuffer` and byte `base` offset. Planned slices
+//!   share one physical allocation and `BufferUsage` token. `BufferUsage`
+//!   reference-counts the allocation and tracks command buffers that can still
+//!   access it.
+//! - Encoding runs inside a `SubmissionContext`, either from
+//!   `begin_submission` or an implicit per-thread context. Each context owns
+//!   an `EncoderManager` with one open command buffer and compute encoder. It
+//!   commits the buffer when full, on demand, or during synchronization.
 //!
 //! # Asynchronous command buffer hazards
 //!
-//! Metal executes committed command buffers asynchronously and may overlap
-//! them, and this allocator recycles buffers aggressively. Three
-//! mechanisms make that safe:
+//! Metal may overlap committed command buffers while the allocator recycles
+//! buffers. Three mechanisms prevent reuse hazards:
 //!
 //! 1. A shared `MTLEvent` serializes consecutive command buffers from one
-//!    context (commit order is not execution order on the GPU).
-//! 2. A `memoryBarrierWithScope(Buffers)` after every dispatch orders
-//!    dispatches within one command buffer (hazard tracking is untracked).
-//! 3. `BufferUse` tokens, attached to each committed command buffer, keep
-//!    physical storage alive and un-recyclable until the command buffer
-//!    completes; retired roots are reaped only at completion boundaries.
+//!    context because GPU execution may differ from commit order.
+//! 2. A `memoryBarrierWithScope(Buffers)` after every dispatch orders work
+//!    within a command buffer, where hazard tracking is untracked.
+//! 3. Each committed command buffer holds `BufferUse` tokens until completion.
+//!    The tokens keep physical storage alive and out of the pool. Retired roots
+//!    are reaped only at completion boundaries.
 //!
-//! Host reads must go through `synchronize`/`synchronize_buffer`, which
-//! drain in-flight work and surface GPU command buffer failures (device
-//! memory exhaustion surfaces as `kIOGPUCommandBufferCallbackErrorOutOfMemory`
-//! and is reported as a lost-work error, not silent corruption).
+//! Host reads must call `synchronize` or `synchronize_buffer`. These methods
+//! drain in-flight work and report GPU command buffer failures. Device memory
+//! exhaustion appears as `kIOGPUCommandBufferCallbackErrorOutOfMemory` and
+//! returns a lost-work error instead of allowing silent corruption.
 //!
 //! # Memory policy
 //!
@@ -42,18 +39,18 @@
 //! (`EFFECT_TORCH_MEMORY_BUDGET_MB`, default half the recommended working
 //! set) triggers host-GPU backpressure: dead pool buckets are retired and
 //! the host waits on the oldest in-flight command buffer until pressure
-//! subsides. Environment policy is snapshotted once by
-//! [`snapshot_global_environment`]; later execution observes only the
-//! immutable snapshot.
+//! subsides. [`snapshot_global_environment`] captures environment policy
+//! once. Later execution uses the captured values.
 
 use crate::runtime::dtype::DType;
+use effect_torch_runtime::{DeviceId, Placement};
 use objc2::rc::Retained;
 use objc2::runtime::ProtocolObject;
 use objc2_metal::{
     MTLBuffer, MTLCommandBuffer, MTLCommandEncoder, MTLCommandQueue, MTLComputeCommandEncoder,
-    MTLComputePipelineState, MTLDevice, MTLLibrary, MTLResourceOptions, MTLSize,
+    MTLComputePipelineState, MTLDevice, MTLLibrary, MTLResource, MTLResourceOptions, MTLSize,
 };
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::ptr::NonNull;
 use std::sync::{Arc, Mutex, OnceLock, Weak};
@@ -86,6 +83,27 @@ static SUBMISSION_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::At
 /// Monotonic id for each created `MetalDevice` (multi-device tests).
 static DEVICE_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+thread_local! {
+    /// Device selected for operations that still use `MetalDevice::get`. N-API
+    /// entry points set this for the duration of one synchronous worker job.
+    static CURRENT_DEVICE_ORDINAL: Cell<usize> = const { Cell::new(0) };
+}
+
+fn metal_placement(ordinal: u32) -> Placement {
+    Placement::with_memory_space(DeviceId::new(format!("metal:{ordinal}")), "shared")
+}
+
+fn buffer_device_ordinal(raw: &ProtocolObject<dyn MTLBuffer>) -> u32 {
+    let registry_id = raw.device().registryID();
+    let ordinal = objc2_metal::MTLCopyAllDevices()
+        .iter()
+        .position(|device| device.registryID() == registry_id)
+        .expect("Metal buffer device is not present in the system device list");
+    u32::try_from(ordinal).expect("Metal device ordinal must fit u32")
+}
+
+static DEVICES: OnceLock<Mutex<HashMap<usize, &'static MetalDevice>>> = OnceLock::new();
+
 #[cfg(test)]
 thread_local! {
     static INJECTED_PRIOR_FAILURE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
@@ -110,10 +128,9 @@ fn take_injected_failure() -> crate::err::Res<()> {
     }
 }
 
-// Bytes of driver-allocated root buffers currently alive (pool, workspace,
-// uploads). Suballocations share their segment's root and are not
-// counted). A hard ceiling, set with EFFECT_TORCH_MEMORY_CAP_MB, turns
-// memory runaways into a loud failure instead of a system freeze.
+// Bytes held by live driver-allocated root buffers in the pool, workspace,
+// and uploads. Suballocations share a segment root and do not count separately.
+// EFFECT_TORCH_MEMORY_CAP_MB sets a hard ceiling to prevent a system freeze.
 pub static LIVE_BYTES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 fn memory_cap() -> Option<usize> {
@@ -162,48 +179,47 @@ fn live_bytes_untrack(size: usize) {
     LIVE_BYTES.fetch_sub(size, std::sync::atomic::Ordering::Relaxed);
 }
 
-// Host-GPU divergence guard. The walk encodes far faster than the GPU
-// executes; without a bound, buffers pile up in dead pool buckets and
-// in-flight command buffers faster than the driver can reclaim them,
-// and a command buffer fails with kIOGPUCommandBufferCallbackError-
-// OutOfMemory (this is what the pre-RFC-0016 mid-step index readback
-// accidentally prevented by syncing every step). When live bytes pass
-// the budget — the env cap if set, else 1/2 of the device's
-// recommended working set — dead buckets are moved to the retired list
-// and the host waits on the oldest in-flight command buffer until
-// pressure subsides. Steps that fit never wait.
-fn memory_budget() -> usize {
-    static BUDGET: std::sync::OnceLock<usize> = std::sync::OnceLock::new();
-    *BUDGET.get_or_init(|| {
-        let recommended = MetalDevice::get().raw.recommendedMaxWorkingSetSize() as usize;
-        let budget = match std::env::var("EFFECT_TORCH_MEMORY_BUDGET_MB") {
-            Ok(v) => {
-                v.parse::<usize>()
+// The graph walk can encode faster than the GPU executes. Without a bound,
+// dead pool buckets and in-flight command buffers grow faster than the driver
+// can reclaim them, eventually causing
+// kIOGPUCommandBufferCallbackErrorOutOfMemory. The pre-RFC-0016 mid-step index
+// readback hid this by synchronizing every step. When live bytes exceed the
+// environment cap, or half the recommended working set when no cap is set,
+// the runtime retires dead buckets and waits for the oldest in-flight command
+// buffer. Steps below the budget do not wait.
+fn memory_budget(raw: &ProtocolObject<dyn MTLDevice>) -> usize {
+    static OVERRIDE: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
+    let override_bytes = *OVERRIDE.get_or_init(|| {
+        std::env::var("EFFECT_TORCH_MEMORY_BUDGET_MB")
+            .ok()
+            .map(|value| {
+                value
+                    .parse::<usize>()
                     .expect("EFFECT_TORCH_MEMORY_BUDGET_MB: not a number")
                     * 1024
                     * 1024
-            }
-            Err(_) => match memory_cap() {
-                Some(cap) => cap.min(recommended / 2),
-                None => recommended / 2,
-            },
-        };
-        if std::env::var_os("EFFECT_TORCH_SYNC_TRACE").is_some() {
-            eprintln!(
-                "[sync] memory budget {} MB (recommended working set {} MB)",
-                budget >> 20,
-                recommended >> 20
-            );
-        }
-        budget
-    })
+            })
+    });
+    let recommended = raw.recommendedMaxWorkingSetSize() as usize;
+    let budget = override_bytes.unwrap_or_else(|| match memory_cap() {
+        Some(cap) => cap.min(recommended / 2),
+        None => recommended / 2,
+    });
+    if std::env::var_os("EFFECT_TORCH_SYNC_TRACE").is_some() {
+        eprintln!(
+            "[sync] memory budget {} MB (recommended working set {} MB)",
+            budget >> 20,
+            recommended >> 20
+        );
+    }
+    budget
 }
 
-/// Forces all process-global memory policy environment reads at compilation.
-/// Subsequent execution only observes these immutable snapshots.
+/// Reads and stores process-global memory policy during compilation. Later
+/// execution uses the stored values.
 pub fn snapshot_global_environment() {
     let _ = memory_cap();
-    let _ = memory_budget();
+    let _ = MetalDevice::get().memory_budget;
 }
 
 /// Resets and returns the (dispatches, syncs, sync-nanos) counters.
@@ -375,6 +391,8 @@ pub struct Buffer {
     // Byte offset of this buffer's start within `raw`; planned slices share
     // one underlying MTLBuffer.
     pub base: usize,
+    device_ordinal: u32,
+    placement: Placement,
     // Shared by every view of one physical allocation.
     usage: Arc<BufferUsage>,
     _owner: Option<Arc<Buffer>>,
@@ -386,10 +404,13 @@ impl Buffer {
     /// bytes, outside the pool and without live-byte accounting.
     pub fn from_raw(raw: Retained<ProtocolObject<dyn MTLBuffer>>, size: usize) -> Self {
         let usage = Arc::new(BufferUsage::new(&raw, None));
+        let device_ordinal = buffer_device_ordinal(&raw);
         Buffer {
             raw,
             size,
             base: 0,
+            device_ordinal,
+            placement: metal_placement(device_ordinal),
             usage,
             _owner: None,
             _retention: None,
@@ -406,8 +427,8 @@ impl Buffer {
         Self::suballoc_with_retention(segment, base, size, segment._retention.clone())
     }
 
-    /// Creates a suballocation view that additionally retains `retention`
-    /// (e.g. the workspace pool lease backing the segment).
+    /// Creates a suballocation view that also keeps `retention` alive, such as
+    /// the workspace pool lease backing the segment.
     pub(crate) fn suballoc_with_retention(
         segment: &Arc<Buffer>,
         base: usize,
@@ -419,15 +440,24 @@ impl Buffer {
             raw: segment.raw.clone(),
             size,
             base: segment.base + base,
+            device_ordinal: segment.device_ordinal,
+            placement: segment.placement.clone(),
             usage: segment.usage.clone(),
             _owner: Some(segment.clone()),
             _retention: retention,
         }
     }
 
-    /// Host pointer to the start of this view's contents (shared storage
-    /// mode only; the GPU may not have produced the bytes yet — synchronize
-    /// first).
+    pub fn device_ordinal(&self) -> u32 {
+        self.device_ordinal
+    }
+
+    pub fn placement(&self) -> &Placement {
+        &self.placement
+    }
+
+    /// Host pointer to this view's shared storage. Synchronize first because the
+    /// GPU may not have produced the bytes yet.
     pub fn contents_ptr(&self) -> *mut std::ffi::c_void {
         // SAFETY: `raw` is a live shared-mode MTLBuffer, so `contents()` is
         // a valid host mapping for the allocation's full length; `base` is
@@ -594,12 +624,11 @@ struct EncoderManager {
         Retained<ProtocolObject<dyn MTLComputeCommandEncoder>>,
     )>,
     count: usize,
-    // Command-buffer serialization. The allocator recycles buffers
-    // across command buffers and Metal may overlap their execution —
-    // commit order is not execution order — so each buffer waits on
-    // the event its predecessor signals. GPU-side ordering only; the
-    // host never blocks on this. (Dense byte-budgeted commits made the
-    // overlap a real corruption source at batch 128+: NaN losses.)
+    // Metal may overlap command buffers while the allocator recycles storage.
+    // Each command buffer therefore waits for its predecessor's event because
+    // commit order does not determine execution order. This orders GPU work
+    // without blocking the host. Dense byte-budgeted commits exposed this race
+    // as NaN losses at batch sizes of 128 and above.
     order_event: Retained<ProtocolObject<dyn objc2_metal::MTLEvent>>,
     order_value: u64,
     // Submitted command buffers, each holding the buffers retired
@@ -637,9 +666,8 @@ impl EncoderManager {
         device: &ProtocolObject<dyn MTLDevice>,
     ) -> Self {
         let event = device.newSharedEvent().expect("metal shared event");
-        // SAFETY: `MTLSharedEvent` refines `MTLEvent` — same object,
-        // rewrapped at the type level for the wait/signal API, which takes
-        // the super-protocol.
+        // SAFETY: `MTLSharedEvent` refines `MTLEvent`. This rewraps the same
+        // object for the wait/signal API, which takes the super-protocol.
         let order_event: Retained<ProtocolObject<dyn objc2_metal::MTLEvent>> =
             unsafe { Retained::cast_unchecked(event) };
         EncoderManager {
@@ -672,10 +700,9 @@ impl EncoderManager {
         self.failures.push((sequence, description));
     }
 
-    /// Drops completed (or errored) command buffers from the head of the
-    /// in-flight list, releasing their carried resources back to the
-    /// driver mid-step. Stops at the first still-running buffer — the
-    /// queue is serial, so later buffers cannot have completed either.
+    /// Drops completed or errored command buffers from the head of the in-flight
+    /// list and releases their resources. It stops at the first running buffer
+    /// because a serial queue cannot have completed a later buffer.
     fn reap_completed(&mut self) {
         while let Some((_, cb, _, _)) = self.in_flight.first() {
             let done = matches!(
@@ -871,9 +898,9 @@ impl SubmissionContext {
         }
     }
 
-    /// Runs `f` against this stream's open compute encoder, then closes
-    /// out the dispatch. Panics if the stream already failed — continuing
-    /// to encode after lost GPU work would mask the corruption.
+    /// Runs `f` against this stream's open compute encoder and closes the
+    /// dispatch. Panics if the stream already failed because more encoding
+    /// would hide lost GPU work.
     fn with_encoder<R>(
         self: &Arc<Self>,
         allow_automatic_commit: bool,
@@ -1141,6 +1168,9 @@ impl Drop for MetalSubmissionGuard<'_> {
 /// registry of live submission contexts (used for global backpressure).
 pub struct MetalDevice {
     id: u64,
+    ordinal: u32,
+    placement: Placement,
+    memory_budget: usize,
     raw: Retained<ProtocolObject<dyn MTLDevice>>,
     queue: Retained<ProtocolObject<dyn MTLCommandQueue>>,
     allocator: Mutex<Allocator>,
@@ -1165,15 +1195,14 @@ unsafe impl Sync for MetalDevice {}
 unsafe impl Send for Buffer {}
 // SAFETY: see the `Send` impl above.
 unsafe impl Sync for Buffer {}
-// SAFETY: fields are a retained handle, an atomic, and mutex-guarded
-// producer state — all safe to share across threads.
+// SAFETY: fields are a retained handle, an atomic, and mutex-guarded producer
+// state. All are safe to share across threads.
 unsafe impl Send for BufferUsage {}
 // SAFETY: see the `Send` impl above.
 unsafe impl Sync for BufferUsage {}
 
-/// Storage options for host-visible buffers: shared storage (unified
-/// memory) with untracked hazards — ordering is the runtime's job (event +
-/// barriers), not the driver's.
+/// Host-visible unified memory with untracked hazards. Events and barriers in
+/// the runtime provide ordering instead of the driver.
 static SHARED_OPTIONS: MTLResourceOptions = MTLResourceOptions(
     MTLResourceOptions::StorageModeShared.0 | MTLResourceOptions::HazardTrackingModeUntracked.0,
 );
@@ -1271,39 +1300,90 @@ pub fn mma_enabled() -> bool {
     })
 }
 
-/// True when some Metal device can create a command queue and shared
-/// event — the two capabilities this runtime requires.
+/// Returns whether a Metal device can create the command queue and shared
+/// event required by this runtime.
 pub fn is_available() -> bool {
     objc2_metal::MTLCopyAllDevices()
         .iter()
         .any(|device| device.newCommandQueue().is_some() && device.newSharedEvent().is_some())
 }
 
+/// Returns whether the requested Metal device can create the resources required
+/// by this runtime.
+pub fn is_ordinal_available(ordinal: usize) -> bool {
+    objc2_metal::MTLCopyAllDevices()
+        .iter()
+        .nth(ordinal)
+        .is_some_and(|device| {
+            device.newCommandQueue().is_some() && device.newSharedEvent().is_some()
+        })
+}
+
 impl MetalDevice {
-    /// The process-wide device singleton (ordinal 0).
+    /// The process-wide device selected for the current operation. Ordinal 0 is
+    /// used when no selection is active.
     ///
     /// # Panics
     ///
     /// Panics if no Metal device is available or the queue cannot be
     /// created.
     pub fn get() -> &'static MetalDevice {
-        static DEVICE: OnceLock<MetalDevice> = OnceLock::new();
-        DEVICE.get_or_init(|| MetalDevice::new(0).expect("metal device"))
+        let ordinal = CURRENT_DEVICE_ORDINAL.with(Cell::get);
+        Self::for_ordinal(ordinal).expect("metal device")
     }
 
-    /// Creates a device handle for `ordinal` (clamped to the last device)
-    /// with its own pool, caches, and submission registry.
+    /// Returns the process-cached runtime state for one physical Metal device.
+    pub fn for_ordinal(ordinal: usize) -> Result<&'static MetalDevice, String> {
+        let devices = DEVICES.get_or_init(|| Mutex::new(HashMap::new()));
+        let mut devices = devices.lock().unwrap_or_else(|error| error.into_inner());
+        if let Some(device) = devices.get(&ordinal) {
+            return Ok(*device);
+        }
+        let device = Box::leak(Box::new(Self::new(ordinal)?));
+        devices.insert(ordinal, device);
+        Ok(device)
+    }
+
+    /// Runs `operation` with `MetalDevice::get` bound to `ordinal` on this
+    /// thread. Nested selections restore the previous ordinal on return.
+    pub fn with_ordinal<T>(ordinal: usize, operation: impl FnOnce() -> T) -> Result<T, String> {
+        Self::for_ordinal(ordinal)?;
+        struct RestoreOrdinal(usize);
+        impl Drop for RestoreOrdinal {
+            fn drop(&mut self) {
+                CURRENT_DEVICE_ORDINAL.with(|current| current.set(self.0));
+            }
+        }
+        let previous = CURRENT_DEVICE_ORDINAL.with(|current| current.replace(ordinal));
+        let _restore = RestoreOrdinal(previous);
+        Ok(operation())
+    }
+
+    /// Creates a device handle for `ordinal` with its own pool, caches, and
+    /// submission registry.
     pub fn new(ordinal: usize) -> Result<Self, String> {
         let devices = objc2_metal::MTLCopyAllDevices();
         if devices.is_empty() {
             return Err("no Metal devices available".to_string());
         }
-        let raw = devices.to_vec().swap_remove(ordinal.min(devices.len() - 1));
+        if ordinal >= devices.len() {
+            return Err(format!(
+                "Metal device ordinal {ordinal} is unavailable; found {} device(s)",
+                devices.len()
+            ));
+        }
+        let raw = devices.to_vec().swap_remove(ordinal);
         let queue = raw
             .newCommandQueue()
             .ok_or("failed to create command queue")?;
+        let ordinal = u32::try_from(ordinal)
+            .map_err(|_| "Metal device ordinal exceeds u32::MAX".to_string())?;
+        let memory_budget = memory_budget(&raw);
         Ok(MetalDevice {
             id: DEVICE_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            ordinal,
+            placement: metal_placement(ordinal),
+            memory_budget,
             raw,
             queue,
             allocator: Mutex::new(Allocator::new()),
@@ -1316,6 +1396,10 @@ impl MetalDevice {
     /// The underlying `MTLDevice` handle.
     pub fn raw(&self) -> &ProtocolObject<dyn MTLDevice> {
         &self.raw
+    }
+
+    pub fn ordinal(&self) -> u32 {
+        self.ordinal
     }
 
     fn device_id(&self) -> u64 {
@@ -1421,7 +1505,7 @@ impl MetalDevice {
     // The registry is snapshotted before waiting; no device allocator lock is
     // held while a command buffer completes.
     fn backpressure(&self) {
-        if self.raw.currentAllocatedSize() <= memory_budget() {
+        if self.raw.currentAllocatedSize() <= self.memory_budget {
             return;
         }
         let contexts = self.submission_snapshot();
@@ -1450,10 +1534,10 @@ impl MetalDevice {
             eprintln!(
                 "[sync] backpressure at {} MB driver-allocated (budget {} MB)",
                 self.raw.currentAllocatedSize() >> 20,
-                memory_budget() >> 20
+                self.memory_budget >> 20
             );
         }
-        while self.raw.currentAllocatedSize() > memory_budget() {
+        while self.raw.currentAllocatedSize() > self.memory_budget {
             let Some(context) = contexts
                 .iter()
                 .filter_map(|context| {
@@ -1532,6 +1616,8 @@ impl MetalDevice {
             raw,
             size: bucket_size,
             base: 0,
+            device_ordinal: self.ordinal,
+            placement: self.placement.clone(),
             usage,
             _owner: None,
             _retention: None,
@@ -1570,6 +1656,8 @@ impl MetalDevice {
             raw,
             size: size.max(1),
             base: 0,
+            device_ordinal: self.ordinal,
+            placement: self.placement.clone(),
             usage,
             _owner: None,
             _retention: None,
@@ -1606,10 +1694,9 @@ impl MetalDevice {
     /// when the live-byte cap trips.
     pub fn upload_bytes(&self, data: &[u8]) -> Arc<Buffer> {
         self.reject_executable_allocation("upload_bytes");
-        // Length is exactly data.len(): newBufferWithBytes copies that
-        // many bytes from the source — a rounded-up (bucketed) length
-        // would read past the end of the caller's allocation. Uploads
-        // are never pooled, so bucketing buys nothing.
+        // newBufferWithBytes copies exactly data.len() bytes. A bucketed length
+        // would read past the caller's allocation. Uploads are not pooled, so
+        // rounding the size would provide no benefit.
         let size = data.len().max(1);
         live_bytes_track(size);
         let zero = 0u8;
@@ -1638,6 +1725,8 @@ impl MetalDevice {
             raw,
             size,
             base: 0,
+            device_ordinal: self.ordinal,
+            placement: self.placement.clone(),
             usage,
             _owner: None,
             _retention: None,
@@ -1686,9 +1775,9 @@ impl MetalDevice {
         self.pipelines.lock().unwrap().get(&key).cloned()
     }
 
-    /// Unconditionally compiles and caches `source` under `key` (fast math
-    /// disabled — bitwise-stable numerics across recompiles). Errors
-    /// instead of compiling during executable dispatch.
+    /// Compiles and caches `source` under `key` with fast math disabled for
+    /// bitwise-stable numerics across recompiles. Returns an error during
+    /// executable dispatch.
     pub fn compile_slow(&self, key: u64, source: &str, name: &str) -> Result<Pipeline, String> {
         let mut cache = self.pipelines.lock().unwrap();
         if let Some(p) = cache.get(&key) {
@@ -1863,10 +1952,9 @@ impl MetalDevice {
         Ok(())
     }
 
-    /// Breakdown of live bytes by pool bucket (dead = held only by the
-    /// pool) plus retired uploads — printed when the memory cap trips.
-    /// Lock-free best effort: the dump runs from the allocation path,
-    /// which may already hold the allocator lock.
+    /// Prints live bytes by pool bucket and retired uploads. A dead bucket is
+    /// held only by the pool. This is a lock-free best effort because the
+    /// allocation path may already hold the allocator lock.
     pub fn dump_live_bytes(&self) {
         let mut rows: Vec<(usize, usize, usize)> = Vec::new();
         if let Ok(alloc) = self.allocator.try_lock() {

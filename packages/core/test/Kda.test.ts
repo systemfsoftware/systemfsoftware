@@ -1,7 +1,7 @@
 import { describe, expect } from "@effect/vitest"
 import * as assert from "@effect/vitest/utils"
 import { Effect } from "effect"
-import { Gradient, LearningRate, Loss, Model, Optimizer, Tensor, Trainer } from "../src/index.ts"
+import { Gradient, LearningRate, Loss, Model, Optimizer, Speculation, Tensor, Trainer } from "../src/index.ts"
 import { floats, GRADCHECK_EPS, GRADCHECK_TOL, onDevices } from "./utils/devices.ts"
 
 const values = (t: Tensor.Any) => Tensor.toNumberArray(t)
@@ -58,7 +58,10 @@ const naiveKda = (
       )
       outs.push(yield* Tensor.transpose(o, swap))
     }
-    return yield* Tensor.concat(outs as [Tensor.Any, Tensor.Any, ...Array<Tensor.Any>], { dim: 2 })
+    const [first, second, ...rest] = outs
+    if (first === undefined) throw new Error("KDA reference must produce at least one row")
+    if (second === undefined) return first
+    return yield* Tensor.concat([first, second, ...rest], { dim: 2 })
   })
 
 const inputs = (t: number, dk: number, dv: number, seed: number) =>
@@ -167,7 +170,7 @@ onDevices("Kda", (device) => (it) => {
     it.effect("runs a finite forward pass at the declared shapes", () =>
       Effect.gen(function*() {
         const model = yield* Model.kimiDeltaAttention("kda", 32, 4)
-        expect(model.names).toEqual([
+        expect(model.parameterSpecs.map(({ name }) => name)).toEqual([
           "kda.qkv.weight",
           "kda.qkv.bias",
           "kda.convqkv.weight",
@@ -182,7 +185,7 @@ onDevices("Kda", (device) => (it) => {
           "kda.wo.weight",
           "kda.wo.bias"
         ])
-        const params = yield* Tensor.compute(yield* model.init)
+        const params = yield* Tensor.compute(yield* Model.initialize(model))
         const x = yield* Tensor.fromTypedArray(
           floats(Array.from({ length: 2 * 10 * 32 }, (_, i) => ((i * 5 + 1) % 11 - 5) / 5)),
           [2, 10, 32]
@@ -203,7 +206,7 @@ onDevices("Kda", (device) => (it) => {
     it.effect("gradients flow to every parameter", () =>
       Effect.gen(function*() {
         const model = yield* Model.kimiDeltaAttention("kda", 16, 4)
-        const params = yield* Tensor.compute(yield* model.init)
+        const params = yield* Tensor.compute(yield* Model.initialize(model))
         const x = yield* Tensor.fromTypedArray(
           floats(Array.from({ length: 2 * 9 * 16 }, (_, i) => ((i * 5 + 1) % 11 - 5) / 5)),
           [2, 9, 16]
@@ -216,12 +219,12 @@ onDevices("Kda", (device) => (it) => {
           const gv = yield* values(g)
           assert.assertTrue(
             gv.every(Number.isFinite) && gv.some((x) => x !== 0),
-            `param ${model.names[i]} has a degenerate gradient`
+            `param ${model.parameterSpecs.map(({ name }) => name)[i]} has a degenerate gradient`
           )
         }
       }))
 
-    it.effect("trains in mixedBf16 on metal, typed error elsewhere", () =>
+    it.effect("trains in mixedBf16 on Metal and reports a typed error elsewhere", () =>
       Effect.gen(function*() {
         const model = yield* Model.kimiDeltaAttention("kda", 32, 4)
         const raw = yield* Tensor.fromTypedArray(
@@ -243,12 +246,14 @@ onDevices("Kda", (device) => (it) => {
           })
         })
         if (device !== "metal") {
-          const error = yield* Effect.flip(Effect.flatMap(makeTrainer, (trainer) => trainer.train()))
+          const error = yield* Effect.flip(
+            Effect.flatMap(makeTrainer, (trainer) => Effect.flatMap(Model.initialize(model), trainer.train))
+          )
           expect(error._tag).toBe("ModelError")
           return
         }
         const trainer = yield* makeTrainer
-        const { params, step } = yield* trainer.train()
+        const { params, step } = yield* trainer.train(yield* Model.initialize(trainer.model))
         expect(step).toBe(4)
         expect(params.every((p) => p.dtype === "f32")).toBe(true)
         const forwardParams = yield* Effect.all(params.map((param) => Tensor.cast(param, "bf16")))
@@ -319,8 +324,8 @@ onDevices("Kda", (device) => (it) => {
     const EMBED = 8
     const HEADS = 2
 
-    // The K3-style hybrid: a KDA layer plus a causal full-attention
-    // layer with no positional encoding anywhere.
+    // The K3-style hybrid has a KDA layer and a causal full-attention layer,
+    // with no positional encoding in either one.
     const makeHybrid = Effect.gen(function*() {
       const wte = yield* Model.embedding("wte", VOCAB, EMBED)
       const kda = yield* Model.kimiDeltaAttention("kda", EMBED, HEADS)
@@ -345,8 +350,22 @@ onDevices("Kda", (device) => (it) => {
         return values.reduce((best, value, index) => (value > values[best] ? index : best), 0)
       })
 
-    // The reference: greedy generation through the ordinary forward
-    // graph, recomputing the whole context every step.
+    it.effect("rejects speculative configuration for recurrent target state", () =>
+      Effect.gen(function*() {
+        const model = yield* makeHybrid
+        const params = yield* Tensor.compute(yield* Model.initialize(model))
+        const proposer = Speculation.autoregressive(model, params, { vocabulary: VOCAB, maxDraftTokens: 2 })
+        const error = yield* Effect.flip(Model.inference(model, params, {
+          maxTokens: 32,
+          blockSize: 4,
+          prefillChunks: [4],
+          speculation: { proposer, maxDraftTokens: 2 }
+        }))
+        expect(error.message).toMatch(/KV-only/)
+      }))
+
+    // The reference performs greedy generation through the ordinary forward
+    // graph and recomputes the whole context at every step.
     const naiveGenerate = (model: Model.Model, params: Model.Params, prompt: ReadonlyArray<number>, steps: number) =>
       Effect.gen(function*() {
         const context = [...prompt]
@@ -367,9 +386,9 @@ onDevices("Kda", (device) => (it) => {
 
     const cachedGenerate = (program: Model.InferenceProgram, prompt: ReadonlyArray<number>, steps: number) =>
       Effect.gen(function*() {
-        const gen = yield* program.generation()
+        const gen = yield* program.execution()
         const context = [...prompt]
-        const entry = yield* gen.add(yield* ids(prompt))
+        const entry = (yield* gen.add([yield* ids(prompt)]))[0]!
         let logits = entry.logits
         for (let i = 0; i < steps; i++) {
           const next = yield* argmaxOf(logits)
@@ -385,13 +404,13 @@ onDevices("Kda", (device) => (it) => {
     it.effect("hybrid KDA + NoPE attention matches naive greedy generation token-for-token", () =>
       Effect.gen(function*() {
         const model = yield* makeHybrid
-        const params = yield* Tensor.compute(yield* model.init)
+        const params = yield* Tensor.compute(yield* Model.initialize(model))
         const prompt = [1, 5, 3]
         const steps = 9
         const program = yield* Model.inference(model, params, {
           maxTokens: 64,
           blockSize: 4,
-          prefillChunk: 4
+          prefillChunks: [4]
         })
         const naive = yield* naiveGenerate(model, params, prompt, steps)
         const cached = yield* cachedGenerate(program, prompt, steps)
@@ -402,13 +421,13 @@ onDevices("Kda", (device) => (it) => {
     it.effect("hybrid KDA multi-chunk prefill matches the naive reference", () =>
       Effect.gen(function*() {
         const model = yield* makeHybrid
-        const params = yield* Tensor.compute(yield* model.init)
+        const params = yield* Tensor.compute(yield* Model.initialize(model))
         const prompt = [1, 5, 3, 8, 2, 11, 4, 7, 6]
         const steps = 4
         const program = yield* Model.inference(model, params, {
           maxTokens: 64,
           blockSize: 4,
-          prefillChunk: 4
+          prefillChunks: [4]
         })
         const naive = yield* naiveGenerate(model, params, prompt, steps)
         const cached = yield* cachedGenerate(program, prompt, steps)
@@ -418,16 +437,16 @@ onDevices("Kda", (device) => (it) => {
     it.effect("recurrent pools restore shared prefixes across sequences", () =>
       Effect.gen(function*() {
         const model = yield* makeHybrid
-        const params = yield* Tensor.compute(yield* model.init)
+        const params = yield* Tensor.compute(yield* Model.initialize(model))
         const prompt = [1, 5, 3, 8, 2]
         const program = yield* Model.inference(model, params, {
           maxTokens: 64,
           blockSize: 4,
-          prefillChunk: 4
+          prefillChunks: [4]
         })
-        const gen = yield* program.generation()
-        const first = yield* gen.add(yield* ids(prompt))
-        const second = yield* gen.add(yield* ids(prompt))
+        const gen = yield* program.execution()
+        const first = (yield* gen.add([yield* ids(prompt)]))[0]!
+        const second = (yield* gen.add([yield* ids(prompt)]))[0]!
         const firstValues = yield* Tensor.toNumberArray(first.logits)
         const secondValues = yield* Tensor.toNumberArray(second.logits)
         secondValues.forEach((value, index) => assert.assertTrue(close(value, firstValues[index]!)))
@@ -440,7 +459,7 @@ onDevices("Kda", (device) => (it) => {
     it.effect("prefillMatch restores a recurrent snapshot at a block boundary", () =>
       Effect.gen(function*() {
         const model = yield* makeHybrid
-        const params = yield* Tensor.compute(yield* model.init)
+        const params = yield* Tensor.compute(yield* Model.initialize(model))
         const exemplar = yield* Tensor.zeros([1, 4], { dtype: "u32" })
         const placeholders: Array<Tensor.Lazy> = []
         for (let index = 0; index < params.length; index++) {
@@ -514,13 +533,13 @@ onDevices("Kda", (device) => (it) => {
     it.effect("a pure-KDA stack (zero KV layers) generates through the decode programs", () =>
       Effect.gen(function*() {
         const model = yield* makePureKda
-        const params = yield* Tensor.compute(yield* model.init)
+        const params = yield* Tensor.compute(yield* Model.initialize(model))
         const prompt = [2, 4]
         const steps = 7
         const program = yield* Model.inference(model, params, {
           maxTokens: 64,
           blockSize: 4,
-          prefillChunk: 4
+          prefillChunks: [4]
         })
         const naive = yield* naiveGenerate(model, params, prompt, steps)
         const cached = yield* cachedGenerate(program, prompt, steps)
@@ -530,16 +549,16 @@ onDevices("Kda", (device) => (it) => {
     it.effect("batched decode steps two hybrid sequences independently", () =>
       Effect.gen(function*() {
         const model = yield* makeHybrid
-        const params = yield* Tensor.compute(yield* model.init)
+        const params = yield* Tensor.compute(yield* Model.initialize(model))
         const program = yield* Model.inference(model, params, {
           maxTokens: 64,
           blockSize: 4,
-          prefillChunk: 4,
-          decodeBatch: 4
+          prefillChunks: [4],
+          batchSize: 4
         })
-        const gen = yield* program.generation()
-        const a = yield* gen.add(yield* ids([1, 5, 3]))
-        const b = yield* gen.add(yield* ids([2, 7]))
+        const gen = yield* program.execution()
+        const a = (yield* gen.add([yield* ids([1, 5, 3])]))[0]!
+        const b = (yield* gen.add([yield* ids([2, 7])]))[0]!
         const naiveA = yield* naiveGenerate(model, params, [1, 5, 3], 5)
         const naiveB = yield* naiveGenerate(model, params, [2, 7], 5)
         const contextA = [1, 5, 3]
@@ -562,6 +581,48 @@ onDevices("Kda", (device) => (it) => {
         }
         expect(contextA).toEqual(naiveA)
         expect(contextB).toEqual(naiveB)
+      }))
+
+    it.effect("hybrid recurrent state stays physical across sparse refill and reversed requests", () =>
+      Effect.gen(function*() {
+        const model = yield* makeHybrid
+        const params = yield* Tensor.compute(yield* Model.initialize(model))
+        const program = yield* Model.inference(model, params, {
+          maxTokens: 64,
+          blockSize: 4,
+          prefillChunks: [4],
+          batchSize: 2
+        })
+        const referenceB = yield* program.execution()
+        const bRef = (yield* referenceB.add([yield* ids([2, 7])]))[0]!
+        yield* Tensor.clear(bRef.logits)
+        const [bRefFirst] = yield* referenceB.step([{ seq: bRef.seq, token: 3 }])
+        const [bRefSecond] = yield* referenceB.step([{ seq: bRef.seq, token: 4 }])
+        const referenceC = yield* program.execution()
+        const cRef = (yield* referenceC.add([yield* ids([4, 1, 6])]))[0]!
+        yield* Tensor.clear(cRef.logits)
+        const [cRefNext] = yield* referenceC.step([{ seq: cRef.seq, token: 5 }])
+
+        const gen = yield* program.execution()
+        const entries = yield* gen.add([yield* ids([1, 5, 3]), yield* ids([2, 7])])
+        yield* Tensor.clearAll(entries.map((entry) => entry.logits))
+        yield* entries[0]!.seq.finish()
+        const [bFirst] = yield* gen.step([{ seq: entries[1]!.seq, token: 3 }])
+        const [c] = yield* gen.add([yield* ids([4, 1, 6])])
+        yield* Tensor.clear(c!.logits)
+        const [bSecond, cNext] = yield* gen.step([
+          { seq: entries[1]!.seq, token: 4 },
+          { seq: c!.seq, token: 5 }
+        ])
+        for (const [actual, expected] of [[bFirst, bRefFirst], [bSecond, bRefSecond], [cNext, cRefNext]] as const) {
+          const actualValues = yield* Tensor.toNumberArray(actual!)
+          const expectedValues = yield* Tensor.toNumberArray(expected!)
+          actualValues.forEach((value, index) => assert.assertTrue(close(value, expectedValues[index]!)))
+        }
+        yield* Tensor.clearAll([bFirst!, bRefFirst!, bSecond!, bRefSecond!, cNext!, cRefNext!])
+        yield* gen.close()
+        yield* referenceB.close()
+        yield* referenceC.close()
       }))
   })
 })

@@ -1,13 +1,14 @@
 /**
  * The load-only Muse-Glimmer transformer architecture used by GGUF artifacts.
  *
- * {@link architecture} consumes the canonical configuration prepared by
- * `Gguf.load`; it does not inspect a file or load weights. The resulting
- * {@link Model.Model} declares the GGUF tensor names and logical shapes, then
- * builds a stateless full-sequence graph. `Model.inference` can subsequently
- * specialize that same graph into paged-KV prefill and decode programs.
+ * {@link loadGGUF} consumes the canonical configuration prepared from a GGUF
+ * artifact, validates its tensor catalog, and loads owned parameters. The
+ * resulting {@link Model.Model} declares the GGUF tensor names and logical
+ * shapes, then builds a stateless full-sequence graph. `Model.inference` can
+ * then specialize that same graph into paged-KV prefill and decode
+ * programs.
  *
- * The implementation is storage-independent at the architecture boundary.
+ * The graph treats supported storage formats alike.
  * Dense F32 parameters and `Q2_K`, `Q3_K`, `Q4_K`, `Q5_K`, or `Q6_K` matrices
  * have the same logical catalog. Packed parameters retain logical F32 shape
  * and dtype over row-packed U8 storage; their last logical dimension must be a
@@ -19,27 +20,25 @@
  * use GGML's interleaved-pair RoPE convention, and centered normalization
  * scales have already been shifted into multiplicative RMS weights (including
  * the artifact's Q- and K-normalization scales). Neither this architecture nor
- * `Gguf.load` repeats those conversions or synthesizes replacement tensors.
+ * `loadGGUF` repeats those conversions or synthesizes replacement tensors.
  *
  * @since 0.1.0
  */
 import { Effect } from "effect"
 import * as Schema from "effect/Schema"
+import * as Gguf from "../Gguf.ts"
 import * as Model from "../Model.ts"
-import type * as Registry from "../Registry.ts"
+import type * as Runtime from "../Runtime.ts"
 import * as Tensor from "../Tensor.ts"
 
 /**
- * The exact registry identifier for Muse-Glimmer GGUF artifacts.
- *
- * `Gguf.load` reads `general.architecture = "muse-glimmer"`, prefixes it with
- * `"gguf:"`, and performs an exact registry lookup. There are no unqualified,
- * case-insensitive, or alternate aliases for this identifier.
+ * The exact `general.architecture` value required in a Muse-Glimmer GGUF
+ * artifact.
  *
  * @since 0.1.0
  * @category identifiers
  */
-export const id = "gguf:muse-glimmer"
+export const architecture = "muse-glimmer"
 
 const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))
 const PositiveFinite = Schema.Finite.check(Schema.isGreaterThan(0))
@@ -48,7 +47,7 @@ const MAX_BLOCKS = 1024
 /**
  * Architecture fields after GGUF metadata has been canonicalized.
  *
- * For a Muse-Glimmer artifact, `Gguf.load` removes the `muse-glimmer.` prefix
+ * For a Muse-Glimmer artifact, `loadGGUF` removes the `muse-glimmer.` prefix
  * from architecture metadata, removes `general.` from general metadata, and
  * derives `vocab_size` from `tokenizer.ggml.tokens.length` when the metadata
  * does not provide it. This schema then requires the fifteen fields below.
@@ -118,13 +117,13 @@ const Config = Schema.Struct({
 type Config = Schema.Schema.Type<typeof Config>
 
 /**
- * Converts the canonical registry map to the validated architecture closure.
+ * Converts the canonical GGUF metadata map to the validated architecture closure.
  * Translation from container-qualified GGUF metadata has already happened in
- * `Gguf.load`; direct callers of `architecture.create` must therefore provide
- * these canonical keys themselves. Schema failures become `ModelError` with
+ * `Gguf.loadModel`; direct callers of `create` must therefore provide these
+ * canonical keys themselves. Schema failures become `ModelError` with
  * `op = "create"` before a parameter catalog is exposed.
  */
-const decodeConfig = (config: Registry.ModelConfig): Effect.Effect<Config, Model.ModelError> =>
+const decodeConfig = (config: Gguf.ModelConfig): Effect.Effect<Config, Model.ModelError> =>
   Schema.decodeUnknownEffect(Config)(Object.fromEntries(config)).pipe(
     Effect.mapError((error) =>
       new Model.ModelError({
@@ -166,10 +165,10 @@ const decodeConfig = (config: Registry.ModelConfig): Effect.Effect<Config, Model
  * 13. `blk.N.ffn_up.weight [F, E]`
  * 14. `blk.N.ffn_down.weight [E, F]`
  *
- * The model arity is consequently `3 + 14 * L`. The spelling `post_ffw` is
- * the source tensor name, not a normalized API alias. `Gguf.load` proves an
- * exact name/shape bijection with this catalog and reorders loaded handles into
- * this array order before returning them.
+ * The model arity is `3 + 14 * L`. The spelling `post_ffw` is
+ * the source tensor name, not a normalized API alias. `loadGGUF` checks that
+ * names and shapes match this catalog one-to-one, then reorders loaded handles
+ * into this array order before returning them.
  */
 const makeParameters = (config: Config): ReadonlyArray<Model.ParameterSpec> => {
   const hiddenSize = config.embedding_length
@@ -178,38 +177,34 @@ const makeParameters = (config: Config): ReadonlyArray<Model.ParameterSpec> => {
   const keySize = config["attention.head_count_kv"] * config["attention.key_length"]
   const valueSize = config["attention.head_count_kv"] * config["attention.value_length"]
   const attentionSize = config["attention.head_count"] * config["attention.value_length"]
+  const normal = (fanIn: number): Model.ParameterInitializer => ({ _tag: "Normal", scale: 1 / Math.sqrt(fanIn) })
+  const one: Model.ParameterInitializer = { _tag: "Constant", value: 1 }
   const specs: Array<Model.ParameterSpec> = [
-    { name: "token_embd.weight", shape: [config.vocab_size, hiddenSize] },
-    { name: "output_norm.weight", shape: [hiddenSize] },
-    { name: "output.weight", shape: [config.vocab_size, hiddenSize] }
+    { name: "token_embd.weight", shape: [config.vocab_size, hiddenSize], initializer: normal(hiddenSize) },
+    { name: "output_norm.weight", shape: [hiddenSize], initializer: one },
+    { name: "output.weight", shape: [config.vocab_size, hiddenSize], initializer: normal(hiddenSize) }
   ]
   for (let layer = 0; layer < config.block_count; layer++) {
     const prefix = `blk.${layer}`
     specs.push(
-      { name: `${prefix}.attn_norm.weight`, shape: [hiddenSize] },
-      { name: `${prefix}.post_attention_norm.weight`, shape: [hiddenSize] },
-      { name: `${prefix}.attn_q.weight`, shape: [querySize, hiddenSize] },
-      { name: `${prefix}.attn_k.weight`, shape: [keySize, hiddenSize] },
-      { name: `${prefix}.attn_v.weight`, shape: [valueSize, hiddenSize] },
-      { name: `${prefix}.attn_q_norm.weight`, shape: [config["attention.key_length"]] },
-      { name: `${prefix}.attn_k_norm.weight`, shape: [config["attention.key_length"]] },
-      { name: `${prefix}.attn_gate.weight`, shape: [attentionSize, hiddenSize] },
-      { name: `${prefix}.attn_output.weight`, shape: [hiddenSize, attentionSize] },
-      { name: `${prefix}.ffn_norm.weight`, shape: [hiddenSize] },
-      { name: `${prefix}.post_ffw_norm.weight`, shape: [hiddenSize] },
-      { name: `${prefix}.ffn_gate.weight`, shape: [feedForwardSize, hiddenSize] },
-      { name: `${prefix}.ffn_up.weight`, shape: [feedForwardSize, hiddenSize] },
-      { name: `${prefix}.ffn_down.weight`, shape: [hiddenSize, feedForwardSize] }
+      { name: `${prefix}.attn_norm.weight`, shape: [hiddenSize], initializer: one },
+      { name: `${prefix}.post_attention_norm.weight`, shape: [hiddenSize], initializer: one },
+      { name: `${prefix}.attn_q.weight`, shape: [querySize, hiddenSize], initializer: normal(hiddenSize) },
+      { name: `${prefix}.attn_k.weight`, shape: [keySize, hiddenSize], initializer: normal(hiddenSize) },
+      { name: `${prefix}.attn_v.weight`, shape: [valueSize, hiddenSize], initializer: normal(hiddenSize) },
+      { name: `${prefix}.attn_q_norm.weight`, shape: [config["attention.key_length"]], initializer: one },
+      { name: `${prefix}.attn_k_norm.weight`, shape: [config["attention.key_length"]], initializer: one },
+      { name: `${prefix}.attn_gate.weight`, shape: [attentionSize, hiddenSize], initializer: normal(hiddenSize) },
+      { name: `${prefix}.attn_output.weight`, shape: [hiddenSize, attentionSize], initializer: normal(attentionSize) },
+      { name: `${prefix}.ffn_norm.weight`, shape: [hiddenSize], initializer: one },
+      { name: `${prefix}.post_ffw_norm.weight`, shape: [hiddenSize], initializer: one },
+      { name: `${prefix}.ffn_gate.weight`, shape: [feedForwardSize, hiddenSize], initializer: normal(hiddenSize) },
+      { name: `${prefix}.ffn_up.weight`, shape: [feedForwardSize, hiddenSize], initializer: normal(hiddenSize) },
+      { name: `${prefix}.ffn_down.weight`, shape: [hiddenSize, feedForwardSize], initializer: normal(feedForwardSize) }
     )
   }
   return specs
 }
-
-const rms = (
-  input: Tensor.Any,
-  epsilon: number,
-  scale?: Tensor.Any
-) => Tensor.rmsNorm(input, scale, epsilon)
 
 /**
  * Defines the load-only forward graph.
@@ -220,8 +215,7 @@ const rms = (
  * only model-level forward checks; this function does not require positive
  * `B` or `S`. Individual tensor operations validate parameter shape, dtype,
  * placement, and token dtype; out-of-vocabulary token IDs fail when the
- * embedding executes. Because no initializer is supplied to `Model.define`,
- * `model.init` fails and parameters must be loaded.
+ * embedding executes.
  *
  * For each layer, Q/K/V have shapes `[B, Hq, S, Dk]`,
  * `[B, Hkv, S, Dk]`, and `[B, Hkv, S, Dv]`. Causal GQA produces
@@ -249,7 +243,7 @@ const rms = (
  * an explicit local-layer window.
  */
 const makeModel = (config: Config): Effect.Effect<Model.Model, Model.ModelError> => {
-  const parameters = makeParameters(config)
+  const parameterSpecs = makeParameters(config)
   const queryHeads = config["attention.head_count"]
   const keyValueHeads = config["attention.head_count_kv"]
   const keyLength = config["attention.key_length"]
@@ -258,13 +252,13 @@ const makeModel = (config: Config): Effect.Effect<Model.Model, Model.ModelError>
   const rmsEpsilon = config["attention.layer_norm_rms_epsilon"]
   const slidingWindowPattern = config["attention.sliding_window_pattern"]
   return Model.define({
-    parameters,
+    parameterSpecs,
     forward: (params, input) =>
       Effect.gen(function*() {
-        if (params.length !== parameters.length) {
+        if (params.length !== parameterSpecs.length) {
           return yield* new Model.ModelError({
             op: "forward",
-            message: `MuseGlimmer.forward: expected ${parameters.length} parameters, got ${params.length}`
+            message: `MuseGlimmer.forward: expected ${parameterSpecs.length} parameters, got ${params.length}`
           })
         }
         if (input.shape.length !== 2) {
@@ -282,23 +276,27 @@ const makeModel = (config: Config): Effect.Effect<Model.Model, Model.ModelError>
           })
         }
         let hidden = yield* Tensor.embedding(input, { weight: params[0] })
-        hidden = yield* rms(hidden, rmsEpsilon)
-        // S=1 is already heads-first after reshape; longer sequences need the
-        // sequence and head axes exchanged.
+        hidden = yield* Tensor.rmsNorm(hidden, undefined, rmsEpsilon)
+        // [B, S, H * W] <-> [B, H, S, W]; unit-axis permutes lower to
+        // zero-cost aliases, so the S=1 decode path needs no special case.
         const headsFirst = (value: Tensor.Any, heads: number, width: number) =>
           Effect.gen(function*() {
-            if (sequence === 1) {
-              return yield* Tensor.reshape(value, [batch, heads, sequence, width])
-            }
             return yield* Tensor.transpose(
               yield* Tensor.reshape(value, [batch, sequence, heads, width]),
               [0, 2, 1, 3]
             )
           })
+        const mergeHeads = (value: Tensor.Any) =>
+          Effect.gen(function*() {
+            return yield* Tensor.reshape(
+              yield* Tensor.transpose(value, [0, 2, 1, 3]),
+              [batch, sequence, attentionSize]
+            )
+          })
 
         for (let layer = 0; layer < config.block_count; layer++) {
           const offset = 3 + layer * 14
-          const attentionInput = yield* rms(hidden, rmsEpsilon, params[offset])
+          const attentionInput = yield* Tensor.rmsNorm(hidden, params[offset], rmsEpsilon)
           let query = yield* headsFirst(
             yield* Tensor.linearRows(attentionInput, params[offset + 2]),
             queryHeads,
@@ -316,8 +314,8 @@ const makeModel = (config: Config): Effect.Effect<Model.Model, Model.ModelError>
           )
           const gate = yield* Tensor.linearRows(attentionInput, params[offset + 7])
 
-          query = yield* rms(query, rmsEpsilon, params[offset + 5])
-          key = yield* rms(key, rmsEpsilon, params[offset + 6])
+          query = yield* Tensor.rmsNorm(query, params[offset + 5], rmsEpsilon)
+          key = yield* Tensor.rmsNorm(key, params[offset + 6], rmsEpsilon)
           // Every Pth one-based layer is explicitly global/NoPE; all other
           // layers are explicitly local and use interleaved-pair RoPE.
           const local = (layer + 1) % slidingWindowPattern !== 0
@@ -335,28 +333,22 @@ const makeModel = (config: Config): Effect.Effect<Model.Model, Model.ModelError>
             causal: true,
             window: local ? config["attention.sliding_window"] : null
           })
-          if (sequence === 1) {
-            attention = yield* Tensor.reshape(attention, [batch, sequence, attentionSize])
-          } else {
-            attention = yield* Tensor.reshape(
-              yield* Tensor.transpose(attention, [0, 2, 1, 3]),
-              [batch, sequence, attentionSize]
-            )
-          }
+          attention = yield* mergeHeads(attention)
           attention = yield* Tensor.mul(attention, yield* Tensor.sigmoid(gate))
           attention = yield* Tensor.linearRows(attention, params[offset + 8])
-          hidden = yield* Tensor.add(hidden, yield* rms(attention, 1e-8, params[offset + 1]))
+          hidden = yield* Tensor.add(hidden, yield* Tensor.rmsNorm(attention, params[offset + 1], 1e-8))
 
-          const ffnInput = yield* rms(hidden, rmsEpsilon, params[offset + 9])
+          const ffnInput = yield* Tensor.rmsNorm(hidden, params[offset + 9], rmsEpsilon)
           let ffn = yield* Tensor.mul(
             yield* Tensor.silu(yield* Tensor.linearRows(ffnInput, params[offset + 11])),
             yield* Tensor.linearRows(ffnInput, params[offset + 12])
           )
           ffn = yield* Tensor.linearRows(ffn, params[offset + 13])
-          hidden = yield* Tensor.add(hidden, yield* rms(ffn, 1e-8, params[offset + 10]))
+          hidden = yield* Tensor.add(hidden, yield* Tensor.rmsNorm(ffn, params[offset + 10], 1e-8))
+          hidden = yield* Tensor.expose(hidden, Model.hiddenExposure(layer))
         }
 
-        hidden = yield* rms(hidden, rmsEpsilon, params[1])
+        hidden = yield* Tensor.rmsNorm(hidden, params[1], rmsEpsilon)
         let logits = yield* Tensor.linearRows(hidden, params[2])
         logits = yield* Tensor.mul(logits, yield* Tensor.constantLike(logits, config.logit_scale))
         logits = yield* Tensor.div(logits, yield* Tensor.constantLike(logits, config.final_logit_softcapping))
@@ -369,19 +361,34 @@ const makeModel = (config: Config): Effect.Effect<Model.Model, Model.ModelError>
 }
 
 /**
- * The Muse-Glimmer GGUF model architecture.
- *
- * `create` validates canonical metadata and returns a load-only model template;
- * it performs no runtime access, file I/O, weight loading, or registration.
- * The architecture is re-exported from `@effect-torch/core/models`, while the
- * core `Registry.layer` installs it under the exact {@link id}. Custom
- * registries must register this value explicitly before `Gguf.load` can resolve
- * a Muse-Glimmer artifact.
+ * Validates canonical Muse-Glimmer metadata and returns a load-only model
+ * template. This performs no runtime access, file I/O, or weight loading.
  *
  * @since 0.1.0
  * @category models
  */
-export const architecture: Registry.ModelArchitecture = {
-  id,
-  create: (config) => Effect.flatMap(decodeConfig(config), makeModel)
+export const create = (config: Gguf.ModelConfig): Effect.Effect<Model.Model, Model.ModelError> =>
+  Effect.flatMap(decodeConfig(config), makeModel)
+
+/**
+ * Explicit GGUF model definition used by {@link loadGGUF}.
+ *
+ * @since 0.1.0
+ * @category models
+ */
+export const definition: Gguf.ModelDefinition = {
+  architecture,
+  create
 }
+
+/**
+ * Inspects, validates, and loads a Muse-Glimmer GGUF artifact. The artifact's
+ * `general.architecture` must equal {@link architecture} exactly.
+ *
+ * @since 0.1.0
+ * @category loading
+ */
+export const loadGGUF = (
+  path: string
+): Effect.Effect<Gguf.LoadedModel, Gguf.GgufError | Model.ModelError, Runtime.Runtime> =>
+  Gguf.loadModel(path, definition)

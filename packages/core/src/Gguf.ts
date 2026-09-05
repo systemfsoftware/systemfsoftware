@@ -1,23 +1,20 @@
 /**
- * Native GGUF v3 inspection, registry-based model resolution, validation, and
- * loading. The selected runtime parses the file and creates concrete tensor
- * handles; this module canonicalizes metadata, resolves the exact
- * `gguf:<architecture>` registration, constructs the model, and verifies that
- * the inspected and loaded tensor catalogs form a bijection with its parameter
- * catalog.
+ * Inspects and loads native GGUF v3 files. The selected runtime parses the file
+ * and creates tensor handles. This module canonicalizes metadata and validates
+ * the architecture expected by the caller. It builds the model or parameter
+ * catalog, then checks the inspected and loaded tensor catalogs for exact
+ * matches.
  *
  * @since 0.1.0
  */
-import { Data, Effect, Exit } from "effect"
+import { Data, Effect, Exit, Predicate } from "effect"
 import type * as Model from "./Model.ts"
-import * as Registry from "./Registry.ts"
 import * as Runtime from "./Runtime.ts"
 import type * as Tensor from "./Tensor.ts"
 
 /**
  * A native GGUF inspection/loading failure or a structural validation failure.
- * Missing architecture registrations remain {@link Registry.RegistryError}s,
- * and architecture construction failures remain `Model.ModelError`s.
+ * Model construction failures remain `Model.ModelError`s.
  *
  * @since 0.1.0
  * @category errors
@@ -32,6 +29,28 @@ export class GgufError extends Data.TaggedError("GgufError")<{
 }> {}
 
 /**
+ * Canonical architecture configuration produced from GGUF metadata.
+ *
+ * @since 0.1.0
+ * @category models
+ */
+export type ModelConfig = ReadonlyMap<string, unknown>
+
+/**
+ * An explicitly selected GGUF model definition. Model modules provide one
+ * definition to their dedicated loader; there is no ambient registry lookup.
+ *
+ * @since 0.1.0
+ * @category models
+ */
+export interface ModelDefinition {
+  /** Exact value required for `general.architecture`. */
+  readonly architecture: string
+  /** Constructs a model template from canonical metadata. */
+  readonly create: (metadata: ModelConfig) => Effect.Effect<Model.Model, Model.ModelError>
+}
+
+/**
  * A constructed model, its concrete parameters in model order, and the
  * canonical configuration used to construct it.
  *
@@ -42,13 +61,13 @@ export interface LoadedModel {
   /** The model constructed from the artifact's architecture configuration. */
   readonly model: Model.Model
   /**
-   * Caller-owned loaded tensors in `model.parameters` order. Release each
+   * Caller-owned loaded tensors in `model.parameterSpecs` order. Release each
    * handle when no longer needed; repeated releases are no-ops.
    */
   readonly params: ReadonlyArray<Tensor.Concrete>
   /**
-   * Canonical configuration passed to the architecture: the architecture
-   * prefix and `general.` are stripped, other keys are retained, and
+   * Canonical configuration passed to the architecture. The architecture
+   * prefix and `general.` are stripped, other keys remain, and
    * `vocab_size` may be derived from `tokenizer.ggml.tokens`. This is not the
    * raw ordered GGUF metadata table; callers should treat the map and any array
    * values as immutable. Original numeric kinds are erased to JavaScript
@@ -56,6 +75,52 @@ export interface LoadedModel {
    * lost precision.
    */
   readonly metadata: ReadonlyMap<string, unknown>
+}
+
+/**
+ * One required GGUF tensor's stable archive name and logical shape.
+ *
+ * @since 0.1.0
+ * @category models
+ */
+export interface TensorSpec {
+  /** Exact tensor name expected in the archive. */
+  readonly name: string
+  /** Logical tensor dimensions expected by the artifact. */
+  readonly shape: ReadonlyArray<number>
+}
+
+/**
+ * Loaded GGUF parameters for an artifact that is not an ordinary one-input
+ * model.
+ *
+ * @since 0.1.0
+ * @category models
+ */
+export interface LoadedParameters {
+  /** Validated parameter specifications in the same order as `params`. */
+  readonly parameterSpecs: ReadonlyArray<TensorSpec>
+  /** Caller-owned tensors in the requested parameter-catalog order. */
+  readonly params: ReadonlyArray<Tensor.Concrete>
+  /** Canonical metadata using the same normalization as {@link loadModel}. */
+  readonly metadata: ReadonlyMap<string, unknown>
+}
+
+/**
+ * Definition used by {@link loadParameters} after inspection and metadata
+ * normalization.
+ *
+ * @since 0.1.0
+ * @category models
+ */
+export interface ParameterArtifactDefinition {
+  /** Exact value required for `general.architecture`. */
+  readonly architecture: string
+  /** Builds the exact tensor catalog from canonical metadata and inspected descriptors. */
+  readonly parameterSpecs: (
+    metadata: ReadonlyMap<string, unknown>,
+    tensors: ReadonlyArray<Runtime.GgufTensorDescriptor>
+  ) => Effect.Effect<ReadonlyArray<TensorSpec>, Model.ModelError>
 }
 
 const fail = (op: GgufError["op"], message: string): GgufError => new GgufError({ op, message })
@@ -100,7 +165,7 @@ const encodedRowBytes = (encoding: Runtime.TensorStorageEncoding, columns: numbe
 }
 
 const validateDescriptor = (value: Runtime.GgufTensorDescriptor): Runtime.GgufTensorDescriptor => {
-  if (typeof value !== "object" || value === null || typeof value.name !== "string" || value.name.length === 0) {
+  if (!Predicate.isObjectOrArray(value) || !Predicate.isString(value.name) || value.name.length === 0) {
     throw fail("validate", "GGUF tensor descriptor has an invalid name")
   }
   if (!validShape(value.logicalShape) || value.logicalShape.length > 4 || !validShape(value.physicalShape)) {
@@ -136,27 +201,33 @@ const validateDescriptor = (value: Runtime.GgufTensorDescriptor): Runtime.GgufTe
 }
 
 const validateInspection = (value: Runtime.GgufInspection): Runtime.GgufInspection => {
-  if (typeof value !== "object" || value === null || !Array.isArray(value.metadata) || !Array.isArray(value.tensors)) {
+  const inspection = value
+  if (
+    !Predicate.isObjectOrArray(value) || !Array.isArray(value.metadata) || !Array.isArray(value.tensors)
+  ) {
     throw fail("validate", "native GGUF inspection has an invalid structure")
   }
   const metadataKeys = new Set<string>()
-  const metadata = value.metadata.map((entry) => {
-    if (typeof entry !== "object" || entry === null || typeof entry.key !== "string" || entry.key.length === 0) {
+  const metadata = inspection.metadata.map((entry) => {
+    const metadataEntry = entry
+    if (!Predicate.isObjectOrArray(entry) || !Predicate.isString(entry.key) || entry.key.length === 0) {
       throw fail("validate", "GGUF metadata contains an invalid key")
     }
-    if (metadataKeys.has(entry.key)) throw fail("validate", `duplicate GGUF metadata key ${JSON.stringify(entry.key)}`)
-    metadataKeys.add(entry.key)
-    const entryValue = entry.value
+    if (metadataKeys.has(metadataEntry.key)) {
+      throw fail("validate", `duplicate GGUF metadata key ${JSON.stringify(metadataEntry.key)}`)
+    }
+    metadataKeys.add(metadataEntry.key)
+    const entryValue = metadataEntry.value
     if (!isScalar(entryValue) && !(Array.isArray(entryValue) && entryValue.every(isScalar))) {
-      throw fail("validate", `GGUF metadata ${JSON.stringify(entry.key)} has an invalid value`)
+      throw fail("validate", `GGUF metadata ${JSON.stringify(metadataEntry.key)} has an invalid value`)
     }
     return Object.freeze({
-      key: entry.key,
+      key: metadataEntry.key,
       value: Array.isArray(entryValue) ? Object.freeze([...entryValue]) : entryValue
     })
   })
   const names = new Set<string>()
-  const tensors = value.tensors.map((descriptor) => {
+  const tensors = inspection.tensors.map((descriptor) => {
     const checked = validateDescriptor(descriptor)
     if (names.has(checked.name)) throw fail("validate", `duplicate GGUF tensor ${JSON.stringify(checked.name)}`)
     names.add(checked.name)
@@ -173,7 +244,7 @@ const descriptorEqual = (left: Runtime.GgufTensorDescriptor, right: Runtime.Gguf
 const modelConfig = (
   inspection: Runtime.GgufInspection,
   architecture: string
-): Registry.ModelConfig => {
+): ModelConfig => {
   const prefix = `${architecture}.`
   const entries = inspection.metadata.map((entry) => ({
     source: entry.key,
@@ -205,15 +276,18 @@ const modelConfig = (
   return output
 }
 
-const validateCatalog = (model: Model.Model, tensors: ReadonlyArray<Runtime.GgufTensorDescriptor>): void => {
-  if (model.parameters.length !== model.names.length || model.parameters.length !== tensors.length) {
+const validateCatalog = (
+  parameterSpecs: ReadonlyArray<TensorSpec>,
+  tensors: ReadonlyArray<Runtime.GgufTensorDescriptor>
+): void => {
+  if (parameterSpecs.length !== tensors.length) {
     throw fail(
       "validate",
-      `GGUF tensor catalog has ${tensors.length} entries but model requires ${model.parameters.length}`
+      `GGUF tensor catalog has ${tensors.length} entries but artifact requires ${parameterSpecs.length}`
     )
   }
   const catalog = new Map(tensors.map((tensor) => [tensor.name, tensor]))
-  for (const parameter of model.parameters) {
+  for (const parameter of parameterSpecs) {
     const tensor = catalog.get(parameter.name)
     if (tensor === undefined) {
       throw fail("validate", `GGUF is missing model parameter ${JSON.stringify(parameter.name)}`)
@@ -233,6 +307,93 @@ const validateCatalog = (model: Model.Model, tensors: ReadonlyArray<Runtime.Gguf
   }
 }
 
+const loadArchive = (
+  path: string,
+  runtime: Runtime.RuntimeService,
+  inspection: Runtime.GgufInspection,
+  parameterSpecs: ReadonlyArray<TensorSpec>,
+  metadata: ReadonlyMap<string, unknown>
+): Effect.Effect<LoadedParameters, GgufError> =>
+  Effect.flatMap(fromBackend("load", runtime.extensions.gguf.load(path)), (archive) => {
+    const loadedArchive = archive
+    const validArchive = Predicate.isObjectOrArray(archive) && Array.isArray(archive.entries)
+    const entries = validArchive ? loadedArchive.entries : []
+    const validated = validateEffect(() => {
+      if (!validArchive) throw fail("validate", "native GGUF load returned an invalid archive")
+      if (entries.length !== inspection.tensors.length) {
+        throw fail("validate", "loaded GGUF tensor count differs from inspection")
+      }
+      const owned = new Set<Runtime.ConcreteTensorHandle>()
+      for (const entry of entries) {
+        const loadedEntry = entry
+        if (Predicate.isObjectOrArray(entry) && owned.has(loadedEntry.tensor)) {
+          throw fail("validate", "loaded GGUF archive contains duplicate tensor ownership")
+        }
+        if (
+          Predicate.isObjectOrArray(entry) && Predicate.isObjectOrArray(loadedEntry.tensor)
+        ) {
+          owned.add(loadedEntry.tensor)
+        }
+      }
+      const inspected = new Map(inspection.tensors.map((descriptor) => [descriptor.name, descriptor]))
+      const loaded = new Map<string, Runtime.ConcreteTensorHandle>()
+      for (const entry of entries) {
+        const descriptor = validateDescriptor(entry.descriptor)
+        const expected = inspected.get(descriptor.name)
+        if (expected === undefined || !descriptorEqual(descriptor, expected) || loaded.has(descriptor.name)) {
+          throw fail(
+            "validate",
+            `loaded GGUF descriptor for ${JSON.stringify(descriptor.name)} differs from inspection`
+          )
+        }
+        validateTensor(runtime, descriptor, entry.tensor)
+        loaded.set(descriptor.name, entry.tensor)
+      }
+      const params = parameterSpecs.map((parameter) => loaded.get(parameter.name))
+      if (params.some((tensor) => tensor === undefined)) {
+        throw fail("validate", "loaded GGUF parameter bijection failed")
+      }
+      return {
+        parameterSpecs,
+        params: params.filter((tensor) => tensor !== undefined),
+        metadata
+      } satisfies LoadedParameters
+    })
+    return Effect.onExit(validated, (exit) => Exit.isFailure(exit) ? clearLoaded(runtime, entries) : Effect.void)
+  })
+
+/**
+ * Loads an exact GGUF tensor catalog without constructing a {@link Model.Model}.
+ * This loader supports target-coupled checkpoints such as DFlash. It follows
+ * the same two-read and ownership rules as {@link loadModel} for inspection,
+ * architecture validation, catalog construction, and loading. On success, the
+ * caller owns every tensor in `params`; on post-load validation failure every
+ * discoverable returned handle receives a best-effort release attempt.
+ *
+ * @since 0.1.0
+ * @category loading
+ */
+export const loadParameters = (
+  path: string,
+  definition: ParameterArtifactDefinition
+): Effect.Effect<LoadedParameters, GgufError | Model.ModelError, Runtime.Runtime> =>
+  Effect.gen(function*() {
+    const runtime = yield* Runtime.Runtime
+    const inspected = yield* fromBackend("inspect", runtime.extensions.gguf.inspect(path))
+    const inspection = yield* validateEffect(() => validateInspection(inspected))
+    const architectureEntry = inspection.metadata.find((entry) => entry.key === "general.architecture")
+    if (architectureEntry?.value !== definition.architecture) {
+      return yield* fail(
+        "validate",
+        `GGUF general.architecture must be exactly ${JSON.stringify(definition.architecture)}`
+      )
+    }
+    const metadata = yield* validateEffect(() => modelConfig(inspection, definition.architecture))
+    const parameterSpecs = yield* definition.parameterSpecs(metadata, inspection.tensors)
+    yield* validateEffect(() => validateCatalog(parameterSpecs, inspection.tensors))
+    return yield* loadArchive(path, runtime, inspection, parameterSpecs, metadata)
+  })
+
 const expectedStorage = (
   descriptor: Runtime.GgufTensorDescriptor
 ): Runtime.EncodedTensorStorage | undefined =>
@@ -249,7 +410,7 @@ const validateTensor = (
   descriptor: Runtime.GgufTensorDescriptor,
   tensor: Runtime.ConcreteTensorHandle
 ): void => {
-  if (typeof tensor !== "object" || tensor === null) {
+  if (!Predicate.isObjectOrArray(tensor)) {
     throw fail("validate", `native GGUF tensor ${JSON.stringify(descriptor.name)} is invalid`)
   }
   const storage = expectedStorage(descriptor)
@@ -269,30 +430,29 @@ const validateTensor = (
 
 const clearLoaded = (
   runtime: Runtime.RuntimeService,
-  entries: ReadonlyArray<unknown>
+  entries: ReadonlyArray<Runtime.GgufLoadEntry>
 ): Effect.Effect<void> => {
   const seen = new Set<object>()
   const tensors: Array<Runtime.ConcreteTensorHandle> = []
   for (const entry of entries) {
     if (
-      typeof entry === "object" && entry !== null && "tensor" in entry &&
-      typeof entry.tensor === "object" && entry.tensor !== null && !seen.has(entry.tensor)
+      Predicate.isObjectOrArray(entry) && "tensor" in entry &&
+      Predicate.isObjectOrArray(entry.tensor) && !seen.has(entry.tensor)
     ) {
       seen.add(entry.tensor)
-      tensors.push(entry.tensor as Runtime.ConcreteTensorHandle)
+      tensors.push(entry.tensor)
     }
   }
   return Effect.forEach(tensors, (tensor) => Effect.ignore(runtime.release(tensor)), { discard: true })
 }
 
 /**
- * Inspects, validates, and loads one native GGUF v3 file. Inspection happens
- * first without payload materialization. `general.architecture` must be a
- * non-empty string and resolves only the exact registry key
- * `gguf:<architecture>`. Canonical metadata strips that architecture prefix and
+ * Inspects, validates, and loads one native GGUF v3 file for an explicitly
+ * selected model definition. Inspection happens first without payload
+ * materialization. `general.architecture` must equal the definition's exact
+ * architecture value. Canonical metadata strips that architecture prefix and
  * `general.`, derives `vocab_size` from tokenizer tokens when absent, and
- * rejects empty or colliding canonical keys before calling the architecture's
- * `create` effect.
+ * rejects empty or colliding canonical keys before calling `create`.
  *
  * The inspected tensor catalog must exactly match the resulting model's names
  * and logical shapes. A second native operation then loads every payload. This
@@ -305,85 +465,37 @@ const clearLoaded = (
  * between phases.
  *
  * Before the native `load` effect completes, the runtime owns partial results
- * and is responsible for interruption cleanup. Ownership transfers with a
- * successful archive. On validation failure or interruption after validation
- * begins, this function attempts to release every distinct returned handle,
- * ignores release failures so the original exit is preserved, and returns no
- * tensors. On success ownership of every parameter transfers to the caller;
- * release each handle when no longer needed. Inspection and load backend
- * failures are {@link GgufError}s, exact-key lookup failures are
- * {@link Registry.RegistryError}s, and architecture construction failures are
- * `Model.ModelError`s.
+ * and handles interruption cleanup. When it returns an archive, ownership
+ * transfers to this function. On validation failure or interruption after
+ * validation begins, this function attempts to release every distinct returned
+ * handle. It ignores release failures to preserve the original exit and returns
+ * no tensors. On success, the caller owns every parameter. Release each handle
+ * when no longer needed. Inspection, loading, and
+ * architecture mismatches are {@link GgufError}s; model construction failures
+ * are `Model.ModelError`s.
  *
  * @since 0.1.0
  * @category loading
  */
-export const load = (
-  path: string
-): Effect.Effect<
-  LoadedModel,
-  GgufError | Registry.RegistryError | Model.ModelError,
-  Runtime.Runtime | Registry.Registry
-> =>
+export const loadModel = (
+  path: string,
+  definition: ModelDefinition
+): Effect.Effect<LoadedModel, GgufError | Model.ModelError, Runtime.Runtime> =>
   Effect.gen(function*() {
     const runtime = yield* Runtime.Runtime
-    const registry = yield* Registry.Registry
     const gguf = runtime.extensions.gguf
     const inspected = yield* fromBackend("inspect", gguf.inspect(path))
     const inspection = yield* validateEffect(() => validateInspection(inspected))
     const architectureEntry = inspection.metadata.find((entry) => entry.key === "general.architecture")
-    if (typeof architectureEntry?.value !== "string" || architectureEntry.value.length === 0) {
-      return yield* fail("validate", "GGUF general.architecture must be a non-empty string")
-    }
-    const architecture = architectureEntry.value
-    const implementation = yield* registry.get(`gguf:${architecture}`)
-    const config = yield* validateEffect(() => modelConfig(inspection, architecture))
-    const model = yield* implementation.create(config)
-    yield* validateEffect(() => validateCatalog(model, inspection.tensors))
-    return yield* Effect.flatMap(fromBackend("load", gguf.load(path)), (archive) => {
-      const validArchive = typeof archive === "object" && archive !== null && Array.isArray(archive.entries)
-      const entries = validArchive ? archive.entries : []
-      const validated = validateEffect(() => {
-        if (!validArchive) {
-          throw fail("validate", "native GGUF load returned an invalid archive")
-        }
-        if (entries.length !== inspection.tensors.length) {
-          throw fail("validate", "loaded GGUF tensor count differs from inspection")
-        }
-        const owned = new Set<Runtime.ConcreteTensorHandle>()
-        for (const entry of entries) {
-          if (typeof entry === "object" && entry !== null && owned.has(entry.tensor)) {
-            throw fail("validate", "loaded GGUF archive contains duplicate tensor ownership")
-          }
-          if (
-            typeof entry === "object" && entry !== null && typeof entry.tensor === "object" && entry.tensor !== null
-          ) {
-            owned.add(entry.tensor)
-          }
-        }
-        const inspected = new Map(inspection.tensors.map((descriptor) => [descriptor.name, descriptor]))
-        const loaded = new Map<string, Runtime.ConcreteTensorHandle>()
-        for (const entry of entries) {
-          const descriptor = validateDescriptor(entry.descriptor)
-          const expected = inspected.get(descriptor.name)
-          if (expected === undefined || !descriptorEqual(descriptor, expected) || loaded.has(descriptor.name)) {
-            throw fail(
-              "validate",
-              `loaded GGUF descriptor for ${JSON.stringify(descriptor.name)} differs from inspection`
-            )
-          }
-          validateTensor(runtime, descriptor, entry.tensor)
-          loaded.set(descriptor.name, entry.tensor)
-        }
-        const params = model.parameters.map((parameter) => loaded.get(parameter.name)!)
-        if (params.some((tensor) => tensor === undefined)) {
-          throw fail("validate", "loaded GGUF parameter bijection failed")
-        }
-        return { model, params, metadata: config } satisfies LoadedModel
-      })
-      return Effect.onExit(
-        validated,
-        (exit) => Exit.isFailure(exit) ? clearLoaded(runtime, entries) : Effect.void
+    if (architectureEntry?.value !== definition.architecture) {
+      return yield* fail(
+        "validate",
+        `GGUF general.architecture must be exactly ${JSON.stringify(definition.architecture)}`
       )
-    })
+    }
+    const config = yield* validateEffect(() => modelConfig(inspection, definition.architecture))
+    const model = yield* definition.create(config)
+    yield* validateEffect(() => validateCatalog(model.parameterSpecs, inspection.tensors))
+    const loaded = yield* loadArchive(path, runtime, inspection, model.parameterSpecs, config)
+    return { model, params: loaded.params, metadata: loaded.metadata }
   })

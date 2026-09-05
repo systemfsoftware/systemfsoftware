@@ -4,13 +4,12 @@ import { NodeRuntime } from "@effect/platform-node"
 import { Effect, Option } from "effect"
 import { BLOCK, CHECKPOINT, createGpt, EOT, loadParams, loadTokenizer } from "./model.js"
 
-// Batch-style FineWeb inference over a bare parameter artifact. `loadParams`
-// does not understand resumable Checkpoint keys; training archives must first
-// be converted with export.ts. Model.inference eagerly freezes parameters and
-// compiles fixed-shape chunked-prefill/decode programs backed by an 8,192-row
-// paged pool. The BLOCK attention window permits old KV blocks to be evicted,
-// while each completed decode is followed by full-vocabulary host readback for
-// sampling.
+// Runs batch-style FineWeb inference from a bare parameter artifact. `loadParams`
+// cannot read resumable Checkpoint keys. Convert training archives with
+// export.ts first. Model.inference freezes parameters and compiles fixed-shape
+// prefill and decode programs backed by an 8,192-row paged pool. The BLOCK
+// attention window allows eviction of old KV blocks. After each decode, the
+// script reads the full vocabulary back to the host for sampling.
 
 const TEMPERATURE = 0.8
 const MAX_NEW_TOKENS = 240
@@ -43,6 +42,7 @@ const program = Effect.scoped(Effect.gen(function*() {
   const inference = yield* Model.inference(model, params, {
     maxTokens: 8192,
     blockSize: 16,
+    prefillChunks: [16],
     attentionWindow: BLOCK
   })
   const prompts = [
@@ -54,11 +54,11 @@ const program = Effect.scoped(Effect.gen(function*() {
     const generated: Array<number> = []
     yield* Effect.scoped(Effect.gen(function*() {
       const gen = yield* Effect.acquireRelease(
-        inference.generation(),
+        inference.execution(),
         (gen) => Effect.ignore(gen.close())
       )
       const encoded = yield* tokenizer.encode(prompt)
-      const entry = yield* gen.add(yield* Tensor.fromTypedArray(encoded.data, [1, encoded.shape[0]]))
+      const entry = (yield* gen.add([yield* Tensor.fromTypedArray(encoded.data, [1, encoded.shape[0]])]))[0]!
       let logits = entry.logits
       for (let i = 0; i < MAX_NEW_TOKENS; i++) {
         const values = yield* Tensor.toNumberArray(logits).pipe(
@@ -78,4 +78,4 @@ const program = Effect.scoped(Effect.gen(function*() {
   }
 }))
 
-NodeRuntime.runMain(program.pipe(Effect.provide(BackendApple.layer)))
+NodeRuntime.runMain(program.pipe(Effect.provide(BackendApple.layer())))

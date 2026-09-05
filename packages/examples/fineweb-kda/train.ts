@@ -1,20 +1,21 @@
 import * as BackendApple from "@effect-torch/backend-apple-native"
-import { Checkpoint, LearningRate, Loss, Optimizer, Sampler, Tensor, Trainer } from "@effect-torch/core"
+import { Checkpoint, LearningRate, Loss, Model, Optimizer, Sampler, Tensor, Trainer } from "@effect-torch/core"
 import { NodeRuntime } from "@effect/platform-node"
 import { Duration, Effect } from "effect"
 import fs from "node:fs"
 import { BLOCK, CHECKPOINT, createKdaGpt, heldOutLoss, loadBin, loadTokenizer, saveParams, windows } from "./model.js"
 
-// FineWeb pilot training for the hybrid KDA model. Training uses the chunked
-// KDA forward/closed-form backward, while Model.inference later specializes the
-// same layers to per-sequence recurrent state. `CKPT` is a resumable archive;
-// `CHECKPOINT` is the final bare-parameter artifact used by generation.
+// FineWeb pilot training for the hybrid KDA model. Training uses the chunked KDA
+// forward pass and closed-form backward pass. Model.inference later converts the
+// same layers to recurrent state for each sequence. `CKPT` is a resumable
+// archive. `CHECKPOINT` is the final bare-parameter artifact that generation reads.
 //
-// The archive preserves parameters, AdamW roots, global step, and the remainder
-// of the sampler's current permutation. It does not preserve Math.random state
-// for future reshuffles or any model/optimizer/hyperparameter provenance.
-// FINEWEB_STEPS and FINEWEB_CHECKPOINT_EVERY are Number-parsed without explicit
-// finite/positive-integer validation.
+// The archive saves parameters, AdamW roots, the global step, and the unused
+// entries in the sampler's current permutation. It does not save Math.random
+// state for future reshuffles or the model, optimizer, and hyperparameter
+// settings used to create it.
+// The script parses FINEWEB_STEPS and FINEWEB_CHECKPOINT_EVERY with Number but
+// does not check that they are finite positive integers.
 
 const TRAIN_BIN = new URL("../data/fineweb-train.bin", import.meta.url).pathname
 const VAL_BIN = new URL("../data/fineweb-val.bin", import.meta.url).pathname
@@ -38,7 +39,7 @@ const program = Effect.gen(function*() {
 
   yield* Effect.log("1) creating model (hybrid KDA, NoPE attention layers)")
   const model = yield* createKdaGpt(tokenizer.vocabSize)
-  const params0 = yield* model.init
+  const params0 = yield* Model.initialize(model)
   const total = params0.reduce((sum, param) => sum + param.shape.reduce((a, b) => a * b, 1), 0)
   yield* Effect.log(`  total: ${total.toLocaleString()} parameters`)
 
@@ -113,4 +114,4 @@ const program = Effect.gen(function*() {
   yield* saveParams(model, params, CHECKPOINT)
 })
 
-NodeRuntime.runMain(program.pipe(Effect.provide(BackendApple.layer)))
+NodeRuntime.runMain(program.pipe(Effect.provide(BackendApple.layer())))
