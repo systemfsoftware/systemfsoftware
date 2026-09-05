@@ -45,6 +45,9 @@ export const LSP_LATE_DIAGNOSTIC_MESSAGE_TYPE = "lsp-late-diagnostic";
 export const BACKGROUND_TAN_DISPATCH_MESSAGE_TYPE = "background-tan-dispatch";
 export const PREWALK_PLAN_MESSAGE_TYPE = "prewalk-plan";
 
+/** Custom message type for the transient Vibe mode directive. */
+export const VIBE_MODE_CONTEXT_MESSAGE_TYPE = "vibe-mode-context";
+
 /**
  * Logs provider-error turns so their actual cause is available outside the
  * session transcript. No-op for non-error stop reasons.
@@ -247,6 +250,7 @@ function normalizeSessionMessageForProviderReplay(message: AgentMessage): unknow
 				output: message.output,
 				exitCode: message.exitCode,
 				cancelled: message.cancelled,
+				images: message.images ? normalizeProviderReplayValue(message.images) : undefined,
 				meta: message.meta
 					? {
 							truncation: normalizeProviderReplayValue(message.meta.truncation),
@@ -814,8 +818,8 @@ function stripImagesFromArrayContent(content: (TextContent | ImageContent)[]): S
 
 /**
  * Strip image content blocks from `message` in place. Returns the count of
- * images removed across `content` (every role that carries `ImageContent`) and
- * any tool-result `details.images` payload. Callers MUST rewrite session
+ * images removed across `content` (every role that carries `ImageContent`),
+ * manual Bash `images`, and any tool-result `details.images` payload. Callers MUST rewrite session
  * entries (`SessionManager.rewriteEntries`) and replay them through
  * `Agent.replaceMessages` afterwards so persisted state and provider-side
  * caches stay aligned with the mutated tree — `stripImagesFromMessage` is a
@@ -831,6 +835,11 @@ export function stripImagesFromMessage(message: AgentMessage): number {
 
 function stripImagesFromMessageContent(message: AgentMessage): number {
 	switch (message.role) {
+		case "bashExecution": {
+			const removed = message.images?.length ?? 0;
+			if (removed > 0) message.images = undefined;
+			return removed;
+		}
 		case "user":
 		case "developer":
 		case "custom":
@@ -932,6 +941,8 @@ export interface BashExecutionMessage {
 	exitCode: number | undefined;
 	cancelled: boolean;
 	truncated: boolean;
+	/** Images extracted from terminal graphics in the command's stdout. */
+	images?: ImageContent[];
 	meta?: OutputMeta;
 	timestamp: number;
 	/** If true, this message is excluded from LLM context (!! prefix) */
@@ -1099,6 +1110,18 @@ export function isUserInvokedSkillPrompt(message: CustomMessage): boolean {
 	return message.customType === SKILL_PROMPT_MESSAGE_TYPE && message.attribution === "user";
 }
 
+/**
+ * True for a custom message that initiates a user-attributed turn: a directly
+ * invoked `/skill:` prompt or a writable-collab peer's prompt. Agent redirects,
+ * reminders, and auto-continues are not turn starts.
+ */
+export function isUserTurnInitiator(message: CustomMessage): boolean {
+	return (
+		isUserInvokedSkillPrompt(message) ||
+		(message.customType === COLLAB_PROMPT_MESSAGE_TYPE && message.attribution === "user")
+	);
+}
+
 function convertImageBearingCustomMessage(message: CustomMessage | HookMessage): Message[] | undefined {
 	if (!isCustomMessageContent(message.content)) return undefined;
 	if (typeof message.content === "string") return undefined;
@@ -1184,7 +1207,7 @@ function convertOne(m: AgentMessage, interruptedNext: boolean): Message[] {
 			return [
 				{
 					role: "user",
-					content: [{ type: "text", text: bashExecutionToText(m) }],
+					content: [{ type: "text", text: bashExecutionToText(m) }, ...(m.images ?? [])],
 					attribution: "user",
 					timestamp: m.timestamp,
 				},
