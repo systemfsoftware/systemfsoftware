@@ -1,0 +1,22 @@
+#!/usr/bin/env sh
+# Skip during a merge: the staged set is the merge result, not authored work.
+if [ -e "$(git rev-parse --git-path MERGE_HEAD)" ]; then
+  exit 0
+fi
+
+# Skip for pure repos/ subtree commits and the subtrees.toml registration commit.
+if git diff --cached --name-only | grep -qvE '^(repos/.*|subtrees\.toml)$'; then
+  # Format staged files that are ours (skip vendored repos/)
+  staged=$(git diff --cached --name-only --diff-filter=ACMR | grep -vE '^repos/' | tr '\n' ' ')
+  if [ -n "$staged" ]; then
+    # dprint on staged non-vendored files
+    echo "$staged" | xargs dprint fmt --allow-no-files -- 2>/dev/null || true
+    # deno lint on staged TS/JS files (commitlint config excluded via deno.json)
+    lint_staged=$(echo "$staged" | tr ' ' '\n' | grep -E '\.(ts|tsx|js|jsx|mjs|cjs)$' | grep -vE 'commitlint\.config\.ts' | tr '\n' ' ')
+    if [ -n "$lint_staged" ]; then
+      echo "$lint_staged" | xargs deno lint 2>/dev/null || true
+    fi
+    # re-add formatted files
+    echo "$staged" | xargs git add -- 2>/dev/null || true
+  fi
+fi

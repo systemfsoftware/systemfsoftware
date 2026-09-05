@@ -4,12 +4,11 @@ import * as Tokenizer from "@effect-torch/tokenizers"
 import { NodeRuntime } from "@effect/platform-node"
 import { Duration, Effect, Option } from "effect"
 
-// End-to-end GPT lifecycle on a small in-memory corpus: train a Unigram
-// tokenizer, construct a pre-norm RoPE transformer, train one compiled step
-// signature, then freeze the learned parameters into fixed-shape prefill and
-// decode artifacts. Inference uses a fixed 4,096-row paged pool; limiting every
-// attention layer to BLOCK cached positions permits eviction and lets the
-// logical cursor advance beyond pool capacity, subject to eventual EOS.
+// Trains a Unigram tokenizer and pre-norm RoPE transformer on a small in-memory
+// corpus, then freezes the learned parameters for compiled prefill and decode.
+// Inference uses a 4,096-row paged pool and caches at most BLOCK positions per
+// attention layer, so the logical cursor can advance past pool capacity until
+// EOS.
 
 const CORPUS = `Shall I compare thee to a summer's day?
 Thou art more lovely and more temperate:
@@ -158,8 +157,8 @@ const createTrainer = (model: Model.Model, data: ReadonlyArray<number>) =>
 
 const init = (model: Model.Model) =>
   Effect.gen(function*() {
-    const params = yield* model.init
-    for (const [i, name] of model.names.entries()) {
+    const params = yield* Model.initialize(model)
+    for (const [i, { name }] of model.parameterSpecs.entries()) {
       yield* Effect.log(`  ${name} [${params[i].shape}] ${params[i].dtype} initialized`)
     }
     const total = params.reduce((sum, param) => sum + param.shape.reduce((a, b) => a * b, 1), 0)
@@ -180,7 +179,7 @@ const generate = (
     const bosId = Option.getOrThrow(tokenizer.tokenToId(BOS))
     const eosId = Option.getOrThrow(tokenizer.tokenToId(EOS))
     const promptIds = Array.from((yield* tokenizer.encode(prompt)).data)
-    const gen = yield* program.generation()
+    const gen = yield* program.execution()
     const sample = (logits: Tensor.Any) =>
       Effect.gen(function*() {
         const row = yield* Tensor.toNumberArray(logits)
@@ -195,7 +194,7 @@ const generate = (
         }
         return exps.length - 1
       })
-    const entry = yield* gen.add(yield* ids([bosId, ...promptIds], [1, 1 + promptIds.length]))
+    const entry = (yield* gen.add([yield* ids([bosId, ...promptIds], [1, 1 + promptIds.length])]))[0]!
     let logits = entry.logits
     const generated: Array<number> = []
     for (;;) {
@@ -240,7 +239,7 @@ const program = Effect.gen(function*() {
 
   yield* Effect.log("1) creating model")
   const model = yield* createGpt(vocabSize)
-  yield* Effect.log(`${model.names.length} tensors of parameters`)
+  yield* Effect.log(`${model.parameterSpecs.length} tensors of parameters`)
   const params0 = yield* init(model)
 
   yield* Effect.log(`2) training: adamW lr=${LR}, ${STEPS} steps (compiled)`)
@@ -252,6 +251,7 @@ const program = Effect.gen(function*() {
   const inference = yield* Model.inference(model, params, {
     maxTokens: 4096,
     blockSize: 16,
+    prefillChunks: [16],
     attentionWindow: BLOCK
   })
   const prompts = [
@@ -266,4 +266,4 @@ const program = Effect.gen(function*() {
   }
 })
 
-NodeRuntime.runMain(program.pipe(Effect.provide(BackendApple.layer)))
+NodeRuntime.runMain(program.pipe(Effect.provide(BackendApple.layer())))

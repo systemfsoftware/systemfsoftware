@@ -104,6 +104,8 @@ export function installDependencyGraphMocks(reverseIndex: ReverseIndexImpl): {
   patchSpy: ReturnType<typeof vi.fn>;
   buildSpy: ReturnType<typeof vi.fn>;
 } {
+  // Default patch "moves" the reverse index (bump revision, leave contents empty) so engine
+  // tests that do not customize the spy still exercise the indexChanged mirror path.
   const patchSpy = vi.fn(async () => {
     reverseIndex.record('/__patch_touch__', '/__patch_touch__', 0);
     reverseIndex.removeStory('/__patch_touch__');
@@ -141,6 +143,14 @@ export function registerTestModuleGraphService(workingDir = process.cwd()) {
       commands: {
         _waitForSettledEngine: {
           handler: async () => undefined,
+        },
+        _waitForChangeDetectionReadiness: {
+          handler: async (_input, ctx) => {
+            ctx.self.setState((state) => {
+              state.changeDetectionReadiness = { status: 'ready' };
+            });
+            return { status: 'ready' as const };
+          },
         },
       },
     }

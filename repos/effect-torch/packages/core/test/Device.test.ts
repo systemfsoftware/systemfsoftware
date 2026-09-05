@@ -20,7 +20,9 @@ layer(BackendCpu.layer)("Runtime", (it) => {
     it.effect("rejects foreign lazy and concrete tensor handles", () =>
       Effect.gen(function*() {
         const cpu = yield* Runtime.Runtime
-        const apple = BackendApple.makeRuntime()
+        const apple = yield* Effect.provide(Runtime.Runtime, BackendApple.layer())
+        expect(apple.placement).toMatchObject({ id: "metal:0", deviceType: "metal", ordinal: 0 })
+        expect(yield* Effect.provide(Runtime.Runtime, BackendApple.layer())).toBe(apple)
         const graph = yield* cpu.node({
           op: "ones",
           inputs: [],
@@ -38,7 +40,7 @@ layer(BackendCpu.layer)("Runtime", (it) => {
 
     it.effect("rejects foreign tensors during graph construction", () =>
       Effect.gen(function*() {
-        const tensor = yield* Effect.provide(Tensor.ones([1]), BackendApple.layer)
+        const tensor = yield* Effect.provide(Tensor.ones([1]), BackendApple.layer())
         const error = yield* Effect.flip(Tensor.relu(tensor))
         expect(error.backend?.reason).toBe("foreign-handle")
       }))
@@ -82,6 +84,7 @@ layer(BackendCpu.layer)("Runtime", (it) => {
 
   it.effect("clearAll ignores invalid handles and continues", () =>
     Effect.gen(function*() {
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- SAFETY: This intentionally crosses the wrong-kind test boundary.
       const invalid = (yield* Tensor.ones([1])) as unknown as Tensor.Concrete
       const second = (yield* Tensor.compute([yield* Tensor.zeros([1])]))[0]
       yield* Tensor.clearAll([invalid, second])
@@ -89,21 +92,21 @@ layer(BackendCpu.layer)("Runtime", (it) => {
       expect(secondError.message).toContain("cleared")
     }))
 
-  it.effect("memoizes the runtime service", () =>
+  it.effect("provides the cached runtime service", () =>
     Effect.gen(function*() {
       const runtime = yield* Runtime.Runtime
-      expect(BackendCpu.makeRuntime()).toBe(runtime)
-      expect(BackendCpu.makeRuntime()).toBe(runtime)
+      const independentlyProvided = yield* Effect.provide(Runtime.Runtime, BackendCpu.layer)
+      expect(independentlyProvided).toBe(runtime)
     }))
 })
 
 test.effect("the memoized runtime reuses compiled caches", () =>
   Effect.gen(function*() {
-    // Tensor.compile keys native artifacts by runtime identity. makeRuntime must
-    // return the same service object for separately provided layers to share it.
+    // Tensor.compile keys native artifacts by runtime identity. Independent
+    // provisions of the backend Layer must share the cached service object.
     const compiled = yield* Tensor.compile((inputs) => Effect.map(Tensor.relu(inputs[0]), (output) => [output]))
-    const firstRuntime = BackendCpu.makeRuntime()
-    const secondRuntime = BackendCpu.makeRuntime()
+    const firstRuntime = yield* Effect.provide(Runtime.Runtime, BackendCpu.layer)
+    const secondRuntime = yield* Effect.provide(Runtime.Runtime, BackendCpu.layer)
     expect(secondRuntime).toBe(firstRuntime)
     const FirstCpu = Layer.succeed(Runtime.Runtime, firstRuntime)
     const SecondCpu = Layer.succeed(Runtime.Runtime, secondRuntime)

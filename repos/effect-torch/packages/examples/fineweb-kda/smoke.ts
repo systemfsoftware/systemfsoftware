@@ -1,8 +1,8 @@
-// Checkpoint-free plumbing smoke test: random initialized weights exercise
-// chunked prefill and eight stateful recurrent/KV advances. Each logits row used
-// to choose an advance must be finite. This validates inference specialization
-// and state updates, not model quality; generate.ts separately requires a bare
-// trained-parameter artifact.
+// Inference smoke test that does not need a checkpoint. Randomly initialized
+// weights run chunked prefill and eight stateful recurrent/KV decode steps. Each
+// logits row used to choose the next token must contain only finite values. This
+// checks inference specialization and state updates, not model quality.
+// generate.ts requires a trained bare-parameter artifact.
 import * as BackendApple from "@effect-torch/backend-apple-native"
 import { Model, Tensor } from "@effect-torch/core"
 import { NodeRuntime } from "@effect/platform-node"
@@ -12,21 +12,22 @@ import { createKdaGpt, loadTokenizer } from "./model.js"
 const program = Effect.scoped(Effect.gen(function*() {
   const tokenizer = yield* loadTokenizer
   const model = yield* createKdaGpt(tokenizer.vocabSize)
-  const params = yield* Tensor.compute(yield* model.init)
+  const params = yield* Tensor.compute(yield* Model.initialize(model))
   yield* Tensor.clearAllScoped(params)
   const total = params.reduce((sum, p) => sum + p.shape.reduce((a, b) => a * b, 1), 0)
   yield* Effect.log(`params: ${total.toLocaleString()}`)
   const inference = yield* Model.inference(model, params, {
     maxTokens: 1024,
     blockSize: 16,
+    prefillChunks: [16],
     attentionWindow: 256
   })
   const gen = yield* Effect.acquireRelease(
-    inference.generation(),
+    inference.execution(),
     (gen) => Effect.ignore(gen.close())
   )
   const encoded = yield* tokenizer.encode("The history of the printing press")
-  const entry = yield* gen.add(yield* Tensor.fromTypedArray(encoded.data, [1, encoded.shape[0]]))
+  const entry = (yield* gen.add([yield* Tensor.fromTypedArray(encoded.data, [1, encoded.shape[0]])]))[0]!
   let logits = entry.logits
   for (let i = 0; i < 8; i++) {
     const vals = yield* Tensor.toNumberArray(logits).pipe(
@@ -42,4 +43,4 @@ const program = Effect.scoped(Effect.gen(function*() {
   yield* Tensor.clear(logits)
   yield* Effect.log("smoke ok")
 }))
-NodeRuntime.runMain(program.pipe(Effect.provide(BackendApple.layer)))
+NodeRuntime.runMain(program.pipe(Effect.provide(BackendApple.layer())))

@@ -157,7 +157,8 @@ onDevices("Compile", (device) => (it) => {
         const x = yield* Tensor.fromTypedArray(floats([1, -2]), [2])
         const y = yield* Tensor.fromTypedArray(new BigInt64Array([3n, -4n]), [2])
         expect(yield* values((yield* fn.call([x]))[0])).toEqual([1, 0])
-        const ints = (yield* Tensor.toTypedArray((yield* fn.call([y]))[0])) as BigInt64Array
+        const ints = yield* Tensor.toTypedArray((yield* fn.call([y]))[0])
+        if (!(ints instanceof BigInt64Array)) throw new Error("i64 readback must use BigInt64Array")
         expect(Array.from(ints)).toEqual([3n, 0n])
         expect(yield* fn.stats).toEqual({ cached: 2, compiled: 2 })
       }))
@@ -230,7 +231,7 @@ onDevices("Compile", (device) => (it) => {
     it.effect("execute matches forward bitwise", () =>
       Effect.gen(function*() {
         const model = yield* mlp
-        const params = yield* Tensor.compute(yield* model.init)
+        const params = yield* Tensor.compute(yield* Model.initialize(model))
         const x = yield* Tensor.fromTypedArray(floats([0, 1, 1, 0]), [2, 2])
         const [expected] = yield* Tensor.compute([yield* model.forward(params, x)])
         const actual = yield* model.execute(params, x)
@@ -241,7 +242,7 @@ onDevices("Compile", (device) => (it) => {
     it.effect("recompiles on a batch-shape change and serves concurrent calls", () =>
       Effect.gen(function*() {
         const model = yield* mlp
-        const params = yield* Tensor.compute(yield* model.init)
+        const params = yield* Tensor.compute(yield* Model.initialize(model))
         const x2 = yield* Tensor.fromTypedArray(floats([0, 1, 1, 0]), [2, 2])
         const x4 = yield* Tensor.fromTypedArray(floats([0, 0, 0, 1, 1, 0, 1, 1]), [4, 2])
         const [a, b] = yield* Effect.all(
@@ -256,7 +257,7 @@ onDevices("Compile", (device) => (it) => {
     it.effect("forward stays a graph builder: it differentiates and composes", () =>
       Effect.gen(function*() {
         const model = yield* mlp
-        const params = yield* Tensor.compute(yield* model.init)
+        const params = yield* Tensor.compute(yield* Model.initialize(model))
         const x = yield* Tensor.fromTypedArray(floats([0, 1, 1, 0]), [2, 2])
         const y = yield* Tensor.fromTypedArray(floats([1, 0]), [2, 1])
         const loss = yield* Loss.mse(yield* model.forward(params, x), y)
@@ -274,7 +275,7 @@ onDevices("Compile", (device) => (it) => {
     it.effect("clear releases the forward programs", () =>
       Effect.gen(function*() {
         const model = yield* mlp
-        const params = yield* Tensor.compute(yield* model.init)
+        const params = yield* Tensor.compute(yield* Model.initialize(model))
         const x = yield* Tensor.fromTypedArray(floats([0, 1, 1, 0]), [2, 2])
         yield* model.execute(params, x)
         expect((yield* model.stats).cached).toBe(1)
@@ -287,7 +288,7 @@ onDevices("Compile", (device) => (it) => {
         const model = yield* mlp
         const input = yield* Tensor.fromTypedArray(floats([0, 1, 1, 0]), [2, 2])
         const target = yield* Tensor.fromTypedArray(floats([1, 0]), [2, 1])
-        const initial = yield* Tensor.compute(yield* model.init)
+        const initial = yield* Tensor.compute(yield* Model.initialize(model))
         const config: Trainer.TrainConfig<Optimizer.SgdState, Tensor.TensorError> = {
           optimizer: yield* Optimizer.sgd(),
           lr: LearningRate.constant(0.1),

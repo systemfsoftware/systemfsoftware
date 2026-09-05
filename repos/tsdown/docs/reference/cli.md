@@ -11,7 +11,9 @@ The mapping between CLI flags and configuration options follows these rules:
 - `--foo.bar` sets `foo: { bar: true }`
 - `--format esm --format cjs` sets `format: ['esm', 'cjs']`
 
-CLI flags support both camelCase and kebab-case. For example, `--outDir` and `--out-dir` are equivalent.
+CLI flags support both camelCase and kebab-case. For example, `--outDir` and `--out-dir` are equivalent. Nested keys follow the same rule, so `--deps.never-bundle` and `--deps.neverBundle` are equivalent as well.
+
+Options whose keys are defined by you — `--env.*`, `--define.*`, `--alias.*`, `--entry.*` and `--loader.*` — are the exception: their keys are used exactly as written.
 
 This flexible pattern allows you to easily control and override configuration options directly from the command line.
 
@@ -33,7 +35,7 @@ See also [Config File](../options/config-file.md).
 
 ## `--config-loader <loader>`
 
-Specifies which config loader to use.
+Specifies which config loader to use: `auto` (default), `native`, `tsx`, or `unrun`.
 
 See also [Config File](../options/config-file.md).
 
@@ -51,7 +53,7 @@ Specify the path or filename of your `tsconfig` file. `tsdown` will search upwar
 tsdown --tsconfig tsconfig.build.json
 ```
 
-## `--format <format>`
+## `-f, --format <format>`
 
 Define the bundle format. Supported formats include:
 
@@ -64,19 +66,13 @@ See also [Output Format](../options/output-format.md).
 
 ## `--clean`
 
-Clean the output directory before building. This removes all files in the output directory to ensure a fresh build.
+Clean the output directory before building. This removes all files in the output directory to ensure a fresh build. Enabled by default; use `--no-clean` to disable.
 
 See also [Cleaning](../options/cleaning.md).
 
 ## `--deps.never-bundle <module>`
 
 Mark a module as external. This prevents the specified module from being included in the bundle.
-
-See also [Dependencies](../options/dependencies.md).
-
-## `--deps.skip-node-modules-bundle`
-
-Skip resolving and bundling all dependencies from `node_modules`.
 
 See also [Dependencies](../options/dependencies.md).
 
@@ -107,25 +103,23 @@ You can also disable all syntax transformations by using `--no-target` or by set
 
 See also [Target](../options/target.md).
 
-## `--log-level <level>`
+## `-l, --log-level <level>`
 
-Set the log level to control the verbosity of logs during the build process.
+Set the log level to control the verbosity of logs during the build process. Available levels: `info`, `warn`, `error`, `silent`.
 
 See also [Log Level](../options/log-level.md).
-
-### ~~`--silent`~~
-
-::: warning Deprecated
-Please use `--log-level error` instead.
-:::
-
-Suppress non-error logs during the build process. Only error messages will be displayed.
 
 ## `-d, --out-dir <dir>`
 
 Specify the output directory for the bundled files. Use this option to customize where the output files are written.
 
 See also [Output Directory](../options/output-directory.md).
+
+## `--root <dir>`
+
+Specify the root directory of input files.
+
+See also [Root Directory](../options/root.md).
 
 ## `--treeshake`, `--no-treeshake`
 
@@ -197,6 +191,10 @@ See also [Extending Vite or Vitest Config](../options/config-file.md#extending-v
 
 Enable or disable the generation of a build report. By default, the report is enabled and outputs the list of build artifacts along with their sizes to the console. This provides a quick overview of the build results, helping you analyze the output and identify potential optimizations. Disabling the report can be useful in scenarios where minimal console output is desired.
 
+## `--devtools`
+
+Enable Vite DevTools integration for bundle analysis.
+
 ## `--env.* <value>`
 
 Define compile-time environment variables, for example:
@@ -251,19 +249,11 @@ tsdown --copy public
 
 All contents of the `public` directory will be copied to your output directory (e.g., `dist`).
 
-## `--public-dir <dir>`
-
-::: warning Deprecated
-Please use `--copy` instead.
-:::
-
-An alias for `--copy`.
-
 ## `--exe`
 
 **[experimental]** Bundle as a standalone executable using [Node.js Single Executable Applications](https://nodejs.org/api/single-executable-applications.html).
 
-This will bundle the output into a single executable file. Requires Node.js 25.7.0 or later, and is not supported in Bun or Deno. Cross-platform builds are supported via the `@tsdown/exe` package.
+This will bundle the output into a single executable file. Requires Node.js 25.7.0 or later (in practice Node.js 26+, since tsdown itself does not support Node.js 25), and is not supported in Bun or Deno. Cross-platform builds are supported via the `@tsdown/exe` package.
 
 When `exe` is enabled:
 
@@ -279,7 +269,7 @@ Enable workspace mode for building multiple packages in a monorepo. Optionally s
 
 ## `--concurrency <count>`
 
-Maximum number of Rolldown builds to run in parallel. Defaults to unlimited.
+Maximum number of Rolldown builds to run in parallel. Defaults to unlimited. Not supported in watch mode, where it is ignored.
 
 ## `-F, --filter <pattern>`
 
@@ -296,6 +286,10 @@ See also [Unbundle](../options/unbundle.md).
 Fail the build when warnings are encountered. Enabled by default.
 
 See also [CI Environment](../advanced/ci.md).
+
+## `--no-write`
+
+Disable writing output files to disk. Incompatible with watch mode.
 
 ## `--exports`
 

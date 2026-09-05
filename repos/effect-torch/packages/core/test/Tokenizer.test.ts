@@ -83,6 +83,22 @@ describe("Tokenizer", () => {
         expect(tokenizer.vocabSize).toBeGreaterThan(256)
       }))
 
+    it.effect("incrementally decodes Unicode and skips special tokens", () =>
+      Effect.gen(function*() {
+        const tokenizer = yield* trainBpe()
+        const encoded = yield* tokenizer.encode("hello cafe — こんにちは 😁")
+        const special = Option.getOrThrow(tokenizer.tokenToId("<|endoftext|>"))
+        const ids = Array.from(encoded.data)
+        ids.splice(Math.floor(ids.length / 2), 0, special)
+        const expected = yield* tokenizer.decode(ids, { skipSpecialTokens: true })
+        const decoder = tokenizer.decodeStream({ skipSpecialTokens: true })
+        let actual = ""
+        for (const id of ids) {
+          actual += (yield* decoder.step(id)) ?? ""
+        }
+        expect(actual).toBe(expected)
+      }))
+
     it.effect("trains from files; save and fromFile/fromJson preserve encoding exactly", () =>
       Effect.gen(function*() {
         const dir = yield* tmpdir
@@ -219,8 +235,8 @@ describe("Tokenizer", () => {
   })
 
   describe("training progress", () => {
-    // No waiting needed: the final (total, total) event is posted when the
-    // feed iterator exhausts — before the merge phase, so all progress
+    // No waiting is needed. The feed iterator posts the final (total, total)
+    // event before the merge phase, so all progress
     // callbacks are queued on the event loop ahead of train's resolution.
     it.effect("reports throttled byte progress ending at (total, total)", () =>
       Effect.gen(function*() {

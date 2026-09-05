@@ -213,19 +213,26 @@ export async function assertAcceptsAllTypeScriptExtensions(): Promise<void> {
 }
 
 /**
- * Asserts `shouldTransform` rejects declaration files and non-TypeScript
- * extensions (`.d.ts`/`.d.mts`, `.js`/`.jsx`, `.json`, `.css`): they pass
- * straight through to the upstream transformer.
+ * Asserts `shouldTransform` rejects every neighboring non-source spelling,
+ * declaration form, virtual id, and dependency path through the shared gate.
  */
 export async function assertRejectsNonTypeScriptExtensions(): Promise<void> {
   const mod = await TestMetroRuntime.loadFreshTransformer();
   for (const file of [
     "/p/a.d.ts",
     "/p/a.d.mts",
+    "/p/a.d.cts",
+    "/p/a.d.css.ts",
     "/p/a.js",
     "/p/a.jsx",
+    "/p/a.mjs",
+    "/p/a.cjs",
+    "/p/a.mtsx",
+    "/p/a.ctsx",
     "/p/a.json",
     "/p/a.css",
+    "/p/node_modules/pkg/a.ts",
+    "\0virtual.ts",
   ]) {
     assert.equal(mod.shouldTransform(file, resolvedOptions()), false, file);
   }
@@ -365,20 +372,90 @@ export async function assertCacheKeySurvivesThrowingUpstreamCacheKey(): Promise<
  * swallow path). Requires the native compiler → CI-only.
  */
 export async function assertOutsideProjectFilePassesThrough(): Promise<void> {
-  const root = TestUnpluginProject.createProject();
+  const root = createBareProject();
+  const externalProject = TestUnpluginProject.createProject();
   const src = "export const value: number = 1;\n";
-  fs.mkdirSync(path.join(root, "outside"), { recursive: true });
-  fs.writeFileSync(path.join(root, "outside", "stray.ts"), src, "utf8");
+  const stray = path.join(externalProject, "scripts", "stray.ts");
+  fs.mkdirSync(path.dirname(stray), { recursive: true });
+  fs.writeFileSync(stray, src, "utf8");
+  const options = fakeUpstreamOptions();
+  const runId = await prepareSnapshot(root);
+  const before = await TestMetroRuntime.withTransformerEnv(
+    options,
+    (mod) => mod.getCacheKey({ projectRoot: root }),
+    runId,
+  );
   const result = await TestMetroRuntime.runTransform({
-    options: fakeUpstreamOptions(),
+    options,
     params: {
       src,
-      filename: "outside/stray.ts",
+      filename: stray,
       options: { projectRoot: root },
     },
+    snapshotRunId: runId,
   });
   assert.equal(result.ast.__fakeUpstream, true);
   assert.equal(result.ast.src, src);
+
+  const snapshotDirectory = path.join(
+    root,
+    "node_modules",
+    ".cache",
+    "ttsc-metro",
+  );
+  const worker = JSON.parse(
+    fs.readFileSync(
+      fs
+        .readdirSync(snapshotDirectory)
+        .map((name) => path.join(snapshotDirectory, name))
+        .find((file) =>
+          path.basename(file).startsWith("graph-inputs.worker-"),
+        )!,
+      "utf8",
+    ),
+  ) as { files: string[]; tainted: boolean };
+  assert.equal(
+    worker.tainted,
+    true,
+    "a pass-through outside the static project map must rotate the snapshot epoch",
+  );
+  assert.ok(
+    worker.files.includes(path.join(externalProject, "tsconfig.json")) &&
+      worker.files.includes(
+        path.join(externalProject, "scripts", "tsconfig.json"),
+      ),
+    "the pass-through must retain its external config and every project-selection candidate",
+  );
+
+  await prepareSnapshot(root);
+  const guardedRunId = await prepareSnapshot(root);
+  const guardedBeforeEdit = await TestMetroRuntime.withTransformerEnv(
+    options,
+    (mod) => mod.getCacheKey({ projectRoot: root }),
+    guardedRunId,
+  );
+  assert.notEqual(
+    before,
+    guardedBeforeEdit,
+    "the tainted pass-through run must be isolated under a fresh epoch",
+  );
+  const configPath = path.join(externalProject, "tsconfig.json");
+  const config = JSON.parse(fs.readFileSync(configPath, "utf8")) as {
+    include?: string[];
+  };
+  config.include = ["src", "scripts"];
+  fs.writeFileSync(configPath, JSON.stringify(config), "utf8");
+  const nextRunId = await prepareSnapshot(root);
+  const after = await TestMetroRuntime.withTransformerEnv(
+    options,
+    (mod) => mod.getCacheKey({ projectRoot: root }),
+    nextRunId,
+  );
+  assert.notEqual(
+    guardedBeforeEdit,
+    after,
+    "including a formerly passed-through external module must invalidate its cached upstream result",
+  );
 }
 
 /**
@@ -399,10 +476,10 @@ export async function assertGenuineCompileErrorPropagates(): Promise<void> {
       },
     }),
     // Load-bearing: must reject with the actual plugin error (mentions
-    // goUpper), not the out-of-project swallow string, and not a vacuous
-    // environment failure.
-    (error: Error) =>
-      /goUpper/.test(error.message) &&
-      !/did not return output/.test(error.message),
+    // goUpper) rather than a vacuous environment failure. A module the program
+    // does not contain no longer reaches this path at all: the shared core
+    // returns `undefined` for it, so there is no swallow string left to
+    // distinguish from a real failure (samchon/ttsc#1308).
+    (error: Error) => /goUpper/.test(error.message),
   );
 }

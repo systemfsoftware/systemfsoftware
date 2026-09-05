@@ -1,0 +1,21 @@
+{
+  "name": "@systemfsoftware/omp-plugin-constitution",
+  "version": "0.1.0",
+  "description": "OMP Plugin providing Time-Traveling Stream Rules (TTSR) enforcing strict adherence to the Supreme Engineering Constitution.",
+  "author": {
+    "name": "systemfsoftware",
+    "url": "https://systemfsoftware.com"
+  },
+  "homepage": "https://github.com/systemfsoftware/constitution",
+  "repository": "https://github.com/systemfsoftware/constitution",
+  "license": "Apache-2.0",
+  "keywords": [
+    "omp",
+    "plugin",
+    "constitution",
+    "rules",
+    "ttsr",
+    "architecture",
+    "clean-code"
+  ]
+}

@@ -4,6 +4,7 @@ import {
   TestUnpluginRuntime,
 } from "@ttsc/testing";
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -590,7 +591,8 @@ async function assertPersistentUtilityConfigLinkRetargetInvalidatesTransform() {
     { addWatchFile: (input: string) => watched.push(input) },
   );
   assert.ok(first);
-  assert.match(first.code, /OLD LINK TARGET/);
+  assert.match(first.code, /NEW LINK TARGET/);
+  assert.doesNotMatch(first.code, /OLD LINK TARGET/);
   assert.ok(
     watched.includes(path.join(link, "selection.cjs")),
     "watch registration must preserve the lexical link spelling",
@@ -605,11 +607,15 @@ async function assertPersistentUtilityConfigLinkRetargetInvalidatesTransform() {
     cache,
   );
   assert.ok(second);
-  assert.notEqual([...cache.values()][0], firstGeneration);
+  assert.equal(
+    [...cache.values()][0],
+    firstGeneration,
+    "the first request must discard the raced output and retain its stable retry",
+  );
   assert.match(second.code, /NEW LINK TARGET/);
   assert.doesNotMatch(second.code, /OLD LINK TARGET/);
 
-  const secondGeneration = [...cache.values()][0]!;
+  const secondGeneration = firstGeneration!;
   const secondGenerationState = await secondGeneration;
   assert.equal(secondGenerationState.result.type, "success");
   const linkedSelection = path.join(link, "selection.cjs");
@@ -636,8 +642,12 @@ async function assertPersistentUtilityConfigLinkRetargetInvalidatesTransform() {
   );
   assert.ok(third);
   assert.notEqual([...cache.values()][0], secondGeneration);
-  assert.match(third.code, /OLD LINK TARGET/);
-  assert.doesNotMatch(third.code, /NEW LINK TARGET/);
+  assert.match(third.code, /NEW LINK TARGET/);
+  assert.doesNotMatch(
+    third.code,
+    /OLD LINK TARGET/,
+    "the invalidated generation must also discard its raced old-target output",
+  );
 }
 
 /** Assert Node's inherited NODE_PATH ordering contributes missing candidates. */
@@ -1097,11 +1107,13 @@ async function assertUnrelatedFileInAProbedDirectoryKeepsTheGeneration() {
  * generation is refused on every delivery for the rest of its life, which is
  * the shape samchon/ttsc#1245 was filed for.
  *
- * 1. Compile a package whose config directory also carries a _directory_ named
- *    `banner.config.ts`.
- * 2. Assert that path reached the envelope, so the case is about how it was
- *    recorded rather than about it being dropped.
- * 3. Deliver again and assert the generation object is the same one.
+ * 1. Compile through an outer config while a nearer `banner.config.json` candidate
+ *    is a directory.
+ * 2. Require that directory's digest and physical identity in a complete envelope,
+ *    then deliver again and retain the same generation.
+ * 3. Replace the directory with a real nearer config and require one new
+ *    generation with the nearer banner.
+ * 4. Deliver once more and retain that replacement generation.
  */
 async function assertDirectoryShapedConfigCandidateKeepsTheGeneration() {
   const { createTtscTransformCache, resolveOptions, transformTtsc } =
@@ -1111,9 +1123,10 @@ async function assertDirectoryShapedConfigCandidateKeepsTheGeneration() {
     plugin: "banner",
     source: 'export const value: string = "kept";\n',
   });
-  // Beside the config the walk settles on, so the search reaches it, rejects
-  // it, and reports it from the directory it stopped in.
-  const directory = path.join(path.dirname(middle), "banner.config.ts");
+  // One level nearer than the config the walk settles on. The search rejects
+  // the directory on its way outward, and replacing it with a file must later
+  // supersede the outer config rather than merely change an inert neighbour.
+  const directory = path.join(middle, "banner.config.json");
   fs.mkdirSync(directory, { recursive: true });
 
   const file = path.join(root, "src", "main.ts");
@@ -1130,13 +1143,37 @@ async function assertDirectoryShapedConfigCandidateKeepsTheGeneration() {
   assert.match(first.code, /OUTER BANNER/);
   const firstGeneration = [...cache.values()][0];
   const cached = (await firstGeneration!) as {
-    result?: { hostInputs?: string[] };
+    projectSnapshotComplete?: boolean;
+    result?: {
+      hostInputHashes?: Record<string, string | null>;
+      hostInputRealpaths?: Record<string, string | null>;
+      hostInputs?: string[];
+    };
   };
+  const absoluteDirectory = path.resolve(directory);
   assert.ok(
     cached.result?.hostInputs?.some(
       (input) => path.resolve(input) === path.resolve(directory),
     ),
     `the directory-shaped candidate is missing from the envelope: ${JSON.stringify(cached.result?.hostInputs ?? [])}`,
+  );
+  assert.equal(
+    cached.result?.hostInputHashes?.[absoluteDirectory],
+    crypto
+      .createHash("sha256")
+      .update("ttsc:host-input:directory\0")
+      .digest("hex"),
+    "the directory-shaped candidate must carry the directory-kind digest",
+  );
+  assert.equal(
+    cached.result?.hostInputRealpaths?.[absoluteDirectory],
+    fs.realpathSync.native(directory),
+    "descriptor and linked-host observations must agree on the physical directory",
+  );
+  assert.equal(
+    cached.projectSnapshotComplete,
+    true,
+    "the directory-shaped candidate must leave a reusable generation snapshot",
   );
 
   const second = await transformTtsc(
@@ -1153,6 +1190,44 @@ async function assertDirectoryShapedConfigCandidateKeepsTheGeneration() {
     "a directory wearing a config name must not make the generation unreusable",
   );
   assert.match(second.code, /OUTER BANNER/);
+
+  fs.rmSync(directory, { recursive: true });
+  fs.writeFileSync(
+    directory,
+    JSON.stringify({ text: "NEARER BANNER" }),
+    "utf8",
+  );
+  const third = await transformTtsc(
+    file,
+    source,
+    resolveOptions(),
+    undefined,
+    cache,
+  );
+  assert.ok(third);
+  const replacementGeneration = [...cache.values()][0];
+  assert.notEqual(
+    replacementGeneration,
+    firstGeneration,
+    "replacing the directory candidate with a config file must replace the generation",
+  );
+  assert.match(third.code, /NEARER BANNER/);
+  assert.doesNotMatch(third.code, /OUTER BANNER/);
+
+  const fourth = await transformTtsc(
+    file,
+    source,
+    resolveOptions(),
+    undefined,
+    cache,
+  );
+  assert.ok(fourth);
+  assert.equal(
+    [...cache.values()][0],
+    replacementGeneration,
+    "the replacement config must compile exactly one new reusable generation",
+  );
+  assert.match(fourth.code, /NEARER BANNER/);
 }
 
 /**

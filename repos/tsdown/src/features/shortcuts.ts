@@ -1,17 +1,17 @@
 import process from 'node:process'
 import readline from 'node:readline'
-import { bold, dim } from 'ansis'
 import { globalLogger } from '../utils/logger.ts'
+import { styleText } from '../utils/style.ts'
 
 // Copied from https://github.com/vitejs/vite/blob/main/packages/vite/src/node/shortcuts.ts - MIT License
 
 export interface Shortcut {
   key: string
   description: string
-  action: () => void | Promise<void>
+  action: () => void | Promise<unknown>
 }
 
-export function shortcuts(restart: () => void): () => void {
+export function shortcuts(restart: () => Promise<unknown>): () => void {
   let actionRunning = false
   async function onInput(input: string) {
     if (actionRunning) return
@@ -20,9 +20,7 @@ export function shortcuts(restart: () => void): () => void {
       {
         key: 'r',
         description: 'reload config and rebuild',
-        action() {
-          restart()
-        },
+        action: restart,
       },
       {
         key: 'c',
@@ -51,9 +49,9 @@ export function shortcuts(restart: () => void): () => void {
         if (shortcut.action == null) continue
 
         globalLogger.info(
-          dim`  press ` +
-            bold`${shortcut.key} + enter` +
-            dim` to ${shortcut.description}`,
+          styleText.dim(`  press `) +
+            styleText.bold(`${shortcut.key} + enter`) +
+            styleText.dim(` to ${shortcut.description}`),
         )
       }
 

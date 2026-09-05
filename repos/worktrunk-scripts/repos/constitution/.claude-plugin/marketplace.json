@@ -1,0 +1,30 @@
+{
+  "$schema": "https://anthropic.com/schemas/claude-code-marketplace.json",
+  "name": "systemfsoftware-marketplace",
+  "owner": {
+    "name": "systemfsoftware",
+    "url": "https://systemfsoftware.com"
+  },
+  "plugins": [
+    {
+      "name": "constitution",
+      "source": "./plugins/constitution",
+      "description": "Time-Traveling Stream Rules (TTSR) enforcing strict adherence to the Supreme Engineering Constitution (Articles I–V).",
+      "version": "0.1.0",
+      "author": {
+        "name": "systemfsoftware",
+        "url": "https://systemfsoftware.com"
+      },
+      "homepage": "https://github.com/systemfsoftware/constitution",
+      "repository": "https://github.com/systemfsoftware/constitution",
+      "license": "Apache-2.0",
+      "keywords": [
+        "constitution",
+        "ttsr",
+        "rules",
+        "omp",
+        "claude-code"
+      ]
+    }
+  ]
+}

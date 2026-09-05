@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -e
+# Skip for pure vendored commits (repos/) and the subtrees.toml registration.
+if git diff --cached --name-only | grep -qvE '^(repos/.*|subtrees\.toml)$'; then
+  deno run --allow-read --allow-run --allow-env --allow-sys npm:@commitlint/cli@19.8.1 --edit "$1"
+fi

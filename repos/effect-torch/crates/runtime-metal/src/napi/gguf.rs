@@ -1,14 +1,15 @@
 //! Cancellable GGUF inspection and direct-to-Metal loading for Node.
 //!
 //! Inspection converts the strict backend-neutral GGUF catalog into
-//! JavaScript-safe object records. Loading parses the same catalog, allocates
-//! one shared Metal destination per tensor, and streams bytes directly into
-//! that destination on a blocking worker. Quantized tensors remain opaque u8
-//! storage with separate logical f32 metadata; F32 tensors retain f32 storage.
-//! Cancellation is polled by the parser and tensor reader, and partially built
-//! archives are dropped rather than published on failure.
+//! JavaScript-safe object records. Loading parses the same catalog and allocates
+//! one shared Metal destination per tensor. A blocking worker streams bytes
+//! into each destination.
+//! Quantized tensors remain opaque u8 storage with separate logical f32
+//! metadata. F32 tensors retain f32 storage. The parser and tensor reader poll
+//! for cancellation. On failure, the loader drops partially built archives
+//! instead of publishing them.
 
-use super::{run_compute, value, CancellationToken, NativeTensor};
+use super::{run_compute, run_compute_on, value, CancellationToken, NativeTensor};
 use effect_torch_runtime::{
     parse_gguf, read_gguf_tensor_into, DType, GgufMetadataArray, GgufMetadataEntry,
     GgufMetadataValue, GgufParseError, GgufTensorDescriptor,
@@ -179,7 +180,24 @@ pub async fn load_gguf(
     path: String,
     token: Option<&CancellationToken>,
 ) -> Result<NativeGgufArchive> {
-    run_compute(token, move |cancelled, _state| {
+    load_gguf_on(path, token, 0).await
+}
+
+#[napi]
+pub async fn load_gguf_for_device(
+    path: String,
+    device_ordinal: u32,
+    token: Option<&CancellationToken>,
+) -> Result<NativeGgufArchive> {
+    load_gguf_on(path, token, device_ordinal as usize).await
+}
+
+async fn load_gguf_on(
+    path: String,
+    token: Option<&CancellationToken>,
+    device_ordinal: usize,
+) -> Result<NativeGgufArchive> {
+    run_compute_on(device_ordinal, token, move |cancelled, _state| {
         let mut file = open(&path)?;
         let parsed = parse_gguf(&mut file, Some(cancelled)).map_err(gguf_error)?;
         let mut entries = Vec::new();

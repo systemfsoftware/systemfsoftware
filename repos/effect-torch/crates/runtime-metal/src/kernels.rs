@@ -3,30 +3,26 @@
 //!
 //! # Conventions
 //!
-//! - **Kernel family per operation.** Each op follows the same four-layer
-//!   pattern: a private `*_pipeline` builder (emits MSL specialized to the
-//!   exact layout, dtype, and sizes), a public `compile_*`/`warm_*`
-//!   precompile entry point, an allocating wrapper, and a `*_into`
-//!   destination API that validates, requires the precompiled pipeline,
-//!   and dispatches without allocating.
-//! - **Layout-keyed pipelines.** Strided sources are handled by baking the
-//!   stride decomposition into the emitted source; the pipeline key hashes
-//!   shape and strides, so a different layout is a different kernel.
-//!   Destinations are always contiguous.
-//! - **Dtypes.** Unlike the fusion emitter (f32/bf16 only), these kernels
-//!   cover f32, f16, bf16, u8, u32, and i64; f64 has MSL syntax here but
-//!   is rejected at the value boundary (unsupported on Metal). Integer
-//!   fill/arange compute in 64-bit integer arithmetic — values above 2^24
-//!   have no exact f32 form.
-//! - **Dispatch topology.** One thread per output element over a padded
-//!   flat grid ([`MetalDevice::grid_flat`]), widening to 64-bit indexing
-//!   past `u32::MAX` elements; argreduce/cumsum use one thread per kept
-//!   slice and loop over the reduced dimension serially.
-//! - **RNG.** randn/uniform use a per-thread xoroshiro128+ seeded from the
-//!   global seed plus the element index, so results are deterministic per
-//!   seed regardless of dispatch shape.
+//! - Each operation has a private `*_pipeline` builder for its layout, dtype,
+//!   and sizes. A public `compile_*` or `warm_*` function precompiles it.
+//!   Allocating wrappers create destinations, while `*_into` functions
+//!   validate and dispatch without allocating.
+//! - Strided sources bake stride decomposition into the emitted source. The
+//!   pipeline key hashes shape and strides, so each layout gets a different
+//!   kernel. Destinations are contiguous.
+//! - These kernels support f32, f16, bf16, u8, u32, and i64. The fusion emitter
+//!   supports only f32 and bf16. f64 has MSL syntax here but the value boundary
+//!   rejects it because Metal does not support it. Integer fill and arange use
+//!   64-bit arithmetic because values above 2^24 have no exact f32 form.
+//! - Dispatch uses one thread per output element over a padded flat grid
+//!   ([`MetalDevice::grid_flat`]) and widens to 64-bit indexing past
+//!   `u32::MAX`. Argreduce and cumsum use one thread per kept slice and loop
+//!   serially over the reduced dimension.
+//! - randn and uniform use per-thread xoroshiro128+ seeded from the global seed
+//!   and element index. Results are deterministic for a seed regardless of
+//!   dispatch shape.
 
-use super::device::{set_buffer, MetalDevice};
+use super::device::{set_buffer, set_bytes, Buffer, MetalDevice};
 use super::run::MetalTensor;
 use crate::runtime::dtype::DType;
 use objc2_metal::MTLComputeCommandEncoder;
@@ -529,6 +525,68 @@ pub fn copy_into(
     Ok(())
 }
 
+/// Copies `bytes` from `source` at `source_offset` into `destination` at
+/// `destination_offset` with a flat device kernel on the current stream.
+/// Used for GPU-ordered state-transaction copies between deferred
+/// invocations: the stream's per-dispatch barriers order it after the
+/// kernels that produced `source` and before later readers of
+/// `destination`, so no host fence is needed. Both buffers must be large
+/// enough; the caller (executable state commits) validates the ranges.
+pub fn copy_bytes_into(
+    dev: &MetalDevice,
+    source: &Buffer,
+    source_offset: usize,
+    destination: &Buffer,
+    destination_offset: usize,
+    bytes: usize,
+) -> Result<(), String> {
+    if bytes == 0 {
+        return Ok(());
+    }
+    if source_offset.saturating_add(bytes) > source.size
+        || destination_offset.saturating_add(bytes) > destination.size
+    {
+        return Err("metal byte copy exceeds its buffer".to_string());
+    }
+    let wide = MetalDevice::WIDE;
+    let pipeline = dev.compile_lazy(
+        key(&[0xBC09]),
+        "et_bcopy",
+        || {
+            format!(
+                r#"
+#include <metal_stdlib>
+using namespace metal;
+kernel void et_bcopy(device const uchar* src [[buffer(0)]], device uchar* dst [[buffer(1)]], constant ulong& n [[buffer(2)]], uint2 gid2 [[thread_position_in_grid]]) {{
+    const ulong i = ulong(gid2.y) * {wide}ul + ulong(gid2.x);
+    const ulong base = i * 4ul;
+    if (base < n) {{
+        const ulong end = min(base + 4ul, n);
+        for (ulong j = base; j < end; j++) {{
+            dst[j] = src[j];
+        }}
+    }}
+}}
+"#
+            )
+        },
+    )?;
+    let words = bytes.div_ceil(4);
+    let padded = words.div_ceil(256) * 256;
+    let n = bytes as u64;
+    dev.with_encoder(|e| {
+        e.setComputePipelineState(pipeline.as_raw());
+        set_buffer(e, 0, source, source_offset);
+        set_buffer(e, 1, destination, destination_offset);
+        set_bytes(e, 2, &n);
+        {
+            let (g, tg) = MetalDevice::grid_flat(padded);
+            e.dispatchThreads_threadsPerThreadgroup(g, tg);
+        }
+    });
+    Ok(())
+}
+
 const RNG_SRC: &str = r#"
 #include <metal_stdlib>
 using namespace metal;
@@ -589,7 +647,7 @@ pub fn warm_randn(shape: &[usize]) -> Result<(), String> {
 }
 
 /// Allocates an f32 tensor of `shape` filled with standard-normal samples
-/// from `seed` (Box–Muller over a per-element seeded xoroshiro128+).
+/// from `seed` using Box-Muller over per-element seeded xoroshiro128+.
 pub fn randn(dev: &MetalDevice, shape: &[usize], seed: u64) -> Result<MetalTensor, String> {
     compile_randn(dev, shape)?;
     let out = MetalTensor::empty(dev, shape.to_vec(), DType::F32);
@@ -948,7 +1006,48 @@ fn argreduce_pipeline(
             ));
         }
     }
+    let parallel = dtype == DType::F32 && dstride == 1 && n >= 1024;
     let make_src = || {
+        if parallel {
+            return format!(
+                r#"
+#include <metal_stdlib>
+using namespace metal;
+kernel void et_argred(
+    device const float* x [[buffer(0)]],
+    device uint* out [[buffer(1)]],
+    uint gid [[threadgroup_position_in_grid]],
+    uint tid [[thread_index_in_threadgroup]]
+) {{
+    if (gid >= {kept_n}u) return;
+    ulong base = 0ul;
+{decompose}    uint best = tid;
+    float best_v = x[base + tid];
+    for (uint i = tid + 256u; i < {n}u; i += 256u) {{
+        float v = x[base + i];
+        if (v {cmp} best_v) {{ best_v = v; best = i; }}
+    }}
+    threadgroup float values[256];
+    threadgroup uint indexes[256];
+    values[tid] = best_v;
+    indexes[tid] = best;
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    for (uint offset = 128u; offset > 0u; offset >>= 1u) {{
+        if (tid < offset) {{
+            float v = values[tid + offset];
+            uint i = indexes[tid + offset];
+            if (v {cmp} values[tid] || (v == values[tid] && i < indexes[tid])) {{
+                values[tid] = v;
+                indexes[tid] = i;
+            }}
+        }}
+        threadgroup_barrier(mem_flags::mem_threadgroup);
+    }}
+    if (tid == 0u) out[gid] = indexes[0];
+}}
+"#
+            );
+        }
         format!(
             r#"
 #include <metal_stdlib>
@@ -1099,12 +1198,17 @@ pub fn argreduce_into(
         ]),
         "et_argred",
     )?;
-    let padded = kept_n.div_ceil(256) * 256;
     dev.with_encoder(|e| {
         e.setComputePipelineState(pipeline.as_raw());
         set_buffer(e, 0, &x.buffer, x.layout.offset() * x.dtype.size_in_bytes());
         set_buffer(e, 1, &out.buffer, out.layout.offset() * 4);
-        {
+        if x.dtype == DType::F32 && x.layout.strides()[dim] == 1 && x.layout.shape()[dim] >= 1024 {
+            e.dispatchThreadgroups_threadsPerThreadgroup(
+                MetalDevice::grid(kept_n, 1, 1),
+                MetalDevice::grid(256, 1, 1),
+            );
+        } else {
+            let padded = kept_n.div_ceil(256) * 256;
             let (g, tg) = MetalDevice::grid_flat(padded);
             e.dispatchThreads_threadsPerThreadgroup(g, tg);
         }
@@ -1220,8 +1324,8 @@ pub fn warm_cumsum(shape: &[usize], dtype: DType, dim: usize) -> Result<(), Stri
     compile_cumsum(MetalDevice::get(), shape, dtype, dim)
 }
 
-/// Allocating inclusive prefix sum along `dim` (one serial thread per
-/// slice — deterministic, O(n) per slice).
+/// Allocating inclusive prefix sum along `dim`. Each slice uses one serial
+/// thread, making the operation deterministic and O(n) per slice.
 pub fn cumsum(dev: &MetalDevice, x: &MetalTensor, dim: usize) -> Result<MetalTensor, String> {
     compile_cumsum_layout(dev, &x.layout, x.dtype, dim)?;
     let out = MetalTensor::empty(dev, x.layout.shape().to_vec(), x.dtype);
@@ -1354,6 +1458,25 @@ mod tests {
         let e = eye(dev, 2, DType::F32).unwrap();
         dev.synchronize().unwrap();
         assert_eq!(e.read_f32().unwrap(), vec![1., 0., 0., 1.]);
+    }
+
+    #[test]
+    fn parallel_argmax_reduces_large_rows_and_keeps_first_tie() {
+        let dev = MetalDevice::get();
+        let width = 2048usize;
+        let mut values = vec![-1.0f32; 3 * width];
+        values[17] = 4.0;
+        values[width + 1023] = 7.0;
+        values[2 * width + 511] = 9.0;
+        values[2 * width + 1535] = 9.0;
+        let input = MetalTensor::from_f32(dev, values, vec![3, width]);
+        let output = argreduce(dev, &input, 1, true).unwrap();
+        dev.synchronize().unwrap();
+
+        // SAFETY: synchronization completed and the output contains three u32 indexes.
+        let indexes =
+            unsafe { std::slice::from_raw_parts(output.buffer.contents_ptr().cast::<u32>(), 3) };
+        assert_eq!(indexes, &[17, 1023, 511]);
     }
 
     // Integer scalars must not round-trip through f32: values above

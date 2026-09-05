@@ -1,7 +1,7 @@
 import { MuseGlimmer } from "@effect-torch/core/models"
 import { expect, it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
-import { Gguf, Model, Registry, Runtime, type Tensor } from "../src/index.ts"
+import { Gguf, Model, Runtime, type Tensor } from "../src/index.ts"
 
 const configEntries = [
   ["block_count", 52],
@@ -21,16 +21,39 @@ const configEntries = [
   ["vocab_size", 202048]
 ] as const
 
-const config = (): Registry.ModelConfig => new Map<string, unknown>(configEntries)
+const config = (): Gguf.ModelConfig => new Map<string, unknown>(configEntries)
 
-// This shape-only runtime records graph requests and fabricates coherent handles;
-// it deliberately cannot compile or execute. Model validation still observes the
-// declared placement, dtype, and shape, so topology checks exercise the real API.
+// This shape-only runtime records graph requests and fabricates coherent handles.
+// It does not implement compilation or execution. Model validation still
+// observes the declared placement, dtype, and shape, so topology checks exercise
+// the real API.
 const placement: Runtime.Placement = Object.freeze({
   id: "muse-test:0",
   deviceType: "test",
   description: "Muse-Glimmer graph test runtime"
 })
+
+type RuntimeDouble = Partial<Omit<Runtime.RuntimeService, "extensions">> & {
+  readonly extensions?: Partial<Runtime.RuntimeService["extensions"]>
+}
+type TestHandle = Pick<Tensor.Any, "_tag" | "shape" | "dtype" | "storage" | "device" | "placement" | "pipe">
+
+const runtimeDouble = (value: RuntimeDouble): Runtime.RuntimeService => {
+  // SAFETY: Each test supplies every runtime member reached by the code under test.
+  return value as Runtime.RuntimeService
+}
+
+const brandedHandle = (value: TestHandle): Tensor.Any => {
+  // SAFETY: The handle factory supplies all public metadata; only Runtime's private brands are absent.
+  return value as Tensor.Any
+}
+
+const loaderOnlyIdentity = (value: Tensor.Any): Tensor.Lazy => {
+  // SAFETY: Loader metadata tests never invoke these placeholder model forwards.
+  return value as Tensor.Lazy
+}
+
+const isLazyHandle = (value: Tensor.Any): value is Tensor.Lazy => value._tag === "LazyTensor"
 
 const broadcast = (left: ReadonlyArray<number>, right: ReadonlyArray<number>): Array<number> => {
   const rank = Math.max(left.length, right.length)
@@ -41,28 +64,42 @@ const broadcast = (left: ReadonlyArray<number>, right: ReadonlyArray<number>): A
   return shape
 }
 
-const handle = (
+function handle(
+  tag: "LazyTensor",
+  shape: ReadonlyArray<number>,
+  dtype: Tensor.DType,
+  storage?: Runtime.EncodedTensorStorage
+): Tensor.Lazy
+function handle(
+  tag: "Tensor",
+  shape: ReadonlyArray<number>,
+  dtype: Tensor.DType,
+  storage?: Runtime.EncodedTensorStorage
+): Tensor.Concrete
+function handle(
   tag: "LazyTensor" | "Tensor",
   shape: ReadonlyArray<number>,
   dtype: Tensor.DType,
   storage?: Runtime.EncodedTensorStorage
-): Tensor.Any =>
-  Object.freeze({
+): Tensor.Any {
+  const value = {
     _tag: tag,
     shape,
     dtype,
-    ...(storage === undefined ? {} : { storage }),
     device: placement.deviceType,
     placement,
     pipe() {
       throw new Error("unused test handle pipe")
     }
-  }) as unknown as Tensor.Any
+  } satisfies TestHandle
+  if (storage !== undefined) Object.assign(value, { storage })
+  return brandedHandle(Object.freeze(value))
+}
 
 // Topology tests clear this module-local log immediately before building a graph.
 const requests: Array<Runtime.NodeRequest> = []
 
-const runtime = {
+const runtime = runtimeDouble({
   identity: {},
   backend: { name: "muse-test" },
   placement,
@@ -73,42 +110,42 @@ const runtime = {
       requests.push(request)
       switch (request.op) {
         case "constant":
-          return handle("LazyTensor", [], request.attributes.dtype) as Tensor.Lazy
+          return handle("LazyTensor", [], request.attributes.dtype)
         case "quantizedEmbedding":
           return handle(
             "LazyTensor",
             [...request.inputs[0].shape, request.attributes.logicalShape[1]],
             "f32"
-          ) as Tensor.Lazy
+          )
         case "quantizedLinear":
           return handle(
             "LazyTensor",
             [...request.inputs[0].shape.slice(0, -1), request.attributes.logicalShape[0]],
             "f32"
-          ) as Tensor.Lazy
+          )
         case "rmsNorm":
-          return handle("LazyTensor", request.inputs[0].shape, request.inputs[0].dtype) as Tensor.Lazy
+          return handle("LazyTensor", request.inputs[0].shape, request.inputs[0].dtype)
         case "mean": {
           const dims = new Set(request.attributes.dims)
           const shape = request.inputs[0].shape.flatMap((dimension, index) =>
             dims.has(index) ? request.attributes.keepdims ? [1] : [] : [dimension]
           )
-          return handle("LazyTensor", shape, request.inputs[0].dtype) as Tensor.Lazy
+          return handle("LazyTensor", shape, request.inputs[0].dtype)
         }
         case "reshape":
-          return handle("LazyTensor", request.attributes.shape, request.inputs[0].dtype) as Tensor.Lazy
+          return handle("LazyTensor", request.attributes.shape, request.inputs[0].dtype)
         case "permute":
           return handle(
             "LazyTensor",
             request.attributes.dims.map((dimension) => request.inputs[0].shape[dimension]),
             request.inputs[0].dtype
-          ) as Tensor.Lazy
+          )
         case "scaledDotProductAttention":
           return handle(
             "LazyTensor",
             [...request.inputs[0].shape.slice(0, -1), request.inputs[2].shape.at(-1)!],
             request.inputs[0].dtype
-          ) as Tensor.Lazy
+          )
         case "add":
         case "div":
         case "mul":
@@ -116,22 +153,27 @@ const runtime = {
             "LazyTensor",
             broadcast(request.inputs[0].shape, request.inputs[1].shape),
             request.inputs[0].shape.length === 0 ? request.inputs[1].dtype : request.inputs[0].dtype
-          ) as Tensor.Lazy
+          )
         case "pow":
         case "rotaryEmbedding":
         case "tanh":
-          return handle("LazyTensor", request.inputs[0].shape, request.inputs[0].dtype) as Tensor.Lazy
+          return handle("LazyTensor", request.inputs[0].shape, request.inputs[0].dtype)
+        case "expose": {
+          const input = request.inputs[0]
+          if (!isLazyHandle(input)) throw new Error("expose input must be lazy")
+          return input
+        }
         default:
           throw new Error(`unexpected Muse-Glimmer graph operation ${request.op}`)
       }
     })
-} as unknown as Runtime.RuntimeService
+})
 
 const runtimeLayer = Layer.succeed(Runtime.Runtime, runtime)
 
 // Rank-two parameters carry encoded storage so the graph takes quantized
 // embedding/linear paths without allocating the canonical model's huge weights.
-const modelParams = (parameters: ReadonlyArray<{ readonly shape: ReadonlyArray<number> }>): Array<Tensor.Any> =>
+const modelParams = (parameters: ReadonlyArray<{ readonly shape: ReadonlyArray<number> }>): Array<Tensor.Concrete> =>
   parameters.map(({ shape }) =>
     handle(
       "Tensor",
@@ -142,6 +184,9 @@ const modelParams = (parameters: ReadonlyArray<{ readonly shape: ReadonlyArray<n
         : undefined
     )
   )
+
+const descriptors = (parameterSpecs: ReadonlyArray<Model.ParameterSpec>) =>
+  parameterSpecs.map(({ name, shape }) => ({ name, shape }))
 
 const expectedLayer = (layer: number) => {
   const prefix = `blk.${layer}`
@@ -163,60 +208,81 @@ const expectedLayer = (layer: number) => {
   ]
 }
 
-it.effect("exports and registers only the exact Muse-Glimmer architecture", () => {
+it.effect("exports the exact Muse-Glimmer GGUF definition and loader", () =>
+  Effect.sync(() => {
+    expect(Object.keys(MuseGlimmer).sort()).toEqual(["architecture", "create", "definition", "loadGGUF"])
+    expect(MuseGlimmer.architecture).toBe("muse-glimmer")
+    expect(MuseGlimmer.definition).toEqual({
+      architecture: "muse-glimmer",
+      create: MuseGlimmer.create
+    })
+  }))
+
+it.effect("loadGGUF rejects artifacts for another architecture", () => {
+  const ggufRuntime = runtimeDouble({
+    ...runtime,
+    extensions: {
+      gguf: {
+        inspect: () =>
+          Effect.succeed({
+            metadata: [{ key: "general.architecture", value: "other-model" }],
+            tensors: []
+          }),
+        load: () => Effect.die(new Error("load must not be called"))
+      }
+    }
+  })
   return Effect.gen(function*() {
-    expect(Object.keys(MuseGlimmer).sort()).toEqual(["architecture", "id"])
-    expect(MuseGlimmer.id).toBe("gguf:muse-glimmer")
-    expect(MuseGlimmer.architecture.id).toBe("gguf:muse-glimmer")
-    const registry = yield* Registry.Registry
-    expect(yield* registry.get("gguf:muse-glimmer")).toBe(MuseGlimmer.architecture)
-    expect((yield* Effect.flip(registry.get("muse-glimmer")))._tag).toBe("RegistryError")
-    expect((yield* Effect.flip(registry.get("Muse-Glimmer")))._tag).toBe("RegistryError")
-  }).pipe(Effect.provide(Registry.layer))
+    const error = yield* Effect.flip(MuseGlimmer.loadGGUF("other.gguf"))
+    expect(error._tag).toBe("GgufError")
+    if (error._tag !== "GgufError") throw error
+    expect(error.op).toBe("validate")
+    expect(error.message).toContain("\"muse-glimmer\"")
+  }).pipe(Effect.provide(Layer.succeed(Runtime.Runtime, ggufRuntime)))
 })
 
 it.effect("validates canonical configuration with Schema", () =>
   Effect.gen(function*() {
-    yield* MuseGlimmer.architecture.create(config())
+    yield* MuseGlimmer.create(config())
     for (const [key] of configEntries) {
       const missing = new Map(config())
       missing.delete(key)
-      const missingError = yield* Effect.flip(MuseGlimmer.architecture.create(missing))
+      const missingError = yield* Effect.flip(MuseGlimmer.create(missing))
       expect(missingError._tag).toBe("ModelError")
       expect(missingError.message).toContain(key)
 
       const invalid = new Map(config())
       invalid.set(key, 0)
-      const invalidError = yield* Effect.flip(MuseGlimmer.architecture.create(invalid))
+      const invalidError = yield* Effect.flip(MuseGlimmer.create(invalid))
       expect(invalidError._tag).toBe("ModelError")
       expect(invalidError.message).toContain(key)
     }
 
     const invalidGqa = new Map(config())
     invalidGqa.set("attention.head_count", 31)
-    expect((yield* Effect.flip(MuseGlimmer.architecture.create(invalidGqa))).message).toContain(
+    expect((yield* Effect.flip(MuseGlimmer.create(invalidGqa))).message).toContain(
       "attention.head_count"
     )
 
     const oversizedBlocks = new Map(config())
     oversizedBlocks.set("block_count", 1025)
-    expect((yield* Effect.flip(MuseGlimmer.architecture.create(oversizedBlocks))).message).toContain("block_count")
+    expect((yield* Effect.flip(MuseGlimmer.create(oversizedBlocks))).message).toContain("block_count")
 
     const invalidRope = new Map(config())
     invalidRope.set("attention.key_length", 127)
-    expect((yield* Effect.flip(MuseGlimmer.architecture.create(invalidRope))).message).toContain(
+    expect((yield* Effect.flip(MuseGlimmer.create(invalidRope))).message).toContain(
       "attention.key_length"
     )
 
     const invalidValueWidth = new Map(config())
     invalidValueWidth.set("attention.value_length", 126)
-    const invalidValueWidthError = yield* Effect.flip(MuseGlimmer.architecture.create(invalidValueWidth))
+    const invalidValueWidthError = yield* Effect.flip(MuseGlimmer.create(invalidValueWidth))
     expect(invalidValueWidthError.message).toContain("attention.value_length")
     expect(invalidValueWidthError.message).toContain("attention.key_length")
 
     const invalidWindow = new Map(config())
     invalidWindow.set("attention.sliding_window", 131073)
-    expect((yield* Effect.flip(MuseGlimmer.architecture.create(invalidWindow))).message).toContain(
+    expect((yield* Effect.flip(MuseGlimmer.create(invalidWindow))).message).toContain(
       "attention.sliding_window"
     )
   }))
@@ -240,8 +306,8 @@ it.effect("derives the parameter catalog and graph from configuration", () =>
       ["final_logit_softcapping", 10],
       ["vocab_size", 12]
     ])
-    const model = yield* MuseGlimmer.architecture.create(custom)
-    expect(model.parameters).toEqual([
+    const model = yield* MuseGlimmer.create(custom)
+    expect(descriptors(model.parameterSpecs)).toEqual([
       { name: "token_embd.weight", shape: [12, 8] },
       { name: "output_norm.weight", shape: [8] },
       { name: "output.weight", shape: [12, 8] },
@@ -262,7 +328,7 @@ it.effect("derives the parameter catalog and graph from configuration", () =>
     ])
 
     requests.length = 0
-    const output = yield* model.forward(modelParams(model.parameters), handle("Tensor", [1, 2], "i64"))
+    const output = yield* model.forward(modelParams(model.parameterSpecs), handle("Tensor", [1, 2], "i64"))
     expect(output.shape).toEqual([1, 2, 12])
     const attention = requests.find(
       (request): request is Runtime.NodeRequest<"scaledDotProductAttention"> =>
@@ -280,14 +346,14 @@ it.effect("derives the parameter catalog and graph from configuration", () =>
     expect(normalizations.some(({ attributes }) => attributes.eps === 1e-8)).toBe(true)
 
     const contextError = yield* Effect.flip(
-      model.forward(modelParams(model.parameters), handle("Tensor", [1, 17], "i64"))
+      model.forward(modelParams(model.parameterSpecs), handle("Tensor", [1, 17], "i64"))
     )
     expect(contextError.message).toContain("exceeds context length 16")
   }).pipe(Effect.provide(runtimeLayer)))
 
 it.effect("receives vocab_size from generic GGUF tokenizer token translation", () => {
   let vocabSize: unknown
-  const ggufRuntime = {
+  const ggufRuntime = runtimeDouble({
     ...runtime,
     extensions: {
       gguf: {
@@ -302,30 +368,25 @@ it.effect("receives vocab_size from generic GGUF tokenizer token translation", (
         load: () => Effect.succeed({ entries: [] })
       }
     }
-  } as unknown as Runtime.RuntimeService
-  const services = Layer.merge(
-    Registry.emptyLayer,
-    Layer.succeed(Runtime.Runtime, ggufRuntime)
-  )
+  })
+  const services = Layer.succeed(Runtime.Runtime, ggufRuntime)
   return Effect.gen(function*() {
-    const registry = yield* Registry.Registry
-    yield* registry.register({
-      id: "gguf:generic-vocab-test",
+    yield* Gguf.loadModel("generic.gguf", {
+      architecture: "generic-vocab-test",
       create: (canonical) => {
         vocabSize = canonical.get("vocab_size")
         return Model.define({
-          parameters: [],
-          forward: (_, input) => Effect.succeed(input as Tensor.Lazy)
+          parameterSpecs: [],
+          forward: (_, input) => Effect.succeed(loaderOnlyIdentity(input))
         })
       }
     })
-    yield* Gguf.load("generic.gguf")
     expect(vocabSize).toBe(3)
   }).pipe(Effect.provide(services))
 })
 
 it.effect("exposes canonical tokenizer metadata from GGUF loading", () => {
-  const ggufRuntime = {
+  const ggufRuntime = runtimeDouble({
     ...runtime,
     extensions: {
       gguf: {
@@ -343,22 +404,17 @@ it.effect("exposes canonical tokenizer metadata from GGUF loading", () => {
         load: () => Effect.succeed({ entries: [] })
       }
     }
-  } as unknown as Runtime.RuntimeService
-  const services = Layer.merge(
-    Registry.emptyLayer,
-    Layer.succeed(Runtime.Runtime, ggufRuntime)
-  )
+  })
+  const services = Layer.succeed(Runtime.Runtime, ggufRuntime)
   return Effect.gen(function*() {
-    const registry = yield* Registry.Registry
-    yield* registry.register({
-      id: "gguf:generic-metadata-test",
+    const loaded = yield* Gguf.loadModel("generic.gguf", {
+      architecture: "generic-metadata-test",
       create: () =>
         Model.define({
-          parameters: [],
-          forward: (_, input) => Effect.succeed(input as Tensor.Lazy)
+          parameterSpecs: [],
+          forward: (_, input) => Effect.succeed(loaderOnlyIdentity(input))
         })
     })
-    const loaded = yield* Gguf.load("generic.gguf")
     expect(loaded.metadata.get("tokenizer.chat_template")).toBe("{{ messages }}")
     expect(loaded.metadata.get("tokenizer.ggml.bos_token_id")).toBe(1)
     expect(loaded.metadata.get("tokenizer.ggml.eos_token_id")).toBe(2)
@@ -366,33 +422,29 @@ it.effect("exposes canonical tokenizer metadata from GGUF loading", () => {
   }).pipe(Effect.provide(services))
 })
 
-it.effect("defines the exact load-only parameter catalog", () =>
+it.effect("defines the exact parameter catalog", () =>
   Effect.gen(function*() {
-    const model = yield* MuseGlimmer.architecture.create(config())
-    expect(model.parameters).toHaveLength(731)
-    expect(model.parameters.slice(0, 3)).toEqual([
+    const model = yield* MuseGlimmer.create(config())
+    expect(model.parameterSpecs).toHaveLength(731)
+    expect(descriptors(model.parameterSpecs.slice(0, 3))).toEqual([
       { name: "token_embd.weight", shape: [202048, 6656] },
       { name: "output_norm.weight", shape: [6656] },
       { name: "output.weight", shape: [202048, 6656] }
     ])
-    expect(model.parameters.slice(3, 17)).toEqual(expectedLayer(0))
-    expect(model.parameters.slice(3 + 27 * 14, 3 + 28 * 14)).toEqual(expectedLayer(27))
-    expect(model.parameters.slice(-14)).toEqual(expectedLayer(51))
-    expect(model.names).toEqual(model.parameters.map(({ name }) => name))
-
-    const initError = yield* Effect.flip(model.init)
-    expect(initError._tag).toBe("ModelError")
-    expect(initError.op).toBe("init")
+    expect(descriptors(model.parameterSpecs.slice(3, 17))).toEqual(expectedLayer(0))
+    expect(descriptors(model.parameterSpecs.slice(3 + 27 * 14, 3 + 28 * 14))).toEqual(expectedLayer(27))
+    expect(descriptors(model.parameterSpecs.slice(-14))).toEqual(expectedLayer(51))
+    expect(model.parameterSpecs.every(({ initializer }) => initializer !== undefined)).toBe(true)
   }).pipe(Effect.provide(runtimeLayer)))
 
 it.effect("reports parameter arity and token rank through ModelError", () =>
   Effect.gen(function*() {
-    const model = yield* MuseGlimmer.architecture.create(config())
+    const model = yield* MuseGlimmer.create(config())
     const arityError = yield* Effect.flip(model.forward([], handle("Tensor", [1, 1], "i64")))
     expect(arityError._tag).toBe("ModelError")
     expect(arityError.message).toContain("expected 731 parameters")
 
-    const rankError = yield* Effect.flip(model.forward(modelParams(model.parameters), handle("Tensor", [1], "i64")))
+    const rankError = yield* Effect.flip(model.forward(modelParams(model.parameterSpecs), handle("Tensor", [1], "i64")))
     expect(rankError._tag).toBe("ModelError")
     expect(rankError.message).toContain("[B, S]")
   }).pipe(Effect.provide(runtimeLayer)))
@@ -400,8 +452,8 @@ it.effect("reports parameter arity and token rank through ModelError", () =>
 it.effect("builds the canonical graph with 39 local and 13 global layers", () =>
   Effect.gen(function*() {
     requests.length = 0
-    const model = yield* MuseGlimmer.architecture.create(config())
-    const output = yield* model.forward(modelParams(model.parameters), handle("Tensor", [1, 2], "i64"))
+    const model = yield* MuseGlimmer.create(config())
+    const output = yield* model.forward(modelParams(model.parameterSpecs), handle("Tensor", [1, 2], "i64"))
     expect(output.shape).toEqual([1, 2, 202048])
 
     const attention = requests.filter(

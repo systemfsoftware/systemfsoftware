@@ -1,10 +1,10 @@
 //! Leaf-value wrapper around [`MetalTensor`] for the graph layer.
 //!
-//! [`Value`] is the concrete `LeafValue` the compiler's graph walks carry:
-//! a thin newtype that exposes shape/dtype/device metadata and the
-//! constructors for uploading host bytes or reserving shared-memory
-//! destination storage (napi addon). f64 is rejected at the boundary —
-//! Metal has no double-precision compute support in this runtime.
+//! [`Value`] is the concrete `LeafValue` used by compiler graph walks. This
+//! thin newtype exposes shape, dtype, and device metadata. It also provides
+//! constructors to upload host bytes or reserve shared-memory destination
+//! storage for the NAPI addon. The boundary rejects f64 because
+//! this runtime has no double-precision Metal support.
 
 use crate::device::MetalDevice;
 #[cfg(test)]
@@ -20,9 +20,9 @@ use std::sync::Arc;
 pub struct Value(pub MetalTensor);
 
 impl Value {
-    /// The device kind this value lives on (always `Device::Metal`).
+    /// The Metal device this value lives on.
     pub fn device(&self) -> Device {
-        Device::Metal
+        Device::Metal(self.0.buffer.device_ordinal())
     }
 
     /// The wrapped tensor (infallible: a `Value` is always Metal-backed).
@@ -45,7 +45,7 @@ impl Value {
         self.0.numel()
     }
 
-    /// `numel * dtype.size_in_bytes()` — the contiguous byte footprint.
+    /// Contiguous byte size: `numel * dtype.size_in_bytes()`.
     pub fn byte_size(&self) -> usize {
         self.numel() * self.dtype().size_in_bytes()
     }
@@ -54,15 +54,17 @@ impl Value {
     /// the host (tests only).
     #[cfg(test)]
     pub fn to_f32_vec(&self) -> Result<Vec<f32>, String> {
-        let device = MetalDevice::get();
-        let tensor = kernels::strided_copy(device, &self.0)?;
-        let tensor = if tensor.dtype == DType::F32 {
-            tensor
-        } else {
-            kernels::cast(device, &tensor, DType::F32)?
-        };
-        device.synchronize()?;
-        tensor.read_f32()
+        MetalDevice::with_ordinal(self.0.buffer.device_ordinal() as usize, || {
+            let device = MetalDevice::get();
+            let tensor = kernels::strided_copy(device, &self.0)?;
+            let tensor = if tensor.dtype == DType::F32 {
+                tensor
+            } else {
+                kernels::cast(device, &tensor, DType::F32)?
+            };
+            device.synchronize()?;
+            tensor.read_f32()
+        })?
     }
 }
 
