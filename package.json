@@ -1,8 +1,7 @@
 {
   "name": "tsdown",
   "type": "module",
-  "version": "0.22.14",
-  "packageManager": "pnpm@11.17.0",
+  "version": "0.23.0",
   "description": "The Elegant Bundler for Libraries",
   "author": "Kevin Deng <sxzz@sxzz.moe>",
   "license": "MIT",
@@ -39,15 +38,6 @@
     "./package.json": "./package.json",
     "./client": "./client.d.ts"
   },
-  "types": "./dist/index.d.mts",
-  "typesVersions": {
-    "*": {
-      "*": [
-        "./dist/*.d.mts",
-        "./*"
-      ]
-    }
-  },
   "bin": {
     "tsdown": "./src/run.ts"
   },
@@ -72,7 +62,14 @@
     }
   },
   "engines": {
-    "node": "^22.18.0 || >=24.11.0"
+    "node": "^22.18.0 || ^24.11.0 || >=26.0.0"
+  },
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.3.1",
+      "onFail": "download"
+    }
   },
   "scripts": {
     "lint": "eslint --cache --max-warnings 0 .",
@@ -96,7 +93,7 @@
     "publint": "^0.3.8",
     "tsx": "*",
     "typescript": "^5.0.0 || ^6.0.0 || ^7.0.0",
-    "unplugin-unused": "^0.5.0",
+    "unplugin-unused": ">=0.5.0",
     "unrun": "*"
   },
   "peerDependenciesMeta": {
@@ -129,7 +126,6 @@
     }
   },
   "dependencies": {
-    "ansis": "catalog:prod",
     "cac": "catalog:prod",
     "defu": "catalog:prod",
     "empathic": "catalog:prod",
@@ -147,7 +143,7 @@
   },
   "inlinedDependencies": {
     "package-manager-detector": "1.8.0",
-    "pkg-types": "2.3.1"
+    "pkg-types": "2.3.2"
   },
   "devDependencies": {
     "@arethetypeswrong/core": "catalog:peer",
@@ -174,6 +170,7 @@
     "pkg-types": "catalog:dev",
     "postcss": "catalog:dev",
     "postcss-import": "catalog:dev",
+    "postcss-modules": "catalog:dev",
     "prettier": "catalog:dev",
     "publint": "catalog:peer",
     "rolldown-plugin-require-cjs": "catalog:dev",

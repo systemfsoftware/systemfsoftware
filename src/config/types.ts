@@ -24,7 +24,11 @@ import type { ExportsOptions } from '../features/pkg/exports.ts'
 import type { PublintOptions } from '../features/pkg/publint.ts'
 import type { TsdownPlugin, TsdownPluginOption } from '../features/plugin.ts'
 import type { ReportOptions } from '../features/report.ts'
-import type { RolldownChunk, TsdownBundle } from '../utils/chunks.ts'
+import type {
+  RolldownChunk,
+  TsdownBundle,
+  TsdownHandle,
+} from '../utils/chunks.ts'
 import type { ConcurrencyExecutor } from '../utils/general.ts'
 import type { Logger, LogLevel } from '../utils/logger.ts'
 import type { PackageJsonWithPath, PackageType } from '../utils/package.ts'
@@ -34,7 +38,6 @@ import type {
   MarkPartial,
   Overwrite,
 } from '../utils/types.ts'
-import type { CssOptions } from '@tsdown/css'
 import type { Hookable } from 'hookable'
 import type {
   ChecksOptions,
@@ -47,33 +50,10 @@ import type {
   OutputOptions,
   TreeshakingOptions,
 } from 'rolldown'
-import type { Options as RolldownPluginDtsOptions } from 'rolldown-plugin-dts'
-import type { Options as UnusedOptions } from 'unplugin-unused'
+import type { Options as DtsOptions } from 'rolldown-plugin-dts'
 
-export interface DtsOptions extends RolldownPluginDtsOptions {
-  /**
-   * When building dual ESM+CJS formats, generate a `.d.cts` re-export stub
-   * instead of running a full second TypeScript compilation pass.
-   *
-   * The stub re-exports everything from the corresponding `.d.mts` file,
-   * ensuring CJS and ESM consumers share the same type declarations. This
-   * eliminates the TypeScript "dual module hazard" where separate `.d.cts`
-   * and `.d.mts` declarations cause `TS2352` ("neither type sufficiently
-   * overlaps") errors when casting between types derived from the same class.
-   *
-   * Only applies when building both `esm` and `cjs` formats simultaneously.
-   *
-   * @remarks
-   * The generated `.d.cts` stub uses a relative path to re-export from the
-   * corresponding `.d.mts` file, so both formats must be emitted to the
-   * **same** `outDir`. Splitting CJS and ESM outputs into separate
-   * format-specific directories (e.g. `dist/cjs` and `dist/esm`) is not
-   * supported with this option, because the re-export path would be invalid.
-   *
-   * @default false
-   */
-  cjsReexport?: boolean
-}
+/** @ts-ignore - optional dep */
+type UnusedOptions = import('unplugin-unused').Options
 
 export type Sourcemap = boolean | 'inline' | 'hidden'
 export type Format = ModuleFormat
@@ -111,6 +91,7 @@ export type {
   CopyOptionsFn,
   DepsConfig,
   DevtoolsOptions,
+  DtsOptions,
   ExeOptions,
   ExportsOptions,
   NoExternalFn,
@@ -127,6 +108,7 @@ export type {
   SeaConfig,
   TreeshakingOptions,
   TsdownBundle,
+  TsdownHandle,
   TsdownHooks,
   TsdownPlugin,
   TsdownPluginOption,
@@ -166,6 +148,9 @@ export type WithEnabled<T> =
        */
       enabled?: boolean | CIOption
     })
+
+/** @ts-ignore - optional dep */
+type CssOptions = import('@tsdown/css').CssOptions
 
 /**
  * Options for tsdown.
@@ -270,6 +255,13 @@ export interface UserConfig {
   define?: Record<string, string>
 
   /**
+   * Inject CJS `__dirname` and `__filename` shims into ESM output.
+   * Only applies when {@linkcode platform} is set to `node`.
+   *
+   * Note: `import.meta.url`, `import.meta.dirname`, and `import.meta.filename`
+   * are always shimmed in CJS output, regardless of this option.
+   *
+   * @see https://tsdown.dev/options/shims
    * @default false
    */
   shims?: boolean
@@ -342,7 +334,8 @@ export interface UserConfig {
   checks?: ChecksOptions & {
     /**
      * If the config includes the `cjs` format and
-     * one of its target >= node 20.19.0 / 22.12.0,
+     * one of its targets is a Node.js version that supports `require(esm)`
+     * (`^20.19.0 || >=22.12.0`),
      * warn the user about the deprecation of CommonJS.
      *
      * @default true
@@ -553,9 +546,10 @@ export interface UserConfig {
   /**
    * Enables generation of TypeScript declaration files (`.d.ts`).
    *
-   * By default, this option is auto-detected based on your project's `package.json`:
+   * By default, this option is auto-detected:
    * - If {@linkcode exe} is enabled, declaration file generation is disabled by default.
-   * - If the `types` field is present, or if the main `exports` contains a `types` entry, declaration file generation is enabled by default.
+   * - If the `types` or `typings` field is present in `package.json`, or if its `exports` field contains a `types` entry, declaration file generation is enabled by default.
+   * - Otherwise, if the resolved `tsconfig.json` has `declaration: true`, declaration file generation is enabled by default.
    * - Otherwise, declaration file generation is disabled by default.
    */
   dts?: WithEnabled<DtsOptions>
@@ -651,64 +645,15 @@ export interface UserConfig {
   // tsup compatibility
 
   /**
+   * Cannot be combined with `deps.neverBundle`; setting both throws an error.
    * @deprecated Use {@linkcode DepsConfig.neverBundle | deps.neverBundle} instead.
    */
   external?: ExternalOption
   /**
+   * Cannot be combined with `deps.alwaysBundle`; setting both throws an error.
    * @deprecated Use {@linkcode DepsConfig.alwaysBundle | deps.alwaysBundle} instead.
    */
   noExternal?: Arrayable<string | RegExp> | NoExternalFn
-  /**
-   * @deprecated Use {@linkcode DepsConfig.onlyBundle | deps.onlyBundle} instead.
-   */
-  inlineOnly?: Arrayable<string | RegExp> | false
-  /**
-   * @deprecated Use {@linkcode DepsConfig.neverBundle | deps.neverBundle: true} instead.
-   * @default false
-   */
-  skipNodeModulesBundle?: boolean
-
-  /**
-   * Remove the `node:` prefix from built-in Node.js module imports.
-   * When enabled, rewrites import sources like `node:fs` to `fs`.
-   *
-   * @default false
-   * @deprecated Use {@linkcode nodeProtocol | nodeProtocol: 'strip'} instead.
-   *
-   * @example
-   * <caption>`removeNodeProtocol: true` — remove the `node:` prefix</caption>
-   *
-   * ```ts
-   * // Input
-   * import 'node:fs'
-   *
-   * // Output
-   * import 'fs'
-   * ```
-   */
-  removeNodeProtocol?: boolean
-
-  /**
-   * @deprecated Use {@linkcode unbundle} instead.
-   * @default true
-   */
-  bundle?: boolean
-
-  /**
-   * @deprecated Use {@linkcode outExtensions} instead.
-   */
-  outExtension?: OutExtensionFactory
-
-  /**
-   * @deprecated Use {@linkcode CssOptions.inject | css.inject} instead.
-   */
-  injectStyle?: boolean
-
-  /**
-   * @alias copy
-   * @deprecated Alias for {@linkcode copy}, will be removed in the future.
-   */
-  publicDir?: CopyOptions | CopyOptionsFn
 
   //#endregion
 }
@@ -736,9 +681,15 @@ export interface InlineConfig extends UserConfig {
   concurrency?: number
 }
 
+export interface UserConfigFnContext {
+  ci: boolean
+  rootConfig?: UserConfig
+  watch: TsdownHandle['watch']
+}
+
 export type UserConfigFn = (
   inlineConfig: InlineConfig,
-  context: { ci: boolean; rootConfig?: UserConfig },
+  context: UserConfigFnContext,
 ) => Awaitable<Arrayable<UserConfig>>
 
 export type UserConfigExport = Awaitable<Arrayable<UserConfig> | UserConfigFn>
@@ -749,15 +700,8 @@ export type ResolvedConfig = Overwrite<
       UserConfig,
       | 'workspace' // merged
       | 'fromVite' // merged
-      | 'publicDir' // deprecated
-      | 'bundle' // deprecated
-      | 'injectStyle' // deprecated, merged to `css`
-      | 'removeNodeProtocol' // deprecated
-      | 'outExtension' // deprecated
       | 'external' // deprecated, merged to `deps`
       | 'noExternal' // deprecated, merged to `deps`
-      | 'inlineOnly' // deprecated, merged to `deps`
-      | 'skipNodeModulesBundle' // deprecated, merged to `deps`
       | 'logLevel' // merge to `logger`
       | 'failOnWarn' // merge to `logger`
       | 'suppressWarnings' // merge to `logger`

@@ -1,12 +1,12 @@
 /* eslint-disable unicorn/no-top-level-side-effects */
 import process from 'node:process'
-import { blue, hex } from 'ansis'
-import { cac } from 'cac'
+import { cac, type CAC } from 'cac'
 import { VERSION as rolldownVersion } from 'rolldown'
 import { x } from 'tinyexec'
 import pkg from '../package.json' with { type: 'json' }
 import { enableDebug } from './features/debug.ts'
 import { globalLogger } from './utils/logger.ts'
+import { styleText } from './utils/style.ts'
 import type { UserConfig } from './config.ts'
 
 const cli = cac('tsdown')
@@ -68,7 +68,6 @@ cli
   )
   .option('--on-success <command>', 'Command to run on success')
   .option('--copy <dir>', 'Copy files to output dir')
-  .option('--public-dir <dir>', 'Alias for --copy, deprecated')
   .option('--tsconfig <tsconfig>', 'Set tsconfig path')
   .option('--unbundle', 'Unbundle mode')
   .option('--root <dir>', 'Root directory of input files')
@@ -86,7 +85,9 @@ cli
   .action(async (input: string[], flags: UserConfig) => {
     globalLogger.level = flags.logLevel || 'info'
     globalLogger.info(
-      `${blue`tsdown v${pkg.version}`} powered by ${hex('#ff7e17')`rolldown v${rolldownVersion}`}`,
+      `${styleText.blue(`tsdown v${pkg.version}`)} powered by ${styleText[
+        '#ff7e17,yellow'
+      ](`rolldown v${rolldownVersion}`)}`,
     )
     const { build } = await import('./build.ts')
     if (input.length > 0) flags.entry = input
@@ -129,10 +130,61 @@ cli
     process.exitCode = exitCode
   })
 
-export async function runCLI(): Promise<void> {
-  cli.parse(process.argv, { run: false })
+/**
+ * Options whose nested keys are user-defined values (environment variable
+ * names, module ids, entry names, ...) instead of option names.
+ */
+const VERBATIM_KEYS: ReadonlySet<string> = new Set([
+  'alias',
+  'define',
+  'entry',
+  'env',
+  'loader',
+  'inputOptions.moduleTypes',
+  'outputOptions.globals',
+])
 
-  enableDebug(cli.options.debug)
+/**
+ * cac camel-cases only the first segment of a dotted flag, so
+ * `--deps.never-bundle` is parsed as `deps['never-bundle']` while the config
+ * expects `deps.neverBundle`. Camel-case the remaining segments here, leaving
+ * the keys of {@linkcode VERBATIM_KEYS} untouched.
+ */
+function camelizeFlags(flags: Record<string, any>, path?: string): void {
+  for (const key of Object.keys(flags)) {
+    const camelKey = key.replaceAll(
+      /([a-z])-([a-z])/g,
+      (_, prev, next) => prev + next.toUpperCase(),
+    )
+    const value = flags[key]
+    const childPath = path ? `${path}.${camelKey}` : camelKey
+
+    if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      !VERBATIM_KEYS.has(childPath)
+    ) {
+      camelizeFlags(value, childPath)
+    }
+
+    if (camelKey !== key) {
+      if (!(camelKey in flags)) flags[camelKey] = value
+      delete flags[key]
+    }
+  }
+}
+
+export function parseCLI(argv: string[]): ReturnType<CAC['parse']> {
+  const parsed = cli.parse(argv, { run: false })
+  camelizeFlags(parsed.options)
+  return parsed
+}
+
+export async function runCLI(): Promise<void> {
+  const { options } = parseCLI(process.argv)
+
+  enableDebug(options.debug)
 
   try {
     await cli.runMatchedCommand()
