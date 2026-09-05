@@ -1,0 +1,53 @@
+{
+  "name": "@systemfsoftware/oxlint-config",
+  "private": true,
+  "license": "Apache-2.0",
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./base": "./src/oxlint-config.base.ts",
+    "./strict": "./src/oxlint-config.strict.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "typecheck": "tsc --noEmit --incremental && tsc --noEmit -p tsconfig.test.json",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@systemfsoftware/oxlint-plugin": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-dmmf": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-entrypoint": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-workflow": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-property-testing": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-recommended": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-test-hygiene": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-test-placement": "workspace:^",
+    "oxlint": "catalog:oxlint",
+    "oxlint-tsgolint": "catalog:oxlint"
+  },
+  "devDependencies": {
+    "@systemfsoftware/oxlint-plugin-effect-native": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-structure": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-tag-discipline": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@types/node": "catalog:",
+    "rimraf": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "oxlint": "catalog:oxlint"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/oxlint-plugin/oxlint-config"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugin/oxlint-config#readme"
+}

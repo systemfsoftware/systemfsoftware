@@ -20,7 +20,7 @@
     "**/etc/*.api.md",
     "vendor/**",
     "repos/**",
-    "packages/testing/mutation/stryker-js/typescript-checker/testResources/errors/invalid-tsconfig/tsconfig.json",
+    "packages/stryker-js/stryker-js-typescript-checker/testResources/errors/invalid-tsconfig/tsconfig.json",
     "**/snapshots/*.md"
   ],
   "plugins": [

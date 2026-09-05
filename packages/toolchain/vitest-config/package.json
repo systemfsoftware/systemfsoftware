@@ -25,5 +25,11 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
     "vitest": "catalog:"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/toolchain"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/toolchain#readme"
 }

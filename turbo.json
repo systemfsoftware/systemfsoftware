@@ -123,7 +123,7 @@
         "vitest.config.ts",
         "vitest.setup.ts",
         "reports/stryker-incremental.json",
-        "$TURBO_ROOT$/packages/testing/mutation/**",
+        "$TURBO_ROOT$/packages/stryker-js/**",
         "!**/*.md"
       ],
       "outputs": [
@@ -143,8 +143,8 @@
         "oxlint.config.ts",
         "tsconfig.json",
         "tsconfig.*.json",
-        "$TURBO_ROOT$/packages/lint/oxlint/config/src/**",
-        "$TURBO_ROOT$/packages/lint/oxlint/config/package.json",
+        "$TURBO_ROOT$/packages/oxlint-plugin/oxlint-config/src/**",
+        "$TURBO_ROOT$/packages/oxlint-plugin/oxlint-config/package.json",
         "$TURBO_ROOT$/packages/toolchain/tsconfig/*.json",
         "$TURBO_ROOT$/packages/toolchain/tsconfig/bundler/**",
         "$TURBO_ROOT$/packages/toolchain/tsconfig/tsc/**",
