@@ -18,6 +18,6 @@ fi
 
 if ! git merge-base --is-ancestor "$main_sha" HEAD; then
   echo "pre-push: behind remote main ($main_sha)." >&2
-  echo "Fetch and rebase onto $remote/main before pushing." >&2
+  echo "Rebase or merge $remote/main before pushing." >&2
   exit 1
 fi
