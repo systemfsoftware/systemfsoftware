@@ -4,6 +4,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 
 import { TestProject } from "../TestProject";
+import { materializeSharedSource as publishSharedSource } from "./materializeSharedSource";
 
 /**
  * Fixture builder for unplugin adapter and transform tests.
@@ -13,6 +14,8 @@ import { TestProject } from "../TestProject";
  * same native source-plugin path that real bundler integrations use.
  */
 export namespace TestUnpluginProject {
+  let sharedGoPluginRoot: string | undefined;
+
   /**
    * Options for the synthetic project used by unplugin transform scenarios.
    *
@@ -83,7 +86,6 @@ export namespace TestUnpluginProject {
       "utf8",
     );
     writePluginEntry(root);
-    writeGoPlugin(root);
     return root;
   }
 
@@ -101,6 +103,30 @@ export namespace TestUnpluginProject {
     }
     sharedCacheDir ??= TestProject.tmpdir("ttsc-unplugin-cache-");
     process.env.TTSC_CACHE_DIR = sharedCacheDir;
+  }
+
+  /**
+   * Publish a generated fixture under an immutable content-addressed path.
+   *
+   * Every process writes a private sibling first, then atomically renames the
+   * complete directory. A concurrent publisher either wins the rename or sees
+   * the same digest already present, so no compiler can observe a truncated Go
+   * source while another test process is materializing it.
+   */
+  export function materializeSharedSource(
+    label: string,
+    write: (directory: string) => void,
+  ): string {
+    return publishSharedSource(
+      path.join(
+        TestProject.WORKSPACE_ROOT,
+        "node_modules",
+        ".cache",
+        "ttsc-test-unplugin",
+      ),
+      label,
+      write,
+    );
   }
 
   /** Absolute path to the generated TypeScript entrypoint. */
@@ -135,14 +161,13 @@ export namespace TestUnpluginProject {
 
   /** Write the local CommonJS plugin descriptor consumed by ttsc. */
   export function writePluginEntry(root: string): void {
+    const source = sharedGoPluginSource();
     fs.writeFileSync(
       path.join(root, "plugin.cjs"),
       [
-        'const path = require("node:path");',
-        "",
         "module.exports = (context) => ({",
         '  name: context.plugin.name ?? "fixture",',
-        '  source: path.resolve(context.dirname, "go-plugin"),',
+        `  source: ${JSON.stringify(source)},`,
         "});",
         "",
       ].join("\n"),
@@ -214,6 +239,12 @@ export namespace TestUnpluginProject {
 
   /**
    * Write the tiny Go transformer used by unplugin adapter tests.
+   *
+   * This is a handwritten synthetic protocol double: it owns its JSON envelope
+   * shape and does not stand in for the production driver's reference graph.
+   * The real-host contract is calibrated by test-unplugin's native envelope
+   * cache gate; this fixture stays synthetic so tests can request controlled
+   * operations and deliberately incomplete shapes.
    *
    * The plugin supports multiple operations so adapter tests can prove plugin
    * ordering, generated tsconfig paths, config path absolutization, and cache
@@ -424,6 +455,8 @@ export namespace TestUnpluginProject {
         '      helper, err := os.ReadFile(filepath.Join(root, stringValue(plugin.Config, "path")))',
         '      if err != nil { return "", err }',
         '      value = strings.ToUpper(value) + ":" + strings.ToUpper(strings.TrimSpace(string(helper)))',
+        '    case "count-runs":',
+        '      if err := countRun(plugin.Config); err != nil { return "", err }',
         '    case "go-uppercase":',
         "      value = strings.ToUpper(value)",
         '    case "go-prefix":',
@@ -435,6 +468,19 @@ export namespace TestUnpluginProject {
         "    }",
         "  }",
         '  return fmt.Sprintf("export const %s = %q;\\nconsole.log(%s);\\n", name, value, name), nil',
+        "}",
+        "",
+        "// countRun appends one byte per transform invocation to the configured",
+        "// run log, so a scenario can count whole-project compiles from outside the",
+        "// build. The log lives wherever the caller puts it, which is deliberately",
+        "// outside the project so the transform's own input walk never sees it.",
+        "func countRun(config map[string]any) error {",
+        '  runLog := stringValue(config, "runLog")',
+        '  if runLog == "" { return fmt.Errorf("count-runs requires a runLog path") }',
+        "  file, err := os.OpenFile(runLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)",
+        "  if err != nil { return err }",
+        "  if _, err := file.Write([]byte{1}); err != nil { _ = file.Close(); return err }",
+        "  return file.Close()",
         "}",
         "",
         "func assertPaths(tsconfig string, config map[string]any) error {",
@@ -577,24 +623,66 @@ export namespace TestUnpluginProject {
         "  if hasHash && hasRealpath { return }",
         "  file := filepath.FromSlash(input)",
         "  if !filepath.IsAbs(file) { file = filepath.Join(root, file) }",
-        "  realpath, err := filepath.EvalSymlinks(file)",
-        "  if err != nil {",
+        "  realpath, ok := physicalGraphInput(file)",
+        "  if !ok {",
         "    graph.InputHashes[input] = nil",
         "    graph.InputRealpaths[input] = nil",
         "    return",
         "  }",
-        "  absolute, err := filepath.Abs(realpath)",
-        "  if err != nil { return }",
         "  data, err := os.ReadFile(file)",
         "  if err != nil {",
         "    info, statErr := os.Stat(file)",
         "    if statErr != nil || !info.IsDir() { return }",
         '    data = []byte("ttsc:host-input:directory\\x00")',
         "  }",
-        "  digest := sha256.Sum256(data)",
-        '  hash := fmt.Sprintf("%x", digest[:])',
-        "  graph.InputHashes[input] = &hash",
-        "  graph.InputRealpaths[input] = &absolute",
+        "  if !hasHash {",
+        "    digest := sha256.Sum256(data)",
+        '    hash := fmt.Sprintf("%x", digest[:])',
+        "    graph.InputHashes[input] = &hash",
+        "  }",
+        "  if !hasRealpath { graph.InputRealpaths[input] = &realpath }",
+        "}",
+        "",
+        "// physicalGraphInput follows both ordinary symlinks and Windows",
+        "// junction ancestors, matching the production host's graph proof.",
+        "func physicalGraphInput(file string) (string, bool) {",
+        "  resolved, err := filepath.Abs(file)",
+        '  if err != nil { return "", false }',
+        "  resolved = filepath.Clean(resolved)",
+        "  seen := map[string]struct{}{}",
+        "  for range 255 {",
+        '    if _, exists := seen[resolved]; exists { return "", false }',
+        "    seen[resolved] = struct{}{}",
+        "    if evaluated, evalErr := filepath.EvalSymlinks(resolved); evalErr == nil {",
+        "      evaluated, evalErr = filepath.Abs(evaluated)",
+        '      if evalErr != nil { return "", false }',
+        "      evaluated = filepath.Clean(evaluated)",
+        '      if _, statErr := os.Stat(evaluated); statErr != nil { return "", false }',
+        "      return evaluated, true",
+        "    }",
+        "    next, ok := resolveGraphInputLinkAncestor(resolved)",
+        '    if !ok { return "", false }',
+        "    resolved = next",
+        "  }",
+        '  return "", false',
+        "}",
+        "",
+        "func resolveGraphInputLinkAncestor(location string) (string, bool) {",
+        "  probe := filepath.Clean(location)",
+        "  suffix := []string{}",
+        "  for {",
+        "    if target, err := os.Readlink(probe); err == nil {",
+        "      if !filepath.IsAbs(target) { target = filepath.Join(filepath.Dir(probe), target) }",
+        "      for i := len(suffix) - 1; i >= 0; i-- { target = filepath.Join(target, suffix[i]) }",
+        "      absolute, absErr := filepath.Abs(target)",
+        '      if absErr != nil { return "", false }',
+        "      return filepath.Clean(absolute), true",
+        "    }",
+        "    parent := filepath.Dir(probe)",
+        '    if parent == probe { return "", false }',
+        "    suffix = append(suffix, filepath.Base(probe))",
+        "    probe = parent",
+        "  }",
         "}",
         "",
         "func optionalStringMapValue(config map[string]any, key string) map[string]*string {",
@@ -649,6 +737,23 @@ export namespace TestUnpluginProject {
       ].join("\n"),
       "utf8",
     );
+  }
+
+  /**
+   * Materialize one process-wide source identity for the synthetic transformer.
+   *
+   * The native cache keys source plugins by both content and location. Writing
+   * identical Go sources below every temporary consumer therefore defeated the
+   * cache and rebuilt the same host for each scenario. The package-discovery
+   * fixture remains local because that case owns the package-relative source
+   * contract; ordinary projects all point at this one deterministic location.
+   */
+  function sharedGoPluginSource(): string {
+    sharedGoPluginRoot ??= materializeSharedSource(
+      "default-go-plugin",
+      writeGoPlugin,
+    );
+    return path.join(sharedGoPluginRoot, "go-plugin");
   }
 
   /**

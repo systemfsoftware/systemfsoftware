@@ -2,10 +2,8 @@ import type { MetaRecord } from "nextra";
 
 const meta: MetaRecord = {
   index: "Overview",
-  examples: "Examples",
-  adoption: "Adoption",
-  claims: "Claims & References",
   tags: "Evidence Tags",
-  rules: "Rules",
+  "spec-driven-development": "Spec-Driven Development",
+  claims: "Configuration",
 };
 export default meta;
