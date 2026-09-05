@@ -13,6 +13,7 @@ Prettier compatible CSS/SCSS/Less formatter (`oxfmt`'s Tier 1 backend), using th
   - `format()`: standalone files, on a service-less session
   - `format_with_session()`: standalone, on the caller's `FormatSession`
   - `format_to_ir()`: embedded use via the dispatcher (`template_placeholders` = the css-in-js parse mode)
+  - `parse_for_format()`: the parse `format()` runs, exposed for callers that inspect the AST (e.g. the fixture harness's fingerprint)
 
 ### Forked parser
 
@@ -20,24 +21,16 @@ Parses with [`oxc-css-parser`](https://crates.io/crates/oxc-css-parser), a `raff
 
 The fork adds:
 
-- `template_placeholder` option (for the css-in-js dispatcher)
-  - Backtick-delimited marker `` `<prefix><digits>` `` with a parameterized inner affix (`TemplatePlaceholder { prefix }`);
-  - Backtick is invalid CSS/SCSS/Sass (only Less's inline-JS delimiter), so the marker is
-    unmistakably out-of-band, not a real `@var`/`$var` or at-rule
-  - Only `format_to_ir` with `template_placeholders: true` enables it (with the option unset a backtick is a syntax error)
-  - MUST be used with `Syntax::Scss`; css-in-js is `CssVariant::Scss`-hardcoded
-  - Tokenized as one typed `Token::Placeholder { index, suffix }` accepted in value / selector / statement / declaration-name positions
-    - Per-position layout and coverage: see "css-in-js specifics" below
-- Whitespace-sensitive Less `+`/`-` operators (matching `lessc`)
-  - A `+`/`-` is a `LessBinaryOperation` operator only when followed by whitespace;
-  - `@a -@b` is two values (`-@b` is a `LessNegativeValue` sign
-  - `margin: -@a -@b` = two values, NOT `(-@a) - @b` subtraction), `@a - @b` is subtraction
-- Various bug fixes for valid CSS/SCSS/Less syntax `oxc-css-parser` miss-parses or rejects
-  - selector / at-rule / value-token coverage gaps
+- `template_placeholder` option: backtick-delimited `` `<prefix><digits>` `` markers tokenized as one typed `Token::Placeholder`
+  - the css-in-js parse mode, enabled only by `format_to_ir`
+  - Rationale, gating and per-position coverage: see "css-in-js specifics" below
+- Bug fixes toward the reference compilers for valid CSS/SCSS/Less syntax `raffia` miss parses or rejects;
+  - unlike the leniencies below these may change the AST of input that already parsed
+    - e.g. lessc's whitespace-sensitive `+`/`-`: `margin: -@a -@b` is two values, not subtraction
 - Additive leniencies for syntax reference compilers reject but postcss (and so Prettier) accepts
-  - the IE `*color` hack, Scss dotted words (`foo.bar`, xstyled / tailwind-theme tokens), plain-CSS `%placeholder` selectors (postcss-extend-rule), non-standard `@import` tails, ...
-  - Each is additive: it only accepts previously-erroring input, never changes the AST of input that already parsed
-  - See "Policy: how to take in non-spec / non-Sass dialect syntax" below
+  - e.g. the IE `*color` hack, raw-prelude rules like `sans: "Sans" { ... }`
+  - Contract (additive-only, code comment + test pin per leniency) and triage:
+    - see "Policy: how to take in non-spec / non-Sass dialect syntax" below
 
 Prettier operates on `postcss` + three sub-parsers (`postcss-selector-parser`, `postcss-values-parser`, `postcss-media-query-parser`) and depends on `raws` (source gaps).
 
@@ -57,31 +50,40 @@ The shared policy applies; CSS specifics:
 `oxc-css-parser` does not attach comments to the AST;
 they are collected via `ParserBuilder::comments()` into a positional cursor over `CssComment { span, inline }` (`inline` = `//`).
 
-- Statement-level comments: flushed before each statement (`flush_leading_comments`);
-  consecutive same-line comments stay glued (`*/ /*!`), but a comment is always followed by a line break before a node
-- Value-level comments: block comments between fill runs are standalone fill items (own-line or not);
-  the rest (leads before the first component, own-line `//`) flush at the next entry's head (`flush_value_comments`),
-  where `//` comments expand the parent group and force a hardline after
-- Trailing (`value /* c */;`): flushed by `write_declaration` with the source gap before `;` preserved
-- After each statement, the sequence DISCARDS unclaimed comments inside the statement span
-  (cursor must never point before a printed position)
+Ownership is a claim discipline, not attachment: each printer claims the comments inside what it prints, in source order.
+
+- Statement level: `flush_leading_comments` before the statement, `write_terminator_tail_comments` before its `;`
+- Value level: a comma group claims its own head (`write_comma_group`); a bare value has no group to do so,
+  its CALLER claims (`write_list_element` / `write_top_level_list_element`), never `write_component_value` itself (a `//` hardline would land inside the indent an arm opens)
+- After each statement, the sequence DISCARDS unclaimed comments inside the statement span:
+  a monotonicity guard (the cursor must never point before a printed position), not a placement rule.
+  A comment reaching it is LOST (the lossless contract), so every new value position must claim its leads
 
 #### Placement invariants
 
 The shared invariants (FORMATTER_POLICY.md "Comment placement invariants") apply; this section records their CSS translation:
 
 - `,` is a list SEPARATOR: a comment between an element and its comma stays BEFORE the comma
-  - `a /* c */, b`; comments after it lead the next element
+  - `a /* c */, b`; comments after it lead the next element, except a `//` on the comma's line (line-boundary rule below)
   - Declaration value lists (`write_value_groups`) and function arguments (`write_function`) route every comma through `write_group_comma` with the comma offset paired to its group
   - `split_comma_groups` returns `(group, Option<comma_start>)`; SCSS/Less lists pair `comma_spans`
   - A new comma site must take the pair, the shape makes taking the groups without the commas a visible choice, not an accident
   - Adopted by every comma writer (function/include args, maps, paren/sass lists, `@mixin` params, `@each` bindings, keyframe selectors)
 - `;` is a declaration TERMINATOR, but unlike JS statements Prettier does NOT move comments behind it:
   - `value /* c */;` keeps the comment before `;` (measured behavior, not principle, may change in the future)
+  - `oxc_formatter` prints `1; /* c */` (comment behind the terminator); CSS keeps it before, uniformly for declarations, `$var` / `@var` values and `!flag`s (`write_terminator_tail_comments`).
+    - Revisit together with JS if the policy ever picks one side
+  - The gap before the `;` is the formatter's and is dropped (`/* c */ ;` -> `/* c */;`), see DIVERGENCES.md "terminator-gap-normalized"
 - The positional cursor makes ownership a bounds discipline, not an attachment one:
   - a flush's upper bound must never extend past the next piece of user content,
   - and a declaration's `tail_bound` may only be consumed by the LAST comma group (`write_value_groups` clears it for every other group)
 - Line-boundary rule in CSS terms: `//` comments force a hardline after;
+  - a `//` on a list `,`'s line stays there (`1, // c`, like JS), together with the block comments glued before it on that line;
+    Prettier's CSS moves it below as the next element's leading comment (DIVERGENCES.md "line-comment-after-comma")
+  - a `//` before a list `,` rides past it (`a // c\n, b` -> `a, // c`), an own-line comment there leads the next element;
+    a `//` glued to a prelude's end stays there and `{` starts the next line (DIVERGENCES.md "line-comment-before-block")
+  - a structured prelude printer places its own comments, word by word (`value::write_with_comments`: own-line ones lead the word, glued ones trail it),
+    and `write_at_rule` writes whatever is still pending before the `;` / `{`, so a prelude comment is never lost
   - own-line comments stay own-line at statement and trailing level, but a value-level own-line BLOCK comment is a plain fill item (joins the line when it fits):
     - it carries no line-based semantics, and freezing it own-line would pin a wrapped layout (= not idempotent)
 
@@ -169,7 +171,7 @@ When a dialect report comes in, first translate it: "which GENERAL postcss behav
 Then absorb it at the highest possible rung of the escape-hatch hierarchy (top = cheapest, each rung covers whole classes of dialects at once):
 
 1. Unknown at-rule prelude verbatim (`write_verbatim_at_rule_tail`) zero-cost bucket: Tailwind, postcss-mixins, ICSS ride it for free
-2. Raw fallbacks when the typed grammar rejects (raw component values, `TokenSeq`, `ImportPrelude.modifiers`) `[attr=;]`, weird import tails
+2. Raw fallbacks when the typed grammar rejects (raw component values, `TokenSeq`, `ImportPrelude.modifiers`, `UnknownQualifiedRule`) `[attr=;]`, weird import tails, nested config blocks
 3. postcss word rules at the separator layer (`is_word_glued_number`, the `1#{$var}` glue, solidus words) variant-agnostic, fixes xstyled + `theme()` + future unknown tokens in one place
 4. `ParserOptions` flag + typed node (postcss-simple-vars) ONLY when the formatter must make layout decisions INSIDE the construct.
    Promotion criteria, all three:
@@ -189,11 +191,7 @@ Either means the fix is at the wrong rung.
 
 #### Supported: postcss-simple-vars (auto-enabled for `CssVariant::Css`)
 
-Covered:
-
-- `$var: value !important;` declarations (top-level and inside rules)
-- `$var` references in property values
-- `$var` references inside `@media`/at-rule preludes
+Covered: `$var: value !important;` declarations (top-level and inside rules), `$var` references in property values and `@media`/at-rule preludes.
 
 NOT covered: `$(var)` interpolation (`margin-$(dir): 10px`, `.icon.is-$(network)`), selector-position bare `$var` (`.$prefix`), comment substitutions (`<<$(var)>>`).
 
@@ -205,10 +203,12 @@ The harness snapshots both `--print-width 80` and `100`; verify fixtures at both
 
 ### Prettier conformance
 
-At the current version (v3.9.6), the divergences of eight files have been confirmed and are intentional (see DIVERGENCES.md):
+At the current version (v3.9.6), these divergences have been confirmed and are intentional (see DIVERGENCES.md):
 
-- CSS: `css/stylefmt-repo/at-media/at-media.css`, `css/stylefmt-repo/cssnext-example/cssnext-example.css`, `css/stylefmt-repo/media-queries-ranges/media-queries-ranges.css`, `css/postcss-plugins/postcss-nesting.css`
-- SCSS: `scss/comments/4878.scss`, `scss/map/function-argument/functional-argument.scss`, `scss/parens/issue-16594.scss`, `scss/variables/apply-rule.scss`
+- CSS: `css/stylefmt-repo/at-media/at-media.css`, `css/stylefmt-repo/cssnext-example/cssnext-example.css`, `css/stylefmt-repo/media-queries-ranges/media-queries-ranges.css`, `css/postcss-plugins/postcss-nesting.css`, `css/comments/declaration.css` (terminator-gap-normalized)
+- SCSS: `scss/comments/4878.scss`, `scss/map/function-argument/functional-argument.scss`, `scss/parens/issue-16594.scss`, `scss/variables/apply-rule.scss`, `scss/trailing-comma/comments.scss`, `scss/trailing-comma/list.scss`, `scss/trailing-comma/variable.scss`, `scss/function/arbitrary-arguments-comment.scss`, `scss/map/15193.scss`, `scss/comments/variable-declaration.scss` (terminator-gap-normalized),
+  `scss/comments/4594.scss`, `scss/comments/lists.scss`, `scss/comments/maps.scss`, `scss/trailing-comma/issue-6920.scss` and one more hunk of `scss/trailing-comma/comments.scss` (line-comment-after-comma)
+- Less: `less/comments/value-lists.less` (line-comment-after-comma)
 
 Two more files fail with MIXED hunks; they can't pass as files (the intentional hunks alone keep them failing), so the remaining diffs are itemized here:
 
