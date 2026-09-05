@@ -3,11 +3,16 @@ import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { join } from 'path';
 
 import semver from 'semver';
-import yml from 'yaml';
 
-import { STORYBOOK_PACKAGE_PATTERNS } from '../../../code/core/src/common/js-package-manager/util.ts';
-import { ROOT_DIRECTORY } from '../../utils/constants.ts';
+import { BEFORE_SANDBOX_NPM_MIN_VERSION, ROOT_DIRECTORY } from '../../utils/constants.ts';
+
+export { BEFORE_SANDBOX_NPM_MIN_VERSION };
 import { runCommand } from '../generate.ts';
+
+export {
+  LOCALLY_PUBLISHED_PACKAGE_PATTERNS,
+  preapproveLocallyPublishedPackages,
+} from '../../utils/preapprove-local-packages.ts';
 
 interface SetupYarnOptions {
   cwd: string;
@@ -64,13 +69,6 @@ export const BEFORE_SANDBOX_MIN_AGE_GATE = '7d';
 export const BEFORE_SANDBOX_MIN_AGE_MINUTES = 7 * 24 * 60;
 /** npm `min-release-age` is in days (npm 11.10+). */
 export const BEFORE_SANDBOX_NPM_MIN_RELEASE_AGE_DAYS = 7;
-/**
- * npm below this version silently ignores `NPM_CONFIG_MIN_RELEASE_AGE`.
- * 11.17+ is required for `min-release-age-exclude`, which templates with
- * `minAgeGateExemptions` rely on during npx/npm scaffolds.
- */
-export const BEFORE_SANDBOX_NPM_MIN_VERSION = '11.17.0';
-
 export async function ensureNpmSupportsMinReleaseAge() {
   const { stdout } = await runCommand('npm --version', { cwd: process.cwd() });
   const version = String(stdout).trim();
@@ -343,52 +341,6 @@ async function narrowQuarantinedRanges({
 
   // So the committed lockfile is always the product of a plain `yarn install`.
   await runCommand(`yarn install --mode=update-lockfile`, { cwd, env }, debug);
-}
-
-/**
- * Packages served by the local Verdaccio registry during sandbox generation.
- * They are published seconds before they are installed, so they can never
- * satisfy the age gate on their own.
- */
-export const LOCALLY_PUBLISHED_PACKAGE_PATTERNS = [
-  ...STORYBOOK_PACKAGE_PATTERNS,
-  'create-storybook',
-  'sb',
-];
-
-/**
- * Allow the locally published Storybook packages past the age gate for the
- * `after-storybook` install, keeping the gate itself in force.
- *
- * This install is the only step in sandbox generation that executes package
- * code (lifecycle scripts, addon postinstall hooks), and it resolves
- * third-party dependencies from the upstream registry through Verdaccio.
- * Switching the gate off here would leave the one dangerous step unprotected,
- * so name the packages that genuinely cannot satisfy it instead.
- *
- * Merges with whatever the template already allows, so a prerelease template
- * does not lose its own entries. Phase 1 strips both keys from the published
- * `after-storybook` tree, so none of this reaches consumers.
- */
-export async function preapproveLocallyPublishedPackages(cwd: string) {
-  const configPath = join(cwd, '.yarnrc.yml');
-
-  let config: Record<string, unknown> = {};
-  try {
-    config = (yml.parse(await readFile(configPath, 'utf-8')) ?? {}) as Record<string, unknown>;
-  } catch {
-    // No config yet (the lockfile refresh may have bailed); start from scratch.
-  }
-
-  const existing = Array.isArray(config.npmPreapprovedPackages)
-    ? (config.npmPreapprovedPackages as string[])
-    : [];
-
-  config.npmPreapprovedPackages = Array.from(
-    new Set([...existing, ...LOCALLY_PUBLISHED_PACKAGE_PATTERNS])
-  );
-
-  await writeFile(configPath, yml.stringify(config));
 }
 
 /**

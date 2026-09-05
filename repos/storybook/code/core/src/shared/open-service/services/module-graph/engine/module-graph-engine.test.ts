@@ -156,6 +156,42 @@ describe('ModuleGraphEngine', () => {
     );
   });
 
+  it('whenSettled waits for the initial build, so a caller after start() observes a ready graph', async () => {
+    const reverseIndex = buildReverseIndex([
+      ['/repo/src/Button.tsx', '/repo/src/Button.stories.tsx', 1],
+    ]);
+    const buildDeferred = createDeferred<void>();
+    const { buildSpy } = installDependencyGraphMocks(reverseIndex);
+    buildSpy.mockImplementation(async () => {
+      await buildDeferred.promise;
+      return { reverseIndex, graph: new Map() };
+    });
+
+    const { service, adapter } = setup({
+      storyIndex: createStoryIndex([
+        { storyId: 'button--primary', importPath: './src/Button.stories.tsx', title: 'Button' },
+      ]),
+    });
+
+    service.start(adapter);
+
+    let settled = false;
+    void service.whenSettled().then(() => {
+      settled = true;
+    });
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+    }
+    expect(settled).toBe(false);
+    expect(service.hasGraph()).toBe(false);
+
+    buildDeferred.resolve();
+    await vi.runAllTimersAsync();
+
+    expect(settled).toBe(true);
+    expect(service.hasGraph()).toBe(true);
+  });
+
   it('mirrors an update after each file-change patch settles, but not for the initial build', async () => {
     installDependencyGraphMocks(buildReverseIndex([]));
     const { service, adapter, emitFileChange, callbacks } = setup({
@@ -176,7 +212,7 @@ describe('ModuleGraphEngine', () => {
     expect(callbacks.onIndex).toHaveBeenCalledTimes(2);
   });
 
-  it('skips the update entirely when a patch leaves the index untouched and bumps no story', async () => {
+  it('still bumps file activity when a patch leaves the index untouched and bumps no story', async () => {
     const { patchSpy } = installDependencyGraphMocks(buildReverseIndex([]));
     const { service, adapter, emitFileChange, callbacks } = setup({
       storyIndex: createStoryIndex([
@@ -188,13 +224,15 @@ describe('ModuleGraphEngine', () => {
     service.start(adapter);
     await vi.runAllTimersAsync();
 
-    // A file the graph has never seen: nothing to re-serialize and nothing to notify about.
+    // A file the graph has never seen: nothing to re-serialize, and graphRevision stays put,
+    // but change detection still needs the empty bump so fileActivityRevision can advance.
     emitFileChange({ kind: 'change', path: '/repo/unrelated.log' });
     await vi.runAllTimersAsync();
 
     expect(patchSpy).toHaveBeenCalledTimes(1);
     expect(callbacks.onIndex).not.toHaveBeenCalled();
-    expect(callbacks.onBump).not.toHaveBeenCalled();
+    expect(callbacks.onBump).toHaveBeenCalledTimes(1);
+    expect(callbacks.onBump).toHaveBeenCalledWith([]);
   });
 
   it('bumps stories without calling onIndex when a patch leaves the reverse index untouched', async () => {
@@ -277,7 +315,7 @@ describe('ModuleGraphEngine', () => {
 
     expect(patchSpy).toHaveBeenCalledWith({ kind: 'add', path: '/repo/src/B.stories.tsx' });
     // The replayed add flows through the normal patch path, so the new story is reported as a
-    // targeted update — no separate untargeted index-invalidation bump is needed.
+    // targeted bump — no separate untargeted index-invalidation bump is needed.
     expect(callbacks.onBump).toHaveBeenCalledWith(['./src/B.stories.tsx']);
   });
 
