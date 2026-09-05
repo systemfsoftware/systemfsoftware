@@ -28,6 +28,11 @@
   dir: packages/lint/oxlint/all
   intents:
     - curvy-rivers-heal
+"@systemfsoftware/all@1.1.3":
+  dir: packages/oxlint-plugin/all
+  intents:
+    - effect-rc112
+    - omp-typescript-discipline-plugin
 "@systemfsoftware/arethetypeswrong-cli@2.0.0":
   dir: packages/arethetypeswrong/cli
   intents:
@@ -63,6 +68,13 @@
   dir: packages/testing/type-testing/arethetypeswrong/cli
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/arethetypeswrong-cli@4.0.0":
+  dir: packages/arethetypeswrong/arethetypeswrong-cli
+  intents:
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - modern-ends-know
+    - projections-collapsed-into-ports
 "@systemfsoftware/arethetypeswrong-core@2.0.0":
   dir: packages/arethetypeswrong/core
   intents:
@@ -104,6 +116,13 @@
   dir: packages/testing/type-testing/arethetypeswrong/analysis
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/arethetypeswrong@7.0.0":
+  dir: packages/arethetypeswrong/arethetypeswrong
+  intents:
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - modern-ends-know
+    - projections-collapsed-into-ports
 "@systemfsoftware/effect-atom-react@0.6.0":
   dir: packages/effect-atom/atom-react
   intents:
@@ -136,6 +155,13 @@
   dir: packages/core/effect/atom/atom-react
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/effect-atom-react@0.8.0":
+  dir: packages/atom/effect-atom-react
+  intents:
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - modern-ends-know
+    - package-landing-pages
 "@systemfsoftware/effect-atom@1.0.0":
   dir: packages/effect-atom/atom
   intents:
@@ -178,6 +204,13 @@
   intents:
     - concrete-effect-channels
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/effect-atom@3.2.0":
+  dir: packages/atom/effect-atom
+  intents:
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - modern-ends-know
+    - package-landing-pages
 "@systemfsoftware/effect-cell-gen@0.1.0":
   dir: packages/core/effect/cell/gen
   intents:
@@ -235,6 +268,10 @@
     - cell-is-one-sandwich
     - one-sandwich-descriptions
     - yummy-hounds-taste
+"@systemfsoftware/effect-cell-types@6.0.1":
+  dir: packages/effect-cell-types
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-daemon-spec@1.0.0":
   dir: packages/effect-daemon-spec
   intents:
@@ -282,6 +319,11 @@
   intents:
     - curvy-rivers-heal
     - schema-filters-gain-constructive-candidates
+"@systemfsoftware/effect-daemon-spec@3.0.6":
+  dir: packages/effect-daemon-spec
+  intents:
+    - effect-rc112
+    - schema-filters-gain-constructive-candidates
 "@systemfsoftware/effect-gherkin-spec@1.0.0":
   dir: packages/effect-gherkin-spec
   intents:
@@ -315,6 +357,10 @@
   intents:
     - concrete-effect-channels
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/effect-gherkin-spec@4.0.1":
+  dir: packages/effect-gherkin-spec
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-memfs@1.2.0":
   dir: packages/effect-memfs
   intents:
@@ -345,6 +391,10 @@
   dir: packages/core/effect/filesystem/memfs
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/effect-memfs@1.3.4":
+  dir: packages/effect-memfs
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-schema-bounded-union@0.1.0":
   dir: packages/core/effect/schema/bounded-union
   intents:
@@ -357,6 +407,10 @@
   dir: packages/core/effect/schema/bounded-union
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/effect-schema-bounded-union@0.1.3":
+  dir: packages/effect-schema-bounded-union
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-schema-discovery@0.1.0":
   dir: packages/core/effect/schema/discovery
   intents:
@@ -370,6 +424,10 @@
   dir: packages/core/effect/schema/discovery
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/effect-schema-discovery@1.0.2":
+  dir: packages/effect-schema-discovery
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-schema-extensions@0.8.0":
   dir: packages/effect-schema-extensions
   intents:
@@ -400,6 +458,10 @@
   dir: packages/core/effect/schema/extensions
   intents:
     - curvy-rivers-heal
+"@systemfsoftware/effect-schema-extensions@0.9.6":
+  dir: packages/effect-schema-extensions
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-schema-law@0.7.0":
   dir: packages/effect-schema-law
   intents:
@@ -429,6 +491,10 @@
   dir: packages/core/effect/schema/law
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/effect-schema-law@2.0.2":
+  dir: packages/effect-schema-law
+  intents:
+    - effect-rc112
 "@systemfsoftware/effect-schema-vite@1.5.2":
   dir: packages/effect-schema-vite
   intents:
@@ -463,6 +529,10 @@
   dir: packages/core/effect/schema/vite
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/effect-schema-vite@2.0.3":
+  dir: packages/effect-schema-vite
+  intents:
+    - effect-rc112
 "@systemfsoftware/harness-toml@0.0.0":
   dir: omp/packages/harness-toml
   intents:
@@ -501,6 +571,10 @@
   dir: packages/core/hex/hex-schema
   intents:
     - curvy-rivers-heal
+"@systemfsoftware/hex-schema@1.8.6":
+  dir: packages/hex-schema
+  intents:
+    - effect-rc112
 "@systemfsoftware/npm-package@0.2.0":
   dir: packages/npm-package
   intents:
@@ -609,7 +683,7 @@
   intents:
     - oxc-instrumenter-dependency-bump
 "@systemfsoftware/oxlint-config@0.1.0":
-  dir: packages/lint/oxlint/config
+  dir: packages/oxlint-plugin/oxlint-config
   intents:
     - drop-undecidable-state-rules
     - make-boundary-regime
@@ -645,6 +719,12 @@
     - curvy-rivers-heal
     - vivid-composers-report
     - vocabulary-rule-judges-spec-bodies
+"@systemfsoftware/oxlint-plugin-cell-vocabulary@2.0.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-cell-vocabulary
+  intents:
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - package-landing-pages
 "@systemfsoftware/oxlint-plugin-effect-dmmf@2.0.0":
   dir: packages/oxlint-plugins/effect-dmmf
   intents:
@@ -693,6 +773,11 @@
     - neat-badgers-roll
     - schema-checked-element-named
     - test-tree-public-api
+"@systemfsoftware/oxlint-plugin-effect-dmmf@5.2.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-dmmf
+  intents:
+    - debut-releases-gain-oidc
+    - effect-rc112
 "@systemfsoftware/oxlint-plugin-effect-entrypoint@1.0.3":
   dir: packages/oxlint-plugins/effect-entrypoint
   intents:
@@ -715,6 +800,11 @@
   dir: packages/lint/oxlint/plugins/effect/entrypoint
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/oxlint-plugin-effect-entrypoint@1.0.8":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-entrypoint
+  intents:
+    - debut-releases-gain-oidc
+    - effect-rc112
 "@systemfsoftware/oxlint-plugin-effect-schema@2.0.0":
   dir: packages/oxlint-plugins/effect-schema
   intents:
@@ -756,6 +846,12 @@
     - neat-badgers-roll
     - schema-checked-element-named
     - schema-filter-constructive-generation
+"@systemfsoftware/oxlint-plugin-effect-schema@5.2.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
+  intents:
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - modern-ends-know
 "@systemfsoftware/oxlint-plugin-effect-workflow@2.0.0":
   dir: packages/oxlint-plugins/effect-workflow
   intents:
@@ -797,6 +893,12 @@
   dir: packages/lint/oxlint/plugins/cells/effect-workflow
   intents:
     - damp-workflow-stem-rule
+"@systemfsoftware/oxlint-plugin-effect-workflow@5.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-workflow
+  intents:
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - make-boundary-regime
 "@systemfsoftware/oxlint-plugin-property-testing@1.2.0":
   dir: packages/oxlint-plugins/property-testing
   intents:
@@ -821,6 +923,12 @@
   dir: packages/lint/oxlint/plugins/testing/property-testing
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/oxlint-plugin-property-testing@1.4.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-property-testing
+  intents:
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - modern-ends-know
 "@systemfsoftware/oxlint-plugin-recommended@1.1.2":
   dir: packages/oxlint-plugins/recommended
   intents:
@@ -835,6 +943,10 @@
   dir: packages/lint/oxlint/plugins/meta/recommended
   intents:
     - disable-explicit-boundary-types
+"@systemfsoftware/oxlint-plugin-recommended@1.1.5":
+  dir: packages/oxlint-plugin/oxlint-plugin-recommended
+  intents:
+    - debut-releases-gain-oidc
 "@systemfsoftware/oxlint-plugin-test-hygiene@1.1.3":
   dir: packages/oxlint-plugins/test-hygiene
   intents:
@@ -857,6 +969,12 @@
   dir: packages/lint/oxlint/plugins/testing/test-hygiene
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/oxlint-plugin-test-hygiene@1.1.8":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-hygiene
+  intents:
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - package-landing-pages
 "@systemfsoftware/oxlint-plugin-test-placement@2.0.0":
   dir: packages/oxlint-plugins/test-placement
   intents:
@@ -897,6 +1015,12 @@
   dir: packages/lint/oxlint/plugins/testing/test-placement
   intents:
     - test-tree-public-api
+"@systemfsoftware/oxlint-plugin-test-placement@3.4.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-test-placement
+  intents:
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - modern-ends-know
 "@systemfsoftware/oxlint-plugin@1.0.0":
   dir: packages/oxlint-plugins/core
   intents:
@@ -937,6 +1061,14 @@
   dir: packages/lint/oxlint/plugins/meta/core
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/oxlint-plugin@3.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin
+  intents:
+    - debut-releases-gain-oidc
+    - drop-undecidable-state-rules
+    - effect-rc112
+    - make-boundary-regime
+    - modern-ends-know
 "@systemfsoftware/rx-effect@0.6.0":
   dir: packages/rx-effect
   intents:
@@ -961,6 +1093,10 @@
   dir: packages/core/effect/rx/rx-effect
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/rx-effect@0.7.4":
+  dir: packages/rx-effect
+  intents:
+    - effect-rc112
 "@systemfsoftware/storybook-gherkin@1.0.0":
   dir: packages/storybook-gherkin
   intents:
@@ -991,6 +1127,10 @@
   dir: packages/testing/specs/gherkin/storybook
   intents:
     - oxc-instrumenter-dependency-bump
+"@systemfsoftware/storybook-gherkin@3.0.2":
+  dir: packages/storybook-gherkin
+  intents:
+    - effect-rc112
 "@systemfsoftware/stryker-js-cli@2.0.0":
   dir: packages/stryker-js/cli
   intents:
@@ -1068,6 +1208,31 @@
     - fine-onions-taste
     - wide-ravens-begin
     - workers-are-group-killed
+"@systemfsoftware/stryker-js-cli@6.0.0":
+  dir: packages/stryker-js/stryker-js-cli
+  intents:
+    - base-preset-is-published-again
+    - concept-modules-platform-node
+    - config-errors-name-the-setting
+    - crash-tolerant-mutation-runs
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - executors-as-descriptions
+    - failures-name-themselves
+    - fine-onions-taste
+    - human-mode-prints-for-humans
+    - human-mode-reads-as-prose
+    - json-report-is-written
+    - machine-stream-is-a-file
+    - modern-ends-know
+    - mutants-actually-run
+    - shared-helpers-move-to-plugin-api
+    - stryker-drop-unimported-deps
+    - tricky-moments-punch
+    - verdict-carries-its-findings
+    - verdict-reaches-the-exit-code
+    - workflow-brand-forced
+    - workflow-constructor-consumers
 "@systemfsoftware/stryker-js-engine@0.2.0":
   dir: packages/testing/mutation/stryker-js/engine
   intents:
@@ -1100,6 +1265,35 @@
   dir: packages/testing/mutation/stryker-js/engine
   intents:
     - silly-coins-shine
+"@systemfsoftware/stryker-js-engine@1.0.0":
+  dir: packages/stryker-js/stryker-js-engine
+  intents:
+    - a-dropped-worker-frame-fails-the-call
+    - an-ignorer-you-did-not-ask-for
+    - base-preset-is-published-again
+    - checkers-group-then-check
+    - cold-clowns-attack
+    - command-runner-actually-runs
+    - config-errors-name-the-setting
+    - crash-tolerant-mutation-runs
+    - crawl-skips-installed-dependencies
+    - engine-stages-run-as-cells
+    - failures-name-themselves
+    - fine-onions-taste
+    - id-generator-is-a-service
+    - incremental-mode-reuses-results
+    - inplace-restore-stops-guessing
+    - json-report-is-written
+    - only-the-api-is-a-door
+    - oversized-frames-fail-the-run
+    - run-outcome-carries-the-verdict
+    - sandbox-files-carry-nocheck
+    - silly-coins-shine
+    - stage-failures-name-themselves
+    - verdict-carries-its-findings
+    - verdict-reaches-the-exit-code
+    - worker-calls-are-declared-not-guessed
+    - worker-calls-no-longer-lose-their-replies
 "@systemfsoftware/stryker-js-html-reporter@0.1.0":
   dir: packages/testing/mutation/stryker-js/html-reporter
   intents:
@@ -1124,6 +1318,18 @@
   dir: packages/testing/mutation/stryker-js/html-reporter
   intents:
     - open-jeans-return
+"@systemfsoftware/stryker-js-html-reporter@2.0.0":
+  dir: packages/stryker-js/stryker-js-html-reporter
+  intents:
+    - concept-modules-platform-node
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - grumpy-rules-behave
+    - json-report-is-written
+    - only-the-api-is-a-door
+    - package-landing-pages
+    - reporters-are-layers
+    - tricky-moments-punch
 "@systemfsoftware/stryker-js-instrumenter@0.2.0":
   dir: packages/testing/mutation/stryker-js/instrumenter
   intents:
@@ -1160,6 +1366,14 @@
   dir: packages/testing/mutation/stryker-js/instrumenter
   intents:
     - polite-signs-grab
+"@systemfsoftware/stryker-js-instrumenter@5.0.0":
+  dir: packages/stryker-js/stryker-js-instrumenter
+  intents:
+    - concept-modules-platform-node
+    - effect-rc112
+    - shared-helpers-move-to-plugin-api
+    - stryker-drop-unimported-deps
+    - tricky-moments-punch
 "@systemfsoftware/stryker-js-mutation-report@1.2.6":
   dir: packages/stryker-js/mutation-report
   intents:
@@ -1374,6 +1588,18 @@
   dir: packages/testing/mutation/stryker-js/typescript-checker
   intents:
     - fruity-lilies-raise
+"@systemfsoftware/stryker-js-typescript-checker@5.0.0":
+  dir: packages/stryker-js/stryker-js-typescript-checker
+  intents:
+    - concept-modules-platform-node
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - modern-ends-know
+    - oversized-frames-fail-the-run
+    - package-landing-pages
+    - shared-helpers-move-to-plugin-api
+    - stryker-drop-unimported-deps
+    - tricky-moments-punch
 "@systemfsoftware/stryker-js-util@0.2.0":
   dir: packages/testing/mutation/stryker-js/util
   intents:
@@ -1429,6 +1655,19 @@
   dir: packages/testing/mutation/stryker-js/vitest-runner
   intents:
     - fine-pugs-hope
+"@systemfsoftware/stryker-js-vitest-runner@4.0.0":
+  dir: packages/stryker-js/stryker-js-vitest-runner
+  intents:
+    - concept-modules-platform-node
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - grumpy-rules-behave
+    - json-report-is-written
+    - machine-stream-is-a-file
+    - package-landing-pages
+    - shared-helpers-move-to-plugin-api
+    - stryker-drop-unimported-deps
+    - tricky-moments-punch
 "@systemfsoftware/stryker-js@0.1.0":
   dir: packages/testing/mutation/stryker-js/stryker-js
   intents:
@@ -1461,6 +1700,23 @@
     - log-level-is-per-run
     - mutation-run-demands-identity
     - salty-toys-sing
+"@systemfsoftware/stryker-js@2.0.0":
+  dir: packages/stryker-js/stryker-js
+  intents:
+    - concept-modules-platform-node
+    - crash-tolerant-mutation-runs
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - evaluator-answers-with-a-verdict
+    - option-defaults-are-published
+    - oversized-frames-fail-the-run
+    - package-landing-pages
+    - shared-helpers-move-to-plugin-api
+    - stryker-drop-unimported-deps
+    - stryker-plugin-contract-effect
+    - tricky-moments-punch
+    - verdict-carries-its-findings
+    - worker-calls-are-declared-not-guessed
 "@systemfsoftware/stryker-plugins@0.12.0":
   dir: packages/stryker-plugins
   intents:
@@ -1510,6 +1766,13 @@
   dir: packages/testing/mutation/plugins/stryker-plugins
   intents:
     - curvy-rivers-heal
+"@systemfsoftware/stryker-plugins@3.0.0":
+  dir: packages/stryker-js/stryker-plugins
+  intents:
+    - concept-modules-platform-node
+    - debut-releases-gain-oidc
+    - effect-rc112
+    - modern-ends-know
 "@systemfsoftware/stryker-test-contribution@0.1.0":
   dir: packages/testing/mutation/plugins/stryker-test-contribution
   intents:
@@ -1542,6 +1805,12 @@
   dir: packages/testing/mutation/plugins/stryker-test-contribution
   intents:
     - curvy-rivers-heal
+"@systemfsoftware/stryker-test-contribution@2.0.0":
+  dir: packages/stryker-js/stryker-test-contribution
+  intents:
+    - concept-modules-platform-node
+    - effect-rc112
+    - evaluator-answers-with-a-verdict
 "@systemfsoftware/tsconfig@1.3.2":
   dir: packages/tsconfig
   intents:
