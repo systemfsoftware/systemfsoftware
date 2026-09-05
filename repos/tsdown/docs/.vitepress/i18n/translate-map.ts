@@ -15,6 +15,7 @@ const zhCN = {
   Options: '选项',
   Entry: '入口文件',
   Cleaning: '清理',
+  'Copy Files': '复制文件',
   Dependencies: '依赖',
   'Config File': '配置文件',
   Minification: '压缩',
@@ -39,6 +40,7 @@ const zhCN = {
   'React Support': 'React 支持',
   'Solid Support': 'Solid 支持',
   'Svelte Support': 'Svelte 支持',
+  'Ember Support': 'Ember 支持',
   'WASM Support': 'WASM 支持',
 
   Advanced: '高级功能',

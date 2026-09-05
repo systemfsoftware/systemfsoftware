@@ -1,17 +1,13 @@
 import path from 'node:path'
-import { dim } from 'ansis'
 import { createDebug } from 'obug'
 import { importWithError, slash } from '../../utils/general.ts'
+import { styleText } from '../../utils/style.ts'
 import type { ResolvedConfig } from '../../config/index.ts'
-import type {
-  CheckPackageOptions,
-  Problem,
-  ProblemKind,
-} from '@arethetypeswrong/core'
+import type { Problem, ProblemKind } from '@arethetypeswrong/core'
 import type { Buffer } from 'node:buffer'
 
 const debug = createDebug('tsdown:attw')
-const label = dim`[attw]`
+const label = styleText.dim(`[attw]`)
 
 const problemFlags: Record<ProblemKind, string> = {
   NoResolution: 'no-resolution',
@@ -28,7 +24,10 @@ const problemFlags: Record<ProblemKind, string> = {
   InternalResolutionError: 'internal-resolution-error',
 }
 
+/** @ts-ignore - optional dep */
+type CheckPackageOptions = import('@arethetypeswrong/core').CheckPackageOptions
 export interface AttwOptions extends CheckPackageOptions {
+  /** @ts-ignore - optional dep */
   module?: typeof import('@arethetypeswrong/core')
 
   /**
@@ -119,7 +118,7 @@ export async function attw(
     return
   }
   const {
-    profile = 'strict',
+    profile = 'esm-only',
     level = 'warn',
     ignoreRules = [],
     ...attwOptions
@@ -179,7 +178,7 @@ export async function attw(
       options.nameLabel,
       label,
       'No problems found',
-      dim`(${Math.round(performance.now() - t)}ms)`,
+      styleText.dim(`(${Math.round(performance.now() - t)}ms)`),
     )
   }
 }

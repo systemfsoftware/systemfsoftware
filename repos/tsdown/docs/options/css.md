@@ -386,6 +386,26 @@ Controls how class names are exported in JavaScript:
 | `'dashes'`        | `foo-bar` | `foo-bar`, `fooBar` |
 | `'dashesOnly'`    | `foo-bar` | `fooBar`            |
 
+You can also provide a function to generate a custom export name. It receives
+the original class name, generated scoped class name, and input file:
+
+```ts
+export default defineConfig({
+  css: {
+    modules: {
+      localsConvention: (originalClassName, generatedClassName, inputFile) => {
+        return originalClassName.replaceAll(/-([a-z0-9])/g, (_, character) =>
+          character.toUpperCase(),
+        )
+      },
+    },
+  },
+})
+```
+
+The function form works with both CSS transformers. It changes the exported
+JavaScript key only; `generatedClassName` remains the value of that export.
+
 ### `generateScopedName`
 
 When using `transformer: 'lightningcss'` (default), this accepts a Lightning CSS [pattern string](https://lightningcss.dev/css-modules.html#custom-naming-conventions) (e.g., `'[hash]_[local]'`).
@@ -420,7 +440,7 @@ npm install -D postcss postcss-modules
 
 ### Merged Mode (Default)
 
-By default, all CSS is merged into a single file (default: `style.css`):
+By default, all CSS is merged into a single file (default: `style.css`). The exception is [unbundle mode](/options/unbundle), where `css.splitting` defaults to `true` to preserve the module structure:
 
 ```
 dist/
@@ -478,15 +498,15 @@ All three are declared as optional peer dependencies of `@tsdown/css` and only l
 
 ## Options Reference
 
-| Option                    | Type                          | Default          | Description                                                 |
-| ------------------------- | ----------------------------- | ---------------- | ----------------------------------------------------------- |
-| `css.transformer`         | `'postcss' \| 'lightningcss'` | `'lightningcss'` | CSS processing pipeline                                     |
-| `css.splitting`           | `boolean`                     | `false`          | Enable CSS code splitting per chunk                         |
-| `css.fileName`            | `string`                      | `'style.css'`    | File name for the merged CSS file (when `splitting: false`) |
-| `css.minify`              | `boolean`                     | `false`          | Enable CSS minification                                     |
-| `css.modules`             | `object \| false`             | `{}`             | CSS modules configuration, or `false` to disable            |
-| `css.target`              | `string \| string[] \| false` | _from `target`_  | CSS-specific syntax lowering target                         |
-| `css.postcss`             | `string \| object`            | —                | PostCSS config path or inline options                       |
-| `css.preprocessorOptions` | `object`                      | —                | Options for CSS preprocessors                               |
-| `css.inject`              | `boolean`                     | `false`          | Preserve CSS import statements in JS output                 |
-| `css.lightningcss`        | `object`                      | —                | Options passed to Lightning CSS for syntax lowering         |
+| Option                    | Type                          | Default                        | Description                                                 |
+| ------------------------- | ----------------------------- | ------------------------------ | ----------------------------------------------------------- |
+| `css.transformer`         | `'postcss' \| 'lightningcss'` | `'lightningcss'`               | CSS processing pipeline                                     |
+| `css.splitting`           | `boolean`                     | `false` (`true` if `unbundle`) | Enable CSS code splitting per chunk                         |
+| `css.fileName`            | `string`                      | `'style.css'`                  | File name for the merged CSS file (when `splitting: false`) |
+| `css.minify`              | `boolean`                     | `false`                        | Enable CSS minification                                     |
+| `css.modules`             | `object \| false`             | `{}`                           | CSS modules configuration, or `false` to disable            |
+| `css.target`              | `string \| string[] \| false` | _from `target`_                | CSS-specific syntax lowering target                         |
+| `css.postcss`             | `string \| object`            | —                              | PostCSS config path or inline options                       |
+| `css.preprocessorOptions` | `object`                      | —                              | Options for CSS preprocessors                               |
+| `css.inject`              | `boolean`                     | `false`                        | Preserve CSS import statements in JS output                 |
+| `css.lightningcss`        | `object`                      | —                              | Options passed to Lightning CSS for syntax lowering         |

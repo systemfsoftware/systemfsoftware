@@ -2,7 +2,6 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import process from 'node:process'
-import { bold, dim, red } from 'ansis'
 import { createDebug } from 'obug'
 import { RE_DTS } from 'rolldown-plugin-dts/internal'
 import { x } from 'tinyexec'
@@ -10,8 +9,9 @@ import { isGreaterOrEqual, type SemVer } from 'verkit'
 import { formatBytes } from '../utils/format.ts'
 import { fsRemove, fsStat } from '../utils/fs.ts'
 import { importWithError, typeAssert } from '../utils/general.ts'
+import { styleText } from '../utils/style.ts'
 import type { ResolvedConfig, RolldownChunk } from '../config/types.ts'
-import type { ExeExtensionOptions, ExeTarget } from '@tsdown/exe'
+import type { ExeTarget } from '@tsdown/exe'
 
 export const NODE_SEA_MIN_VERSION: string = '25.7.0'
 export const NODE_SEA_MIN_VERSION_PARSED: SemVer = {
@@ -20,6 +20,8 @@ export const NODE_SEA_MIN_VERSION_PARSED: SemVer = {
   patch: 0,
 }
 
+/** @ts-ignore - optional dep */
+type ExeExtensionOptions = import('@tsdown/exe').ExeExtensionOptions
 export interface ExeOptions extends ExeExtensionOptions {
   seaConfig?: Omit<SeaConfig, 'main' | 'output' | 'mainFormat'>
   /**
@@ -37,7 +39,7 @@ export interface ExeOptions extends ExeExtensionOptions {
 /**
  * See also [Node.js SEA Documentation](https://nodejs.org/api/single-executable-applications.html#generating-single-executable-applications-with---build-sea)
  *
- * Note some default values are different from Node.js defaults to optimize for typical use cases (e.g. disabling experimental warning, enabling code cache). These can be overridden.
+ * Note some default values are different from Node.js defaults to optimize for typical use cases (e.g. disabling the experimental SEA warning). These can be overridden.
  */
 export interface SeaConfig {
   main?: string
@@ -275,14 +277,14 @@ async function buildSingleExe(
     const sizeText = formatBytes(stat.size)
     config.logger.info(
       config.nameLabel,
-      bold(path.relative(config.cwd, outputPath)),
-      ` ${dim(sizeText!)}`,
+      styleText.bold(path.relative(config.cwd, outputPath)),
+      ` ${styleText.dim(sizeText!)}`,
     )
   }
 
   config.logger.success(
     config.nameLabel,
-    `Built executable: ${red(path.relative(config.cwd, outputPath))}`,
-    dim`(${Math.round(performance.now() - t)}ms)`,
+    `Built executable: ${styleText.red(path.relative(config.cwd, outputPath))}`,
+    styleText.dim(`(${Math.round(performance.now() - t)}ms)`),
   )
 }
