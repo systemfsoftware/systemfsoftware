@@ -1,0 +1,1 @@
+deno run --allow-read --allow-env --allow-run --allow-sys npm:@commitlint/cli@21 --edit $1
