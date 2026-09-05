@@ -32,7 +32,7 @@
     "@commitlint/config-conventional": "^21.2.0",
     "@commitlint/config-pnpm-scopes": "^21.2.0",
     "@commitlint/types": "^21.2.0",
-    "@effect/tsgo": "^0.36.5",
+    "@effect/tsgo": "^0.39.1",
     "@std/jsonc": "catalog:",
     "concurrently": "^9.2.1",
     "estree-walker": "^3",
