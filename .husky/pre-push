@@ -1,18 +1,19 @@
 #!/usr/bin/env sh
+# Gate: refuse when HEAD lacks remote main as ancestor.
+# Local main can lag — query the remote tip directly.
 set -e
 remote=origin
 
-if ! git ls-remote --exit-code "$remote" refs/heads/main >/dev/null 2>&1; then
-  exit 0
-fi
-
-main_sha=$(git ls-remote "$remote" refs/heads/main | cut -f1)
+main_sha=$(git ls-remote --heads "$remote" main 2>/dev/null | cut -f1)
 if [ -z "$main_sha" ]; then
   exit 0
 fi
 
 if ! git cat-file -e "$main_sha^{commit}" 2>/dev/null; then
-  git fetch --quiet "$remote" refs/heads/main || exit 1
+  git fetch --quiet "$remote" main || {
+    echo "pre-push: could not fetch $remote main." >&2
+    exit 1
+  }
 fi
 
 if ! git merge-base --is-ancestor "$main_sha" HEAD; then
