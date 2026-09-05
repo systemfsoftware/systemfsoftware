@@ -1,0 +1,38 @@
+{
+  "name": "@systemfsoftware/oxlint-import-origin",
+  "license": "Apache-2.0",
+  "private": true,
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/oxlint-plugin/import-origin"
+  },
+  "description": "Import-origin resolver for oxlint rules: what module and exported name does this AST reference ultimately denote? Shared by the plugins that gate on import origin.",
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rimraf dist",
+    "typecheck": "tsc --noEmit --incremental",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+  },
+  "dependencies": {
+    "@oxlint/plugins": "catalog:oxlint"
+  },
+  "devDependencies": {
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@types/node": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  }
+}

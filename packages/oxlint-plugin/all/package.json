@@ -1,0 +1,84 @@
+{
+  "name": "@systemfsoftware/all",
+  "license": "Apache-2.0",
+  "version": "1.1.2",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/oxlint-plugin/all"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugin/all#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Complete oxlint preset for Effect and cell architecture: bundles all custom rule plugins (workflow, schema, entrypoint, cell vocabulary, property testing, test placement, hygiene) with type-aware correctness settings in a single config.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "cell-architecture",
+    "oxlint",
+    "oxlint-config",
+    "preset",
+    "schema",
+    "workflow",
+    "typescript"
+  ],
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit --incremental",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack ."
+  },
+  "dependencies": {
+    "@systemfsoftware/oxlint-plugin": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-dmmf": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-entrypoint": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-workflow": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-property-testing": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-recommended": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-test-hygiene": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-test-placement": "workspace:^"
+  },
+  "devDependencies": {
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "oxlint-tsgolint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers",
+    "oxlint": "catalog:oxlint",
+    "oxlint-tsgolint": "catalog:oxlint",
+    "typescript": ">=5.0.0"
+  },
+  "publishConfig": {
+    "provenance": true,
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    }
+  },
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  }
+}

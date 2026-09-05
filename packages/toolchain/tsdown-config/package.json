@@ -11,5 +11,11 @@
   },
   "files": [
     "src"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/toolchain"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/toolchain#readme"
 }

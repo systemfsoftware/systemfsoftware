@@ -104,7 +104,7 @@ export function discoverMutationTargets(root, changedPaths = null) {
   assertNoNestedTargets(targets)
   if (changedPaths === null || changedPaths.length === 0) return targets
   const isStrykerToolchainChange = changedPaths.some(
-    (p) => p.startsWith('packages/testing/mutation/') || p === 'stryker.config.base.json',
+    (p) => p.startsWith('packages/stryker-js/') || p === 'stryker.config.base.json',
   )
   if (isStrykerToolchainChange) return targets
   const touched = (project) =>

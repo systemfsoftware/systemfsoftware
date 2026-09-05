@@ -1,0 +1,88 @@
+{
+  "name": "@systemfsoftware/effect-schema-extensions",
+  "license": "Apache-2.0",
+  "version": "0.9.5",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/effect-schema-extensions"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-extensions#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Extra Effect Schema codecs — hex-string, prefixed-hex, colon-hex, and byte-level schemas with branded types, decode/encode, and arbitraries.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "schema",
+    "codec",
+    "hex",
+    "hexstring",
+    "branded-types",
+    "validation",
+    "typescript"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/mod.ts",
+      "types": "./dist/effect-schema-extensions.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./hex-schema": {
+      "@systemfsoftware/source": "./src/hex-schema/mod.ts",
+      "types": "./dist/hex-schema.d.ts",
+      "default": "./dist/hex-schema.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown && pnpm api:check",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
+    "api:check": "api-extractor run && api-extractor run --config api-extractor.hex-schema.json",
+    "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.hex-schema.json",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack ."
+  },
+  "dependencies": {
+    "@systemfsoftware/hex-schema": "workspace:^"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/effect-schema-extensions.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./hex-schema": {
+        "types": "./dist/hex-schema.d.ts",
+        "default": "./dist/hex-schema.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}

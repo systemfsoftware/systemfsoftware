@@ -1,0 +1,136 @@
+{
+  "name": "@systemfsoftware/effect-atom",
+  "license": "Apache-2.0",
+  "version": "3.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/atom/effect-atom"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/atom/effect-atom#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Reactive toolkit for Effect — forked under systemfsoftware from tim-smart/effect-atom.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "atom",
+    "reactive",
+    "state"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./Atom": {
+      "@systemfsoftware/source": "./src/Atom.ts",
+      "types": "./dist/Atom.d.ts",
+      "default": "./dist/Atom.mjs"
+    },
+    "./AtomHttpApi": {
+      "@systemfsoftware/source": "./src/AtomHttpApi.ts",
+      "types": "./dist/AtomHttpApi.d.ts",
+      "default": "./dist/AtomHttpApi.mjs"
+    },
+    "./AtomRef": {
+      "@systemfsoftware/source": "./src/AtomRef.ts",
+      "types": "./dist/AtomRef.d.ts",
+      "default": "./dist/AtomRef.mjs"
+    },
+    "./AtomRpc": {
+      "@systemfsoftware/source": "./src/AtomRpc.ts",
+      "types": "./dist/AtomRpc.d.ts",
+      "default": "./dist/AtomRpc.mjs"
+    },
+    "./Hydration": {
+      "@systemfsoftware/source": "./src/Hydration.ts",
+      "types": "./dist/Hydration.d.ts",
+      "default": "./dist/Hydration.mjs"
+    },
+    "./Registry": {
+      "@systemfsoftware/source": "./src/Registry.ts",
+      "types": "./dist/Registry.d.ts",
+      "default": "./dist/Registry.mjs"
+    },
+    "./Result": {
+      "@systemfsoftware/source": "./src/Result.ts",
+      "types": "./dist/Result.d.ts",
+      "default": "./dist/Result.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown && pnpm dts:check",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --config oxlint.config.ts --format=${f:-default}",
+    "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.json --format ${TSGO_FORMAT:-text}",
+    "attw": "attw --pack .",
+    "dts:check": "tsc --noEmit -p tsconfig.dts.json"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "type-fest": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./Atom": {
+        "types": "./dist/Atom.d.ts",
+        "default": "./dist/Atom.mjs"
+      },
+      "./AtomHttpApi": {
+        "types": "./dist/AtomHttpApi.d.ts",
+        "default": "./dist/AtomHttpApi.mjs"
+      },
+      "./AtomRef": {
+        "types": "./dist/AtomRef.d.ts",
+        "default": "./dist/AtomRef.mjs"
+      },
+      "./AtomRpc": {
+        "types": "./dist/AtomRpc.d.ts",
+        "default": "./dist/AtomRpc.mjs"
+      },
+      "./Hydration": {
+        "types": "./dist/Hydration.d.ts",
+        "default": "./dist/Hydration.mjs"
+      },
+      "./Registry": {
+        "types": "./dist/Registry.d.ts",
+        "default": "./dist/Registry.mjs"
+      },
+      "./Result": {
+        "types": "./dist/Result.d.ts",
+        "default": "./dist/Result.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}

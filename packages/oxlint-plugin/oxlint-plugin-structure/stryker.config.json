@@ -1,0 +1,18 @@
+{
+  "extends": "../../../stryker.config.base.json",
+  "mutate": [
+    "src/rules/**/*.ts",
+    "!src/rules/__tests__/**",
+    "!src/rules/**/*.config.ts"
+  ],
+  "plugins": [
+    "@systemfsoftware/stryker-js-vitest-runner",
+    "@systemfsoftware/stryker-js-typescript-checker"
+  ],
+  "thresholds": {
+    "high": 100,
+    "low": 100,
+    "break": 100
+  },
+  "ignorers": null
+}

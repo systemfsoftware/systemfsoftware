@@ -1,0 +1,39 @@
+{
+  "name": "@systemfsoftware/oxlint-make-boundary",
+  "license": "Apache-2.0",
+  "private": true,
+  "version": "0.1.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/oxlint-plugin/make-boundary"
+  },
+  "description": "Workflow.make boundary locator for oxlint rules: every Workflow.make(...) call in a file, its resolved decision body, and containment queries. Shared by the plugins that judge decision bodies.",
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rimraf dist",
+    "typecheck": "tsc --noEmit --incremental",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+  },
+  "dependencies": {
+    "@oxlint/plugins": "catalog:oxlint"
+  },
+  "devDependencies": {
+    "@systemfsoftware/oxlint-import-origin": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@types/node": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "name": "@systemfsoftware/effect-atom-react",
+  "license": "Apache-2.0",
+  "version": "0.7.3",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/atom/effect-atom-react"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/atom/effect-atom-react#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "React bindings for effect-atom — forked under systemfsoftware from tim-smart/effect-atom.",
+  "keywords": [
+    "effect",
+    "effect-ts",
+    "atom",
+    "react",
+    "reactive",
+    "state"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "@systemfsoftware/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown && pnpm dts:check",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run --passWithNoTests",
+    "test:watch": "vitest",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --config oxlint.config.ts --format=${f:-default}",
+    "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.json --format ${TSGO_FORMAT:-text}",
+    "attw": "attw --pack .",
+    "dts:check": "tsc --noEmit -p tsconfig.dts.json"
+  },
+  "dependencies": {
+    "@systemfsoftware/effect-atom": "workspace:^"
+  },
+  "peerDependencies": {
+    "effect": "catalog:peers",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "scheduler": "*"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@testing-library/dom": "catalog:",
+    "@testing-library/react": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@types/scheduler": "catalog:",
+    "@vitest/browser": "catalog:",
+    "@vitest/browser-playwright": "catalog:",
+    "@vitest/coverage-istanbul": "catalog:",
+    "effect": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "playwright": "1.62.1",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-error-boundary": "catalog:",
+    "rimraf": "catalog:",
+    "scheduler": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    },
+    "provenance": true
+  }
+}

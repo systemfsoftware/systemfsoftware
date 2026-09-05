@@ -50,7 +50,7 @@ export const isWorkspaceStrykerConfig = (path: string): boolean => {
   if (path.startsWith('repos/')) return false
   if (path.includes('__fixtures__') || path.includes('/fixtures/')) return false
   if (path.includes('node_modules/')) return false
-  if (path.startsWith('packages/lint/oxlint/')) return false
+  if (path.startsWith('packages/oxlint-plugin/')) return false
   return true
 }
 
@@ -112,13 +112,13 @@ const selftest = (): number => {
 
   if (
     isWorkspaceStrykerConfig(
-      'packages/testing/mutation/stryker-js/cli/tests/__fixtures__/fixtures/broken-config-project/stryker.config.json',
+      'packages/stryker-js/stryker-js-cli/tests/__fixtures__/fixtures/broken-config-project/stryker.config.json',
     )
   ) {
     failures.push('fixture stryker config was not excluded')
   }
 
-  if (!isWorkspaceStrykerConfig('packages/core/effect/daemon-spec/stryker.config.json')) {
+  if (!isWorkspaceStrykerConfig('packages/effect-daemon-spec/stryker.config.json')) {
     failures.push('workspace stryker config was wrongly excluded')
   }
 

@@ -1,0 +1,8 @@
+{
+  "extends": "../../../stryker.config.base.json",
+  "mutate": [
+    "src/rules/*.ts",
+    "!src/rules/**/*.test.ts",
+    "!src/rules/*.config.ts"
+  ]
+}

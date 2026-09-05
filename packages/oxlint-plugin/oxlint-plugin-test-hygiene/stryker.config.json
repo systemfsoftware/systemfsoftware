@@ -1,0 +1,16 @@
+{
+  "extends": "../../../stryker.config.base.json",
+  "mutate": [
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "!src/**/*.config.ts",
+    "!src/index.ts"
+  ],
+  "plugins": [
+    "@systemfsoftware/stryker-js-vitest-runner",
+    "@systemfsoftware/stryker-js-typescript-checker"
+  ],
+  "coverageAnalysis": "all",
+  "disableBail": true,
+  "ignorers": null
+}
