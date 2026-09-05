@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { originMemberSequence, resolveImportOrigin } from '@systemfsoftware/oxlint-import-origin'
+import { originFinalMember, resolveImportOrigin } from '@systemfsoftware/oxlint-import-origin'
 import {
   CHECKED_ELEMENT_ACTUAL,
   CHECKED_ELEMENT_EXPECTED,
@@ -16,8 +16,7 @@ type GetScope = (node: ESTree.Node) => unknown
 const vocabularyMemberOf = (node: ESTree.Node, getScope: GetScope): string | null => {
   const origin = resolveImportOrigin(node, getScope)
   if (origin === null || !isSchemaVocabularyOrigin(origin)) return null
-  const sequence = originMemberSequence(origin)
-  return sequence[sequence.length - 1] ?? null
+  return originFinalMember(origin) ?? null
 }
 
 const COLLECTION_MEMBERS: Readonly<Record<string, true>> = {

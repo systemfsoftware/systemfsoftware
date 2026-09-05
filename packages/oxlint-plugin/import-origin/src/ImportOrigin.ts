@@ -55,7 +55,7 @@ import type { ESTree } from '@oxlint/plugins'
  *
  * The resolver is deliberately self-contained (no import of `MakeBoundary.ts`):
  * it lives once, in this kernel package, and every plugin that gates on import
- * origin (make-boundary, no-effect-service, schema-declaration-location)
+ * origin (make-boundary, schema-declaration-location)
  * imports this single contract — no plugin vendors a copy. `getScope` is the
  * scope-lookup closure (`context.sourceCode.getScope`), which makes the
  * resolver shadow-correct: a
@@ -87,6 +87,11 @@ export interface ImportOrigin {
  */
 export const originMemberSequence = (origin: ImportOrigin): readonly string[] =>
   origin.importedName === null ? origin.path : [origin.importedName, ...origin.path]
+
+export const originFirstMember = (origin: ImportOrigin): string | null => origin.importedName ?? origin.path[0] ?? null
+
+export const originFinalMember = (origin: ImportOrigin): string | null =>
+  origin.path[origin.path.length - 1] ?? origin.importedName ?? null
 
 interface ScopeLike {
   readonly upper: ScopeLike | null
@@ -285,10 +290,8 @@ const resolveIdentifierOrigin = (
   const variable = variableOfIdentifier(identifier, getScope)
   if (variable === null) return null
   // A same-scope redeclaration shadows an import: the oxc defs hold both
-  // bindings with the later declaration last, and only the last one resolves —
-  // the same last-def rule the old kernel used with `defs[defs.length - 1]`
-  // for its callee-object check. A resolution never falls through to an
-  // earlier def.
+  // bindings with the later declaration last, and only the last one resolves.
+  // A resolution never falls through to an earlier def.
   const def = variable.defs[variable.defs.length - 1]
   if (def === undefined) return null
   if (def.type === 'ImportBinding') {

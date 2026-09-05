@@ -164,7 +164,7 @@ const unwrap = (node: ESTree.Node): ESTree.Node => {
  * The classifier's own recursion ladder (local factory bodies, container
  * nesting, member bases). Overflow is `opaque`, NOT a report: a chain this
  * deep has lost its evidence, and irresolution is not evidence. See
- * `MAX_DEPTH` in `ImportOrigin.ts` for the resolver-side cap; alias chains
+ * `MAX_DEPTH` in `@systemfsoftware/oxlint-import-origin` for the resolver-side cap; alias chains
  * are walked cycle-guarded without consuming the ladder (see
  * `classifyIdentifier`), so a deep alias ladder still resolves its base and
  * reports only when that base is positively the vocabulary.

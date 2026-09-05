@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { originMemberSequence, resolveImportOrigin } from '@systemfsoftware/oxlint-import-origin'
+import { originFinalMember, resolveImportOrigin } from '@systemfsoftware/oxlint-import-origin'
 import {
   CHECK_SITE_NAME,
   EXPORTED_FIX,
@@ -34,8 +34,7 @@ const isNotSpread = (node: ESTree.Node | ESTree.SpreadElement): node is ESTree.N
 const vocabularyMemberOf = (node: ESTree.Node, getScope: GetScope): string | null => {
   const origin = resolveImportOrigin(node, getScope)
   if (origin === null || !isSchemaVocabularyOrigin(origin)) return null
-  const sequence = originMemberSequence(origin)
-  return sequence[sequence.length - 1] ?? null
+  return originFinalMember(origin) ?? null
 }
 
 const objectPropertyOf = (object: ESTree.Node, key: string): PropertyNode | null => {

@@ -1,5 +1,10 @@
 import type { Context, ESTree } from '@oxlint/plugins'
-import { type ImportOrigin, originMemberSequence, resolveImportOrigin } from '@systemfsoftware/oxlint-import-origin'
+import {
+  type ImportOrigin,
+  originFinalMember,
+  originFirstMember,
+  resolveImportOrigin,
+} from '@systemfsoftware/oxlint-import-origin'
 
 /**
  * The module whose `Workflow` value owns the `make` boundary. Mirrors the
@@ -156,9 +161,9 @@ const isWorkflowModuleSpecifier = (source: string): boolean =>
  */
 const isMakeBoundaryOrigin = (origin: ImportOrigin): boolean => {
   if (!isWorkflowModuleSpecifier(origin.source)) return false
-  const sequence = originMemberSequence(origin)
-  if (sequence[sequence.length - 1] !== MAKE_MEMBER_NAME) return false
-  return sequence[0] === MAKE_MEMBER_NAME || sequence[0] === WORKFLOW_IMPORT_NAME
+  if (originFinalMember(origin) !== MAKE_MEMBER_NAME) return false
+  const firstMember = originFirstMember(origin)
+  return firstMember === MAKE_MEMBER_NAME || firstMember === WORKFLOW_IMPORT_NAME
 }
 
 /**
