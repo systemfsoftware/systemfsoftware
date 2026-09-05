@@ -1,8 +1,11 @@
 #!/usr/bin/env sh
-# Gate: refuse when HEAD lacks remote main as ancestor.
-# Local main can lag — query the remote tip directly.
 set -e
 remote=origin
+
+branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+if [ "$branch" != "main" ]; then
+  exit 0
+fi
 
 main_sha=$(git ls-remote --heads "$remote" main 2>/dev/null | cut -f1)
 if [ -z "$main_sha" ]; then
@@ -17,7 +20,7 @@ if ! git cat-file -e "$main_sha^{commit}" 2>/dev/null; then
 fi
 
 if ! git merge-base --is-ancestor "$main_sha" HEAD; then
-  echo "pre-push: behind remote main ($main_sha)." >&2
-  echo "Rebase or merge $remote/main before pushing." >&2
+  echo "pre-push: main is behind $remote/main ($main_sha)." >&2
+  echo "Rebase or merge $remote/main before pushing main." >&2
   exit 1
 fi
