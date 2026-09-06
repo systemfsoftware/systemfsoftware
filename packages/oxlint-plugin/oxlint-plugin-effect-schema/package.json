@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-effect-schema",
   "license": "Apache-2.0",
-  "version": "5.1.0",
+  "version": "5.2.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -52,8 +52,8 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@systemfsoftware/oxlint-import-origin": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/oxlint-import-origin": "workspace:^",
     "@systemfsoftware/stryker-js-cli": "catalog:stryker",
     "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
     "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",

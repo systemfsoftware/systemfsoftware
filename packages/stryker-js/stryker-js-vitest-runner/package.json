@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/stryker-js-vitest-runner",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
