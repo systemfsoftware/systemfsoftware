@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/hex-schema",
   "license": "Apache-2.0",
-  "version": "1.8.5",
+  "version": "1.8.6",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",

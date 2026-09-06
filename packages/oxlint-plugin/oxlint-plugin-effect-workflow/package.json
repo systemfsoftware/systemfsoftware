@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-effect-workflow",
   "license": "Apache-2.0",
-  "version": "4.2.0",
+  "version": "5.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -53,8 +53,8 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@systemfsoftware/oxlint-make-boundary": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/oxlint-make-boundary": "workspace:^",
     "@systemfsoftware/stryker-js-cli": "catalog:stryker",
     "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
     "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
