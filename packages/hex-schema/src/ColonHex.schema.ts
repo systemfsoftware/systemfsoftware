@@ -30,6 +30,7 @@ if (import.meta.vitest !== void 0) {
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
   const { FastCheck: fc } = await import('effect/testing')
+  const { Exit } = await import('effect')
   const { expectTypeOf } = await import('vitest')
 
   /**
@@ -62,6 +63,11 @@ if (import.meta.vitest !== void 0) {
       const groups = hexToColon(hex).split(':')
       return groups.length === hex.length / 2 && groups.every((group) => group.length === 2)
     },
+  )
+  it.prop(
+    '∀h_HexToColonOutput_∈ColonHex',
+    [fc.stringMatching(/^(?:[0-9a-f]{2})+$/)],
+    ([hex]) => Exit.isSuccess(S.decodeUnknownExit(ColonHex)(hexToColon(hex))),
   )
 
   /**

@@ -32,6 +32,7 @@ if (import.meta.vitest !== void 0) {
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
   const { FastCheck: fc } = await import('effect/testing')
+  const { Exit } = await import('effect')
   const { expectTypeOf } = await import('vitest')
 
   /**
@@ -48,6 +49,11 @@ if (import.meta.vitest !== void 0) {
     '∀b_ToStrictHex_=LowerOfBody',
     [fc.stringMatching(/^[0-9a-fA-F]*[A-F][0-9a-fA-F]*$/)],
     ([body]) => toStrictHex(`0x${body}`) === body.toLowerCase(),
+  )
+  it.prop(
+    '∀b_StringMatchingDraw_∈HexString',
+    [fc.stringMatching(/^[0-9a-fA-F]*[A-F][0-9a-fA-F]*$/)],
+    ([body]) => Exit.isSuccess(S.decodeUnknownExit(HexString)(`0x${body}`)),
   )
 
   /**

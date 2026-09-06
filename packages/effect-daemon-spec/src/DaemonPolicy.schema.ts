@@ -142,4 +142,28 @@ if (import.meta.vitest !== void 0) {
     [negative.map((restarts) => ({ restarts, window }))],
     ([input]) => Exit.isFailure(Schema.decodeExit(IntensityConfig)(input)),
   )
+  it.prop(
+    '∀x_AcceptedSets_⊆SchemaDomain',
+    [
+      Schema.toArbitrary(ChildPolicyConfig)(fc),
+      Schema.toArbitrary(LockPolicyConfig)(fc),
+      Schema.toArbitrary(TickPolicyConfig)(fc),
+    ],
+    ([child, lock, tick]) =>
+      (child.restart === undefined || ['permanent', 'transient', 'temporary'].includes(child.restart)) &&
+      (lock.mode === undefined || ['none', 'required', 'optional'].includes(lock.mode)) &&
+      (tick.startLogLevel === undefined || ['debug', 'info'].includes(tick.startLogLevel)),
+  )
+
+  it.prop(
+    '∀x_AcceptedCooldown_∈Duration',
+    [Schema.toArbitrary(SupervisorPolicyConfig)(fc)],
+    ([cfg]) => cfg.cooldown === undefined || Duration.isDuration(cfg.cooldown),
+  )
+
+  it.prop(
+    '∀r_AcceptedRestarts_≥0',
+    [Schema.toArbitrary(IntensityConfig)(fc)],
+    ([cfg]) => cfg.restarts >= 0,
+  )
 }

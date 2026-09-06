@@ -96,6 +96,7 @@ if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
   // branch is statically dead in the build and never enters the published module graph.
   const { it } = await import('@effect/vitest')
+  const { Exit } = await import('effect')
   const { FastCheck: fc } = await import('effect/testing')
 
   /**
@@ -106,6 +107,7 @@ if (import.meta.vitest !== void 0) {
   const tree = fc.integer({ min: 1, max: 32 }).chain((total) =>
     fc.tuple(fc.constant(total), fc.integer({ min: 0, max: total - 1 }))
   )
+  const decodesDecideInput = S.decodeUnknownExit(DecideInput)
 
   const ascendingDistinct = (xs: readonly number[]): boolean =>
     xs.every((x, i) => i === 0 || x > (xs[i - 1] ?? Number.NEGATIVE_INFINITY))
@@ -141,5 +143,21 @@ if (import.meta.vitest !== void 0) {
     ([[total, failedIndex]]) =>
       restartIndicesFor('one_for_all', failedIndex, total).length === total &&
       restartIndicesFor('rest_for_one', failedIndex, total).length === total - failedIndex,
+  )
+  it.prop(
+    '∀t_TreeDraws_∈DecideInput',
+    [tree],
+    ([[total, failedIndex]]) =>
+      RESTART_STRATEGIES.every((strategy) =>
+        Exit.isSuccess(
+          decodesDecideInput({
+            strategy,
+            totalChildren: total,
+            failedIndex,
+            exitSuccess: true,
+            intensityExceeded: false,
+          }),
+        )
+      ),
   )
 }

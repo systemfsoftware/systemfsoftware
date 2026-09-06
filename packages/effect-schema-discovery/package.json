@@ -34,7 +34,7 @@
     "clean": "rimraf dist",
     "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
-    "test": "vitest run",
+    "test": "vitest run && node ./pin-inhabitance.mjs",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",

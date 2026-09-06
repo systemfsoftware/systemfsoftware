@@ -48,4 +48,16 @@ if (import.meta.vitest !== void 0) {
     [negative.map((limit) => ({ _tag: 'DynamicLimitExceeded' as const, limit }))],
     ([input]) => Exit.isFailure(decode(input)),
   )
+  /**
+   * Companion domain audit (U4): `negative` above is hand-built and therefore
+   * statically opaque — the provenance rule fails it open. This states the
+   * reverse direction from the schema's own arbitrary: whatever the schema
+   * accepts carries a non-negative limit, so a weakening of the `>= 0` check
+   * fails here while the refusal above stays green.
+   */
+  it.prop(
+    '∀l_AcceptedLimit_≥0',
+    [S.toArbitrary(DynamicLimitExceeded)(fc)],
+    ([err]) => err.limit >= 0,
+  )
 }
