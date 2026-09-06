@@ -1,4 +1,3 @@
-/// <reference types="vitest/import-meta" />
 import { Latch, Schema as S } from 'effect'
 import type { Effect } from 'effect'
 

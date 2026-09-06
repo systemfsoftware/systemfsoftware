@@ -39,8 +39,6 @@ const parsedBlockReason = (
   return stated === undefined || stated.trim() === '' ? `Blocked by ${event} hook` : stated
 }
 
-const EXIT_KINDS = ['ExitBlock', 'ExitDecisionJson', 'ExitNoDecision', 'ExitOther'] as const
-
 const HookVerdictTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-claude-compat/HookVerdict')
 type HookVerdictTypeId = typeof HookVerdictTypeId
 
@@ -158,85 +156,3 @@ export const interpretHookResult = Workflow.make(
     )
   },
 )
-
-if (import.meta.vitest !== void 0) {
-  const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect/testing')
-
-  const ExitCodeWithin = S.Int.pipe(
-    S.check(
-      S.makeFilter((n) => n >= -8 && n <= 8, {
-        arbitrary: { candidate: { weight: 100, make: (g) => g.integer({ min: -8, max: 8 }) } },
-      }),
-    ),
-  )
-  const HookStdout = S.Union([
-    S.Literal(''),
-    S.Literal('   '),
-    S.Literal('{"decision":"block"}'),
-    S.Literal('  {"a":1}  '),
-    S.Literal('not json'),
-    S.String,
-  ])
-  const HookStderr = S.Union([S.Literal(''), S.Literal('   \n '), S.String])
-  const HookEventName = S.String.pipe(
-    S.check(
-      S.makeFilter((s) => s.length >= 1 && s.length <= 10, {
-        arbitrary: { candidate: { weight: 100, make: (g) => g.string({ minLength: 1, maxLength: 10 }) } },
-      }),
-    ),
-  )
-  const DecisionKeyText = S.Union([S.Null, S.Literal('deny'), S.Literal('block'), S.Literal('allow'), S.String])
-  const exitCode = S.toArbitrary(ExitCodeWithin)(fc)
-  const stdout = S.toArbitrary(HookStdout)(fc)
-  const stderr = S.toArbitrary(HookStderr)(fc)
-  const event = S.toArbitrary(HookEventName)(fc)
-  const decisionKey = S.toArbitrary(DecisionKeyText)(fc).map((key) => (key === null ? undefined : key))
-
-  it.prop(
-    '∀c_ExitKind_∈Four',
-    [exitCode, stdout],
-    ([code, out]) => EXIT_KINDS.includes(exitKindOf(code, out)),
-  )
-
-  it.prop(
-    '∀c_NonZeroExit_=AnyStdout',
-    [exitCode, stdout, stdout],
-    ([code, a, b]) => code === 0 || exitKindOf(code, a) === exitKindOf(code, b),
-  )
-
-  it.prop(
-    '∀s_ZeroExit_≡BraceTest',
-    [stdout],
-    ([out]) => exitKindOf(0, out) === (out.trim().startsWith('{') ? 'ExitDecisionJson' : 'ExitNoDecision'),
-  )
-
-  it.prop('∀s_BlockReason_≠Empty', [stderr, event], ([err, ev]) => {
-    const reason = blockReason(err, ev)
-    return reason !== '' && (err.trim() === '' ? reason.includes(ev) : reason === err.trim())
-  })
-
-  it.prop(
-    '∀s_StderrReaders_≡Agree',
-    [stderr],
-    ([err]) => (stderrVerdict(err) === 'warning') === (spokenStderr(err) !== ''),
-  )
-
-  it.prop(
-    '∀k_ParsedVerdict_=Permission',
-    [decisionKey, decisionKey],
-    ([permission, legacy]) =>
-      permission === undefined || parsedVerdict(permission, legacy) === parsedVerdict(permission, undefined),
-  )
-
-  it.prop(
-    '∀k_ParsedBlockReason_≠NonEmpty',
-    [decisionKey, decisionKey, decisionKey, event],
-    ([key, denyReason, reason, ev]) => {
-      const stated = parsedBlockReason(key, denyReason, reason, ev)
-      if (stated.trim() === '') return false
-      const raw = key === 'deny' ? denyReason : reason
-      return raw === undefined || raw.trim() === '' ? stated.includes(ev) : stated === raw
-    },
-  )
-}

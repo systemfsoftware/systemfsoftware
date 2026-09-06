@@ -1,4 +1,3 @@
-/// <reference types="vitest/import-meta" />
 import { Schema } from 'effect'
 import { MAX_CHILDREN_CEILING } from './SupervisorDynamic.js'
 
