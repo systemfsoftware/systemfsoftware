@@ -163,24 +163,17 @@ if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
   const { FastCheck: fc } = await import('effect/testing')
 
-  const stdout = fc.oneof(
-    fc.constant(''),
-    fc.constant('   '),
-    fc.constant('{"decision":"block"}'),
-    fc.constant('  {"a":1}  '),
-    fc.constant('not json'),
-    fc.string({ maxLength: 12 }),
-  )
+  const edgeOrString = (...edges: readonly string[]) =>
+    S.toArbitrary(S.Union([...edges.map((edge) => S.Literal(edge)), S.String]))(fc)
+  const stdout = edgeOrString('', '   ', '{"decision":"block"}', '  {"a":1}  ', 'not json')
 
-  const stderr = fc.oneof(fc.constant(''), fc.constant('   \n '), fc.string({ maxLength: 12 }))
-  const event = fc.string({ minLength: 1, maxLength: 10 })
-  const decisionKey = fc.oneof(
-    fc.constant(undefined),
-    fc.constant('deny'),
-    fc.constant('block'),
-    fc.constant('allow'),
-    fc.string({ maxLength: 6 }),
-  )
+  const stderr = edgeOrString('', '   \n ')
+  const event = S.toArbitrary(S.String)(fc).filter((s) => s.length >= 1 && s.length <= 10)
+  const decisionKey = S.toArbitrary(
+    S.Union([S.Null, S.Literal('deny'), S.Literal('block'), S.Literal('allow'), S.String]),
+  )(
+    fc,
+  ).map((key) => (key === null ? undefined : key))
 
   it.prop(
     '∀c_ExitKind_∈Four',

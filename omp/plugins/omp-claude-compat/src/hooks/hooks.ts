@@ -129,12 +129,13 @@ if (import.meta.vitest !== void 0) {
 
   const budget = { fastCheck: { numRuns: 25 }, timeout: 30_000 }
 
-  const deadlineMs = fc.integer({ min: 1, max: 10_000 })
+  const within = (max: number) => S.toArbitrary(S.Int)(fc).filter((n) => n >= 1 && n <= max)
+  const deadlineMs = within(10_000)
 
-  const overrunMs = fc.integer({ min: 1, max: 10_000 })
+  const overrunMs = within(10_000)
 
   const deadlineWithUnderrun = deadlineMs.chain((deadline) =>
-    fc.tuple(fc.constant(deadline), fc.integer({ min: 0, max: deadline - 1 }))
+    S.toArbitrary(S.Int)(fc).filter((n) => n >= 0 && n < deadline).map((workMillis) => [deadline, workMillis] as const)
   )
 
   const workTaking = (millis: number) =>

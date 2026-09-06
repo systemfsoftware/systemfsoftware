@@ -29,7 +29,11 @@ if (import.meta.vitest !== void 0) {
    * for it can state the rejection half but never a discriminating half. It is
    * stated directly.
    */
-  it.prop('∀b_Uint8ArrayFromPrefixedHex_⊥', [fc.uint8Array()], ([bytes]) => !Exit.isSuccess(decode(bytes)))
+  it.prop(
+    '∀b_Uint8ArrayFromPrefixedHex_⊥',
+    [S.toArbitrary(S.Uint8Array)(fc)],
+    ([bytes]) => !Exit.isSuccess(decode(bytes)),
+  )
 
   expectTypeOf<S.Codec.Encoded<typeof Uint8ArrayFromPrefixedHex>>().toEqualTypeOf<`0x${string}`>()
 }

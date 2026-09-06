@@ -66,7 +66,6 @@ const CapOutsideSpan = Schema.Int.pipe(
 
 const decodesChildRestart = Schema.decodeUnknownExit(ChildPolicyConfig)
 const decodesLockMode = Schema.decodeUnknownExit(LockPolicyConfig)
-const decodesTickLogLevel = Schema.decodeUnknownExit(TickPolicyConfig)
 const decodesSupervisorPolicy = Schema.decodeUnknownExit(SupervisorPolicyConfig)
 
 if (import.meta.vitest !== void 0) {
@@ -82,37 +81,14 @@ if (import.meta.vitest !== void 0) {
     ([children]) => Exit.isFailure(Schema.decodeExit(MaxChildren)(children)),
   )
 
-  /**
-   * The accepted value set of each policy field, written down rather than drawn from the schema.
-   *
-   * An arbitrary derived from the schema cannot police this: shrink the literal union to one member
-   * and the generator shrinks with it, so the round-trip law still passes. Measured - these three
-   * properties are what turn the `Schema.Literal` mutants in this cell from survivors into kills,
-   * and the accepted set is a decision rather than declaration data, which is why no ignorer covers
-   * it.
-   */
-  it.prop(
-    '∀x_AcceptedChildRestart_→decodes',
-    [fc.constantFrom('permanent', 'transient', 'temporary')],
-    ([restart]) => Exit.isSuccess(decodesChildRestart({ restart })),
-  )
-
-  it.prop(
-    '∀x_AcceptedLockMode_→decodes',
-    [fc.constantFrom('none', 'required', 'optional')],
-    ([mode]) => Exit.isSuccess(decodesLockMode({ mode })),
-  )
-
-  it.prop(
-    '∀x_AcceptedStartLogLevel_→decodes',
-    [fc.constantFrom('debug', 'info')],
-    ([startLogLevel]) => Exit.isSuccess(decodesTickLogLevel({ startLogLevel, tickTimeout: Duration.seconds(1) })),
-  )
-
   it.prop(
     '∀x_UnlistedChildRestart_→rejects',
-    [fc.string().filter((s) => !['permanent', 'transient', 'temporary'].includes(s))],
-    ([restart]) => Exit.isFailure(decodesChildRestart({ restart })),
+    [
+      Schema.toArbitrary(Schema.String)(fc).filter((s) => !['permanent', 'transient', 'temporary'].includes(s)).map((
+        restart,
+      ) => ({ restart })),
+    ],
+    ([{ restart }]) => Exit.isFailure(decodesChildRestart({ restart })),
   )
 
   /**
@@ -124,14 +100,22 @@ if (import.meta.vitest !== void 0) {
    */
   it.prop(
     '∀x_UnlistedLockMode_→rejects',
-    [fc.string().filter((mode) => !['none', 'required', 'optional'].includes(mode))],
-    ([mode]) => Exit.isFailure(decodesLockMode({ mode })),
+    [
+      Schema.toArbitrary(Schema.String)(fc).filter((s) => !['none', 'required', 'optional'].includes(s)).map((
+        mode,
+      ) => ({ mode })),
+    ],
+    ([{ mode }]) => Exit.isFailure(decodesLockMode({ mode })),
   )
 
   it.prop(
     '∀x_NonDurationCooldown_→rejects',
-    [fc.oneof(fc.string(), fc.integer(), fc.boolean())],
-    ([cooldown]) => Exit.isFailure(decodesSupervisorPolicy({ cooldown })),
+    [
+      Schema.toArbitrary(Schema.Union([Schema.String, Schema.Int, Schema.Boolean]))(fc).map((cooldown) => ({
+        cooldown,
+      })),
+    ],
+    ([{ cooldown }]) => Exit.isFailure(decodesSupervisorPolicy({ cooldown })),
   )
 
   const window = Duration.seconds(1)

@@ -104,9 +104,7 @@ if (import.meta.vitest !== void 0) {
    * own filter guarantees `failedIndex < totalChildren`, so the arbitrary draws the same shape
    * rather than a wider one the decision never sees.
    */
-  const tree = fc.integer({ min: 1, max: 32 }).chain((total) =>
-    fc.tuple(fc.constant(total), fc.integer({ min: 0, max: total - 1 }))
-  )
+  const tree = S.toArbitrary(DecideInput)(fc).map((input) => [input.totalChildren, input.failedIndex] as const)
   const decodesDecideInput = S.decodeUnknownExit(DecideInput)
 
   const ascendingDistinct = (xs: readonly number[]): boolean =>
@@ -151,7 +149,7 @@ if (import.meta.vitest !== void 0) {
    */
   it.prop(
     '∀r_RestartWithoutIndices_→Refused',
-    [fc.constant({ _tag: 'Restart', indices: [] })],
+    [S.toArbitrary(RestartDecisionRestart)(fc).map((input) => ({ _tag: input._tag, indices: [] }))],
     ([input]) => Exit.isFailure(S.decodeUnknownExit(RestartDecisionRestart)(input)),
   )
 

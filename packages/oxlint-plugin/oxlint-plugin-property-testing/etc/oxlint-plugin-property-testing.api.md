@@ -18,6 +18,7 @@ const _default: {
         'require-effect-fastcheck': Rule;
         'no-unbounded-fanout': Rule;
         'no-nested-quantification': Rule;
+        'prop-generated-law-duplicate': Rule;
         'prop-arbitrary-schema-origin': Rule;
     };
     configs: {
@@ -31,6 +32,7 @@ const _default: {
                 readonly '@systemfsoftware/oxlint-plugin-property-testing/no-unbounded-fanout': 'error';
                 readonly '@systemfsoftware/oxlint-plugin-property-testing/no-nested-quantification': 'error';
                 readonly '@systemfsoftware/oxlint-plugin-property-testing/prop-arbitrary-schema-origin': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-property-testing/prop-generated-law-duplicate': 'error';
             };
         };
     };

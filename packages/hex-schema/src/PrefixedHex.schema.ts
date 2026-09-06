@@ -1,6 +1,7 @@
 /// <reference types="vitest/import-meta" />
 import { type Brand, Schema as S, SchemaTransformation } from 'effect'
 import { addHexPrefix, stripHexPrefix } from './PrefixedHex.js'
+import { HexBodyPairs } from './StrictHex.schema.js'
 import { StrictHex } from './StrictHex.schema.js'
 
 export const PrefixedHex = S.TemplateLiteral(['0x', S.String]).pipe(
@@ -38,7 +39,7 @@ if (import.meta.vitest !== void 0) {
    * half. It is stated directly; the prefixed invalid-body draws below witness
    * the body obligation.
    */
-  it.prop('∀b_PrefixedHexPrefix_⊥', [fc.stringMatching(/^[0-9a-f]+$/)], ([bare]) => !Exit.isSuccess(decode(bare)))
+  it.prop('∀b_PrefixedHexPrefix_⊥', [S.toArbitrary(HexBodyPairs)(fc)], ([bare]) => !Exit.isSuccess(decode(bare)))
 
   /**
    * The reason the package exists: a consumer whose API demands `0x${string}`

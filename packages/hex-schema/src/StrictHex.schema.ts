@@ -9,6 +9,18 @@ export const StrictHex = S.String.pipe(
     title: 'Strict Hex String',
   }),
 )
+export const HexBodyPairs = S.String.pipe(
+  S.check(
+    S.makeFilter((s) => /^(?:[0-9a-f]{2})+$/.test(s), {
+      arbitrary: {
+        candidate: {
+          weight: 100,
+          make: (fc) => fc.stringMatching(/^(?:[0-9a-f]{2})+$/),
+        },
+      },
+    }),
+  ),
+)
 
 const decode = S.decodeUnknownExit(StrictHex)
 
@@ -32,7 +44,7 @@ if (import.meta.vitest !== void 0) {
    */
   it.prop(
     '∀h_StrictHex_=x',
-    [fc.stringMatching(/^(?:[0-9a-f]{2})+$/)],
+    [S.toArbitrary(HexBodyPairs)(fc)],
     ([hex]) => {
       const result = decode(hex)
       return Exit.isSuccess(result) && result.value === hex

@@ -34,7 +34,7 @@ if (import.meta.vitest !== void 0) {
    * `HexBytes` accepts a `Uint8Array`, so a refusal generator for it can state
    * the rejection half but never a discriminating half. It is stated directly.
    */
-  it.prop('∀b_HexBytesWireIsString_⊥', [fc.uint8Array()], ([bytes]) => !Exit.isSuccess(decode(bytes)))
+  it.prop('∀b_HexBytesWireIsString_⊥', [S.toArbitrary(S.Uint8Array)(fc)], ([bytes]) => !Exit.isSuccess(decode(bytes)))
 
   expectTypeOf<S.Codec.Encoded<typeof HexBytes>>().toEqualTypeOf<string>()
 }
