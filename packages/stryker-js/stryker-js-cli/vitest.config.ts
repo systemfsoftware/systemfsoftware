@@ -12,6 +12,7 @@ export default defineConfig({
       'tests/exit-code.integration.test.ts',
       'tests/verdict-envelope.integration.test.ts',
     ],
+    passWithNoTests: false,
     testTimeout: 60_000,
   },
 })

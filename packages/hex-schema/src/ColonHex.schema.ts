@@ -1,6 +1,20 @@
 /// <reference types="vitest/import-meta" />
 import { type Brand, Schema as S, SchemaTransformation } from 'effect'
 import { HexString } from './HexString.schema.js'
+import { HexBodyPairs } from './StrictHex.schema.js'
+
+const LowerHexWithLetter = S.String.pipe(
+  S.check(
+    S.makeFilter((s) => /^[0-9a-f]*[a-f][0-9a-f]*$/.test(s), {
+      arbitrary: {
+        candidate: {
+          weight: 100,
+          make: (fc) => fc.stringMatching(/^[0-9a-f]*[a-f][0-9a-f]*$/),
+        },
+      },
+    }),
+  ),
+)
 
 const hexToColon = (hex: string): string => (hex.match(/.{1,2}/g) ?? []).map((byte) => byte.toUpperCase()).join(':')
 
@@ -30,6 +44,7 @@ if (import.meta.vitest !== void 0) {
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
   const { FastCheck: fc } = await import('effect/testing')
+  const { Exit } = await import('effect')
   const { expectTypeOf } = await import('vitest')
 
   /**
@@ -46,7 +61,7 @@ if (import.meta.vitest !== void 0) {
    */
   it.prop(
     '∀h_HexToColon_=UpperOfInput',
-    [fc.stringMatching(/^[0-9a-f]*[a-f][0-9a-f]*$/)],
+    [S.toArbitrary(LowerHexWithLetter)(fc)],
     ([hex]) => hexToColon(hex).replaceAll(':', '') === hex.toUpperCase(),
   )
 
@@ -57,11 +72,16 @@ if (import.meta.vitest !== void 0) {
    */
   it.prop(
     '∀h_HexToColonGrouping_=PairsOfInput',
-    [fc.stringMatching(/^(?:[0-9a-f]{2})+$/)],
+    [S.toArbitrary(HexBodyPairs)(fc)],
     ([hex]) => {
       const groups = hexToColon(hex).split(':')
       return groups.length === hex.length / 2 && groups.every((group) => group.length === 2)
     },
+  )
+  it.prop(
+    '∀h_HexToColonOutput_∈ColonHex',
+    [S.toArbitrary(HexBodyPairs)(fc)],
+    ([hex]) => Exit.isSuccess(S.decodeUnknownExit(ColonHex)(hexToColon(hex))),
   )
 
   /**

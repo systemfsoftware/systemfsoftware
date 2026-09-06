@@ -7,8 +7,6 @@ export class DynamicLimitExceeded extends S.TaggedError<DynamicLimitExceeded>()(
   { limit: S.Int.pipe(S.check(S.isGreaterThanOrEqualTo(0))) },
 ) {}
 
-const decode = S.decodeUnknownExit(DynamicLimitExceeded)
-
 export interface DaemonHealth {
   readonly name: string
   readonly ready: Latch.Latch
@@ -34,18 +32,4 @@ export interface DynamicHandle<Args, R = never> {
 export type ChildRef = {
   readonly id: number
   readonly removed: Effect.Effect<void>
-}
-
-if (import.meta.vitest !== void 0) {
-  const { it } = await import('@effect/vitest')
-  const { Exit } = await import('effect')
-  const { FastCheck: fc } = await import('effect/testing')
-
-  const negative = fc.integer({ min: -100, max: -1 })
-
-  it.prop(
-    '∀l_NegativeLimit_⊥',
-    [negative.map((limit) => ({ _tag: 'DynamicLimitExceeded' as const, limit }))],
-    ([input]) => Exit.isFailure(decode(input)),
-  )
 }

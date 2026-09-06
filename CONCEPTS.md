@@ -281,6 +281,12 @@ One of the pair of properties — round-trip identity and encode stability — r
 
 _Aliases:_ `ruleOfSchemas` pair, the round-trip laws
 
+### Fabricated arbitrary
+
+A hand-built `fc.*` generator passed to `it.prop` that is disconnected from the schema constraining the function under test, so the run stays green over inputs the function never has to handle. It fails the schemas-only rule on sight: an input with no schema grows one first, and customization belongs in a schema-attached `arbitrary` annotation, not at the call site. Distinct from **collateral kill**, which is tautological credit earned through a derived arbitrary; a fabricated arbitrary earns its green by never generating the case that would fail.
+
+_Aliases:_ `contrived arbitrary`
+
 ## Agent context injection
 
 ### Context file

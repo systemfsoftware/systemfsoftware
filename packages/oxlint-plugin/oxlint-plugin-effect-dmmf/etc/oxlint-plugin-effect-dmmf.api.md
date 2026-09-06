@@ -33,10 +33,13 @@ const _default: {
         'require-effect-fastcheck': Rule;
         'no-unbounded-fanout': Rule;
         'no-nested-quantification': Rule;
+        'prop-generated-law-duplicate': Rule;
+        'prop-arbitrary-schema-origin': Rule;
         'damp-test-naming': Rule;
         'no-behaviourless-assertion': Rule;
         'no-unrun-effect-test': Rule;
         'pbt-naming': Rule;
+        'in-source-test-prop-only': Rule;
         'in-source-test-targets-private': Rule;
         'no-test-file-in-src': Rule;
         'src-property-test-cell': Rule;

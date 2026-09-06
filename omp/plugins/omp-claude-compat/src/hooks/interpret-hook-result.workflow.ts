@@ -163,34 +163,45 @@ if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
   const { FastCheck: fc } = await import('effect/testing')
 
-  const stdout = fc.oneof(
-    fc.constant(''),
-    fc.constant('   '),
-    fc.constant('{"decision":"block"}'),
-    fc.constant('  {"a":1}  '),
-    fc.constant('not json'),
-    fc.string({ maxLength: 12 }),
+  const ExitCodeWithin = S.Int.pipe(
+    S.check(
+      S.makeFilter((n) => n >= -8 && n <= 8, {
+        arbitrary: { candidate: { weight: 100, make: (g) => g.integer({ min: -8, max: 8 }) } },
+      }),
+    ),
   )
-
-  const stderr = fc.oneof(fc.constant(''), fc.constant('   \n '), fc.string({ maxLength: 12 }))
-  const event = fc.string({ minLength: 1, maxLength: 10 })
-  const decisionKey = fc.oneof(
-    fc.constant(undefined),
-    fc.constant('deny'),
-    fc.constant('block'),
-    fc.constant('allow'),
-    fc.string({ maxLength: 6 }),
+  const HookStdout = S.Union([
+    S.Literal(''),
+    S.Literal('   '),
+    S.Literal('{"decision":"block"}'),
+    S.Literal('  {"a":1}  '),
+    S.Literal('not json'),
+    S.String,
+  ])
+  const HookStderr = S.Union([S.Literal(''), S.Literal('   \n '), S.String])
+  const HookEventName = S.String.pipe(
+    S.check(
+      S.makeFilter((s) => s.length >= 1 && s.length <= 10, {
+        arbitrary: { candidate: { weight: 100, make: (g) => g.string({ minLength: 1, maxLength: 10 }) } },
+      }),
+    ),
   )
+  const DecisionKeyText = S.Union([S.Null, S.Literal('deny'), S.Literal('block'), S.Literal('allow'), S.String])
+  const exitCode = S.toArbitrary(ExitCodeWithin)(fc)
+  const stdout = S.toArbitrary(HookStdout)(fc)
+  const stderr = S.toArbitrary(HookStderr)(fc)
+  const event = S.toArbitrary(HookEventName)(fc)
+  const decisionKey = S.toArbitrary(DecisionKeyText)(fc).map((key) => (key === null ? undefined : key))
 
   it.prop(
     '∀c_ExitKind_∈Four',
-    [fc.integer({ min: -8, max: 8 }), stdout],
+    [exitCode, stdout],
     ([code, out]) => EXIT_KINDS.includes(exitKindOf(code, out)),
   )
 
   it.prop(
     '∀c_NonZeroExit_=AnyStdout',
-    [fc.integer({ min: -8, max: 8 }), stdout, stdout],
+    [exitCode, stdout, stdout],
     ([code, a, b]) => code === 0 || exitKindOf(code, a) === exitKindOf(code, b),
   )
 

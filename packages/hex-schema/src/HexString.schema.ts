@@ -25,6 +25,18 @@ export const HexString = S.String.pipe(
 )
 
 export type HexString = S.Schema.Type<typeof HexString>
+const HexWithUppercaseLetter = S.String.pipe(
+  S.check(
+    S.makeFilter((s) => /^[0-9a-fA-F]*[A-F][0-9a-fA-F]*$/.test(s), {
+      arbitrary: {
+        candidate: {
+          weight: 100,
+          make: (fc) => fc.stringMatching(/^[0-9a-fA-F]*[A-F][0-9a-fA-F]*$/),
+        },
+      },
+    }),
+  ),
+)
 
 if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
@@ -46,7 +58,7 @@ if (import.meta.vitest !== void 0) {
    */
   it.prop(
     '∀b_ToStrictHex_=LowerOfBody',
-    [fc.stringMatching(/^[0-9a-fA-F]*[A-F][0-9a-fA-F]*$/)],
+    [S.toArbitrary(HexWithUppercaseLetter)(fc)],
     ([body]) => toStrictHex(`0x${body}`) === body.toLowerCase(),
   )
 

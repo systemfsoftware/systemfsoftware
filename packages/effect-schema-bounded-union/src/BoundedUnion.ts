@@ -244,7 +244,7 @@ if (import.meta.vitest !== void 0) {
    */
   it.prop(
     '∀s_ExprDeepest_=DepthCap',
-    [fc.integer()],
+    [S.toArbitrary(S.Int)(fc)],
     ([seed]) => deepestOf(sampleAt(seed)) === DEPTH_CAP,
     { timeout: SAMPLE_TIMEOUT_MS, fastCheck: { numRuns: SEEDS } },
   )
@@ -259,7 +259,7 @@ if (import.meta.vitest !== void 0) {
    */
   it.prop(
     '∀s_ExprComposition_⊇AllTags',
-    [fc.integer()],
+    [S.toArbitrary(S.Int)(fc)],
     ([seed]) => distinctTagsOf(sampleAt(seed)) === VARIANT_COUNT,
     { timeout: SAMPLE_TIMEOUT_MS, fastCheck: { numRuns: SEEDS } },
   )
@@ -274,7 +274,7 @@ if (import.meta.vitest !== void 0) {
    */
   it.prop(
     '∀s_ExprBranches_≤ShareTolerance',
-    [fc.integer()],
+    [S.toArbitrary(S.Int)(fc)],
     ([seed]) => widestBranchDriftOf(sampleAt(seed)) <= SHARE_TOLERANCE,
     { timeout: SAMPLE_TIMEOUT_MS, fastCheck: { numRuns: SEEDS } },
   )
@@ -300,4 +300,10 @@ if (import.meta.vitest !== void 0) {
       return Exit.isSuccess(decoded) && nestingDepth(decoded.value) === depth
     },
   )
+  it.prop('∀e_ExprSample_≡RoundTrip', [S.toArbitrary(Expr)(fc)], ([expr]) => {
+    const encoded = S.encodeUnknownExit(Expr)(expr)
+    if (Exit.isFailure(encoded)) return false
+    const decoded = S.decodeUnknownExit(Expr)(encoded.value)
+    return Exit.isSuccess(decoded) && tagOf(decoded.value) === tagOf(expr)
+  })
 }
