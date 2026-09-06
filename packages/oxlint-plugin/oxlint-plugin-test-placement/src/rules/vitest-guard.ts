@@ -18,3 +18,15 @@ export const isVitestGuard = (test: ESTree.Node): boolean => {
   if (test.type !== 'BinaryExpression') return false
   return isMetaVitest(test.left) || isMetaVitest(test.right)
 }
+
+export const isInsideConsequent = (
+  node: { readonly parent: ESTree.Node | null },
+  consequent: ESTree.Node,
+): boolean => {
+  const walk = (current: ESTree.Node | null): boolean => {
+    if (current === null) return false
+    if (current === consequent) return true
+    return walk(current.parent)
+  }
+  return walk(node.parent)
+}

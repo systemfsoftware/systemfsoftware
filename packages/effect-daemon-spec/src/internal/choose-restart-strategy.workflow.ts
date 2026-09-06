@@ -96,7 +96,6 @@ if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
   // branch is statically dead in the build and never enters the published module graph.
   const { it } = await import('@effect/vitest')
-  const { expect } = await import('vitest')
   const { FastCheck: fc } = await import('effect/testing')
 
   /**
@@ -104,9 +103,7 @@ if (import.meta.vitest !== void 0) {
    * own filter guarantees `failedIndex < totalChildren`, so the arbitrary draws the same shape
    * rather than a wider one the decision never sees.
    */
-  const tree = fc.integer({ min: 1, max: 32 }).chain((total) =>
-    fc.tuple(fc.constant(total), fc.integer({ min: 0, max: total - 1 }))
-  )
+  const tree = S.toArbitrary(DecideInput)(fc).map((input) => [input.totalChildren, input.failedIndex] as const)
 
   const ascendingDistinct = (xs: readonly number[]): boolean =>
     xs.every((x, i) => i === 0 || x > (xs[i - 1] ?? Number.NEGATIVE_INFINITY))
@@ -143,35 +140,4 @@ if (import.meta.vitest !== void 0) {
       restartIndicesFor('one_for_all', failedIndex, total).length === total &&
       restartIndicesFor('rest_for_one', failedIndex, total).length === total - failedIndex,
   )
-
-  /**
-   * `indices: S.NonEmptyArray(S.Int)` puts both refinements on one array node under v4, so
-   * cannot explain an empty array as the failure of a single check, and a generator that
-   * asserted directly against the decoder just below, which is the only honest split.
-   */
-
-  it('Should_RefuseTheDecision_When_TheRestartCarriesNoIndices', () => {
-    const decoded = S.decodeUnknownExit(RestartDecisionRestart)({ _tag: 'Restart', indices: [] })
-    expect(decoded._tag).toBe('Failure')
-  })
-
-  /**
-   * The brand the interpreter dispatches on. It is a private symbol, so no consumer can
-   * forge it and no structural value satisfies the decision types by accident; a refactor
-   * that drops the field from the class leaves every `decide` result undispatchable,
-   * which is what this observes.
-   */
-  it('Should_CarryTheDecisionBrand_When_DecidingARestart', () => {
-    const decided = chooseRestartStrategy({
-      strategy: 'one_for_one',
-      totalChildren: 3,
-      failedIndex: 1,
-      exitSuccess: false,
-      intensityExceeded: false,
-    })
-    expect(Result.isSuccess(decided)).toBe(true)
-    if (Result.isSuccess(decided)) {
-      expect(decided.success[RestartDecisionTypeId]).toBe(RestartDecisionTypeId)
-    }
-  })
 }

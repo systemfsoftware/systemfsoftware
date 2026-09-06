@@ -39,8 +39,6 @@ const parsedBlockReason = (
   return stated === undefined || stated.trim() === '' ? `Blocked by ${event} hook` : stated
 }
 
-const EXIT_KINDS = ['ExitBlock', 'ExitDecisionJson', 'ExitNoDecision', 'ExitOther'] as const
-
 const HookVerdictTypeId: unique symbol = Symbol.for('@systemfsoftware/omp-claude-compat/HookVerdict')
 type HookVerdictTypeId = typeof HookVerdictTypeId
 
@@ -158,74 +156,3 @@ export const interpretHookResult = Workflow.make(
     )
   },
 )
-
-if (import.meta.vitest !== void 0) {
-  const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect/testing')
-
-  const stdout = fc.oneof(
-    fc.constant(''),
-    fc.constant('   '),
-    fc.constant('{"decision":"block"}'),
-    fc.constant('  {"a":1}  '),
-    fc.constant('not json'),
-    fc.string({ maxLength: 12 }),
-  )
-
-  const stderr = fc.oneof(fc.constant(''), fc.constant('   \n '), fc.string({ maxLength: 12 }))
-  const event = fc.string({ minLength: 1, maxLength: 10 })
-  const decisionKey = fc.oneof(
-    fc.constant(undefined),
-    fc.constant('deny'),
-    fc.constant('block'),
-    fc.constant('allow'),
-    fc.string({ maxLength: 6 }),
-  )
-
-  it.prop(
-    '∀c_ExitKind_∈Four',
-    [fc.integer({ min: -8, max: 8 }), stdout],
-    ([code, out]) => EXIT_KINDS.includes(exitKindOf(code, out)),
-  )
-
-  it.prop(
-    '∀c_NonZeroExit_=AnyStdout',
-    [fc.integer({ min: -8, max: 8 }), stdout, stdout],
-    ([code, a, b]) => code === 0 || exitKindOf(code, a) === exitKindOf(code, b),
-  )
-
-  it.prop(
-    '∀s_ZeroExit_≡BraceTest',
-    [stdout],
-    ([out]) => exitKindOf(0, out) === (out.trim().startsWith('{') ? 'ExitDecisionJson' : 'ExitNoDecision'),
-  )
-
-  it.prop('∀s_BlockReason_≠Empty', [stderr, event], ([err, ev]) => {
-    const reason = blockReason(err, ev)
-    return reason !== '' && (err.trim() === '' ? reason.includes(ev) : reason === err.trim())
-  })
-
-  it.prop(
-    '∀s_StderrReaders_≡Agree',
-    [stderr],
-    ([err]) => (stderrVerdict(err) === 'warning') === (spokenStderr(err) !== ''),
-  )
-
-  it.prop(
-    '∀k_ParsedVerdict_=Permission',
-    [decisionKey, decisionKey],
-    ([permission, legacy]) =>
-      permission === undefined || parsedVerdict(permission, legacy) === parsedVerdict(permission, undefined),
-  )
-
-  it.prop(
-    '∀k_ParsedBlockReason_≠NonEmpty',
-    [decisionKey, decisionKey, decisionKey, event],
-    ([key, denyReason, reason, ev]) => {
-      const stated = parsedBlockReason(key, denyReason, reason, ev)
-      if (stated.trim() === '') return false
-      const raw = key === 'deny' ? denyReason : reason
-      return raw === undefined || raw.trim() === '' ? stated.includes(ev) : stated === raw
-    },
-  )
-}

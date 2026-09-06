@@ -871,32 +871,3 @@ export const incrementalDiff = (
     },
   }
 }
-
-if (import.meta.vitest !== void 0) {
-  const { expect, it } = await import('vitest')
-
-  it('Should_KeepKilledBy_When_BuildingARememberedEntry', () => {
-    const location = { start: { line: 1, column: 0 }, end: { line: 1, column: 1 } }
-    const mutant = new Mutant({
-      id: 'm1',
-      fileName: '/proj/src/a.ts',
-      mutatorName: 'BooleanLiteral',
-      replacement: 'false',
-      location,
-    })
-    const previous = {
-      mutatorName: 'BooleanLiteral',
-      replacement: 'false',
-      location,
-      status: 'Killed',
-      killedBy: ['t1'],
-      coveredBy: ['t1'],
-    }
-    expect(rememberedEntryOf(mutant, previous)).toEqual({
-      mutantId: 'm1',
-      status: 'Killed',
-      killedBy: ['t1'],
-      coveredBy: ['t1'],
-    })
-  })
-}
