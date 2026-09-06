@@ -29,7 +29,7 @@ interface ImportEdge {
 
 type LocalBinding =
   | { readonly kind: 'import' }
-  | { readonly kind: 'init'; readonly init: ESTree.Node }
+  | { readonly kind: 'init'; readonly init: ESTree.Node; readonly declarator: ESTree.VariableDeclarator }
   | { readonly kind: 'none' }
 
 interface ScopeLike {
@@ -78,11 +78,45 @@ const resolveLocal = (name: string, node: ESTree.Node, getScope: GetScope): Loca
       if (def.type === 'ImportBinding') return { kind: 'import' }
       if (def.node.type !== 'VariableDeclarator') continue
       const init = Option.fromNullishOr(def.node.init)
-      if (Option.isSome(init)) return { kind: 'init', init: init.value }
+      if (Option.isSome(init)) return { kind: 'init', init: init.value, declarator: def.node }
     }
     return { kind: 'none' }
   }
   return { kind: 'none' }
+}
+
+const importSourceOf = (argument: ESTree.Expression | null | undefined): string | undefined => {
+  if (argument === undefined || argument === null) return undefined
+  if (argument.type !== 'ImportExpression') return undefined
+  const { source } = argument
+  return source.type === 'Literal' && typeof source.value === 'string' ? source.value : undefined
+}
+
+/**
+ * A guard-local `const { FastCheck: fc } = await import('effect/testing')` is the corpus's
+ * canonical generator binding. Resolve it to the same import edge a static import would
+ * produce, so the dynamic idiom cannot hide a hand-built arbitrary behind an opaque verdict.
+ */
+const dynamicEdgeOf = (
+  declarator: ESTree.VariableDeclarator,
+  init: ESTree.Node,
+  name: string,
+): ImportEdge | undefined => {
+  if (init.type !== 'AwaitExpression') return undefined
+  const source = importSourceOf(init.argument)
+  if (source === undefined) return undefined
+  const { id } = declarator
+  if (id.type === 'ObjectPattern') {
+    for (const property of id.properties) {
+      if (property.type !== 'Property') continue
+      if (property.key.type !== 'Identifier' || property.value.type !== 'Identifier') continue
+      if (property.value.name !== name) continue
+      return { source, imported: property.key.name }
+    }
+    return undefined
+  }
+  if (id.type === 'Identifier' && id.name === name) return { source, imported: null }
+  return undefined
 }
 
 const vocabularyOf = (edge: ImportEdge): Verdict => {
@@ -91,11 +125,14 @@ const vocabularyOf = (edge: ImportEdge): Verdict => {
     if (SCHEMA_NAMESPACE_NAMES[edge.imported] === true) return 'schema'
     if (FASTCHECK_NAMESPACE_NAMES[edge.imported] === true) return 'handBuilt'
   }
+  if (edge.source === 'effect/testing' && edge.imported !== null) {
+    if (FASTCHECK_NAMESPACE_NAMES[edge.imported] === true) return 'handBuilt'
+    if (SCHEMA_NAMESPACE_NAMES[edge.imported] === true) return 'schema'
+  }
   if (edge.source === FASTCHECK_PACKAGE || edge.source.startsWith(`${FASTCHECK_PACKAGE}/`)) return 'handBuilt'
   return 'opaque'
 }
-
-class Provenance {
+export class Provenance {
   readonly imports = new Map<string, ImportEdge>()
 
   constructor(readonly getScope: GetScope) {}
@@ -116,7 +153,10 @@ class Provenance {
           const edge = this.imports.get(expr.name)
           return edge === undefined ? 'opaque' : vocabularyOf(edge)
         }
-        if (resolved.kind === 'init') return this.verdictOf(resolved.init, depth + 1)
+        if (resolved.kind === 'init') {
+          const edge = dynamicEdgeOf(resolved.declarator, resolved.init, expr.name)
+          return edge === undefined ? this.verdictOf(resolved.init, depth + 1) : vocabularyOf(edge)
+        }
         return 'opaque'
       }
       case 'MemberExpression':
@@ -129,6 +169,8 @@ class Provenance {
         return this.reduceArgs(expr.elements, depth)
       case 'CallExpression':
         return this.callVerdictOf(expr, depth)
+      case 'AwaitExpression':
+        return this.verdictOf(expr.argument, depth + 1)
       default:
         return 'opaque'
     }

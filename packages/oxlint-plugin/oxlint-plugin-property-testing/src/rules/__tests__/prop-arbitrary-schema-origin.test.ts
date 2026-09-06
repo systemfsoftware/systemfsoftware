@@ -401,5 +401,24 @@ ${GUARD_END}`,
       filename: FILENAME,
       errors: [{ messageId: 'handBuiltArbitrary', data: EXPECTED_DATA }],
     },
+    {
+      name: 'Should_Report_When_HandBuiltConstantRidesADynamicFastCheckImport',
+      code: `${GUARD}
+const { it } = await import('@effect/vitest')
+const { FastCheck: fc } = await import('effect/testing')
+it.prop('p', [fc.constant({ a: 1 })], ([input]) => input !== null)
+${GUARD_END}`,
+      filename: FILENAME,
+      errors: [{ messageId: 'handBuiltArbitrary', data: EXPECTED_DATA }],
+    },
+    {
+      name: 'Should_Report_When_HandBuiltMemberRidesADynamicFastCheckImport',
+      code: `${GUARD}
+const { FastCheck: fc } = await import('effect/testing')
+it.prop('p', [fc.integer({ min: 0 })], ([n]) => n >= 0)
+${GUARD_END}`,
+      filename: FILENAME,
+      errors: [{ messageId: 'handBuiltArbitrary', data: EXPECTED_DATA }],
+    },
   ],
 })
