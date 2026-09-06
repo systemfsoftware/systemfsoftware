@@ -13,6 +13,17 @@ export const FIX =
 
 export const EFFECT_SOURCE = 'effect' as const
 
+export const STOCK_NAME = 'a stock-schema derivation wearing a domain costume' as const
+
+export const STOCK_EXPECTED =
+  'the arbitrary derives from a schema this module (or a sibling) declares for its own contract — a domain schema — never from a stock Schema member or stock composition at the prop site' as const
+
+export const STOCK_ACTUAL =
+  'the toArbitrary root is Schema.String, Schema.Int, or another stock member — the filter and map chains on it are the hand-built generator, relocated behind a schema-looking call' as const
+
+export const STOCK_FIX =
+  'declare the domain schema that states the shape — its filter carries the format, its arbitrary annotation carries the generator — and derive through S.toArbitrary(ThatSchema)(fc)' as const
+
 export const FASTCHECK_PACKAGE = 'fast-check' as const
 
 export const SCHEMA_SOURCE_PATTERN = /schema/i
@@ -39,5 +50,6 @@ export const meta = {
   schema: [],
   messages: {
     handBuiltArbitrary: MESSAGE,
+    stockDerivedArbitrary: MESSAGE,
   },
 } as const

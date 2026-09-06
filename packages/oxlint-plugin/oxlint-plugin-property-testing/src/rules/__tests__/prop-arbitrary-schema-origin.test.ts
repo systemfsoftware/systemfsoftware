@@ -1,7 +1,16 @@
 import { RuleTester } from 'oxlint/plugins-dev'
 import * as vitest from 'vitest'
 
-import { ACTUAL, EXPECTED, FIX, VIOLATION_NAME } from '../prop-arbitrary-schema-origin.config.js'
+import {
+  ACTUAL,
+  EXPECTED,
+  FIX,
+  STOCK_ACTUAL,
+  STOCK_EXPECTED,
+  STOCK_FIX,
+  STOCK_NAME,
+  VIOLATION_NAME,
+} from '../prop-arbitrary-schema-origin.config.js'
 import { propArbitrarySchemaOrigin } from '../prop-arbitrary-schema-origin.js'
 
 RuleTester.it = vitest.it
@@ -19,6 +28,7 @@ const ruleTester = new RuleTester({
 const FILENAME = 'src/DaemonPolicy.schema.ts'
 
 const EXPECTED_DATA = { name: VIOLATION_NAME, expected: EXPECTED, actual: ACTUAL, fix: FIX }
+const STOCK_DATA = { name: STOCK_NAME, expected: STOCK_EXPECTED, actual: STOCK_ACTUAL, fix: STOCK_FIX }
 
 const GUARD = 'if (import.meta.vitest !== void 0) {'
 const GUARD_BARE = 'if (import.meta.vitest) {'
@@ -94,27 +104,9 @@ ${GUARD_END}`,
       filename: FILENAME,
     },
     {
-      name: 'Should_StaySilent_When_FastCheckCombinatorWrapsASchemaArbitrary',
-      code: `import { Schema } from 'effect'
-import * as fc from 'fast-check'
-${GUARD}
-it.prop('p', [fc.oneof(fc.string(), Schema.toArbitrary(UserSchema)(fc))], ([u]) => u !== null)
-${GUARD_END}`,
-      filename: FILENAME,
-    },
-    {
       name: 'Should_StaySilent_When_ArbitraryCallIsStaticallyOpaque',
       code: `${GUARD}
 it.prop('p', [getArb()], ([x]) => x !== null)
-${GUARD_END}`,
-      filename: FILENAME,
-    },
-    {
-      name: 'Should_StaySilent_When_RecordObjectContainsASchemaDerivedField',
-      code: `import { Schema } from 'effect'
-import * as fc from 'fast-check'
-${GUARD}
-it.prop('p', [fc.record({ user: Schema.toArbitrary(UserSchema)(fc), tag: fc.string() })], ([r]) => r !== null)
 ${GUARD_END}`,
       filename: FILENAME,
     },
@@ -205,6 +197,24 @@ if (a.meta.vitest) {
       code: `import * as fc from 'fast-check'
 ${GUARD}
 it('example', () => { fc.record({}); return true })
+${GUARD_END}`,
+      filename: FILENAME,
+    },
+    {
+      name: 'Should_StaySilent_When_ToArbitraryDerivesFromADomainBinding',
+      code: `import { Schema } from 'effect'
+const Money = Schema.String
+${GUARD}
+it.prop('p', [Schema.toArbitrary(Money)(fc)], ([s]) => s === s)
+${GUARD_END}`,
+      filename: FILENAME,
+    },
+    {
+      name: 'Should_StaySilent_When_ToArbitraryDerivesFromAnImportedSchema',
+      code: `import { Schema } from 'effect'
+import { Money } from './money.schema.js'
+${GUARD}
+it.prop('p', [Schema.toArbitrary(Money)(fc).filter((s) => s.length > 0)], ([s]) => s === s)
 ${GUARD_END}`,
       filename: FILENAME,
     },
@@ -419,6 +429,44 @@ it.prop('p', [fc.integer({ min: 0 })], ([n]) => n >= 0)
 ${GUARD_END}`,
       filename: FILENAME,
       errors: [{ messageId: 'handBuiltArbitrary', data: EXPECTED_DATA }],
+    },
+    {
+      name: 'Should_Report_When_ToArbitraryRootIsAStockMember',
+      code: `import { Schema } from 'effect'
+${GUARD}
+it.prop('p', [Schema.toArbitrary(Schema.String)(fc).filter((s) => s.length > 0)], ([s]) => s === s)
+${GUARD_END}`,
+      filename: FILENAME,
+      errors: [{ messageId: 'stockDerivedArbitrary', data: STOCK_DATA }],
+    },
+    {
+      name: 'Should_Report_When_OneOfMixesHandBuiltWithSchema',
+      code: `import { Schema } from 'effect'
+import * as fc from 'fast-check'
+${GUARD}
+it.prop('p', [fc.oneof(fc.string(), Schema.toArbitrary(UserSchema)(fc))], ([u]) => u !== null)
+${GUARD_END}`,
+      filename: FILENAME,
+      errors: [{ messageId: 'handBuiltArbitrary', data: EXPECTED_DATA }],
+    },
+    {
+      name: 'Should_Report_When_RecordMixesSchemaFieldWithHandBuilt',
+      code: `import { Schema } from 'effect'
+import * as fc from 'fast-check'
+${GUARD}
+it.prop('p', [fc.record({ user: Schema.toArbitrary(UserSchema)(fc), tag: fc.string() })], ([r]) => r !== null)
+${GUARD_END}`,
+      filename: FILENAME,
+      errors: [{ messageId: 'handBuiltArbitrary', data: EXPECTED_DATA }],
+    },
+    {
+      name: 'Should_Report_When_ToArbitraryRootIsAStockComposition',
+      code: `import { Schema } from 'effect'
+${GUARD}
+it.prop('p', [Schema.toArbitrary(Schema.Union([Schema.Literal('a'), Schema.String]))(fc)], ([s]) => s === s)
+${GUARD_END}`,
+      filename: FILENAME,
+      errors: [{ messageId: 'stockDerivedArbitrary', data: STOCK_DATA }],
     },
   ],
 })

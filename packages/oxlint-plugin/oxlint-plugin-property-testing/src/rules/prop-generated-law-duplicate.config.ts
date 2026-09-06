@@ -1,24 +1,36 @@
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
-export const VIOLATION_NAME = 'a hand-written duplicate of the generated schema laws' as const
+export const COMPILER_NAME = 'a runtime probe of a compile-time guarantee' as const
 
-export const EXPECTED =
-  'in-source it.prop cases state only what the generated law suite cannot: refusals and domain decision laws over schema-derived inputs — never round-trip identity, encode stability, or plain decode acceptance of a schema' as const
+export const COMPILER_EXPECTED =
+  'the type checker owns brand and nominal-identity contracts — a dropped brand is a compile error at the consumer brand gate, not a failing property' as const
 
-export const ACTUAL =
-  'the property draws from a schema and its predicate only exercises that codec, so the generated schema-laws.test.ts (ruleOfSchemas, injected by @systemfsoftware/effect-schema-vite) already proves it — the block is a second copy of a generated law' as const
+export const COMPILER_ACTUAL =
+  'the predicate reflects over brand symbols at runtime, so it re-asserts what tsc already enforces and passes whenever the type system passes' as const
 
-export const FIX =
-  'delete the prop. What generation cannot state is rejection and domain decisions: a refusal (decode fails) or a decision law belongs in-source with its input derived through S.toArbitrary(schema)(fc) chains' as const
+export const COMPILER_FIX =
+  'delete the prop; state the brand contract where the compiler reads it — an expectTypeOf assertion or the consuming signature — never a symbol reflection loop' as const
+
+export const NO_FUNCTION_NAME = 'a property that tests no function' as const
+
+export const NO_FUNCTION_EXPECTED =
+  'every in-source property exercises domain logic — at least one call to a module-local function that is not a schema codec accessor — because a predicate that only feeds values through encode or decode tests the schema declaration, not code, and decode acceptance and refusal alike are generated or declared elsewhere' as const
+
+export const NO_FUNCTION_ACTUAL =
+  'no call in the predicate reaches module code — every call is a codec accessor, a schema wrapper, or an iteration combinator — so the property cannot fail unless the declaration it restates changes meaning' as const
+
+export const NO_FUNCTION_FIX =
+  'delete the prop; test the function that owns the decision — the workflow or a private helper in this module — with its input derived from a domain schema' as const
 
 export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Inside an import.meta.vitest in-source block, an it.prop whose arbitraries are schema-derived and whose predicate only exercises codec vocabulary (encode/decode/Exit-acceptance/equivalence) duplicates the generated ruleOfSchemas pair for that schema. The generated suite already proves decode-encode identity and encode stability for every exported schema; a hand-written copy is a second copy of a generated law.',
+      'Inside an import.meta.vitest in-source block: a predicate that reflects over brand symbols re-asserts a compile-time guarantee, and a predicate containing no module-local non-codec function call tests a schema declaration instead of code. Both report.',
   },
   schema: [],
   messages: {
-    generatedLawDuplicate: MESSAGE,
+    compilerDuplicate: MESSAGE,
+    noDomainFunction: MESSAGE,
   },
 } as const

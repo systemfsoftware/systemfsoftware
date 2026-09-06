@@ -2,21 +2,31 @@ import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import { Provenance } from './prop-arbitrary-schema-origin.js'
 import { isPropCallee } from './prop-call.js'
-import { ACTUAL, EXPECTED, FIX, meta, VIOLATION_NAME } from './prop-generated-law-duplicate.config.js'
+import {
+  COMPILER_ACTUAL,
+  COMPILER_EXPECTED,
+  COMPILER_FIX,
+  COMPILER_NAME,
+  meta,
+  NO_FUNCTION_ACTUAL,
+  NO_FUNCTION_EXPECTED,
+  NO_FUNCTION_FIX,
+  NO_FUNCTION_NAME,
+} from './prop-generated-law-duplicate.config.js'
 
-export type MessageIds = 'generatedLawDuplicate'
+export type MessageIds = 'compilerDuplicate' | 'noDomainFunction'
 
 /**
- * Codec-law vocabulary: every call whose terminal name lands here exercises the
- * schema's own encode/decode surface, so a predicate made only of these names —
- * and asserting acceptance, never rejection — re-asserts a generated law.
+ * Codec accessors and iteration/string combinators: a call whose terminal name
+ * lands in either list never counts as the function under test.
  */
-const CODEC_LAW_CALLEES: Record<string, true> = {
+const CODEC_ACCESSORS: Record<string, true> = {
   encode: true,
   encodeSync: true,
   encodeExit: true,
   encodeUnknownSync: true,
   encodeUnknownExit: true,
+  encodeOption: true,
   decode: true,
   decodeSync: true,
   decodeExit: true,
@@ -25,22 +35,57 @@ const CODEC_LAW_CALLEES: Record<string, true> = {
   decodeOption: true,
   decodeEither: true,
   decodePromise: true,
+  decodeUnknownPromise: true,
   isSuccess: true,
+  isFailure: true,
+  isRight: true,
+  isLeft: true,
+  isSome: true,
+  isNone: true,
   toEquivalence: true,
   toEncoded: true,
+  toArbitrary: true,
   Exit: true,
 }
 
-const isNode = (value: unknown): value is ESTree.Node => value !== null && typeof value === 'object' && 'type' in value
-
-type PredicateShape = {
-  leavesVocabulary: boolean
-  lastReturnAssertsRejection: boolean
-  lastReturnAssertsAcceptance: boolean
+const NEUTRAL_METHODS: Record<string, true> = {
+  every: true,
+  some: true,
+  includes: true,
+  map: true,
+  filter: true,
+  find: true,
+  join: true,
+  split: true,
+  trim: true,
+  toLowerCase: true,
+  toUpperCase: true,
+  replaceAll: true,
+  replace: true,
+  indexOf: true,
+  startsWith: true,
+  endsWith: true,
+  concat: true,
+  slice: true,
+  get: true,
+  set: true,
+  has: true,
+  keys: true,
+  values: true,
+  entries: true,
+  forEach: true,
+  reduce: true,
+  test: true,
+  match: true,
+  gen: true,
 }
 
-const ACCEPTANCE_CALLEES: Record<string, true> = { isSuccess: true, isRight: true }
-const REJECTION_CALLEES: Record<string, true> = { isFailure: true, isLeft: true }
+type PredicateShape = {
+  usesCompilerProbe: boolean
+  callsDomainFunction: boolean
+}
+
+const isNode = (value: unknown): value is ESTree.Node => value !== null && typeof value === 'object' && 'type' in value
 
 const mentionsImportMetaVitest = (value: unknown): boolean => {
   if (Array.isArray(value)) return value.some((item) => mentionsImportMetaVitest(item))
@@ -68,28 +113,33 @@ const collectPredicateShape = (provenance: Provenance, node: unknown, shape: Pre
     return
   }
   if (!isNode(node)) return
+  if (node.type === 'MemberExpression' && node.property.type === 'Identifier') {
+    if (node.property.name === 'getOwnPropertySymbols' || node.property.name === 'getOwnPropertyNames') {
+      shape.usesCompilerProbe = true
+    }
+  }
+  if (node.type === 'Identifier' && node.name.endsWith('TypeId')) {
+    shape.usesCompilerProbe = true
+  }
   if (node.type === 'CallExpression') {
     let callee: ESTree.CallExpression['callee'] = node.callee
     while (callee.type === 'CallExpression') callee = callee.callee
-    const codecName = callee.type === 'MemberExpression' && callee.property.type === 'Identifier'
-      ? callee.property.name
-      : callee.type === 'Identifier'
-      ? callee.name
-      : null
-    if (codecName === null) {
-      shape.leavesVocabulary = true
-    } else if (
-      CODEC_LAW_CALLEES[codecName] !== true &&
-      REJECTION_CALLEES[codecName] !== true &&
-      ACCEPTANCE_CALLEES[codecName] !== true
-    ) {
-      if (provenance.verdictOf(callee, 0) !== 'schema') shape.leavesVocabulary = true
+    if (callee.type === 'MemberExpression' && callee.property.type === 'Identifier') {
+      const name = callee.property.name
+      if (CODEC_ACCESSORS[name] !== true && NEUTRAL_METHODS[name] !== true) {
+        const receiverIsLocal = callee.object.type === 'Identifier' &&
+          provenance.isLocalBinding(callee.object.name, node)
+        if (provenance.classifyCall(name, node) === 'domain' || receiverIsLocal) shape.callsDomainFunction = true
+      }
+    } else if (callee.type === 'Identifier') {
+      if (
+        CODEC_ACCESSORS[callee.name] !== true &&
+        NEUTRAL_METHODS[callee.name] !== true &&
+        provenance.classifyCall(callee.name, node) === 'domain'
+      ) {
+        shape.callsDomainFunction = true
+      }
     }
-  }
-  if (node.type === 'ReturnStatement' && node.argument !== null && node.argument !== undefined) {
-    const outcome = returnOutcome(provenance, node.argument)
-    shape.lastReturnAssertsRejection = outcome === 'rejection'
-    shape.lastReturnAssertsAcceptance = outcome === 'acceptance'
   }
   for (const [key, child] of Object.entries(node)) {
     if (key === 'parent') continue
@@ -97,65 +147,31 @@ const collectPredicateShape = (provenance: Provenance, node: unknown, shape: Pre
   }
 }
 
-const returnOutcome = (provenance: Provenance, expression: ESTree.Node): 'acceptance' | 'rejection' | 'other' => {
-  if (expression.type === 'BinaryExpression') return returnOutcome(provenance, expression.left)
-  if (expression.type === 'UnaryExpression' && expression.operator === '!') {
-    const inner = returnOutcome(provenance, expression.argument)
-    if (inner === 'acceptance') return 'rejection'
-    if (inner === 'rejection') return 'acceptance'
-    return 'other'
-  }
-  if (expression.type !== 'CallExpression') return 'other'
-  let callee: ESTree.CallExpression['callee'] = expression.callee
-  while (callee.type === 'CallExpression') callee = callee.callee
-  const name = callee.type === 'MemberExpression' && callee.property.type === 'Identifier'
-    ? callee.property.name
-    : callee.type === 'Identifier'
-    ? callee.name
-    : null
-  if (name !== null && (REJECTION_CALLEES[name] === true || CODEC_LAW_CALLEES[name] === true)) {
-    return REJECTION_CALLEES[name] === true ? 'rejection' : 'acceptance'
-  }
-  if (name !== null && ACCEPTANCE_CALLEES[name] === true) return 'acceptance'
-  if (callee.type === 'Identifier' && provenance.verdictOf(callee, 0) === 'schema') return 'acceptance'
-  return 'other'
-}
-
-const isArbitraryArray = (argument: ESTree.CallExpression['arguments'][number]): argument is ESTree.ArrayExpression =>
-  argument.type === 'ArrayExpression'
-
-const isPredicateFunction = (
-  argument: ESTree.CallExpression['arguments'][number] | undefined,
-): argument is ESTree.ArrowFunctionExpression => argument !== undefined && argument.type === 'ArrowFunctionExpression'
-
 const checkPropCall = (provenance: Provenance, context: Context, call: ESTree.CallExpression): void => {
-  const arbitraries = call.arguments.find(isArbitraryArray)
-  if (arbitraries === undefined) return
-  let hasSchemaArbitrary = false
-  for (const element of arbitraries.elements) {
-    if (element === null) continue
-    if (provenance.verdictOf(element, 0) === 'schema') hasSchemaArbitrary = true
-  }
-  if (!hasSchemaArbitrary) return
   const predicate = call.arguments[call.arguments.length - 1]
-  if (!isPredicateFunction(predicate)) return
-  const shape: PredicateShape = {
-    leavesVocabulary: false,
-    lastReturnAssertsRejection: false,
-    lastReturnAssertsAcceptance: false,
-  }
-  if (predicate.body.type !== 'BlockStatement') {
-    shape.lastReturnAssertsRejection = returnOutcome(provenance, predicate.body) === 'rejection'
-    shape.lastReturnAssertsAcceptance = returnOutcome(provenance, predicate.body) === 'acceptance'
-  }
+  if (predicate === undefined || predicate.type !== 'ArrowFunctionExpression') return
+  const shape: PredicateShape = { usesCompilerProbe: false, callsDomainFunction: false }
   collectPredicateShape(provenance, predicate.body, shape)
-  const statesOnlyAcceptance = shape.lastReturnAssertsAcceptance && !shape.lastReturnAssertsRejection
-  if (shape.leavesVocabulary || !statesOnlyAcceptance) return
-  context.report({
-    node: call,
-    messageId: 'generatedLawDuplicate',
-    data: { name: VIOLATION_NAME, expected: EXPECTED, actual: ACTUAL, fix: FIX },
-  })
+  if (shape.usesCompilerProbe) {
+    context.report({
+      node: call,
+      messageId: 'compilerDuplicate',
+      data: { name: COMPILER_NAME, expected: COMPILER_EXPECTED, actual: COMPILER_ACTUAL, fix: COMPILER_FIX },
+    })
+    return
+  }
+  if (!shape.callsDomainFunction) {
+    context.report({
+      node: call,
+      messageId: 'noDomainFunction',
+      data: {
+        name: NO_FUNCTION_NAME,
+        expected: NO_FUNCTION_EXPECTED,
+        actual: NO_FUNCTION_ACTUAL,
+        fix: NO_FUNCTION_FIX,
+      },
+    })
+  }
 }
 
 export const propGeneratedLawDuplicate = defineRule({

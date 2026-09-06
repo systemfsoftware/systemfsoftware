@@ -12,11 +12,15 @@ import {
   meta,
   SCHEMA_NAMESPACE_NAMES,
   SCHEMA_SOURCE_PATTERN,
+  STOCK_ACTUAL,
+  STOCK_EXPECTED,
+  STOCK_FIX,
+  STOCK_NAME,
   VIOLATION_NAME,
 } from './prop-arbitrary-schema-origin.config.js'
 import { isPropCallee } from './prop-call.js'
 
-export type MessageIds = 'handBuiltArbitrary'
+export type MessageIds = 'handBuiltArbitrary' | 'stockDerivedArbitrary'
 
 type Verdict = 'schema' | 'handBuilt' | 'opaque'
 
@@ -30,6 +34,7 @@ interface ImportEdge {
 type LocalBinding =
   | { readonly kind: 'import' }
   | { readonly kind: 'init'; readonly init: ESTree.Node; readonly declarator: ESTree.VariableDeclarator }
+  | { readonly kind: 'function' }
   | { readonly kind: 'none' }
 
 interface ScopeLike {
@@ -76,6 +81,7 @@ const resolveLocal = (name: string, node: ESTree.Node, getScope: GetScope): Loca
     if (variable === undefined) continue
     for (const def of variable.defs) {
       if (def.type === 'ImportBinding') return { kind: 'import' }
+      if (def.node.type === 'FunctionDeclaration') return { kind: 'function' }
       if (def.node.type !== 'VariableDeclarator') continue
       const init = Option.fromNullishOr(def.node.init)
       if (Option.isSome(init)) return { kind: 'init', init: init.value, declarator: def.node }
@@ -137,6 +143,43 @@ export class Provenance {
 
   constructor(readonly getScope: GetScope) {}
 
+  isLocalFunction(name: string, node: ESTree.Node): boolean {
+    const resolved = resolveLocal(name, node, this.getScope)
+    if (resolved.kind === 'function') return true
+    return (
+      resolved.kind === 'init' &&
+      (resolved.init.type === 'ArrowFunctionExpression' || resolved.init.type === 'FunctionExpression')
+    )
+  }
+
+  isSchemaNamespaceBinding(name: string, node: ESTree.Node): boolean {
+    const resolved = resolveLocal(name, node, this.getScope)
+    if (resolved.kind !== 'import') return false
+    const edge = this.imports.get(name)
+    return edge !== undefined && edge.source === EFFECT_SOURCE && edge.imported === 'Schema'
+  }
+
+  classifyCall(name: string, node: ESTree.Node): 'codec' | 'domain' | 'unknown' {
+    if (this.isLocalFunction(name, node)) return 'domain'
+    const resolved = resolveLocal(name, node, this.getScope)
+    if (resolved.kind === 'import') {
+      const edge = this.imports.get(name)
+      if (edge === undefined) return 'unknown'
+      const verdict = vocabularyOf(edge)
+      return verdict === 'schema' || verdict === 'handBuilt' ? 'codec' : 'domain'
+    }
+    if (resolved.kind === 'init') {
+      const verdict = this.verdictOf(resolved.init, 0)
+      if (verdict === 'schema' || verdict === 'handBuilt') return 'codec'
+      return 'unknown'
+    }
+    return 'unknown'
+  }
+  isLocalBinding(name: string, node: ESTree.Node): boolean {
+    const resolved = resolveLocal(name, node, this.getScope)
+    return resolved.kind === 'init' || resolved.kind === 'function'
+  }
+
   verdictOf(expr: ESTree.Node | null, depth: number): Verdict {
     if (depth > MAX_WALK_DEPTH || !isNode(expr)) return 'opaque'
     switch (expr.type) {
@@ -194,6 +237,7 @@ export class Provenance {
   }
 
   private objectVerdictOf(object: ESTree.ObjectExpression, depth: number): Verdict {
+    let sawSchema = false
     let sawOpaque = false
     for (const property of object.properties) {
       if (property.type !== 'Property' || property.computed) {
@@ -201,13 +245,15 @@ export class Provenance {
         continue
       }
       const verdict = this.verdictOf(property.value, depth + 1)
-      if (verdict === 'schema') return 'schema'
+      if (verdict === 'handBuilt') return 'handBuilt'
+      if (verdict === 'schema') sawSchema = true
       if (verdict === 'opaque') sawOpaque = true
     }
-    return sawOpaque ? 'opaque' : 'handBuilt'
+    return sawOpaque ? 'opaque' : sawSchema ? 'schema' : 'handBuilt'
   }
 
   private reduceArgs(args: readonly (ESTree.Expression | ESTree.SpreadElement | null)[], depth: number): Verdict {
+    let sawSchema = false
     let sawOpaque = false
     for (const arg of args) {
       if (arg === null) {
@@ -216,10 +262,61 @@ export class Provenance {
       }
       if (arg.type === 'ArrowFunctionExpression' || arg.type === 'FunctionExpression') continue
       const verdict = this.verdictOf(arg, depth + 1)
-      if (verdict === 'schema') return 'schema'
+      if (verdict === 'handBuilt') return 'handBuilt'
+      if (verdict === 'schema') sawSchema = true
       if (verdict === 'opaque') sawOpaque = true
     }
-    return sawOpaque ? 'opaque' : 'handBuilt'
+    return sawOpaque ? 'opaque' : sawSchema ? 'schema' : 'handBuilt'
+  }
+}
+
+const mentionsLocalBinding = (provenance: Provenance, value: unknown): boolean => {
+  if (Array.isArray(value)) return value.some((item) => mentionsLocalBinding(provenance, item))
+  if (!isNode(value)) return false
+  if (value.type === 'Identifier') {
+    if (provenance.isSchemaNamespaceBinding(value.name, value)) return false
+    if (provenance.isLocalFunction(value.name, value)) return true
+    return provenance.verdictOf(value, 0) !== 'opaque'
+  }
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'parent') continue
+    if (mentionsLocalBinding(provenance, child)) return true
+  }
+  return false
+}
+
+const stockArgVerdict = (provenance: Provenance, arg: ESTree.Node | undefined): boolean => {
+  if (arg === undefined || arg === null || !isNode(arg)) return false
+  if (arg.type === 'MemberExpression') {
+    if (arg.object.type !== 'Identifier' || !provenance.isSchemaNamespaceBinding(arg.object.name, arg)) return false
+    return true
+  }
+  if (arg.type === 'CallExpression') {
+    const callee = arg.callee
+    if (callee.type !== 'MemberExpression' || callee.object.type !== 'Identifier') return false
+    if (!provenance.isSchemaNamespaceBinding(callee.object.name, arg)) return false
+    return !mentionsLocalBinding(provenance, arg.arguments)
+  }
+  return false
+}
+
+const checkArbitraryFactory = (provenance: Provenance, context: Context, call: ESTree.CallExpression): void => {
+  const callee = call.callee
+  if (
+    callee.type !== 'MemberExpression' ||
+    callee.property.type !== 'Identifier' ||
+    callee.property.name !== 'toArbitrary'
+  ) {
+    return
+  }
+  const arg = call.arguments[0]
+  if (arg === undefined) return
+  if (stockArgVerdict(provenance, arg)) {
+    context.report({
+      node: call,
+      messageId: 'stockDerivedArbitrary',
+      data: { name: STOCK_NAME, expected: STOCK_EXPECTED, actual: STOCK_ACTUAL, fix: STOCK_FIX },
+    })
   }
 }
 
@@ -275,7 +372,30 @@ export const propArbitrarySchemaOrigin = defineRule({
         const calls: ESTree.CallExpression[] = []
         collect(node.consequent, calls)
         collect(node.alternate, calls)
+        const factories: ESTree.CallExpression[] = []
+        const collectFactories = (value: unknown): void => {
+          if (Array.isArray(value)) {
+            for (const item of value) collectFactories(item)
+            return
+          }
+          if (!isNode(value)) return
+          if (
+            value.type === 'CallExpression' &&
+            value.callee.type === 'MemberExpression' &&
+            value.callee.property.type === 'Identifier' &&
+            value.callee.property.name === 'toArbitrary'
+          ) {
+            factories.push(value)
+          }
+          for (const [key, child] of Object.entries(value)) {
+            if (key === 'parent') continue
+            collectFactories(child)
+          }
+        }
+        collectFactories(node.consequent)
+        collectFactories(node.alternate)
         for (const call of calls) checkPropCall(provenance, context, call)
+        for (const factory of factories) checkArbitraryFactory(provenance, context, factory)
       },
     }
   },
