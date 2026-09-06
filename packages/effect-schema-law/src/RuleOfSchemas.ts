@@ -68,7 +68,8 @@ if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
-  const { expect, it: test } = await import('vitest')
+  const { it } = await import('@effect/vitest')
+  const { FastCheck: fc } = await import('effect/testing')
   const Getter = await import('effect/SchemaGetter')
 
   ruleOfSchemas('SelfCheck', S.Struct({ s: S.String, b: S.Boolean }))
@@ -88,13 +89,15 @@ if (import.meta.vitest !== void 0) {
     ),
   )
 
-  test('Should_RejectBothLaws_When_TheCodecDiscardsItsInput', () => {
-    expect(collapsed.roundTrips('kept')).toBe(false)
-    expect(collapsed.encodeStable('kept')).toBe(false)
-  })
-
-  test('Should_HoldBothLaws_When_TheValueIsTheCodecsFixedPoint', () => {
-    expect(collapsed.roundTrips('collapsed')).toBe(true)
-    expect(collapsed.encodeStable('collapsed')).toBe(true)
-  })
+  /**
+   * The refusal the generated accept-laws cannot state: every input they draw
+   * comes from the schema's own arbitrary, so a codec that collapses its input
+   * still passes them. This pins that both laws say no everywhere except the
+   * codec's fixed point — a vacuous-true predicate fails it on every other draw.
+   */
+  it.prop(
+    '∀s_CollapsedLaw_≡FixedPoint',
+    [Schema.toArbitrary(S.String)(fc)],
+    ([s]) => collapsed.roundTrips(s) === (s === 'collapsed') && collapsed.encodeStable(s) === (s === 'collapsed'),
+  )
 }

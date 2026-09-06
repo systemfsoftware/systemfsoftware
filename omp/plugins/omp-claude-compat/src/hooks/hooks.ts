@@ -123,7 +123,7 @@ export const detachIn = <A, E, R>(
 const onGaveUp: LazyArg<string> = () => 'gave-up'
 
 if (import.meta.vitest !== void 0) {
-  const { describe, it } = await import('@effect/vitest')
+  const { it } = await import('@effect/vitest')
   const { Effect, Exit, Fiber, Ref, Scope } = await import('effect')
   const { FastCheck: fc, TestClock } = await import('effect/testing')
 
@@ -159,73 +159,71 @@ if (import.meta.vitest !== void 0) {
       return { scope, done, interrupted, caller }
     })
 
-  describe('detachIn', () => {
-    it.effect.prop(
-      '∀overrun_WorkOutrunningTheDeadline_→CallerGetsTheFallback',
-      [deadlineMs, overrunMs],
-      ([deadline, overrun]) =>
-        Effect.gen(function*() {
-          const { caller } = yield* detachedFor(deadline, deadline + overrun)
-          yield* TestClock.adjust(deadline)
-          return (yield* Fiber.join(caller)) === 'gave-up'
-        }),
-      budget,
-    )
+  it.effect.prop(
+    '∀overrun_WorkOutrunningTheDeadline_→CallerGetsTheFallback',
+    [deadlineMs, overrunMs],
+    ([deadline, overrun]) =>
+      Effect.gen(function*() {
+        const { caller } = yield* detachedFor(deadline, deadline + overrun)
+        yield* TestClock.adjust(deadline)
+        return (yield* Fiber.join(caller)) === 'gave-up'
+      }),
+    budget,
+  )
 
-    it.effect.prop(
-      '∀overrun_TheDeadlinePassing_→WorkNeitherFinishedNorInterrupted',
-      [deadlineMs, overrunMs],
-      ([deadline, overrun]) =>
-        Effect.gen(function*() {
-          const { done, interrupted, caller } = yield* detachedFor(deadline, deadline + overrun)
-          yield* TestClock.adjust(deadline)
-          yield* Fiber.join(caller)
-          return !(yield* Ref.get(done)) && !(yield* Ref.get(interrupted))
-        }),
-      budget,
-    )
+  it.effect.prop(
+    '∀overrun_TheDeadlinePassing_→WorkNeitherFinishedNorInterrupted',
+    [deadlineMs, overrunMs],
+    ([deadline, overrun]) =>
+      Effect.gen(function*() {
+        const { done, interrupted, caller } = yield* detachedFor(deadline, deadline + overrun)
+        yield* TestClock.adjust(deadline)
+        yield* Fiber.join(caller)
+        return !(yield* Ref.get(done)) && !(yield* Ref.get(interrupted))
+      }),
+    budget,
+  )
 
-    it.effect.prop(
-      '∀overrun_AbandonedWorkLeftAlone_→StillCompletes',
-      [deadlineMs, overrunMs],
-      ([deadline, overrun]) =>
-        Effect.gen(function*() {
-          const { done, caller } = yield* detachedFor(deadline, deadline + overrun)
-          yield* TestClock.adjust(deadline)
-          yield* Fiber.join(caller)
-          yield* TestClock.adjust(overrun)
-          return (yield* Ref.get(done)) === true
-        }),
-      budget,
-    )
+  it.effect.prop(
+    '∀overrun_AbandonedWorkLeftAlone_→StillCompletes',
+    [deadlineMs, overrunMs],
+    ([deadline, overrun]) =>
+      Effect.gen(function*() {
+        const { done, caller } = yield* detachedFor(deadline, deadline + overrun)
+        yield* TestClock.adjust(deadline)
+        yield* Fiber.join(caller)
+        yield* TestClock.adjust(overrun)
+        return (yield* Ref.get(done)) === true
+      }),
+    budget,
+  )
 
-    it.effect.prop(
-      '∀overrun_ScopeClosingOnAbandonedWork_→InterruptedAndNeverCompletes',
-      [deadlineMs, overrunMs],
-      ([deadline, overrun]) =>
-        Effect.gen(function*() {
-          const { scope, done, interrupted, caller } = yield* detachedFor(deadline, deadline + overrun)
-          yield* TestClock.adjust(deadline)
-          yield* Fiber.join(caller)
-          yield* Scope.close(scope, Exit.succeed(undefined))
-          yield* TestClock.adjust(overrun)
-          return (yield* Ref.get(interrupted)) === true && (yield* Ref.get(done)) === false
-        }),
-      budget,
-    )
+  it.effect.prop(
+    '∀overrun_ScopeClosingOnAbandonedWork_→InterruptedAndNeverCompletes',
+    [deadlineMs, overrunMs],
+    ([deadline, overrun]) =>
+      Effect.gen(function*() {
+        const { scope, done, interrupted, caller } = yield* detachedFor(deadline, deadline + overrun)
+        yield* TestClock.adjust(deadline)
+        yield* Fiber.join(caller)
+        yield* Scope.close(scope, Exit.succeed(undefined))
+        yield* TestClock.adjust(overrun)
+        return (yield* Ref.get(interrupted)) === true && (yield* Ref.get(done)) === false
+      }),
+    budget,
+  )
 
-    it.effect.prop(
-      '∀underrun_WorkBeatingTheDeadline_→CallerGetsTheWorkResult',
-      [deadlineWithUnderrun],
-      ([[deadline, workMillis]]) =>
-        Effect.gen(function*() {
-          const { caller } = yield* detachedFor(deadline, workMillis)
-          yield* TestClock.adjust(workMillis)
-          return (yield* Fiber.join(caller)) === 'finished'
-        }),
-      budget,
-    )
-  })
+  it.effect.prop(
+    '∀underrun_WorkBeatingTheDeadline_→CallerGetsTheWorkResult',
+    [deadlineWithUnderrun],
+    ([[deadline, workMillis]]) =>
+      Effect.gen(function*() {
+        const { caller } = yield* detachedFor(deadline, workMillis)
+        yield* TestClock.adjust(workMillis)
+        return (yield* Fiber.join(caller)) === 'finished'
+      }),
+    budget,
+  )
 }
 
 export const EMPTY_TOOL_INPUT: Record<string, unknown> = {}
