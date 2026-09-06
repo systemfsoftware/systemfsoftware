@@ -129,13 +129,41 @@ if (import.meta.vitest !== void 0) {
 
   const budget = { fastCheck: { numRuns: 25 }, timeout: 30_000 }
 
-  const within = (max: number) => S.toArbitrary(S.Int)(fc).filter((n) => n >= 1 && n <= max)
-  const deadlineMs = within(10_000)
+  const DeadlineMsWindow = S.Int.pipe(
+    S.check(
+      S.makeFilter((n) => n >= 1 && n <= 10_000, {
+        arbitrary: { candidate: { weight: 100, make: (g) => g.integer({ min: 1, max: 10_000 }) } },
+      }),
+    ),
+  )
+  const UnderrunPair = S.Struct({ deadline: S.Int, workMillis: S.Int }).pipe(
+    S.check(
+      S.makeFilter(
+        (pair) =>
+          pair.deadline >= 1 && pair.deadline <= 10_000 && pair.workMillis >= 0 && pair.workMillis < pair.deadline,
+        {
+          arbitrary: {
+            candidate: {
+              weight: 100,
+              make: (g) =>
+                g.integer({ min: 1, max: 10_000 }).chain((deadline) =>
+                  g.tuple(g.constant(deadline), g.integer({ min: 0, max: deadline - 1 })).map(([d, workMillis]) => ({
+                    deadline: d,
+                    workMillis,
+                  }))
+                ),
+            },
+          },
+        },
+      ),
+    ),
+  )
+  const deadlineMs = S.toArbitrary(DeadlineMsWindow)(fc)
 
-  const overrunMs = within(10_000)
+  const overrunMs = deadlineMs
 
-  const deadlineWithUnderrun = deadlineMs.chain((deadline) =>
-    S.toArbitrary(S.Int)(fc).filter((n) => n >= 0 && n < deadline).map((workMillis) => [deadline, workMillis] as const)
+  const deadlineWithUnderrun = S.toArbitrary(UnderrunPair)(fc).map(
+    (pair) => [pair.deadline, pair.workMillis] as const,
   )
 
   const workTaking = (millis: number) =>

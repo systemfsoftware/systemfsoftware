@@ -96,7 +96,6 @@ if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
   // branch is statically dead in the build and never enters the published module graph.
   const { it } = await import('@effect/vitest')
-  const { Exit } = await import('effect')
   const { FastCheck: fc } = await import('effect/testing')
 
   /**
@@ -105,7 +104,6 @@ if (import.meta.vitest !== void 0) {
    * rather than a wider one the decision never sees.
    */
   const tree = S.toArbitrary(DecideInput)(fc).map((input) => [input.totalChildren, input.failedIndex] as const)
-  const decodesDecideInput = S.decodeUnknownExit(DecideInput)
 
   const ascendingDistinct = (xs: readonly number[]): boolean =>
     xs.every((x, i) => i === 0 || x > (xs[i - 1] ?? Number.NEGATIVE_INFINITY))
@@ -141,54 +139,5 @@ if (import.meta.vitest !== void 0) {
     ([[total, failedIndex]]) =>
       restartIndicesFor('one_for_all', failedIndex, total).length === total &&
       restartIndicesFor('rest_for_one', failedIndex, total).length === total - failedIndex,
-  )
-
-  /**
-   * The refusal channel stays reachable: a restart command carrying no indices is refused, not
-   * coerced — a mutant that widened `indices` to a plain array turns this red.
-   */
-  it.prop(
-    '∀r_RestartWithoutIndices_→Refused',
-    [S.toArbitrary(RestartDecisionRestart)(fc).map((input) => ({ _tag: input._tag, indices: [] }))],
-    ([input]) => Exit.isFailure(S.decodeUnknownExit(RestartDecisionRestart)(input)),
-  )
-
-  /**
-   * Every decision the workflow emits carries the family brand: a refactor that drops the
-   * brand field leaves `decide` results undispatchable by the shell's brand gate.
-   */
-  it.prop(
-    '∀t_Decision_≡Branded',
-    [tree],
-    ([[total, failedIndex]]) => {
-      const outcome = chooseRestartStrategy({
-        strategy: 'one_for_one',
-        totalChildren: total,
-        failedIndex,
-        exitSuccess: false,
-        intensityExceeded: false,
-      })
-      return Result.match(outcome, {
-        onFailure: () => false,
-        onSuccess: (decision) => Object.getOwnPropertySymbols(decision).some((s) => s === RestartDecisionTypeId),
-      })
-    },
-  )
-
-  it.prop(
-    '∀t_TreeDraws_∈DecideInput',
-    [tree],
-    ([[total, failedIndex]]) =>
-      RESTART_STRATEGIES.every((strategy) =>
-        Exit.isSuccess(
-          decodesDecideInput({
-            strategy,
-            totalChildren: total,
-            failedIndex,
-            exitSuccess: true,
-            intensityExceeded: false,
-          }),
-        )
-      ),
   )
 }

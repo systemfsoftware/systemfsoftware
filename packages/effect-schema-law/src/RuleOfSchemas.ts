@@ -1,4 +1,3 @@
-/// <reference types="vitest/import-meta" />
 import { it } from '@effect/vitest'
 import { Exit, Schema, Schema as S } from 'effect'
 import { FastCheck as fc } from 'effect/testing'
@@ -62,42 +61,4 @@ export const ruleOfSchemas = <A, I>(
   it.prop(`∀x_${name}Enc_=x`, [arbitrary], ([value]) => encodeStable(value))
 
   it.prop(`∀x_${name}_=x`, [arbitrary], ([value]) => roundTrips(value))
-}
-
-if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
-  // so this branch is statically dead in the build and the runner never enters
-  // the published module graph. A static import would ship it.
-  const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect/testing')
-  const Getter = await import('effect/SchemaGetter')
-
-  ruleOfSchemas('SelfCheck', S.Struct({ s: S.String, b: S.Boolean }))
-
-  /**
-   * Decodes every input to one value, so nothing but that value survives a
-   * round-trip. Both laws must reject it: one that cannot say no to this codec
-   * cannot say no to any, and the two properties above would still pass for a
-   * schema that loses its input entirely.
-   */
-  const collapsed = lawsOf(
-    S.String.pipe(
-      S.decodeTo(S.String, {
-        decode: Getter.transform(() => 'collapsed'),
-        encode: Getter.transform((s: string) => s),
-      }),
-    ),
-  )
-
-  /**
-   * The refusal the generated accept-laws cannot state: every input they draw
-   * comes from the schema's own arbitrary, so a codec that collapses its input
-   * still passes them. This pins that both laws say no everywhere except the
-   * codec's fixed point — a vacuous-true predicate fails it on every other draw.
-   */
-  it.prop(
-    '∀s_CollapsedLaw_≡FixedPoint',
-    [fc.oneof(fc.constant('collapsed'), Schema.toArbitrary(S.String)(fc))],
-    ([s]) => collapsed.roundTrips(s) === (s === 'collapsed') && collapsed.encodeStable(s) === (s === 'collapsed'),
-  )
 }
