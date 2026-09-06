@@ -150,10 +150,9 @@ if (import.meta.vitest !== void 0) {
    * coerced — a mutant that widened `indices` to a plain array turns this red.
    */
   it.prop(
-    '∀n_RestartWithoutIndices_→Refused',
-    [fc.integer({ min: 1, max: 32 })],
-    ([total]) =>
-      Exit.isFailure(S.decodeUnknownExit(RestartDecisionRestart)({ _tag: 'Restart', indices: [] })) && total > 0,
+    '∀r_RestartWithoutIndices_→Refused',
+    [fc.constant({ _tag: 'Restart', indices: [] })],
+    ([input]) => Exit.isFailure(S.decodeUnknownExit(RestartDecisionRestart)(input)),
   )
 
   /**

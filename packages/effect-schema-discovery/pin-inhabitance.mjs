@@ -14,5 +14,5 @@ const found = findExportedSchemas(fixtureDir)
   )
   .sort((a, b) => a.localeCompare(b))
 
-assert.deepStrictEqual(found, ['pinFirst', 'pinSecond'])
+assert.deepStrictEqual(found, ['pinFirst', 'pinSecond', 'pinStruct', 'PinTagged'])
 console.log(`inhabitance pin ok: ${found.join(',')}`)

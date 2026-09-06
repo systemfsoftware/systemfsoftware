@@ -306,6 +306,15 @@ ${GUARD_END}`,
       errors: [{ messageId: 'handBuiltArbitrary', data: EXPECTED_DATA }],
     },
     {
+      name: 'Should_Report_When_BareMemberRidesAFastCheckNamespace',
+      code: `import * as fc from 'fast-check'
+${GUARD}
+it.prop('p', [fc.string], ([s]) => s !== null)
+${GUARD_END}`,
+      filename: FILENAME,
+      errors: [{ messageId: 'handBuiltArbitrary', data: EXPECTED_DATA }],
+    },
+    {
       name: 'Should_Report_When_DefaultImportFromFastCheck',
       code: `import fc from 'fast-check'
 ${GUARD}

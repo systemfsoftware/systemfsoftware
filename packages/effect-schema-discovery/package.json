@@ -32,9 +32,9 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown && pnpm api:check",
+    "build": "tsdown && pnpm api:check && node ./pin-inhabitance.mjs",
     "typecheck": "tsc --noEmit --incremental",
-    "test": "vitest run && node ./pin-inhabitance.mjs",
+    "test": "vitest run",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",

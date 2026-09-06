@@ -13,21 +13,9 @@ import {
   NOT_MODULE_LEVEL_NAME,
 } from './in-source-test-targets-private.config.js'
 import { basenameOf, isTestFile, isUnderSrc } from './path.js'
-import { isInsideConsequent } from './vitest-guard.js'
+import { isInsideConsequent, isVitestGuard } from './vitest-guard.js'
 
 export type MessageIds = 'notModuleLevel' | 'noPrivateTarget'
-
-export const isMetaVitest = (node: ESTree.Node): boolean =>
-  node.type === 'MemberExpression' &&
-  node.property.type === 'Identifier' &&
-  node.property.name === 'vitest' &&
-  node.object.type === 'MetaProperty'
-
-export const isVitestGuard = (test: ESTree.Node): boolean => {
-  if (isMetaVitest(test)) return true
-  if (test.type !== 'BinaryExpression') return false
-  return isMetaVitest(test.left) || isMetaVitest(test.right)
-}
 
 type CollectableNode =
   | ESTree.VariableDeclaration

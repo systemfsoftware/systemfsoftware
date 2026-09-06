@@ -97,7 +97,7 @@ if (import.meta.vitest !== void 0) {
    */
   it.prop(
     '∀s_CollapsedLaw_≡FixedPoint',
-    [Schema.toArbitrary(S.String)(fc)],
+    [fc.oneof(fc.constant('collapsed'), Schema.toArbitrary(S.String)(fc))],
     ([s]) => collapsed.roundTrips(s) === (s === 'collapsed') && collapsed.encodeStable(s) === (s === 'collapsed'),
   )
 }

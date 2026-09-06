@@ -49,6 +49,11 @@ const isImportMetaVitest = (node: ESTree.Node): boolean =>
   node.object.meta.name === 'import' &&
   node.object.property.name === 'meta'
 
+/**
+ * Broader than test-placement's condition-only `isVitestGuard`: this walks the whole
+ * test-expression subtree, so a guard like `if (runTests && import.meta.vitest)` is
+ * recognised here. Deliberate — plugins do not share code (KTD8).
+ */
 const mentionsImportMetaVitest = (value: unknown): boolean => {
   if (Array.isArray(value)) return value.some(mentionsImportMetaVitest)
   if (!isNode(value)) return false
@@ -114,6 +119,8 @@ class Provenance {
         if (resolved.kind === 'init') return this.verdictOf(resolved.init, depth + 1)
         return 'opaque'
       }
+      case 'MemberExpression':
+        return this.verdictOf(expr.object, depth + 1)
       case 'Literal':
         return 'handBuilt'
       case 'ObjectExpression':
