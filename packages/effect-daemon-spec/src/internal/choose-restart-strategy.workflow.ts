@@ -144,6 +144,40 @@ if (import.meta.vitest !== void 0) {
       restartIndicesFor('one_for_all', failedIndex, total).length === total &&
       restartIndicesFor('rest_for_one', failedIndex, total).length === total - failedIndex,
   )
+
+  /**
+   * The refusal channel stays reachable: a restart command carrying no indices is refused, not
+   * coerced — a mutant that widened `indices` to a plain array turns this red.
+   */
+  it.prop(
+    '∀n_RestartWithoutIndices_→Refused',
+    [fc.integer({ min: 1, max: 32 })],
+    ([total]) =>
+      Exit.isFailure(S.decodeUnknownExit(RestartDecisionRestart)({ _tag: 'Restart', indices: [] })) && total > 0,
+  )
+
+  /**
+   * Every decision the workflow emits carries the family brand: a refactor that drops the
+   * brand field leaves `decide` results undispatchable by the shell's brand gate.
+   */
+  it.prop(
+    '∀t_Decision_≡Branded',
+    [tree],
+    ([[total, failedIndex]]) => {
+      const outcome = chooseRestartStrategy({
+        strategy: 'one_for_one',
+        totalChildren: total,
+        failedIndex,
+        exitSuccess: false,
+        intensityExceeded: false,
+      })
+      return Result.match(outcome, {
+        onFailure: () => false,
+        onSuccess: (decision) => Object.getOwnPropertySymbols(decision).some((s) => s === RestartDecisionTypeId),
+      })
+    },
+  )
+
   it.prop(
     '∀t_TreeDraws_∈DecideInput',
     [tree],

@@ -13,6 +13,7 @@ import {
   NOT_MODULE_LEVEL_NAME,
 } from './in-source-test-targets-private.config.js'
 import { basenameOf, isTestFile, isUnderSrc } from './path.js'
+import { isInsideConsequent } from './vitest-guard.js'
 
 export type MessageIds = 'notModuleLevel' | 'noPrivateTarget'
 
@@ -71,18 +72,6 @@ const collectPrivateNames = (
 }
 
 type GuardRecord = { node: ESTree.IfStatement; hit: boolean }
-
-const isInsideConsequent = (
-  node: { readonly parent: ESTree.Node | null },
-  consequent: ESTree.Node,
-): boolean => {
-  const walk = (current: ESTree.Node | null): boolean => {
-    if (current === null) return false
-    if (current === consequent) return true
-    return walk(current.parent)
-  }
-  return walk(node.parent)
-}
 
 export const inSourceTestTargetsPrivate = defineRule({
   meta,

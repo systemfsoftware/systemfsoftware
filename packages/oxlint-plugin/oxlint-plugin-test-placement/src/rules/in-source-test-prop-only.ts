@@ -8,7 +8,7 @@ import {
   NON_PROP_CALL_NAME,
 } from './in-source-test-prop-only.config.js'
 import { basenameOf, isTestFile, isUnderSrc } from './path.js'
-import { isVitestGuard } from './vitest-guard.js'
+import { isInsideConsequent, isVitestGuard } from './vitest-guard.js'
 
 export type MessageIds = 'nonPropCall'
 
@@ -47,18 +47,6 @@ const rootNameOf = (node: ESTree.Node): string | undefined => {
   return undefined
 }
 
-const isInsideConsequent = (
-  node: { readonly parent: ESTree.Node | null },
-  consequent: ESTree.Node,
-): boolean => {
-  const walk = (current: ESTree.Node | null): boolean => {
-    if (current === null) return false
-    if (current === consequent) return true
-    return walk(current.parent)
-  }
-  return walk(node.parent)
-}
-
 export const inSourceTestPropOnly = defineRule({
   meta,
   create(context: Context) {
@@ -74,6 +62,7 @@ export const inSourceTestPropOnly = defineRule({
         guards.push(node)
       },
       CallExpression(node: ESTree.CallExpression) {
+        if (guards.length === 0) return
         if (isPropCallee(node.callee)) return
         const root = rootNameOf(node.callee)
         if (root === undefined || !BANNED_TEST_ROOTS.has(root)) return
