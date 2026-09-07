@@ -7,6 +7,8 @@
  */
 
 import { Schema as S } from 'effect'
+const HasChangesSchema = S.Boolean.pipe(S.brand('HasChanges'))
+const NeedsBackupSchema = S.Boolean.pipe(S.brand('NeedsBackup'))
 
 export class BuildCommandFailedError extends S.TaggedError<BuildCommandFailedError>()(
   'BuildCommandFailedError',
@@ -75,7 +77,7 @@ export type TSConfig = S.Schema.Type<typeof TsConfigSchema>
 /** A tsconfig `extends` entry list: the array form of `extends`. */
 export const ExtendsArraySchema = S.Array(S.String)
 export class SandboxCommand extends S.TaggedClass<SandboxCommand>()('SandboxCommand', {
-  fileEntries: S.Array(S.Struct({ name: S.String.pipe(S.check(S.isMinLength(1))), hasChanges: S.Boolean })),
+  fileEntries: S.Array(S.Struct({ name: S.NonEmptyString, hasChanges: HasChangesSchema })),
   basePath: S.String,
   workingDirectory: S.String,
   backupDirectory: S.String,
@@ -85,9 +87,9 @@ export class SandboxCommand extends S.TaggedClass<SandboxCommand>()('SandboxComm
 export class SandboxDecision extends S.TaggedClass<SandboxDecision>()('SandboxDecision', {
   entries: S.Array(
     S.Struct({
-      original: S.String.pipe(S.check(S.isMinLength(1))),
-      target: S.String.pipe(S.check(S.isMinLength(1))),
-      needsBackup: S.Boolean,
+      original: S.NonEmptyString,
+      target: S.NonEmptyString,
+      needsBackup: NeedsBackupSchema,
     }),
   ),
 }) {}

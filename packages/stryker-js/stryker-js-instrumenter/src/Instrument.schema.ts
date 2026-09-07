@@ -31,9 +31,12 @@ const RangeSchema = S.Struct({
 
 export const MutateDescriptionSchema = S.Union([S.Boolean, S.Array(RangeSchema)])
 
+export const FileContent = S.String.pipe(S.brand('FileContent'))
+export type FileContent = typeof FileContent.Type
+
 export const FileSchema = S.Struct({
   name: S.NonEmptyString,
-  content: S.String,
+  content: FileContent,
   mutate: MutateDescriptionSchema,
 })
 

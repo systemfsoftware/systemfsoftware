@@ -8,8 +8,10 @@ import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 
 export const ConfigDocumentSchema = S.Record(S.String, S.Unknown)
 
+const ModuleDefaultSchema = S.Unknown.pipe(S.brand('ModuleDefault'))
+
 export const ImportedModuleSchema = S.Struct({
-  default: S.optional(S.Unknown),
+  default: S.optional(ModuleDefaultSchema),
 })
 
 /**

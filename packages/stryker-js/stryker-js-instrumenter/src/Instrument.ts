@@ -4,7 +4,10 @@ import * as Predicate from 'effect/Predicate'
 
 import type { IgnorerService } from '@systemfsoftware/stryker-js/Ignorer'
 import type { MutateDescription } from '@systemfsoftware/stryker-js/Mutant'
+import * as S from 'effect/Schema'
 import {
+  type FileContent,
+  FileContent as FileContentSchema,
   FileSchema,
   InstrumentCommand,
   InstrumentDecision,
@@ -204,6 +207,8 @@ function isAst(value: unknown): value is Ast {
 }
 
 type FileSchemaType = typeof FileSchema.Type
+
+const toFileContent: (value: string) => FileContent = S.decodeUnknownSync(FileContentSchema)
 const readCollected = (
   command: InstrumentCommand,
 ): Effect.Effect<
@@ -271,7 +276,7 @@ const printDecision = (
         const ast: Ast = maybeAst
         const file: FileSchemaType = maybeFile
         const mutatedContent = print(ast)
-        outFiles.push({ name: file.name, mutate: file.mutate, content: mutatedContent })
+        outFiles.push({ name: file.name, mutate: file.mutate, content: toFileContent(mutatedContent) })
       }
       return InstrumentResultSchema.make({ files: outFiles, mutants: decision.mutants })
     },
@@ -292,7 +297,7 @@ export const instrument = (
   Effect.gen(function*() {
     const schemaFiles: FileSchemaType[] = files.map((file) => ({
       name: file.name,
-      content: file.content,
+      content: toFileContent(file.content),
       mutate: file.mutate,
     }))
     const collected = yield* readCollected(InstrumentCommand.make({ files: schemaFiles, options }))

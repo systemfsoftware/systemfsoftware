@@ -14,7 +14,7 @@ export {
   MutantRunOptionsSchema,
   MutantRunResultSchema,
   MutantRunStatus,
-  TestResultSchema,
+  ReloadEnvironmentSchema,
   TestRunnerCapabilitiesSchema,
   TestRunnerFailed,
   TestStatus,

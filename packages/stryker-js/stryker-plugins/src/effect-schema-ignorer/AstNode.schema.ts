@@ -7,9 +7,10 @@ export const Identifier = S.Struct({
 export type Identifier = S.Schema.Type<typeof Identifier>
 
 // ESTree renders string literals as Literal{value:string}; the semantic name records what this matches.
+const StringLiteralValue = S.String.pipe(S.brand('StringLiteralValue'))
 export const StringLiteral = S.Struct({
   type: S.Literal('Literal'),
-  value: S.String,
+  value: StringLiteralValue,
 })
 export type StringLiteral = S.Schema.Type<typeof StringLiteral>
 
@@ -93,6 +94,8 @@ export const AstNode: S.Schema<AstNode> = AstNodeSchema
 
 export const DocumentationKey = S.Literals(['identifier', 'description', 'title', 'documentation', 'examples'])
 
+const AnnotationValue = S.Unknown.pipe(S.brand('AnnotationValue'))
+
 export const DocumentationProperty = S.Struct({
   type: S.Literal('Property'),
   computed: S.Literal(false),
@@ -100,7 +103,7 @@ export const DocumentationProperty = S.Struct({
     S.Struct({ type: S.Literal('Identifier'), name: DocumentationKey }),
     S.Struct({ type: S.Literal('Literal'), value: DocumentationKey }),
   ]),
-  value: S.Unknown,
+  value: AnnotationValue,
 })
 
 export const DocumentationObject = S.Struct({

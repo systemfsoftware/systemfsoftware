@@ -20,6 +20,7 @@ import {
   type DryRunResult,
   type MutantRunOptions,
   type MutantRunResult,
+  ReloadEnvironmentSchema,
   testFilesProvided,
   type TestRunnerCapabilities,
   TestRunnerFailed,
@@ -31,6 +32,7 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
 import * as Ref from 'effect/Ref'
+import * as S from 'effect/Schema'
 import type * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import * as ChildProcess from 'effect/unstable/process/ChildProcess'
@@ -146,7 +148,12 @@ export const makeChildProcessTestRunner = (
       init: Effect.void,
       dryRun: (options) => client.dryRun({ options }).pipe(Effect.mapError(toRunnerFailure(runnerName, 'dryRun'))),
       mutantRun: (options) =>
-        client.mutantRun({ options }).pipe(Effect.mapError(toRunnerFailure(runnerName, 'mutantRun'))),
+        S.decodeUnknownEffect(ReloadEnvironmentSchema)(options.reloadEnvironment).pipe(
+          Effect.orDie,
+          Effect.map((reloadEnvironment) => ({ ...options, reloadEnvironment })),
+          Effect.flatMap((decided) => client.mutantRun({ options: decided })),
+          Effect.mapError(toRunnerFailure(runnerName, 'mutantRun')),
+        ),
     }
   })
 

@@ -2,6 +2,10 @@ import * as S from 'effect/Schema'
 
 import { Mutant, PositionSchema } from './Mutant.schema.js'
 
+const FailureMessageSchema = S.String.pipe(S.brand('FailureMessage'))
+const ErrorMessageSchema = S.String.pipe(S.brand('ErrorMessage'))
+export const ReloadEnvironmentSchema = S.Boolean.pipe(S.brand('ReloadEnvironment'))
+
 export const DryRunStatus = S.Literals(['complete', 'error', 'timeout'])
 export type DryRunStatus = typeof DryRunStatus.Type
 
@@ -20,7 +24,7 @@ const TestResultBase = {
 }
 
 export const TestResultSchema = S.Union([
-  S.Struct({ ...TestResultBase, status: S.Literal('failed'), failureMessage: S.String }),
+  S.Struct({ ...TestResultBase, status: S.Literal('failed'), failureMessage: FailureMessageSchema }),
   S.Struct({ ...TestResultBase, status: S.Literal('skipped') }),
   S.Struct({ ...TestResultBase, status: S.Literal('success') }),
 ])
@@ -37,19 +41,19 @@ export const DryRunResultSchema = S.Union([
     mutantCoverage: S.optionalKey(MutantCoverageSchema),
   }),
   S.Struct({ status: S.Literal('timeout'), reason: S.optionalKey(S.String) }),
-  S.Struct({ status: S.Literal('error'), errorMessage: S.String }),
+  S.Struct({ status: S.Literal('error'), errorMessage: ErrorMessageSchema }),
 ])
 
 export const MutantRunResultSchema = S.Union([
   S.Struct({
     status: S.Literal('killed'),
     killedBy: S.Array(S.String),
-    failureMessage: S.String,
+    failureMessage: FailureMessageSchema,
     nrOfTests: S.Finite,
   }),
   S.Struct({ status: S.Literal('survived'), nrOfTests: S.Finite }),
   S.Struct({ status: S.Literal('timeout'), reason: S.optionalKey(S.String) }),
-  S.Struct({ status: S.Literal('error'), errorMessage: S.String }),
+  S.Struct({ status: S.Literal('error'), errorMessage: ErrorMessageSchema }),
 ])
 
 export const CoverageAnalysisSchema = S.Literals(['off', 'all', 'perTest'])
@@ -71,15 +75,15 @@ export const MutantActivationSchema = S.Literals(['runtime', 'static'])
 export const MutantRunOptionsSchema = S.Struct({
   ...RunOptionsFields,
   activeMutant: Mutant,
-  sandboxFileName: S.String.pipe(S.check(S.isMinLength(1))),
+  sandboxFileName: S.NonEmptyString,
   mutantActivation: MutantActivationSchema,
-  reloadEnvironment: S.Boolean,
+  reloadEnvironment: ReloadEnvironmentSchema,
   testFilter: S.optionalKey(S.Array(S.String)),
   hitLimit: S.optionalKey(S.Finite),
 })
 
 export const TestRunnerCapabilitiesSchema = S.Struct({
-  reloadEnvironment: S.Boolean,
+  reloadEnvironment: ReloadEnvironmentSchema,
 })
 
 export class TestRunnerFailed extends S.TaggedError<TestRunnerFailed>()('TestRunnerFailed', {

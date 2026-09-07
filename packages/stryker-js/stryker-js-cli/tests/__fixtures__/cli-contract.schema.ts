@@ -37,12 +37,13 @@ export const LocationSchema = S.Struct({
   end: S.Struct({ line: S.Finite, column: S.Finite }),
 })
 
+const ReplacementText = S.String.pipe(S.brand('ReplacementText'))
 export const MutantSchema = S.Struct({
   id: S.NonEmptyString,
   file: S.NonEmptyString,
   location: LocationSchema,
   mutator: S.NonEmptyString,
-  replacement: S.NullOr(S.String),
+  replacement: S.NullOr(ReplacementText),
   status: S.NonEmptyString,
 })
 

@@ -1,6 +1,13 @@
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as S from 'effect/Schema'
 
+const ReplacementTextSchema = S.String.pipe(S.brand('ReplacementText'))
+const SourceTextSchema = S.String.pipe(S.brand('SourceText'))
+const StatusReasonSchema = S.String.pipe(S.brand('StatusReason'))
+const DisableBailSchema = S.Boolean.pipe(S.brand('DisableBail'))
+const IgnoreStaticSchema = S.Boolean.pipe(S.brand('IgnoreStatic'))
+const ReloadEnvironmentSchema = S.Boolean.pipe(S.brand('ReloadEnvironment'))
+const IsStaticSchema = S.Boolean.pipe(S.brand('IsStatic'))
 const DiffChangesSchema = S.Struct({ added: S.Finite, removed: S.Finite })
 const DiffStatisticsSchema = S.Struct({
   changesByFile: S.Record(S.String, DiffChangesSchema),
@@ -11,8 +18,8 @@ const PositionSchema = S.Struct({ line: S.Finite, column: S.Finite })
 const PreviousLocationSchema = S.Struct({ start: PositionSchema, end: PositionSchema })
 
 const PreviousMutantSchema = S.Struct({
-  mutatorName: S.String.pipe(S.check(S.isMinLength(1))),
-  replacement: S.String,
+  mutatorName: S.NonEmptyString,
+  replacement: ReplacementTextSchema,
   location: PreviousLocationSchema,
   status: S.Literals([
     'Killed',
@@ -30,16 +37,16 @@ const PreviousMutantSchema = S.Struct({
 })
 
 const PreviousFileSchema = S.Struct({
-  source: S.optional(S.String),
+  source: S.optional(SourceTextSchema),
   mutants: S.optional(S.Array(PreviousMutantSchema)),
 })
 
 const PreviousTestFileSchema = S.Struct({
-  source: S.optional(S.String),
+  source: S.optional(SourceTextSchema),
 })
 
 const RememberedMutantSchema = S.Struct({
-  mutantId: S.String.pipe(S.check(S.isMinLength(1))),
+  mutantId: S.NonEmptyString,
   status: S.Literals([
     'Killed',
     'Survived',
@@ -82,10 +89,10 @@ export type PreviousMutant = S.Schema.Type<typeof PreviousMutantSchema>
 export type RememberedMutant = S.Schema.Type<typeof RememberedMutantSchema>
 
 const PlannerOptionsSchema = S.Struct({
-  disableBail: S.Boolean,
+  disableBail: DisableBailSchema,
   timeoutMS: S.Finite,
   timeoutFactor: S.Finite,
-  ignoreStatic: S.Boolean,
+  ignoreStatic: IgnoreStaticSchema,
 })
 
 export class PlanMutantTestsCommand extends S.TaggedClass<PlanMutantTestsCommand>()('PlanMutantTestsCommand', {
@@ -104,25 +111,25 @@ export class PlanMutantTestsCommand extends S.TaggedClass<PlanMutantTestsCommand
 const DecidedRunOptionsSchema = S.Struct({
   mutantActivation: S.Literals(['runtime', 'static']),
   timeout: S.Finite,
-  sandboxFileName: S.String.pipe(S.check(S.isMinLength(1))),
-  disableBail: S.Boolean,
-  reloadEnvironment: S.Boolean,
+  sandboxFileName: S.NonEmptyString,
+  disableBail: DisableBailSchema,
+  reloadEnvironment: ReloadEnvironmentSchema,
   testFilter: S.optionalKey(S.Array(S.String)),
   hitLimit: S.optionalKey(S.Finite),
 })
 
 const RunPlanSchema = S.Struct({
   plan: S.Literal('Run'),
-  mutantId: S.String.pipe(S.check(S.isMinLength(1))),
+  mutantId: S.NonEmptyString,
   netTime: S.Finite,
   runOptions: DecidedRunOptionsSchema,
-  static: S.optional(S.Boolean),
+  static: S.optional(IsStaticSchema),
   coveredBy: S.optional(S.Array(S.String)),
 })
 
 const EarlyResultPlanSchema = S.Struct({
   plan: S.Literal('EarlyResult'),
-  mutantId: S.String.pipe(S.check(S.isMinLength(1))),
+  mutantId: S.NonEmptyString,
   status: S.Literals([
     'Killed',
     'Survived',
@@ -133,8 +140,8 @@ const EarlyResultPlanSchema = S.Struct({
     'Ignored',
     'Pending',
   ]),
-  statusReason: S.optional(S.String),
-  static: S.optional(S.Boolean),
+  statusReason: S.optional(StatusReasonSchema),
+  static: S.optional(IsStaticSchema),
   coveredBy: S.optional(S.Array(S.String)),
 })
 

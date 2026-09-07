@@ -1,18 +1,19 @@
 import * as S from 'effect/Schema'
 
+const ReplacementTextSchema = S.String.pipe(S.brand('ReplacementText'))
+const SourceTextSchema = S.String.pipe(S.brand('SourceText'))
 const PositionSchema = S.Struct({ line: S.Finite, column: S.Finite })
 const PreviousLocationSchema = S.Struct({ start: PositionSchema, end: PositionSchema })
 
 const PreviousMutantSchema = S.Struct({
-  mutatorName: S.String.pipe(S.check(S.isMinLength(1))),
-  replacement: S.String,
+  mutatorName: S.NonEmptyString,
+  replacement: ReplacementTextSchema,
   location: PreviousLocationSchema,
   status: S.Literals([
     'Killed',
     'Survived',
     'NoCoverage',
     'Timeout',
-    'CompileError',
     'RuntimeError',
     'Ignored',
     'Pending',
@@ -23,12 +24,12 @@ const PreviousMutantSchema = S.Struct({
 })
 
 const PreviousFileSchema = S.Struct({
-  source: S.optional(S.String),
+  source: S.optional(SourceTextSchema),
   mutants: S.optional(S.Array(PreviousMutantSchema)),
 })
 
 const PreviousTestFileSchema = S.Struct({
-  source: S.optional(S.String),
+  source: S.optional(SourceTextSchema),
 })
 
 export const PreviousFilesSchema = S.Record(S.String, PreviousFileSchema)

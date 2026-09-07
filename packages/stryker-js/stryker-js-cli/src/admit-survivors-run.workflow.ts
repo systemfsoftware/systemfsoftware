@@ -6,11 +6,13 @@ import * as S from 'effect/Schema'
  * The mutant shape the admission carries, named once because both the decision's
  * `Admitted` payload and the command's precomputed survivor list are the same shape.
  */
-const MutantShape = S.Struct({
+const ReplacementText = S.String.pipe(S.brand('ReplacementText'))
+const SourceText = S.String.pipe(S.brand('SourceText'))
+export const MutantShape = S.Struct({
   id: S.NonEmptyString,
   fileName: S.NonEmptyString,
   mutatorName: S.NonEmptyString,
-  replacement: S.String,
+  replacement: ReplacementText,
   location: S.Struct({
     start: S.Struct({ line: S.Finite, column: S.Finite }),
     end: S.Struct({ line: S.Finite, column: S.Finite }),
@@ -23,11 +25,11 @@ export const PriorReportDocument = S.Struct({
   files: S.Record(
     S.String,
     S.Struct({
-      source: S.String,
+      source: SourceText,
       mutants: S.Array(S.Struct({
         id: S.NonEmptyString,
         mutatorName: S.NonEmptyString,
-        replacement: S.optional(S.String),
+        replacement: S.optional(ReplacementText),
         status: S.NonEmptyString,
         location: S.Struct({
           start: S.Struct({ line: S.Finite, column: S.Finite }),

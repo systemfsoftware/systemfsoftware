@@ -27,7 +27,7 @@ import * as Match from 'effect/Match'
 import * as Path from 'effect/Path'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { PriorReportDocument as PriorReportDocumentSchema } from './admit-survivors-run.workflow.js'
+import { MutantShape, PriorReportDocument as PriorReportDocumentSchema } from './admit-survivors-run.workflow.js'
 export type PriorReportDocument = S.Schema.Type<typeof PriorReportDocumentSchema>
 export type PriorReportMutant = PriorReportDocument['files'][string]['mutants'][number]
 import {
@@ -256,18 +256,22 @@ export const survivorsAdmissionCell = (basePath: string) =>
           }),
         )
       }
-      return Result.map(decodePriorReport(priorReportRaw), (document) =>
-        AdmitSurvivorsRunCommand.make({
-          priorReport: PriorReportFacts.make({
-            config: document.config ?? {},
-            frameworkVersion: document.framework?.version,
-          }),
-          currentConfig: resolvedOptions,
-          frameworkVersion: strykerVersion,
-          sourceContentHashes,
-          priorSourceHashes: priorSourceHashes(document, hashContent),
-          priorSurvivors: extractSurvivors(document, resolveAbsolutePath),
-        }))
+      return Result.flatMap(decodePriorReport(priorReportRaw), (document) =>
+        Result.map(
+          S.decodeUnknownResult(S.Array(MutantShape))(extractSurvivors(document, resolveAbsolutePath)),
+          (priorSurvivors) =>
+            AdmitSurvivorsRunCommand.make({
+              priorReport: PriorReportFacts.make({
+                config: document.config ?? {},
+                frameworkVersion: document.framework?.version,
+              }),
+              currentConfig: resolvedOptions,
+              frameworkVersion: strykerVersion,
+              sourceContentHashes,
+              priorSourceHashes: priorSourceHashes(document, hashContent),
+              priorSurvivors,
+            }),
+        ))
     },
     decide: admitSurvivorsRun,
     encode: (outcome: Result.Result<SurvivorsAdmission, SurvivorsRejection>) => outcome,

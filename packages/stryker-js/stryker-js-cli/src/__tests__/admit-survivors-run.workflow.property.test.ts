@@ -12,7 +12,9 @@ import {
   admitSurvivorsRun,
   AdmitSurvivorsRunCommand,
   Admitted,
+  MutantShape,
   NoSurvivors,
+  PriorReportDocument,
   PriorReportFacts,
   SurvivorsAdmission,
   SurvivorsRejection,
@@ -129,22 +131,27 @@ const survivorsProducedReportArb = reportArb(
  * assignable — the suite would keep passing while no longer exercising a command. Spread
  * the data, construct once, and every variant is a real instance.
  */
-const matchingFields = (report: schema.MutationTestResult) => ({
-  priorReport: PriorReportFacts.make({
-    config: report.config ?? {},
-    frameworkVersion: report.framework?.version,
-  }),
-  currentConfig: report.config ?? {},
-  frameworkVersion: report.framework?.version ?? '',
-  sourceContentHashes: Object.fromEntries(
-    Object.entries(report.files).map(([file, fileResult]) => [
-      file,
-      sourceContentHash(fileResult.source, sha256Hex),
-    ]),
-  ),
-  priorSourceHashes: priorSourceHashes(report, sha256Hex),
-  priorSurvivors: extractSurvivors(report, absPath),
-})
+const asDocument = (report: schema.MutationTestResult) => S.decodeUnknownSync(PriorReportDocument)(report)
+
+const matchingFields = (report: schema.MutationTestResult) => {
+  const document = asDocument(report)
+  return {
+    priorReport: PriorReportFacts.make({
+      config: document.config ?? {},
+      frameworkVersion: document.framework?.version,
+    }),
+    currentConfig: document.config ?? {},
+    frameworkVersion: document.framework?.version ?? '',
+    sourceContentHashes: Object.fromEntries(
+      Object.entries(document.files).map(([file, fileResult]) => [
+        file,
+        sourceContentHash(fileResult.source, sha256Hex),
+      ]),
+    ),
+    priorSourceHashes: priorSourceHashes(document, sha256Hex),
+    priorSurvivors: S.decodeUnknownSync(S.Array(MutantShape))(extractSurvivors(document, absPath)),
+  }
+}
 
 const matchingCommand = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand =>
   AdmitSurvivorsRunCommand.make(matchingFields(report))
@@ -258,7 +265,7 @@ describe('admitSurvivorsRun', () => {
       if (!S.is(Admitted)(admission.success)) {
         return false
       }
-      const expected = extractSurvivors(report, absPath)
+      const expected = extractSurvivors(asDocument(report), absPath)
       return expected.length > 0 &&
         stringArrayEquivalence(
           admission.success.survivors.map(fingerprint),
@@ -348,7 +355,7 @@ describe('admitSurvivorsRun', () => {
       Exit.isSuccess(
         S.decodeExit(SurvivorsAdmission)({
           _tag: 'Admitted',
-          survivors: extractSurvivors(report, absPath),
+          survivors: extractSurvivors(asDocument(report), absPath),
         }),
       ),
   )

@@ -65,7 +65,7 @@ const ThresholdsLikeSchema = Wire.wire({
 })
 export const IncrementalReportSchema = S.StructWithRest(
   S.Struct({
-    schemaVersion: S.String.pipe(S.check(S.isMinLength(1))),
+    schemaVersion: S.NonEmptyString,
     thresholds: ThresholdsLikeSchema,
     files: S.Record(S.String, FileResultLikeSchema),
     testFiles: S.optional(S.Record(S.String, TestFileLikeSchema)),

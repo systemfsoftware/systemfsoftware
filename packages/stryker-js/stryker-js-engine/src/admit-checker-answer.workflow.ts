@@ -46,7 +46,7 @@ export class CheckGroupDecision extends S.TaggedClass<CheckGroupDecision>()('Che
 }
 
 export class CheckResultDecision extends S.TaggedClass<CheckResultDecision>()('CheckResultDecision', {
-  pairs: S.Array(S.Struct({ id: S.String.pipe(S.check(S.isMinLength(1))), result: CheckResultSchema })),
+  pairs: S.Array(S.Struct({ id: S.NonEmptyString, result: CheckResultSchema })),
 }) {
   readonly [CheckerDecisionTypeId] = CheckerDecisionTypeId
 }
