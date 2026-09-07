@@ -71,7 +71,7 @@ export const MutantActivationSchema = S.Literals(['runtime', 'static'])
 export const MutantRunOptionsSchema = S.Struct({
   ...RunOptionsFields,
   activeMutant: Mutant,
-  sandboxFileName: S.String,
+  sandboxFileName: S.String.pipe(S.check(S.isMinLength(1))),
   mutantActivation: MutantActivationSchema,
   reloadEnvironment: S.Boolean,
   testFilter: S.optionalKey(S.Array(S.String)),

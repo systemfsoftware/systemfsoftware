@@ -11,10 +11,19 @@ const PositionSchema = S.Struct({ line: S.Finite, column: S.Finite })
 const PreviousLocationSchema = S.Struct({ start: PositionSchema, end: PositionSchema })
 
 const PreviousMutantSchema = S.Struct({
-  mutatorName: S.String,
+  mutatorName: S.String.pipe(S.check(S.isMinLength(1))),
   replacement: S.String,
   location: PreviousLocationSchema,
-  status: S.String,
+  status: S.Literals([
+    'Killed',
+    'Survived',
+    'NoCoverage',
+    'Timeout',
+    'CompileError',
+    'RuntimeError',
+    'Ignored',
+    'Pending',
+  ]),
   testsCompleted: S.optional(S.Finite),
   coveredBy: S.optional(S.Array(S.String)),
   killedBy: S.optional(S.Array(S.String)),
@@ -30,8 +39,17 @@ const PreviousTestFileSchema = S.Struct({
 })
 
 const RememberedMutantSchema = S.Struct({
-  mutantId: S.String,
-  status: S.String,
+  mutantId: S.String.pipe(S.check(S.isMinLength(1))),
+  status: S.Literals([
+    'Killed',
+    'Survived',
+    'NoCoverage',
+    'Timeout',
+    'CompileError',
+    'RuntimeError',
+    'Ignored',
+    'Pending',
+  ]),
   testsCompleted: S.optional(S.Finite),
   coveredBy: S.optional(S.Array(S.String)),
   killedBy: S.optional(S.Array(S.String)),
@@ -86,7 +104,7 @@ export class PlanMutantTestsCommand extends S.TaggedClass<PlanMutantTestsCommand
 const DecidedRunOptionsSchema = S.Struct({
   mutantActivation: S.Literals(['runtime', 'static']),
   timeout: S.Finite,
-  sandboxFileName: S.String,
+  sandboxFileName: S.String.pipe(S.check(S.isMinLength(1))),
   disableBail: S.Boolean,
   reloadEnvironment: S.Boolean,
   testFilter: S.optionalKey(S.Array(S.String)),
@@ -95,7 +113,7 @@ const DecidedRunOptionsSchema = S.Struct({
 
 const RunPlanSchema = S.Struct({
   plan: S.Literal('Run'),
-  mutantId: S.String,
+  mutantId: S.String.pipe(S.check(S.isMinLength(1))),
   netTime: S.Finite,
   runOptions: DecidedRunOptionsSchema,
   static: S.optional(S.Boolean),
@@ -104,7 +122,7 @@ const RunPlanSchema = S.Struct({
 
 const EarlyResultPlanSchema = S.Struct({
   plan: S.Literal('EarlyResult'),
-  mutantId: S.String,
+  mutantId: S.String.pipe(S.check(S.isMinLength(1))),
   status: S.Literals([
     'Killed',
     'Survived',

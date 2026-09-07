@@ -4,10 +4,19 @@ const PositionSchema = S.Struct({ line: S.Finite, column: S.Finite })
 const PreviousLocationSchema = S.Struct({ start: PositionSchema, end: PositionSchema })
 
 const PreviousMutantSchema = S.Struct({
-  mutatorName: S.String,
+  mutatorName: S.String.pipe(S.check(S.isMinLength(1))),
   replacement: S.String,
   location: PreviousLocationSchema,
-  status: S.String,
+  status: S.Literals([
+    'Killed',
+    'Survived',
+    'NoCoverage',
+    'Timeout',
+    'CompileError',
+    'RuntimeError',
+    'Ignored',
+    'Pending',
+  ]),
   testsCompleted: S.optional(S.Finite),
   coveredBy: S.optional(S.Array(S.String)),
   killedBy: S.optional(S.Array(S.String)),

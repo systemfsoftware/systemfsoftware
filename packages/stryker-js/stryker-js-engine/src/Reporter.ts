@@ -1690,7 +1690,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
     'ts-jest',
   ] as const
 
-  const ManifestSchema = S.Struct({ version: S.optional(S.String) })
+  const ManifestSchema = S.Struct({ version: S.optional(S.String.pipe(S.check(S.isMinLength(1)))) })
 
   const readManifestVersion = (
     fs: FileSystem.FileSystem,

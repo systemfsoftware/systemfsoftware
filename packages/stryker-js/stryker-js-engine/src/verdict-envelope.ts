@@ -142,7 +142,7 @@ function embeddedConfig(
   readonly jsonReporterFileName: string | undefined
 } {
   const JsonReporterSchema = S.Struct({
-    fileName: S.String,
+    fileName: S.String.pipe(S.check(S.isMinLength(1))),
   })
   const EmbeddedConfigSchema = S.StructWithRest(
     S.Struct({
