@@ -1,7 +1,7 @@
+import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import { TestResultSchema } from '@systemfsoftware/stryker-js/TestRunner'
 import { Effect } from 'effect'
 import * as S from 'effect/Schema'
-
-import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import type * as VitestNode from 'vitest/node'
 
 export const VitestRunnerOptionsSchema = S.Struct({
@@ -62,20 +62,76 @@ export const VitestNodeModuleSchema = S.declare(
 
 export const VitestPackageSchema = S.Struct({ version: S.String })
 
-export class VitestDryRunCommand extends S.TaggedClass<VitestDryRunCommand>()('VitestDryRunCommand', {
-  rawTests: S.Array(S.Unknown),
-  projectRoot: S.String,
-  hasExternalError: S.Boolean,
-  externalErrorText: S.String,
-}) {}
+export type VitestTaskState = typeof TaskState.Type
 
-export class DryRunComplete extends S.TaggedClass<DryRunComplete>()('Complete', {
-  testsJson: S.String,
-}) {}
+interface VitestTaskBase {
+  readonly name?: string | undefined
+  readonly mode?: 'run' | 'skip' | undefined
+  readonly type?: string | undefined
+  readonly filepath?: string | undefined
+  readonly file?: string | VitestTask | undefined
+  readonly suite?: VitestTask | undefined
+}
 
-export class DryRunExternalError extends S.TaggedClass<DryRunExternalError>()('Error', {
-  testsJson: S.String,
-  errorMessage: S.String,
-}) {}
+export interface VitestTestTask extends VitestTaskBase {
+  readonly result: {
+    readonly state: VitestTaskState
+    readonly duration?: number | undefined
+    readonly errors?: readonly { readonly message?: string | undefined }[] | undefined
+  }
+}
 
-export type VitestDryRunOutcome = DryRunComplete | DryRunExternalError
+interface VitestSuiteTask extends VitestTaskBase {
+  readonly result?:
+    | {
+      readonly state: VitestTaskState
+      readonly duration?: number | undefined
+      readonly errors?: readonly { readonly message?: string | undefined }[] | undefined
+    }
+    | undefined
+  readonly tasks: readonly VitestTask[]
+}
+
+export type VitestTask = VitestTestTask | VitestSuiteTask
+
+const TaskState = S.Literals(['pass', 'fail', 'skip', 'todo'])
+
+const RunMode = S.Literals(['run', 'skip'])
+
+const TaskResult = S.Struct({
+  state: TaskState,
+  duration: S.optional(S.Finite.check(S.isGreaterThan(0))),
+  errors: S.optional(S.Array(S.Struct({ message: S.optional(S.String) }))),
+})
+
+const TaskBaseFields = {
+  name: S.optional(S.String),
+  mode: S.optional(RunMode),
+  type: S.optional(S.String),
+  filepath: S.optional(S.String),
+  file: S.optional(S.Union([S.String, S.suspend((): S.Codec<VitestTask> => VitestTask)])),
+  suite: S.optional(S.suspend((): S.Codec<VitestTask> => VitestTask)),
+}
+
+export const VitestTestTask = S.Struct({
+  ...TaskBaseFields,
+  result: TaskResult,
+}).annotate({ identifier: 'VitestTestTask' })
+
+export const VitestSuiteTask = S.Struct({
+  ...TaskBaseFields,
+  result: S.optional(TaskResult),
+  tasks: S.Array(S.suspend((): S.Codec<VitestTask> => VitestTask)),
+}).annotate({ identifier: 'VitestSuiteTask' })
+
+export const VitestTask = S.Union([VitestTestTask, VitestSuiteTask]).annotate({
+  identifier: 'VitestTask',
+})
+
+export const VitestTaskArray = S.Array(VitestTask)
+
+export class VitestDryRunOutput extends S.TaggedClass<VitestDryRunOutput>()('VitestDryRunOutput', {
+  status: S.Literals(['Complete', 'Error']),
+  tests: S.Array(TestResultSchema),
+  errorMessage: S.optional(S.String),
+}) {}

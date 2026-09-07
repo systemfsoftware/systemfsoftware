@@ -1,97 +1,46 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import { Match, Schema } from 'effect'
+import { Schema } from 'effect'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
 
 import {
   interpretVitestRun,
-  MutantDryError,
   MutantKilled,
   MutantSurvived,
   MutantTimeout,
   VitestMutantRunCommand,
   VitestMutantRunError,
-  type VitestMutantRunOutput,
 } from '../interpret-vitest-run.workflow.js'
+import type { VitestTestTask } from '../Runner.schema.js'
 
 const VITEST_MUTANT_RUN_FAMILY = Symbol.for('@systemfsoftware/stryker-js-vitest-runner/VitestMutantRun')
 
 const carriesFamilyBrand = (decision: object): boolean =>
   Reflect.get(decision, VITEST_MUTANT_RUN_FAMILY) === VITEST_MUTANT_RUN_FAMILY
 
-const tagOf = (result: Result.Result<VitestMutantRunOutput, VitestMutantRunError>): string | null =>
-  Match.value(result).pipe(
-    Match.tag('Success', ({ success }) => success._tag),
-    Match.tag('Failure', ({ failure }) => failure._tag),
-    Match.exhaustive,
-  )
+const failedTask = (name: string, message: string): VitestTestTask => ({
+  name,
+  result: { state: 'fail', duration: 5, errors: [{ message }] },
+})
 
-const commandWith = (
-  input: VitestMutantRunCommand,
-  override: {
-    readonly rawTests?: readonly unknown[]
-    readonly hasExternalError?: boolean
-    readonly externalErrorText?: string
-    readonly hitCount: number | undefined
-    readonly hitLimit: number | undefined
-    readonly reportAllKillers?: boolean
-  },
-): VitestMutantRunCommand =>
+const passedTask = (name: string): VitestTestTask => ({
+  name,
+  result: { state: 'pass', duration: 3 },
+})
+
+const commandFrom = (input: VitestMutantRunCommand, tests: readonly VitestTestTask[], reportAllKillers: boolean) =>
   VitestMutantRunCommand.make({
-    rawTests: [...(override.rawTests ?? input.rawTests)],
+    tests,
     projectRoot: input.projectRoot,
-    hasExternalError: override.hasExternalError ?? input.hasExternalError,
-    externalErrorText: override.externalErrorText ?? input.externalErrorText,
-    hitCount: override.hitCount,
-    hitLimit: override.hitLimit,
-    reportAllKillers: override.reportAllKillers ?? input.reportAllKillers,
+    hasExternalError: false,
+    externalErrorText: input.externalErrorText,
+    hitCount: undefined,
+    hitLimit: undefined,
+    reportAllKillers,
   })
 
-const testsIn = (
-  testsJson: string,
-): { readonly ids: readonly string[]; readonly failed: readonly string[] } | null => {
-  const parsed: unknown = JSON.parse(testsJson)
-  if (!Array.isArray(parsed)) {
-    return null
-  }
-  const items: readonly unknown[] = parsed
-  const ids: string[] = []
-  const failed: string[] = []
-  for (const entry of items) {
-    if (typeof entry !== 'object' || entry === null || !('id' in entry) || typeof entry.id !== 'string') {
-      return null
-    }
-    ids.push(entry.id)
-    if ('status' in entry && entry.status === 'failed') {
-      failed.push(entry.id)
-    }
-  }
-  return { ids, failed }
-}
-
 describe('interpretVitestRun', () => {
-  it.prop(
-    '∀c_Decision_≡BrandedAndKnown',
-    [Schema.toArbitrary(VitestMutantRunCommand)(fc)],
-    ([input]) => {
-      const result = interpretVitestRun(input)
-      const tag = tagOf(result)
-      const known = tag === 'Killed' ||
-        tag === 'Survived' ||
-        tag === 'Timeout' ||
-        tag === 'Error' ||
-        tag === 'VitestMutantRunError'
-      if (!known) {
-        return false
-      }
-      if (Result.isSuccess(result)) {
-        return carriesFamilyBrand(result.success)
-      }
-      return carriesFamilyBrand(result.failure)
-    },
-  )
-
   it.prop(
     '→h_HitLimitExceeded_=Timeout',
     [
@@ -101,7 +50,17 @@ describe('interpretVitestRun', () => {
     ],
     ([input, hitLimit, extra]) => {
       const hitCount = hitLimit + extra
-      const result = interpretVitestRun(commandWith(input, { hitCount, hitLimit }))
+      const result = interpretVitestRun(
+        VitestMutantRunCommand.make({
+          tests: input.tests,
+          projectRoot: input.projectRoot,
+          hasExternalError: input.hasExternalError,
+          externalErrorText: input.externalErrorText,
+          hitCount,
+          hitLimit,
+          reportAllKillers: input.reportAllKillers,
+        }),
+      )
       if (!Result.isSuccess(result)) {
         return false
       }
@@ -110,34 +69,35 @@ describe('interpretVitestRun', () => {
       }
       return (
         carriesFamilyBrand(result.success) &&
-        result.success.testsJson === '[]' &&
         result.success.reason === `Hit limit reached (${hitCount}/${hitLimit})`
       )
     },
   )
 
   it.prop(
-    '→e_ExternalErrorAlone_=DryError',
+    '→e_ExternalErrorAlone_=Abort',
     [Schema.toArbitrary(VitestMutantRunCommand)(fc)],
     ([input]) => {
       const result = interpretVitestRun(
-        commandWith(input, {
-          rawTests: [],
+        VitestMutantRunCommand.make({
+          tests: [],
+          projectRoot: input.projectRoot,
           hasExternalError: true,
+          externalErrorText: input.externalErrorText,
           hitCount: undefined,
           hitLimit: undefined,
+          reportAllKillers: input.reportAllKillers,
         }),
       )
-      if (!Result.isSuccess(result)) {
+      if (!Result.isFailure(result)) {
         return false
       }
-      if (!S.is(MutantDryError)(result.success)) {
+      if (!S.is(VitestMutantRunError)(result.failure)) {
         return false
       }
       return (
-        carriesFamilyBrand(result.success) &&
-        result.success.testsJson === '[]' &&
-        result.success.errorMessage === `An error occurred outside of a test run: ${input.externalErrorText}`
+        carriesFamilyBrand(result.failure) &&
+        result.failure.message === `An error occurred outside of a test run: ${input.externalErrorText}`
       )
     },
   )
@@ -150,20 +110,8 @@ describe('interpretVitestRun', () => {
       fc.string({ maxLength: 32 }),
     ],
     ([input, name, message]) => {
-      const result = interpretVitestRun(
-        commandWith(input, {
-          rawTests: [
-            {
-              name,
-              result: { state: 'fail', duration: 5, errors: [{ message }] },
-              file: { filepath: `${input.projectRoot}/tests/a.spec.ts` },
-            },
-          ],
-          hasExternalError: false,
-          hitCount: undefined,
-          hitLimit: undefined,
-        }),
-      )
+      const trimmed = name.trim()
+      const result = interpretVitestRun(commandFrom(input, [failedTask(name, message)], false))
       if (!Result.isSuccess(result)) {
         return false
       }
@@ -173,17 +121,48 @@ describe('interpretVitestRun', () => {
       if (!carriesFamilyBrand(result.success)) {
         return false
       }
-      const tests = testsIn(result.success.testsJson)
-      if (tests === null) {
+      const killerIds = result.success.killerIds
+      return (
+        result.success.tests.length === 1 &&
+        result.success.tests[0].id.endsWith(`#${trimmed}`) &&
+        result.success.tests[0].name === trimmed &&
+        result.success.failureMessage === message &&
+        killerIds !== undefined &&
+        killerIds.length === 1 &&
+        killerIds[0] === result.success.tests[0].id
+      )
+    },
+  )
+
+  it.prop(
+    '→t_ReportAllKillers_=EveryKillerId',
+    [
+      Schema.toArbitrary(VitestMutantRunCommand)(fc),
+      fc.string({ minLength: 1, maxLength: 24 }),
+      fc.string({ minLength: 1, maxLength: 24 }),
+      fc.string({ maxLength: 32 }),
+    ],
+    ([input, firstName, secondName, message]) => {
+      const result = interpretVitestRun(
+        commandFrom(
+          input,
+          [failedTask(firstName, message), failedTask(secondName, message)],
+          true,
+        ),
+      )
+      if (!Result.isSuccess(result)) {
+        return false
+      }
+      if (!S.is(MutantKilled)(result.success)) {
         return false
       }
       const killerIds = result.success.killerIds
       return (
-        tests.failed.length === 1 &&
+        result.success.tests.length === 2 &&
         killerIds !== undefined &&
-        killerIds.length === 1 &&
-        killerIds[0] === tests.failed[0] &&
-        result.success.failureMessage === message
+        killerIds.length === 2 &&
+        killerIds[0] === result.success.tests[0].id &&
+        killerIds[1] === result.success.tests[1].id
       )
     },
   )
@@ -192,20 +171,8 @@ describe('interpretVitestRun', () => {
     '→t_PassedTest_=Survived',
     [Schema.toArbitrary(VitestMutantRunCommand)(fc), fc.string({ minLength: 1, maxLength: 24 })],
     ([input, name]) => {
-      const result = interpretVitestRun(
-        commandWith(input, {
-          rawTests: [
-            {
-              name,
-              result: { state: 'pass', duration: 3 },
-              file: { filepath: `${input.projectRoot}/tests/a.spec.ts` },
-            },
-          ],
-          hasExternalError: false,
-          hitCount: undefined,
-          hitLimit: undefined,
-        }),
-      )
+      const trimmed = name.trim()
+      const result = interpretVitestRun(commandFrom(input, [passedTask(name)], false))
       if (!Result.isSuccess(result)) {
         return false
       }
@@ -215,11 +182,11 @@ describe('interpretVitestRun', () => {
       if (!carriesFamilyBrand(result.success)) {
         return false
       }
-      const tests = testsIn(result.success.testsJson)
-      if (tests === null) {
-        return false
-      }
-      return tests.ids.length === 1 && tests.failed.length === 0
+      return (
+        result.success.tests.length === 1 &&
+        result.success.tests[0].status === 'success' &&
+        result.success.tests[0].name === trimmed
+      )
     },
   )
 })
