@@ -25,7 +25,21 @@ export class CheckerSkippedRequested extends S.TaggedError<CheckerSkippedRequest
 
 export type CheckerContractBroken = CheckerAnsweredUnrequested | CheckerSkippedRequested
 
-const isCheckResult = (_value: unknown): _value is CheckResult => true
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && Array.isArray(value) === false
+
+const isCheckResult = (value: unknown): value is CheckResult => {
+  if (!isRecord(value)) {
+    return false
+  }
+  if (value['status'] === 'passed') {
+    return true
+  }
+  if (value['status'] === 'compileError') {
+    return typeof value['reason'] === 'string'
+  }
+  return false
+}
 const CheckResultSchema = S.Unknown.pipe(S.refine(isCheckResult))
 
 export class CheckerCommand extends S.TaggedClass<CheckerCommand>()('CheckerCommand', {
@@ -60,33 +74,40 @@ const evaluateGroup = (command: CheckerCommand): Result.Result<CheckerDecision, 
   )
   const flatIds = idGroups.flat()
   const unrequested = flatIds.filter((id) => !(id in requestedRecord))
-  if (unrequested.length > 0) {
-    return Result.fail(
-      new CheckerAnsweredUnrequested({
-        checkerName: command.checkerName,
-        phase: 'group',
-        unrequestedIds: unrequested,
-        requestedIds: [...command.requestedIds],
-      }),
-    )
-  }
-  const groupedRecord: Record<string, true> = Object.fromEntries(
-    flatIds.filter((id) => requestedRecord[id] === true).map((id): readonly [string, true] => [id, true]),
-  )
-  const missing = command.requestedIds.filter((id) => !(id in groupedRecord))
-  if (missing.length > 0) {
-    return Result.fail(
-      new CheckerSkippedRequested({
-        checkerName: command.checkerName,
-        phase: 'group',
-        missingIds: missing,
-      }),
-    )
-  }
-  return Result.succeed(
-    new CheckGroupDecision({
-      groups: idGroups.map((group) => [...group]),
+  return Match.value(unrequested.length > 0).pipe(
+    Match.when(true, () =>
+      Result.fail(
+        new CheckerAnsweredUnrequested({
+          checkerName: command.checkerName,
+          phase: 'group',
+          unrequestedIds: unrequested,
+          requestedIds: [...command.requestedIds],
+        }),
+      )),
+    Match.when(false, (): Result.Result<CheckerDecision, CheckerContractBroken> => {
+      const groupedRecord: Record<string, true> = Object.fromEntries(
+        flatIds.filter((id) => requestedRecord[id] === true).map((id): readonly [string, true] => [id, true]),
+      )
+      const missing = command.requestedIds.filter((id) => !(id in groupedRecord))
+      return Match.value(missing.length > 0).pipe(
+        Match.when(true, () =>
+          Result.fail(
+            new CheckerSkippedRequested({
+              checkerName: command.checkerName,
+              phase: 'group',
+              missingIds: missing,
+            }),
+          )),
+        Match.when(false, () =>
+          Result.succeed(
+            new CheckGroupDecision({
+              groups: idGroups.map((group) => [...group]),
+            }),
+          )),
+        Match.exhaustive,
+      )
     }),
+    Match.exhaustive,
   )
 }
 
@@ -99,33 +120,41 @@ const evaluateCheckResult = (
   )
   const entries = Object.entries(answers)
   const unrequested = entries.filter(([id]) => !(id in requestedRecord)).map(([id]) => id)
-  if (unrequested.length > 0) {
-    return Result.fail(
-      new CheckerAnsweredUnrequested({
-        checkerName: command.checkerName,
-        phase: 'check',
-        unrequestedIds: unrequested,
-        requestedIds: [...command.requestedIds],
-      }),
-    )
-  }
-  const pairedRecord: Record<string, true> = Object.fromEntries(
-    entries.filter(([id]) => requestedRecord[id] === true).map(([id]): readonly [string, true] => [id, true]),
+  return Match.value(unrequested.length > 0).pipe(
+    Match.when(true, () =>
+      Result.fail(
+        new CheckerAnsweredUnrequested({
+          checkerName: command.checkerName,
+          phase: 'check',
+          unrequestedIds: unrequested,
+          requestedIds: [...command.requestedIds],
+        }),
+      )),
+    Match.when(false, (): Result.Result<CheckerDecision, CheckerContractBroken> => {
+      const pairedRecord: Record<string, true> = Object.fromEntries(
+        entries.filter(([id]) => requestedRecord[id] === true).map(([id]): readonly [string, true] => [id, true]),
+      )
+      const missing = command.requestedIds.filter((id) => !(id in pairedRecord))
+      return Match.value(missing.length > 0).pipe(
+        Match.when(true, () =>
+          Result.fail(
+            new CheckerSkippedRequested({
+              checkerName: command.checkerName,
+              phase: 'check',
+              missingIds: missing,
+            }),
+          )),
+        Match.when(false, () => {
+          const pairs = entries
+            .filter(([id]) => requestedRecord[id] === true)
+            .map(([id, result]) => ({ id, result }))
+          return Result.succeed(new CheckResultDecision({ pairs }))
+        }),
+        Match.exhaustive,
+      )
+    }),
+    Match.exhaustive,
   )
-  const missing = command.requestedIds.filter((id) => !(id in pairedRecord))
-  if (missing.length > 0) {
-    return Result.fail(
-      new CheckerSkippedRequested({
-        checkerName: command.checkerName,
-        phase: 'check',
-        missingIds: missing,
-      }),
-    )
-  }
-  const pairs = entries
-    .filter(([id]) => requestedRecord[id] === true)
-    .map(([id, result]) => ({ id, result }))
-  return Result.succeed(new CheckResultDecision({ pairs }))
 }
 
 export const admitCheckerAnswer = Workflow.make(

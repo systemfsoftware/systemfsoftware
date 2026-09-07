@@ -175,8 +175,9 @@ export function reportMutantToMutant(
   file: string,
   mutant: PriorReportMutant,
   resolveAbsolutePath: ResolveAbsolutePath,
-): Mutant {
-  return Mutant.make({
+): Result.Result<Mutant, S.SchemaError> {
+  return S.decodeResult(Mutant)({
+    _tag: 'Mutant' as const,
     id: mutant.id,
     fileName: resolveAbsolutePath(file),
     mutatorName: mutant.mutatorName,
@@ -202,16 +203,18 @@ export function reportMutantToMutant(
 export function extractSurvivors(
   priorReport: PriorReportDocument,
   resolveAbsolutePath: ResolveAbsolutePath,
-): Mutant[] {
+): Result.Result<Mutant[], S.SchemaError> {
   const survivors: Mutant[] = []
   for (const [file, fileResult] of objectEntries(priorReport.files)) {
     for (const mutant of fileResult.mutants) {
       if (mutant.status === 'Survived') {
-        survivors.push(reportMutantToMutant(file, mutant, resolveAbsolutePath))
+        const decoded = reportMutantToMutant(file, mutant, resolveAbsolutePath)
+        if (Result.isFailure(decoded)) return Result.fail(decoded.failure)
+        survivors.push(decoded.success)
       }
     }
   }
-  return survivors
+  return Result.succeed(survivors)
 }
 
 /**
@@ -270,18 +273,22 @@ export const survivorsAdmission = Cell.layer({
         }),
       )
     }
-    return Result.map(decodePriorReport(priorReportRaw), (document) =>
-      AdmitSurvivorsRunCommand.make({
-        priorReport: PriorReportFacts.make({
-          config: document.config ?? {},
-          frameworkVersion: document.framework?.version,
-        }),
-        currentConfig: resolvedOptions,
-        frameworkVersion: strykerVersion,
-        sourceContentHashes,
-        priorSourceHashes: priorSourceHashes(document, hashContent),
-        priorSurvivors: extractSurvivors(document, resolveAbsolutePath),
-      }))
+    return Result.flatMap(
+      decodePriorReport(priorReportRaw),
+      (document) =>
+        Result.map(extractSurvivors(document, resolveAbsolutePath), (priorSurvivors) =>
+          AdmitSurvivorsRunCommand.make({
+            priorReport: PriorReportFacts.make({
+              config: document.config ?? {},
+              frameworkVersion: document.framework?.version,
+            }),
+            currentConfig: resolvedOptions,
+            frameworkVersion: strykerVersion,
+            sourceContentHashes,
+            priorSourceHashes: priorSourceHashes(document, hashContent),
+            priorSurvivors,
+          })),
+    )
   },
   decide: admitSurvivorsRun,
   encode: (outcome: Result.Result<SurvivorsAdmission, SurvivorsRejection>) => outcome,

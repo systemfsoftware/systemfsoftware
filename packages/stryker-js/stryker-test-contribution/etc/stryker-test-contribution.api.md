@@ -4,32 +4,10 @@
 
 ```ts
 
-import * as Effect from 'effect/Effect';
 import { Evaluator } from '@systemfsoftware/stryker-js/Evaluator';
-import { EvaluatorFailed } from '@systemfsoftware/stryker-js/Evaluator';
-import { ExitClass } from '@systemfsoftware/stryker-js/Evaluator';
 import * as Layer from 'effect/Layer';
 import { PluginContribution } from '@systemfsoftware/stryker-js/Plugin';
 import { RunConfiguration } from '@systemfsoftware/stryker-js/Plugin';
-import { schema } from '@systemfsoftware/stryker-js/Mutant';
-
-// Warning: (ae-forgotten-export) The symbol "ReportView" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const contributionByTestFile: (report: ReportView) => ReadonlyMap<string, TestFileContribution>;
-
-// @public (undocumented)
-export const defaultRequireTestContributionSuffixes: readonly ['.workflow.property.test.ts', '.policy.property.test.ts', '.kernel.property.test.ts'];
-
-// @public (undocumented)
-export const judgeTestContribution: (report: ReportView, everyKillerRecorded: boolean, suffixes?: readonly string[]) => TestContributionVerdict;
-
-// @public (undocumented)
-export const makeTestContributionEvaluatorService: (options: {
-    readonly disableBail: boolean;
-}) => {
-    readonly evaluate: (report: schema.MutationTestResult) => Effect.Effect<ExitClass | null, EvaluatorFailed>;
-};
 
 // @public (undocumented)
 export const strykerPlugins: PluginContribution<"Evaluator">[];
@@ -61,9 +39,6 @@ export interface TestFileContribution {
     // (undocumented)
     readonly totalKills: number;
 }
-
-// @public (undocumented)
-export const toothlessTestFiles: (contribution: ReadonlyMap<string, TestFileContribution>, input: TestContributionInput) => readonly string[];
 
 // (No @packageDocumentation comment for this package)
 

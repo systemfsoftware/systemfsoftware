@@ -1,5 +1,6 @@
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as S from 'effect/Schema'
+import { MUTANT_STATUSES } from './mutant-status.js'
 
 const DiffChangesSchema = S.Struct({ added: S.Finite, removed: S.Finite })
 const DiffStatisticsSchema = S.Struct({
@@ -14,7 +15,7 @@ const PreviousMutantSchema = S.Struct({
   mutatorName: S.String,
   replacement: S.String,
   location: PreviousLocationSchema,
-  status: S.String,
+  status: S.Literals(MUTANT_STATUSES),
   testsCompleted: S.optional(S.Finite),
   coveredBy: S.optional(S.Array(S.String)),
   killedBy: S.optional(S.Array(S.String)),
@@ -31,7 +32,7 @@ const PreviousTestFileSchema = S.Struct({
 
 const RememberedMutantSchema = S.Struct({
   mutantId: S.String,
-  status: S.String,
+  status: S.Literals(MUTANT_STATUSES),
   testsCompleted: S.optional(S.Finite),
   coveredBy: S.optional(S.Array(S.String)),
   killedBy: S.optional(S.Array(S.String)),

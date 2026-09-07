@@ -2,6 +2,7 @@ import * as Effect from 'effect/Effect'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as MutableHashSet from 'effect/MutableHashSet'
 import * as Option from 'effect/Option'
+import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
@@ -479,12 +480,13 @@ const materializeMutant = (
     readonly static?: boolean | undefined
     readonly coveredBy?: readonly string[] | undefined
   },
-): Mutant => {
+): Result.Result<Mutant, S.SchemaError> => {
   const status = decided.status ?? original.status
   const statusReason = decided.statusReason ?? original.statusReason
   const isStatic = decided.static ?? original.static
   const coveredBy = decided.coveredBy ?? original.coveredBy
-  return new Mutant({
+  return S.decodeResult(Mutant)({
+    _tag: 'Mutant' as const,
     id: original.id,
     fileName: original.fileName,
     mutatorName: original.mutatorName,
@@ -499,13 +501,18 @@ const materializeMutant = (
   })
 }
 
-const materializePlan = (plan: TestPlan, original: Mutant): MutantTestPlan => {
+const materializePlan = (
+  plan: TestPlan,
+  original: Mutant,
+): Result.Result<MutantTestPlan, S.SchemaError> => {
   if (plan.plan === 'EarlyResult') {
-    return { plan: 'EarlyResult', mutant: materializeMutant(original, plan) }
+    return Result.map(materializeMutant(original, plan), (mutant) => ({
+      plan: 'EarlyResult' as const,
+      mutant,
+    }))
   }
-  const mutant = materializeMutant(original, plan)
-  return {
-    plan: 'Run',
+  return Result.map(materializeMutant(original, plan), (mutant) => ({
+    plan: 'Run' as const,
     mutant,
     netTime: plan.netTime,
     runOptions: {
@@ -518,7 +525,7 @@ const materializePlan = (plan: TestPlan, original: Mutant): MutantTestPlan => {
       ...(plan.runOptions.testFilter !== undefined && { testFilter: [...plan.runOptions.testFilter] }),
       ...(plan.runOptions.hitLimit !== undefined && { hitLimit: plan.runOptions.hitLimit }),
     },
-  }
+  }))
 }
 
 export const makeMutantTestPlanner = (
@@ -534,7 +541,10 @@ export const makeMutantTestPlanner = (
     if (original === undefined) {
       return Effect.die(new Error(`planner returned an unknown mutant id: ${plan.mutantId}`))
     }
-    return Effect.succeed(materializePlan(plan, original))
+    return Result.match(materializePlan(plan, original), {
+      onFailure: (cause) => Effect.die(cause),
+      onSuccess: (mutantPlan) => Effect.succeed(mutantPlan),
+    })
   })
 }
 
@@ -602,9 +612,6 @@ export interface IncrementalDiffOutput {
   readonly mutantStatistics: DiffStatisticsLike
   readonly testStatistics: DiffStatisticsLike
 }
-
-const REMEMBERED_STATUS: ReadonlySet<string> = new Set(['Killed', 'Survived', 'Timeout', 'NoCoverage', 'Ignored'])
-
 const normalizeDiffFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
 
 const toRelativeNormalized = (fileName: string | undefined, basePath: string): string => {
@@ -683,7 +690,6 @@ const decideForMutant = (
   if (changedFiles.includes(file)) return { kind: 'run' }
   const previous = findRemembered(input.previousFiles, file, currentMutantKey(mutant))
   if (previous === undefined) return { kind: 'run' }
-  if (!REMEMBERED_STATUS.has(previous.status)) return { kind: 'run' }
   if (hasChangedCoverage(mutant.id, input.coveringTestFilesByMutantId, changedTests)) return { kind: 'run' }
   return { kind: 'remembered', previous }
 }

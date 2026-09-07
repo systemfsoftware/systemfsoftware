@@ -1165,7 +1165,7 @@ const dispatchRequest = (edge: RunEdge, input: RunStrykerCliInput) => (request: 
                     edge.pathService,
                   )),
                 Match.tag('Admitted', (admitted) => {
-                  const admittedMutants = admitted.survivors.map((s) => Mutant.make(s))
+                  const admittedMutants = [...admitted.survivors]
                   const restricted: PartialStrykerOptions & {
                     readonly survivors?: readonly Mutant[]
                     readonly survivorsPriorReport?: string

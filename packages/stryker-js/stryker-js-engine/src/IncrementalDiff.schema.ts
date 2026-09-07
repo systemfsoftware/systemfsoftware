@@ -1,4 +1,5 @@
 import * as S from 'effect/Schema'
+import { MUTANT_STATUSES } from './mutant-status.js'
 
 const PositionSchema = S.Struct({ line: S.Finite, column: S.Finite })
 const PreviousLocationSchema = S.Struct({ start: PositionSchema, end: PositionSchema })
@@ -7,7 +8,7 @@ const PreviousMutantSchema = S.Struct({
   mutatorName: S.String,
   replacement: S.String,
   location: PreviousLocationSchema,
-  status: S.String,
+  status: S.Literals(MUTANT_STATUSES),
   testsCompleted: S.optional(S.Finite),
   coveredBy: S.optional(S.Array(S.String)),
   killedBy: S.optional(S.Array(S.String)),

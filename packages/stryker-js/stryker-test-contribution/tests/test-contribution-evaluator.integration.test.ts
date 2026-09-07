@@ -1,15 +1,3 @@
-/**
- * Evaluator plugin wiring: listing the plugin is enough. A failing
- * contribution verdict returns the `VerdictFail` exit class on the SUCCESS channel;
- * EvaluatorFailed is only for the evaluator itself breaking.
- *
- * Warrant: composition — real gate decision through the Evaluator port's
- * Layer, not a mock; property tests cover the pure decision, this covers the
- * shell wiring (options via RunConfiguration, success value vs error channel).
- * Refusal: not a tautology — removing the system under test (the evaluator's
- * evaluate) would make the Then assertions fail (no VerdictFail where expected,
- * or no EvaluatorFailed where breaking expected).
- */
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { schema } from '@systemfsoftware/stryker-js/Mutant'
 import { type PartialStrykerOptions, StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
@@ -24,12 +12,7 @@ import { expect } from 'vitest'
 
 import { Evaluator, type EvaluatorFailed, type ExitClass } from '@systemfsoftware/stryker-js/Evaluator'
 import { RunConfiguration } from '@systemfsoftware/stryker-js/Plugin'
-import {
-  makeTestContributionEvaluatorService,
-  testContributionEvaluatorLayer,
-} from '@systemfsoftware/stryker-test-contribution'
-
-import { strykerPlugins } from '@systemfsoftware/stryker-test-contribution'
+import { strykerPlugins, testContributionEvaluatorLayer } from '@systemfsoftware/stryker-test-contribution'
 
 const Feature = makeFeature({ it, layer })
 
@@ -62,12 +45,6 @@ const reportWithToothlessKernelFile = (
   },
 })
 
-// test fixture constructing StrykerOptions via decodeUnknownSync — allowed per no-sync-schema-codecs (test file)
-const evaluatorServiceWith = (options: PartialStrykerOptions) => {
-  const decoded = Schema.decodeUnknownSync(StrykerOptionsSchema)(options)
-  return makeTestContributionEvaluatorService(decoded)
-}
-
 const evaluatorViaLayerWith = (options: PartialStrykerOptions) => {
   const decoded = Schema.decodeUnknownSync(StrykerOptionsSchema)(options)
   return Effect.gen(function*() {
@@ -99,7 +76,6 @@ const causeOfExit = (exit: Exit.Exit<ExitClass | null, EvaluatorFailed>): string
   }
   return Cause.pretty(exit.cause)
 }
-// A VerdictFail on a success exit is the evaluator's non-error failure signal; assert it once here.
 const expectVerdictFail = (exit: Exit.Exit<ExitClass | null, EvaluatorFailed>): void => {
   expect(Exit.isSuccess(exit)).toBe(true)
   if (Exit.isSuccess(exit)) {
@@ -124,13 +100,14 @@ Feature('test-contribution evaluator plugin')
     scenario(
       'A toothless required file yields a failing verdict',
       Gherkin.Do.pipe(
-        Given('an evaluator service with disableBail true')(
-          'evaluator',
-          () => Effect.sync(() => evaluatorServiceWith({ disableBail: true })),
-        ),
+        Given('an evaluator with disableBail true')('options', () => Effect.succeed({ disableBail: true })),
         When('a report with one toothless kernel property file is evaluated')(
           'exit',
-          (s) => exitOf(s.evaluator, reportWithToothlessKernelFile()),
+          (s) =>
+            Effect.gen(function*() {
+              const evaluator = yield* evaluatorViaLayerWith(s.options)
+              return yield* exitOf(evaluator, reportWithToothlessKernelFile())
+            }),
         ),
         Then('the evaluation succeeds with the VerdictFail exit class')((s) => {
           expectVerdictFail(s.exit)
@@ -141,13 +118,14 @@ Feature('test-contribution evaluator plugin')
     scenario(
       'Bail stopping killer recording still yields a failing verdict',
       Gherkin.Do.pipe(
-        Given('an evaluator service with bail active (disableBail unset)')(
-          'evaluator',
-          () => Effect.sync(() => evaluatorServiceWith({})),
-        ),
+        Given('an evaluator with bail active (disableBail unset)')('options', () => Effect.succeed({})),
         When('a report with one toothless kernel property file is evaluated')(
           'exit',
-          (s) => exitOf(s.evaluator, reportWithToothlessKernelFile()),
+          (s) =>
+            Effect.gen(function*() {
+              const evaluator = yield* evaluatorViaLayerWith(s.options)
+              return yield* exitOf(evaluator, reportWithToothlessKernelFile())
+            }),
         ),
         Then('the evaluation succeeds with the VerdictFail exit class for the bail case')((s) => {
           expectVerdictFail(s.exit)
@@ -158,17 +136,17 @@ Feature('test-contribution evaluator plugin')
     scenario(
       'Every required file defending a mutant yields no verdict',
       Gherkin.Do.pipe(
-        Given('an evaluator service with disableBail true')(
-          'evaluator',
-          () => Effect.sync(() => evaluatorServiceWith({ disableBail: true })),
-        ),
+        Given('an evaluator with disableBail true')('options', () => Effect.succeed({ disableBail: true })),
         When('a report where every kernel file kills a distinct mutant is evaluated')(
           'exit',
           (s) =>
-            exitOf(
-              s.evaluator,
-              reportWithToothlessKernelFile([kernelMutant('m1', ['t1']), kernelMutant('m2', ['t2'])]),
-            ),
+            Effect.gen(function*() {
+              const evaluator = yield* evaluatorViaLayerWith(s.options)
+              return yield* exitOf(
+                evaluator,
+                reportWithToothlessKernelFile([kernelMutant('m1', ['t1']), kernelMutant('m2', ['t2'])]),
+              )
+            }),
         ),
         Then('the evaluation succeeds with null')((s) => {
           expect(Exit.isSuccess(s.exit)).toBe(true)
@@ -197,19 +175,18 @@ Feature('test-contribution evaluator plugin')
     scenario(
       'An unreadable report fails evaluation with an error',
       Gherkin.Do.pipe(
-        Given('an evaluator service with disableBail true')(
-          'evaluator',
-          () => Effect.sync(() => evaluatorServiceWith({ disableBail: true })),
-        ),
-        When('a report missing required fields is evaluated')('exit', (s) => {
-          const brokenReport = reportWithToothlessKernelFile()
-          Object.defineProperty(brokenReport, 'files', {
-            get() {
-              throw new Error('report files unreadable')
-            },
-          })
-          return exitOf(s.evaluator, brokenReport)
-        }),
+        Given('an evaluator with disableBail true')('options', () => Effect.succeed({ disableBail: true })),
+        When('a report missing required fields is evaluated')('exit', (s) =>
+          Effect.gen(function*() {
+            const evaluator = yield* evaluatorViaLayerWith(s.options)
+            const brokenReport = reportWithToothlessKernelFile()
+            Object.defineProperty(brokenReport, 'files', {
+              get() {
+                throw new Error('report files unreadable')
+              },
+            })
+            return yield* exitOf(evaluator, brokenReport)
+          })),
         Then('the evaluation fails with EvaluatorFailed')((s) => {
           expect(Exit.isFailure(s.exit)).toBe(true)
           const cause = causeOfExit(s.exit)

@@ -1,6 +1,6 @@
 import * as S from 'effect/Schema'
 
-import { Mutant, PositionSchema } from './Mutant.schema.js'
+import { FileName, Mutant, PositionSchema, TestId } from './Mutant.schema.js'
 
 export const DryRunStatus = S.Literals(['complete', 'error', 'timeout'])
 export type DryRunStatus = typeof DryRunStatus.Type
@@ -12,10 +12,10 @@ export const MutantRunStatus = S.Literals(['killed', 'survived', 'timeout', 'err
 export type MutantRunStatus = typeof MutantRunStatus.Type
 
 const TestResultBase = {
-  id: S.String,
+  id: TestId,
   name: S.String,
   timeSpentMs: S.Finite,
-  fileName: S.optionalKey(S.String),
+  fileName: S.optionalKey(FileName),
   startPosition: S.optionalKey(PositionSchema),
 }
 
@@ -43,7 +43,7 @@ export const DryRunResultSchema = S.Union([
 export const MutantRunResultSchema = S.Union([
   S.Struct({
     status: S.Literal('killed'),
-    killedBy: S.Array(S.String),
+    killedBy: S.Array(TestId),
     failureMessage: S.String,
     nrOfTests: S.Finite,
   }),

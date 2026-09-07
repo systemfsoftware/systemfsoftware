@@ -1,6 +1,6 @@
 import { NodeFileSystem, NodePath, NodeSocketServer } from '@effect/platform-node'
 import { Checker, CheckerFailed } from '@systemfsoftware/stryker-js/Checker'
-import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import type { Mutant, MutantId } from '@systemfsoftware/stryker-js/Mutant'
 import type { ContributionOf } from '@systemfsoftware/stryker-js/Plugin'
 import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
@@ -37,7 +37,7 @@ const buildChecker = (
     ),
   )
 
-const mutantIdsOf = (mutants: readonly Mutant[]): ReadonlyArray<string> => mutants.map((mutant) => mutant.id)
+const mutantIdsOf = (mutants: readonly Mutant[]): ReadonlyArray<MutantId> => mutants.map((mutant) => mutant.id)
 
 const readWorkerOptions = Effect.gen(function*() {
   const workerDir = process.env['STRYKER_WORKER_DIR'] ?? (yield* Effect.die(new Error('STRYKER_WORKER_DIR is not set')))

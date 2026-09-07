@@ -443,14 +443,21 @@ export const makeVitestRunnerLayer = (): Layer.Layer<
           if (coverages.length === 0) return undefined
           if (coverages.length === 1) return coverages[0]
           const first = coverages[0]
-          return coverages.slice(1).reduce((acc, projectCoverage) => {
-            for (const [testId, testCoverage] of Object.entries(projectCoverage.perTest)) {
-              if (testId in acc.perTest) mergeCoverage(acc.perTest[testId], testCoverage)
-              else acc.perTest[testId] = testCoverage
-            }
-            mergeCoverage(acc.static, projectCoverage.static)
-            return acc
-          }, first)
+          const merged: { perTest: Record<string, CoverageData>; static: CoverageData } = {
+            perTest: { ...first.perTest },
+            static: { ...first.static },
+          }
+          return coverages.slice(1).reduce(
+            (acc: { perTest: Record<string, CoverageData>; static: CoverageData }, projectCoverage) => {
+              for (const [testId, testCoverage] of Object.entries(projectCoverage.perTest)) {
+                if (testId in acc.perTest) mergeCoverage(acc.perTest[testId], testCoverage)
+                else acc.perTest[testId] = { ...testCoverage }
+              }
+              mergeCoverage(acc.static, projectCoverage.static)
+              return acc
+            },
+            merged,
+          )
         },
       )
       const collectRaw = (

@@ -4,7 +4,7 @@ import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 
 import { ancestorsOf, type IgnorerPath } from '../AncestorPath.js'
-import { decideInSourceTestIgnore, IN_SOURCE_TEST_IGNORED, isInSourceTestGuard } from './InSourceTestIgnore.js'
+import { decideInSourceTestIgnore } from './InSourceTestIgnore.js'
 
 export const strykerPlugins = [
   declarePlugin(
@@ -17,7 +17,3 @@ export const strykerPlugins = [
     }),
   ),
 ]
-
-// Public-surface decision: tests reach the decision function through the
-// barrel rather than deep-importing the .kernel.ts cell.
-export { decideInSourceTestIgnore, IN_SOURCE_TEST_IGNORED, isInSourceTestGuard }

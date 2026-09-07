@@ -6,6 +6,7 @@ import type { IgnorerService } from '@systemfsoftware/stryker-js/Ignorer'
 import { Ignorer } from '@systemfsoftware/stryker-js/Ignorer'
 import { Module } from '@systemfsoftware/stryker-js/Module'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import { FileName } from '@systemfsoftware/stryker-js/Mutant'
 import type { MutantResult } from '@systemfsoftware/stryker-js/Mutant'
 import type { MutantTestCoverage } from '@systemfsoftware/stryker-js/Mutant'
 import type { RunPlan as MutantRunPlan } from '@systemfsoftware/stryker-js/Mutant'
@@ -22,7 +23,13 @@ import { MutantTested } from '@systemfsoftware/stryker-js/Run'
 import { PlanKnown } from '@systemfsoftware/stryker-js/Run'
 import { RunEvents } from '@systemfsoftware/stryker-js/Run'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
-import type { CompleteDryRunResult, DryRunResult, TestRunnerCapabilities } from '@systemfsoftware/stryker-js/TestRunner'
+import type {
+  CompleteDryRunResult,
+  DryRunResult,
+  TestResult,
+  TestRunnerCapabilities,
+} from '@systemfsoftware/stryker-js/TestRunner'
+import { Schema as S } from 'effect'
 import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Console from 'effect/Console'
@@ -805,9 +812,16 @@ export const dryRunCell = Cell.layer({
                 new StageError({ stage: 'dryRun', reason: 'Unexpected dry-run status after decision' }),
               )
             }
-            const tests = rawResult.tests.map((test) => {
+            const tests = rawResult.tests.map((test): TestResult => {
               if (test.fileName !== undefined) {
-                return { ...test, fileName: prevDone.sandbox.originalFileFor(test.fileName) }
+                return {
+                  ...test,
+                  fileName: Result.getOrThrow(
+                    S.decodeResult(FileName)(
+                      prevDone.sandbox.originalFileFor(test.fileName),
+                    ),
+                  ),
+                }
               }
               return test
             })

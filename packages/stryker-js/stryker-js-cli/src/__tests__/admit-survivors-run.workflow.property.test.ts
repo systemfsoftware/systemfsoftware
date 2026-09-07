@@ -1,7 +1,7 @@
 import { sha256 } from '@noble/hashes/sha256'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils'
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import { schema } from '@systemfsoftware/stryker-js/Mutant'
+import { type Mutant, schema } from '@systemfsoftware/stryker-js/Mutant'
 import * as Equivalence from 'effect/Equivalence'
 import * as Exit from 'effect/Exit'
 import * as Result from 'effect/Result'
@@ -115,6 +115,13 @@ const survivorsProducedReportArb = reportArb(
   cleanConfigArb.map((config) => ({ ...config, survivorsPriorReport: 'reports/prior.json' })),
 )
 
+// Test-only unwrap: fixtures are valid by construction, so a decode failure is a failing fixture (no-sync-schema-codecs test exception).
+const mustExtractSurvivors = (report: schema.MutationTestResult, resolvePath: (file: string) => string): Mutant[] => {
+  const decoded = extractSurvivors(report, resolvePath)
+  if (Result.isFailure(decoded)) throw decoded.failure
+  return decoded.success
+}
+
 /**
  * The fields of a command whose prior and current sides agree, as plain data. The report
  * the arbitraries build is the shape the codec accepts, so it stands in for a decoded
@@ -143,7 +150,7 @@ const matchingFields = (report: schema.MutationTestResult) => ({
     ]),
   ),
   priorSourceHashes: priorSourceHashes(report, sha256Hex),
-  priorSurvivors: extractSurvivors(report, absPath),
+  priorSurvivors: mustExtractSurvivors(report, absPath),
 })
 
 const matchingCommand = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand =>
@@ -258,11 +265,22 @@ describe('admitSurvivorsRun', () => {
       if (!S.is(Admitted)(admission.success)) {
         return false
       }
-      const expected = extractSurvivors(report, absPath)
-      return expected.length > 0 &&
+      const expectedSurvivors = Object.entries(report.files).flatMap(([file, fileResult]) =>
+        fileResult.mutants.filter((mutant) => mutant.status === 'Survived').map((mutant) => ({
+          id: mutant.id,
+          fileName: `/work/${file}`,
+          mutatorName: mutant.mutatorName,
+          replacement: mutant.replacement ?? mutant.mutatorName,
+          location: {
+            start: { line: mutant.location.start.line - 1, column: mutant.location.start.column - 1 },
+            end: { line: mutant.location.end.line - 1, column: mutant.location.end.column - 1 },
+          },
+        }))
+      )
+      return expectedSurvivors.length > 0 &&
         stringArrayEquivalence(
           admission.success.survivors.map(fingerprint),
-          expected.map(fingerprint),
+          expectedSurvivors.map(fingerprint),
         )
     },
   )
@@ -348,7 +366,7 @@ describe('admitSurvivorsRun', () => {
       Exit.isSuccess(
         S.decodeExit(SurvivorsAdmission)({
           _tag: 'Admitted',
-          survivors: extractSurvivors(report, absPath),
+          survivors: mustExtractSurvivors(report, absPath),
         }),
       ),
   )
@@ -394,14 +412,14 @@ describe('sourceContentHash', () => {
   it.prop(
     '∀c_Content_≡Deterministic',
     [fc.string({ maxLength: 16 })],
-    ([content]) => sourceContentHash(content, sha256Hex) === sourceContentHash(content, sha256Hex),
+    ([content]) => sourceContentHash(content, sha256Hex) === sha256Hex(content),
   )
 
   it.prop(
     '∀a,b_Content_≠Distinct',
-    [fc.string({ maxLength: 16 }), fc.string({ maxLength: 16 })],
-    ([a, b]) => {
-      fc.pre(a !== b)
+    [fc.uniqueArray(fc.string({ maxLength: 16 }), { minLength: 2, maxLength: 2 })],
+    ([pair]) => {
+      const [a = '', b = ''] = pair
       return sourceContentHash(a, sha256Hex) !== sourceContentHash(b, sha256Hex)
     },
   )

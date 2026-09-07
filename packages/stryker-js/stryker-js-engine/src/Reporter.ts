@@ -1,5 +1,6 @@
 import { type CheckResult, type CheckStatus, type PassedCheckResult } from '@systemfsoftware/stryker-js/Checker'
 import type {
+  FileName,
   Location,
   MutantResult,
   MutantStatus,
@@ -1599,7 +1600,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       const uniqueTestFileNames = [...MutableHashMap.values(input.testCoverage.testsById)]
         .map(({ fileName }) => fileName)
         .filter((value, index, array) => array.indexOf(value) === index)
-        .filter((value): value is string => value !== undefined)
+        .filter((value): value is FileName => value !== undefined)
       const mapped = uniqueTestFileNames.map((fileName) =>
         normalizeReportFileName(input.basePath, fileName, pathService)
       )

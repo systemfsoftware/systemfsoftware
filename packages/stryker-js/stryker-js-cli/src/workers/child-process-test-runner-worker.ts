@@ -1,6 +1,8 @@
 import { NodeFileSystem, NodePath, NodeSocketServer } from '@effect/platform-node'
 import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
+import type { ContributionOf } from '@systemfsoftware/stryker-js/Plugin'
 import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
+import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import type {
   DryRunOptions,
   DryRunResult,
@@ -26,6 +28,26 @@ import {
 } from '@systemfsoftware/stryker-js-engine/worker'
 import { nodeModuleLayer } from '../platform/node.js'
 import { launchWorker, workerSocketPath } from './worker-runtime.js'
+
+const buildTestRunner = (
+  contribution: ContributionOf<'TestRunner'>,
+  options: StrykerOptions,
+): Effect.Effect<TestRunner['Service'], unknown, never> =>
+  TestRunner.pipe(
+    Effect.provide(
+      contribution.layer.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.succeed(RunConfiguration, options),
+            Layer.succeed(SandboxDirectory, process.cwd()),
+            NodeFileSystem.layer,
+            NodePath.layer,
+            nodeModuleLayer,
+          ),
+        ),
+      ),
+    ),
+  )
 
 const withCoverage = (
   result: DryRunResult,
@@ -73,10 +95,7 @@ const TestRunnerHandlers = TestRunnerRpcs.toLayer(
       Effect.catchCause(failed('connect')),
     )
     const underlying = yield* create(loaded.pluginsByKind, 'TestRunner', runnerName).pipe(
-      Effect.flatMap((contribution) => TestRunner.pipe(Effect.provide(contribution.layer))),
-      Effect.provide(
-        Layer.merge(Layer.succeed(RunConfiguration, options), Layer.succeed(SandboxDirectory, process.cwd())),
-      ),
+      Effect.flatMap((contribution) => buildTestRunner(contribution, options)),
       Effect.catchCause(failed('connect')),
     )
 
@@ -96,7 +115,7 @@ const TestRunnerHandlers = TestRunnerRpcs.toLayer(
         ),
     }
   }),
-).pipe(Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)))
+).pipe(Layer.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer, nodeModuleLayer)))
 
 const MainLayer = RpcServer.layer(TestRunnerRpcs).pipe(
   Layer.provide(TestRunnerHandlers),

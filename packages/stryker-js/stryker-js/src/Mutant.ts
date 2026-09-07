@@ -3,7 +3,7 @@ import type { MutantRunOptions } from './TestRunner.js'
 import { Mutant } from './Mutant.schema.js'
 import type { Position } from './Mutant.schema.js'
 
-export { LocationSchema, Mutant, PositionSchema } from './Mutant.schema.js'
+export { FileName, LocationSchema, Mutant, MutantId, MutatorName, PositionSchema } from './Mutant.schema.js'
 export type { Location, Position } from './Mutant.schema.js'
 
 export type CoverageData = Record<string, number>

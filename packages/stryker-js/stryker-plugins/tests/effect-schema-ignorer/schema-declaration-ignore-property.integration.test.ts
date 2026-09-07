@@ -1,15 +1,16 @@
+import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
+import * as NodePath from '@effect/platform-node-shared/NodePath'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Ignorer, type NodePath as StrykerNodePath } from '@systemfsoftware/stryker-js/Ignorer'
+import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
+import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
+import { strykerPlugins } from '@systemfsoftware/stryker-plugins/effect-schema-ignorer'
 import { Effect } from 'effect'
+import * as Context from 'effect/Context'
+import * as Layer from 'effect/Layer'
+import * as Option from 'effect/Option'
+import * as Schema from 'effect/Schema'
 import { expect } from 'vitest'
-
-import {
-  ANNOTATION_OBJECT_IGNORED,
-  ANNOTATION_TEXT_IGNORED,
-  decideSchemaDeclarationIgnore,
-  SYMBOL_DESCRIPTION_IGNORED,
-  TAGGED_FIELDS_IGNORED,
-  TAGGED_TAG_IGNORED,
-} from '@systemfsoftware/stryker-plugins/effect-schema-ignorer'
 
 import {
   annotationsCall,
@@ -24,8 +25,63 @@ import {
   symbolForCall,
   taggedCall,
 } from '../__fixtures__/EffectSchemaAst.fixtures.js'
+import { nodeModuleTestLayer } from '../__fixtures__/NodePlatform.fixtures.js'
 
 const Feature = makeFeature({ it, layer })
+
+const stubPath = (node: unknown, parent?: StrykerNodePath | null): StrykerNodePath => {
+  const base = {
+    node,
+    isObjectExpression: () => false,
+    isCallExpression: () => false,
+    isClassProperty: () => false,
+    isClassPrivateProperty: () => false,
+    isClassAccessorProperty: () => false,
+  }
+  if (parent === undefined) {
+    return base
+  }
+  return { ...base, parentPath: parent }
+}
+
+const pathOf = (node: unknown, ancestors: readonly unknown[]): StrykerNodePath => {
+  let parent: StrykerNodePath | null | undefined = undefined
+  for (let index = ancestors.length - 1; index >= 0; index--) {
+    parent = stubPath(ancestors[index], parent ?? undefined)
+  }
+  return stubPath(node, parent ?? undefined)
+}
+
+const ignorerLive = Effect.gen(function*() {
+  const plugin = strykerPlugins[0]
+  if (plugin === undefined) {
+    return yield* Effect.die(new Error('effect-schema-declarations plugin missing'))
+  }
+  const options = Schema.decodeUnknownSync(StrykerOptionsSchema)({})
+  const env = Layer.mergeAll(
+    Layer.succeed(RunConfiguration, options),
+    Layer.succeed(SandboxDirectory, '/tmp'),
+    NodeFileSystem.layer,
+    NodePath.layer,
+    nodeModuleTestLayer,
+  )
+  const context = yield* Layer.build(plugin.layer.pipe(Layer.provide(env)))
+  return Context.get(context, Ignorer)
+})
+
+const ignoredBy = (node: unknown, ancestors: readonly unknown[]) =>
+  Effect.gen(function*() {
+    const ignorer = yield* ignorerLive
+    return ignorer.shouldIgnore(pathOf(node, ancestors))
+  })
+
+const expectIgnored = (result: Option.Option<string>): void => {
+  expect(Option.isSome(result)).toBe(true)
+}
+
+const expectLive = (result: Option.Option<string>): void => {
+  expect(Option.isNone(result)).toBe(true)
+}
 
 Feature('Effect Schema declarations — invariant coverage as named examples')
   .body(({ scenario }) => {
@@ -38,13 +94,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = symbolForCall(description)
             return { description, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the description argument')(
+        When('the schema ignorer examines the description argument through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.description, s.node.call)),
+          (s) => ignoredBy(s.node.description, [s.node.call]),
         ),
-        Then('it returns SYMBOL_DESCRIPTION_IGNORED')((s) =>
+        Then('it is ignored as identity-only data')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBe(SYMBOL_DESCRIPTION_IGNORED)
+            expectIgnored(s.reason)
           })
         ),
       ),
@@ -60,13 +116,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = taggedCall('TaggedClass', tag, fields)
             return { tag, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the tag argument')(
+        When('the schema ignorer examines the tag argument through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.tag, s.node.call)),
+          (s) => ignoredBy(s.node.tag, [s.node.call]),
         ),
-        Then('it returns TAGGED_TAG_IGNORED')((s) =>
+        Then('it is ignored as a declaration discriminant')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBe(TAGGED_TAG_IGNORED)
+            expectIgnored(s.reason)
           })
         ),
       ),
@@ -82,13 +138,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = taggedCall('TaggedError', tag, fields)
             return { tag, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the tag argument')(
+        When('the schema ignorer examines the tag argument through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.tag, s.node.call)),
+          (s) => ignoredBy(s.node.tag, [s.node.call]),
         ),
-        Then('it returns TAGGED_TAG_IGNORED')((s) =>
+        Then('it is ignored as a declaration discriminant')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBe(TAGGED_TAG_IGNORED)
+            expectIgnored(s.reason)
           })
         ),
       ),
@@ -104,13 +160,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = taggedCall('TaggedClass', tag, fields)
             return { fields, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the fields argument')(
+        When('the schema ignorer examines the fields argument through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.fields, s.node.call)),
+          (s) => ignoredBy(s.node.fields, [s.node.call]),
         ),
-        Then('it returns TAGGED_FIELDS_IGNORED')((s) =>
+        Then('it is ignored as a declaration')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBe(TAGGED_FIELDS_IGNORED)
+            expectIgnored(s.reason)
           })
         ),
       ),
@@ -126,13 +182,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = taggedCall('TaggedError', tag, fields)
             return { fields, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the fields argument')(
+        When('the schema ignorer examines the fields argument through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.fields, s.node.call)),
+          (s) => ignoredBy(s.node.fields, [s.node.call]),
         ),
-        Then('it returns TAGGED_FIELDS_IGNORED')((s) =>
+        Then('it is ignored as a declaration')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBe(TAGGED_FIELDS_IGNORED)
+            expectIgnored(s.reason)
           })
         ),
       ),
@@ -147,13 +203,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = callOf(memberOf('Symbol', 'iterator'), [description])
             return { description, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the description argument')(
+        When('the schema ignorer examines the description argument through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.description, s.node.call)),
+          (s) => ignoredBy(s.node.description, [s.node.call]),
         ),
-        Then('it returns undefined (member name is not `for`)')((s) =>
+        Then('it stays live (member name is not `for`)')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -169,18 +225,19 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = taggedCall('Struct', tag, fields)
             return { tag, fields, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the tag and fields arguments')(
+        When('the schema ignorer examines the tag and fields arguments through the public layer')(
           'results',
           (s) =>
-            Effect.sync(() => ({
-              tag: decideSchemaDeclarationIgnore(s.node.tag, s.node.call),
-              fields: decideSchemaDeclarationIgnore(s.node.fields, s.node.call),
-            })),
+            Effect.gen(function*() {
+              const tag = yield* ignoredBy(s.node.tag, [s.node.call])
+              const fields = yield* ignoredBy(s.node.fields, [s.node.call])
+              return { tag, fields }
+            }),
         ),
-        Then('both return undefined')((s) =>
+        Then('both stay live')((s) =>
           Effect.sync(() => {
-            expect(s.results.tag).toBeUndefined()
-            expect(s.results.fields).toBeUndefined()
+            expectLive(s.results.tag)
+            expectLive(s.results.fields)
           })
         ),
       ),
@@ -196,13 +253,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = taggedCall('TaggedClass', fields, tag)
             return { fields, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the first argument')(
+        When('the schema ignorer examines the first argument through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.fields, s.node.call)),
+          (s) => ignoredBy(s.node.fields, [s.node.call]),
         ),
-        Then('it returns undefined (the object expression is at the tag slot, not fields)')((s) =>
+        Then('it stays live (the object expression is at the tag slot, not fields)')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -220,13 +277,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
               return { node, call }
             }),
         ),
-        When('decideSchemaDeclarationIgnore examines the argument')(
+        When('the schema ignorer examines the argument through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.node, s.node.call)),
+          (s) => ignoredBy(s.node.node, [s.node.call]),
         ),
-        Then('it returns undefined (not a string literal)')((s) =>
+        Then('it stays live (not a string literal)')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -245,13 +302,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
               return { description, call }
             }),
         ),
-        When('decideSchemaDeclarationIgnore examines the description string')(
+        When('the schema ignorer examines the description string through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.description, s.node.call)),
+          (s) => ignoredBy(s.node.description, [s.node.call]),
         ),
-        Then('it returns undefined (this string is not the Symbol.for argument)')((s) =>
+        Then('it stays live (this string is not the Symbol.for argument)')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -266,13 +323,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = callOf(memberOf('Match', 'tag'), [tag])
             return { tag, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the tag argument')(
+        When('the schema ignorer examines the tag argument through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.tag, s.node.call)),
+          (s) => ignoredBy(s.node.tag, [s.node.call]),
         ),
-        Then('it returns undefined (Match.tag is a runtime discriminator, not a declaration)')((s) =>
+        Then('it stays live (Match.tag is a runtime discriminator, not a declaration)')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -286,13 +343,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const node = identifier('x')
             return { node }
           })),
-        When('decideSchemaDeclarationIgnore runs with parent=undefined')(
+        When('the schema ignorer examines the orphan through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.node, undefined)),
+          (s) => ignoredBy(s.node.node, []),
         ),
-        Then('it returns undefined (no parent context means no decision)')((s) =>
+        Then('it stays live (no parent context means no decision)')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -307,16 +364,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const parent = symbolForCall(node)
             return { node, parent }
           })),
-        When('decideSchemaDeclarationIgnore examines the description argument')(
+        When('the schema ignorer examines the description argument through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.node, s.node.parent)),
+          (s) => ignoredBy(s.node.node, [s.node.parent]),
         ),
-        Then('it returns SYMBOL_DESCRIPTION_IGNORED or undefined — never an arbitrary new reason')((s) =>
+        Then('it is ignored — never an arbitrary new reason')((s) =>
           Effect.sync(() => {
-            expect(
-              s.reason === undefined || s.reason === SYMBOL_DESCRIPTION_IGNORED ||
-                s.reason === TAGGED_TAG_IGNORED || s.reason === TAGGED_FIELDS_IGNORED,
-            ).toBe(true)
+            expectIgnored(s.reason)
           })
         ),
       ),
@@ -333,17 +387,22 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = annotationsCall(object)
             return { object, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the object and the value')('reasons', (s) =>
-          Effect.sync(() => {
-            const objectReason = decideSchemaDeclarationIgnore(s.node.object, s.node.call)
-            const value = s.node.object.properties[0]
-            const valueReason = decideSchemaDeclarationIgnore(value?.value, value, s.node.object, s.node.call)
-            return { objectReason, valueReason }
-          })),
+        When('the schema ignorer examines the object and the value through the public layer')(
+          'reasons',
+          (s) =>
+            Effect.gen(function*() {
+              const objectReason = yield* ignoredBy(s.node.object, [s.node.call])
+              const first = s.node.object.properties[0]
+              const valueReason = first === undefined
+                ? Option.none<string>()
+                : yield* ignoredBy(first.value, [first, s.node.object, s.node.call])
+              return { objectReason, valueReason }
+            }),
+        ),
         Then('the object is ignored and the value is ignored')((s) =>
           Effect.sync(() => {
-            expect(s.reasons.objectReason).toBe(ANNOTATION_OBJECT_IGNORED)
-            expect(s.reasons.valueReason).toBe(ANNOTATION_TEXT_IGNORED)
+            expectIgnored(s.reasons.objectReason)
+            expectIgnored(s.reasons.valueReason)
           })
         ),
       ),
@@ -360,13 +419,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = annotationsCall(object)
             return { object, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the object')(
+        When('the schema ignorer examines the object through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.object, s.node.call)),
+          (s) => ignoredBy(s.node.object, [s.node.call]),
         ),
-        Then('it returns ANNOTATION_OBJECT_IGNORED')((s) =>
+        Then('it is ignored as documentation')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBe(ANNOTATION_OBJECT_IGNORED)
+            expectIgnored(s.reason)
           })
         ),
       ),
@@ -384,24 +443,22 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = annotationsCall(object)
             return { object, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the object and the description value')(
+        When('the schema ignorer examines the object and the description value through the public layer')(
           'reasons',
-          (s) => {
-            const objectReason = decideSchemaDeclarationIgnore(s.node.object, s.node.call)
-            const descriptionProperty = s.node.object.properties[0]
-            const valueReason = decideSchemaDeclarationIgnore(
-              descriptionProperty?.value,
-              descriptionProperty,
-              s.node.object,
-              s.node.call,
-            )
-            return Effect.sync(() => ({ objectReason, valueReason }))
-          },
+          (s) =>
+            Effect.gen(function*() {
+              const objectReason = yield* ignoredBy(s.node.object, [s.node.call])
+              const first = s.node.object.properties[0]
+              const valueReason = first === undefined
+                ? Option.none<string>()
+                : yield* ignoredBy(first.value, [first, s.node.object, s.node.call])
+              return { objectReason, valueReason }
+            }),
         ),
-        Then('the object is NOT ignored but the documentation value is ignored')((s) =>
+        Then('the object stays live but the documentation value is ignored')((s) =>
           Effect.sync(() => {
-            expect(s.reasons.objectReason).toBeUndefined()
-            expect(s.reasons.valueReason).toBe(ANNOTATION_TEXT_IGNORED)
+            expectLive(s.reasons.objectReason)
+            expectIgnored(s.reasons.valueReason)
           })
         ),
       ),
@@ -418,14 +475,17 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = annotationsCall(object)
             return { object, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the value')('reason', (s) =>
-          Effect.sync(() => {
-            const property = s.node.object.properties[0]
-            return decideSchemaDeclarationIgnore(property?.value, property, s.node.object, s.node.call)
+        When('the schema ignorer examines the value through the public layer')('reason', (s) =>
+          Effect.gen(function*() {
+            const first = s.node.object.properties[0]
+            if (first === undefined) {
+              return Option.none<string>()
+            }
+            return yield* ignoredBy(first.value, [first, s.node.object, s.node.call])
           })),
-        Then('it returns undefined (behaviour values are never ignored)')((s) =>
+        Then('it stays live (behaviour values are never ignored)')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -442,13 +502,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = annotationsCall(object)
             return { object, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the object')(
+        When('the schema ignorer examines the object through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.object, s.node.call)),
+          (s) => ignoredBy(s.node.object, [s.node.call]),
         ),
-        Then('it returns undefined (the object holds behaviour, not documentation)')((s) =>
+        Then('it stays live (the object holds behaviour, not documentation)')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -465,17 +525,22 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = annotationsCall(object)
             return { object, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the object and the value')('reasons', (s) =>
-          Effect.sync(() => {
-            const objectReason = decideSchemaDeclarationIgnore(s.node.object, s.node.call)
-            const property = s.node.object.properties[0]
-            const valueReason = decideSchemaDeclarationIgnore(property?.value, property, s.node.object, s.node.call)
-            return { objectReason, valueReason }
-          })),
+        When('the schema ignorer examines the object and the value through the public layer')(
+          'reasons',
+          (s) =>
+            Effect.gen(function*() {
+              const objectReason = yield* ignoredBy(s.node.object, [s.node.call])
+              const first = s.node.object.properties[0]
+              const valueReason = first === undefined
+                ? Option.none<string>()
+                : yield* ignoredBy(first.value, [first, s.node.object, s.node.call])
+              return { objectReason, valueReason }
+            }),
+        ),
         Then('neither the object nor the value is ignored (the documentation key is not a string literal)')((s) =>
           Effect.sync(() => {
-            expect(s.reasons.objectReason).toBeUndefined()
-            expect(s.reasons.valueReason).toBeUndefined()
+            expectLive(s.reasons.objectReason)
+            expectLive(s.reasons.valueReason)
           })
         ),
       ),
@@ -492,37 +557,13 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
             const call = callOf(memberOf('S', 'filter'), [object])
             return { object, call }
           })),
-        When('decideSchemaDeclarationIgnore examines the argument')(
+        When('the schema ignorer examines the argument through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideSchemaDeclarationIgnore(s.node.object, s.node.call)),
+          (s) => ignoredBy(s.node.object, [s.node.call]),
         ),
-        Then('it returns undefined (the callee is `S.filter`, not `S.annotations`)')((s) =>
+        Then('it stays live (the callee is `S.filter`, not `S.annotations`)')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
-          })
-        ),
-      ),
-    )
-
-    scenario(
-      'A property key itself in a non-annotations position is not ignored',
-      Gherkin.Do.pipe(
-        Given('`S.annotations({ identifier: "HexBytes" })` — examining the key node')('node', () =>
-          Effect.sync(() => {
-            const object = objectOf([
-              namedProperty('identifier', stringLiteral('HexBytes')),
-            ])
-            const call = annotationsCall(object)
-            return { object, call }
-          })),
-        When('decideSchemaDeclarationIgnore examines the property key')('reason', (s) =>
-          Effect.sync(() => {
-            const property = s.node.object.properties[0]
-            return decideSchemaDeclarationIgnore(property?.key, property, s.node.object, s.node.call)
-          })),
-        Then('it returns undefined (the key slot is not the documentation value slot)')((s) =>
-          Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -542,14 +583,17 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
               return { object, call }
             }),
         ),
-        When('decideSchemaDeclarationIgnore examines the value')('reason', (s) =>
-          Effect.sync(() => {
-            const property = s.node.object.properties[0]
-            return decideSchemaDeclarationIgnore(property?.value, property, s.node.object, s.node.call)
+        When('the schema ignorer examines the value through the public layer')('reason', (s) =>
+          Effect.gen(function*() {
+            const first = s.node.object.properties[0]
+            if (first === undefined) {
+              return Option.none<string>()
+            }
+            return yield* ignoredBy(first.value, [first, s.node.object, s.node.call])
           })),
-        Then('it returns undefined (no annotations call owns the slot)')((s) =>
+        Then('it stays live (no annotations call owns the slot)')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -568,17 +612,20 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
               return { object }
             }),
         ),
-        When('decideSchemaDeclarationIgnore examines the value with ancestor=undefined')(
+        When('the schema ignorer examines the value with a chain ending at the object through the public layer')(
           'reason',
           (s) =>
-            Effect.sync(() => {
-              const property = s.node.object.properties[0]
-              return decideSchemaDeclarationIgnore(property?.value, property, s.node.object, undefined)
+            Effect.gen(function*() {
+              const first = s.node.object.properties[0]
+              if (first === undefined) {
+                return Option.none<string>()
+              }
+              return yield* ignoredBy(first.value, [first, s.node.object])
             }),
         ),
-        Then('it returns undefined (no call expression in scope means no annotations rule applies)')((s) =>
+        Then('it stays live (no call expression in scope means no annotations rule applies)')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -599,14 +646,50 @@ Feature('Effect Schema declarations — invariant coverage as named examples')
               return { object, call }
             }),
         ),
-        When('decideSchemaDeclarationIgnore examines the value at index 1')('reason', (s) =>
+        When('the schema ignorer examines the value at index 1 through the public layer')(
+          'reason',
+          (s) =>
+            Effect.gen(function*() {
+              const first = s.node.object.properties[0]
+              if (first === undefined) {
+                return Option.none<string>()
+              }
+              return yield* ignoredBy(first.value, [first, s.node.object, s.node.call])
+            }),
+        ),
+        Then('it stays live (the annotations rule only fires at argument index 0)')((s) =>
           Effect.sync(() => {
-            const property = s.node.object.properties[0]
-            return decideSchemaDeclarationIgnore(property?.value, property, s.node.object, s.node.call)
+            expectLive(s.reason)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A property key is ignored through the ancestor walk when its annotations object holds only documentation',
+      Gherkin.Do.pipe(
+        Given('an annotations call holding only documentation')('node', () =>
+          Effect.sync(() => {
+            const object = objectOf([
+              namedProperty('identifier', stringLiteral('HexBytes')),
+            ])
+            const call = annotationsCall(object)
+            return { object, call }
           })),
-        Then('it returns undefined (the annotations rule only fires at argument index 0)')((s) =>
+        When('the schema ignorer examines the property key through the public layer')(
+          'reason',
+          (s) =>
+            Effect.gen(function*() {
+              const first = s.node.object.properties[0]
+              if (first === undefined) {
+                return Option.none<string>()
+              }
+              return yield* ignoredBy(first.key, [first, s.node.object, s.node.call])
+            }),
+        ),
+        Then('it is ignored because the ancestor walk reaches the documentation object')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectIgnored(s.reason)
           })
         ),
       ),

@@ -7,7 +7,24 @@ import type { PluginContribution } from '@systemfsoftware/stryker-js/Plugin'
 import { Schema as S } from 'effect'
 import * as SSchema from 'effect/Schema'
 
-const isPluginContribution = (_value: unknown): _value is PluginContribution<PluginKind> => true
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && Array.isArray(value) === false
+
+const isPluginContribution = (value: unknown): value is PluginContribution<PluginKind> => {
+  if (!isRecord(value)) {
+    return false
+  }
+  if (typeof value['name'] !== 'string') {
+    return false
+  }
+  if (typeof value['kind'] !== 'string' || SSchema.is(PluginKind)(value['kind']) === false) {
+    return false
+  }
+  if (!('layer' in value)) {
+    return false
+  }
+  return true
+}
 const PluginContributionSchema = SSchema.Unknown.pipe(SSchema.refine(isPluginContribution))
 
 export class PluginLoaderEntry extends SSchema.Class<PluginLoaderEntry>('PluginLoaderEntry')({

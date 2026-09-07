@@ -7,37 +7,7 @@
 import { PluginContribution } from '@systemfsoftware/stryker-js/Plugin';
 
 // @public (undocumented)
-export const ANNOTATION_OBJECT_IGNORED: 'annotations object holding only documentation is a declaration, not behaviour';
-
-// @public (undocumented)
-export const ANNOTATION_TEXT_IGNORED: 'annotation documentation value is declaration data, not behaviour';
-
-// @public (undocumented)
-export const BRAND_NAME_IGNORED: 'Schema.brand name is identity-only data, not behaviour';
-
-// @public (undocumented)
-export const CLASS_FIELDS_IGNORED: 'Schema.Class field schema is a declaration, not behaviour';
-
-// @public (undocumented)
-export const CLASS_ID_IGNORED: 'Schema.Class identifier is a declaration name, not behaviour';
-
-// @public (undocumented)
-export const decideSchemaDeclarationIgnore: (node: unknown, parent: unknown, grandparent?: unknown, ancestor?: unknown) => string | undefined;
-
-// @public (undocumented)
-export const OPTIONAL_DEFAULT_IGNORED: 'optionalWith default value is config, not behaviour';
-
-// @public (undocumented)
 export const strykerPlugins: PluginContribution<"Ignore">[];
-
-// @public (undocumented)
-export const SYMBOL_DESCRIPTION_IGNORED: 'Symbol.for() brand description is identity-only data, not behaviour';
-
-// @public (undocumented)
-export const TAGGED_FIELDS_IGNORED: 'TaggedClass/TaggedError field schema is a declaration, not behaviour';
-
-// @public (undocumented)
-export const TAGGED_TAG_IGNORED: 'TaggedClass/TaggedError _tag is a declaration discriminant, not behaviour';
 
 // (No @packageDocumentation comment for this package)
 

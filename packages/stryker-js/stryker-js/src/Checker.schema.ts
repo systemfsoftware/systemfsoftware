@@ -1,4 +1,5 @@
 import * as S from 'effect/Schema'
+import { MutantId } from './Mutant.schema.js'
 
 export const CheckStatus = S.Literals(['passed', 'compileError'])
 export type CheckStatus = typeof CheckStatus.Type
@@ -11,5 +12,5 @@ export const CheckResultSchema = S.Union([
 export class CheckerFailed extends S.TaggedError<CheckerFailed>()('CheckerFailed', {
   cause: S.String,
   checkerName: S.String,
-  mutantIds: S.Array(S.String),
+  mutantIds: S.Array(MutantId),
 }) {}

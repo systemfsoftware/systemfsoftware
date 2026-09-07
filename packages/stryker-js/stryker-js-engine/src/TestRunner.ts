@@ -12,6 +12,7 @@ import * as Layer from 'effect/Layer'
 import type { Policy } from '@systemfsoftware/effect-cell-types'
 import { errorToString, type FileDescriptions, INSTRUMENTER_CONSTANTS } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import { TestId } from '@systemfsoftware/stryker-js/TestRunner'
 import {
   type CompleteDryRunResult,
   type DryRunOptions,
@@ -23,12 +24,14 @@ import {
   TestRunnerFailed,
   toMutantRunResult,
 } from '@systemfsoftware/stryker-js/TestRunner'
+import { Schema as S } from 'effect'
 import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Match from 'effect/Match'
 import * as Ref from 'effect/Ref'
+import * as Result from 'effect/Result'
 import type * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import * as ChildProcess from 'effect/unstable/process/ChildProcess'
@@ -384,6 +387,8 @@ export const commandRunnerRejects = (
 export const commandRunnerCapabilities = { reloadEnvironment: true } as const
 
 /** One test result standing for the whole command, decided by its exit code. */
+const allTestsId: TestId = Result.getOrThrow(S.decodeResult(TestId)('all'))
+
 const resultFromExit = (
   exitCode: number,
   output: string,
@@ -392,13 +397,13 @@ const resultFromExit = (
   if (exitCode === 0) {
     return {
       status: 'complete',
-      tests: [{ id: 'all', name: 'All tests', status: 'success', timeSpentMs }],
+      tests: [{ id: allTestsId, name: 'All tests', status: 'success', timeSpentMs }],
     }
   }
   return {
     status: 'complete',
     tests: [{
-      id: 'all',
+      id: allTestsId,
       name: 'All tests',
       status: 'failed',
       failureMessage: output,

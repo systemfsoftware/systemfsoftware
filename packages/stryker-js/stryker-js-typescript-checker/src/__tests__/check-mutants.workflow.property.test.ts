@@ -1,5 +1,5 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import { FileName, Mutant, MutantId, MutatorName } from '@systemfsoftware/stryker-js/Mutant'
 import { Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
@@ -30,11 +30,12 @@ const isDisjoint = (left: ReadonlySet<string>, right: ReadonlySet<string>): bool
 
 const fileArb = fc.integer({ min: 0, max: 100000 }).map((n) => `src/mod-${n}.ts`)
 
+// decodeSync: test helper building a valid fixture — throwing IS the assertion (no-sync-schema-codecs test exception).
 const mutantInFile = (id: string, fileName: string): Mutant =>
   new Mutant({
-    id,
-    fileName,
-    mutatorName: 'foo-mutator',
+    id: S.decodeSync(MutantId)(id),
+    fileName: S.decodeSync(FileName)(fileName),
+    mutatorName: S.decodeSync(MutatorName)('foo-mutator'),
     replacement: 'x',
     location: { start: { line: 1, column: 1 }, end: { line: 1, column: 2 } },
   })

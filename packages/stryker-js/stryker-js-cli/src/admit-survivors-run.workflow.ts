@@ -1,22 +1,9 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import { MutantStatus } from '@systemfsoftware/stryker-js/Run'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-
-/**
- * The mutant shape the admission carries, named once because both the decision's
- * `Admitted` payload and the command's precomputed survivor list are the same shape.
- */
-const MutantShape = S.Struct({
-  id: S.String,
-  fileName: S.String,
-  mutatorName: S.String,
-  replacement: S.String,
-  location: S.Struct({
-    start: S.Struct({ line: S.Finite, column: S.Finite }),
-    end: S.Struct({ line: S.Finite, column: S.Finite }),
-  }),
-})
 
 export const PriorReportDocument = S.Struct({
   config: S.optional(S.Record(S.String, S.Unknown)),
@@ -29,7 +16,7 @@ export const PriorReportDocument = S.Struct({
         id: S.String,
         mutatorName: S.String,
         replacement: S.optional(S.String),
-        status: S.String,
+        status: MutantStatus,
         location: S.Struct({
           start: S.Struct({ line: S.Finite, column: S.Finite }),
           end: S.Struct({ line: S.Finite, column: S.Finite }),
@@ -162,7 +149,7 @@ export class AdmitSurvivorsRunCommand extends S.Class<AdmitSurvivorsRunCommand>(
   /** The same hashes for the sources the prior report embeds, computed at the edge. */
   priorSourceHashes: S.Record(S.String, S.String),
   /** The prior report's survivors, already converted to the internal mutant shape. */
-  priorSurvivors: S.Array(MutantShape),
+  priorSurvivors: S.Array(Mutant),
 }) {}
 
 const NO_REPORT_DETAIL = 'No prior mutation report found — a --survivors run needs the report of a previous run.'
@@ -195,7 +182,7 @@ const SurvivorsAdmissionTypeId: unique symbol = Symbol.for('@systemfsoftware/str
 type SurvivorsAdmissionTypeId = typeof SurvivorsAdmissionTypeId
 
 export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {
-  survivors: S.Array(MutantShape),
+  survivors: S.Array(Mutant),
 }) {
   readonly [SurvivorsAdmissionTypeId] = SurvivorsAdmissionTypeId
 }

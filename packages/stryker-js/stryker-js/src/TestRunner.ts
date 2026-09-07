@@ -1,9 +1,24 @@
 import * as Context from 'effect/Context'
 import type * as Effect from 'effect/Effect'
+import * as Match from 'effect/Match'
+import type * as S from 'effect/Schema'
 
-import type { Mutant } from './Mutant.js'
+import type { PositionSchema } from './Mutant.schema.js'
 import type { TestRunnerFailed } from './TestRunner.schema.js'
+import {
+  CoverageAnalysisSchema,
+  DryRunOptionsSchema,
+  DryRunResultSchema,
+  MutantActivationSchema,
+  MutantRunOptionsSchema,
+  MutantRunResultSchema,
+  TestResultSchema,
+  TestRunnerCapabilitiesSchema,
+} from './TestRunner.schema.js'
 
+export type CoverageAnalysis = S.Schema.Type<typeof CoverageAnalysisSchema>
+
+export { TestId } from './Mutant.schema.js'
 export {
   CoverageAnalysisSchema,
   DryRunOptionsSchema,
@@ -19,113 +34,42 @@ export {
   TestRunnerFailed,
   TestStatus,
 } from './TestRunner.schema.js'
+export type TestResult = S.Schema.Type<typeof TestResultSchema>
 
-export interface Position {
-  readonly line: number
-  readonly column: number
+export type DryRunResult = S.Schema.Type<typeof DryRunResultSchema>
+
+export type MutantRunResult = S.Schema.Type<typeof MutantRunResultSchema>
+
+export type DryRunOptions = S.Schema.Type<typeof DryRunOptionsSchema>
+
+export type MutantActivation = S.Schema.Type<typeof MutantActivationSchema>
+
+export type MutantRunOptions = S.Schema.Type<typeof MutantRunOptionsSchema>
+
+export type TestRunnerCapabilities = S.Schema.Type<typeof TestRunnerCapabilitiesSchema>
+
+/**
+ * Written out concretely: the nested record lazy does not survive the
+ * declaration rollup, so consumers would read `unknown` through
+ * `S.Schema.Type<typeof MutantCoverageSchema>`. Kept adjacent to the schema
+ * it mirrors.
+ */
+export type MutantCoverage = {
+  readonly perTest: { readonly [testId: string]: { readonly [mutantId: string]: number } }
+  readonly static: { readonly [mutantId: string]: number }
 }
 
-export interface BaseTestResult {
-  readonly id: string
-  readonly name: string
-  readonly timeSpentMs: number
-  readonly fileName?: string
-  readonly startPosition?: Position
-}
-
-export interface FailedTestResult extends BaseTestResult {
-  readonly status: 'failed'
-  readonly failureMessage: string
-}
-
-export interface SkippedTestResult extends BaseTestResult {
-  readonly status: 'skipped'
-}
-
-export interface SuccessTestResult extends BaseTestResult {
-  readonly status: 'success'
-}
-
-export type TestResult = FailedTestResult | SkippedTestResult | SuccessTestResult
-
-export interface MutantCoverage {
-  readonly perTest: Record<string, Record<string, number>>
-  readonly static: Record<string, number>
-}
-
-export interface CompleteDryRunResult {
-  readonly tests: readonly TestResult[]
-  readonly mutantCoverage?: MutantCoverage
-  readonly status: 'complete'
-}
-
-export interface TimeoutDryRunResult {
-  readonly status: 'timeout'
-  readonly reason?: string
-}
-
-export interface ErrorDryRunResult {
-  readonly status: 'error'
-  readonly errorMessage: string
-}
-
-export type DryRunResult = CompleteDryRunResult | ErrorDryRunResult | TimeoutDryRunResult
-
-export interface TimeoutMutantRunResult {
-  readonly status: 'timeout'
-  readonly reason?: string
-}
-
-export interface KilledMutantRunResult {
-  readonly status: 'killed'
-  readonly killedBy: readonly string[]
-  readonly failureMessage: string
-  readonly nrOfTests: number
-}
-
-export interface SurvivedMutantRunResult {
-  readonly status: 'survived'
-  readonly nrOfTests: number
-}
-
-export interface ErrorMutantRunResult {
-  readonly status: 'error'
-  readonly errorMessage: string
-}
-
-export type MutantRunResult =
-  | ErrorMutantRunResult
-  | KilledMutantRunResult
-  | SurvivedMutantRunResult
-  | TimeoutMutantRunResult
-
-export type CoverageAnalysis = 'off' | 'all' | 'perTest'
-
-export interface RunOptions {
-  readonly timeout: number
-  readonly disableBail: boolean
-}
-
-export interface DryRunOptions extends RunOptions {
-  readonly coverageAnalysis: CoverageAnalysis
-  readonly files?: readonly string[]
-  readonly testFiles?: readonly string[]
-}
-
-export type MutantActivation = 'runtime' | 'static'
-
-export interface MutantRunOptions extends RunOptions {
-  readonly testFilter?: readonly string[]
-  readonly hitLimit?: number
-  readonly activeMutant: Mutant
-  readonly sandboxFileName: string
-  readonly mutantActivation: MutantActivation
-  readonly reloadEnvironment: boolean
-}
-
-export interface TestRunnerCapabilities {
-  readonly reloadEnvironment: boolean
-}
+export type CompleteDryRunResult = Extract<DryRunResult, { readonly status: 'complete' }>
+export type TimeoutDryRunResult = Extract<DryRunResult, { readonly status: 'timeout' }>
+export type ErrorDryRunResult = Extract<DryRunResult, { readonly status: 'error' }>
+export type FailedTestResult = Extract<TestResult, { readonly status: 'failed' }>
+export type SkippedTestResult = Extract<TestResult, { readonly status: 'skipped' }>
+export type SuccessTestResult = Extract<TestResult, { readonly status: 'success' }>
+export type KilledMutantRunResult = Extract<MutantRunResult, { readonly status: 'killed' }>
+export type SurvivedMutantRunResult = Extract<MutantRunResult, { readonly status: 'survived' }>
+export type TimeoutMutantRunResult = Extract<MutantRunResult, { readonly status: 'timeout' }>
+export type ErrorMutantRunResult = Extract<MutantRunResult, { readonly status: 'error' }>
+export type Position = S.Schema.Type<typeof PositionSchema>
 
 export function toMutantRunResult(
   dryRunResult: DryRunResult,
@@ -142,7 +86,7 @@ export function toMutantRunResult(
       return { errorMessage: dryRunResult.errorMessage, status: 'error' }
     case 'complete': {
       const failed = dryRunResult.tests.filter(
-        (t): t is FailedTestResult => t.status === 'failed',
+        (t): t is Extract<TestResult, { readonly status: 'failed' }> => t.status === 'failed',
       )
       const nrOfTests = dryRunResult.tests.filter((t) => t.status !== 'skipped').length
       if (failed.length === 0) {
@@ -152,12 +96,11 @@ export function toMutantRunResult(
       if (firstFailed === undefined) {
         return { nrOfTests, status: 'survived' }
       }
-      let killedBy: readonly string[]
-      if (reportAllKillers) {
-        killedBy = failed.map((t) => t.id)
-      } else {
-        killedBy = [firstFailed.id]
-      }
+      const killedBy = Match.value(reportAllKillers).pipe(
+        Match.when(true, () => failed.map((t) => t.id)),
+        Match.when(false, () => [firstFailed.id]),
+        Match.exhaustive,
+      )
       return {
         failureMessage: firstFailed.failureMessage,
         killedBy,

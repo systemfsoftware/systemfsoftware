@@ -1,6 +1,6 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { TestResultSchema } from '@systemfsoftware/stryker-js/TestRunner'
-import type { FailedTestResult, TestResult, TestStatus } from '@systemfsoftware/stryker-js/TestRunner'
+import { TestId, TestResultSchema } from '@systemfsoftware/stryker-js/TestRunner'
+import type { TestStatus } from '@systemfsoftware/stryker-js/TestRunner'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
@@ -22,7 +22,7 @@ type VitestMutantRunTypeId = typeof VitestMutantRunTypeId
 
 export class MutantKilled extends S.TaggedClass<MutantKilled>()('Killed', {
   tests: S.Array(TestResultSchema),
-  killerIds: S.optional(S.Array(S.String)),
+  killerIds: S.optional(S.Array(TestId)),
   failureMessage: S.optional(S.String),
 }) {
   readonly [VitestMutantRunTypeId] = VitestMutantRunTypeId
@@ -118,15 +118,29 @@ const normalizeTestId = (id: string, projectRoot: string): string => {
   return `${relative}#${rest}`
 }
 
-const asTestResult = (task: VitestTestTask, projectRoot: string): TestResult => {
+interface VitestTestResult {
+  readonly id: string
+  readonly name: string
+  readonly timeSpentMs: number
+  readonly fileName?: string
+  readonly status: TestStatus
+  readonly failureMessage?: string
+}
+
+interface VitestFailedTestResult extends VitestTestResult {
+  readonly status: 'failed'
+  readonly failureMessage: string
+}
+
+const asTestResult = (task: VitestTestTask, projectRoot: string): VitestTestResult => {
   const status = testStatus(task)
   const name = [...ancestorNames(task), task.name ?? ''].join(' ').trim()
+  const file = fileOf(task)
   const base: { id: string; name: string; timeSpentMs: number; fileName?: string } = {
     id: normalizeTestId(`${fileOf(task) ?? 'unknown.js'}#${name}`, projectRoot),
     name,
     timeSpentMs: task.result.duration ?? 0,
   }
-  const file = fileOf(task)
   if (file !== undefined) {
     base.fileName = file
   }
@@ -156,7 +170,7 @@ const hitLimitReason = (
   return Option.none()
 }
 
-const isExternalAbort = (tests: readonly TestResult[], command: VitestMutantRunCommand): boolean =>
+const isExternalAbort = (tests: readonly VitestTestResult[], command: VitestMutantRunCommand): boolean =>
   tests.every((t) => t.status !== 'failed') && command.hasExternalError
 
 const externalAbort = (command: VitestMutantRunCommand): VitestMutantRunError =>
@@ -164,41 +178,58 @@ const externalAbort = (command: VitestMutantRunCommand): VitestMutantRunError =>
     message: `An error occurred outside of a test run: ${command.externalErrorText}`,
   })
 
+const decodeKilled = (
+  candidate: {
+    readonly tests: readonly VitestTestResult[]
+    readonly killerIds: readonly string[]
+    readonly failureMessage: string | undefined
+  },
+): Result.Result<MutantKilled, VitestMutantRunError> =>
+  Result.mapError(
+    S.decodeUnknownResult(MutantKilled)({
+      _tag: 'Killed' as const,
+      tests: [...candidate.tests],
+      killerIds: [...candidate.killerIds],
+      failureMessage: candidate.failureMessage,
+    }),
+    (cause) => new VitestMutantRunError({ message: `Failed to decode test results: ${cause.message}` }),
+  )
+
 const killedVerdict = (
-  tests: readonly TestResult[],
-  failed: readonly FailedTestResult[],
+  tests: readonly VitestTestResult[],
+  failed: readonly VitestFailedTestResult[],
   reportAllKillers: boolean,
 ): Result.Result<VitestMutantRunOutput, VitestMutantRunError> =>
   Match.value(reportAllKillers).pipe(
     Match.when(true, () =>
-      Result.succeed(
-        MutantKilled.make({
-          tests,
-          killerIds: failed.map((t) => t.id),
-          failureMessage: failed[0]?.failureMessage,
-        }),
-      )),
+      decodeKilled({
+        tests,
+        killerIds: failed.map((t) => t.id),
+        failureMessage: failed[0]?.failureMessage,
+      })),
     Match.when(false, () => {
       const first = failed[0]
-      return Result.succeed(
-        MutantKilled.make({
-          tests,
-          killerIds: [first.id],
-          failureMessage: first.failureMessage,
-        }),
-      )
+      return decodeKilled({
+        tests,
+        killerIds: [first.id],
+        failureMessage: first.failureMessage,
+      })
     }),
     Match.exhaustive,
   )
 
 const verdict = (
-  tests: readonly TestResult[],
-  failed: readonly FailedTestResult[],
+  tests: readonly VitestTestResult[],
+  failed: readonly VitestFailedTestResult[],
   reportAllKillers: boolean,
 ): Result.Result<VitestMutantRunOutput, VitestMutantRunError> =>
   Match.value(failed.length > 0).pipe(
     Match.when(true, () => killedVerdict(tests, failed, reportAllKillers)),
-    Match.when(false, () => Result.succeed(MutantSurvived.make({ tests }))),
+    Match.when(false, () =>
+      Result.mapError(
+        S.decodeUnknownResult(MutantSurvived)({ _tag: 'Survived' as const, tests: [...tests] }),
+        (cause) => new VitestMutantRunError({ message: `Failed to decode test results: ${cause.message}` }),
+      )),
     Match.exhaustive,
   )
 
@@ -206,7 +237,7 @@ const decideVitestMutantRun = (
   command: VitestMutantRunCommand,
 ): Result.Result<VitestMutantRunOutput, VitestMutantRunError> => {
   const tests = command.tests.map((task) => asTestResult(task, command.projectRoot))
-  const failed = tests.filter((t): t is FailedTestResult => t.status === 'failed')
+  const failed = tests.filter((t): t is VitestFailedTestResult => t.status === 'failed')
   return Match.value(hitLimitReason(command.hitCount, command.hitLimit)).pipe(
     Match.tag('Some', (hit) => Result.succeed(MutantTimeout.make({ reason: hit.value }))),
     Match.tag('None', () =>

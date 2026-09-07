@@ -4,6 +4,8 @@
 import { RegExpParser, visitRegExpAST } from '@eslint-community/regexpp'
 import { type Location, Mutant as ApiMutant, type Position } from '@systemfsoftware/stryker-js/Mutant'
 import * as Predicate from 'effect/Predicate'
+import type * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
 import type {
   AssignmentExpression as EstreeAssignmentExpression,
   BinaryExpression as EstreeBinaryExpression,
@@ -86,7 +88,7 @@ export function createMutant(
     replacementCode: printNode(specs.replacement),
   }
 }
-export function toApiMutant(mutant: Mutant): ApiMutant {
+export function toApiMutant(mutant: Mutant): Result.Result<ApiMutant, S.SchemaError> {
   const start = nodeOffset(mutant, 'start')
   const end = nodeOffset(mutant, 'end')
   const baseFields = {
@@ -97,13 +99,14 @@ export function toApiMutant(mutant: Mutant): ApiMutant {
     replacement: mutant.replacementCode,
   }
   if (mutant.ignoreReason !== undefined) {
-    return ApiMutant.make({
+    return S.decodeResult(ApiMutant)({
+      _tag: 'Mutant' as const,
       ...baseFields,
       statusReason: mutant.ignoreReason,
       status: 'Ignored' as const,
     })
   }
-  return ApiMutant.make(baseFields)
+  return S.decodeResult(ApiMutant)({ _tag: 'Mutant' as const, ...baseFields })
 }
 
 function nodeOffset(mutant: Mutant, edge: 'start' | 'end'): number {

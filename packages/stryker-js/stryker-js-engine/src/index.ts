@@ -4,11 +4,24 @@ export { idGeneratorLayer } from './Run.js'
 export type { DryRunDone, InstrumentDone, PrepareDone, PrepareExecutorArgs, RunOutcome, StageServices } from './Run.js'
 export { mutationRun, shouldKeepTempDir } from './Run.js'
 
-export * from './Config.js'
-export * from './Config.schema.js'
-
-export * from './output-mode.js'
-export * from './verdict-envelope.js'
+export { defaultOptions, readConfig } from './Config.js'
+export {
+  ConfigDocumentSchema,
+  ConfigError,
+  ConfigFileInvalidError,
+  ConfigFileNotFoundError,
+  ConfigFileUnreadableError,
+  extendsPropertySchema,
+  forkOptionsSchema,
+  ImportedModuleSchema,
+  MergeCommand,
+  MergeResult,
+  ReadConfigCommand,
+  survivorsPriorReport,
+} from './Config.schema.js'
+export type { ModeSignal, OutputMode, ResolvedMode } from './output-mode.js'
+export { buildVerdictEnvelope, generateRunId, VERDICT_ENVELOPE_SCHEMA_VERSION } from './verdict-envelope.js'
+export type { VerdictEnvelope } from './verdict-envelope.js'
 
 export { toRelativeNormalizedFileName } from './IncrementalDiff.paths.js'
 

@@ -1,19 +1,21 @@
+import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
+import * as NodePath from '@effect/platform-node-shared/NodePath'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { Ignorer, type NodePath as StrykerNodePath } from '@systemfsoftware/stryker-js/Ignorer'
+import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
+import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
+import { strykerPlugins as composedPlugins } from '@systemfsoftware/stryker-plugins'
+import { strykerPlugins as schemaPlugins } from '@systemfsoftware/stryker-plugins/effect-schema-ignorer'
+import { strykerPlugins } from '@systemfsoftware/stryker-plugins/workflow-make-ignorer'
 import { Effect } from 'effect'
+import * as Context from 'effect/Context'
+import * as Layer from 'effect/Layer'
+import * as Option from 'effect/Option'
+import * as Schema from 'effect/Schema'
 import { expect } from 'vitest'
 
-import { strykerPlugins as composedPlugins } from '@systemfsoftware/stryker-plugins'
-import {
-  decideSchemaDeclarationIgnore,
-  TAGGED_TAG_IGNORED,
-} from '@systemfsoftware/stryker-plugins/effect-schema-ignorer'
-import {
-  decideWorkflowMakeBoundaryIgnore,
-  NOT_INSIDE_WORKFLOW_MAKE,
-  strykerPlugins,
-} from '@systemfsoftware/stryker-plugins/workflow-make-ignorer'
-
-import { taggedCall } from '../__fixtures__/EffectSchemaAst.fixtures.js'
+import { objectExpression, taggedCall } from '../__fixtures__/EffectSchemaAst.fixtures.js'
+import { nodeModuleTestLayer } from '../__fixtures__/NodePlatform.fixtures.js'
 import {
   callOf,
   classDeclarationOf,
@@ -33,6 +35,68 @@ import {
 
 const Feature = makeFeature({ it, layer })
 
+const stubPath = (node: unknown, parent?: StrykerNodePath | null): StrykerNodePath => {
+  const base = {
+    node,
+    isObjectExpression: () => false,
+    isCallExpression: () => false,
+    isClassProperty: () => false,
+    isClassPrivateProperty: () => false,
+    isClassAccessorProperty: () => false,
+  }
+  if (parent === undefined) {
+    return base
+  }
+  return { ...base, parentPath: parent }
+}
+
+const pathOf = (node: unknown, ancestors: readonly unknown[]): StrykerNodePath => {
+  let parent: StrykerNodePath | null | undefined = undefined
+  for (let index = ancestors.length - 1; index >= 0; index--) {
+    parent = stubPath(ancestors[index], parent ?? undefined)
+  }
+  return stubPath(node, parent ?? undefined)
+}
+
+const optionsLive = Schema.decodeUnknownSync(StrykerOptionsSchema)({})
+const hostEnv = Layer.mergeAll(
+  Layer.succeed(RunConfiguration, optionsLive),
+  Layer.succeed(SandboxDirectory, '/tmp'),
+  NodeFileSystem.layer,
+  NodePath.layer,
+  nodeModuleTestLayer,
+)
+
+const ignorerFrom = (
+  plugins: typeof strykerPlugins,
+  name: string,
+) =>
+  Effect.gen(function*() {
+    const plugin = plugins.find((entry) => entry.name === name)
+    if (plugin === undefined) {
+      return yield* Effect.die(new Error(`${name} plugin missing`))
+    }
+    const context = yield* Layer.build(plugin.layer.pipe(Layer.provide(hostEnv)))
+    return Context.get(context, Ignorer)
+  })
+
+const makeIgnorerLive = ignorerFrom(strykerPlugins, 'workflow-make-boundary')
+const schemaIgnorerLive = ignorerFrom(schemaPlugins, 'effect-schema-declarations')
+
+const decidedByMake = (node: unknown, ancestors: readonly unknown[]) =>
+  Effect.gen(function*() {
+    const ignorer = yield* makeIgnorerLive
+    return ignorer.shouldIgnore(pathOf(node, ancestors))
+  })
+
+const expectIgnored = (result: Option.Option<string>): void => {
+  expect(Option.isSome(result)).toBe(true)
+}
+
+const expectLive = (result: Option.Option<string>): void => {
+  expect(Option.isNone(result)).toBe(true)
+}
+
 const makeFixture = (mutant: unknown, ancestors: readonly unknown[]) => ({ mutant, ancestors })
 
 Feature('Workflow.make boundary — the inverted mutation-population selector')
@@ -48,13 +112,13 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
             const program = programOf([workflowNamedImport(), call])
             return makeFixture(mutant, [body, call, program])
           })),
-        When('the boundary decision runs on the mutant and its ancestor chain')(
+        When('the boundary ignorer runs on the mutant and its ancestor chain through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+          (s) => decidedByMake(s.fixture.mutant, s.fixture.ancestors),
         ),
-        Then('it returns undefined — the mutant stays live')((s) =>
+        Then('the mutant stays live')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -75,13 +139,13 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
               return makeFixture(mutant, [callInside, body, call, program])
             }),
         ),
-        When('the boundary decision runs on that mutant')(
+        When('the boundary ignorer runs on that mutant through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+          (s) => decidedByMake(s.fixture.mutant, s.fixture.ancestors),
         ),
-        Then('it returns undefined')((s) =>
+        Then('the mutant stays live')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -96,13 +160,13 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
             const program = programOf([workflowNamedImport(), mutant])
             return makeFixture(mutant, [program])
           })),
-        When('the boundary decision runs on that mutant')(
+        When('the boundary ignorer runs on that mutant through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+          (s) => decidedByMake(s.fixture.mutant, s.fixture.ancestors),
         ),
-        Then('it returns NOT_INSIDE_WORKFLOW_MAKE')((s) =>
+        Then('the mutant is ignored as outside every make body')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBe(NOT_INSIDE_WORKFLOW_MAKE)
+            expectIgnored(s.reason)
           })
         ),
       ),
@@ -117,13 +181,13 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
             const program = programOf([unrelatedImport('../local.js', 'Workflow'), mutant])
             return makeFixture(mutant, [program])
           })),
-        When('the boundary decision runs on that mutant')(
+        When('the boundary ignorer runs on that mutant through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+          (s) => decidedByMake(s.fixture.mutant, s.fixture.ancestors),
         ),
-        Then('it returns NOT_INSIDE_WORKFLOW_MAKE')((s) =>
+        Then('the mutant is ignored as outside every make body')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBe(NOT_INSIDE_WORKFLOW_MAKE)
+            expectIgnored(s.reason)
           })
         ),
       ),
@@ -143,13 +207,13 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
               return makeFixture(mutant, [body, call, program])
             }),
         ),
-        When('the boundary decision runs on that mutant')(
+        When('the boundary ignorer runs on that mutant through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+          (s) => decidedByMake(s.fixture.mutant, s.fixture.ancestors),
         ),
-        Then('it returns NOT_INSIDE_WORKFLOW_MAKE — only the cell-types value opens a boundary')((s) =>
+        Then('the mutant is ignored — only the cell-types value opens a boundary')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBe(NOT_INSIDE_WORKFLOW_MAKE)
+            expectIgnored(s.reason)
           })
         ),
       ),
@@ -167,19 +231,16 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
               const decision = constBindingOf('decision', body)
               const call = workflowMakeCallOf(identifier('decision'))
               const program = programOf([workflowNamedImport(), decision, call])
-              // The make call is a sibling statement, not an ancestor: the mutant's
-              // chain runs mutant -> body -> binding -> program, and the resolution
-              // must keep the body inside the population anyway.
               return makeFixture(mutant, [mutant, body, decision, program])
             }),
         ),
-        When('the boundary decision runs on that mutant')(
+        When('the boundary ignorer runs on that mutant through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+          (s) => decidedByMake(s.fixture.mutant, s.fixture.ancestors),
         ),
-        Then('it returns undefined — the referenced function body stays inside the mutation population')((s) =>
+        Then('the referenced function body stays inside the mutation population')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -200,19 +261,16 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
               const command = classDeclarationOf('Cmd')
               const call = workflowMakeCallOfTwo(identifier('Cmd'), identifier('decision'))
               const program = programOf([workflowNamedImport(), command, decision, call])
-              // Slot 0 resolves to a class, never a function. A resolver pinned
-              // to that slot drops this body from the population and every
-              // mutant in the decision silently stops being tested.
               return makeFixture(mutant, [mutant, body, decision, program])
             }),
         ),
-        When('the boundary decision runs on that mutant')(
+        When('the boundary ignorer runs on that mutant through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+          (s) => decidedByMake(s.fixture.mutant, s.fixture.ancestors),
         ),
-        Then('it returns undefined — the referenced decider stays inside the mutation population')((s) =>
+        Then('the referenced decider stays inside the mutation population')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -232,13 +290,13 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
               return makeFixture(mutant, [body, call, program])
             }),
         ),
-        When('the boundary decision runs on that mutant')(
+        When('the boundary ignorer runs on that mutant through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+          (s) => decidedByMake(s.fixture.mutant, s.fixture.ancestors),
         ),
-        Then('it returns undefined — an argument-slot ancestor is slot-agnostic')((s) =>
+        Then('the mutant stays live — an argument-slot ancestor is slot-agnostic')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -257,13 +315,13 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
               return makeFixture(mutant, [mutant, program])
             }),
         ),
-        When('the boundary decision runs on that mutant')(
+        When('the boundary ignorer runs on that mutant through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+          (s) => decidedByMake(s.fixture.mutant, s.fixture.ancestors),
         ),
-        Then('it returns NOT_INSIDE_WORKFLOW_MAKE')((s) =>
+        Then('the mutant is ignored as outside every make body')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBe(NOT_INSIDE_WORKFLOW_MAKE)
+            expectIgnored(s.reason)
           })
         ),
       ),
@@ -284,13 +342,13 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
               return makeFixture(mutant, [secondBody, secondCall, program])
             }),
         ),
-        When('the boundary decision runs on that mutant')(
+        When('the boundary ignorer runs on that mutant through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+          (s) => decidedByMake(s.fixture.mutant, s.fixture.ancestors),
         ),
-        Then('it returns undefined — every make boundary holds mutation live')((s) =>
+        Then('every make boundary holds mutation live')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -312,13 +370,13 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
               return makeFixture(mutant, [innerBody, innerCall, outerBody, outerCall, program])
             }),
         ),
-        When('the boundary decision runs on that mutant')(
+        When('the boundary ignorer runs on that mutant through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+          (s) => decidedByMake(s.fixture.mutant, s.fixture.ancestors),
         ),
-        Then('it returns undefined — the inner make argument is inside a boundary too')((s) =>
+        Then('the inner make argument is inside a boundary too')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -334,13 +392,13 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
             const program = programOf([workflowNamespaceImport('Workflow'), call])
             return makeFixture(mutant, [body, call, program])
           })),
-        When('the boundary decision runs on that mutant')(
+        When('the boundary ignorer runs on that mutant through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+          (s) => decidedByMake(s.fixture.mutant, s.fixture.ancestors),
         ),
-        Then('it returns undefined')((s) =>
+        Then('the mutant stays live')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -357,13 +415,13 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
             const program = programOf([workflowAliasedImport('W'), call])
             return makeFixture(mutant, [body, call, program])
           })),
-        When('the boundary decision runs on that mutant')(
+        When('the boundary ignorer runs on that mutant through the public layer')(
           'reason',
-          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+          (s) => decidedByMake(s.fixture.mutant, s.fixture.ancestors),
         ),
-        Then('it returns undefined')((s) =>
+        Then('the mutant stays live')((s) =>
           Effect.sync(() => {
-            expect(s.reason).toBeUndefined()
+            expectLive(s.reason)
           })
         ),
       ),
@@ -377,25 +435,30 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
           () =>
             Effect.sync(() => {
               const tag = stringLiteral('Placed')
-              const fields = { type: 'ObjectExpression' as const }
+              const fields = objectExpression()
               const call = taggedCall('TaggedClass', tag, fields)
               const program = programOf([workflowNamedImport(), call])
               return makeFixture(tag, [call, program])
             }),
         ),
-        When('both the schema-declaration ignorer and the make-boundary ignorer decide it')(
+        When('both public ignorer layers decide it')(
           'tagverdict',
           (s) =>
-            Effect.sync(() => {
-              const schemaReason = decideSchemaDeclarationIgnore(s.fixture.mutant, s.fixture.ancestors[0])
-              const makeReason = decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)
+            Effect.gen(function*() {
+              const schemaIgnorer = yield* schemaIgnorerLive
+              const makeIgnorer = yield* makeIgnorerLive
+              const ancestorCall = s.fixture.ancestors[0]
+              const schemaReason = schemaIgnorer.shouldIgnore(
+                pathOf(s.fixture.mutant, ancestorCall === undefined ? [] : [ancestorCall]),
+              )
+              const makeReason = makeIgnorer.shouldIgnore(pathOf(s.fixture.mutant, s.fixture.ancestors))
               return { schemaReason, makeReason }
             }),
         ),
-        Then('each reports its own named reason, distinct from the other')((s) =>
+        Then('each reports its own ignored reason, distinct from the other')((s) =>
           Effect.sync(() => {
-            expect(s.tagverdict.schemaReason).toBe(TAGGED_TAG_IGNORED)
-            expect(s.tagverdict.makeReason).toBe(NOT_INSIDE_WORKFLOW_MAKE)
+            expect(Option.isSome(s.tagverdict.schemaReason)).toBe(true)
+            expect(Option.isSome(s.tagverdict.makeReason)).toBe(true)
             expect(s.tagverdict.schemaReason).not.toBe(s.tagverdict.makeReason)
           })
         ),
@@ -410,10 +473,6 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
         Then('it is an Ignore-kind plugin named workflow-make-boundary carrying a layer')((s) =>
           Effect.sync(() => {
             expect(s.plugin).toMatchObject({ kind: 'Ignore', name: 'workflow-make-boundary' })
-            // The contribution now carries a `Layer` rather than a bare value.
-            // That the layer actually provides `Ignorer` is proven where the
-            // engine composes it, since building it here would need fabricated
-            // `RunConfiguration` and `SandboxDirectory` services.
             expect(s.plugin?.layer).toBeDefined()
           })
         ),

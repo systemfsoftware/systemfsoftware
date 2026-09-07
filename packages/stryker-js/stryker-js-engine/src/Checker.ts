@@ -92,7 +92,7 @@ export const pairCheckResults = (
   plans: readonly MutantRunPlan[],
   answers: Readonly<Record<string, CheckResult>>,
 ): Result.Result<readonly (readonly [MutantRunPlan, CheckResult])[], CheckerContractBroken> => {
-  const byId = new Map(plans.map((plan) => [plan.mutant.id, plan]))
+  const byId = new Map<string, MutantRunPlan>(plans.map((plan) => [plan.mutant.id, plan]))
   const paired: (readonly [MutantRunPlan, CheckResult])[] = []
   const unrequested: string[] = []
 
@@ -140,7 +140,7 @@ export const pairGroups = (
   plans: readonly MutantRunPlan[],
   idGroups: readonly (readonly string[])[],
 ): Result.Result<readonly (readonly MutantRunPlan[])[], CheckerContractBroken> => {
-  const byId = new Map(plans.map((plan) => [plan.mutant.id, plan]))
+  const byId = new Map<string, MutantRunPlan>(plans.map((plan) => [plan.mutant.id, plan]))
   const grouped = new Set<string>()
   const unrequested: string[] = []
   const groups: (readonly MutantRunPlan[])[] = []

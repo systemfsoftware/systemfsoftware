@@ -4,7 +4,7 @@ import { And, Gherkin, Given, it, layer, makeFeature, Then, When } from '@system
 import { strykerPlugins } from '@systemfsoftware/stryker-js-typescript-checker'
 import { Checker } from '@systemfsoftware/stryker-js/Checker'
 import { Module } from '@systemfsoftware/stryker-js/Module'
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import { FileName, Mutant, MutantId, MutatorName } from '@systemfsoftware/stryker-js/Mutant'
 import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import * as Context from 'effect/Context'
@@ -79,10 +79,11 @@ const locate = (
     throw new Error(`Missing line ${lineNumber} in ${fileName}`)
   }
   const textColumn = line.indexOf(findText)
+  // no-sync-schema-codecs test-file exception: throw is the assertion.
   return new Mutant({
-    id,
-    fileName,
-    mutatorName: 'foo-mutator',
+    id: S.decodeSync(MutantId)(id),
+    fileName: S.decodeSync(FileName)(fileName),
+    mutatorName: S.decodeSync(MutatorName)('foo-mutator'),
     replacement,
     location: {
       start: { line: lineNumber, column: textColumn + offset },

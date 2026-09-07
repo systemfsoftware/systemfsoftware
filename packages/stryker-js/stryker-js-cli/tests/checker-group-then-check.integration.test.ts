@@ -1,8 +1,9 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import type { CheckResult } from '@systemfsoftware/stryker-js/Checker'
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import { FileName, Mutant, MutantId, MutatorName } from '@systemfsoftware/stryker-js/Mutant'
 import type { RunPlan as MutantRunPlan } from '@systemfsoftware/stryker-js/Mutant'
 import { Array as Arr, Effect, Equal, HashMap, HashSet, Option } from 'effect'
+import * as S from 'effect/Schema'
 
 import { type CheckerResourceService, checkGroupedPlans } from '@systemfsoftware/stryker-js-engine'
 import { expect } from 'vitest'
@@ -19,11 +20,12 @@ type Recording = {
   readonly plans: readonly MutantRunPlan[]
 }
 
+// no-sync-schema-codecs test-file exception: throw is the assertion.
 const planOf = (id: string): MutantRunPlan => {
   const mutant = new Mutant({
-    id,
-    fileName: 'src/f.ts',
-    mutatorName: 'arithmetic',
+    id: S.decodeSync(MutantId)(id),
+    fileName: S.decodeSync(FileName)('src/f.ts'),
+    mutatorName: S.decodeSync(MutatorName)('arithmetic'),
     replacement: '0',
     location: LOCATION,
   })
@@ -146,8 +148,10 @@ Feature('Isolating typechecks to one mutant group').body(({ scenario }) => {
         pairs: readonly (readonly [MutantRunPlan, CheckResult])[]
       }) => {
         const byId = HashMap.fromIterable(Arr.map(s.pairs, ([plan, result]) => [plan.mutant.id, result] as const))
-        checkExpect(HashMap.get(byId, 'a')).toEqual(Option.some({ status: 'compileError', reason: 'TS2322' }))
-        checkExpect(HashMap.get(byId, 'b')).toEqual(Option.some({ status: 'passed' }))
+        checkExpect(HashMap.get(byId, S.decodeSync(MutantId)('a'))).toEqual(
+          Option.some({ status: 'compileError', reason: 'TS2322' }),
+        )
+        checkExpect(HashMap.get(byId, S.decodeSync(MutantId)('b'))).toEqual(Option.some({ status: 'passed' }))
       }),
     ),
   )

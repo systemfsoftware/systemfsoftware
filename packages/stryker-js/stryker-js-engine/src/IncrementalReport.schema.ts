@@ -1,5 +1,6 @@
 import { Wire } from '@systemfsoftware/effect-cell-types'
 import * as S from 'effect/Schema'
+import { MUTANT_STATUSES } from './mutant-status.js'
 
 const PositionSchema = Wire.wire({
   line: Wire.mint(S.Finite),
@@ -15,17 +16,6 @@ const OpenEndLocationSchema = Wire.wire({
   start: PositionSchema,
   end: Wire.mint(S.optional(PositionSchema)),
 })
-
-const MUTANT_STATUSES = [
-  'Killed',
-  'Survived',
-  'NoCoverage',
-  'Timeout',
-  'CompileError',
-  'RuntimeError',
-  'Ignored',
-  'Pending',
-] as const
 
 const MutantResultLikeSchema = Wire.wire({
   id: Wire.mint(S.String),

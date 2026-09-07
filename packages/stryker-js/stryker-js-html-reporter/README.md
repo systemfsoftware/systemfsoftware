@@ -11,7 +11,7 @@ You normally never import this package directly — the CLI wires it in. The
 reporter exists so a programmatic consumer can assemble its own host:
 
 ```ts
-import { makeHtmlReporter, strykerPlugins } from '@systemfsoftware/stryker-js-html-reporter'
+import { strykerPlugins } from '@systemfsoftware/stryker-js-html-reporter'
 ```
 
 ## Related

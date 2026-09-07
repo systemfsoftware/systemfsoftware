@@ -1,6 +1,7 @@
 import { type FileDescription, Mutant as ApiMutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as Effect from 'effect/Effect'
 import * as Predicate from 'effect/Predicate'
+import * as Result from 'effect/Result'
 
 import type { IgnorerService } from '@systemfsoftware/stryker-js/Ignorer'
 import type { MutateDescription } from '@systemfsoftware/stryker-js/Mutant'
@@ -245,7 +246,12 @@ const readCollected = (
       })
     }
     const mutants: readonly ApiMutant[] = yield* Effect.try({
-      try: () => collector.map(toApiMutant),
+      try: () =>
+        collector.map((mutant) => {
+          const decoded = toApiMutant(mutant)
+          if (Result.isFailure(decoded)) throw decoded.failure
+          return decoded.success
+        }),
       catch: (cause) => new InstrumentError({ message: 'Failed to instrument', cause }),
     })
     return { files, options, asts, mutants }

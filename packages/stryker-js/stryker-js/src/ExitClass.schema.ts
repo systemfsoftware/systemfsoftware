@@ -4,11 +4,13 @@ export const ExitClass = S.Literals(['VerdictFail', 'ConfigError', 'RuntimeError
 
 export type ExitClass = typeof ExitClass.Type
 
+const Percentage = S.Finite.pipe(S.check(S.isBetween({ minimum: 0, maximum: 100 })))
+
 export class ClassifyExitCommand extends S.TaggedClass<ClassifyExitCommand>()('ClassifyExitCommand', {
   pending: S.Array(ExitClass),
-  signal: S.NullOr(S.Number),
-  score: S.NullOr(S.Number),
-  breakingThreshold: S.NullOr(S.Number),
+  signal: S.NullOr(S.Finite),
+  score: S.NullOr(Percentage),
+  breakingThreshold: S.NullOr(Percentage),
 }) {}
 
 export class ClassifyExitDecision extends S.TaggedClass<ClassifyExitDecision>()('ClassifyExitDecision', {
