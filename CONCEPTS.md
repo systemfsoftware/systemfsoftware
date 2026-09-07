@@ -173,11 +173,9 @@ A `WATCHDOG.md` that `@import`s `CONSTITUTION.md` into the omp advisor's system 
 
 ### Row graduation
 
-The loop that promotes a doctrine row from advisory to binding: the evaluator ships in its own commit, observed red on a planted known-bad fixture; the tree migrates behind it; enrollment at `error` lands in a third commit. A row with a gate but a living dated baseline is enrolled, not graduated — graduation completes only when the baseline recomputes to empty (CONST-E5). The loop's ordering is the point: a migration that runs before its gate exists is a regression window, because nothing fails when the forbidden shape is written back.
+The loop that promotes a doctrine row from advisory to binding: the evaluator ships in its own commit, observed red on a planted known-bad fixture; the tree migrates behind it; enrollment at `error` lands in a third commit, only over a tree whose live violation count is zero. There is no baseline stage: suppressing known sites to enroll early is suppression with extra steps, and a baseline whose list can grow is keyed on the gated author's own data (CONST-E5). The loop's ordering is the point: a migration that runs before its gate exists is a regression window, because nothing fails when the forbidden shape is written back.
 
 ## Test execution
-
-
 
 ### Run class
 
