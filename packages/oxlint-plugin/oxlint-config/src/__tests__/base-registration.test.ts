@@ -4,8 +4,13 @@ import { fileURLToPath } from 'node:url'
 
 import effectDmmf from '@systemfsoftware/oxlint-plugin-effect-dmmf'
 import effectNative from '@systemfsoftware/oxlint-plugin-effect-native'
+import effectSchema from '@systemfsoftware/oxlint-plugin-effect-schema'
+import effectWorkflow from '@systemfsoftware/oxlint-plugin-effect-workflow'
+import propertyTesting from '@systemfsoftware/oxlint-plugin-property-testing'
 import structure from '@systemfsoftware/oxlint-plugin-structure'
 import tagDiscipline from '@systemfsoftware/oxlint-plugin-tag-discipline'
+import testHygiene from '@systemfsoftware/oxlint-plugin-test-hygiene'
+import testPlacement from '@systemfsoftware/oxlint-plugin-test-placement'
 import type { OxlintConfig } from 'oxlint'
 import { describe, expect, it } from 'vitest'
 
@@ -79,4 +84,123 @@ describe('base preset registration integrity', () => {
   it('Should_UnionLeafRecommendations_When_TheAggregateReKeysThem', () => {
     expect([...baseRecommendedHouseKeys].sort()).toStrictEqual([...leafRecommendedUnion].sort())
   })
+
+  it('Should_RecommendEveryShippedRule_When_ALeafPublishesIt', () => {
+    const missing: string[] = []
+    const prematurelyEnrolled: string[] = []
+    for (const leaf of INSPECTED_LEAVES) {
+      const plugin = leaf.meta?.name ?? ''
+      const recommended = leaf.configs?.recommended?.rules ?? {}
+      for (const ruleName of Object.keys(leaf.rules ?? {})) {
+        const key = `${plugin}/${ruleName}`
+        if (allowlisted(plugin, ruleName)) {
+          if (Object.hasOwn(recommended, key)) prematurelyEnrolled.push(key)
+        } else if (recommended[key] !== 'error') {
+          missing.push(key)
+        }
+      }
+    }
+    expect(missing).toStrictEqual([])
+    expect(prematurelyEnrolled).toStrictEqual([])
+  })
+
+  it('Should_NameOnlyRealRules_When_AnAllowlistEntryCoversAnInspectedLeaf', () => {
+    const inspected = new Map(INSPECTED_LEAVES.map((leaf) => [leaf.meta?.name ?? '', leaf]))
+    for (const entry of NOT_YET_ENROLLED) {
+      const leaf = inspected.get(entry.plugin)
+      if (leaf === undefined) continue
+      expect(Object.hasOwn(leaf.rules ?? {}, entry.rule)).toBe(true)
+      expect(Object.hasOwn(leaf.configs?.recommended?.rules ?? {}, `${entry.plugin}/${entry.rule}`)).toBe(false)
+    }
+  })
 })
+
+interface AllowlistEntry {
+  readonly plugin: string
+  readonly rule: string
+  readonly date: string
+  readonly reason: string
+}
+
+/**
+ * Rules absent from their leaf's recommended set, each dated and reasoned.
+ * Dated-baseline shape: an entry whose rule is now recommended fails, and an
+ * entry naming no real rule of its leaf fails — the list can only shrink.
+ * The U1/U4 pairs await their enrollment commits. The structure and
+ * tag-discipline entries are deliberate absences per the aggregate's own
+ * comment (recommending them would fire on correct consumer code), recorded
+ * here so a fifth absence still fails. The cell-vocabulary pair is recorded
+ * but asserted at enrollment: that leaf is not a dependency of this package,
+ * and this wave adds none.
+ */
+const NOT_YET_ENROLLED: readonly AllowlistEntry[] = [
+  {
+    plugin: '@systemfsoftware/oxlint-plugin-effect-schema',
+    rule: 'schema-bare-primitive-field',
+    date: '2026-09-07',
+    reason: 'U1 evaluator landed; enrollment ships in its own commit',
+  },
+  {
+    plugin: '@systemfsoftware/oxlint-plugin-effect-schema',
+    rule: 'schema-brand-requires-filter',
+    date: '2026-09-07',
+    reason: 'U1 evaluator landed; enrollment ships in its own commit',
+  },
+  {
+    plugin: '@systemfsoftware/oxlint-plugin-cell-vocabulary',
+    rule: 'no-sequenced-cell-run',
+    date: '2026-09-07',
+    reason: 'U4 evaluator landed; enrollment ships in its own commit',
+  },
+  {
+    plugin: '@systemfsoftware/oxlint-plugin-cell-vocabulary',
+    rule: 'no-laundered-cell-service',
+    date: '2026-09-07',
+    reason: 'U4 evaluator landed; enrollment ships in its own commit',
+  },
+  {
+    plugin: '@systemfsoftware/oxlint-plugin-structure',
+    rule: 'ban-classes',
+    date: '2026-09-07',
+    reason:
+      'Deliberate absence per the aggregate: needs a per-package whitelist; recommending would fire on consumers first file',
+  },
+  {
+    plugin: '@systemfsoftware/oxlint-plugin-structure',
+    rule: 'no-barrels',
+    date: '2026-09-07',
+    reason: 'Deliberate absence per the aggregate: fires on correct code',
+  },
+  {
+    plugin: '@systemfsoftware/oxlint-plugin-structure',
+    rule: 'no-inline-destructured-type',
+    date: '2026-09-07',
+    reason: 'Deliberate absence per the aggregate: fires on correct code',
+  },
+  {
+    plugin: '@systemfsoftware/oxlint-plugin-tag-discipline',
+    rule: 'no-bodyless-status-assertion',
+    date: '2026-09-07',
+    reason: 'Deliberate absence per the aggregate: needs a status-assertion vocabulary only some packages have',
+  },
+]
+
+interface LeafPlugin {
+  readonly meta?: { readonly name?: string }
+  readonly rules?: Record<string, unknown>
+  readonly configs?: { readonly recommended?: { readonly rules?: Record<string, string> } }
+}
+
+const INSPECTED_LEAVES: readonly LeafPlugin[] = [
+  effectNative,
+  structure,
+  tagDiscipline,
+  effectSchema,
+  effectWorkflow,
+  propertyTesting,
+  testHygiene,
+  testPlacement,
+]
+
+const allowlisted = (plugin: string, rule: string): boolean =>
+  NOT_YET_ENROLLED.some((entry) => entry.plugin === plugin && entry.rule === rule)
