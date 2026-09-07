@@ -8,6 +8,11 @@ import type {
   MutantRunResult,
 } from '@systemfsoftware/stryker-js/TestRunner'
 import { TestRunner, TestRunnerFailed } from '@systemfsoftware/stryker-js/TestRunner'
+import {
+  DryRunResultSchema,
+  MutantRunResultSchema,
+  TestRunnerCapabilitiesSchema,
+} from '@systemfsoftware/stryker-js/TestRunner'
 import { Schema as S } from 'effect'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
@@ -83,17 +88,24 @@ const TestRunnerHandlers = TestRunnerRpcs.toLayer(
     yield* Effect.addFinalizer(() => underlying.dispose.pipe(Effect.ignore))
 
     return {
-      capabilities: () => underlying.capabilities.pipe(Effect.catchCause(failed('capabilities'))),
+      capabilities: () =>
+        underlying.capabilities.pipe(
+          Effect.catchCause(failed('capabilities')),
+          Effect.flatMap((capabilities) =>
+            S.decodeUnknownEffect(TestRunnerCapabilitiesSchema)(capabilities).pipe(Effect.orDie)
+          ),
+        ),
 
       dryRun: ({ options: runOptions }: { readonly options: DryRunOptions }) =>
         underlying.dryRun(runOptions).pipe(
           Effect.flatMap((result) => withCoverage(result, runOptions)),
+          Effect.flatMap((result) => S.decodeUnknownEffect(DryRunResultSchema)(result).pipe(Effect.orDie)),
           Effect.catchCause(failed('dryRun')),
         ),
-
       mutantRun: ({ options: runOptions }: { readonly options: MutantRunOptions }) =>
         underlying.mutantRun(runOptions).pipe(
           Effect.map(normalizeMutantRun),
+          Effect.flatMap((result) => S.decodeUnknownEffect(MutantRunResultSchema)(result).pipe(Effect.orDie)),
           Effect.catchCause(failed('mutantRun')),
         ),
     }

@@ -16,7 +16,7 @@
     "src",
     "../oxlint-plugin-effect-schema/src/rules/*.corpus.ts",
     "../oxlint-plugin-effect-schema/src/rules/schema-bare-primitive-field.config.ts",
-    "../oxlint-plugin-effect-schema/src/rules/schema-brand-requires-filter.config.ts",
+    "../oxlint-plugin-effect-schema/src/rules/schema-brand-requires-decode.config.ts",
     "../oxlint-plugin-cell-vocabulary/src/rules/*.corpus.ts",
     "../oxlint-plugin-property-testing/src/rules/no-ignored-draw.corpus.ts",
     "../oxlint-plugin-property-testing/src/rules/no-ignored-draw.config.ts"

@@ -531,7 +531,8 @@ export function readConfigFile(
       return yield* importResult.failure
     }
     const importedModule: unknown = importResult.success
-    const exported = yield* S.decodeUnknownEffect(ImportedModuleSchema)(importedModule).pipe(
+    // ModuleDefault is brand-only over Unknown: decode narrows nothing, so the unknown view stands for the object checks below.
+    const exported: unknown = yield* S.decodeUnknownEffect(ImportedModuleSchema)(importedModule).pipe(
       Effect.mapError((cause) => new ConfigFileInvalidError({ file: configFile, cause })),
       Effect.map((decoded) => decoded.default),
     )
@@ -1094,8 +1095,7 @@ function importJSConfig(
     if (Result.isFailure(decodedResult)) {
       return yield* new ConfigFileInvalidError({ file: configFile, cause: decodedResult.failure })
     }
-    const decodedModule = decodedResult.success
-    const maybeOptions = decodedModule.default
+    const maybeOptions: unknown = decodedResult.success.default
     if (maybeOptions === undefined) {
       return yield* new ConfigFileInvalidError({
         file: configFile,

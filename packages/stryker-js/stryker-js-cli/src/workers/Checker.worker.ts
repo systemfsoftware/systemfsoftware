@@ -1,9 +1,10 @@
 import { NodeFileSystem, NodePath, NodeSocketServer } from '@effect/platform-node'
-import { Checker, CheckerFailed } from '@systemfsoftware/stryker-js/Checker'
+import { Checker, CheckerFailed, CheckResultSchema } from '@systemfsoftware/stryker-js/Checker'
 import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import type { ContributionOf } from '@systemfsoftware/stryker-js/Plugin'
 import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import { Schema as S } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as HashMap from 'effect/HashMap'
@@ -85,7 +86,11 @@ const CheckerHandlers = CheckerRpcs.toLayer(
       check: ({ checkerName, mutants }: { readonly checkerName: string; readonly mutants: readonly Mutant[] }) =>
         resolve(checkerName, mutants).pipe(
           Effect.flatMap((checker) => checker.check([...mutants])),
-          Effect.map((resultMap) => Object.fromEntries(resultMap)),
+          Effect.flatMap((resultMap) =>
+            S.decodeUnknownEffect(S.Record(S.String, CheckResultSchema))(Object.fromEntries(resultMap)).pipe(
+              Effect.orDie,
+            )
+          ),
         ),
 
       group: ({ checkerName, mutants }: { readonly checkerName: string; readonly mutants: readonly Mutant[] }) =>
