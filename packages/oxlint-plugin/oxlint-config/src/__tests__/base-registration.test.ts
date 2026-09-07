@@ -126,12 +126,11 @@ interface AllowlistEntry {
  * Rules absent from their leaf's recommended set, each dated and reasoned.
  * Dated-baseline shape: an entry whose rule is now recommended fails, and an
  * entry naming no real rule of its leaf fails — the list can only shrink.
- * The U1/U4 pairs await their enrollment commits. The structure and
- * tag-discipline entries are deliberate absences per the aggregate's own
- * comment (recommending them would fire on correct consumer code), recorded
- * here so a fifth absence still fails. The cell-vocabulary pair is recorded
- * but asserted at enrollment: that leaf is not a dependency of this package,
- * and this wave adds none.
+ * The U1 pair awaits its enrollment commit (migration wave in flight). The
+ * structure and tag-discipline entries are deliberate absences per the
+ * aggregate's own comment (recommending them would fire on correct consumer
+ * code), recorded here so a fifth absence still fails. The cell-vocabulary
+ * pair enrolled 2026-09-07 after the tree verified clean.
  */
 const NOT_YET_ENROLLED: readonly AllowlistEntry[] = [
   {
@@ -145,18 +144,6 @@ const NOT_YET_ENROLLED: readonly AllowlistEntry[] = [
     rule: 'schema-brand-requires-filter',
     date: '2026-09-07',
     reason: 'U1 evaluator landed; enrollment ships in its own commit',
-  },
-  {
-    plugin: '@systemfsoftware/oxlint-plugin-cell-vocabulary',
-    rule: 'no-sequenced-cell-run',
-    date: '2026-09-07',
-    reason: 'U4 evaluator landed; enrollment ships in its own commit',
-  },
-  {
-    plugin: '@systemfsoftware/oxlint-plugin-cell-vocabulary',
-    rule: 'no-laundered-cell-service',
-    date: '2026-09-07',
-    reason: 'U4 evaluator landed; enrollment ships in its own commit',
   },
   {
     plugin: '@systemfsoftware/oxlint-plugin-structure',

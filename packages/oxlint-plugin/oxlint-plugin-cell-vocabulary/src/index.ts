@@ -8,6 +8,8 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
 
 const recommendedRules = {
   [rule('no-io-in-phase-bodies')]: 'error',
+  [rule('no-laundered-cell-service')]: 'error',
+  [rule('no-sequenced-cell-run')]: 'error',
 } as const
 
 export default {

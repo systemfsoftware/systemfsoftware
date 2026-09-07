@@ -13,6 +13,8 @@ const _default: {
     };
     rules: {
         'no-io-in-phase-bodies': Rule;
+        'no-laundered-cell-service': Rule;
+        'no-sequenced-cell-run': Rule;
     };
     configs: {
         recommended: {
