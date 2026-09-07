@@ -2,9 +2,10 @@
 /**
  * Validate the constitution corpus against constitution-rule/v1.
  *
- * Gate for CONST-E6 applied reflexively: the constitution's own format must fail a
- * command, not a cited clause. Validates every fenced ```yaml block against
- * hardcoded schema fields (required_fields, optional_fields, gate_values).
+ * The enforcement doctrine applied reflexively (ENFORCEMENT.md): the
+ * constitution's own format must fail a command, not a cited clause. Validates
+ * every fenced ```yaml block against hardcoded schema fields (required_fields,
+ * optional_fields, gate_values).
  *
  * Coverage is checked before schema. A rule the parser never reaches cannot be
  * validated, and an unterminated fence silently removes every rule after it from

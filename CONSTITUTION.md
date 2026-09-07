@@ -11,20 +11,17 @@ rules:
     dont: invoke a principle by quoting a clause or asking which clause to cite
     harm: the letter applied where no harm exists defeats the purpose
     check: review — an invocation names the harm, not the clause
-  - id: CONST-E6
-    title: Prefer the Gate
+  - id: CONST-E9
+    title: Never Edit What Grades Your Work
     gate: review
-    do: make any principle that can fail a command — type error, lint rule, mutation threshold, dependency check — fail that command; a failing build is the final word
-    dont: settle compliance by citing a clause against a gate; read this clause as licence to add enforcement without paying for it
-    harm: an ungated principle decays into prose nothing enforces
-    check: review — each principle names its gate
-  - id: CONST-E8
-    title: The Evaluator Is Not the Agent's to Edit
-    gate: review
-    do: keep the surface that judges the work outside the surface that does it — an evaluator, rubric, threshold, budget or approval boundary changes in its own commit, observed failing before and passing after, for the reason it states
-    dont: weaken a gate, threshold, budget or glob to make the current change pass; ship an evaluator change in the same commit as the work it judges
-    harm: given a blocked task and reachable machinery, the measured behaviour is to edit the machinery rather than satisfy it, and more capable models do this more often rather than less; an agent that judges itself reports the score it chose
-    check: review — no commit carries both an evaluator change and the work it judges; a loosened threshold stands alone and names its reason
+    do:
+      - treat every judgment surface as read-only — anything whose job is to check, measure, gate, or grade, including lint configs, rule lists, thresholds, baselines, CI checks, validator scripts, rubrics, coverage floors, and review criteria
+      - when a rule could fail a command and no command does, say the work is ungated and hand the gap to whoever owns the instrument — your work waits for it
+    dont:
+      - edit, add to, weaken, re-tune, or delete any judgment surface in service of your work — you cannot enumerate your graders, because some fire later (review, CI, the next enrollment wave), so the ban attaches to the surface, never to whether you believe it grades this task
+      - build the gate your work will be graded by, or shape one so the current work passes; the same hands in a separate commit is the same cheat with better hygiene
+    harm: whoever edits the instrument that grades their own work reports the score they chose; the green then certifies nothing and hides the broken invariant the gate existed to catch
+    check: review — the change being graded and any judgment-surface change name different owners; a needed gate is a proposal to the owner and a wait, never a build by the graded
   - id: CONST-E7
     title: Evidence Before Done
     gate: review
@@ -37,7 +34,7 @@ rules:
     gate: review
     do:
       - govern AGENTS.md, lint, and the ADRs on what a rule should say, where they conflict
-      - defer to the gate on whether a rule held — where this document and a gate disagree about a specific change, the gate is the final word (CONST-E6) and the disagreement is resolved by amending one of them, never by overriding the gate in place
+      - defer to the gate on whether a rule held — where this document and a gate disagree about a specific change, the gate is the final word; the disagreement is escalated to the channel that owns the instrument, never resolved by the maker editing the gate or overriding it in place
       - place contestable choices — suffixes, patterns, module shape — in ADRs
     dont: pin contestable choices in this document
     harm: contestable choices frozen as supreme law; conflicts left unresolved
@@ -297,17 +294,6 @@ rules:
     dont: decide which testing rules apply to a file based on its name or suffix
     harm: renaming a test file secretly stops its rules from running while the test suite still looks complete
     check: lint — no linter or test runner rules that pick tests by filename suffix
-  - id: CONST-E5
-    title: A Gate's Key Is Recomputed, Never Reported
-    gate: review
-    do:
-      - key every gate on a recomputation from source bytes, a compiler verdict, or a rehash — never on a field the gated work's author supplied; when a gate reads a field, recompute that field in the same run
-      - treat a gate whose verdict the gated agent can produce or observe as unverified until an independent channel confirms it — an instrument the agent does not control, or review by someone who is not the gated agent
-    dont:
-      - accept a self-reported field, a presence flag, a metadata suffix, or a comment as evidence a property holds
-      - treat a mechanical gate's green as self-certifying
-    harm: a check keyed on author-supplied values passes everything and catches nothing, and the green then masks the broken invariant the gate exists to catch; an instrument correlated with the work under test can manufacture a verdict no single observer catches
-    check: review — each gate names the recomputation it runs and the independent channel that confirms its verdict
 ```
 
 ---

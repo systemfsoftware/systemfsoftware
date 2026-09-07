@@ -2,7 +2,7 @@
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square)](LICENSE)
 [![System F Software](https://img.shields.io/badge/systemfsoftware.com-constitution-black?style=flat-square)](https://systemfsoftware.com/constitution)
-[![Rules: 40](https://img.shields.io/badge/rules-40%20in%20corpus-blue?style=flat-square)](CONSTITUTION.md)
+[![Rules: 38](https://img.shields.io/badge/rules-38%20in%20corpus-blue?style=flat-square)](CONSTITUTION.md)
 
 Shared engineering laws for repositories at [System F Software](https://systemfsoftware.com).
 
@@ -36,17 +36,17 @@ git subtree add --prefix=vendor/constitution refs/remotes/vendor/constitution --
 ln -s vendor/constitution/CONSTITUTION.md CONSTITUTION.md
 ```
 
-Include `@CONSTITUTION.md` in your agent harness (`AGENTS.md` or `CLAUDE.md`) so all 40 rules remain always-on in the context window.
+Include `@CONSTITUTION.md` in your agent harness (`AGENTS.md` or `CLAUDE.md`) so all 38 rules remain always-on in the context window. Never include `ENFORCEMENT.md` there — it is doctrine for whoever builds the gates, not for the agent the gates grade. Instead, wire it at the surfaces that own instruments: in every `AGENTS.md` leaf governing a lint plugin, guard script, CI workflow, rules directory, or advisor roster, add one routing line — "You are editing an enforcement instrument. Read the vendored `ENFORCEMENT.md` before this lands."
 
 ---
 
 ## The Articles
 
-The 40 rules are structured across six sections in [`CONSTITUTION.md`](CONSTITUTION.md):
+The 38 rules are structured across six sections in [`CONSTITUTION.md`](CONSTITUTION.md):
 
 | Section | Key Invariants |
 | :--- | :--- |
-| **Application** | Invoke rules by harm rather than clause; build failures decide; the evaluator is not the agent's to edit; evidence before done. |
+| **Application** | Invoke rules by harm rather than clause; build failures decide; never edit what grades your work; evidence before done. |
 | **Article I: Pure Core** | Pure decisions, explicit types, tagged error variants, no `null` states. |
 | **Article II: Boundaries** | Functional core / imperative shell, values for effects, decode inputs rather than casting. |
 | **Article III: Verification** | Testing Trophy investment order, properties by narrow grant, mutation as the measure, independent oracles. |
