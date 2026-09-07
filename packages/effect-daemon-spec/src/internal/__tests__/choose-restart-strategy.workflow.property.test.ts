@@ -44,32 +44,32 @@ const commandWith = (
   input: DecideInput,
   override: {
     readonly strategy?: RestartStrategy
-    readonly exitSuccess?: boolean
-    readonly intensityExceeded?: boolean
+    readonly exit?: 'succeeded' | 'failed'
+    readonly intensity?: 'within' | 'exceeded'
   },
 ): DecideInput =>
   DecideInput.make({
     strategy: override.strategy ?? input.strategy,
     totalChildren: input.totalChildren,
     failedIndex: input.failedIndex,
-    exitSuccess: override.exitSuccess ?? input.exitSuccess,
-    intensityExceeded: override.intensityExceeded ?? input.intensityExceeded,
+    exit: override.exit ?? input.exit,
+    intensity: override.intensity ?? input.intensity,
   })
 
-const RESTARTING = { exitSuccess: false, intensityExceeded: false } as const
+const RESTARTING = { exit: 'failed', intensity: 'within' } as const
 
 describe('chooseRestartStrategy — invariants', () => {
   it.prop(
     '→Succeeded_Exit_=Continue',
     [Schema.toArbitrary(DecideInput)(fc)],
-    ([input]) => tagOf(chooseRestartStrategy(commandWith(input, { exitSuccess: true }))) === 'Continue',
+    ([input]) => tagOf(chooseRestartStrategy(commandWith(input, { exit: 'succeeded' }))) === 'Continue',
   )
 
   it.prop(
     '→Failed∧Exceeded_Decide_=Exhausted',
     [Schema.toArbitrary(DecideInput)(fc)],
     ([input]) =>
-      tagOf(chooseRestartStrategy(commandWith(input, { exitSuccess: false, intensityExceeded: true }))) === 'Exhausted',
+      tagOf(chooseRestartStrategy(commandWith(input, { exit: 'failed', intensity: 'exceeded' }))) === 'Exhausted',
   )
 
   it.prop(

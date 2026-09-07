@@ -44,8 +44,8 @@ const DecideInputBase = Schema.Struct({
   strategy: RestartStrategy,
   totalChildren: Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 1, maximum: MAX_CHILDREN_CEILING }))),
   failedIndex: Schema.Int.pipe(Schema.check(Schema.isBetween({ minimum: 0, maximum: MAX_CHILDREN_CEILING }))),
-  exitSuccess: Schema.Boolean,
-  intensityExceeded: Schema.Boolean,
+  exit: Schema.Literals(['succeeded', 'failed']),
+  intensity: Schema.Literals(['within', 'exceeded']),
 }).pipe(
   Schema.check(
     Schema.makeFilter(failedIndexAddressesAChild, {
@@ -59,8 +59,8 @@ const DecideInputBase = Schema.Struct({
                 strategy: fc.constantFrom('one_for_one', 'one_for_all', 'rest_for_one'),
                 totalChildren: fc.constant(totalChildren),
                 failedIndex: fc.integer({ min: 0, max: totalChildren - 1 }),
-                exitSuccess: fc.boolean(),
-                intensityExceeded: fc.boolean(),
+                exit: fc.constantFrom('succeeded', 'failed'),
+                intensity: fc.constantFrom('within', 'exceeded'),
               })
             ),
         },

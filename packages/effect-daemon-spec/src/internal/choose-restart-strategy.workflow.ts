@@ -80,8 +80,8 @@ export const chooseRestartStrategy = Workflow.make(
   DecideInput,
   (command): RestartDecisionOutcome =>
     Match.value(command).pipe(
-      Match.when({ exitSuccess: true }, () => Result.succeed(RestartDecisionContinue.make())),
-      Match.when({ exitSuccess: false, intensityExceeded: true }, () => Result.fail(RestartDecisionExhausted.make())),
+      Match.when({ exit: 'succeeded' }, () => Result.succeed(RestartDecisionContinue.make())),
+      Match.when({ exit: 'failed', intensity: 'exceeded' }, () => Result.fail(RestartDecisionExhausted.make())),
       Match.orElse(() =>
         Result.succeed(
           RestartDecisionRestart.make({

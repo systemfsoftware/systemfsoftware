@@ -50,6 +50,11 @@ const handleRestart = <R>(
     return RestartEpoch.make()
   })
 
+const intensityStateOf = (exceeded: boolean): 'exceeded' | 'within' => {
+  if (exceeded) return 'exceeded'
+  return 'within'
+}
+
 /**
  * The restart decision, as a description whose phases chain by type and read in the order
  * they run.
@@ -78,13 +83,13 @@ const restartDescription = <R>(spec: {
 }) =>
   Cell.layer({
     read: (intensity: IntensityTracker) => Effect.andThen(intensity.record, intensity.isExceeded),
-    decode: (intensityExceeded) =>
+    decode: (exceeded) =>
       Result.succeed({
         strategy: spec.strategy,
         totalChildren: spec.totalChildren,
         failedIndex: spec.failedIndex,
-        exitSuccess: false,
-        intensityExceeded,
+        exit: 'failed',
+        intensity: intensityStateOf(exceeded),
       }),
     decide: chooseRestartStrategy,
     encode: (outcome) => outcome,
