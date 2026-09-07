@@ -8,6 +8,7 @@ import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { Predicate, Result } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as HashMap from 'effect/HashMap'
+import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
@@ -181,6 +182,8 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
       return parts.join('\n')
     })
 
+  const providedCheckCell = Cell.provide(checkCell, Layer.succeed(TypeScriptCompiler, compiler))
+
   return {
     init: Effect.gen(function*() {
       const errors = yield* compiler.init.pipe(
@@ -206,9 +209,7 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
     check: (mutants) =>
       Effect.gen(function*() {
         const applyOnce = (group: readonly Mutant[]) =>
-          Cell.run(checkCell, new CheckMutantsCommand({ mutants: [...group] })).pipe(
-            Effect.provideService(TypeScriptCompiler, compiler),
-          )
+          Cell.run(providedCheckCell, new CheckMutantsCommand({ mutants: [...group] }))
         const first = yield* applyOnce(mutants)
         let map = HashMap.empty<string, CheckResult>()
         const mergeResults = (results: CheckMutantsDecision['results']) => {
