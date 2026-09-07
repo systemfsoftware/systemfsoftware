@@ -303,11 +303,11 @@ export const Service =
         groupEntry = undefined
       }
       if (typeof groupEntry !== 'object' || groupEntry === null) {
-        return Effect.fail(new UnknownApiGroupError({ group }))
+        return Effect.fail(UnknownApiGroupError.make({ group }))
       }
       const call: unknown = Reflect.get(groupEntry, endpoint)
       if (!isEndpointCall(call)) {
-        return Effect.fail(new UnknownEndpointError({ group, endpoint }))
+        return Effect.fail(UnknownEndpointError.make({ group, endpoint }))
       }
       return call(request)
     }
