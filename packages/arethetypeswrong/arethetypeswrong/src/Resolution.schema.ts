@@ -8,7 +8,7 @@ export const ProgramInfoSchema = Schema.Struct({
 export type ProgramInfo = Schema.Schema.Type<typeof ProgramInfoSchema>
 
 export const EntrypointInfoSchema = Schema.Struct({
-  subpath: Schema.String,
+  subpath: Schema.NonEmptyString,
   resolutions: Schema.Record(
     ResolutionKindSchema,
     Schema.suspend(() => EntrypointResolutionAnalysisSchema),

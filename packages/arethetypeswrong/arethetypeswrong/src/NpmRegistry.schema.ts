@@ -1,8 +1,8 @@
 import { Schema } from 'effect'
 
 const NpmRegistryVersionSchema = Schema.Struct({
-  deprecated: Schema.optional(Schema.String),
-  dist: Schema.Struct({ tarball: Schema.String }),
+  deprecated: Schema.optional(Schema.NonEmptyString),
+  dist: Schema.Struct({ tarball: Schema.NonEmptyString }),
 })
 
 /**
@@ -14,9 +14,9 @@ const NpmRegistryVersionSchema = Schema.Struct({
  * accesses on `any` further downstream.
  */
 export const NpmRegistryDocSchema = Schema.Struct({
-  error: Schema.optional(Schema.String),
-  version: Schema.optional(Schema.String),
-  dist: Schema.optional(Schema.Struct({ tarball: Schema.String })),
+  error: Schema.optional(Schema.NonEmptyString),
+  version: Schema.optional(Schema.NonEmptyString),
+  dist: Schema.optional(Schema.Struct({ tarball: Schema.NonEmptyString })),
   versions: Schema.optional(Schema.Record(Schema.String, NpmRegistryVersionSchema)),
   'dist-tags': Schema.optional(Schema.Record(Schema.String, Schema.String)),
   time: Schema.optional(Schema.Record(Schema.String, Schema.String)),

@@ -4,7 +4,7 @@ export const PackageSpecVersionKindSchema = Schema.Literals(['none', 'exact', 'r
 export type PackageSpecVersionKind = Schema.Schema.Type<typeof PackageSpecVersionKindSchema>
 
 export const ParsedPackageSpecSchema = Schema.Struct({
-  name: Schema.String,
+  name: Schema.NonEmptyString,
   versionKind: PackageSpecVersionKindSchema,
   version: Schema.String,
 })

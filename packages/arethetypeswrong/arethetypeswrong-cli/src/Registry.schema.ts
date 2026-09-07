@@ -6,9 +6,9 @@ import * as S from 'effect/Schema'
  * field, instead of surfacing as a member access on `any` further downstream.
  */
 export const RegistryDocument = S.Struct({
-  name: S.String,
-  version: S.String,
-  dist: S.Struct({ tarball: S.String }),
+  name: S.NonEmptyString,
+  version: S.NonEmptyString,
+  dist: S.Struct({ tarball: S.NonEmptyString }),
 })
 
 /** A registry request that never produced a tarball, carrying its cause. */

@@ -16,6 +16,6 @@ export const AttwConfigSchema = Schema.Struct({
   entrypointsLegacy: Schema.optional(Schema.Boolean),
   fromNpm: Schema.optional(Schema.Boolean),
   pack: Schema.optional(Schema.Boolean),
-  registry: Schema.optional(Schema.String),
+  registry: Schema.optional(Schema.NonEmptyString),
 })
 export type AttwConfig = Schema.Schema.Type<typeof AttwConfigSchema>

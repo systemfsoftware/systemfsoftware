@@ -31,12 +31,12 @@ export type ModuleKindSyntax = Schema.Schema.Type<typeof ModuleKindSyntaxSchema>
 export const ModuleKindSchema = Schema.Struct({
   detectedKind: ModuleKindSyntaxSchema,
   detectedReason: ModuleKindReasonSchema,
-  reasonFileName: Schema.String,
+  reasonFileName: Schema.NonEmptyString,
 })
 export type ModuleKind = Schema.Schema.Type<typeof ModuleKindSchema>
 
 export const ResolutionSchema = Schema.Struct({
-  fileName: Schema.String,
+  fileName: Schema.NonEmptyString,
   isTypeScript: Schema.Boolean,
   isJson: Schema.Boolean,
   trace: Schema.Array(Schema.String),
@@ -44,7 +44,7 @@ export const ResolutionSchema = Schema.Struct({
 export type Resolution = Schema.Schema.Type<typeof ResolutionSchema>
 
 export const EntrypointResolutionAnalysisSchema = Schema.Struct({
-  name: Schema.String,
+  name: Schema.NonEmptyString,
   resolutionKind: ResolutionKindSchema,
   isWildcard: Schema.optional(Schema.Boolean),
   resolution: Schema.optional(ResolutionSchema),
@@ -56,22 +56,22 @@ export type EntrypointResolutionAnalysis = Schema.Schema.Type<typeof EntrypointR
 
 export const NoResolutionProblemSchema = Schema.Struct({
   kind: Schema.Literal('NoResolution'),
-  entrypoint: Schema.String,
+  entrypoint: Schema.NonEmptyString,
   resolutionKind: ResolutionKindSchema,
 })
 export type NoResolutionProblem = Schema.Schema.Type<typeof NoResolutionProblemSchema>
 
 export const UntypedResolutionProblemSchema = Schema.Struct({
   kind: Schema.Literal('UntypedResolution'),
-  entrypoint: Schema.String,
+  entrypoint: Schema.NonEmptyString,
   resolutionKind: ResolutionKindSchema,
 })
 export type UntypedResolutionProblem = Schema.Schema.Type<typeof UntypedResolutionProblemSchema>
 
 export const FalseESMProblemSchema = Schema.Struct({
   kind: Schema.Literal('FalseESM'),
-  typesFileName: Schema.String,
-  implementationFileName: Schema.String,
+  typesFileName: Schema.NonEmptyString,
+  implementationFileName: Schema.NonEmptyString,
   typesModuleKind: ModuleKindSchema,
   implementationModuleKind: ModuleKindSchema,
 })
@@ -79,8 +79,8 @@ export type FalseESMProblem = Schema.Schema.Type<typeof FalseESMProblemSchema>
 
 export const FalseCJSProblemSchema = Schema.Struct({
   kind: Schema.Literal('FalseCJS'),
-  typesFileName: Schema.String,
-  implementationFileName: Schema.String,
+  typesFileName: Schema.NonEmptyString,
+  implementationFileName: Schema.NonEmptyString,
   typesModuleKind: ModuleKindSchema,
   implementationModuleKind: ModuleKindSchema,
 })
@@ -88,15 +88,15 @@ export type FalseCJSProblem = Schema.Schema.Type<typeof FalseCJSProblemSchema>
 
 export const CJSResolvesToESMProblemSchema = Schema.Struct({
   kind: Schema.Literal('CJSResolvesToESM'),
-  entrypoint: Schema.String,
+  entrypoint: Schema.NonEmptyString,
   resolutionKind: ResolutionKindSchema,
 })
 export type CJSResolvesToESMProblem = Schema.Schema.Type<typeof CJSResolvesToESMProblemSchema>
 
 export const NamedExportsProblemSchema = Schema.Struct({
   kind: Schema.Literal('NamedExports'),
-  typesFileName: Schema.String,
-  implementationFileName: Schema.String,
+  typesFileName: Schema.NonEmptyString,
+  implementationFileName: Schema.NonEmptyString,
   isMissingAllNamed: Schema.Boolean,
   missing: Schema.Array(Schema.String),
 })
@@ -104,42 +104,42 @@ export type NamedExportsProblem = Schema.Schema.Type<typeof NamedExportsProblemS
 
 export const FallbackConditionProblemSchema = Schema.Struct({
   kind: Schema.Literal('FallbackCondition'),
-  entrypoint: Schema.String,
+  entrypoint: Schema.NonEmptyString,
   resolutionKind: ResolutionKindSchema,
 })
 export type FallbackConditionProblem = Schema.Schema.Type<typeof FallbackConditionProblemSchema>
 
 export const FalseExportDefaultProblemSchema = Schema.Struct({
   kind: Schema.Literal('FalseExportDefault'),
-  typesFileName: Schema.String,
-  implementationFileName: Schema.String,
+  typesFileName: Schema.NonEmptyString,
+  implementationFileName: Schema.NonEmptyString,
 })
 export type FalseExportDefaultProblem = Schema.Schema.Type<typeof FalseExportDefaultProblemSchema>
 
 export const MissingExportEqualsProblemSchema = Schema.Struct({
   kind: Schema.Literal('MissingExportEquals'),
-  typesFileName: Schema.String,
-  implementationFileName: Schema.String,
+  typesFileName: Schema.NonEmptyString,
+  implementationFileName: Schema.NonEmptyString,
 })
 export type MissingExportEqualsProblem = Schema.Schema.Type<typeof MissingExportEqualsProblemSchema>
 
 export const InternalResolutionErrorProblemSchema = Schema.Struct({
   kind: Schema.Literal('InternalResolutionError'),
-  fileName: Schema.String,
-  pos: Schema.Number,
-  end: Schema.Number,
+  fileName: Schema.NonEmptyString,
+  pos: Schema.Int,
+  end: Schema.Int,
   resolutionOption: ResolutionOptionSchema,
-  moduleSpecifier: Schema.String,
-  resolutionMode: Schema.Number,
+  moduleSpecifier: Schema.NonEmptyString,
+  resolutionMode: ModuleKindSyntaxSchema,
   trace: Schema.Array(Schema.String),
 })
 export type InternalResolutionErrorProblem = Schema.Schema.Type<typeof InternalResolutionErrorProblemSchema>
 
 export const UnexpectedModuleSyntaxProblemSchema = Schema.Struct({
   kind: Schema.Literal('UnexpectedModuleSyntax'),
-  fileName: Schema.String,
-  pos: Schema.Number,
-  end: Schema.Number,
+  fileName: Schema.NonEmptyString,
+  pos: Schema.Int,
+  end: Schema.Int,
   syntax: ModuleKindSyntaxSchema,
   moduleKind: ModuleKindSchema,
 })
@@ -147,9 +147,9 @@ export type UnexpectedModuleSyntaxProblem = Schema.Schema.Type<typeof Unexpected
 
 export const CJSOnlyExportsDefaultProblemSchema = Schema.Struct({
   kind: Schema.Literal('CJSOnlyExportsDefault'),
-  fileName: Schema.String,
-  pos: Schema.Number,
-  end: Schema.Number,
+  fileName: Schema.NonEmptyString,
+  pos: Schema.Int,
+  end: Schema.Int,
 })
 export type CJSOnlyExportsDefaultProblem = Schema.Schema.Type<typeof CJSOnlyExportsDefaultProblemSchema>
 

@@ -27,9 +27,9 @@ export type BuildTool = Schema.Schema.Type<typeof BuildToolSchema>
 export const IncludedTypesSchema = Schema.Struct({ kind: Schema.Literal('included') })
 export const TypesPackageSchema = Schema.Struct({
   kind: Schema.Literal('@types'),
-  packageName: Schema.String,
-  packageVersion: Schema.String,
-  definitelyTypedUrl: Schema.optional(Schema.String),
+  packageName: Schema.NonEmptyString,
+  packageVersion: Schema.NonEmptyString,
+  definitelyTypedUrl: Schema.optional(Schema.NonEmptyString),
 })
 export const AnalysisTypesSchema = Schema.Union([IncludedTypesSchema, TypesPackageSchema])
 export type AnalysisTypes = Schema.Schema.Type<typeof AnalysisTypesSchema>
@@ -37,8 +37,8 @@ export type AnalysisTypes = Schema.Schema.Type<typeof AnalysisTypesSchema>
 const AnyProgramInfoSchema = Schema.Any
 
 export const AnalysisSchema = Schema.Struct({
-  packageName: Schema.String,
-  packageVersion: Schema.String,
+  packageName: Schema.NonEmptyString,
+  packageVersion: Schema.NonEmptyString,
   buildTools: Schema.Record(Schema.String, Schema.String),
   types: AnalysisTypesSchema,
   entrypoints: Schema.Record(Schema.String, EntrypointInfoSchema),
@@ -48,8 +48,8 @@ export const AnalysisSchema = Schema.Struct({
 export type Analysis = Schema.Schema.Type<typeof AnalysisSchema>
 
 export const UntypedResultSchema = Schema.Struct({
-  packageName: Schema.String,
-  packageVersion: Schema.String,
+  packageName: Schema.NonEmptyString,
+  packageVersion: Schema.NonEmptyString,
   types: Schema.Literal(false),
 })
 export type UntypedResult = Schema.Schema.Type<typeof UntypedResultSchema>
