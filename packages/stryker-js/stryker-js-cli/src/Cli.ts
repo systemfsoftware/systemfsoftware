@@ -6,12 +6,9 @@ import { Cell } from '@systemfsoftware/effect-cell-types'
 import {
   idGeneratorLayer,
   mutationRun,
-  type PrepareExecutorArgs,
   type ResolvedMode,
   RunEnvironment,
   type RunEnvironmentShape,
-  type RunOutcome,
-  type StageError,
   strykerVersion,
 } from '@systemfsoftware/stryker-js-engine'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
@@ -32,7 +29,6 @@ import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import type * as Scope from 'effect/Scope'
 import * as Terminal from 'effect/Terminal'
 import * as Argument from 'effect/unstable/cli/Argument'
 import * as CliConfig from 'effect/unstable/cli/CliConfig'
@@ -63,7 +59,7 @@ import { emitNullScoreVerdict } from './Output.js'
 import { nodePlatformLayer } from './platform/node.js'
 import { DEFAULT_PROGRESS_STREAM_FILE } from './StreamFile.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
-import type { StrykerRun } from './StrykerRun.js'
+import type { StrykerRun, StrykerRunCell } from './StrykerRun.js'
 import {
   survivorMutateSpans,
   survivorsAdmission,
@@ -1125,7 +1121,7 @@ const runEdgeOf = (input: RunStrykerCliInput, stream: RunEventStream) => {
     Layer.succeed(RunEvents, stream.queue),
     idGeneratorLayer,
   ).pipe(Layer.provideMerge(nodePlatformLayer))
-  const runCell: Cell.Cell<PrepareExecutorArgs, RunOutcome, StageError, Scope.Scope> = Cell.provide(
+  const runCell = Cell.provide(
     input.mutationRun ?? mutationRun,
     appLayer,
   )
@@ -1146,13 +1142,8 @@ interface RunEdge {
   readonly stream: RunEventStream
   readonly basePath: string
   readonly pathService: Path.Path
-  readonly runCell: Cell.Cell<PrepareExecutorArgs, RunOutcome, StageError, Scope.Scope>
-  readonly survivorsCell: Cell.Cell<
-    PartialStrykerOptions,
-    SurvivorsFrame,
-    SurvivorsAdmissionError,
-    never
-  >
+  readonly runCell: StrykerRunCell
+  readonly survivorsCell: Cell.Cell<PartialStrykerOptions, SurvivorsFrame, SurvivorsAdmissionError>
 }
 
 const dispatchRequest = (edge: RunEdge, input: RunStrykerCliInput) => (request: CliRequest) =>

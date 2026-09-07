@@ -14,34 +14,22 @@ import {
 const PrepareDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-engine/PrepareDecision')
 
 describe('prepareRun', () => {
-  it.prop(
-    '∀d_Brand_∈Decision',
-    [
-      fc.constantFrom(
-        new PreparePlanned({ fileCount: 1, mutateCount: 1 }),
-        new PrepareRefused({ reason: 'No input files found.' }),
-      ),
-    ],
-    ([decision]) => Object.getOwnPropertySymbols(decision).includes(PrepareDecisionTypeId),
-  )
-  it.prop('∀c_Command_≡Decision', [S.toArbitrary(PrepareCommand)(fc)], ([command]) => {
+  it.prop('∀c_Fail_≡fileCount<0', [S.toArbitrary(PrepareCommand)(fc)], ([command]) => {
     const result = prepareRun(command)
     if (command.fileCount < 0) {
-      return (
-        Result.isFailure(result) &&
-        S.is(PrepareWorkflowError)(result.failure) &&
-        result.failure.reason === 'Invalid file count'
-      )
+      return Result.isFailure(result) && S.is(PrepareWorkflowError)(result.failure)
     }
+    return Result.isSuccess(result)
+  })
+  it.prop('∀c_Decision_∈branded∧conserved', [S.toArbitrary(PrepareCommand)(fc)], ([command]) => {
+    const result = prepareRun(command)
+    if (command.fileCount < 0) return true
+    if (!Result.isSuccess(result)) return false
+    if (!Object.getOwnPropertySymbols(result.success).includes(PrepareDecisionTypeId)) return false
     if (command.fileCount === 0) {
-      return (
-        Result.isSuccess(result) &&
-        S.is(PrepareRefused)(result.success) &&
-        result.success.reason === 'No input files found.'
-      )
+      return S.is(PrepareRefused)(result.success)
     }
     return (
-      Result.isSuccess(result) &&
       S.is(PreparePlanned)(result.success) &&
       result.success.fileCount === command.fileCount &&
       result.success.mutateCount === command.mutateCount

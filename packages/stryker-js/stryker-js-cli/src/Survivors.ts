@@ -238,12 +238,7 @@ export function survivorMutateSpans(survivors: readonly Mutant[], basePath: stri
 export const SURVIVORS_REJECT_EXIT_CLASS: ExitClass = 'ConfigError'
 const hashContent: HashContent = (content) => bytesToHex(sha256(utf8ToBytes(content)))
 
-export const survivorsAdmission: Cell.Cell<
-  PartialStrykerOptions,
-  SurvivorsFrame,
-  SurvivorsAdmissionError,
-  FileSystem.FileSystem | Path.Path | Module | RunEnvironment
-> = Cell.layer({
+export const survivorsAdmission = Cell.layer({
   read: (cliOptions: PartialStrykerOptions) =>
     Effect.gen(function*() {
       const pathService = yield* Path.Path
