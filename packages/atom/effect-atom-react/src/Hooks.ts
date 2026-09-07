@@ -266,7 +266,10 @@ function atomToPromise<A, E>(
   atom: Atom.Atom<AsyncResult.Result<A, E>>,
   suspendOnWaiting: boolean,
 ): Promise<void> {
-  const registries = suspendOnWaiting ? atomPromiseMap.suspendOnWaiting : atomPromiseMap.default
+  let registries = atomPromiseMap.default
+  if (suspendOnWaiting) {
+    registries = atomPromiseMap.suspendOnWaiting
+  }
   let map = registries.get(registry)
   if (map === undefined) {
     map = new WeakMap()
@@ -298,6 +301,7 @@ function atomResultOrSuspend<A, E>(
 ): AsyncResult.Success<A, E> | AsyncResult.Failure<A, E> {
   const value = useStore(registry, atom)
   if (AsyncResult.isInitial(value) || (suspendOnWaiting && value.waiting)) {
+    // oxlint-disable-next-line typescript/only-throw-error -- React Suspense protocol: suspending requires throwing the pending promise itself
     throw atomToPromise(registry, atom, suspendOnWaiting)
   }
   return value
@@ -337,7 +341,7 @@ export const useAtomSuspense = <A, E>(
   const registry = React.useContext(RegistryContext)
   const result = atomResultOrSuspend(registry, atom, options?.suspendOnWaiting ?? false)
   if (AsyncResult.isFailure(result)) {
-    if (options?.includeFailure) {
+    if (options?.includeFailure === true) {
       return result
     }
     throw Cause.squash(result.cause)

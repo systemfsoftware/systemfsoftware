@@ -113,5 +113,5 @@ export const RegistryProvider = (options: {
       }, 500)
     }
   }, [ref])
-  return React.createElement(RegistryContext.Provider, { value: ref.current.registry }, options?.children)
+  return React.createElement(RegistryContext.Provider, { value: ref.current.registry }, options.children)
 }
