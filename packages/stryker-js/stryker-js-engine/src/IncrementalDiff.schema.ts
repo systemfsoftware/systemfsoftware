@@ -14,6 +14,7 @@ const PreviousMutantSchema = S.Struct({
     'Survived',
     'NoCoverage',
     'Timeout',
+    'CompileError',
     'RuntimeError',
     'Ignored',
     'Pending',

@@ -17,20 +17,22 @@ const DiffStatisticsSchema = S.Struct({
 const PositionSchema = S.Struct({ line: S.Finite, column: S.Finite })
 const PreviousLocationSchema = S.Struct({ start: PositionSchema, end: PositionSchema })
 
+const MutantStatusSchema = S.Literals([
+  'Killed',
+  'Survived',
+  'NoCoverage',
+  'Timeout',
+  'CompileError',
+  'RuntimeError',
+  'Ignored',
+  'Pending',
+])
+
 const PreviousMutantSchema = S.Struct({
   mutatorName: S.NonEmptyString,
   replacement: ReplacementTextSchema,
   location: PreviousLocationSchema,
-  status: S.Literals([
-    'Killed',
-    'Survived',
-    'NoCoverage',
-    'Timeout',
-    'CompileError',
-    'RuntimeError',
-    'Ignored',
-    'Pending',
-  ]),
+  status: MutantStatusSchema,
   testsCompleted: S.optional(S.Finite),
   coveredBy: S.optional(S.Array(S.String)),
   killedBy: S.optional(S.Array(S.String)),
@@ -47,16 +49,7 @@ const PreviousTestFileSchema = S.Struct({
 
 const RememberedMutantSchema = S.Struct({
   mutantId: S.NonEmptyString,
-  status: S.Literals([
-    'Killed',
-    'Survived',
-    'NoCoverage',
-    'Timeout',
-    'CompileError',
-    'RuntimeError',
-    'Ignored',
-    'Pending',
-  ]),
+  status: MutantStatusSchema,
   testsCompleted: S.optional(S.Finite),
   coveredBy: S.optional(S.Array(S.String)),
   killedBy: S.optional(S.Array(S.String)),
@@ -130,16 +123,7 @@ const RunPlanSchema = S.Struct({
 const EarlyResultPlanSchema = S.Struct({
   plan: S.Literal('EarlyResult'),
   mutantId: S.NonEmptyString,
-  status: S.Literals([
-    'Killed',
-    'Survived',
-    'NoCoverage',
-    'Timeout',
-    'CompileError',
-    'RuntimeError',
-    'Ignored',
-    'Pending',
-  ]),
+  status: MutantStatusSchema,
   statusReason: S.optional(StatusReasonSchema),
   static: S.optional(IsStaticSchema),
   coveredBy: S.optional(S.Array(S.String)),
