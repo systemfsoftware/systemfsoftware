@@ -1,3 +1,4 @@
+/// <reference types="vitest/import-meta" />
 /**
  * Represents observable state for asynchronous values.
  *
@@ -13,6 +14,7 @@
 import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Effect from 'effect/Effect'
+import * as Equal from 'effect/Equal'
 import * as Exit from 'effect/Exit'
 import type { LazyArg } from 'effect/Function'
 import { constTrue, dual } from 'effect/Function'
@@ -23,6 +25,8 @@ import type { Predicate, Refinement } from 'effect/Predicate'
 import { isIterable, isTagged } from 'effect/Predicate'
 import * as Either from 'effect/Result'
 import type * as Types from 'effect/Types'
+
+import { Schema as ResultSchema } from './ResultSchema.js'
 
 import {
   type Failure,
@@ -826,3 +830,160 @@ class BuilderImpl<Out, A, E> {
 }
 
 export { Schema } from './ResultSchema.js'
+
+// Fixed timestamp for every `Success` built below, so generation never
+// observes the wall clock; no law asserts on it.
+const lawTimestamp = 0
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
+  // so this branch is statically dead in the build and the runner never enters
+  // the published module graph. A static import would ship it.
+  const { it } = await import('@effect/vitest')
+  const { Schema: S } = await import('effect')
+  const { FastCheck: fc } = await import('effect/testing')
+
+  // Algebraic laws of the `Result` combinators, quantified over generated
+  // results. The result schema retains the value and error domains, and every
+  // arbitrary below derives through it, so generation cannot drift from the
+  // declared domain.
+  const LawSuccessValue = S.Int
+  const LawError = S.Literals(['e0', 'e1', 'e2'])
+  const LawWaiting = S.Boolean
+  const LawResult = ResultSchema({ success: LawSuccessValue, error: LawError })
+  const LawSuccessShape = S.Struct({ value: LawResult.success, waiting: LawWaiting })
+  const LawFailureShape = S.Struct({
+    error: LawError,
+    waiting: LawWaiting,
+    previous: S.Option(LawSuccessValue),
+  })
+
+  const successArb = S.toArbitrary(LawSuccessShape)(fc).map(({ value, waiting }) =>
+    success(value, { waiting, timestamp: lawTimestamp })
+  )
+  const failureArb = S.toArbitrary(LawFailureShape)(fc).map(({ error, waiting, previous }) =>
+    failure(Cause.fail(error), {
+      previousSuccess: Option.map(previous, (n) => success(n, { timestamp: lawTimestamp })),
+      waiting,
+    })
+  )
+  const initialArb = S.toArbitrary(LawWaiting)(fc).map((waiting) => initial(waiting))
+  const resultArb = fc.oneof(successArb, failureArb, initialArb)
+  const resultPairArb = fc.tuple(resultArb, resultArb)
+  const errorArb = S.toArbitrary(LawError)(fc)
+
+  const incResult = (n: number) => success(n + 1, { timestamp: lawTimestamp })
+
+  // Mapping with the identity changes nothing. Equality on `Failure` compares
+  // the cause only, so the value projection is what pins previous-success
+  // threading through the map.
+  it.prop(
+    '∀r_ResultMap_=Identity',
+    [resultArb],
+    ([r]) => Equal.equals(map(r, (n) => n), r) && Equal.equals(value(map(r, (n) => n)), value(r)),
+  )
+
+  // Mapping twice composes exactly like mapping once with the composed
+  // function, on the outcome and on any remembered previous success.
+  it.prop(
+    '∀r_ResultMap_=Composition',
+    [resultArb],
+    ([r]) =>
+      Equal.equals(map(map(r, (n) => n + 1), (n) => n * 2), map(r, (n) => (n + 1) * 2)) &&
+      Equal.equals(value(map(map(r, (n) => n + 1), (n) => n * 2)), value(map(r, (n) => (n + 1) * 2))),
+  )
+
+  // Sequencing a bare success calls the continuation with its value.
+  it.prop(
+    '∀s_ResultFlatMap_=LeftIdentity',
+    [successArb],
+    ([s]) => Equal.equals(flatMap(s, incResult), success(getOrThrow(s) + 1, { timestamp: lawTimestamp })),
+  )
+
+  // Sequencing nests: sequencing twice agrees with sequencing once over the
+  // composed continuation, on the outcome and on the remembered previous
+  // success.
+  it.prop('∀r_ResultFlatMap_=Associativity', [resultArb], ([r]) =>
+    Equal.equals(
+      flatMap(flatMap(r, incResult), (n) => success(n * 2, { timestamp: lawTimestamp })),
+      flatMap(r, (a) => flatMap(incResult(a), (n) => success(n * 2, { timestamp: lawTimestamp }))),
+    ) && Equal.equals(
+      value(flatMap(flatMap(r, incResult), (n) => success(n * 2, { timestamp: lawTimestamp }))),
+      value(flatMap(r, (a) => flatMap(incResult(a), (n) => success(n * 2, { timestamp: lawTimestamp })))),
+    ))
+
+  // `match` dispatches on the variant the guards report: initials take
+  // `onInitial`, failures (which always carry a cause) take `onFailure`, and
+  // successes take `onSuccess`.
+  it.prop('∀r_ResultMatch_=DispatchAgreesWithGuards', [resultArb], ([r]) => {
+    const tag = match(r, {
+      onInitial: () => 'initial',
+      onFailure: () => 'failure',
+      onSuccess: () => 'success',
+    })
+    return isInitial(r) === (tag === 'initial') && isFailure(r) === (tag === 'failure') &&
+      isSuccess(r) === (tag === 'success')
+  })
+
+  // Projecting a result to its available value agrees with `value`: the
+  // current value on success, the remembered one on failure, none on initial.
+  it.prop('∀r_ResultMatch_=ValueProjectionAgrees', [resultArb], ([r]) =>
+    Equal.equals(
+      value(r),
+      match(r, {
+        onInitial: () => Option.none(),
+        onFailure: (f) => Option.map(f.previousSuccess, (s) => s.value),
+        onSuccess: (s) => Option.some(s.value),
+      }),
+    ))
+
+  // On a success, `getOrThrow` returns the value and the exit succeeds.
+  it.prop(
+    '∀s_ResultGetOrThrow_=ExitAgrees',
+    [successArb],
+    ([s]) => getOrThrow(s) === s.value && Exit.isSuccess(toExit(s)),
+  )
+
+  // Replacing the remembered success of a failure takes the latest success
+  // from the previous result, or drops it when the previous result has none;
+  // non-failures pass through untouched.
+  it.prop('∀fr_ResultReplacePrevious_=RoundTrip', [resultPairArb], ([[first, second]]) => {
+    const replaced = replacePrevious(first, Option.some(second))
+    const expected = match(second, {
+      onInitial: () => Option.none(),
+      onFailure: (f) => f.previousSuccess,
+      onSuccess: (s) => Option.some(s),
+    })
+    if (isFailure(first)) {
+      return isFailure(replaced) && Equal.equals(replaced.previousSuccess, expected)
+    }
+    return Equal.equals(replaced, first)
+  })
+
+  // `fail` builds a failure whose typed error round-trips and which carries
+  // no value.
+  it.prop(
+    '∀e_ResultFail_=FailureWithTypedError',
+    [errorArb],
+    ([e]) => isFailure(fail(e)) && Equal.equals(error(fail(e)), Option.some(e)) && Option.isNone(value(fail(e))),
+  )
+
+  // A cause is present exactly on failures.
+  it.prop('∀r_ResultCause_∈FailureIffPresent', [resultArb], ([r]) => Option.isSome(cause(r)) === isFailure(r))
+
+  // Falling back agrees with the value projection: the available value, or
+  // the fallback when no current or remembered success exists.
+  it.prop(
+    '∀r_ResultGetOrElse_=ValueAgrees',
+    [resultArb],
+    ([r]) => getOrElse(r, () => -999) === Option.getOrElse(value(r), () => -999),
+  )
+
+  // Marking waiting sets the flag and preserves the variant and its value.
+  it.prop('∀r_ResultWaiting_=SetsWaitingPreservesVariant', [resultArb], ([r]) =>
+    waiting(r).waiting === true &&
+    Equal.equals(value(waiting(r)), value(r)) &&
+    isInitial(r) === isInitial(waiting(r)) &&
+    isSuccess(r) === isSuccess(waiting(r)) &&
+    isFailure(r) === isFailure(waiting(r)))
+}
