@@ -1,6 +1,7 @@
 ---
 area: architecture-patterns
 problem_type: design
+category: architecture-patterns
 ---
 
 # Plugin Lifecycle: Construction Is Initialization
