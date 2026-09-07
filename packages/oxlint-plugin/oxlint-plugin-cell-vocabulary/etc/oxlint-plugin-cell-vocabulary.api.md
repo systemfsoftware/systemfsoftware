@@ -13,6 +13,8 @@ const _default: {
     };
     rules: {
         'no-io-in-phase-bodies': Rule;
+        'no-platform-provide-service-on-run': Rule;
+        'no-two-run-chain': Rule;
     };
     configs: {
         recommended: {
