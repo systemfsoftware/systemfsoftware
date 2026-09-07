@@ -1,9 +1,7 @@
 /**
  * The test runner capability — spawning, timeout, retry, reuse and environment
- * decisions for the engine's test execution.
- *
- * One module per capability: types, ports, combinators and the impure edge
- * live together, as `effect-torch`'s `Tensor.ts` or `Trainer.ts` do. The
+ * reload. One module per capability: types, ports, combinators and the impure
+ * edge live together, as `effect-torch`'s `Tensor.ts` or `Trainer.ts` do. The
  * schemas stay in `TestRunner.schema.ts`. The spawned worker entry point
  * stays separate at `child-process-test-runner-worker.ts` (emitted as its own
  * chunk).
@@ -12,7 +10,7 @@
 import * as Layer from 'effect/Layer'
 
 import type { Policy } from '@systemfsoftware/effect-cell-types'
-import { type FileDescriptions, INSTRUMENTER_CONSTANTS } from '@systemfsoftware/stryker-js/Mutant'
+import { errorToString, type FileDescriptions, INSTRUMENTER_CONSTANTS } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import {
   type CompleteDryRunResult,
@@ -444,15 +442,15 @@ const runCommand = (
         return { output, exitCode }
       }),
     ).pipe(
-      Effect.catchCause((cause) => Effect.succeed({ failure: cause })),
+      Effect.catch((error) => Effect.succeed({ status: 'error' as const, errorMessage: errorToString(error) })),
     )
 
     const elapsed = (yield* Clock.currentTimeMillis) - startedAt
 
-    if ('failure' in outcome) {
-      return { status: 'error', errorMessage: String(outcome.failure) }
+    if ('exitCode' in outcome) {
+      return resultFromExit(outcome.exitCode, outcome.output, elapsed)
     }
-    return resultFromExit(outcome.exitCode, outcome.output, elapsed)
+    return { status: 'error' as const, errorMessage: outcome.errorMessage }
   })
 
 /** Run the tests with no mutant active, to establish the baseline. */

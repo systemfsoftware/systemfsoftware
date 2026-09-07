@@ -23,8 +23,7 @@ const drainStreamFile = (
     yield* Effect.scoped(
       Effect.gen(function*() {
         const handle = yield* fs.open(fileName, { flag: 'w' })
-        yield* Stream.runForEach(framed, (line) =>
-          handle.writeAll(encodeUtf8(line)).pipe(Effect.flatMap(() => handle.sync)))
+        yield* Stream.runForEach(framed, (line) => handle.writeAll(encodeUtf8(line)))
       }),
     ).pipe(Effect.orDie)
   })
