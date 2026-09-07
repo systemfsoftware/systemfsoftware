@@ -53,6 +53,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
