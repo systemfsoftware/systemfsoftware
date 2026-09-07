@@ -98,6 +98,42 @@ export const User = Schema.Struct({ name: Schema.String.pipe(Schema.filter((s: s
       filename: SCHEMA_FILE,
     },
     {
+      name: 'Should_Pass_When_BrandNamesTheRoleOverBareString',
+      code: `import { Schema } from 'effect'
+export const User = Schema.Struct({ email: Schema.String.pipe(Schema.brand('Email')) })`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_AliasedBrandNamesTheRoleOverBareNumber',
+      code: `import { Schema as S } from 'effect'
+export const Counter = S.Struct({ count: S.Number.pipe(S.brand('Count')) })`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_NamespacedBrandNamesTheRoleOverBareBoolean',
+      code: `import * as E from 'effect'
+export const Flags = E.Schema.Struct({ enabled: E.Schema.Boolean.pipe(E.Schema.brand('Flag')) })`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_BrandNamesTheRoleOverUnrefinedUnknown',
+      code: `import { Schema } from 'effect'
+export const Bag = Schema.Struct({ misc: Schema.Unknown.pipe(Schema.brand('Mystery')) })`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_BrandFollowsACheckRefinement',
+      code: `import { Schema } from 'effect'
+export const User = Schema.Struct({ name: Schema.String.pipe(Schema.check(Schema.isPattern(/^[A-Z]+$/)), Schema.brand('Name')) })`,
+      filename: SCHEMA_FILE,
+    },
+    {
+      name: 'Should_Pass_When_PipeFunctionHoldsBrandOverBare',
+      code: `import { pipe, Schema } from 'effect'
+export const User = Schema.Struct({ email: pipe(Schema.String, Schema.brand('Email')) })`,
+      filename: SCHEMA_FILE,
+    },
+    {
       name: 'Should_Pass_When_FieldKeyIsComputed',
       code: `import { Schema } from 'effect'
 const K = 'name'

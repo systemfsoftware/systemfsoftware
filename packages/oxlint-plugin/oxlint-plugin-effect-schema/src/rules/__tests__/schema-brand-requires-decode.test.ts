@@ -36,19 +36,20 @@ export const Mystery = Schema.Unknown.pipe(Schema.brand('Mystery'))`,
     {
       name: 'Should_Pass_When_CheckStandsBehindBrand',
       code: `import { Schema } from 'effect'
-export const Name = Schema.String.pipe(Schema.check(Schema.isMinLength(1)), Schema.brand('Name'))`,
+export const Name = Schema.String.pipe(Schema.check(Schema.isPattern(/^[A-Z]+$/)), Schema.brand('Name'))`,
       filename: SCHEMA_FILE,
     },
     {
       name: 'Should_Pass_When_BrandCheckCarriesACheck',
-      code: `import { Brand } from 'effect'
-export const make = Brand.check((s: string) => s.length > 0)`,
+      code: `import { Brand, Schema } from 'effect'
+export const make = Brand.check(Schema.isPattern(/^[A-Z]+$/))`,
       filename: SCHEMA_FILE,
     },
     {
       name: 'Should_Pass_When_BareCheckCarriesACheck',
       code: `import { check } from 'effect/Brand'
-export const make = check((s: string) => s.length > 0)`,
+import { Schema } from 'effect'
+export const make = check(Schema.isPattern(/^[A-Z]+$/))`,
       filename: SCHEMA_FILE,
     },
     {

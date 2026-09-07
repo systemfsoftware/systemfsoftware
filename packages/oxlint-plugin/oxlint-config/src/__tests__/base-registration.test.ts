@@ -126,25 +126,13 @@ interface AllowlistEntry {
  * Rules absent from their leaf's recommended set, each dated and reasoned.
  * Dated-baseline shape: an entry whose rule is now recommended fails, and an
  * entry naming no real rule of its leaf fails — the list can only shrink.
- * The U1 pair awaits its enrollment commit (migration wave in flight). The
- * structure and tag-discipline entries are deliberate absences per the
+ * The structure and tag-discipline entries are deliberate absences per the
  * aggregate's own comment (recommending them would fire on correct consumer
  * code), recorded here so a fifth absence still fails. The cell-vocabulary
- * pair enrolled 2026-09-07 after the tree verified clean.
+ * pair and the U1 schema pair enrolled 2026-09-07 after the tree verified
+ * clean — the schema migration converted every field to a named claim.
  */
 const NOT_YET_ENROLLED: readonly AllowlistEntry[] = [
-  {
-    plugin: '@systemfsoftware/oxlint-plugin-effect-schema',
-    rule: 'schema-bare-primitive-field',
-    date: '2026-09-07',
-    reason: 'U1 evaluator landed; enrollment ships in its own commit',
-  },
-  {
-    plugin: '@systemfsoftware/oxlint-plugin-effect-schema',
-    rule: 'schema-brand-requires-decode',
-    date: '2026-09-07',
-    reason: 'Rescoped from brand-without-filter to zero-decode constructors; enrollment ships in its own commit',
-  },
   {
     plugin: '@systemfsoftware/oxlint-plugin-structure',
     rule: 'ban-classes',

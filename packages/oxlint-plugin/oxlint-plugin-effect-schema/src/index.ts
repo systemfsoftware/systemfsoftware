@@ -22,6 +22,8 @@ const recommendedRules = {
   [rule('schema-declaration-location')]: 'error',
   [rule('schema-filter-constructive-generation')]: 'error',
   [rule('schema-file-exports-schemas-only')]: 'error',
+  [rule('schema-bare-primitive-field')]: 'error',
+  [rule('schema-brand-requires-decode')]: 'error',
 } as const
 
 export default {

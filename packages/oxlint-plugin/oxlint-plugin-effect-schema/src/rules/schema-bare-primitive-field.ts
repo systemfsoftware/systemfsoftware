@@ -32,7 +32,7 @@ export const schemaBarePrimitiveField = defineRule({
           const key = fieldKeyOf(property)
           if (key === null) continue
           const result = analyzeChain(property.value, getScope, 0)
-          if (result.base !== 'bare' || result.refined || result.opaque) continue
+          if (result.base !== 'bare' || result.refined || result.opaque || result.branded) continue
           context.report({
             node: property.value,
             messageId: 'barePrimitiveField',

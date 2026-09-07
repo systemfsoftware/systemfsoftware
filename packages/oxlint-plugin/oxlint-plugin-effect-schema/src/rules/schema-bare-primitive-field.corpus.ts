@@ -49,13 +49,6 @@ export const Pair = Schema.Struct({ a: Schema.String, b: Schema.Number })`,
     errors: [bareError('a', 'String'), bareError('b', 'Number')],
   },
   {
-    name: 'Should_Fail_When_BrandSitsOnBareStringWithNoFilter',
-    code: `import { Schema } from 'effect'
-export const User = Schema.Struct({ email: Schema.String.pipe(Schema.brand('Email')) })`,
-    filename: SCHEMA_FILE,
-    errors: [bareError('email', 'String')],
-  },
-  {
     name: 'Should_Fail_When_AnnotationIsTheOnlyChainStep',
     code: `import { Schema } from 'effect'
 export const User = Schema.Struct({ name: Schema.String.annotate({ identifier: 'Name' }) })`,
@@ -83,13 +76,6 @@ export const User = Schema.Struct({ nick: Schema.optional(Schema.String) })`,
 export const User = Schema.Struct({ nick: Schema.NullOr(Schema.String) })`,
     filename: SCHEMA_FILE,
     errors: [bareError('nick', 'String')],
-  },
-  {
-    name: 'Should_Fail_When_PipeFunctionHoldsBrandOverBare',
-    code: `import { pipe, Schema } from 'effect'
-export const User = Schema.Struct({ email: pipe(Schema.String, Schema.brand('Email')) })`,
-    filename: SCHEMA_FILE,
-    errors: [bareError('email', 'String')],
   },
   {
     name: 'Should_Fail_When_BareFieldLivesOutsideASchemaFile',

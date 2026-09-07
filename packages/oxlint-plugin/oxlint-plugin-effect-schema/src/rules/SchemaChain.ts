@@ -99,14 +99,27 @@ export const localInitOf = (name: string, node: ESTree.Node, getScope: GetScope)
 }
 
 export type ChainAnalysis =
-  | { readonly base: 'bare'; readonly member: string; readonly refined: boolean; readonly opaque: boolean }
-  | { readonly base: 'other'; readonly member: null; readonly refined: boolean; readonly opaque: boolean }
+  | {
+    readonly base: 'bare'
+    readonly member: string
+    readonly refined: boolean
+    readonly opaque: boolean
+    readonly branded: boolean
+  }
+  | {
+    readonly base: 'other'
+    readonly member: null
+    readonly refined: boolean
+    readonly opaque: boolean
+    readonly branded: boolean
+  }
 
-const other = (refined: boolean, opaque: boolean): ChainAnalysis => ({
+const other = (refined: boolean, opaque: boolean, branded: boolean): ChainAnalysis => ({
   base: 'other',
   member: null,
   refined,
   opaque,
+  branded,
 })
 
 export type StepKind = 'refinement' | 'transparent' | 'opaque' | 'brand'
@@ -137,17 +150,19 @@ const foldSteps = (
 ): ChainAnalysis => {
   let refined = inner.refined
   let opaque = inner.opaque
+  let branded = inner.branded
   for (const arg of args) {
     const step = classifyStepArg(arg, getScope)
     if (step === 'refinement') refined = true
     else if (step === 'opaque') opaque = true
+    else if (step === 'brand') branded = true
   }
-  if (inner.base !== 'bare') return other(refined, opaque)
-  return { base: 'bare', member: inner.member, refined, opaque }
+  if (inner.base !== 'bare') return other(refined, opaque, branded)
+  return { base: 'bare', member: inner.member, refined, opaque, branded }
 }
 
 export const analyzeChain = (node: ESTree.Node, getScope: GetScope, depth: number): ChainAnalysis => {
-  if (depth > MAX_WALK_DEPTH) return other(false, true)
+  if (depth > MAX_WALK_DEPTH) return other(false, true, false)
   const current = unwrapExpression(node)
   switch (current.type) {
     case 'Identifier': {
@@ -155,22 +170,22 @@ export const analyzeChain = (node: ESTree.Node, getScope: GetScope, depth: numbe
       if (init !== null) return analyzeChain(init, getScope, depth + 1)
       const member = vocabularyMemberOf(current, getScope)
       if (member !== null && BARE_MEMBERS[member] === true) {
-        return { base: 'bare', member, refined: false, opaque: false }
+        return { base: 'bare', member, refined: false, opaque: false, branded: false }
       }
-      return other(false, false)
+      return other(false, false, false)
     }
     case 'MemberExpression': {
       const member = vocabularyMemberOf(current, getScope)
       if (member !== null && BARE_MEMBERS[member] === true) {
-        return { base: 'bare', member, refined: false, opaque: false }
+        return { base: 'bare', member, refined: false, opaque: false, branded: false }
       }
-      return other(false, false)
+      return other(false, false, false)
     }
     case 'CallExpression': {
       return analyzeCall(current, getScope, depth)
     }
     default:
-      return other(false, false)
+      return other(false, false, false)
   }
 }
 
@@ -186,27 +201,28 @@ const analyzeCall = (call: ESTree.CallExpression, getScope: GetScope, depth: num
   }
   if (callee.type === 'Identifier' && callee.name === 'pipe' && isEffectPipeCallee(callee, getScope)) {
     const first = call.arguments[0]
-    if (first === undefined || first.type === 'SpreadElement') return other(false, true)
+    if (first === undefined || first.type === 'SpreadElement') return other(false, true, false)
     return foldSteps(analyzeChain(first, getScope, depth + 1), call.arguments.slice(1), getScope)
   }
   if (callee.type === 'MemberExpression') {
     const member = vocabularyMemberOf(callee, getScope)
     if (member !== null && LOOKTHROUGH_MEMBERS[member] === true && isNamespaceRoot(callee.object, getScope)) {
       const first = call.arguments[0]
-      if (first === undefined || first.type === 'SpreadElement') return other(false, true)
+      if (first === undefined || first.type === 'SpreadElement') return other(false, true, false)
       return analyzeChain(first, getScope, depth + 1)
     }
     if (member !== null && (REFINEMENT_STEPS[member] === true || TRANSPARENT_STEPS[member] === true)) {
       const inner = analyzeChain(callee.object, getScope, depth + 1)
-      if (inner.base !== 'bare') return other(inner.refined, inner.opaque)
+      if (inner.base !== 'bare') return other(inner.refined, inner.opaque, inner.branded)
       return {
         base: 'bare',
         member: inner.member,
         refined: inner.refined || REFINEMENT_STEPS[member] === true,
         opaque: inner.opaque,
+        branded: inner.branded,
       }
     }
-    return other(false, false)
+    return other(false, false, false)
   }
-  return other(false, true)
+  return other(false, true, false)
 }
