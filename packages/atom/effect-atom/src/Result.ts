@@ -921,8 +921,21 @@ if (import.meta.vitest !== void 0) {
       onFailure: () => 'failure',
       onSuccess: () => 'success',
     })
+    const projected = match(r, {
+      onInitial: () => 0,
+      onFailure: (f) => Option.match(f.previousSuccess, { onNone: () => 0, onSome: (s) => s.value + 1 }),
+      onSuccess: (s) => s.value + 1,
+    })
+    const oracle = Match.value(r).pipe(
+      Match.when({ _tag: 'Success' }, (s) => s.value + 1),
+      Match.when(
+        { _tag: 'Failure' },
+        (f) => Option.match(f.previousSuccess, { onNone: () => 0, onSome: (s) => s.value + 1 }),
+      ),
+      Match.orElse(() => 0),
+    )
     return isInitial(r) === (tag === 'initial') && isFailure(r) === (tag === 'failure') &&
-      isSuccess(r) === (tag === 'success')
+      isSuccess(r) === (tag === 'success') && Equal.equals(projected, oracle)
   })
 
   // Projecting a result to its available value agrees with `value`: the
@@ -973,11 +986,17 @@ if (import.meta.vitest !== void 0) {
 
   // Falling back agrees with the value projection: the available value, or
   // the fallback when no current or remembered success exists.
-  it.prop(
-    '∀r_ResultGetOrElse_=ValueAgrees',
-    [resultArb],
-    ([r]) => getOrElse(r, () => -999) === Option.getOrElse(value(r), () => -999),
-  )
+  it.prop('∀r_ResultGetOrElse_=ValueAgrees', [resultArb], ([r]) => {
+    const oracle = Match.value(r).pipe(
+      Match.when({ _tag: 'Success' }, (s) => s.value),
+      Match.when(
+        { _tag: 'Failure' },
+        (f) => Option.match(f.previousSuccess, { onNone: () => -999, onSome: (s) => s.value }),
+      ),
+      Match.orElse(() => -999),
+    )
+    return getOrElse(r, () => -999) === oracle
+  })
 
   // Marking waiting sets the flag and preserves the variant and its value.
   it.prop('∀r_ResultWaiting_=SetsWaitingPreservesVariant', [resultArb], ([r]) =>
