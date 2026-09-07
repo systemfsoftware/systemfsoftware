@@ -32,6 +32,7 @@ import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as FileSystem from 'effect/FileSystem'
+import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
 import * as HashSet from 'effect/HashSet'
 import * as Layer from 'effect/Layer'
@@ -496,12 +497,13 @@ interface InstrumentRaw {
 }
 
 export const instrumentCell = Cell.layer({
-  read: (command: PrepareDone) =>
+  read: (command: PrepareExecutorArgs) =>
     Effect.gen(function*() {
+      const prepared = yield* runPrepare(command)
       yield* Scope.Scope
       const env = yield* RunEnvironment
 
-      const filesToMutate = yield* Effect.forEach([...MutableHashMap.values(command.project.filesToMutate)], (file) =>
+      const filesToMutate = yield* Effect.forEach([...MutableHashMap.values(prepared.project.filesToMutate)], (file) =>
         toInstrumenterFile(file), {
         concurrency: FILE_CONCURRENCY,
       }).pipe(
@@ -511,24 +513,24 @@ export const instrumentCell = Cell.layer({
       )
 
       const instrumentResult = yield* instrument(filesToMutate, {
-        ignorers: [...command.ignorers],
-        excludedMutations: [...command.options.mutator.excludedMutations],
+        ignorers: [...prepared.ignorers],
+        excludedMutations: [...prepared.options.mutator.excludedMutations],
       }).pipe(Effect.mapError((cause) =>
         new StageError({ stage: 'instrument', reason: 'Instrumenter failed', cause })
       ))
 
-      const instrumentedProject = withInstrumentedFiles(command.project, instrumentResult.files)
+      const instrumentedProject = withInstrumentedFiles(prepared.project, instrumentResult.files)
 
       const basePath = env.basePath
-      let workingDirectory = command.temporaryDirectoryPath
+      let workingDirectory = prepared.temporaryDirectoryPath
       let backupDirectory = ''
-      if (command.options.inPlace) {
+      if (prepared.options.inPlace) {
         workingDirectory = basePath
-        backupDirectory = command.temporaryDirectoryPath
+        backupDirectory = prepared.temporaryDirectoryPath
       }
 
       const sandbox = yield* makeSandbox({
-        options: command.options,
+        options: prepared.options,
         project: instrumentedProject,
         workingDirectory,
         backupDirectory,
@@ -537,14 +539,14 @@ export const instrumentCell = Cell.layer({
         new StageError({ stage: 'instrument', reason: 'Sandbox initialization failed', cause })
       ))
 
-      const concurrency = yield* makeConcurrency(command.options).pipe(
+      const concurrency = yield* makeConcurrency(prepared.options).pipe(
         Effect.mapError((cause) =>
           new StageError({ stage: 'instrument', reason: 'Failed to compute concurrency', cause })
         ),
       )
 
       const raw: InstrumentRaw = {
-        prev: command,
+        prev: prepared,
         filesToMutate,
         instrumentResult,
         instrumentedProject,
@@ -1102,16 +1104,7 @@ export const makeRunLayer = (
   )
 }
 
-export const runMutationTest = (
-  cliOptions: PartialStrykerOptions,
-  targetMutatePatterns?: string[],
-): Effect.Effect<RunOutcome, StageError, StageServices> =>
-  Effect.gen(function*() {
-    const prepared = yield* runPrepare({ cliOptions, targetMutatePatterns })
-    const instrumented = yield* Cell.run(instrumentCell, prepared)
-    const dryDone = yield* Cell.run(dryRunCell, instrumented)
-    return yield* Cell.run(mutationTestCell, dryDone)
-  })
+export const mutationRun = pipe(instrumentCell, Cell.andThen(dryRunCell), Cell.andThen(mutationTestCell))
 export const shouldKeepTempDir = (
   exit: Exit.Exit<unknown, unknown>,
   cleanTempDir: 'always' | boolean,

@@ -53,11 +53,10 @@ const describeOrders = (): OrderPair => {
 }
 
 const runBoth = (orders: OrderPair) =>
-  Effect.gen(function*() {
-    const firstResponse = yield* Cell.run(orders.first, new OrderRequest({ id: 'initial-request' }))
-    yield* Cell.run(orders.second, firstResponse)
-    return { firstResponse, recorded: orders.recorded, trace: orders.trace }
-  })
+  Effect.map(
+    Cell.run(Cell.andThen(orders.first, orders.second), new OrderRequest({ id: 'initial-request' })),
+    (firstResponse) => ({ firstResponse, recorded: orders.recorded, trace: orders.trace }),
+  )
 
 interface SingleOrder {
   readonly cell: Cell.Cell<OrderRequest, OrderRequest, OrderRefused, never>

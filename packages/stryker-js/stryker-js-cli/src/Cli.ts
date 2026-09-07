@@ -2,18 +2,19 @@ import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChild
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import * as NodeStdio from '@effect/platform-node/NodeStdio'
+import { Cell } from '@systemfsoftware/effect-cell-types'
 import {
   ConfigFileInvalidError,
   ConfigFileNotFoundError,
   ConfigFileUnreadableError,
   makeRunLayer,
+  mutationRun,
   type ResolvedMode,
   type RunEnvironmentShape,
-  runMutationTest,
   strykerVersion,
 } from '@systemfsoftware/stryker-js-engine'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import { ManifestRendered, type RunEvent, RunEvents } from '@systemfsoftware/stryker-js/Run'
+import { ManifestRendered, type RunEvent } from '@systemfsoftware/stryker-js/Run'
 import { RENDERED_OPTION_DEFAULTS } from '@systemfsoftware/stryker-js/Schema'
 import type { LogLevel, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Cause from 'effect/Cause'
@@ -1104,11 +1105,10 @@ const hostRunLayer = (hostOptions: RunEnvironmentShape, queue?: Queue.Queue<RunE
 
 const defaultRunMutationTest =
   (hostOptions: RunEnvironmentShape, queue: Queue.Queue<RunEvent, Cause.Done>): StrykerRun =>
-  (...args: Parameters<StrykerRun>) =>
-    Effect.scoped(runMutationTest(...args)).pipe(
-      Effect.provide(hostRunLayer(hostOptions, queue)),
-      Effect.provideService(RunEvents, queue),
-    )
+  (...args: Parameters<StrykerRun>) => {
+    const provided = Cell.provide(mutationRun, hostRunLayer(hostOptions, queue))
+    return Effect.scoped(Cell.run(provided, { cliOptions: args[0], targetMutatePatterns: args[1] }))
+  }
 
 function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironmentShape {
   return {
