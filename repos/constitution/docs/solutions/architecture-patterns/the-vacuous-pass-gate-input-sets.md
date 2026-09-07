@@ -185,9 +185,11 @@ artifact worth keeping:
 
 - The gate discussed here is the constitution corpus validator invoked by the repository's
   `test` script; its module docstring carries the same argument at the point of use.
-- `CONST-E6` (Prefer the Gate) makes a gate the final word; the rule that priced a gate's
-  false-positive budget is gone with its vacated number. This learning is the counterweight
-  either way — a gate that cannot fail is not enforcement, it is a certificate.
+- `CONST-E6` (Prefer the Gate) made a gate the final word; it was retired 2026-09-07 in the
+  audience split — its substance lives in ENFORCEMENT.md, and the maker-side boundary is
+  CONST-E9. The rule that priced a gate's false-positive budget is gone with its vacated
+  number. This learning is the counterweight either way — a gate that cannot fail is not
+  enforcement, it is a certificate.
 - The transition-state shape and the fixture-anchoring rule were added by the
   single-document restore (branch `restore-single-document`); the gate-fidelity residuals
   from that surgery are tracked in this repo's issues #19 and #20.
