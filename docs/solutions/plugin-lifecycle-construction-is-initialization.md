@@ -1,4 +1,5 @@
 ---
+title: Plugin lifecycle owned by layer construction and teardown
 area: architecture-patterns
 problem_type: design
 category: architecture-patterns
