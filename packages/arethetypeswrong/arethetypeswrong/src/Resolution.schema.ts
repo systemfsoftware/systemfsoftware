@@ -13,7 +13,7 @@ export const EntrypointInfoSchema = Schema.Struct({
     ResolutionKindSchema,
     Schema.suspend(() => EntrypointResolutionAnalysisSchema),
   ),
-  hasTypes: Schema.Boolean,
-  isWildcard: Schema.Boolean,
+  hasTypes: Schema.Boolean.pipe(Schema.brand('HasTypes')),
+  isWildcard: Schema.Boolean.pipe(Schema.brand('IsWildcard')),
 })
 export type EntrypointInfo = Schema.Schema.Type<typeof EntrypointInfoSchema>

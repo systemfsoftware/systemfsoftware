@@ -127,7 +127,9 @@ async function resolveTarballRef(
     : undefined
 
   for (const packageSpec of packageSpecs) {
-    const manifestUrl = `${baseUrl}/${packageSpec.name}/${packageSpec.version || 'latest'}`
+    const manifestUrl = `${baseUrl}/${packageSpec.name}/${
+      packageSpec.versionKind === 'none' ? 'latest' : packageSpec.version
+    }`
     const payload: unknown = packument ?? await fetch(manifestUrl).then((r) => r.json())
     const decoded = decodeRegistryDoc(payload)
     if (Option.isNone(decoded)) {

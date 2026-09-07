@@ -129,7 +129,7 @@ export function parsePackageSpec(input: string): Failable<ParsedPackageSpec> {
   if (!version) {
     return {
       status: 'success',
-      data: { versionKind: 'none', name, version: '' },
+      data: { versionKind: 'none', name },
     }
   }
   if (valid(version)) {

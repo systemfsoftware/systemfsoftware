@@ -181,8 +181,13 @@ export type ProblemKind = Problem['kind']
 
 export type Failable<T> = { status: 'error'; error: string; data?: never } | { status: 'success'; data: T }
 
-export interface ParsedPackageSpec {
+export interface ParsedPackageSpecNone {
   name: string
-  versionKind: 'none' | 'exact' | 'range' | 'tag'
+  versionKind: 'none'
+}
+export interface ParsedPackageSpecVersioned {
+  name: string
+  versionKind: 'exact' | 'range' | 'tag'
   version: string
 }
+export type ParsedPackageSpec = ParsedPackageSpecNone | ParsedPackageSpecVersioned

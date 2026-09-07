@@ -37,8 +37,8 @@ export type ModuleKind = Schema.Schema.Type<typeof ModuleKindSchema>
 
 export const ResolutionSchema = Schema.Struct({
   fileName: Schema.NonEmptyString,
-  isTypeScript: Schema.Boolean,
-  isJson: Schema.Boolean,
+  isTypeScript: Schema.Boolean.pipe(Schema.brand('IsTypeScript')),
+  isJson: Schema.Boolean.pipe(Schema.brand('IsJson')),
   trace: Schema.Array(Schema.String),
 })
 export type Resolution = Schema.Schema.Type<typeof ResolutionSchema>
@@ -46,7 +46,7 @@ export type Resolution = Schema.Schema.Type<typeof ResolutionSchema>
 export const EntrypointResolutionAnalysisSchema = Schema.Struct({
   name: Schema.NonEmptyString,
   resolutionKind: ResolutionKindSchema,
-  isWildcard: Schema.optional(Schema.Boolean),
+  isWildcard: Schema.optional(Schema.Boolean.pipe(Schema.brand('IsWildcard'))),
   resolution: Schema.optional(ResolutionSchema),
   implementationResolution: Schema.optional(ResolutionSchema),
   files: Schema.optional(Schema.Array(Schema.String)),
@@ -97,7 +97,7 @@ export const NamedExportsProblemSchema = Schema.Struct({
   kind: Schema.Literal('NamedExports'),
   typesFileName: Schema.NonEmptyString,
   implementationFileName: Schema.NonEmptyString,
-  isMissingAllNamed: Schema.Boolean,
+  isMissingAllNamed: Schema.Boolean.pipe(Schema.brand('IsMissingAllNamed')),
   missing: Schema.Array(Schema.String),
 })
 export type NamedExportsProblem = Schema.Schema.Type<typeof NamedExportsProblemSchema>

@@ -26,7 +26,7 @@ export const parsePackageSpec = (input: string): Result.Result<ParsedPackageSpec
     return Result.fail(new PackageSpecParseError({ message: 'Invalid package name' }))
   }
   if (!version) {
-    return Result.succeed({ versionKind: 'none' as const, name, version: '' })
+    return Result.succeed({ versionKind: 'none' as const, name })
   }
   if (valid(version)) {
     return Result.succeed({ versionKind: 'exact' as const, name, version })
