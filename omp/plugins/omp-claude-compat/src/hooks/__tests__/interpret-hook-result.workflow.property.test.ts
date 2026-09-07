@@ -2,7 +2,7 @@ import { describe, it } from '@effect/vitest'
 import { Exit, Option, Result } from 'effect'
 import { Schema as S } from 'effect'
 import { FastCheck as fc } from 'effect/testing'
-import { HookOutputFromStdout, type ParsedHookOutput } from '../hooks.schema.js'
+import { HookOutputFromStdout, HookResult, type ParsedHookOutput } from '../hooks.schema.js'
 import { InterpretHookCommand, interpretHookResult } from '../interpret-hook-result.workflow.js'
 
 const parseHookOutput = S.decodeUnknownExit(HookOutputFromStdout)
@@ -45,7 +45,11 @@ const stderrText = fc
   .map(([head, rest]) => head + rest.join(''))
 
 const commandOf = (result: { readonly code: number; readonly stdout: string; readonly stderr: string }, ev: string) =>
-  new InterpretHookCommand({ result, event: ev, parsed: parsedOf(result.stdout) })
+  new InterpretHookCommand({
+    result: S.decodeSync(HookResult)({ ...result }),
+    event: ev,
+    parsed: parsedOf(result.stdout),
+  })
 
 describe('interpretHookResult (PBT)', () => {
   it.prop('∀stdout_Exit0AndBlankStdout_→Allow', [blankStdout, event], ([stdout, ev]) => {

@@ -14,7 +14,7 @@ import {
   WRAPPED_SHADOW_REASON,
 } from './events.js'
 import type { BridgedEvent } from './events.js'
-import { SettingsJSON } from './settings.schema.js'
+import { SettingsJSON, SettingsSourceFields } from './settings.schema.js'
 import type {
   DisableSource,
   HookCoverage,
@@ -266,7 +266,9 @@ const decodePluginSettings = (content: string, pluginRoot: string): SettingsSour
   const jsonOrError = S.decodeUnknownExit(S.fromJsonString(S.Record(S.String, S.Unknown)))(content)
   if (Exit.isFailure(jsonOrError)) return null
   const parsed = parseSettings(jsonOrError.value)
-  return Exit.isFailure(parsed) ? null : { settings: parsed.value, managed: false, pluginRoot }
+  if (Exit.isFailure(parsed)) return null
+  const source = S.decodeUnknownExit(SettingsSourceFields)({ settings: parsed.value, managed: false, pluginRoot })
+  return Exit.isFailure(source) ? null : source.value
 }
 
 const loadOnePlugin = (root: PluginRoot) =>
@@ -307,8 +309,8 @@ const NO_ROWS: readonly HookRow[] = []
 const asHookRows = S.decodeUnknownOption(
   S.Array(
     S.Struct({
-      matcher: S.optional(S.String),
-      hooks: S.Array(S.Struct({ type: S.optional(S.String) })).pipe(
+      matcher: S.optional(S.String.pipe(S.brand('HookMatcher'))),
+      hooks: S.Array(S.Struct({ type: S.optional(S.String.pipe(S.brand('HookType'))) })).pipe(
         S.withDecodingDefaultTypeKey(Effect.succeed([])),
       ),
     }),
@@ -595,12 +597,11 @@ const decodeSources = (raw: LoadSettingsRaw): HookSettings | null =>
         if (Exit.isFailure(jsonOrError)) return []
         const decoded = S.decodeUnknownExit(SettingsJsonWire)(jsonOrError.value)
         if (Exit.isFailure(decoded)) return []
-        return [
-          {
-            settings: decoded.value,
-            managed: path === MANAGED_SETTINGS_PATH,
-          },
-        ]
+        const source = S.decodeUnknownExit(SettingsSourceFields)({
+          settings: decoded.value,
+          managed: path === MANAGED_SETTINGS_PATH,
+        })
+        return Exit.isFailure(source) ? [] : [source.value]
       }),
       ...raw.pluginSources,
     ])),

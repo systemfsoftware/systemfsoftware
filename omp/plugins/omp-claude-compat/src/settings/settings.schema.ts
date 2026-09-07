@@ -2,16 +2,16 @@ import { Effect, Schema as S, SchemaGetter } from 'effect'
 
 const CommandHook = S.Struct({
   type: S.Literal('command'),
-  command: S.String,
+  command: S.String.pipe(S.brand('HookCommand')),
   args: S.optional(S.Array(S.String)),
-  async: S.optional(S.Boolean),
-  asyncRewake: S.optional(S.Boolean),
+  async: S.optional(S.Boolean.pipe(S.brand('HookAsync'))),
+  asyncRewake: S.optional(S.Boolean.pipe(S.brand('HookAsyncRewake'))),
   shell: S.optional(S.Literals(['bash', 'powershell'])),
-  timeout: S.optional(S.Number),
-  if: S.optional(S.String),
-  statusMessage: S.optional(S.String),
-  once: S.optional(S.Boolean),
-  pluginRoot: S.optional(S.String),
+  timeout: S.optional(S.Number.pipe(S.brand('HookTimeout'))),
+  if: S.optional(S.String.pipe(S.brand('PermissionRule'))),
+  statusMessage: S.optional(S.String.pipe(S.brand('HookStatusMessage'))),
+  once: S.optional(S.Boolean.pipe(S.brand('HookOnce'))),
+  pluginRoot: S.optional(S.String.pipe(S.brand('PluginRoot'))),
 })
 
 const UnsupportedHook = S.Struct({
@@ -25,7 +25,7 @@ export const HookCommand = S.Union([CommandHook, UnsupportedHook])
 export type HookCommand = S.Schema.Type<typeof HookCommand>
 
 export const HookEntry = S.Struct({
-  matcher: S.optional(S.String),
+  matcher: S.optional(S.String.pipe(S.brand('HookMatcher'))),
   hooks: S.Array(HookCommand).pipe(S.check(S.isMaxLength(3))),
 })
 
@@ -47,14 +47,14 @@ const HookGroups = S.Struct({
 
 export const SettingsWrapped = S.Struct({
   hooks: HookGroups,
-  disableAllHooks: S.optional(S.Boolean),
+  disableAllHooks: S.optional(S.Boolean.pipe(S.brand('DisableAllHooks'))),
 })
 
 export type HookSettings = S.Schema.Type<typeof SettingsWrapped>
 
 const SettingsFlat = S.Struct({
   ...HookGroups.fields,
-  disableAllHooks: S.optional(S.Boolean),
+  disableAllHooks: S.optional(S.Boolean.pipe(S.brand('DisableAllHooks'))),
 
   hooks: S.optional(S.Never),
 })
@@ -70,10 +70,10 @@ const LiftFlatSettingsACL = SettingsFlat.pipe(
 
 export const SettingsJSON = S.Union([SettingsWrapped, LiftFlatSettingsACL])
 
-const SettingsSourceFields = S.Struct({
+export const SettingsSourceFields = S.Struct({
   settings: SettingsJSON,
-  managed: S.Boolean,
-  pluginRoot: S.optional(S.String),
+  managed: S.Boolean.pipe(S.brand('ManagedSource')),
+  pluginRoot: S.optional(S.String.pipe(S.brand('PluginRoot'))),
 })
 export type DecodedSource = S.Schema.Type<typeof SettingsSourceFields>
 

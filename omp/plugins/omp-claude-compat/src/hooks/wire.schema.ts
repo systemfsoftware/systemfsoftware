@@ -12,7 +12,10 @@ import { Schema as S } from 'effect'
  * change, and translating it would produce a hook payload claiming an edit that is not
  * there.
  */
-export const OmpEdit = S.Struct({ old_text: S.optional(S.Unknown), new_text: S.optional(S.Unknown) }).pipe(
+export const OmpEdit = S.Struct({
+  old_text: S.optional(S.Unknown.pipe(S.brand('OmpOldText'))),
+  new_text: S.optional(S.Unknown.pipe(S.brand('OmpNewText'))),
+}).pipe(
   S.check(
     S.makeFilter((entry) => 'old_text' in entry || 'new_text' in entry, {
       arbitrary: {
@@ -32,7 +35,10 @@ export const OmpEdit = S.Struct({ old_text: S.optional(S.Unknown), new_text: S.o
 
 export const OmpEdits = S.Array(OmpEdit).pipe(S.check(S.isNonEmpty()))
 
-export const ClaudeEdit = S.Struct({ old_string: S.optional(S.Unknown), new_string: S.optional(S.Unknown) }).pipe(
+export const ClaudeEdit = S.Struct({
+  old_string: S.optional(S.Unknown.pipe(S.brand('ClaudeOldString'))),
+  new_string: S.optional(S.Unknown.pipe(S.brand('ClaudeNewString'))),
+}).pipe(
   S.check(
     S.makeFilter((entry) => 'old_string' in entry || 'new_string' in entry, {
       arbitrary: {

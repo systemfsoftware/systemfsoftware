@@ -223,16 +223,22 @@ export const runHookScript = Effect.fn('runHookScript')(function*(
           ),
         )
 
-        return { code, stdout, stderr } satisfies HookResult
+        return yield* S.decodeUnknownEffect(HookResult)({ code, stdout, stderr }).pipe(Effect.orDie)
       })
     ),
   ).pipe(
     Effect.tapCause((cause) => Effect.logWarning(`hook ${hook.command} failed`, cause)),
   )
 
+  const timeoutResult = yield* S.decodeUnknownEffect(HookResult)({
+    code: -1,
+    stdout: '',
+    stderr: `timeout after ${timeoutMs}ms${capNote}`,
+  }).pipe(Effect.orDie)
+
   return yield* detachIn(run, hookScope, {
     deadline: timeoutMs,
-    onDeadline: () => ({ code: -1, stdout: '', stderr: `timeout after ${timeoutMs}ms${capNote}` }),
+    onDeadline: () => timeoutResult,
   })
 })
 
@@ -480,7 +486,9 @@ export const runPostToolUseHooks = Effect.fn('runPostToolUseHooks')(function*(
   return firstWarning === undefined ? lastResult : { ...lastResult, warning: firstWarning }
 })
 
-const asTextBlocks = S.decodeUnknownOption(S.Array(S.Struct({ text: S.optional(S.String) })))
+const asTextBlocks = S.decodeUnknownOption(
+  S.Array(S.Struct({ text: S.optional(S.String.pipe(S.brand('ContentBlockText'))) })),
+)
 const asPlainText = S.decodeUnknownOption(S.String)
 
 const errorText = (content: unknown): string =>
