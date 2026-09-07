@@ -4,10 +4,126 @@
 
 ```ts
 
+import * as AST from 'effect/SchemaAST';
+import { FastCheck } from 'effect/testing';
 import { Schema } from 'effect';
+
+// @public (undocumented)
+export interface AdequacyReport {
+    // (undocumented)
+    readonly adequate: boolean;
+    // (undocumented)
+    readonly message: string;
+    // (undocumented)
+    readonly undischarged: readonly Obligation[];
+}
+
+// @public (undocumented)
+export const adequacyReport: (schema: Parameters<typeof Schema.is>[0] & {
+    readonly ast: AST.AST;
+}, generators: RefusalGenerators) => AdequacyReport;
+
+// @public (undocumented)
+export interface Arm {
+    // (undocumented)
+    readonly kind: 'drop-refinement' | 'drop-to-arm' | 'drop-from-arm';
+    // (undocumented)
+    readonly node: AST.AST;
+    // (undocumented)
+    readonly path: string;
+    // (undocumented)
+    readonly weakened: AST.AST;
+}
+
+// @public (undocumented)
+export const armsOf: (schema: {
+    readonly ast: AST.AST;
+}) => readonly Arm[];
+
+// @public (undocumented)
+export interface BlindArm {
+    // (undocumented)
+    readonly kind: string;
+    // (undocumented)
+    readonly message: string;
+    // (undocumented)
+    readonly path: string;
+}
+
+// @public (undocumented)
+export const dischargedBy: (schema: Parameters<typeof Schema.is>[0] & {
+    readonly ast: AST.AST;
+}, obligations: ReadonlyMap<AST.AST, Obligation>, generators: Readonly<Record<string, NamedArbitrary>>) => ReadonlyMap<AST.AST, readonly string[]>;
+
+// @public (undocumented)
+export const discriminates: (schema: Parameters<typeof Schema.is>[0], obligations: ReadonlyMap<AST.AST, Obligation>, value: unknown) => boolean;
+
+// @public (undocumented)
+export type NamedArbitrary = FastCheck.Arbitrary<unknown>;
+
+// @public (undocumented)
+export interface Obligation {
+    // (undocumented)
+    readonly node: AST.AST;
+    // (undocumented)
+    readonly paths: readonly string[];
+    // (undocumented)
+    readonly tag: string;
+    // (undocumented)
+    readonly weakened: AST.AST;
+    // (undocumented)
+    readonly witness: unknown;
+}
+
+// @public (undocumented)
+export interface ObligationScan {
+    // (undocumented)
+    readonly blind: readonly BlindArm[];
+    // (undocumented)
+    readonly obligations: ReadonlyMap<AST.AST, Obligation>;
+    // (undocumented)
+    readonly warnings: readonly string[];
+}
+
+// @public (undocumented)
+export const obligationsOf: (schema: Parameters<typeof Schema.is>[0] & {
+    readonly ast: AST.AST;
+}) => ReadonlyMap<AST.AST, Obligation>;
+
+// @public (undocumented)
+export type RefusalGenerators = Record<string, FastCheck.Arbitrary<unknown>>;
+
+// @public (undocumented)
+export const refutes: (schema: Parameters<typeof Schema.is>[0] & {
+    readonly ast: AST.AST;
+}, generators: RefusalGenerators) => void;
 
 // @public
 export const ruleOfSchemas: <A, I>(name: string, schema: Schema.Codec<A, I>) => void;
+
+// @public (undocumented)
+export const scanObligations: (schema: Parameters<typeof Schema.is>[0] & {
+    readonly ast: AST.AST;
+}) => ObligationScan;
+
+// @public (undocumented)
+export const UNSUPPORTED_SHAPES: readonly UnsupportedShape[];
+
+// @public (undocumented)
+export interface UnsupportedShape {
+    // (undocumented)
+    readonly coverageRoute: string;
+    // (undocumented)
+    readonly reason: string;
+    // (undocumented)
+    readonly tag: string;
+}
+
+// @public (undocumented)
+export const unsupportedShapeOf: (ast: AST.AST) => UnsupportedShape | undefined;
+
+// @public (undocumented)
+export const WITNESS_BUDGET = 256;
 
 // (No @packageDocumentation comment for this package)
 
