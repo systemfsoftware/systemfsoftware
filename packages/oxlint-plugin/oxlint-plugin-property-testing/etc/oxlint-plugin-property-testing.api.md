@@ -12,6 +12,7 @@ const _default: {
         name: string;
     };
     rules: {
+        'no-ignored-draw': Rule;
         'no-silent-return': Rule;
         'no-assert-in-property': Rule;
         'property-file-purity': Rule;
