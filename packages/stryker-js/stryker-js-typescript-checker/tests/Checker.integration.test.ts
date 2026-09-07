@@ -104,7 +104,6 @@ const openChecker = Effect.gen(function*() {
   const env = Layer.mergeAll(host, Layer.succeed(RunConfiguration, options))
   const context = yield* Layer.build(plugin.layer.pipe(Layer.provide(env)))
   const sut = Context.get(context, Checker)
-  yield* sut.init.pipe(Effect.orDie)
   return sut
 })
 

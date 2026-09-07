@@ -65,22 +65,20 @@ const TestRunnerHandlers = TestRunnerRpcs.toLayer(
     const options = yield* readWorkerOptions
     const runnerName = options.testRunner
     const failed =
-      (phase: 'capabilities' | 'dryRun' | 'init' | 'mutantRun') =>
+      (phase: 'capabilities' | 'connect' | 'dryRun' | 'mutantRun') =>
       (cause: Cause.Cause<unknown>): Effect.Effect<never, TestRunnerFailed> =>
         Effect.fail(new TestRunnerFailed({ cause: Cause.pretty(cause), phase, runnerName }))
 
     const loaded = yield* loadPlugins(options.plugins, process.cwd()).pipe(
-      Effect.catchCause(failed('init')),
+      Effect.catchCause(failed('connect')),
     )
     const underlying = yield* create(loaded.pluginsByKind, 'TestRunner', runnerName).pipe(
       Effect.flatMap((contribution) => TestRunner.pipe(Effect.provide(contribution.layer))),
       Effect.provide(
         Layer.merge(Layer.succeed(RunConfiguration, options), Layer.succeed(SandboxDirectory, process.cwd())),
       ),
-      Effect.catchCause(failed('init')),
+      Effect.catchCause(failed('connect')),
     )
-    yield* underlying.init.pipe(Effect.catchCause(failed('init')))
-    yield* Effect.addFinalizer(() => underlying.dispose.pipe(Effect.ignore))
 
     return {
       capabilities: () => underlying.capabilities.pipe(Effect.catchCause(failed('capabilities'))),

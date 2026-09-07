@@ -20,7 +20,7 @@ import { launchWorker, workerSocketPath } from './worker-runtime.js'
 const buildChecker = (
   contribution: ContributionOf<'Checker'>,
   options: StrykerOptions,
-): Effect.Effect<Checker['Service'], never, never> =>
+): Effect.Effect<Checker['Service'], unknown, never> =>
   Checker.pipe(
     Effect.provide(
       contribution.layer.pipe(
@@ -58,7 +58,6 @@ const CheckerHandlers = CheckerRpcs.toLayer(
           Effect.gen(function*() {
             const contribution = yield* create(loaded.pluginsByKind, 'Checker', name)
             const checker = yield* buildChecker(contribution, options)
-            yield* checker.init
             return [name, checker] as const
           }),
         { concurrency: 'unbounded', discard: false },

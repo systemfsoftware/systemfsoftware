@@ -5,18 +5,17 @@ import * as Layer from 'effect/Layer'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
-
 import { Checker } from './Checker.js'
 import type { Evaluator } from './Evaluator.js'
 import { Ignorer } from './Ignorer.js'
 import { Module } from './Module.js'
-import { PluginContribution, PluginKind, Shadowing } from './Plugin.schema.js'
+import { PluginBuildError, PluginContribution, PluginKind, Shadowing } from './Plugin.schema.js'
 import { Reporter } from './Reporter.js'
 import type { ReporterService } from './Reporter.js'
 import type { StrykerOptions } from './Schema.js'
 import { TestRunner } from './TestRunner.js'
 
-export { PluginContribution, PluginKind, Shadowing } from './Plugin.schema.js'
+export { PluginBuildError, PluginContribution, PluginKind, Shadowing } from './Plugin.schema.js'
 
 export class RunConfiguration extends Context.Service<RunConfiguration, StrykerOptions>()(
   '~@systemfsoftware/stryker-js/RunConfiguration',
@@ -50,7 +49,7 @@ export type ContributionOf<K extends PluginKind> = Extract<AnyPluginContribution
 export function declarePlugin<K extends PluginKind>(
   kind: K,
   name: string,
-  layer: Layer.Layer<PluginInterfaces[K], never, PluginEnvironment>,
+  layer: Layer.Layer<PluginInterfaces[K], PluginBuildError, PluginEnvironment>,
 ): PluginContribution<K> {
   return new PluginContribution({ kind, name, layer })
 }
@@ -58,7 +57,7 @@ export function declarePlugin<K extends PluginKind>(
 export type MergedPluginServices = Checker & Ignorer & Reporter & TestRunner
 
 export interface ComposedPlugins {
-  readonly layer: Option.Option<Layer.Layer<MergedPluginServices, never, PluginEnvironment>>
+  readonly layer: Option.Option<Layer.Layer<MergedPluginServices, PluginBuildError, PluginEnvironment>>
   readonly shadowings: readonly Shadowing[]
 }
 
@@ -106,10 +105,10 @@ export function composePlugins(
   const reporterContributions = allResolved.filter(
     (c): c is ContributionOf<'Reporter'> => c.kind === 'Reporter',
   )
-  const nonReporterLayers: Array<Layer.Layer<never, never, PluginEnvironment>> = allResolved
+  const nonReporterLayers = allResolved
     .filter((c) => c.kind !== 'Reporter')
     .map((contribution) => contribution.layer)
-  let broadcastLayer: Layer.Layer<Reporter, never, PluginEnvironment> | undefined
+  let broadcastLayer: Layer.Layer<Reporter, PluginBuildError, PluginEnvironment> | undefined
   if (reporterContributions.length > 0) {
     broadcastLayer = Layer.effect(
       Reporter,
@@ -165,7 +164,7 @@ export function composePlugins(
     )
   }
 
-  const allLayers: Array<Layer.Layer<never, never, PluginEnvironment>> = [...nonReporterLayers]
+  const allLayers: Array<Layer.Layer<never, PluginBuildError, PluginEnvironment>> = [...nonReporterLayers]
   if (broadcastLayer !== undefined) {
     allLayers.push(broadcastLayer)
   }
@@ -173,10 +172,7 @@ export function composePlugins(
   if (allLayers.length === 0) {
     return { layer: Option.none(), shadowings }
   }
-  // The layers in allLayers each provide a single service; merging them
-  // yields the intersection MergedPluginServices. The reduce's inferred
-  // Layer<never> is widened via annotation to the intended bound.
-  const merged: Layer.Layer<MergedPluginServices, never, PluginEnvironment> = allLayers.reduce((acc, next) =>
+  const merged: Layer.Layer<MergedPluginServices, PluginBuildError, PluginEnvironment> = allLayers.reduce((acc, next) =>
     Layer.merge(acc, next)
   )
   return { layer: Option.some(merged), shadowings }

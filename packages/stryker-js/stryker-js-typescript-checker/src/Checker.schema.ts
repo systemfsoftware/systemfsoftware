@@ -16,6 +16,13 @@ export class CheckMutantsCommand extends S.TaggedClass<CheckMutantsCommand>()(
   },
 ) {}
 
+// ── options section ───────────────────────────────────────────────────────
+
+/** The `typescriptChecker` option section this plugin contributes. */
+export const TypeScriptCheckerSection = S.Struct({
+  prioritizePerformanceOverAccuracy: S.optional(S.Boolean),
+})
+
 // ── compiler errors ──────────────────────────────────────────────────────
 
 /**

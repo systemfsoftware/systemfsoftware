@@ -23,6 +23,7 @@ import { PlanKnown } from '@systemfsoftware/stryker-js/Run'
 import { RunEvents } from '@systemfsoftware/stryker-js/Run'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import type { CompleteDryRunResult, DryRunResult, TestRunnerCapabilities } from '@systemfsoftware/stryker-js/TestRunner'
+import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Console from 'effect/Console'
 import * as Context from 'effect/Context'
@@ -324,6 +325,7 @@ const resolveReporterService = <E>(
         Layer.succeed(Path.Path, path),
         Layer.succeed(Module, module),
       )),
+      Effect.catchCause((cause) => Effect.fail(makeError(`Reporter plugin failed to build: ${Cause.pretty(cause)}`))),
     )
     const maybeReporter = Context.getOption(ctx, Reporter)
     if (Option.isNone(maybeReporter)) {

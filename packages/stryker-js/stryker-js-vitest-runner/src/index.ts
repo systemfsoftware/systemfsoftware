@@ -1,6 +1,4 @@
-import { declarePlugin, RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
-import * as Effect from 'effect/Effect'
-import * as Layer from 'effect/Layer'
+import { declarePlugin } from '@systemfsoftware/stryker-js/Plugin'
 import * as S from 'effect/Schema'
 
 import { makeVitestRunnerLayer } from './Runner.js'
@@ -14,17 +12,7 @@ import { VitestRunnerOptionsSchema } from './Runner.schema.js'
  * provide it fails to compile.
  */
 export const strykerPlugins = [
-  declarePlugin(
-    'TestRunner',
-    'vitest',
-    Layer.unwrap(
-      Effect.gen(function*() {
-        const options = yield* RunConfiguration
-        const sandboxDirectory = yield* SandboxDirectory
-        return makeVitestRunnerLayer({ options, sandboxDirectory })
-      }),
-    ),
-  ),
+  declarePlugin('TestRunner', 'vitest', makeVitestRunnerLayer()),
 ]
 
 /**

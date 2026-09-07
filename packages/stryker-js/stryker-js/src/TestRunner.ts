@@ -170,10 +170,8 @@ export function toMutantRunResult(
 
 export interface TestRunnerService {
   readonly capabilities: Effect.Effect<TestRunnerCapabilities, TestRunnerFailed>
-  readonly init: Effect.Effect<void, TestRunnerFailed>
   readonly dryRun: (options: DryRunOptions) => Effect.Effect<DryRunResult, TestRunnerFailed>
   readonly mutantRun: (options: MutantRunOptions) => Effect.Effect<MutantRunResult, TestRunnerFailed>
-  readonly dispose: Effect.Effect<void, TestRunnerFailed>
 }
 
 export class TestRunner

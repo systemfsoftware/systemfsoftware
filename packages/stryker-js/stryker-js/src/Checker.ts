@@ -19,7 +19,6 @@ export interface PassedCheckResult {
 export type CheckResult = FailedCheckResult | PassedCheckResult
 
 export interface CheckerService {
-  readonly init: Effect.Effect<void, CheckerFailed>
   readonly check: (
     mutants: readonly Mutant[],
   ) => Effect.Effect<HashMap.HashMap<string, CheckResult>, CheckerFailed>

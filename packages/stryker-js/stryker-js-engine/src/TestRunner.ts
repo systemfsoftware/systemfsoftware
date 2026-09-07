@@ -79,13 +79,12 @@ export type PooledTestRunnerError =
  */
 export interface PooledTestRunner {
   readonly capabilities: Effect.Effect<TestRunnerCapabilities, PooledTestRunnerError>
-  readonly init: Effect.Effect<void, PooledTestRunnerError>
   readonly dryRun: (options: DryRunOptions) => Effect.Effect<DryRunResult, PooledTestRunnerError>
   readonly mutantRun: (options: MutantRunOptions) => Effect.Effect<MutantRunResult, PooledTestRunnerError>
 }
 
 const toRunnerFailure =
-  (runnerName: string, phase: 'capabilities' | 'init' | 'dryRun' | 'mutantRun' | 'dispose') =>
+  (runnerName: string, phase: 'capabilities' | 'connect' | 'dryRun' | 'mutantRun') =>
   (error: RpcClientError | TestRunnerFailed): PooledTestRunnerError =>
     Match.value(error).pipe(
       Match.tag('TestRunnerFailed', (e): PooledTestRunnerError => e),
@@ -135,7 +134,7 @@ export const makeChildProcessTestRunner = (
           return Effect.fail(error)
         }
         return Effect.fail(
-          new TestRunnerFailed({ runnerName, phase: 'init', cause: `Worker failed to start: ${error.message}` }),
+          new TestRunnerFailed({ runnerName, phase: 'connect', cause: `Worker failed to start: ${error.message}` }),
         )
       }),
     )
@@ -143,7 +142,6 @@ export const makeChildProcessTestRunner = (
 
     return {
       capabilities: client.capabilities().pipe(Effect.mapError(toRunnerFailure(runnerName, 'capabilities'))),
-      init: Effect.void,
       dryRun: (options) => client.dryRun({ options }).pipe(Effect.mapError(toRunnerFailure(runnerName, 'dryRun'))),
       mutantRun: (options) =>
         client.mutantRun({ options }).pipe(Effect.mapError(toRunnerFailure(runnerName, 'mutantRun'))),
@@ -512,7 +510,6 @@ const commandRunner = (
 
   const base: PooledTestRunner = {
     capabilities: Effect.succeed(commandRunnerCapabilities),
-    init: Effect.void,
     dryRun: () => commandRunnerDryRun(config).pipe(provided),
     mutantRun: (options: MutantRunOptions) => commandRunnerMutantRun(config, options).pipe(provided),
   }

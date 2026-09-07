@@ -16,8 +16,14 @@ export class PluginContribution<K extends PluginKind = PluginKind>
 {
   declare readonly kind: K
   declare readonly name: string
-  declare readonly layer: Layer.Layer<PluginInterfaces[K], never, PluginEnvironment>
+  declare readonly layer: Layer.Layer<PluginInterfaces[K], PluginBuildError, PluginEnvironment>
 }
+
+/** A plugin layer failed to build at load time — the plugin-construction phase's typed failure. */
+export class PluginBuildError extends S.TaggedError<PluginBuildError>()('PluginBuildError', {
+  name: S.String,
+  cause: S.Unknown,
+}) {}
 
 export class Shadowing extends S.TaggedClass<Shadowing>()('Shadowing', {
   kind: S.String,

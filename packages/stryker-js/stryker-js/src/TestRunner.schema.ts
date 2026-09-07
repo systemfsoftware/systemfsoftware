@@ -84,6 +84,6 @@ export const TestRunnerCapabilitiesSchema = S.Struct({
 
 export class TestRunnerFailed extends S.TaggedError<TestRunnerFailed>()('TestRunnerFailed', {
   cause: S.String,
-  phase: S.Literals(['capabilities', 'dispose', 'dryRun', 'init', 'mutantRun']),
+  phase: S.Literals(['capabilities', 'connect', 'dryRun', 'mutantRun']),
   runnerName: S.String,
 }) {}
