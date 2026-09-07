@@ -16,7 +16,7 @@ import { basenameOf } from './path.js'
 
 export type MessageIds = 'foreignRunner' | 'missingMakeFeature'
 
-const ImportedIdentifier = S.Struct({ name: S.String })
+const ImportedIdentifier = S.Struct({ name: S.NonEmptyString })
 
 const isMakeFeatureSpecifier = (specifier: ESTree.ImportSpecifier): boolean => {
   const imported = specifier.imported

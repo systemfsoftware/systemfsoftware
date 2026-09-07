@@ -33,7 +33,7 @@ const addPrivateName = (id: ESTree.Node, out: Set<string>): void => {
   if (id.type === 'Identifier') out.add(id.name)
 }
 
-const LocalBinding = S.Struct({ name: S.String })
+const LocalBinding = S.Struct({ name: S.NonEmptyString })
 
 const collectDeclaration = (node: CollectableNode, out: Set<string>): void => {
   if (node.type === 'VariableDeclaration') {
