@@ -171,7 +171,13 @@ A drifted key is worse than a missing one. Retrieving nothing leaves the author 
 
 A `WATCHDOG.md` that `@import`s `CONSTITUTION.md` into the omp advisor's system prompt, making the advisor — a separate model reviewing transcript deltas — police code changes against the 21 `gate: review` rules no command enforces. The 13 rules with lint/type-checker/mutation gates are excluded; the advisor does not re-check what the toolchain already catches. Not a gate: the advisor raises `concern`/`nit`/silent, never pass/fail. The mechanism that gives `gate: review` rules Reach — the constitution was present in neither the window (the primary agent does not read it) nor a gate (no command checks it) until the watchdog put it in the advisor's window.
 
+### Row graduation
+
+The loop that promotes a doctrine row from advisory to binding: the evaluator ships in its own commit, observed red on a planted known-bad fixture; the tree migrates behind it; enrollment at `error` lands in a third commit. A row with a gate but a living dated baseline is enrolled, not graduated — graduation completes only when the baseline recomputes to empty (CONST-E5). The loop's ordering is the point: a migration that runs before its gate exists is a regression window, because nothing fails when the forbidden shape is written back.
+
 ## Test execution
+
+
 
 ### Run class
 
