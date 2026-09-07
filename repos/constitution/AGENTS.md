@@ -1,6 +1,6 @@
 # AGENTS.md — Constitution Repository
 
-Single source of truth for the supreme design law of [System F Software](https://systemfsoftware.com). Consumer repos vendor via `git subtree` + symlink. This repo has no production code, no test suite, and no build step — it is one markdown document plus its governance tooling (corpus validation, commit validation): `CONSTITUTION.md`, resident in every agent's context, all articles, always.
+Single source of truth for the supreme design law of [System F Software](https://systemfsoftware.com). Consumer repos vendor via `git subtree` + symlink. This repo has no production code, no test suite, and no build step — it is two documents plus governance tooling (corpus validation, commit validation): `CONSTITUTION.md`, the maker's law, resident in every agent's context, all articles, always; and `ENFORCEMENT.md`, the instrument owner's doctrine, never loaded into the maker's context.
 
 @CONSTITUTION.md
 
@@ -25,7 +25,8 @@ Before making changes:
 
 ### Corpus
 
-- **`CONSTITUTION.md` (Resident):** the entire corpus — the Application section plus Articles I–V — loaded in every session. There is no retrieved half and no on-demand trigger: law that is not in the window is not law.
+- **`CONSTITUTION.md` (Resident):** the entire maker corpus — the Application section plus Articles I–V — loaded in every session. There is no retrieved half and no on-demand trigger: law that is not in the window is not law. Residency delivers obligation, not enforcement; the machinery of judgment lives outside the maker's reach.
+- **`ENFORCEMENT.md` (Non-resident):** the instrument owner's doctrine — gate design, instrument-change discipline, enrollment law. Read by whoever builds or changes a gate, never `@`-imported into a maker's context. Consumer repos route to it from the leaves that own enforcement surfaces (lint plugins, guard scripts, CI workflows, rules directories, advisor rosters): one line — "You are editing an enforcement instrument. Read the vendored `ENFORCEMENT.md` before this lands." A routing line added anywhere else is the defect: the maker must not meet instrument doctrine while doing graded work.
 
 ### Writing a Rule
 
@@ -38,7 +39,7 @@ ID format: `CONST-<family><n>`. Pick the next free number in the family (never r
 | Letter | Family | Purpose |
 |---|---|---|
 | `G` | Governance | Invoking constitution or resolving priority |
-| `E` | Enforcement | Gate design, execution, verification |
+| `E` | Enforcement | The maker's conduct under judgment (evidence, the instrument boundary); instrument design lives in `ENFORCEMENT.md` |
 | `P` | Purity | Decision functions and side-effect isolation |
 | `D` | Domain modelling | Domain types and constraints |
 | `B` | Boundary | Core/shell boundaries, effects, adapters |
