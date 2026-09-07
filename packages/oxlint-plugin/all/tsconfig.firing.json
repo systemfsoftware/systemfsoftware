@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "composite": false,
+    "incremental": false,
+    "rootDir": "..",
+    "outDir": "dist/firing"
+  },
+  "include": ["src/firing-suite.ts", "src/firing-corpus.ts"],
+  "references": []
+}

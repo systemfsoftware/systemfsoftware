@@ -3,11 +3,7 @@ import * as vitest from 'vitest'
 
 import { Cell } from '@systemfsoftware/effect-cell-types'
 
-import {
-  LAUNDERED_CELL_SERVICE_ACTUAL,
-  LAUNDERED_CELL_SERVICE_EXPECTED,
-  LAUNDERED_CELL_SERVICE_FIX,
-} from '../no-laundered-cell-service.config.js'
+import { launderedCellServiceInvalidCases } from '../no-laundered-cell-service.corpus.js'
 import { noLaunderedCellService } from '../no-laundered-cell-service.js'
 
 RuleTester.it = vitest.it
@@ -19,32 +15,11 @@ const ruleTester = new RuleTester()
 const CELL_IMPORT = `import { Cell } from '${Cell.vocabulary.module}'`
 const EFFECT_IMPORT = `import * as Effect from 'effect/Effect'`
 
-const error = (tag: string) =>
-  ({
-    messageId: 'launderedCellService',
-    data: {
-      name: tag,
-      expected: LAUNDERED_CELL_SERVICE_EXPECTED,
-      actual: LAUNDERED_CELL_SERVICE_ACTUAL,
-      fix: LAUNDERED_CELL_SERVICE_FIX,
-    },
-  }) as const
-
 const CHECKER_CELL = `const checkCell = Cell.layer({
   read: (command) =>
     Effect.gen(function*() {
       const compiler = yield* TypeScriptCompiler
       return { compiler, command }
-    }),
-  decide: (raw) => raw,
-  write: (outcome) => Effect.succeed(outcome),
-})`
-
-const RUNNER_CELL = `const mutantRunCell = Cell.layer({
-  read: (command) =>
-    Effect.gen(function*() {
-      const harness = yield* VitestHarness
-      return { harness, command }
     }),
   decide: (raw) => raw,
   write: (outcome) => Effect.succeed(outcome),
@@ -124,54 +99,5 @@ export const program = Layer.build(base).pipe(
       filename: 'main.ts',
     },
   ],
-  invalid: [
-    {
-      name: 'Should_Report_Provide_When_CheckerCellRMemberIsProvidedPerGroup',
-      code: `${CELL_IMPORT}
-${EFFECT_IMPORT}
-${CHECKER_CELL}
-export const check = (mutants) =>
-  Effect.gen(function*() {
-    const applyOnce = (group) =>
-      Cell.run(checkCell, group).pipe(
-        Effect.provideService(TypeScriptCompiler, compiler),
-      )
-    return yield* applyOnce(mutants)
-  })`,
-      filename: 'checker.service.ts',
-      errors: [error('TypeScriptCompiler')],
-    },
-    {
-      name: 'Should_Report_Provide_When_RunnerCellRMemberIsProvidedPerCell',
-      code: `import { pipe } from 'effect/Function'
-${CELL_IMPORT}
-${EFFECT_IMPORT}
-${RUNNER_CELL}
-export const mutantRun = (options) =>
-  pipe(
-    Cell.run(mutantRunCell, options),
-    Effect.provideService(VitestHarness, harnessImpl),
-  )`,
-      filename: 'runner.service.ts',
-      errors: [error('VitestHarness')],
-    },
-    {
-      name: 'Should_Report_Provide_When_RIsDeclaredByAnnotation',
-      code: `${CELL_IMPORT}
-${EFFECT_IMPORT}
-const annotated: Cell.Cell<Cmd, Resp, Err, Dep> = Cell.layer({
-  read: (command) => Effect.succeed(command),
-  decide: (raw) => raw,
-  write: (outcome) => Effect.succeed(outcome),
-})
-export const run = (cmd) =>
-  Effect.gen(function*() {
-    return yield* Cell.run(annotated, cmd).pipe(
-      Effect.provideService(Dep, impl),
-    )
-  })`,
-      filename: 'run.executor.ts',
-      errors: [error('Dep')],
-    },
-  ],
+  invalid: launderedCellServiceInvalidCases(Cell.vocabulary.module),
 })

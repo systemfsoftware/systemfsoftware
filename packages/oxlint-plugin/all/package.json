@@ -29,6 +29,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown",
+    "test": "rimraf dist/firing && tsc -p tsconfig.firing.json && node dist/firing/all/src/firing-suite.js; code=$?; rimraf dist/firing; exit $code",
     "typecheck": "tsc --noEmit --incremental",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."

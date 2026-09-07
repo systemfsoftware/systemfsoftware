@@ -3,11 +3,7 @@ import * as vitest from 'vitest'
 
 import { Cell } from '@systemfsoftware/effect-cell-types'
 
-import {
-  SEQUENCED_CELL_RUN_ACTUAL,
-  SEQUENCED_CELL_RUN_EXPECTED,
-  SEQUENCED_CELL_RUN_FIX,
-} from '../no-sequenced-cell-run.config.js'
+import { sequencedCellRunInvalidCases } from '../no-sequenced-cell-run.corpus.js'
 import { noSequencedCellRun } from '../no-sequenced-cell-run.js'
 
 RuleTester.it = vitest.it
@@ -18,17 +14,6 @@ const ruleTester = new RuleTester()
 
 const CELL_IMPORT = `import { Cell } from '${Cell.vocabulary.module}'`
 const EFFECT_IMPORT = `import * as Effect from 'effect/Effect'`
-
-const error = () =>
-  ({
-    messageId: 'sequencedCellRun',
-    data: {
-      name: 'a Cell.run whose success binding feeds a second Cell.run',
-      expected: SEQUENCED_CELL_RUN_EXPECTED,
-      actual: SEQUENCED_CELL_RUN_ACTUAL,
-      fix: SEQUENCED_CELL_RUN_FIX,
-    },
-  }) as const
 
 ruleTester.run('no-sequenced-cell-run', noSequencedCellRun, {
   valid: [
@@ -81,31 +66,5 @@ export const program = Effect.gen(function*() {
       filename: 'run.executor.ts',
     },
   ],
-  invalid: [
-    {
-      name: 'Should_Report_SecondRun_When_SuccessBindingFeedsIt',
-      code: `${CELL_IMPORT}
-${EFFECT_IMPORT}
-export const program = Effect.gen(function*() {
-  const instrumented = yield* Cell.run(instrumentCell, prepared)
-  const dryDone = yield* Cell.run(dryRunCell, instrumented)
-  return dryDone
-})`,
-      filename: 'run.executor.ts',
-      errors: [error()],
-    },
-    {
-      name: 'Should_Report_BothDownstreamRuns_When_ThreeRunChain',
-      code: `${CELL_IMPORT}
-${EFFECT_IMPORT}
-export const program = Effect.gen(function*() {
-  const prepared = yield* runPrepare(cmd)
-  const instrumented = yield* Cell.run(instrumentCell, prepared)
-  const dryDone = yield* Cell.run(dryRunCell, instrumented)
-  return yield* Cell.run(mutationTestCell, dryDone)
-})`,
-      filename: 'run.executor.ts',
-      errors: [error(), error()],
-    },
-  ],
+  invalid: sequencedCellRunInvalidCases(Cell.vocabulary.module),
 })
