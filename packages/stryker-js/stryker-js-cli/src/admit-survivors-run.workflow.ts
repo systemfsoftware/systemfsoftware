@@ -7,9 +7,9 @@ import * as S from 'effect/Schema'
  * `Admitted` payload and the command's precomputed survivor list are the same shape.
  */
 const MutantShape = S.Struct({
-  id: S.String,
-  fileName: S.String,
-  mutatorName: S.String,
+  id: S.NonEmptyString,
+  fileName: S.NonEmptyString,
+  mutatorName: S.NonEmptyString,
   replacement: S.String,
   location: S.Struct({
     start: S.Struct({ line: S.Finite, column: S.Finite }),
@@ -19,16 +19,16 @@ const MutantShape = S.Struct({
 
 export const PriorReportDocument = S.Struct({
   config: S.optional(S.Record(S.String, S.Unknown)),
-  framework: S.optional(S.Struct({ version: S.optional(S.String) })),
+  framework: S.optional(S.Struct({ version: S.optional(S.NonEmptyString) })),
   files: S.Record(
     S.String,
     S.Struct({
       source: S.String,
       mutants: S.Array(S.Struct({
-        id: S.String,
-        mutatorName: S.String,
+        id: S.NonEmptyString,
+        mutatorName: S.NonEmptyString,
         replacement: S.optional(S.String),
-        status: S.String,
+        status: S.NonEmptyString,
         location: S.Struct({
           start: S.Struct({ line: S.Finite, column: S.Finite }),
           end: S.Struct({ line: S.Finite, column: S.Finite }),

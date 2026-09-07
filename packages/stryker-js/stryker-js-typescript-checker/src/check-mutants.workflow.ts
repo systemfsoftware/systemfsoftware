@@ -57,7 +57,7 @@ type CheckMutantsTypeId = typeof CheckMutantsTypeId
 
 const MutantCheckStatusSchema = S.Union([
   S.Struct({ status: S.Literal('passed') }),
-  S.Struct({ status: S.Literal('compileError'), reason: S.String }),
+  S.Struct({ status: S.Literal('compileError'), reason: S.NonEmptyString }),
 ])
 
 export class CheckFinished extends S.TaggedClass<CheckFinished>()('CheckFinished', {

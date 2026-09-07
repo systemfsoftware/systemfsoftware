@@ -5,9 +5,9 @@ import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import type * as VitestNode from 'vitest/node'
 
 export const VitestRunnerOptionsSchema = S.Struct({
-  dir: S.optional(S.String),
+  dir: S.optional(S.NonEmptyString),
   related: S.optional(S.Boolean).pipe(S.withDecodingDefault(Effect.succeed(true))),
-  configFile: S.optional(S.String),
+  configFile: S.optional(S.NonEmptyString),
 })
 
 export type VitestRunnerOptions = S.Schema.Type<typeof VitestRunnerOptionsSchema>
@@ -46,7 +46,7 @@ export const ExportEntry = S.Union([S.String, S.Record(S.String, S.Unknown)])
 
 export const PackageManifest = S.StructWithRest(
   S.Struct({
-    name: S.optional(S.String),
+    name: S.optional(S.NonEmptyString),
     exports: S.optional(S.Record(S.String, ExportEntry)),
   }),
   [S.Record(S.String, S.Unknown)],
@@ -60,7 +60,7 @@ export const VitestNodeModuleSchema = S.declare(
   { description: 'The project-local vitest/node module' },
 )
 
-export const VitestPackageSchema = S.Struct({ version: S.String })
+export const VitestPackageSchema = S.Struct({ version: S.NonEmptyString })
 
 export class VitestDryRunCommand extends S.TaggedClass<VitestDryRunCommand>()('VitestDryRunCommand', {
   rawTests: S.Array(S.Unknown),

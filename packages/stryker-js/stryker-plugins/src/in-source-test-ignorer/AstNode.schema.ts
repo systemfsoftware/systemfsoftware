@@ -2,11 +2,11 @@ import { Schema as S } from 'effect'
 
 export const Identifier = S.Struct({
   type: S.Literal('Identifier'),
-  name: S.String,
+  name: S.NonEmptyString,
 })
 export type Identifier = S.Schema.Type<typeof Identifier>
 
-export const AstLike = S.Struct({ type: S.String })
+export const AstLike = S.Struct({ type: S.NonEmptyString })
 export type AstLike = S.Schema.Type<typeof AstLike>
 
 export const MetaProperty = S.Struct({

@@ -38,12 +38,12 @@ export const LocationSchema = S.Struct({
 })
 
 export const MutantSchema = S.Struct({
-  id: S.String,
-  file: S.String,
+  id: S.NonEmptyString,
+  file: S.NonEmptyString,
   location: LocationSchema,
-  mutator: S.String,
+  mutator: S.NonEmptyString,
   replacement: S.NullOr(S.String),
-  status: S.String,
+  status: S.NonEmptyString,
 })
 
 type DecodedMutant = S.Schema.Type<typeof MutantSchema>
@@ -77,10 +77,10 @@ const StreamLineFields = {
 export const StreamLineSchema = S.StructWithRest(S.Struct(StreamLineFields), [S.Record(S.String, S.Unknown)])
 
 export const ManifestSchema = S.Struct({
-  tool: S.String,
+  tool: S.NonEmptyString,
   commands: S.Array(
     S.Struct({
-      subcommands: S.Array(S.Struct({ name: S.String, description: S.String })),
+      subcommands: S.Array(S.Struct({ name: S.NonEmptyString, description: S.NonEmptyString })),
     }),
   ),
 })

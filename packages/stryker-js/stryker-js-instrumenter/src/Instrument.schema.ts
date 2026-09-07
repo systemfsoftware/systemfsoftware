@@ -32,7 +32,7 @@ const RangeSchema = S.Struct({
 export const MutateDescriptionSchema = S.Union([S.Boolean, S.Array(RangeSchema)])
 
 export const FileSchema = S.Struct({
-  name: S.String,
+  name: S.NonEmptyString,
   content: S.String,
   mutate: MutateDescriptionSchema,
 })

@@ -2,7 +2,7 @@ import { Schema as S } from 'effect'
 
 export const Identifier = S.Struct({
   type: S.Literal('Identifier'),
-  name: S.String,
+  name: S.NonEmptyString,
 })
 export type Identifier = S.Schema.Type<typeof Identifier>
 
@@ -30,7 +30,7 @@ export const FunctionExpression = S.Struct({
 export type FunctionExpression = S.Schema.Type<typeof FunctionExpression>
 
 /** Any AST node outside the modeled vocabulary — accepts every node type structurally. */
-export const UnknownNode = S.Struct({ type: S.String })
+export const UnknownNode = S.Struct({ type: S.NonEmptyString })
 export type UnknownNode = S.Schema.Type<typeof UnknownNode>
 
 export interface MemberExpression {

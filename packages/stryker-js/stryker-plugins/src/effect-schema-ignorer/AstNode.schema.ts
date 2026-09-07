@@ -2,7 +2,7 @@ import { Schema as S } from 'effect'
 
 export const Identifier = S.Struct({
   type: S.Literal('Identifier'),
-  name: S.String,
+  name: S.NonEmptyString,
 })
 export type Identifier = S.Schema.Type<typeof Identifier>
 
@@ -23,7 +23,7 @@ export const ArrowFunctionExpression = S.Struct({
 })
 export type ArrowFunctionExpression = S.Schema.Type<typeof ArrowFunctionExpression>
 
-export const UnknownNode = S.Struct({ type: S.String })
+export const UnknownNode = S.Struct({ type: S.NonEmptyString })
 export type UnknownNode = S.Schema.Type<typeof UnknownNode>
 
 export interface MemberExpression {

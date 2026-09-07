@@ -6,8 +6,8 @@
 import * as S from 'effect/Schema'
 
 export const PluginDeclarationSchema = S.Struct({
-  kind: S.String,
-  name: S.String,
+  kind: S.NonEmptyString,
+  name: S.NonEmptyString,
 })
 
 export const PluginRegistrySchema = S.Struct({
