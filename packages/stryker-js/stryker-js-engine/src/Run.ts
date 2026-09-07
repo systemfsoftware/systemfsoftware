@@ -358,13 +358,10 @@ export type EnginePorts =
 interface PrepareEnvSnapshot {
   readonly resolvedMode: ResolvedMode
   readonly allowConsoleColors: boolean
-  readonly reporterPluginModules: readonly string[]
   readonly basePath: string
-  readonly runStartedAt: number
 }
 
 interface PrepareRaw {
-  readonly configured: StrykerOptions
   readonly options: PrepareDone['options']
   readonly loaded: LoadedPlugins
   readonly project: Project
@@ -483,7 +480,6 @@ export const prepareCell = Cell.layer({
       const mutateCount = MutableHashMap.size(project.filesToMutate)
       const summary = `Found ${mutateCount} of ${fileCount} file(s) to be mutated.`
       const raw: PrepareRaw = {
-        configured,
         options,
         loaded,
         project,
@@ -496,9 +492,7 @@ export const prepareCell = Cell.layer({
         envSnapshot: {
           resolvedMode: env.resolvedMode,
           allowConsoleColors: env.allowConsoleColors,
-          reporterPluginModules: env.reporterPluginModules,
           basePath: env.basePath,
-          runStartedAt: env.runStartedAt,
         },
       }
       return raw
@@ -519,59 +513,43 @@ export const prepareCell = Cell.layer({
     raw: PrepareRaw,
   ): Effect.Effect<PrepareDone, StageError, RunEnvironment | RunEvents> =>
     Effect.gen(function*() {
+      const env = yield* RunEnvironment
+      const queue = yield* RunEvents
+      if (raw.envSnapshot.resolvedMode.mode === 'human') {
+        if (raw.envSnapshot.allowConsoleColors) {
+          yield* Console.log(ansi.green(raw.summary))
+        } else {
+          yield* Console.log(raw.summary)
+        }
+      } else {
+        yield* Effect.logInfo(raw.summary)
+      }
+      const now = yield* Clock.currentTimeMillis
+      yield* Queue.offer(queue, new PhaseEntered({ phase: 'prepare', elapsedMs: now - env.runStartedAt }))
       const decision = yield* Result.match(output, {
         onFailure: (err) => Effect.fail(new StageError({ stage: err.stage, reason: err.reason, cause: err })),
         onSuccess: (d) => Effect.succeed(d),
       })
       return yield* Match.value(decision).pipe(
         Match.tag('PrepareRefused', () =>
-          Effect.gen(function*() {
-            const env = yield* RunEnvironment
-            const queue = yield* RunEvents
-            if (raw.envSnapshot.resolvedMode.mode === 'human') {
-              if (raw.envSnapshot.allowConsoleColors) {
-                yield* Console.log(ansi.green(raw.summary))
-              } else {
-                yield* Console.log(raw.summary)
-              }
-            } else {
-              yield* Effect.logInfo(raw.summary)
-            }
-            const now = yield* Clock.currentTimeMillis
-            yield* Queue.offer(queue, new PhaseEntered({ phase: 'prepare', elapsedMs: now - env.runStartedAt }))
-            return yield* Effect.fail(
-              new StageError({
-                stage: 'prepare',
-                reason: 'No input files found.',
-                cause: new PrepareError({ stage: 'prepare', reason: 'No input files found.' }),
-              }),
-            )
-          })),
-        Match.tag('PreparePlanned', () =>
-          Effect.gen(function*() {
-            const env = yield* RunEnvironment
-            const queue = yield* RunEvents
-            if (raw.envSnapshot.resolvedMode.mode === 'human') {
-              if (raw.envSnapshot.allowConsoleColors) {
-                yield* Console.log(ansi.green(raw.summary))
-              } else {
-                yield* Console.log(raw.summary)
-              }
-            } else {
-              yield* Effect.logInfo(raw.summary)
-            }
-            const now = yield* Clock.currentTimeMillis
-            yield* Queue.offer(queue, new PhaseEntered({ phase: 'prepare', elapsedMs: now - env.runStartedAt }))
-            const done: PrepareDone = {
-              project: raw.project,
-              plugins: raw.plugins,
-              loadedPlugins: raw.loaded,
-              ignorers: raw.ignorers,
-              options: raw.options,
-              temporaryDirectoryPath: raw.temporaryDirectoryPath,
-            }
-            return done
-          })),
+          Effect.fail(
+            new StageError({
+              stage: 'prepare',
+              reason: 'No input files found.',
+              cause: new PrepareError({ stage: 'prepare', reason: 'No input files found.' }),
+            }),
+          )),
+        Match.tag('PreparePlanned', () => {
+          const done: PrepareDone = {
+            project: raw.project,
+            plugins: raw.plugins,
+            loadedPlugins: raw.loaded,
+            ignorers: raw.ignorers,
+            options: raw.options,
+            temporaryDirectoryPath: raw.temporaryDirectoryPath,
+          }
+          return Effect.succeed(done)
+        }),
         Match.exhaustive,
       )
     }),

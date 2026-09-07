@@ -80,7 +80,7 @@ function stripSurvivorsKeys(config: unknown): Record<string, unknown> {
     Match.when(isRecord, (record) =>
       objectFromEntries(
         objectKeys(record)
-          .filter((key) => key !== SURVIVORS_BOOKKEEPING_KEYS[0])
+          .filter((key) => !SURVIVORS_BOOKKEEPING_KEYS.some((bookkeeping) => bookkeeping === key))
           .map((key) => [key, record[key]]),
       )),
     Match.orElse(() => ({})),

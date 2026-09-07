@@ -56,8 +56,7 @@ const describeOrders = (): OrderPair => {
 const runBoth = (orders: OrderPair) =>
   Effect.gen(function*() {
     const chained = pipe(orders.first, Cell.andThen(orders.second))
-    yield* Cell.run(chained, new OrderRequest({ id: 'initial-request' }))
-    const firstResponse = new OrderRequest({ id: 'after-initial-request' })
+    const firstResponse = yield* Cell.run(chained, new OrderRequest({ id: 'initial-request' }))
     return { firstResponse, recorded: orders.recorded, trace: orders.trace }
   })
 
@@ -109,6 +108,7 @@ Feature('Chaining two orders through the caller')
           (s) => runBoth(s.orders),
         ),
         Then('the second order read exactly the answer the first produced')((s) => {
+          expect(s.outcome.firstResponse).toStrictEqual(new OrderRequest({ id: 'after-initial-request' }))
           expect(s.outcome.recorded.secondReadRaw).toStrictEqual(s.outcome.firstResponse)
         }),
         Then('both orders ran their steps in the order each declares')((s) => {
