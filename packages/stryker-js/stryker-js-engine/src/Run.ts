@@ -43,7 +43,6 @@ import * as Predicate from 'effect/Predicate'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
 import * as Scope from 'effect/Scope'
 import * as Semaphore from 'effect/Semaphore'
 import * as Stream from 'effect/Stream'
@@ -497,15 +496,7 @@ export const prepareCell = Cell.layer({
       }
       return raw
     }),
-  decode: (raw: PrepareRaw): Result.Result<PrepareCommand, StageError> =>
-    Result.match(
-      S.decodeUnknownResult(PrepareCommand)({ fileCount: raw.fileCount, mutateCount: raw.mutateCount }),
-      {
-        onFailure: (cause) =>
-          Result.fail(new StageError({ stage: 'prepare', reason: 'Failed to decode prepare command', cause })),
-        onSuccess: (command) => Result.succeed(command),
-      },
-    ),
+  decode: (raw) => Result.succeed(PrepareCommand.make({ fileCount: raw.fileCount, mutateCount: raw.mutateCount })),
   decide: prepareRun,
   encode: (outcome: Result.Result<PrepareDecision, PrepareWorkflowError>) => outcome,
   write: (
@@ -622,18 +613,13 @@ export const instrumentCell = Cell.layer({
       }
       return raw
     }),
-  decode: (raw: InstrumentRaw): Result.Result<InstrumentCommand, StageError> =>
-    Result.match(
-      S.decodeUnknownResult(InstrumentCommand)({
+  decode: (raw) =>
+    Result.succeed(
+      InstrumentCommand.make({
         fileCount: raw.filesToMutate.length,
         inPlace: raw.prev.options.inPlace,
         pluginCount: raw.prev.loadedPlugins.pluginModulePaths.length,
       }),
-      {
-        onFailure: (cause) =>
-          Result.fail(new StageError({ stage: 'instrument', reason: 'Failed to decode instrument command', cause })),
-        onSuccess: (command) => Result.succeed(command),
-      },
     ),
   decide: planInstrumentation,
   encode: (outcome) => outcome,
@@ -643,7 +629,6 @@ export const instrumentCell = Cell.layer({
       const now = yield* Clock.currentTimeMillis
       const queue = yield* RunEvents
       yield* Queue.offer(queue, new PhaseEntered({ phase: 'instrument', elapsedMs: now - env.runStartedAt }))
-
       const out = output
       if (Result.isFailure(out)) {
         const err = out.failure
@@ -752,53 +737,36 @@ export const dryRunCell = Cell.layer({
       }
       return raw
     }),
-  decode: (raw: DryRunRaw): Result.Result<DryRunCommand, StageError> =>
+  decode: (raw: DryRunRaw) =>
     Match.value(raw.rawResult).pipe(
-      Match.when({ status: 'complete' }, (completed) => {
-        const failedTestCount = completed.tests.filter((test) => test.status === 'failed').length
-        return Result.match(
-          S.decodeUnknownResult(DryRunCommand)({
+      Match.when({ status: 'complete' }, (completed) =>
+        Result.succeed(
+          DryRunCommand.make({
             status: 'Complete',
             testCount: completed.tests.length,
-            failedTestCount,
+            failedTestCount: completed.tests.filter((test) => test.status === 'failed').length,
             allowEmpty: raw.prev.options.allowEmpty,
           }),
-          {
-            onFailure: (cause) =>
-              Result.fail(new StageError({ stage: 'dryRun', reason: 'Failed to decode dry-run command', cause })),
-            onSuccess: (command) => Result.succeed(command),
-          },
-        )
-      }),
+        )),
       Match.when({ status: 'error' }, (failed) =>
-        Result.match(
-          S.decodeUnknownResult(DryRunCommand)({
+        Result.succeed(
+          DryRunCommand.make({
             status: 'Error',
             testCount: 0,
             failedTestCount: 0,
             allowEmpty: raw.prev.options.allowEmpty,
             errorMessage: failed.errorMessage,
           }),
-          {
-            onFailure: (cause) =>
-              Result.fail(new StageError({ stage: 'dryRun', reason: 'Failed to decode dry-run command', cause })),
-            onSuccess: (command) => Result.succeed(command),
-          },
         )),
       Match.when({ status: 'timeout' }, (timedOut) =>
-        Result.match(
-          S.decodeUnknownResult(DryRunCommand)({
+        Result.succeed(
+          DryRunCommand.make({
             status: 'Timeout',
             testCount: 0,
             failedTestCount: 0,
             allowEmpty: raw.prev.options.allowEmpty,
             ...(timedOut.reason !== undefined && { reason: timedOut.reason }),
           }),
-          {
-            onFailure: (cause) =>
-              Result.fail(new StageError({ stage: 'dryRun', reason: 'Failed to decode dry-run command', cause })),
-            onSuccess: (command) => Result.succeed(command),
-          },
         )),
       Match.exhaustive,
     ),
@@ -896,19 +864,14 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
       const raw: MutationTestRaw = { prev }
       return raw
     }),
-  decode: (raw: MutationTestRaw): Result.Result<MutationTestCommand, StageError> =>
-    Result.match(
-      S.decodeUnknownResult(MutationTestCommand)({
+  decode: (raw: MutationTestRaw) =>
+    Result.succeed(
+      MutationTestCommand.make({
         dryRunOnly: raw.prev.options.dryRunOnly,
         allowEmpty: raw.prev.options.allowEmpty,
         testCount: raw.prev.dryRunResult.tests.length,
         isZero: raw.prev.dryRunResult.tests.length === 0,
       }),
-      {
-        onFailure: (cause) =>
-          Result.fail(new StageError({ stage: 'mutationTest', reason: 'Failed to decode mutation command', cause })),
-        onSuccess: (command) => Result.succeed(command),
-      },
     ),
   decide: admitMutationTest,
   encode: (outcome) => outcome,

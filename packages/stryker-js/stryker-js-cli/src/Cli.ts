@@ -1239,6 +1239,7 @@ const executeParsed = (input: RunStrykerCliInput, edge: RunEdge) =>
               Match.when(undefined, () => Effect.void),
               Match.orElse((set) => set(fileName)),
             ),
+            Effect.andThen(() => edge.stream.open),
             Effect.andThen(
               Result.match(parsed, {
                 onFailure: (failure): Effect.Effect<unknown, SurvivorsAdmissionError | CliError.CliError> =>
@@ -1306,11 +1307,11 @@ export const runStrykerCli = (
     createRunEventStream(input.mode),
     Effect.flatMap((stream) => runEdgeOf(input, stream)),
     Effect.flatMap((edge) =>
-      pipe(
-        executeParsed(input, edge),
-        withSignalGuard,
-        Effect.exit,
-        Effect.flatMap((exit) => Effect.uninterruptible(emitAndClassify(input, edge)(exit))),
+      Effect.uninterruptibleMask((restore) =>
+        pipe(
+          Effect.exit(withSignalGuard(restore(executeParsed(input, edge)))),
+          Effect.flatMap((exit) => emitAndClassify(input, edge)(exit)),
+        )
       )
     ),
   )
