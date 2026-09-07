@@ -1,4 +1,5 @@
 import { noAssertInProperty } from './rules/no-assert-in-property.js'
+import { noIgnoredDraw } from './rules/no-ignored-draw.js'
 import { noNestedQuantification } from './rules/no-nested-quantification.js'
 import { noSilentReturn } from './rules/no-silent-return.js'
 import { noUnboundedFanout } from './rules/no-unbounded-fanout.js'
@@ -24,6 +25,7 @@ export default {
     name: PLUGIN_NAME,
   },
   rules: {
+    'no-ignored-draw': noIgnoredDraw,
     'no-silent-return': noSilentReturn,
     'no-assert-in-property': noAssertInProperty,
     'property-file-purity': propertyFilePurity,
