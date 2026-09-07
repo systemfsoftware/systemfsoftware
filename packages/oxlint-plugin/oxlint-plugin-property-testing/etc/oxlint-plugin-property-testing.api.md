@@ -26,6 +26,7 @@ const _default: {
         recommended: {
             plugins: string[];
             rules: {
+                readonly '@systemfsoftware/oxlint-plugin-property-testing/no-ignored-draw': 'error';
                 readonly '@systemfsoftware/oxlint-plugin-property-testing/no-silent-return': 'error';
                 readonly '@systemfsoftware/oxlint-plugin-property-testing/no-assert-in-property': 'error';
                 readonly '@systemfsoftware/oxlint-plugin-property-testing/property-file-purity': 'error';

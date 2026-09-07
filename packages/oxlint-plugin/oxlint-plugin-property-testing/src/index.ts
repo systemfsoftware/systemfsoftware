@@ -10,6 +10,7 @@ import { requireEffectFastcheck } from './rules/require-effect-fastcheck.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-property-testing'
 const recommendedRules = {
+  '@systemfsoftware/oxlint-plugin-property-testing/no-ignored-draw': 'error',
   '@systemfsoftware/oxlint-plugin-property-testing/no-silent-return': 'error',
   '@systemfsoftware/oxlint-plugin-property-testing/no-assert-in-property': 'error',
   '@systemfsoftware/oxlint-plugin-property-testing/property-file-purity': 'error',
