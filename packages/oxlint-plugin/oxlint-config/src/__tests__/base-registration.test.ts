@@ -141,9 +141,9 @@ const NOT_YET_ENROLLED: readonly AllowlistEntry[] = [
   },
   {
     plugin: '@systemfsoftware/oxlint-plugin-effect-schema',
-    rule: 'schema-brand-requires-filter',
+    rule: 'schema-brand-requires-decode',
     date: '2026-09-07',
-    reason: 'U1 evaluator landed; enrollment ships in its own commit',
+    reason: 'Rescoped from brand-without-filter to zero-decode constructors; enrollment ships in its own commit',
   },
   {
     plugin: '@systemfsoftware/oxlint-plugin-structure',

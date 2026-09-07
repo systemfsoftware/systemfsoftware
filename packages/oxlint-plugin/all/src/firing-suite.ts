@@ -139,7 +139,7 @@ check('manifest: the corpus covers exactly the five program rules', () => {
   const names = manifest.map((entry) => entry.shortName)
   const expected = [
     'schema-bare-primitive-field',
-    'schema-brand-requires-filter',
+    'schema-brand-requires-decode',
     'no-sequenced-cell-run',
     'no-laundered-cell-service',
     'no-ignored-draw',

@@ -5,7 +5,7 @@ import type { RuleTester } from 'oxlint/plugins-dev'
 import { launderedCellServiceInvalidCases } from '../../oxlint-plugin-cell-vocabulary/src/rules/no-laundered-cell-service.corpus.js'
 import { sequencedCellRunInvalidCases } from '../../oxlint-plugin-cell-vocabulary/src/rules/no-sequenced-cell-run.corpus.js'
 import { SCHEMA_BARE_PRIMITIVE_FIELD_INVALID } from '../../oxlint-plugin-effect-schema/src/rules/schema-bare-primitive-field.corpus.js'
-import { SCHEMA_BRAND_REQUIRES_FILTER_INVALID } from '../../oxlint-plugin-effect-schema/src/rules/schema-brand-requires-filter.corpus.js'
+import { SCHEMA_BRAND_REQUIRES_DECODE_INVALID } from '../../oxlint-plugin-effect-schema/src/rules/schema-brand-requires-decode.corpus.js'
 import { NO_IGNORED_DRAW_INVALID } from '../../oxlint-plugin-property-testing/src/rules/no-ignored-draw.corpus.js'
 
 export interface RuleManifest {
@@ -56,14 +56,14 @@ export const loadManifest = (moduleUrl: string): readonly RuleManifest[] => {
       tester: 'schema',
     },
     {
-      shortName: 'schema-brand-requires-filter',
+      shortName: 'schema-brand-requires-decode',
       ownerPackage: '@systemfsoftware/oxlint-plugin-effect-schema',
-      distRuleKey: 'schema-brand-requires-filter',
-      leafRecommendedKey: '@systemfsoftware/oxlint-plugin-effect-schema/schema-brand-requires-filter',
-      suitePath: 'oxlint-plugin-effect-schema/src/rules/__tests__/schema-brand-requires-filter.test.ts',
-      corpusSpecifier: '../schema-brand-requires-filter.corpus.js',
-      invalidPattern: 'invalid:SCHEMA_BRAND_REQUIRES_FILTER_INVALID,?\\}',
-      cases: SCHEMA_BRAND_REQUIRES_FILTER_INVALID,
+      distRuleKey: 'schema-brand-requires-decode',
+      leafRecommendedKey: '@systemfsoftware/oxlint-plugin-effect-schema/schema-brand-requires-decode',
+      suitePath: 'oxlint-plugin-effect-schema/src/rules/__tests__/schema-brand-requires-decode.test.ts',
+      corpusSpecifier: '../schema-brand-requires-decode.corpus.js',
+      invalidPattern: 'invalid:SCHEMA_BRAND_REQUIRES_DECODE_INVALID,?\\}',
+      cases: SCHEMA_BRAND_REQUIRES_DECODE_INVALID,
       tester: 'schema',
     },
     {

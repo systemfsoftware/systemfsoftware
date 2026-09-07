@@ -17,7 +17,7 @@ const _default: {
         'no-manual-tag-member': Rule;
         'no-manual-tag-property': Rule;
         'schema-bare-primitive-field': Rule;
-        'schema-brand-requires-filter': Rule;
+        'schema-brand-requires-decode': Rule;
         'schema-checked-element-named': Rule;
         'schema-declaration-location': Rule;
         'schema-filter-constructive-generation': Rule;
