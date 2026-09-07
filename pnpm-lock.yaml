@@ -688,6 +688,12 @@ importers:
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../effect-gherkin-spec
+      '@systemfsoftware/effect-schema-law':
+        specifier: workspace:^
+        version: link:../../effect-schema-law
+      '@systemfsoftware/effect-schema-vite':
+        specifier: workspace:^
+        version: link:../../effect-schema-vite
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../oxlint-plugin/oxlint-config
