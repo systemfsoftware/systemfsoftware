@@ -249,9 +249,7 @@ export const failure = <A, E = never>(
     ...ResultProto,
     ...FailureTag,
     cause,
-    ...(options?.previousSuccess === undefined
-      ? { previousSuccess: Option.none() }
-      : { previousSuccess: options.previousSuccess }),
+    previousSuccess: options?.previousSuccess ?? Option.none(),
     waiting: options?.waiting ?? false,
   }
   return result

@@ -337,7 +337,7 @@ const LifetimeProto: Omit<Lifetime<unknown>, 'node' | 'finalizers' | 'disposed' 
       return this.resultOnce(atom, options)
     }
     const result = this.get(atom)
-    if (options?.suspendOnWaiting && result.waiting) {
+    if (options?.suspendOnWaiting === true && result.waiting) {
       return Effect.never
     }
     if (Result.isInitial(result)) {
@@ -354,11 +354,11 @@ const LifetimeProto: Omit<Lifetime<unknown>, 'node' | 'finalizers' | 'disposed' 
   }): Effect.Effect<A, E> {
     return Effect.callback<A, E>((resume) => {
       const result = this.once(atom)
-      if (!Result.isInitial(result) && !(options?.suspendOnWaiting && result.waiting)) {
+      if (!Result.isInitial(result) && !(options?.suspendOnWaiting === true && result.waiting)) {
         return resume(Result.toExit(result))
       }
       const cancel = this.node.registry.subscribe(atom, (result) => {
-        if (Result.isInitial(result) || (options?.suspendOnWaiting && result.waiting)) return
+        if (Result.isInitial(result) || (options?.suspendOnWaiting === true && result.waiting)) return
         cancel()
         resume(Result.toExit(result))
       }, { immediate: false })
@@ -381,7 +381,10 @@ const LifetimeProto: Omit<Lifetime<unknown>, 'node' | 'finalizers' | 'disposed' 
       return this.someOnce(atom)
     }
     const result = this.get(atom)
-    return Option.isNone(result) ? Effect.never : Effect.succeed(result.value)
+    if (Option.isNone(result)) {
+      return Effect.never
+    }
+    return Effect.succeed(result.value)
   },
 
   someOnce<A>(this: Lifetime<unknown>, atom: Atom.Atom<Option.Option<A>>): Effect.Effect<A> {
@@ -447,7 +450,7 @@ const LifetimeProto: Omit<Lifetime<unknown>, 'node' | 'finalizers' | 'disposed' 
     return Stream.callback<A>((queue) =>
       Effect.sync(() => {
         this.subscribe(atom, (value) => Queue.offerUnsafe(queue, value), {
-          immediate: !options?.withoutInitialValue,
+          immediate: options?.withoutInitialValue !== true,
         })
       })
     )
@@ -541,14 +544,18 @@ export const BatchPhase = {
   collect: 1,
   commit: 2,
 } as const
-
 export type BatchPhase = typeof BatchPhase[keyof typeof BatchPhase]
 
-export const batchState = {
-  phase: BatchPhase.disabled as BatchPhase,
+export const batchState: {
+  phase: BatchPhase
+  depth: number
+  stale: NodeImpl<unknown>[]
+  notify: Set<NodeImpl<unknown>>
+} = {
+  phase: BatchPhase.disabled,
   depth: 0,
-  stale: [] as NodeImpl<unknown>[],
-  notify: new Set<NodeImpl<unknown>>(),
+  stale: [],
+  notify: new Set(),
 }
 
 export function runInternalBatch(f: () => void): void {

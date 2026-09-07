@@ -67,10 +67,14 @@ export const setIdleTTL: {
 >(2, <A extends Atom<unknown>>(self: A, durationInput: Duration.Input): A => {
   const duration = Duration.fromInputUnsafe(durationInput)
   const isFinite = Duration.isFinite(duration)
+  let idleTTL: number | undefined
+  if (isFinite) {
+    idleTTL = Duration.toMillis(duration)
+  }
   const copy = {
     ...self,
     keepAlive: !isFinite,
-    idleTTL: isFinite ? Duration.toMillis(duration) : undefined,
+    idleTTL,
   }
   Reflect.setPrototypeOf(copy, Reflect.getPrototypeOf(self))
   return copy
@@ -118,12 +122,16 @@ export const readable = <A>(
   read: (get: AtomContext) => A,
   refresh?: (f: <A>(atom: Atom<A>) => void) => void,
 ): Atom<A> => {
+  const refreshPatch: { refresh?: (f: <A>(atom: Atom<A>) => void) => void } = {}
+  if (refresh !== undefined) {
+    refreshPatch.refresh = refresh
+  }
   const self: Atom<A> = {
     ...AtomProto,
     keepAlive: false,
     lazy: true,
     read,
-    ...(refresh === undefined ? {} : { refresh }),
+    ...refreshPatch,
   }
   return self
 }
@@ -139,13 +147,17 @@ export const writable = <R, W>(
   write: (ctx: WriteContext<R>, value: W) => void,
   refresh?: (f: <A>(atom: Atom<A>) => void) => void,
 ): Writable<R, W> => {
+  const refreshPatch: { refresh?: (f: <A>(atom: Atom<A>) => void) => void } = {}
+  if (refresh !== undefined) {
+    refreshPatch.refresh = refresh
+  }
   const self: Writable<R, W> = {
     ...WritableProto,
     keepAlive: false,
     lazy: true,
     read,
     write,
-    ...(refresh === undefined ? {} : { refresh }),
+    ...refreshPatch,
   }
   return self
 }
@@ -196,24 +208,26 @@ export const transform: {
       readonly initialValueTarget?: Atom<B> | undefined
     },
   ): Atom<B> => {
-    const atom = removeTtl(
-      isWritable(self)
-        ? writable(
-          (get) => f(get, self),
-          function(ctx, value) {
-            ctx.set(self, value)
-          },
-          self.refresh ?? function(refresh) {
-            refresh(self)
-          },
-        )
-        : readable(
-          (get) => f(get, self),
-          self.refresh ?? function(refresh) {
-            refresh(self)
-          },
-        ),
-    )
+    let target: Atom<B>
+    if (isWritable(self)) {
+      target = writable(
+        (get) => f(get, self),
+        function(ctx, value) {
+          ctx.set(self, value)
+        },
+        self.refresh ?? function(refresh) {
+          refresh(self)
+        },
+      )
+    } else {
+      target = readable(
+        (get) => f(get, self),
+        self.refresh ?? function(refresh) {
+          refresh(self)
+        },
+      )
+    }
+    const atom = removeTtl(target)
     if (options?.initialValueTarget) {
       const mutable: Mutable<Atom<B>> = atom
       mutable.initialValueTarget = getInitialValueTarget(options.initialValueTarget)

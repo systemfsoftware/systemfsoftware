@@ -259,9 +259,12 @@ export const toStreamResult: {
   <A, E>(self: Registry, atom: Atom.Atom<Result.Result<A, E>>): Stream.Stream<A, E> =>
     toStream(self, atom).pipe(
       Stream.filter(Result.isNotInitial),
-      Stream.mapEffect((result) =>
-        Result.isSuccess(result) ? Effect.succeed(result.value) : Effect.failCause(result.cause)
-      ),
+      Stream.mapEffect((result) => {
+        if (Result.isSuccess(result)) {
+          return Effect.succeed(result.value)
+        }
+        return Effect.failCause(result.cause)
+      }),
       Stream.changes,
     ),
 )
@@ -352,8 +355,12 @@ interface SerializableAtom {
 const isSerializableAtom = (atom: Atom.Atom<unknown>): atom is Atom.Atom<unknown> & SerializableAtom =>
   SerializableTypeId in atom
 
-const atomKey = <A>(atom: Atom.Atom<A>): Atom.Atom<A> | string =>
-  isSerializableAtom(atom) ? atom[SerializableTypeId].key : atom
+const atomKey = <A>(atom: Atom.Atom<A>): Atom.Atom<A> | string => {
+  if (isSerializableAtom(atom)) {
+    return atom[SerializableTypeId].key
+  }
+  return atom
+}
 
 /**
  * Nodes are stored in one heterogeneous map keyed by `atomKey`. A node found
@@ -494,7 +501,7 @@ export class RegistryImpl implements Registry {
 
   subscribe<A>(atom: Atom.Atom<A>, f: (_: A) => void, options?: { readonly immediate?: boolean }): () => void {
     const node = this.ensureNode(atom)
-    if (options?.immediate) {
+    if (options?.immediate === true) {
       f(node.value())
     }
     const remove = node.subscribe(function() {

@@ -251,15 +251,16 @@ class PropRefImpl<A, K extends keyof A> implements AtomRef<A[K]> {
     return Hash.hash(this.value)
   }
   get value() {
-    if (this.parent.value && this._prop in (this.parent.value as object)) {
-      this.previous = this.parent.value[this._prop]
+    const parentValue: A = this.parent.value
+    if (typeof parentValue === 'object' && parentValue !== null && this._prop in parentValue) {
+      this.previous = parentValue[this._prop]
     }
     return this.previous
   }
   subscribe(f: (a: A[K]) => void): () => void {
     let previous = this.value
     return this.parent.subscribe((a) => {
-      if (!a || !(this._prop in (a as object))) {
+      if (typeof a !== 'object' || a === null || !(this._prop in a)) {
         return
       }
       const next = a[this._prop]

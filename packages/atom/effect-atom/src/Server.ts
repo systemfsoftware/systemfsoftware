@@ -80,8 +80,10 @@ export const getServerValue: {
   <A>(self: Atom<A>, registry: Registry): A
 } = dual(
   2,
-  <A>(self: Atom<A>, registry: Registry): A =>
-    isServerValue(self)
-      ? self[ServerValueTypeId]((atom) => registry.get(atom))
-      : registry.get(self),
+  <A>(self: Atom<A>, registry: Registry): A => {
+    if (isServerValue(self)) {
+      return self[ServerValueTypeId]((atom) => registry.get(atom))
+    }
+    return registry.get(self)
+  },
 )

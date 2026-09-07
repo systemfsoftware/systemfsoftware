@@ -16,6 +16,7 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import type { LazyArg } from 'effect/Function'
 import { constTrue, dual } from 'effect/Function'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import { type Pipeable, pipeArguments } from 'effect/Pipeable'
 import type { Predicate, Refinement } from 'effect/Predicate'
@@ -81,8 +82,12 @@ export const isWaiting = <A, E>(result: Result<A, E>): boolean => result.waiting
  * @category constructors
  * @since 4.0.0
  */
-export const fromExit = <A, E>(exit: Exit.Exit<A, E>): Success<A, E> | Failure<A, E> =>
-  Exit.isSuccess(exit) ? success(exit.value) : failure(exit.cause)
+export const fromExit = <A, E>(exit: Exit.Exit<A, E>): Success<A, E> | Failure<A, E> => {
+  if (Exit.isSuccess(exit)) {
+    return success(exit.value)
+  }
+  return failure(exit.cause)
+}
 
 /**
  * Converts an `Exit` to a result, preserving the latest previous success when the exit is a failure.
@@ -93,8 +98,12 @@ export const fromExit = <A, E>(exit: Exit.Exit<A, E>): Success<A, E> | Failure<A
 export const fromExitWithPrevious = <A, E>(
   exit: Exit.Exit<A, E>,
   previous: Option.Option<Result<A, E>>,
-): Success<A, E> | Failure<A, E> =>
-  Exit.isSuccess(exit) ? success(exit.value) : failureWithPrevious(exit.cause, { previous })
+): Success<A, E> | Failure<A, E> => {
+  if (Exit.isSuccess(exit)) {
+    return success(exit.value)
+  }
+  return failureWithPrevious(exit.cause, { previous })
+}
 
 /**
  * Creates a waiting result from an optional previous result, using `Initial(true)` when no previous result exists.
@@ -165,11 +174,12 @@ export const failureWithPrevious = <A, E>(
 ): Failure<A, E> =>
   failure(cause, {
     previousSuccess: Option.flatMap(options.previous, (result) =>
-      isSuccess(result)
-        ? Option.some(result)
-        : isFailure(result)
-        ? result.previousSuccess
-        : Option.none()),
+      Match.value(result).pipe(
+        Match.tag('Success', (s) => Option.some(s)),
+        Match.tag('Failure', (f) => f.previousSuccess),
+        Match.tag('Initial', () => Option.none()),
+        Match.exhaustive,
+      )),
     waiting: options.waiting,
   })
 
@@ -208,10 +218,16 @@ export const waiting = <R extends Result<unknown, unknown>>(self: R, options?: {
   readonly touch?: boolean | undefined
 }): R => {
   if (self.waiting) {
-    return options?.touch ? touch(self) : self
+    if (options?.touch === true) {
+      return touch(self)
+    }
+    return self
   }
   const result = { ...self, waiting: true }
-  return options?.touch ? touch(result) : result
+  if (options?.touch === true) {
+    return touch(result)
+  }
+  return result
 }
 
 /**
@@ -242,9 +258,11 @@ export function replacePrevious(
   self: Result<unknown, unknown>,
   previous: Option.Option<Result<unknown, unknown>>,
 ): Result<unknown, unknown> {
-  return isFailure(self) ? failureWithPrevious(self.cause, { previous, waiting: self.waiting }) : self
+  if (isFailure(self)) {
+    return failureWithPrevious(self.cause, { previous, waiting: self.waiting })
+  }
+  return self
 }
-
 /**
  * Returns the current success value, or the previous success value stored in a failure, as an `Option`.
  *
@@ -287,8 +305,12 @@ export const getOrThrow = <A, E>(self: Result<A, E>): A =>
  * @category accessors
  * @since 4.0.0
  */
-export const cause = <A, E>(self: Result<A, E>): Option.Option<Cause.Cause<E>> =>
-  isFailure(self) ? Option.some(self.cause) : Option.none()
+export const cause = <A, E>(self: Result<A, E>): Option.Option<Cause.Cause<E>> => {
+  if (isFailure(self)) {
+    return Option.some(self.cause)
+  }
+  return Option.none()
+}
 
 /**
  * Returns the first typed error from a failure cause, or `None` for successes, initial results, defects, and interrupt-only causes.
@@ -296,8 +318,12 @@ export const cause = <A, E>(self: Result<A, E>): Option.Option<Cause.Cause<E>> =
  * @category accessors
  * @since 4.0.0
  */
-export const error = <A, E>(self: Result<A, E>): Option.Option<E> =>
-  isFailure(self) ? Cause.findErrorOption(self.cause) : Option.none()
+export const error = <A, E>(self: Result<A, E>): Option.Option<E> => {
+  if (isFailure(self)) {
+    return Cause.findErrorOption(self.cause)
+  }
+  return Option.none()
+}
 
 /**
  * Converts a result to an `Exit`, succeeding with a success value, failing with a failure cause, or failing with `NoSuchElementError` for `Initial`.
@@ -376,7 +402,10 @@ export const flatMap: {
       return failure<B, E | E2>(self.cause, {
         previousSuccess: Option.flatMap(self.previousSuccess, (s) => {
           const next = f(s.value, s)
-          return isSuccess(next) ? Option.some(next) : Option.none()
+          if (isSuccess(next)) {
+            return Option.some(next)
+          }
+          return Option.none()
         }),
         waiting: self.waiting,
       })
@@ -740,7 +769,12 @@ class BuilderImpl<Out, A, E> {
     f: (error: E, result: Failure<A, E>) => B,
   ): BuilderImpl<Out | B, A, E> {
     return this.onErrorIf(
-      (e) => typeof tag === 'string' ? isTagged(e, tag) : tag.some((t) => isTagged(e, t)),
+      (e) => {
+        if (typeof tag === 'string') {
+          return isTagged(e, tag)
+        }
+        return tag.some((t) => isTagged(e, t))
+      },
       f,
     )
   }
@@ -748,14 +782,20 @@ class BuilderImpl<Out, A, E> {
   onDefect<B>(f: (defect: unknown, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E> {
     return this.when(isFailure, (result) => {
       const defect = Cause.findDefect(result.cause)
-      return Either.isFailure(defect) ? Option.none() : Option.some(f(defect.success, result))
+      if (Either.isFailure(defect)) {
+        return Option.none()
+      }
+      return Option.some(f(defect.success, result))
     })
   }
 
   onInterrupt<B>(f: (interruptors: ReadonlySet<number>, result: Failure<A, E>) => B): BuilderImpl<Out | B, A, E> {
     return this.when(isFailure, (result) => {
       const interruptors = Cause.filterInterruptors(result.cause)
-      return Either.isFailure(interruptors) ? Option.none() : Option.some(f(interruptors.success, result))
+      if (Either.isFailure(interruptors)) {
+        return Option.none()
+      }
+      return Option.some(f(interruptors.success, result))
     })
   }
 

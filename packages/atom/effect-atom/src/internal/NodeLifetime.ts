@@ -1,3 +1,5 @@
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import type { NodeFate } from './NodeLifetime.schema.js'
 
 /** @internal */
@@ -13,12 +15,19 @@ export interface NodeLifetimeInput {
 
 /** @internal */
 export const decideNodeFate = (input: NodeLifetimeInput): NodeFate => {
-  if (input.keepAlive || input.listenerCount > 0 || input.childCount > 0 || !input.isLive || input.isWaiting) {
-    return { _tag: 'Alive' }
-  }
-  if (input.idleTTL === 0) {
-    return { _tag: 'RemoveNow' }
-  }
-  const ttlMillis = input.idleTTL ?? input.defaultIdleTTL
-  return ttlMillis === undefined ? { _tag: 'RemoveNow' } : { _tag: 'RemoveAfterTtl', ttlMillis }
+  const ttl = Option.fromUndefinedOr(input.idleTTL ?? input.defaultIdleTTL)
+  return Match.value({
+    alive: input.keepAlive || input.listenerCount > 0 || input.childCount > 0 || !input.isLive || input.isWaiting,
+    zeroIdle: input.idleTTL === 0,
+    hasTtl: Option.isSome(ttl),
+  }).pipe(
+    Match.when({ alive: true, zeroIdle: Match.any, hasTtl: Match.any }, () => ({ _tag: 'Alive' as const })),
+    Match.when({ alive: false, zeroIdle: true, hasTtl: Match.any }, () => ({ _tag: 'RemoveNow' as const })),
+    Match.when({ alive: false, zeroIdle: false, hasTtl: false }, () => ({ _tag: 'RemoveNow' as const })),
+    Match.when({ alive: false, zeroIdle: false, hasTtl: true }, () => ({
+      _tag: 'RemoveAfterTtl' as const,
+      ttlMillis: Option.getOrThrow(ttl),
+    })),
+    Match.exhaustive,
+  )
 }
