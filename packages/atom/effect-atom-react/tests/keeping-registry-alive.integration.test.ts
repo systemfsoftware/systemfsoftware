@@ -11,6 +11,12 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Keeping a shared registry alive')
   .body(({ scenario }) => {
+    const everyRenderSawTheSameRegistry = (s: {
+      readonly ctx: { readonly seenRegistries: ReadonlyArray<AtomRegistry.Registry> }
+    }): void => {
+      expect(new Set(s.ctx.seenRegistries).size).toBe(1)
+    }
+
     scenario(
       'A provider that re-renders keeps serving the same registry',
       Gherkin.Do.pipe(
@@ -43,9 +49,7 @@ Feature('Keeping a shared registry alive')
               s.ctx.tick()
             })
           })),
-        Then('every render saw the same registry')((s) => {
-          expect(new Set(s.ctx.seenRegistries).size).toBe(1)
-        }),
+        Then('every render saw the same registry')(everyRenderSawTheSameRegistry),
       ),
     )
   })

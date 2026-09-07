@@ -30,6 +30,10 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Reading and changing shared values from on-screen widgets')
   .body(({ scenario }) => {
+    const saveConfirmedWithStoredDraft = (s: { readonly saved: number }): void => {
+      expect(s.saved).toBe(42)
+    }
+
     scenario(
       'A writer who saves through the confirming setter knows when the save has finished',
       Gherkin.Do.pipe(
@@ -56,11 +60,14 @@ Feature('Reading and changing shared values from on-screen widgets')
             const confirmed = yield* s.ctx.save()(42)
             return confirmed
           })),
-        Then('the save is confirmed with the stored draft')((s) => {
-          expect(s.saved).toBe(42)
-        }),
+        Then('the save is confirmed with the stored draft')(saveConfirmedWithStoredDraft),
       ),
     )
+
+    const seededValueShownImmediately = () =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('balance')).toHaveTextContent('7')
+      })
 
     scenario(
       'A page that starts with seeded values shows them right away',
@@ -83,13 +90,14 @@ Feature('Reading and changing shared values from on-screen widgets')
             return {}
           })),
         When('the page is shown')('shown', () => Effect.sync(() => true)),
-        Then('the seeded value is already on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('balance')).toHaveTextContent('7')
-          })
-        ),
+        Then('the seeded value is already on screen')(seededValueShownImmediately),
       ),
     )
+
+    const recomputedReadingShown = () =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('reading')).toHaveTextContent('3')
+      })
 
     scenario(
       'A reader who asks for fresh data sees the value recomputed',
@@ -124,13 +132,13 @@ Feature('Reading and changing shared values from on-screen widgets')
               s.ctx.refresh()()
             })
           })),
-        Then('the widget shows the recomputed reading')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('reading')).toHaveTextContent('3')
-          })
-        ),
+        Then('the widget shows the recomputed reading')(recomputedReadingShown),
       ),
     )
+
+    const heardStartingValueAndChanges = (s: { readonly heard: ReadonlyArray<number> }): void => {
+      expect(s.heard).toEqual([3, 5, 8])
+    }
 
     scenario(
       'A listener attached to a value hears every change without showing it',
@@ -163,11 +171,17 @@ Feature('Reading and changing shared values from on-screen widgets')
             })
             return s.ctx.heard
           })),
-        Then('the listener heard the starting value and both changes')((s) => {
-          expect(s.heard).toEqual([3, 5, 8])
-        }),
+        Then('the listener heard the starting value and both changes')(heardStartingValueAndChanges),
       ),
     )
+
+    const viewShowsNewValueRecordUntouched = (s: {
+      readonly ctx: { readonly record: AtomRef.AtomRef<{ readonly name: string; readonly age: number }> }
+    }) =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('name')).toHaveTextContent('grace')
+        expect(s.ctx.record.value).toEqual({ name: 'grace', age: 36 })
+      })
 
     scenario(
       'A view of one field of a shared record stays in sync with that field',
@@ -196,21 +210,33 @@ Feature('Reading and changing shared values from on-screen widgets')
               s.ctx.nameRef().set('grace')
             })
           })),
-        Then('the view shows the new value and the rest of the record is untouched')((s) =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('name')).toHaveTextContent('grace')
-            expect(s.ctx.record.value).toEqual({ name: 'grace', age: 36 })
-          })
+        Then('the view shows the new value and the rest of the record is untouched')(
+          viewShowsNewValueRecordUntouched,
         ),
       ),
     )
+
+    const firstAcceptedSecondRejected = (s: {
+      readonly outcomes: {
+        readonly accepted: Exit.Exit<number, 'rejected'>
+        readonly rejected: Exit.Exit<number, 'rejected'>
+      }
+    }): void => {
+      expect(s.outcomes.accepted).toEqual(Exit.succeed(5))
+      expect(Exit.isFailure(s.outcomes.rejected)).toBe(true)
+    }
 
     scenario(
       'A writer who saves through the exit-reporting setter learns whether the save worked or failed',
       Gherkin.Do.pipe(
         Given('a form whose save button reports success or failure')('ctx', () =>
           Effect.sync(() => {
-            const draft = Atom.fn((n: number) => n > 0 ? Effect.succeed(n) : Effect.fail<'rejected'>('rejected'))
+            const draft = Atom.fn((n: number) => {
+              if (n > 0) {
+                return Effect.succeed(n)
+              }
+              return Effect.fail<'rejected'>('rejected')
+            })
             let save: (n: number) => Effect.Effect<number, 'rejected'> = () =>
               Effect.die(new Error('save called before the form rendered'))
             function Form() {
@@ -235,13 +261,14 @@ Feature('Reading and changing shared values from on-screen widgets')
               return { accepted, rejected }
             }),
         ),
-        Then('the first save is reported as accepted and the second as rejected')((s) => {
-          const acceptedValue = Exit.isSuccess(s.outcomes.accepted) ? s.outcomes.accepted.value : null
-          expect(acceptedValue).toBe(5)
-          expect(Exit.isFailure(s.outcomes.rejected)).toBe(true)
-        }),
+        Then('the first save is reported as accepted and the second as rejected')(firstAcceptedSecondRejected),
       ),
     )
+
+    const transformedValueShown = () =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('tripled')).toHaveTextContent('21')
+      })
 
     scenario(
       'A reader who transforms what they read sees the transformed value',
@@ -263,13 +290,14 @@ Feature('Reading and changing shared values from on-screen widgets')
             return {}
           })),
         When('the widget is shown')('shown', () => Effect.sync(() => true)),
-        Then('the transformed value is on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('tripled')).toHaveTextContent('21')
-          })
-        ),
+        Then('the transformed value is on screen')(transformedValueShown),
       ),
     )
+
+    const failureShownOnScreen = () =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('outcome')).toHaveTextContent('Failure')
+      })
 
     scenario(
       'A reader who accepts failures sees the failure instead of the widget crashing',
@@ -295,13 +323,14 @@ Feature('Reading and changing shared values from on-screen widgets')
             return {}
           })),
         When('the widget is shown')('shown', () => Effect.sync(() => true)),
-        Then('the failure is on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('outcome')).toHaveTextContent('Failure')
-          })
-        ),
+        Then('the failure is on screen')(failureShownOnScreen),
       ),
     )
+
+    const newerSavedValueCommitted = () =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('temperature')).toHaveTextContent('23')
+      })
 
     scenario(
       'A reloaded page keeps showing its current value until the saved one is safely committed',
@@ -336,13 +365,16 @@ Feature('Reading and changing shared values from on-screen widgets')
               return {}
             }),
         ),
-        When('the page settles after the saved data is committed')('settled', () =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('temperature')).toHaveTextContent('23')
-          })),
+        When('the page settles after the saved data is committed')('settled', newerSavedValueCommitted),
         Then('the newer saved value is what ends up on screen')(() => Effect.sync(() => true)),
       ),
     )
+
+    const registryNoLongerAnswers = (s: {
+      readonly ctx: { readonly unmount: () => void; readonly registry: () => AtomRegistry.Registry }
+    }): void => {
+      expect(() => s.ctx.registry().get(Atom.make(1))).toThrow('registry is disposed')
+    }
 
     scenario(
       'A data source nobody is using anymore is put away',
@@ -370,9 +402,7 @@ Feature('Reading and changing shared values from on-screen widgets')
             vi.advanceTimersByTime(1000)
             vi.useRealTimers()
           })),
-        Then('the data source no longer answers')((s) => {
-          expect(() => s.ctx.registry().get(Atom.make(1))).toThrow('registry is disposed')
-        }),
+        Then('the data source no longer answers')(registryNoLongerAnswers),
       ),
     )
   })

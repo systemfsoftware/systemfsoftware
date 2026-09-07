@@ -26,6 +26,17 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Server-side rendering of React atom hooks')
   .body(({ scenario }) => {
+    const inspectRenderedMarkup = (s: {
+      readonly ctx: { readonly getCount: () => number; readonly ssrHtml: string }
+    }) => Effect.sync(() => s.ctx)
+
+    const atomRunsDuringSsrWithoutSnapshot = (s: {
+      readonly result: { readonly getCount: () => number; readonly ssrHtml: string }
+    }): void => {
+      expect(s.result.getCount).toHaveBeenCalled()
+      expect(s.result.ssrHtml).toContain('0')
+    }
+
     scenario(
       'Atoms run during SSR when no server snapshot is given',
       Gherkin.Do.pipe(
@@ -48,58 +59,79 @@ Feature('Server-side rendering of React atom hooks')
             )
             return { getCount, ssrHtml }
           })),
-        When('the rendered markup is inspected')('result', (s) => Effect.sync(() => s.ctx)),
-        Then('the atom read function was called and the value is in the markup')((s) => {
-          expect(s.result.getCount).toHaveBeenCalled()
-          expect(s.result.ssrHtml).toContain('0')
-        }),
+        When('the rendered markup is inspected')('result', inspectRenderedMarkup),
+        Then('the atom read function was called and the value is in the markup')(atomRunsDuringSsrWithoutSnapshot),
       ),
     )
+
+    const serverSnapshotSkipsEffects = () =>
+      Effect.sync(() => {
+        const mockFetchData = vi.fn<() => number>(() => 0)
+        const userDataAtom = Atom.make(Effect.sync(() => mockFetchData())).pipe(Atom.withServerValueInitial)
+        const registry = AtomRegistry.make()
+
+        function TestComponent() {
+          const result = useAtomValue(userDataAtom)
+          return React.createElement(
+            'div',
+            null,
+            AsyncResult.match(result, {
+              onInitial: () => 'Initial',
+              onSuccess: () => 'Success',
+              onFailure: () => 'Failure',
+            }),
+          )
+        }
+
+        const ssrHtml = renderToString(
+          React.createElement(
+            RegistryContext.Provider,
+            { value: registry },
+            React.createElement(TestComponent),
+          ),
+        )
+        expect(mockFetchData).not.toHaveBeenCalled()
+        expect(ssrHtml).toContain('Initial')
+        return { mockFetchData, ssrHtml, registry, userDataAtom }
+      })
+
+    const observeServerMarkupAndReadClient = (s: {
+      readonly ctx: {
+        readonly registry: AtomRegistry.Registry
+        readonly userDataAtom: Atom.Atom<AsyncResult.Result<number, never>>
+      }
+    }) =>
+      Effect.sync(() => {
+        const clientValue = s.ctx.registry.get(s.ctx.userDataAtom)
+        return { clientValue }
+      })
+
+    const clientReadRunsEffectAndSettles = (s: {
+      readonly ctx: { readonly mockFetchData: () => number }
+      readonly result: { readonly clientValue: AsyncResult.Result<number, never> }
+    }): void => {
+      expect(s.ctx.mockFetchData).toHaveBeenCalled()
+      expect(AsyncResult.isSuccess(s.result.clientValue)).toBe(true)
+    }
 
     scenario(
       'Atoms with a server snapshot skip their effects during SSR',
       Gherkin.Do.pipe(
-        Given('an atom with a configured server snapshot')('ctx', () =>
-          Effect.sync(() => {
-            const mockFetchData = vi.fn<() => number>(() => 0)
-            const userDataAtom = Atom.make(Effect.sync(() => mockFetchData())).pipe(Atom.withServerValueInitial)
-            const registry = AtomRegistry.make()
-
-            function TestComponent() {
-              const result = useAtomValue(userDataAtom)
-              return React.createElement(
-                'div',
-                null,
-                AsyncResult.match(result, {
-                  onInitial: () => 'Initial',
-                  onSuccess: () => 'Success',
-                  onFailure: () => 'Failure',
-                }),
-              )
-            }
-
-            const ssrHtml = renderToString(
-              React.createElement(
-                RegistryContext.Provider,
-                { value: registry },
-                React.createElement(TestComponent),
-              ),
-            )
-            expect(mockFetchData).not.toHaveBeenCalled()
-            expect(ssrHtml).toContain('Initial')
-            return { mockFetchData, ssrHtml, registry, userDataAtom }
-          })),
-        When('the server markup is observed and the client reads the atom')('result', (s) =>
-          Effect.sync(() => {
-            const clientValue = s.ctx.registry.get(s.ctx.userDataAtom)
-            return { clientValue }
-          })),
-        Then('the client read ran the effect and settled the atom')((s) => {
-          expect(s.ctx.mockFetchData).toHaveBeenCalled()
-          expect(AsyncResult.isSuccess(s.result.clientValue)).toBe(true)
-        }),
+        Given('an atom with a configured server snapshot')('ctx', serverSnapshotSkipsEffects),
+        When('the server markup is observed and the client reads the atom')(
+          'result',
+          observeServerMarkupAndReadClient,
+        ),
+        Then('the client read ran the effect and settled the atom')(clientReadRunsEffectAndSettles),
       ),
     )
+
+    const dehydratedValuesInMarkup = (s: { readonly ctx: { readonly ssrHtml: string } }): void => {
+      expect(s.ctx.ssrHtml).toContain('data-testid="value">1<')
+      expect(s.ctx.ssrHtml).toContain('data-testid="value-1">123<')
+      expect(s.ctx.ssrHtml).toContain('data-testid="error-2">Error<')
+      expect(s.ctx.ssrHtml).toContain('data-testid="loading-3">Loading...<')
+    }
 
     scenario(
       'Dehydrated server state is hydrated from the server snapshot',
@@ -186,14 +218,43 @@ Feature('Server-side rendering of React atom hooks')
             }),
         ),
         When('the rendered markup is inspected')('result', () => Effect.sync(() => true)),
-        Then('the dehydrated values are present in the markup')((s) => {
-          expect(s.ctx.ssrHtml).toContain('data-testid="value">1<')
-          expect(s.ctx.ssrHtml).toContain('data-testid="value-1">123<')
-          expect(s.ctx.ssrHtml).toContain('data-testid="error-2">Error<')
-          expect(s.ctx.ssrHtml).toContain('data-testid="loading-3">Loading...<')
-        }),
+        Then('the dehydrated values are present in the markup')(dehydratedValuesInMarkup),
       ),
     )
+
+    const serverValueSettlesAndStreams = (s: {
+      readonly ctx: {
+        readonly latch: Latch.Latch
+        readonly hydrationRegistry: AtomRegistry.Registry
+        readonly atom: Atom.Atom<AsyncResult.Result<number, never>>
+      }
+    }) =>
+      Effect.promise(async () => {
+        Effect.runSync(s.ctx.latch.open)
+        await Effect.runPromise(s.ctx.latch.await)
+        await vi.waitFor(() => {
+          const snapshot = s.ctx.hydrationRegistry.get(s.ctx.atom)
+          expect(AsyncResult.isSuccess(snapshot)).toBe(true)
+        })
+        return AsyncResult.getOrThrow(s.ctx.hydrationRegistry.get(s.ctx.atom))
+      })
+
+    const deferredValueAppliedOnce = (s: {
+      readonly ctx: {
+        readonly before: { readonly start: number; readonly stop: number }
+        readonly ssrHtml: string
+        readonly readCounters: () => { readonly start: number; readonly stop: number }
+      }
+      readonly settled: unknown
+    }): void => {
+      expect(s.ctx.before.start).toBe(1)
+      expect(s.ctx.before.stop).toBe(0)
+      expect(s.ctx.ssrHtml).toContain('Initial')
+      const counters = s.ctx.readCounters()
+      expect(counters.start).toBe(1)
+      expect(s.settled).toBe(1)
+      expect(counters.stop).toBe(1)
+    }
 
     scenario(
       'Deferred hydration state is applied when the streaming promise settles',
@@ -257,26 +318,9 @@ Feature('Server-side rendering of React atom hooks')
           })),
         When('the server-side value settles and the streaming data is applied')(
           'settled',
-          (s) =>
-            Effect.promise(async () => {
-              Effect.runSync(s.ctx.latch.open)
-              await Effect.runPromise(s.ctx.latch.await)
-              await vi.waitFor(() => {
-                const snapshot = s.ctx.hydrationRegistry.get(s.ctx.atom)
-                expect(AsyncResult.isSuccess(snapshot)).toBe(true)
-              })
-              return AsyncResult.getOrThrow(s.ctx.hydrationRegistry.get(s.ctx.atom))
-            }),
+          serverValueSettlesAndStreams,
         ),
-        Then('the deferred value is applied to the hydration registry once')((s) => {
-          expect(s.ctx.before.start).toBe(1)
-          expect(s.ctx.before.stop).toBe(0)
-          expect(s.ctx.ssrHtml).toContain('Initial')
-          const counters = s.ctx.readCounters()
-          expect(counters.start).toBe(1)
-          expect(s.settled).toBe(1)
-          expect(counters.stop).toBe(1)
-        }),
+        Then('the deferred value is applied to the hydration registry once')(deferredValueAppliedOnce),
       ),
     )
   })

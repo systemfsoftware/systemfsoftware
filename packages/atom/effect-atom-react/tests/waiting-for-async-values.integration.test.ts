@@ -16,6 +16,20 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Waiting for asynchronous values')
   .body(({ scenario }) => {
+    const deliveredValueArrivesOnScreen = (s: {
+      readonly ctx: { readonly source: Deferred.Deferred<number> }
+    }) =>
+      Effect.promise(async () => {
+        await act(async () => {
+          await Effect.runPromise(Deferred.succeed(s.ctx.source, 5))
+        })
+      })
+
+    const loadedValueOnScreen = () =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('loaded-value')).toHaveTextContent('5')
+      })
+
     scenario(
       'A reader who waits through loading sees the value once it arrives',
       Gherkin.Do.pipe(
@@ -43,19 +57,35 @@ Feature('Waiting for asynchronous values')
               return { source }
             }),
         ),
-        When('the value is delivered to the widget')('settled', (s) =>
-          Effect.promise(async () => {
-            await act(async () => {
-              await Effect.runPromise(Deferred.succeed(s.ctx.source, 5))
-            })
-          })),
-        Then('the loaded value is on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('loaded-value')).toHaveTextContent('5')
-          })
-        ),
+        When('the value is delivered to the widget')('settled', deliveredValueArrivesOnScreen),
+        Then('the loaded value is on screen')(loadedValueOnScreen),
       ),
     )
+
+    const refreshedValueOnScreen = () =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('refreshed-value')).toHaveTextContent('2')
+      })
+
+    const firstArrivesRefreshArrivesNewer = (s: {
+      readonly ctx: {
+        readonly pending: ReadonlyArray<Deferred.Deferred<number>>
+        readonly refresh: () => () => void
+      }
+    }) =>
+      Effect.promise(async () => {
+        await act(async () => {
+          await Effect.runPromise(Deferred.succeed(s.ctx.pending[0], 1))
+        })
+        await expect.element(screen.getByTestId('refreshed-value')).toHaveTextContent('1')
+        await act(async () => {
+          s.ctx.refresh()()
+        })
+        await expect.poll(() => s.ctx.pending.length).toBe(2)
+        await act(async () => {
+          await Effect.runPromise(Deferred.succeed(s.ctx.pending[1], 2))
+        })
+      })
 
     scenario(
       'A reader who waits through a refresh sees the refreshed value',
@@ -93,28 +123,17 @@ Feature('Waiting for asynchronous values')
           })),
         When('the first value arrives, the reader asks for a refresh, and the newer value arrives')(
           'settled',
-          (s) =>
-            Effect.promise(async () => {
-              await act(async () => {
-                await Effect.runPromise(Deferred.succeed(s.ctx.pending[0], 1))
-              })
-              await expect.element(screen.getByTestId('refreshed-value')).toHaveTextContent('1')
-              await act(async () => {
-                s.ctx.refresh()()
-              })
-              await expect.poll(() => s.ctx.pending.length).toBe(2)
-              await act(async () => {
-                await Effect.runPromise(Deferred.succeed(s.ctx.pending[1], 2))
-              })
-            }),
+          firstArrivesRefreshArrivesNewer,
         ),
-        Then('the widget shows the refreshed value')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('refreshed-value')).toHaveTextContent('2')
-          })
-        ),
+        Then('the widget shows the refreshed value')(refreshedValueOnScreen),
       ),
     )
+
+    const failureMessageShownWidgetAbsent = () =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('failure-message')).toHaveTextContent('failed to load')
+        expect(screen.queryByTestId('unexpected-widget')).toBeNull()
+      })
 
     scenario(
       'A reader who does not accept failures sees the error message instead of the widget',
@@ -144,11 +163,8 @@ Feature('Waiting for asynchronous values')
             return {}
           })),
         When('the widget is shown')('shown', () => Effect.sync(() => true)),
-        Then('the error boundary shows the failure message and the widget is not rendered')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('failure-message')).toHaveTextContent('failed to load')
-            expect(screen.queryByTestId('unexpected-widget')).toBeNull()
-          })
+        Then('the error boundary shows the failure message and the widget is not rendered')(
+          failureMessageShownWidgetAbsent,
         ),
       ),
     )

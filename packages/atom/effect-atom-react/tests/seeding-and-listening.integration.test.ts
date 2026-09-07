@@ -17,6 +17,11 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Seeding and listening to shared values')
   .body(({ scenario }) => {
+    const firstSeedWinsOnScreen = () =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('seeded-balance')).toHaveTextContent('7')
+      })
+
     scenario(
       'A page that seeds the same value twice keeps only the first seed',
       Gherkin.Do.pipe(
@@ -39,13 +44,13 @@ Feature('Seeding and listening to shared values')
             return {}
           })),
         When('the page is shown')('shown', () => Effect.sync(() => true)),
-        Then('only the first seed is on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('seeded-balance')).toHaveTextContent('7')
-          })
-        ),
+        Then('only the first seed is on screen')(firstSeedWinsOnScreen),
       ),
     )
+
+    const listenerHearsOnlyChange = (s: { readonly heard: ReadonlyArray<number> }): void => {
+      expect(s.heard).toEqual([5])
+    }
 
     scenario(
       'A listener attached without the immediate flag hears only later changes',
@@ -71,9 +76,7 @@ Feature('Seeding and listening to shared values')
             })
             return s.ctx.heard
           })),
-        Then('the listener heard only the change, not the starting value')((s) => {
-          expect(s.heard).toEqual([5])
-        }),
+        Then('the listener heard only the change, not the starting value')(listenerHearsOnlyChange),
       ),
     )
   })

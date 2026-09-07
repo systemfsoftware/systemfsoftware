@@ -13,6 +13,12 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Keeping two on-screen widgets showing values from separate data sources independent of each other')
   .body(({ scenario }) => {
+    const widgetsStayIndependent = (s: {
+      readonly state: { readonly firstLoading: boolean; readonly secondLoading: boolean }
+    }): void => {
+      expect(s.state.firstLoading || s.state.secondLoading).toBe(true)
+    }
+
     scenario(
       "A widget still loading is not affected when a different widget's cleanup timer runs",
       Gherkin.Do.pipe(
@@ -35,7 +41,7 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
             Effect.sync(() => {
               function Comp({ id }: { readonly id: string }) {
                 const result = useAtomSuspense(s.ctx.atom)
-                const value = AsyncResult.isSuccess(result) ? result.value : 0
+                const value = AsyncResult.getOrElse(result, () => 0)
                 return React.createElement('div', { 'data-testid': `${id}-value` }, value)
               }
 
@@ -71,9 +77,7 @@ Feature('Keeping two on-screen widgets showing values from separate data sources
               return { firstLoading, secondLoading }
             }),
         ),
-        Then('the widgets do not both flip to the same state together')((s) => {
-          expect(s.state.firstLoading || s.state.secondLoading).toBe(true)
-        }),
+        Then('the widgets do not both flip to the same state together')(widgetsStayIndependent),
       ),
     )
   })

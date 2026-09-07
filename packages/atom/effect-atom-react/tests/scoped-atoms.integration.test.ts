@@ -13,6 +13,11 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Scoped atoms that belong to one part of the page')
   .body(({ scenario }) => {
+    const scopedCounterShowsUpdate = () =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('scoped-counter')).toHaveTextContent('6')
+      })
+
     scenario(
       'A scoped counter is created for its subtree and updates through its setter',
       Gherkin.Do.pipe(
@@ -53,13 +58,14 @@ Feature('Scoped atoms that belong to one part of the page')
               })
             }),
         ),
-        Then('the widget shows the updated counter')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('scoped-counter')).toHaveTextContent('6')
-          })
-        ),
+        Then('the widget shows the updated counter')(scopedCounterShowsUpdate),
       ),
     )
+
+    const inputNameOnScreen = () =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('greeting')).toHaveTextContent('Ada')
+      })
 
     scenario(
       'A scoped atom created with an input starts with that input',
@@ -82,13 +88,14 @@ Feature('Scoped atoms that belong to one part of the page')
             return {}
           })),
         When('the greeting is shown')('shown', () => Effect.sync(() => true)),
-        Then('the input name is on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('greeting')).toHaveTextContent('Ada')
-          })
-        ),
+        Then('the input name is on screen')(inputNameOnScreen),
       ),
     )
+
+    const originalAtomKeptOnRerender = () =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('kept-name')).toHaveTextContent('Ada')
+      })
 
     scenario(
       'A scoped atom provider that renders again keeps its original atom',
@@ -124,13 +131,14 @@ Feature('Scoped atoms that belong to one part of the page')
               s.ctx.rename()()
             })
           })),
-        Then('the original atom is still on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('kept-name')).toHaveTextContent('Ada')
-          })
-        ),
+        Then('the original atom is still on screen')(originalAtomKeptOnRerender),
       ),
     )
+
+    const missingProviderReported = () =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('missing-provider')).toHaveTextContent('provider missing')
+      })
 
     scenario(
       'A scoped atom read outside its provider reports that the provider is missing',
@@ -160,11 +168,7 @@ Feature('Scoped atoms that belong to one part of the page')
             }),
         ),
         When('the widget is shown')('shown', () => Effect.sync(() => true)),
-        Then('the error boundary reports the missing provider')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('missing-provider')).toHaveTextContent('provider missing')
-          })
-        ),
+        Then('the error boundary reports the missing provider')(missingProviderReported),
       ),
     )
   })

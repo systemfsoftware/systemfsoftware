@@ -14,6 +14,11 @@ const Feature = makeFeature({ it, layer })
 
 Feature('Restoring saved page state')
   .body(({ scenario }) => {
+    const freshTemperatureSavedValueOnScreen = () =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('fresh-temperature')).toHaveTextContent('23')
+      })
+
     scenario(
       'A page that receives a saved value for a fresh atom shows it immediately',
       Gherkin.Do.pipe(
@@ -39,13 +44,14 @@ Feature('Restoring saved page state')
             return {}
           })),
         When('the page is shown')('shown', () => Effect.sync(() => true)),
-        Then('the saved value is already on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('fresh-temperature')).toHaveTextContent('23')
-          })
-        ),
+        Then('the saved value is already on screen')(freshTemperatureSavedValueOnScreen),
       ),
     )
+
+    const valueSetBeforeRenderStillOnScreen = () =>
+      Effect.promise(async () => {
+        await expect.element(screen.getByTestId('plain-room')).toHaveTextContent('4')
+      })
 
     scenario(
       'A hydration boundary without saved state leaves the page values alone',
@@ -72,11 +78,7 @@ Feature('Restoring saved page state')
             }),
         ),
         When('the page is shown')('shown', () => Effect.sync(() => true)),
-        Then('the value that was set is still on screen')(() =>
-          Effect.promise(async () => {
-            await expect.element(screen.getByTestId('plain-room')).toHaveTextContent('4')
-          })
-        ),
+        Then('the value that was set is still on screen')(valueSetBeforeRenderStillOnScreen),
       ),
     )
   })
