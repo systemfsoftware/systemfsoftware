@@ -130,7 +130,7 @@ ruleTester.run('schema-bare-primitive-field', schemaBarePrimitiveField, {
     {
       name: 'Should_Pass_When_StringFieldCarriesMinLength',
       code: `import { Schema } from 'effect'
-export const User = Schema.Struct({ email: Schema.String.pipe(Schema.minLength(1)) })`,
+export const User = Schema.Struct({ email: Schema.String.check(Schema.isMinLength(1)) })`,
       filename: SCHEMA_FILE,
     },
     {
@@ -161,13 +161,13 @@ export const Policy = Schema.Struct({ max: Schema.Int.pipe(Schema.check(Schema.i
     {
       name: 'Should_Pass_When_RefinementFollowsAnAnnotation',
       code: `import { Schema } from 'effect'
-export const User = Schema.Struct({ name: Schema.String.annotate({ identifier: 'Name' }).pipe(Schema.minLength(1)) })`,
+export const User = Schema.Struct({ name: Schema.String.annotate({ identifier: 'Name' }).check(Schema.isMinLength(1)) })`,
       filename: SCHEMA_FILE,
     },
     {
       name: 'Should_Pass_When_BrandSitsOverAStructOfRefinedFields',
       code: `import { Schema } from 'effect'
-export const Box = Schema.Struct({ name: Schema.String.pipe(Schema.minLength(1)) }).pipe(Schema.brand('Box'))`,
+export const Box = Schema.Struct({ name: Schema.String.check(Schema.isMinLength(1)) }).pipe(Schema.brand('Box'))`,
       filename: SCHEMA_FILE,
     },
     {
@@ -185,20 +185,20 @@ export const User = Schema.Struct({ name: Schema.String })`,
     {
       name: 'Should_Pass_When_LocalAliasCarriesTheRefinement',
       code: `import { Schema } from 'effect'
-const Name = Schema.String.pipe(Schema.minLength(1))
+const Name = Schema.String.check(Schema.isMinLength(1))
 export const User = Schema.Struct({ name: Name })`,
       filename: SCHEMA_FILE,
     },
     {
       name: 'Should_Pass_When_OptionalWrapsARefinedString',
       code: `import { Schema } from 'effect'
-export const User = Schema.Struct({ nick: Schema.optional(Schema.String.pipe(Schema.maxLength(20))) })`,
+export const User = Schema.Struct({ nick: Schema.optional(Schema.String.check(Schema.isMaxLength(20))) })`,
       filename: SCHEMA_FILE,
     },
     {
       name: 'Should_Pass_When_StringFieldCarriesPattern',
       code: `import { Schema } from 'effect'
-export const User = Schema.Struct({ code: Schema.String.pipe(Schema.pattern(/^[A-Z]+$/)) })`,
+export const User = Schema.Struct({ code: Schema.String.check(Schema.isPattern(/^[A-Z]+$/)) })`,
       filename: SCHEMA_FILE,
     },
     {

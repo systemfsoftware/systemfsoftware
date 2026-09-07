@@ -93,7 +93,7 @@ ruleTester.run('schema-brand-requires-filter', schemaBrandRequiresFilter, {
     {
       name: 'Should_Pass_When_MinLengthStandsBehindBrand',
       code: `import { Schema } from 'effect'
-export const Name = Schema.String.pipe(Schema.minLength(1), Schema.brand('Name'))`,
+export const Name = Schema.String.check(Schema.isMinLength(1)).pipe(Schema.brand('Name'))`,
       filename: SCHEMA_FILE,
     },
     {
@@ -111,7 +111,7 @@ export const Positive = S.Number.pipe(S.check((n: number) => n > 0), S.brand('Po
     {
       name: 'Should_Pass_When_NamespacedPatternStandsBehindBrand',
       code: `import * as E from 'effect'
-export const Code = E.Schema.String.pipe(E.Schema.pattern(/^[A-Z]+$/), E.Schema.brand('Code'))`,
+export const Code = E.Schema.String.check(E.Schema.isPattern(/^[A-Z]+$/)).pipe(E.Schema.brand('Code'))`,
       filename: SCHEMA_FILE,
     },
     {
@@ -129,7 +129,7 @@ export const Name = Schema.String.annotate({ identifier: 'Name' }).pipe(Schema.f
     {
       name: 'Should_Pass_When_BrandSitsOverAStruct',
       code: `import { Schema } from 'effect'
-export const Box = Schema.Struct({ name: Schema.String.pipe(Schema.minLength(1)) }).pipe(Schema.brand('Box'))`,
+export const Box = Schema.Struct({ name: Schema.String.check(Schema.isMinLength(1)) }).pipe(Schema.brand('Box'))`,
       filename: SCHEMA_FILE,
     },
     {
@@ -159,7 +159,7 @@ export const Wrapped = getSchema().pipe(Schema.brand('Wrapped'))`,
     {
       name: 'Should_Pass_When_LocalAliasCarriesTheRefinementBehindBrand',
       code: `import { Schema } from 'effect'
-const Name = Schema.String.pipe(Schema.minLength(1))
+const Name = Schema.String.check(Schema.isMinLength(1))
 export const Branded = Name.pipe(Schema.brand('Branded'))`,
       filename: SCHEMA_FILE,
     },
@@ -167,7 +167,7 @@ export const Branded = Name.pipe(Schema.brand('Branded'))`,
       name: 'Should_Pass_When_PipeComesFromFunctionModule',
       code: `import { pipe } from 'effect/Function'
 import { Schema } from 'effect'
-export const Name = pipe(Schema.String, Schema.minLength(1), Schema.brand('Name'))`,
+export const Name = pipe(Schema.String.check(Schema.isMinLength(1)), Schema.brand('Name'))`,
       filename: SCHEMA_FILE,
     },
   ],
