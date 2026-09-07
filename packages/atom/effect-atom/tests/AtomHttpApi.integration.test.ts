@@ -35,8 +35,8 @@ const Api = HttpApi.make('api').add(
 const MutationApi = HttpApi.make('api').add(
   HttpApiGroup.make('group').add(
     HttpApiEndpoint.post('create', '/users', {
-      payload: Schema.Struct({ name: Schema.String }),
-      success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+      payload: Schema.Struct({ name: Schema.NonEmptyString }),
+      success: Schema.Struct({ id: Schema.Int, name: Schema.NonEmptyString }),
     }),
   ),
 )
@@ -47,8 +47,8 @@ const QueryAndMutationApi = HttpApi.make('api').add(
       params: { id: Schema.FiniteFromString },
     }),
     HttpApiEndpoint.post('create', '/users', {
-      payload: Schema.Struct({ name: Schema.String }),
-      success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+      payload: Schema.Struct({ name: Schema.NonEmptyString }),
+      success: Schema.Struct({ id: Schema.Int, name: Schema.NonEmptyString }),
     }),
   ),
 )
@@ -56,9 +56,9 @@ const QueryAndMutationApi = HttpApi.make('api').add(
 const ApiWithRejection = HttpApi.make('api').add(
   HttpApiGroup.make('group').add(
     HttpApiEndpoint.post('create', '/users', {
-      payload: Schema.Struct({ name: Schema.String }),
-      success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
-      error: Schema.Struct({ message: Schema.String }),
+      payload: Schema.Struct({ name: Schema.NonEmptyString }),
+      success: Schema.Struct({ id: Schema.Int, name: Schema.NonEmptyString }),
+      error: Schema.Struct({ message: Schema.NonEmptyString }),
     }),
   ),
 )

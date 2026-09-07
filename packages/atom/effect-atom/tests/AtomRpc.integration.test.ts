@@ -12,18 +12,18 @@ const Feature = makeFeature({ it, layer })
 const Group = RpcGroup.make(
   Rpc.make('getUser', {
     payload: Schema.Struct({ id: Schema.FiniteFromString }),
-    success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+    success: Schema.Struct({ id: Schema.Int, name: Schema.NonEmptyString }),
   }),
   Rpc.make('createUser', {
-    payload: Schema.Struct({ name: Schema.String }),
-    success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+    payload: Schema.Struct({ name: Schema.NonEmptyString }),
+    success: Schema.Struct({ id: Schema.Int, name: Schema.NonEmptyString }),
   }),
 )
 
 const StreamGroup = RpcGroup.make(
   Rpc.make('getItems', {
-    payload: Schema.Struct({ count: Schema.Number }),
-    success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+    payload: Schema.Struct({ count: Schema.Int }),
+    success: Schema.Struct({ id: Schema.Int, name: Schema.NonEmptyString }),
     stream: true,
   }),
 )
