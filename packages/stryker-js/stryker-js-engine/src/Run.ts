@@ -1102,15 +1102,18 @@ export const makeRunLayer = (
   )
 }
 
+export const stageSpine: Cell.Cell<PrepareDone, RunOutcome, StageError, StageServices> = Cell.andThen(
+  Cell.andThen(instrumentCell, dryRunCell),
+  mutationTestCell,
+)
+
 export const runMutationTest = (
   cliOptions: PartialStrykerOptions,
   targetMutatePatterns?: string[],
 ): Effect.Effect<RunOutcome, StageError, StageServices> =>
   Effect.gen(function*() {
     const prepared = yield* runPrepare({ cliOptions, targetMutatePatterns })
-    const instrumented = yield* Cell.run(instrumentCell, prepared)
-    const dryDone = yield* Cell.run(dryRunCell, instrumented)
-    return yield* Cell.run(mutationTestCell, dryDone)
+    return yield* Cell.run(stageSpine, prepared)
   })
 export const shouldKeepTempDir = (
   exit: Exit.Exit<unknown, unknown>,
