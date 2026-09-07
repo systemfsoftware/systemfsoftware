@@ -6,7 +6,7 @@ process entry binds. The engine names no runtime: its manifest carries no
 `@effect/platform-*` dependency and no `engines` field. The published process
 entries live in [`@systemfsoftware/stryker-js-cli`][cli], which binds the Node
 layers (`FileSystem`, `Path`, `ChildProcessSpawner`, `Module`, sockets) around
-[`makeRunLayer`][run] and owns the worker files.
+the run and owns the worker files.
 
 ```sh
 pnpm add @systemfsoftware/stryker-js-engine effect
@@ -21,10 +21,9 @@ so the host pins one version across the whole run.
   identities it raises
 - `./builtin-reporters` — the clear-text, progress, and JSON reporters
 - `./config/base` — the base option preset
-- `./worker` — the worker-side wiring a worker entry file calls into
 
-A host other than Node starts the same engine by providing its own layers at
-the process that calls `makeRunLayer`; it does not fork these sources.
+A host other than Node starts the same engine by seeding the run's
+requirements and its own layers at the process that runs `mutationRun`; it
+does not fork these sources.
 
 [cli]: https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/stryker-js/stryker-js-cli
-[run]: https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/stryker-js/stryker-js-engine

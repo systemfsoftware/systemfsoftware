@@ -64,23 +64,19 @@ export const makeHtmlReporter = (params: {
     onMutantTested: (_result: MutantResult) => Effect.void,
     onMutationTestReportReady: (report: schema.MutationTestResult, metrics: MutationTestMetricsResult) =>
       Effect.gen(function*() {
-        const path = yield* Path.Path
-        const fs = yield* FileSystem.FileSystem
-        const scriptPath = yield* path.fromFileUrl(
+        const scriptPath = yield* params.path.fromFileUrl(
           new URL(import.meta.resolve('mutation-testing-elements/dist/mutation-test-elements.js')),
         )
-        const scriptContent = yield* fs.readFileString(scriptPath)
+        const scriptContent = yield* params.fs.readFileString(scriptPath)
         void metrics
         const html = buildHtmlDocument(HtmlReportCommand.make({ report, scriptContent })).html
         if (options === undefined) return
         const fileName = options.htmlReporter.fileName
         yield* Effect.logDebug(`Using file "${fileName}"`)
-        yield* writeOutputFile(fs, path, fileName, html)
-        const fileUrl = yield* path.toFileUrl(path.resolve(fileName))
+        yield* writeOutputFile(params.fs, params.path, fileName, html)
+        const fileUrl = yield* params.path.toFileUrl(params.path.resolve(fileName))
         yield* Effect.logInfo(`Your report can be found at: ${fileUrl.href}`)
       }).pipe(
-        Effect.provideService(FileSystem.FileSystem, params.fs),
-        Effect.provideService(Path.Path, params.path),
         Effect.catchCause((cause) =>
           Effect.fail(
             new ReporterFailed({

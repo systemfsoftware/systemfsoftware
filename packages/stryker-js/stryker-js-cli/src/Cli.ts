@@ -2,26 +2,28 @@ import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChild
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import * as NodeStdio from '@effect/platform-node/NodeStdio'
+import { Cell } from '@systemfsoftware/effect-cell-types'
 import {
-  ConfigFileInvalidError,
-  ConfigFileNotFoundError,
-  ConfigFileUnreadableError,
-  makeRunLayer,
+  idGeneratorLayer,
+  mutationRun,
+  type PrepareExecutorArgs,
   type ResolvedMode,
+  RunEnvironment,
   type RunEnvironmentShape,
-  runMutationTest,
+  type RunOutcome,
+  type StageError,
   strykerVersion,
 } from '@systemfsoftware/stryker-js-engine'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import { ManifestRendered, type RunEvent, RunEvents } from '@systemfsoftware/stryker-js/Run'
+import { ManifestRendered, RunEvents } from '@systemfsoftware/stryker-js/Run'
 import { RENDERED_OPTION_DEFAULTS } from '@systemfsoftware/stryker-js/Schema'
 import type { LogLevel, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
-import * as Cause from 'effect/Cause'
 import * as Console from 'effect/Console'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import * as FileSystem from 'effect/FileSystem'
+import { pipe } from 'effect/Function'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -30,7 +32,7 @@ import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import type { SchemaError } from 'effect/Schema'
+import type * as Scope from 'effect/Scope'
 import * as Terminal from 'effect/Terminal'
 import * as Argument from 'effect/unstable/cli/Argument'
 import * as CliConfig from 'effect/unstable/cli/CliConfig'
@@ -38,7 +40,6 @@ import * as CliError from 'effect/unstable/cli/CliError'
 import * as Command from 'effect/unstable/cli/Command'
 import * as Flag from 'effect/unstable/cli/Flag'
 import * as GlobalFlag from 'effect/unstable/cli/GlobalFlag'
-import { SurvivorsRejection } from './admit-survivors-run.workflow.js'
 import type { CliRequest } from './Cli.schema.js'
 import {
   buildErrorEnvelope,
@@ -63,7 +64,12 @@ import { nodePlatformLayer } from './platform/node.js'
 import { DEFAULT_PROGRESS_STREAM_FILE } from './StreamFile.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 import type { StrykerRun } from './StrykerRun.js'
-import { runSurvivorsAdmission, survivorMutateSpans } from './Survivors.js'
+import {
+  survivorMutateSpans,
+  survivorsAdmission,
+  type SurvivorsAdmissionError,
+  type SurvivorsFrame,
+} from './Survivors.js'
 
 export { type StrykerRun }
 export {
@@ -110,9 +116,8 @@ export interface RunStrykerCliInput {
   readonly program: Effect.Effect<void, CliError.CliError, never>
   readonly requestRef: Ref.Ref<Option.Option<CliRequest>>
   readonly mode: ResolvedMode
-  readonly runMutationTest: StrykerRun | undefined
+  readonly mutationRun: StrykerRun | undefined
   readonly argv: readonly string[]
-  /** The terminating signal, observed at the process edge (`signal-observer.ts`). */
   readonly lastSignal: SignalObserver
 }
 
@@ -1068,7 +1073,7 @@ const cliLayer = Layer.mergeAll(
 )
 export function strykerCliEffect(
   argv: string[],
-  runMutationTest: StrykerRun | undefined,
+  mutationRun: StrykerRun | undefined,
   detectMode: DetectModeCapability,
   createRunEventStream: CreateRunEventStreamCapability,
   lastSignal: SignalObserver,
@@ -1088,7 +1093,7 @@ export function strykerCliEffect(
     )
     const result = yield* Effect.result(
       runStrykerCli(
-        { program: cliEffect, requestRef, mode, runMutationTest, argv, lastSignal },
+        { program: cliEffect, requestRef, mode, mutationRun, argv, lastSignal },
         createRunEventStream,
       ),
     )
@@ -1098,17 +1103,6 @@ export function strykerCliEffect(
     return result.success
   }).pipe(Effect.orElseSucceed(() => 2))
 }
-
-const hostRunLayer = (hostOptions: RunEnvironmentShape, queue?: Queue.Queue<RunEvent, Cause.Done>) =>
-  makeRunLayer(hostOptions, queue).pipe(Layer.provideMerge(nodePlatformLayer))
-
-const defaultRunMutationTest =
-  (hostOptions: RunEnvironmentShape, queue: Queue.Queue<RunEvent, Cause.Done>): StrykerRun =>
-  (...args: Parameters<StrykerRun>) =>
-    Effect.scoped(runMutationTest(...args)).pipe(
-      Effect.provide(hostRunLayer(hostOptions, queue)),
-      Effect.provideService(RunEvents, queue),
-    )
 
 function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironmentShape {
   return {
@@ -1124,143 +1118,208 @@ function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironme
   }
 }
 
-export const runStrykerCli = (
-  input: RunStrykerCliInput,
-  createRunEventStream: CreateRunEventStreamCapability,
-): Effect.Effect<number, never, never> =>
-  Effect.gen(function*() {
-    const stream = yield* createRunEventStream(input.mode)
-    const hostOptions = hostOptionsOf(input.mode, stream)
-    const runMutationTestImpl = input.runMutationTest ?? defaultRunMutationTest(hostOptions, stream.queue)
-    const basePath = hostOptions.basePath
-    const pathService = yield* Path.Path.pipe(Effect.provide(NodePath.layer))
+const runEdgeOf = (input: RunStrykerCliInput, stream: RunEventStream) => {
+  const hostOptions = hostOptionsOf(input.mode, stream)
+  const appLayer = Layer.mergeAll(
+    Layer.succeed(RunEnvironment, hostOptions),
+    Layer.succeed(RunEvents, stream.queue),
+    idGeneratorLayer,
+  ).pipe(Layer.provideMerge(nodePlatformLayer))
+  const runCell: Cell.Cell<PrepareExecutorArgs, RunOutcome, StageError, Scope.Scope> = Cell.provide(
+    input.mutationRun ?? mutationRun,
+    appLayer,
+  )
+  const survivorsCell = Cell.provide(survivorsAdmission, appLayer)
+  return pipe(
+    Path.Path,
+    Effect.provide(appLayer),
+    Effect.map((pathService) => ({
+      stream,
+      basePath: hostOptions.basePath,
+      pathService,
+      runCell,
+      survivorsCell,
+    })),
+  )
+}
+interface RunEdge {
+  readonly stream: RunEventStream
+  readonly basePath: string
+  readonly pathService: Path.Path
+  readonly runCell: Cell.Cell<PrepareExecutorArgs, RunOutcome, StageError, Scope.Scope>
+  readonly survivorsCell: Cell.Cell<
+    PartialStrykerOptions,
+    SurvivorsFrame,
+    SurvivorsAdmissionError,
+    never
+  >
+}
 
-    let currentFiber: Fiber.Fiber<unknown, unknown> | null = null
+const dispatchRequest = (edge: RunEdge, input: RunStrykerCliInput) => (request: CliRequest) =>
+  Match.value(request).pipe(
+    Match.tag('run', (runRequest) =>
+      Match.value(runRequest.survivors === true).pipe(
+        Match.when(true, () =>
+          pipe(
+            Cell.run(edge.survivorsCell, runRequest.options),
+            Effect.flatMap(({ admission, resolvedOptions, priorReportPath }) =>
+              Match.value(admission).pipe(
+                Match.tag('NoSurvivors', () =>
+                  emitNullScoreVerdict(
+                    edge.stream,
+                    input.mode,
+                    resolvedOptions.thresholds,
+                    resolvedOptions,
+                    edge.basePath,
+                    edge.pathService,
+                  )),
+                Match.tag('Admitted', (admitted) => {
+                  const admittedMutants = admitted.survivors.map((s) => Mutant.make(s))
+                  const restricted: PartialStrykerOptions & {
+                    readonly survivors?: readonly Mutant[]
+                    readonly survivorsPriorReport?: string
+                    readonly mutate?: string[]
+                    readonly incremental?: boolean
+                  } = {
+                    ...resolvedOptions,
+                    survivors: admittedMutants,
+                    mutate: survivorMutateSpans(admittedMutants, edge.basePath),
+                    survivorsPriorReport: priorReportPath,
+                    incremental: false,
+                  }
+                  return Effect.scoped(
+                    Cell.run(edge.runCell, { cliOptions: restricted, targetMutatePatterns: undefined }),
+                  ).pipe(Effect.orDie)
+                }),
+                Match.exhaustive,
+              )
+            ),
+          )),
+        Match.when(false, () =>
+          Effect.scoped(
+            Cell.run(edge.runCell, { cliOptions: runRequest.options, targetMutatePatterns: undefined }),
+          ).pipe(Effect.orDie)),
+        Match.exhaustive,
+      )),
+    Match.tag('llms', (llmsRequest) =>
+      pipe(
+        Effect.sync(() =>
+          edge.stream.ensureOpen({ mode: 'machine', signal: 'flag', stdoutIsTTY: process.stdout.isTTY === true })
+        ),
+        Effect.andThen(() =>
+          Queue.offer(
+            edge.stream.queue,
+            ManifestRendered.make({
+              schemaVersion: STREAM_SCHEMA_VERSION,
+              code: 0,
+              manifest: llmsRequest.document.manifest,
+            }),
+          )
+        ),
+        Effect.asVoid,
+      )),
+    Match.orElse(() => Effect.die('unreachable cli request variant')),
+  )
 
-    const onSignal = (): void => {
-      process.removeListener('SIGINT', onSignal)
-      process.removeListener('SIGTERM', onSignal)
-      if (currentFiber !== null) {
-        currentFiber.interruptUnsafe(currentFiber.id)
-      }
-    }
-
-    const dispatch = (
-      request: CliRequest,
-    ): Effect.Effect<
-      unknown,
-      SchemaError | SurvivorsRejection | ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError,
-      never
-    > =>
-      Match.value(request).pipe(
-        Match.tag('run', (runRequest) =>
-          (() => {
-            if (runRequest.survivors) {
-              return Effect.gen(function*() {
-                const { admission, resolvedOptions, priorReportPath } = yield* runSurvivorsAdmission(
-                  runRequest.options,
-                  basePath,
-                ).pipe(Effect.provide(hostRunLayer(hostOptions)))
-                return yield* Match.value(admission).pipe(
-                  Match.tag('NoSurvivors', () =>
-                    emitNullScoreVerdict(
-                      stream,
-                      input.mode,
-                      resolvedOptions.thresholds,
-                      resolvedOptions,
-                      basePath,
-                      pathService,
-                    )),
-                  Match.tag('Admitted', (admitted) => {
-                    const admittedMutants = admitted.survivors.map((s) => Mutant.make(s))
-                    const restricted: PartialStrykerOptions & {
-                      readonly survivors?: readonly Mutant[]
-                      readonly survivorsPriorReport?: string
-                      readonly mutate?: string[]
-                      readonly incremental?: boolean
-                    } = {
-                      ...resolvedOptions,
-                      survivors: admittedMutants,
-                      mutate: survivorMutateSpans(admittedMutants, basePath),
-                      survivorsPriorReport: priorReportPath,
-                      incremental: false,
-                    }
-                    return runMutationTestImpl(restricted).pipe(Effect.orDie)
-                  }),
-                  Match.exhaustive,
-                )
-              })
-            }
-            return runMutationTestImpl(runRequest.options).pipe(Effect.orDie)
-          })()),
-        Match.tag('llms', (llmsRequest) =>
-          Effect.gen(function*() {
-            stream.ensureOpen({ mode: 'machine', signal: 'flag', stdoutIsTTY: process.stdout.isTTY === true })
-            yield* Queue.offer(
-              stream.queue,
-              ManifestRendered.make({
-                schemaVersion: STREAM_SCHEMA_VERSION,
-                code: 0,
-                manifest: llmsRequest.document.manifest,
-              }),
-            )
-          })),
-        Match.orElse(() => Effect.die('unreachable cli request variant')),
-      )
-
-    const program = Effect.acquireUseRelease(
-      Effect.sync(() => {
-        currentFiber = Fiber.getCurrent() ?? null
-        process.on('SIGINT', onSignal)
-        process.on('SIGTERM', onSignal)
-      }),
-      () =>
-        Effect.gen(function*() {
-          const parsed = yield* Effect.result(input.program)
-          const request = yield* Ref.get(input.requestRef)
+const executeParsed = (input: RunStrykerCliInput, edge: RunEdge) =>
+  pipe(
+    Effect.result(input.program),
+    Effect.flatMap((parsed) =>
+      pipe(
+        Ref.get(input.requestRef),
+        Effect.flatMap((request) => {
           const fileName = Option.match(request, {
             onNone: () => DEFAULT_PROGRESS_STREAM_FILE,
             onSome: (cliRequest) =>
               Match.value(cliRequest).pipe(
-                Match.tag('run', (runRequest) => {
-                  const fromCli = runRequest.options['progressStreamFile']
-                  if (typeof fromCli === 'string' && fromCli.length > 0) {
-                    return fromCli
-                  }
-                  return DEFAULT_PROGRESS_STREAM_FILE
-                }),
+                Match.tag('run', (runRequest) =>
+                  Match.value(runRequest.options['progressStreamFile']).pipe(
+                    Match.when(
+                      (fromCli): fromCli is string => typeof fromCli === 'string' && fromCli.length > 0,
+                      (fromCli) => fromCli,
+                    ),
+                    Match.orElse(() => DEFAULT_PROGRESS_STREAM_FILE),
+                  )),
                 Match.orElse(() => DEFAULT_PROGRESS_STREAM_FILE),
               ),
           })
-          if (stream.setProgressStreamFile !== undefined) {
-            yield* stream.setProgressStreamFile(fileName)
-          }
-          yield* stream.open
-          if (Result.isFailure(parsed)) {
-            return yield* Effect.fail(parsed.failure)
-          }
-          return yield* Option.match(request, {
-            onNone: () => Effect.void,
-            onSome: (cliRequest) => dispatch(cliRequest),
-          })
+          return pipe(
+            Match.value(edge.stream.setProgressStreamFile).pipe(
+              Match.when(undefined, () => Effect.void),
+              Match.orElse((set) => set(fileName)),
+            ),
+            Effect.andThen(
+              Result.match(parsed, {
+                onFailure: (failure): Effect.Effect<unknown, SurvivorsAdmissionError | CliError.CliError> =>
+                  Effect.fail(failure),
+                onSuccess: () =>
+                  Option.match(request, {
+                    onNone: () => Effect.void,
+                    onSome: dispatchRequest(edge, input),
+                  }),
+              }),
+            ),
+          )
         }),
-      () =>
-        Effect.sync(() => {
-          process.removeListener('SIGINT', onSignal)
-          process.removeListener('SIGTERM', onSignal)
-        }),
-    )
+      )
+    ),
+  )
 
-    return yield* Effect.uninterruptibleMask((restore) =>
-      Effect.gen(function*() {
-        const exit = yield* Effect.exit(restore(program))
-        const outcome = classifyRunOutcome(exit, input.lastSignal(), input.argv)
-        const code = runOutcomeCode(outcome)
-        if (input.mode.mode === 'machine') {
-          yield* emitMachineModeOutput(stream, input.mode, outcome, basePath, pathService)
-        }
-        yield* stream.closeAndDrain
-        return code
-      })
-    )
-  })
+const withSignalGuard = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> => {
+  let currentFiber: Fiber.Fiber<unknown, unknown> | null = null
+  const onSignal = (): void => {
+    process.removeListener('SIGINT', onSignal)
+    process.removeListener('SIGTERM', onSignal)
+    if (currentFiber !== null) {
+      currentFiber.interruptUnsafe(currentFiber.id)
+    }
+  }
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      currentFiber = Fiber.getCurrent() ?? null
+      process.on('SIGINT', onSignal)
+      process.on('SIGTERM', onSignal)
+    }),
+    () => effect,
+    () =>
+      Effect.sync(() => {
+        process.removeListener('SIGINT', onSignal)
+        process.removeListener('SIGTERM', onSignal)
+      }),
+  )
+}
+
+const emitAndClassify = (input: RunStrykerCliInput, edge: RunEdge) => (exit: Exit.Exit<unknown, unknown>) =>
+  pipe(
+    Effect.sync(() => classifyRunOutcome(exit, input.lastSignal(), input.argv)),
+    Effect.flatMap((outcome) =>
+      pipe(
+        Match.value(input.mode.mode).pipe(
+          Match.when(
+            'machine',
+            () => emitMachineModeOutput(edge.stream, input.mode, outcome, edge.basePath, edge.pathService),
+          ),
+          Match.orElse(() => Effect.void),
+        ),
+        Effect.andThen(() => edge.stream.closeAndDrain),
+        Effect.as(runOutcomeCode(outcome)),
+      )
+    ),
+  )
+
+export const runStrykerCli = (
+  input: RunStrykerCliInput,
+  createRunEventStream: CreateRunEventStreamCapability,
+): Effect.Effect<number, never, never> =>
+  pipe(
+    createRunEventStream(input.mode),
+    Effect.flatMap((stream) => runEdgeOf(input, stream)),
+    Effect.flatMap((edge) =>
+      pipe(
+        executeParsed(input, edge),
+        withSignalGuard,
+        Effect.exit,
+        Effect.flatMap((exit) => Effect.uninterruptible(emitAndClassify(input, edge)(exit))),
+      )
+    ),
+  )

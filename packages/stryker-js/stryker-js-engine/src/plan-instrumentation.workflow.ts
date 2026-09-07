@@ -34,14 +34,25 @@ export class EphemeralInstrument extends S.TaggedClass<EphemeralInstrument>()('E
 
 export type InstrumentDecision = InPlaceInstrument | EphemeralInstrument
 
+const toInstrumentKind = (command: InstrumentCommand): 'Invalid' | 'InPlace' | 'Ephemeral' => {
+  if (command.fileCount === 0) {
+    return 'Invalid'
+  }
+  if (command.inPlace) {
+    return 'InPlace'
+  }
+  return 'Ephemeral'
+}
+
 export const planInstrumentation = Workflow.make(
   InstrumentCommand,
-  (command: InstrumentCommand): Result.Result<InstrumentDecision, InstrumentError> => {
-    if (command.fileCount === 0) {
-      return Result.fail(new InstrumentError({ stage: 'instrument', reason: 'No files to instrument.' }))
-    }
-    return Match.value(command.inPlace).pipe(
-      Match.when(true, () =>
+  (command: InstrumentCommand): Result.Result<InstrumentDecision, InstrumentError> =>
+    Match.value(toInstrumentKind(command)).pipe(
+      Match.when(
+        'Invalid',
+        () => Result.fail(new InstrumentError({ stage: 'instrument', reason: 'No files to instrument.' })),
+      ),
+      Match.when('InPlace', () =>
         Result.succeed(
           new InPlaceInstrument({
             workingDirectoryHint: 'inPlace',
@@ -49,7 +60,7 @@ export const planInstrumentation = Workflow.make(
             fileCount: command.fileCount,
           }),
         )),
-      Match.when(false, () =>
+      Match.when('Ephemeral', () =>
         Result.succeed(
           new EphemeralInstrument({
             workingDirectoryHint: 'temp',
@@ -57,6 +68,5 @@ export const planInstrumentation = Workflow.make(
           }),
         )),
       Match.exhaustive,
-    )
-  },
+    ),
 )

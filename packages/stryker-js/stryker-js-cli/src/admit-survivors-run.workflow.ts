@@ -1,4 +1,5 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
@@ -75,14 +76,15 @@ const SURVIVORS_BOOKKEEPING_KEYS = ['survivorsPriorReport'] as const
  * sides of the admission comparison describe the same configuration.
  */
 function stripSurvivorsKeys(config: unknown): Record<string, unknown> {
-  if (!isRecord(config)) {
-    return {}
-  }
-  const rest: Record<string, unknown> = { ...config }
-  for (const key of SURVIVORS_BOOKKEEPING_KEYS) {
-    delete rest[key]
-  }
-  return rest
+  return Match.value(config).pipe(
+    Match.when(isRecord, (record) =>
+      objectFromEntries(
+        objectKeys(record)
+          .filter((key) => key !== SURVIVORS_BOOKKEEPING_KEYS[0])
+          .map((key) => [key, record[key]]),
+      )),
+    Match.orElse(() => ({})),
+  )
 }
 
 /**
@@ -91,8 +93,8 @@ function stripSurvivorsKeys(config: unknown): Record<string, unknown> {
  * (KTD7): without this check the second run would either re-read a shrunken set
  * or re-test a stale one.
  */
-function wasProducedBySurvivorsRun(priorReport: { readonly config: unknown }): boolean {
-  const config = priorReport.config
+function wasProducedBySurvivorsRun(priorReport: { readonly config: unknown } | undefined): boolean {
+  const config = priorReport?.config
   return isRecord(config) && 'survivorsPriorReport' in config
 }
 
@@ -109,17 +111,16 @@ function serializeSurvivorsHashInput(input: {
 }
 
 function sortKeys(value: unknown): unknown {
-  if (isArray(value)) {
-    return value.map(sortKeys)
-  }
-  if (isRecord(value)) {
-    return objectFromEntries(
-      objectKeys(value)
-        .sort()
-        .map((key) => [key, sortKeys(value[key])]),
-    )
-  }
-  return value
+  return Match.value(value).pipe(
+    Match.when(isArray, (array) => array.map(sortKeys)),
+    Match.when(isRecord, (record) =>
+      objectFromEntries(
+        objectKeys(record)
+          .sort()
+          .map((key) => [key, sortKeys(record[key])]),
+      )),
+    Match.orElse(() => value),
+  )
 }
 /**
  * The prior report's facts the decision reads: its embedded configuration, which carries
@@ -178,13 +179,10 @@ const MISMATCH_DETAIL =
  * serializations are equal runs, so the digest was a lossy restatement of the check that
  * also demanded a capability no command can carry.
  */
-function hashesMatch(
-  priorReport: PriorReportFacts,
-  input: AdmitSurvivorsRunCommand,
-): boolean {
+function hashesMatch(input: AdmitSurvivorsRunCommand): boolean {
   return serializeSurvivorsHashInput({
-    resolvedOptions: stripSurvivorsKeys(priorReport.config),
-    frameworkVersion: priorReport.frameworkVersion,
+    resolvedOptions: stripSurvivorsKeys(input.priorReport?.config),
+    frameworkVersion: input.priorReport?.frameworkVersion,
     sourceContentHashes: input.priorSourceHashes,
   }) === serializeSurvivorsHashInput({
     resolvedOptions: stripSurvivorsKeys(input.currentConfig),
@@ -226,29 +224,30 @@ function reject(
   )
 }
 
-function decideAdmission(
-  input: AdmitSurvivorsRunCommand,
-): Result.Result<SurvivorsAdmission, SurvivorsRejection> {
-  const priorReport = input.priorReport
-  if (priorReport === undefined) {
-    return reject('no-report', NO_REPORT_DETAIL)
-  }
-  if (wasProducedBySurvivorsRun(priorReport)) {
-    return reject('mismatch', SURVIVORS_RUN_SOURCE_DETAIL)
-  }
-  if (input.priorSurvivors.length === 0) {
-    return Result.succeed(NoSurvivors.make())
-  }
-  if (!hashesMatch(priorReport, input)) {
-    return reject('mismatch', MISMATCH_DETAIL)
-  }
-  return Result.succeed(Admitted.make({ survivors: input.priorSurvivors }))
-}
+type SurvivorsAdmissionKind = 'NoPriorReport' | 'SurvivorsProduced' | 'EmptySurvivors' | 'HashMismatch' | 'Admitted'
 
-function admissionDecision(
-  command: AdmitSurvivorsRunCommand,
-): Result.Result<SurvivorsAdmission, SurvivorsRejection> {
-  return decideAdmission(command)
-}
+const ADMISSION_RULES: ReadonlyArray<{
+  readonly kind: SurvivorsAdmissionKind
+  readonly matches: (command: AdmitSurvivorsRunCommand) => boolean
+}> = [
+  { kind: 'NoPriorReport', matches: (command) => command.priorReport === undefined },
+  { kind: 'SurvivorsProduced', matches: (command) => wasProducedBySurvivorsRun(command.priorReport) },
+  { kind: 'EmptySurvivors', matches: (command) => command.priorSurvivors.length === 0 },
+  { kind: 'HashMismatch', matches: (command) => !hashesMatch(command) },
+]
 
-export const admitSurvivorsRun = Workflow.make(AdmitSurvivorsRunCommand, admissionDecision)
+const toKind = (command: AdmitSurvivorsRunCommand): SurvivorsAdmissionKind =>
+  ADMISSION_RULES.find((rule) => rule.matches(command))?.kind ?? 'Admitted'
+
+export const admitSurvivorsRun = Workflow.make(
+  AdmitSurvivorsRunCommand,
+  (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, SurvivorsRejection> =>
+    Match.value(toKind(command)).pipe(
+      Match.when('NoPriorReport', () => reject('no-report', NO_REPORT_DETAIL)),
+      Match.when('SurvivorsProduced', () => reject('mismatch', SURVIVORS_RUN_SOURCE_DETAIL)),
+      Match.when('EmptySurvivors', () => Result.succeed(NoSurvivors.make())),
+      Match.when('HashMismatch', () => reject('mismatch', MISMATCH_DETAIL)),
+      Match.when('Admitted', () => Result.succeed(Admitted.make({ survivors: command.priorSurvivors }))),
+      Match.exhaustive,
+    ),
+)

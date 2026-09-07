@@ -206,9 +206,7 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
     check: (mutants) =>
       Effect.gen(function*() {
         const applyOnce = (group: readonly Mutant[]) =>
-          Cell.run(checkCell, new CheckMutantsCommand({ mutants: [...group] })).pipe(
-            Effect.provideService(TypeScriptCompiler, compiler),
-          )
+          Cell.run(checkCell, new CheckMutantsCommand({ mutants: [...group] }))
         const first = yield* applyOnce(mutants)
         let map = HashMap.empty<string, CheckResult>()
         const mergeResults = (results: CheckMutantsDecision['results']) => {
@@ -242,7 +240,7 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
           Match.exhaustive,
         )
         return map
-      }),
+      }).pipe(Effect.provideService(TypeScriptCompiler, compiler)),
 
     group: (mutants) =>
       Effect.gen(function*() {

@@ -83,61 +83,72 @@ export type RunOutcomeError = RunInterrupted
 
 export type FailedRunOutcome = Exclude<RunOutcomeDecision, RunOk> | RunOutcomeError
 
-function classify(command: RunOutcomeCommand): RunOutcomeDecision | RunOutcomeError {
-  if (command.signal !== undefined) {
-    return RunInterrupted.make({ code: 128 + command.signal })
-  }
-  if (command.succeeded) {
-    if (command.successExitClass !== undefined) {
-      return RunFailed.make({
-        code: classCode(command.successExitClass),
-        diagnostic: command.diagnostic,
-      })
-    }
-    return RunOk.make({ help: false })
-  }
-  if (command.interrupted) {
-    return RunInterrupted.make({ code: 1 })
-  }
-  if (command.helpErrorCount !== undefined) {
-    if (command.helpErrorCount > 0) {
-      return RunParseFailed.make({ unrecognized: command.unrecognized })
-    }
-    return RunOk.make({ help: true })
-  }
-  if (command.cliError) {
-    return RunParseFailed.make({ unrecognized: command.unrecognized })
-  }
-  if (command.survivorsReason !== undefined) {
-    return RunSurvivorsRejected.make({
-      reason: command.survivorsReason,
-      diagnostic: command.survivorsDiagnostic,
-    })
-  }
-  if (command.schemaError) {
-    return RunConfigFailed.make({ detail: command.configDetail })
-  }
-  if (command.highestExitClass !== undefined) {
-    if (command.highestExitClass === 'ConfigError') {
-      return RunConfigFailed.make({ detail: command.configDetail })
-    }
-    return RunFailed.make({
-      code: classCode(command.highestExitClass),
-      diagnostic: command.diagnostic,
-    })
-  }
-  return RunFailed.make({ code: 1, diagnostic: command.diagnostic })
-}
+type RunOutcomeKind =
+  | 'Signaled'
+  | 'SucceededWithClass'
+  | 'SucceededClean'
+  | 'InterruptedFlag'
+  | 'ParseFailed'
+  | 'HelpOk'
+  | 'Survivors'
+  | 'ConfigDetail'
+  | 'HighestOther'
+  | 'Fallback'
+
+const OUTCOME_RULES: ReadonlyArray<{
+  readonly kind: RunOutcomeKind
+  readonly matches: (command: RunOutcomeCommand) => boolean
+}> = [
+  { kind: 'Signaled', matches: (command) => command.signal !== undefined },
+  { kind: 'SucceededWithClass', matches: (command) => command.succeeded && command.successExitClass !== undefined },
+  { kind: 'SucceededClean', matches: (command) => command.succeeded },
+  { kind: 'InterruptedFlag', matches: (command) => command.interrupted },
+  { kind: 'ParseFailed', matches: (command) => command.helpErrorCount !== undefined && command.helpErrorCount > 0 },
+  { kind: 'HelpOk', matches: (command) => command.helpErrorCount !== undefined },
+  { kind: 'ParseFailed', matches: (command) => command.cliError },
+  { kind: 'Survivors', matches: (command) => command.survivorsReason !== undefined },
+  { kind: 'ConfigDetail', matches: (command) => command.schemaError },
+  { kind: 'ConfigDetail', matches: (command) => command.highestExitClass === 'ConfigError' },
+  { kind: 'HighestOther', matches: (command) => command.highestExitClass !== undefined },
+]
+
+const toKind = (command: RunOutcomeCommand): RunOutcomeKind =>
+  OUTCOME_RULES.find((rule) => rule.matches(command))?.kind ?? 'Fallback'
 
 export const classifyRunOutcome = Workflow.make(
   RunOutcomeCommand,
-  (command): Result.Result<RunOutcomeDecision, RunOutcomeError> =>
-    Match.value(classify(command)).pipe(
-      Match.tag('RunInterrupted', (error) => Result.fail(error)),
-      Match.when(
-        (outcome): outcome is RunOutcomeDecision => !(outcome instanceof RunInterrupted),
-        (decision) => Result.succeed(decision),
-      ),
+  // The `??` fallbacks below are totality witnesses, not live defaults: each
+  // kind reaches its arm only when the classifier saw the field defined.
+  (command: RunOutcomeCommand): Result.Result<RunOutcomeDecision, RunOutcomeError> =>
+    Match.value(toKind(command)).pipe(
+      Match.when('Signaled', () => Result.fail(RunInterrupted.make({ code: 128 + (command.signal ?? 0) }))),
+      Match.when('SucceededWithClass', () =>
+        Result.succeed(
+          RunFailed.make({
+            code: classCode(command.successExitClass ?? 'VerdictFail'),
+            diagnostic: command.diagnostic,
+          }),
+        )),
+      Match.when('SucceededClean', () => Result.succeed(RunOk.make({ help: false }))),
+      Match.when('InterruptedFlag', () => Result.fail(RunInterrupted.make({ code: 1 }))),
+      Match.when('ParseFailed', () => Result.succeed(RunParseFailed.make({ unrecognized: command.unrecognized }))),
+      Match.when('HelpOk', () => Result.succeed(RunOk.make({ help: true }))),
+      Match.when('Survivors', () =>
+        Result.succeed(
+          RunSurvivorsRejected.make({
+            reason: command.survivorsReason ?? 'no-report',
+            diagnostic: command.survivorsDiagnostic,
+          }),
+        )),
+      Match.when('ConfigDetail', () => Result.succeed(RunConfigFailed.make({ detail: command.configDetail }))),
+      Match.when('HighestOther', () =>
+        Result.succeed(
+          RunFailed.make({
+            code: classCode(command.highestExitClass ?? 'VerdictFail'),
+            diagnostic: command.diagnostic,
+          }),
+        )),
+      Match.when('Fallback', () => Result.succeed(RunFailed.make({ code: 1, diagnostic: command.diagnostic }))),
       Match.exhaustive,
     ),
 )

@@ -1157,7 +1157,9 @@ export const makeVitestRunnerLayer = (
           })())),
         )
       const mutantRun: TestRunner['Service']['mutantRun'] = (options) =>
-        Cell.run(mutantRunCell, options).pipe(
+        Effect.gen(function*() {
+          return yield* Cell.run(mutantRunCell, options)
+        }).pipe(
           Effect.provideService(VitestHarness, harnessImpl),
           Effect.mapError((cause) => ((() => {
             if (cause instanceof TestRunnerFailed) return cause

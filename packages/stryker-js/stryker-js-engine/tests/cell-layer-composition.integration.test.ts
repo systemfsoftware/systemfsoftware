@@ -2,6 +2,7 @@ import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import { expect } from 'vitest'
@@ -54,8 +55,9 @@ const describeOrders = (): OrderPair => {
 
 const runBoth = (orders: OrderPair) =>
   Effect.gen(function*() {
-    const firstResponse = yield* Cell.run(orders.first, new OrderRequest({ id: 'initial-request' }))
-    yield* Cell.run(orders.second, firstResponse)
+    const chained = pipe(orders.first, Cell.andThen(orders.second))
+    yield* Cell.run(chained, new OrderRequest({ id: 'initial-request' }))
+    const firstResponse = new OrderRequest({ id: 'after-initial-request' })
     return { firstResponse, recorded: orders.recorded, trace: orders.trace }
   })
 
