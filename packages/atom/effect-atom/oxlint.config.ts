@@ -5,6 +5,9 @@ export default defineConfig({
   extends: [all],
   rules: {
     'jsdoc/check-tag-names': ['error', { definedTags: ['category', 'since', 'internal'] }],
+    'vitest/no-standalone-expect': [
+      'error',
+      { additionalTestBlockFunctions: ['Then', 'Given', 'When', 'And'] },
+    ],
   },
-  ignorePatterns: [...(all.ignorePatterns ?? []), 'tests/AtomRpc.integration.test.ts'],
 })
