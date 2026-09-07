@@ -2,6 +2,8 @@ import { banEffectSchemaImports } from './rules/ban-@-effect-schema-imports.js'
 import { banDataTaggedError } from './rules/ban-data-taggederror.js'
 import { noManualTagMember } from './rules/no-manual-tag-member.js'
 import { noManualTagProperty } from './rules/no-manual-tag-property.js'
+import { schemaBarePrimitiveField } from './rules/schema-bare-primitive-field.js'
+import { schemaBrandRequiresFilter } from './rules/schema-brand-requires-filter.js'
 import { schemaCheckedElementNamed } from './rules/schema-checked-element-named.js'
 import { schemaDeclarationLocation } from './rules/schema-declaration-location.js'
 import { schemaFileExportsSchemasOnly } from './rules/schema-file-exports-schemas-only.js'
@@ -31,6 +33,8 @@ export default {
     'ban-data-taggederror': banDataTaggedError,
     'no-manual-tag-member': noManualTagMember,
     'no-manual-tag-property': noManualTagProperty,
+    'schema-bare-primitive-field': schemaBarePrimitiveField,
+    'schema-brand-requires-filter': schemaBrandRequiresFilter,
     'schema-checked-element-named': schemaCheckedElementNamed,
     'schema-declaration-location': schemaDeclarationLocation,
     'schema-filter-constructive-generation': schemaFilterConstructiveGeneration,
