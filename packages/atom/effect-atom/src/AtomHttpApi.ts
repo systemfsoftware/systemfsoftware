@@ -13,6 +13,7 @@ import * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import type { ReadonlyRecord } from 'effect/Record'
 import * as Schema from 'effect/Schema'
 import type { Simplify } from 'effect/Types'
@@ -27,13 +28,17 @@ import type * as HttpApiMiddleware from 'effect/unstable/httpapi/HttpApiMiddlewa
 import * as HttpApiSchema from 'effect/unstable/httpapi/HttpApiSchema'
 import * as Reactivity from 'effect/unstable/reactivity/Reactivity'
 import * as Atom from './Atom.js'
+import { UnknownApiGroupError, UnknownEndpointError, type UnknownHttpApiError } from './AtomHttpApi.schema.js'
 import * as AsyncResult from './Result.js'
 import { schemaCodec } from './ResultSchema.js'
 // rc.108 does not expose HttpApiEndpoint.getSuccessSchemas/getErrorSchemas (added upstream
 // after rc.108); replicate them against the public .success/.error schema sets.
 const getSuccessSchemas = (endpoint: HttpApiEndpoint.Top): readonly [Schema.Top, ...Array<Schema.Top>] => {
   const [first, ...rest] = Array.from(endpoint.success)
-  return first === undefined ? [HttpApiSchema.NoContent] : [first, ...rest]
+  return Match.value(first).pipe(
+    Match.when(undefined, (): readonly [Schema.Top, ...Array<Schema.Top>] => [HttpApiSchema.NoContent]),
+    Match.orElse((head): readonly [Schema.Top, ...Array<Schema.Top>] => [head, ...rest]),
+  )
 }
 const getErrorSchemas = (endpoint: HttpApiEndpoint.Top): readonly Schema.Top[] => Array.from(endpoint.error)
 
@@ -222,18 +227,26 @@ export const Service =
     )
     const httpClient = options.httpClient
     const runtime = (options.runtime ?? Atom.runtime)(
-      typeof httpClient === 'function'
-        ? (get) =>
-          Layer.provide(
-            layer,
-            httpClient(get),
-          )
-        : Layer.provide(layer, httpClient),
+      Match.value(httpClient).pipe(
+        Match.when(
+          (
+            candidate: typeof httpClient,
+          ): candidate is (get: Atom.AtomContext) => Layer.Layer<
+            HttpApiGroup.ClientServices<Groups> | HttpApiGroup.MiddlewareClient<Groups> | HttpClient.HttpClient
+          > => typeof candidate === 'function',
+          (dynamic) => (get: Atom.AtomContext) => Layer.provide(layer, dynamic(get)),
+        ),
+        Match.orElse((staticClient) => Layer.provide(layer, staticClient)),
+      ),
     )
 
     const catchErrors = Effect.catch(
-      (e: HttpClientError.HttpClientError | Schema.SchemaError | Error) =>
-        Schema.isSchemaError(e) || HttpClientError.isHttpClientError(e) ? Effect.die(e) : Effect.fail(e),
+      (e: HttpClientError.HttpClientError | Schema.SchemaError | UnknownHttpApiError) =>
+        Match.value(Schema.isSchemaError(e) || HttpClientError.isHttpClientError(e)).pipe(
+          Match.when(true, () => Effect.die(e)),
+          Match.when(false, () => Effect.fail(e)),
+          Match.exhaustive,
+        ),
     )
 
     interface EndpointCall {
@@ -243,11 +256,11 @@ export const Service =
         readonly payload?: unknown
         readonly headers?: unknown
         readonly responseMode?: HttpApiEndpoint.ClientResponseMode | undefined
-      }): Effect.Effect<unknown, HttpClientError.HttpClientError | Schema.SchemaError | Error, never>
+      }): Effect.Effect<unknown, HttpClientError.HttpClientError | Schema.SchemaError | UnknownHttpApiError, never>
     }
     const isEndpointCall = (u: unknown): u is EndpointCall => typeof u === 'function'
 
-    const endpointFor = (group: string, endpoint: string): HttpApiEndpoint.Top => {
+    const endpointFor = (group: string, endpoint: string): HttpApiEndpoint.Top | undefined => {
       for (const candidate of Object.values(options.api.groups)) {
         if (
           (typeof candidate !== 'object' || candidate === null) && typeof candidate !== 'function' ||
@@ -268,7 +281,7 @@ export const Service =
         }
         break
       }
-      throw new Error(`Unknown endpoint: ${group}.${endpoint}`)
+      return undefined
     }
 
     const callEndpoint = (
@@ -282,16 +295,19 @@ export const Service =
         readonly headers?: unknown
         readonly responseMode?: HttpApiEndpoint.ClientResponseMode | undefined
       },
-    ): Effect.Effect<unknown, HttpClientError.HttpClientError | Schema.SchemaError | Error, never> => {
-      const groupEntry: unknown = (typeof client === 'object' && client !== null) || typeof client === 'function'
-        ? Reflect.get(client, group)
-        : undefined
+    ): Effect.Effect<unknown, HttpClientError.HttpClientError | Schema.SchemaError | UnknownHttpApiError, never> => {
+      let groupEntry: unknown
+      if ((typeof client === 'object' && client !== null) || typeof client === 'function') {
+        groupEntry = Reflect.get(client, group)
+      } else {
+        groupEntry = undefined
+      }
       if (typeof groupEntry !== 'object' || groupEntry === null) {
-        throw new Error(`Unknown API group: ${group}`)
+        return Effect.fail(new UnknownApiGroupError({ group }))
       }
       const call: unknown = Reflect.get(groupEntry, endpoint)
       if (!isEndpointCall(call)) {
-        throw new Error(`Unknown endpoint: ${group}.${endpoint}`)
+        return Effect.fail(new UnknownEndpointError({ group, endpoint }))
       }
       return call(request)
     }
@@ -312,20 +328,23 @@ export const Service =
             ...opts,
             responseMode,
           }))
-          return yield* opts.reactivityKeys
-            ? Reactivity.mutation(effect, opts.reactivityKeys)
-            : effect
+          return yield* Match.value(opts.reactivityKeys).pipe(
+            Match.when(undefined, () => effect),
+            Match.orElse((keys) => Reactivity.mutation(effect, keys)),
+          )
         }),
       )
       if (responseMode === 'decoded-only') {
         const definition = endpointFor(group, endpoint)
-        return Atom.serializable(fnAtom, {
-          key: `AtomHttpApi:mutation:${group}:${endpoint}`,
-          schema: resultSchema(
-            Schema.Union(getSuccessSchemas(definition)),
-            Schema.Union(getErrorSchemas(definition)),
-          ),
-        })
+        if (definition !== undefined) {
+          return Atom.serializable(fnAtom, {
+            key: `AtomHttpApi:mutation:${group}:${endpoint}`,
+            schema: resultSchema(
+              Schema.Union(getSuccessSchemas(definition)),
+              Schema.Union(getErrorSchemas(definition)),
+            ),
+          })
+        }
       }
       return fnAtom
     })
@@ -404,20 +423,25 @@ export const Service =
       if (opts.reactivityKeys) {
         atom = runtime.factory.withReactivity(opts.reactivityKeys)(atom)
       }
-      if (opts.responseMode === 'decoded-only' && opts.serializationKey) {
+      if (opts.responseMode === 'decoded-only' && opts.serializationKey !== undefined) {
         const endpoint = endpointFor(opts.group, opts.endpoint)
-        atom = Atom.serializable(atom, {
-          key: `AtomHttpApi:${opts.group}:${opts.endpoint}:${opts.serializationKey}`,
-          schema: resultSchema(
-            Schema.Union(getSuccessSchemas(endpoint)),
-            Schema.Union(getErrorSchemas(endpoint)),
-          ),
-        })
+        if (endpoint !== undefined) {
+          atom = Atom.serializable(atom, {
+            key: `AtomHttpApi:${opts.group}:${opts.endpoint}:${opts.serializationKey}`,
+            schema: resultSchema(
+              Schema.Union(getSuccessSchemas(endpoint)),
+              Schema.Union(getErrorSchemas(endpoint)),
+            ),
+          })
+        }
       }
       if (opts.timeToLive) {
-        atom = Duration.isFinite(opts.timeToLive)
-          ? Atom.setIdleTTL(atom, opts.timeToLive)
-          : Atom.keepAlive(atom)
+        const timeToLive = opts.timeToLive
+        atom = Match.value(Duration.isFinite(timeToLive)).pipe(
+          Match.when(true, () => Atom.setIdleTTL(atom, timeToLive)),
+          Match.when(false, () => Atom.keepAlive(atom)),
+          Match.exhaustive,
+        )
       }
       return atom
     })
@@ -522,9 +546,10 @@ export const Service =
         headers: request.headers,
         responseMode: request.responseMode ?? 'decoded-only',
         reactivityKeys: request.reactivityKeys,
-        timeToLive: request.timeToLive
-          ? Duration.fromInputUnsafe(request.timeToLive)
-          : undefined,
+        timeToLive: Match.value(request.timeToLive).pipe(
+          Match.when(undefined, () => undefined),
+          Match.orElse((timeToLive) => Duration.fromInputUnsafe(timeToLive)),
+        ),
         serializationKey: request.serializationKey,
       }
       return queryFamily(key)

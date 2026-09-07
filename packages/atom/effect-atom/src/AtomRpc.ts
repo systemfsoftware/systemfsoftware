@@ -13,6 +13,7 @@ import * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import type { ReadonlyRecord } from 'effect/Record'
 import * as Schema from 'effect/Schema'
 import * as Scope from 'effect/Scope'
@@ -179,13 +180,16 @@ export const Service = <Self>() =>
   const protocol = options.protocol
 
   const runtime = (options.runtime ?? Atom.runtime)(
-    typeof protocol === 'function'
-      ? (get) =>
-        Layer.provide(
-          layer,
-          Layer.orDie(protocol(get)),
-        )
-      : Layer.provide(layer, Layer.orDie(protocol)),
+    Match.value(protocol).pipe(
+      Match.when(
+        (
+          candidate: typeof protocol,
+        ): candidate is (get: Atom.AtomContext) => Layer.Layer<Exclude<NoInfer<RM>, Scope.Scope>, ER> =>
+          typeof candidate === 'function',
+        (dynamic) => (get: Atom.AtomContext) => Layer.provide(layer, Layer.orDie(dynamic(get))),
+      ),
+      Match.orElse((staticProtocol) => Layer.provide(layer, Layer.orDie(staticProtocol))),
+    ),
   )
 
   const isAnyWithProps = (u: unknown): u is Rpc.AnyWithProps =>
@@ -284,9 +288,10 @@ export const Service = <Self>() =>
       Effect.fnUntraced(function*({ headers, payload, reactivityKeys }) {
         const client = yield* service
         const effect = callFlat(client, tag, payload, headers, 'effect')
-        return yield* (reactivityKeys
-          ? Reactivity.mutation(effect, reactivityKeys)
-          : effect)
+        return yield* Match.value(reactivityKeys).pipe(
+          Match.when(undefined, () => effect),
+          Match.orElse((keys) => Reactivity.mutation(effect, keys)),
+        )
       }),
     )
     return Atom.serializable(fnAtom, {
@@ -327,32 +332,38 @@ export const Service = <Self>() =>
       const { headers, payload, reactivityKeys, tag, timeToLive } = key
       const rpc = getRpc(tag)
       const isStream = RpcSchema.isStreamSchema(rpc.successSchema)
-      let atom = isStream
-        ? runtime.pull(
-          Stream.unwrap(
-            service.use((client) =>
-              Effect.succeed(
-                callFlat(client, tag, payload, headers, 'stream'),
-              )
+      let atom = Match.value(isStream).pipe(
+        Match.when(true, () =>
+          runtime.pull(
+            Stream.unwrap(
+              service.use((client) =>
+                Effect.succeed(
+                  callFlat(client, tag, payload, headers, 'stream'),
+                )
+              ),
             ),
-          ),
-        )
-        : runtime.atom(
-          service.use((client) => callFlat(client, tag, payload, headers, 'effect')),
-        )
+          )),
+        Match.when(false, () =>
+          runtime.atom(
+            service.use((client) => callFlat(client, tag, payload, headers, 'effect')),
+          )),
+        Match.exhaustive,
+      )
       if (reactivityKeys) {
         atom = runtime.factory.withReactivity(reactivityKeys)(atom)
       }
-      if (!isStream && key.serializationKey) {
+      if (!isStream && key.serializationKey !== undefined) {
         atom = Atom.serializable(atom, {
           key: `AtomRpc:${key.tag}:${key.serializationKey}`,
           schema: resultSchema(rpc.successSchema, makeErrorSchema(rpc)),
         })
       }
       if (timeToLive) {
-        atom = Duration.isFinite(timeToLive)
-          ? Atom.setIdleTTL(atom, timeToLive)
-          : Atom.keepAlive(atom)
+        atom = Match.value(Duration.isFinite(timeToLive)).pipe(
+          Match.when(true, () => Atom.setIdleTTL(atom, timeToLive)),
+          Match.when(false, () => Atom.keepAlive(atom)),
+          Match.exhaustive,
+        )
       }
       return atom
     },
@@ -408,13 +419,15 @@ export const Service = <Self>() =>
     const key: QueryKey<Rpcs> = {
       tag,
       payload,
-      headers: options?.headers
-        ? Headers.fromInput(options.headers)
-        : undefined,
+      headers: Match.value(options?.headers).pipe(
+        Match.when(undefined, () => undefined),
+        Match.orElse((headers) => Headers.fromInput(headers)),
+      ),
       reactivityKeys: options?.reactivityKeys,
-      timeToLive: options?.timeToLive
-        ? Duration.fromInputUnsafe(options.timeToLive)
-        : undefined,
+      timeToLive: Match.value(options?.timeToLive).pipe(
+        Match.when(undefined, () => undefined),
+        Match.orElse((timeToLive) => Duration.fromInputUnsafe(timeToLive)),
+      ),
       serializationKey: options?.serializationKey,
     }
     return queryFamily(key)

@@ -10,6 +10,7 @@
  */
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
 import type { Atom, Type, WithoutSerializable, Writable, WriteContext } from './Atom.js'
@@ -119,12 +120,15 @@ export function searchParam<S extends Schema.ConstraintCodec<unknown, string> = 
   return writable<R, W>(
     (get): R => {
       if (typeof window === 'undefined') {
-        return decode ? Option.none() : ''
+        return Match.value(decode).pipe(
+          Match.when(undefined, () => ''),
+          Match.orElse(() => Option.none()),
+        )
       }
       const handleUpdate = () => {
         if (searchParamState.updating) return
         const searchParams = new URLSearchParams(window.location.search)
-        const newValue = searchParams.get(name) || ''
+        const newValue = searchParams.get(name) ?? ''
         if (decode) {
           get.setSelf(Exit.getSuccess(decode(newValue)))
         } else if (newValue !== Option.getOrUndefined(get.self())) {
@@ -137,8 +141,11 @@ export function searchParam<S extends Schema.ConstraintCodec<unknown, string> = 
         window.removeEventListener('popstate', handleUpdate)
         window.removeEventListener('pushstate', handleUpdate)
       })
-      const value = new URLSearchParams(window.location.search).get(name) || ''
-      return decode ? Exit.getSuccess(decode(value)) : value
+      const value = new URLSearchParams(window.location.search).get(name) ?? ''
+      return Match.value(decode).pipe(
+        Match.when(undefined, () => value),
+        Match.orElse((decodeExit) => Exit.getSuccess(decodeExit(value))),
+      )
     },
     (ctx: WriteContext<R>, value: W) => {
       if (typeof window === 'undefined') {
@@ -147,7 +154,13 @@ export function searchParam<S extends Schema.ConstraintCodec<unknown, string> = 
       }
       if (encode) {
         const encoded = Option.flatMap(
-          Option.isOption(value) ? value : Option.none(),
+          Match.value(value).pipe(
+            Match.when(
+              (candidate: W): candidate is Option.Option<S['Type']> => Option.isOption(candidate),
+              (optionValue) => optionValue,
+            ),
+            Match.orElse(() => Option.none()),
+          ),
           (v) => Exit.getSuccess(encode(v)),
         )
         searchParamState.updates.set(name, Option.getOrElse(encoded, () => ''))
