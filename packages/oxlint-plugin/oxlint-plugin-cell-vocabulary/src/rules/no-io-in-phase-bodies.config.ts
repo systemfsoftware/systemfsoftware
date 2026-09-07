@@ -1,15 +1,10 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Schema as S } from 'effect'
+import { DESCRIPTION_NAMESPACE, MODULE_SOURCE, SKIPPED_WALK_KEYS } from './cell.js'
+
+export { DESCRIPTION_NAMESPACE, MODULE_SOURCE, SKIPPED_WALK_KEYS }
 
 export const Options = S.Struct({})
-
-/**
- * The export name of the description vocabulary on its own module. A description is
- * recognised by an import from `Cell.vocabulary.module`; among that module's exports
- * only this one carries the phase constructors, so a named import of any other export
- * (Policy, Workflow) must not be treated as a description namespace.
- */
-export const DESCRIPTION_NAMESPACE = 'Cell' as const
 
 /**
  * The phases whose kind forbids I/O, read off the vocabulary's own partition by
@@ -21,9 +16,6 @@ export const PURE_PHASE_NAMES: readonly string[] = Cell.vocabulary.byKind.pure
 
 /** The pure phase names as one string, for the message's {{phases}} slot. */
 export const PURE_PHASE_LIST: string = PURE_PHASE_NAMES.join(', ')
-
-/** The description package's own module name, read off the vocabulary. */
-export const MODULE_SOURCE: string = Cell.vocabulary.module
 
 /** The cells whose calls are I/O, read off the vocabulary. */
 export const IO_CELLS: readonly string[] = Cell.vocabulary.ioCells.cells
@@ -54,8 +46,6 @@ if (COMPOSER_NAME.length === 0) {
     `${DESCRIPTION_NAMESPACE}: the vocabulary names no composing constructor, so spec-object descriptions go unrecognised`,
   )
 }
-
-export const SKIPPED_WALK_KEYS = ['parent', 'range', 'loc', 'start', 'end'] as const
 
 // The predicate's exact reach, stated so the message promises no decision the walker does not make.
 // The walk descends through the phase body's own subtree, so an I/O call written in a function

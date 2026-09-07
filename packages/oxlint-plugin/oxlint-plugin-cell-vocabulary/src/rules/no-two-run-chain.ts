@@ -1,6 +1,16 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
 import {
+  cellRunReceiver,
+  classifyDescriptionImport,
+  isCallExpression,
+  isFunctionNode,
+  isWalkable,
+  nodeType,
+  subtreeHoldsRun,
+  type Walkable,
+} from './cell.js'
+import {
   DESCRIPTION_NAMESPACE,
   meta,
   MODULE_SOURCE,
@@ -11,63 +21,10 @@ import {
   TWO_RUN_CHAIN_FIX,
 } from './no-two-run-chain.config.js'
 
-type Walkable = Readonly<Record<string, unknown>>
-
-const isWalkable = (value: unknown): value is Walkable => typeof value === 'object' && value !== null
-
-const nodeType = (node: Walkable): string => String(node['type'])
-
-const isCallExpression = (value: unknown): value is ESTree.CallExpression =>
-  isWalkable(value) && nodeType(value) === 'CallExpression'
-
-const isFunctionNode = (value: unknown): boolean => {
-  if (!isWalkable(value)) return false
-  const kind = nodeType(value)
-  return kind === 'FunctionDeclaration' || kind === 'FunctionExpression' ||
-    kind === 'ArrowFunctionExpression'
-}
-
 export const noTwoRunChain = defineRule({
   meta,
   create(context: Context) {
     const descriptionNamespaces = new Set<string>()
-
-    /**
-     * The written receiver of a `Cell.run` call — the namespace object name — or null.
-     * The namespace rides the import edge, so an import alias still resolves and a
-     * lookalike object never does; a computed member is not a static reference.
-     */
-    const cellRunReceiver = (node: ESTree.CallExpression): string | null => {
-      const callee = node.callee
-      if (callee.type !== 'MemberExpression' || callee.computed) return null
-      const object = callee.object
-      const property = callee.property
-      if (object.type !== 'Identifier' || !descriptionNamespaces.has(object.name)) return null
-      if (property.type !== 'Identifier' || property.name !== RUN_NAME) return null
-      return object.name
-    }
-
-    /**
-     * Whether the subtree holds a `Cell.run` call without crossing a function boundary:
-     * a run written inside a nested closure belongs to that closure's body, never to the
-     * scope under analysis.
-     */
-    const subtreeHoldsRun = (value: unknown): boolean => {
-      let found = false
-      const visit = (current: unknown): void => {
-        if (found || !isWalkable(current) || isFunctionNode(current)) return
-        if (isCallExpression(current) && cellRunReceiver(current) !== null) {
-          found = true
-          return
-        }
-        for (const key of Object.keys(current)) {
-          if (SKIPPED_WALK_KEYS.some((skipped) => skipped === key)) continue
-          visit(current[key])
-        }
-      }
-      visit(value)
-      return found
-    }
 
     /**
      * Whether the expression reads one of the run-bound names. A member key written
@@ -127,7 +84,7 @@ export const noTwoRunChain = defineRule({
      * hand-sequenced pipeline shape that must be an andThen spine instead.
      */
     const judgeRunCall = (node: ESTree.CallExpression, bindings: ReadonlySet<string>): void => {
-      const receiver = cellRunReceiver(node)
+      const receiver = cellRunReceiver(node, descriptionNamespaces, RUN_NAME)
       if (receiver === null) return
       const chained = node.arguments.some((argument) => expressionReadsBinding(argument, bindings))
       if (!chained) return
@@ -175,13 +132,13 @@ export const noTwoRunChain = defineRule({
           const init = current['init']
           if (init === null || init === undefined) return
           reportChainedRunsIn(init, bindings)
-          if (subtreeHoldsRun(init)) collectBoundNames(current['id'], bindings)
+          if (subtreeHoldsRun(init, descriptionNamespaces, RUN_NAME)) collectBoundNames(current['id'], bindings)
           return
         }
         if (kind === 'AssignmentExpression' && current['operator'] === '=') {
           const right = current['right']
           reportChainedRunsIn(right, bindings)
-          if (subtreeHoldsRun(right)) {
+          if (subtreeHoldsRun(right, descriptionNamespaces, RUN_NAME)) {
             const left = current['left']
             if (isWalkable(left)) {
               const leftKind = nodeType(left)
@@ -204,32 +161,12 @@ export const noTwoRunChain = defineRule({
       visit(body)
     }
 
-    /**
-     * Imports are classified here rather than in an `ImportDeclaration` listener.
-     * Listeners fire in document order, so a run written above its own import would be
-     * judged against an empty set — a silent pass decided by line order, which is the
-     * one failure a guard must not have. `Program` sees every top-level statement before
-     * any body is analysed, so the set is complete when the first run is judged.
-     */
-    const classifyImport = (node: ESTree.ImportDeclaration): void => {
-      if (node.source.value !== MODULE_SOURCE) return
-      for (const specifier of node.specifiers) {
-        if (specifier.type === 'ImportNamespaceSpecifier') {
-          descriptionNamespaces.add(specifier.local.name)
-        } else if (
-          specifier.type === 'ImportSpecifier' &&
-          specifier.imported.type === 'Identifier' &&
-          specifier.imported.name === DESCRIPTION_NAMESPACE
-        ) {
-          descriptionNamespaces.add(specifier.local.name)
-        }
-      }
-    }
-
     return {
       Program(node: ESTree.Program) {
         for (const statement of node.body) {
-          if (statement.type === 'ImportDeclaration') classifyImport(statement)
+          if (statement.type === 'ImportDeclaration') {
+            classifyDescriptionImport(statement, descriptionNamespaces, MODULE_SOURCE, DESCRIPTION_NAMESPACE)
+          }
         }
         analyseBody(node.body)
         const collectFunctionBodies = (current: unknown): void => {

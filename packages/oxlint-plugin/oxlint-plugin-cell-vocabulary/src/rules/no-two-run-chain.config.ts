@@ -1,18 +1,9 @@
-import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Schema as S } from 'effect'
+import { assertDescriptionModuleNonEmpty, DESCRIPTION_NAMESPACE, MODULE_SOURCE, SKIPPED_WALK_KEYS } from './cell.js'
+
+export { DESCRIPTION_NAMESPACE, MODULE_SOURCE, SKIPPED_WALK_KEYS }
 
 export const Options = S.Struct({})
-
-/**
- * The export name of the description vocabulary on its own module. A description is
- * recognised by an import from `Cell.vocabulary.module`; among that module's exports
- * only this one carries the cell constructors, so a named import of any other export
- * (Policy, Workflow) must not be treated as a description namespace.
- */
-export const DESCRIPTION_NAMESPACE = 'Cell' as const
-
-/** The description package's own module name, read off the vocabulary. */
-export const MODULE_SOURCE: string = Cell.vocabulary.module
 
 /** The runner member on the description namespace whose chaining is judged. */
 export const RUN_NAME = 'run' as const
@@ -21,16 +12,10 @@ export const RUN_NAME = 'run' as const
 export const AND_THEN_NAME = 'andThen' as const
 
 // A derivation that comes back empty is not a permissive rule, it is a disarmed one: the
-// module match below would never hold and the rule would report on no file while still
+// module match in the rule would never hold and the rule would report on no file while still
 // loading, still registered, still green. Refusing to load is the only honest failure —
 // it names the empty vocabulary instead of silently protecting nothing.
-if (MODULE_SOURCE.length === 0) {
-  throw new Error(
-    `${DESCRIPTION_NAMESPACE}: the vocabulary names no description module, so this rule would decide nothing`,
-  )
-}
-
-export const SKIPPED_WALK_KEYS = ['parent', 'range', 'loc', 'start', 'end'] as const
+assertDescriptionModuleNonEmpty(MODULE_SOURCE, DESCRIPTION_NAMESPACE)
 
 // The predicate's exact reach, stated so the message promises no decision the walker does
 // not make. One body at a time: a run is judged against the run-bound names collected

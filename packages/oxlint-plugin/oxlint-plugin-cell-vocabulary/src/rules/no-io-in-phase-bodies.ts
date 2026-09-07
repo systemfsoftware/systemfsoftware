@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { calleeRootName, cellOf } from './cell.js'
+import { calleeRootName, cellOf, isWalkable, nodeType, type Walkable } from './cell.js'
 import {
   COMPOSER_NAME,
   DESCRIPTION_NAMESPACE,
@@ -17,12 +17,6 @@ import {
 } from './no-io-in-phase-bodies.config.js'
 
 export type MessageIds = 'ioInPhaseBody'
-
-type Walkable = Readonly<Record<string, unknown>>
-
-const isWalkable = (value: unknown): value is Walkable => typeof value === 'object' && value !== null
-
-const nodeType = (node: Walkable): string => String(node['type'])
 
 const walk = (value: unknown, visit: (node: Walkable) => void): void => {
   if (!isWalkable(value)) return
