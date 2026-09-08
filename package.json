@@ -20,6 +20,7 @@
     "check:stryker-mutate-scope": "./scripts/guards/check-stryker-mutate-scope.ts",
     "check:oracle-weakening": "./scripts/guards/check-oracle-weakening.ts",
     "check:published-surface": "./scripts/guards/check-published-surface.ts",
+    "lint:tax": "./scripts/guards/emit-lint-tax.ts",
     "check:ci": "s=0; pnpm format:check || s=1; pnpm check:forbidden-lines || s=1; pnpm check:stryker-mutate-scope || s=1; pnpm check:oracle-weakening \"$ORACLE_BASE\" || s=1; pnpm check:published-surface || s=1; TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-100%} pnpm gate:tasks || s=1; pnpm gate:dist || s=1; exit $s",
     "check:contract": "TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-100%} pnpm gate:contract",
     "check:local": "s=0; ./bin/dprint check || s=1; pnpm check:forbidden-lines || s=1; pnpm check:stryker-mutate-scope || s=1; pnpm check:published-surface || s=1; TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-100%} pnpm gate:tasks || s=1; pnpm gate:dist || s=1; exit $s",
