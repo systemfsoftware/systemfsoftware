@@ -1,5 +1,5 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { FileName, MutantId, MutatorName } from '@systemfsoftware/stryker-js/Mutant'
+import { DirectoryPath, FileName, MutantId, MutatorName } from '@systemfsoftware/stryker-js/Mutant'
 import { Effect } from 'effect'
 import * as Result from 'effect/Result'
 import * as Schema from 'effect/Schema'
@@ -13,6 +13,7 @@ const Feature = makeFeature({ it, layer })
 const brands = [
   { kind: 'mutant', schema: MutantId, sample: '0' },
   { kind: 'file', schema: FileName, sample: 'src/order.ts' },
+  { kind: 'directory', schema: DirectoryPath, sample: 'reports' },
   { kind: 'mutator', schema: MutatorName, sample: 'Arithmetic' },
   { kind: 'test', schema: TestId, sample: 'src/order.ts#cancels the order' },
 ] as const

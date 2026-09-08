@@ -4,7 +4,11 @@
  * declarations live in `*.schema.ts` files; the test imports the schemas and
  * the `StreamLine` type from here.
  */
+import { MutantId } from '@systemfsoftware/stryker-js/Mutant'
 import * as S from 'effect/Schema'
+
+export const RunId = S.NonEmptyString.pipe(S.brand('RunId'))
+export type RunId = typeof RunId.Type
 
 export interface StreamLine {
   readonly kind: string
@@ -38,7 +42,7 @@ export const LocationSchema = S.Struct({
 })
 
 export const MutantSchema = S.Struct({
-  id: S.String,
+  id: MutantId,
   file: S.String,
   location: LocationSchema,
   mutator: S.String,
@@ -50,12 +54,12 @@ type DecodedMutant = S.Schema.Type<typeof MutantSchema>
 
 const StreamLineFields = {
   kind: S.String,
-  runId: S.optional(S.String),
+  runId: S.optional(RunId),
   schemaVersion: S.optional(S.String),
   mode: S.optional(S.String),
   phase: S.optional(S.String),
   elapsedMs: S.optional(S.Finite),
-  id: S.optional(S.String),
+  id: S.optional(MutantId),
   status: S.optional(S.String),
   file: S.optional(S.String),
   location: S.optional(LocationSchema),

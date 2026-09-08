@@ -1,19 +1,21 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import { Mutant, MutantId } from '@systemfsoftware/stryker-js/Mutant'
 import { MutantStatus } from '@systemfsoftware/stryker-js/Run'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
+const FrameworkVersion = S.NonEmptyString.pipe(S.brand('FrameworkVersion'))
+
 export const PriorReportDocument = S.Struct({
   config: S.optional(S.Record(S.String, S.Unknown)),
-  framework: S.optional(S.Struct({ version: S.optional(S.String) })),
+  framework: S.optional(S.Struct({ version: S.optional(FrameworkVersion) })),
   files: S.Record(
     S.String,
     S.Struct({
       source: S.String,
       mutants: S.Array(S.Struct({
-        id: S.String,
+        id: MutantId,
         mutatorName: S.String,
         replacement: S.optional(S.String),
         status: MutantStatus,

@@ -1,10 +1,11 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import { MutantId } from '@systemfsoftware/stryker-js/Mutant'
 import * as Effect from 'effect/Effect'
-import * as Exit from 'effect/Exit'
 import { pipe } from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
 import { expect } from 'vitest'
 import { admitOrder, type OrderDecision, OrderRefused, OrderRequest } from './__fixtures__/admit-order.workflow.js'
 
@@ -32,7 +33,7 @@ const describeOrders = (): OrderPair => {
           onSuccess: (admitted) => admitted.id,
           onFailure: (refused) => refused.id,
         })
-        return new OrderRequest({ id: `after-${answered}` })
+        return new OrderRequest({ id: S.decodeSync(MutantId)(`after-${answered}`) })
       }),
   })
   const second = Cell.layer({
@@ -56,7 +57,7 @@ const describeOrders = (): OrderPair => {
 const runBoth = (orders: OrderPair) =>
   Effect.gen(function*() {
     const chained = pipe(orders.first, Cell.andThen(orders.second))
-    const firstResponse = yield* Cell.run(chained, new OrderRequest({ id: 'initial-request' }))
+    const firstResponse = yield* Cell.run(chained, new OrderRequest({ id: S.decodeSync(MutantId)('initial-request') }))
     return { firstResponse, recorded: orders.recorded, trace: orders.trace }
   })
 
@@ -84,7 +85,7 @@ const describeSingleOrder = (): SingleOrder => {
               Match.tag('OrderRejected', (rejected) => `after-rejected:${rejected.why}:${rejected.id}`),
               Match.exhaustive,
             )
-            return new OrderRequest({ id: answered })
+            return new OrderRequest({ id: S.decodeSync(MutantId)(answered) })
           }),
         onFailure: (refused) => Effect.fail(refused),
       }),
@@ -108,7 +109,9 @@ Feature('Chaining two orders through the caller')
           (s) => runBoth(s.orders),
         ),
         Then('the second order read exactly the answer the first produced')((s) => {
-          expect(s.outcome.firstResponse).toStrictEqual(new OrderRequest({ id: 'after-initial-request' }))
+          expect(s.outcome.firstResponse).toStrictEqual(
+            new OrderRequest({ id: S.decodeSync(MutantId)('after-initial-request') }),
+          )
           expect(s.outcome.recorded.secondReadRaw).toStrictEqual(s.outcome.firstResponse)
         }),
         Then('both orders ran their steps in the order each declares')((s) => {
@@ -133,10 +136,12 @@ Feature('Chaining two orders through the caller')
         ),
         When("the order runs with id 'ab'")(
           'outcome',
-          (s) => Cell.run(s.order.cell, new OrderRequest({ id: 'ab' })),
+          (s) => Cell.run(s.order.cell, new OrderRequest({ id: S.decodeSync(MutantId)('ab') })),
         ),
         Then('the response carries the rejection in the ledger')((s) => {
-          expect(s.outcome).toStrictEqual(new OrderRequest({ id: 'after-rejected:too short:ab' }))
+          expect(s.outcome).toStrictEqual(
+            new OrderRequest({ id: S.decodeSync(MutantId)('after-rejected:too short:ab') }),
+          )
         }),
         Then('the order ran its steps in the order it declares')((s) => {
           expect(s.order.trace).toStrictEqual([
@@ -147,21 +152,21 @@ Feature('Chaining two orders through the caller')
       ),
     )
     scenario(
-      'an empty id fails the run with the refusal reason',
+      'an empty id is refused at the order boundary',
       Gherkin.Do.pipe(
         Given('a single order is described')(
           'order',
           () => Effect.succeed(describeSingleOrder()),
         ),
-        When('the order runs with an empty id')(
-          'exit',
-          (s) => Effect.exit(Cell.run(s.order.cell, new OrderRequest({ id: '' }))),
+        When('the empty id is decoded against the order request')(
+          'admitted',
+          () => Effect.succeed(Result.isSuccess(S.decodeUnknownResult(OrderRequest)({ _tag: 'OrderRequest', id: '' }))),
         ),
-        Then('the run fails with the refusal reason')((s) => {
-          expect(s.exit).toStrictEqual(Exit.fail(new OrderRefused({ id: '', why: 'empty' })))
+        Then('the boundary refuses it')((s) => {
+          expect(s.admitted).toBe(false)
         }),
         Then('the refusal never reached the write')((s) => {
-          expect(s.order.trace).toStrictEqual(['single order read its request'])
+          expect(s.order.trace).toStrictEqual([])
         }),
       ),
     )

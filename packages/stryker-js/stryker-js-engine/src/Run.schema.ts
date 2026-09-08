@@ -2,13 +2,16 @@ import * as S from 'effect/Schema'
 
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 
+export const StageCommand = S.NonEmptyString.pipe(S.brand('StageCommand'))
+export type StageCommand = typeof StageCommand.Type
+
 const TypeId = '~stryker/mutation-run/StageError' as const
 
 export class StageError extends S.TaggedError<StageError>(TypeId)('StageError', {
   stage: S.Literals(['prepare', 'instrument', 'dryRun', 'dryRunNoTests', 'mutationTest']),
   reason: S.String,
   cause: S.optional(S.Defect()),
-  command: S.optional(S.String),
+  command: S.optional(StageCommand),
 }) {
   readonly [TypeId] = TypeId
 

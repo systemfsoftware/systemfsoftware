@@ -1,8 +1,12 @@
+import { FileName } from '@systemfsoftware/stryker-js/Mutant'
 import * as S from 'effect/Schema'
+
+export const SvelteVersion = S.NonEmptyString.pipe(S.brand('SvelteVersion'))
+export type SvelteVersion = typeof SvelteVersion.Type
 
 export class ParseFailed
   extends S.TaggedError<ParseFailed>('@systemfsoftware/stryker-js-instrumenter/ParseFailed')('ParseFailed', {
-    fileName: S.String,
+    fileName: FileName,
     message: S.String,
     location: S.Struct({ line: S.Finite, column: S.Finite }),
     cause: S.Defect(),
@@ -15,7 +19,7 @@ export class ParseFailed
 
 export class ParserNotFound
   extends S.TaggedError<ParserNotFound>('@systemfsoftware/stryker-js-instrumenter/ParserNotFound')('ParserNotFound', {
-    fileName: S.String,
+    fileName: FileName,
     extension: S.String,
     cause: S.Defect(),
   })
@@ -28,8 +32,8 @@ export class ParserNotFound
 export class SvelteVersionNotSupported extends S.TaggedError<SvelteVersionNotSupported>(
   '@systemfsoftware/stryker-js-instrumenter/SvelteVersionNotSupported',
 )('SvelteVersionNotSupported', {
-  version: S.String,
-  fileName: S.String,
+  version: SvelteVersion,
+  fileName: FileName,
   cause: S.Defect(),
 }) {
   override get message(): string {
@@ -41,7 +45,7 @@ export class SvelteWalkerNotFound
   extends S.TaggedError<SvelteWalkerNotFound>('@systemfsoftware/stryker-js-instrumenter/SvelteWalkerNotFound')(
     'SvelteWalkerNotFound',
     {
-      fileName: S.String,
+      fileName: FileName,
       cause: S.Defect(),
     },
   )
@@ -55,7 +59,7 @@ export class SvelteParseFailed
   extends S.TaggedError<SvelteParseFailed>('@systemfsoftware/stryker-js-instrumenter/SvelteParseFailed')(
     'SvelteParseFailed',
     {
-      fileName: S.String,
+      fileName: FileName,
       cause: S.Defect(),
     },
   )

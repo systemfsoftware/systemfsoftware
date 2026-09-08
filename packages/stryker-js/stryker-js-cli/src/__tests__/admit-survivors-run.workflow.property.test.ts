@@ -14,6 +14,7 @@ import {
   AdmitSurvivorsRunCommand,
   Admitted,
   NoSurvivors,
+  PriorReportDocument,
   PriorReportFacts,
   SurvivorsAdmission,
   SurvivorsRejection,
@@ -116,9 +117,14 @@ const survivorsProducedReportArb = reportArb(
   cleanConfigArb.map((config) => ({ ...config, survivorsPriorReport: 'reports/prior.json' })),
 )
 
-// Test-only unwrap: fixtures are valid by construction, so a decode failure is a failing fixture (no-sync-schema-codecs test exception).
+const mustDecodePriorReport = (report: schema.MutationTestResult): S.Schema.Type<typeof PriorReportDocument> => {
+  const decoded = S.decodeUnknownResult(PriorReportDocument)(report)
+  if (Result.isFailure(decoded)) throw decoded.failure
+  return decoded.success
+}
+
 const mustExtractSurvivors = (report: schema.MutationTestResult, resolvePath: (file: string) => string): Mutant[] => {
-  const decoded = extractSurvivors(report, resolvePath)
+  const decoded = extractSurvivors(mustDecodePriorReport(report), resolvePath)
   if (Result.isFailure(decoded)) throw decoded.failure
   return decoded.success
 }
@@ -150,7 +156,7 @@ const matchingFields = (report: schema.MutationTestResult) => ({
       sourceContentHash(fileResult.source, sha256Hex),
     ]),
   ),
-  priorSourceHashes: priorSourceHashes(report, sha256Hex),
+  priorSourceHashes: priorSourceHashes(mustDecodePriorReport(report), sha256Hex),
   priorSurvivors: mustExtractSurvivors(report, absPath),
 })
 

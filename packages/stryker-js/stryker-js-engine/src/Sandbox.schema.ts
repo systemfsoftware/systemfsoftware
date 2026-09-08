@@ -6,12 +6,16 @@
  * sandbox preprocessor reads and rewrites.
  */
 
+import { DirectoryPath } from '@systemfsoftware/stryker-js/Mutant'
 import { Schema as S } from 'effect'
+
+export const ShellCommand = S.NonEmptyString.pipe(S.brand('ShellCommand'))
+export type ShellCommand = typeof ShellCommand.Type
 
 export class BuildCommandFailedError extends S.TaggedError<BuildCommandFailedError>()(
   'BuildCommandFailedError',
   {
-    command: S.String,
+    command: ShellCommand,
     description: S.String,
     cause: S.optional(S.Unknown),
   },
@@ -22,7 +26,7 @@ export class BuildCommandFailedError extends S.TaggedError<BuildCommandFailedErr
 export class SpawnFailedError extends S.TaggedError<SpawnFailedError>()(
   'SpawnFailedError',
   {
-    command: S.String,
+    command: ShellCommand,
     cause: S.Unknown,
   },
 ) {
@@ -76,9 +80,9 @@ export type TSConfig = S.Schema.Type<typeof TsConfigSchema>
 export const ExtendsArraySchema = S.Array(S.String)
 export class SandboxCommand extends S.TaggedClass<SandboxCommand>()('SandboxCommand', {
   fileEntries: S.Array(S.Struct({ name: S.String, hasChanges: S.Boolean })),
-  basePath: S.String,
-  workingDirectory: S.String,
-  backupDirectory: S.String,
+  basePath: DirectoryPath,
+  workingDirectory: DirectoryPath,
+  backupDirectory: DirectoryPath,
   inPlace: S.Boolean,
 }) {}
 

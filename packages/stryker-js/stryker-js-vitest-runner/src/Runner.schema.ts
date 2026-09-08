@@ -3,6 +3,8 @@ import { TestResultSchema } from '@systemfsoftware/stryker-js/TestRunner'
 import { Effect } from 'effect'
 import * as S from 'effect/Schema'
 import type * as VitestNode from 'vitest/node'
+export const VitestVersion = S.NonEmptyString.pipe(S.brand('VitestVersion'))
+export type VitestVersion = typeof VitestVersion.Type
 
 export const VitestRunnerOptionsSchema = S.Struct({
   dir: S.optional(S.String),
@@ -60,7 +62,7 @@ export const VitestNodeModuleSchema = S.declare(
   { description: 'The project-local vitest/node module' },
 )
 
-export const VitestPackageSchema = S.Struct({ version: S.String })
+export const VitestPackageSchema = S.Struct({ version: VitestVersion })
 
 export type VitestTaskState = typeof TaskState.Type
 

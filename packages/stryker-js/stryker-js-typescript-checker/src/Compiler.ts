@@ -6,6 +6,7 @@
  * only the Effect-typed service surface.
  */
 
+import { FileName } from '@systemfsoftware/stryker-js/Mutant'
 import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
@@ -26,7 +27,7 @@ import type { FileSystem as TSFileSystem, FileSystemEntries } from 'typescript/u
 import { API, type Diagnostic, DiagnosticCategory, type Program, type Snapshot } from 'typescript/unstable/sync'
 
 import { CompilerFailed } from './Checker.schema.js'
-import { HybridFileNotFoundError, UnsupportedTypeScriptVersionError } from './Compiler.schema.js'
+import { HybridFileNotFoundError, TypeScriptVersion, UnsupportedTypeScriptVersionError } from './Compiler.schema.js'
 import { determineBuildModeEnabled, overrideOptions, parseTsConfig, retrieveReferencedProjects } from './Tsconfig.js'
 import { TsConfigNotFoundError } from './Tsconfig.schema.js'
 
@@ -92,7 +93,8 @@ export const guardTSVersion = (
   Effect.gen(function*() {
     const version = yield* getTSVersion(fsService, pathService)
     if (!isSupportedTypescriptVersion(version)) {
-      return yield* new UnsupportedTypeScriptVersionError({ version })
+      const branded = yield* S.decodeUnknownEffect(TypeScriptVersion)(version)
+      return yield* new UnsupportedTypeScriptVersionError({ version: branded })
     }
   })
 
@@ -267,7 +269,11 @@ export const makeHybridFileSystem = (fsService: FileSystem.FileSystem): Effect.E
       Effect.gen(function*() {
         const file = yield* getFile(fileName)
         if (file === undefined) {
-          return yield* new HybridFileNotFoundError({ fileName })
+          const branded = S.decodeOption(FileName)(fileName)
+          if (Option.isNone(branded)) {
+            return yield* Effect.die(new Error('Cannot report a missing file for an empty file name'))
+          }
+          return yield* new HybridFileNotFoundError({ fileName: branded.value })
         }
         const next = mutateScriptFile(file, mutant)
         const normalized = normalizeFileName(fileName)
@@ -310,13 +316,17 @@ export const makeHybridFileSystem = (fsService: FileSystem.FileSystem): Effect.E
 // ── TSFileNode graph ─────────────────────────────────────────────────────
 
 export interface TSFileNode {
-  readonly fileName: string
+  readonly fileName: FileName
   readonly parents: readonly TSFileNode[]
   readonly children: readonly TSFileNode[]
 }
 
 export function makeTSFileNode(fileName: string): TSFileNode {
-  return { fileName, parents: [], children: [] }
+  const decoded = S.decodeOption(FileName)(fileName)
+  if (Option.isNone(decoded)) {
+    throw new Error('Cannot create a file node for an empty file name')
+  }
+  return { fileName: decoded.value, parents: [], children: [] }
 }
 
 export function getAllParentReferencesIncludingSelf(

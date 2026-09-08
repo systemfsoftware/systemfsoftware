@@ -4,6 +4,7 @@
  * Typed by Effect Schema and decoded at the boundary; the compiler capability
  * consumes only validated shapes.
  */
+import { DirectoryPath } from '@systemfsoftware/stryker-js/Mutant'
 import { Schema as S } from 'effect'
 
 /** The configured tsconfig failed to parse or is not a shape this package can consume. */
@@ -25,7 +26,7 @@ export class TsConfigNotFoundError extends S.TaggedError<TsConfigNotFoundError>(
 }
 
 const InternalTsConfigSchema = S.Struct({
-  references: S.optional(S.Array(S.Struct({ path: S.String }))),
+  references: S.optional(S.Array(S.Struct({ path: DirectoryPath }))),
   compilerOptions: S.optional(S.Record(S.String, S.Unknown)),
 })
 

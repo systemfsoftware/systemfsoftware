@@ -1,7 +1,10 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { CheckerFailed } from '@systemfsoftware/stryker-js/Checker'
+import { FileName } from '@systemfsoftware/stryker-js/Mutant'
 import { HashMap, Result } from 'effect'
 import * as Effect from 'effect/Effect'
+import * as Option from 'effect/Option'
+import * as S from 'effect/Schema'
 import {
   checkMutants,
   type CheckMutantsDecision,
@@ -40,7 +43,16 @@ export const checkCell = Cell.layer({
       )
       return new CheckMutantsInput({
         mutants: [...command.mutants],
-        diagnostics: [...diagnostics],
+        diagnostics: diagnostics.map((diagnostic) => {
+          if (diagnostic.fileName === undefined) {
+            return { ...diagnostic, fileName: undefined }
+          }
+          const decoded = S.decodeOption(FileName)(diagnostic.fileName)
+          if (Option.isNone(decoded)) {
+            return { ...diagnostic, fileName: undefined }
+          }
+          return { ...diagnostic, fileName: decoded.value }
+        }),
         nodes,
       })
     }),

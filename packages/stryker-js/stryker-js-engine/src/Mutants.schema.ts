@@ -1,4 +1,4 @@
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import { DirectoryPath, Mutant, MutantId } from '@systemfsoftware/stryker-js/Mutant'
 import * as S from 'effect/Schema'
 import { MUTANT_STATUSES } from './mutant-status.js'
 
@@ -31,7 +31,7 @@ const PreviousTestFileSchema = S.Struct({
 })
 
 const RememberedMutantSchema = S.Struct({
-  mutantId: S.String,
+  mutantId: MutantId,
   status: S.Literals(MUTANT_STATUSES),
   testsCompleted: S.optional(S.Finite),
   coveredBy: S.optional(S.Array(S.String)),
@@ -42,7 +42,7 @@ export const PreviousFilesSchema = S.Record(S.String, PreviousFileSchema)
 export const PreviousTestFilesSchema = S.Record(S.String, PreviousTestFileSchema)
 
 export class IncrementalDiffCommand extends S.TaggedClass<IncrementalDiffCommand>()('IncrementalDiffCommand', {
-  basePath: S.String,
+  basePath: DirectoryPath,
   currentMutants: S.Array(Mutant),
   previousFiles: PreviousFilesSchema,
   previousTestFiles: PreviousTestFilesSchema,
@@ -96,7 +96,7 @@ const DecidedRunOptionsSchema = S.Struct({
 
 const RunPlanSchema = S.Struct({
   plan: S.Literal('Run'),
-  mutantId: S.String,
+  mutantId: MutantId,
   netTime: S.Finite,
   runOptions: DecidedRunOptionsSchema,
   static: S.optional(S.Boolean),
@@ -105,7 +105,7 @@ const RunPlanSchema = S.Struct({
 
 const EarlyResultPlanSchema = S.Struct({
   plan: S.Literal('EarlyResult'),
-  mutantId: S.String,
+  mutantId: MutantId,
   status: S.Literals([
     'Killed',
     'Survived',

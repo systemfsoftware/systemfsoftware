@@ -36,7 +36,7 @@ const MutationApi = HttpApi.make('api').add(
   HttpApiGroup.make('group').add(
     HttpApiEndpoint.post('create', '/users', {
       payload: Schema.Struct({ name: Schema.String }),
-      success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+      success: Schema.Struct({ id: Schema.Number.pipe(Schema.brand('UserId')), name: Schema.String }),
     }),
   ),
 )
@@ -48,7 +48,7 @@ const QueryAndMutationApi = HttpApi.make('api').add(
     }),
     HttpApiEndpoint.post('create', '/users', {
       payload: Schema.Struct({ name: Schema.String }),
-      success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+      success: Schema.Struct({ id: Schema.Number.pipe(Schema.brand('UserId')), name: Schema.String }),
     }),
   ),
 )
@@ -57,7 +57,7 @@ const ApiWithRejection = HttpApi.make('api').add(
   HttpApiGroup.make('group').add(
     HttpApiEndpoint.post('create', '/users', {
       payload: Schema.Struct({ name: Schema.String }),
-      success: Schema.Struct({ id: Schema.Number, name: Schema.String }),
+      success: Schema.Struct({ id: Schema.Number.pipe(Schema.brand('UserId')), name: Schema.String }),
       error: Schema.Struct({ message: Schema.String }),
     }),
   ),

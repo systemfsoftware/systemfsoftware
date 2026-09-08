@@ -1,13 +1,16 @@
 /**
  * Compiler — declarations for the TypeScript compiler and version guard.
  */
+import { FileName } from '@systemfsoftware/stryker-js/Mutant'
 import { Schema as S } from 'effect'
+export const TypeScriptVersion = S.NonEmptyString.pipe(S.brand('TypeScriptVersion'))
+export type TypeScriptVersion = typeof TypeScriptVersion.Type
 
 /** The installed TypeScript version is below the supported floor. */
 export class UnsupportedTypeScriptVersionError extends S.TaggedError<UnsupportedTypeScriptVersionError>()(
   'UnsupportedTypeScriptVersionError',
   {
-    version: S.String,
+    version: TypeScriptVersion,
   },
 ) {
   override get message(): string {
@@ -19,6 +22,6 @@ export class UnsupportedTypeScriptVersionError extends S.TaggedError<Unsupported
 export class HybridFileNotFoundError extends S.TaggedError<HybridFileNotFoundError>()(
   'HybridFileNotFoundError',
   {
-    fileName: S.String,
+    fileName: FileName,
   },
 ) {}

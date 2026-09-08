@@ -27,8 +27,8 @@ const mutantInFile = (id: string, fileName: string): Mutant =>
 
 const nodeFor = (
   fileName: string,
-): { readonly fileName: string; readonly parents: readonly never[]; readonly children: readonly never[] } => ({
-  fileName,
+): { readonly fileName: FileName; readonly parents: readonly never[]; readonly children: readonly never[] } => ({
+  fileName: S.decodeSync(FileName)(fileName),
   parents: [],
   children: [],
 })
@@ -50,7 +50,7 @@ const ambiguousGroupInputArb: fc.Arbitrary<CheckMutantsInput> = fc
     ([file, text]) =>
       new CheckMutantsInput({
         mutants: [mutantInFile('retest-a', file), mutantInFile('retest-b', file)],
-        diagnostics: [{ fileName: file, text }],
+        diagnostics: [{ fileName: S.decodeSync(FileName)(file), text }],
         nodes: HashMap.fromIterable([[file, nodeFor(file)]]),
       }),
   )

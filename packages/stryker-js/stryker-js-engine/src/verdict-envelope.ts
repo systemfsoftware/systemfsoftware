@@ -1,3 +1,4 @@
+import { FileName } from '@systemfsoftware/stryker-js/Mutant'
 import type { MutantStatus } from '@systemfsoftware/stryker-js/Mutant'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
@@ -95,7 +96,7 @@ function embeddedConfig(
   readonly jsonReporterFileName: string | undefined
 } {
   const JsonReporterSchema = S.Struct({
-    fileName: S.String,
+    fileName: FileName,
   })
   const EmbeddedConfigSchema = S.StructWithRest(
     S.Struct({

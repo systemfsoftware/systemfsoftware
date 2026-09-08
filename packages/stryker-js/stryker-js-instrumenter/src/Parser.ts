@@ -1,8 +1,11 @@
 /**
  * Parser — all parsers that turn source text into the instrumenter's ASTs.
  */
+import { FileName } from '@systemfsoftware/stryker-js/Mutant'
 import type { Ast as NGAst } from 'angular-html-parser'
+import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'
+import * as S from 'effect/Schema'
 import type { BaseNode, Program } from 'estree'
 import { parseSync } from 'oxc-parser'
 import path from 'path'
@@ -11,6 +14,7 @@ import {
   ParseFailed,
   ParserNotFound,
   SvelteParseFailed,
+  SvelteVersion,
   SvelteVersionNotSupported,
   SvelteWalkerNotFound,
 } from './Parser.schema.js'
@@ -50,6 +54,21 @@ export type Parser<T extends Ast = Ast> = (
   fileName: string,
   context: ParserContext,
 ) => Promise<T>
+
+const toFileName = (fileName: string): FileName => {
+  const decoded = S.decodeOption(FileName)(fileName)
+  if (Option.isNone(decoded)) {
+    throw new Error('Cannot report a parse failure for an empty file name')
+  }
+  return decoded.value
+}
+const toSvelteVersion = (version: string): SvelteVersion => {
+  const decoded = S.decodeOption(SvelteVersion)(version)
+  if (Option.isNone(decoded)) {
+    throw new Error('Cannot report an unsupported Svelte version for an empty version string')
+  }
+  return decoded.value
+}
 // ---------------------------------------------------------------------------
 // Oxc parse — one engine for js, ts and tsx.
 // ---------------------------------------------------------------------------
@@ -65,7 +84,7 @@ function parseWithOxc(
     const label = first?.labels[0]
     const position = positionFromLineTable(label?.start ?? 0, buildLineTable(text))
     throw new ParseFailed({
-      fileName,
+      fileName: toFileName(fileName),
       message: first?.message ?? 'unknown parse error',
       location: position,
       cause: result.errors.map((error) => error.message),
@@ -128,7 +147,7 @@ export function createParser(): {
     const format = getFormat(fileName, formatOverride)
     if (!format) {
       const ext = path.extname(fileName).toLowerCase()
-      throw new ParserNotFound({ fileName, extension: ext, cause: undefined })
+      throw new ParserNotFound({ fileName: toFileName(fileName), extension: ext, cause: undefined })
     }
     switch (format) {
       case 'js':
@@ -255,14 +274,14 @@ async function ngHtmlParser(
     const firstError = errors[0]
     if (firstError === undefined) {
       throw new ParseFailed({
-        fileName,
+        fileName: toFileName(fileName),
         message: 'HTML parser reported errors but first error is missing',
         location: { line: 0, column: 0 },
         cause: errors,
       })
     }
     throw new ParseFailed({
-      fileName,
+      fileName: toFileName(fileName),
       message: firstError.msg,
       location: toSourceLocation(firstError.span.start),
       cause: firstError,
@@ -507,8 +526,8 @@ export async function parseSvelte(
 
   if (!isSupportedSvelteVersion(VERSION)) {
     throw new SvelteVersionNotSupported({
-      version: VERSION,
-      fileName,
+      version: toSvelteVersion(VERSION),
+      fileName: toFileName(fileName),
       cause: `Expected >=3.30`,
     })
   }
@@ -523,7 +542,10 @@ export async function parseSvelte(
       !isPlainRecord(walkerModule) ||
       !isWalkFunction(walkerModule['walk'])
     ) {
-      throw new SvelteWalkerNotFound({ fileName, cause: 'estree-walker module without walk export' })
+      throw new SvelteWalkerNotFound({
+        fileName: toFileName(fileName),
+        cause: 'estree-walker module without walk export',
+      })
     }
     walk = walkerModule['walk']
   } else {
@@ -533,7 +555,10 @@ export async function parseSvelte(
       !isPlainRecord(svelteCompilerModule) ||
       !isWalkFunction(svelteCompilerModule['walk'])
     ) {
-      throw new SvelteWalkerNotFound({ fileName, cause: 'svelte/compiler module without walk export' })
+      throw new SvelteWalkerNotFound({
+        fileName: toFileName(fileName),
+        cause: 'svelte/compiler module without walk export',
+      })
     }
     walk = svelteCompilerModule['walk']
   }

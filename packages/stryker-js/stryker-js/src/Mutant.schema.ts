@@ -9,6 +9,9 @@ export type TestId = typeof TestId.Type
 export const FileName = S.NonEmptyString.pipe(S.brand('FileName'))
 export type FileName = typeof FileName.Type
 
+export const DirectoryPath = S.NonEmptyString.pipe(S.brand('DirectoryPath'))
+export type DirectoryPath = typeof DirectoryPath.Type
+
 export const MutatorName = S.NonEmptyString.pipe(S.brand('MutatorName'))
 export type MutatorName = typeof MutatorName.Type
 

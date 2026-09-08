@@ -1,8 +1,10 @@
 import { Effect, Schema as S, SchemaGetter } from 'effect'
+export const HookShellCommand = S.NonEmptyString.pipe(S.brand('HookShellCommand'))
+export type HookShellCommand = typeof HookShellCommand.Type
 
 const CommandHook = S.Struct({
   type: S.Literal('command'),
-  command: S.String,
+  command: HookShellCommand,
   args: S.optional(S.Array(S.String)),
   async: S.optional(S.Boolean),
   asyncRewake: S.optional(S.Boolean),

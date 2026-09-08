@@ -1,12 +1,13 @@
+import { FileName, MutantId } from '@systemfsoftware/stryker-js/Mutant'
 import * as S from 'effect/Schema'
 
 export class PlacementFailed
   extends S.TaggedError<PlacementFailed>('@systemfsoftware/stryker-js-instrumenter/PlacementFailed')(
     'PlacementFailed',
     {
-      fileName: S.String,
+      fileName: FileName,
       placerName: S.String,
-      mutantIds: S.Array(S.String),
+      mutantIds: S.Array(MutantId),
       cause: S.Defect(),
     },
   )
@@ -20,7 +21,7 @@ export class TransformFailed
   extends S.TaggedError<TransformFailed>('@systemfsoftware/stryker-js-instrumenter/TransformFailed')(
     'TransformFailed',
     {
-      fileName: S.String,
+      fileName: FileName,
       cause: S.Defect(),
     },
   )

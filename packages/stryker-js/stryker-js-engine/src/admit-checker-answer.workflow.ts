@@ -1,6 +1,8 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import type { CheckResult } from '@systemfsoftware/stryker-js/Checker'
+import { MutantId } from '@systemfsoftware/stryker-js/Mutant'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
@@ -59,8 +61,10 @@ export class CheckGroupDecision extends S.TaggedClass<CheckGroupDecision>()('Che
   readonly [CheckerDecisionTypeId] = CheckerDecisionTypeId
 }
 
+const CheckerPairSchema = S.Struct({ id: MutantId, result: CheckResultSchema })
+
 export class CheckResultDecision extends S.TaggedClass<CheckResultDecision>()('CheckResultDecision', {
-  pairs: S.Array(S.Struct({ id: S.String, result: CheckResultSchema })),
+  pairs: S.Array(CheckerPairSchema),
 }) {
   readonly [CheckerDecisionTypeId] = CheckerDecisionTypeId
 }
@@ -144,10 +148,22 @@ const evaluateCheckResult = (
               missingIds: missing,
             }),
           )),
-        Match.when(false, () => {
-          const pairs = entries
-            .filter(([id]) => requestedRecord[id] === true)
-            .map(([id, result]) => ({ id, result }))
+        Match.when(false, (): Result.Result<CheckerDecision, CheckerContractBroken> => {
+          const pairs: S.Schema.Type<typeof CheckerPairSchema>[] = []
+          for (const [id, result] of entries.filter(([candidate]) => requestedRecord[candidate] === true)) {
+            const decoded = S.decodeOption(CheckerPairSchema)({ id, result })
+            if (Option.isNone(decoded)) {
+              return Result.fail(
+                new CheckerAnsweredUnrequested({
+                  checkerName: command.checkerName,
+                  phase: 'check',
+                  unrequestedIds: [id],
+                  requestedIds: [...command.requestedIds],
+                }),
+              )
+            }
+            pairs.push(decoded.value)
+          }
           return Result.succeed(new CheckResultDecision({ pairs }))
         }),
         Match.exhaustive,

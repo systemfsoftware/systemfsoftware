@@ -1,23 +1,24 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { MutantId } from '@systemfsoftware/stryker-js/Mutant'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
 export class OrderRequest extends S.TaggedClass<OrderRequest>()('OrderRequest', {
-  id: S.String,
+  id: MutantId,
 }) {}
 
 const OrderDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-engine/tests/OrderDecision')
 type OrderDecisionTypeId = typeof OrderDecisionTypeId
 
 export class OrderAdmitted extends S.TaggedClass<OrderAdmitted>()('OrderAdmitted', {
-  id: S.String,
+  id: MutantId,
 }) {
   readonly [OrderDecisionTypeId] = OrderDecisionTypeId
 }
 
 export class OrderRejected extends S.TaggedClass<OrderRejected>()('OrderRejected', {
-  id: S.String,
+  id: MutantId,
   why: S.String,
 }) {
   readonly [OrderDecisionTypeId] = OrderDecisionTypeId
@@ -26,7 +27,7 @@ export class OrderRejected extends S.TaggedClass<OrderRejected>()('OrderRejected
 export type OrderDecision = OrderAdmitted | OrderRejected
 
 export class OrderRefused extends S.TaggedError<OrderRefused>()('OrderRefused', {
-  id: S.String,
+  id: MutantId,
   why: S.String,
 }) {}
 

@@ -2,6 +2,7 @@
  * Config — schema declarations for the Config capability.
  */
 import { Wire } from '@systemfsoftware/effect-cell-types'
+import { DirectoryPath } from '@systemfsoftware/stryker-js/Mutant'
 import * as S from 'effect/Schema'
 
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
@@ -57,7 +58,7 @@ export class ConfigError extends S.TaggedError<ConfigError>()('ConfigError', {
 
 export class ReadConfigCommand extends S.TaggedClass<ReadConfigCommand>()('ReadConfigCommand', {
   cliOptions: Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown))), // plugin sections are foreign by design
-  basePath: S.String,
+  basePath: DirectoryPath,
 }) {}
 
 export class MergeCommand extends S.TaggedClass<MergeCommand>()('MergeCommand', {

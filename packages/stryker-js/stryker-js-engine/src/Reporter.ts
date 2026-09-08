@@ -1686,8 +1686,8 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
     'webpack-cli',
     'ts-jest',
   ] as const
-
-  const ManifestSchema = S.Struct({ version: S.optional(S.String) })
+  const ManifestVersion = S.NonEmptyString.pipe(S.brand('ManifestVersion'))
+  const ManifestSchema = S.Struct({ version: S.optional(ManifestVersion) })
 
   const readManifestVersion = (
     fs: FileSystem.FileSystem,

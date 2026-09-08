@@ -1,5 +1,5 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Mutant, MutantId } from '@systemfsoftware/stryker-js/Mutant'
+import { FileName, Mutant, MutantId } from '@systemfsoftware/stryker-js/Mutant'
 import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
@@ -16,23 +16,28 @@ export class DiagnosticInUnrelatedFileError extends S.TaggedError<DiagnosticInUn
   'DiagnosticInUnrelatedFileError',
   {
     text: S.String,
-    fileName: S.String,
+    fileName: FileName,
   },
 ) {}
 
 const DiagnosticSchema = S.Struct({
-  fileName: S.optional(S.String),
+  fileName: S.optional(FileName),
   text: S.String,
 })
 
+const DiagnosticWithFileSchema = S.Struct({
+  text: S.String,
+  fileName: FileName,
+})
+
 interface NodeDecodedShape {
-  readonly fileName: string
+  readonly fileName: FileName
   readonly parents: readonly NodeDecodedShape[]
   readonly children: readonly NodeDecodedShape[]
 }
 const TSFileNodeSchema: S.Schema<NodeDecodedShape> = S.suspend((): S.Schema<NodeDecodedShape> =>
   S.Struct({
-    fileName: S.String,
+    fileName: FileName,
     parents: S.Array(TSFileNodeSchema),
     children: S.Array(TSFileNodeSchema),
   })
@@ -119,10 +124,14 @@ const classifyDiagnosticsPure = (
     }
   }
   for (const diagnostic of diagnostics) {
-    const fileName = diagnostic.fileName
-    if (fileName === undefined || fileName === '') {
+    const filed = S.decodeUnknownOption(DiagnosticWithFileSchema)({
+      text: diagnostic.text,
+      fileName: diagnostic.fileName,
+    })
+    if (Option.isNone(filed)) {
       return Result.fail(new DiagnosticWithoutFileError({ text: diagnostic.text }))
     }
+    const fileName = filed.value.fileName
     const node = HashMap.get(nodes, fileName)
     if (Option.isNone(node)) {
       return Result.fail(new DiagnosticInUnrelatedFileError({ text: diagnostic.text, fileName }))
