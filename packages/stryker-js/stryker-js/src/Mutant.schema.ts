@@ -1,15 +1,15 @@
 import * as S from 'effect/Schema'
 
-export const MutantId = S.String.pipe(S.check(S.isMinLength(1)), S.brand('MutantId'))
+export const MutantId = S.NonEmptyString.pipe(S.brand('MutantId'))
 export type MutantId = typeof MutantId.Type
 
-export const TestId = S.String.pipe(S.check(S.isMinLength(1)), S.brand('TestId'))
+export const TestId = S.NonEmptyString.pipe(S.brand('TestId'))
 export type TestId = typeof TestId.Type
 
-export const FileName = S.String.pipe(S.check(S.isMinLength(1)), S.brand('FileName'))
+export const FileName = S.NonEmptyString.pipe(S.brand('FileName'))
 export type FileName = typeof FileName.Type
 
-export const MutatorName = S.String.pipe(S.check(S.isMinLength(1)), S.brand('MutatorName'))
+export const MutatorName = S.NonEmptyString.pipe(S.brand('MutatorName'))
 export type MutatorName = typeof MutatorName.Type
 
 export const PositionSchema = S.Struct({
