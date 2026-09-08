@@ -1,5 +1,20 @@
 import * as S from 'effect/Schema'
 
+export const ColdEnvironmentBase = S.TaggedStruct('ColdEnvironment', { reloadRequested: S.Boolean })
+export const LoadedEnvironmentBase = S.TaggedStruct('LoadedEnvironment', {
+  reloadRequested: S.Boolean,
+  canReload: S.Boolean,
+})
+export const StaticMutantLoadedBase = S.TaggedStruct('StaticMutantLoaded', {
+  reloadRequested: S.Boolean,
+  canReload: S.Boolean,
+})
+
+export type EnvironmentRequest =
+  | S.Schema.Type<typeof ColdEnvironmentBase>
+  | S.Schema.Type<typeof LoadedEnvironmentBase>
+  | S.Schema.Type<typeof StaticMutantLoadedBase>
+
 /**
  * The command runner was asked for something it cannot do.
  *

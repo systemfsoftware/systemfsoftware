@@ -41,7 +41,7 @@ import type { RpcClientError } from 'effect/unstable/rpc/RpcClientError'
 import type { SocketError } from 'effect/unstable/socket/Socket'
 import { encodeWorkerOptions } from './worker-options.js'
 
-import { CommandRunnerUnsupportedOption } from './TestRunner.schema.js'
+import { CommandRunnerUnsupportedOption, type EnvironmentRequest } from './TestRunner.schema.js'
 import type { IdGeneratorShape } from './Worker.js'
 import { ChildProcessCrashedError, OutOfMemoryError } from './Worker.schema.js'
 import type { WorkerFrameTooLargeError } from './Worker.schema.js'
@@ -283,6 +283,60 @@ export const withMaxReuse = (
 /** What the test environment currently holds, which is what decides a reload. */
 type EnvironmentState = 'pristine' | 'loaded' | 'loaded-static-mutant'
 
+interface EnvironmentRuling {
+  readonly reloadEnvironment: boolean
+  readonly retireBeforeRun: boolean
+  readonly nextState: EnvironmentState
+}
+
+const rulingOf = (
+  reloadEnvironment: boolean,
+  nextState: EnvironmentState,
+): EnvironmentRuling => ({ reloadEnvironment, retireBeforeRun: false, nextState })
+
+const retireOf = (nextState: EnvironmentState): EnvironmentRuling => ({
+  reloadEnvironment: false,
+  retireBeforeRun: true,
+  nextState,
+})
+
+const decideEnvironmentReload = (request: EnvironmentRequest): EnvironmentRuling =>
+  Match.value(request).pipe(
+    Match.when({ _tag: 'ColdEnvironment' }, (cold) =>
+      Match.value(cold.reloadRequested).pipe(
+        Match.when(true, () => rulingOf(false, 'loaded-static-mutant')),
+        Match.when(false, () => rulingOf(false, 'loaded')),
+        Match.exhaustive,
+      )),
+    Match.when({ _tag: 'LoadedEnvironment' }, (warm) =>
+      Match.value(warm.reloadRequested).pipe(
+        Match.when(true, () =>
+          Match.value(warm.canReload).pipe(
+            Match.when(true, () => rulingOf(true, 'loaded-static-mutant')),
+            Match.when(false, () => rulingOf(false, 'loaded-static-mutant')),
+            Match.exhaustive,
+          )),
+        Match.when(false, () => rulingOf(false, 'loaded')),
+        Match.exhaustive,
+      )),
+    Match.when({ _tag: 'StaticMutantLoaded' }, (loaded) =>
+      Match.value(loaded.reloadRequested).pipe(
+        Match.when(true, () =>
+          Match.value(loaded.canReload).pipe(
+            Match.when(true, () => rulingOf(true, 'loaded-static-mutant')),
+            Match.when(false, () => rulingOf(false, 'loaded-static-mutant')),
+            Match.exhaustive,
+          )),
+        Match.when(false, () =>
+          Match.value(loaded.canReload).pipe(
+            Match.when(true, () => rulingOf(true, 'loaded')),
+            Match.when(false, () => retireOf('loaded')),
+            Match.exhaustive,
+          )),
+        Match.exhaustive,
+      )),
+    Match.exhaustive,
+  )
 /**
  * Decide whether the test environment must be reloaded before a mutant runs.
  *
@@ -311,26 +365,40 @@ export const withEnvironmentReload = (
           const current = yield* Ref.get(state)
           const canReload = (yield* inner.capabilities).reloadEnvironment
 
-          let reloadEnvironment: boolean
-          if (options.reloadEnvironment) {
-            reloadEnvironment = current !== 'pristine' && canReload
-          } else {
-            reloadEnvironment = current === 'loaded-static-mutant' && canReload
-          }
-          const decided: MutantRunOptions = { ...options, reloadEnvironment }
+          const request: EnvironmentRequest = Match.value(current).pipe(
+            Match.when(
+              'pristine',
+              (): EnvironmentRequest => ({ _tag: 'ColdEnvironment', reloadRequested: options.reloadEnvironment }),
+            ),
+            Match.when(
+              'loaded',
+              (): EnvironmentRequest => ({
+                _tag: 'LoadedEnvironment',
+                reloadRequested: options.reloadEnvironment,
+                canReload,
+              }),
+            ),
+            Match.when(
+              'loaded-static-mutant',
+              (): EnvironmentRequest => ({
+                _tag: 'StaticMutantLoaded',
+                reloadRequested: options.reloadEnvironment,
+                canReload,
+              }),
+            ),
+            Match.exhaustive,
+          )
+          const ruling = decideEnvironmentReload(request)
+          const decided: MutantRunOptions = { ...options, reloadEnvironment: ruling.reloadEnvironment }
 
-          if (current === 'loaded-static-mutant' && !canReload) {
+          if (ruling.retireBeforeRun) {
             yield* retire
           }
 
           const policy: Policy.Policy<MutantRunResult, PooledTestRunnerError, never> = (self) =>
             Effect.gen(function*() {
               const result = yield* self
-              let nextState: EnvironmentState = 'loaded'
-              if (options.reloadEnvironment) {
-                nextState = 'loaded-static-mutant'
-              }
-              yield* Ref.set(state, nextState)
+              yield* Ref.set(state, ruling.nextState)
               return result
             })
 
