@@ -1,14 +1,19 @@
 import { Context, Effect, Layer, Option, Schema } from 'effect'
 import { maxSatisfying } from 'semver'
 
+import type { FilePath } from './FilePath.schema.js'
 import { type NpmRegistryDoc, NpmRegistryDocSchema } from './NpmRegistry.schema.js'
 import type { ParsedPackageSpec } from './PackageSpec.schema.js'
 import { PackageNotFoundError, PackageStoreError } from './PackageStore.schema.js'
 
+export type TarballSource =
+  | { readonly kind: 'registry'; readonly url: string }
+  | { readonly kind: 'local'; readonly path: FilePath }
+
 export interface PackageStoreTarballRef {
   readonly packageName: string
   readonly packageVersion: string
-  readonly tarballUrl: string
+  readonly tarball: TarballSource
 }
 
 export { PackageNotFoundError, PackageStoreError }
@@ -24,7 +29,7 @@ export interface PackageStoreService {
     specs: readonly ParsedPackageSpec[],
     options?: PackageStoreOptions,
   ) => Effect.Effect<PackageStoreTarballRef, PackageNotFoundError | PackageStoreError>
-  readonly fetchTarball: (tarballUrl: string) => Effect.Effect<Uint8Array, PackageStoreError>
+  readonly fetchTarball: (tarball: TarballSource) => Effect.Effect<Uint8Array, PackageStoreError>
 }
 
 export class PackageStore extends Context.Service<PackageStore, PackageStoreService>()(
@@ -42,11 +47,15 @@ export const PackageStoreLive: Layer.Layer<PackageStore, never, never> = Layer.s
             ? e
             : new PackageStoreError({ message: `Failed to resolve ${nameOf(specs)}`, cause: e }),
       }),
-    fetchTarball: (tarballUrl) =>
-      Effect.tryPromise({
-        try: () => fetchTarball(tarballUrl),
-        catch: (e) => new PackageStoreError({ message: `Failed to fetch ${tarballUrl}`, cause: e }),
-      }),
+    fetchTarball: (tarball) =>
+      tarball.kind === 'registry'
+        ? Effect.tryPromise({
+          try: () => fetchTarball(tarball.url),
+          catch: (e) => new PackageStoreError({ message: `Failed to fetch ${tarball.url}`, cause: e }),
+        })
+        : Effect.fail(
+          new PackageStoreError({ message: `a local tarball source serves only from the stub store: ${tarball.path}` }),
+        ),
   },
 )
 
@@ -80,7 +89,7 @@ const tarballFor = (
     const tarballUrl = versions[packageVersion]?.dist.tarball
     return tarballUrl === undefined
       ? undefined
-      : { packageName: spec.name, packageVersion, tarballUrl }
+      : { packageName: spec.name, packageVersion, tarball: { kind: 'registry', url: tarballUrl } }
   }
   if (spec.versionKind === 'tag' && spec.version !== 'latest') {
     // A named tag names no version in the packument's `versions` map, so the
@@ -94,20 +103,20 @@ const tarballFor = (
     const tarballUrl = versions?.[packageVersion]?.dist.tarball
     return tarballUrl === undefined
       ? undefined
-      : { packageName: spec.name, packageVersion, tarballUrl }
+      : { packageName: spec.name, packageVersion, tarball: { kind: 'registry', url: tarballUrl } }
   }
   if (doc.version !== undefined) {
     const tarballUrl = doc.dist?.tarball
     return tarballUrl === undefined
       ? undefined
-      : { packageName: spec.name, packageVersion: doc.version, tarballUrl }
+      : { packageName: spec.name, packageVersion: doc.version, tarball: { kind: 'registry', url: tarballUrl } }
   }
   const packageVersion = doc['dist-tags']?.['latest']
   if (packageVersion === undefined) return undefined
   const tarballUrl = versions?.[packageVersion]?.dist.tarball
   return tarballUrl === undefined
     ? undefined
-    : { packageName: spec.name, packageVersion, tarballUrl }
+    : { packageName: spec.name, packageVersion, tarball: { kind: 'registry', url: tarballUrl } }
 }
 
 async function resolveTarballRef(

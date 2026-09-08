@@ -1,5 +1,7 @@
 import { Schema } from 'effect'
 
+import { FilePath } from './FilePath.schema.js'
+
 export const ResolutionKindSchema = Schema.Literals(['node10', 'node16-cjs', 'node16-esm', 'bundler'])
 export type ResolutionKind = Schema.Schema.Type<typeof ResolutionKindSchema>
 
@@ -31,12 +33,12 @@ export type ModuleKindSyntax = Schema.Schema.Type<typeof ModuleKindSyntaxSchema>
 export const ModuleKindSchema = Schema.Struct({
   detectedKind: ModuleKindSyntaxSchema,
   detectedReason: ModuleKindReasonSchema,
-  reasonFileName: Schema.String,
+  reasonFileName: FilePath,
 })
 export type ModuleKind = Schema.Schema.Type<typeof ModuleKindSchema>
 
 export const ResolutionSchema = Schema.Struct({
-  fileName: Schema.String,
+  fileName: FilePath,
   isTypeScript: Schema.Boolean,
   isJson: Schema.Boolean,
   trace: Schema.Array(Schema.String),
@@ -118,14 +120,14 @@ export type FalseExportDefaultProblem = Schema.Schema.Type<typeof FalseExportDef
 
 export const MissingExportEqualsProblemSchema = Schema.Struct({
   kind: Schema.Literal('MissingExportEquals'),
-  typesFileName: Schema.String,
-  implementationFileName: Schema.String,
+  typesFileName: FilePath,
+  implementationFileName: FilePath,
 })
 export type MissingExportEqualsProblem = Schema.Schema.Type<typeof MissingExportEqualsProblemSchema>
 
 export const InternalResolutionErrorProblemSchema = Schema.Struct({
   kind: Schema.Literal('InternalResolutionError'),
-  fileName: Schema.String,
+  fileName: FilePath,
   pos: Schema.Number,
   end: Schema.Number,
   resolutionOption: ResolutionOptionSchema,
@@ -137,7 +139,7 @@ export type InternalResolutionErrorProblem = Schema.Schema.Type<typeof InternalR
 
 export const UnexpectedModuleSyntaxProblemSchema = Schema.Struct({
   kind: Schema.Literal('UnexpectedModuleSyntax'),
-  fileName: Schema.String,
+  fileName: FilePath,
   pos: Schema.Number,
   end: Schema.Number,
   syntax: ModuleKindSyntaxSchema,
@@ -147,7 +149,7 @@ export type UnexpectedModuleSyntaxProblem = Schema.Schema.Type<typeof Unexpected
 
 export const CJSOnlyExportsDefaultProblemSchema = Schema.Struct({
   kind: Schema.Literal('CJSOnlyExportsDefault'),
-  fileName: Schema.String,
+  fileName: FilePath,
   pos: Schema.Number,
   end: Schema.Number,
 })

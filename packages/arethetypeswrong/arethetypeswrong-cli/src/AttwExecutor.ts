@@ -5,11 +5,16 @@ import {
   PackageStore,
   PackageStoreStub,
   type ResolutionKind,
+  type TarballSource,
 } from '@systemfsoftware/arethetypeswrong'
+import { FilePath } from '@systemfsoftware/arethetypeswrong'
 import { Effect, Layer, Schema as S } from 'effect'
+import * as PlatformFs from 'effect/FileSystem'
+import * as PlatformPathMod from 'effect/Path'
+import type { PlatformError } from 'effect/PlatformError'
+import * as PlatformTerminal from 'effect/Terminal'
 import { ChildProcessSpawner } from 'effect/unstable/process/ChildProcessSpawner'
 
-import { CliFilesystem as Filesystem } from './FilesystemAdapter.js'
 import { computeExitCode } from './GetExitCode.js'
 import { ComputeExitCodeCommand } from './GetExitCode.schema.js'
 import { PackRunner } from './PackRunnerAdapter.js'
@@ -17,8 +22,6 @@ import { applyProfile, type CliProfileName } from './Profiles.js'
 import { ApplyProfileCommand } from './Profiles.schema.js'
 import { RegistryDocument, RegistryFetchError } from './Registry.schema.js'
 import { renderAnalysis } from './Render.js'
-import { Stdin } from './StdinAdapter.js'
-import { Terminal } from './TerminalAdapter.js'
 
 export type CliFormat = 'auto' | 'table' | 'table-flipped' | 'ascii' | 'json'
 
@@ -43,6 +46,11 @@ export interface CliRequest {
   readonly moduleKinds?: readonly string[]
   readonly registry: string
 }
+
+const decodeFilePath = (path: string): Effect.Effect<FilePath> =>
+  S.decodeUnknownEffect(FilePath)(path).pipe(Effect.orDie)
+
+const localTarball = (path: FilePath): TarballSource => ({ kind: 'local', path })
 
 export const prepareAnalysis = (
   request: CliRequest,
@@ -72,29 +80,31 @@ export const prepareAnalysis = (
 const acquireTarball = (
   request: CliRequest,
 ): Effect.Effect<
-  { bytes: Uint8Array; ref: { packageName: string; packageVersion: string; tarballUrl: string } },
+  { bytes: Uint8Array; ref: { packageName: string; packageVersion: string; tarball: TarballSource } },
   never,
-  Filesystem | PackRunner | ChildProcessSpawner
+  PlatformFs.FileSystem | PlatformPathMod.Path | PackRunner | ChildProcessSpawner
 > =>
   Effect.gen(function*() {
-    const fs = yield* Filesystem
+    const fs = yield* PlatformFs.FileSystem
+    const path = yield* PlatformPathMod.Path
     const target = request.fileOrDirectory
     if (request.pack) {
       const packRunner = yield* PackRunner
       const packed = yield* packRunner.pack(target).pipe(Effect.orDie)
-      const tarballPath = fs.join(target, packed.tarballPath)
-      const bytes = yield* fs.readBytes(tarballPath).pipe(Effect.orDie)
-      yield* fs.deleteFile(tarballPath)
+      const archive = yield* decodeFilePath(path.join(target, packed.tarballPath))
+      const bytes = yield* fs.readFile(archive).pipe(Effect.orDie)
+      yield* fs.remove(archive).pipe(Effect.orDie)
       return {
         bytes,
-        ref: { packageName: target, packageVersion: 'local', tarballUrl: `file://${tarballPath}` },
+        ref: { packageName: target, packageVersion: 'local', tarball: localTarball(archive) },
       }
     }
     if (target.endsWith('.tgz') || target.endsWith('.tar.gz')) {
-      const bytes = yield* fs.readBytes(target).pipe(Effect.orDie)
+      const archive = yield* decodeFilePath(target)
+      const bytes = yield* fs.readFile(archive).pipe(Effect.orDie)
       return {
         bytes,
-        ref: { packageName: target, packageVersion: 'local', tarballUrl: `file://${target}` },
+        ref: { packageName: target, packageVersion: 'local', tarball: localTarball(archive) },
       }
     }
     const npmTarget = request.fromNpm
@@ -133,21 +143,34 @@ const acquireTarball = (
       }).pipe(Effect.orDie)
       return {
         bytes: tarballRes,
-        ref: { packageName: registry.name, packageVersion: registry.version, tarballUrl: registry.dist.tarball },
+        ref: {
+          packageName: registry.name,
+          packageVersion: registry.version,
+          tarball: { kind: 'registry', url: registry.dist.tarball },
+        },
       }
     }
-    const bytes = yield* fs.readBytes(target).pipe(Effect.orDie)
+    const archive = yield* decodeFilePath(target)
+    const bytes = yield* fs.readFile(archive).pipe(Effect.orDie)
     return {
       bytes,
-      ref: { packageName: target, packageVersion: 'local', tarballUrl: `file://${target}` },
+      ref: { packageName: target, packageVersion: 'local', tarball: localTarball(archive) },
     }
   })
 
 export const runAttw = (
   request: CliRequest,
-): Effect.Effect<number, never, Terminal | Filesystem | Stdin | PackRunner | ChildProcessSpawner> =>
+): Effect.Effect<
+  number,
+  PlatformError,
+  | PlatformFs.FileSystem
+  | PlatformPathMod.Path
+  | PlatformTerminal.Terminal
+  | PackRunner
+  | ChildProcessSpawner
+> =>
   Effect.gen(function*() {
-    const terminal = yield* Terminal
+    const terminal = yield* PlatformTerminal.Terminal
 
     const { bytes, ref } = yield* acquireTarball(request)
     const storeLayer = PackageStoreStub(ref, bytes)
@@ -191,7 +214,7 @@ export const runAttw = (
         terminalWidth: 120,
         isTTY: true,
       })
-      yield* terminal.stdout.write(output)
+      yield* terminal.display(output)
     }
     return exitDecision.exitCode
   })

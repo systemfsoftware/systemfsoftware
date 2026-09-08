@@ -25,7 +25,7 @@ export class CheckPackage extends Context.Service<CheckPackage, CheckPackageServ
             const ref = yield* store.resolveTarballRef([
               { name: pkgSpec, versionKind: 'tag', version: 'latest' },
             ])
-            const bytes = yield* store.fetchTarball(ref.tarballUrl)
+            const bytes = yield* store.fetchTarball(ref.tarball)
             const result = yield* checkPackage(createPackageFromTarballData(bytes), options).pipe(
               Effect.catchDefect((cause: unknown) => Effect.fail(new Error('Analysis failed', { cause }))),
             )
