@@ -2,12 +2,12 @@ import {
   CheckPackage,
   CheckPackageLive,
   type CheckResult,
+  FilePath,
   PackageStore,
   PackageStoreStub,
   type ResolutionKind,
   type TarballSource,
 } from '@systemfsoftware/arethetypeswrong'
-import { FilePath } from '@systemfsoftware/arethetypeswrong'
 import { Effect, Layer, Schema as S } from 'effect'
 import * as PlatformFs from 'effect/FileSystem'
 import * as PlatformPathMod from 'effect/Path'

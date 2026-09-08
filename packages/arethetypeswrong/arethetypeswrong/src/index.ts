@@ -24,7 +24,6 @@ export type { EntrypointResolutionsInput } from './EntrypointResolutions.js'
 export { resolvedThroughFallback } from './Fallback.js'
 
 export { FilePath } from './FilePath.schema.js'
-export type { FilePath as FilePathType } from './FilePath.schema.js'
 export { CommonJSModuleKind, ESNextModuleKind } from './ModuleKind.js'
 
 export { detectModuleKindDisagreement } from './ModuleKindDisagreement.js'

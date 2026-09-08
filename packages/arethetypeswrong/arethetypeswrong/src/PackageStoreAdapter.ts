@@ -1,4 +1,4 @@
-import { Context, Effect, Layer, Option, Schema } from 'effect'
+import { Context, Effect, Layer, Match, Option, Schema } from 'effect'
 import { maxSatisfying } from 'semver'
 
 import type { FilePath } from './FilePath.schema.js'
@@ -48,14 +48,20 @@ export const PackageStoreLive: Layer.Layer<PackageStore, never, never> = Layer.s
             : new PackageStoreError({ message: `Failed to resolve ${nameOf(specs)}`, cause: e }),
       }),
     fetchTarball: (tarball) =>
-      tarball.kind === 'registry'
-        ? Effect.tryPromise({
-          try: () => fetchTarball(tarball.url),
-          catch: (e) => new PackageStoreError({ message: `Failed to fetch ${tarball.url}`, cause: e }),
-        })
-        : Effect.fail(
-          new PackageStoreError({ message: `a local tarball source serves only from the stub store: ${tarball.path}` }),
-        ),
+      Match.value(tarball).pipe(
+        Match.when({ kind: 'registry' }, (source) =>
+          Effect.tryPromise({
+            try: () => fetchTarball(source.url),
+            catch: (e) => new PackageStoreError({ message: `Failed to fetch ${source.url}`, cause: e }),
+          })),
+        Match.when({ kind: 'local' }, (source) =>
+          Effect.fail(
+            new PackageStoreError({
+              message: `a local tarball source serves only from the stub store: ${source.path}`,
+            }),
+          )),
+        Match.exhaustive,
+      ),
   },
 )
 
