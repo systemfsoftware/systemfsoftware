@@ -14,11 +14,11 @@ The stryker CLI assembled its host layer per run: `makeRunLayer(env, events?)` w
 
 - **Runtime values enter context at the root via `Layer.succeed`, never as function parameters.** The composition root assembles one `AppLayer` (`Layer.mergeAll` of seeded values, static layers, and host layers — merged with `Layer.provideMerge` when a static layer requires ports), then `Cell.provide`s each cell once. What varies per invocation belongs in the command; what varies per process belongs in the seeded layer.
 - **The engine exports static layers only.** A host-neutral package ships `Layer` constants (`idGeneratorLayer`), never `makeXLayer(args)` factories; factories are composition-root code and belong to the process entry.
-- **Per-run resources get `Effect.scoped` at the run site, not a scope layer.** A `Scope` requirement left on the cell is closed by the scoped run; a scope-carrying layer build per process is a different (wrong) lifetime.
-- **Residue lint closes the loop.** `no-two-run-chain` and `no-platform-provide-service-on-run` (registered at error) make the hand-sequenced and per-run-provision shapes fail a command when pasted back.
+- **Per-run resources close at run end via `Layer.scope` at the root.** The cell reaches the edge with `R` eliminated: the root provides `Layer.scope` alongside the host layers, so a `Scope` requirement is satisfied per run and closed when that run's effect completes — the same lifetime the bare `Effect.scoped` run used to carry, in the shape the run edge now requires.
+- **Residue lint closes the loop.** `no-two-run-chain` (registered at error) makes the hand-sequenced shape fail a command when pasted back; the per-run-provision shape is refused by `Cell.run`'s signature itself — an unprovided cell does not compile at the edge.
 
 ## Verification
 
-- Import sweep: the engine exports no function returning `Layer`; the CLI contains exactly one `Layer.mergeAll` assembly and its `Cell.run` sites are bare under `Effect.scoped`.
+- Import sweep: the engine exports no function returning `Layer`; the CLI contains exactly one `Layer.mergeAll` assembly and its `Cell.run` sites are bare cells provided at the root.
 - Grep: `Effect.provideService` piped directly onto a `Cell.run` returns zero hits in `packages/stryker-js/`; `makeRunLayer` has zero references.
-- Paste-back: a scratch file containing the old chain and the per-run provision fails `oxlint` with both new rules at error.
+- Paste-back: a scratch file containing the old chain fails `oxlint` with `no-two-run-chain` at error, and a scratch file running a cell with an inhabited `R` fails `tsc` with `UnprovidedCell`.
