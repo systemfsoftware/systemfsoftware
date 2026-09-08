@@ -14,8 +14,12 @@ const _default: {
     rules: {
         'ban-effect-schema-imports': Rule;
         'ban-data-taggederror': Rule;
+        'no-effect-returning-schema-method': Rule;
         'no-manual-tag-member': Rule;
         'no-manual-tag-property': Rule;
+        'no-schema-field-mutation': Rule;
+        'no-time-source-in-schema-module': Rule;
+        'no-zero-arm-schema': Rule;
         'schema-checked-element-named': Rule;
         'schema-declaration-location': Rule;
         'schema-filter-constructive-generation': Rule;

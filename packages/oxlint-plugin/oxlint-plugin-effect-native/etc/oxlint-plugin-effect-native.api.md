@@ -12,6 +12,7 @@ const _default: {
         name: string;
     };
     rules: {
+        'no-captured-provide-service': Rule;
         'no-date-now-in-effect': Rule;
         'no-logging-in-catch': Rule;
         'no-native-map-in-effect': Rule;

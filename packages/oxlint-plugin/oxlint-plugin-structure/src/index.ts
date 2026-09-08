@@ -3,9 +3,12 @@ import { banErrorString } from './rules/ban-error-string.js'
 import { internalExportJsdoc } from './rules/internal-export-jsdoc.js'
 import { noBarrels } from './rules/no-barrels.js'
 import { noDomainBranchingDensity } from './rules/no-domain-branching-density.js'
+import { noHandCurriedExport } from './rules/no-hand-curried-export.js'
 import { noInlineDestructuredType } from './rules/no-inline-destructured-type.js'
 import { noInternalJsdocOutside } from './rules/no-internal-jsdoc-outside.js'
 import { noIoBoundaryTests } from './rules/no-io-boundary-tests.js'
+import { noLongPositionalSignature } from './rules/no-long-positional-signature.js'
+import { noMutableOptionsField } from './rules/no-mutable-options-field.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-structure'
 
@@ -22,8 +25,11 @@ const recommendedRules = {
   [rule('ban-error-string')]: 'error',
   [rule('internal-export-jsdoc')]: 'error',
   [rule('no-domain-branching-density')]: 'error',
+  [rule('no-hand-curried-export')]: 'error',
   [rule('no-internal-jsdoc-outside')]: 'error',
   [rule('no-io-boundary-tests')]: 'error',
+  [rule('no-long-positional-signature')]: 'error',
+  [rule('no-mutable-options-field')]: 'error',
 } as const
 
 export default {
@@ -36,9 +42,12 @@ export default {
     'internal-export-jsdoc': internalExportJsdoc,
     'no-barrels': noBarrels,
     'no-domain-branching-density': noDomainBranchingDensity,
+    'no-hand-curried-export': noHandCurriedExport,
     'no-inline-destructured-type': noInlineDestructuredType,
     'no-internal-jsdoc-outside': noInternalJsdocOutside,
     'no-io-boundary-tests': noIoBoundaryTests,
+    'no-long-positional-signature': noLongPositionalSignature,
+    'no-mutable-options-field': noMutableOptionsField,
   },
   configs: {
     recommended: {

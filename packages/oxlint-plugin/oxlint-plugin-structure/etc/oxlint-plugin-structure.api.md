@@ -17,9 +17,12 @@ const _default: {
         'internal-export-jsdoc': Rule;
         'no-barrels': Rule;
         'no-domain-branching-density': Rule;
+        'no-hand-curried-export': Rule;
         'no-inline-destructured-type': Rule;
         'no-internal-jsdoc-outside': Rule;
         'no-io-boundary-tests': Rule;
+        'no-long-positional-signature': Rule;
+        'no-mutable-options-field': Rule;
     };
     configs: {
         recommended: {
