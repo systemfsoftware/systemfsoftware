@@ -1,6 +1,6 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { CheckerFailed } from '@systemfsoftware/stryker-js/Checker'
-import { Result } from 'effect'
+import { HashMap, Result } from 'effect'
 import * as Effect from 'effect/Effect'
 import {
   checkMutants,
@@ -10,7 +10,6 @@ import {
   DiagnosticWithoutFileError,
 } from './check-mutants.workflow.js'
 import { CheckMutantsCommand } from './Checker.schema.js'
-import type { TSFileNode } from './Compiler.js'
 import { TypeScriptCompiler } from './Compiler.js'
 import { errorToString } from './error-to-string.js'
 
@@ -28,10 +27,7 @@ export const checkCell = Cell.layer({
             }),
         ),
       )
-      const nodes: Record<string, TSFileNode> = {}
-      for (const [k, v] of nodesHm) {
-        nodes[k] = v
-      }
+      const nodes = HashMap.fromIterable(nodesHm)
       const diagnostics = yield* compiler.check([...command.mutants]).pipe(
         Effect.mapError(
           (cause) =>

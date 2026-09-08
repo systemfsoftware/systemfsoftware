@@ -1,6 +1,6 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
 import { FileName, Mutant, MutantId, MutatorName } from '@systemfsoftware/stryker-js/Mutant'
-import { Match, Schema } from 'effect'
+import { Equal, HashMap, HashSet, Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
@@ -14,23 +14,8 @@ import {
   RetestRequired,
 } from '../check-mutants.workflow.js'
 
-const CHECK_MUTANTS_FAMILY = Symbol.for('@systemfsoftware/stryker-js-typescript-checker/CheckMutants')
-
-const carriesFamilyBrand = (decision: object): boolean =>
-  Reflect.get(decision, CHECK_MUTANTS_FAMILY) === CHECK_MUTANTS_FAMILY
-
-const setsEqual = (left: ReadonlySet<string>, right: ReadonlySet<string>): boolean =>
-  left.size === right.size && [...left].every((value) => right.has(value))
-
-const isSubset = (inner: ReadonlySet<string>, outer: ReadonlySet<string>): boolean =>
-  [...inner].every((value) => outer.has(value))
-
-const isDisjoint = (left: ReadonlySet<string>, right: ReadonlySet<string>): boolean =>
-  [...left].every((value) => !right.has(value))
-
 const fileArb = fc.integer({ min: 0, max: 100000 }).map((n) => `src/mod-${n}.ts`)
 
-// decodeSync: test helper building a valid fixture — throwing IS the assertion (no-sync-schema-codecs test exception).
 const mutantInFile = (id: string, fileName: string): Mutant =>
   new Mutant({
     id: S.decodeSync(MutantId)(id),
@@ -55,7 +40,7 @@ const emptyDiagnosticsInputArb: fc.Arbitrary<CheckMutantsInput> = fc
       new CheckMutantsInput({
         mutants: ids.map((id) => mutantInFile(id, file)),
         diagnostics: [],
-        nodes: { [file]: nodeFor(file) },
+        nodes: HashMap.fromIterable([[file, nodeFor(file)]]),
       }),
   )
 
@@ -66,7 +51,7 @@ const ambiguousGroupInputArb: fc.Arbitrary<CheckMutantsInput> = fc
       new CheckMutantsInput({
         mutants: [mutantInFile('retest-a', file), mutantInFile('retest-b', file)],
         diagnostics: [{ fileName: file, text }],
-        nodes: { [file]: nodeFor(file) },
+        nodes: HashMap.fromIterable([[file, nodeFor(file)]]),
       }),
   )
 
@@ -82,20 +67,17 @@ describe('checkMutants', () => {
           S.is(DiagnosticInUnrelatedFileError)(result.failure)
         )
       }
-      if (!carriesFamilyBrand(result.success)) {
-        return false
-      }
-      const ids = new Set(input.mutants.map((mutant) => mutant.id))
-      const keys = new Set(Object.keys(result.success.results))
+      const ids = HashSet.fromIterable(input.mutants.map((mutant) => mutant.id))
+      const keys = HashSet.fromIterable(result.success.results.map((entry) => entry.id))
       return Match.value(result.success).pipe(
-        Match.tag('CheckFinished', () => setsEqual(keys, ids)),
+        Match.tag('CheckFinished', () => Equal.equals(keys, ids)),
         Match.tag('RetestRequired', (retry) => {
-          const retest = new Set(retry.needsRetest.map((mutant) => mutant.id))
+          const retest = HashSet.fromIterable(retry.needsRetest.map((mutant) => mutant.id))
           return (
             retry.needsRetest.length > 0 &&
-            isSubset(retest, ids) &&
-            isDisjoint(keys, retest) &&
-            setsEqual(new Set([...keys, ...retest]), ids)
+            HashSet.isSubset(retest, ids) &&
+            HashSet.isEmpty(HashSet.intersection(keys, retest)) &&
+            Equal.equals(HashSet.union(keys, retest), ids)
           )
         }),
         Match.exhaustive,
@@ -111,13 +93,12 @@ describe('checkMutants', () => {
     if (!S.is(CheckFinished)(result.success)) {
       return false
     }
-    if (!carriesFamilyBrand(result.success)) {
-      return false
-    }
-    const ids = new Set(input.mutants.map((mutant) => mutant.id))
+    const ids = HashSet.fromIterable(input.mutants.map((mutant) => mutant.id))
     return (
-      setsEqual(new Set(Object.keys(result.success.results)), ids) &&
-      input.mutants.every((mutant) => result.success.results[mutant.id]?.status === 'passed')
+      Equal.equals(HashSet.fromIterable(result.success.results.map((entry) => entry.id)), ids) &&
+      input.mutants.every(
+        (mutant) => result.success.results.find((entry) => entry.id === mutant.id)?.status.status === 'passed',
+      )
     )
   })
 
@@ -129,11 +110,13 @@ describe('checkMutants', () => {
     if (!S.is(RetestRequired)(result.success)) {
       return false
     }
-    if (!carriesFamilyBrand(result.success)) {
-      return false
-    }
-    const expected = new Set(input.mutants.map((mutant) => mutant.id))
-    const actual = new Set(result.success.needsRetest.map((mutant) => mutant.id))
-    return setsEqual(actual, expected) && isDisjoint(new Set(Object.keys(result.success.results)), actual)
+    const expected = HashSet.fromIterable(input.mutants.map((mutant) => mutant.id))
+    const actual = HashSet.fromIterable(result.success.needsRetest.map((mutant) => mutant.id))
+    return (
+      Equal.equals(actual, expected) &&
+      HashSet.isEmpty(
+        HashSet.intersection(HashSet.fromIterable(result.success.results.map((entry) => entry.id)), actual),
+      )
+    )
   })
 })

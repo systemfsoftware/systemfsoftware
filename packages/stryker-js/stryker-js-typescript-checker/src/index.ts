@@ -15,6 +15,7 @@ import * as Match from 'effect/Match'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
+import * as Ref from 'effect/Ref'
 import * as S from 'effect/Schema'
 import type { Diagnostic } from 'typescript/unstable/sync'
 
@@ -97,38 +98,43 @@ const CheckerLive = Layer.effect(
         const applyOnce = (group: readonly Mutant[]) =>
           Cell.run(checkOnce, new CheckMutantsCommand({ mutants: [...group] }))
         const first = yield* applyOnce(mutants)
-        let map = HashMap.empty<string, CheckResult>()
-        const mergeResults = (results: CheckMutantsDecision['results']) => {
-          for (const [id, value] of Object.entries(results)) {
-            if (value.status === 'passed') {
-              map = HashMap.set(map, id, { status: 'passed' })
-            } else {
-              map = HashMap.set(map, id, { status: 'compileError', reason: value.reason })
+        const resultsMap = yield* Ref.make(MutableHashMap.empty<string, CheckResult>())
+        const mergeResults = (results: CheckMutantsDecision['results']) =>
+          Effect.gen(function*() {
+            const map = yield* Ref.get(resultsMap)
+            for (const entry of results) {
+              yield* Match.value(entry.status).pipe(
+                Match.when({ status: 'passed' }, () => {
+                  MutableHashMap.set(map, entry.id, { status: 'passed' })
+                  return Effect.void
+                }),
+                Match.when({ status: 'compileError' }, (compileError) => {
+                  MutableHashMap.set(map, entry.id, { status: 'compileError', reason: compileError.reason })
+                  return Effect.void
+                }),
+                Match.exhaustive,
+              )
             }
-          }
-        }
-        mergeResults(first.results)
+          })
+        yield* mergeResults(first.results)
         yield* Match.value(first).pipe(
           Match.tag('CheckFinished', () => Effect.void),
           Match.tag('RetestRequired', (retest) =>
             Effect.gen(function*() {
               yield* applyOnce([])
-              const originals: Record<string, Mutant> = {}
-              for (const m of mutants) {
-                originals[m.id] = m
-              }
+              const originals = HashMap.fromIterable(mutants.map((m) => [m.id, m] as const))
               for (const pending of retest.needsRetest) {
-                const original = originals[pending.id]
-                if (original === undefined) {
+                const original = HashMap.get(originals, pending.id)
+                if (Option.isNone(original)) {
                   continue
                 }
-                const one = yield* applyOnce([original])
-                mergeResults(one.results)
+                const one = yield* applyOnce([original.value])
+                yield* mergeResults(one.results)
               }
             })),
           Match.exhaustive,
         )
-        return map
+        return HashMap.fromIterable(yield* Ref.get(resultsMap))
       })
 
     const group = (mutants: readonly Mutant[]) =>
