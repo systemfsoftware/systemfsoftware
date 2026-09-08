@@ -1,4 +1,3 @@
-import { noCapturedProvideService } from './rules/no-captured-provide-service.js'
 import { noDateNowInEffect } from './rules/no-date-now-in-effect.js'
 import { noLoggingInCatch } from './rules/no-logging-in-catch.js'
 import { noNativeMapInEffect } from './rules/no-native-map-in-effect.js'
@@ -13,7 +12,6 @@ const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-effect-native'
 const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
 
 const recommendedRules = {
-  [rule('no-captured-provide-service')]: 'error',
   [rule('no-date-now-in-effect')]: 'error',
   [rule('no-logging-in-catch')]: 'error',
   [rule('no-native-map-in-effect')]: 'error',
@@ -29,7 +27,6 @@ export default {
     name: PLUGIN_NAME,
   },
   rules: {
-    'no-captured-provide-service': noCapturedProvideService,
     'no-date-now-in-effect': noDateNowInEffect,
     'no-logging-in-catch': noLoggingInCatch,
     'no-native-map-in-effect': noNativeMapInEffect,

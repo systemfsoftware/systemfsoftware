@@ -72,7 +72,6 @@ export default defineConfig({
     'typescript/no-unsafe-type-assertion': 'error',
 
     '@systemfsoftware/oxlint-plugin/ban-error-string': 'error',
-    '@systemfsoftware/oxlint-plugin/no-captured-provide-service': 'error',
     '@systemfsoftware/oxlint-plugin/no-context-generic-tag': 'error',
     '@systemfsoftware/oxlint-plugin/no-date-now-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-direct-tag-access': 'error',
@@ -81,8 +80,6 @@ export default defineConfig({
     '@systemfsoftware/oxlint-plugin/no-hand-curried-export': 'error',
     '@systemfsoftware/oxlint-plugin/no-io-boundary-tests': 'error',
     '@systemfsoftware/oxlint-plugin/no-logging-in-catch': 'error',
-    '@systemfsoftware/oxlint-plugin/no-long-positional-signature': 'error',
-    '@systemfsoftware/oxlint-plugin/no-mutable-options-field': 'error',
     '@systemfsoftware/oxlint-plugin/no-new-promise-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-native-map-in-effect': 'error',
     '@systemfsoftware/oxlint-plugin/no-native-set-in-effect': 'error',

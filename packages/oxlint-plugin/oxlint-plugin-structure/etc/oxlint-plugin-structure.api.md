@@ -21,8 +21,6 @@ const _default: {
         'no-inline-destructured-type': Rule;
         'no-internal-jsdoc-outside': Rule;
         'no-io-boundary-tests': Rule;
-        'no-long-positional-signature': Rule;
-        'no-mutable-options-field': Rule;
     };
     configs: {
         recommended: {

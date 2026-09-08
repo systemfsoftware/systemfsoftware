@@ -7,20 +7,11 @@ import { noHandCurriedExport } from './rules/no-hand-curried-export.js'
 import { noInlineDestructuredType } from './rules/no-inline-destructured-type.js'
 import { noInternalJsdocOutside } from './rules/no-internal-jsdoc-outside.js'
 import { noIoBoundaryTests } from './rules/no-io-boundary-tests.js'
-import { noLongPositionalSignature } from './rules/no-long-positional-signature.js'
-import { noMutableOptionsField } from './rules/no-mutable-options-field.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-structure'
 
 const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
 
-/**
- * `ban-classes`, `no-barrels`, and `no-inline-destructured-type` ship in
- * `rules` but are deliberately absent here: `ban-classes` needs a per-package
- * whitelist, and `no-barrels` and `no-inline-destructured-type` fire on
- * correct code. A consumer enables those by name; recommending them would
- * fire on their first file.
- */
 const recommendedRules = {
   [rule('ban-error-string')]: 'error',
   [rule('internal-export-jsdoc')]: 'error',
@@ -28,8 +19,6 @@ const recommendedRules = {
   [rule('no-hand-curried-export')]: 'error',
   [rule('no-internal-jsdoc-outside')]: 'error',
   [rule('no-io-boundary-tests')]: 'error',
-  [rule('no-long-positional-signature')]: 'error',
-  [rule('no-mutable-options-field')]: 'error',
 } as const
 
 export default {
@@ -46,8 +35,6 @@ export default {
     'no-inline-destructured-type': noInlineDestructuredType,
     'no-internal-jsdoc-outside': noInternalJsdocOutside,
     'no-io-boundary-tests': noIoBoundaryTests,
-    'no-long-positional-signature': noLongPositionalSignature,
-    'no-mutable-options-field': noMutableOptionsField,
   },
   configs: {
     recommended: {

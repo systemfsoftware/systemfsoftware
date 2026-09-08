@@ -40,8 +40,8 @@ export const noZeroArmSchema = defineRule({
           }
           const first = node.arguments[0]
           if (first === undefined) return
-          if (first.type !== 'SpreadElement' && first.type === 'ArrayExpression') {
-            if (first.elements.length === 0) report(node, 'a union with no arms')
+          if (first.type === 'ArrayExpression' && first.elements.length === 0) {
+            report(node, 'a union with no arms')
           }
           return
         }

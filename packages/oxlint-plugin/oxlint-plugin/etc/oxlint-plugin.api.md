@@ -12,7 +12,6 @@ const _default: {
         name: string;
     };
     rules: {
-        'no-captured-provide-service': Rule;
         'no-date-now-in-effect': Rule;
         'no-logging-in-catch': Rule;
         'no-native-map-in-effect': Rule;
@@ -30,8 +29,6 @@ const _default: {
         'no-inline-destructured-type': Rule;
         'no-internal-jsdoc-outside': Rule;
         'no-io-boundary-tests': Rule;
-        'no-long-positional-signature': Rule;
-        'no-mutable-options-field': Rule;
         'no-bodyless-status-assertion': Rule;
         'no-context-generic-tag': Rule;
         'no-direct-tag-access': Rule;

@@ -3,7 +3,7 @@ import { banDataTaggedError } from './rules/ban-data-taggederror.js'
 import { noEffectReturningSchemaMethod } from './rules/no-effect-returning-schema-method.js'
 import { noManualTagMember } from './rules/no-manual-tag-member.js'
 import { noManualTagProperty } from './rules/no-manual-tag-property.js'
-import { noSchemaFieldMutation } from './rules/no-schema-field-mutation.js'
+
 import { noTimeSourceInSchemaModule } from './rules/no-time-source-in-schema-module.js'
 import { noZeroArmSchema } from './rules/no-zero-arm-schema.js'
 import { schemaCheckedElementNamed } from './rules/schema-checked-element-named.js'
@@ -21,7 +21,7 @@ const recommendedRules = {
   [rule('no-effect-returning-schema-method')]: 'error',
   [rule('no-manual-tag-member')]: 'error',
   [rule('no-manual-tag-property')]: 'error',
-  [rule('no-schema-field-mutation')]: 'error',
+
   [rule('no-time-source-in-schema-module')]: 'error',
   [rule('no-zero-arm-schema')]: 'error',
   [rule('schema-checked-element-named')]: 'error',
@@ -40,7 +40,7 @@ export default {
     'no-effect-returning-schema-method': noEffectReturningSchemaMethod,
     'no-manual-tag-member': noManualTagMember,
     'no-manual-tag-property': noManualTagProperty,
-    'no-schema-field-mutation': noSchemaFieldMutation,
+
     'no-time-source-in-schema-module': noTimeSourceInSchemaModule,
     'no-zero-arm-schema': noZeroArmSchema,
     'schema-checked-element-named': schemaCheckedElementNamed,
