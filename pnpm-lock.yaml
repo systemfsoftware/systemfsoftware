@@ -2925,6 +2925,9 @@ importers:
       '@systemfsoftware/stryker-js':
         specifier: workspace:^
         version: link:../stryker-js
+      mutation-testing-report-schema:
+        specifier: catalog:stryker
+        version: 3.7.3
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'

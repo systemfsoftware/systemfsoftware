@@ -42,7 +42,8 @@
     "api:update": "api-extractor run --local"
   },
   "dependencies": {
-    "@systemfsoftware/stryker-js": "workspace:^"
+    "@systemfsoftware/stryker-js": "workspace:^",
+    "mutation-testing-report-schema": "catalog:stryker"
   },
   "peerDependencies": {
     "effect": "catalog:peers"

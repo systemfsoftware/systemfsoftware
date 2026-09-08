@@ -1,4 +1,4 @@
-import { schema } from '@systemfsoftware/stryker-js/Mutant'
+import * as schema from 'mutation-testing-report-schema/api'
 
 export const defaultRequireTestContributionSuffixes = [
   '.workflow.property.test.ts',

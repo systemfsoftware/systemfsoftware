@@ -1,5 +1,4 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { schema } from '@systemfsoftware/stryker-js/Mutant'
 import { type PartialStrykerOptions, StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
@@ -8,6 +7,7 @@ import * as Exit from 'effect/Exit'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Schema from 'effect/Schema'
+import * as schema from 'mutation-testing-report-schema/api'
 import { expect } from 'vitest'
 
 import { Evaluator, type EvaluatorFailed, type ExitClass } from '@systemfsoftware/stryker-js/Evaluator'

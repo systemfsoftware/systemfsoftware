@@ -6,7 +6,7 @@ import * as Layer from 'effect/Layer'
 
 import { judgeTestContribution } from './test-contribution.js'
 
-import type { schema } from '@systemfsoftware/stryker-js/Mutant'
+import type * as schema from 'mutation-testing-report-schema/api'
 
 export const makeTestContributionEvaluatorService = (options: {
   readonly disableBail: boolean
