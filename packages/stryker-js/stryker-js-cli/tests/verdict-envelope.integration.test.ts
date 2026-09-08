@@ -26,12 +26,7 @@ import { Effect } from 'effect'
 import * as Path from 'effect/Path'
 import type * as schema from 'mutation-testing-report-schema/api'
 
-import {
-  buildVerdictEnvelope,
-  generateRunId,
-  VERDICT_ENVELOPE_SCHEMA_VERSION,
-  type VerdictEnvelope,
-} from '@systemfsoftware/stryker-js-engine'
+import { VerdictEnvelope } from '@systemfsoftware/stryker-js-engine'
 
 const Feature = makeFeature({ it, layer })
 
@@ -86,16 +81,6 @@ const LOCATION_C = { start: { line: 3, column: 0 }, end: { line: 3, column: 6 } 
 
 Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
   scenario(
-    'Two run-id generations produce different ids',
-    Gherkin.Do.pipe(
-      When('two run ids are generated')('ids', () => Effect.sync(() => [generateRunId(), generateRunId()])),
-      Then('the ids differ')((s: { ids: readonly string[] }) => {
-        checkExpect(s.ids[0]).not.toBe(s.ids[1])
-      }),
-    ),
-  )
-
-  scenario(
     'A report mixing statuses keeps every named field',
     Gherkin.Do.pipe(
       Given('a report with survivors, killed and no-coverage mutants')('report', () =>
@@ -110,12 +95,12 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
       When('the verdict envelope is built')(
         'envelope',
         (s: { report: MutationReport }) =>
-          Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, pathService)),
+          Effect.sync(() => VerdictEnvelope.fromReport(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, pathService)),
       ),
       Then('every named field is present and the actionable mutants are listed')((s: {
         envelope: VerdictEnvelope
       }) => {
-        checkExpect(s.envelope.schemaVersion).toBe(VERDICT_ENVELOPE_SCHEMA_VERSION)
+        checkExpect(s.envelope.schemaVersion).toBe(VerdictEnvelope.SCHEMA_VERSION)
         checkExpect(s.envelope.schemaVersion).toBe('1.1')
         checkExpect(s.envelope.runId).toBe(RUN_ID)
         checkExpect(s.envelope.mode).toBe('machine')
@@ -153,7 +138,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
       When('the verdict envelope is built')(
         'envelope',
         (s: { report: MutationReport }) =>
-          Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'agent', RUN_ID, BASE_PATH, pathService)),
+          Effect.sync(() => VerdictEnvelope.fromReport(s.report, 'machine', 'agent', RUN_ID, BASE_PATH, pathService)),
       ),
       Then('each mutant entry carries file, location, mutator, replacement and status')((s: {
         envelope: VerdictEnvelope
@@ -202,7 +187,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
       When('the verdict envelope is built')(
         'envelope',
         (s: { report: MutationReport }) =>
-          Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, pathService)),
+          Effect.sync(() => VerdictEnvelope.fromReport(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, pathService)),
       ),
       Then('only the survivor is listed and every mutant is counted')((s: {
         envelope: VerdictEnvelope
@@ -249,7 +234,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
       When('the verdict envelope is built')(
         'envelope',
         (s: { report: MutationReport }) =>
-          Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, pathService)),
+          Effect.sync(() => VerdictEnvelope.fromReport(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, pathService)),
       ),
       Then('the mutants array is present and empty')((s: { envelope: VerdictEnvelope }) => {
         checkExpect(s.envelope.mutants).toStrictEqual([])
@@ -270,7 +255,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
       When('the verdict envelope is built')(
         'envelope',
         (s: { report: MutationReport }) =>
-          Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'flag', RUN_ID, BASE_PATH, pathService)),
+          Effect.sync(() => VerdictEnvelope.fromReport(s.report, 'machine', 'flag', RUN_ID, BASE_PATH, pathService)),
       ),
       Then('the configured file name rides along')((s: { envelope: VerdictEnvelope }) => {
         checkExpect(s.envelope.reportFile).toBe('custom/report.json')
@@ -285,7 +270,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
       When('the verdict envelope is built')(
         'envelope',
         (s: { report: MutationReport }) =>
-          Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, pathService)),
+          Effect.sync(() => VerdictEnvelope.fromReport(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, pathService)),
       ),
       Then('there is no score, no report file and no mutants')((s: { envelope: VerdictEnvelope }) => {
         checkExpect(s.envelope.score).toBe(null)
@@ -307,7 +292,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
       When('the verdict envelope is built')(
         'envelope',
         (s: { report: MutationReport }) =>
-          Effect.sync(() => buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, pathService)),
+          Effect.sync(() => VerdictEnvelope.fromReport(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, pathService)),
       ),
       Then('there is nothing to score')((s: { envelope: VerdictEnvelope }) => {
         checkExpect(s.envelope.score).toBe(null)
@@ -331,7 +316,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
         'line',
         (s: { report: MutationReport }) =>
           Effect.sync(() =>
-            JSON.stringify(buildVerdictEnvelope(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, pathService))
+            JSON.stringify(VerdictEnvelope.fromReport(s.report, 'machine', 'tty', RUN_ID, BASE_PATH, pathService))
           ),
       ),
       Then('the line stays under the 64 KB scanner limit')((s: { line: string }) => {

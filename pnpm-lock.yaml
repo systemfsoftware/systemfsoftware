@@ -2474,6 +2474,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
+      mutation-testing-report-schema:
+        specifier: catalog:stryker
+        version: 3.7.3
     devDependencies:
       '@systemfsoftware/all':
         specifier: workspace:^
@@ -2517,9 +2520,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.9(vitest@4.1.10)
-      mutation-testing-report-schema:
-        specifier: catalog:stryker
-        version: 3.7.3
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)

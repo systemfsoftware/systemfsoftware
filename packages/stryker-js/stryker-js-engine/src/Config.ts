@@ -2,8 +2,10 @@ import { Wire } from '@systemfsoftware/effect-cell-types'
 import { Module } from '@systemfsoftware/stryker-js/Module'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
+import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
+import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Path from 'effect/Path'
 import * as Predicate from 'effect/Predicate'
@@ -1173,3 +1175,23 @@ export function readConfig(
     return decoded.success
   })
 }
+
+export interface ConfigLoaderService {
+  readonly readConfig: (
+    cliOptions: PartialStrykerOptions,
+    basePath: string,
+  ) => Effect.Effect<
+    StrykerOptions,
+    ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError,
+    FileSystem.FileSystem | Module | Path.Path
+  >
+  readonly defaultOptions: Effect.Effect<Immutable<StrykerOptions>, never, never>
+}
+
+export class ConfigLoader extends Context.Service<ConfigLoader, ConfigLoaderService>()(
+  '~@systemfsoftware/stryker-js-engine/ConfigLoader',
+) {}
+
+export const configLoaderLayer = Layer.effect(ConfigLoader)(
+  Effect.succeed({ readConfig, defaultOptions } satisfies ConfigLoaderService),
+)

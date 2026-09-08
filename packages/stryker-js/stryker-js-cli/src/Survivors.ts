@@ -12,15 +12,12 @@ import {
   type ConfigFileInvalidError,
   type ConfigFileNotFoundError,
   ConfigFileUnreadableError,
-  readConfig,
+  ConfigLoader,
   RunEnvironment,
-  strykerVersion,
-  toRelativeNormalizedFileName,
 } from '@systemfsoftware/stryker-js-engine'
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import { Module } from '@systemfsoftware/stryker-js/Module'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import { schema } from '@systemfsoftware/stryker-js/Mutant'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
@@ -28,6 +25,7 @@ import * as Match from 'effect/Match'
 import * as Path from 'effect/Path'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
+import * as schema from 'mutation-testing-report-schema/api'
 import { PriorReportDocument as PriorReportDocumentSchema } from './admit-survivors-run.workflow.js'
 export type PriorReportDocument = S.Schema.Type<typeof PriorReportDocumentSchema>
 export type PriorReportMutant = PriorReportDocument['files'][string]['mutants'][number]
@@ -38,6 +36,7 @@ import {
   type SurvivorsAdmission,
   SurvivorsRejection,
 } from './admit-survivors-run.workflow.js'
+import { frameworkVersion } from './FrameworkVersion.js'
 
 export interface SurvivorsFrame {
   readonly admission: SurvivorsAdmission
@@ -143,6 +142,16 @@ export type ResolveAbsolutePath = (file: string) => string
  * which carries exactly these fields, is sufficient input to reconstruct a
  * survivor with no access to the report file.
  */
+const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
+
+const toRelativeNormalizedFileName = (fileName: string | undefined, basePath: string): string => {
+  const raw = fileName ?? ''
+  if (raw.startsWith(basePath)) {
+    return normalizeFileName(raw.slice(basePath.length).replace(/^\/+/, ''))
+  }
+  return normalizeFileName(raw)
+}
+
 export function survivorIdentifyingKey(
   input: {
     readonly file: string
@@ -266,7 +275,7 @@ export const survivorsAdmission = Cell.layer({
         AdmitSurvivorsRunCommand.make({
           priorReport: undefined,
           currentConfig: resolvedOptions,
-          frameworkVersion: strykerVersion,
+          frameworkVersion,
           sourceContentHashes,
           priorSourceHashes: {},
           priorSurvivors: [],
@@ -283,7 +292,7 @@ export const survivorsAdmission = Cell.layer({
               frameworkVersion: document.framework?.version,
             }),
             currentConfig: resolvedOptions,
-            frameworkVersion: strykerVersion,
+            frameworkVersion,
             sourceContentHashes,
             priorSourceHashes: priorSourceHashes(document, hashContent),
             priorSurvivors,
@@ -310,9 +319,12 @@ function resolveSurvivorsRunOptions(
 ): Effect.Effect<
   StrykerOptions,
   ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError,
-  FileSystem.FileSystem | Module | Path.Path
+  ConfigLoader | FileSystem.FileSystem | Module | Path.Path
 > {
-  return readConfig(cliOptions, basePath)
+  return Effect.gen(function*() {
+    const loader = yield* ConfigLoader
+    return yield* loader.readConfig(cliOptions, basePath)
+  })
 }
 
 function priorReportPathOf(resolved: StrykerOptions): string {

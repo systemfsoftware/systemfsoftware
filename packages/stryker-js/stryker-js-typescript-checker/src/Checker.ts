@@ -1,6 +1,5 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { CheckerFailed } from '@systemfsoftware/stryker-js/Checker'
-import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
 import { Result } from 'effect'
 import * as Effect from 'effect/Effect'
 import {
@@ -13,6 +12,7 @@ import {
 import { CheckMutantsCommand } from './Checker.schema.js'
 import type { TSFileNode } from './Compiler.js'
 import { TypeScriptCompiler } from './Compiler.js'
+import { errorToString } from './error-to-string.js'
 
 export const checkCell = Cell.layer({
   read: (command: CheckMutantsCommand) =>

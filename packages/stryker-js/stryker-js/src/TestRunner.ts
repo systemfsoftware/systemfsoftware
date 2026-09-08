@@ -1,6 +1,5 @@
 import * as Context from 'effect/Context'
 import type * as Effect from 'effect/Effect'
-import * as Match from 'effect/Match'
 import type * as S from 'effect/Schema'
 
 import type { PositionSchema } from './Mutant.schema.js'
@@ -71,46 +70,6 @@ export type TimeoutMutantRunResult = Extract<MutantRunResult, { readonly status:
 export type ErrorMutantRunResult = Extract<MutantRunResult, { readonly status: 'error' }>
 export type Position = S.Schema.Type<typeof PositionSchema>
 
-export function toMutantRunResult(
-  dryRunResult: DryRunResult,
-  reportAllKillers: boolean,
-): MutantRunResult {
-  switch (dryRunResult.status) {
-    case 'timeout': {
-      if (dryRunResult.reason === undefined) {
-        return { status: 'timeout' }
-      }
-      return { reason: dryRunResult.reason, status: 'timeout' }
-    }
-    case 'error':
-      return { errorMessage: dryRunResult.errorMessage, status: 'error' }
-    case 'complete': {
-      const failed = dryRunResult.tests.filter(
-        (t): t is Extract<TestResult, { readonly status: 'failed' }> => t.status === 'failed',
-      )
-      const nrOfTests = dryRunResult.tests.filter((t) => t.status !== 'skipped').length
-      if (failed.length === 0) {
-        return { nrOfTests, status: 'survived' }
-      }
-      const firstFailed = failed.at(0)
-      if (firstFailed === undefined) {
-        return { nrOfTests, status: 'survived' }
-      }
-      const killedBy = Match.value(reportAllKillers).pipe(
-        Match.when(true, () => failed.map((t) => t.id)),
-        Match.when(false, () => [firstFailed.id]),
-        Match.exhaustive,
-      )
-      return {
-        failureMessage: firstFailed.failureMessage,
-        killedBy,
-        nrOfTests,
-        status: 'killed',
-      }
-    }
-  }
-}
-
 export interface TestRunnerService {
   readonly capabilities: Effect.Effect<TestRunnerCapabilities, TestRunnerFailed>
   readonly dryRun: (options: DryRunOptions) => Effect.Effect<DryRunResult, TestRunnerFailed>
@@ -120,7 +79,3 @@ export interface TestRunnerService {
 export class TestRunner
   extends Context.Service<TestRunner, TestRunnerService>()('~@systemfsoftware/stryker-js/TestRunner')
 {}
-
-export function testFilesProvided(options: { readonly testFiles?: readonly string[] }): boolean {
-  return options.testFiles !== undefined && options.testFiles.length > 0
-}

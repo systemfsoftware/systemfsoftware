@@ -7,7 +7,6 @@ import type {
   MutantTestCoverage,
   Position,
 } from '@systemfsoftware/stryker-js/Mutant'
-import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
 import type { AnyPluginContribution, PluginKind } from '@systemfsoftware/stryker-js/Plugin'
 import type {
   DryRunCompletedEvent,
@@ -19,7 +18,7 @@ import type {
   RunTiming,
 } from '@systemfsoftware/stryker-js/Reporter'
 import { broadcastReporter, ReporterFailed } from '@systemfsoftware/stryker-js/Reporter'
-import { RunEvents, VerdictReached } from '@systemfsoftware/stryker-js/Run'
+import { RunEvents, RunIdentity, VerdictReached } from '@systemfsoftware/stryker-js/Run'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import type { MutantRunResult, TestResult } from '@systemfsoftware/stryker-js/TestRunner'
 import type { TestRunnerCapabilities } from '@systemfsoftware/stryker-js/TestRunner'
@@ -44,6 +43,7 @@ import type { OpenEndLocation } from 'mutation-testing-report-schema/api'
 
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import { verdictExitClass } from '@systemfsoftware/stryker-js/ExitClass'
+import { errorToString } from './error-format.js'
 import type { TestCoverage } from './Mutants.js'
 import type { ResolvedMode } from './output-mode.js'
 import type { Project } from './Project.js'
@@ -51,8 +51,7 @@ import { FILE_CONCURRENCY, readOriginal } from './Project.js'
 import { ansi } from './Reporter.ansi.js'
 import { ClearTextReportCommand } from './Reporter.schema.js'
 import type { RunOutcome } from './Run.js'
-import { strykerVersion } from './stryker-package.js'
-import { buildVerdictEnvelope, isActionableStatus } from './verdict-envelope.js'
+import { isActionableStatus, VerdictEnvelope } from './verdict-envelope.js'
 const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
 type ProvidedStrykerOptions = StrykerOptions
 const writeOutputFile = (
@@ -1399,15 +1398,6 @@ export function selectReporters(
   return [...permitted, STREAM_REPORTER]
 }
 
-const STRYKER_FRAMEWORK: Readonly<Pick<schema.FrameworkInformation, 'branding' | 'name' | 'version'>> = Object.freeze({
-  branding: {
-    homepageUrl: 'https://stryker-mutator.io',
-    imageUrl: 'https://stryker-mutator.io/assets/images/stryker-80x80.png',
-  },
-  name: 'StrykerJS',
-  version: strykerVersion,
-})
-
 export interface MutationReportingService {
   readonly reportCheckFailure: (
     mutant: MutantTestCoverage,
@@ -1419,7 +1409,7 @@ export interface MutationReportingService {
   ) => Effect.Effect<MutantResult, unknown>
   readonly reportAll: (
     results: readonly MutantResult[],
-  ) => Effect.Effect<RunOutcome, unknown, FileSystem.FileSystem | Path.Path | RunEvents>
+  ) => Effect.Effect<RunOutcome, unknown, FileSystem.FileSystem | Path.Path | RunEvents | RunIdentity>
   readonly checkpoint: (
     results: readonly MutantResult[],
   ) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path>
@@ -1650,10 +1640,11 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
 
   const mutationTestReport = (
     results: readonly MutantResult[],
-  ): Effect.Effect<schema.MutationTestResult, unknown, FileSystem.FileSystem | Path.Path> =>
+  ): Effect.Effect<schema.MutationTestResult, unknown, FileSystem.FileSystem | Path.Path | RunIdentity> =>
     Effect.gen(function*() {
       const files = yield* toFileResults(results, remappers.remapTestIds)
       const testFiles = yield* toTestFiles(remappers.remapTestId)
+      const identity = yield* RunIdentity
 
       return {
         files,
@@ -1663,7 +1654,12 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
         projectRoot: input.basePath,
         config: input.options,
         framework: {
-          ...STRYKER_FRAMEWORK,
+          branding: {
+            homepageUrl: 'https://stryker-mutator.io',
+            imageUrl: 'https://stryker-mutator.io/assets/images/stryker-80x80.png',
+          },
+          name: 'StrykerJS',
+          version: identity.frameworkVersion,
           dependencies: yield* discoverDependencies(),
         },
       }
@@ -1769,7 +1765,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
     pathService: Path.Path,
   ): Effect.Effect<void, never, RunEvents> =>
     Effect.gen(function*() {
-      const envelope = buildVerdictEnvelope(
+      const envelope = VerdictEnvelope.fromReport(
         report,
         input.resolvedMode.mode,
         input.resolvedMode.signal,

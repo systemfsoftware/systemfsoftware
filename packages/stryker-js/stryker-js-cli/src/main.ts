@@ -11,6 +11,7 @@ import cliPkgJson from '../package.json' with { type: 'json' }
 
 import { observeTerminatingSignal } from './Cli.js'
 import { strykerCliEffect } from './Cli.js'
+import { resolveExitCode } from './Envelope.js'
 import { OutputModeProbe, OutputModeProbeLive } from './Output.js'
 import { RunEventStreamPort } from './Output.js'
 import { RunEventStreamFileLive } from './StreamFile.js'
@@ -78,7 +79,7 @@ NodeRuntime.runMain(program, {
     if (signal === null) {
       onExit(EXIT_CODE_RUN_NEVER_REACHED_ITS_FINALIZER)
     } else {
-      onExit(128 + signal)
+      onExit(resolveExitCode([], signal))
     }
   },
 })

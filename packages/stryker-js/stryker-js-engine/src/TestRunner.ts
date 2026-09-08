@@ -10,7 +10,8 @@
 import * as Layer from 'effect/Layer'
 
 import type { Policy } from '@systemfsoftware/effect-cell-types'
-import { errorToString, type FileDescriptions, INSTRUMENTER_CONSTANTS } from '@systemfsoftware/stryker-js/Mutant'
+import { INSTRUMENTER_CONSTANTS } from '@systemfsoftware/stryker-js/Instrumenter'
+import type { FileDescriptions } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { TestId } from '@systemfsoftware/stryker-js/TestRunner'
 import {
@@ -19,10 +20,9 @@ import {
   type DryRunResult,
   type MutantRunOptions,
   type MutantRunResult,
-  testFilesProvided,
+  type TestResult,
   type TestRunnerCapabilities,
   TestRunnerFailed,
-  toMutantRunResult,
 } from '@systemfsoftware/stryker-js/TestRunner'
 import { Schema as S } from 'effect'
 import * as Cause from 'effect/Cause'
@@ -39,6 +39,7 @@ import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawne
 import * as RpcClient from 'effect/unstable/rpc/RpcClient'
 import type { RpcClientError } from 'effect/unstable/rpc/RpcClientError'
 import type { SocketError } from 'effect/unstable/socket/Socket'
+import { errorToString } from './error-format.js'
 import { encodeWorkerOptions } from './worker-options.js'
 
 import { CommandRunnerUnsupportedOption, type EnvironmentRequest } from './TestRunner.schema.js'
@@ -443,9 +444,9 @@ export interface CommandTestRunnerConfig {
  * fault (exit 3).
  */
 export const commandRunnerRejects = (
-  options: StrykerOptions,
+  options: { readonly testFiles?: readonly string[] },
 ): CommandRunnerUnsupportedOption | undefined => {
-  if (testFilesProvided(options)) {
+  if (options.testFiles !== undefined && options.testFiles.length > 0) {
     return new CommandRunnerUnsupportedOption({ option: 'testFiles' })
   }
   return undefined
@@ -530,6 +531,46 @@ const runCommand = (
 export const commandRunnerDryRun = (
   config: CommandTestRunnerConfig,
 ): Effect.Effect<DryRunResult, never, ChildProcessSpawner.ChildProcessSpawner> => runCommand(config, undefined)
+
+const toMutantRunResult = (
+  dryRunResult: DryRunResult,
+  reportAllKillers: boolean,
+): MutantRunResult => {
+  switch (dryRunResult.status) {
+    case 'timeout': {
+      if (dryRunResult.reason === undefined) {
+        return { status: 'timeout' }
+      }
+      return { reason: dryRunResult.reason, status: 'timeout' }
+    }
+    case 'error':
+      return { errorMessage: dryRunResult.errorMessage, status: 'error' }
+    case 'complete': {
+      const failed = dryRunResult.tests.filter(
+        (t): t is Extract<TestResult, { readonly status: 'failed' }> => t.status === 'failed',
+      )
+      const nrOfTests = dryRunResult.tests.filter((t) => t.status !== 'skipped').length
+      if (failed.length === 0) {
+        return { nrOfTests, status: 'survived' }
+      }
+      const firstFailed = failed.at(0)
+      if (firstFailed === undefined) {
+        return { nrOfTests, status: 'survived' }
+      }
+      const killedBy = Match.value(reportAllKillers).pipe(
+        Match.when(true, () => failed.map((t) => t.id)),
+        Match.when(false, () => [firstFailed.id]),
+        Match.exhaustive,
+      )
+      return {
+        failureMessage: firstFailed.failureMessage,
+        killedBy,
+        nrOfTests,
+        status: 'killed',
+      }
+    }
+  }
+}
 
 /** Run the tests with one mutant active. */
 export const commandRunnerMutantRun = (

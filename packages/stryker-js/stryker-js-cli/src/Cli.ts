@@ -4,17 +4,17 @@ import * as NodePath from '@effect/platform-node-shared/NodePath'
 import * as NodeStdio from '@effect/platform-node/NodeStdio'
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import {
+  configLoaderLayer,
   idGeneratorLayer,
   mutationRun,
   type ResolvedMode,
   RunEnvironment,
   type RunEnvironmentShape,
-  strykerVersion,
 } from '@systemfsoftware/stryker-js-engine'
 import { instrumenterLayer } from '@systemfsoftware/stryker-js-instrumenter'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import { ManifestRendered, RunEvents } from '@systemfsoftware/stryker-js/Run'
-import { RENDERED_OPTION_DEFAULTS } from '@systemfsoftware/stryker-js/Schema'
+import { ManifestRendered, RunEvents, RunIdentity } from '@systemfsoftware/stryker-js/Run'
+import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import type { LogLevel, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Console from 'effect/Console'
 import * as Effect from 'effect/Effect'
@@ -54,6 +54,7 @@ import {
   runOutcomeCode,
   unrecognizedArgumentOf,
 } from './Envelope.js'
+import { frameworkVersion } from './FrameworkVersion.js'
 import { emitMachineModeOutput, isColorEnabled } from './Output.js'
 import type { OutputModeProbe, RunEventStream, RunEventStreamPort } from './Output.js'
 import { emitNullScoreVerdict } from './Output.js'
@@ -644,6 +645,9 @@ function setLogLevel(
     target[key] = unwrapped
   }
 }
+const RENDERED_OPTION_DEFAULTS: StrykerOptions = Effect.runSync(
+  S.decodeEffect(StrykerOptionsSchema)({}).pipe(Effect.orDie),
+)
 
 const runOptions = {
   ignorePatterns: Flag.string('ignorePatterns')
@@ -1004,7 +1008,7 @@ function makeStrykerCommand(requestRef: Ref.Ref<Option.Option<CliRequest>>) {
     .make('stryker', rootConfig, (config) =>
       Effect.gen(function*() {
         if (config.llms === true) {
-          const manifest = yield* emitLLMSManifest(strykerCommand, strykerVersion)
+          const manifest = yield* emitLLMSManifest(strykerCommand, frameworkVersion)
           const document: ManifestRendered = {
             _tag: 'manifest',
             schemaVersion: STREAM_SCHEMA_VERSION,
@@ -1049,7 +1053,7 @@ const cliLayer = Layer.mergeAll(
       GlobalFlag.Help,
       GlobalFlag.action({
         flag: Flag.boolean('version').pipe(Flag.withAlias('v'), Flag.withDescription('Show version information')),
-        run: () => Console.log(strykerVersion),
+        run: () => Console.log(frameworkVersion),
       }),
       GlobalFlag.Wizard,
       GlobalFlag.Completions,
@@ -1085,7 +1089,7 @@ export function strykerCliEffect(
       }
       return Layer.empty
     })()
-    const cliEffect = Command.runWith(command, { version: strykerVersion })(argv).pipe(
+    const cliEffect = Command.runWith(command, { version: frameworkVersion })(argv).pipe(
       Effect.provide(Layer.mergeAll(consoleLayer, cliLayer)),
     )
     const result = yield* Effect.result(
@@ -1119,7 +1123,13 @@ const runEdgeOf = (input: RunStrykerCliInput, stream: RunEventStream) => {
   const hostOptions = hostOptionsOf(input.mode, stream)
   const appLayer = Layer.mergeAll(
     Layer.succeed(RunEnvironment, hostOptions),
+    Layer.succeed(RunIdentity, {
+      runId: hostOptions.runId,
+      basePath: hostOptions.basePath,
+      frameworkVersion,
+    }),
     Layer.succeed(RunEvents, stream.queue),
+    configLoaderLayer,
     idGeneratorLayer,
     instrumenterLayer,
   ).pipe(Layer.provideMerge(nodePlatformLayer))

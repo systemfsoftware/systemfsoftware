@@ -3,7 +3,6 @@ import rawSchemaJson from '../schema/typescript-checker-options.json' with { typ
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { Checker, CheckerFailed } from '@systemfsoftware/stryker-js/Checker'
 import type { CheckResult } from '@systemfsoftware/stryker-js/Checker'
-import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
 import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import { declarePlugin, PluginBuildError, RunConfiguration } from '@systemfsoftware/stryker-js/Plugin'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
@@ -24,6 +23,7 @@ import { checkCell } from './Checker.js'
 import { CheckMutantsCommand, TypeScriptCheckerSection } from './Checker.schema.js'
 import type { TSFileNode } from './Compiler.js'
 import { createGroups, makeHybridFileSystem, makeTypescriptCompiler, TypeScriptCompiler } from './Compiler.js'
+import { errorToString } from './error-to-string.js'
 
 const getPrioritize = (options: StrykerOptions): boolean => {
   const section = Result.match(S.decodeUnknownResult(TypeScriptCheckerSection)(options['typescriptChecker'] ?? {}), {

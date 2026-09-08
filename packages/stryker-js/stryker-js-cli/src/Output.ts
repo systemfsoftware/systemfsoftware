@@ -1,9 +1,7 @@
-/// <reference types="vitest/import-meta" />
-
+import { randomBytes } from '@noble/hashes/utils'
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { buildVerdictEnvelope, defaultOptions, generateRunId, strykerVersion } from '@systemfsoftware/stryker-js-engine'
+import { ConfigLoader, configLoaderLayer, VerdictEnvelope } from '@systemfsoftware/stryker-js-engine'
 import type { ResolvedMode } from '@systemfsoftware/stryker-js-engine'
-import { schema } from '@systemfsoftware/stryker-js/Mutant'
 import {
   Heartbeat,
   HelpRendered,
@@ -25,12 +23,14 @@ import * as Result from 'effect/Result'
 import * as Stdio from 'effect/Stdio'
 import * as Stream from 'effect/Stream'
 import * as CliError from 'effect/unstable/cli/CliError'
+import * as schema from 'mutation-testing-report-schema/api'
 import {
   type FailedRunOutcome,
   type RunOutcomeDecision,
   type RunOutcomeError,
 } from './classify-run-outcome.workflow.js'
 import { readCapturedConsole, shapeEnvelope } from './Envelope.js'
+import { frameworkVersion } from './FrameworkVersion.js'
 import {
   ModeConflictError,
   ResolveModeCommand,
@@ -142,6 +142,42 @@ export interface RunEventStream {
   readonly open: Effect.Effect<void, never, never>
   readonly closeAndDrain: Effect.Effect<void, never, never>
   readonly setProgressStreamFile?: (fileName: string) => Effect.Effect<void, never, never>
+}
+
+const CROCKFORD_BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
+
+/**
+ * A ULID-shaped run identifier: 48 bits of millisecond time followed by 80
+ * random bits, Crockford base32-encoded into exactly 26 characters. The time
+ * prefix keeps ids roughly sortable; the randomness makes collisions
+ * negligible.
+ */
+function generateRunId(): string {
+  const bytes = new Uint8Array(16)
+  const now = new Date().getTime()
+  bytes[0] = (now / 0x10000000000) % 0x100
+  bytes[1] = (now / 0x100000000) % 0x100
+  bytes[2] = (now / 0x1000000) % 0x100
+  bytes[3] = (now / 0x10000) % 0x100
+  bytes[4] = (now / 0x100) % 0x100
+  bytes[5] = now % 0x100
+  bytes.set(randomBytes(10), 6)
+  let chars = ''
+  let value = 0
+  let bits = 0
+  for (const byte of bytes) {
+    value = (value << 8) | byte
+    bits += 8
+    while (bits >= 5) {
+      chars += CROCKFORD_BASE32[(value >>> (bits - 5)) & 0x1f]
+      bits -= 5
+      value &= (1 << bits) - 1
+    }
+  }
+  if (bits > 0) {
+    chars += CROCKFORD_BASE32[(value << (5 - bits)) & 0x1f]
+  }
+  return chars
 }
 
 export const makeRunEventStream = (
@@ -510,9 +546,9 @@ export function emitNullScoreVerdict(
     thresholds,
     projectRoot: basePath,
     config,
-    framework: { name: 'StrykerJS', version: strykerVersion },
+    framework: { name: 'StrykerJS', version: frameworkVersion },
   }
-  const envelope = buildVerdictEnvelope(report, mode.mode, mode.signal, stream.runId, basePath, pathService)
+  const envelope = VerdictEnvelope.fromReport(report, mode.mode, mode.signal, stream.runId, basePath, pathService)
   return Queue.offer(
     stream.queue,
     VerdictReached.make({
@@ -583,7 +619,10 @@ export function emitMachineModeOutput(
               return
             }
             if (stream.isOpen()) {
-              const defaults = yield* defaultOptions
+              const defaults = yield* ConfigLoader.pipe(
+                Effect.flatMap((loader) => loader.defaultOptions),
+                Effect.provide(configLoaderLayer),
+              )
               yield* emitNullScoreVerdict(stream, mode, defaults.thresholds, {}, basePath, pathService)
             }
           })),

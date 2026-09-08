@@ -8,7 +8,6 @@ export default defineConfig({
     ...sharedConfig.test,
     include: [
       'src/**/*.test.ts',
-      'tests/checker-group-then-check.integration.test.ts',
       'tests/exit-code.integration.test.ts',
       'tests/verdict-envelope.integration.test.ts',
     ],

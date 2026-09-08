@@ -22,6 +22,7 @@ import { PhaseEntered } from '@systemfsoftware/stryker-js/Run'
 import { MutantTested } from '@systemfsoftware/stryker-js/Run'
 import { PlanKnown } from '@systemfsoftware/stryker-js/Run'
 import { RunEvents } from '@systemfsoftware/stryker-js/Run'
+import { RunIdentity } from '@systemfsoftware/stryker-js/Run'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import type {
   CompleteDryRunResult,
@@ -36,7 +37,6 @@ import * as Console from 'effect/Console'
 import * as Context from 'effect/Context'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
-import * as Exit from 'effect/Exit'
 import * as FileSystem from 'effect/FileSystem'
 import { pipe } from 'effect/Function'
 import * as HashMap from 'effect/HashMap'
@@ -354,6 +354,7 @@ export type StageServices =
   | Path.Path
   | RunEnvironment
   | RunEvents
+  | RunIdentity
   | Scope.Scope
   | WorkerEntries
   | WorkerLauncher
@@ -363,6 +364,7 @@ export type EnginePorts =
   | Instrumenter
   | Module
   | Path.Path
+  | RunIdentity
   | WorkerEntries
   | WorkerLauncher
 interface PrepareEnvSnapshot {
@@ -1160,7 +1162,3 @@ export const mutationRun: Cell.Cell<PrepareExecutorArgs, RunOutcome, StageError,
   Cell.andThen(dryRunCell),
   Cell.andThen(mutationTestCell),
 )
-export const shouldKeepTempDir = (
-  exit: Exit.Exit<unknown, unknown>,
-  cleanTempDir: 'always' | boolean,
-): boolean => Exit.isFailure(exit) && cleanTempDir !== 'always'

@@ -147,11 +147,6 @@ export class RunCommand extends S.TaggedClass<RunCommand>()('RunCommand', {
   targetMutatePatterns: S.Array(S.String),
 }) {}
 
-export class RunOutput extends S.TaggedClass<RunOutput>()('RunOutput', {
-  verdictJson: S.String,
-  exitCode: S.Finite,
-}) {}
-
 export class RunDecodeError extends S.TaggedError<RunDecodeError>()('RunDecodeError', {
   message: S.String,
 }) {}
@@ -162,16 +157,4 @@ export class RunReadError extends S.TaggedError<RunReadError>()('RunReadError', 
 
 export class RunWriteError extends S.TaggedError<RunWriteError>()('RunWriteError', {
   message: S.String,
-}) {}
-
-export class PlanMutationRunCommand extends S.TaggedClass<PlanMutationRunCommand>()('PlanMutationRunCommand', {
-  configMutatePatterns: Wire.mint(S.Array(Wire.mint(S.String))),
-  configMutatorNames: Wire.mint(S.Array(Wire.mint(S.String))),
-  targetMutatePatterns: Wire.mint(S.Array(Wire.mint(S.String))),
-  availableMutators: Wire.mint(S.Array(Wire.mint(S.String))),
-}) {}
-
-export class MutationRunPlan extends S.TaggedClass<MutationRunPlan>()('MutationRunPlan', {
-  mutatePatterns: Wire.mint(S.Array(Wire.mint(S.String))),
-  mutatorNames: Wire.mint(S.Array(Wire.mint(S.String))),
 }) {}

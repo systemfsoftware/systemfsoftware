@@ -1,5 +1,4 @@
-import { ExitClass, highestExitClass } from '@systemfsoftware/stryker-js/ExitClass'
-import { causeText } from '@systemfsoftware/stryker-js/Mutant'
+import { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Console from 'effect/Console'
@@ -112,6 +111,34 @@ export function collectExitClasses(exit: Exit.Exit<unknown, unknown>): Array<Exi
   return out
 }
 
+export const EXIT_CODE: Record<ExitClass, number> = {
+  VerdictFail: 1,
+  ConfigError: 2,
+  RuntimeError: 3,
+  InternalError: 4,
+}
+
+export function highestExitClass(pending: Iterable<ExitClass>): ExitClass | null {
+  let highest: ExitClass | null = null
+  for (const exitClass of pending) {
+    if (highest === null || EXIT_CODE[exitClass] > EXIT_CODE[highest]) {
+      highest = exitClass
+    }
+  }
+  return highest
+}
+
+export function resolveExitCode(pending: Iterable<ExitClass>, signal: number | null): number {
+  if (signal !== null) {
+    return 128 + signal
+  }
+  const highest = highestExitClass(pending)
+  if (highest === null) {
+    return 0
+  }
+  return EXIT_CODE[highest]
+}
+
 function reasonOf(value: object): string | undefined {
   if (!('reason' in value)) {
     return undefined
@@ -125,6 +152,77 @@ function reasonOf(value: object): string | undefined {
     return reason
   }
   return `${reason}: ${detail}`
+}
+
+const stringField = (value: object, key: string): string | undefined => {
+  if (!(key in value)) {
+    return undefined
+  }
+  const field: unknown = Reflect.get(value, key)
+  if (typeof field === 'string' && field.length > 0) {
+    return field
+  }
+  return undefined
+}
+
+const tagOf = (value: object): string | undefined => {
+  let tag: unknown
+  if ('_tag' in value) {
+    tag = Reflect.get(value, '_tag')
+  } else {
+    tag = undefined
+  }
+  if (typeof tag === 'string' && tag.length > 0) {
+    return tag
+  }
+  if (value instanceof Error && value.name.length > 0) {
+    return value.name
+  }
+  return undefined
+}
+
+const causeText = (cause: unknown, depth: number): string | undefined => {
+  if (depth > 4 || cause === undefined || cause === null) {
+    return undefined
+  }
+  if (typeof cause === 'string') {
+    if (cause.length > 0) {
+      return cause
+    }
+    return undefined
+  }
+  if (typeof cause !== 'object') {
+    return undefined
+  }
+  let own: string | undefined
+  const reason = stringField(cause, 'reason')
+  if (reason !== undefined) {
+    own = reason
+  } else {
+    const message = stringField(cause, 'message')
+    if (message !== undefined) {
+      own = message
+    } else {
+      if (cause instanceof Error && cause.message.length > 0) {
+        own = cause.message
+      } else {
+        own = tagOf(cause)
+      }
+    }
+  }
+  let nested: string | undefined
+  if ('cause' in cause) {
+    nested = causeText(Reflect.get(cause, 'cause'), depth + 1)
+  } else {
+    nested = undefined
+  }
+  if (own === undefined) {
+    return nested
+  }
+  if (nested === undefined) {
+    return own
+  }
+  return `${own}: ${nested}`
 }
 
 function causeTextOf(value: object, depth = 0): string | undefined {

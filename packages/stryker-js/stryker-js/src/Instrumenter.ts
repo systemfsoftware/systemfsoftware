@@ -34,3 +34,16 @@ export class Instrumenter
 {}
 
 export { InstrumenterFailed }
+
+/**
+ * Instrumenter contract vocabulary attached to its schema namespace.
+ */
+export const INSTRUMENTER_CONSTANTS = Object.freeze({
+  NAMESPACE: '__stryker__' as const,
+  MUTATION_COVERAGE_OBJECT: 'mutantCoverage' as const,
+  ACTIVE_MUTANT: 'activeMutant' as const,
+  CURRENT_TEST_ID: 'currentTestId' as const,
+  HIT_COUNT: 'hitCount' as const,
+  HIT_LIMIT: 'hitLimit' as const,
+  ACTIVE_MUTANT_ENV_VARIABLE: '__STRYKER_ACTIVE_MUTANT__' as const,
+})

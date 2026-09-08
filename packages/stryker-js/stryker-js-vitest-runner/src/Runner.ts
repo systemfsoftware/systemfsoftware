@@ -3,13 +3,9 @@ import type { Vitest } from 'vitest/node'
 import { createVitest as createVitestOriginal } from 'vitest/node'
 
 import { Cell } from '@systemfsoftware/effect-cell-types'
+import { INSTRUMENTER_CONSTANTS } from '@systemfsoftware/stryker-js/Instrumenter'
 import { Module } from '@systemfsoftware/stryker-js/Module'
-import {
-  type CoverageData,
-  errorToString,
-  INSTRUMENTER_CONSTANTS,
-  normalizeFileName,
-} from '@systemfsoftware/stryker-js/Mutant'
+import type { CoverageData } from '@systemfsoftware/stryker-js/Mutant'
 import { PluginBuildError, RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
 import {
   type DryRunOptions,
@@ -17,7 +13,6 @@ import {
   type MutantCoverage as DryRunMutantCoverage,
   type MutantRunOptions,
   MutantRunResult,
-  testFilesProvided,
   TestRunner,
   TestRunnerFailed,
 } from '@systemfsoftware/stryker-js/TestRunner'
@@ -46,6 +41,101 @@ import {
   VitestSectionSchema,
   VitestTaskArray,
 } from './Runner.schema.js'
+const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
+
+interface ErrnoException extends Error {
+  code?: string
+  errno?: number
+  path?: string
+  syscall?: string
+}
+
+const isErrnoException = (error: unknown): error is ErrnoException => {
+  if (!(error instanceof Error)) {
+    return false
+  }
+  if (!('code' in error)) {
+    return false
+  }
+  const code: unknown = Reflect.get(error, 'code')
+  return typeof code === 'string'
+}
+
+const isEmptyError = (error: unknown): boolean => {
+  if (error === undefined || error === null) {
+    return true
+  }
+  if (typeof error === 'string' && error.length === 0) {
+    return true
+  }
+  if (error === 0 || error === false) {
+    return true
+  }
+  if (typeof error === 'number' && Number.isNaN(error)) {
+    return true
+  }
+  return false
+}
+
+const formatErrnoException = (error: ErrnoException): string => {
+  const stack = error.stack
+  if (stack !== undefined && stack.length > 0) {
+    return `${error.name}: ${error.code} (${error.syscall}) ${stack}`
+  }
+  return `${error.name}: ${error.code} (${error.syscall})`
+}
+
+const formatError = (error: Error): string => {
+  const message = `${error.name}: ${error.message}`
+  if (error.stack !== undefined && error.stack.length > 0) {
+    return `${message}\n${error.stack.toString()}`
+  }
+  return message
+}
+
+const stringifyNonError = (error: unknown): string => {
+  if (typeof error === 'string') {
+    return error
+  }
+  if (typeof error === 'number' || typeof error === 'boolean' || typeof error === 'bigint') {
+    return JSON.stringify(error)
+  }
+  try {
+    const json = JSON.stringify(error)
+    if (typeof json === 'string' && json.length > 0) {
+      return json
+    }
+  } catch {
+    // fall through
+  }
+  if (typeof error === 'object' && error !== null && 'toString' in error) {
+    const toStringValue: unknown = Reflect.get(error, 'toString')
+    if (typeof toStringValue === 'function') {
+      try {
+        const text: unknown = Reflect.apply(toStringValue, error, [])
+        if (typeof text === 'string' && text.length > 0 && text !== '[object Object]') {
+          return text
+        }
+      } catch {
+        // fall through
+      }
+    }
+  }
+  return ''
+}
+
+const errorToString = (error: unknown): string => {
+  if (isEmptyError(error)) {
+    return ''
+  }
+  if (error instanceof Error) {
+    if (isErrnoException(error)) {
+      return formatErrnoException(error)
+    }
+    return formatError(error)
+  }
+  return stringifyNonError(error)
+}
 
 function fromTestId(id: string): { file: string; test: string } {
   const [file, ...name] = id.split('#')
@@ -639,7 +729,7 @@ export const makeVitestRunnerLayer = (): Layer.Layer<
       const dryRunCell = Cell.layer({
         read: (options: DryRunOptions) =>
           Effect.gen(function*() {
-            const hasTestFiles = testFilesProvided(options)
+            const hasTestFiles = options.testFiles !== undefined && options.testFiles.length > 0
             const filter: RunFilter = (() => {
               if (hasTestFiles) {
                 return {

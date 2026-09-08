@@ -1,4 +1,4 @@
-import { type ClassifyExitCommand, ClassifyExitDecision, type ExitClass } from './ExitClass.schema.js'
+import type { ExitClass } from './ExitClass.schema.js'
 
 export { ExitClass } from './ExitClass.schema.js'
 
@@ -38,17 +38,4 @@ export function resolveExitCode(pending: Iterable<ExitClass>, signal: number | n
     return 0
   }
   return EXIT_CODE[highest]
-}
-
-export const classifyExit = (command: ClassifyExitCommand): ClassifyExitDecision => {
-  const verdictClass = verdictExitClass(command.score, command.breakingThreshold)
-  let pendingWithVerdict: ReadonlyArray<ExitClass> = command.pending
-  if (verdictClass !== null && !command.pending.includes(verdictClass)) {
-    pendingWithVerdict = [...command.pending, verdictClass]
-  }
-  const highestClass = highestExitClass(pendingWithVerdict)
-  return ClassifyExitDecision.make({
-    highestClass,
-    verdictClass,
-  })
 }

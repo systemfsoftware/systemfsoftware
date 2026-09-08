@@ -4,6 +4,7 @@ import { ChildProcessCrashedError, WorkerEntries, WorkerLauncher } from '@system
 import type { EnginePorts, SpawnedSocketWorker } from '@systemfsoftware/stryker-js-engine'
 import { instrumenterLayer } from '@systemfsoftware/stryker-js-instrumenter'
 import { Module, type ModuleRequire } from '@systemfsoftware/stryker-js/Module'
+import type { RunIdentity } from '@systemfsoftware/stryker-js/Run'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
@@ -139,12 +140,9 @@ const nodeSpawnerLayer = NodeChildProcessSpawner.layer.pipe(Layer.provide(nodeFs
 
 const nodeBase = Layer.merge(nodeFsPathLayer, nodeSpawnerLayer)
 
-/**
- * Every port the engine requires, provided from this runtime: the file
- * system, the path service, the module loader, the child-process spawner,
- * the worker launcher, and this build's worker entry addresses.
- */
-export const nodePlatformLayer: Layer.Layer<EnginePorts> = Layer.mergeAll(
+type StaticEnginePorts = Exclude<EnginePorts, RunIdentity>
+
+export const nodePlatformLayer: Layer.Layer<StaticEnginePorts> = Layer.mergeAll(
   nodeModuleLayer,
   workerEntriesLayer,
   nodeWorkerLauncherLayer.pipe(Layer.provide(nodeBase)),

@@ -1,12 +1,13 @@
 import { sha256 } from '@noble/hashes/sha256'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils'
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import { type Mutant, schema } from '@systemfsoftware/stryker-js/Mutant'
+import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as Equivalence from 'effect/Equivalence'
 import * as Exit from 'effect/Exit'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { FastCheck as fc } from 'effect/testing'
+import * as schema from 'mutation-testing-report-schema/api'
 
 import {
   admitSurvivorsRun,

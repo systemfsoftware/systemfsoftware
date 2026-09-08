@@ -1,9 +1,9 @@
 // oxlint-disable typescript/no-unsafe-type-assertion typescript/no-unnecessary-type-assertion
 
 import { type IgnorerService, type NodePath as IgnorerNodePath } from '@systemfsoftware/stryker-js/Ignorer'
-import { INSTRUMENTER_CONSTANTS as ID } from '@systemfsoftware/stryker-js/Mutant'
+import { INSTRUMENTER_CONSTANTS as ID } from '@systemfsoftware/stryker-js/Instrumenter'
 import { type MutateDescription, type Position } from '@systemfsoftware/stryker-js/Mutant'
-import { propertyPath, type StrykerOptions, strykerReportBugUrl } from '@systemfsoftware/stryker-js/Schema'
+import { propertyPath, type StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'
 import type { Comment, Expression, Node, Program, Statement } from 'estree'
@@ -408,6 +408,22 @@ export function nodeOfKind(
     throw new Error(`Cannot place mutant ${mutant.id}: expected ${kind}, got ${node.type}`)
   }
   return node
+}
+
+/**
+ * Creates a URL to the page where a consumer can report a bug against this
+ * project.
+ *
+ * The tracker is ours. The ported original addressed the upstream StrykerJS
+ * repository, along with its label and issue-template parameters, so every bug
+ * a consumer filed from a Stryker run arrived at a project that does not own
+ * this code (`REPO-O1`) and prefilled a template that does not exist here.
+ *
+ * @param titleSuggestion The title to be prefilled in.
+ */
+const strykerReportBugUrl = (titleSuggestion: string): string => {
+  const title = encodeURIComponent(titleSuggestion)
+  return `https://github.com/systemfsoftware/systemfsoftware/issues/new?title=${title}`
 }
 
 export function throwPlacementError(

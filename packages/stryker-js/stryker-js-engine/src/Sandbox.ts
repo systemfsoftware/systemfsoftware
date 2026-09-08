@@ -1,6 +1,5 @@
 import { parse } from '@std/jsonc'
 import { Instrumenter } from '@systemfsoftware/stryker-js/Instrumenter'
-import { errorToString, normalizeFileName } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { Schema as S } from 'effect'
 import * as Context from 'effect/Context'
@@ -19,6 +18,7 @@ import * as ChildProcess from 'effect/unstable/process/ChildProcess'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 
 import { createFileMatcher, isWarningEnabled, optionsPath } from './Config.js'
+import { errorToString } from './error-format.js'
 import {
   backupTo,
   FILE_CONCURRENCY,
@@ -33,6 +33,8 @@ import type { ProjectFile } from './Project.js'
 import type { Project } from './Project.js'
 import { ExtendsArraySchema, type TSConfig, TsConfigParseError, TsConfigSchema } from './Sandbox.schema.js'
 import { StrykerError } from './stryker-error.schema.js'
+
+const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
 
 export interface SandboxHandle {
   readonly workingDirectory: string

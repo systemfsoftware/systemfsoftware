@@ -36,6 +36,7 @@
     "@systemfsoftware/stryker-js-engine": "workspace:^",
     "@systemfsoftware/stryker-js-html-reporter": "workspace:^",
     "@systemfsoftware/stryker-js-instrumenter": "workspace:^",
+    "mutation-testing-report-schema": "catalog:stryker",
     "effect": "catalog:"
   },
   "devDependencies": {
@@ -53,7 +54,6 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
-    "mutation-testing-report-schema": "catalog:stryker",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "testcontainers": "catalog:",
