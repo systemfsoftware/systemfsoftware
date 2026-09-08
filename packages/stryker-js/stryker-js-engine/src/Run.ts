@@ -829,10 +829,7 @@ export const dryRunCell = Cell.layer({
 
             const net = tests.reduce((total, test) => total + test.timeSpentMs, 0)
             const grossMillis = Duration.toMillis(raw.gross)
-            let overheadMillis = grossMillis - net
-            if (overheadMillis < 0) {
-              overheadMillis = 0
-            }
+            const overheadMillis = Math.max(grossMillis - net, 0)
             const overhead = Duration.millis(overheadMillis)
 
             const testCoverage = testCoverageFrom(dryRunResult)
