@@ -1,6 +1,5 @@
 import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
 import type { Effect } from 'effect/Effect'
-import * as EffectModule from 'effect/Effect'
 import { pipe } from 'effect/Function'
 import type { Layer } from 'effect/Layer'
 import type { Result } from 'effect/Result'
@@ -166,10 +165,10 @@ describe('the run the Cell publishes', () => {
     expect(Cell.run(cell, command)).type.toBe<Effect<void, never, never>>()
   })
 
-  it('Should_RunTheCell_When_TheInputIsBoundFirst', () => {
-    const cell = Cell.layer({ read, decide: decideOverRaw, write: writeOutcome })
-    const withInput = Cell.run(command)
-    expect(withInput(cell)).type.toBe<Effect<void, never, never>>()
+  it('Should_RefuseTheRun_When_TheCellStillDemandsServices', () => {
+    const cell = Cell.layer({ read: readNeedingDb, decide: decideOverRaw, write: writeOutcome })
+    expect(Cell.run(cell, command)).type.toBe<Cell.UnprovidedCell<Db>>()
+    expect(Cell.run(cell, command)).type.not.toBeAssignableTo<Effect<void, never, never>>()
   })
 
   it('Should_HideTheNeverServices_When_TheCellNeedsNone', () => {
@@ -217,8 +216,8 @@ describe('the provide that clears the services', () => {
 
   it('Should_DemandTheProvide_When_TheShellRunsTheCell', () => {
     const cell = Cell.layer({ read: readNeedingDb, decide: decideOverRaw, write: writeOutcome })
-    const runInShell = EffectModule.provide(Cell.run(cell, command), dbLayer)
-    expect(runInShell).type.toBe<Effect<void, never, never>>()
+    const provided = pipe(cell, Cell.provide(dbLayer))
+    expect(Cell.run(provided, command)).type.toBe<Effect<void, never, never>>()
   })
 })
 

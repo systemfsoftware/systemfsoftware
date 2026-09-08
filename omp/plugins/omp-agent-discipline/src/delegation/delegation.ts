@@ -101,13 +101,18 @@ const delegationCell = (toolName: string, subagentType: string, prompt: string) 
     write: (result) => Effect.succeed(result),
   })
 
+export interface RunNoSkillDelegationOptions {
+  readonly cwd: string
+  readonly toolName: string
+  readonly subagentType: string
+  readonly prompt: string
+}
+
 export function runNoSkillDelegation(
-  cwd: string,
-  toolName: string,
-  subagentType: string,
-  prompt: string,
+  options: RunNoSkillDelegationOptions,
 ): Effect.Effect<NoSkillDelegationResult, never, NoDelegateSkills | FileSystem.FileSystem> {
-  return Cell.run(delegationCell(toolName, subagentType, prompt), { cwd, toolName, subagentType, prompt })
+  const { cwd, toolName, subagentType, prompt } = options
+  return delegationCell(toolName, subagentType, prompt).run({ cwd, toolName, subagentType, prompt })
 }
 
 export const NoSkillDelegationExtension = (pi: ExtensionAPI, runSafe: RunSafe<DisciplineContext>): void => {
@@ -118,7 +123,7 @@ export const NoSkillDelegationExtension = (pi: ExtensionAPI, runSafe: RunSafe<Di
       const subagentType = readString(input, 'subagent_type', 'agent')
       const prompt = readString(input, 'prompt', 'task', 'description')
       const result = await runSafe(
-        Effect.result(runNoSkillDelegation(ctx.cwd, event.toolName, subagentType, prompt)),
+        Effect.result(runNoSkillDelegation({ cwd: ctx.cwd, toolName: event.toolName, subagentType, prompt })),
       )
       if (Result.isFailure(result)) throw result.failure
       return result.success

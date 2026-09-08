@@ -144,13 +144,22 @@ export function layer<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
 ): Cell<I, Resp, RE | DecE | WE, RR | WR> {
   return make(layerRunner(spec))
 }
-export const run: {
-  <I>(input: I): <A, E, R>(self: Cell<I, A, E, R>) => Effect.Effect<A, E, R>
-  <I, A, E, R>(self: Cell<I, A, E, R>, input: I): Effect.Effect<A, E, R>
-} = dual(
-  2,
-  <I, A, E, R>(self: Cell<I, A, E, R>, input: I): Effect.Effect<A, E, R> => self.run(input),
-)
+
+export interface UnprovidedCell<R> {
+  readonly unprovidedServices: R
+}
+
+/**
+ * Interprets a Cell. A Cell reaches the run edge with `R` eliminated: the overload
+ * pair refuses an inhabited `R` by assignability — the unprovided cell returns the
+ * {@link UnprovidedCell} marker, which has no callable signature. The rejection
+ * lives here, at the run edge — never in a combinator.
+ */
+export function run<I, A, E>(self: Cell<I, A, E, never>, input: I): Effect.Effect<A, E>
+export function run<I, A, E, R>(self: Cell<I, A, E, R>, input: I): UnprovidedCell<R>
+export function run<I, A, E, R>(self: Cell<I, A, E, R>, input: I): Effect.Effect<A, E, R> | UnprovidedCell<R> {
+  return self.run(input)
+}
 
 /**
  * Transforms the Cell's response.

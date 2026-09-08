@@ -123,7 +123,7 @@ export function runDispatchDoctrineCheck(
   toolName: string,
   doctrineLoaded: boolean,
 ): Effect.Effect<DispatchDoctrineCheck, never, DispatchDoctrineSkills | FileSystem.FileSystem> {
-  return Cell.run(doctrineCell(toolName, doctrineLoaded), { cwd, toolName, doctrineLoaded })
+  return doctrineCell(toolName, doctrineLoaded).run({ cwd, toolName, doctrineLoaded })
 }
 
 const FLAG_MAP_MAX = 50

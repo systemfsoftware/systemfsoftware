@@ -7,9 +7,12 @@ import {
   configLoaderLayer,
   idGeneratorLayer,
   mutationRun,
+  type PrepareExecutorArgs,
   type ResolvedMode,
   RunEnvironment,
   type RunEnvironmentShape,
+  type RunOutcome,
+  type StageError,
 } from '@systemfsoftware/stryker-js-engine'
 import { instrumenterLayer } from '@systemfsoftware/stryker-js-instrumenter'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
@@ -30,6 +33,7 @@ import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
+import * as Scope from 'effect/Scope'
 import * as Terminal from 'effect/Terminal'
 import * as Argument from 'effect/unstable/cli/Argument'
 import * as CliConfig from 'effect/unstable/cli/CliConfig'
@@ -61,7 +65,7 @@ import { emitNullScoreVerdict } from './Output.js'
 import { nodePlatformLayer } from './platform/node.js'
 import { DEFAULT_PROGRESS_STREAM_FILE } from './StreamFile.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
-import type { StrykerRun, StrykerRunCell } from './StrykerRun.js'
+import type { StrykerRun } from './StrykerRun.js'
 import {
   survivorMutateSpans,
   survivorsAdmission,
@@ -1072,13 +1076,18 @@ const cliLayer = Layer.mergeAll(
     Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
   ),
 )
+export interface StrykerCliEffectOptions {
+  readonly argv: string[]
+  readonly mutationRun: StrykerRun | undefined
+  readonly detectMode: DetectModeCapability
+  readonly createRunEventStream: CreateRunEventStreamCapability
+  readonly lastSignal: SignalObserver
+}
+
 export function strykerCliEffect(
-  argv: string[],
-  mutationRun: StrykerRun | undefined,
-  detectMode: DetectModeCapability,
-  createRunEventStream: CreateRunEventStreamCapability,
-  lastSignal: SignalObserver,
-): Effect.Effect<number, never, never> {
+  options: StrykerCliEffectOptions,
+): Effect.Effect<number, never, FileSystem.FileSystem | Path.Path> {
+  const { argv, mutationRun, detectMode, createRunEventStream, lastSignal } = options
   return Effect.gen(function*() {
     const mode = yield* detectMode
     const requestRef = yield* Ref.make<Option.Option<CliRequest>>(Option.none())
@@ -1105,7 +1114,10 @@ export function strykerCliEffect(
   }).pipe(Effect.orElseSucceed(() => 2))
 }
 
-function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironmentShape {
+function hostOptionsOf(
+  mode: ResolvedMode,
+  stream: RunEventStream<FileSystem.FileSystem | Path.Path>,
+): RunEnvironmentShape {
   return {
     runId: stream.runId,
     resolvedMode: mode,
@@ -1119,7 +1131,7 @@ function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironme
   }
 }
 
-const runEdgeOf = (input: RunStrykerCliInput, stream: RunEventStream) => {
+const runEdgeOf = (input: RunStrykerCliInput, stream: RunEventStream<FileSystem.FileSystem | Path.Path>) => {
   const hostOptions = hostOptionsOf(input.mode, stream)
   const appLayer = Layer.mergeAll(
     Layer.succeed(RunEnvironment, hostOptions),
@@ -1132,6 +1144,7 @@ const runEdgeOf = (input: RunStrykerCliInput, stream: RunEventStream) => {
     configLoaderLayer,
     idGeneratorLayer,
     instrumenterLayer,
+    Layer.effect(Scope.Scope, Effect.scope),
   ).pipe(Layer.provideMerge(nodePlatformLayer))
   const runCell = Cell.provide(
     input.mutationRun ?? mutationRun,
@@ -1151,10 +1164,10 @@ const runEdgeOf = (input: RunStrykerCliInput, stream: RunEventStream) => {
   )
 }
 interface RunEdge {
-  readonly stream: RunEventStream
+  readonly stream: RunEventStream<FileSystem.FileSystem | Path.Path>
   readonly basePath: string
   readonly pathService: Path.Path
-  readonly runCell: StrykerRunCell
+  readonly runCell: Cell.Cell<PrepareExecutorArgs, RunOutcome, StageError>
   readonly survivorsCell: Cell.Cell<PartialStrykerOptions, SurvivorsFrame, SurvivorsAdmissionError>
 }
 
@@ -1168,14 +1181,14 @@ const dispatchRequest = (edge: RunEdge, input: RunStrykerCliInput) => (request: 
             Effect.flatMap(({ admission, resolvedOptions, priorReportPath }) =>
               Match.value(admission).pipe(
                 Match.tag('NoSurvivors', () =>
-                  emitNullScoreVerdict(
-                    edge.stream,
-                    input.mode,
-                    resolvedOptions.thresholds,
-                    resolvedOptions,
-                    edge.basePath,
-                    edge.pathService,
-                  )),
+                  emitNullScoreVerdict({
+                    stream: edge.stream,
+                    mode: input.mode,
+                    thresholds: resolvedOptions.thresholds,
+                    config: resolvedOptions,
+                    basePath: edge.basePath,
+                    pathService: edge.pathService,
+                  })),
                 Match.tag('Admitted', (admitted) => {
                   const admittedMutants = [...admitted.survivors]
                   const restricted: PartialStrykerOptions & {
@@ -1190,18 +1203,18 @@ const dispatchRequest = (edge: RunEdge, input: RunStrykerCliInput) => (request: 
                     survivorsPriorReport: priorReportPath,
                     incremental: false,
                   }
-                  return Effect.scoped(
-                    Cell.run(edge.runCell, { cliOptions: restricted, targetMutatePatterns: undefined }),
-                  ).pipe(Effect.orDie)
+                  return Cell.run(edge.runCell, { cliOptions: restricted, targetMutatePatterns: undefined }).pipe(
+                    Effect.orDie,
+                  )
                 }),
                 Match.exhaustive,
               )
             ),
           )),
         Match.when(false, () =>
-          Effect.scoped(
-            Cell.run(edge.runCell, { cliOptions: runRequest.options, targetMutatePatterns: undefined }),
-          ).pipe(Effect.orDie)),
+          Cell.run(edge.runCell, { cliOptions: runRequest.options, targetMutatePatterns: undefined }).pipe(
+            Effect.orDie,
+          )),
         Match.exhaustive,
       )),
     Match.tag('llms', (llmsRequest) =>
@@ -1301,7 +1314,14 @@ const emitAndClassify = (input: RunStrykerCliInput, edge: RunEdge) => (exit: Exi
         Match.value(input.mode.mode).pipe(
           Match.when(
             'machine',
-            () => emitMachineModeOutput(edge.stream, input.mode, outcome, edge.basePath, edge.pathService),
+            () =>
+              emitMachineModeOutput({
+                stream: edge.stream,
+                mode: input.mode,
+                outcome,
+                basePath: edge.basePath,
+                pathService: edge.pathService,
+              }),
           ),
           Match.orElse(() => Effect.void),
         ),
@@ -1314,7 +1334,7 @@ const emitAndClassify = (input: RunStrykerCliInput, edge: RunEdge) => (exit: Exi
 export const runStrykerCli = (
   input: RunStrykerCliInput,
   createRunEventStream: CreateRunEventStreamCapability,
-): Effect.Effect<number, never, never> =>
+): Effect.Effect<number, never, FileSystem.FileSystem | Path.Path> =>
   pipe(
     createRunEventStream(input.mode),
     Effect.flatMap((stream) => runEdgeOf(input, stream)),

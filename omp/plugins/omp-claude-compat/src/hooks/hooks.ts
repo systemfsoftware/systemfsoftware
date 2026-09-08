@@ -329,7 +329,7 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
       if (hook.type !== 'command') continue
       if (hook.if !== undefined) {
         if (!ifEvaluatingEvent(event)) continue
-        if (!matchesPermissionRule(hook.if, matchValue, ruleInput, cwd)) continue
+        if (!matchesPermissionRule({ rule: hook.if, toolName: matchValue, toolInput: ruleInput, cwd })) continue
       }
       if (hook.async === true || hook.asyncRewake === true) {
         yield* Effect.forkDetach(
@@ -338,7 +338,7 @@ const runHooksForEventUnbounded = Effect.fn('runHooksForEventUnbounded')(functio
         continue
       }
 
-      const exit = yield* Cell.run(hookVerdictCell, { hook, input: currentInput })
+      const exit = yield* hookVerdictCell.run({ hook, input: currentInput })
       if (Option.isSome(exit)) return exit.value
     }
   }
@@ -649,7 +649,7 @@ export const runUserPromptSubmitHooks = Effect.fn('runUserPromptSubmitHooks')(fu
     for (const hook of entry.hooks) {
       if (hook.type !== 'command') continue
       if (hook.if !== undefined) continue
-      const exit = yield* Cell.run(submitCell, { hook, input })
+      const exit = yield* submitCell.run({ hook, input })
       if (Option.isSome(exit)) return exit.value
     }
   }
