@@ -55,6 +55,7 @@
       "./Evaluator": "./dist/Evaluator.mjs",
       "./ExitClass": "./dist/ExitClass.mjs",
       "./Ignorer": "./dist/Ignorer.mjs",
+      "./Instrumenter": "./dist/Instrumenter.mjs",
       "./Module": "./dist/Module.mjs",
       "./Mutant": "./dist/Mutant.mjs",
       "./output-file": "./dist/output-file.mjs",
@@ -87,6 +88,10 @@
     "./Ignorer": {
       "@systemfsoftware/source": "./src/Ignorer.ts",
       "default": "./dist/Ignorer.mjs"
+    },
+    "./Instrumenter": {
+      "@systemfsoftware/source": "./src/Instrumenter.ts",
+      "default": "./dist/Instrumenter.mjs"
     },
     "./Module": {
       "@systemfsoftware/source": "./src/Module.ts",

@@ -35,6 +35,7 @@
     "@systemfsoftware/stryker-js": "workspace:^",
     "@systemfsoftware/stryker-js-engine": "workspace:^",
     "@systemfsoftware/stryker-js-html-reporter": "workspace:^",
+    "@systemfsoftware/stryker-js-instrumenter": "workspace:^",
     "effect": "catalog:"
   },
   "devDependencies": {

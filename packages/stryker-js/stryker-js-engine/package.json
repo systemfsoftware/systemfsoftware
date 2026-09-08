@@ -24,7 +24,6 @@
     "@noble/hashes": "1.8.0",
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/stryker-js": "workspace:^",
-    "@systemfsoftware/stryker-js-instrumenter": "workspace:^",
     "diff-match-patch": "1.0.5",
     "minimatch": "~10.2.4",
     "mutation-testing-metrics": "catalog:stryker",

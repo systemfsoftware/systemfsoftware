@@ -1,5 +1,5 @@
 import { parse } from '@std/jsonc'
-import { disableTypeChecks } from '@systemfsoftware/stryker-js-instrumenter'
+import { Instrumenter } from '@systemfsoftware/stryker-js/Instrumenter'
 import { errorToString, normalizeFileName } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { Schema as S } from 'effect'
@@ -54,56 +54,56 @@ export interface MakeSandboxInput {
  */
 type FilePreprocessor = (
   project: Project,
-) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path>
+) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path | Instrumenter>
 
 const combinePreprocessors = (preprocessors: readonly FilePreprocessor[]): FilePreprocessor => (project) =>
   Effect.forEach(preprocessors, (pre) => pre(project), { discard: true })
 
-const makeDisableTypeChecksPreprocessor =
-  (options: StrykerOptions, impl: typeof disableTypeChecks): FilePreprocessor => (project) => {
-    return Effect.gen(function*() {
-      const pathService = yield* Path.Path
-      const matches = createFileMatcher(options.disableTypeChecks, pathService)
-      const updates = yield* Effect.forEach([...project.files], ([name, file]) => {
-        if (!matches(pathService.resolve(name))) {
-          return Effect.succeed<ProjectFile | undefined>(undefined)
+const makeDisableTypeChecksPreprocessor = (options: StrykerOptions): FilePreprocessor => (project) => {
+  return Effect.gen(function*() {
+    const pathService = yield* Path.Path
+    const instrumenter = yield* Instrumenter
+    const matches = createFileMatcher(options.disableTypeChecks, pathService)
+    const updates = yield* Effect.forEach([...project.files], ([name, file]) => {
+      if (!matches(pathService.resolve(name))) {
+        return Effect.succeed<ProjectFile | undefined>(undefined)
+      }
+      return Effect.gen(function*() {
+        const instrumenterFile = yield* toInstrumenterFile(file)
+        const content = yield* instrumenter.disableTypeChecks(instrumenterFile).pipe(
+          Effect.map((disabled) => disabled.content),
+          Effect.mapError((cause) => new StrykerError({ message: 'disableTypeChecks failed', cause })),
+        ).pipe(
+          Effect.catch((_error) =>
+            Effect.gen(function*() {
+              if (isWarningEnabled('preprocessorErrors', options.warnings)) {
+                yield* Effect.logWarning(
+                  `Unable to disable type checking for file "${name}". Shouldn't type checking be disabled for this file? Consider configuring a more restrictive "${
+                    optionsPath('disableTypeChecks')
+                  }" settings (or turn it completely off with \`false\`)`,
+                )
+              }
+              return undefined
+            })
+          ),
+        )
+        if (content !== undefined) {
+          return withContent(file, content)
         }
-        return Effect.gen(function*() {
-          const instrumenterFile = yield* toInstrumenterFile(file)
-          const content = yield* Effect.tryPromise({
-            try: () => impl(instrumenterFile).then((r) => r.content),
-            catch: (cause) => new StrykerError({ message: 'disableTypeChecks failed', cause }),
-          }).pipe(
-            Effect.catch((_error) =>
-              Effect.gen(function*() {
-                if (isWarningEnabled('preprocessorErrors', options.warnings)) {
-                  yield* Effect.logWarning(
-                    `Unable to disable type checking for file "${name}". Shouldn't type checking be disabled for this file? Consider configuring a more restrictive "${
-                      optionsPath('disableTypeChecks')
-                    }" settings (or turn it completely off with \`false\`)`,
-                  )
-                }
-                return undefined
-              })
-            ),
-          )
-          if (content !== undefined) {
-            return withContent(file, content)
-          }
-          return undefined
-        })
-      }, { concurrency: FILE_CONCURRENCY })
-      for (const updated of updates) {
-        if (updated !== undefined) {
-          const key = updated.name
-          MutableHashMap.set(project.files, key, updated)
-          if (Option.isSome(MutableHashMap.get(project.filesToMutate, key))) {
-            MutableHashMap.set(project.filesToMutate, key, updated)
-          }
+        return undefined
+      })
+    }, { concurrency: FILE_CONCURRENCY })
+    for (const updated of updates) {
+      if (updated !== undefined) {
+        const key = updated.name
+        MutableHashMap.set(project.files, key, updated)
+        if (Option.isSome(MutableHashMap.get(project.filesToMutate, key))) {
+          MutableHashMap.set(project.filesToMutate, key, updated)
         }
       }
-    })
-  }
+    }
+  })
+}
 
 export function parseTsConfig(
   fileName: string,
@@ -290,7 +290,7 @@ const createPreprocessor = (
   basePath: string,
 ): FilePreprocessor =>
   combinePreprocessors([
-    makeDisableTypeChecksPreprocessor(options, disableTypeChecks),
+    makeDisableTypeChecksPreprocessor(options),
     makeTSConfigPreprocessor(options, basePath),
   ])
 
@@ -507,7 +507,7 @@ export const makeSandbox = (
 ): Effect.Effect<
   SandboxHandle,
   PlatformError | StrykerError,
-  FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope
+  FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope | Instrumenter
 > =>
   Effect.gen(function*() {
     const buildHandle = (

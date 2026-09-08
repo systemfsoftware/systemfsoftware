@@ -1,9 +1,9 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { instrument } from '@systemfsoftware/stryker-js-instrumenter'
-import type { File as InstrumenterFile, InstrumentResult } from '@systemfsoftware/stryker-js-instrumenter'
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import type { IgnorerService } from '@systemfsoftware/stryker-js/Ignorer'
 import { Ignorer } from '@systemfsoftware/stryker-js/Ignorer'
+import { Instrumenter } from '@systemfsoftware/stryker-js/Instrumenter'
+import type { InstrumenterFile, InstrumenterResult } from '@systemfsoftware/stryker-js/Instrumenter'
 import { Module } from '@systemfsoftware/stryker-js/Module'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import { FileName } from '@systemfsoftware/stryker-js/Mutant'
@@ -349,6 +349,7 @@ export type StageServices =
   | ChildProcessSpawner.ChildProcessSpawner
   | FileSystem.FileSystem
   | IdGenerator
+  | Instrumenter
   | Module
   | Path.Path
   | RunEnvironment
@@ -359,6 +360,7 @@ export type StageServices =
 export type EnginePorts =
   | ChildProcessSpawner.ChildProcessSpawner
   | FileSystem.FileSystem
+  | Instrumenter
   | Module
   | Path.Path
   | WorkerEntries
@@ -558,7 +560,7 @@ export const prepareCell = Cell.layer({
 interface InstrumentRaw {
   readonly prev: PrepareDone
   readonly filesToMutate: readonly InstrumenterFile[]
-  readonly instrumentResult: InstrumentResult
+  readonly instrumentResult: InstrumenterResult
   readonly instrumentedProject: Project
   readonly sandbox: SandboxHandle
   readonly concurrency: { readonly testRunners: number; readonly checkers: number }
@@ -579,7 +581,8 @@ export const instrumentCell = Cell.layer({
         ),
       )
 
-      const instrumentResult = yield* instrument(filesToMutate, {
+      const instrumenter = yield* Instrumenter
+      const instrumentResult = yield* instrumenter.instrument(filesToMutate, {
         ignorers: [...command.ignorers],
         excludedMutations: [...command.options.mutator.excludedMutations],
       }).pipe(Effect.mapError((cause) =>

@@ -1,4 +1,4 @@
-import type { File as InstrumentFile } from '@systemfsoftware/stryker-js-instrumenter'
+import type { InstrumenterFile as InstrumentFile } from '@systemfsoftware/stryker-js/Instrumenter'
 import type { FileDescription, FileDescriptions, MutateDescription } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Effect from 'effect/Effect'

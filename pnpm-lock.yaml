@@ -2468,6 +2468,9 @@ importers:
       '@systemfsoftware/stryker-js-html-reporter':
         specifier: workspace:^
         version: link:../stryker-js-html-reporter
+      '@systemfsoftware/stryker-js-instrumenter':
+        specifier: workspace:^
+        version: link:../stryker-js-instrumenter
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
@@ -2547,9 +2550,6 @@ importers:
       '@systemfsoftware/stryker-js':
         specifier: workspace:^
         version: link:../stryker-js
-      '@systemfsoftware/stryker-js-instrumenter':
-        specifier: workspace:^
-        version: link:../stryker-js-instrumenter
       diff-match-patch:
         specifier: 1.0.5
         version: 1.0.5

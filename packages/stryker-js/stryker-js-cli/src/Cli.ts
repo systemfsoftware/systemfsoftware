@@ -11,6 +11,7 @@ import {
   type RunEnvironmentShape,
   strykerVersion,
 } from '@systemfsoftware/stryker-js-engine'
+import { instrumenterLayer } from '@systemfsoftware/stryker-js-instrumenter'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import { ManifestRendered, RunEvents } from '@systemfsoftware/stryker-js/Run'
 import { RENDERED_OPTION_DEFAULTS } from '@systemfsoftware/stryker-js/Schema'
@@ -1120,6 +1121,7 @@ const runEdgeOf = (input: RunStrykerCliInput, stream: RunEventStream) => {
     Layer.succeed(RunEnvironment, hostOptions),
     Layer.succeed(RunEvents, stream.queue),
     idGeneratorLayer,
+    instrumenterLayer,
   ).pipe(Layer.provideMerge(nodePlatformLayer))
   const runCell = Cell.provide(
     input.mutationRun ?? mutationRun,
