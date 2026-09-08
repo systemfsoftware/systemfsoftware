@@ -1,22 +1,27 @@
 import { Context, Effect } from 'effect'
+import type * as FileSystem from 'effect/FileSystem'
 
-export class ReferencedContent
-  extends Context.Service<ReferencedContent, { readonly load: (cwd: string) => Effect.Effect<string> }>()(
-    '@systemfsoftware/omp-claude-compat/inject/ReferencedContent',
-  )
-{}
+export class ReferencedContent extends Context.Service<
+  ReferencedContent,
+  { readonly load: (cwd: string) => Effect.Effect<string, never, FileSystem.FileSystem> }
+>()(
+  '@systemfsoftware/omp-claude-compat/inject/ReferencedContent',
+) {}
 
 export interface Ref {
   readonly sourcePath: string
   readonly resolvedPath: string
 }
 
-export const buildInjectedContent = (
-  projectDir: string,
-  uniqueRefs: readonly Ref[],
-  refContents: Readonly<Record<string, string>>,
-  skipList: readonly string[],
-): string => {
+export interface BuildInjectedContentOptions {
+  readonly projectDir: string
+  readonly uniqueRefs: readonly Ref[]
+  readonly refContents: Readonly<Record<string, string>>
+  readonly skipList: readonly string[]
+}
+
+export const buildInjectedContent = (options: BuildInjectedContentOptions): string => {
+  const { projectDir, uniqueRefs, refContents, skipList } = options
   const sections: string[] = []
   for (const ref of uniqueRefs) {
     const relativePath = ref.resolvedPath.slice(projectDir.length + 1)

@@ -75,7 +75,7 @@ export const FileReferencedContentLive = Layer.effect(
             }
           }
 
-          const skipList = yield* skipListService.load(projectDir).pipe(Effect.provideService(FileSystem, fs))
+          const skipList = yield* skipListService.load(projectDir)
 
           const entries = yield* Effect.all(
             uniqueRefs.map((ref) =>
@@ -95,7 +95,7 @@ export const FileReferencedContentLive = Layer.effect(
             if (entry !== null) refContents[entry[0]] = entry[1]
           }
 
-          return buildInjectedContent(projectDir, uniqueRefs, refContents, skipList)
+          return buildInjectedContent({ projectDir, uniqueRefs, refContents, skipList })
         }),
     })
   }),

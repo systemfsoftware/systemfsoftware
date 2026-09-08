@@ -285,12 +285,16 @@ export function createFileMatcher(
   return () => normalized
 }
 
-export function matchesFile(
-  pattern: boolean | string,
-  fileName: string,
-  pathService: Path.Path,
-  allowHiddenFiles = true,
-): boolean {
+export interface MatchesFileOptions {
+  readonly pattern: boolean | string
+  readonly fileName: string
+  readonly pathService: Path.Path
+  /** Hidden files are matched when true. */
+  readonly allowHiddenFiles?: boolean | undefined
+}
+
+export function matchesFile(options: MatchesFileOptions): boolean {
+  const { pattern, fileName, pathService, allowHiddenFiles = true } = options
   return createFileMatcher(pattern, pathService, allowHiddenFiles)(fileName)
 }
 
@@ -455,12 +459,15 @@ const mergeChainDocuments = (documents: readonly ExtendsStepDocument[]): Partial
     {},
   )
 
-export const decideExtendsStep = (
-  state: ExtendsStepState,
-  document: PartialStrykerOptions,
-  file: string,
-  pathService: Path.Path,
-): ExtendsStepDecision => {
+export interface DecideExtendsStepOptions {
+  readonly state: ExtendsStepState
+  readonly document: PartialStrykerOptions
+  readonly file: string
+  readonly pathService: Path.Path
+}
+
+export const decideExtendsStep = (options: DecideExtendsStepOptions): ExtendsStepDecision => {
+  const { state, document, file, pathService } = options
   if (state.visited.includes(file)) {
     return { ...RefusedTag, reason: 'cycle', file }
   }
@@ -584,7 +591,7 @@ export function resolveExtends(
       ConfigFileUnreadableError | ConfigFileInvalidError,
       FileSystem.FileSystem | Module | Path.Path
     > =>
-      Match.value(decideExtendsStep(state, currentDocument, file, pathService)).pipe(
+      Match.value(decideExtendsStep({ state, document: currentDocument, file, pathService })).pipe(
         Match.tag('done', (d) => Effect.succeed(d.options)),
         Match.tag('read', (d) =>
           readConfigFile(d.path).pipe(Effect.flatMap((nextDocument) => loop(d.state, d.path, nextDocument)))),

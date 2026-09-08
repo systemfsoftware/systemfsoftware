@@ -22,10 +22,10 @@ import {
 import { getResolutionOption, visitResolutions } from './Utils.js'
 
 export interface CheckPackageOptions {
-  entrypoints?: string[]
-  includeEntrypoints?: string[]
-  excludeEntrypoints?: (string | RegExp)[]
-  entrypointsLegacy?: boolean
+  readonly entrypoints?: string[]
+  readonly includeEntrypoints?: string[]
+  readonly excludeEntrypoints?: (string | RegExp)[]
+  readonly entrypointsLegacy?: boolean
 }
 
 const isStringRecord = (value: unknown): value is Record<string, string> => {
@@ -72,7 +72,7 @@ export const checkPackage = (
     }
 
     const hosts = yield* createCompilerHosts(pkg)
-    const entrypointResolutions = yield* getEntrypointInfo(packageName, pkg, hosts, options, companion)
+    const entrypointResolutions = yield* getEntrypointInfo({ packageName, fs: pkg, hosts, options, companion })
     const programInfo: Record<ResolutionOption, ProgramInfo> = {
       node10: {},
       node16: { moduleKinds: getModuleKinds(entrypointResolutions, 'node16', hosts) },

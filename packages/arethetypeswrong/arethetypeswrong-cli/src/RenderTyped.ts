@@ -80,12 +80,18 @@ export const problemsForCell = (
   resolutionKind: ResolutionKind,
 ): readonly Problem[] => cells.get(cellKey(entrypoint, resolutionKind)) ?? []
 
+export interface RenderTypedAnalysisInput {
+  readonly entrypoints: readonly string[]
+  readonly problems: readonly Problem[]
+  readonly opts: RenderOptions
+  /** Default: no annotations. */
+  readonly annotations?: Record<string, AnsiAnnotation>
+}
+
 export const renderTypedAnalysis = (
-  entrypoints: readonly string[],
-  problems: readonly Problem[],
-  opts: RenderOptions,
-  annotations: Record<string, AnsiAnnotation> = {},
+  input: RenderTypedAnalysisInput,
 ): string => {
+  const { entrypoints, problems, opts, annotations = {} } = input
   if (entrypoints.length === 0) {
     return 'No entrypoints found.'
   }

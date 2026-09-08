@@ -478,12 +478,15 @@ export const layer = Layer.effect(TypeScriptCompiler)(makeDummy)
 export type ITypescriptCompiler = Pick<TypeScriptCompiler['Service'], 'init' | 'check'>
 export type IFileRelationCreator = Pick<TypeScriptCompiler['Service'], 'nodes'>
 
-export function makeTypescriptCompiler(
-  options: unknown,
-  fs: HybridFileSystem,
-  fsService: FileSystem.FileSystem,
-  pathService: Path.Path,
-): TypeScriptCompiler['Service'] {
+export interface MakeTypescriptCompilerOptions {
+  readonly options: unknown
+  readonly fs: HybridFileSystem
+  readonly fsService: FileSystem.FileSystem
+  readonly pathService: Path.Path
+}
+
+export function makeTypescriptCompiler(compilerOptions: MakeTypescriptCompilerOptions): TypeScriptCompiler['Service'] {
+  const { options, fs, fsService, pathService } = compilerOptions
   if (!S.is(StrykerOptionsSchema)(options)) {
     throw new Error('Invalid StrykerOptions')
   }

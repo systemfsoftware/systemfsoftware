@@ -116,6 +116,6 @@ declare module 'typescript' {
   /** @internal */
   export interface CompilerOptions {
     /** @internal */
-    noDtsResolution?: boolean
+    readonly noDtsResolution?: boolean
   }
 }

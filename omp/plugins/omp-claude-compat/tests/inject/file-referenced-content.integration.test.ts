@@ -16,10 +16,11 @@ const Feature = makeFeature({ it, layer })
 
 const baseLayer = Layer.mergeAll(NodePath.layer, NoInjectRefsLive)
 
-const makeLayer = (contents: Record<string, string>) =>
-  FileReferencedContentLive.pipe(
-    Layer.provide(Layer.mergeAll(MemoryFileSystem.layerWith(contents), baseLayer)),
-  )
+const makeLayer = (contents: Record<string, string>) => {
+  const fsLayer = MemoryFileSystem.layerWith(contents)
+  const deps = Layer.mergeAll(fsLayer, baseLayer)
+  return Layer.mergeAll(deps, FileReferencedContentLive.pipe(Layer.provide(deps)))
+}
 
 Feature('FileReferencedContent adapter — extraction, resolution, and injection').body(({ scenario }) => {
   scenario(

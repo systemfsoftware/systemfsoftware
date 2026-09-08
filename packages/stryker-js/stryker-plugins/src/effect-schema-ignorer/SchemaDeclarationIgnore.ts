@@ -137,9 +137,16 @@ const RULES: readonly IgnoreRule[] = [
   documentationValueRule,
 ]
 
-export const decideSchemaDeclarationIgnore = (
-  node: unknown,
-  parent: unknown,
-  grandparent?: unknown,
-  ancestor?: unknown,
-): string | undefined => RULES.find((rule) => rule.matches(node, parent, grandparent, ancestor))?.reason
+export interface DecideSchemaDeclarationIgnoreOptions {
+  readonly node: unknown
+  readonly parent: unknown
+  /** The grandparent node when the path is that deep. */
+  readonly grandparent?: unknown
+  /** The great-grandparent node when the path is that deep. */
+  readonly ancestor?: unknown
+}
+
+export const decideSchemaDeclarationIgnore = (options: DecideSchemaDeclarationIgnoreOptions): string | undefined => {
+  const { node, parent, grandparent, ancestor } = options
+  return RULES.find((rule) => rule.matches(node, parent, grandparent, ancestor))?.reason
+}

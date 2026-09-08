@@ -445,12 +445,17 @@ export interface ProjectFile extends FileDescription {
   readonly originalContent: string | undefined
 }
 
-export function makeProjectFile(
-  name: string,
-  mutate: MutateDescription,
-  content?: string,
-  originalContent?: string,
-): ProjectFile {
+export interface MakeProjectFileOptions {
+  readonly name: string
+  readonly mutate: MutateDescription
+  /** @default undefined */
+  readonly content?: string | undefined
+  /** @default undefined */
+  readonly originalContent?: string | undefined
+}
+
+export function makeProjectFile(options: MakeProjectFileOptions): ProjectFile {
+  const { name, mutate, content, originalContent } = options
   return {
     name,
     mutate,
@@ -570,7 +575,7 @@ export function makeProject(
   const files: MutableHashMap.MutableHashMap<string, ProjectFile> = MutableHashMap.empty<string, ProjectFile>()
   const filesToMutate: MutableHashMap.MutableHashMap<string, ProjectFile> = MutableHashMap.empty<string, ProjectFile>()
   for (const [name, desc] of Object.entries(fileDescriptions)) {
-    const file = makeProjectFile(name, desc.mutate)
+    const file = makeProjectFile({ name, mutate: desc.mutate })
     MutableHashMap.set(files, name, file)
     if (desc.mutate !== false) {
       MutableHashMap.set(filesToMutate, name, file)

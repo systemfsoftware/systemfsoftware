@@ -36,7 +36,7 @@ import {
   variableDeclaration,
   variableDeclarator,
 } from './estree.js'
-import { applyMutant, createMutant, type Mutable, type Mutant } from './Mutator.js'
+import { applyMutant, createMutant, type Mutable, type Mutant, type Mutator } from './Mutator.js'
 import { type MutatorContext, type MutatorOptions } from './Mutator.js'
 import { allMutators } from './Mutator.js'
 import {
@@ -45,7 +45,7 @@ import {
   AstFormat,
   locationIncluded,
   locationOverlaps,
-  type ScriptFormat,
+  type ScriptAst,
   type SourceLocationInFile,
 } from './Syntax.js'
 import { PlacementFailed, TransformFailed } from './Transformer.schema.js'
@@ -56,7 +56,7 @@ const COVER_MUTANT_HELPER = 'stryCov_9fa48'
 const IS_MUTANT_ACTIVE_HELPER = 'stryMutAct_9fa48'
 
 export interface TransformerOptions extends MutatorOptions {
-  ignorers: IgnorerService[]
+  readonly ignorers: IgnorerService[]
 }
 
 export type MutantCollector = Mutant[]
@@ -65,22 +65,27 @@ export function createMutantCollector(): MutantCollector {
   return []
 }
 
-export function collect(
-  collector: MutantCollector,
-  fileName: string,
-  original: Node,
-  mutable: Mutable,
-  offset: Position = { line: 0, column: 0 },
-  lineTable: readonly number[] = buildLineTable(''),
-): Mutant {
-  const mutant = createMutant(
-    collector.length.toString(),
+export interface CollectOptions {
+  readonly collector: MutantCollector
+  readonly fileName: string
+  readonly original: Node
+  readonly mutable: Mutable
+  /** Defaults to { line: 0, column: 0 }. */
+  readonly offset?: Position | undefined
+  /** Defaults to the line table of an empty string. */
+  readonly lineTable?: readonly number[] | undefined
+}
+export function collect(options: CollectOptions): Mutant {
+  const { collector, fileName, original, mutable, offset = { line: 0, column: 0 }, lineTable = buildLineTable('') } =
+    options
+  const mutant = createMutant({
+    id: collector.length.toString(),
     fileName,
     original,
-    mutable,
+    specs: mutable,
     offset,
     lineTable,
-  )
+  })
   collector.push(mutant)
   return mutant
 }
@@ -159,12 +164,16 @@ interface LocatedComment extends Comment {
   }
 }
 
+export interface ProcessStrykerDirectivesOptions {
+  readonly rule: Rule
+  readonly node: Node
+  readonly allMutatorNames: readonly string[]
+  readonly originFileName: string
+}
 export function processStrykerDirectives(
-  rule: Rule,
-  node: Node,
-  allMutatorNames: readonly string[],
-  originFileName: string,
+  options: ProcessStrykerDirectivesOptions,
 ): { rule: Rule; warnings: readonly string[] } {
+  const { rule, node, allMutatorNames, originFileName } = options
   const leadingComments = (node as { leadingComments?: readonly LocatedComment[] }).leadingComments
   if (!leadingComments) {
     return { rule, warnings: [] }
@@ -375,7 +384,7 @@ export function isImportDeclaration(path: TraversePath): boolean {
 export function mutantTestExpression(
   mutantId: string,
 ): Expression {
-  return callExpression(identifier(IS_MUTANT_ACTIVE_HELPER), [stringLiteral(mutantId)])
+  return callExpression({ callee: identifier(IS_MUTANT_ACTIVE_HELPER), args: [stringLiteral(mutantId)] })
 }
 
 export function mutationCoverageSequenceExpression(
@@ -384,7 +393,7 @@ export function mutationCoverageSequenceExpression(
 ): Expression {
   const mutantIds = [...mutants].map((mutant) => stringLiteral(mutant.id))
   const sequence: Expression[] = [
-    callExpression(identifier(COVER_MUTANT_HELPER), mutantIds),
+    callExpression({ callee: identifier(COVER_MUTANT_HELPER), args: mutantIds }),
   ]
   if (targetExpression) {
     sequence.push(targetExpression)
@@ -398,18 +407,19 @@ export interface MutantPlacer {
   place(path: TraversePath, appliedMutants: Map<Mutant, Node>): void
 }
 
-export function nodeOfKind(
-  mutant: Mutant,
-  node: Node,
-  isKind: (candidate: Node) => boolean,
-  kind: string,
-): Node {
+export interface NodeOfKindOptions {
+  readonly mutant: Mutant
+  readonly node: Node
+  readonly isKind: (candidate: Node) => boolean
+  readonly kind: string
+}
+export function nodeOfKind(options: NodeOfKindOptions): Node {
+  const { mutant, node, isKind, kind } = options
   if (!isKind(node)) {
     throw new Error(`Cannot place mutant ${mutant.id}: expected ${kind}, got ${node.type}`)
   }
   return node
 }
-
 /**
  * Creates a URL to the page where a consumer can report a bug against this
  * project.
@@ -425,15 +435,16 @@ const strykerReportBugUrl = (titleSuggestion: string): string => {
   const title = encodeURIComponent(titleSuggestion)
   return `https://github.com/systemfsoftware/systemfsoftware/issues/new?title=${title}`
 }
-
-export function throwPlacementError(
-  error: Error,
-  nodePath: TraversePath,
-  placer: MutantPlacer,
-  mutants: Mutant[],
-  fileName: string,
-  lineTable: readonly number[],
-): never {
+export interface ThrowPlacementErrorOptions {
+  readonly error: Error
+  readonly nodePath: TraversePath
+  readonly placer: MutantPlacer
+  readonly mutants: Mutant[]
+  readonly fileName: string
+  readonly lineTable: readonly number[]
+}
+export function throwPlacementError(options: ThrowPlacementErrorOptions): never {
+  const { error, nodePath, placer, mutants, fileName, lineTable } = options
   const span = spanOf(nodePath.node)
   const position = span !== undefined ? positionFromLineTable(span.start, lineTable) : undefined
   const location = `${path.relative(process.cwd(), fileName)}:${position?.line}:${position?.column}`
@@ -492,16 +503,16 @@ function arrowFunctionExpressionNamedIfNeeded(
     parentPath.node.id.type === 'Identifier'
   ) {
     const declaratorId = parentPath.node.id
-    return callExpression(
-      arrowFunctionExpression(
+    return callExpression({
+      callee: arrowFunctionExpression(
         [],
         blockStatement([
           variableDeclaration('const', [variableDeclarator(declaratorId, path.node)]),
           returnStatement(declaratorId),
         ]),
       ),
-      [],
-    )
+      args: [],
+    })
   }
   return
 }
@@ -596,16 +607,16 @@ export const expressionMutantPlacer: MutantPlacer = {
       expression,
     )
     for (const [mutant, appliedMutant] of appliedMutants) {
-      expression = conditionalExpression(
-        mutantTestExpression(mutant.id),
-        nodeOfKind(
+      expression = conditionalExpression({
+        test: mutantTestExpression(mutant.id),
+        consequent: nodeOfKind({
           mutant,
-          unwrapParenthesizedExpression(appliedMutant),
-          isExpressionKind,
-          'an expression',
-        ) as Expression,
-        expression,
-      )
+          node: unwrapParenthesizedExpression(appliedMutant),
+          isKind: isExpressionKind,
+          kind: 'an expression',
+        }) as Expression,
+        alternate: expression,
+      })
     }
     path.replaceWith(expression)
   },
@@ -629,11 +640,13 @@ export const statementMutantPlacer: MutantPlacer = {
     }
     let statement: Statement = blockStatement(bodyStatements)
     for (const [mutant, appliedMutant] of appliedMutants) {
-      statement = ifStatement(
-        mutantTestExpression(mutant.id),
-        blockStatement([nodeOfKind(mutant, appliedMutant, isStatementKind, 'a statement') as Statement]),
-        statement,
-      )
+      statement = ifStatement({
+        test: mutantTestExpression(mutant.id),
+        consequent: blockStatement([
+          nodeOfKind({ mutant, node: appliedMutant, isKind: isStatementKind, kind: 'a statement' }) as Statement,
+        ]),
+        alternate: statement,
+      })
     }
     if (path.node.type === 'BlockStatement') {
       path.replaceWith(blockStatement([statement]))
@@ -657,17 +670,17 @@ export const switchCaseMutantPlacer: MutantPlacer = {
       ...currentCase.consequent,
     ])
     for (const [mutant, appliedMutant] of appliedMutants) {
-      const appliedCase = nodeOfKind(
+      const appliedCase = nodeOfKind({
         mutant,
-        appliedMutant,
-        (candidate) => nodeType(candidate) === 'SwitchCase',
-        'a switch case',
-      ) as unknown as { consequent: Statement[] }
-      consequence = ifStatement(
-        mutantTestExpression(mutant.id),
-        blockStatement(appliedCase.consequent),
-        consequence,
-      )
+        node: appliedMutant,
+        isKind: (candidate: Node) => nodeType(candidate) === 'SwitchCase',
+        kind: 'a switch case',
+      }) as unknown as { consequent: Statement[] }
+      consequence = ifStatement({
+        test: mutantTestExpression(mutant.id),
+        consequent: blockStatement(appliedCase.consequent),
+        alternate: consequence,
+      })
     }
     path.replaceWith(switchCase(currentCase.test, [consequence]))
   },
@@ -890,13 +903,15 @@ export const instrumentationHeader: readonly Statement[] = parsedInstrumentation
   .body as unknown as readonly Statement[]
 deepFreeze(instrumentationHeader)
 
-export function placeHeaderIfNeeded(
-  mutantCollector: MutantCollector,
-  originFileName: string,
-  options: MutatorOptions,
-  root: Program,
-): void {
-  if (hasPlacedMutants(mutantCollector, originFileName) && options.noHeader !== true) {
+export interface PlaceHeaderIfNeededOptions {
+  readonly mutantCollector: MutantCollector
+  readonly originFileName: string
+  readonly options: MutatorOptions
+  readonly root: Program
+}
+export function placeHeaderIfNeeded(options: PlaceHeaderIfNeededOptions): void {
+  const { mutantCollector, originFileName, options: mutatorOptions, root } = options
+  if (hasPlacedMutants(mutantCollector, originFileName) && mutatorOptions.noHeader !== true) {
     placeHeader(root)
   }
 }
@@ -964,7 +979,7 @@ export function transform(
     case 'js':
     case 'ts':
     case 'tsx':
-      return transformScript(ast, mutantCollector, context)
+      return transformScript({ ast, mutantCollector, context })
     case 'svelte':
       return transformSvelte(ast, mutantCollector, context)
   }
@@ -1056,13 +1071,25 @@ interface MutantsPlacement {
 
 type PlacementMap = Map<Node, MutantsPlacement>
 
-export const transformScript: AstTransformer<ScriptFormat> = (
-  { root, originFileName, rawContent, offset, comments },
-  mutantCollector,
-  { options, mutateDescription },
-  mutators = allMutators,
-  mutantPlacers = allMutantPlacers,
-) => {
+export interface TransformScriptOptions {
+  readonly ast: ScriptAst
+  readonly mutantCollector: MutantCollector
+  readonly context: TransformerContext
+  /** Defaults to allMutators. */
+  readonly mutators?: Readonly<Record<string, Mutator>>
+  /** Defaults to allMutantPlacers. */
+  readonly mutantPlacers?: readonly MutantPlacer[]
+}
+export function transformScript(options: TransformScriptOptions): readonly string[] {
+  const {
+    ast,
+    mutantCollector,
+    context: transformerContext,
+    mutators = allMutators,
+    mutantPlacers = allMutantPlacers,
+  } = options
+  const { root, originFileName, rawContent, offset, comments } = ast
+  const { options: transformerOptions, mutateDescription } = transformerContext
   const lineTable = buildLineTable(rawContent)
 
   attachComments(root, comments as readonly AttachedComment[], lineTable)
@@ -1077,12 +1104,12 @@ export const transformScript: AstTransformer<ScriptFormat> = (
 
   traverse(root, {
     enter(path) {
-      const result = processStrykerDirectives(
-        directiveRule,
-        path.node,
+      const result = processStrykerDirectives({
+        rule: directiveRule,
+        node: path.node,
         allMutatorNames,
         originFileName,
-      )
+      })
       directiveRule = result.rule
       warnings.push(...result.warnings)
       if (shouldSkip(path)) {
@@ -1116,7 +1143,7 @@ export const transformScript: AstTransformer<ScriptFormat> = (
     },
   })
 
-  placeHeaderIfNeeded(mutantCollector, originFileName, options, root)
+  placeHeaderIfNeeded({ mutantCollector, originFileName, options: transformerOptions, root })
 
   return warnings
 
@@ -1170,20 +1197,20 @@ export const transformScript: AstTransformer<ScriptFormat> = (
         path.skip()
       } catch (error) {
         const normalizedError = toError(error)
-        throwPlacementError(
-          normalizedError,
-          path,
-          mutantsPlacement.placer,
-          [...mutantsPlacement.appliedMutants.keys()],
-          originFileName,
+        throwPlacementError({
+          error: normalizedError,
+          nodePath: path,
+          placer: mutantsPlacement.placer,
+          mutants: [...mutantsPlacement.appliedMutants.keys()],
+          fileName: originFileName,
           lineTable,
-        )
+        })
       }
     }
   }
   function ignoreMessageFor(path: TraversePath): string | undefined {
     const view = toIgnorerPath(path)
-    for (const ignorer of options.ignorers) {
+    for (const ignorer of transformerOptions.ignorers) {
       const result = ignorer.shouldIgnore(view)
       if (Option.isSome(result)) {
         return result.value
@@ -1194,7 +1221,7 @@ export const transformScript: AstTransformer<ScriptFormat> = (
 
   function collectMutants(path: TraversePath): Mutant[] {
     return [...mutate(path)].map((mutable) =>
-      collect(mutantCollector, originFileName, path.node, mutable, offset, lineTable)
+      collect({ collector: mutantCollector, fileName: originFileName, original: path.node, mutable, offset, lineTable })
     )
       .filter((mutant) => mutant.ignoreReason === undefined)
   }
@@ -1218,7 +1245,7 @@ export const transformScript: AstTransformer<ScriptFormat> = (
     }
 
     function findExcludedMutatorIgnoreReason(mutatorName: string): string | undefined {
-      if (options.excludedMutations.includes(mutatorName)) {
+      if (transformerOptions.excludedMutations.includes(mutatorName)) {
         return `Ignored because of excluded mutation "${mutatorName}"`
       } else {
         return undefined

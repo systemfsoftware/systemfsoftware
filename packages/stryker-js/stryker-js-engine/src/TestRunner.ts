@@ -29,6 +29,7 @@ import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Function from 'effect/Function'
 import * as Match from 'effect/Match'
 import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
@@ -250,36 +251,49 @@ export const withRetry: TestRunnerCombinator = (inner) => {
  * `Pool.invalidate`, and a runner that restarts itself behind the pool's back
  * would create two owners of one process.
  */
-export const withMaxReuse = (
-  options: Pick<StrykerOptions, 'maxTestRunnerReuse'>,
-  retire: Effect.Effect<void>,
-): (inner: PooledTestRunner) => Effect.Effect<PooledTestRunner> =>
-(inner) =>
-  Effect.gen(function*() {
-    const restartAfter = options.maxTestRunnerReuse
-    if (restartAfter <= 0) {
-      return inner
-    }
+export const withMaxReuse: {
+  (
+    options: Pick<StrykerOptions, 'maxTestRunnerReuse'>,
+    retire: Effect.Effect<void>,
+  ): (inner: PooledTestRunner) => Effect.Effect<PooledTestRunner>
+  (
+    inner: PooledTestRunner,
+    options: Pick<StrykerOptions, 'maxTestRunnerReuse'>,
+    retire: Effect.Effect<void>,
+  ): Effect.Effect<PooledTestRunner>
+} = Function.dual(
+  3,
+  (
+    inner: PooledTestRunner,
+    options: Pick<StrykerOptions, 'maxTestRunnerReuse'>,
+    retire: Effect.Effect<void>,
+  ): Effect.Effect<PooledTestRunner> =>
+    Effect.gen(function*() {
+      const restartAfter = options.maxTestRunnerReuse
+      if (restartAfter <= 0) {
+        return inner
+      }
 
-    const runs = yield* Ref.make(0)
+      const runs = yield* Ref.make(0)
 
-    const wrapped: PooledTestRunner = {
-      ...inner,
-      mutantRun: (runOptions: MutantRunOptions): Effect.Effect<MutantRunResult, PooledTestRunnerError> => {
-        const policy: Policy.Policy<MutantRunResult, PooledTestRunnerError, never> = (self) =>
-          Effect.gen(function*() {
-            const count = yield* Ref.updateAndGet(runs, (n) => n + 1)
-            if (count > restartAfter) {
-              yield* retire
-              yield* Ref.set(runs, 1)
-            }
-            return yield* self
-          })
-        return policy(inner.mutantRun(runOptions))
-      },
-    }
-    return wrapped
-  })
+      const wrapped: PooledTestRunner = {
+        ...inner,
+        mutantRun: (runOptions: MutantRunOptions): Effect.Effect<MutantRunResult, PooledTestRunnerError> => {
+          const policy: Policy.Policy<MutantRunResult, PooledTestRunnerError, never> = (self) =>
+            Effect.gen(function*() {
+              const count = yield* Ref.updateAndGet(runs, (n) => n + 1)
+              if (count > restartAfter) {
+                yield* retire
+                yield* Ref.set(runs, 1)
+              }
+              return yield* self
+            })
+          return policy(inner.mutantRun(runOptions))
+        },
+      }
+      return wrapped
+    }),
+)
 
 /** What the test environment currently holds, which is what decides a reload. */
 type EnvironmentState = 'pristine' | 'loaded' | 'loaded-static-mutant'
@@ -345,69 +359,72 @@ const decideEnvironmentReload = (request: EnvironmentRequest): EnvironmentRuling
  * mutated, so a caller that reuses its own options does not read a value it
  * never wrote.
  */
-export const withEnvironmentReload = (
-  retire: Effect.Effect<void>,
-): (inner: PooledTestRunner) => Effect.Effect<PooledTestRunner> =>
-(inner) =>
-  Effect.gen(function*() {
-    const state = yield* Ref.make<EnvironmentState>('pristine')
+export const withEnvironmentReload: {
+  (retire: Effect.Effect<void>): (inner: PooledTestRunner) => Effect.Effect<PooledTestRunner>
+  (inner: PooledTestRunner, retire: Effect.Effect<void>): Effect.Effect<PooledTestRunner>
+} = Function.dual(
+  2,
+  (inner: PooledTestRunner, retire: Effect.Effect<void>): Effect.Effect<PooledTestRunner> =>
+    Effect.gen(function*() {
+      const state = yield* Ref.make<EnvironmentState>('pristine')
 
-    const wrapped: PooledTestRunner = {
-      ...inner,
+      const wrapped: PooledTestRunner = {
+        ...inner,
 
-      dryRun: (options: DryRunOptions): Effect.Effect<DryRunResult, PooledTestRunnerError> => {
-        const policy: Policy.Policy<DryRunResult, PooledTestRunnerError, never> = (self) =>
-          Ref.set(state, 'loaded').pipe(Effect.andThen(self))
-        return policy(inner.dryRun(options))
-      },
+        dryRun: (options: DryRunOptions): Effect.Effect<DryRunResult, PooledTestRunnerError> => {
+          const policy: Policy.Policy<DryRunResult, PooledTestRunnerError, never> = (self) =>
+            Ref.set(state, 'loaded').pipe(Effect.andThen(self))
+          return policy(inner.dryRun(options))
+        },
 
-      mutantRun: (options: MutantRunOptions): Effect.Effect<MutantRunResult, PooledTestRunnerError> =>
-        Effect.gen(function*() {
-          const current = yield* Ref.get(state)
-          const canReload = (yield* inner.capabilities).reloadEnvironment
+        mutantRun: (options: MutantRunOptions): Effect.Effect<MutantRunResult, PooledTestRunnerError> =>
+          Effect.gen(function*() {
+            const current = yield* Ref.get(state)
+            const canReload = (yield* inner.capabilities).reloadEnvironment
 
-          const request: EnvironmentRequest = Match.value(current).pipe(
-            Match.when(
-              'pristine',
-              (): EnvironmentRequest => ({ _tag: 'ColdEnvironment', reloadRequested: options.reloadEnvironment }),
-            ),
-            Match.when(
-              'loaded',
-              (): EnvironmentRequest => ({
-                _tag: 'LoadedEnvironment',
-                reloadRequested: options.reloadEnvironment,
-                canReload,
-              }),
-            ),
-            Match.when(
-              'loaded-static-mutant',
-              (): EnvironmentRequest => ({
-                _tag: 'StaticMutantLoaded',
-                reloadRequested: options.reloadEnvironment,
-                canReload,
-              }),
-            ),
-            Match.exhaustive,
-          )
-          const ruling = decideEnvironmentReload(request)
-          const decided: MutantRunOptions = { ...options, reloadEnvironment: ruling.reloadEnvironment }
+            const request: EnvironmentRequest = Match.value(current).pipe(
+              Match.when(
+                'pristine',
+                (): EnvironmentRequest => ({ _tag: 'ColdEnvironment', reloadRequested: options.reloadEnvironment }),
+              ),
+              Match.when(
+                'loaded',
+                (): EnvironmentRequest => ({
+                  _tag: 'LoadedEnvironment',
+                  reloadRequested: options.reloadEnvironment,
+                  canReload,
+                }),
+              ),
+              Match.when(
+                'loaded-static-mutant',
+                (): EnvironmentRequest => ({
+                  _tag: 'StaticMutantLoaded',
+                  reloadRequested: options.reloadEnvironment,
+                  canReload,
+                }),
+              ),
+              Match.exhaustive,
+            )
+            const ruling = decideEnvironmentReload(request)
+            const decided: MutantRunOptions = { ...options, reloadEnvironment: ruling.reloadEnvironment }
 
-          if (ruling.retireBeforeRun) {
-            yield* retire
-          }
+            if (ruling.retireBeforeRun) {
+              yield* retire
+            }
 
-          const policy: Policy.Policy<MutantRunResult, PooledTestRunnerError, never> = (self) =>
-            Effect.gen(function*() {
-              const result = yield* self
-              yield* Ref.set(state, ruling.nextState)
-              return result
-            })
+            const policy: Policy.Policy<MutantRunResult, PooledTestRunnerError, never> = (self) =>
+              Effect.gen(function*() {
+                const result = yield* self
+                yield* Ref.set(state, ruling.nextState)
+                return result
+              })
 
-          return yield* policy(inner.mutantRun(decided))
-        }),
-    }
-    return wrapped
-  })
+            return yield* policy(inner.mutantRun(decided))
+          }),
+      }
+      return wrapped
+    }),
+)
 
 // ---------------------------------------------------------------------------
 // Command runner — shells out to one command
@@ -658,7 +675,7 @@ export const buildTestRunner = (
 
     const base = yield* childProcessRunner
     const timed = withTimeout(base)
-    const limited = yield* withMaxReuse(context.options, context.retire)(timed)
-    const reloading = yield* withEnvironmentReload(context.retire)(limited)
+    const limited = yield* withMaxReuse(timed, context.options, context.retire)
+    const reloading = yield* withEnvironmentReload(limited, context.retire)
     return withRetry(reloading)
   })

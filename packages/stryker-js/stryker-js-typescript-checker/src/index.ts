@@ -63,7 +63,7 @@ const CheckerLive = Layer.effect(
     const fsService = yield* FileSystem.FileSystem
     const pathService = yield* Path.Path
     const fs = yield* makeHybridFileSystem(fsService)
-    const compiler = makeTypescriptCompiler(options, fs, fsService, pathService)
+    const compiler = makeTypescriptCompiler({ options, fs, fsService, pathService })
 
     const formatDiagnostic = (error: Diagnostic): Effect.Effect<string> =>
       Effect.gen(function*() {

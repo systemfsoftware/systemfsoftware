@@ -59,19 +59,19 @@ export const renderAnalysis = (
     case 'ascii':
       return renderAsciiAnalysis(entrypointNames, visible, { useEmoji: options.useEmoji })
     case 'table-flipped':
-      return renderTypedAnalysis(
-        entrypointNames,
-        visible,
-        { flipped: true, useEmoji: options.useEmoji, color: options.color },
+      return renderTypedAnalysis({
+        entrypoints: entrypointNames,
+        problems: visible,
+        opts: { flipped: true, useEmoji: options.useEmoji, color: options.color },
         annotations,
-      )
+      })
     case 'table':
-      return renderTypedAnalysis(
-        entrypointNames,
-        visible,
-        { flipped: false, useEmoji: options.useEmoji, color: options.color },
+      return renderTypedAnalysis({
+        entrypoints: entrypointNames,
+        problems: visible,
+        opts: { flipped: false, useEmoji: options.useEmoji, color: options.color },
         annotations,
-      )
+      })
   }
 }
 

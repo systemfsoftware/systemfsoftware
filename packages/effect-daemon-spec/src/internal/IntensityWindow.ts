@@ -1,5 +1,10 @@
+import { Function } from 'effect'
+
 /** @internal */
-export const isWithinWindow = (now: number, windowMillis: number) => (t: number): boolean => now - t <= windowMillis
+export const isWithinWindow: {
+  (now: number, windowMillis: number): (t: number) => boolean
+  (t: number, now: number, windowMillis: number): boolean
+} = Function.dual(3, (t: number, now: number, windowMillis: number): boolean => now - t <= windowMillis)
 
 const keepWithin = (now: number, windowMillis: number) =>
 (

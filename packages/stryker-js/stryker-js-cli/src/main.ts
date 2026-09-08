@@ -48,13 +48,13 @@ if (!isSupportedNodeVersion(process.version)) {
 const program = Effect.gen(function*() {
   const outputMode = yield* OutputModeProbe
   const runEvents = yield* RunEventStreamPort
-  return yield* strykerCliEffect(
-    process.argv.slice(2),
-    undefined,
-    outputMode.detectMode,
-    runEvents.createRunEventStream,
+  return yield* strykerCliEffect({
+    argv: process.argv.slice(2),
+    mutationRun: undefined,
+    detectMode: outputMode.detectMode,
+    createRunEventStream: runEvents.createRunEventStream,
     lastSignal,
-  )
+  })
 }).pipe(
   Effect.provideService(Logger.LogToStderr, true),
   Effect.provide(
@@ -62,6 +62,7 @@ const program = Effect.gen(function*() {
       Layer.provide(Layer.mergeAll(NodeStdio.layer, NodeFileSystem.layer, NodePath.layer)),
     ),
   ),
+  Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),
 )
 
 NodeRuntime.runMain(program, {

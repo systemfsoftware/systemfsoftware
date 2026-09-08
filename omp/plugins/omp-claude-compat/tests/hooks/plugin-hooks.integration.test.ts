@@ -92,7 +92,12 @@ Feature('Dispatching hooks from an enabled Claude plugin')
             const cwd = yield* fs.makeTempDirectoryScoped()
             const homeDir = yield* fs.makeTempDirectoryScoped()
             const pluginRoot = yield* fs.makeTempDirectoryScoped()
-            const reviewer = yield* makeShellHookScript(pluginRoot, 'reviewer', 2, 'blocked by plugin')
+            const reviewer = yield* makeShellHookScript({
+              dir: pluginRoot,
+              name: 'reviewer',
+              exitCode: 2,
+              stderr: 'blocked by plugin',
+            })
             yield* writePluginTree(
               homeDir,
               pluginRoot,
@@ -206,7 +211,12 @@ Feature('Dispatching hooks from an enabled Claude plugin')
             const cwd = yield* fs.makeTempDirectoryScoped()
             const homeDir = yield* fs.makeTempDirectoryScoped()
             const pluginRoot = yield* fs.makeTempDirectoryScoped()
-            const settingsHook = yield* makeShellHookScript(cwd, 'settings', 2, 'settings only')
+            const settingsHook = yield* makeShellHookScript({
+              dir: cwd,
+              name: 'settings',
+              exitCode: 2,
+              stderr: 'settings only',
+            })
             yield* makeSettingsJson(cwd, {
               PostToolUse: [{ hooks: [{ type: 'command', command: settingsHook }] }],
             })
@@ -252,7 +262,12 @@ Feature('Dispatching hooks from an enabled Claude plugin')
             const cwd = yield* fs.makeTempDirectoryScoped()
             const homeDir = yield* fs.makeTempDirectoryScoped()
             const pluginRoot = yield* fs.makeTempDirectoryScoped()
-            const guard = yield* makeShellHookScript(pluginRoot, 'pre', 2, 'pre blocked')
+            const guard = yield* makeShellHookScript({
+              dir: pluginRoot,
+              name: 'pre',
+              exitCode: 2,
+              stderr: 'pre blocked',
+            })
             yield* writePluginTree(
               homeDir,
               pluginRoot,
@@ -323,7 +338,12 @@ Feature('Dispatching hooks from an enabled Claude plugin')
             const cwd = yield* fs.makeTempDirectoryScoped()
             const homeDir = yield* fs.makeTempDirectoryScoped()
             const pluginRoot = yield* fs.makeTempDirectoryScoped()
-            const settingsHook = yield* makeShellHookScript(cwd, 'settings', 2, 'settings survived')
+            const settingsHook = yield* makeShellHookScript({
+              dir: cwd,
+              name: 'settings',
+              exitCode: 2,
+              stderr: 'settings survived',
+            })
             yield* makeSettingsJson(cwd, {
               PostToolUse: [{ hooks: [{ type: 'command', command: settingsHook }] }],
             })

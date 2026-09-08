@@ -14,7 +14,7 @@ export const inlineSchemaTests: (options?: InlineSchemaTestsOptions) => Plugin_2
 
 // @public
 export interface InlineSchemaTestsOptions {
-    dir?: string;
+    readonly dir?: string;
 }
 
 // @public

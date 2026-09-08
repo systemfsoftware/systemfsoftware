@@ -19,7 +19,15 @@ Feature('buildInjectedContent pure formatter').body(({ scenario }) => {
         })),
       When('buildInjectedContent is called')(
         'result',
-        (s) => Effect.succeed(buildInjectedContent(s.ctx.projectDir, s.ctx.refs, s.ctx.contents, s.ctx.skip)),
+        (s) =>
+          Effect.succeed(
+            buildInjectedContent({
+              projectDir: s.ctx.projectDir,
+              uniqueRefs: s.ctx.refs,
+              refContents: s.ctx.contents,
+              skipList: s.ctx.skip,
+            }),
+          ),
       ),
       Then('result should contain header and ref section')((s) =>
         Effect.sync(() => {
@@ -43,7 +51,15 @@ Feature('buildInjectedContent pure formatter').body(({ scenario }) => {
         })),
       When('buildInjectedContent is called')(
         'result',
-        (s) => Effect.succeed(buildInjectedContent(s.ctx.projectDir, s.ctx.refs, s.ctx.contents, s.ctx.skip)),
+        (s) =>
+          Effect.succeed(
+            buildInjectedContent({
+              projectDir: s.ctx.projectDir,
+              uniqueRefs: s.ctx.refs,
+              refContents: s.ctx.contents,
+              skipList: s.ctx.skip,
+            }),
+          ),
       ),
       Then('result should be empty')((s) =>
         Effect.sync(() => {
@@ -65,7 +81,15 @@ Feature('buildInjectedContent pure formatter').body(({ scenario }) => {
         })),
       When('buildInjectedContent is called')(
         'result',
-        (s) => Effect.succeed(buildInjectedContent(s.ctx.projectDir, s.ctx.refs, s.ctx.contents, s.ctx.skip)),
+        (s) =>
+          Effect.succeed(
+            buildInjectedContent({
+              projectDir: s.ctx.projectDir,
+              uniqueRefs: s.ctx.refs,
+              refContents: s.ctx.contents,
+              skipList: s.ctx.skip,
+            }),
+          ),
       ),
       Then('result should be empty')((s) =>
         Effect.sync(() => {

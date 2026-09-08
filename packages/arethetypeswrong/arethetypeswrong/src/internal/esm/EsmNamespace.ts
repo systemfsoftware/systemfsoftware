@@ -7,13 +7,21 @@ import { esmResolve } from './Resolve.js'
 // implementation complexity.
 
 /** @internal */
+export interface GetEsmModuleNamespaceOptions {
+  /** Default: a fresh `new URL('file:///')` per call. */
+  readonly parentURL?: URL
+  /** Default: a fresh empty `Set` per top-level call; shared across recursion. */
+  readonly seen?: Set<string>
+}
+
+/** @internal */
 export function getEsmModuleNamespace(
   fs: Package,
   specifier: string,
-  parentURL = new URL('file:///'),
-  seen = new Set<string>(),
+  options?: GetEsmModuleNamespaceOptions,
 ): string[] {
-  // Resolve specifier
+  const parentURL = options?.parentURL ?? new URL('file:///')
+  const seen = options?.seen ?? new Set<string>()
   const { format, url } = esmResolve(fs, specifier, parentURL)
 
   // Don't recurse for circular indirect exports
@@ -34,7 +42,7 @@ export function getEsmModuleNamespace(
 
   // Concat indirect exports
   const indirect = bindings.reexports
-    .flatMap((specifier) => getEsmModuleNamespace(fs, specifier, url, seen))
+    .flatMap((reexport) => getEsmModuleNamespace(fs, reexport, { parentURL: url, seen }))
     .filter((name) => name !== 'default')
   return [...new Set([...bindings.exports, ...indirect])]
 }

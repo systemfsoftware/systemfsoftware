@@ -5,7 +5,7 @@ import type { Plugin, ResolvedConfig } from 'vite'
 /** @since 0.1.0 */
 export interface InlineSchemaTestsOptions {
   /** Directory to scan for schema files, relative to Vite root. Default: `"src"`. */
-  dir?: string
+  readonly dir?: string
 }
 
 /**

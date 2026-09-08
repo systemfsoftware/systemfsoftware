@@ -9,7 +9,7 @@ import { fromObservable } from '@systemfsoftware/rx-effect'
 import { Stream } from 'effect'
 import { interval } from 'rxjs'
 
-const stream = fromObservable(interval(1000)) // Stream<number>
+const stream = fromObservable(interval(1000), (error) => new Error(String(error))) // Stream<number, Error>
 ```
 
 ## Install

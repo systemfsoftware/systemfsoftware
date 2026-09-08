@@ -135,14 +135,21 @@ function getProxyDirectories(rootDir: string, fs: Package) {
   }
 }
 /** @internal */
+export interface GetEntrypointInfoInput {
+  readonly packageName: string
+  readonly fs: Package
+  readonly hosts: CompilerHosts
+  readonly options: CheckPackageOptions | undefined
+  /** Default: no companion package. */
+  readonly companion?: TypesCompanionInfo
+}
+
+/** @internal */
 export const getEntrypointInfo = (
-  packageName: string,
-  fs: Package,
-  hosts: CompilerHosts,
-  options: CheckPackageOptions | undefined,
-  companion?: TypesCompanionInfo,
+  input: GetEntrypointInfoInput,
 ): Effect.Effect<Record<string, EntrypointInfo>> =>
   Effect.gen(function*() {
+    const { packageName, fs, hosts, options, companion } = input
     const packageJson: unknown = JSON.parse(fs.readFile(`/node_modules/${packageName}/package.json`))
     const exportsObject: unknown = Object.getOwnPropertyDescriptor(packageJson, 'exports')?.value
     let entrypoints = getEntrypoints(fs, exportsObject, options)

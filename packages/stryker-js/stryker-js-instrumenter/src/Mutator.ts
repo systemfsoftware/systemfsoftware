@@ -68,14 +68,18 @@ export interface Mutant extends Mutable {
   readonly lineTable: readonly number[]
   readonly replacementCode: string
 }
-export function createMutant(
-  id: string,
-  fileName: string,
-  original: Node,
-  specs: Mutable,
-  offset: Position = { column: 0, line: 0 },
-  lineTable: readonly number[] = buildLineTable(''),
-): Mutant {
+export interface CreateMutantOptions {
+  readonly id: string
+  readonly fileName: string
+  readonly original: Node
+  readonly specs: Mutable
+  /** Defaults to { column: 0, line: 0 }. */
+  readonly offset?: Position
+  /** Defaults to the line table of an empty string. */
+  readonly lineTable?: readonly number[]
+}
+export function createMutant(options: CreateMutantOptions): Mutant {
+  const { id, fileName, original, specs, offset = { column: 0, line: 0 }, lineTable = buildLineTable('') } = options
   return {
     id,
     fileName,
@@ -188,8 +192,8 @@ export interface MutatorContext {
 export type Mutator = (node: Node, context: MutatorContext) => Iterable<Node>
 
 export interface MutatorOptions {
-  excludedMutations: string[]
-  noHeader?: boolean
+  readonly excludedMutations: string[]
+  readonly noHeader?: boolean
 }
 
 /**
@@ -374,7 +378,7 @@ export const arrayDeclarationMutator: Mutator = function*(node, _context: Mutato
     if (node.type === 'NewExpression') {
       replacement = newExpression(cloneNode(node.callee), mutatedCallArgs)
     } else {
-      replacement = callExpression(cloneNode(node.callee), mutatedCallArgs)
+      replacement = callExpression({ callee: cloneNode(node.callee), args: mutatedCallArgs })
     }
     yield replacement
   }
@@ -708,7 +712,7 @@ export const methodExpressionMutator: Mutator = function*(node, _context: Mutato
   }
 
   if (newName === null) {
-    yield callExpression(cloneNode(callee.object), [], callee.optional === true)
+    yield callExpression({ callee: cloneNode(callee.object), args: [], optional: callee.optional === true })
     return
   }
 
@@ -719,14 +723,14 @@ export const methodExpressionMutator: Mutator = function*(node, _context: Mutato
     }
   }
 
-  const mutatedCallee = memberExpression(
-    cloneNode(callee.object),
-    identifier(newName),
-    false,
-    callee.optional === true,
-  )
+  const mutatedCallee = memberExpression({
+    object: cloneNode(callee.object),
+    property: identifier(newName),
+    computed: false,
+    optional: callee.optional === true,
+  })
 
-  yield callExpression(mutatedCallee, nodeArguments, node.optional === true)
+  yield callExpression({ callee: mutatedCallee, args: nodeArguments, optional: node.optional === true })
 }
 
 export const objectLiteralMutator: Mutator = function*(node, _context: MutatorContext) {
@@ -903,7 +907,11 @@ const UpdateOperators = {
 
 export const updateOperatorMutator: Mutator = function*(node, _context: MutatorContext) {
   if (node.type === 'UpdateExpression') {
-    yield updateExpression(UpdateOperators[node.operator], cloneNode(node.argument), node.prefix)
+    yield updateExpression({
+      operator: UpdateOperators[node.operator],
+      argument: cloneNode(node.argument),
+      prefix: node.prefix,
+    })
   }
 }
 

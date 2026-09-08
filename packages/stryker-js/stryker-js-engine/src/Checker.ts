@@ -235,24 +235,28 @@ export const makeCheckerChildProcess = (params: {
     }
   })
 
+export interface CreateCheckerFactoryOptions {
+  readonly options: StrykerOptions
+  readonly fileDescriptions: FileDescriptions
+  readonly pluginModulePaths: readonly string[]
+  readonly idGenerator: IdGeneratorShape
+  readonly workingDirectory: string
+}
+
 export const createCheckerFactory = (
-  options: StrykerOptions,
-  fileDescriptions: FileDescriptions,
-  pluginModulePaths: readonly string[],
-  idGenerator: IdGeneratorShape,
-  workingDirectory: string,
+  options: CreateCheckerFactoryOptions,
 ): Effect.Effect<
   CheckerResourceService,
   unknown,
   Scope.Scope | WorkerLauncher | WorkerEntries
 > =>
   makeCheckerChildProcess({
-    options,
-    fileDescriptions,
-    pluginModulePaths,
-    workingDirectory,
-    execArgv: [...options.checkerNodeArgs],
-    idGenerator,
+    options: options.options,
+    fileDescriptions: options.fileDescriptions,
+    pluginModulePaths: options.pluginModulePaths,
+    workingDirectory: options.workingDirectory,
+    execArgv: [...options.options.checkerNodeArgs],
+    idGenerator: options.idGenerator,
   })
 // ---------------------------------------------------------------------------
 /**

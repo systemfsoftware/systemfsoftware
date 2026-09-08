@@ -15,6 +15,7 @@ import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
+import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Path from 'effect/Path'
@@ -44,7 +45,9 @@ export { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 export const TICK_INTERVAL_MS = 10_000
 
 export interface RunEventStreamPort {
-  readonly createRunEventStream: (resolved: ResolvedMode) => Effect.Effect<RunEventStream, never, never>
+  readonly createRunEventStream: (
+    resolved: ResolvedMode,
+  ) => Effect.Effect<RunEventStream<FileSystem.FileSystem | Path.Path>, never, FileSystem.FileSystem | Path.Path>
 }
 
 class RunEventStreamPortTag extends Context.Service<RunEventStreamPortTag, RunEventStreamPort>()(
@@ -83,7 +86,7 @@ const toWireLine = (event: RunEvent): string => {
   return JSON.stringify({ kind: wireKind(event), ...fields })
 }
 
-export type FramedDrain = (framed: Stream.Stream<string>) => Effect.Effect<void, never, never>
+export type FramedDrain<R = never> = (framed: Stream.Stream<string>) => Effect.Effect<void, never, R>
 
 function numberText(value: number | null | undefined, fallback: string): string {
   if (typeof value === 'number') {
@@ -133,15 +136,15 @@ const writeStderr = (stdio: Stdio.Stdio, line: string): Effect.Effect<void, neve
 const drainOf = (stdio: Stdio.Stdio, framed: Stream.Stream<string>): Effect.Effect<void, never, never> =>
   Stream.run(framed, stdio.stdout({ endOnDone: true })).pipe(Effect.ignore)
 
-export interface RunEventStream {
+export interface RunEventStream<R = never> {
   readonly queue: Queue.Queue<RunEvent, Cause.Done>
   readonly runId: string
   readonly startedAt: number
   readonly isOpen: () => boolean
   readonly ensureOpen: (resolved: ResolvedMode) => void
-  readonly open: Effect.Effect<void, never, never>
-  readonly closeAndDrain: Effect.Effect<void, never, never>
-  readonly setProgressStreamFile?: (fileName: string) => Effect.Effect<void, never, never>
+  readonly open: Effect.Effect<void, never, R>
+  readonly closeAndDrain: Effect.Effect<void, never, R>
+  readonly setProgressStreamFile?: (fileName: string) => Effect.Effect<void, never, R>
 }
 
 const CROCKFORD_BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -180,11 +183,11 @@ function generateRunId(): string {
   return chars
 }
 
-export const makeRunEventStream = (
+export const makeRunEventStream = <R = never>(
   stdio: Stdio.Stdio,
   resolved: ResolvedMode,
-  drainFramed: FramedDrain = drainOf.bind(null, stdio),
-): Effect.Effect<RunEventStream, never, never> =>
+  drainFramed: FramedDrain<R> = drainOf.bind(null, stdio),
+): Effect.Effect<RunEventStream<R>, never, R> =>
   Effect.gen(function*() {
     const runId = generateRunId()
     const startedAt = yield* Clock.currentTimeMillis
@@ -267,7 +270,7 @@ export const makeRunEventStream = (
       Stream.map((event) => `${toWireLine(event)}\n`),
     )
 
-    const drain: Effect.Effect<void, never, never> = drainFramed(framed)
+    const drain: Effect.Effect<void, never, R> = drainFramed(framed)
 
     let drainFiber: Fiber.Fiber<void, never> | null = null
 
@@ -532,14 +535,17 @@ export const OutputModeProbeLive: Layer.Layer<OutputModeProbeTag> = Layer.succee
   }),
 )
 
-export function emitNullScoreVerdict(
-  stream: RunEventStream,
-  mode: ResolvedMode,
-  thresholds: schema.Thresholds,
-  config: object,
-  basePath: string,
-  pathService: Path.Path,
-): Effect.Effect<void, never, never> {
+export interface EmitNullScoreVerdictOptions<R = never> {
+  readonly stream: RunEventStream<R>
+  readonly mode: ResolvedMode
+  readonly thresholds: schema.Thresholds
+  readonly config: object
+  readonly basePath: string
+  readonly pathService: Path.Path
+}
+
+export function emitNullScoreVerdict<R>(options: EmitNullScoreVerdictOptions<R>): Effect.Effect<void, never, never> {
+  const { stream, mode, thresholds, config, basePath, pathService } = options
   const report: schema.MutationTestResult = {
     schemaVersion: '1.0',
     files: {},
@@ -548,7 +554,14 @@ export function emitNullScoreVerdict(
     config,
     framework: { name: 'StrykerJS', version: frameworkVersion },
   }
-  const envelope = VerdictEnvelope.fromReport(report, mode.mode, mode.signal, stream.runId, basePath, pathService)
+  const envelope = VerdictEnvelope.fromReport({
+    report,
+    mode: mode.mode,
+    signal: mode.signal,
+    runId: stream.runId,
+    basePath,
+    pathService,
+  })
   return Queue.offer(
     stream.queue,
     VerdictReached.make({
@@ -565,8 +578,8 @@ export function emitNullScoreVerdict(
   )
 }
 
-function offerFailureEnvelope(
-  stream: RunEventStream,
+function offerFailureEnvelope<R>(
+  stream: RunEventStream<R>,
   failed: FailedRunOutcome,
   captured: string,
 ): Effect.Effect<void, never, never> {
@@ -582,13 +595,16 @@ function offerFailureEnvelope(
   )
 }
 
-export function emitMachineModeOutput(
-  stream: RunEventStream,
-  mode: ResolvedMode,
-  outcome: Result.Result<RunOutcomeDecision, RunOutcomeError>,
-  basePath: string,
-  pathService: Path.Path,
-): Effect.Effect<void, never, never> {
+export interface EmitMachineModeOutputOptions<R = never> {
+  readonly stream: RunEventStream<R>
+  readonly mode: ResolvedMode
+  readonly outcome: Result.Result<RunOutcomeDecision, RunOutcomeError>
+  readonly basePath: string
+  readonly pathService: Path.Path
+}
+
+export function emitMachineModeOutput<R>(options: EmitMachineModeOutputOptions<R>): Effect.Effect<void, never, never> {
+  const { stream, mode, outcome, basePath, pathService } = options
   return Effect.gen(function*() {
     const captured = readCapturedConsole()
     if (Result.isSuccess(outcome)) {
@@ -623,7 +639,14 @@ export function emitMachineModeOutput(
                 Effect.flatMap((loader) => loader.defaultOptions),
                 Effect.provide(configLoaderLayer),
               )
-              yield* emitNullScoreVerdict(stream, mode, defaults.thresholds, {}, basePath, pathService)
+              yield* emitNullScoreVerdict({
+                stream,
+                mode,
+                thresholds: defaults.thresholds,
+                config: {},
+                basePath,
+                pathService,
+              })
             }
           })),
         Match.tag('RunParseFailed', (failed) => offerFailureEnvelope(stream, failed, captured)),

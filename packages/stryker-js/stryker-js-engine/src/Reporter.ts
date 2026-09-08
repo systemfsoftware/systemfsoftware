@@ -1765,14 +1765,14 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
     pathService: Path.Path,
   ): Effect.Effect<void, never, RunEvents> =>
     Effect.gen(function*() {
-      const envelope = VerdictEnvelope.fromReport(
+      const envelope = VerdictEnvelope.fromReport({
         report,
-        input.resolvedMode.mode,
-        input.resolvedMode.signal,
-        input.runId,
-        input.basePath,
+        mode: input.resolvedMode.mode,
+        signal: input.resolvedMode.signal,
+        runId: input.runId,
+        basePath: input.basePath,
         pathService,
-      )
+      })
       const queue = yield* RunEvents
       yield* Queue.offer(
         queue,

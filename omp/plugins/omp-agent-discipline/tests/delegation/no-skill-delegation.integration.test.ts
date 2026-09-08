@@ -40,7 +40,13 @@ Feature('No-skill-delegation — executor integration')
         Given('a toml config at /test')('cwd', () => Effect.succeed('/unknown')),
         When('runNoSkillDelegation is called for /unknown')(
           'result',
-          (s) => runNoSkillDelegation(s.cwd, 'task', '', 'spawn a task with ce-work'),
+          (s) =>
+            runNoSkillDelegation({
+              cwd: s.cwd,
+              toolName: 'task',
+              subagentType: '',
+              prompt: 'spawn a task with ce-work',
+            }),
         ),
         Then('it should return undefined')((s) =>
           Effect.sync(() => {
@@ -57,7 +63,13 @@ Feature('No-skill-delegation — executor integration')
         Given('a toml config at /test')('cwd', () => Effect.succeed('/test')),
         When('runNoSkillDelegation is called for /test')(
           'result',
-          (s) => runNoSkillDelegation(s.cwd, 'task', '', 'spawn a task with ce-work'),
+          (s) =>
+            runNoSkillDelegation({
+              cwd: s.cwd,
+              toolName: 'task',
+              subagentType: '',
+              prompt: 'spawn a task with ce-work',
+            }),
         ),
         Then('the block result protects ce-work')((s) =>
           Effect.sync(() => {
@@ -80,7 +92,13 @@ Feature('No-skill-delegation — executor integration')
         Given('a malformed toml file')('cwd', () => Effect.succeed('/test')),
         When('runNoSkillDelegation is called')(
           'result',
-          (s) => runNoSkillDelegation(s.cwd, 'task', '', 'spawn a task with ce-work'),
+          (s) =>
+            runNoSkillDelegation({
+              cwd: s.cwd,
+              toolName: 'task',
+              subagentType: '',
+              prompt: 'spawn a task with ce-work',
+            }),
         ),
         Then('it should return undefined (fail open)')((s) =>
           Effect.sync(() => {
@@ -101,7 +119,13 @@ Feature('No-skill-delegation — executor integration')
         ),
         When('runNoSkillDelegation is called')(
           'result',
-          (s) => runNoSkillDelegation(s.ctx.cwd, s.ctx.toolName, s.ctx.subagentType, s.ctx.prompt),
+          (s) =>
+            runNoSkillDelegation({
+              cwd: s.ctx.cwd,
+              toolName: s.ctx.toolName,
+              subagentType: s.ctx.subagentType,
+              prompt: s.ctx.prompt,
+            }),
         ),
         Then('it should return a block result')((s) =>
           Effect.sync(() => {
@@ -124,7 +148,13 @@ Feature('No-skill-delegation — executor integration')
         ),
         When('runNoSkillDelegation is called')(
           'result',
-          (s) => runNoSkillDelegation(s.ctx.cwd, s.ctx.toolName, s.ctx.subagentType, s.ctx.prompt),
+          (s) =>
+            runNoSkillDelegation({
+              cwd: s.ctx.cwd,
+              toolName: s.ctx.toolName,
+              subagentType: s.ctx.subagentType,
+              prompt: s.ctx.prompt,
+            }),
         ),
         Then('it should return undefined')((s) =>
           Effect.sync(() => {
@@ -151,10 +181,20 @@ Feature('No-skill-delegation — executor integration')
         When('runNoSkillDelegation is called for both directories')(
           'results',
           (s) =>
-            runNoSkillDelegation('/project-a', 'task', '', 'spawn a task with ce-work').pipe(
+            runNoSkillDelegation({
+              cwd: '/project-a',
+              toolName: 'task',
+              subagentType: '',
+              prompt: 'spawn a task with ce-work',
+            }).pipe(
               Effect.provide(s.dirs.layer),
               Effect.flatMap((a) =>
-                runNoSkillDelegation('/project-b', 'task', '', 'spawn a task with ce-work').pipe(
+                runNoSkillDelegation({
+                  cwd: '/project-b',
+                  toolName: 'task',
+                  subagentType: '',
+                  prompt: 'spawn a task with ce-work',
+                }).pipe(
                   Effect.provide(s.dirs.layer),
                   Effect.map((b) => ({ a, b })),
                 )

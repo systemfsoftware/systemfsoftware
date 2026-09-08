@@ -52,11 +52,12 @@ export const SettingsWrapped = S.Struct({
 
 export type HookSettings = S.Schema.Type<typeof SettingsWrapped>
 
+const AbsentHookKey = S.declare<never>((_u: unknown): _u is never => false)
+
 const SettingsFlat = S.Struct({
   ...HookGroups.fields,
   disableAllHooks: S.optional(S.Boolean),
-
-  hooks: S.optional(S.Never),
+  hooks: S.optional(AbsentHookKey),
 })
 
 const LiftFlatSettingsACL = SettingsFlat.pipe(

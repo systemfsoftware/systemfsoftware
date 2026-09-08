@@ -13,13 +13,20 @@ import { Effect } from 'effect'
 import { FileSystem } from 'effect/FileSystem'
 import type { PlatformError } from 'effect/PlatformError'
 
+export interface MakeShellHookScriptOptions {
+  readonly dir: string
+  readonly name: string
+  readonly exitCode: number
+  /** Stderr line echoed by the script. Default: no stderr line. */
+  readonly stderr?: string | undefined
+  /** Stdout line echoed by the script. Default: no stdout line. */
+  readonly stdout?: string | undefined
+}
+
 export function makeShellHookScript(
-  dir: string,
-  name: string,
-  exitCode: number,
-  stderr?: string,
-  stdout?: string,
+  options: MakeShellHookScriptOptions,
 ): Effect.Effect<string, PlatformError, FileSystem> {
+  const { dir, name, exitCode, stderr, stdout } = options
   return Effect.gen(function*() {
     const fs = yield* FileSystem
     const content = [

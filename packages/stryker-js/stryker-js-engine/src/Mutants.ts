@@ -550,18 +550,22 @@ export const makeMutantTestPlanner = (
 
 export const plan = makeMutantTestPlanner
 
-export const decidePlans = (
-  mutants: readonly Mutant[],
-  testCoverage: TestCoverage,
-  options: { disableBail: boolean; timeoutMS: number; timeoutFactor: number; ignoreStatic: boolean },
-  timeOverheadMS: number,
-  globalTestFilter: string[] | undefined,
-  sandboxFileByName: Record<string, string>,
-): Effect.Effect<readonly MutantTestPlan[], never, never> => {
+export interface DecidePlansOptions {
+  readonly mutants: readonly Mutant[]
+  readonly testCoverage: TestCoverage
+  readonly options: PlannerOptions
+  readonly timeOverheadMS: number
+  /** No filtering — all tests run when absent. */
+  readonly globalTestFilter?: string[] | undefined
+  readonly sandboxFileByName: Record<string, string>
+}
+
+export const decidePlans = (options: DecidePlansOptions): Effect.Effect<readonly MutantTestPlan[], never, never> => {
+  const { mutants, testCoverage, timeOverheadMS, globalTestFilter, sandboxFileByName } = options
   const command = coverageToCommand(
     mutants,
     testCoverage,
-    options,
+    options.options,
     timeOverheadMS,
     globalTestFilter,
     sandboxFileByName,

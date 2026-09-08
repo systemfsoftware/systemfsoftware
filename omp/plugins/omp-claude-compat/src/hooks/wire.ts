@@ -134,12 +134,15 @@ const SEPARATORS = /&&|\|\||[;|]/
 
 const escapeRegex = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-export function matchesPermissionRule(
-  rule: string,
-  toolName: string,
-  toolInput: Record<string, unknown>,
-  cwd: string,
-): boolean {
+export interface MatchesPermissionRuleOptions {
+  readonly rule: string
+  readonly toolName: string
+  readonly toolInput: Record<string, unknown>
+  readonly cwd: string
+}
+
+export function matchesPermissionRule(options: MatchesPermissionRuleOptions): boolean {
+  const { rule, toolName, toolInput, cwd } = options
   const parsed = RULE.exec(rule)
   const tool = parsed?.[1]
   if (tool === undefined) return true

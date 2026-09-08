@@ -157,12 +157,16 @@ export function arrayExpression(elements: ReadonlyArray<Expression | null> = [],
   return mark<Expression>({ type: 'ArrayExpression', elements: elementList }, loc)
 }
 
-export function callExpression(
-  callee: Expression,
-  args: ReadonlyArray<Expression> = [],
-  optional = false,
-  loc?: Loc,
-): Expression {
+export interface CallExpressionOptions {
+  readonly callee: Expression
+  /** Defaults to []. */
+  readonly args?: ReadonlyArray<Expression>
+  /** Defaults to false. */
+  readonly optional?: boolean
+  readonly loc?: Loc
+}
+export function callExpression(options: CallExpressionOptions): Expression {
+  const { callee, args = [], optional = false, loc } = options
   return mark<Expression>({ type: 'CallExpression', callee, arguments: [...args], optional }, loc)
 }
 
@@ -170,32 +174,39 @@ export function newExpression(callee: Expression, args: ReadonlyArray<Expression
   return mark<Expression>({ type: 'NewExpression', callee, arguments: [...args] }, loc)
 }
 
-export function memberExpression(
-  object: Expression,
-  property: Expression,
-  computed = false,
-  optional = false,
-  loc?: Loc,
-): Expression {
+export interface MemberExpressionOptions {
+  readonly object: Expression
+  readonly property: Expression
+  /** Defaults to false. */
+  readonly computed?: boolean
+  /** Defaults to false. */
+  readonly optional?: boolean
+  readonly loc?: Loc
+}
+export function memberExpression(options: MemberExpressionOptions): Expression {
+  const { object, property, computed = false, optional = false, loc } = options
   return mark<Expression>({ type: 'MemberExpression', object, property, computed, optional }, loc)
 }
 
-export function optionalMemberExpression(
-  object: Expression,
-  property: Expression,
-  computed: boolean,
-  optional: boolean,
-  loc?: Loc,
-): Expression {
+export interface OptionalMemberExpressionOptions {
+  readonly object: Expression
+  readonly property: Expression
+  readonly computed: boolean
+  readonly optional: boolean
+  readonly loc?: Loc
+}
+export function optionalMemberExpression(options: OptionalMemberExpressionOptions): Expression {
+  const { object, property, computed, optional, loc } = options
   return mark<Expression>({ type: 'MemberExpression', object, property, computed, optional }, loc)
 }
-
-export function optionalCallExpression(
-  callee: Expression,
-  args: ReadonlyArray<Expression>,
-  optional: boolean,
-  loc?: Loc,
-): Expression {
+export interface OptionalCallExpressionOptions {
+  readonly callee: Expression
+  readonly args: ReadonlyArray<Expression>
+  readonly optional: boolean
+  readonly loc?: Loc
+}
+export function optionalCallExpression(options: OptionalCallExpressionOptions): Expression {
+  const { callee, args, optional, loc } = options
   return mark<Expression>({ type: 'CallExpression', callee, arguments: [...args], optional }, loc)
 }
 
@@ -227,15 +238,17 @@ export function expressionStatement(expression: Expression, loc?: Loc): Statemen
   return mark<Statement>({ type: 'ExpressionStatement', expression }, loc)
 }
 
-export function ifStatement(
-  test: Expression,
-  consequent: Statement,
-  alternate?: Statement | null,
-  loc?: Loc,
-): Statement {
+export interface IfStatementOptions {
+  readonly test: Expression
+  readonly consequent: Statement
+  /** Defaults to null. */
+  readonly alternate?: Statement | null
+  readonly loc?: Loc
+}
+export function ifStatement(options: IfStatementOptions): Statement {
+  const { test, consequent, alternate, loc } = options
   return mark<Statement>({ type: 'IfStatement', test, consequent, alternate: alternate ?? null }, loc)
 }
-
 export function variableDeclarator(id: Identifier, init: Expression | null, loc?: Loc): VariableDeclaratorNode {
   return mark<VariableDeclaratorNode>({ type: 'VariableDeclarator', id, init }, loc)
 }
@@ -255,16 +268,16 @@ export function returnStatement(argument: Expression | null, loc?: Loc): Stateme
 export function sequenceExpression(expressions: ReadonlyArray<Expression>, loc?: Loc): Expression {
   return mark<Expression>({ type: 'SequenceExpression', expressions: [...expressions] }, loc)
 }
-
-export function conditionalExpression(
-  test: Expression,
-  consequent: Expression,
-  alternate: Expression,
-  loc?: Loc,
-): Expression {
+export interface ConditionalExpressionOptions {
+  readonly test: Expression
+  readonly consequent: Expression
+  readonly alternate: Expression
+  readonly loc?: Loc
+}
+export function conditionalExpression(options: ConditionalExpressionOptions): Expression {
+  const { test, consequent, alternate, loc } = options
   return mark<Expression>({ type: 'ConditionalExpression', test, consequent, alternate }, loc)
 }
-
 export function unaryExpression(
   operator: Extract<UnaryOperator, '+' | '-' | '!' | '~' | 'typeof' | 'void' | 'delete'>,
   argument: Expression,
@@ -273,8 +286,14 @@ export function unaryExpression(
   // Synthesized unaries are always prefixed; the postfix case is UpdateExpression.
   return mark<Expression>({ type: 'UnaryExpression', operator, argument, prefix: true }, loc)
 }
-
-export function updateExpression(operator: '++' | '--', argument: Expression, prefix: boolean, loc?: Loc): Expression {
+export interface UpdateExpressionOptions {
+  readonly operator: '++' | '--'
+  readonly argument: Expression
+  readonly prefix: boolean
+  readonly loc?: Loc
+}
+export function updateExpression(options: UpdateExpressionOptions): Expression {
+  const { operator, argument, prefix, loc } = options
   return mark<Expression>({ type: 'UpdateExpression', operator, argument, prefix }, loc)
 }
 

@@ -58,7 +58,7 @@ import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawne
 
 import { admitMutationTest, MutationTestError } from './admit-mutation-test.workflow.js'
 import type { MutationTestDecision } from './admit-mutation-test.workflow.js'
-import type { CheckerResourceService } from './Checker.js'
+import type { CheckerResourceService, CreateCheckerFactoryOptions } from './Checker.js'
 import { checkGroupedPlans, createCheckerFactory } from './Checker.js'
 import { forkCoreSchema, readConfig, validateOptions, type ValidationSchemaDocument } from './Config.js'
 import { dryRun, DryRunCommand } from './dry-run.workflow.js'
@@ -273,7 +273,7 @@ const toReportedMutant = (mutant: Mutant): MutantTestCoverage =>
 
 const makeCheckerPool = (
   prev: DryRunDone,
-  idGenerator: Parameters<typeof createCheckerFactory>[3],
+  idGenerator: CreateCheckerFactoryOptions['idGenerator'],
 ): Effect.Effect<
   Pool.Pool<CheckerResourceService, unknown> | undefined,
   never,
@@ -284,13 +284,13 @@ const makeCheckerPool = (
       return undefined
     }
     return yield* Pool.make({
-      acquire: createCheckerFactory(
-        prev.options,
-        prev.project.fileDescriptions,
-        prev.loadedPlugins.pluginModulePaths,
+      acquire: createCheckerFactory({
+        options: prev.options,
+        fileDescriptions: prev.project.fileDescriptions,
+        pluginModulePaths: prev.loadedPlugins.pluginModulePaths,
         idGenerator,
-        prev.sandbox.workingDirectory,
-      ),
+        workingDirectory: prev.sandbox.workingDirectory,
+      }),
       size: prev.concurrency.checkers,
     })
   })
@@ -1005,19 +1005,19 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
               )
             }
             const { coveredPlans, earlyResults: noCoverageResults } = partitionPlans(
-              yield* decidePlans(
-                incremental.mutants,
-                prev.testCoverage,
-                {
+              yield* decidePlans({
+                mutants: incremental.mutants,
+                testCoverage: prev.testCoverage,
+                options: {
                   disableBail: prev.options.disableBail,
                   timeoutMS: prev.options.timeoutMS,
                   timeoutFactor: prev.options.timeoutFactor,
                   ignoreStatic: prev.options.ignoreStatic,
                 },
-                Duration.toMillis(prev.timeOverhead),
-                undefined,
+                timeOverheadMS: Duration.toMillis(prev.timeOverhead),
+                globalTestFilter: undefined,
                 sandboxFileByName,
-              ),
+              }),
             )
             const sortedPlans = [...coveredPlans].sort((a, b) => {
               if (a.runOptions.reloadEnvironment === b.runOptions.reloadEnvironment) return 0

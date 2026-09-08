@@ -32,16 +32,11 @@ export const RunEventStreamFileLive = Layer.effect(
   RunEventStreamPort,
   Effect.gen(function*() {
     const stdio = yield* Stdio.Stdio
-    const fs = yield* FileSystem.FileSystem
-    const path = yield* Path.Path
     const fileNameRef = yield* Ref.make(DEFAULT_PROGRESS_STREAM_FILE)
     const drainFramed = (framed: Stream.Stream<string>) =>
       Effect.gen(function*() {
         const fileName = yield* Ref.get(fileNameRef)
-        yield* drainStreamFile(fileName, framed).pipe(
-          Effect.provideService(FileSystem.FileSystem, fs),
-          Effect.provideService(Path.Path, path),
-        )
+        yield* drainStreamFile(fileName, framed)
       })
     return RunEventStreamPort.of({
       createRunEventStream: (resolved) =>

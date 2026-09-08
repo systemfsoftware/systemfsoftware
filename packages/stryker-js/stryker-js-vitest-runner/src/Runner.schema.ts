@@ -17,7 +17,7 @@ export const VitestSectionSchema = S.optional(VitestRunnerOptionsSchema).pipe(
 )
 
 export interface StrykerVitestRunnerOptions {
-  vitest: VitestRunnerOptions
+  readonly vitest: VitestRunnerOptions
 }
 
 export interface VitestRunnerOptionsWithStrykerOptions extends StrykerVitestRunnerOptions, StrykerOptions {}

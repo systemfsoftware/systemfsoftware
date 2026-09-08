@@ -127,14 +127,17 @@ function breakThreshold(thresholds: schema.Thresholds): number | null {
 export namespace VerdictEnvelope {
   export const SCHEMA_VERSION = '1.1'
 
-  export const fromReport = (
-    report: schema.MutationTestResult,
-    mode: OutputMode,
-    signal: ModeSignal,
-    runId: string,
-    basePath: string,
-    pathService: Path.Path,
-  ): VerdictEnvelope => {
+  export interface FromReportOptions {
+    readonly report: schema.MutationTestResult
+    readonly mode: OutputMode
+    readonly signal: ModeSignal
+    readonly runId: string
+    readonly basePath: string
+    readonly pathService: Path.Path
+  }
+
+  export const fromReport = (options: FromReportOptions): VerdictEnvelope => {
+    const { report, mode, signal, runId, basePath, pathService } = options
     const { jsonReporterFileName } = embeddedConfig(report)
     const metrics = calculateMutationTestMetrics(report)
       .systemUnderTestMetrics.metrics

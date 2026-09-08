@@ -65,7 +65,7 @@ Feature('Reviewing a change the agent already made')
       Effect.gen(function*() {
         const fs = yield* FileSystem
         const dir = yield* fs.makeTempDirectoryScoped()
-        const reviewer = yield* makeShellHookScript(dir, 'reviewer', 2, complaint)
+        const reviewer = yield* makeShellHookScript({ dir, name: 'reviewer', exitCode: 2, stderr: complaint })
         yield* makeSettingsJson(dir, {
           PostToolUse: [{ hooks: [{ type: 'command', command: reviewer }] }],
           PostToolUseFailure: [{ hooks: [{ type: 'command', command: reviewer }] }],
@@ -104,7 +104,7 @@ Feature('Reviewing a change the agent already made')
           Effect.gen(function*() {
             const fs = yield* FileSystem
             const dir = yield* fs.makeTempDirectoryScoped()
-            const reviewer = yield* makeShellHookScript(dir, 'quiet-reviewer', 0)
+            const reviewer = yield* makeShellHookScript({ dir, name: 'quiet-reviewer', exitCode: 0 })
             yield* makeSettingsJson(dir, {
               PostToolUse: [{ hooks: [{ type: 'command', command: reviewer }] }],
             })

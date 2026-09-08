@@ -40,16 +40,36 @@ Feature('Policy per-session timing — two cwds get their own projects config').
           yield* warmHarnessPolicy('/project-a').pipe(Effect.provide(appLayer))
           yield* warmHarnessPolicy('/project-b').pipe(Effect.provide(appLayer))
 
-          const a = yield* runNoSkillDelegation('/project-a', 'task', 'ce-work', 'invoke ce-work').pipe(
+          const a = yield* runNoSkillDelegation({
+            cwd: '/project-a',
+            toolName: 'task',
+            subagentType: 'ce-work',
+            prompt: 'invoke ce-work',
+          }).pipe(
             Effect.provide(appLayer),
           )
-          const b = yield* runNoSkillDelegation('/project-b', 'task', 'other-skill', 'invoke other-skill').pipe(
+          const b = yield* runNoSkillDelegation({
+            cwd: '/project-b',
+            toolName: 'task',
+            subagentType: 'other-skill',
+            prompt: 'invoke other-skill',
+          }).pipe(
             Effect.provide(appLayer),
           )
-          const crossA = yield* runNoSkillDelegation('/project-a', 'task', 'other-skill', 'invoke other-skill').pipe(
+          const crossA = yield* runNoSkillDelegation({
+            cwd: '/project-a',
+            toolName: 'task',
+            subagentType: 'other-skill',
+            prompt: 'invoke other-skill',
+          }).pipe(
             Effect.provide(appLayer),
           )
-          const crossB = yield* runNoSkillDelegation('/project-b', 'task', 'ce-work', 'invoke ce-work').pipe(
+          const crossB = yield* runNoSkillDelegation({
+            cwd: '/project-b',
+            toolName: 'task',
+            subagentType: 'ce-work',
+            prompt: 'invoke ce-work',
+          }).pipe(
             Effect.provide(appLayer),
           )
           return { a, b, crossA, crossB }
@@ -122,10 +142,20 @@ Feature('Policy per-session timing — two cwds get their own projects config').
           const appLayerSecond = Layer.mergeAll(secondLayer, Path.layer, policyLiveSecond)
           yield* warmHarnessPolicy(s.ctx.cwd).pipe(Effect.provide(appLayerSecond))
 
-          const second = yield* runNoSkillDelegation(s.ctx.cwd, 'task', 'other-skill', 'invoke other-skill').pipe(
+          const second = yield* runNoSkillDelegation({
+            cwd: s.ctx.cwd,
+            toolName: 'task',
+            subagentType: 'other-skill',
+            prompt: 'invoke other-skill',
+          }).pipe(
             Effect.provide(appLayerSecond),
           )
-          const first = yield* runNoSkillDelegation(s.ctx.cwd, 'task', 'ce-work', 'invoke ce-work').pipe(
+          const first = yield* runNoSkillDelegation({
+            cwd: s.ctx.cwd,
+            toolName: 'task',
+            subagentType: 'ce-work',
+            prompt: 'invoke ce-work',
+          }).pipe(
             Effect.provide(appLayerSecond),
           )
 

@@ -5,11 +5,12 @@ import type {
   ExtensionContext,
 } from '@oh-my-pi/pi-coding-agent'
 import { Effect } from 'effect'
+import type * as FileSystem from 'effect/FileSystem'
 import { ReferencedContent } from './referenced-content.js'
 
 export const InjectInstructionsTask = (
   pi: ExtensionAPI,
-  runSafe: <A, E>(effect: Effect.Effect<A, E, ReferencedContent>) => Promise<A>,
+  runSafe: <A, E>(effect: Effect.Effect<A, E, ReferencedContent | FileSystem.FileSystem>) => Promise<A>,
 ): void => {
   pi.on('before_agent_start', async (event: BeforeAgentStartEvent, ctx: ExtensionContext) => {
     const injected = await runSafe(

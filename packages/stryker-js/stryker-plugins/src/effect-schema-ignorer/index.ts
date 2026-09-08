@@ -18,12 +18,12 @@ export const strykerPlugins = [
         for (let current: IgnorerPath | null | undefined = path; current; current = current.parentPath) {
           const parent = current.parentPath
           const grandparent = parent?.parentPath
-          const reason = decideSchemaDeclarationIgnore(
-            current.node,
-            parent?.node,
-            grandparent?.node,
-            grandparent?.parentPath?.node,
-          )
+          const reason = decideSchemaDeclarationIgnore({
+            node: current.node,
+            parent: parent?.node,
+            grandparent: grandparent?.node,
+            ancestor: grandparent?.parentPath?.node,
+          })
           if (reason !== undefined) {
             return Option.some(reason)
           }

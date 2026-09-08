@@ -327,7 +327,7 @@ function firstConfigErrorDetail(exit: Exit.Exit<unknown, unknown>): string | und
 }
 
 export function remediationFor(exit: Exit.Exit<unknown, unknown>, code: number): string {
-  return buildErrorEnvelope(exit, code, '', []).remediation
+  return buildErrorEnvelope({ exit, code, captured: '', argv: [] }).remediation
 }
 
 export function describeFailure(exit: Exit.Exit<unknown, unknown>): string {
@@ -618,12 +618,15 @@ export function classifyRunOutcome(
   return classifyRunOutcomeWorkflow(gatherRunOutcome(exit, signal, argv))
 }
 
-export function buildErrorEnvelope(
-  exit: Exit.Exit<unknown, unknown>,
-  code: number,
-  captured: string,
-  argv: readonly string[],
-): ErrorEnvelope {
+export interface BuildErrorEnvelopeOptions {
+  readonly exit: Exit.Exit<unknown, unknown>
+  readonly code: number
+  readonly captured: string
+  readonly argv: readonly string[]
+}
+
+export function buildErrorEnvelope(options: BuildErrorEnvelopeOptions): ErrorEnvelope {
+  const { exit, code, captured, argv } = options
   const result = classifyRunOutcome(exit, signalFromCode(code), argv)
   return Result.match(result, {
     onFailure: (failure) => shapeEnvelope(failure, captured),
