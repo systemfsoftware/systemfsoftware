@@ -40,7 +40,7 @@ no_delegate_skills = [
 dispatch_doctrine_skills = ["task-decomposition"]
 
 # @-ref targets, as project-relative paths, that the omp host already renders as
-# context files, so the claude-compat plugin must not inject a second copy.
+# context files, so the claude-compat plugin (now at github.com/systemfsoftware/omp-claude-compat) must not inject a second copy.
 # Matching is exact: "AGENTS.md" suppresses only the root file, never a nested
 # "packages/foo/AGENTS.md". Absent, it defaults to ["AGENTS.md"]; set it to []
 # to disable suppression entirely.

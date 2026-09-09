@@ -293,11 +293,11 @@ _Aliases:_ `contrived arbitrary`
 
 An instruction file the omp host discovers on its own and renders into the system prompt — `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `copilot-instructions.md` and the like. The host expands `@`-imports inside each one, dedupes the set by byte-identical content, and reformats the markdown before rendering. Root `<cwd>/CLAUDE.md` is _not_ a context file: the Claude provider resolves only `<cwd>/.claude/CLAUDE.md` and the user-level copy.
 
-_Avoid:_ using this for anything `omp-claude-compat` injects — that is an injected ref, and conflating the two is what caused `AGENTS.md` to reach the prompt twice.
+_Avoid:_ using this for anything the `omp-claude-compat` extension (now at github.com/systemfsoftware/omp-claude-compat) injects — that is an injected ref, and conflating the two is what caused `AGENTS.md` to reach the prompt twice.
 
 ### Injected ref
 
-The target of an `@`-reference inside a `CLAUDE.md` that the host does not discover, materialized into the system prompt by `omp-claude-compat`. Injected refs exist only to cover the host's discovery gap, so a ref pointing at a file that is already a context file is redundant by construction and must be suppressed. Suppression keys on the target's file name, never on its content: the host reformats markdown, so the same file is not byte-identical across the two paths.
+The target of an `@`-reference inside a `CLAUDE.md` that the host does not discover, materialized into the system prompt by the `omp-claude-compat` extension (now at github.com/systemfsoftware/omp-claude-compat). Injected refs exist only to cover the host's discovery gap, so a ref pointing at a file that is already a context file is redundant by construction and must be suppressed. Suppression keys on the target's file name, never on its content: the host reformats markdown, so the same file is not byte-identical across the two paths.
 
 ## Prompt routing
 
