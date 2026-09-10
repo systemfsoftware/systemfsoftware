@@ -2274,6 +2274,9 @@ importers:
       '@noble/hashes':
         specifier: 1.8.0
         version: 1.8.0
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.1
       '@systemfsoftware/effect-cell-types':
         specifier: workspace:^
         version: link:../../effect-cell-types
@@ -2344,6 +2347,12 @@ importers:
 
   packages/stryker-js/stryker-js-html-reporter:
     dependencies:
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
+      '@effect/platform-node-shared':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
       '@systemfsoftware/effect-cell-types':
         specifier: workspace:^
         version: link:../../effect-cell-types
@@ -8141,8 +8150,7 @@ snapshots:
 
   '@noble/hashes@1.8.0': {}
 
-  '@opentelemetry/api@1.9.1':
-    optional: true
+  '@opentelemetry/api@1.9.1': {}
 
   '@oxc-parser/binding-android-arm-eabi@0.127.0':
     optional: true

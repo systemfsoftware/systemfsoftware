@@ -9,32 +9,28 @@ import type {
 import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
 import type { AnyPluginContribution, PluginKind } from '@systemfsoftware/stryker-js/Plugin'
 import type {
-  DryRunCompletedEvent,
   Metrics,
   MetricsResult,
-  MutationTestingPlanReadyEvent,
   MutationTestMetricsResult,
-  ReporterService,
+  ReporterFactory,
   RunTiming,
 } from '@systemfsoftware/stryker-js/Reporter'
-import { broadcastReporter, ReporterFailed } from '@systemfsoftware/stryker-js/Reporter'
+import { ReporterFailed } from '@systemfsoftware/stryker-js/Reporter'
 import { RunEvents, VerdictReached } from '@systemfsoftware/stryker-js/Run'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import type { MutantRunResult, TestResult } from '@systemfsoftware/stryker-js/TestRunner'
 import type { TestRunnerCapabilities } from '@systemfsoftware/stryker-js/TestRunner'
-import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
-import type { PlatformError } from 'effect/PlatformError'
 import * as Predicate from 'effect/Predicate'
 import * as Queue from 'effect/Queue'
-import * as Ref from 'effect/Ref'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { calculateMutationTestMetrics } from 'mutation-testing-metrics'
@@ -42,32 +38,20 @@ import type * as schema from 'mutation-testing-report-schema/api'
 import type { OpenEndLocation } from 'mutation-testing-report-schema/api'
 
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
-import { verdictExitClass } from '@systemfsoftware/stryker-js/ExitClass'
+import { highestExitClass, verdictExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import type { TestCoverage } from './Mutants.js'
 import type { ResolvedMode } from './output-mode.js'
 import type { Project } from './Project.js'
 import { FILE_CONCURRENCY, readOriginal } from './Project.js'
 import { ansi } from './Reporter.ansi.js'
 import { ClearTextReportCommand } from './Reporter.schema.js'
+import type { ReporterStage } from './ReporterStream.js'
+import { closeReporterStage, offerTerminalReport, terminalDrainClass } from './ReporterStream.js'
 import type { RunOutcome } from './Run.js'
 import { strykerVersion } from './stryker-package.js'
 import { buildVerdictEnvelope, isActionableStatus } from './verdict-envelope.js'
 const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
 type ProvidedStrykerOptions = StrykerOptions
-const writeOutputFile = (
-  fs: FileSystem.FileSystem,
-  path: Path.Path,
-  fileName: string,
-  content: string,
-): Effect.Effect<void, PlatformError, never> =>
-  Effect.gen(function*() {
-    yield* fs.makeDirectory(path.dirname(fileName), { recursive: true })
-    yield* fs.writeFileString(fileName, content)
-  })
-
-export { broadcastReporter }
-export type { NamedReporter } from '@systemfsoftware/stryker-js/Reporter'
-export type StrictReporter = ReporterService
 
 export type ProgressBarState = {
   readonly format: string
@@ -163,42 +147,6 @@ export const emptyTally = (startedAt: number): ProgressTally => ({
   capabilities: { reloadEnvironment: false },
   startedAt,
 })
-
-export const handleDryRunCompleted = (
-  tally: ProgressTally,
-  event: DryRunCompletedEvent,
-): ProgressTally => ({
-  ...tally,
-  timing: event.timing,
-  capabilities: event.capabilities,
-})
-
-export const handleMutationTestingPlanReady = (
-  tally: ProgressTally,
-  event: MutationTestingPlanReadyEvent,
-  startedAt: number,
-): ProgressTally => {
-  const map = new Map<string, number>()
-  for (const plan of event.mutantPlans) {
-    if (plan.plan !== 'Run') continue
-    let ticks = plan.netTime
-    if (
-      tally.capabilities.reloadEnvironment === false &&
-      plan.runOptions.reloadEnvironment
-    ) {
-      ticks += tally.timing.overhead
-    }
-    map.set(plan.mutant.id, ticks)
-  }
-  const total = [...map.values()].reduce((acc, n) => acc + n, 0)
-  return {
-    ...tally,
-    startedAt,
-    ticksByMutantId: map,
-    mutants: map.size,
-    total,
-  }
-}
 
 export const handleMutantTested = (
   tally: ProgressTally,
@@ -913,187 +861,193 @@ export function renderClearText(
   return { stdout, debug }
 }
 
-export const makeClearTextReporter = (params: {
-  readonly options?: ProvidedStrykerOptions
-  readonly out?: NodeJS.WritableStream
-}): ReporterService => {
-  const options = params.options
-  const out = params.out ?? process.stdout
-
-  const runClearText = (
-    command: { readonly report: schema.MutationTestResult; readonly metrics: MutationTestMetricsResult },
-  ) =>
-    Effect.gen(function*() {
-      const decoded = yield* Result.match(
-        S.decodeUnknownResult(ClearTextReportCommand)({ report: command.report, metrics: command.metrics, options }),
-        {
-          onFailure: (cause) => Effect.fail(cause),
-          onSuccess: (value) => Effect.succeed(value),
-        },
-      )
-      const { stdout, debug } = renderClearText(decoded.report, decoded.metrics, decoded.options)
-      for (const line of stdout) {
-        out.write(`${line}\n`)
-      }
-      for (const line of debug) {
-        yield* Effect.logDebug(line)
-      }
-    })
-
-  return {
-    onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
-    onMutationTestingPlanReady: (_event: MutationTestingPlanReadyEvent) => Effect.void,
-    onMutantTested: (_result: MutantResult) => Effect.void,
-    onMutationTestReportReady: (report: schema.MutationTestResult, metrics: MutationTestMetricsResult) =>
-      Effect.gen(function*() {
-        if (options === undefined) return
-        yield* runClearText({ report, metrics })
-      }).pipe(
-        Effect.catchCause((cause) =>
-          Effect.fail(
-            new ReporterFailed({
-              reporterName: 'clear-text',
-              event: 'onMutationTestReportReady',
-              cause: errorToString(cause),
-            }),
-          )
-        ),
-      ),
-    wrapUp: Effect.void,
+export const makeClearTextReporter: ReporterFactory = (options) => async (events) => {
+  const seen: {
+    terminal?: { readonly report: schema.MutationTestResult; readonly metrics: MutationTestMetricsResult }
+  } = {}
+  for await (const event of events) {
+    Match.value(event).pipe(
+      Match.tag('mutationTestReportReady', (ready) => {
+        seen.terminal = { report: ready.report, metrics: ready.metrics }
+      }),
+      Match.orElse(() => undefined),
+    )
   }
-}
-
-export const makeJsonReporter = (params: {
-  readonly options?: ProvidedStrykerOptions
-  readonly fs: FileSystem.FileSystem
-  readonly path: Path.Path
-}): ReporterService => {
-  const options = params.options
-  const fs = params.fs
-  const path = params.path
-
-  const runJsonReport = (command: { readonly report: schema.MutationTestResult }) =>
-    Effect.gen(function*() {
-      if (options === undefined) return
-      const json = JSON.stringify(command.report, null, 0)
-      const filePath = path.normalize(options.jsonReporter.fileName)
-      yield* Effect.logDebug(`Using relative path ${filePath}`)
-      yield* writeOutputFile(fs, path, path.resolve(filePath), json)
-      const url = yield* path.toFileUrl(path.resolve(filePath)).pipe(Effect.orDie)
-      yield* Effect.logInfo(`Your report can be found at: ${url.href}`)
-    })
-
-  return {
-    onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
-    onMutationTestingPlanReady: (_event: MutationTestingPlanReadyEvent) => Effect.void,
-    onMutantTested: (_result: MutantResult) => Effect.void,
-    onMutationTestReportReady: (report: schema.MutationTestResult, _metrics: MutationTestMetricsResult) =>
-      Effect.gen(function*() {
-        if (options === undefined) return
-        yield* runJsonReport({ report })
-      }).pipe(
-        Effect.catchCause((cause) =>
-          Effect.fail(
-            new ReporterFailed({
-              reporterName: 'json',
-              event: 'onMutationTestReportReady',
-              cause: errorToString(cause),
-            }),
-          )
-        ),
-      ),
-    wrapUp: Effect.void,
+  if (seen.terminal === undefined) {
+    return
   }
-}
-
-export const makeProgressBarReporter = (params: {
-  readonly out?: NodeJS.WritableStream
-  readonly barFormat?: string
-  readonly barOptions?: {
-    readonly complete: string
-    readonly incomplete: string
-    readonly width: number
-  }
-} = {}): Effect.Effect<ReporterService> =>
-  Effect.gen(function*() {
-    const out = params.out ?? process.stdout
-    const barFormat = params.barFormat ??
-      'Mutation testing  [:bar] :percent (elapsed: :et, remaining: :etc) :tested/:mutants Mutants tested (:survived survived, :timedOut timed out)'
-    const barOptions = params.barOptions ?? { complete: '=', incomplete: ' ', width: 50 }
-    const tallyRef = yield* Ref.make<ProgressTally>(emptyTally(0))
-    const barRef = yield* Ref.make<ProgressBarState | undefined>(undefined)
-
-    const reporter: ReporterService = {
-      onDryRunCompleted: (event: DryRunCompletedEvent) =>
-        Ref.update(tallyRef, (tally) => handleDryRunCompleted(tally, event)).pipe(
-          Effect.mapError(
-            (cause) => new ReporterFailed({ reporterName: 'progress', event: 'onDryRunCompleted', cause }),
-          ),
-        ),
-      onMutationTestingPlanReady: (event: MutationTestingPlanReadyEvent) =>
-        Effect.gen(function*() {
-          const startedAt = yield* Clock.currentTimeMillis
-          yield* Ref.update(tallyRef, (tally) => handleMutationTestingPlanReady(tally, event, startedAt))
-          const tally = yield* Ref.get(tallyRef)
-          const barState = makeProgressBarState(barFormat, {
-            complete: barOptions.complete,
-            incomplete: barOptions.incomplete,
-            total: tally.total,
-            width: barOptions.width,
-          })
-          yield* Ref.set(barRef, barState)
-        }).pipe(
-          Effect.mapError(
-            (cause) => new ReporterFailed({ reporterName: 'progress', event: 'onMutationTestingPlanReady', cause }),
-          ),
-        ),
-
-      onMutantTested: (result: MutantResult) =>
-        Effect.gen(function*() {
-          const now = yield* Clock.currentTimeMillis
-          const tally = yield* Ref.get(tallyRef)
-          const { tally: nextTally, ticks } = handleMutantTested(tally, result)
-          yield* Ref.set(tallyRef, nextTally)
-          const barState = yield* Ref.get(barRef)
-          if (barState === undefined) return
-          let nextBar = barState
-          if (ticks !== 0) {
-            nextBar = tickProgressBar(barState, ticks)
-          }
-          yield* Ref.set(barRef, nextBar)
-          const data: Record<string, string | number> = {
-            survived: nextTally.survived,
-            timedOut: nextTally.timedOut,
-            tested: nextTally.tested,
-            mutants: nextTally.mutants,
-            total: nextTally.total,
-            ticks: nextTally.ticks,
-            et: getElapsedTime(nextTally, now),
-            etc: getEtc(nextTally, now),
-          }
-          const line = renderProgressBar(nextBar, data)
-          yield* Effect.sync(() => {
-            out.write(`\r${line}`)
-            if (isComplete(nextBar)) {
-              out.write('\n')
-            }
-          })
-        }).pipe(
-          Effect.mapError(
-            (cause) => new ReporterFailed({ reporterName: 'progress', event: 'onMutantTested', cause }),
-          ),
-        ),
-
-      onMutationTestReportReady: (
-        _report: schema.MutationTestResult,
-        _metrics: MutationTestMetricsResult,
-      ) => Effect.void,
-
-      wrapUp: Effect.void,
-    }
-
-    return reporter
+  const decoded = S.decodeUnknownResult(ClearTextReportCommand)({
+    report: seen.terminal.report,
+    metrics: seen.terminal.metrics,
+    options,
   })
+  if (Result.isFailure(decoded)) {
+    throw new ReporterFailed({
+      reporterName: 'clear-text',
+      event: 'mutationTestReportReady',
+      cause: errorToString(decoded.failure),
+    })
+  }
+  const rendered = renderClearText(decoded.success.report, decoded.success.metrics, decoded.success.options)
+  for (const line of rendered.stdout) {
+    process.stdout.write(`${line}\n`)
+  }
+  if (options.logLevel === 'debug') {
+    for (const line of rendered.debug) {
+      process.stderr.write(`${line}\n`)
+    }
+  }
+}
+
+export interface JsonReporterDeps {
+  readonly fileSystem: FileSystem.FileSystem
+  readonly path: Path.Path
+}
+
+// The json built-in closes over the host's FileSystem/Path services bound
+// once at the composition root; the ReporterFactory contract itself carries
+// no services and stays effect-free.
+export const makeJsonReporter = (services: JsonReporterDeps): ReporterFactory => (options) => async (events) => {
+  const seen: { report?: schema.MutationTestResult } = {}
+  for await (const event of events) {
+    Match.value(event).pipe(
+      Match.tag('mutationTestReportReady', (ready) => {
+        seen.report = ready.report
+      }),
+      Match.orElse(() => undefined),
+    )
+  }
+  if (seen.report === undefined) {
+    return
+  }
+  const json = JSON.stringify(seen.report, null, 0)
+  const writeReport = Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const fileName = path.resolve(path.normalize(options.jsonReporter.fileName))
+    if (options.logLevel === 'debug') {
+      process.stderr.write(`Using relative path ${path.normalize(options.jsonReporter.fileName)}\n`)
+    }
+    const failAsJsonReporter = (cause: unknown): ReporterFailed =>
+      new ReporterFailed({
+        reporterName: 'json',
+        event: 'mutationTestReportReady',
+        cause: errorToString(cause),
+      })
+    yield* fs.makeDirectory(path.dirname(fileName), { recursive: true }).pipe(
+      Effect.mapError(failAsJsonReporter),
+    )
+    yield* fs.writeFileString(fileName, json).pipe(Effect.mapError(failAsJsonReporter))
+    const url = yield* path.toFileUrl(fileName).pipe(Effect.mapError(failAsJsonReporter))
+    process.stdout.write(`Your report can be found at: ${url.href}\n`)
+  })
+  await Effect.runPromise(
+    writeReport.pipe(
+      Effect.provideService(FileSystem.FileSystem, services.fileSystem),
+      Effect.provideService(Path.Path, services.path),
+    ),
+  )
+}
+
+const PROGRESS_BAR_FORMAT =
+  'Mutation testing  [:bar] :percent (elapsed: :et, remaining: :etc) :tested/:mutants Mutants tested (:survived survived, :timedOut timed out)'
+
+const PROGRESS_BAR_OPTIONS = { complete: '=', incomplete: ' ', width: 50 }
+
+export const makeProgressBarReporter: ReporterFactory = () => async (events) => {
+  const progress: { tally: ProgressTally; bar: ProgressBarState | undefined } = {
+    tally: emptyTally(0),
+    bar: undefined,
+  }
+  const render = (now: number): void => {
+    if (progress.bar === undefined) {
+      return
+    }
+    const data: Record<string, string | number> = {
+      survived: progress.tally.survived,
+      timedOut: progress.tally.timedOut,
+      tested: progress.tally.tested,
+      mutants: progress.tally.mutants,
+      total: progress.tally.total,
+      ticks: progress.tally.ticks,
+      et: getElapsedTime(progress.tally, now),
+      etc: getEtc(progress.tally, now),
+    }
+    const line = renderProgressBar(progress.bar, data)
+    process.stdout.write(`\r${line}`)
+    if (isComplete(progress.bar)) {
+      process.stdout.write('\n')
+    }
+  }
+  try {
+    for await (const event of events) {
+      Match.value(event).pipe(
+        Match.tag('dryRunCompleted', (dryRun) => {
+          progress.tally = {
+            ...progress.tally,
+            timing: dryRun.timing,
+            capabilities: { reloadEnvironment: dryRun.capabilities.reloadEnvironment },
+          }
+        }),
+        Match.tag('mutationTestingPlanReady', (planReady) => {
+          const ticksByMutantId = new Map<string, number>()
+          for (const plan of planReady.plans) {
+            if (plan.plan !== 'Run') {
+              continue
+            }
+            let ticks = plan.netTime
+            if (progress.tally.capabilities.reloadEnvironment === false && plan.reloadEnvironment) {
+              ticks += progress.tally.timing.overhead
+            }
+            ticksByMutantId.set(plan.mutantId, ticks)
+          }
+          let total = 0
+          for (const ticks of ticksByMutantId.values()) {
+            total += ticks
+          }
+          progress.tally = {
+            ...progress.tally,
+            startedAt: performance.now(),
+            ticksByMutantId,
+            mutants: ticksByMutantId.size,
+            total,
+          }
+          progress.bar = makeProgressBarState(PROGRESS_BAR_FORMAT, { ...PROGRESS_BAR_OPTIONS, total })
+        }),
+        Match.tag('mutantTested', (tested) => {
+          const ticks = progress.tally.ticksByMutantId.get(tested.id)
+          if (ticks === undefined) {
+            return
+          }
+          let survived = progress.tally.survived
+          if (tested.status === 'Survived') {
+            survived = progress.tally.survived + 1
+          }
+          let timedOut = progress.tally.timedOut
+          if (tested.status === 'Timeout') {
+            timedOut = progress.tally.timedOut + 1
+          }
+          progress.tally = {
+            ...progress.tally,
+            tested: tested.completed,
+            ticks: progress.tally.ticks + ticks,
+            survived,
+            timedOut,
+          }
+          if (ticks !== 0 && progress.bar !== undefined) {
+            progress.bar = tickProgressBar(progress.bar, ticks)
+          }
+          render(performance.now())
+        }),
+        Match.orElse(() => undefined),
+      )
+    }
+  } finally {
+    if (progress.bar !== undefined && !isComplete(progress.bar)) {
+      process.stdout.write('\n')
+    }
+  }
+}
 
 export type RunEvent =
   | { kind: 'plan'; total: number }
@@ -1133,70 +1087,14 @@ export function toRunEvent(
   }
 }
 
-export const makeProgressStreamReporter = (
-  runEventSink: RunEventSink = () => {},
-): Effect.Effect<ReporterService> =>
-  Effect.gen(function*() {
-    const totalRef = yield* Ref.make(0)
-    const completedRef = yield* Ref.make(0)
-
-    const reporter: ReporterService = {
-      onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
-
-      onMutationTestingPlanReady: (event: MutationTestingPlanReadyEvent) =>
-        Effect.gen(function*() {
-          const total = event.mutantPlans.length
-          yield* Ref.set(totalRef, total)
-          yield* Effect.try({
-            try: () => {
-              runEventSink({ kind: 'plan', total })
-            },
-            catch: (cause) =>
-              new ReporterFailed({
-                reporterName: 'progress-stream',
-                event: 'onMutationTestingPlanReady',
-                cause: errorToString(cause),
-              }),
-          })
-        }),
-
-      onMutantTested: (result: MutantResult) =>
-        Effect.gen(function*() {
-          const completed = yield* Ref.updateAndGet(completedRef, (n) => n + 1)
-          const total = yield* Ref.get(totalRef)
-          yield* Effect.try({
-            try: () => {
-              runEventSink({
-                kind: 'mutant',
-                id: result.id,
-                status: result.status,
-                file: result.fileName,
-                location: result.location,
-                mutator: result.mutatorName,
-                replacement: result.replacement,
-                completed,
-                total,
-              })
-            },
-            catch: (cause) =>
-              new ReporterFailed({
-                reporterName: 'progress-stream',
-                event: 'onMutantTested',
-                cause: errorToString(cause),
-              }),
-          })
-        }),
-
-      onMutationTestReportReady: (
-        _report: schema.MutationTestResult,
-        _metrics: MutationTestMetricsResult,
-      ) => Effect.void,
-
-      wrapUp: Effect.void,
-    }
-
-    return reporter
-  })
+export const makeProgressStreamReporter: ReporterFactory = () => async (events) => {
+  // The in-process progress stream has no subscribed sink; the machine-mode
+  // progress stream is the CLI RunEvent stream (KTD5). Drain only.
+  for await (const drained of events) {
+    // Consume without producing output.
+    void drained
+  }
+}
 
 export const toSchemaPosition = (pos: Position): schema.Position => ({
   column: pos.column + 1,
@@ -1429,7 +1327,7 @@ export class MutationReporting extends Context.Service<MutationReporting, Mutati
 ) {}
 
 export interface MakeMutationReportingInput {
-  readonly reporter: ReporterService
+  readonly reporterStage: ReporterStage
   readonly options: StrykerOptions
   readonly project: Project
   readonly testCoverage: TestCoverage
@@ -1441,8 +1339,7 @@ export interface MakeMutationReportingInput {
 }
 
 export const makeMutationReportingService = (input: MakeMutationReportingInput): MutationReportingService => {
-  const reportOne = (result: MutantResult): Effect.Effect<MutantResult, unknown> =>
-    input.reporter.onMutantTested(result).pipe(Effect.as(result))
+  const reportOne = (result: MutantResult): Effect.Effect<MutantResult, unknown> => Effect.succeed(result)
   const reportMutantStatus = (
     mutant: MutantTestCoverage,
     status: MutantResult['status'],
@@ -1798,7 +1695,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       const pathService = yield* Path.Path
       const report = yield* mutationTestReport(results)
       const metrics = calculateMutationTestMetrics(report)
-      yield* input.reporter.onMutationTestReportReady(report, metrics)
+      yield* offerTerminalReport(input.reporterStage, report, metrics)
       const verdict = yield* determineExitCode(metrics)
       yield* emitVerdict(report, pathService)
       if (input.options.incremental) {
@@ -1807,7 +1704,19 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
         yield* fs.makeDirectory(dir, { recursive: true })
         yield* fs.writeFileString(input.options.incrementalFile, JSON.stringify(report, null, 2))
       }
-      return { results, verdict } satisfies RunOutcome
+      const terminalDrain = terminalDrainClass(yield* closeReporterStage(input.reporterStage))
+      let finalVerdict = verdict
+      if (terminalDrain !== null) {
+        if (finalVerdict === null) {
+          finalVerdict = terminalDrain
+        } else {
+          const highest = highestExitClass([finalVerdict, terminalDrain])
+          if (highest !== null) {
+            finalVerdict = highest
+          }
+        }
+      }
+      return { results, verdict: finalVerdict, terminalDrain } satisfies RunOutcome
     })
   const writeAtomic = (file: string, content: string) =>
     Effect.gen(function*() {
