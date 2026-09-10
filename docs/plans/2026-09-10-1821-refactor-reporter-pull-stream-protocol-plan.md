@@ -218,6 +218,8 @@ Recorded from headless scoping and a destructive-review pass (lens: Edge-First, 
 
 Test-layer adjudication (choose-test-layer gate): all new coverage is in-process — property laws through the contract package's published exports and composition scenarios through the engine's public run API. Default REFUSE was applied: no planned test spawns a process, a CLI, or a container. The contract-lane command is the repo's pre-existing process-level gate required by R8; this plan updates its assertions but creates no new spawn-based test.
 
+Post-implementation adjudication (choose-test-layer gate, executed during U2/U4): the U2/U4 composition scenarios driving the reporter stream host (ordering, containment, terminal-drain, interrupt, bootstrap init, backpressure) were REFUSED — the stream-host functions are internal plumbing with no published in-process seam, and the only public entry (`runMutationTest`) requires worker-process spawns, which the gate bans. No test-born re-exports were minted. Those behaviors are observed at their true altitude: the contract lane (R8) exercises real runs end-to-end, and U1's properties pin the protocol layer. If the CI mutation report shows survivors inside the stream host, the sanctioned repair is in-source `import.meta.vitest` coverage beside the guarded code, not exported hatches.
+
 ---
 
 ## Definition of Done
