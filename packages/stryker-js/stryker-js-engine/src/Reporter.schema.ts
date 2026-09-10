@@ -1,5 +1,4 @@
 import { Wire } from '@systemfsoftware/effect-cell-types'
-import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import * as S from 'effect/Schema'
 import type { MutationTestMetricsResult } from 'mutation-testing-metrics'
 import type * as report from 'mutation-testing-report-schema/api'
@@ -11,7 +10,6 @@ const MutationTestMetricsResultSchema = Wire.mint(S.Unknown.pipe(S.refine(isMuta
 export class ClearTextReportCommand extends S.TaggedClass<ClearTextReportCommand>()('ClearTextReportCommand', {
   report: MutationTestResultSchema,
   metrics: MutationTestMetricsResultSchema,
-  options: StrykerOptionsSchema,
 }) {}
 
 export class ClearTextDocument extends S.TaggedClass<ClearTextDocument>()('ClearTextDocument', {

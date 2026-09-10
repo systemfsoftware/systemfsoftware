@@ -877,9 +877,9 @@ export const makeClearTextReporter: ReporterFactory = (options) => async (events
     return
   }
   const decoded = S.decodeUnknownResult(ClearTextReportCommand)({
+    _tag: 'ClearTextReportCommand',
     report: seen.terminal.report,
     metrics: seen.terminal.metrics,
-    options,
   })
   if (Result.isFailure(decoded)) {
     throw new ReporterFailed({
@@ -888,7 +888,7 @@ export const makeClearTextReporter: ReporterFactory = (options) => async (events
       cause: errorToString(decoded.failure),
     })
   }
-  const rendered = renderClearText(decoded.success.report, decoded.success.metrics, decoded.success.options)
+  const rendered = renderClearText(decoded.success.report, decoded.success.metrics, options)
   for (const line of rendered.stdout) {
     process.stdout.write(`${line}\n`)
   }
