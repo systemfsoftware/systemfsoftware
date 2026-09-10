@@ -5,48 +5,36 @@ import type { MutantResult } from './Mutant.js'
 import type { TestPlan } from './Mutant.js'
 import type { ReporterFailed } from './Reporter.schema.js'
 export { ReporterFailed } from './Reporter.schema.js'
+import { ReporterEventKind } from './ReporterEvent.schema.js'
+import type { MutationTestMetricsResult, RunTiming } from './ReporterEvent.schema.js'
 
-export interface Metrics {
-  readonly pending: number
-  readonly killed: number
-  readonly timeout: number
-  readonly survived: number
-  readonly noCoverage: number
-  readonly runtimeErrors: number
-  readonly compileErrors: number
-  readonly ignored: number
-  readonly totalDetected: number
-  readonly totalUndetected: number
-  readonly totalInvalid: number
-  readonly totalValid: number
-  readonly totalMutants: number
-  readonly totalCovered: number
-  readonly mutationScore: number
-  readonly mutationScoreBasedOnCoveredCode: number
-}
+export { ReporterEventKind }
+export {
+  DryRunCompleted,
+  MutantTested,
+  MutationTestingPlanReady,
+  MutationTestReportReady,
+  ReporterEventSchema,
+  ReporterEventUnion,
+} from './ReporterEvent.schema.js'
+export type {
+  Metrics,
+  MetricsResult,
+  MutationTestMetricsResult,
+  ReporterEvent,
+  ReporterFactory,
+  ReporterInit,
+  ReporterPlanDescriptor,
+  RunTiming,
+  TestMetrics,
+} from './ReporterEvent.schema.js'
 
-export interface TestMetrics {
-  readonly total: number
-  readonly killing: number
-  readonly covering: number
-  readonly notCovering: number
-}
-
-export interface MetricsResult<TMetrics> {
-  readonly name: string
-  readonly metrics: TMetrics
-  readonly childResults: readonly MetricsResult<TMetrics>[]
-}
-
-export interface MutationTestMetricsResult {
-  readonly systemUnderTestMetrics: MetricsResult<Metrics>
-  readonly testMetrics: MetricsResult<TestMetrics> | undefined
-}
-
-export interface RunTiming {
-  readonly net: number
-  readonly overhead: number
-}
+// ---------------------------------------------------------------------------
+// Protocol version — plain string following the STREAM_SCHEMA_VERSION
+// precedent. It lives here rather than in ReporterEvent.schema.ts because a
+// *.schema.ts file may export only schema declarations and type vocabulary.
+// ---------------------------------------------------------------------------
+export const REPORTER_SCHEMA_VERSION = '1.0'
 
 export interface CompleteDryRunResultForReporter {
   readonly tests: readonly unknown[]

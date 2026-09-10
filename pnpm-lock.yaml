@@ -2135,6 +2135,9 @@ importers:
         specifier: catalog:stryker
         version: 3.7.3
     devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
       '@systemfsoftware/all':
         specifier: workspace:^
         version: link:../../oxlint-plugin/all

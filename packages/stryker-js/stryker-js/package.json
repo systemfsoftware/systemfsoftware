@@ -31,6 +31,7 @@
     "mutation-testing-report-schema": "catalog:stryker"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-schema-law": "workspace:^",
@@ -60,6 +61,7 @@
       "./Plugin": "./dist/Plugin.mjs",
       "./provided-options": "./dist/provided-options.mjs",
       "./Reporter": "./dist/Reporter.mjs",
+      "./ReporterEvent": "./dist/ReporterEvent.mjs",
       "./Run": "./dist/Run.mjs",
       "./Schema": "./dist/Schema.mjs",
       "./TestRunner": "./dist/TestRunner.mjs",
@@ -110,6 +112,10 @@
     "./Reporter": {
       "@systemfsoftware/source": "./src/Reporter.ts",
       "default": "./dist/Reporter.mjs"
+    },
+    "./ReporterEvent": {
+      "@systemfsoftware/source": "./src/ReporterEvent.schema.ts",
+      "default": "./dist/ReporterEvent.mjs"
     },
     "./Run": {
       "@systemfsoftware/source": "./src/Run.ts",
