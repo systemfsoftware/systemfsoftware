@@ -733,6 +733,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.113(patch_hash=34bcb9d16512015eb93d0503e6743d3faf7dafc9a5e37e1d5f1ba9ef8432a6f5)
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)
@@ -1309,6 +1312,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.113(patch_hash=34bcb9d16512015eb93d0503e6743d3faf7dafc9a5e37e1d5f1ba9ef8432a6f5)
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)
@@ -1535,6 +1541,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.113(patch_hash=34bcb9d16512015eb93d0503e6743d3faf7dafc9a5e37e1d5f1ba9ef8432a6f5)
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)
@@ -1599,6 +1608,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.113(patch_hash=34bcb9d16512015eb93d0503e6743d3faf7dafc9a5e37e1d5f1ba9ef8432a6f5)
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)
@@ -1809,6 +1821,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.113(patch_hash=34bcb9d16512015eb93d0503e6743d3faf7dafc9a5e37e1d5f1ba9ef8432a6f5)
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)
@@ -1867,6 +1882,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.113(patch_hash=34bcb9d16512015eb93d0503e6743d3faf7dafc9a5e37e1d5f1ba9ef8432a6f5)
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)
@@ -1928,6 +1946,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.113(patch_hash=34bcb9d16512015eb93d0503e6743d3faf7dafc9a5e37e1d5f1ba9ef8432a6f5)
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)
@@ -2637,6 +2658,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.113(patch_hash=34bcb9d16512015eb93d0503e6743d3faf7dafc9a5e37e1d5f1ba9ef8432a6f5)
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)
@@ -2689,6 +2713,9 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.113(patch_hash=34bcb9d16512015eb93d0503e6743d3faf7dafc9a5e37e1d5f1ba9ef8432a6f5)
+      fast-check:
+        specifier: ^4
+        version: 4.9.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)

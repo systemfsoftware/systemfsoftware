@@ -1,1 +1,7 @@
-export {}
+import * as fc from 'fast-check'
+
+const isCi = typeof process !== 'undefined' && process.env['CI'] === 'true'
+
+const numRuns = isCi ? 1000 : 100
+
+fc.configureGlobal({ numRuns })
