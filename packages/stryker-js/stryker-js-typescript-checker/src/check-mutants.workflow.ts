@@ -85,6 +85,17 @@ export type CheckMutantsDecision = CheckFinished | RetestRequired
 
 const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
 
+/**
+ * Records keyed by schema-valid strings (mutant ids, file names) must not
+ * inherit `Object.prototype` members: a key like "toString" would otherwise
+ * resolve to the inherited function and poison every `record[key]` lookup.
+ */
+const bareRecord = <V>(entries: Readonly<Record<string, V>> = {}): Record<string, V> => {
+  const out: Record<string, V> = Object.assign({}, entries)
+  Object.setPrototypeOf(out, null)
+  return out
+}
+
 const getMutantsWithReferenceToChildrenOrSelf = (
   node: NodeDecoded,
   mutants: readonly MutantDecoded[],
@@ -110,8 +121,8 @@ const classifyDiagnosticsPure = (
   },
   DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError
 > => {
-  const definitive: Record<string, DiagnosticDecoded[]> = {}
-  const needsRetest: Record<string, MutantDecoded> = {}
+  const definitive = bareRecord<DiagnosticDecoded[]>()
+  const needsRetest = bareRecord<MutantDecoded>()
   if (diagnostics.length > 0 && mutants.length === 1) {
     const only = mutants[0]
     if (only !== undefined) {
@@ -158,13 +169,13 @@ const buildResult = (
 ): Result.Result<CheckMutantsDecision, DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError> => {
   const mutants = input.mutants
   const diagnostics = input.diagnostics
-  const nodes = input.nodes
+  const nodes = bareRecord(input.nodes)
   if (mutants.length === 0) {
     return Result.succeed(CheckFinished.make({ results: {} }))
   }
   const first = mutants[0]
   if (first === undefined || nodes[normalizeFileName(first.fileName)] === undefined) {
-    const results: Record<string, MutantCheckStatus> = {}
+    const results = bareRecord<MutantCheckStatus>()
     for (const m of mutants) {
       results[m.id] = { status: 'passed' }
     }
@@ -175,11 +186,11 @@ const buildResult = (
     return Result.fail(classified.failure)
   }
   const { definitive, needsRetest } = classified.success
-  const retestIds: Record<string, true> = {}
+  const retestIds = bareRecord<true>()
   for (const m of needsRetest) {
     retestIds[m.id] = true
   }
-  const results: Record<string, MutantCheckStatus> = {}
+  const results = bareRecord<MutantCheckStatus>()
   for (const m of mutants) {
     const diags = definitive[m.id]
     if (diags !== undefined) {
