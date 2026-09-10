@@ -15,7 +15,7 @@ import { Effect } from 'effect'
 import * as S from 'effect/Schema'
 import { expect } from 'vitest'
 const checkExpect = expect
-import { ManifestSchema, type StreamLine, StreamLineSchema } from './__fixtures__/cli-contract.schema.js'
+import { type StreamLine, StreamLineSchema } from './__fixtures__/cli-contract.schema.js'
 import { CLI_BIN, fixtureDir, WORKDIR } from './__fixtures__/stryker-cli-env.js'
 import { type CliResult, layerStrykerCli, StrykerCli } from './__fixtures__/StrykerCliAdapter.js'
 
@@ -192,7 +192,7 @@ const byMutatorName = <T extends { readonly mutator?: string | undefined }>(
   lines: readonly T[],
 ): readonly T[] => [...lines].sort((left, right) => String(left['mutator']).localeCompare(String(right['mutator'])))
 
-const TERMINAL_KINDS = ['verdict', 'error', 'help', 'manifest']
+const TERMINAL_KINDS = ['verdict', 'error', 'help']
 
 const Feature = makeFeature({ it, layer })
 
@@ -453,37 +453,6 @@ Feature('Driving the mutation tester from an agent harness')
             checkExpect(terminal(s.observed)['error']).toContain(row.unrecognised)
           }),
         ),
-    )
-
-    scenario(
-      'A harness meeting the tool for the first time can ask it to describe itself',
-      Gherkin.Do.pipe(
-        Given('a harness that has never driven this tool before')(
-          'fixture',
-          () => Effect.succeed('minimal-project'),
-        ),
-        When('the harness asks the tool to describe itself')(
-          'observed',
-          (s) => invoke(s.fixture, ['--llms']),
-        ),
-        Then('the command succeeds')((s) => {
-          checkExpect(s.observed.exitCode).toBe(0)
-        }),
-        Then('the description names the tool and the command that runs mutation testing')((s) => {
-          checkExpect(terminal(s.observed)).toMatchObject({ kind: 'manifest', code: 0 })
-          const described = S.decodeSync(S.fromJsonString(ManifestSchema))(
-            terminal(s.observed)['manifest'] ?? '',
-          )
-          checkExpect(described.tool).toBe('stryker')
-          checkExpect(described.commands[0]?.subcommands).toContainEqual(
-            expect.objectContaining({ name: 'run', description: 'Run mutation testing' }),
-          )
-        }),
-        Then('nothing was mutated on the way')((s) => {
-          checkExpect(kindsOf(s.observed)).not.toContain('verdict')
-          checkExpect(kindsOf(s.observed)).not.toContain('plan')
-        }),
-      ),
     )
 
     scenarioOutline(

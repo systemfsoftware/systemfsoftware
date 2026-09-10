@@ -19,15 +19,12 @@
  * Declaring the resolved `StrykerOptions` described a value this type never
  * holds, which is why its `Type` had to be discarded and patched by hand.
  */
-import { ManifestRendered as ManifestRenderedSchema } from '@systemfsoftware/stryker-js/Run'
 import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as S from 'effect/Schema'
 
 const RunRequestBase = S.TaggedStruct('run', { survivors: S.Boolean })
-const LlmsRequestBase = S.TaggedStruct('llms', { document: ManifestRenderedSchema })
 
 export type RunRequest = S.Schema.Type<typeof RunRequestBase> & {
   readonly options: PartialStrykerOptions
 }
-export type LlmsRequest = S.Schema.Type<typeof LlmsRequestBase>
-export type CliRequest = RunRequest | LlmsRequest
+export type CliRequest = RunRequest
