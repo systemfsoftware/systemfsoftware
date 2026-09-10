@@ -21,7 +21,6 @@ import * as Console from 'effect/Console'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
-import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
@@ -447,8 +446,6 @@ const runConfig = {
   ...runArgs,
 }
 
-const rootConfig = {}
-
 function unwrap<A>(value: Option.Option<A> | A | undefined): A | undefined {
   if (Option.isOption(value)) {
     return Option.match(value, { onNone: () => undefined, onSome: (v) => v })
@@ -559,16 +556,16 @@ function makeStrykerCommand(requestRef: Ref.Ref<Option.Option<CliRequest>>) {
     return options
   }
 
-  // The explicit type breaks the circular inference from `root` being
-  // referenced inside its own handler, which would collapse R/E to unknown.
+  // `root` needs an explicit type: without it, `root` referenced inside its own
+  // handler (via `Command.withSubcommands`) collapses R/E to unknown.
   const root: Command.Command<
     'stryker',
     {},
     {},
     CliError.CliError,
-    FileSystem.FileSystem | Path.Path
+    never
   > = Command
-    .make('stryker', rootConfig, (_config) =>
+    .make('stryker', {}, (_config) =>
       Effect.gen(function*() {
         return yield* Effect.failSync(() => CliError.ShowHelp.make({ commandPath: ['stryker'], errors: [] }))
       }))
@@ -752,7 +749,7 @@ export const runStrykerCli = (
             }
             return runMutationTestImpl(runRequest.options).pipe(Effect.orDie)
           })()),
-        Match.orElse(() => Effect.die('unreachable cli request variant')),
+        Match.exhaustive,
       )
 
     const program = Effect.acquireUseRelease(
@@ -776,7 +773,7 @@ export const runStrykerCli = (
                   }
                   return DEFAULT_PROGRESS_STREAM_FILE
                 }),
-                Match.orElse(() => DEFAULT_PROGRESS_STREAM_FILE),
+                Match.exhaustive,
               ),
           })
           if (stream.setProgressStreamFile !== undefined) {

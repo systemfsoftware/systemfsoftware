@@ -192,8 +192,6 @@ const byMutatorName = <T extends { readonly mutator?: string | undefined }>(
   lines: readonly T[],
 ): readonly T[] => [...lines].sort((left, right) => String(left['mutator']).localeCompare(String(right['mutator'])))
 
-const TERMINAL_KINDS = ['verdict', 'error', 'help']
-
 const Feature = makeFeature({ it, layer })
 
 Feature('Driving the mutation tester from an agent harness')
@@ -269,7 +267,7 @@ Feature('Driving the mutation tester from an agent harness')
         ),
         When('the harness runs the mutation test')('observed', (s) => invoke(s.fixture, ['run'])),
         Then('one closing line reports the outcome and it is the last thing written')((s) => {
-          checkExpect(kindsOf(s.observed).filter((kind) => TERMINAL_KINDS.includes(kind))).toEqual(['verdict'])
+          checkExpect(terminal(s.observed)['kind']).toBe('verdict')
         }),
       ),
     )

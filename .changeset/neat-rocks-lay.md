@@ -11,4 +11,4 @@
 "@systemfsoftware/stryker-test-contribution": patch
 ---
 
-Re-released against @systemfsoftware/stryker-js without the removed --llms manifest: the Run stream no longer carries a manifest terminal event. No API change in these packages.
+Re-released against @systemfsoftware/stryker-js without the removed --llms manifest. The Run stream no longer carries a manifest terminal event, and the RunEvent / RunTerminalEvent unions no longer include the manifest arm, so any exhaustive consumer of those types must drop that case.

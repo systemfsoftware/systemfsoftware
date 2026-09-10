@@ -4,8 +4,8 @@
  * A request never crosses a boundary: `makeStrykerCommand` builds one as an
  * object literal from flags Effect's CLI has already parsed and typed, and the
  * dispatcher reads it out of a `Ref` in the same process. Nothing decodes it, so
- * the bases below exist only to derive the `_tag` members rather than to
- * hand-write them, and neither is exported.
+ * the base below exists only to derive the `_tag` member rather than to
+ * hand-write it, and it is not exported.
  *
  * That non-export is load-bearing. The law generator walks every refinement
  * reachable from an *exported* schema, so the previous
