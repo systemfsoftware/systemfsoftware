@@ -32,7 +32,7 @@ Factory body = per session. Module top level = per process. Confusing the two is
 ## Verifying a lifecycle change
 
 ```bash
-pnpm turbo build --filter '@systemfsoftware/omp-claude-compat'
+pnpm turbo build --filter '@systemfsoftware/omp-agent-discipline'
 # load dist/index.js twice under distinct ?mtime= tags, emit session_shutdown on
 # the second, then emit an event on the first — it must still answer.
 ```

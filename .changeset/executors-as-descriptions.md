@@ -1,6 +1,5 @@
 ---
 "@systemfsoftware/effect-daemon-spec": patch
-"@systemfsoftware/omp-claude-compat": patch
 "@systemfsoftware/stryker-js-cli": patch
 ---
 

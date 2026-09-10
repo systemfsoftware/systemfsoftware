@@ -16,7 +16,6 @@
 "@systemfsoftware/hex-schema": patch
 "@systemfsoftware/npm-package": patch
 "@systemfsoftware/omp-agent-discipline": patch
-"@systemfsoftware/omp-claude-compat": patch
 "@systemfsoftware/omp-typescript-discipline": patch
 "@systemfsoftware/oxlint-plugin": patch
 "@systemfsoftware/oxlint-plugin-cell-vocabulary": patch
