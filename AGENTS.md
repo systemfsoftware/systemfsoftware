@@ -12,12 +12,13 @@ Startup: confirm working directory and active task; run `pnpm check:local` and r
 
 Load docs on-demand when triggers fire; do not perform eager multi-spec reads at startup.
 
-| Doc                 | Trigger                                                    |
-| ------------------- | ---------------------------------------------------------- |
-| `CONSTITUTION.md`   | architecture changes, rule authoring, or design disputes   |
-| `CONCEPTS.md`       | domain vocabulary, taxonomy, or convention lookup          |
-| `.github/AGENTS.md` | CI check failure or workflow modification                  |
-| `docs/solutions/`   | researching past decisions, postmortems, or known patterns |
+| Doc                                 | Trigger                                                                                                                                         |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CONSTITUTION.md`                   | architecture changes, rule authoring, or design disputes                                                                                        |
+| `repos/constitution/ENFORCEMENT.md` | building or changing an instrument that grades work (lint gates, stream rules, CI checks, thresholds, rubrics, advisors); situational read only |
+| `CONCEPTS.md`                       | domain vocabulary, taxonomy, or convention lookup                                                                                               |
+| `.github/AGENTS.md`                 | CI check failure or workflow modification                                                                                                       |
+| `docs/solutions/`                   | researching past decisions, postmortems, or known patterns                                                                                      |
 
 ## Stack & Conventions
 
