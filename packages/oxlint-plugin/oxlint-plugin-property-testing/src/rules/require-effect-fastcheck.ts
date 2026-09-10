@@ -9,9 +9,12 @@ const isFastCheckSource = (source: string): boolean =>
 
 const isEffectFastCheckSource = (source: string): boolean => EFFECT_FASTCHECK_SOURCES[source] === true
 
+/** The ban disciplines property-test authoring; only sources under a `src/` folder build property inputs. */
+const isSourceFile = (filename: string): boolean => filename.startsWith('src/') || filename.includes('/src/')
 export const requireEffectFastcheck = defineRule({
   meta,
   create(context: Context) {
+    if (!isSourceFile(context.filename)) return {}
     return {
       ImportDeclaration(node: ESTree.ImportDeclaration) {
         const source = node.source.value

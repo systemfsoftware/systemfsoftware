@@ -9,10 +9,8 @@ export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {
 
 export const meta = {
   type: 'problem',
-  docs: {
-    description:
-      'FastCheck is gone — no FastCheck value import from any module. Imports from the fast-check package and FastCheck re-exports from effect or effect/testing are all banned; pass Effect Schemas directly to it.prop. Type-only imports are exempt.',
-  },
+  description:
+    'FastCheck is gone from property tests — no FastCheck value import under src/. Imports from the fast-check package and FastCheck re-exports from effect or effect/testing are banned; pass Effect Schemas directly to it.prop. Type-only imports are exempt. Files outside a src folder (vitest setup, scripts) tune the fast-check global or tooling and are allowed.',
   schema: [],
   messages: {
     rawFastCheckImport: MESSAGE,

@@ -38,4 +38,4 @@
 "@systemfsoftware/stryker-test-contribution": patch
 ---
 
-Peer Effect requirement advances to 4.0.0-rc.113. No API changes.
+The Effect peer requirement advances to 4.0.0-rc.113. Property-test suites now generate inputs from Effect Schemas directly; fast-check remains available for tuning global run counts in test setup.

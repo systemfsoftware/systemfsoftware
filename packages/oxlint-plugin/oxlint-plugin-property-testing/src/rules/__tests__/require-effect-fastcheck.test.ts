@@ -61,6 +61,16 @@ ruleTester.run('require-effect-fastcheck', requireEffectFastcheck, {
         `import { Effect, Schema } from 'effect'\nit.effect.prop('∀s_X_=x', [Schema.String], ([s]) => Effect.succeed(s === s))`,
       filename: FILENAME,
     },
+    {
+      name: 'Should_Pass_When_FastCheckImportOutsideSrcFolder',
+      code: `import * as fc from 'fast-check'\nfc.configureGlobal({ numRuns: 100 })`,
+      filename: 'vitest.setup.ts',
+    },
+    {
+      name: 'Should_Pass_When_FastCheckImportInNestedVitestSetupOutsideSrcFolder',
+      code: `import * as fc from 'fast-check'\nfc.configureGlobal({ numRuns: 100 })`,
+      filename: 'packages/effect-memfs/vitest-setup.ts',
+    },
   ],
   invalid: [
     {
@@ -130,6 +140,22 @@ ruleTester.run('require-effect-fastcheck', requireEffectFastcheck, {
       code: `import { FastCheck as fc } from 'effect/testing'\nit.prop('∀n_X_=x', [Schema.String], ([n]) => n === n)`,
       filename: FILENAME,
       errors: [{ messageId: 'effectFastCheckImport' }],
+    },
+    {
+      name: 'Should_Report_When_SetupLikeFileInsideSrcFolder',
+      code: `import * as fc from 'fast-check'\nit.prop('∀n_X_=x', [fc.integer()], ([n]) => n === n)`,
+      filename: 'src/vitest-setup-helpers.test.ts',
+      errors: [
+        {
+          messageId: 'rawFastCheckImport',
+          data: {
+            name: "import from 'fast-check'",
+            expected: 'no FastCheck import — pass Effect Schemas directly to it.prop',
+            actual: "FastCheck imported from 'fast-check'",
+            fix: 'delete the fast-check import; pass the Schema directly to it.prop([DomainSchema])',
+          },
+        },
+      ],
     },
   ],
 })
