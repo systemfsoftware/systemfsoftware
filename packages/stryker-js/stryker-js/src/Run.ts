@@ -9,7 +9,6 @@ import * as S from 'effect/Schema'
 import {
   Heartbeat,
   HelpRendered,
-  ManifestRendered,
   MutantTested,
   MutationRunPlan,
   PhaseEntered,
@@ -84,7 +83,6 @@ export const shouldKeepTempDir = (
 export {
   Heartbeat,
   HelpRendered,
-  ManifestRendered,
   MutantTested,
   PhaseEntered,
   PlanKnown,

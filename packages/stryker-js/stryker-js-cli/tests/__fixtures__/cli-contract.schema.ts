@@ -27,7 +27,6 @@ export interface StreamLine {
   readonly error?: string | undefined
   readonly remediation?: string | undefined
   readonly help?: string | undefined
-  readonly manifest?: string | undefined
   readonly mutants?: readonly DecodedMutant[] | undefined
   readonly [field: string]: unknown
 }
@@ -70,17 +69,7 @@ const StreamLineFields = {
   error: S.optional(S.String),
   remediation: S.optional(S.String),
   help: S.optional(S.String),
-  manifest: S.optional(S.String),
   mutants: S.optional(S.Array(MutantSchema)),
 }
 
 export const StreamLineSchema = S.StructWithRest(S.Struct(StreamLineFields), [S.Record(S.String, S.Unknown)])
-
-export const ManifestSchema = S.Struct({
-  tool: S.String,
-  commands: S.Array(
-    S.Struct({
-      subcommands: S.Array(S.Struct({ name: S.String, description: S.String })),
-    }),
-  ),
-})

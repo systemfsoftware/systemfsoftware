@@ -121,12 +121,6 @@ export class HelpRendered extends S.TaggedClass<HelpRendered>()('help', {
   help: Wire.mint(S.String),
 }) {}
 
-export class ManifestRendered extends S.TaggedClass<ManifestRendered>()('manifest', {
-  schemaVersion: Wire.mint(S.String),
-  code: Wire.mint(S.Literals([0])),
-  manifest: Wire.mint(S.String),
-}) {}
-
 export const RunEvent = S.Union([
   RunStarted,
   PhaseEntered,
@@ -136,11 +130,10 @@ export const RunEvent = S.Union([
   VerdictReached,
   RunFailed,
   HelpRendered,
-  ManifestRendered,
 ])
 export type RunEvent = typeof RunEvent.Type
 
-export type RunTerminalEvent = VerdictReached | RunFailed | HelpRendered | ManifestRendered
+export type RunTerminalEvent = VerdictReached | RunFailed | HelpRendered
 
 export class RunCommand extends S.TaggedClass<RunCommand>()('RunCommand', {
   cliOptionsJson: S.String,

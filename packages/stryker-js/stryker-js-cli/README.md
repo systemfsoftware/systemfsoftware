@@ -37,9 +37,7 @@ $ npx stryker <command> [options]
 ```
 
 Mutation testing concepts, the supported mutators, and every `run` option are
-the ones [stryker-mutator.io][docs] documents. `stryker --llms`
-prints the whole command surface as one JSON object, walked from the command
-descriptors rather than hand-maintained.
+the ones [stryker-mutator.io][docs] documents.
 
 ## Machine output
 

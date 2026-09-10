@@ -60,7 +60,6 @@ const isTerminalEvent = (event: RunEvent): boolean =>
     Match.tag('verdict', () => true),
     Match.tag('error', () => true),
     Match.tag('help', () => true),
-    Match.tag('manifest', () => true),
     Match.orElse(() => false),
   )
 
@@ -74,7 +73,6 @@ const wireKind = (event: RunEvent): string =>
     Match.tag('verdict', () => 'verdict'),
     Match.tag('error', () => 'error'),
     Match.tag('help', () => 'help'),
-    Match.tag('manifest', () => 'manifest'),
     Match.exhaustive,
   )
 

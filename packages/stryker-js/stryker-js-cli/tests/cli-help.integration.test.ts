@@ -86,18 +86,4 @@ Feature('CLI help regression')
         }),
       ),
     )
-
-    scenario(
-      'The manifest keeps the description following the stream header',
-      Gherkin.Do.pipe(
-        Given('a harness asking for the manifest')('observed', () => invoke(['--llms'])),
-        Then('the description follows the stream header')((s) => {
-          checkExpect(s.observed.exitCode).toBe(0)
-          const first = s.observed.lines[0]
-          const last = s.observed.lines.at(-1)
-          checkExpect(first).toMatchObject({ kind: 'stream' })
-          checkExpect(last).toMatchObject({ kind: 'manifest', code: 0 })
-        }),
-      ),
-    )
   })
