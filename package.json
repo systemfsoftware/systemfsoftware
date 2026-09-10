@@ -34,7 +34,7 @@
     "@commitlint/types": "^21.2.0",
     "@effect/tsgo": "^0.36.5",
     "@std/jsonc": "catalog:",
-    "concurrently": "^9.2.1",
+    "concurrently": "^10.0.5",
     "estree-walker": "^3",
     "husky": "^9.1.7",
     "lint-staged": "^17.1.0",
