@@ -1,0 +1,19 @@
+diff --git a/dist/Schema.d.ts b/dist/Schema.d.ts
+index 6c438fa219ff01c30135a4eee55ea1a7b915e257..947811b2f777fe88eb940c5f00b6dfdabf9f5c09 100644
+--- a/dist/Schema.d.ts
++++ b/dist/Schema.d.ts
+@@ -10637,6 +10637,14 @@ export declare function resolveAnnotationsKey<S extends Constraint>(schema: S):
+  * @category models
+  * @since 4.0.0
+  */
++
++/**
++ * Upstream dts bug: the `@internal` alias referenced by the public
++ * `Annotations.ToArbitrary.DeclarationInput`/`Declaration` interfaces was
++ * dropped by dts generation. Restored verbatim from src/Schema.ts:
++ * `type AnnotationSchemaConstraint = Constraint`.
++ */
++declare type AnnotationSchemaConstraint = Constraint
+ export declare namespace Annotations {
+     /**
+      * This interface is used to define the annotations that can be attached to a

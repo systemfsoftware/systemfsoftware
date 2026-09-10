@@ -1,7 +1,6 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { FastCheck as fc } from 'effect/testing'
 
 import {
   classifyRunOutcome,
@@ -40,7 +39,7 @@ const isRunFailed = (
   result.success.diagnostic === diagnostic
 
 describe('classifyRunOutcome', () => {
-  it.prop('∀c_Command_≡TaggedOutcome', [S.toArbitrary(RunOutcomeCommand)(fc)], ([command]) => {
+  it.prop('∀c_Command_≡TaggedOutcome', [RunOutcomeCommand], ([command]) => {
     const result = classifyRunOutcome(command)
     if (command.signal !== undefined) {
       const code = 128 + command.signal

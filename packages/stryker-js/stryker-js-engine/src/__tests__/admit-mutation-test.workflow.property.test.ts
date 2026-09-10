@@ -1,7 +1,6 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { FastCheck as fc } from 'effect/testing'
 
 import {
   admitMutationTest,
@@ -17,16 +16,10 @@ const MutationTestDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/s
 describe('admitMutationTest', () => {
   it.prop(
     '∀d_Brand_∈Decision',
-    [
-      fc.constantFrom(
-        new MutationTestProceed({}),
-        new MutationTestDryRunOnly({}),
-        new MutationTestNoTests({}),
-      ),
-    ],
+    [S.Union([MutationTestProceed, MutationTestDryRunOnly, MutationTestNoTests])],
     ([decision]) => Object.getOwnPropertySymbols(decision).includes(MutationTestDecisionTypeId),
   )
-  it.prop('∀c_Command_≡Decision', [S.toArbitrary(MutationTestCommand)(fc)], ([command]) => {
+  it.prop('∀c_Command_≡Decision', [MutationTestCommand], ([command]) => {
     const result = admitMutationTest(command)
     if (command.testCount < 0) {
       return Result.isFailure(result) && S.is(MutationTestError)(result.failure)

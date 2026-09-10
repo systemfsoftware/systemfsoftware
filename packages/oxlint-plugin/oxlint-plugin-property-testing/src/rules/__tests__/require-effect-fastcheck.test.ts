@@ -20,24 +20,13 @@ const FILENAME = 'src/sort.property.test.ts'
 ruleTester.run('require-effect-fastcheck', requireEffectFastcheck, {
   valid: [
     {
-      name: 'Should_Pass_When_FastCheckAsFcFromEffect',
-      code: `import { FastCheck as fc } from 'effect'\nit.prop('∀n_X_=x', [fc.integer()], ([n]) => n === n)`,
-      filename: FILENAME,
-    },
-    {
-      name: 'Should_Pass_When_FastCheckAsFcAmongOtherEffectImports',
-      code:
-        `import { Effect, FastCheck as fc, Schema } from 'effect'\nit.effect.prop('∀x_X_=x', [fc.integer()], ([n]) => Effect.gen(function*() { return n === n }))`,
-      filename: FILENAME,
-    },
-    {
       name: 'Should_Pass_When_NoFastCheckImport',
       code: `import { Schema } from 'effect'\nit.prop('∀s_X_=x', [Schema.String], ([s]) => s === s)`,
       filename: FILENAME,
     },
     {
       name: 'Should_Pass_When_UnrelatedPackageImport',
-      code: `import { describe, it } from '@effect/vitest'\nit.prop('∀n_X_=x', [fc.integer()], ([n]) => n === n)`,
+      code: `import { describe, it } from '@effect/vitest'\nit.prop('∀n_X_=x', [Schema.String], ([n]) => n === n)`,
       filename: FILENAME,
     },
     {
@@ -52,15 +41,35 @@ ruleTester.run('require-effect-fastcheck', requireEffectFastcheck, {
       filename: FILENAME,
     },
     {
+      name: 'Should_Pass_When_TypeOnlyFastCheckImportFromTesting',
+      code: `import type { FastCheck } from 'effect/testing'\ntype F = typeof FastCheck`,
+      filename: FILENAME,
+    },
+    {
       name: 'Should_Pass_When_FastCheckAliasFromOtherPackage',
       code: `import { FastCheck as notFc } from 'some-other-lib'`,
       filename: FILENAME,
     },
     {
+      name: 'Should_Pass_When_TestClockFromEffectTesting',
+      code: `import { TestClock } from 'effect/testing'\nawait TestClock.adjust('1 second')`,
+      filename: FILENAME,
+    },
+    {
       name: 'Should_Pass_When_OtherEffectSpecifiersUnaliased',
       code:
-        `import { Arbitrary, Schema } from 'effect'\nit.prop('∀s_X_=x', [Arbitrary.make(Schema.String)], ([s]) => s === s)`,
+        `import { Effect, Schema } from 'effect'\nit.effect.prop('∀s_X_=x', [Schema.String], ([s]) => Effect.succeed(s === s))`,
       filename: FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_FastCheckImportOutsideSrcFolder',
+      code: `import * as fc from 'fast-check'\nfc.configureGlobal({ numRuns: 100 })`,
+      filename: 'vitest.setup.ts',
+    },
+    {
+      name: 'Should_Pass_When_FastCheckImportInNestedVitestSetupOutsideSrcFolder',
+      code: `import * as fc from 'fast-check'\nfc.configureGlobal({ numRuns: 100 })`,
+      filename: 'packages/effect-memfs/vitest-setup.ts',
     },
   ],
   invalid: [
@@ -73,9 +82,9 @@ ruleTester.run('require-effect-fastcheck', requireEffectFastcheck, {
           messageId: 'rawFastCheckImport',
           data: {
             name: "import from 'fast-check'",
-            expected: "import { FastCheck as fc } from 'effect'",
+            expected: 'no FastCheck import — pass Effect Schemas directly to it.prop',
             actual: "FastCheck imported from 'fast-check'",
-            fix: "delete the 'fast-check' import; add FastCheck as fc to the existing 'effect' import",
+            fix: 'delete the fast-check import; pass the Schema directly to it.prop([DomainSchema])',
           },
         },
       ],
@@ -99,27 +108,54 @@ ruleTester.run('require-effect-fastcheck', requireEffectFastcheck, {
       errors: [{ messageId: 'rawFastCheckImport' }],
     },
     {
-      name: 'Should_Report_When_FastCheckAliasedToOtherName',
-      code:
-        `import { FastCheck as fastCheck } from 'effect'\nit.prop('∀n_X_=x', [fastCheck.integer()], ([n]) => n === n)`,
+      name: 'Should_Report_When_FastCheckAsFcFromEffect',
+      code: `import { FastCheck as fc } from 'effect'\nit.prop('∀n_X_=x', [Schema.String], ([n]) => n === n)`,
       filename: FILENAME,
       errors: [
         {
-          messageId: 'fastCheckAlias',
+          messageId: 'effectFastCheckImport',
           data: {
-            name: "FastCheck imported as 'fastCheck'",
-            expected: "import { FastCheck as fc } from 'effect'",
-            actual: "aliased to 'fastCheck'",
-            fix: 'rename the alias to fc — every rule and reader assumes the `fc` namespace',
+            name: "FastCheck imported from 'effect'",
+            expected: 'no FastCheck import — pass Effect Schemas directly to it.prop',
+            actual: "FastCheck imported from 'effect'",
+            fix: 'delete the FastCheck import; pass the Schema directly to it.prop([DomainSchema])',
           },
         },
       ],
     },
     {
-      name: 'Should_Report_When_FastCheckImportedUnaliased',
-      code: `import { FastCheck } from 'effect'\nit.prop('∀n_X_=x', [FastCheck.integer()], ([n]) => n === n)`,
+      name: 'Should_Report_When_FastCheckAliasedToOtherName',
+      code: `import { FastCheck as fastCheck } from 'effect'\nit.prop('∀n_X_=x', [Schema.String], ([n]) => n === n)`,
       filename: FILENAME,
-      errors: [{ messageId: 'fastCheckAlias' }],
+      errors: [{ messageId: 'effectFastCheckImport' }],
+    },
+    {
+      name: 'Should_Report_When_FastCheckImportedUnaliased',
+      code: `import { FastCheck } from 'effect'\nit.prop('∀n_X_=x', [Schema.String], ([n]) => n === n)`,
+      filename: FILENAME,
+      errors: [{ messageId: 'effectFastCheckImport' }],
+    },
+    {
+      name: 'Should_Report_When_FastCheckFromEffectTesting',
+      code: `import { FastCheck as fc } from 'effect/testing'\nit.prop('∀n_X_=x', [Schema.String], ([n]) => n === n)`,
+      filename: FILENAME,
+      errors: [{ messageId: 'effectFastCheckImport' }],
+    },
+    {
+      name: 'Should_Report_When_SetupLikeFileInsideSrcFolder',
+      code: `import * as fc from 'fast-check'\nit.prop('∀n_X_=x', [fc.integer()], ([n]) => n === n)`,
+      filename: 'src/vitest-setup-helpers.test.ts',
+      errors: [
+        {
+          messageId: 'rawFastCheckImport',
+          data: {
+            name: "import from 'fast-check'",
+            expected: 'no FastCheck import — pass Effect Schemas directly to it.prop',
+            actual: "FastCheck imported from 'fast-check'",
+            fix: 'delete the fast-check import; pass the Schema directly to it.prop([DomainSchema])',
+          },
+        },
+      ],
     },
   ],
 })

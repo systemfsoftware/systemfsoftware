@@ -37,17 +37,25 @@ const TSFileNodeSchema: Wire.Minted<NodeDecodedShape, unknown> = Wire.mint(
     })
   ),
 )
+type MutantDecoded = S.Schema.Type<typeof Mutant>
 
 export class CheckMutantsInput extends S.TaggedClass<CheckMutantsInput>()(
   'CheckMutantsInput',
   {
-    mutants: S.Array(Mutant),
+    mutants: S.Array(Mutant).check(
+      S.makeFilter(
+        (mutants: readonly MutantDecoded[]) => new Set(mutants.map((mutant) => mutant.id)).size === mutants.length,
+        {
+          expected: 'unique mutant ids',
+          arbitraryConstraint: { uniqueBy: (mutant: MutantDecoded) => mutant.id },
+        },
+      ),
+    ),
     diagnostics: S.Array(DiagnosticSchema),
     nodes: Wire.mint(S.Record(Wire.mint(S.String), TSFileNodeSchema)),
   },
 ) {}
 
-type MutantDecoded = S.Schema.Type<typeof Mutant>
 type DiagnosticDecoded = S.Schema.Type<typeof DiagnosticSchema>
 type NodeDecoded = NodeDecodedShape
 type MutantCheckStatus = { readonly status: 'passed' } | { readonly status: 'compileError'; readonly reason: string }
@@ -77,6 +85,22 @@ export type CheckMutantsDecision = CheckFinished | RetestRequired
 
 const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
 
+/**
+ * Records keyed by schema-valid strings (mutant ids, file names) must not
+ * inherit `Object.prototype` members: a key like "toString" would otherwise
+ * resolve to the inherited function and poison every `record[key]` lookup.
+ */
+const bareRecord = <V>(entries: Readonly<Record<string, V>> = {}): Record<string, V> => {
+  const out: Record<string, V> = Object.assign({}, entries)
+  Object.setPrototypeOf(out, null)
+  return out
+}
+
+const nodeAt = (nodes: Readonly<Record<string, NodeDecoded>>, fileName: string): NodeDecoded | undefined => {
+  if (!Object.hasOwn(nodes, fileName)) return undefined
+  return nodes[fileName]
+}
+
 const getMutantsWithReferenceToChildrenOrSelf = (
   node: NodeDecoded,
   mutants: readonly MutantDecoded[],
@@ -102,8 +126,8 @@ const classifyDiagnosticsPure = (
   },
   DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError
 > => {
-  const definitive: Record<string, DiagnosticDecoded[]> = {}
-  const needsRetest: Record<string, MutantDecoded> = {}
+  const definitive = bareRecord<DiagnosticDecoded[]>()
+  const needsRetest = bareRecord<MutantDecoded>()
   if (diagnostics.length > 0 && mutants.length === 1) {
     const only = mutants[0]
     if (only !== undefined) {
@@ -116,7 +140,7 @@ const classifyDiagnosticsPure = (
     if (fileName === undefined || fileName === '') {
       return Result.fail(new DiagnosticWithoutFileError({ text: diagnostic.text }))
     }
-    const node = nodes[fileName]
+    const node = nodeAt(nodes, fileName)
     if (node === undefined) {
       return Result.fail(new DiagnosticInUnrelatedFileError({ text: diagnostic.text, fileName }))
     }
@@ -155,8 +179,8 @@ const buildResult = (
     return Result.succeed(CheckFinished.make({ results: {} }))
   }
   const first = mutants[0]
-  if (first === undefined || nodes[normalizeFileName(first.fileName)] === undefined) {
-    const results: Record<string, MutantCheckStatus> = {}
+  if (first === undefined || nodeAt(nodes, normalizeFileName(first.fileName)) === undefined) {
+    const results = bareRecord<MutantCheckStatus>()
     for (const m of mutants) {
       results[m.id] = { status: 'passed' }
     }
@@ -167,11 +191,11 @@ const buildResult = (
     return Result.fail(classified.failure)
   }
   const { definitive, needsRetest } = classified.success
-  const retestIds: Record<string, true> = {}
+  const retestIds = bareRecord<true>()
   for (const m of needsRetest) {
     retestIds[m.id] = true
   }
-  const results: Record<string, MutantCheckStatus> = {}
+  const results = bareRecord<MutantCheckStatus>()
   for (const m of mutants) {
     const diags = definitive[m.id]
     if (diags !== undefined) {

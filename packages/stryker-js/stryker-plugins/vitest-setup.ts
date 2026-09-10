@@ -1,4 +1,4 @@
-import { FastCheck as fc } from 'effect/testing'
+import * as fc from 'fast-check'
 
 const isStrykerWorker = typeof process !== 'undefined' && process.env['STRYKER_MUTATOR_WORKER'] !== undefined
 const isCi = typeof process !== 'undefined' && process.env['CI'] === 'true'

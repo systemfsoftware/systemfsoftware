@@ -98,11 +98,6 @@ const importSourceOf = (argument: ESTree.Expression | null | undefined): string 
   return source.type === 'Literal' && typeof source.value === 'string' ? source.value : undefined
 }
 
-/**
- * A guard-local `const { FastCheck: fc } = await import('effect/testing')` is the corpus's
- * canonical generator binding. Resolve it to the same import edge a static import would
- * produce, so the dynamic idiom cannot hide a hand-built arbitrary behind an opaque verdict.
- */
 const dynamicEdgeOf = (
   declarator: ESTree.VariableDeclarator,
   init: ESTree.Node,
@@ -317,7 +312,13 @@ const checkArbitraryFactory = (provenance: Provenance, context: Context, call: E
       messageId: 'stockDerivedArbitrary',
       data: { name: STOCK_NAME, expected: STOCK_EXPECTED, actual: STOCK_ACTUAL, fix: STOCK_FIX },
     })
+    return
   }
+  context.report({
+    node: call,
+    messageId: 'handBuiltArbitrary',
+    data: { name: VIOLATION_NAME, expected: EXPECTED, actual: ACTUAL, fix: FIX },
+  })
 }
 
 const checkPropCall = (provenance: Provenance, context: Context, call: ESTree.CallExpression): void => {

@@ -11,7 +11,17 @@ export const LocationSchema = S.Struct({
 })
 
 export class Mutant extends S.TaggedClass<Mutant>()('Mutant', {
-  id: S.String,
+  id: S.String.check(
+    S.makeFilter(
+      (id: string) => id !== '__proto__' && id !== 'constructor' && id !== 'prototype',
+      {
+        expected: 'a non-prototype object key',
+        arbitraryConstraint: {
+          patterns: [{ source: '^(?!__proto__$|constructor$|prototype$).*$', flags: '' }],
+        },
+      },
+    ),
+  ),
   fileName: S.String,
   mutatorName: S.String,
   replacement: S.String,

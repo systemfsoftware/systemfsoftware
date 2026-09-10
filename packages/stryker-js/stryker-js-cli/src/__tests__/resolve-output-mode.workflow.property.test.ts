@@ -1,7 +1,6 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { FastCheck as fc } from 'effect/testing'
 
 import { HumanOutput, MachineOutput, ResolveModeCommand, resolveOutputMode } from '../resolve-output-mode.workflow.js'
 
@@ -25,7 +24,7 @@ const envSet = (command: ResolveModeCommand): boolean => command.envMode !== und
 const agentSet = (command: ResolveModeCommand): boolean => command.agent !== undefined && command.agent.length > 0
 
 describe('resolveOutputMode', () => {
-  it.prop('∀c_Command_≡R4Mode', [S.toArbitrary(ResolveModeCommand)(fc)], ([command]) => {
+  it.prop('∀c_Command_≡R4Mode', [ResolveModeCommand], ([command]) => {
     const result = resolveOutputMode(command)
     if (command.text === true && command.json === true) {
       return (

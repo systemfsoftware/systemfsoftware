@@ -11,13 +11,13 @@ import { runAttw } from './AttwExecutor.js'
 import { CliFormat, CliProfile } from './ProblemUtils.js'
 
 const formatOptions = (): Flag.Flag<typeof CliFormat[number]> =>
-  Flag.choice('format', CliFormat).pipe(
+  Flag.Literals('format', CliFormat).pipe(
     Flag.withAlias('f'),
     Flag.withDefault('auto' as typeof CliFormat[number]),
   )
 
 const profileOptions = (): Flag.Flag<typeof CliProfile[number]> =>
-  Flag.choice('profile', CliProfile).pipe(
+  Flag.Literals('profile', CliProfile).pipe(
     Flag.withDefault('strict' as typeof CliProfile[number]),
   )
 
@@ -30,8 +30,8 @@ const profileOptions = (): Flag.Flag<typeof CliProfile[number]> =>
  */
 const ignoreRulesOptions = (): Flag.Flag<Option.Option<readonly string[]>> =>
   Flag.optional(
-    Flag.atLeast<string>(1)(Flag.string('ignore-rules').pipe(Flag.withAlias('ignore-rule'))).pipe(
-      Flag.withFallbackConfig(Config.schema(Config.Array(Schema.String), 'ignoreRules')),
+    Flag.atLeast<string>(1)(Flag.String('ignore-rules').pipe(Flag.withAlias('ignore-rule'))).pipe(
+      Flag.withFallbackConfig(Config.schema(Schema.Array(Schema.String), 'ignoreRules')),
     ),
   )
 
@@ -41,17 +41,17 @@ const ignoreRulesOptions = (): Flag.Flag<Option.Option<readonly string[]>> =>
  * `default(true)`. We model the decoded value as a tagged union and translate.
  */
 const definitelyTypedOptions = (): Flag.Flag<Option.Option<string>> =>
-  Flag.optional(Flag.string('definitely-typed')).pipe(
+  Flag.optional(Flag.String('definitely-typed')).pipe(
     Flag.withDescription('Specify the version range of @types to use. Pass `false` to disable.'),
   )
 
 const registryOptions = (): Flag.Flag<string> =>
-  Flag.string('registry').pipe(
+  Flag.String('registry').pipe(
     Flag.withDescription(
       'URL of the npm registry to read packages from with --from-npm (default: https://registry.npmjs.org)',
     ),
     Flag.withFallbackConfig(
-      Config.string('registry').pipe(Config.withDefault('https://registry.npmjs.org')),
+      Config.String('registry').pipe(Config.withDefault('https://registry.npmjs.org')),
     ),
   )
 
@@ -60,35 +60,35 @@ const unwrap = <A>(opt: Option.Option<A>): A | undefined => Option.isSome(opt) ?
 export const attwCommand = Command.make(
   'attw',
   {
-    fileOrDirectory: Argument.optional(Argument.string('file-directory-or-package-spec')),
-    pack: Flag.boolean('pack').pipe(
+    fileOrDirectory: Argument.optional(Argument.String('file-directory-or-package-spec')),
+    pack: Flag.Boolean('pack').pipe(
       Flag.withAlias('P'),
       Flag.withDefault(false),
       Flag.withDescription(
         'Run `npm pack` in the specified directory and delete the resulting .tgz file afterwards',
       ),
     ),
-    fromNpm: Flag.boolean('from-npm').pipe(
+    fromNpm: Flag.Boolean('from-npm').pipe(
       Flag.withAlias('p'),
       Flag.withDefault(false),
       Flag.withDescription('Read from the npm registry instead of a local file'),
     ),
     definitelyTyped: definitelyTypedOptions(),
     format: formatOptions(),
-    quiet: Flag.boolean('quiet').pipe(
+    quiet: Flag.Boolean('quiet').pipe(
       Flag.withAlias('q'),
       Flag.withDefault(false),
       Flag.withDescription("Don't print anything to STDOUT (overrides all other options)"),
     ),
-    entrypoints: Flag.optional(Flag.atLeast<string>(1)(Flag.string('entrypoints'))),
-    includeEntrypoints: Flag.optional(Flag.atLeast<string>(1)(Flag.string('include-entrypoints'))),
-    excludeEntrypoints: Flag.optional(Flag.atLeast<string>(1)(Flag.string('exclude-entrypoints'))),
-    entrypointsLegacy: Flag.boolean('entrypoints-legacy').pipe(Flag.withDefault(false)),
+    entrypoints: Flag.optional(Flag.atLeast<string>(1)(Flag.String('entrypoints'))),
+    includeEntrypoints: Flag.optional(Flag.atLeast<string>(1)(Flag.String('include-entrypoints'))),
+    excludeEntrypoints: Flag.optional(Flag.atLeast<string>(1)(Flag.String('exclude-entrypoints'))),
+    entrypointsLegacy: Flag.Boolean('entrypoints-legacy').pipe(Flag.withDefault(false)),
     ignoreRules: ignoreRulesOptions(),
     profile: profileOptions(),
-    summary: Flag.boolean('summary').pipe(Flag.withDefault(true)),
-    emoji: Flag.boolean('emoji').pipe(Flag.withDefault(true)),
-    color: Flag.boolean('color').pipe(Flag.withDefault(true)),
+    summary: Flag.Boolean('summary').pipe(Flag.withDefault(true)),
+    emoji: Flag.Boolean('emoji').pipe(Flag.withDefault(true)),
+    color: Flag.Boolean('color').pipe(Flag.withDefault(true)),
     registry: registryOptions(),
   } as const,
   (config) =>

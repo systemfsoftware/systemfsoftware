@@ -1,8 +1,7 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import { Match, Schema } from 'effect'
+import { Match } from 'effect'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { FastCheck as fc } from 'effect/testing'
 
 import {
   interpretVitestRun,
@@ -73,7 +72,7 @@ const testsIn = (
 describe('interpretVitestRun', () => {
   it.prop(
     '∀c_Decision_≡BrandedAndKnown',
-    [Schema.toArbitrary(VitestMutantRunCommand)(fc)],
+    [VitestMutantRunCommand],
     ([input]) => {
       const result = interpretVitestRun(input)
       const tag = tagOf(result)
@@ -95,9 +94,9 @@ describe('interpretVitestRun', () => {
   it.prop(
     '→h_HitLimitExceeded_=Timeout',
     [
-      Schema.toArbitrary(VitestMutantRunCommand)(fc),
-      fc.integer({ min: 0, max: 100000 }),
-      fc.integer({ min: 1, max: 100 }),
+      VitestMutantRunCommand,
+      S.Int.check(S.isBetween({ minimum: 0, maximum: 100000 })),
+      S.Int.check(S.isBetween({ minimum: 1, maximum: 100 })),
     ],
     ([input, hitLimit, extra]) => {
       const hitCount = hitLimit + extra
@@ -118,7 +117,7 @@ describe('interpretVitestRun', () => {
 
   it.prop(
     '→e_ExternalErrorAlone_=DryError',
-    [Schema.toArbitrary(VitestMutantRunCommand)(fc)],
+    [VitestMutantRunCommand],
     ([input]) => {
       const result = interpretVitestRun(
         commandWith(input, {
@@ -145,9 +144,9 @@ describe('interpretVitestRun', () => {
   it.prop(
     '→t_FailedTest_=Killed',
     [
-      Schema.toArbitrary(VitestMutantRunCommand)(fc),
-      fc.string({ minLength: 1, maxLength: 24 }),
-      fc.string({ maxLength: 32 }),
+      VitestMutantRunCommand,
+      S.String.check(S.isMinLength(1), S.isMaxLength(24)),
+      S.String.check(S.isMaxLength(32)),
     ],
     ([input, name, message]) => {
       const result = interpretVitestRun(
@@ -190,7 +189,7 @@ describe('interpretVitestRun', () => {
 
   it.prop(
     '→t_PassedTest_=Survived',
-    [Schema.toArbitrary(VitestMutantRunCommand)(fc), fc.string({ minLength: 1, maxLength: 24 })],
+    [VitestMutantRunCommand, S.String.check(S.isMinLength(1), S.isMaxLength(24))],
     ([input, name]) => {
       const result = interpretVitestRun(
         commandWith(input, {

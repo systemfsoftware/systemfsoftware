@@ -1,5 +1,5 @@
 import { addEqualityTesters } from '@effect/vitest'
-import { FastCheck as fc } from 'effect/testing'
+import * as fc from 'fast-check'
 import { env } from 'node:process'
 
 addEqualityTesters()

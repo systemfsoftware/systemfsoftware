@@ -108,7 +108,7 @@ ruleTester.run('no-native-set-in-effect', noNativeSetInEffect, {
       name: 'allows new Set() in Config.map with effect import',
       code: `
         import { Config } from 'effect'
-        const ids = Config.map(Config.array(Config.string(), 'IDS'), (a) => new Set(a))
+        const ids = Config.map(Config.Array(Config.String(), 'IDS'), (a) => new Set(a))
       `,
     },
     {

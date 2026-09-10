@@ -44,17 +44,17 @@ ruleTester.run('schema-filter-constructive-generation', schemaFilterConstructive
       code: `import { Schema } from 'effect'
 const prime = Schema.makeFilter((v: number) => isPrime(v), {
   expected: 'a prime number',
-  arbitrary: { constraint: { integer: true, ordered: { order: Order.Number, minimum: 2 } } },
+  arbitraryConstraint: { number: 'integer', order: Order.Number, minimum: 2 },
 })
 const Prime = Schema.Finite.check(prime)`,
       filename: '/repo/pkg/src/domain.schema.ts',
     },
     {
-      name: 'Should_Pass_When_InlineFilterCarriesCandidate',
+      name: 'Should_Pass_When_InlineFilterCarriesPatterns',
       code: `import { Schema } from 'effect'
 const palindrome = Schema.makeFilter((v: string) => isPalindrome(v), {
   expected: 'a palindrome',
-  arbitrary: { candidate: { weight: 5, make: (fc) => fc.string().map(halfToPalindrome) } },
+  arbitraryConstraint: { patterns: [{ source: '([a-z]+)\\\\1', flags: '' }] },
 })
 const Palindrome = Schema.String.check(palindrome)`,
       filename: '/repo/pkg/src/domain.schema.ts',
@@ -64,7 +64,7 @@ const Palindrome = Schema.String.check(palindrome)`,
       code: `import { Schema as S } from 'effect'
 const uniqueSlots = S.makeFilter((g: Group) => uniqueIds(g.slots), {
   expected: 'unique slot ids',
-  arbitrary: { candidate: { weight: 5, make: (fc) => slotArb.map(dedupeById) } },
+  arbitraryConstraint: { minSize: 1 },
 })
 const Group = S.Struct({ slots: S.Array(Slot) }).check(uniqueSlots)`,
       filename: '/repo/pkg/src/domain.schema.ts',
@@ -86,14 +86,14 @@ const Username = Schema.String.check(Schema.isMinLength(3), Schema.isMaxLength(2
       name: 'Should_Pass_When_NodeOverridePrecedesCheck',
       code: `import { Schema } from 'effect'
 const bare = Schema.makeFilter((v: string) => isName(v), { expected: 'a name' })
-const Name = Schema.String.annotate({ toArbitrary: () => (fc) => fc.constantFrom('Alice', 'Dante') }).check(bare)`,
+const Name = Schema.String.annotate({ toCodecArbitrary: ({ constraint }) => nameLink(constraint) }).check(bare)`,
       filename: '/repo/pkg/src/domain.schema.ts',
     },
     {
       name: 'Should_Pass_When_OverrideLivesOnLocalReceiverDeclaration',
       code: `import { Schema } from 'effect'
 const bare = Schema.makeFilter((v: string) => isName(v), { expected: 'a name' })
-const Person = Schema.Struct({ name: Schema.String }).annotate({ toArbitrary: () => (fc) => fc.constant({ name: 'x' }) })
+const Person = Schema.Struct({ name: Schema.String }).annotate({ toCodecArbitrary: ({ constraint }) => personLink(constraint) })
 const Named = Person.check(bare)`,
       filename: '/repo/pkg/src/domain.schema.ts',
     },
@@ -107,7 +107,7 @@ const X = Schema.Number.check(helper)`,
     {
       name: 'Should_Pass_When_AnnotationsCarrySpread',
       code: `import { Schema } from 'effect'
-const hints = { arbitrary: { constraint: { integer: true } } }
+const hints = { arbitraryConstraint: { number: 'integer' } }
 const odd = Schema.makeFilter((v: number) => isOdd(v), { ...hints, expected: 'odd' })
 const Odd = Schema.Finite.check(odd)`,
       filename: '/repo/pkg/src/domain.schema.ts',
@@ -123,7 +123,7 @@ const result = config.check(myValue)`,
       code: `import { Schema } from 'effect'
 export const prime = Schema.makeFilter((v: number) => isPrime(v), {
   expected: 'a prime number',
-  arbitrary: { constraint: { integer: true } },
+  arbitraryConstraint: { number: 'integer' },
 })`,
       filename: '/repo/pkg/src/filters.schema.ts',
     },
@@ -139,7 +139,7 @@ const unused = Schema.makeFilter((v: number) => v > 0)`,
 const { check } = Schema
 const prime = Schema.makeFilter((v: number) => isPrime(v), {
   expected: 'a prime number',
-  arbitrary: { constraint: { integer: true } },
+  arbitraryConstraint: { number: 'integer' },
 })
 const Prime = check(prime)(Schema.Finite)`,
       filename: '/repo/pkg/src/domain.schema.ts',
@@ -182,7 +182,15 @@ const X = Schema.String.check(pair)`,
       name: 'Should_Fail_When_OverrideComesAfterCheck',
       code: `import { Schema } from 'effect'
 const bare = Schema.makeFilter((v: string) => isName(v), { expected: 'a name' })
-const Name = Schema.String.check(bare).annotate({ toArbitrary: () => (fc) => fc.constant('') })`,
+const Name = Schema.String.check(bare).annotate({ toCodecArbitrary: ({ constraint }) => nameLink(constraint) })`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [discardsError()],
+    },
+    {
+      name: 'Should_Fail_When_NodeOverrideUsesRetiredKey',
+      code: `import { Schema } from 'effect'
+const bare = Schema.makeFilter((v: string) => isName(v), { expected: 'a name' })
+const Name = Schema.String.annotate({ toArbitrary: () => (fc) => fc.constant('') }).check(bare)`,
       filename: '/repo/pkg/src/domain.schema.ts',
       errors: [discardsError()],
     },
@@ -203,9 +211,17 @@ const X = S.Finite.check(bare)`,
       errors: [discardsError()],
     },
     {
-      name: 'Should_Fail_When_ObjectArbitraryLacksBothKeys',
+      name: 'Should_Fail_When_ObjectArbitraryCarriesNoConstraint',
       code: `import { Schema } from 'effect'
 const bare = Schema.makeFilter((v: number) => v > 0, { expected: 'positive', arbitrary: { note: 1 } })
+const X = Schema.Finite.check(bare)`,
+      filename: '/repo/pkg/src/domain.schema.ts',
+      errors: [discardsError()],
+    },
+    {
+      name: 'Should_Fail_When_ArbitraryNestsRetiredConstraint',
+      code: `import { Schema } from 'effect'
+const bare = Schema.makeFilter((v: number) => v > 0, { expected: 'positive', arbitrary: { constraint: { number: 'integer' } } })
 const X = Schema.Finite.check(bare)`,
       filename: '/repo/pkg/src/domain.schema.ts',
       errors: [discardsError()],
@@ -263,7 +279,7 @@ const X = check(bare)(Schema.Finite)`,
       code: `import { Schema } from 'effect'
 import { builder } from './builder.js'
 const bare = Schema.makeFilter((v: number) => v > 0)
-const X = builder.annotate({ toArbitrary: () => (fc) => fc.integer({ min: 1 }) }).check(bare)`,
+const X = builder.annotate({ toCodecArbitrary: ({ constraint }) => builderLink(constraint) }).check(bare)`,
       filename: '/repo/pkg/src/domain.schema.ts',
       errors: [discardsError()],
     },
