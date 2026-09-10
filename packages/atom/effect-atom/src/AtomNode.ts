@@ -68,21 +68,20 @@ export class NodeImpl<A> {
 
   get canBeRemoved(): boolean {
     const value = this._value
-    const fate = decideNodeFate({
-      keepAlive: this.atom.keepAlive,
-      listenerCount: this.listeners.size,
-      childCount: this.children.size,
-      isLive: this.state !== 0,
-      isWaiting: Result.isResult(value) && Result.isInitial(value) && value.waiting,
-      idleTTL: this.atom.idleTTL,
-      defaultIdleTTL: this.registry.defaultIdleTTL,
-    })
-    return Match.value(fate).pipe(
-      Match.tags({
-        Alive: () => false,
-        RemoveNow: () => true,
-        RemoveAfterTtl: () => true,
+    return Match.value(
+      decideNodeFate({
+        keepAlive: this.atom.keepAlive,
+        listenerCount: this.listeners.size,
+        childCount: this.children.size,
+        isLive: this.state !== 0,
+        isWaiting: Result.isResult(value) && Result.isInitial(value) && value.waiting,
+        idleTTL: this.atom.idleTTL,
+        defaultIdleTTL: this.registry.defaultIdleTTL,
       }),
+    ).pipe(
+      Match.tag('Alive', () => false),
+      Match.tag('RemoveNow', () => true),
+      Match.tag('RemoveAfterTtl', () => true),
       Match.exhaustive,
     )
   }

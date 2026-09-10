@@ -96,14 +96,6 @@ if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
   // branch is statically dead in the build and never enters the published module graph.
   const { it } = await import('@effect/vitest')
-  const { FastCheck: fc } = await import('effect/testing')
-
-  /**
-   * A supervision tree with a failed child: a total, and a failed index inside it. The schema's
-   * own filter guarantees `failedIndex < totalChildren`, so the arbitrary draws the same shape
-   * rather than a wider one the decision never sees.
-   */
-  const tree = S.toArbitrary(DecideInput)(fc).map((input) => [input.totalChildren, input.failedIndex] as const)
 
   const ascendingDistinct = (xs: readonly number[]): boolean =>
     xs.every((x, i) => i === 0 || x > (xs[i - 1] ?? Number.NEGATIVE_INFINITY))
@@ -114,10 +106,10 @@ if (import.meta.vitest !== void 0) {
    * Whatever the strategy, a restart set is a set of real child indices in a stable order: a
    * mutant that reversed the order, repeated an index, or ran one past the last child breaks it.
    */
-  it.prop('∀t_RestartSet_⊆Children', [tree], ([[total, failedIndex]]) =>
+  it.prop('∀t_RestartSet_⊆Children', [DecideInput], ([input]) =>
     RESTART_STRATEGIES.every((strategy) => {
-      const indices = restartIndicesFor(strategy, failedIndex, total)
-      return ascendingDistinct(indices) && indices.every((x) => x >= 0 && x < total)
+      const indices = restartIndicesFor(strategy, input.failedIndex, input.totalChildren)
+      return ascendingDistinct(indices) && indices.every((x) => x >= 0 && x < input.totalChildren)
     }))
 
   /**
@@ -125,19 +117,20 @@ if (import.meta.vitest !== void 0) {
    * one_for_one restarts the failed child, rest_for_one that child and its juniors, one_for_all
    * every child. An off-by-one in any branch breaks a containment the branch itself cannot see.
    */
-  it.prop('∀t_BlastRadius_⊆Widening', [tree], ([[total, failedIndex]]) => {
-    const one = restartIndicesFor('one_for_one', failedIndex, total)
-    const rest = restartIndicesFor('rest_for_one', failedIndex, total)
-    const all = restartIndicesFor('one_for_all', failedIndex, total)
+  it.prop('∀t_BlastRadius_⊆Widening', [DecideInput], ([input]) => {
+    const one = restartIndicesFor('one_for_one', input.failedIndex, input.totalChildren)
+    const rest = restartIndicesFor('rest_for_one', input.failedIndex, input.totalChildren)
+    const all = restartIndicesFor('one_for_all', input.failedIndex, input.totalChildren)
     return subset(one, rest) && subset(rest, all)
   })
 
   /** one_for_all covers the whole tree, and rest_for_one exactly the failed child's suffix. */
   it.prop(
     '∀t_Cardinality_=Strategy',
-    [tree],
-    ([[total, failedIndex]]) =>
-      restartIndicesFor('one_for_all', failedIndex, total).length === total &&
-      restartIndicesFor('rest_for_one', failedIndex, total).length === total - failedIndex,
+    [DecideInput],
+    ([input]) =>
+      restartIndicesFor('one_for_all', input.failedIndex, input.totalChildren).length === input.totalChildren &&
+      restartIndicesFor('rest_for_one', input.failedIndex, input.totalChildren).length ===
+        input.totalChildren - input.failedIndex,
   )
 }

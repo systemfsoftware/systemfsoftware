@@ -1,7 +1,30 @@
 /// <reference types="vitest/import-meta" />
 import { Schema as S } from 'effect'
-import type { FastCheck } from 'effect/testing'
 
+/**
+ * Default recursion cap, counted in descents below the root.
+ *
+ * Single source for the `maxDepth` option default and for the sampling `size`
+ * the in-source properties pass alongside it: native Arbitrary derives
+ * generation from the schema and terminates recursion through its own shared
+ * budget, so depth is a sampling parameter (`CheckOptions.size` /
+ * `SampleOptions.size`), not a schema-side `oneof` budget. The cap is
+ * therefore enforced where values are drawn — never where they are decoded,
+ * encoded, or compared (BU-R1).
+ */
+const DEFAULT_MAX_DEPTH = 2
+
+/**
+ * A `Schema.Union` of non-recursive `base` members and recursive `recur`
+ * members whose *generated* values terminate.
+ *
+ * Returns `S.Union([...base, ...recur])` annotated with `identifier`, so
+ * decode, encode, and equivalence stay exactly `Schema.Union`'s and accept
+ * values nested deeper than the cap (BU-R1). To reproduce the cap while
+ * sampling, pass the same `maxDepth` as `size` to `it.prop`'s `arbitrary`
+ * options or to `Arbitrary.sampleEffect` — the in-source properties below do
+ * exactly this with the default.
+ */
 export const boundedUnion = <
   Base extends readonly [S.ConstraintCodec<unknown, unknown>, ...readonly S.ConstraintCodec<unknown, unknown>[]],
   Recur extends readonly [S.ConstraintCodec<unknown, unknown>, ...readonly S.ConstraintCodec<unknown, unknown>[]],
@@ -10,59 +33,29 @@ export const boundedUnion = <
   options: {
     readonly base: Base
     readonly recur: Recur
+    /**
+     * Descends below the root allowed when sampling. This is the sampling
+     * contract, not a decode filter: draw generation with `size: maxDepth`
+     * (see `DEFAULT_MAX_DEPTH`), while decode accepts any depth.
+     */
     readonly maxDepth?: number
   },
 ): S.Codec<
   Base[number]['Type'] | Recur[number]['Type'],
   Base[number]['Encoded'] | Recur[number]['Encoded']
 > => {
-  const { base, maxDepth = 2, recur } = options
-  // The member arbitraries are derived inside the hook (not at construction):
-  // a recursive union's members reference the union being built, so deriving
-  // them eagerly would run the recursive thunks before the binding exists.
-  // Deriving a recursive member re-enters this union's own arbitrary
-  // derivation while it is still in flight — the guard folds that re-entry to
-  // the finite base pair, so the single top-level derivation closes instead
-  // of recursing forever. The recursion budget itself stays the classic
-  // shared `depthIdentifier`/`maxDepth` oneof, which is what the depth law
-  // measures.
-  let deriving = false
-  const hook: S.Annotations.ToArbitrary.Declaration<unknown, readonly []> = () =>
-  (
-    fc: typeof FastCheck,
-    _context?: S.Annotations.ToArbitrary.Context,
-  ): FastCheck.Arbitrary<unknown> | S.Annotations.ToArbitrary.Derivation<unknown> => {
-    const baseArbitraries = fc.oneof(...base.map((member) => S.toArbitrary(member)(fc)))
-    if (deriving) return baseArbitraries
-    deriving = true
-    try {
-      const recurArbitraries = recur.map((member) => S.toArbitrary(member)(fc))
-      return {
-        arbitrary: fc.oneof(
-          { depthIdentifier: identifier, maxDepth },
-          baseArbitraries,
-          ...recurArbitraries,
-        ),
-        terminal: baseArbitraries,
-      }
-    } finally {
-      deriving = false
-    }
-  }
-  return S.Union([...base, ...recur]).annotate({ identifier, toArbitrary: hook })
+  const { base, recur } = options
+  return S.Union([...base, ...recur]).annotate({ identifier })
 }
-
-/** Seeds per sampling property. */
-const SEEDS = 25
 
 if (import.meta.vitest !== void 0) {
   // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`,
   // so this branch is statically dead in the build and the runner never enters
   // the published module graph. A static import would ship it.
   const { it } = await import('@effect/vitest')
-  const { Exit, Match } = await import('effect')
+  const { Effect, Exit, Match } = await import('effect')
   const { Schema: S } = await import('effect')
-  const { FastCheck: fc } = await import('effect/testing')
+  const Arbitrary = await import('effect/unstable/arbitrary/Arbitrary')
 
   /**
    * `ruleOfSchemas` covers a schema's codec laws; the arbitrary `boundedUnion`
@@ -125,48 +118,51 @@ if (import.meta.vitest !== void 0) {
   type Id = S.Schema.Type<typeof Id>
 
   /**
-   * The default `maxDepth` is 2, and depth counts recursive *descents*: a root
-   * recurse may bear a recurse child, whose own children are forced to base. So the
-   * deepest chain is recurse -> recurse -> leaf, and `nestingDepth` — which scores a
-   * leaf 1 — tops out one above the cap.
+   * `nestingDepth` scores a leaf 1, so `DEFAULT_MAX_DEPTH` descents below the
+   * root top out one above it: recurse -> recurse -> leaf for the default 2.
    */
-  const DEPTH_CAP = 3
+  const DEPTH_CAP = DEFAULT_MAX_DEPTH + 1
 
   /**
-   * At the root `fc.oneof` hands out five branches, the base pair counting as
-   * one, so the rarest tag sits near 1/10 and 200 draws miss a given tag with
-   * probability 0.9^200 ≈ 7e-10. The number to hold is this one, not a seed —
-   * and the margin is thinner than it looks. Measured over 2000 seeds, a run of
-   * 50 draws misses a tag 1.3% of the time, which `SEEDS` independent draws
-   * compound into roughly one red in four per test run; the composition
-   * property is only comfortably stable above about 100.
+   * At the root the native engine draws uniformly among the six eligible
+   * members, so the rarest tag sits near 1/6 and 200 draws miss a given tag
+   * with probability (5/6)^200 ≈ 2e-16. The number to hold is this one, not a
+   * seed: each sampling property below draws one batch per generated seed, so
+   * a batch that rarely misses still reds the run when it does.
    */
   const SAMPLE_SIZE = 200
 
   /**
-   * Each sampling property draws `SEEDS * SAMPLE_SIZE` values from a recursive
-   * schema, which is CPU-bound and does not share a core well. Measured on the
-   * same commit: 612ms for the file's slowest property run alone, 45.7s for the
-   * same property inside a full parallel gate — a 74x spread. The timeout has to
-   * cover the contended cost, because a bound set near the isolated cost hands
-   * the verdict to whichever sibling tasks happen to run alongside, and a red
-   * from that is indistinguishable from a real one.
+   * Each sampling property draws `SAMPLE_SIZE` values per generated seed from
+   * a recursive schema, which is CPU-bound and does not share a core well.
+   * The timeout has to cover the contended cost, because a bound set near the
+   * isolated cost hands the verdict to whichever sibling tasks happen to run
+   * alongside, and a red from that is indistinguishable from a real one.
    */
   const SAMPLE_TIMEOUT_MS = 120_000
 
   const VARIANT_COUNT = BASE.length + RECUR.length
 
   /**
-   * The base pair enters each level as ONE branch of that level's `fc.oneof`,
-   * so the root's branches — the base pair, then each recur member — are evenly
-   * weighted at `1 / (1 + RECUR.length)`. Measured over 3000 seeds the widest
-   * per-branch drift was 0.115; the tolerance sits above that at about 5.3
-   * binomial standard deviations, putting a false red near 1e-7 per seed.
+   * Native `generateUnion` selects uniformly among the budget-eligible
+   * members, so each of the six tags — the base pair counting as two members,
+   * not one branch — is expected at `1 / VARIANT_COUNT`. For a 200-draw batch
+   * the per-tag standard deviation is about 0.026, so the tolerance sits near
+   * six sigma and a false red lands near 1e-8 per batch.
    */
-  const EVEN_BRANCH_SHARE = 1 / (1 + RECUR.length)
+  const EVEN_TAG_SHARE = 1 / VARIANT_COUNT
   const SHARE_TOLERANCE = 0.15
 
-  const sampleAt = (seed: number): readonly Expr[] => fc.sample(S.toArbitrary(Expr)(fc), { numRuns: SAMPLE_SIZE, seed })
+  const ExprArbitrary = Arbitrary.schema(Expr)
+
+  /**
+   * One capped batch: `size` is the sampling-side image of `maxDepth`, so
+   * every sampled tree nests no deeper than `DEPTH_CAP` while decode stays
+   * uncapped (BU-R1). A sampling exhaustion stays on the failure channel, so
+   * a starved batch reds the property instead of passing quietly.
+   */
+  const sampleAt = (seed: number) =>
+    Arbitrary.sampleEffect(ExprArbitrary, { count: SAMPLE_SIZE, size: DEFAULT_MAX_DEPTH, seed })
 
   const tagOf = (expr: Expr): Expr['_tag'] =>
     Match.value(expr).pipe(
@@ -206,47 +202,48 @@ if (import.meta.vitest !== void 0) {
     return tags.size
   }
 
-  const isBaseTag = (tag: Expr['_tag']): boolean => tag === 'Lit' || tag === 'Id'
-
   /**
-   * A branch is the base pair taken together, or one recurse member. A branch that
-   * never drew at all scores maximal drift rather than being skipped, so a
-   * starved branch cannot hide by being absent from the tally.
+   * Tags are tallied per member: a tag that never drew at all scores maximal
+   * drift rather than being skipped, so a starved member cannot hide by being
+   * absent from the tally. Counting against the fixture's own arity means a
+   * seventh variant raises the bar without this helper being touched.
    */
-  const widestBranchDriftOf = (samples: readonly Expr[]): number => {
-    const drawn = new Map<string, number>()
+  const widestTagDriftOf = (samples: readonly Expr[]): number => {
+    const drawn: Record<string, number> = {}
     for (const sample of samples) {
       const tag = tagOf(sample)
-      const branch = isBaseTag(tag) ? 'base' : tag
-      drawn.set(branch, (drawn.get(branch) ?? 0) + 1)
+      drawn[tag] = (drawn[tag] ?? 0) + 1
     }
-    if (drawn.size !== 1 + RECUR.length) return 1
+    const tallies = Object.values(drawn)
+    if (tallies.length !== VARIANT_COUNT) return 1
     let widest = 0
-    for (const count of drawn.values()) {
-      const drift = Math.abs(count / samples.length - EVEN_BRANCH_SHARE)
+    for (const count of tallies) {
+      const drift = Math.abs(count / samples.length - EVEN_TAG_SHARE)
       if (drift > widest) widest = drift
     }
     return widest
   }
 
   /**
-   * Raising the default `maxDepth`, or dropping the `depthIdentifier` that makes
-   * the cap shared rather than per-branch, lets a chain run past `DEPTH_CAP`.
-   * Quantified over `Expr` itself, so fast-check's own bias and shrinking hunt
-   * the deep cases rather than a seed deciding whether one appears.
+   * The cap lives in the sampling `size`, not in the schema: drawing the same
+   * union with a larger size lets a chain run past `DEPTH_CAP`. Quantified
+   * over `Expr` itself, so the engine's own bias and shrinking hunt the deep
+   * cases rather than a seed deciding whether one appears.
    */
-  it.prop('∀e_ExprNesting_≤DepthCap', [S.toArbitrary(Expr)(fc)], ([expr]) => nestingDepth(expr) <= DEPTH_CAP)
+  it.prop('∀e_ExprNesting_≤DepthCap', [Expr], ([expr]) => nestingDepth(expr) <= DEPTH_CAP, {
+    arbitrary: { size: DEFAULT_MAX_DEPTH },
+  })
 
   /**
    * The cap must bind rather than the generator simply never recursing: a kernel
    * that lost its recurse members, or capped a level short, still satisfies the
    * bound above while generating nothing but shallow values.
    */
-  it.prop(
+  it.effect.prop(
     '∀s_ExprDeepest_=DepthCap',
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => deepestOf(sampleAt(seed)) === DEPTH_CAP,
-    { timeout: SAMPLE_TIMEOUT_MS, fastCheck: { numRuns: SEEDS } },
+    [S.Int],
+    ([seed]) => Effect.map(sampleAt(seed), (samples) => deepestOf(samples) === DEPTH_CAP),
+    { timeout: SAMPLE_TIMEOUT_MS },
   )
 
   /**
@@ -257,11 +254,11 @@ if (import.meta.vitest !== void 0) {
    * distinct tags against the fixture's own arity means a seventh variant raises
    * the bar without this test being touched.
    */
-  it.prop(
+  it.effect.prop(
     '∀s_ExprComposition_⊇AllTags',
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => distinctTagsOf(sampleAt(seed)) === VARIANT_COUNT,
-    { timeout: SAMPLE_TIMEOUT_MS, fastCheck: { numRuns: SEEDS } },
+    [S.Int],
+    ([seed]) => Effect.map(sampleAt(seed), (samples) => distinctTagsOf(samples) === VARIANT_COUNT),
+    { timeout: SAMPLE_TIMEOUT_MS },
   )
 
   /**
@@ -272,11 +269,11 @@ if (import.meta.vitest !== void 0) {
    * that draws your schema through `ruleOfSchemas` starts exercising shallow
    * values only.
    */
-  it.prop(
-    '∀s_ExprBranches_≤ShareTolerance',
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => widestBranchDriftOf(sampleAt(seed)) <= SHARE_TOLERANCE,
-    { timeout: SAMPLE_TIMEOUT_MS, fastCheck: { numRuns: SEEDS } },
+  it.effect.prop(
+    '∀s_ExprTags_≤ShareTolerance',
+    [S.Int],
+    ([seed]) => Effect.map(sampleAt(seed), (samples) => widestTagDriftOf(samples) <= SHARE_TOLERANCE),
+    { timeout: SAMPLE_TIMEOUT_MS },
   )
 
   /**
@@ -292,15 +289,17 @@ if (import.meta.vitest !== void 0) {
       ? { _tag: 'Lit', value: 1 }
       : { _tag: 'Binary', op: '+', left: encodedChain(depth - 1), right: { _tag: 'Lit', value: 1 } }
 
+  const DeeperDepth = S.Int.check(S.isBetween({ minimum: DEPTH_CAP + 1, maximum: DEPTH_CAP + 20 }))
+
   it.prop(
     '∀d_DeeperThanCap_=Depth',
-    [fc.integer({ min: DEPTH_CAP + 1, max: DEPTH_CAP + 20 })],
+    [DeeperDepth],
     ([depth]) => {
       const decoded = S.decodeUnknownExit(Expr)(encodedChain(depth))
       return Exit.isSuccess(decoded) && nestingDepth(decoded.value) === depth
     },
   )
-  it.prop('∀e_ExprSample_≡RoundTrip', [S.toArbitrary(Expr)(fc)], ([expr]) => {
+  it.prop('∀e_ExprSample_≡RoundTrip', [Expr], ([expr]) => {
     const encoded = S.encodeUnknownExit(Expr)(expr)
     if (Exit.isFailure(encoded)) return false
     const decoded = S.decodeUnknownExit(Expr)(encoded.value)

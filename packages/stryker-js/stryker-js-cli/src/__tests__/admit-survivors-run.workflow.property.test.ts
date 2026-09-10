@@ -1,13 +1,22 @@
 import { sha256 } from '@noble/hashes/sha256'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils'
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import { schema } from '@systemfsoftware/stryker-js/Mutant'
 import * as Equivalence from 'effect/Equivalence'
 import * as Exit from 'effect/Exit'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { FastCheck as fc } from 'effect/testing'
 
+import {
+  ContentText,
+  EitherReport,
+  FrameworklessReport,
+  MalformedLocation,
+  PartialSurvivor,
+  ReportWithoutSurvivors,
+  ReportWithSurvivors,
+  SurvivorFields,
+  SurvivorsProducedReport,
+} from '../../tests/__fixtures__/admit-survivors-run.schema.js'
 import {
   admitSurvivorsRun,
   AdmitSurvivorsRunCommand,
@@ -18,118 +27,19 @@ import {
   SurvivorsRejection,
 } from '../admit-survivors-run.workflow.js'
 import { SURVIVORS_RUN_FIRST_REMEDIATION } from '../Survivors.js'
-import { extractSurvivors, type HashContent, priorSourceHashes, sourceContentHash } from '../Survivors.js'
+import {
+  extractSurvivors,
+  type HashContent,
+  type PriorReportDocument,
+  priorSourceHashes,
+  sourceContentHash,
+} from '../Survivors.js'
 const stringArrayEquivalence = Equivalence.Array(Equivalence.String)
 
 const sha256Hex: HashContent = (content) => bytesToHex(sha256(utf8ToBytes(content)))
 const absPath = (file: string): string => `/work/${file}`
 
-const reportPositionArb = fc.record({
-  line: fc.integer({ min: 1, max: 200 }),
-  column: fc.integer({ min: 1, max: 200 }),
-})
-
-const reportLocationArb = fc.record({ start: reportPositionArb, end: reportPositionArb })
-
-const nonSurvivedStatusArb = fc.constantFrom<schema.MutantStatus>(
-  'Killed',
-  'NoCoverage',
-  'Timeout',
-  'RuntimeError',
-  'CompileError',
-  'Ignored',
-  'Pending',
-)
-
-const mutantResultArb = (
-  status: fc.Arbitrary<schema.MutantStatus>,
-): fc.Arbitrary<schema.MutantResult> =>
-  fc.record(
-    {
-      id: fc.string({ minLength: 1, maxLength: 8 }),
-      mutatorName: fc.string({ minLength: 1, maxLength: 8 }),
-      location: reportLocationArb,
-      status,
-      replacement: fc.string({ maxLength: 8 }),
-    },
-    { requiredKeys: ['id', 'mutatorName', 'location', 'status'] },
-  )
-
-/** Keys are short enough that `survivorsPriorReport` can never be generated. */
-const cleanConfigArb: fc.Arbitrary<Record<string, unknown>> = fc.dictionary(
-  fc.string({ maxLength: 6 }),
-  fc.oneof(fc.string({ maxLength: 6 }), fc.integer(), fc.boolean()),
-  { maxKeys: 3 },
-)
-
-const sourceArb = fc.string({ maxLength: 16 })
-
-const survivingFilesArb: fc.Arbitrary<Record<string, schema.FileResult>> = fc
-  .tuple(
-    fc.string({ minLength: 1, maxLength: 6 }),
-    fc.array(mutantResultArb(nonSurvivedStatusArb), { maxLength: 3 }),
-    mutantResultArb(fc.constant<schema.MutantStatus>('Survived')),
-    sourceArb,
-  )
-  .map(([file, others, survivor, source]) => ({
-    [file]: { language: 'javascript', source, mutants: [...others, survivor] },
-  }))
-
-const nonSurvivingFilesArb: fc.Arbitrary<Record<string, schema.FileResult>> = fc.dictionary(
-  fc.string({ maxLength: 6 }),
-  fc.record({
-    language: fc.constant('javascript'),
-    source: sourceArb,
-    mutants: fc.array(mutantResultArb(nonSurvivedStatusArb), { maxLength: 3 }),
-  }),
-  { maxKeys: 3 },
-)
-
-const reportArb = (
-  files: fc.Arbitrary<Record<string, schema.FileResult>>,
-  config: fc.Arbitrary<Record<string, unknown>> = cleanConfigArb,
-): fc.Arbitrary<schema.MutationTestResult> =>
-  fc.record({
-    config,
-    schemaVersion: fc.constant('1'),
-    thresholds: fc.record({ high: fc.integer(), low: fc.integer() }),
-    framework: fc.record({
-      name: fc.constant('stryker'),
-      version: fc.string({ minLength: 1, maxLength: 6 }),
-    }),
-    files,
-  })
-
-const reportWithSurvivorsArb = reportArb(survivingFilesArb)
-const reportWithoutSurvivorsArb = reportArb(nonSurvivingFilesArb)
-
-const frameworklessReportArb: fc.Arbitrary<schema.MutationTestResult> = fc.record({
-  config: cleanConfigArb,
-  schemaVersion: fc.constant('1'),
-  thresholds: fc.record({ high: fc.integer(), low: fc.integer() }),
-  files: survivingFilesArb,
-})
-
-const survivorsProducedReportArb = reportArb(
-  survivingFilesArb,
-  cleanConfigArb.map((config) => ({ ...config, survivorsPriorReport: 'reports/prior.json' })),
-)
-
-/**
- * The fields of a command whose prior and current sides agree, as plain data. The report
- * the arbitraries build is the shape the codec accepts, so it stands in for a decoded
- * document here — the decode itself is the executor's edge, not this suite's subject.
- *
- * The two precomputed fields are built with the same helpers the edge uses, so a change to
- * either helper moves both sides of the comparison together rather than silently making
- * every admission mismatch.
- *
- * This is a record and not a command on purpose: the variants below override one field
- * each, and spreading a class instance drops its prototype while staying structurally
- * assignable — the suite would keep passing while no longer exercising a command. Spread
- * the data, construct once, and every variant is a real instance.
- */
-const matchingFields = (report: schema.MutationTestResult) => ({
+const matchingFields = (report: PriorReportDocument) => ({
   priorReport: PriorReportFacts.make({
     config: report.config ?? {},
     frameworkVersion: report.framework?.version,
@@ -146,18 +56,16 @@ const matchingFields = (report: schema.MutationTestResult) => ({
   priorSurvivors: extractSurvivors(report, absPath),
 })
 
-const matchingCommand = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand =>
+const matchingCommand = (report: PriorReportDocument): AdmitSurvivorsRunCommand =>
   AdmitSurvivorsRunCommand.make(matchingFields(report))
 
-/** The same command with the framework version drifted, so the two sides disagree. */
-const driftedCommand = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand =>
+const driftedCommand = (report: PriorReportDocument): AdmitSurvivorsRunCommand =>
   AdmitSurvivorsRunCommand.make({
     ...matchingFields(report),
     frameworkVersion: `${report.framework?.version ?? ''}-drifted`,
   })
 
-/** The same command with no prior report, so the admission has nothing to inspect. */
-const commandWithoutPriorReport = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand =>
+const commandWithoutPriorReport = (report: PriorReportDocument): AdmitSurvivorsRunCommand =>
   AdmitSurvivorsRunCommand.make({
     ...matchingFields(report),
     priorReport: undefined,
@@ -196,7 +104,7 @@ const rejectionOf = (result: Result.Result<unknown, SurvivorsRejection>): Surviv
 describe('admitSurvivorsRun', () => {
   it.prop(
     '∀i_NoPriorReport_≡NoReportRejection',
-    [reportWithSurvivorsArb],
+    [ReportWithSurvivors],
     ([report]) => {
       const rejection = rejectionOf(
         admitSurvivorsRun(commandWithoutPriorReport(report)),
@@ -211,7 +119,7 @@ describe('admitSurvivorsRun', () => {
 
   it.prop(
     '∀r_SurvivorsProducedReport_≡RejectedAsUnusableSource',
-    [survivorsProducedReportArb],
+    [SurvivorsProducedReport],
     ([report]) => {
       const rejection = rejectionOf(admitSurvivorsRun(matchingCommand(report)))
       if (rejection === undefined) {
@@ -224,7 +132,7 @@ describe('admitSurvivorsRun', () => {
 
   it.prop(
     '∀r_NoSurvivors_≡AdmittedEmptyEvenWhenHashesDrift',
-    [reportWithoutSurvivorsArb],
+    [ReportWithoutSurvivors],
     ([report]) => {
       const drifted = admitSurvivorsRun(driftedCommand(report))
       if (!Result.isSuccess(drifted)) {
@@ -236,7 +144,7 @@ describe('admitSurvivorsRun', () => {
 
   it.prop(
     '∀r_SurvivorsWithDriftedHashes_≡MismatchRejection',
-    [reportWithSurvivorsArb],
+    [ReportWithSurvivors],
     ([report]) => {
       const rejection = rejectionOf(admitSurvivorsRun(driftedCommand(report)))
       if (rejection === undefined) {
@@ -249,7 +157,7 @@ describe('admitSurvivorsRun', () => {
 
   it.prop(
     '∀r_SurvivorsWithMatchingHashes_≡AdmittedWithExactSurvivors',
-    [reportWithSurvivorsArb],
+    [ReportWithSurvivors],
     ([report]) => {
       const admission = admitSurvivorsRun(matchingCommand(report))
       if (!Result.isSuccess(admission)) {
@@ -269,7 +177,7 @@ describe('admitSurvivorsRun', () => {
 
   it.prop(
     '∀r_EveryRejection_≡EndsWithRunFirstRemediation',
-    [fc.oneof(reportWithSurvivorsArb, survivorsProducedReportArb)],
+    [EitherReport],
     ([report]) => {
       const rejections = [
         rejectionOf(admitSurvivorsRun(commandWithoutPriorReport(report))),
@@ -285,7 +193,7 @@ describe('admitSurvivorsRun', () => {
 
   it.prop(
     '∀r_ReportWithoutFramework_≡DecidesWithoutThrowing',
-    [frameworklessReportArb],
+    [FrameworklessReport],
     ([report]) => {
       const rejection = rejectionOf(admitSurvivorsRun(matchingCommand(report)))
       if (rejection === undefined) {
@@ -297,7 +205,7 @@ describe('admitSurvivorsRun', () => {
 
   it.prop(
     '∀i_EveryRejection_≡CarriesTheRejectionTag',
-    [reportWithSurvivorsArb],
+    [ReportWithSurvivors],
     ([report]) =>
       (() => {
         const r = rejectionOf(admitSurvivorsRun(commandWithoutPriorReport(report)))
@@ -310,7 +218,7 @@ describe('admitSurvivorsRun', () => {
 
   it.prop(
     '∀m_MalformedSurvivor_≡RefusedByAdmissionDecode',
-    [fc.record({ id: fc.string(), fileName: fc.string() })],
+    [PartialSurvivor],
     ([partial]) =>
       Exit.isFailure(
         S.decodeUnknownExit(SurvivorsAdmission)({ _tag: 'Admitted', survivors: [partial] }),
@@ -319,19 +227,7 @@ describe('admitSurvivorsRun', () => {
 
   it.prop(
     '∀l_MalformedLocation_≡RefusedByAdmissionDecode',
-    [
-      fc.oneof(
-        fc.constant({}),
-        fc.record({ start: fc.constant({}), end: reportPositionArb }),
-        fc.record({ start: reportPositionArb, end: fc.constant({}) }),
-      ),
-      fc.record({
-        id: fc.string({ minLength: 1 }),
-        fileName: fc.string({ minLength: 1 }),
-        mutatorName: fc.string({ minLength: 1 }),
-        replacement: fc.string({ minLength: 1 }),
-      }),
-    ],
+    [MalformedLocation, SurvivorFields],
     ([location, fields]) =>
       Exit.isFailure(
         S.decodeUnknownExit(SurvivorsAdmission)({
@@ -343,7 +239,7 @@ describe('admitSurvivorsRun', () => {
 
   it.prop(
     '∀r_WellFormedSurvivors_≡AcceptedByAdmissionDecode',
-    [reportWithSurvivorsArb],
+    [ReportWithSurvivors],
     ([report]) =>
       Exit.isSuccess(
         S.decodeExit(SurvivorsAdmission)({
@@ -355,7 +251,7 @@ describe('admitSurvivorsRun', () => {
 
   it.prop(
     '∀r_EveryVariant_≡BrandedWithTheRegistryScopedTypeId',
-    [reportWithSurvivorsArb],
+    [ReportWithSurvivors],
     ([report]) => {
       const crossRealmBrand = Symbol.for('@systemfsoftware/stryker-js-cli/SurvivorsAdmission')
       const admitted = admitSurvivorsRun(matchingCommand(report))
@@ -372,43 +268,43 @@ describe('admitSurvivorsRun', () => {
 describe('sourceContentHash', () => {
   it.prop(
     '∀c_Empty_≡FipsVector',
-    [fc.constant('')],
+    [S.Literal('')],
     ([content]) =>
       sourceContentHash(content, sha256Hex) === 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
   )
 
   it.prop(
     '∀c_Abc_≡FipsVector',
-    [fc.constant('abc')],
+    [S.Literal('abc')],
     ([content]) =>
       sourceContentHash(content, sha256Hex) === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
   )
 
   it.prop(
     '∀c_NonAscii_≡Utf8Vector',
-    [fc.constant('✓')],
+    [S.Literal('✓')],
     ([content]) =>
       sourceContentHash(content, sha256Hex) === '1dabba21cdad44541f6b15796f8d22978fc7ea10c46aeceeeeb66c23b3ac7604',
   )
 
   it.prop(
     '∀c_Content_≡Deterministic',
-    [fc.string({ maxLength: 16 })],
+    [ContentText],
     ([content]) => sourceContentHash(content, sha256Hex) === sourceContentHash(content, sha256Hex),
   )
 
   it.prop(
     '∀a,b_Content_≠Distinct',
-    [fc.string({ maxLength: 16 }), fc.string({ maxLength: 16 })],
-    ([a, b]) => {
-      fc.pre(a !== b)
+    [ContentText, S.String.check(S.isMinLength(1), S.isMaxLength(4))],
+    ([a, extra]) => {
+      const b = `${a}${extra}`
       return sourceContentHash(a, sha256Hex) !== sourceContentHash(b, sha256Hex)
     },
   )
 })
 
 describe('Survivors not-found', () => {
-  it.prop('∀c_NotFound_≡Rejection', [fc.constant(null)], () =>
+  it.prop('∀c_NotFound_≡Rejection', [S.Null], () =>
     Result.match(
       admitSurvivorsRun(
         AdmitSurvivorsRunCommand.make({

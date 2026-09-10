@@ -1,9 +1,8 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import { Match, Schema } from 'effect'
+import { Match } from 'effect'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { FastCheck as fc } from 'effect/testing'
 
 import {
   CheckFinished,
@@ -28,8 +27,6 @@ const isSubset = (inner: ReadonlySet<string>, outer: ReadonlySet<string>): boole
 const isDisjoint = (left: ReadonlySet<string>, right: ReadonlySet<string>): boolean =>
   [...left].every((value) => !right.has(value))
 
-const fileArb = fc.integer({ min: 0, max: 100000 }).map((n) => `src/mod-${n}.ts`)
-
 const mutantInFile = (id: string, fileName: string): Mutant =>
   new Mutant({
     id,
@@ -47,32 +44,10 @@ const nodeFor = (
   children: [],
 })
 
-const emptyDiagnosticsInputArb: fc.Arbitrary<CheckMutantsInput> = fc
-  .tuple(fileArb, fc.array(fc.uuid(), { minLength: 1, maxLength: 2 }))
-  .map(
-    ([file, ids]) =>
-      new CheckMutantsInput({
-        mutants: ids.map((id) => mutantInFile(id, file)),
-        diagnostics: [],
-        nodes: { [file]: nodeFor(file) },
-      }),
-  )
-
-const ambiguousGroupInputArb: fc.Arbitrary<CheckMutantsInput> = fc
-  .tuple(fileArb, fc.string({ maxLength: 32 }))
-  .map(
-    ([file, text]) =>
-      new CheckMutantsInput({
-        mutants: [mutantInFile('retest-a', file), mutantInFile('retest-b', file)],
-        diagnostics: [{ fileName: file, text }],
-        nodes: { [file]: nodeFor(file) },
-      }),
-  )
-
 describe('checkMutants', () => {
   it.prop(
     '∀i_Decision_≡PartitionedAndBranded',
-    [Schema.toArbitrary(CheckMutantsInput)(fc)],
+    [CheckMutantsInput],
     ([input]) => {
       const result = checkMutants(input)
       if (Result.isFailure(result)) {
@@ -102,37 +77,74 @@ describe('checkMutants', () => {
     },
   )
 
-  it.prop('∀i_NoDiagnostics_≡CheckFinishedPassed', [emptyDiagnosticsInputArb], ([input]) => {
-    const result = checkMutants(input)
-    if (!Result.isSuccess(result)) {
-      return false
-    }
-    if (!S.is(CheckFinished)(result.success)) {
-      return false
-    }
-    if (!carriesFamilyBrand(result.success)) {
-      return false
-    }
-    const ids = new Set(input.mutants.map((mutant) => mutant.id))
-    return (
-      setsEqual(new Set(Object.keys(result.success.results)), ids) &&
-      input.mutants.every((mutant) => result.success.results[mutant.id]?.status === 'passed')
-    )
-  })
+  it.prop(
+    '∀i_NoDiagnostics_≡CheckFinishedPassed',
+    [
+      S.Int.check(S.isBetween({ minimum: 0, maximum: 100000 })),
+      S.String.check(
+        S.isMinLength(1),
+        S.isMaxLength(36),
+        S.makeFilter(
+          (id: string) => id !== '__proto__' && id !== 'constructor' && id !== 'prototype',
+          {
+            expected: 'a non-prototype object key',
+            arbitraryConstraint: {
+              patterns: [{ source: '^(?!__proto__$|constructor$|prototype$).*$', flags: '' }],
+            },
+          },
+        ),
+      ),
+    ],
+    ([n, id]) => {
+      const file = `src/mod-${n}.ts`
+      const input = new CheckMutantsInput({
+        mutants: [mutantInFile(id, file)],
+        diagnostics: [],
+        nodes: { [file]: nodeFor(file) },
+      })
+      const result = checkMutants(input)
+      if (!Result.isSuccess(result)) {
+        return false
+      }
+      if (!S.is(CheckFinished)(result.success)) {
+        return false
+      }
+      if (!carriesFamilyBrand(result.success)) {
+        return false
+      }
+      return (
+        result.success.results[id]?.status === 'passed' &&
+        Object.keys(result.success.results).length === 1
+      )
+    },
+  )
 
-  it.prop('∀i_AmbiguousGroup_≡RetestRequired', [ambiguousGroupInputArb], ([input]) => {
-    const result = checkMutants(input)
-    if (!Result.isSuccess(result)) {
-      return false
-    }
-    if (!S.is(RetestRequired)(result.success)) {
-      return false
-    }
-    if (!carriesFamilyBrand(result.success)) {
-      return false
-    }
-    const expected = new Set(input.mutants.map((mutant) => mutant.id))
-    const actual = new Set(result.success.needsRetest.map((mutant) => mutant.id))
-    return setsEqual(actual, expected) && isDisjoint(new Set(Object.keys(result.success.results)), actual)
-  })
+  it.prop(
+    '∀i_AmbiguousGroup_≡RetestRequired',
+    [
+      S.Int.check(S.isBetween({ minimum: 0, maximum: 100000 })),
+      S.String.check(S.isMaxLength(32)),
+    ],
+    ([n, text]) => {
+      const file = `src/mod-${n}.ts`
+      const input = new CheckMutantsInput({
+        mutants: [mutantInFile('retest-a', file), mutantInFile('retest-b', file)],
+        diagnostics: [{ fileName: file, text }],
+        nodes: { [file]: nodeFor(file) },
+      })
+      const result = checkMutants(input)
+      if (!Result.isSuccess(result)) {
+        return false
+      }
+      if (!S.is(RetestRequired)(result.success)) {
+        return false
+      }
+      if (!carriesFamilyBrand(result.success)) {
+        return false
+      }
+      const expected = new Set(input.mutants.map((mutant) => mutant.id))
+      const actual = new Set(result.success.needsRetest.map((mutant) => mutant.id))
+      return setsEqual(actual, expected) && isDisjoint(new Set(Object.keys(result.success.results)), actual)
+    },
+  )
 })

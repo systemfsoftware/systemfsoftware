@@ -1,4 +1,5 @@
 import { Layer } from 'effect'
+import * as ByteSize from 'effect/ByteSize'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Option from 'effect/Option'
@@ -78,8 +79,8 @@ const makeFileInfo = (stat: Stat): FileSystem.File.Info => ({
   nlink: Option.fromNullishOr(stat.nlink ? Number(stat.nlink) : null),
   uid: Option.fromNullishOr(stat.uid ? Number(stat.uid) : null),
   gid: Option.fromNullishOr(stat.gid ? Number(stat.gid) : null),
-  size: FileSystem.Size(Number(stat.size)),
-  blksize: Option.fromNullishOr(stat.blksize ? FileSystem.Size(Number(stat.blksize)) : null),
+  size: ByteSize.bytes(Number(stat.size)),
+  blksize: Option.fromNullishOr(stat.blksize ? ByteSize.bytes(Number(stat.blksize)) : null),
   blocks: Option.fromNullishOr(stat.blocks ? Number(stat.blocks) : null),
 })
 
@@ -95,12 +96,11 @@ const makeFile = (handle: FileHandle): FileSystem.File => {
       try: () => handle.sync(),
       catch: toPlatformError('sync'),
     }),
-    seek(offset: FileSystem.SizeInput, from: FileSystem.SeekMode) {
-      const off = FileSystem.Size(offset)
+    seek(offset: bigint, from: FileSystem.SeekMode) {
       return Effect.sync(() => {
-        if (from === 'start') position = off
-        else if (from === 'current') position = position + off
-        return FileSystem.Size(position)
+        if (from === 'start') position = offset
+        else if (from === 'current') position = position + offset
+        return position
       })
     },
     read(buffer: Uint8Array) {
@@ -110,12 +110,12 @@ const makeFile = (handle: FileHandle): FileSystem.File => {
       }).pipe(
         Effect.map(({ bytesRead }) => {
           position = position + BigInt(bytesRead)
-          return FileSystem.Size(bytesRead)
+          return bytesRead
         }),
       )
     },
-    readAlloc(size: FileSystem.SizeInput) {
-      const sizeNumber = Number(size)
+    readAlloc(size: number) {
+      const sizeNumber = size
       return Effect.suspend(() => {
         const buf = Buffer.allocUnsafeSlow(sizeNumber)
         return Effect.tryPromise({
@@ -133,7 +133,7 @@ const makeFile = (handle: FileHandle): FileSystem.File => {
         )
       })
     },
-    truncate(length?: FileSystem.SizeInput) {
+    truncate(length?: number) {
       const len = Number(length ?? 0)
       return Effect.tryPromise({
         try: () => handle.truncate(len),
@@ -151,7 +151,7 @@ const makeFile = (handle: FileHandle): FileSystem.File => {
       }).pipe(
         Effect.map(({ bytesWritten }) => {
           position = position + BigInt(bytesWritten)
-          return FileSystem.Size(bytesWritten)
+          return bytesWritten
         }),
       )
     },

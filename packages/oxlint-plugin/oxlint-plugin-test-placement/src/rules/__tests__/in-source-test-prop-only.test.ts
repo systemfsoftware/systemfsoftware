@@ -56,17 +56,15 @@ if (import.meta.vitest !== void 0) {
       filename: '/repo/pkg/src/widget.ts',
     },
     {
-      name: 'Should_Allow_SchemaAndFcCalls_When_InsidePropBlock',
+      name: 'Should_Allow_SchemaCalls_When_InsidePropBlock',
       code: `
 if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
-  const { Exit } = await import('effect')
-  const { FastCheck: fc } = await import('effect/testing')
-  const negative = fc.integer({ min: -100, max: -1 })
+  const { Exit, Schema } = await import('effect')
   it.prop(
     'NegativeLimit_Fails',
-    [negative.map((limit) => ({ _tag: 'DynamicLimitExceeded' as const, limit }))],
-    ([input]) => Exit.isFailure(decode(input)),
+    [Schema.Int.check(Schema.isBetween({ minimum: -100, maximum: -1 }))],
+    ([limit]) => Exit.isFailure(decode({ _tag: 'DynamicLimitExceeded', limit })),
   )
 }
 `,

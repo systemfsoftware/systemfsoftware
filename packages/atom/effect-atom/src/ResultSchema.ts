@@ -162,8 +162,7 @@ export const Schema = <
       // The wire codec is JSON-based: an `undefined` defect — at any depth —
       // does not survive it. The schema's input space is therefore the
       // wire-representable subset: Fail of the error schema, or Die of a JSON
-      // value.
-      toArbitrary: () => (fc) => fc.constant(initial(false)),
+      // value. Native Arbitrary derives from the codec.
       toFormatter: ([value, cause]) => (t) => {
         if (hasProperty(t, 'value')) {
           return `Result.Success(${value(t.value)}, ${t.waiting}, ${t.timestamp})`

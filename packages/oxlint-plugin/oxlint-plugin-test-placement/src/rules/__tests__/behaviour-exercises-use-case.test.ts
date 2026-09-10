@@ -140,7 +140,7 @@ Feature('x', () => {})
       name: 'Should_Ignore_APropertyTest_When_ItImportsOnlyEffect',
       code: `
 import { Effect } from 'effect'
-import { FastCheck as fc } from 'effect/testing'
+import { Schema } from 'effect/Schema'
 `,
       filename: '/repo/pkg/src/__tests__/x.workflow.property.test.ts',
     },
@@ -162,7 +162,7 @@ Feature('x', () => {})
       // satisfy the rule by importing an arbitrary and asserting on it.
       name: 'Should_ReportViolation_When_TheOnlyNonRunnerImportIsAnEffectSubpath',
       code: `${FEATURE_IMPORTS}
-import { FastCheck as fc } from 'effect/testing'
+import { TestClock } from 'effect/testing'
 import { Schema } from 'effect/Schema'
 
 Feature('x', () => {})

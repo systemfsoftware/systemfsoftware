@@ -6,7 +6,7 @@
 
 import { Schema } from 'effect';
 
-// @public (undocumented)
+// @public
 export const boundedUnion: <Base extends readonly [Schema.ConstraintCodec<unknown, unknown>, ...readonly Schema.ConstraintCodec<unknown, unknown>[]], Recur extends readonly [Schema.ConstraintCodec<unknown, unknown>, ...readonly Schema.ConstraintCodec<unknown, unknown>[]]>(identifier: string, options: {
     readonly base: Base;
     readonly recur: Recur;

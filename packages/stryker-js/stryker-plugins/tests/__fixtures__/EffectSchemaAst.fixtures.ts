@@ -1,5 +1,3 @@
-import { FastCheck as fc } from 'effect/testing'
-
 interface Identifier {
   readonly type: 'Identifier'
   readonly name: string
@@ -57,16 +55,6 @@ export const classCall = (id: AstNode, fields: AstNode): CallExpression =>
 /** `X.pipe(S.brand('Name'))`'s inner call - the brand name is identity data. */
 export const brandCall = (name: AstNode): CallExpression => callOf(memberOf('S', 'brand'), [name])
 
-export const taggedFactory = fc.constantFrom('TaggedClass', 'TaggedError')
-
-export const nonTaggedFactory = fc.constantFrom('Struct', 'Class', 'Union', 'TaggedRequest', 'tag', 'Literal')
-
-export const nonSymbolForMember = fc.oneof(
-  fc.tuple(fc.constant('Symbol'), fc.constantFrom('iterator', 'keyFor', 'description')),
-  fc.tuple(fc.constantFrom('Reflect', 'Object', 'globalThis'), fc.constant('for')),
-  fc.tuple(fc.constantFrom('Reflect', 'Match', 'Effect'), fc.constantFrom('tag', 'gen', 'sync')),
-)
-
 export interface PropertyNode {
   readonly type: 'Property'
   readonly computed: boolean
@@ -101,9 +89,3 @@ export const objectExpression = (properties: readonly PropertyNode[] = []): Obje
 })
 
 export const annotationsCall = (argument: AstNode): CallExpression => callOf(memberOf('S', 'annotations'), [argument])
-
-export const documentationKey = fc.constantFrom('identifier', 'description', 'title', 'documentation', 'examples')
-
-export const behaviourKey = fc.constantFrom('arbitrary', 'pretty', 'equivalence', 'message', 'jsonSchema')
-
-export const nonAnnotationsMethod = fc.constantFrom('filter', 'transform', 'pipe', 'brand', 'annotate')

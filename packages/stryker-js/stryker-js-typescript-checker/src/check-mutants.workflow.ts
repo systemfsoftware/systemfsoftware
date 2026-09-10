@@ -37,17 +37,25 @@ const TSFileNodeSchema: Wire.Minted<NodeDecodedShape, unknown> = Wire.mint(
     })
   ),
 )
+type MutantDecoded = S.Schema.Type<typeof Mutant>
 
 export class CheckMutantsInput extends S.TaggedClass<CheckMutantsInput>()(
   'CheckMutantsInput',
   {
-    mutants: S.Array(Mutant),
+    mutants: S.Array(Mutant).check(
+      S.makeFilter(
+        (mutants: readonly MutantDecoded[]) => new Set(mutants.map((mutant) => mutant.id)).size === mutants.length,
+        {
+          expected: 'unique mutant ids',
+          arbitraryConstraint: { uniqueBy: (mutant: MutantDecoded) => mutant.id },
+        },
+      ),
+    ),
     diagnostics: S.Array(DiagnosticSchema),
     nodes: Wire.mint(S.Record(Wire.mint(S.String), TSFileNodeSchema)),
   },
 ) {}
 
-type MutantDecoded = S.Schema.Type<typeof Mutant>
 type DiagnosticDecoded = S.Schema.Type<typeof DiagnosticSchema>
 type NodeDecoded = NodeDecodedShape
 type MutantCheckStatus = { readonly status: 'passed' } | { readonly status: 'compileError'; readonly reason: string }

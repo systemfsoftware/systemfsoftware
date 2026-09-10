@@ -1,7 +1,6 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { FastCheck as fc } from 'effect/testing'
 
 import { dryRun, DryRunCommand, DryRunError, DryRunFailed, DryRunPassed } from '../dry-run.workflow.js'
 
@@ -10,15 +9,10 @@ const DryRunDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker
 describe('dryRun', () => {
   it.prop(
     '∀d_Brand_∈Decision',
-    [
-      fc.constantFrom(
-        new DryRunPassed({ testCount: 1 }),
-        new DryRunFailed({ testCount: 2, failedTestCount: 1 }),
-      ),
-    ],
+    [S.Union([DryRunPassed, DryRunFailed])],
     ([decision]) => Object.getOwnPropertySymbols(decision).includes(DryRunDecisionTypeId),
   )
-  it.prop('∀c_Command_≡Decision', [S.toArbitrary(DryRunCommand)(fc)], ([command]) => {
+  it.prop('∀c_Command_≡Decision', [DryRunCommand], ([command]) => {
     const result = dryRun(command)
     if (command.status === 'Error') {
       return (

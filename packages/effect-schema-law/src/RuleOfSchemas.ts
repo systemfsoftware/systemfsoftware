@@ -1,6 +1,5 @@
 import { it } from '@effect/vitest'
 import { Exit, Schema, Schema as S } from 'effect'
-import { FastCheck as fc } from 'effect/testing'
 
 /**
  * The two laws, as decisions over one schema's own values.
@@ -45,7 +44,7 @@ const lawsOf = <A, I>(schema: S.Codec<A, I>): {
 /**
  * Property-test the round-trip and encode-stability laws of any Effect Schema.
  *
- * Registers two fast-check properties with `@effect/vitest`:
+ * Registers two `@effect/vitest` properties:
  *   1. `∀x. enc(dec(enc(x))) === enc(x)` — encode stability across decode.
  *   2. `∀x. dec(enc(x)) === x` — round-trip identity.
  *
@@ -56,9 +55,8 @@ export const ruleOfSchemas = <A, I>(
   schema: S.Codec<A, I>,
 ): void => {
   const { encodeStable, roundTrips } = lawsOf(schema)
-  const arbitrary = S.toArbitrary(schema)(fc)
 
-  it.prop(`∀x_${name}Enc_=x`, [arbitrary], ([value]) => encodeStable(value))
+  it.prop(`∀x_${name}Enc_=x`, [schema], ([value]) => encodeStable(value))
 
-  it.prop(`∀x_${name}_=x`, [arbitrary], ([value]) => roundTrips(value))
+  it.prop(`∀x_${name}_=x`, [schema], ([value]) => roundTrips(value))
 }

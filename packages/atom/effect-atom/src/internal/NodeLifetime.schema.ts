@@ -1,10 +1,21 @@
 import { Schema as S } from 'effect'
 
 /** @internal */
-export const NodeFate = S.Union([
-  S.TaggedStruct('Alive', {}),
-  S.TaggedStruct('RemoveNow', {}),
-  S.TaggedStruct('RemoveAfterTtl', { ttlMillis: S.Finite }),
-])
+export const Alive = S.TaggedStruct('Alive', {})
 /** @internal */
-export type NodeFate = S.Schema.Type<typeof NodeFate>
+export type Alive = S.Schema.Type<typeof Alive>
+
+/** @internal */
+export const RemoveNow = S.TaggedStruct('RemoveNow', {})
+/** @internal */
+export type RemoveNow = S.Schema.Type<typeof RemoveNow>
+
+/** @internal */
+export const RemoveAfterTtl = S.TaggedStruct('RemoveAfterTtl', { ttlMillis: S.Finite })
+/** @internal */
+export type RemoveAfterTtl = S.Schema.Type<typeof RemoveAfterTtl>
+
+/** @internal */
+export const NodeFate = S.Union([Alive, RemoveNow, RemoveAfterTtl])
+/** @internal */
+export type NodeFate = Alive | RemoveNow | RemoveAfterTtl
