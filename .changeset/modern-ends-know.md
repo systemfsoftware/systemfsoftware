@@ -19,7 +19,6 @@
 "@systemfsoftware/oxlint-plugin-effect-schema": minor
 "@systemfsoftware/oxlint-plugin-property-testing": minor
 "@systemfsoftware/oxlint-plugin-test-placement": minor
-"@systemfsoftware/omp-agent-discipline": minor
 ---
 
 cut over to effect v4 (4.0.0-rc.108): public surface derives from effect types; peers flip effect ^3→^4

@@ -4,7 +4,6 @@
 '@systemfsoftware/effect-memfs': patch
 '@systemfsoftware/effect-schema-vite': patch
 '@systemfsoftware/hex-schema': patch
-'@systemfsoftware/omp-agent-discipline': patch
 '@systemfsoftware/oxlint-plugin-cell-vocabulary': patch
 '@systemfsoftware/oxlint-plugin-test-hygiene': patch
 '@systemfsoftware/storybook-gherkin': patch

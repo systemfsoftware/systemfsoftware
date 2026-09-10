@@ -30,8 +30,6 @@ catalog:
   "@microsoft/api-extractor": ^7.58.7
   oxc-parser: ^0.140.0
   "@oxc-project/types": ^0.140.0
-  "@oh-my-pi/pi-coding-agent": ^17.0.5
-  "@std/toml": jsr:^1.0.11
   "@std/jsonc": jsr:^1.0.2
   "@std/path": jsr:^1.0.0
   "@std/fs": jsr:^1.0.6
@@ -116,8 +114,6 @@ packages:
   - packages/hex-schema/
   - packages/npm-package/
   - packages/rx-effect/
-  - omp/packages/omp-runtime/
-  - omp/packages/harness-toml/
   - packages/oxlint-plugin/import-origin/
   - packages/oxlint-plugin/make-boundary/
   - packages/oxlint-plugin/oxlint-plugin/

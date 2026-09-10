@@ -21,7 +21,6 @@ A workspace of modular [Effect-TS](https://effect.website) libraries, testing ut
 | [`@systemfsoftware/effect-schema-bounded-union`](packages/effect-schema-bounded-union) | A recursive schema union whose generated values terminate; decoding is unchanged.     |
 | [`@systemfsoftware/rx-effect`](packages/rx-effect)                                     | Bidirectional bridge between RxJS Observables and backpressured Effect Streams.       |
 | [`@systemfsoftware/oxlint-plugin`](packages/oxlint-plugin/oxlint-plugin)               | Fast Oxlint rules enforcing functional purity, schema invariants, and test placement. |
-| [`@systemfsoftware/omp-agent-discipline`](omp/plugins/omp-agent-discipline)            | Guardrails and dispatch interception for Oh My Pi coding agents.                      |
 
 ## Quick Start
 
