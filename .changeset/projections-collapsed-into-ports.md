@@ -2,7 +2,6 @@
 "@systemfsoftware/arethetypeswrong-cli": major
 "@systemfsoftware/arethetypeswrong": major
 "@systemfsoftware/effect-gherkin-spec": major
-"@systemfsoftware/omp-agent-discipline": major
 ---
 
 Aggregated dependency tags are removed. `AttwCliExecutorDeps`, `CheckPackageExecutorDeps`, `HookDispatcherExecutorDeps` and `InjectInstructionsExecutorDeps` are gone; provide the capabilities themselves instead of an aggregate that bundled them.
