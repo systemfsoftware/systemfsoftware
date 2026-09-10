@@ -4,7 +4,7 @@
 
 ```ts
 
-import { PluginContribution } from '@systemfsoftware/stryker-js/Plugin';
+import { PluginLayerContribution } from '@systemfsoftware/stryker-js/Plugin';
 
 // @public (undocumented)
 export const decideInSourceTestIgnore: (ancestors: Iterable<unknown>) => string | undefined;
@@ -16,7 +16,7 @@ export const IN_SOURCE_TEST_IGNORED: 'inside an `if (import.meta.vitest)` block 
 export const isInSourceTestGuard: (node: unknown) => boolean;
 
 // @public (undocumented)
-export const strykerPlugins: PluginContribution<"Ignore">[];
+export const strykerPlugins: PluginLayerContribution<"Ignore">[];
 
 // (No @packageDocumentation comment for this package)
 
