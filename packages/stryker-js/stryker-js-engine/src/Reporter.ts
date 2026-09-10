@@ -49,7 +49,7 @@ import type { ReporterStage } from './ReporterStream.js'
 import { closeReporterStage, offerTerminalReport, terminalDrainClass } from './ReporterStream.js'
 import type { RunOutcome } from './Run.js'
 import { strykerVersion } from './stryker-package.js'
-import { buildVerdictEnvelope, isActionableStatus } from './verdict-envelope.js'
+import { buildVerdictEnvelope } from './verdict-envelope.js'
 const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
 type ProvidedStrykerOptions = StrykerOptions
 
@@ -147,32 +147,6 @@ export const emptyTally = (startedAt: number): ProgressTally => ({
   capabilities: { reloadEnvironment: false },
   startedAt,
 })
-
-export const handleMutantTested = (
-  tally: ProgressTally,
-  result: MutantResult,
-): { readonly tally: ProgressTally; readonly ticks: number } => {
-  const ticks = tally.ticksByMutantId.get(result.id)
-  if (ticks === undefined) {
-    return { tally, ticks: 0 }
-  }
-  let survived = tally.survived
-  if (result.status === 'Survived') {
-    survived = tally.survived + 1
-  }
-  let timedOut = tally.timedOut
-  if (result.status === 'Timeout') {
-    timedOut = tally.timedOut + 1
-  }
-  const next: ProgressTally = {
-    ...tally,
-    tested: tally.tested + 1,
-    ticks: tally.ticks + ticks,
-    survived,
-    timedOut,
-  }
-  return { tally: next, ticks }
-}
 
 export const getElapsedTime = (tally: ProgressTally, now: number): string => {
   const elapsed = Math.floor((now - tally.startedAt) / 1000)
@@ -1049,49 +1023,10 @@ export const makeProgressBarReporter: ReporterFactory = () => async (events) => 
   }
 }
 
-export type RunEvent =
-  | { kind: 'plan'; total: number }
-  | {
-    kind: 'mutant'
-    id: string
-    status: string
-    file: string
-    location: schema.Location
-    mutator: string
-    replacement: string | null
-    completed: number
-    total: number
-  }
-
-export type RunEventSink = (event: RunEvent) => void
-
-export function filterActionable(result: MutantResult): boolean {
-  return isActionableStatus(result.status)
-}
-
-export function toRunEvent(
-  result: MutantResult,
-  completed: number,
-  total: number,
-): RunEvent {
-  return {
-    kind: 'mutant',
-    id: result.id,
-    status: result.status,
-    file: result.fileName,
-    location: result.location,
-    mutator: result.mutatorName,
-    replacement: result.replacement,
-    completed,
-    total,
-  }
-}
-
 export const makeProgressStreamReporter: ReporterFactory = () => async (events) => {
   // The in-process progress stream has no subscribed sink; the machine-mode
   // progress stream is the CLI RunEvent stream (KTD5). Drain only.
   for await (const drained of events) {
-    // Consume without producing output.
     void drained
   }
 }
@@ -1309,11 +1244,11 @@ export interface MutationReportingService {
   readonly reportCheckFailure: (
     mutant: MutantTestCoverage,
     result: Exclude<CheckResult, PassedCheckResult>,
-  ) => Effect.Effect<MutantResult, unknown>
+  ) => Effect.Effect<MutantResult>
   readonly reportMutantRunResult: (
     mutant: MutantTestCoverage,
     result: MutantRunResult,
-  ) => Effect.Effect<MutantResult, unknown>
+  ) => Effect.Effect<MutantResult>
   readonly reportAll: (
     results: readonly MutantResult[],
   ) => Effect.Effect<RunOutcome, unknown, FileSystem.FileSystem | Path.Path | RunEvents>
@@ -1339,13 +1274,12 @@ export interface MakeMutationReportingInput {
 }
 
 export const makeMutationReportingService = (input: MakeMutationReportingInput): MutationReportingService => {
-  const reportOne = (result: MutantResult): Effect.Effect<MutantResult, unknown> => Effect.succeed(result)
   const reportMutantStatus = (
     mutant: MutantTestCoverage,
     status: MutantResult['status'],
-  ): Effect.Effect<MutantResult, unknown> => {
+  ): Effect.Effect<MutantResult> => {
     const location = toSchemaLocation(mutant.location)
-    return reportOne({
+    return Effect.succeed({
       _tag: 'Mutant',
       id: mutant.id,
       fileName: mutant.fileName,
@@ -1366,7 +1300,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
 
   const reportMutantRunResult: MutationReportingService['reportMutantRunResult'] = (mutant, result) => {
     const mapped = mapRunResult(mutant, result)
-    return reportOne(mapped)
+    return Effect.succeed(mapped)
   }
 
   const toTestDefinition = (test: TestResult, remapTestId: (id: string) => string): schema.TestDefinition => {
@@ -1696,7 +1630,11 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       const report = yield* mutationTestReport(results)
       const metrics = calculateMutationTestMetrics(report)
       yield* offerTerminalReport(input.reporterStage, report, metrics)
+      const terminalDrain = terminalDrainClass(yield* closeReporterStage(input.reporterStage))
       const verdict = yield* determineExitCode(metrics)
+      const finalVerdict = highestExitClass(
+        [verdict, terminalDrain].filter((candidate): candidate is ExitClass => candidate !== null),
+      )
       yield* emitVerdict(report, pathService)
       if (input.options.incremental) {
         const fs = yield* FileSystem.FileSystem
@@ -1704,19 +1642,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
         yield* fs.makeDirectory(dir, { recursive: true })
         yield* fs.writeFileString(input.options.incrementalFile, JSON.stringify(report, null, 2))
       }
-      const terminalDrain = terminalDrainClass(yield* closeReporterStage(input.reporterStage))
-      let finalVerdict = verdict
-      if (terminalDrain !== null) {
-        if (finalVerdict === null) {
-          finalVerdict = terminalDrain
-        } else {
-          const highest = highestExitClass([finalVerdict, terminalDrain])
-          if (highest !== null) {
-            finalVerdict = highest
-          }
-        }
-      }
-      return { results, verdict: finalVerdict, terminalDrain } satisfies RunOutcome
+      return { results, verdict: finalVerdict } satisfies RunOutcome
     })
   const writeAtomic = (file: string, content: string) =>
     Effect.gen(function*() {

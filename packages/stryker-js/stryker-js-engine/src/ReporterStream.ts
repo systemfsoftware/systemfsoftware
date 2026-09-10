@@ -13,9 +13,9 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import * as HashSet from 'effect/HashSet'
-import * as Match from 'effect/Match'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
+import * as S from 'effect/Schema'
 import type * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
 import type * as reportApi from 'mutation-testing-report-schema/api'
@@ -50,7 +50,6 @@ export interface ReporterStage {
 }
 
 export interface ReporterDrainSummary {
-  readonly detached: readonly string[]
   readonly terminalFailed: readonly string[]
 }
 
@@ -59,11 +58,7 @@ export interface AttachReporterInput {
   readonly factory: ReporterFactory
 }
 
-export const isTerminalReportEvent = (event: ReporterEvent): boolean =>
-  Match.value(event).pipe(
-    Match.tag('mutationTestReportReady', () => true),
-    Match.orElse(() => false),
-  )
+export const isTerminalReportEvent = (event: ReporterEvent): boolean => S.is(MutationTestReportReady)(event)
 
 export const validateReporterNames = (
   configured: readonly string[],
@@ -110,14 +105,7 @@ const markDetached = (ports: EmitterPorts): void => {
 
 const pumpEmitter = (ports: EmitterPorts): Effect.Effect<void> =>
   Stream.fromQueue(ports.inbox).pipe(
-    Stream.runForEach((event) =>
-      Effect.gen(function*() {
-        if (isTerminalReportEvent(event) && (yield* Ref.get(ports.state)) !== 'detached') {
-          yield* Ref.set(ports.state, 'terminal')
-        }
-        yield* Effect.asVoid(Queue.offer(ports.queue, event))
-      })
-    ),
+    Stream.runForEach((event) => Effect.asVoid(Queue.offer(ports.queue, event))),
     Effect.ensuring(Effect.asVoid(Queue.end(ports.queue))),
   )
 
@@ -133,20 +121,46 @@ export const attachReporterFactories = (
       const state = yield* Ref.make<ReporterStreamState>('streaming')
       const events = Stream.toAsyncIterable(Stream.fromQueue(queue))
       const iterator = yield* acquireReporterIterator(events)
-      const singleUse: AsyncIterable<ReporterEvent> = { [Symbol.asyncIterator]: () => iterator }
+      const ports: EmitterPorts = { inbox, queue, state }
+      // The state cell flips to 'terminal' only when the consumer's pull
+      // OBSERVES the terminal event — never when the emitter merely enqueues
+      // it — so a consumer rejecting on an earlier event while the bounded
+      // queue is still draining classifies as a detach (exit code untouched),
+      // not as a terminal-phase failure.
+      const singleUse: AsyncIterable<ReporterEvent> = {
+        [Symbol.asyncIterator]: () => {
+          const observe = (result: IteratorResult<ReporterEvent>): IteratorResult<ReporterEvent> => {
+            if (result.done !== true && isTerminalReportEvent(result.value)) {
+              Effect.runSync(Ref.set(ports.state, 'terminal'))
+            }
+            return result
+          }
+          return {
+            next: async () => observe(await iterator.next()),
+            return: async (value) => {
+              const settled = await iterator.return?.(value)
+              return settled ?? { done: true, value: undefined }
+            },
+          }
+        },
+      }
       let consumer: Promise<void>
       try {
         consumer = input.factory(options, init)(singleUse)
       } catch (reason) {
         consumer = Promise.reject(reason)
       }
-      const ports: EmitterPorts = { inbox, queue, state }
       const emitter = yield* Effect.forkScoped(pumpEmitter(ports))
       const attachment: ReporterAttachment = { name: input.name, inbox, queue, state, emitter, consumer }
-      void consumer.then(undefined, () => markDetached(ports))
+      // Fulfilment also detaches: a consumer that stops pulling early must not
+      // leave its unbounded inbox accumulating every remaining event for the
+      // rest of the run. The 'terminal' guard keeps normal completion a no-op.
+      void consumer.then(
+        () => markDetached(ports),
+        () => markDetached(ports),
+      )
       return attachment
     }))
-
 export const offerReporterEvent = (
   stage: Pick<ReporterStage, 'attachments'>,
   event: ReporterEvent,
@@ -160,7 +174,7 @@ export const offerReporterEvent = (
       if (!offered && (yield* Ref.get(attachment.state)) !== 'detached') {
         yield* Effect.logWarning(`Reporter "${attachment.name}" stream closed before an event could be delivered.`)
       }
-    }), { discard: true, concurrency: 'unbounded' })
+    }), { discard: true })
 
 export const offerTerminalReport = (
   stage: Pick<ReporterStage, 'attachments'>,
@@ -210,16 +224,13 @@ export const closeReporterStage = (
       discard: true,
     })
     const outcomes = yield* Effect.forEach(stage.attachments, settleAttachment, { concurrency: 'unbounded' })
-    const detached: string[] = []
     const terminalFailed: string[] = []
     for (const outcome of outcomes) {
       if (outcome.kind === 'terminal-failed') {
         terminalFailed.push(outcome.name)
-      } else if (outcome.kind === 'detached') {
-        detached.push(outcome.name)
       }
     }
-    return { detached, terminalFailed }
+    return { terminalFailed }
   })
 
 const ENGINE_TRACER_NAME = 'stryker-js-engine'
@@ -262,9 +273,11 @@ export const currentReporterInit = (span?: api.Span): ReporterInit =>
 export const withPhaseSpan = <A, E, R>(
   spanName: string,
   attributes: Record<string, string | number>,
-  effect: Effect.Effect<A, E, R>,
+  effect: (span: api.Span) => Effect.Effect<A, E, R>,
 ): Effect.Effect<A, E, R> =>
   Effect.flatMap(
-    Effect.sync(() => api.trace.getTracer(ENGINE_TRACER_NAME).startSpan(spanName, { attributes })),
-    (span) => effect.pipe(Effect.ensuring(Effect.sync(() => span.end()))),
+    Effect.sync(() =>
+      api.trace.getTracer(ENGINE_TRACER_NAME).startSpan(spanName, { attributes }, api.context.active())
+    ),
+    (span) => effect(span).pipe(Effect.ensuring(Effect.sync(() => span.end()))),
   )

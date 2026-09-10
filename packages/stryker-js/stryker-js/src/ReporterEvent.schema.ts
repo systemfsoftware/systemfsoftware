@@ -21,9 +21,8 @@ export const ReporterEventKind = S.Literals([
 ])
 export type ReporterEventKind = typeof ReporterEventKind.Type
 
-// ---------------------------------------------------------------------------
-// Metrics — moved here from Reporter.ts so the protocol module is the single
-// source; Reporter.ts re-exports them unchanged.
+// Metrics — the protocol module owns these so there is a single source of
+// truth for the wire shape; Reporter.ts re-exports them unchanged.
 // ---------------------------------------------------------------------------
 
 export interface Metrics {

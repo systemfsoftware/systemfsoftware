@@ -1,10 +1,12 @@
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
+import { MutationTestReportReady } from '@systemfsoftware/stryker-js/Reporter'
 import type { ReporterFactory } from '@systemfsoftware/stryker-js/ReporterEvent'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
+import * as S from 'effect/Schema'
 
 import { HtmlDocument, HtmlReportCommand } from './Reporter.schema.js'
 
@@ -72,23 +74,15 @@ export const makeHtmlReporter: ReporterFactory = (options, _init) => async (even
   // .fileName); the host validates the full option set before factory init
   // (R2), so the default lives in the schema as it always has.
   const fileName = options.htmlReporter.fileName
-  // The bundle text is the resource owned across the pull loop, read lazily
-  // on the first terminal event; the finally below (KTD6) is the only
-  // cleanup path, so an early return or a stream close still releases it.
+  // The bundle text is cached across the pull loop, read lazily on the
+  // first terminal event; a plain local — nothing to release.
   let bundleContent: string | undefined
-  try {
-    for await (const event of events) {
-      // The closed four-kind union carries report only on the terminal
-      // mutationTestReportReady kind (KTD1); presence narrows without
-      // touching the discriminant, so structural events are accepted too.
-      if (!('report' in event)) continue
-      // metrics intentionally unused: the html document renders the report only.
-      bundleContent ??= await Effect.runPromise(Effect.provide(readBundleContent, nodeFsPathLayer))
-      const html = buildHtmlDocument(HtmlReportCommand.make({ report: event.report, scriptContent: bundleContent }))
-        .html
-      await Effect.runPromise(Effect.provide(writeHtmlFile(fileName, html), nodeFsPathLayer))
-    }
-  } finally {
-    bundleContent = undefined
+  for await (const event of events) {
+    // metrics intentionally unused: the html document renders the report only.
+    if (!S.is(MutationTestReportReady)(event)) continue
+    bundleContent ??= await Effect.runPromise(Effect.provide(readBundleContent, nodeFsPathLayer))
+    const html = buildHtmlDocument(HtmlReportCommand.make({ report: event.report, scriptContent: bundleContent }))
+      .html
+    await Effect.runPromise(Effect.provide(writeHtmlFile(fileName, html), nodeFsPathLayer))
   }
 }
