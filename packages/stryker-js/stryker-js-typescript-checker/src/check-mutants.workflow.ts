@@ -96,6 +96,11 @@ const bareRecord = <V>(entries: Readonly<Record<string, V>> = {}): Record<string
   return out
 }
 
+const nodeAt = (nodes: Readonly<Record<string, NodeDecoded>>, fileName: string): NodeDecoded | undefined => {
+  if (!Object.hasOwn(nodes, fileName)) return undefined
+  return nodes[fileName]
+}
+
 const getMutantsWithReferenceToChildrenOrSelf = (
   node: NodeDecoded,
   mutants: readonly MutantDecoded[],
@@ -135,7 +140,7 @@ const classifyDiagnosticsPure = (
     if (fileName === undefined || fileName === '') {
       return Result.fail(new DiagnosticWithoutFileError({ text: diagnostic.text }))
     }
-    const node = nodes[fileName]
+    const node = nodeAt(nodes, fileName)
     if (node === undefined) {
       return Result.fail(new DiagnosticInUnrelatedFileError({ text: diagnostic.text, fileName }))
     }
@@ -169,12 +174,12 @@ const buildResult = (
 ): Result.Result<CheckMutantsDecision, DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError> => {
   const mutants = input.mutants
   const diagnostics = input.diagnostics
-  const nodes = bareRecord(input.nodes)
+  const nodes = input.nodes
   if (mutants.length === 0) {
     return Result.succeed(CheckFinished.make({ results: {} }))
   }
   const first = mutants[0]
-  if (first === undefined || nodes[normalizeFileName(first.fileName)] === undefined) {
+  if (first === undefined || nodeAt(nodes, normalizeFileName(first.fileName)) === undefined) {
     const results = bareRecord<MutantCheckStatus>()
     for (const m of mutants) {
       results[m.id] = { status: 'passed' }

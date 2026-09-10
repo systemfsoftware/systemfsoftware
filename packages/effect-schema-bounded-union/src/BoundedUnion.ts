@@ -133,12 +133,16 @@ if (import.meta.vitest !== void 0) {
   const SAMPLE_SIZE = 200
 
   /**
-   * Each sampling property draws `SAMPLE_SIZE` values per generated seed from
-   * a recursive schema, which is CPU-bound and does not share a core well.
-   * The timeout has to cover the contended cost, because a bound set near the
-   * isolated cost hands the verdict to whichever sibling tasks happen to run
-   * alongside, and a red from that is indistinguishable from a real one.
+   * Each sampling property draws `SEEDS * SAMPLE_SIZE` values from a recursive
+   * schema, which is CPU-bound and does not share a core well. `SEEDS` stays
+   * pinned at 25 — the measured basis for the shared `numRuns` in
+   * `vitest.setup.ts`, whose slowest single property ran 4.05s against the
+   * 30s cap (measured 2026-08-06); raising run counts there without
+   * re-measuring headroom would hand the verdict to whichever sibling tasks
+   * happen to run alongside, and a red from that is indistinguishable from a
+   * real one. The timeout covers the contended cost for the same reason.
    */
+  const SEEDS = 25
   const SAMPLE_TIMEOUT_MS = 120_000
 
   const VARIANT_COUNT = BASE.length + RECUR.length
@@ -243,7 +247,7 @@ if (import.meta.vitest !== void 0) {
     '∀s_ExprDeepest_=DepthCap',
     [S.Int],
     ([seed]) => Effect.map(sampleAt(seed), (samples) => deepestOf(samples) === DEPTH_CAP),
-    { timeout: SAMPLE_TIMEOUT_MS },
+    { timeout: SAMPLE_TIMEOUT_MS, arbitrary: { runs: SEEDS } },
   )
 
   /**
@@ -258,7 +262,7 @@ if (import.meta.vitest !== void 0) {
     '∀s_ExprComposition_⊇AllTags',
     [S.Int],
     ([seed]) => Effect.map(sampleAt(seed), (samples) => distinctTagsOf(samples) === VARIANT_COUNT),
-    { timeout: SAMPLE_TIMEOUT_MS },
+    { timeout: SAMPLE_TIMEOUT_MS, arbitrary: { runs: SEEDS } },
   )
 
   /**
@@ -273,7 +277,7 @@ if (import.meta.vitest !== void 0) {
     '∀s_ExprTags_≤ShareTolerance',
     [S.Int],
     ([seed]) => Effect.map(sampleAt(seed), (samples) => widestTagDriftOf(samples) <= SHARE_TOLERANCE),
-    { timeout: SAMPLE_TIMEOUT_MS },
+    { timeout: SAMPLE_TIMEOUT_MS, arbitrary: { runs: SEEDS } },
   )
 
   /**
