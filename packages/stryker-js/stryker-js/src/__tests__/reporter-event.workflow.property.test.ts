@@ -4,8 +4,9 @@ import * as S from 'effect/Schema'
 import type { StandardSchemaV1 } from 'effect/StandardSchema'
 import { FastCheck as fc } from 'effect/testing'
 
-import { DryRunCompleted, ReporterEventSchema, ReporterEventUnion } from '../ReporterEvent.schema.js'
+import { DryRunCompleted, MutantTested, ReporterEventSchema, ReporterEventUnion } from '../ReporterEvent.schema.js'
 import type { ReporterEvent } from '../ReporterEvent.schema.js'
+import { MutantTested as RunMutantTested } from '../Run.schema.js'
 
 type Validation = StandardSchemaV1.Result<ReporterEvent> | 'async'
 
@@ -102,5 +103,17 @@ describe('ReporterEvent', () => {
     '∀e_UnknownTag_≡Reject',
     [S.toArbitrary(ReporterEventUnion)(fc)],
     ([event]) => rejectsUnknownTag(validateSync(withTag(S.encodeSync(ReporterEventUnion)(event), 'not-a-kind'))),
+  )
+
+  it.prop(
+    '∀m_Tested_≡MachineAlphabet',
+    [S.toArbitrary(MutantTested)(fc)],
+    ([event]) => {
+      const encoded = S.encodeSync(MutantTested)(event)
+      const members = Object.keys(encoded).filter((key) => key !== '_tag').sort()
+      const pinned = ['completed', 'file', 'id', 'location', 'mutator', 'replacement', 'status', 'total']
+      if (members.join(',') !== pinned.join(',')) return false
+      return Exit.isSuccess(S.decodeUnknownExit(RunMutantTested)({ ...encoded, _tag: 'mutant' }))
+    },
   )
 })
