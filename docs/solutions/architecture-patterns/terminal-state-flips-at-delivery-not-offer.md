@@ -25,24 +25,25 @@ tags:
 
 ## Context
 
-The reporter pull-stream host (issue #372) keeps a per-reporter state cell (`'streaming' | 'terminal' | 'detached'`) that decides how a consumer rejection is classified: rejected while `'terminal'` means the run fails; rejected earlier means log-and-detach with the exit code untouched. The first implementation flipped the cell to `'terminal'` inside the emitter fiber, the moment the terminal event was *offered* into the bounded queue.
+The reporter pull-stream host (issue #372) keeps a per-reporter state cell (`'streaming' | 'terminal' | 'detached'`) that decides how a consumer rejection is classified: rejected while `'terminal'` means the run fails; rejected earlier means log-and-detach with the exit code untouched. The first implementation flipped the cell to `'terminal'` inside the emitter fiber, the moment the terminal event was _offered_ into the bounded queue.
 
-With a full queue (256) and a slow consumer, the emitter can block on the terminal offer with the cell already flipped. A consumer rejecting on an *earlier* event then sees the guard `state !== 'terminal'` be a no-op, and `settleAttachment` maps the rejection to a terminal-phase failure — bumping the exit code for what the contract calls a detach. The multi-reviewer round caught it twice independently (correctness traced the interleaving; the adversarial pass derived the same site from a CAS-timing angle).
+With a full queue (256) and a slow consumer, the emitter can block on the terminal offer with the cell already flipped. A consumer rejecting on an _earlier_ event then sees the guard `state !== 'terminal'` be a no-op, and `settleAttachment` maps the rejection to a terminal-phase failure — bumping the exit code for what the contract calls a detach. The multi-reviewer round caught it twice independently (correctness traced the interleaving; the adversarial pass derived the same site from a CAS-timing angle).
 
 ## Guidance
 
-State that means "the consumer has observed X" must be set where the observation happens — at the consumer's pull site — not where the producer enqueues X. In this host the delivery-observing iterator wraps `next()` and flips the cell only when the pulled value *is* the terminal event:
+State that means "the consumer has observed X" must be set where the observation happens — at the consumer's pull site — not where the producer enqueues X. In this host the delivery-observing iterator wraps `next()` and flips the cell only when the pulled value _is_ the terminal event:
 
 ```ts
-next: async () => observe(await iterator.next())
+next: ;
+;(async () => observe(await iterator.next()))
 // observe: if (!result.done && isTerminalReportEvent(result.value)) set 'terminal'
 ```
 
 The producer side then carries no state transition at all, and the `'terminal'` guard in the detach path becomes exactly the contract's classification rule: rejection after the consumer received the terminal event fails the run; rejection before it detaches.
 
-The same round fixed the mirror-image leak with one line: a consumer that *fulfils* early (stops pulling) must also detach, or its unbounded inbox accumulates every remaining event for the rest of the run — `consumer.then(onFulfil → detach, onReject → detach)`, where the `'terminal'` guard keeps normal completion a no-op.
+The same round fixed the mirror-image leak with one line: a consumer that _fulfils_ early (stops pulling) must also detach, or its unbounded inbox accumulates every remaining event for the rest of the run — `consumer.then(onFulfil → detach, onReject → detach)`, where the `'terminal'` guard keeps normal completion a no-op.
 
-Prevention tip: when a state cell classifies outcomes, enumerate the producer events and the consumer observations separately and ask which side each transition means. "Terminal" here meant *consumer saw the last event* — so the offer site was the wrong owner by definition, and no amount of locking at the offer site would have fixed it.
+Prevention tip: when a state cell classifies outcomes, enumerate the producer events and the consumer observations separately and ask which side each transition means. "Terminal" here meant _consumer saw the last event_ — so the offer site was the wrong owner by definition, and no amount of locking at the offer site would have fixed it.
 
 ## Applies when
 
