@@ -199,20 +199,20 @@ flowchart TB
 
 ## Verification Contract
 
-| Repo | Gate | Command | Proves |
-| ---- | ---- | ------- | ------ |
-| `new:` | Install | `pnpm install` | Dependency graph resolves without monorepo checkout (R2) |
-| `new:` | Build | `pnpm build` | Standalone tsdown config + vendored runtime bundle into `dist/` (KTD1, KTD2) |
-| `new:` | Types | `pnpm typecheck` | Published tsconfig + vendored members type-resolve |
-| `new:` | Tests | `pnpm test` | Migrated suite green unmodified (R1, KTD6) |
-| `new:` | Mutation | `pnpm mutation` | Mutation gate holds at 100 killed-or-disposed on `src/**/*.workflow.ts` |
-| `new:` | Lint | `pnpm lint` | Standalone oxlint config accepts the code |
-| `new:` | Smoke | load `dist/index.js` via the plugin smoke runner | Extension registers its handler set |
-| `new:` | Clean clone | repeat install/build/test from a pristine clone | R2's clean-clone criterion |
-| here | Install | `pnpm install` | Lockfile regenerates without the removed package (R7) |
-| here | Workspace gates | `pnpm build`, `pnpm typecheck`, `pnpm test`, `pnpm lint` | Remaining workspace green (R7) |
-| here | Release flow | `node scripts/tools/plan-release.mjs` | No intent names a missing package (R5) |
-| here | Live-trace grep | grep `omp-claude-compat` outside historical dirs | R4, R6 |
+| Repo   | Gate            | Command                                                  | Proves                                                                       |
+| ------ | --------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| `new:` | Install         | `pnpm install`                                           | Dependency graph resolves without monorepo checkout (R2)                     |
+| `new:` | Build           | `pnpm build`                                             | Standalone tsdown config + vendored runtime bundle into `dist/` (KTD1, KTD2) |
+| `new:` | Types           | `pnpm typecheck`                                         | Published tsconfig + vendored members type-resolve                           |
+| `new:` | Tests           | `pnpm test`                                              | Migrated suite green unmodified (R1, KTD6)                                   |
+| `new:` | Mutation        | `pnpm mutation`                                          | Mutation gate holds at 100 killed-or-disposed on `src/**/*.workflow.ts`      |
+| `new:` | Lint            | `pnpm lint`                                              | Standalone oxlint config accepts the code                                    |
+| `new:` | Smoke           | load `dist/index.js` via the plugin smoke runner         | Extension registers its handler set                                          |
+| `new:` | Clean clone     | repeat install/build/test from a pristine clone          | R2's clean-clone criterion                                                   |
+| here   | Install         | `pnpm install`                                           | Lockfile regenerates without the removed package (R7)                        |
+| here   | Workspace gates | `pnpm build`, `pnpm typecheck`, `pnpm test`, `pnpm lint` | Remaining workspace green (R7)                                               |
+| here   | Release flow    | `node scripts/tools/plan-release.mjs`                    | No intent names a missing package (R5)                                       |
+| here   | Live-trace grep | grep `omp-claude-compat` outside historical dirs         | R4, R6                                                                       |
 
 ---
 
