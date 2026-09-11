@@ -11,12 +11,6 @@ description = "TypeScript bundler powered by Rolldown"
 tag_prefix = "v"
 
 [[repos]]
-name = "deno-std"
-url = "https://github.com/denoland/std"
-description = "Deno standard library published as @std/*"
-tag_prefix = "release-"
-
-[[repos]]
 name = "effect"
 url = "https://github.com/Effect-TS/effect"
 description = "Typed functional effects, Schema, Layer, and Stream for TypeScript"
