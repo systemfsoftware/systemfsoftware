@@ -3,6 +3,7 @@ import { noNestedQuantification } from './rules/no-nested-quantification.js'
 import { noSilentReturn } from './rules/no-silent-return.js'
 import { noUnboundedFanout } from './rules/no-unbounded-fanout.js'
 import { propArbitrarySchemaOrigin } from './rules/prop-arbitrary-schema-origin.js'
+import { propFixtureSchemaOrigin } from './rules/prop-fixture-schema-origin.js'
 import { propGeneratedLawDuplicate } from './rules/prop-generated-law-duplicate.js'
 import { propertyFilePurity } from './rules/property-file-purity.js'
 import { requireEffectFastcheck } from './rules/require-effect-fastcheck.js'
@@ -16,6 +17,7 @@ const recommendedRules = {
   '@systemfsoftware/oxlint-plugin-property-testing/no-unbounded-fanout': 'error',
   '@systemfsoftware/oxlint-plugin-property-testing/no-nested-quantification': 'error',
   '@systemfsoftware/oxlint-plugin-property-testing/prop-arbitrary-schema-origin': 'error',
+  '@systemfsoftware/oxlint-plugin-property-testing/prop-fixture-schema-origin': 'error',
   '@systemfsoftware/oxlint-plugin-property-testing/prop-generated-law-duplicate': 'error',
 } as const
 
@@ -32,6 +34,7 @@ export default {
     'no-nested-quantification': noNestedQuantification,
     'prop-generated-law-duplicate': propGeneratedLawDuplicate,
     'prop-arbitrary-schema-origin': propArbitrarySchemaOrigin,
+    'prop-fixture-schema-origin': propFixtureSchemaOrigin,
   },
   configs: {
     recommended: {

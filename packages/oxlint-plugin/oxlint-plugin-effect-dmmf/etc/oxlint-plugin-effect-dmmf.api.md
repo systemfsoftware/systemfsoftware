@@ -36,6 +36,7 @@ const _default: {
         'no-nested-quantification': Rule;
         'prop-generated-law-duplicate': Rule;
         'prop-arbitrary-schema-origin': Rule;
+        'prop-fixture-schema-origin': Rule;
         'damp-test-naming': Rule;
         'no-behaviourless-assertion': Rule;
         'no-unrun-effect-test': Rule;
