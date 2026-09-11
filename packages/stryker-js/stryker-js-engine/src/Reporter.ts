@@ -2,11 +2,8 @@ import { type CheckResult, type PassedCheckResult } from '@systemfsoftware/stryk
 import { calculateMetrics } from '@systemfsoftware/stryker-js/Metrics'
 import type { MetricsResult } from '@systemfsoftware/stryker-js/Metrics'
 import type { MutantResult, MutantTestCoverage } from '@systemfsoftware/stryker-js/Mutant'
-import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
 import type { AnyPluginContribution, PluginKind } from '@systemfsoftware/stryker-js/Plugin'
 import type * as schema from '@systemfsoftware/stryker-js/Report'
-import type { ReporterFactory } from '@systemfsoftware/stryker-js/Reporter'
-import { ReporterFailed } from '@systemfsoftware/stryker-js/Reporter'
 import { RunEvents, VerdictReached } from '@systemfsoftware/stryker-js/Run'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import type { MutantRunResult } from '@systemfsoftware/stryker-js/TestRunner'
@@ -15,7 +12,6 @@ import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
-import * as Match from 'effect/Match'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
@@ -37,53 +33,6 @@ import { closeReporterStage, offerTerminalReport, terminalDrainClass } from './R
 import type { RunOutcome } from './Run.js'
 import { strykerVersion } from './stryker-package.js'
 import { buildVerdictEnvelope } from './verdict-envelope.js'
-
-export interface JsonReporterDeps {
-  readonly fileSystem: FileSystem.FileSystem
-  readonly path: Path.Path
-}
-
-export const makeJsonReporter = (services: JsonReporterDeps): ReporterFactory => (options) => async (events) => {
-  const seen: { report?: schema.MutationTestResult } = {}
-  for await (const event of events) {
-    Match.value(event).pipe(
-      Match.tag('mutationTestReportReady', (ready) => {
-        seen.report = ready.report
-      }),
-      Match.orElse(() => undefined),
-    )
-  }
-  if (seen.report === undefined) {
-    return
-  }
-  const json = JSON.stringify(seen.report, null, 0)
-  const writeReport = Effect.gen(function*() {
-    const fs = yield* FileSystem.FileSystem
-    const path = yield* Path.Path
-    const fileName = path.resolve(path.normalize(options.jsonReporter.fileName))
-    if (options.logLevel === 'debug') {
-      process.stderr.write(`Using relative path ${path.normalize(options.jsonReporter.fileName)}\n`)
-    }
-    const failAsJsonReporter = (cause: unknown): ReporterFailed =>
-      new ReporterFailed({
-        reporterName: 'json',
-        event: 'mutationTestReportReady',
-        cause: errorToString(cause),
-      })
-    yield* fs.makeDirectory(path.dirname(fileName), { recursive: true }).pipe(
-      Effect.mapError(failAsJsonReporter),
-    )
-    yield* fs.writeFileString(fileName, json).pipe(Effect.mapError(failAsJsonReporter))
-    const url = yield* path.toFileUrl(fileName).pipe(Effect.mapError(failAsJsonReporter))
-    process.stdout.write(`Your report can be found at: ${url.href}\n`)
-  })
-  await Effect.runPromise(
-    writeReport.pipe(
-      Effect.provideService(FileSystem.FileSystem, services.fileSystem),
-      Effect.provideService(Path.Path, services.path),
-    ),
-  )
-}
 
 const STRYKER_FRAMEWORK: Readonly<Pick<schema.FrameworkInformation, 'branding' | 'name' | 'version'>> = Object.freeze({
   branding: {
