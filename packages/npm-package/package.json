@@ -79,7 +79,6 @@
   },
   "exports": {
     ".": {
-      "@systemfsoftware/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },

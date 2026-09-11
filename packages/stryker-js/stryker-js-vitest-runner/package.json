@@ -14,14 +14,8 @@
     "dist"
   ],
   "exports": {
-    ".": {
-      "@systemfsoftware/source": "./src/index.ts",
-      "default": "./dist/index.mjs"
-    },
-    "./stryker-setup": {
-      "@systemfsoftware/source": "./src/stryker-setup.ts",
-      "default": "./dist/stryker-setup.mjs"
-    },
+    ".": "./dist/index.mjs",
+    "./stryker-setup": "./dist/stryker-setup.mjs",
     "./package.json": "./package.json"
   },
   "scripts": {

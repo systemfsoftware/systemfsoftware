@@ -1,8 +1,9 @@
 {
   "extends": "./tsconfig.build.json",
   "compilerOptions": {
-    "customConditions": [],
     "resolveJsonModule": false
   },
-  "include": ["dist/effect-schema-ignorer.d.ts"]
+  "include": [
+    "dist/effect-schema-ignorer.d.ts"
+  ]
 }

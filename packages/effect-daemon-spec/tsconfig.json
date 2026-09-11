@@ -3,9 +3,6 @@
   "extends": ["@systemfsoftware/tsconfig/bundler/dom/library-monorepo", "@systemfsoftware/tsconfig/effect"],
   "compilerOptions": {
     "types": [],
-    "customConditions": [
-      "@systemfsoftware/source"
-    ],
     "isolatedModules": true
   },
   "include": [

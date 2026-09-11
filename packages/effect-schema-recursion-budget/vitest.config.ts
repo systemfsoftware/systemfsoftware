@@ -5,7 +5,6 @@ import { recursionBudgetTransform } from './src/recursion-budget-transform.js'
 const isCI = typeof process.env['CI'] === 'string' && process.env['CI'].length > 0
 
 export default defineConfig({
-  resolve: { conditions: ['@systemfsoftware/source'] },
   plugins: [recursionBudgetTransform()],
   test: {
     globals: true,

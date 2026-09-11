@@ -27,7 +27,6 @@
   ],
   "exports": {
     ".": {
-      "@systemfsoftware/source": "./src/index.ts",
       "types": "./dist/effect-memfs.d.ts",
       "default": "./dist/index.mjs"
     },

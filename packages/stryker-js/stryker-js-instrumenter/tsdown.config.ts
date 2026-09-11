@@ -4,7 +4,7 @@ export default defineConfig({
   entry: { index: './src/index.ts' },
   format: 'esm',
   dts: true,
-  exports: { devExports: '@systemfsoftware/source' },
+  exports: true,
   clean: true,
   // In-source `if (import.meta.vitest)` blocks are test code. Defining the
   // flag away makes every such branch statically dead, so rolldown drops it

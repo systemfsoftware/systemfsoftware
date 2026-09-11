@@ -26,7 +26,6 @@ export default defineConfig({
     index: './src/mod.ts',
   },
   exports: {
-    devExports: '@systemfsoftware/source',
     customExports: injectApiExtractorTypes,
   },
   deps: {

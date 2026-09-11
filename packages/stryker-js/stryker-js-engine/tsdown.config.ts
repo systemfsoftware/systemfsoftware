@@ -9,9 +9,7 @@ export default defineConfig({
   },
   format: 'esm',
   dts: true,
-  exports: {
-    devExports: '@systemfsoftware/source',
-  },
+  exports: true,
   noExternal: ['@std/jsonc'],
   clean: true,
   define: { 'import.meta.vitest': 'undefined' },

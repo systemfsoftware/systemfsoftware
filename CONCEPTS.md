@@ -4,12 +4,6 @@ Shared domain vocabulary for this project — entities, named processes, and sta
 
 ## Build pipeline
 
-### `@systemfsoftware/source` custom export condition
-
-A package.json `exports` condition added by the shared tsconfig to every package in this monorepo. When TypeScript resolves a workspace dependency (e.g. `@systemfsoftware/hex-schema`), this condition makes it pick `src/mod.ts` over `dist/index.mjs`. It exists so editors and the dev typecheck see live source, not stale build output. It is _not_ a Node.js condition — running apps with `node` (or api-extractor outside the dev tsconfig) fall through to standard resolution (`default` → `.mjs`).
-
-_Aliases:_ `customConditions: ["@systemfsoftware/source"]`
-
 ### tsdown output
 
 The `.d.ts` and `.mjs` files in `packages/<name>/dist/` produced by the `tsdown` build step. For a barrel-re-export package this is `dist/index.d.ts` containing `export * from '@workspace/dep'` — a one-line re-export that depends on the consumer resolving the dep's types. Created fresh on every `pnpm build`; gitignored.
@@ -22,7 +16,7 @@ _Avoid:_ "the dist .d.ts" (ambiguous with tsdown output)
 
 ### internal folder
 
-A source directory whose path contains a segment exactly equal to `internal` (`src/internal`, `src/**/internal`). Exports in those files carry the TSDoc `@internal` tag. The tag is forbidden outside those folders. Workspace typecheck still sees the declarations through `@systemfsoftware/source`; the published `exports.types` artifact omits them.
+A source directory whose path contains a segment exactly equal to `internal` (`src/internal`, `src/**/internal`). Exports in those files carry the TSDoc `@internal` tag. The tag is forbidden outside those folders. The published `exports.types` artifact — the api-extractor public-trimmed rollup — omits them, and an in-repo typecheck that resolves the package by name reads that same artifact, so only a relative import inside the owning package reaches an `@internal` declaration.
 
 _Avoid:_ treating a filename substring as the folder (`internalize.ts` is not an internal folder)
 

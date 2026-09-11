@@ -1,8 +1,9 @@
 {
   "extends": "./tsconfig.build.json",
   "compilerOptions": {
-    "customConditions": [],
     "resolveJsonModule": false
   },
-  "include": ["dist/index.d.ts"]
+  "include": [
+    "dist/index.d.ts"
+  ]
 }

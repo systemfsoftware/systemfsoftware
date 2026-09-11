@@ -1,8 +1,9 @@
 {
   "extends": "./tsconfig.build.json",
   "compilerOptions": {
-    "customConditions": [],
     "resolveJsonModule": false
   },
-  "include": ["dist/in-source-test-ignorer.d.ts"]
+  "include": [
+    "dist/in-source-test-ignorer.d.ts"
+  ]
 }

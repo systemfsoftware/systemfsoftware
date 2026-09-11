@@ -161,7 +161,9 @@ Removing the plugin removes the traversal. The tests were always ~1s; the ~55s o
 
 - **The general form: a resolver plugin whose input set is empty still pays full traversal cost.** Discovery is eager and exhaustive — the plugin cannot know the alias set is empty without parsing every candidate tsconfig first, and it redoes that per build. "It resolves nothing" is not a cheap no-op; it is the full walk with zero payoff. Cost of a resolver plugin is roughly the cost of discovering its inputs, regardless of what it finds.
 
-- **This repo's convention makes the whole plugin class unnecessary.** No tsconfig here declares `paths` or `baseUrl`; cross-package imports resolve through workspace specifiers and `customConditions` like `@systemfsoftware/source` (e.g. `packages/effect-schema-law/tsconfig.json:4-6`). Any future alias mechanism should be added deliberately — aliases first, resolver second — never a resolver on spec.
+- **This repo's convention makes the whole plugin class unnecessary.** No tsconfig here declares `paths` or `baseUrl`; cross-package imports resolve through workspace specifiers and each package's `exports` map. Any future alias mechanism should be added deliberately — aliases first, resolver second — never a resolver on spec.
+
+_Update 2026-09-11:_ the `@systemfsoftware/source` condition this section cited is gone — no package declares `customConditions` and none exports a source condition. The conclusion is unchanged; the search commands above still return empty.
 
 ## Related
 

@@ -70,74 +70,23 @@
     }
   },
   "exports": {
-    ".": {
-      "@systemfsoftware/source": "./src/index.ts",
-      "default": "./dist/index.mjs"
-    },
-    "./Checker": {
-      "@systemfsoftware/source": "./src/Checker.ts",
-      "default": "./dist/Checker.mjs"
-    },
-    "./Evaluator": {
-      "@systemfsoftware/source": "./src/Evaluator.ts",
-      "default": "./dist/Evaluator.mjs"
-    },
-    "./ExitClass": {
-      "@systemfsoftware/source": "./src/ExitClass.ts",
-      "default": "./dist/ExitClass.mjs"
-    },
-    "./Ignorer": {
-      "@systemfsoftware/source": "./src/Ignorer.ts",
-      "default": "./dist/Ignorer.mjs"
-    },
-    "./Metrics": {
-      "@systemfsoftware/source": "./src/Metrics.ts",
-      "default": "./dist/Metrics.mjs"
-    },
-    "./Module": {
-      "@systemfsoftware/source": "./src/Module.ts",
-      "default": "./dist/Module.mjs"
-    },
-    "./Mutant": {
-      "@systemfsoftware/source": "./src/Mutant.ts",
-      "default": "./dist/Mutant.mjs"
-    },
-    "./output-file": {
-      "@systemfsoftware/source": "./src/output-file.ts",
-      "default": "./dist/output-file.mjs"
-    },
-    "./Plugin": {
-      "@systemfsoftware/source": "./src/Plugin.ts",
-      "default": "./dist/Plugin.mjs"
-    },
-    "./provided-options": {
-      "@systemfsoftware/source": "./src/provided-options.ts",
-      "default": "./dist/provided-options.mjs"
-    },
-    "./Report": {
-      "@systemfsoftware/source": "./src/Report.schema.ts",
-      "default": "./dist/Report.mjs"
-    },
-    "./Reporter": {
-      "@systemfsoftware/source": "./src/Reporter.ts",
-      "default": "./dist/Reporter.mjs"
-    },
-    "./ReporterEvent": {
-      "@systemfsoftware/source": "./src/ReporterEvent.schema.ts",
-      "default": "./dist/ReporterEvent.mjs"
-    },
-    "./Run": {
-      "@systemfsoftware/source": "./src/Run.ts",
-      "default": "./dist/Run.mjs"
-    },
-    "./Schema": {
-      "@systemfsoftware/source": "./src/Schema.ts",
-      "default": "./dist/Schema.mjs"
-    },
-    "./TestRunner": {
-      "@systemfsoftware/source": "./src/TestRunner.ts",
-      "default": "./dist/TestRunner.mjs"
-    },
+    ".": "./dist/index.mjs",
+    "./Checker": "./dist/Checker.mjs",
+    "./Evaluator": "./dist/Evaluator.mjs",
+    "./ExitClass": "./dist/ExitClass.mjs",
+    "./Ignorer": "./dist/Ignorer.mjs",
+    "./Metrics": "./dist/Metrics.mjs",
+    "./Module": "./dist/Module.mjs",
+    "./Mutant": "./dist/Mutant.mjs",
+    "./output-file": "./dist/output-file.mjs",
+    "./Plugin": "./dist/Plugin.mjs",
+    "./provided-options": "./dist/provided-options.mjs",
+    "./Report": "./dist/Report.mjs",
+    "./Reporter": "./dist/Reporter.mjs",
+    "./ReporterEvent": "./dist/ReporterEvent.mjs",
+    "./Run": "./dist/Run.mjs",
+    "./Schema": "./dist/Schema.mjs",
+    "./TestRunner": "./dist/TestRunner.mjs",
     "./package.json": "./package.json"
   }
 }

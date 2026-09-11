@@ -98,6 +98,8 @@ The "what didn't work" attempts each addressed one part of the chain but missed 
 - **Don't override `customConditions` with non-standard values** to coerce TypeScript into resolving a specific `.d.ts`. The legitimate solutions are: bundle the dep (`bundledPackages`), drop the offending condition by extending a different base tsconfig, or change the dep's exports so the standard conditions find the types.
 - **Treat `dist/<name>.d.ts` (api-extractor rollup) and `dist/index.d.ts` (tsdown output) as distinct artifacts with different purposes.** The rollup is for `exports.types`. The index is the runtime type companion to the JS barrel. Don't conflate them or merge the configs.
 
+_Update 2026-09-11:_ the `@systemfsoftware/source` condition is gone from the workspace — every tsconfig dropped `customConditions`, including the `customConditions: []` overrides the api-extractor configs carried to clear it. The api tsconfigs extend the base shared tsconfig as described above; that arrangement is now simply the default rather than a workaround.
+
 ## Related Issues
 
 - **Found by:** running `attw --pack` on `effect-schema-extensions@0.4.0` (npm-published). The user's install reported missing types.
