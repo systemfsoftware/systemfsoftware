@@ -44,7 +44,7 @@
     "attw": "attw --pack .",
     "dts:check": "node scripts/check-dts.mjs",
     "storybook": "storybook dev -p 6006 --no-open",
-    "test:browser": "vitest run"
+    "test:browser": "pnpm build && vitest run"
   },
   "dependencies": {
     "type-fest": "catalog:"
