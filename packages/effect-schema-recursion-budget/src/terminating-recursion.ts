@@ -122,10 +122,11 @@ if (import.meta.vitest !== void 0) {
   const DEEP_SHARE = 0.15
   const SAMPLE_DRAWS = 2000
   const SAMPLE_SEEDS = 3
-  const SHARING_DRAWS = 20_000
   const SAMPLE_BUDGET_MS = 10_000
   const SAMPLE_TIMEOUT_MS = 30_000
-
+  /** The hazard fixture runs a shallow budget so identifier-stacking tails surface within the standard draw count. */
+  const FIXTURE_MAX_DEPTH = 2
+  const FIXTURE_NESTING_CAP = FIXTURE_MAX_DEPTH + 1
   const SAMPLE_OPTIONS = {
     timeout: SAMPLE_TIMEOUT_MS,
     fastCheck: { numRuns: SAMPLE_SEEDS, interruptAfterTimeLimit: SAMPLE_BUDGET_MS, markInterruptAsFailure: true },
@@ -174,7 +175,7 @@ if (import.meta.vitest !== void 0) {
       identifier: innerIdentifier,
       base: [Lit],
       recur: [Wrap],
-      maxDepth: MAX_DEPTH,
+      maxDepth: FIXTURE_MAX_DEPTH,
       depthSize: 'medium',
     })
     const Pair: Codec = S.suspend((): Codec => S.Struct({ _tag: S.Literal('Pair'), left: Outer, right: Inner }))
@@ -184,7 +185,7 @@ if (import.meta.vitest !== void 0) {
       identifier: outerIdentifier,
       base: [Lit],
       recur: [Pair, Fst, Snd],
-      maxDepth: MAX_DEPTH,
+      maxDepth: FIXTURE_MAX_DEPTH,
       depthSize: 'medium',
     })
     return Outer
@@ -241,11 +242,16 @@ if (import.meta.vitest !== void 0) {
   it.prop('∀d_ChainPastCap_=Depth', [S.toArbitrary(DeepChain)(fc)], ([depth]) => decodedDepthOf(depth) === depth)
 
   it.prop(
-    '∀s_SharedCycleDepth_≤MaxDepth1',
+    '∀s_SharedIdentifierDepth_≤Cap',
     [S.toArbitrary(S.Int)(fc)],
-    ([seed]) =>
-      deepestNestingAt(SHARED_BUDGET_CYCLE, seed, SHARING_DRAWS) <= NESTING_CAP &&
-      deepestNestingAt(SEPARATE_BUDGET_CYCLE, seed, SHARING_DRAWS) > NESTING_CAP,
+    ([seed]) => deepestNestingAt(SHARED_BUDGET_CYCLE, seed, SAMPLE_DRAWS) <= FIXTURE_NESTING_CAP,
+    SAMPLE_OPTIONS,
+  )
+
+  it.prop(
+    '∀s_SeparateIdentifierNesting_≥CapPlus1',
+    [S.toArbitrary(S.Int)(fc)],
+    ([seed]) => deepestNestingAt(SEPARATE_BUDGET_CYCLE, seed, SAMPLE_DRAWS) > FIXTURE_NESTING_CAP,
     SAMPLE_OPTIONS,
   )
 
