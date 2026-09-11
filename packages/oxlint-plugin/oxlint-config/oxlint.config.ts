@@ -1,9 +1,5 @@
 import { defineConfig } from 'oxlint'
 
-/**
- * Self-contained config for the oxlint-config package itself.
- * This avoids circular dependency by not extending from @systemfsoftware/oxlint-config/base.
- */
 export default defineConfig({
   categories: {
     correctness: 'error',
@@ -17,6 +13,7 @@ export default defineConfig({
     'typescript/no-unnecessary-boolean-literal-compare': 'off',
     'jest/no-standalone-expect': 'off',
     'jest/valid-expect': 'off',
+    'vitest/no-standalone-expect': 'off',
   },
 
   ignorePatterns: [

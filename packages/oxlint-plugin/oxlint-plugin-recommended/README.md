@@ -98,8 +98,15 @@ Defect-class stock rules enabled at `error` across all files:
 
 Enforces test assertion integrity and structure across `*.test.ts`, `tests/**`, and `__tests__/**` using stock `vitest` rules:
 
-- Requires explicit assertions (`vitest/expect-expect`, `vitest/valid-expect`, `vitest/no-standalone-expect`).
+- Requires explicit assertions (`vitest/expect-expect`, `vitest/valid-expect`).
 - Forbids disabled, focused, or conditional tests (`vitest/no-disabled-tests`, `vitest/no-focused-tests`, `vitest/no-conditional-in-test`, `vitest/no-identical-title`).
+- Deliberately disabled: `vitest/no-standalone-expect`. oxc turns the rule on
+  whenever the `vitest` plugin is loaded, so it is set `off` in the **universal**
+  tier — omitting it would leave the plugin default on, and this tier's globs do
+  not even cover `*.spec.ts`. The Given/When/Then DSL creates its `it` blocks at
+  runtime through `makeFeature`, which static analysis cannot follow, so a step's
+  `expect` reads as standalone. The rule cannot fire on correct DSL code, which
+  fails the "cannot fire on correct code" test above.
 
 ## Development
 
