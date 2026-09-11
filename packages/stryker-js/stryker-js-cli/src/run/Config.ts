@@ -826,6 +826,20 @@ export const forkCoreSchema: Record<string, unknown> = {
   },
 }
 
+/**
+ * Discovery in this host is the explicit `plugins` list. The ABI schema still
+ * declares the retired auto-discovery wildcard as `plugins`' default, and a
+ * wildcard is not a module specifier the loader could resolve, so a document
+ * that names no plugins decodes as naming none. Whatever a document does name
+ * — module specifier or pattern — reaches the loader unchanged, which fails
+ * loudly on a descriptor it cannot resolve.
+ */
+const withExplicitPlugins = (document: Record<string, unknown>): Record<string, unknown> =>
+  Match.value(Object.hasOwn(document, 'plugins')).pipe(
+    Match.when(true, () => document),
+    Match.orElse(() => ({ ...document, plugins: [] })),
+  )
+
 const decodeOptions = S.decodeUnknownResult(StrykerOptionsPayload, { errors: 'all' })
 
 function recordOf(value: object): Record<string, unknown> {
@@ -1194,7 +1208,7 @@ function customValidation(
 function schemaValidate(
   options: Record<string, unknown>,
 ): Effect.Effect<StrykerOptions, ConfigError> {
-  const decoded = decodeOptions(options)
+  const decoded = decodeOptions(withExplicitPlugins(options))
   if (Result.isFailure(decoded)) {
     return failWithConfigErrors(describeErrors(decoded.failure))
   }
@@ -1340,7 +1354,7 @@ export function validateOptions(
 }
 
 export function createDefaultOptions(): Effect.Effect<StrykerOptions> {
-  return S.decodeUnknownEffect(StrykerOptionsPayload)({}).pipe(Effect.orDie)
+  return S.decodeUnknownEffect(StrykerOptionsPayload)(withExplicitPlugins({})).pipe(Effect.orDie)
 }
 
 export const defaultOptions: Effect.Effect<Immutable<StrykerOptions>, never, never> = Effect.map(
@@ -1562,7 +1576,7 @@ export function readConfig(
       onSuccess: (options) => Effect.succeed(options),
     })
     const merged = mergeRecords(fileOptions, cliRecord)
-    const decoded = S.decodeUnknownResult(StrykerOptionsPayload)(merged)
+    const decoded = S.decodeUnknownResult(StrykerOptionsPayload)(withExplicitPlugins(merged))
     if (Result.isFailure(decoded)) {
       throw new ConfigError({ message: configErrorMessage(describeErrors(decoded.failure)) })
     }
