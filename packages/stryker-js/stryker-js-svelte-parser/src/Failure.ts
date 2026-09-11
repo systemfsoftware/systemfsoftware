@@ -11,6 +11,7 @@ type SvelteCompilerNotFoundTag = typeof SvelteCompilerNotFoundTag
 
 /** The project's svelte install could not supply a compiler. */
 export interface SvelteCompilerNotFound extends SvelteCompilerNotFoundTag {
+  readonly exitClass: 'ConfigError'
   readonly fileName: string
   readonly specifier: string
   readonly projectDir: string
@@ -36,6 +37,7 @@ type SvelteWalkerNotFoundTag = typeof SvelteWalkerNotFoundTag
 
 /** The module that walks the template could not supply a `walk` function. */
 export interface SvelteWalkerNotFound extends SvelteWalkerNotFoundTag {
+  readonly exitClass: 'ConfigError'
   readonly fileName: string
   readonly specifier: string
   readonly message: string
@@ -66,6 +68,7 @@ export function svelteCompilerNotFound(
   cause: unknown,
 ): SvelteCompilerNotFound {
   return {
+    exitClass: 'ConfigError',
     _tag: 'SvelteCompilerNotFound',
     fileName: fileName,
     specifier: specifier,
@@ -95,6 +98,7 @@ export function svelteWalkerNotFound(
   cause: string,
 ): SvelteWalkerNotFound {
   return {
+    exitClass: 'ConfigError',
     _tag: 'SvelteWalkerNotFound',
     fileName: fileName,
     specifier: specifier,
