@@ -1,8 +1,18 @@
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import * as Match from 'effect/Match'
+import * as Predicate from 'effect/Predicate'
 import * as S from 'effect/Schema'
 
 const TypeId = '~stryker/mutation-run/StageError' as const
+
+const EXIT_CLASS_VALUES: ReadonlyArray<ExitClass> = ['VerdictFail', 'ConfigError', 'RuntimeError', 'InternalError']
+
+// A typed error that declares its own exit class (e.g. ParserNotFound as a
+// ConfigError) outranks the stage's generic fallback wherever it surfaces.
+const declaredCauseExitClass = (cause: unknown): ExitClass | undefined =>
+  EXIT_CLASS_VALUES.find(
+    (candidate) => Predicate.hasProperty(cause, 'exitClass') && candidate === Reflect.get(cause, 'exitClass'),
+  )
 
 export class StageError extends S.TaggedError<StageError>(TypeId)('StageError', {
   stage: S.Literals(['prepare', 'instrument', 'dryRun', 'dryRunNoTests', 'mutationTest']),
@@ -13,7 +23,7 @@ export class StageError extends S.TaggedError<StageError>(TypeId)('StageError', 
   readonly [TypeId] = TypeId
 
   get exitClass(): ExitClass {
-    return STAGE_PRESENTATION[this.stage].exitClass
+    return declaredCauseExitClass(this.cause) ?? STAGE_PRESENTATION[this.stage].exitClass
   }
 
   override get message(): string {

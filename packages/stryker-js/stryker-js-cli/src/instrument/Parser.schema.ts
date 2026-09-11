@@ -20,6 +20,8 @@ export class ParserNotFound
     cause: S.Defect(),
   })
 {
+  readonly exitClass = 'ConfigError' as const
+
   override get message(): string {
     return `No parser registered for ${this.fileName} (extension "${this.extension}") — load the parser plugin that claims it`
   }
