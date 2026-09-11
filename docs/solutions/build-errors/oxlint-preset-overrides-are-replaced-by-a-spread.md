@@ -51,7 +51,7 @@ Corollary for review: "the gate fires in the other consumers" is not evidence it
 
 ## Verification and prevention
 
-- Probe shape, seconds to run: put a known violator under the glob the gate claims, run the consumer's own lint command, and require the diagnostic. Delete the probe file. A gate whose binding has never been probed is an unfalsified hypothesis — the same polarity trap recorded in `an-escape-hatch-is-an-unfalsified-hypothesis.md` and `a-disable-comment-names-the-config-key.md`.
+- Probe shape, seconds to run. Write one throwaway file under a `src/` directory the config's globs cover, holding a function with four `if` statements (complexity 5); run that consumer's own lint command over the directory; require the diagnostic `eslint(complexity): function has a complexity of 5. Maximum allowed is 2.`; delete the probe. A gate whose binding has never been probed is an unfalsified hypothesis — the same polarity trap recorded in `an-escape-hatch-is-an-unfalsified-hypothesis.md` and `a-disable-comment-names-the-config-key.md`.
 - Sweep shape: `grep` every consumer config for the preset's spread (`...all`, `...base`) and require a probe in each file that also declares the same key (`overrides`, `rules`, `plugins`).
 - Never reach for the spread when the preset supplies `overrides`. `extends` is the only form that cannot silently drop a tier.
 - The preset's globs are config-relative, and `**/src/**` matches a path with an empty prefix, so the same override text works from any consumer directory — the glob is not what varies between consumers; the merge is.
