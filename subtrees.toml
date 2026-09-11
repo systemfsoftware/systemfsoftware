@@ -1,10 +1,4 @@
 [[repos]]
-name = "oh-my-pi"
-url = "https://github.com/can1357/oh-my-pi"
-description = "Coding-agent harness (OMP) with tools, skills, browser, and session runtime"
-tag_prefix = "v"
-
-[[repos]]
 name = "constitution"
 url = "https://github.com/systemfsoftware/constitution"
 description = "Shared engineering constitution: pure-core / imperative-shell design law"
