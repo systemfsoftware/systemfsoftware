@@ -35,55 +35,53 @@ export interface PluginLoadPlan {
 }
 
 export const buildPluginLoadPlan = (entries: readonly PluginLoaderEntryLike[]): PluginLoadPlan => {
-  const shadowingState = entries.reduce<{
+  const positionedPlugins = entries.flatMap((entry, entryIndex) =>
+    Option.match(Option.fromUndefinedOr(entry.plugins), {
+      onNone: () => [],
+      onSome: (plugins) => plugins.map((plugin) => ({ plugin, entryIndex })),
+    })
+  )
+
+  const keyOf = (plugin: PluginContribution<PluginKind>): string => `${plugin.kind}:${plugin.name.toLowerCase()}`
+
+  const winnerPositions = new Map<string, number>()
+  positionedPlugins.forEach(({ plugin }, position) => {
+    winnerPositions.set(keyOf(plugin), position)
+  })
+
+  const shadowingState = positionedPlugins.reduce<{
     readonly seen: HashMap.HashMap<string, number>
     readonly shadowings: readonly Shadowing[]
   }>(
-    (acc, entry, index) =>
-      Option.match(Option.fromUndefinedOr(entry.plugins), {
-        onNone: () => acc,
-        onSome: (plugins) =>
-          plugins.reduce(
-            (inner, plugin) => {
-              const key = `${plugin.kind}:${plugin.name}`
-              const previousOption = HashMap.get(inner.seen, key)
-              const nextShadowings = Option.match(previousOption, {
-                onNone: () => inner.shadowings,
-                onSome: (prev) => [
-                  ...inner.shadowings,
-                  {
-                    kind: plugin.kind,
-                    name: plugin.name,
-                    shadowedIndex: prev,
-                    winnerIndex: index,
-                  },
-                ],
-              })
-              return {
-                seen: HashMap.set(inner.seen, key, index),
-                shadowings: nextShadowings,
-              }
-            },
-            acc,
-          ),
-      }),
+    (acc, { plugin, entryIndex }) => {
+      const previousOption = HashMap.get(acc.seen, keyOf(plugin))
+      const shadowings = Option.match(previousOption, {
+        onNone: () => acc.shadowings,
+        onSome: (prev) => [
+          ...acc.shadowings,
+          {
+            kind: plugin.kind,
+            name: plugin.name,
+            shadowedIndex: prev,
+            winnerIndex: entryIndex,
+          },
+        ],
+      })
+      return { seen: HashMap.set(acc.seen, keyOf(plugin), entryIndex), shadowings }
+    },
     { seen: HashMap.empty<string, number>(), shadowings: [] },
   )
 
-  const pluginsByKind = entries.reduce<HashMap.HashMap<PluginKind, readonly PluginContribution<PluginKind>[]>>(
-    (map, entry) =>
-      Option.match(Option.fromUndefinedOr(entry.plugins), {
-        onNone: () => map,
-        onSome: (plugins) =>
-          plugins.reduce(
-            (inner, plugin) =>
-              Option.match(HashMap.get(inner, plugin.kind), {
-                onNone: () => HashMap.set(inner, plugin.kind, [plugin]),
-                onSome: (existing) => HashMap.set(inner, plugin.kind, [...existing, plugin]),
-              }),
-            map,
-          ),
-      }),
+  const pluginsByKind = positionedPlugins.reduce<
+    HashMap.HashMap<PluginKind, readonly PluginContribution<PluginKind>[]>
+  >(
+    (map, { plugin }, position) => {
+      if (winnerPositions.get(keyOf(plugin)) !== position) return map
+      return Option.match(HashMap.get(map, plugin.kind), {
+        onNone: () => HashMap.set(map, plugin.kind, [plugin]),
+        onSome: (existing) => HashMap.set(map, plugin.kind, [...existing, plugin]),
+      })
+    },
     HashMap.empty<PluginKind, readonly PluginContribution<PluginKind>[]>(),
   )
 
