@@ -325,7 +325,7 @@ const survivorsOf = (report: MutationTestResult): readonly Survivor[] =>
           column: mutant.location.start.column,
           status: mutant.status,
           mutatorName: mutant.mutatorName,
-          replacement: orDefault(Option.fromUndefinedOr(mutant.replacement), ''),
+          replacement: orDefault(Option.fromNullishOr(mutant.replacement), ''),
         }))
     )
     .sort(byFileThenLine)
@@ -367,7 +367,7 @@ const mergedOutcome = (
 
 const decideMerge = (command: MergeReportPartsCommand): Result.Result<Decision, DecisionError> => {
   const parts = uniqueParts(command.parts)
-  const expected = orDefault(Option.fromUndefinedOr(command.expectedPackages), EMPTY_PACKAGES)
+  const expected = orDefault(Option.fromNullishOr(command.expectedPackages), EMPTY_PACKAGES)
   const rows = packageRows(parts, expected)
   return Match.value(parts.length === 0).pipe(
     Match.when(true, () => Result.fail(MissingPackages.make({ packages: [...expected] }))),

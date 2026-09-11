@@ -1,4 +1,6 @@
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
+import * as Predicate from 'effect/Predicate'
 
 import type { MutantRunOptions } from './TestRunner.js'
 
@@ -87,17 +89,10 @@ export interface ErrnoException extends Error {
   syscall?: string
 }
 
-const hasText = (value: unknown): value is string =>
-  Match.value(value).pipe(
-    Match.when(Match.string, (text) => text.length > 0),
-    Match.orElse(() => false),
-  )
+const hasText = (value: unknown): value is string => Predicate.isString(value) && value.length > 0
 
 const textIfNonEmpty = (value: unknown): string | undefined =>
-  Match.value(value).pipe(
-    Match.when(hasText, (text) => text),
-    Match.orElse(() => undefined),
-  )
+  Option.getOrUndefined(Option.filter(Option.fromUndefinedOr(value), hasText))
 
 const fieldOf = (value: object, key: string): unknown =>
   Match.value(key in value).pipe(

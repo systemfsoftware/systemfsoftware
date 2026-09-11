@@ -202,13 +202,8 @@ const toTestStatus = (taskState: TaskState, mode: string): TestStatus =>
     Match.when(false, (): TestStatus =>
       Match.value(taskState).pipe(
         Match.when('pass', (): TestStatus => 'success'),
-        Match.when('fail', (): TestStatus => 'failed'),
         Match.when('skip', (): TestStatus => 'skipped'),
         Match.when('todo', (): TestStatus => 'skipped'),
-        Match.when(undefined, (): TestStatus => 'failed'),
-        Match.when('queued', (): TestStatus => 'failed'),
-        Match.when('run', (): TestStatus => 'failed'),
-        Match.when('only', (): TestStatus => 'failed'),
         Match.orElse((): TestStatus => 'failed'),
       )),
     Match.exhaustive,

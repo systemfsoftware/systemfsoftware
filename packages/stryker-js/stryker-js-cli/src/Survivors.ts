@@ -169,11 +169,11 @@ export const survivorsAdmissionCell = (basePath: string) =>
       return Result.map(decodePriorReport(priorReportRaw), (document) =>
         AdmitSurvivorsRunCommand.make({
           priorReport: PriorReportFacts.make({
-            config: Option.getOrElse(Option.fromUndefinedOr(document.config), () => EMPTY_CONFIG),
+            config: Option.getOrElse(Option.fromNullishOr(document.config), () => EMPTY_CONFIG),
             frameworkVersion: Option.getOrUndefined(
               Option.flatMap(
-                Option.fromUndefinedOr(document.framework),
-                (framework) => Option.fromUndefinedOr(framework.version),
+                Option.fromNullishOr(document.framework),
+                (framework) => Option.fromNullishOr(framework.version),
               ),
             ),
           }),

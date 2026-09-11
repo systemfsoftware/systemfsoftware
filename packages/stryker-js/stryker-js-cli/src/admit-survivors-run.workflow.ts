@@ -42,11 +42,11 @@ const { entries: objectEntries, fromEntries: objectFromEntries, keys: objectKeys
 const stringify = JSON.stringify
 
 const SURVIVORS_RUN_FIRST_REMEDIATION = 'run a full `stryker run` first, then re-run with --survivors'
-const SURVIVORS_BOOKKEEPING_KEYS = ['survivorsPriorReport'] as const
+const SURVIVORS_BOOKKEEPING_KEYS: readonly string[] = ['survivorsPriorReport']
 
 function stripSurvivorsKeys(config: Record<string, unknown>): Record<string, unknown> {
   return objectFromEntries(
-    objectEntries(config).filter(([key]) => !SURVIVORS_BOOKKEEPING_KEYS.some((bookkeeping) => bookkeeping === key)),
+    objectEntries(config).filter(([key]) => !SURVIVORS_BOOKKEEPING_KEYS.includes(key)),
   )
 }
 

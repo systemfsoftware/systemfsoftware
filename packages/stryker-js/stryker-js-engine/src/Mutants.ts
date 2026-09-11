@@ -36,7 +36,7 @@ const ZERO = 0
 const ONE = 1
 
 const firstDefined = <Value>(first: Value | undefined, second: Value | undefined): Value | undefined =>
-  Option.getOrElse(Option.fromUndefinedOr(first), () => second)
+  Option.getOrElse(Option.fromNullishOr(first), () => second)
 
 const staticField = (isStatic: boolean | undefined): { readonly static?: boolean } =>
   Option.match(Option.fromUndefinedOr(isStatic), {
@@ -71,26 +71,27 @@ const applyDiffChange = (
   amount: number,
 ): DiffStatistics => {
   const base = Option.getOrElse(MutableHashMap.get(stats.changesByFile, input.file), emptyDiffChanges)
-  const nextChanges = Match.value(input.change).pipe(
-    Match.when('added', () => ({ added: base.added + amount, removed: base.removed })),
-    Match.when('removed', () => ({ added: base.added, removed: base.removed + amount })),
-    Match.exhaustive,
-  )
-  const nextTotal = Match.value(input.change).pipe(
-    Match.when('added', () => ({ added: stats.total.added + amount, removed: stats.total.removed })),
-    Match.when('removed', () => ({ added: stats.total.added, removed: stats.total.removed + amount })),
+  const next = Match.value(input.change).pipe(
+    Match.when('added', () => ({
+      changes: { added: base.added + amount, removed: base.removed },
+      total: { added: stats.total.added + amount, removed: stats.total.removed },
+    })),
+    Match.when('removed', () => ({
+      changes: { added: base.added, removed: base.removed + amount },
+      total: { added: stats.total.added, removed: stats.total.removed + amount },
+    })),
     Match.exhaustive,
   )
   const nextMap = MutableHashMap.fromIterable(stats.changesByFile)
-  MutableHashMap.set(nextMap, input.file, nextChanges)
-  return { changesByFile: nextMap, total: nextTotal }
+  MutableHashMap.set(nextMap, input.file, next.changes)
+  return { changesByFile: nextMap, total: next.total }
 }
 
 export const diffStatisticsCount = (
   stats: Readonly<DiffStatistics>,
   input: Readonly<{ file: string; change: DiffChange; amount?: number }>,
 ): DiffStatistics => {
-  const amount = Option.getOrElse(Option.fromUndefinedOr(input.amount), () => ONE)
+  const amount = Option.getOrElse(Option.fromNullishOr(input.amount), () => ONE)
   return Match.value(amount).pipe(
     Match.when(ZERO, () => stats),
     Match.orElse(() => applyDiffChange(stats, input, amount)),
@@ -117,7 +118,7 @@ const staticCoverageCountOf = (
   mutantId: string,
 ): number =>
   Option.getOrElse(
-    Option.flatMap(Option.fromUndefinedOr(staticCoverage), (countsByMutantId) =>
+    Option.flatMap(Option.fromNullishOr(staticCoverage), (countsByMutantId) =>
       Option.fromUndefinedOr(countsByMutantId[mutantId])),
     () =>
       ZERO,
@@ -205,10 +206,9 @@ const addTestsForMutant = (
   const existing = MutableHashMap.get(testsByMutantId, mutantId)
   const tests = Option.getOrElse(existing, () => MutableHashSet.empty<TestResult>())
   MutableHashSet.add(tests, test)
-  Option.match(existing, {
-    onNone: () => MutableHashMap.set(testsByMutantId, mutantId, tests),
-    onSome: () => undefined,
-  })
+  if (Option.isNone(existing)) {
+    MutableHashMap.set(testsByMutantId, mutantId, tests)
+  }
 }
 
 const addTestCoverage = (
@@ -259,7 +259,7 @@ export const testCoverageFrom = (
   result: Readonly<CompleteDryRunResult>,
 ): TestCoverage => {
   const testsById = testsByIdOf(result)
-  const mutantCoverage = Option.fromUndefinedOr(result.mutantCoverage)
+  const mutantCoverage = Option.fromNullishOr(result.mutantCoverage)
   return {
     testsByMutantId: Option.match(mutantCoverage, {
       onNone: () => MutableHashMap.empty<string, MutableHashSet.MutableHashSet<TestResult>>(),

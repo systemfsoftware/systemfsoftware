@@ -617,6 +617,8 @@ function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironme
   }
 }
 
+const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.length > 0
+
 const progressStreamFileName = (request: Option.Option<CliRequest>): string =>
   Option.match(request, {
     onNone: () => DEFAULT_PROGRESS_STREAM_FILE,
@@ -625,7 +627,7 @@ const progressStreamFileName = (request: Option.Option<CliRequest>): string =>
         Match.tag('merge-reports', () => DEFAULT_PROGRESS_STREAM_FILE),
         Match.tag('run', (runRequest) =>
           Option.getOrElse(
-            Option.filter(Option.fromUndefinedOr(runRequest.options['progressStreamFile']), (text) => text.length > 0),
+            Option.filter(Option.fromNullishOr(runRequest.options['progressStreamFile']), isNonEmptyString),
             () => DEFAULT_PROGRESS_STREAM_FILE,
           )),
         Match.exhaustive,

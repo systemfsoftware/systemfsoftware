@@ -1,5 +1,6 @@
 import { ExitClass, highestExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import { causeText } from '@systemfsoftware/stryker-js/Mutant'
+import * as Arr from 'effect/Array'
 import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Console from 'effect/Console'
@@ -102,17 +103,7 @@ function findReachableValue<A>(
   seen.add(value)
   return Option.orElse(
     read(value),
-    () => firstSome(causeChildrenOf(value), (child) => findReachableValue(child, depth + 1, seen, read)),
-  )
-}
-
-function firstSome<A, B>(
-  candidates: ReadonlyArray<A>,
-  read: (candidate: A) => Option.Option<B>,
-): Option.Option<B> {
-  return candidates.reduce<Option.Option<B>>(
-    (found, candidate) => Option.orElse(found, () => read(candidate)),
-    Option.none(),
+    () => Arr.findFirst(causeChildrenOf(value), (child) => findReachableValue(child, depth + 1, seen, read)),
   )
 }
 
@@ -124,12 +115,7 @@ function causePayloadOf(reason: Cause.Reason<unknown>): unknown {
   )
 }
 
-function failedExit(exit: Exit.Exit<unknown, unknown>): Option.Option<Exit.Failure<unknown, unknown>> {
-  return Match.value(exit).pipe(
-    Match.when(Exit.isFailure, (failure) => Option.some(failure)),
-    Match.orElse(() => Option.none()),
-  )
-}
+const failedExit = Option.liftPredicate(Exit.isFailure)
 
 function failurePayloads(exit: Exit.Exit<unknown, unknown>): ReadonlyArray<unknown> {
   return Option.getOrElse(
@@ -158,12 +144,7 @@ function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
 }
 
-function nonEmptyText(value: unknown): Option.Option<string> {
-  return Match.value(value).pipe(
-    Match.when(isNonEmptyString, (text) => Option.some(text)),
-    Match.orElse(() => Option.none()),
-  )
-}
+const nonEmptyText = Option.liftPredicate(isNonEmptyString)
 
 function reasonOf(value: object): string | undefined {
   const declared: unknown = Reflect.get(value, 'reason')
@@ -199,7 +180,7 @@ function firstConfigErrorDetail(exit: Exit.Exit<unknown, unknown>): string | und
   // The reasons are read newest-first, the order the previous stack walk visited them in.
   const roots = [...failurePayloads(exit)].reverse()
   return Option.getOrUndefined(
-    firstSome(roots, (root) => findReachableValue(root, 0, seen, configDetailAt)),
+    Arr.findFirst(roots, (root) => findReachableValue(root, 0, seen, configDetailAt)),
   )
 }
 
@@ -252,7 +233,7 @@ export function unrecognizedArgumentOf(
 ): string | undefined {
   return Option.getOrUndefined(
     cliErrorList(exit).pipe(
-      Option.flatMap((errors) => firstSome(errors, (error) => argumentHintOf(error, argv))),
+      Option.flatMap((errors) => Arr.findFirst(errors, (error) => argumentHintOf(error, argv))),
     ),
   )
 }

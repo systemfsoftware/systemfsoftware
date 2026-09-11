@@ -30,7 +30,7 @@ const makeModuleRequire = (nodeModule: NodeModule, filename: string | URL): Modu
       onNone: () => requireFrom.resolve(request),
       onSome: (present) =>
         requireFrom.resolve(request, {
-          paths: [...Option.getOrElse(Option.fromUndefinedOr(present.paths), () => EMPTY_PATHS)],
+          paths: [...Option.getOrElse(Option.fromNullishOr(present.paths), () => EMPTY_PATHS)],
         }),
     })
   return requireFn

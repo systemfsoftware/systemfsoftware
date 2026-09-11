@@ -48,7 +48,7 @@ export type ResolveModeDecision = HumanOutput | MachineOutput
 const CONFLICT_EXPECTED = 'the "--format text" and "--json" flags are mutually exclusive — use one or the other'
 
 const configured = (value: string | undefined): Option.Option<string> =>
-  Option.filter(Option.fromUndefinedOr(value), (text) => text.length > 0)
+  Option.filter(Option.fromNullishOr(value), (text) => text.length > 0)
 
 const modeFromEnv = (envMode: string, stdoutIsTTY: boolean): ResolveModeDecision =>
   Match.value(envMode).pipe(
@@ -69,7 +69,7 @@ const modeFromTools = (command: ResolveModeCommand): ResolveModeDecision =>
   )
 
 const anyToolVariableSet = (toolVars: Readonly<Record<string, string>> | undefined): boolean =>
-  Option.match(Option.fromUndefinedOr(toolVars), {
+  Option.match(Option.fromNullishOr(toolVars), {
     onNone: () => false,
     onSome: (named) => TOOL_VARIABLES.some((variable) => Option.isSome(configured(named[variable]))),
   })

@@ -92,7 +92,7 @@ const groupStreamMutant = (
   groups: Record<string, MutantResult[]>,
   value: StreamMutantLine,
 ): Record<string, MutantResult[]> => {
-  const mutants = Option.getOrElse(Option.fromUndefinedOr(groups[value.file]), (): MutantResult[] => [])
+  const mutants = Option.getOrElse(Option.fromNullishOr(groups[value.file]), (): MutantResult[] => [])
   mutants.push(streamMutant(value))
   groups[value.file] = mutants
   return groups
@@ -178,8 +178,8 @@ const readPartStream = (
   Effect.gen(function*() {
     const path = yield* Path.Path
     const text = yield* readOptional(path.join(dir, PART_STREAM_FILE))
-    const report = Option.fromUndefinedOr(text).pipe(
-      Option.flatMap((streamed) => Option.fromUndefinedOr(streamReport(streamed))),
+    const report = Option.fromNullishOr(text).pipe(
+      Option.flatMap((streamed) => Option.fromNullishOr(streamReport(streamed))),
     )
     return Option.match(report, {
       onNone: (): PartRead => ({ dir, part: Option.some(base), unreadable: false }),
@@ -208,7 +208,7 @@ const readPart = (dir: string): Effect.Effect<PartRead, never, FileSystem.FileSy
   Effect.gen(function*() {
     const path = yield* Path.Path
     const metaText = yield* readOptional(path.join(dir, PART_MARKER_FILE))
-    const meta = Option.fromUndefinedOr(metaText).pipe(
+    const meta = Option.fromNullishOr(metaText).pipe(
       Option.flatMap((text) => S.decodeUnknownOption(S.fromJsonString(PartMetaSchema))(text)),
     )
     return yield* Option.match(meta, {
@@ -235,7 +235,7 @@ const decodePackageList = (raw: string): Effect.Effect<readonly string[] | undef
   })
 
 const parsePackages = (raw: string | undefined): Effect.Effect<readonly string[] | undefined, MergeReportsFailed> =>
-  Option.match(Option.filter(Option.fromUndefinedOr(raw), (text) => text.length > 0), {
+  Option.match(Option.filter(Option.fromNullishOr(raw), (text) => text.length > 0), {
     onNone: () => Effect.succeed(undefined),
     onSome: decodePackageList,
   })
@@ -387,7 +387,7 @@ const writeReportOutputs = (
 const appendStepSummary = (summary: string): Effect.Effect<void, MergeReportsFailed, FileSystem.FileSystem> =>
   Effect.forEach(
     Option.toArray(
-      Option.filter(Option.fromUndefinedOr(process.env[STEP_SUMMARY_VARIABLE]), (file) => file.length > 0),
+      Option.filter(Option.fromNullishOr(process.env[STEP_SUMMARY_VARIABLE]), (file) => file.length > 0),
     ),
     (file) => writeFile(file, summary, true),
     { discard: true },

@@ -2,7 +2,9 @@
  * Parser — all parsers that turn source text into the instrumenter's ASTs.
  */
 import type { Ast as NGAst, ParseTreeResult } from 'angular-html-parser'
+import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'
 import type { BaseNode, Program } from 'estree'
 import { type OxcError, parseSync } from 'oxc-parser'
@@ -540,14 +542,11 @@ function isTemplateExpressionTag(value: unknown): value is Record<string, unknow
  */
 function scriptChild(node: unknown): unknown {
   return Match.value(node).pipe(
-    Match.when(isScriptElement, (element) => firstElement(element['children'])),
-    Match.orElse(() => undefined),
-  )
-}
-
-function firstElement(value: unknown): unknown {
-  return Match.value(value).pipe(
-    Match.when(isNonEmptyArray, (values) => values[0]),
+    Match.when(isScriptElement, (element) =>
+      Match.value(element['children']).pipe(
+        Match.when(isNonEmptyArray, (values) => Option.getOrUndefined(Arr.head(values))),
+        Match.orElse(() => undefined),
+      )),
     Match.orElse(() => undefined),
   )
 }
