@@ -1,7 +1,0 @@
-{
-  "name": "903-create-component-async-fetch-reshaped-explicit-stories",
-  "type": "module",
-  "evals": {
-    "template": "reshaped-storybook"
-  }
-}

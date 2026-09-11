@@ -1,7 +1,0 @@
-{
-  "name": "803-edit-component",
-  "type": "module",
-  "evals": {
-    "template": "reshaped-storybook"
-  }
-}

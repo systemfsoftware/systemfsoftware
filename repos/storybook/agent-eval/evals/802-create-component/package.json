@@ -1,7 +1,0 @@
-{
-  "name": "802-create-component",
-  "type": "module",
-  "evals": {
-    "template": "reshaped-storybook"
-  }
-}

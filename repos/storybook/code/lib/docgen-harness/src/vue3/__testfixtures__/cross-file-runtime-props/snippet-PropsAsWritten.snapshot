@@ -1,3 +1,0 @@
-<template>
-  <CrossFileRuntimeProps :count="3" label="Imported" />
-</template>

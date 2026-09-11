@@ -1,7 +1,0 @@
-{
-  "name": "808-shared-infra-fallback",
-  "type": "module",
-  "evals": {
-    "template": "reshaped-storybook"
-  }
-}

@@ -1,7 +1,0 @@
-{
-  "name": "908-run-story-tests",
-  "type": "module",
-  "evals": {
-    "template": "reshaped-storybook"
-  }
-}

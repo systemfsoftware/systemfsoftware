@@ -1,6 +1,0 @@
-[*]
-indent_style = space
-indent_size = unset
-
-[*.ts]
-indent_size = 4
