@@ -23,12 +23,6 @@ description = "UI component workshop for developing components in isolation"
 tag_prefix = "v"
 
 [[repos]]
-name = "oxc"
-url = "https://github.com/oxc-project/oxc"
-description = "Rust JavaScript/TypeScript toolchain: parser, linter, transformer, minifier"
-branch = "main"
-
-[[repos]]
 name = "typia"
 url = "https://github.com/samchon/typia"
 description = "TypeScript transformer for runtime validators and serializers from types"
