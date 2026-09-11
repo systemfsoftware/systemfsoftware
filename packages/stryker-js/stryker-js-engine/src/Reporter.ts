@@ -1188,40 +1188,6 @@ export const normalizeReportFileName = (
   return ''
 }
 
-const STDOUT_REPORTERS: ReadonlySet<string> = new Set(['clear-text', 'progress'])
-
-const STREAM_REPORTER = 'progress-stream'
-
-const HUMAN_REPORTER = 'clear-text'
-
-export function selectReporters(
-  configured: readonly string[],
-  mode: 'human' | 'machine',
-): readonly string[] {
-  if (mode === 'human') {
-    const mapped = configured.map((name) => {
-      if (name === STREAM_REPORTER) {
-        return HUMAN_REPORTER
-      }
-      return name
-    })
-    const seen = new Set<string>()
-    const result: string[] = []
-    for (const name of mapped) {
-      if (!seen.has(name)) {
-        seen.add(name)
-        result.push(name)
-      }
-    }
-    return result
-  }
-  const permitted = configured.filter((name) => !STDOUT_REPORTERS.has(name))
-  if (permitted.includes(STREAM_REPORTER)) {
-    return permitted
-  }
-  return [...permitted, STREAM_REPORTER]
-}
-
 const STRYKER_FRAMEWORK: Readonly<Pick<schema.FrameworkInformation, 'branding' | 'name' | 'version'>> = Object.freeze({
   branding: {
     homepageUrl: 'https://stryker-mutator.io',

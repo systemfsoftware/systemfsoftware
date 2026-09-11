@@ -79,7 +79,6 @@ import { ansi } from './Reporter.ansi.js'
 import { makeMutationReportingService } from './Reporter.js'
 import { toSchemaLocation } from './Reporter.js'
 import { normalizeReportFileName } from './Reporter.js'
-import { selectReporters } from './Reporter.js'
 import {
   attachReporterFactories,
   currentReporterInit,
@@ -93,6 +92,7 @@ import { makeSandbox } from './Sandbox.js'
 import type { SandboxHandle } from './Sandbox.js'
 import { TemporaryDirectory } from './Sandbox.js'
 import { TemporaryDirectoryLive } from './Sandbox.js'
+import { selectReporters } from './select-reporters.js'
 import { buildTestRunner } from './TestRunner.js'
 import { makeChildProcessTestRunner } from './TestRunner.js'
 import type { PooledTestRunner } from './TestRunner.js'
