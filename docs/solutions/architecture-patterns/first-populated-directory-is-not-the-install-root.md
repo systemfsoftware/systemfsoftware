@@ -10,8 +10,8 @@ applies_when:
 root_cause: layout_assumption
 resolution_type: design_change
 related_components:
-  - packages/testing/mutation/stryker-js/mutation-run
-  - packages/testing/mutation/stryker-js/instrumenter
+  - packages/stryker-js/stryker-js-engine
+  - packages/stryker-js/stryker-js-instrumenter
 tags:
   - pnpm
   - plugin-discovery

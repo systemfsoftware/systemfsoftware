@@ -2,7 +2,7 @@
 
 ## Context
 
-A branch that mass-renames files (here: kebab decision stems locked to exports, PR workflow-file-naming) collides with main when main independently refactors the same files (#346 branded decision channels, #351 the meta-core split into mutation-sized private leaves). `git rebase` replays every cutover commit against shifted ground and produces ~35 conflicts per commit; `git merge` collapses them to one round but marks each collision `UU`/`DU`/`UD` with both sides half-right: the branch owns the naming, main owns the newer content.
+A branch that mass-renames files (here: kebab decision stems locked to exports, PR workflow-file-naming) collides with main when main independently refactors the same files (#346 branded decision channels, #351 the meta-core split into mutation-sized private leaves). `git rebase` replays every cutover commit against shifted ground and produces ~35 conflicts per commit; `git merge` collapses them to one round but marks each collision `UU`/`DU`/`UD` with both sides half-right: the branch owns the naming, main owns the newer content. The PR references are as recorded at the time and are not resolvable from this tree.
 
 ## Guidance
 

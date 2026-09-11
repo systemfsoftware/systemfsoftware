@@ -12,7 +12,12 @@ topic: architecture-patterns
 
 - The sanctioned-suffix config is gone; no gate anywhere keys on a cell-role filename. The organizing unit is the `Workflow.make` boundary: the brand (`WorkflowTypeId`, applied only by `make`) forces every running decision through `make`, `Cell.decide` demands the brand, the one-path and purity rules key on the boundary, and the `workflow-make-boundary` Stryker ignorer selects the mutation population from it.
 - The spike proved both unproven legs sound over the five production and adapter sites: the boundary walk (module-scope references followed, shadow-correct) and the reference classification (audited sealed table of pure imports per module, with honest `unresolvable` findings — no heuristic pass).
-- Gate checks held the KTD4 line: `no-manual-tag-member` died (its gate reads the sanctioned `.shape.ts`); `no-schema-law-duplicate` survived (its gate is the property-test kind `*.property.test.ts`); `effect-entrypoint` survived whole (its rules gate on the `main.ts` basename, an entry convention the taxonomy never owned — the plugin's own AGENTS.md forbade adding it to the CELLS list).
+- Gate checks held the KTD4 line: `no-manual-tag-member` died on the sanctioned `.shape.ts` gate and is live
+  again in `oxlint-plugin-effect-schema`, reinstated after the fleet deletion, as a ban on a `_tag` property
+  signature in any type position (`.tst.ts` fixtures the only exclusion); `no-schema-law-duplicate` is gone,
+  its check carried by `prop-generated-law-duplicate` in `oxlint-plugin-property-testing`, keyed on the
+  in-source test block; `effect-entrypoint` survived whole (its rules gate on the `main.ts` basename, an
+  entry convention the taxonomy never owned — the plugin's own AGENTS.md forbade adding it to the CELLS list).
 
 ## The R13 ledger — every channel is none
 

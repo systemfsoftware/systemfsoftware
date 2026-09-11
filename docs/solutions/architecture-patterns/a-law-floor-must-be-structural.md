@@ -30,20 +30,29 @@ values, not ASTs, so no generic rewrite can point them at the twin.
 
 ## What survived
 
-The law asserts, per seed:
+The shipped law (`recursionLaws`) asserts, per seed:
 
 1. the declared-budget sample contains at least one value at depth ≥ 4
-   (`deepShareOf(sample) > 0`) — a collapsed annotation derives only the base
-   members and never crosses the depth, so this holds a verdict of _no_;
+   (`deepShareOf(sample) > 0`, emitted as `∀s_<label>DeepShare_≠Zero` over
+   `DEEP_DEPTH`, which is `STOCK_MAX_DEPTH + 2`) — a collapsed annotation
+   derives only the base members and never crosses the depth, so this holds a
+   verdict of _no_;
 2. the annotation declares a ceiling strictly above the stock constant
-   (`maxDepth > 2`) — an annotation that mirrors stock is vacuous;
+   (`maxDepth > STOCK_MAX_DEPTH`, the constant being `2`) — an annotation that
+   mirrors stock is vacuous, and the deep-share law above is emitted only where
+   the ceiling clears the constant;
+3. the declared sample covers every declared variant
+   (`coversEveryVariant(sample, members)`, emitted as
+   `∀s_<label>Variants_⊇Declared`) — a sample that starves a member is a
+   verdict of _no_;
 
-and the termination law caps every generated value at `maxDepth + 1`. A
-pinned pair grounds both edges: a collapsed-hook fixture whose measured share
-is exactly zero, and a base-heavy fixture (five terminal members) whose
-declared budget does surface deep values. Because the corpus unions are
-base-heavy, their migration picks `'small'` decay — the `'medium'` default
-biases toward base at depth and starves the deep tail that law 1 requires.
+and the termination law (`∀x_<label>Nesting_≤MaxDepth1`) caps every generated
+value at `maxDepth + 1`. A pinned pair grounds both edges: a collapsed-hook
+fixture whose measured share is exactly zero, and a base-heavy fixture (five
+terminal members) whose declared budget does surface deep values. Because the
+corpus unions are base-heavy, their migration picks `'small'` decay — the
+`'medium'` default biases toward base at depth and starves the deep tail that
+law 1 requires.
 
 ## The general shape
 

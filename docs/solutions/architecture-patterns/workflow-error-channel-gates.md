@@ -1,7 +1,7 @@
 ---
 title: Workflow Error Channel Gates
 module: omp-claude-compat
-component: hook-verdict.workflow.ts
+component: workflow-error-channel
 tags: [effect-ts, constitution, workflow, tagged-error, match-exhaustive]
 problem_type: architecture-pattern
 track: knowledge
@@ -18,7 +18,10 @@ applies_when:
 
 ## Context
 
-`omp/plugins/omp-claude-compat/src/hook-verdict.workflow.ts` was written as `Either<HookDecision, never>` — a "total" decision shape where every domain outcome lands in the `Right` channel.
+`interpretHookResult` in the `omp-claude-compat` plugin — the file was
+`hook-verdict.workflow.ts`, and the plugin has since been extracted from this tree to its own
+repository — was written as `Either<HookDecision, never>`, a "total" decision shape where every
+domain outcome lands in the `Right` channel.
 
 The original code also routed JSON parse errors through `Either.match(parseHookOutput(...), { onLeft: () => null, onRight: ... })` — collapsing a typed error into `null` and then dispatching as if no error existed. The mutator cannot kill what the type system refuses to name.
 
@@ -26,7 +29,7 @@ The original code also routed JSON parse errors through `Either.match(parseHookO
 
 Apply the three gates that govern the error channel of a workflow:
 
-**Gate A — error variants extend `S.TaggedError`, never `S.TaggedClass`.** A `TaggedClass` is data; a `TaggedError` is an error. The convention exists because errors flow through Effect's `catchTag` / `catchTags` machinery and need an `_tag` discriminator plus the schema metadata that `TaggedError` provides. Use the same pattern as `packages/effect-daemon-spec/src/leader-lock.schema.ts`:
+**Gate A — error variants extend `S.TaggedError`, never `S.TaggedClass`.** A `TaggedClass` is data; a `TaggedError` is an error. The convention exists because errors flow through Effect's `catchTag` / `catchTags` machinery and need an `_tag` discriminator plus the schema metadata that `TaggedError` provides. Use the same pattern as `packages/effect-daemon-spec/src/LeaderLock.schema.ts`:
 
 ```ts
 // RIGHT
@@ -48,7 +51,7 @@ The hook-verdict workflow has BOTH shapes layered: `result.code` (primitive → 
 
 ## Why This Matters
 
-Constitution §I.1 (Purity) and §I.3 (Each Error Its Own Variant) are carried by construction and lint, not by a skill: `Workflow.make` refuses an uninhabited or untagged error channel at the construction site (`Inhabited` / `UninhabitedError` / `UntaggedError` become the compiler diagnostics), and the `effect-workflow` plugin's `workflow-no-effect-import` and `workflow-match-exhaustive` rules bind the file at lint time. The remaining gates — the `S.TaggedError`-over-`S.TaggedClass` choice and one producer per variant — are held by review, not by a deterministic gate. A workflow with `never` in the error channel that bypasses the constructor can still typecheck and still pass `pnpm check` — the violation is invisible to the compiler and to the test suite. The next contributor who adds a real failure mode will either smuggle it into a `Warning` (silently collapsing two distinct failures) or add it as a `boolean` field on a decision (violating §I.3). The mistake reproduces because nothing in the build chain catches it.
+Constitution §I.1 (Purity) and §I.3 (Each Error Its Own Variant) are carried by construction and lint, not by a skill: `Workflow.make` refuses an uninhabited or untagged error channel at the construction site (`Inhabited` / `UninhabitedError` / `UntaggedError` become the compiler diagnostics), and the `effect-workflow` plugin's `make-body-purity` and `workflow-match-exhaustive` rules bind the file at lint time. The remaining gates — the `S.TaggedError`-over-`S.TaggedClass` choice and one producer per variant — are held by review, not by a deterministic gate. A workflow with `never` in the error channel that bypasses the constructor can still typecheck and still pass `pnpm check` — the violation is invisible to the compiler and to the test suite. The next contributor who adds a real failure mode will either smuggle it into a `Warning` (silently collapsing two distinct failures) or add it as a `boolean` field on a decision (violating §I.3). The mistake reproduces because nothing in the build chain catches it.
 
 The 100% mutation gate is the other failure mode this prevents: a workflow that swallows `Either.left` to `null` is unfalsifiable. The mutator changes the parse path to always succeed and the test still passes because the workflow never branched on the failure in the first place.
 
@@ -139,4 +142,4 @@ const decision = Either.match(verdict, {
 - The `Workflow` constructor's `Inhabited` / `UninhabitedError` / `UntaggedError` refusals — the enforcement that gives this document its gates
 - The success-channel twin of this document — the tagged-union / shared-TypeId constraint on the decision channel — is enforced by the `SingleVariantDecision`, `UntaggedDecision`, and `UnsharedTypeId` refusals of the same constructor
 - `CONSTITUTION.md` §I.3 (Each Error Its Own Variant) and §III.3 (Mutation Is the Measure)
-- `packages/effect-daemon-spec/src/leader-lock.schema.ts` — reference usage of `S.TaggedError` in the monorepo
+- `packages/effect-daemon-spec/src/LeaderLock.schema.ts` — reference usage of `S.TaggedError` in the monorepo

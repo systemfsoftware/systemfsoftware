@@ -29,11 +29,11 @@ A schema-authoring gate restates a foreign payload in primitives the workspace d
 
 The type looked like the answer. A phantom `Mark` on the schema, a `mint` constructor as the only place a mark originates, and a `wire(fields)` whose parameter admits only marked members. The design claim that followed was: marking a foreign schema deliberately is the one residual, `mint` is the single call site, so the checker that closes it is one predicate over one call.
 
-That claim is false, and the way it fails generalises to any phantom marker in TypeScript.
+That claim is false, and the way it fails generalises to any phantom marker in TypeScript. The marker was built and measured, and it is gone: `Wire` was deleted from `@systemfsoftware/effect-cell-types` together with its type tests, so what follows is the property the measurement exposed rather than a design in the tree.
 
 ## Guidance
 
-**A phantom obtained from a legitimately marked value can be intersected onto any other type.** TypeScript is structural and has no nominal types, so the marker is not a capability — it is a property that travels. Five routes were measured against the built package; every one compiled, and none needed an `as` cast. The routes were measured against the `Wire` marker module of `@systemfsoftware/effect-cell-types`, which this workspace has since deleted; they are quoted in that module's vocabulary because they generalise to any phantom marker:
+**A phantom obtained from a legitimately marked value can be intersected onto any other type.** TypeScript is structural and has no nominal types, so the marker is not a capability — it is a property that travels. Five routes were measured against the built package; every one compiled, and none needed an `as` cast. They are quoted in `Wire`'s vocabulary — the deleted module is where they were measured — because they generalise to any phantom marker:
 
 | Route                                                                              | Names something from the module?                            |
 | ---------------------------------------------------------------------------------- | ----------------------------------------------------------- |
@@ -51,7 +51,7 @@ The last row is the one that decides the design. It names no marker, no construc
 
 **So state the guarantee at its true strength.** A phantom marker makes the _accidental_ case a compile error at the authoring site: reaching for the library's primitive instead of the gate's, or dropping a vendor schema into a field. That is worth having, and it travels to consumers through the emitted declaration without a lint setup. It is a guardrail, not a boundary, and a design that needs the stronger property must read the member type that arrived and resolve where it was declared — never how it came to be marked.
 
-**Corollary, and a trap with its own failure mode: intersect the marker with the permissive arm of a library union, or the diagnostic reports something unrelated.** Effect's `Struct.Field` is `Schema.All | PropertySignature.All`, and the `All` unions contain `never`-parameterised variants. Widening a field constraint to `Struct.Field & Mark` type-checks and refuses exactly the right programs, while the reported error becomes:
+**Corollary, and a trap with its own failure mode: intersect the marker with the permissive arm of a library union, or the diagnostic reports something unrelated.** Effect's `Struct.Field` is `Schema.All | PropertySignature.All`, and the `All` unions contain `never`-parameterised variants. Neither name survives in the vendored source — v4 carries the field-map position as `Struct.Fields` over schema constraints — so read what follows as the union shape the trap was measured against, not as live vocabulary. Widening a field constraint to `Struct.Field & Mark` type-checks and refuses exactly the right programs, while the reported error becomes:
 
 ```
 Type 'typeof String$' is not assignable to type 'MintedField'.
@@ -71,7 +71,7 @@ Give the marker member the name a reader needs and the fix as its type, per `REP
 
 ## Applicability
 
-This is a property of TypeScript's structural typing, not of Effect or of schemas: it holds for any phantom marker used to gate a position. Reach for one when the cost of the _accidental_ case is what matters and a compile-site error is worth more than a lint finding. Do not build a plan around a marker being an enumerable set of doors.
+This is a property of TypeScript's structural typing, not of Effect or of schemas: it holds for any phantom marker used to gate a position. Reach for one when the cost of the _accidental_ case is what matters and a compile-site error is worth more than a lint finding. The workspace carries one today — `WorkflowBrand`, the phantom `Workflow.make` returns — and it is donatable by the same routes. Do not build a plan around a marker being an enumerable set of doors.
 
 Two verification habits earned their place here:
 
@@ -82,6 +82,6 @@ The capability a deleted marker takes with it is easy to miss. `docs/solutions/a
 
 ## Related
 
-- `docs/solutions/architecture-patterns/constructor-rule-boundary.md` — establishes marker members whose property NAME is the diagnostic, and places the compiler channel above the file-reading observers. This learning bounds that channel: it is donatable, so it refuses accidents rather than adversaries.
+- `docs/solutions/architecture-patterns/constructor-rule-boundary.md` — establishes marker members whose property NAME is the diagnostic, and records where the compiler channel displaces the file-reading observers on the `workflow` cell. This learning bounds that channel: it is donatable, so it refuses accidents rather than adversaries.
 - `docs/solutions/architecture-patterns/label-routed-rules-are-unfalsifiable.md` — why the filename-keyed predicate was rejected before the type was reached for.
 - `docs/solutions/architecture-patterns/constraint-reaches-only-via-window-or-gate.md` — the reach question this design answered with the published declaration file.

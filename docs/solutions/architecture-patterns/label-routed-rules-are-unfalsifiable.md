@@ -8,8 +8,8 @@ aim mutation and property testing at a boundary a manifest enforces.
 1. A filename suffix is an author's assertion about a file's contents.
 2. A rule routed by that assertion runs only on files that carry it.
 3. So the rule never runs on the violation it exists to catch: an author whose module holds an
-   Effect runtime import simply does not write `.kernel.ts`, and `kernel-no-effect-runtime` stays
-   silent. The rule has full precision against nothing.
+   Effect runtime import simply does not write `.kernel.ts`, and `kernel-no-effect-runtime` — since deleted
+   with the fleet — stayed silent. The rule has full precision against nothing.
 4. A check that can only agree is not a check. Routing a rule on the property it is checking is
    circular in exactly the way a gate passed by stuffing its own keyword is circular.
 
@@ -46,12 +46,12 @@ Two files, byte-identical content, differing only in suffix, each holding
 | `probe.executor.ts` | silent                     | fires                   |
 
 The purity rule evaporates on rename. The rule that held selects on an import edge —
-`packages/oxlint-plugins/core/src/rules/no-date-now-in-effect.ts:45-52` sets a flag from
+`packages/oxlint-plugin/oxlint-plugin-effect-native/src/rules/no-date-now-in-effect.ts` sets a flag from
 `ImportDeclaration` and gates on it, touching the filename only to exclude tests. One repo, one
 runner, two selection strategies, and only one survives a rename.
 
-`executor-requires-deps-tag` states the escape in its own message: "or rename the file to the cell it
-actually is."
+`executor-requires-deps-tag` — since deleted with the fleet — stated the escape in its own message: "or
+rename the file to the cell it actually is."
 
 The replacement boundary was checked the same way. A package whose manifest does not declare `effect`
 cannot import it: `TS2307: Cannot find module 'effect'`, from the type checker, at the first import.
@@ -59,7 +59,7 @@ The suffix boundary is invisible when crossed; the manifest boundary is a type e
 
 ## Purity is already carried
 
-`CONSTITUTION.md` II.6 judges pure-versus-effectful by return type alone and forbids inferring it
+`CONSTITUTION.md` `CONST-P3` judges pure-versus-effectful by return type alone and forbids inferring it
 from a folder or a package. A `kernel` suffix is a second, weaker statement of a fact the type
 already carries: `Effect<A, E, R>` in the signature settles it, and a rename cannot.
 
@@ -82,13 +82,16 @@ excluded, the same suite over the same code reports **score 74.2, 67 killed, 42 
 
 The forty-two survivors the narrow glob was not looking at sit in `daemon-metrics.kernel.ts`,
 `intensity-window.kernel.ts`, `restart-decision.kernel.ts`, three `supervision-*.state.ts` files and
-`mod.ts`. They are pure decisions, which is what the instrument is for.
+`mod.ts` — names as they stood for this run, before the 2026-08-16 suffix-fleet deletion dropped every
+cell-role suffix from the tree. They are pure decisions, which is what the instrument is for.
 
 The package's own `stryker.config.json` mutate globs leave `*.kernel.ts` out of the mutated scope — `effect-daemon-spec` mutates `src/**/*.workflow.ts` and `src/**/*.schema.ts`, not `*.kernel.ts` — on the ground that kernels are observed instead by colocated K-law property tests, and `requireTestContribution` names that ground: a `*.kernel.property.test.ts` that kills no mutant nothing else kills fails the run. The widened run tested that
 ground and it failed twice over: the kernel files hold survivors, and `requireTestContribution`
 reported that deleting `src/internal/__tests__/restart-decision.kernel.property.test.ts` would leave
 every mutant just as dead. The named substitute observer contributes nothing that another test does
-not already contribute.
+not already contribute. Both the quoted mutate globs and `requireTestContribution` are those of the
+recorded run: the config's only positive mutate glob today is `src/**/*.workflow.ts`, and the gate is armed by
+listing `@systemfsoftware/stryker-test-contribution` in `plugins`.
 
 The widened run also produced 54 timeouts, almost all in `supervisor-body.executor.ts`. That is the
 precondition failing where it should: mutating a module that performs I/O yields a mutant that hangs
@@ -108,7 +111,7 @@ rather than by a rule that has to be pointed at the right file first.
 ## Why the pure boundary is not a new package
 
 The tempting move is to extract every pure decision into one such package and aim the instruments at
-it. That is the folder split under another name: it relocates code by purity, which II.6 forbids
+it. That is the folder split under another name: it relocates code by purity, which `CONST-P3` forbids
 inferring and which the FCIS ruling rejects because folder geometry satisfies the diagram rather than
 the dependency graph, and destroys change-locality. A feature's decision, its schema and its I/O end
 up in three packages.
@@ -124,8 +127,9 @@ rather than only where a filename invited them.
 ## The shape that results
 
 - Modules named for their subject, one concern each, no role marker. Purity read off the signature.
-- The purity rules made uniform. `no-effect-runtime`, `no-ambient-impurity` and `no-throw` are things
-  to want of every module; routing them by suffix left every other module free to do the thing.
+- The purity rules made uniform. `no-effect-runtime`, `no-ambient-impurity` and `no-throw` — the uniform
+  successors of the `kernel-*` rules the fleet deleted, none of the three written yet — are things to want
+  of every module; routing them by suffix left every other module free to do the thing.
 - Mutation and property testing aimed at whole packages, so nothing is unmeasured by omission.
 - Per-role rules re-keyed onto the derivation they were always about, not deleted wholesale. A rule
   whose property is real keeps working once its selector is; a rule with no property to re-key had
@@ -143,7 +147,7 @@ and two manifest facts.
   expression language cannot reproduce an imperative body byte-for-byte — a module that
   accumulates into a mutable local through a `for` loop has no expression form, so compiled
   authorship cannot cover the population it would have to govern.
-- **Folder split, `pure/` beside `shell/`.** Loses to II.6 directly: it re-encodes purity in
+- **Folder split, `pure/` beside `shell/`.** Loses to `CONST-P3` directly: it re-encodes purity in
   placement, which is the same category error as the suffix with a different separator.
 
 ## The falsification, and what it changed

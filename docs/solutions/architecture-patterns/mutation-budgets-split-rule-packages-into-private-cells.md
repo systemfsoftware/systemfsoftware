@@ -48,9 +48,9 @@ Gate the aggregate's packaging invariant on the **built artifact, not the manife
 
 ## Examples
 
-Before: `@systemfsoftware/oxlint-plugin` owns 20 rules, one Stryker config, ~2,075 mutants, one serial CI cell.
+Before: `@systemfsoftware/oxlint-plugin` owns 19 rules, one Stryker config, ~2,075 mutants, one serial CI cell.
 
-After: three private leaves (`effect-native` 8, `tag-discipline` 4, `structure` 8 plus four vendored kernels) each mutate in parallel under the per-package budget; the aggregate re-keys via `recommendedFrom` and spreads, exports stay byte-identical (20 rules, 16 recommended), and the dist guard fails a bare-import leak at build time.
+After: three private leaves (`effect-native` 8, `tag-discipline` 4, `structure` 7 plus two vendored kernels) each mutate in parallel under the per-package budget; the aggregate re-keys via `recommendedFrom` and spreads, exports stay byte-identical (19 rules, 15 recommended — the aggregate registration contract's pre-split literal pins both), and the dist guard fails a bare-import leak at build time.
 
 ## Related
 

@@ -26,8 +26,9 @@ One scratch file per prohibition, holding the proposed compliant form for **one 
 each cohort the hatch would cover**. Run the owning package's own `typecheck`. Read the exit code,
 then delete the file.
 
-Measured on 2026-08-22 for a rule banning hand-written `_tag` members in type positions, against
-five cohorts each independently claimed unmigratable:
+Measured on 2026-08-22 for a rule banning hand-written `_tag` members in type positions
+(`no-manual-tag-member`, shipped by `@systemfsoftware/oxlint-plugin-effect-schema`), against five
+cohorts each independently claimed unmigratable:
 
 | Cohort claimed unmigratable                               | Compliant form the probe compiled                                                                    |
 | --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |

@@ -14,7 +14,7 @@ The law's warrant was measured on arrival: `kernel-no-ambient-impurity` (a now-d
 
 ## Why the package died
 
-- **Zero in-tree callers.** Nothing in the workspace ever registered the law; the umbrella's dependency edge (`packages/all`) was a declaration of intent, not a use.
+- **Zero in-tree callers.** Nothing in the workspace ever registered the law; the umbrella's dependency edge (`@systemfsoftware/all`) was a declaration of intent, not a use.
 - **Effect v4 ships the comparator the package hand-rolled.** `Equal.equals` already treats `NaN` as equal to `NaN` (`repos/effect/packages/effect/src/Equal.ts` special-cases it before object comparison) and does structural equality for records, options, chunks, dates. The package's `Object.is` default existed to dodge a `NaN` flake Effect had already fixed; `ruleOfPurityBy` existed only because that default was wrong for structural codomains.
 - **The gate was vacuous.** The leaf's own check ran its `test` command, which exited 0 with zero test files by configuration (`passWithNoTests`). A green gate that runs nothing certifies nothing.
 - **Nothing shipped.** The registry never saw it (404 at deletion time), so the removal has no adopter blast radius.

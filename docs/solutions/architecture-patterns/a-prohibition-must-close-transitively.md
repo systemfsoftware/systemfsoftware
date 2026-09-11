@@ -26,6 +26,9 @@ Architectural boundaries are usually written as direct statements: this componen
 ## Guidance
 
 **Compute the transitive closure of the permitted relation before accepting a prohibition as enforced.** When `X` is forbidden to reach `Y`, the obligation is not "no direct edge from `X` to `Y`" but "no permitted chain from `X` reaches `Y`". Writing the direct prohibition and stopping leaves the boundary decorative.
+No instrument in this repository computes that closure — turbo's package-boundary audit asks whether an import is
+declared in a manifest, and `import/no-cycle` reports cycles, neither of which answers whether a permitted chain
+reaches the forbidden pair — so the guidance is carried by review until one is written.
 
 The general result is sharper than a reminder to check paths: **a permissive residual makes every prohibition between the laundering pair unenforceable.** If some third component is reachable from `X` and can itself reach `Y`, then that component _is_ the residual, and no prohibition stated directly between `X` and `Y` can bind — not because the check is buggy, but because the relation the check consults still permits the route. The repair is to the relation, never to the check.
 

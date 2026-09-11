@@ -27,7 +27,7 @@ hidden in a scalar or a field, the shape defect `CONST-D4` names, and none was r
 The compiled enforcement now closes the gap: `Workflow.make` refuses a decider whose success
 channel is not a tagged union of at least two `S.TaggedClass` variants sharing one family
 TypeId. The refusal is a compile error at the `make` call, naming the defect in the marker
-(`packages/core/effect/cell/types/src/Workflow.ts` — `DecisionShape` composed from
+(`packages/effect-cell-types/src/Workflow.ts` — `DecisionShape` composed from
 `AtLeastTwoDistinct`, `TaggedMembers`, `SharedTypeId`).
 
 ## Guidance
@@ -53,17 +53,18 @@ is not provenance. What the type layer cannot see, the property tests observe.
 Every site migrates up the ladder, never skipping a rung:
 
 - **Brand-add** — a site already has two `S.TaggedClass` variants but no shared brand: add
-  the family brand only, preserve names and fields (`omp/plugins/omp-claude-compat/src/hooks/admit.workflow.ts`,
-  `omp/plugins/omp-claude-compat/src/settings/settings.workflow.ts`).
+  the family brand only, preserve names and fields (the `omp-claude-compat` plugin's
+  `admit.workflow.ts` and `settings.workflow.ts` — gone from this tree, the plugin having been
+  extracted to its own repository).
 - **Re-author** — a plain record or interface is the decision: promote its real outcome
   dimensions into `S.TaggedClass` variants, each carrying only its valid fields per
-  `CONST-D4` (`omp/plugins/omp-claude-compat/src/hooks/hooks.workflow.ts` — `Block | Allow | Warning`;
-  `packages/testing/mutation/stryker-js/typescript-checker/src/Checker.workflow.ts` —
+  `CONST-D4` (the extracted plugin's `hooks.workflow.ts` — `Block | Allow | Warning`;
+  `packages/stryker-js/stryker-js-typescript-checker/src/check-mutants.workflow.ts` —
   `CheckFinished | RetestRequired`).
 - **Split** — a single aggregate success variant whose consumer branches on a field is a
   hidden state machine: split by the consumer's actual branching
-  (`packages/testing/mutation/stryker-js/engine/src/DryRun.workflow.ts` — `DryRunPassed | DryRunFailed`
-  from a `{ testCount, failedTestCount }` record; `Instrument.workflow.ts` —
+  (`packages/stryker-js/stryker-js-engine/src/dry-run.workflow.ts` — `DryRunPassed | DryRunFailed`
+  from a `{ testCount, failedTestCount }` record; `plan-instrumentation.workflow.ts` —
   `InPlaceInstrument | EphemeralInstrument`, which also killed a
   `backupDirectoryHint: ''` sentinel).
 - **Declassify** — a workflow with genuinely one outcome is not a decision. The logic folds
@@ -73,7 +74,7 @@ Every site migrates up the ladder, never skipping a rung:
 
 Error channels keep their own rules (`S.TaggedError`, inhabited). A refusal the consumer
 renders is a **decision** — promote it to the success union; a genuinely undecidable input
-stays an error. `packages/core/effect/cell/types/tests/__fixtures__/InterpreterDecide.workflow.ts`
+stays an error. `packages/effect-cell-types/tests/__fixtures__/admit-decoded-command.workflow.ts`
 is the model: an over-short id is `Rejected` (success), a negative length `Malformed` (error).
 
 ### Why This Matters
@@ -91,7 +92,7 @@ Two toolchain facts shape the enforcement surface:
 - The shared-TypeId **negatives** are not assertable under tstyche: the assertion compiler
   (TS 6.0.3) leaves a symbol-keyed `keyof` over a class intersection deferred. The refusal
   is real and observed under the package's own `tsc` (TS 7.0.2) — the compile sweep is the
-  failing observer. The gap is recorded in `packages/core/effect/cell/types/test-types/Workflow.tst.ts` and recommends a
+  failing observer. The gap is recorded in `packages/effect-cell-types/test-types/Workflow.tst.ts` and recommends a
   runtime brand law per migrated site as the executable complement.
 
 ## When to Apply
@@ -132,7 +133,7 @@ export class RetestRequired extends S.TaggedClass<RetestRequired>()('RetestRequi
 }
 ```
 
-The consumer dispatches `Match.tag('Finished', …)` / `Match.tag('RetestRequired', …)` +
+The consumer dispatches `Match.tag('CheckFinished', …)` / `Match.tag('RetestRequired', …)` +
 `Match.exhaustive`; the second variant is produced by the `needsRetest` branch of the
 decider, never invented.
 

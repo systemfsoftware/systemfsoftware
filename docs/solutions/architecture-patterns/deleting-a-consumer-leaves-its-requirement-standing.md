@@ -33,17 +33,21 @@ gone, and the build is green.
 
 ## Problem
 
-The stryker CLI's only runtime reader of a sibling package's manifest was the `--llms` manifest
-emitter. It resolved a specifier, read a file, and parsed it, so it carried `FileSystem.FileSystem |
-Path.Path` in its `R` channel. That requirement was written into the root command's `Command` type
-annotation, where the comment justified the annotation by the emitter's own call site: the handler
-called the emitter, the emitter referenced the command being built, and the circular inference
-forced an explicit type.
+The stryker CLI package (`@systemfsoftware/stryker-js-cli`)'s only runtime reader of a sibling
+package's manifest was the `--llms` manifest emitter. It resolved a specifier, read a file, and
+parsed it, so it carried `FileSystem.FileSystem | Path.Path` in its `R` channel. That requirement
+was written into the root command's `Command` type annotation, where the comment justified the
+annotation by the emitter's own call site: the handler called the emitter, the emitter referenced
+the command being built, and the circular inference forced an explicit type.
 
 Deleting the feature deleted the call site — and with it, the stated reason for the annotation —
 while leaving the annotation's environment parameter untouched. `FileSystem.FileSystem` survived in
 exactly two places: the import, and that one type. The module compiled, lint passed, the full
 contract lane passed. Nothing failed.
+
+That instance is history: the `--llms` emitter and the requirement it stranded have since been
+deleted, so this tree currently carries no live instance of the pattern. The mechanism below is what
+the instance measured, and the price it still puts on the next deletion of this shape.
 
 ## Mechanism
 
@@ -132,7 +136,7 @@ Two-sided, and both sides are cheap:
    now-unused import in the same step — the compiler is the detector.
 2. **Delete-the-layer probe.** Only after step 1 proves nothing declares the service, ask whether the
    layer is still needed by another path. Answer it by reading the remaining consumers, not by
-   deleting the layer and seeing what breaks: the run path in this case read the same service
+   deleting the layer and seeing what breaks: the run path in that instance read the same service
    through its own provider, so the layer stayed.
 
 For the guard-shaped residual, the falsification is a paste-back: restore the removed vocabulary

@@ -15,14 +15,14 @@ related_components:
   - oxlint-make-boundary
   - oxlint-plugin-effect-workflow
   - oxlint-plugin-effect-schema
-tags: [oxlint-plugins, tsdown-bundling, devdependency-bundling, drift-test, mirror-rot, standalone-artifacts]
+tags: [oxlint-plugin, tsdown-bundling, devdependency-bundling, drift-test, mirror-rot, standalone-artifacts]
 ---
 
 # Shared kernel mirrors drift where unpinned; private build-bundled packages need no pin
 
 ## Context
 
-Three oxlint plugin packages needed the same two internal modules — the `ImportOrigin` resolver and the `MakeBoundary` locator. Because each plugin publishes a standalone artifact and plugins must not depend on each other, the modules were vendored: one copy per package, with a drift test asserting byte-identity between the copies it knew about. Two of the three mirrors were pinned; one was declared "also mirrored" and left unpinned. The unpinned copy drifted — it grew `isSchemaVocabularyOrigin`, a predicate its siblings never had — before any gate noticed.
+Three oxlint plugin packages needed the same two internal modules — the `ImportOrigin` resolver and the `MakeBoundary` locator. Because each plugin publishes a standalone artifact and plugins must not depend on each other, the modules were vendored: one copy per package, with a drift test asserting byte-identity between the copies it knew about. Two of the three mirrors were pinned; one was declared "also mirrored" and left unpinned. The unpinned copy drifted — it grew `isSchemaVocabularyOrigin`, a predicate its siblings never had — before any gate noticed. The remedy this learning prescribes is realised: the two modules now live once each, as the private packages `@systemfsoftware/oxlint-import-origin` (`packages/oxlint-plugin/import-origin`) and `@systemfsoftware/oxlint-make-boundary` (`packages/oxlint-plugin/make-boundary`), and the mirrors and the drift test are gone.
 
 ## Failure mechanism
 
@@ -34,8 +34,8 @@ Three oxlint plugin packages needed the same two internal modules — the `Impor
 
 **Artifact independence is a packaging property, not a source property.** Published artifacts stay standalone when shared source is compiled into them at build time; the source of truth stays single.
 
-- Shared module → private workspace package, `private: true`.
-- Consumer declares it under `devDependencies` and the bundler inlines it into `dist` (tsdown bundles everything outside `dependencies`/`peerDependencies`; `deps.onlyBundle: false` only silences the hint).
+- Shared module → private workspace package, `private: true` — one package per concern, not one "shared" package named for neither.
+- Consumer declares it under `devDependencies` and the bundler inlines it into `dist` (tsdown bundles everything outside `dependencies`/`peerDependencies`; `deps.onlyBundle: false` only silences the hint). Both live consumers read this way: `oxlint-plugin-effect-schema` declares `@systemfsoftware/oxlint-import-origin`, and `oxlint-plugin-effect-workflow` declares `@systemfsoftware/oxlint-make-boundary`.
 - `dependencies` would externalize the module and force the private package to be published — exactly the coupling to avoid.
 
 ## Guidance
@@ -44,7 +44,7 @@ Three oxlint plugin packages needed the same two internal modules — the `Impor
 - Bundle via devDependency; never list the private package under `dependencies` of a published package.
 - Delete the mirrors and the drift test in the same change; a pin whose mirrors are gone is dead weight, and a mirror whose pin is gone is an unobserved drift surface.
 - Vocabulary-specific logic extracted from a drifted mirror belongs to the package whose vocabulary it encodes (the schema predicate returned to the schema plugin), not to the shared module.
-- A shared package with no tests of its own must not own a mutation config: CI enrollment predicates keyed on config presence would run a test-less package vacuously red. Its behavior is graded through the consumers' suites; state that tradeoff in the package's own AGENTS.md rather than papering over it.
+- A shared package with no tests of its own must not own a mutation config: CI enrollment predicates keyed on config presence would run a test-less package vacuously red — a mechanism this workspace asserts and has never measured. Its behavior is graded through the consumers' suites, and the package's own AGENTS.md carries the tradeoff under a shell gate asserting that no `stryker.config.json` and no test directory exist.
 
 ## Why This Works
 

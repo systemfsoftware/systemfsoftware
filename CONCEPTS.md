@@ -163,7 +163,9 @@ A drifted key is worse than a missing one. Retrieving nothing leaves the author 
 
 ### Constitution watchdog
 
-A `WATCHDOG.md` that `@import`s `CONSTITUTION.md` into the omp advisor's system prompt, making the advisor — a separate model reviewing transcript deltas — police code changes against the 21 `gate: review` rules no command enforces. The 13 rules with lint/type-checker/mutation gates are excluded; the advisor does not re-check what the toolchain already catches. Not a gate: the advisor raises `concern`/`nit`/silent, never pass/fail. The mechanism that gives `gate: review` rules Reach — the constitution was present in neither the window (the primary agent does not read it) nor a gate (no command checks it) until the watchdog put it in the advisor's window.
+A `WATCHDOG.md` that `@import`s `CONSTITUTION.md` into the omp advisor's system prompt, making the advisor — a separate model reviewing transcript deltas — police code changes against the 22 rules `CONSTITUTION.md` marks `gate: review` and no command enforces; the 16 it marks `gate: lint|type-checker|mutation` are excluded, so the advisor does not re-check what the toolchain already catches. Not a gate: the advisor raises `concern`/`nit`/silent, never pass/fail. The mechanism that gives `gate: review` rules Reach — the constitution sits in neither the window (the primary agent does not read it) nor a gate (no command checks it) unless the watchdog puts it in the advisor's window.
+
+Not activated: no `WATCHDOG.md` exists at the repo root or in the harness config directory, so nothing currently puts the constitution in the advisor's window. The rule counts above are read from `CONSTITUTION.md`, whose `gate:` value on each rule block is the whole source.
 
 ## Test execution
 

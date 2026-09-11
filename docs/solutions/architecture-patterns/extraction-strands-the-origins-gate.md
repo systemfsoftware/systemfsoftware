@@ -18,7 +18,7 @@ tags:
 
 ## Problem
 
-Splitting `@systemfsoftware/effect-schema-law` down to its namesake export left the origin package with **zero tests**, and its own doctrine went on citing the package's `test` command as the check for both codec laws. The command still exited 0. It was running nothing.
+Splitting `@systemfsoftware/effect-schema-law` down to its namesake export left the origin package with **zero tests**, and its own doctrine went on citing the package's `test` command as the check for both codec laws. The command still exited 0. It was running nothing. It is `pnpm --filter @systemfsoftware/effect-schema-law test`, and `packages/effect-schema-law/AGENTS.md` still names it as the gate for the laws that stayed. Its suite has since grown exactly one inhabitant — the in-source block beside `recursionLaws` in `recursion-laws.ts` — and no test in it reaches `ruleOfSchemas`, which lives in `RuleOfSchemas.ts` with no block of its own and registers its laws into whichever suite calls it. Inhabited, and still certifying nothing about the symbol the command is cited for.
 
 The extraction was correct: `refutes`, `scanObligations` and the weakening chain left the module, `boundedUnion` went to its own package, and `ruleOfSchemas` stayed. What nobody wrote down is that under an in-source test convention, **a module's tests are bytes inside the module**, so a file move is simultaneously a test move — and the surviving export's coverage was never in its own module at all. It rode along in a sibling that left. Where the departed code lands does not soften this: two of the three later came back as a second entry on the same package, and the origin's gate was already empty by then.
 
@@ -64,6 +64,8 @@ for pred in decisions(R):
     inject(negate(pred)); assert suite(R) == RED
     restore();            assert suite(R) == GREEN
 ```
+
+The count line is prescription, not measurement. No gate in this workspace asserts a test count: `packages/effect-schema-law/AGENTS.md` gates its law rule on the command's exit code alone, with no count and no inverted predicate, so the `|tests(R)| == expected` above is ungraded — the bare-command form the code smells name below.
 
 The inversion loop is the part that transfers. It is cheap for a pure decision, it needs no mutation-testing run, and it is the only evidence that separates "the predicate holds" from "the predicate cannot fail".
 
