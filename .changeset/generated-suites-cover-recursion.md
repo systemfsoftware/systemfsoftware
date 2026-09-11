@@ -5,8 +5,6 @@
 "@systemfsoftware/stryker-js-vitest-runner": none
 "@systemfsoftware/stryker-test-contribution": none
 "@systemfsoftware/all": none
-"@systemfsoftware/arethetypeswrong": none
-"@systemfsoftware/arethetypeswrong-cli": none
 "@systemfsoftware/effect-schema-discovery": none
 ---
 
