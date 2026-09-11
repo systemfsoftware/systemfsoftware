@@ -147,12 +147,6 @@ catalogs:
     mutation-testing-elements:
       specifier: 3.7.3
       version: 3.7.3
-    mutation-testing-metrics:
-      specifier: 3.7.3
-      version: 3.7.3
-    mutation-testing-report-schema:
-      specifier: 3.7.3
-      version: 3.7.3
 
 overrides:
   fast-check: ^4
@@ -193,12 +187,6 @@ importers:
       lint-staged:
         specifier: ^17.1.0
         version: 17.1.0
-      mutation-testing-elements:
-        specifier: catalog:stryker
-        version: 3.7.3
-      mutation-testing-metrics:
-        specifier: catalog:stryker
-        version: 3.7.3
       oxc-parser:
         specifier: 'catalog:'
         version: 0.140.0
@@ -2131,10 +2119,10 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
-      mutation-testing-report-schema:
-        specifier: catalog:stryker
-        version: 3.7.3
     devDependencies:
+      '@effect/vitest':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
       '@systemfsoftware/all':
         specifier: workspace:^
         version: link:../../oxlint-plugin/all
@@ -2244,9 +2232,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.9(vitest@4.1.10)
-      mutation-testing-report-schema:
-        specifier: catalog:stryker
-        version: 3.7.3
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)
@@ -2271,6 +2256,9 @@ importers:
       '@noble/hashes':
         specifier: 1.8.0
         version: 1.8.0
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.1
       '@systemfsoftware/effect-cell-types':
         specifier: workspace:^
         version: link:../../effect-cell-types
@@ -2286,12 +2274,6 @@ importers:
       minimatch:
         specifier: ~10.2.4
         version: 10.2.5
-      mutation-testing-metrics:
-        specifier: catalog:stryker
-        version: 3.7.3
-      mutation-testing-report-schema:
-        specifier: catalog:stryker
-        version: 3.7.3
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -2341,6 +2323,9 @@ importers:
 
   packages/stryker-js/stryker-js-html-reporter:
     dependencies:
+      '@effect/platform-node-shared':
+        specifier: 'catalog:'
+        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
       '@systemfsoftware/effect-cell-types':
         specifier: workspace:^
         version: link:../../effect-cell-types
@@ -2348,12 +2333,6 @@ importers:
         specifier: workspace:^
         version: link:../stryker-js
       mutation-testing-elements:
-        specifier: catalog:stryker
-        version: 3.7.3
-      mutation-testing-metrics:
-        specifier: catalog:stryker
-        version: 3.7.3
-      mutation-testing-report-schema:
         specifier: catalog:stryker
         version: 3.7.3
     devDependencies:
@@ -8138,8 +8117,7 @@ snapshots:
 
   '@noble/hashes@1.8.0': {}
 
-  '@opentelemetry/api@1.9.1':
-    optional: true
+  '@opentelemetry/api@1.9.1': {}
 
   '@oxc-parser/binding-android-arm-eabi@0.127.0':
     optional: true

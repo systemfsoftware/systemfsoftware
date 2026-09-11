@@ -498,7 +498,7 @@ export function emitNullScoreVerdict(
   stream: RunEventStream,
   mode: ResolvedMode,
   thresholds: schema.Thresholds,
-  config: object,
+  config: Readonly<Record<string, unknown>>,
   basePath: string,
   pathService: Path.Path,
 ): Effect.Effect<void, never, never> {

@@ -233,6 +233,12 @@ A schema for a payload the workspace does not own, restated in members it does. 
 
 The mark is a phantom on the schema and never on the decoded value, because a brand on the value forces nothing: a schema's own escape hatch and a bare cast each produce a branded value with every refinement skipped. What the mark cannot do is refuse a determined author. TypeScript is structural, so any value legitimately carrying the phantom donates it to any other type by intersection, and that route names nothing — no constructor, no alias, no marker. A wire declaration therefore refuses the accidental case, and deciding admissibility for the rest belongs to a checker that resolves where a member's type was declared, never how it came to be marked.
 
+### Reporter event protocol
+
+The published contract between the stryker-js host and a reporter plugin: a factory receiving validated options and W3C trace context, returning an async consumer that pulls a closed four-kind event union (`dryRunCompleted`, `mutationTestingPlanReady`, `mutantTested`, `mutationTestReportReady`) over an `AsyncIterable`. End of iterable is completion, a consumer rejection is a contained failure, and `iterator.return()` is cancellation. The event union is exported as a `StandardSchemaV1` object from `@systemfsoftware/stryker-js`, so a plugin author depends only on that package and never imports `effect`.
+
+Distinct from the machine-stream `RunEvent` alphabet: the reporter protocol is an in-process plugin ABI, the machine stream is the on-the-wire NDJSON surface.
+
 ### Description
 
 One sandwich, authored as a `Cell.layer` spec — read (impure), decode and decide (pure), encode (pure), write (impure) — and compiled into a Cell: a single function from command to response. The assembler chains the phases in that order internally; the author cannot author a different order, and a hand-built record claiming one is not expressible on the published surface. A **phase** is one named step — a read, a decode, a decision, an encode, or a write. One Cell is one sandwich; a site whose real order writes before it can classify is two Cells composed in the calling `Effect.gen` (or through `Cell.andThen`), with the shell owning the binding between them — a later read that needs durable state an earlier write created reads it by re-gathering, and a response that becomes the next command travels as an ordinary generator binding.

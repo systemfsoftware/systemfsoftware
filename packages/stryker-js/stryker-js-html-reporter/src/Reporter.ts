@@ -1,18 +1,12 @@
-import type { MutantResult } from '@systemfsoftware/stryker-js/Mutant'
-import { writeOutputFile } from '@systemfsoftware/stryker-js/output-file'
-import type { ProvidedStrykerOptions } from '@systemfsoftware/stryker-js/provided-options'
-import type {
-  DryRunCompletedEvent,
-  MutationTestingPlanReadyEvent,
-  MutationTestMetricsResult,
-} from '@systemfsoftware/stryker-js/Reporter'
-import { ReporterFailed } from '@systemfsoftware/stryker-js/Reporter'
-import type { ReporterService } from '@systemfsoftware/stryker-js/Reporter'
-import * as Cause from 'effect/Cause'
+import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
+import * as NodePath from '@effect/platform-node-shared/NodePath'
+import { MutationTestReportReady } from '@systemfsoftware/stryker-js/Reporter'
+import type { ReporterFactory } from '@systemfsoftware/stryker-js/ReporterEvent'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
+import * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
-import type * as schema from 'mutation-testing-report-schema/api'
+import * as S from 'effect/Schema'
 
 import { HtmlDocument, HtmlReportCommand } from './Reporter.schema.js'
 
@@ -51,46 +45,32 @@ function buildReportHtml(report: unknown, scriptContent: string): string {
 export const buildHtmlDocument = (command: HtmlReportCommand): HtmlDocument =>
   HtmlDocument.make({ html: buildReportHtml(command.report, command.scriptContent) })
 
-export const makeHtmlReporter = (params: {
-  readonly options?: ProvidedStrykerOptions
-  readonly fs: FileSystem.FileSystem
-  readonly path: Path.Path
-}): ReporterService => {
-  const options = params.options
+const BUNDLE_SPECIFIER = 'mutation-testing-elements/dist/mutation-test-elements.js'
 
-  return {
-    onDryRunCompleted: (_event: DryRunCompletedEvent) => Effect.void,
-    onMutationTestingPlanReady: (_event: MutationTestingPlanReadyEvent) => Effect.void,
-    onMutantTested: (_result: MutantResult) => Effect.void,
-    onMutationTestReportReady: (report: schema.MutationTestResult, metrics: MutationTestMetricsResult) =>
-      Effect.gen(function*() {
-        const path = yield* Path.Path
-        const fs = yield* FileSystem.FileSystem
-        const scriptPath = yield* path.fromFileUrl(
-          new URL(import.meta.resolve('mutation-testing-elements/dist/mutation-test-elements.js')),
-        )
-        const scriptContent = yield* fs.readFileString(scriptPath)
-        void metrics
-        const html = buildHtmlDocument(HtmlReportCommand.make({ report, scriptContent })).html
-        if (options === undefined) return
-        const fileName = options.htmlReporter.fileName
-        yield* Effect.logDebug(`Using file "${fileName}"`)
-        yield* writeOutputFile(fs, path, fileName, html)
-        const fileUrl = yield* path.toFileUrl(path.resolve(fileName))
-        yield* Effect.logInfo(`Your report can be found at: ${fileUrl.href}`)
-      }).pipe(
-        Effect.provideService(FileSystem.FileSystem, params.fs),
-        Effect.provideService(Path.Path, params.path),
-        Effect.catchCause((cause) =>
-          Effect.fail(
-            new ReporterFailed({
-              reporterName: 'html',
-              event: 'onMutationTestReportReady',
-              cause: Cause.pretty(cause),
-            }),
-          )
-        ),
-      ),
-    wrapUp: Effect.void,
+const nodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)
+
+const readBundleContent = Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem
+  const path = yield* Path.Path
+  const bundlePath = yield* path.fromFileUrl(new URL(import.meta.resolve(BUNDLE_SPECIFIER)))
+  return yield* fs.readFileString(bundlePath)
+})
+
+const writeHtmlFile = (fileName: string, html: string) =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    yield* fs.makeDirectory(path.dirname(fileName), { recursive: true })
+    yield* fs.writeFileString(fileName, html)
+  })
+export const makeHtmlReporter: ReporterFactory = (options, _init) => async (events) => {
+  const fileName = options.htmlReporter.fileName
+  let bundleContent: string | undefined
+  for await (const event of events) {
+    if (!S.is(MutationTestReportReady)(event)) continue
+    bundleContent ??= await Effect.runPromise(Effect.provide(readBundleContent, nodeFsPathLayer))
+    const html = buildHtmlDocument(HtmlReportCommand.make({ report: event.report, scriptContent: bundleContent }))
+      .html
+    await Effect.runPromise(Effect.provide(writeHtmlFile(fileName, html), nodeFsPathLayer))
   }
 }

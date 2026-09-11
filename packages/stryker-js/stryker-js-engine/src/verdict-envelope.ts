@@ -1,49 +1,23 @@
 import { randomBytes } from '@noble/hashes/utils'
+import { calculateMetrics } from '@systemfsoftware/stryker-js/Metrics'
 import type { MutantStatus } from '@systemfsoftware/stryker-js/Mutant'
+import type * as schema from '@systemfsoftware/stryker-js/Report'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as S from 'effect/Schema'
-import { calculateMutationTestMetrics } from 'mutation-testing-metrics'
-import type * as schema from 'mutation-testing-report-schema/api'
 
 import type { ModeSignal, OutputMode } from './output-mode.js'
 
 const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
 
-/**
- * U4 — the verdict envelope (R5, R11, R20): the single JSON document machine
- * mode prints to stdout at the end of a run. Everything an agent needs to
- * act without opening the report file, including the survivor re-run
- * matching key per actionable mutant (R20 bounds the list). All functions
- * here are pure over the report — no I/O side effects, no randomness except
- * inside `generateRunId`.
- */
 export const VERDICT_ENVELOPE_SCHEMA_VERSION = '1.1'
 
-/**
- * The statuses a `verdict.mutants` entry (and a `mutant` stream line, U7) is
- * recorded for (R20). `Killed`, `Ignored`, and `CompileError` are reported
- * as counts only: the full per-mutant record stays in the report file, and
- * enumerating killed mutants served no consumer while pushing the terminal
- * line past the 64 KB limit of `bufio.Scanner`-class readers. Measured:
- * `oxlint-plugins/effect-workflow` produced a 2164-entry, ~440 KB line with
- * zero actionable entries. This is the single definition of the R20 filter,
- * shared with the progress stream.
- */
 export const ACTIONABLE_STATUSES = ['Survived', 'NoCoverage', 'Timeout', 'RuntimeError'] as const
 
-/**
- * Whether `status` is actionable (R20) — one of `ACTIONABLE_STATUSES`.
- */
 export function isActionableStatus(status: MutantStatus): boolean {
   return ACTIONABLE_STATUSES.some((actionable) => actionable === status)
 }
 
-/**
- * One mutant as the envelope reports it. `file` is the report's relative file
- * key; `location`/`mutator`/`replacement` are exactly the survivor re-run
- * matching key (R10/R11).
- */
 export interface VerdictMutant {
   readonly id: string
   readonly file: string
@@ -53,10 +27,6 @@ export interface VerdictMutant {
   readonly status: MutantStatus
 }
 
-/**
- * The configured thresholds. `break` rides along even though the report
- * schema does not declare it — it is the threshold the exit code depends on.
- */
 export interface VerdictThresholds {
   readonly high: number
   readonly low: number
@@ -74,12 +44,6 @@ export interface VerdictCounts {
   readonly pending: number
 }
 
-/**
- * The full verdict document. `score` and `reportFile` are `null` for a run
- * with zero mutants (AE3): there is no score to report and no report file was
- * written. `mutants` is bounded to `ACTIONABLE_STATUSES` (R20) — see that
- * definition for why the remaining statuses are counts only.
- */
 export interface VerdictEnvelope {
   readonly schemaVersion: string
   readonly runId: string
@@ -94,12 +58,6 @@ export interface VerdictEnvelope {
 
 const CROCKFORD_BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 
-/**
- * A ULID-shaped run identifier: 48 bits of millisecond time followed by 80
- * random bits, Crockford base32-encoded into exactly 26 characters. The time
- * prefix keeps ids roughly sortable; the randomness makes collisions
- * negligible.
- */
 export function generateRunId(): string {
   const bytes = new Uint8Array(16)
   const now = new Date().getTime()
@@ -128,14 +86,6 @@ export function generateRunId(): string {
   return chars
 }
 
-/**
- * The resolved options the report helper embeds as `report.config` (it writes
- * `config: this.options`). Decoded through a schema so the schema is the
- * single source of the shape — the prior `in`-narrowing chain is deleted.
- * The report schema types `config` as `{}`, while the runtime value is the full
- * resolved `StrykerOptions` with its index signature; `StructWithRest` allows
- * the extra keys.
- */
 function embeddedConfig(
   report: schema.MutationTestResult,
 ): {
@@ -180,8 +130,7 @@ export function buildVerdictEnvelope(
   pathService: Path.Path,
 ): VerdictEnvelope {
   const { jsonReporterFileName } = embeddedConfig(report)
-  const metrics = calculateMutationTestMetrics(report)
-    .systemUnderTestMetrics.metrics
+  const metrics = calculateMetrics(report.files).metrics
   const hasMutants = metrics.totalMutants > 0
   let score: number | null = null
   if (hasMutants && Number.isFinite(metrics.mutationScore)) {

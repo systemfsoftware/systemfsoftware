@@ -22,11 +22,10 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint --format=${f:-default}"
   },
   "dependencies": {
+    "@effect/platform-node-shared": "catalog:",
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/stryker-js": "workspace:^",
-    "mutation-testing-elements": "catalog:stryker",
-    "mutation-testing-metrics": "catalog:stryker",
-    "mutation-testing-report-schema": "catalog:stryker"
+    "mutation-testing-elements": "catalog:stryker"
   },
   "devDependencies": {
     "@systemfsoftware/all": "workspace:^",

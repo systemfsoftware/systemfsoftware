@@ -1,14 +1,3 @@
-/**
- * The CLI contract lane (U2). Characterizes what the packed `stryker` tarball
- * does TODAY when an agent harness drives it, so PR-A's rewrites of the
- * presentation path cannot change the observable surface in silence.
- *
- * Every assertion here was captured from a real run of the real tarball in a
- * real container. Three scenarios pin behaviour that is wrong today - the run
- * command rejects the output-format and json options, and prose keeps its
- * colour codes when no terminal is listening - so a later unit that fixes any
- * of them turns this lane red on purpose rather than by accident.
- */
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 
@@ -70,7 +59,6 @@ const parseStream = (stdout: string): readonly StreamLine[] =>
     .filter((line) => line.trim().startsWith('{'))
     .map((line) => decodeStreamLine(line))
 
-/** `checkExpect.any` is typed `any` by vitest; the matcher's shape is untyped by design. */
 const anyNumberMatcher: unknown = checkExpect.any(Number)
 
 const invoke = (
@@ -130,13 +118,6 @@ interface CorePurityProbe {
 const CORE_PACKAGE_MANIFEST = `${WORKDIR}/node_modules/@systemfsoftware/stryker-js-engine/package.json`
 const CLI_PACKAGE_MANIFEST = `${WORKDIR}/node_modules/@systemfsoftware/stryker-js-cli/package.json`
 
-/**
- * U9: core's imports used to run `guardMinimalNodeVersion()` at module scope,
- * so a mere import could write to stderr and throw. The guard moved to the
- * cli package; core is now side-effect-free. This probe re-asserts the old
- * red-by-design property as a green one: every entry core declares today must
- * import silently, under a real per-entry node process (R19, R33).
- */
 const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never, StrykerCli> =>
   Effect.gen(function*() {
     const cli = yield* StrykerCli
@@ -156,8 +137,6 @@ const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never,
     const imports: CoreEntryImport[] = []
     for (const entry of entries) {
       const specifier = `@systemfsoftware/stryker-js-engine${entry.slice(1)}`
-      // The specifier travels in the environment so a future entry's spelling
-      // can never break the shell quoting of the probe command itself.
       const probe = yield* cli.sh('node --input-type=module -e "await import(process.env.CORE_ENTRY)"', {
         ...options,
         env: { CORE_ENTRY: specifier },
@@ -183,11 +162,6 @@ const terminal = (observed: Observed): StreamLine => {
   return last
 }
 
-/**
- * Mutants are tested concurrently, so the order survivors reach stdout varies
- * between runs. Sorting by mutator name before comparing keeps the assertion
- * about which mutations survived rather than about which finished first.
- */
 const byMutatorName = <T extends { readonly mutator?: string | undefined }>(
   lines: readonly T[],
 ): readonly T[] => [...lines].sort((left, right) => String(left['mutator']).localeCompare(String(right['mutator'])))
@@ -427,7 +401,7 @@ Feature('Driving the mutation tester from an agent harness')
     )
 
     scenarioOutline(
-      'Asking a run to <request> is refused today, even though the tool knows the two output styles',
+      'Asking a run to <request> is refused as something the tool does not recognise',
       [
         {
           request: 'print plain text',
@@ -531,7 +505,7 @@ Feature('Driving the mutation tester from an agent harness')
         Then('not one machine-readable line is written')((s) => {
           checkExpect(s.observed.lines).toEqual([])
         }),
-        Then('the prose still carries colour codes today, with nothing on the far end able to read them')((s) => {
+        Then('the prose carries colour codes that nothing on the far end reads')((s) => {
           const escape = String.fromCharCode(27)
           checkExpect(s.observed.stdout).toContain(`${escape}[`)
         }),
@@ -680,7 +654,7 @@ Feature('Driving the mutation tester from an agent harness')
     )
 
     scenario(
-      'Importing any declared part of the core package stays silent while the tool alone refuses unsupported Node versions',
+      'Importing every declared part of the core package stays silent, and the tool alone refuses unsupported Node versions',
       Gherkin.Do.pipe(
         Given('a container that has the packed core and cli packages installed')(
           'fixture',

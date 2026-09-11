@@ -8,11 +8,11 @@ import { FastCheck as fc } from 'effect/testing'
 import {
   CheckFinished,
   checkMutants,
-  CheckMutantsInput,
   DiagnosticInUnrelatedFileError,
   DiagnosticWithoutFileError,
   RetestRequired,
 } from '../check-mutants.workflow.js'
+import { CheckMutantsInput } from '../CheckMutants.schema.js'
 
 const CHECK_MUTANTS_FAMILY = Symbol.for('@systemfsoftware/stryker-js-typescript-checker/CheckMutants')
 
@@ -29,6 +29,8 @@ const isDisjoint = (left: ReadonlySet<string>, right: ReadonlySet<string>): bool
   [...left].every((value) => !right.has(value))
 
 const fileArb = fc.integer({ min: 0, max: 100000 }).map((n) => `src/mod-${n}.ts`)
+
+const mutantIdArb = fc.integer({ min: 0, max: 1000 }).map((n) => n.toString())
 
 const mutantInFile = (id: string, fileName: string): Mutant =>
   new Mutant({
@@ -48,7 +50,7 @@ const nodeFor = (
 })
 
 const emptyDiagnosticsInputArb: fc.Arbitrary<CheckMutantsInput> = fc
-  .tuple(fileArb, fc.array(fc.uuid(), { minLength: 1, maxLength: 2 }))
+  .tuple(fileArb, fc.array(mutantIdArb, { minLength: 1, maxLength: 2 }))
   .map(
     ([file, ids]) =>
       new CheckMutantsInput({
@@ -63,7 +65,7 @@ const ambiguousGroupInputArb: fc.Arbitrary<CheckMutantsInput> = fc
   .map(
     ([file, text]) =>
       new CheckMutantsInput({
-        mutants: [mutantInFile('retest-a', file), mutantInFile('retest-b', file)],
+        mutants: [mutantInFile('0', file), mutantInFile('1', file)],
         diagnostics: [{ fileName: file, text }],
         nodes: { [file]: nodeFor(file) },
       }),

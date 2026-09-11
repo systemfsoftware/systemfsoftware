@@ -22,9 +22,9 @@ const checkExpect = expect
 
 import { NodePath } from '@effect/platform-node'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
+import type * as schema from '@systemfsoftware/stryker-js/Report'
 import { Effect } from 'effect'
 import * as Path from 'effect/Path'
-import type * as schema from 'mutation-testing-report-schema/api'
 
 import {
   buildVerdictEnvelope,
@@ -88,7 +88,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
   scenario(
     'Two run-id generations produce different ids',
     Gherkin.Do.pipe(
-      When('two run ids are generated')('ids', () => Effect.sync(() => [generateRunId(), generateRunId()])),
+      When('the tool generates two run ids')('ids', () => Effect.sync(() => [generateRunId(), generateRunId()])),
       Then('the ids differ')((s: { ids: readonly string[] }) => {
         checkExpect(s.ids[0]).not.toBe(s.ids[1])
       }),
