@@ -44,8 +44,7 @@ export interface TerminatingRecursionOptions<
   readonly depthSize: 'small' | 'medium' | 'large'
 }
 
-/** The declared ceiling: a value's deepest generated nesting is this bound. */
-const MEMBER_LEVELS_PER_DESCENT = 1
+const MEMBER_OBJECT_LEVELS_PER_DESCENT = 1
 
 const recursionHookOf = (options: TerminatingRecursionOptions): TerminatingRecursionHook => {
   const { base, depthSize, identifier, maxDepth, recur } = options
@@ -56,18 +55,20 @@ const recursionHookOf = (options: TerminatingRecursionOptions): TerminatingRecur
       fc: typeof FastCheck,
       context: S.Annotations.ToArbitrary.Context,
     ) => S.Annotations.ToArbitrary.Output<unknown> =>
+    // Collapse past the cap lands on the FIRST arbitrary — base — never on terminal.
     (fc) => {
-      const baseArbitrary = fc.oneof(...base.map((member) => S.toArbitrary(member)(fc)))
-      if (memberDerivationInFlight) return baseArbitrary
+      const baseArbitraries = base.map((member) => S.toArbitrary(member)(fc))
+      const baseOnlyArbitrary = fc.oneof(...baseArbitraries)
+      if (memberDerivationInFlight) return baseOnlyArbitrary
       memberDerivationInFlight = true
       try {
         return {
           arbitrary: fc.oneof(
             { depthIdentifier: identifier, maxDepth, depthSize },
-            ...base.map((member) => S.toArbitrary(member)(fc)),
+            ...baseArbitraries,
             ...recur.map((member) => S.toArbitrary(member)(fc)),
           ),
-          terminal: baseArbitrary,
+          terminal: baseOnlyArbitrary,
         }
       } finally {
         memberDerivationInFlight = false
@@ -87,7 +88,7 @@ const maxNestingDepthOf = (value: unknown): number => {
     return value.reduce((deepest: number, element) => Math.max(deepest, maxNestingDepthOf(element)), 0)
   }
   if (typeof value === 'object' && value !== null) {
-    return MEMBER_LEVELS_PER_DESCENT +
+    return MEMBER_OBJECT_LEVELS_PER_DESCENT +
       Object.values(value).reduce((deepest: number, child) => Math.max(deepest, maxNestingDepthOf(child)), 0)
   }
   return 0

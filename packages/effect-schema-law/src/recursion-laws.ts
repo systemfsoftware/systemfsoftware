@@ -135,7 +135,6 @@ export const recursionLaws = <A, I>(label: string, schema: S.Codec<A, I>): void 
 }
 
 if (import.meta.vitest !== void 0) {
-  // Guard-local: a static import would ship the runner peers in the published graph.
   const { it } = await import('@effect/vitest')
   const { Schema: S, Exit } = await import('effect')
   const { FastCheck: fc } = await import('effect/testing')

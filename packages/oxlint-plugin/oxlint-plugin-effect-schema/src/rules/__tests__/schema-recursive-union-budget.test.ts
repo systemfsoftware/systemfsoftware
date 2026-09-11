@@ -188,7 +188,7 @@ let ExprSchema: S.Schema<Expr>
 
 export const Leaf: S.Schema<Expr> = S.Struct({ type: S.Literal('Leaf'), next: S.Unknown })
 
-const boundedUnion = (members: readonly S.Schema<Expr>[]): S.Schema<Expr> => S.Union(members)
+const buildUnion = (members: readonly S.Schema<Expr>[]): S.Schema<Expr> => S.Union(members)
 
 export const Branch1: S.Schema<Expr> = S.suspend(() => S.Struct({ type: S.Literal('b1'), next: ExprSchema }))
 export const Branch2: S.Schema<Expr> = S.suspend(() => S.Struct({ type: S.Literal('b2'), next: ExprSchema }))
@@ -197,7 +197,7 @@ export const Branch4: S.Schema<Expr> = S.suspend(() => S.Struct({ type: S.Litera
 export const Branch5: S.Schema<Expr> = S.suspend(() => S.Struct({ type: S.Literal('b5'), next: ExprSchema }))
 export const Branch6: S.Schema<Expr> = S.suspend(() => S.Struct({ type: S.Literal('b6'), next: ExprSchema }))
 
-ExprSchema = boundedUnion([Leaf, Branch1, Branch2, Branch3, Branch4, Branch5, Branch6])`
+ExprSchema = buildUnion([Leaf, Branch1, Branch2, Branch3, Branch4, Branch5, Branch6])`
 
 const DECLARE_TYPE_PARAMETER_SCHEMA = `import * as S from 'effect/Schema'
 

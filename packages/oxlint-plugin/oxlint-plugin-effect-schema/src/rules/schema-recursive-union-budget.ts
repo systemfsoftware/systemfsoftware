@@ -15,6 +15,8 @@ import { isSchemaVocabularyOrigin } from './SchemaVocabulary.js'
 
 export type MessageIds = 'recursiveUnionBudget'
 
+const MESSAGE_ID: MessageIds = 'recursiveUnionBudget'
+
 type GetScope = (node: ESTree.Node) => unknown
 
 type Bindings = ReadonlyMap<string, ESTree.Node>
@@ -211,7 +213,7 @@ export const schemaRecursiveUnionBudget = defineRule({
           if (report === null) continue
           context.report({
             node: report.node,
-            messageId: 'recursiveUnionBudget',
+            messageId: MESSAGE_ID,
             data: { name: NAME, expected: EXPECTED, actual: actualWithSuspends(report.count), fix: FIX },
           })
         }
