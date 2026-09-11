@@ -32,12 +32,7 @@ export default defineConfig({
   deps: {
     onlyBundle: false,
   },
-  // `devExports` keeps the source condition in `exports` for in-repo resolution and
-  // emits a `publishConfig.exports` without it. Without this block tsdown writes no
-  // publish override, so the condition ships: a consumer whose tsconfig or bundler
-  // enables it resolves to `./src/index.ts`, which the tarball does not contain.
   exports: {
-    devExports: '@systemfsoftware/source',
     customExports: injectTypes,
   },
 })

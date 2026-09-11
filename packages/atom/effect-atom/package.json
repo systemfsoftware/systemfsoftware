@@ -21,42 +21,34 @@
   "type": "module",
   "exports": {
     ".": {
-      "@systemfsoftware/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
     "./Atom": {
-      "@systemfsoftware/source": "./src/Atom.ts",
       "types": "./dist/Atom.d.ts",
       "default": "./dist/Atom.mjs"
     },
     "./AtomHttpApi": {
-      "@systemfsoftware/source": "./src/AtomHttpApi.ts",
       "types": "./dist/AtomHttpApi.d.ts",
       "default": "./dist/AtomHttpApi.mjs"
     },
     "./AtomRef": {
-      "@systemfsoftware/source": "./src/AtomRef.ts",
       "types": "./dist/AtomRef.d.ts",
       "default": "./dist/AtomRef.mjs"
     },
     "./AtomRpc": {
-      "@systemfsoftware/source": "./src/AtomRpc.ts",
       "types": "./dist/AtomRpc.d.ts",
       "default": "./dist/AtomRpc.mjs"
     },
     "./Hydration": {
-      "@systemfsoftware/source": "./src/Hydration.ts",
       "types": "./dist/Hydration.d.ts",
       "default": "./dist/Hydration.mjs"
     },
     "./Registry": {
-      "@systemfsoftware/source": "./src/Registry.ts",
       "types": "./dist/Registry.d.ts",
       "default": "./dist/Registry.mjs"
     },
     "./Result": {
-      "@systemfsoftware/source": "./src/Result.ts",
       "types": "./dist/Result.d.ts",
       "default": "./dist/Result.mjs"
     },
@@ -81,7 +73,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",

@@ -144,7 +144,9 @@ export const Flat = Schema.Struct({ name: Schema.String, count: Schema.Int })
 `
 
 const makeRuntimePackage = (files: Record<string, string>): string => {
-  const root = mkdtempSync(join(PACKAGE_ROOT, 'temp', 'law-suite-'))
+  const tempRoot = join(PACKAGE_ROOT, 'temp')
+  mkdirSync(tempRoot, { recursive: true })
+  const root = mkdtempSync(join(tempRoot, 'law-suite-'))
   mkdirSync(join(root, 'src'), { recursive: true })
   for (const [relativePath, contents] of Object.entries(files)) {
     writeFileSync(join(root, 'src', relativePath), contents)

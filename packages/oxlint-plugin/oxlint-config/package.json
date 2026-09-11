@@ -20,6 +20,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@effect/tsgo": "^0.36.5",
     "@systemfsoftware/oxlint-plugin": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-dmmf": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-entrypoint": "workspace:^",

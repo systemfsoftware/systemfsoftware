@@ -15,10 +15,7 @@
     "schema"
   ],
   "exports": {
-    ".": {
-      "@systemfsoftware/source": "./src/index.ts",
-      "default": "./dist/index.mjs"
-    },
+    ".": "./dist/index.mjs",
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -40,7 +37,7 @@
     "@effect/platform-node-shared": "catalog:",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/all": "workspace:^",
-    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",

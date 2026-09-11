@@ -18,7 +18,7 @@ export default defineConfig({
   },
   format: 'esm',
   dts: true,
-  exports: { devExports: '@systemfsoftware/source' },
+  exports: true,
   clean: true,
   define: { 'import.meta.vitest': 'undefined' },
 })

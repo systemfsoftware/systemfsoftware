@@ -3,10 +3,9 @@
  * decisions for the engine's test execution.
  *
  * One module per capability: types, ports, combinators and the impure edge
- * live together, as `effect-torch`'s `Tensor.ts` or `Trainer.ts` do. The
- * schemas stay in `TestRunner.schema.ts`. The spawned worker entry point
- * stays separate at `child-process-test-runner-worker.ts` (emitted as its own
- * chunk).
+ * live together. The schemas stay in `TestRunner.schema.ts`. The spawned
+ * worker entry point stays separate at `child-process-test-runner-worker.ts`
+ * (emitted as its own chunk).
  */
 
 import * as Layer from 'effect/Layer'

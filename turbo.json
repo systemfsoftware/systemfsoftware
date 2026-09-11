@@ -41,7 +41,8 @@
       ],
       "outputs": [],
       "dependsOn": [
-        "^build"
+        "^build",
+        "build"
       ],
       "cache": true
     },
@@ -199,79 +200,6 @@
         "build"
       ]
     },
-    "//#check:exports": {
-      "inputs": [
-        "$TURBO_ROOT$/scripts/guards/check-exports.mjs",
-        "$TURBO_ROOT$/packages/**/package.json",
-        "$TURBO_ROOT$/packages/**/api-extractor*.json",
-        "$TURBO_ROOT$/packages/**/dist/**",
-        "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
-        "!$TURBO_ROOT$/packages/**/sandbox-*/**"
-      ],
-      "outputs": [],
-      "cache": true
-    },
-    "//#check:runtime-deps": {
-      "inputs": [
-        "$TURBO_ROOT$/scripts/guards/check-runtime-deps.mjs",
-        "$TURBO_ROOT$/packages/**/package.json",
-        "$TURBO_ROOT$/packages/**/dist/**",
-        "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
-        "!$TURBO_ROOT$/packages/**/sandbox-*/**"
-      ],
-      "outputs": [],
-      "cache": true
-    },
-    "//#check:lint-coverage": {
-      "inputs": [
-        "$TURBO_ROOT$/scripts/guards/check-lint-coverage.mjs",
-        "$TURBO_ROOT$/packages/**/package.json",
-        "$TURBO_ROOT$/packages/**/oxlint.config.ts",
-        "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
-        "!$TURBO_ROOT$/packages/**/sandbox-*/**"
-      ],
-      "outputs": [],
-      "cache": true
-    },
-    "//#check:publish-config": {
-      "inputs": [
-        "$TURBO_ROOT$/scripts/guards/validate-publish-config.mjs",
-        "$TURBO_ROOT$/packages/**/package.json",
-        "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
-        "!$TURBO_ROOT$/packages/**/sandbox-*/**"
-      ],
-      "outputs": [],
-      "cache": true
-    },
-    "//#check:action-provenance": {
-      "inputs": [
-        "$TURBO_ROOT$/scripts/guards/guard-action-provenance.mjs",
-        "$TURBO_ROOT$/.github/**/*.{yml,yaml}"
-      ],
-      "outputs": [],
-      "cache": true
-    },
-    "//#check:workflow-test-adjacency": {
-      "inputs": [
-        "$TURBO_ROOT$/scripts/guards/check-workflow-test-adjacency.mjs",
-        "$TURBO_ROOT$/packages/**/src/**/*.workflow.ts",
-        "$TURBO_ROOT$/omp/**/src/**/*.workflow.ts"
-      ],
-      "outputs": [],
-      "cache": true
-    },
-    "//#check:umbrella-completeness": {
-      "inputs": [
-        "$TURBO_ROOT$/scripts/guards/check-umbrella-completeness.mjs",
-        "$TURBO_ROOT$/packages/**/package.json",
-        "$TURBO_ROOT$/omp/**/package.json",
-        "$TURBO_ROOT$/pnpm-workspace.yaml",
-        "!$TURBO_ROOT$/packages/**/.stryker-tmp/**",
-        "!$TURBO_ROOT$/packages/**/sandbox-*/**"
-      ],
-      "outputs": [],
-      "cache": true
-    },
     "clean": {
       "cache": false
     },
@@ -284,16 +212,6 @@
       "dependsOn": [
         "build"
       ]
-    },
-    "//#check:exported-wiring": {
-      "inputs": [
-        "$TURBO_ROOT$/scripts/guards/check-exported-wiring.ts",
-        "$TURBO_ROOT$/packages/**/etc/*.api.md",
-        "$TURBO_ROOT$/packages/**/src/**/*.ts",
-        "$TURBO_ROOT$/omp/**/src/**/*.ts",
-        "$TURBO_ROOT$/agent-plugins/**/src/**/*.ts"
-      ],
-      "outputs": []
     }
   }
 }

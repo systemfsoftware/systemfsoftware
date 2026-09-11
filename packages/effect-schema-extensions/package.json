@@ -25,12 +25,10 @@
   "type": "module",
   "exports": {
     ".": {
-      "@systemfsoftware/source": "./src/mod.ts",
       "types": "./dist/effect-schema-extensions.d.ts",
       "default": "./dist/index.mjs"
     },
     "./hex-schema": {
-      "@systemfsoftware/source": "./src/hex-schema/mod.ts",
       "types": "./dist/hex-schema.d.ts",
       "default": "./dist/hex-schema.mjs"
     },
@@ -55,7 +53,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",

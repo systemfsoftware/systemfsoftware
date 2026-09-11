@@ -1,10 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
-  "extends": ["@systemfsoftware/tsconfig/bundler/dom/library-monorepo", "@systemfsoftware/tsconfig/effect"],
+  "extends": [
+    "@systemfsoftware/tsconfig/bundler/dom/library-monorepo",
+    "@systemfsoftware/tsconfig/effect"
+  ],
   "compilerOptions": {
-    "types": ["vitest/globals"],
-    "customConditions": [
-      "@systemfsoftware/source"
+    "types": [
+      "vitest/globals"
     ]
   },
   "include": [

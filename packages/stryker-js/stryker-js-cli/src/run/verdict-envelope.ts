@@ -1,4 +1,4 @@
-import { randomBytes } from '@noble/hashes/utils'
+import { randomBytes } from '@noble/hashes/utils.js'
 import type { EvaluatorVerdict } from '@systemfsoftware/stryker-js/Evaluator'
 import type { Location, MutantStatus } from '@systemfsoftware/stryker-js/Mutant'
 import { normalizeFileName } from '@systemfsoftware/stryker-js/Mutant'

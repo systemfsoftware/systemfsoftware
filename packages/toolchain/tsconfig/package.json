@@ -46,6 +46,6 @@
     "attw": "attw --pack ."
   },
   "devDependencies": {
-    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw"
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:"
   }
 }

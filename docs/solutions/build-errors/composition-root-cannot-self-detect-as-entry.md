@@ -2,7 +2,7 @@
 title: "a module that self-detects as the process entry cannot survive code splitting"
 date: 2026-08-17
 category: build-errors
-module: stryker-js-mutation-run
+module: stryker-js-cli
 problem_type: build_error
 component: tooling
 symptoms:
@@ -28,15 +28,15 @@ tags:
 
 ## Problem & Observable Boundary
 
-The mutation-run child worker was a declared build entry module that both exported a behavior-bearing class (`ChildProcessProxyWorker`) and self-detected as the process entry with a guard comparing `import.meta.url` against `process.argv[1]`. Adding a shared message-protocol schema made the module share code with sibling entries, so rolldown hoisted the module body into a shared chunk and emitted a 126-byte pure re-export as the entry. The guard now lives in the chunk, where `import.meta.url` can never equal `process.argv[1]` (the entry path), so it is unfalsifiably false.
+The mutation run's child worker was a declared build entry module that both exported a behavior-bearing class and self-detected as the process entry with a guard comparing `import.meta.url` against `process.argv[1]`. Adding a shared message-protocol schema made the module share code with sibling entries, so rolldown hoisted the module body into a shared chunk and emitted a 126-byte pure re-export as the entry. The guard now lives in the chunk, where `import.meta.url` can never equal `process.argv[1]` (the entry path), so it is unfalsifiably false.
 
 The forked child loads the re-export, constructs nothing, and exits 0 with empty stdout and stderr. The parent — which listens for a `'close'` event and treats an unannounced exit as a crash — reports `ChildProcessCrashedError: Child process ... exited unexpectedly with exit code 0 (without signal). Stdout and stderr were empty.` Every mutation job in the run died, because every one of them spawns a checker child.
 
-Boundary: the defect exists only in the **built artifact's module layout**, never in `src`. Unit suites compile and exercise the module through the package source condition and stay green, so a change that breaks the child worker on every real run passes all unit gates. The failure is observable only at a process boundary the unit suite never crosses.
+Boundary: the defect exists only in the **built artifact's module layout**, never in `src`. Unit suites compile and exercise the module through the package's built `dist/` and stay green, so a change that breaks the child worker on every real run passes all unit gates. The failure is observable only at a process boundary the unit suite never crosses.
 
 ## Mechanism & Failure Modes
 
-1. **Self-detection as a declaration of entry.** `if (fileURLToPath(import.meta.url) === process.argv[1]) { new ChildProcessProxyWorker(createInjector) }` assumes the module's own body stays in its entry file. That assumption is private to the author and invisible to the bundler.
+1. **Self-detection as a declaration of entry.** The guard — `if (fileURLToPath(import.meta.url) === process.argv[1]) { … }` — assumes the module's own body stays in its entry file. That assumption is private to the author and invisible to the bundler.
 2. **Hoisting into a shared chunk.** Once the module shares code with a sibling entry, rolldown hoists the body into a chunk and the entry becomes a pure re-export of the hoisted class. The guard's module, its `import.meta.url`, and its `process.argv[1]` comparison all move into the chunk.
 3. **Two names for "this file", both wrong.** In the chunk, `import.meta.url` names the chunk while `process.argv[1]` names the entry. They can never be equal, so the guard is _unfalsifiably false_: correct in the source, dead in the artifact, with no test able to observe the difference except one that forks the built entry.
 4. **Silent exit reads as crash.** An empty-successful child handshake is not a loud failure in the child; the parent's `close` handler converts it into `ChildProcessCrashedError`. The child does not write anything to stdout or stderr, so the error message carries no clue that the guard was the cause.
@@ -47,11 +47,11 @@ Boundary: the defect exists only in the **built artifact's module layout**, neve
 
 ```ts
 // the unit — exports behavior, has zero module-level side effects
-export class ChildProcessProxyWorker { … }
+export const launchWorker = (main: Layer.Layer<never, unknown, never>, label: string): void => { … }
 
 // the bootstrap entry — a no-export module whose whole body is the composition root
-import { ChildProcessProxyWorker } from '<unit>'
-new ChildProcessProxyWorker(createInjector) // unconditional, no argv / import.meta inspection
+import { launchWorker } from './worker-runtime.js'
+launchWorker(MainLayer, 'checker worker') // unconditional, no argv / import.meta inspection
 ```
 
 The invariant this buys: an unconditional bootstrap in a no-export entry cannot silently no-op. If the file executes, the worker starts and handshakes. There is no condition for a wrong answer to falsify. If the entry is split, the module stays a pure surface — the side effect never lived in it.
@@ -71,7 +71,7 @@ Honesty where it is due: (b) and (c) are cheaper and would have worked for this 
 
 ## The reversing observation
 
-The decision is wrong if an emitted bootstrap entry's body no longer contains the composition root — e.g. a future refactor reintroduces the guard, or the entry again becomes a pure re-export of a unit that _also_ self-detects. The check, concretely: **the built `-main` entry must execute `new ChildProcessProxyWorker(...)` unconditionally, with no conditional around it.** A future agent re-introducing a `process.argv` / `import.meta.url` inspection in the entry has re-created the original defect and should be reverted.
+The decision is wrong if an emitted bootstrap entry's body no longer contains the composition root — e.g. a future refactor reintroduces the guard, or the entry again becomes a pure re-export of a unit that _also_ self-detects. The check, concretely: **the built worker entry must execute `launchWorker(...)` unconditionally, with no conditional around it.** A future agent re-introducing a `process.argv` / `import.meta.url` inspection in the entry has re-created the original defect and should be reverted.
 
 ## Canon
 
@@ -79,7 +79,7 @@ The composition root is executed at the process entry point, one root per proces
 
 ## Verification & The Gate
 
-No unit test can observe module layout, so the gate must be a process test. The resolving integration test forks the **built** child entry and requires the child's `Ready` handshake (`{ kind: ParentMessageKind.Ready }`) to arrive; a child that exits without handshaking fails the test. It is authored at `packages/stryker-js/mutation-run/tests/child-process-proxy-worker-bootstrap.integration.test.ts`.
+No unit test can observe module layout, so the gate must be a process observation, and it is structural: `stryker-js-cli` declares the `Checker.worker.ts` and `child-process-test-runner-worker.ts` modules under `src/workers/` as build entries (emitted as `workers/*.mjs`), and `stryker-js-engine`'s `WorkerLauncher` spawns whichever `entryUrl` the `WorkerEntries` port supplies, racing the child's `exited` against the socket-connect budget (`connectRetry`, 100 × 50 ms) so a worker that dies before serving fails with `ChildProcessCrashedError` instead of burning that budget. Both entries are forked for real by `stryker-js-cli`'s own mutation run, whose config uses the vitest runner.
 
 Code smell to lint for elsewhere: a behavior-bearing exported module ending in `if (fileURLToPath(import.meta.url) === process.argv[1]) { … }` — a composition root wearing a guard. The composition root lives in its own entry or it does not live at all.
 

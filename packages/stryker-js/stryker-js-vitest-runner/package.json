@@ -14,14 +14,8 @@
     "dist"
   ],
   "exports": {
-    ".": {
-      "@systemfsoftware/source": "./src/index.ts",
-      "default": "./dist/index.mjs"
-    },
-    "./stryker-setup": {
-      "@systemfsoftware/source": "./src/stryker-setup.ts",
-      "default": "./dist/stryker-setup.mjs"
-    },
+    ".": "./dist/index.mjs",
+    "./stryker-setup": "./dist/stryker-setup.mjs",
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -55,7 +49,7 @@
     "@effect/platform-node": "catalog:",
     "@effect/vitest": "catalog:",
     "@systemfsoftware/all": "workspace:^",
-    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",

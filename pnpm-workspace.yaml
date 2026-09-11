@@ -11,6 +11,7 @@ allowBuilds:
   unrs-resolver: false
 catalog:
   typescript: ^7
+  "@systemfsoftware/arethetypeswrong-cli": ^4.1.0
   "@effect/platform-node": 4.0.0-rc.112
   "@effect/platform-node-shared": 4.0.0-rc.112
   effect: 4.0.0-rc.112
@@ -28,6 +29,7 @@ catalog:
   tstyche: ^7.1.0
   testcontainers: ^12.1.0
   "@microsoft/api-extractor": ^7.58.7
+  "@noble/hashes": 2.4.0
   oxc-parser: ^0.140.0
   "@oxc-project/types": ^0.140.0
   "@std/jsonc": jsr:^1.0.2
@@ -70,15 +72,6 @@ catalogs:
     "mutation-testing-elements": 3.7.3
     "mutation-testing-metrics": 3.7.3
     "mutation-testing-report-schema": 3.7.3
-  attw:
-    # @systemfsoftware/arethetypeswrong runs the JS compiler bridge (typescript@6).
-    # typescript@7 is the native Go compiler with no JS API; see
-    # docs/solutions/tooling-decisions/arethetypeswrong-core-requires-js-typescript-api.md
-    typescript: ^6.0.3
-    # The published CLI. Consumers that must not close a workspace cycle resolve
-    # through this catalog instead of `workspace:^`; see
-    # docs/solutions/tooling-decisions/registry-consumption-of-self-hosted-forks.md
-    "@systemfsoftware/arethetypeswrong-cli": ^1.1.1
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - "@systemfsoftware/*"

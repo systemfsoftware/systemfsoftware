@@ -33,17 +33,11 @@ gone, and the build is green.
 
 ## Problem
 
-The stryker CLI's only runtime reader of a sibling package's manifest was the `--llms` manifest
-emitter. It resolved a specifier, read a file, and parsed it, so it carried `FileSystem.FileSystem |
-Path.Path` in its `R` channel. That requirement was written into the root command's `Command` type
-annotation, where the comment justified the annotation by the emitter's own call site: the handler
-called the emitter, the emitter referenced the command being built, and the circular inference
-forced an explicit type.
-
-Deleting the feature deleted the call site — and with it, the stated reason for the annotation —
-while leaving the annotation's environment parameter untouched. `FileSystem.FileSystem` survived in
-exactly two places: the import, and that one type. The module compiled, lint passed, the full
-contract lane passed. Nothing failed.
+The delete looks complete: the flag, the branch, the request variant, the tests, the docs are all
+gone, the module compiles, lint passes, and the contract lane passes — while a service the deleted
+handler demanded is still demanded by a type, and the composition root still provides it. Nothing
+names the leftover: the requirement is nominal, so a declaration nothing consumes looks exactly like
+a declaration something does.
 
 ## Mechanism
 
@@ -94,11 +88,11 @@ const root: Command.Command<'tool', {}, {}, CliError, never> = Command.make(
 )
 ```
 
-**A comment that names the deleted call site is part of the deletion.** The annotation's stated
-justification was its own self-reference. When the call site goes, the justification goes — either
-rewritten to the reason that still holds, or deleted with the annotation. A surviving comment that
-names a deleted symbol is a false instruction to the next editor, who cannot tell whether the
-annotation is safe to remove.
+**A comment that names the deleted call site is part of the deletion.** An annotation justified by a
+comment that names its own call site is justified by nothing once that call site goes; the
+justification is either rewritten to the reason that still holds, or deleted with the annotation. A
+surviving comment that names a deleted symbol is a false instruction to the next editor, who cannot
+tell whether the annotation is safe to remove.
 
 **An unreachable dispatch fallback becomes an exhaustiveness proof.** A match over a union that has
 collapsed to one variant keeps its trailing fallback (`Match.orElse(() => Effect.die(...))`). The
@@ -111,8 +105,8 @@ runtime text to build-time failure. Prefer the build-time failure.
 **A guard's decoder must be able to reject the vocabulary it guards.** A contract lane that decodes
 stream lines with a rest-permissive schema and asserts `observedKinds.filter(k => expected.includes(k))`
 is structurally incapable of failing on an _added_ kind — the extra line decodes cleanly and the
-filter drops it. Pin the exact observable instead (`terminalLine.kind === 'verdict'`); a membership
-filter asserts "at least this", never "exactly this".
+filter drops it. Pin the exact observable instead — assert equality with the one expected kind; a
+membership filter asserts "at least this", never "exactly this".
 
 ## Anti-Pattern Code Smell
 
@@ -132,11 +126,11 @@ Two-sided, and both sides are cheap:
    now-unused import in the same step — the compiler is the detector.
 2. **Delete-the-layer probe.** Only after step 1 proves nothing declares the service, ask whether the
    layer is still needed by another path. Answer it by reading the remaining consumers, not by
-   deleting the layer and seeing what breaks: the run path in this case read the same service
-   through its own provider, so the layer stayed.
+   deleting the layer and seeing what breaks: a second consumer may read the same service through
+   its own provider, and the layer then stays.
 
 For the guard-shaped residual, the falsification is a paste-back: restore the removed vocabulary
-(a stray terminal kind) and confirm the lane goes red. A lane that stays green under its own
+(a stray kind) and confirm the lane goes red. A lane that stays green under its own
 removed case is the defect, not the proof. Prefer a contract-lane assertion on the exact observable
 over any count or filter.
 

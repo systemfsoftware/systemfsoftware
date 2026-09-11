@@ -31,7 +31,6 @@ export default defineConfig({
   format: 'esm',
   dts: true,
   exports: {
-    devExports: '@systemfsoftware/source',
     customExports: injectTypes,
   },
   deps: { onlyBundle: false },

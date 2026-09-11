@@ -37,7 +37,7 @@
   },
   "devDependencies": {
     "@systemfsoftware/all": "workspace:^",
-    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
@@ -56,5 +56,6 @@
       ".": "./dist/index.mjs",
       "./package.json": "./package.json"
     }
+
   }
 }

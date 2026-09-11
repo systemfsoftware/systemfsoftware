@@ -528,8 +528,6 @@ export const decideVitestDryRun = (command: VitestDryRunCommand): VitestDryRunOu
   )
 }
 
-export const SOURCE_CONDITION = '@systemfsoftware/source'
-
 const TYPESCRIPT_SOURCE_EXTENSIONS = ['.ts', '.tsx', '.mts'] as const
 
 const isTypescriptSourcePath = (filePath: string): boolean =>
@@ -541,11 +539,7 @@ const typescriptSourcePath = (filePath: string): string | undefined =>
 const sourceTargetOf = (entry: ExportEntry): string | undefined =>
   Match.value(entry).pipe(
     Match.when(Match.string, (filePath) => typescriptSourcePath(filePath)),
-    Match.orElse((conditions) =>
-      Option.getOrUndefined(
-        Option.flatMap(recordOption(conditions), (record) => getStringField(record, SOURCE_CONDITION)),
-      )
-    ),
+    Match.orElse((): string | undefined => undefined),
   )
 
 const subpathSpecifier = (packageName: string, exportKey: string): string | undefined =>
@@ -966,7 +960,7 @@ export const makeVitestRunnerLayer = (
               silent: true,
               reporters: [{ onInit(_vitest: Vitest) {} }],
             }, {
-              resolve: { alias: [...aliases], conditions: ['@systemfsoftware/source', 'import'] },
+              resolve: { alias: [...aliases], conditions: ['import'] },
               plugins: [plugin],
             }),
           catch: (cause) => vitestFailed('init', errorToString(cause)),

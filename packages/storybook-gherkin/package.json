@@ -27,7 +27,6 @@
   "type": "module",
   "exports": {
     ".": {
-      "@systemfsoftware/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.mjs"
     },
@@ -45,7 +44,7 @@
     "attw": "attw --pack .",
     "dts:check": "node scripts/check-dts.mjs",
     "storybook": "storybook dev -p 6006 --no-open",
-    "test:browser": "vitest run"
+    "test:browser": "pnpm build && vitest run"
   },
   "dependencies": {
     "type-fest": "catalog:"
@@ -57,7 +56,7 @@
   "devDependencies": {
     "@storybook/addon-vitest": "catalog:",
     "@storybook/react-vite": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",

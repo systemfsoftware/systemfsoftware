@@ -58,9 +58,11 @@ Grep for the ordering, not the files: any script that writes gate inputs and run
 
 ## Verification & Prevention
 
-- Run the gate locally with the pinned base SHA, after committing:
+- Run the gate locally with the pinned base SHA, after committing. The verdict executes the lockfile-installed turbo and checks it against the lockfile pin, so the frozen install comes first; the selftest needs no subprocess and no writes:
 
 ```bash
+pnpm install --frozen-lockfile
+deno run --allow-read scripts/guards/check-changeset.ts --selftest
 deno run --allow-run=git,"$PWD/node_modules/.bin/turbo" --allow-read --allow-write=/tmp \
   scripts/guards/check-changeset.ts <base-sha>
 ```

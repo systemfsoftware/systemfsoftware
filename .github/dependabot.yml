@@ -22,10 +22,6 @@ updates:
     exclude-paths:
       - "repos/**"
     ignore:
-      # typescript majors are deliberate migrations, not routine bumps:
-      # typescript@7 (native) has no JS compiler API, so
-      # @systemfsoftware/arethetypeswrong runs the typescript@6 bridge
-      # (catalog:attw); a 7.x major would break it.
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
 
@@ -80,6 +76,16 @@ updates:
           - "typescript"
         update-types: ["minor", "patch"]
 
+      types-node-minor-patch:
+        patterns:
+          - "@types/node"
+        update-types: ["minor", "patch"]
+
+      types-node-major:
+        patterns:
+          - "@types/node"
+        update-types: ["major"]
+
       other-minor-patch:
         patterns: ["*"]
         exclude-patterns:
@@ -88,6 +94,7 @@ updates:
           - "@effect/*"
           - "@commitlint/*"
           - "typescript"
+          - "@types/node"
         update-types: ["minor", "patch"]
 
       major-updates:
@@ -97,6 +104,7 @@ updates:
           - "@oxlint/*"
           - "@commitlint/*"
           - "typescript"
+          - "@types/node"
         update-types: ["major"]
 
   - package-ecosystem: nix

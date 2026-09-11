@@ -28,7 +28,6 @@
   "type": "module",
   "exports": {
     ".": {
-      "@systemfsoftware/source": "./src/mod.ts",
       "types": "./dist/effect-daemon-spec.d.ts",
       "default": "./dist/index.mjs"
     },
@@ -55,7 +54,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "^7.58.7",
-    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",

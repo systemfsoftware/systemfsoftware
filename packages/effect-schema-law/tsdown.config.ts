@@ -25,7 +25,6 @@ export default defineConfig({
   format: 'esm',
   dts: true,
   exports: {
-    devExports: '@systemfsoftware/source',
     customExports: injectApiExtractorTypes,
   },
   deps: { onlyBundle: false },
