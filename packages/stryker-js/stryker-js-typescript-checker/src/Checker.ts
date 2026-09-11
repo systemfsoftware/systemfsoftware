@@ -9,8 +9,6 @@ import { Predicate, Result } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as HashMap from 'effect/HashMap'
 import * as Match from 'effect/Match'
-import * as MutableHashMap from 'effect/MutableHashMap'
-import * as Option from 'effect/Option'
 import { DiagnosticCategory } from 'typescript/unstable/sync'
 import type { Diagnostic } from 'typescript/unstable/sync'
 import {
@@ -22,9 +20,8 @@ import {
 import { CheckMutantsCommand } from './Checker.schema.js'
 import { CheckMutantsInput } from './CheckMutants.schema.js'
 import type { TSFileNode } from './Compiler.js'
-import { createGroups, TypeScriptCompiler } from './Compiler.js'
-
-const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
+import { TypeScriptCompiler } from './Compiler.js'
+import { groupMutants } from './mutant-groups.js'
 
 export interface TypescriptCheckerPluginOptions {
   typescriptChecker?: {
@@ -33,33 +30,6 @@ export interface TypescriptCheckerPluginOptions {
 }
 
 export interface TypescriptCheckerOptionsWithStrykerOptions extends TypescriptCheckerPluginOptions, StrykerOptions {}
-
-const findSourceMapRegex = /\/\/# sourceMappingURL=(.+)$/m
-
-export function getSourceMappingURL(content: string): string | undefined {
-  findSourceMapRegex.lastIndex = 0
-  return findSourceMapRegex.exec(content)?.[1]
-}
-
-export function partitionMutantsForGrouping(
-  mutants: readonly Mutant[],
-  nodes: MutableHashMap.MutableHashMap<string, TSFileNode>,
-  prioritizePerformanceOverAccuracy: boolean,
-): { inside: readonly Mutant[]; outside: readonly Mutant[] } {
-  if (!prioritizePerformanceOverAccuracy) {
-    return { inside: [], outside: [...mutants] }
-  }
-  const outside: Mutant[] = []
-  const inside: Mutant[] = []
-  for (const m of mutants) {
-    if (Option.isNone(MutableHashMap.get(nodes, normalizeFileName(m.fileName)))) {
-      outside.push(m)
-    } else {
-      inside.push(m)
-    }
-  }
-  return { inside, outside }
-}
 
 interface CheckerDeps {
   readonly options: unknown
@@ -84,6 +54,27 @@ function getPrioritize(options: unknown): boolean {
   return false
 }
 
+const pendingRetestsOf = (decision: CheckMutantsDecision): ReadonlyArray<Mutant> =>
+  Match.value(decision).pipe(
+    Match.tag('CheckFinished', (): ReadonlyArray<Mutant> => []),
+    Match.tag('RetestRequired', (retest) => [...retest.needsRetest]),
+    Match.exhaustive,
+  )
+
+const toCheckResult = (answer: CheckMutantsDecision['results'][string]): CheckResult => {
+  if (answer.status === 'passed') {
+    return { status: 'passed' }
+  }
+  return { status: 'compileError', reason: answer.reason }
+}
+
+const mergeAnswers = (runs: ReadonlyArray<CheckMutantsDecision['results']>): HashMap.HashMap<string, CheckResult> =>
+  runs.reduce(
+    (merged, answers) =>
+      Object.entries(answers).reduce((into, [id, answer]) => HashMap.set(into, id, toCheckResult(answer)), merged),
+    HashMap.empty<string, CheckResult>(),
+  )
+
 const checkCell = Cell.layer({
   read: (command: CheckMutantsCommand) =>
     Effect.gen(function*() {
@@ -98,10 +89,7 @@ const checkCell = Cell.layer({
             }),
         ),
       )
-      const nodes: Record<string, TSFileNode> = {}
-      for (const [k, v] of nodesHm) {
-        nodes[k] = v
-      }
+      const nodes: Record<string, TSFileNode> = Object.fromEntries(nodesHm)
       const diagnostics = yield* compiler.check([...command.mutants]).pipe(
         Effect.mapError(
           (cause) =>
@@ -118,10 +106,7 @@ const checkCell = Cell.layer({
         nodes,
       })
     }),
-  decode: (raw: CheckMutantsInput) => Result.succeed(raw),
   decide: checkMutants,
-  encode: (outcome: Result.Result<CheckMutantsDecision, DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError>) =>
-    outcome,
   write: (outcome: Result.Result<CheckMutantsDecision, DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError>) =>
     Result.match(outcome, {
       onFailure: (failure) =>
@@ -210,43 +195,21 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
             Effect.provideService(TypeScriptCompiler, compiler),
           )
         const first = yield* applyOnce(mutants)
-        let map = HashMap.empty<string, CheckResult>()
-        const mergeResults = (results: CheckMutantsDecision['results']) => {
-          for (const [id, value] of Object.entries(results)) {
-            if (value.status === 'passed') {
-              map = HashMap.set(map, id, { status: 'passed' })
-            } else {
-              map = HashMap.set(map, id, { status: 'compileError', reason: value.reason })
-            }
-          }
+        const pending = pendingRetestsOf(first)
+        if (pending.length === 0) {
+          return mergeAnswers([first.results])
         }
-        mergeResults(first.results)
-        yield* Match.value(first).pipe(
-          Match.tag('CheckFinished', () => Effect.void),
-          Match.tag('RetestRequired', (retest) =>
-            Effect.gen(function*() {
-              yield* applyOnce([])
-              const originals: Record<string, Mutant> = {}
-              for (const m of mutants) {
-                originals[m.id] = m
-              }
-              for (const pending of retest.needsRetest) {
-                const original = originals[pending.id]
-                if (original === undefined) {
-                  continue
-                }
-                const one = yield* applyOnce([original])
-                mergeResults(one.results)
-              }
-            })),
-          Match.exhaustive,
+        yield* applyOnce([])
+        const retests = yield* Effect.forEach(
+          pending,
+          (mutant) => Effect.map(applyOnce([mutant]), (one) => one.results),
         )
-        return map
+        return mergeAnswers([first.results, ...retests])
       }),
 
     group: (mutants) =>
       Effect.gen(function*() {
-        const nodesHm = yield* compiler.nodes.pipe(
+        const nodes = yield* compiler.nodes.pipe(
           Effect.mapError(
             (cause) =>
               new CheckerFailed({
@@ -256,18 +219,7 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
               }),
           ),
         )
-        const nodes = nodesHm
-        const prioritize = getPrioritize(options)
-        const { inside, outside } = partitionMutantsForGrouping(mutants, nodes, prioritize)
-        if (inside.length === 0) {
-          return mutants.map((m) => [m.id])
-        }
-        const groups = createGroups([...inside], nodes)
-        if (outside.length > 0) {
-          const outsideGroup = outside.map((m) => m.id)
-          return [outsideGroup, ...groups]
-        }
-        return groups
+        return groupMutants(mutants, nodes, getPrioritize(options))
       }),
   }
 }
