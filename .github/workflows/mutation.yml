@@ -70,7 +70,7 @@ jobs:
           if [ -z "$base" ] || [[ "$base" =~ ^0+$ ]]; then
             echo 'changed=[]' >> "$GITHUB_OUTPUT"
           else
-            git diff --name-only "$base" HEAD \
+            git diff --name-only "$base" HEAD -- ':!repos' \
               | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.stringify(s.split("\n").filter(Boolean))))' \
               | sed 's/^/changed=/' >> "$GITHUB_OUTPUT"
           fi
