@@ -7,6 +7,7 @@ import * as Predicate from 'effect/Predicate'
 import * as S from 'effect/Schema'
 
 import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import { normalizeFileName } from '@systemfsoftware/stryker-js/Mutant'
 import type {
   Coverage,
   CoverageData,
@@ -728,13 +729,11 @@ export interface IncrementalDiffOutput {
 
 const REMEMBERED_STATUS: ReadonlySet<string> = new Set(['Killed', 'Survived', 'Timeout', 'NoCoverage', 'Ignored'])
 
-const normalizeDiffFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
-
 const toRelativeNormalized = (fileName: string | undefined, basePath: string): string => {
   const raw = Option.getOrElse(Option.fromUndefinedOr(fileName), () => '')
   return Match.value(raw.startsWith(basePath)).pipe(
-    Match.when(true, () => normalizeDiffFileName(raw.slice(basePath.length).replace(/^\/+/, ''))),
-    Match.orElse(() => normalizeDiffFileName(raw)),
+    Match.when(true, () => normalizeFileName(raw.slice(basePath.length).replace(/^\/+/, ''))),
+    Match.orElse(() => normalizeFileName(raw)),
   )
 }
 

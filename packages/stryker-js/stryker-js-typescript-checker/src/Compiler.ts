@@ -7,6 +7,7 @@
  */
 
 import type { Mutant, Position } from '@systemfsoftware/stryker-js/Mutant'
+import { normalizeFileName } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Options'
 import { Predicate, Result } from 'effect'
 import * as Context from 'effect/Context'
@@ -27,8 +28,6 @@ import { CompilerFailed } from './Checker.schema.js'
 import { HybridFileNotFoundError, UnsupportedTypeScriptVersionError } from './Compiler.schema.js'
 import { determineBuildModeEnabled, overrideOptions, parseTsConfig, retrieveReferencedProjects } from './Tsconfig.js'
 import { type TsConfig, TsConfigNotFoundError, type TsConfigParseError } from './Tsconfig.schema.js'
-
-const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
 
 const findSourceMapRegex = /\/\/# sourceMappingURL=(.+)$/m
 

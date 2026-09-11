@@ -1,4 +1,5 @@
 import type { FileDescription, FileDescriptions, MutateDescription } from '@systemfsoftware/stryker-js/Mutant'
+import { normalizeFileName } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Options'
 import type { MutationTestResult } from '@systemfsoftware/stryker-js/Report'
 import * as Effect from 'effect/Effect'
@@ -21,8 +22,6 @@ import { IncrementalReportError, IncrementalReportSchema } from './IncrementalRe
 import { ALWAYS_IGNORE, IGNORE_PATTERN_CHARACTER, MUTATION_RANGE_REGEX } from './Project.ignore.js'
 
 const DEFAULT_GLOB = '**/*.{js,ts,jsx,tsx,html,vue,mjs,mts,cts,cjs}'
-
-const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
 
 export interface FileSelectionInput {
   readonly inputFileNames: readonly string[]

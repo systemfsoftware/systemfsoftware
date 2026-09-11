@@ -6,9 +6,9 @@ import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Predicate from 'effect/Predicate'
 
-import type { AnyPluginContribution, PluginContribution } from '@systemfsoftware/stryker-js/Plugin'
+import type { AnyPluginContribution, PluginContribution, PluginModule } from '@systemfsoftware/stryker-js/Plugin'
 import { foldContributions } from '@systemfsoftware/stryker-js/Plugin'
-import type { PluginKind } from '@systemfsoftware/stryker-js/Plugin'
+import type { PluginKind, Shadowing } from '@systemfsoftware/stryker-js/Plugin'
 import type { ReporterFactory } from '@systemfsoftware/stryker-js/Reporter'
 
 import { importModule } from './Config.js'
@@ -31,23 +31,13 @@ export interface PluginLoaderEntryLike {
 export interface PluginLoadPlan {
   readonly schemaContributions: readonly Record<string, unknown>[]
   readonly pluginsByKind: HashMap.HashMap<PluginKind, readonly PluginContribution<PluginKind>[]>
-  readonly shadowings: readonly {
-    readonly kind: PluginKind
-    readonly name: string
-    readonly shadowedIndex: number
-    readonly winnerIndex: number
-  }[]
+  readonly shadowings: readonly Shadowing[]
 }
 
 export const buildPluginLoadPlan = (entries: readonly PluginLoaderEntryLike[]): PluginLoadPlan => {
   const shadowingState = entries.reduce<{
     readonly seen: HashMap.HashMap<string, number>
-    readonly shadowings: readonly {
-      readonly kind: PluginKind
-      readonly name: string
-      readonly shadowedIndex: number
-      readonly winnerIndex: number
-    }[]
+    readonly shadowings: readonly Shadowing[]
   }>(
     (acc, entry, index) =>
       Option.match(Option.fromUndefinedOr(entry.plugins), {
@@ -147,10 +137,6 @@ const messageNamesDescriptor = (message: unknown, descriptor: string): boolean =
     Match.when(isText, (text: string) => descriptorTexts(descriptor).some((candidate) => text.includes(candidate))),
     Match.orElse(() => false),
   )
-
-interface PluginModule {
-  strykerPlugins: readonly PluginContribution<PluginKind>[]
-}
 
 interface SchemaValidationContribution {
   strykerValidationSchema: Record<string, unknown>

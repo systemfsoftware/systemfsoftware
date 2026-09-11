@@ -1,8 +1,7 @@
+import { normalizeFileName } from '@systemfsoftware/stryker-js/Mutant'
 import * as Match from 'effect/Match'
 
 export const REMEMBERED_REASON = 'Remembered'
-
-const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
 
 export const toRelativeNormalizedFileName = (fileName: string | undefined, basePath: string): string =>
   normalizeFileName(

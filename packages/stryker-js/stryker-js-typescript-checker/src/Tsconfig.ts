@@ -6,6 +6,7 @@
  * single-project).
  */
 import { parse } from '@std/jsonc'
+import { normalizeFileName } from '@systemfsoftware/stryker-js/Mutant'
 import { Predicate, Result, Schema as S } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
@@ -14,8 +15,6 @@ import * as Option from 'effect/Option'
 import type * as Path from 'effect/Path'
 
 import { type TsConfig, TsConfigParseError, TsConfigSchema } from './Tsconfig.schema.js'
-
-const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
 
 // Override some compiler options that have to do with code quality. When mutating, we're not interested in the resulting code quality
 // See https://github.com/stryker-mutator/stryker-js/issues/391 for more info

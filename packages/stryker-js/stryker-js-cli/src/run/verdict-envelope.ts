@@ -1,6 +1,7 @@
 import { randomBytes } from '@noble/hashes/utils'
 import type { EvaluatorVerdict } from '@systemfsoftware/stryker-js/Evaluator'
 import type { Location, MutantStatus } from '@systemfsoftware/stryker-js/Mutant'
+import { normalizeFileName } from '@systemfsoftware/stryker-js/Mutant'
 import { calculateMetrics } from '@systemfsoftware/stryker-js/Report'
 import type * as schema from '@systemfsoftware/stryker-js/Report'
 import * as Match from 'effect/Match'
@@ -9,8 +10,6 @@ import * as Path from 'effect/Path'
 import * as S from 'effect/Schema'
 
 import type { ModeSignal, OutputMode } from './output-mode.js'
-
-const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
 
 export const VERDICT_ENVELOPE_SCHEMA_VERSION = '1.2'
 

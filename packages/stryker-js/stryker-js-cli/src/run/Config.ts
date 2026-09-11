@@ -1,3 +1,4 @@
+import { normalizeFileName } from '@systemfsoftware/stryker-js/Mutant'
 import { type PartialStrykerOptions, strykerCoreSchema, type StrykerOptions } from '@systemfsoftware/stryker-js/Options'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
@@ -89,7 +90,6 @@ export const REMOVED_OPTIONS: Record<string, string> = {
   'eventReporter': 'the event-recorder reporter was removed; remove this option',
 }
 
-const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
 export const optionsPath = (...path: string[]): string => path.join('.')
 
 const combine = (
@@ -506,15 +506,6 @@ const mergePluginDescriptors = (
   return merged.filter(isFirstDescriptorOccurrence(merged))
 }
 
-const setConfigEntry = (
-  out: Record<string, unknown>,
-  key: string,
-  value: unknown,
-): Record<string, unknown> => {
-  out[key] = value
-  return out
-}
-
 const removeConfigEntry = (out: Record<string, unknown>, key: string): Record<string, unknown> => {
   delete out[key]
   return out
@@ -527,8 +518,8 @@ const applyMergedEntry = (
   childValue: unknown,
 ): Record<string, unknown> =>
   Match.value(childValue).pipe(
-    Match.when(isMergeableRecord, (mergeableChild) => setConfigEntry(out, key, { ...parentValue, ...mergeableChild })),
-    Match.orElse(() => setConfigEntry(out, key, childValue)),
+    Match.when(isMergeableRecord, (mergeableChild) => assignOverride(out, key, { ...parentValue, ...mergeableChild })),
+    Match.orElse(() => assignOverride(out, key, childValue)),
   )
 
 const applyValueEntry = (
@@ -539,7 +530,7 @@ const applyValueEntry = (
 ): Record<string, unknown> =>
   Match.value(parentValue).pipe(
     Match.when(isMergeableRecord, (mergeableParent) => applyMergedEntry(out, key, mergeableParent, childValue)),
-    Match.orElse(() => setConfigEntry(out, key, childValue)),
+    Match.orElse(() => assignOverride(out, key, childValue)),
   )
 
 const applyPluginsEntry = (
@@ -548,7 +539,7 @@ const applyPluginsEntry = (
   parentValue: unknown,
   childValue: unknown,
 ): Record<string, unknown> =>
-  setConfigEntry(
+  assignOverride(
     out,
     key,
     mergePluginDescriptors(asUnknownArray(parentValue), asUnknownArray(childValue)),

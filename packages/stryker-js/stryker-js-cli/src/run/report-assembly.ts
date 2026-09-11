@@ -1,4 +1,5 @@
 import type { MutantResult } from '@systemfsoftware/stryker-js/Mutant'
+import { normalizeFileName } from '@systemfsoftware/stryker-js/Mutant'
 import type * as schema from '@systemfsoftware/stryker-js/Report'
 import type { TestResult } from '@systemfsoftware/stryker-js/TestRunner'
 import * as HashMap from 'effect/HashMap'
@@ -26,7 +27,7 @@ export const determineLanguage = (fileName: string): string =>
 export const reportFileName = (relativePath: string | undefined): string =>
   Option.match(Option.fromUndefinedOr(relativePath), {
     onNone: () => '',
-    onSome: (present) => present.replaceAll('\\', '/'),
+    onSome: (present) => normalizeFileName(present),
   })
 
 export interface TestIdRemap {
