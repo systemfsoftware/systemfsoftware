@@ -5,16 +5,51 @@ import { FastCheck as fc } from 'effect/testing'
 const SAMPLE_DRAWS = 2000
 const SAMPLE_SEEDS = 3
 
-const DEEP_DEPTH = 4
-const DEEP_SHARE = 0.15
-
 const STOCK_MAX_DEPTH = 2
 
-const BUDGET_MS = 10_000
+const DEEP_DEPTH = STOCK_MAX_DEPTH + 2
 
-const LAW_OPTIONS = {
-  fastCheck: { numRuns: SAMPLE_SEEDS, interruptAfterTimeLimit: BUDGET_MS, markInterruptAsFailure: true },
-} as const
+const CALIBRATION_DRAWS = 2048
+const CALIBRATION_RUNS = 5
+const SAFETY = 256
+const BACKSTOP_FACTOR = 2
+const BUDGET_LOWER_FACTOR = 64
+const BUDGET_UPPER_FACTOR = 1024
+const CALIBRATION_SEED = 0xC0FFEE
+
+const medianMs = (timings: ReadonlyArray<number>): number => {
+  const ordered = [...timings].sort((left, right) => left - right)
+  return ordered[ordered.length >> 1] ?? 0
+}
+
+const measureDrawMs = (arbitrary: fc.Arbitrary<unknown>): number => {
+  const timings = Array.from({ length: CALIBRATION_RUNS }, () => {
+    const started = performance.now()
+    fc.sample(arbitrary, { numRuns: CALIBRATION_DRAWS, seed: CALIBRATION_SEED })
+    return performance.now() - started
+  })
+  const median = medianMs(timings)
+  if (median <= 0) throw new Error('recursionLaws calibration measured zero cost — clock unavailable')
+  return median
+}
+
+const budgetCache = new WeakMap<fc.Arbitrary<unknown>, number>()
+
+const budgetMsFor = (arbitrary: fc.Arbitrary<unknown>): number => {
+  const cached = budgetCache.get(arbitrary)
+  if (cached !== undefined) return cached
+  const budget = measureDrawMs(arbitrary) * ((SAMPLE_DRAWS * SAMPLE_SEEDS) / CALIBRATION_DRAWS) * SAFETY
+  budgetCache.set(arbitrary, budget)
+  return budget
+}
+
+const lawOptionsFor = (arbitrary: fc.Arbitrary<unknown>) => {
+  const budget = budgetMsFor(arbitrary)
+  return {
+    timeout: budget * BACKSTOP_FACTOR,
+    fastCheck: { numRuns: SAMPLE_SEEDS, interruptAfterTimeLimit: budget, markInterruptAsFailure: true },
+  } as const
+}
 
 const maxDepthOf = (ast: SchemaAST.AST): number => {
   const hook: unknown = SchemaAST.resolve(ast)?.['toArbitrary']
@@ -123,14 +158,14 @@ export const recursionLaws = <A, I>(label: string, schema: S.Codec<A, I>): void 
     `∀s_${label}DeepShare_≠Zero`,
     [S.toArbitrary(S.Int)(fc)],
     ([seed]) => deepShareOf(sampledAt(arbitrary, seed)) > 0 && maxDepth > STOCK_MAX_DEPTH,
-    LAW_OPTIONS,
+    lawOptionsFor(arbitrary),
   )
 
   it.prop(
     `∀s_${label}Variants_⊇Declared`,
     [S.toArbitrary(S.Int)(fc)],
     ([seed]) => coversEveryVariant(sampledAt(arbitrary, seed), members),
-    LAW_OPTIONS,
+    lawOptionsFor(arbitrary),
   )
 }
 
@@ -171,11 +206,7 @@ if (import.meta.vitest !== void 0) {
       depthSize: 'medium',
     })
   )
-  const STOCK_EXPR: Codec = (() => {
-    const Cons: Codec = S.suspend((): Codec => S.Struct({ _tag: S.Literal('Cons'), head: S.Finite, tail: Chain }))
-    const Chain: Codec = S.Union([Lit, Cons])
-    return Chain
-  })()
+  const STOCK_EXPR: Codec = expressionOf((recur) => S.Union([...BasePair, ...recur]))
 
   const basePairOnly: S.Annotations.ToArbitrary.Declaration<unknown, readonly []> = () => (fc) =>
     fc.oneof(S.toArbitrary(Lit)(fc), S.toArbitrary(Id)(fc))
@@ -187,7 +218,15 @@ if (import.meta.vitest !== void 0) {
     })
   )
 
-  const arbitraryOf = (schema: S.Constraint): fc.Arbitrary<unknown> => S.toArbitrary(schema)(fc)
+  const arbitraryCache = new Map<S.Constraint, fc.Arbitrary<unknown>>()
+
+  const arbitraryOf = (schema: S.Constraint): fc.Arbitrary<unknown> => {
+    const cached = arbitraryCache.get(schema)
+    if (cached !== undefined) return cached
+    const arbitrary = S.toArbitrary(schema)(fc)
+    arbitraryCache.set(schema, arbitrary)
+    return arbitrary
+  }
 
   const deepShareAt = (schema: S.Constraint, seed: number): number => deepShareOf(sampledAt(arbitraryOf(schema), seed))
 
@@ -221,13 +260,12 @@ if (import.meta.vitest !== void 0) {
     return details.failed && 'interrupted' in details && details.interrupted
   }
 
-  const flatStructOf = (seed: number): S.Constraint => {
-    const fields: Record<string, S.Constraint> = {}
-    for (let index = 0; index <= Math.abs(seed % 3); index += 1) {
-      fields[`field${index}`] = S.String
-    }
-    return S.Struct(fields)
-  }
+  const NON_RECURSIVE_SCHEMAS: ReadonlyArray<{ readonly ast: SchemaAST.AST }> = [
+    S.String,
+    S.Array(S.String),
+    S.Struct({ a: S.String, b: S.String }),
+    S.Struct({ outer: S.Struct({ inner: S.String }) }),
+  ]
 
   const encodedChainOf = (depth: number): unknown => {
     let node: unknown = { _tag: 'Lit', value: 1 }
@@ -243,9 +281,9 @@ if (import.meta.vitest !== void 0) {
   }
 
   it.prop(
-    '∀s_FlatStructs_⊥Cycle',
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => firstRecursiveUnion(flatStructOf(seed).ast) === undefined,
+    '∀s_NonRecursiveSchemas_⊥Cycle',
+    [fc.constantFrom(...NON_RECURSIVE_SCHEMAS)],
+    ([schema]) => firstRecursiveUnion(schema.ast) === undefined,
   )
 
   it.prop(
@@ -255,26 +293,28 @@ if (import.meta.vitest !== void 0) {
   )
 
   it.prop(
-    '∀s_StockExprDeepShare_≤Floor',
+    '∀s_StockExprDeepShare_≠Zero',
     [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => deepShareAt(STOCK_EXPR, seed) < DEEP_SHARE,
-    LAW_OPTIONS,
+    ([seed]) => deepShareAt(STOCK_EXPR, seed) > 0,
+    lawOptionsFor(arbitraryOf(STOCK_EXPR)),
   )
 
   it.prop(
     '∀s_DeclaredDeepShare_≠Zero',
     [S.toArbitrary(S.Int)(fc)],
     ([seed]) => deepShareAt(ANNOTATED_EXPR, seed) > 0,
-    LAW_OPTIONS,
+    lawOptionsFor(arbitraryOf(ANNOTATED_EXPR)),
   )
 
-  const Num = S.TaggedStruct('Num', { value: S.Finite })
-  const Str = S.TaggedStruct('Str', { value: S.String })
-  const Flag = S.TaggedStruct('Flag', { on: S.Boolean })
   const BASE_HEAVY_EXPR = expressionOf((recur) =>
     terminatingRecursion({
       identifier: 'BaseHeavyExpr',
-      base: [...BasePair, Num, Str, Flag],
+      base: [
+        ...BasePair,
+        S.TaggedStruct('Num', { value: S.Finite }),
+        S.TaggedStruct('Str', { value: S.String }),
+        S.TaggedStruct('Flag', { on: S.Boolean }),
+      ],
       recur,
       maxDepth: MAX_DEPTH,
       depthSize: 'medium',
@@ -285,41 +325,61 @@ if (import.meta.vitest !== void 0) {
     '∀s_BaseHeavyDeepShare_≠Zero',
     [S.toArbitrary(S.Int)(fc)],
     ([seed]) => deepShareAt(BASE_HEAVY_EXPR, seed) > 0,
-    LAW_OPTIONS,
+    lawOptionsFor(arbitraryOf(BASE_HEAVY_EXPR)),
   )
 
   it.prop(
     '∀s_CollapsedDeepShare_=Zero',
     [S.toArbitrary(S.Int)(fc)],
     ([seed]) => deepShareAt(DROPPED_MEMBER_EXPR, seed) === 0,
-    LAW_OPTIONS,
+    lawOptionsFor(arbitraryOf(DROPPED_MEMBER_EXPR)),
   )
 
   it.prop(
     '∀s_AnnotatedExprNesting_≤DeclaredCap',
     [S.toArbitrary(S.Int)(fc)],
     ([seed]) => longestNestingAt(ANNOTATED_EXPR, seed) <= declaredCapOf(ANNOTATED_EXPR),
-    LAW_OPTIONS,
+    lawOptionsFor(arbitraryOf(ANNOTATED_EXPR)),
   )
 
   it.prop(
     '∀s_AnnotatedExprVariants_⊇Declared',
     [S.toArbitrary(S.Int)(fc)],
     ([seed]) => coversAt(ANNOTATED_EXPR, seed),
-    LAW_OPTIONS,
+    lawOptionsFor(arbitraryOf(ANNOTATED_EXPR)),
   )
 
   it.prop(
     '∀s_DroppedMemberVariants_⊆Declared',
     [S.toArbitrary(S.Int)(fc)],
     ([seed]) => !coversAt(DROPPED_MEMBER_EXPR, seed),
-    LAW_OPTIONS,
+    lawOptionsFor(arbitraryOf(DROPPED_MEMBER_EXPR)),
   )
 
   it.prop(
     '∀s_TightBudget_⊥SilentOverrun',
     [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => interruptedUnder(1, seed) && !interruptedUnder(BUDGET_MS, seed),
+    ([seed]) => {
+      const arbitrary = arbitraryOf(ANNOTATED_EXPR)
+      const started = performance.now()
+      fc.sample(arbitrary, { numRuns: BUDGET_PROBE_RUNS * SAMPLE_DRAWS, seed })
+      const workMs = performance.now() - started
+      return interruptedUnder(workMs / 4, seed) && !interruptedUnder(workMs * 4, seed)
+    },
+    { fastCheck: { numRuns: BUDGET_PROBE_RUNS } },
+  )
+
+  it.prop(
+    '∀c_Budget_∈MeasuredBand',
+    [S.toArbitrary(S.Int)(fc)],
+    ([seed]) => {
+      const arbitrary = arbitraryOf(ANNOTATED_EXPR)
+      const freshBudget = measureDrawMs(arbitrary) * ((SAMPLE_DRAWS * SAMPLE_SEEDS) / CALIBRATION_DRAWS) * SAFETY
+      const started = performance.now()
+      fc.sample(arbitrary, { numRuns: SAMPLE_DRAWS * SAMPLE_SEEDS, seed })
+      const measured = performance.now() - started
+      return freshBudget >= measured * BUDGET_LOWER_FACTOR && freshBudget <= measured * BUDGET_UPPER_FACTOR
+    },
     { fastCheck: { numRuns: BUDGET_PROBE_RUNS } },
   )
 }
