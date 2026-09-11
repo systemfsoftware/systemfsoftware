@@ -66,6 +66,7 @@ import { toSchemaLocation } from './mutant-result-mapping.js'
 import { decidePlans, incrementalDiff } from './Mutants.js'
 import type { TestCoverage } from './Mutants.js'
 import { testCoverageFrom } from './Mutants.js'
+import { makeMutationReportingService } from './mutation-reporting.js'
 import { MutationTestCommand } from './MutationTest.schema.js'
 import type { ResolvedMode } from './output-mode.js'
 import { InstrumentCommand, planInstrumentation } from './plan-instrumentation.workflow.js'
@@ -78,7 +79,6 @@ import { FILE_CONCURRENCY, readOriginal, toInstrumenterFile } from './Project.js
 import { withInstrumentedFiles } from './Project.js'
 import { reportFileName } from './report-assembly.js'
 import { ansi } from './Reporter.ansi.js'
-import { makeMutationReportingService } from './Reporter.js'
 import {
   attachReporterFactories,
   currentReporterInit,

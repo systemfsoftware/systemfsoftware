@@ -1,4 +1,6 @@
 import { type CheckResult, type PassedCheckResult } from '@systemfsoftware/stryker-js/Checker'
+import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
+import { highestExitClass, verdictExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import { calculateMetrics } from '@systemfsoftware/stryker-js/Metrics'
 import type { MetricsResult } from '@systemfsoftware/stryker-js/Metrics'
 import type { MutantResult, MutantTestCoverage } from '@systemfsoftware/stryker-js/Mutant'
@@ -11,7 +13,6 @@ import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as HashMap from 'effect/HashMap'
-import * as Layer from 'effect/Layer'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
@@ -19,15 +20,18 @@ import * as Queue from 'effect/Queue'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
-import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
-import { highestExitClass, verdictExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import { checkStatusToMutantStatus, mapRunResult, toSchemaLocation } from './mutant-result-mapping.js'
 import type { TestCoverage } from './Mutants.js'
 import type { ResolvedMode } from './output-mode.js'
 import type { Project } from './Project.js'
 import { FILE_CONCURRENCY, readOriginal } from './Project.js'
-import { determineLanguage, reportFileName } from './report-assembly.js'
-import { assembleFileResults, assembleTestFiles, testIdRemap } from './report-assembly.js'
+import {
+  assembleFileResults,
+  assembleTestFiles,
+  determineLanguage,
+  reportFileName,
+  testIdRemap,
+} from './report-assembly.js'
 import type { ReporterStage } from './ReporterStream.js'
 import { closeReporterStage, offerTerminalReport, terminalDrainClass } from './ReporterStream.js'
 import type { RunOutcome } from './Run.js'
@@ -385,6 +389,3 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
     checkpoint,
   }
 }
-
-export const makeMutationReportingLayer = (input: MakeMutationReportingInput): Layer.Layer<MutationReporting> =>
-  Layer.succeed(MutationReporting, makeMutationReportingService(input))
