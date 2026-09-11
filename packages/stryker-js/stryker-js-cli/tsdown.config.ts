@@ -6,11 +6,12 @@ export default defineConfig({
     main: './src/main.ts',
     'workers/checker-worker': './src/workers/Checker.worker.ts',
     'workers/child-process-test-runner-worker': './src/workers/child-process-test-runner-worker.ts',
-    'config/base': './src/config/base.ts',
+    config: './src/config/base.ts',
   },
   exports: {
-    exclude: ['main', 'workers/checker-worker', 'workers/child-process-test-runner-worker'],
+    exclude: ['main', 'workers/checker-worker', 'workers/child-process-test-runner-worker', 'config'],
     bin: { stryker: './src/main.ts' },
+    customExports: { './config': './dist/config.mjs' },
   },
   deps: {
     alwaysBundle: ['effect', '@std/jsonc'],

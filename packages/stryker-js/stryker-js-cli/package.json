@@ -75,8 +75,8 @@
     "provenance": true
   },
   "exports": {
-    ".": "./dist/config/base.mjs",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./config": "./dist/config.mjs"
   },
   "bin": {
     "stryker": "./dist/main.mjs"
