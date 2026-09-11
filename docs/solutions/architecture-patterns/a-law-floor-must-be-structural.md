@@ -8,11 +8,8 @@ rebuilt comparison object that shares closures with the annotated subject.
 
 ## The two shapes that failed
 
-**Fixture-measured absolute floor.** The reference fixture (two base members,
-two recur members, ceiling 6, `'medium'` decay) measured a deep-value share of
-0.249 at depth ≥ 4; the stock-equivalent policy measured 0.000. Codifying
-"15 %" as the law's floor encoded the fixture's arity balance, not the
-policy's guarantee. The first real corpus union to run under the law — five
+**Fixture-measured absolute floor.** Codifying "15 %" as the law's floor
+encoded a fixture's arity balance, not the policy's guarantee. The first real corpus union to run under the law — five
 base members, two recur — cannot reach 15 % under any honest budget, because
 `fc.oneof`'s depth decay biases toward the _first_ arbitrary (the base
 members) as depth grows. A floor that a correct implementation fails is not a

@@ -26,11 +26,10 @@ One lint-rule package concentrated ~2,075 mutants into a single Stryker cell: on
 
 Split the rule set along its natural domains into **private leaf packages** (`private: true`, never published), and convert the public package into a **re-key aggregate**: it imports the leaves as devDependencies, spreads their rules under its own plugin name, and derives its recommended set from each leaf's own recommendation. The consumer-facing namespace never changes, so no config, disable comment, or import migrates.
 
-The contract that makes this safe is mechanical, three-deep:
+The contract that makes this safe is mechanical, two-deep:
 
 1. The aggregate test asserts the exported rule count and id set against a pre-split literal.
 2. The base-preset test asserts the wired error set equals the union of the leaves' recommended sets re-keyed — both sides read live plugin objects, so neither can drift alone.
-3. A drift test pins byte-identical mirrors of shared kernel modules between the packages that must co-vary.
 
 Each leaf owns its own Stryker config and enters the mutation matrix as an independent parallel cell; the discovery predicate that enumerates cells (workspace importers owning a Stryker config) picks them up with no per-cell CI wiring. The aggregate, owning no rules, leaves the matrix.
 
@@ -50,7 +49,7 @@ Gate the aggregate's packaging invariant on the **built artifact, not the manife
 
 Before: `@systemfsoftware/oxlint-plugin` owns 19 rules, one Stryker config, ~2,075 mutants, one serial CI cell.
 
-After: three private leaves (`effect-native` 8, `tag-discipline` 4, `structure` 7 plus two vendored kernels) each mutate in parallel under the per-package budget; the aggregate re-keys via `recommendedFrom` and spreads, exports stay byte-identical (19 rules, 15 recommended — the aggregate registration contract's pre-split literal pins both), and the dist guard fails a bare-import leak at build time.
+After: three private leaves (`effect-native` 8, `tag-discipline` 4, `structure` 7) each mutate in parallel under the per-package budget; the aggregate re-keys via `recommendedFrom` and spreads, exports stay byte-identical (19 rules, 15 recommended — the aggregate registration contract's pre-split literal pins both), and the dist guard fails a bare-import leak at build time.
 
 ## Related
 

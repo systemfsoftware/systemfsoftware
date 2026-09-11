@@ -31,11 +31,11 @@ The `arethetypeswrong-cli` container contract lane failed because `/work/node_mo
 ## What Didn't Work
 
 - Checking only `installed.exitCode !== 0` after the container `npm install` — npm does not fail when it skips a bin link; it completes with a warning class npm treats as non-fatal (hidden entirely at `--loglevel=error`).
-- Relying on `pnpm pack` always shipping the build output (it did — the CLI ran `prepack: pnpm build` and the tarball carried the built CLI; that package has since left this tree) — the failure was not the pack; it was that the lane never verified the runtime artifact after installing.
+- Relying on `pnpm pack` always shipping the build output (it did — the CLI ran `prepack: pnpm build` and the tarball carried the built CLI) — the failure was not the pack; it was that the lane never verified the runtime artifact after installing.
 
 ## Solution
 
-In the arethetypeswrong CLI's container setup — then at `packages/arethetypeswrong/cli/tests/__fixtures__/GlobalSetup.ts`; the arethetypeswrong packages have since left this tree, and consumers resolve the CLI from the registry through the `attw` catalog — after the container install, explicitly re-link the bin and assert it:
+After the container install, explicitly re-link the bin and assert it:
 
 ```ts
 const relink = await attwContainer.exec(
@@ -53,7 +53,7 @@ if (binOk.exitCode !== 0 || binOk.stdout.trim() !== 'ok') { throw new Error(...)
 ## Why This Works
 
 - npm's install-time bin linking skips a bin when the target file is missing and reports it only as a warning; exit code stays 0. A green install class never implied a runnable binary.
-- `npm rebuild` runs the bin-linking pass again for the named package; with `dist` present the link is (re)created. The host-side pack hook already ensured the tarball carried `dist` — the CLI built from its `prepack`, and the only `prepare` script under `packages/` now belongs to `packages/stryker-js/stryker-js-cli`.
+- `npm rebuild` runs the bin-linking pass again for the named package; with `dist` present the link is (re)created. The host-side pack hook already ensured the tarball carried `dist`, and the only `prepare` script under `packages/` belongs to `packages/stryker-js/stryker-js-cli`.
 - The subsequent `test -x` assertion enforces the suite's own precondition at the setup boundary, so a missing binary becomes a named setup error before any scenario runs.
 
 ## Prevention

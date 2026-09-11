@@ -8,7 +8,7 @@ component: ci-gate
 severity: high
 symptoms:
   - "release gate fails non-deterministically on a fresh (cold-cache) tree; 2 of 3 identical runs failed, 1 passed"
-  - "the CLI contract lane needs a built package: .../arethetypeswrong/cli/dist/main.mjs is missing - run `pnpm build` first"
+  - "the CLI contract lane needs a built package: `dist/main.mjs` is missing - run `pnpm build` first"
   - "a dependent typecheck dies with TS2307: Cannot find module '@systemfsoftware/arethetypeswrong-core' — a dependency's dist vanished seconds after its build task completed"
   - "the package's own build task shows `✔ Build complete` earlier in the same run — the gate failure contradicts the build log"
   - "one `npm pack` in a package dir runs `prepack`, `prepare`, a workspace-wide prepare sweep, and the root prepare — visible as `Scope: all 42 workspace projects` noise from an analyzer task"
@@ -75,7 +75,7 @@ publish pack:    hooks ON  (npm-package prepack: pnpm build rebuilds dist)
 - **A package gaining `prepack`/`prepare` changes the contract for everyone that packs it.** The lane's explicit pack list (`WORKSPACE_PACKAGES`) and the analyzer's own pack are the shared surfaces above; a _new_ pack surface must adopt the read-only form or it reintroduces the race.
 - **Keep hooks minimal.** `prepare` on a bin-shipping package is a ~60 ms transpile-only build by design; a hook that grows into a workspace-wide operation turns one pack into a multi-package mutation.
 - **A package that reaches a workspace tool through its published version never receives that tool's unreleased fix.** Where a package consumes its own sibling from the registry to avoid closing a dependency cycle, the sibling's in-source read-only packing is invisible to it: the analysis task executes the published binary, which packs with hooks enabled and rebuilds the very output its concurrent readers are importing. Diagnose it by identity, not timestamp — a clean-and-rebuild replaces the files, so the inode changes while the byte size does not. Force the read-only form from the caller's environment, which holds for every version of the tool, instead of relying on the tool carrying its own flag.
-- Verification that closed this: cold `attw` for the fixed package exits 0 with `dist/` md5-identical and zero hook executions in the log; `check:local` exits 0; a live graph query confirms the lane's `test:contract` still waits on own and `^build`; CI runs the lane in containers against the hookless tarballs.
+- Verification that closed this: `check:local` exits 0; a live graph query confirms the lane's `test:contract` still waits on own and `^build`; CI runs the lane in containers against the hookless tarballs.
 
 ## Related Issues
 

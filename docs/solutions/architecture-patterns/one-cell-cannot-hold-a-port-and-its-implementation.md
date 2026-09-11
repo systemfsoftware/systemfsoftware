@@ -22,58 +22,22 @@ tags:
 # One Cell Cannot Hold Both A Port And Its Implementation
 
 A capability port and the implementation that satisfies it are two different things with two
-different consumers. A `.adapter` cell held both, so every rule that governed the edge into it had
-to decide for both at once — and the only safe file-level answer was to forbid the edge. That ban
-manufactured a projection tag in every consumer. The rule and the fleet around it were deleted on
-2026-08-16: `cell-imports` is gone with the `cell-import-boundary` rule it shipped and the
-`forbidValue` edges that rule read, no `.adapter` or `.executor` file remains anywhere in the tree,
-and no `*ExecutorDeps` tag is importable. What survives is the lesson and the measurement that
-carried it.
+different consumers. When one module holds both, every rule governing the edge into it has to decide
+for both at once — and the only safe file-level answer is to forbid the edge. That ban manufactures a
+projection tag in every consumer.
 
-## The chain, measured
-
-The deleted `cell-import-boundary` rule, last shipped in the deleted `cell-imports` package, gave
-`.executor.ts` the edge `forbidValue: ['.adapter']` over a table in `cell-import-table.config.ts`,
-and reported:
-
-> `../leader-lock.adapter.js` is forbidden. Expected: at most a type-only reference to this cell.
-> Actual: a value import of the .adapter cell. Fix: use `import type` so no runtime edge is created.
+## Why a file-level ban forces a projection
 
 A port is only usable as a **value** — `yield* LeaderLock` needs the tag at runtime. Type-only is
 therefore not a weaker form of the same access, it is a different thing: enough to name the
-service's type, never enough to require it. An executor obeying the rule had exactly one route
-left, and it was forced rather than chosen:
+service's type, never enough to require it. A module forbidden a value edge into the module that
+declares the port has exactly one route left, and it is forced rather than chosen: mint a local tag
+whose service type references the port's type, and bridge the two with a layer whose body carries no
+logic at all.
 
-```ts
-// the adapter is reachable for its type and nothing else, so the executor mints its own tag
-export class WithLeaderLockExecutorDeps extends Context.Tag('…/WithLeaderLockExecutorDeps')<
-  WithLeaderLockExecutorDeps,
-  { readonly withLock: LeaderLock['Type']['withLock'] } // a type-only reference to the port
->() {}
-```
-
-Something else then had to bridge the two, and that something was a layer whose body carries no
-logic at all:
-
-```ts
-export const WithLeaderLockExecutorLive: Layer.Layer<WithLeaderLockExecutorDeps, never, LeaderLock> = Layer.effect(
-  WithLeaderLockExecutorDeps,
-  Effect.gen(function*() {
-    const lock = yield* LeaderLock
-    return { withLock: lock.withLock }
-  }),
-)
-```
-
-Those fences show the shape the rule manufactured, not one that ships. Measured across the tree
-while it was live — a census of every production `*ExecutorDeps` tag — the count was **25**. Against
-the two categories that license managing a dependency at all, **3** had a second implementation,
-**3** were substituted in a test, and **22** had neither — 4 of them had no `Layer` constructing
-them anywhere. The three category counts sum to 28 against a population of 25, so a tag can sit in
-two categories at once; the population is the figure to trust. The projections were not a style
-that spread; they were the only shape the boundary rule left — and a prohibition that leaves
-exactly one legal route, with a workaround at the end of it, is worse than no prohibition: it
-manufactures the workaround and then certifies it as the shape.
+A prohibition that leaves exactly one legal route, with a workaround at the end of it, is worse than
+no prohibition: it manufactures the workaround and then certifies it as the shape. The projections
+were not a style that spread; they were the only shape the boundary rule left.
 
 ## What the primary does instead
 
@@ -117,11 +81,10 @@ Two repairs that look adjacent and are not:
 
 ## What a violation costs now
 
-Nothing catches a module that value-imports an implementation once the rule is gone, and nothing
-stops a module from declaring a service key beside the `Layer` that provides it — the deletion took
-the rule and left the conflation. That is why the split is the load-bearing half. No gate keys on a
-cell-role filename any more; what selects the mutation population now is the `Workflow.make`
-boundary. `collectMakeBoundaries` in
+Nothing catches a module that value-imports an implementation, and nothing stops a module from
+declaring a service key beside the `Layer` that provides it. That is why the split is the
+load-bearing half. No gate keys on a cell-role filename any more; what selects the mutation
+population now is the `Workflow.make` boundary. `collectMakeBoundaries` in
 `@systemfsoftware/oxlint-make-boundary` (`packages/oxlint-plugin/make-boundary`) reads every `make`
 call whose callee resolves to the `Workflow` value of `@systemfsoftware/effect-cell-types`, and the
 `workflow-make-boundary` ignorer in `@systemfsoftware/stryker-plugins` takes the mutated set from

@@ -1,6 +1,6 @@
 ---
 title: Workflow Error Channel Gates
-module: omp-claude-compat
+module: effect-cell-types
 component: workflow-error-channel
 tags: [effect-ts, constitution, workflow, tagged-error, match-exhaustive]
 problem_type: architecture-pattern
@@ -18,12 +18,12 @@ applies_when:
 
 ## Context
 
-`interpretHookResult` in the `omp-claude-compat` plugin — the file was
-`hook-verdict.workflow.ts`, and the plugin has since been extracted from this tree to its own
-repository — was written as `Either<HookDecision, never>`, a "total" decision shape where every
-domain outcome lands in the `Right` channel.
+A workflow that interpreted a subprocess verdict was written as `Either<VerdictDecision, never>` —
+a "total" decision shape where every domain outcome lands in the `Right` channel.
 
-The original code also routed JSON parse errors through `Either.match(parseHookOutput(...), { onLeft: () => null, onRight: ... })` — collapsing a typed error into `null` and then dispatching as if no error existed. The mutator cannot kill what the type system refuses to name.
+The same code also routed JSON parse errors through an `Either.match` whose `onLeft` returned
+`null` — collapsing a typed error into `null` and then dispatching as if no error existed. The
+mutator cannot kill what the type system refuses to name.
 
 ## Guidance
 
@@ -33,7 +33,7 @@ Apply the three gates that govern the error channel of a workflow:
 
 ```ts
 // RIGHT
-export class HookVerdictError extends S.TaggedError<HookVerdictError>()('HookVerdictError', {
+export class VerdictError extends S.TaggedError<VerdictError>()('VerdictError', {
   raw: S.String,
 }) {}
 
@@ -45,19 +45,22 @@ export class MalformedJson extends S.TaggedClass<MalformedJson>()('MalformedJson
 
 **Gate B — primitive dispatch over open shapes uses `Match.value` with terminal `orElse`; closed unions use `Match.tag` + `Match.exhaustive`.** A primitive (number, string) is an open shape — `Match.value(result.code).pipe(Match.when(2, ...), Match.when(0, ...), Match.orElse(...))` is legal because the primitive has infinitely many values. A closed tagged union (e.g. `ExitBlock | ExitParse | ExitOther`) is not — dispatch must terminate with `Match.exhaustive` so adding a variant forces a compile error.
 
-The hook-verdict workflow has BOTH shapes layered: `result.code` (primitive → `orElse` is legal) dispatches into one of three `ExitKind` variants (closed → `Match.exhaustive` is required). The `ExitKind` union exists specifically to give `Match.exhaustive` a closed shape to bite on. Without it, the dispatch is unfalsifiable — `Match.orElse` on a primitive swallows any new exit code silently.
+One interpreter can carry BOTH shapes layered: a primitive (`result.code` → `orElse` is legal)
+dispatches into a closed `ExitKind` union (→ `Match.exhaustive` is required). The `ExitKind`
+union exists specifically to give `Match.exhaustive` a closed shape to bite on. Without it, the
+dispatch is unfalsifiable — `Match.orElse` on a primitive swallows any new exit code silently.
 
-**Gate C — error variants are produced by some step; every variant has at least one producer.** `HookVerdictError` is the only error type because there is exactly one failure mode the workflow can detect: the hook exited `0` but its stdout was not parseable as the expected JSON shape. If you find yourself unable to list which step produces a given variant, the variant is dead and should be removed.
+**Gate C — error variants are produced by some step; every variant has at least one producer.** A workflow with exactly one detectable failure mode — the process exited `0` but its stdout was not parseable as the expected JSON shape — declares exactly one error variant. If you find yourself unable to list which step produces a given variant, the variant is dead and should be removed.
 
 ## Why This Matters
 
-Constitution §I.1 (Purity) and §I.3 (Each Error Its Own Variant) are carried by construction and lint, not by a skill: `Workflow.make` refuses an uninhabited or untagged error channel at the construction site (`Inhabited` / `UninhabitedError` / `UntaggedError` become the compiler diagnostics), and the `effect-workflow` plugin's `make-body-purity` and `workflow-match-exhaustive` rules bind the file at lint time. The remaining gates — the `S.TaggedError`-over-`S.TaggedClass` choice and one producer per variant — are held by review, not by a deterministic gate. A workflow with `never` in the error channel that bypasses the constructor can still typecheck and still pass `pnpm check` — the violation is invisible to the compiler and to the test suite. The next contributor who adds a real failure mode will either smuggle it into a `Warning` (silently collapsing two distinct failures) or add it as a `boolean` field on a decision (violating §I.3). The mistake reproduces because nothing in the build chain catches it.
+Constitution `CONST-P1` (Purity) and `CONST-D2` (Each Error Its Own Variant) are carried by construction and lint, not by a skill: `Workflow.make` refuses an uninhabited or untagged error channel at the construction site (`Inhabited` / `UninhabitedError` / `UntaggedError` become the compiler diagnostics), and the `effect-workflow` plugin's `make-body-purity` and `workflow-match-exhaustive` rules bind the file at lint time. The remaining gates — the `S.TaggedError`-over-`S.TaggedClass` choice and one producer per variant — are held by review, not by a deterministic gate. A workflow with `never` in the error channel that bypasses the constructor can still typecheck and still pass `pnpm check` — the violation is invisible to the compiler and to the test suite. The next contributor who adds a real failure mode will either smuggle it into a `Warning` (silently collapsing two distinct failures) or add it as a `boolean` field on a decision (violating `CONST-D2`). The mistake reproduces because nothing in the build chain catches it.
 
 The 100% mutation gate is the other failure mode this prevents: a workflow that swallows `Either.left` to `null` is unfalsifiable. The mutator changes the parse path to always succeed and the test still passes because the workflow never branched on the failure in the first place.
 
 ## When to Apply
 
-- Every `*.workflow.ts` file under `omp/plugins/*/src/`, `omp/packages/*/src/`, and `packages/*/src/`
+- Every `*.workflow.ts` file under `packages/**/src/`
 - During code review: if the signature is `Either<X, never>`, push back — total workflows are `Allow | Block` with no other named variants, and most "total" workflows are actually hiding a failure mode
 - When a workflow dispatches on a primitive and reaches for `Match.exhaustive`: derive a closed tagged union first, then dispatch
 
@@ -66,17 +69,17 @@ The 100% mutation gate is the other failure mode this prevents: a workflow that 
 **Before** — workflow with `never` error channel and silent parse-failure collapse:
 
 ```ts
-export const interpretHookResult = (
-  result: HookResult,
+export const interpretVerdict = (
+  result: VerdictResult,
   event: string,
-): Either.Either<HookDecision, never> =>
+): Either.Either<VerdictDecision, never> =>
   Either.right(
     Match.value(classifyExit(result.code)).pipe(
       Match.tag('ExitTwo', () => new Block({ ... })),
       Match.tag('NonZeroNonTwo', () => /* Allow or Warning */),
       Match.tag('ExitZero', () =>
         decideFromParsed(
-          Either.match(parseHookOutput(result.stdout), {
+          Either.match(parseOutput(result.stdout), {
             onLeft: () => null,   // <-- failure swallowed
             onRight: (p) => p,
           }),
@@ -90,7 +93,7 @@ export const interpretHookResult = (
 **After** — workflow with a real error variant, dispatch through a closed `ExitKind` union, `S.TaggedError` for the error:
 
 ```ts
-export class HookVerdictError extends S.TaggedError<HookVerdictError>()('HookVerdictError', {
+export class VerdictError extends S.TaggedError<VerdictError>()('VerdictError', {
   raw: S.String,
 }) {}
 
@@ -100,15 +103,15 @@ class ExitOther extends S.TaggedClass<ExitOther>()('ExitOther', {}) {}
 
 const ExitKind = S.Union(ExitBlock, ExitParse, ExitOther)
 
-export const interpretHookResult = (
-  result: HookResult,
+export const interpretVerdict = (
+  result: VerdictResult,
   event: string,
-): Either.Either<HookDecision, HookVerdictError> =>
+): Either.Either<VerdictDecision, VerdictError> =>
   Match.value(classifyExit(result.code)).pipe(
     Match.tag('ExitBlock', () => Either.right(new Block({ reason: blockReason(result.stderr, event) }))),
     Match.tag('ExitParse', () =>
-      Either.match(parseHookOutput(result.stdout), {
-        onLeft: () => Either.left(new HookVerdictError({ raw: result.stdout })),
+      Either.match(parseOutput(result.stdout), {
+        onLeft: () => Either.left(new VerdictError({ raw: result.stdout })),
         onRight: (parsed) => Either.right(decideFromParsed(parsed, event)),
       })),
     Match.tag('ExitOther', () => Either.right(decideFromNonStandardExit(result.stderr))),
@@ -119,12 +122,12 @@ export const interpretHookResult = (
 **Executor side** — the executor must handle the new error variant. `Either.merge` no longer works because `Left` is now reachable:
 
 ```ts
-const verdict = interpretHookResult(result, event)
+const verdict = interpretVerdict(result, event)
 const decision = Either.match(verdict, {
   onLeft: (err) =>
     Match.value(err).pipe(
-      Match.tag('HookVerdictError', (e) =>
-        new Warning({ message: `Hook exited 0 but produced invalid JSON: ${e.raw.slice(0, 200)}` })),
+      Match.tag('VerdictError', (e) =>
+        new Warning({ message: `Process exited 0 but produced invalid JSON: ${e.raw.slice(0, 200)}` })),
       Match.exhaustive,
     ),
   onRight: (d) => d,
@@ -133,13 +136,13 @@ const decision = Either.match(verdict, {
 
 ## Verification
 
-- `grep -n 'Either<.*, never>' omp/plugins/*/src/*.workflow.ts omp/packages/*/src/*.workflow.ts packages/*/src/*.workflow.ts` returns only files where the workflow genuinely has zero failure modes (rare; `Allow | Block` total decisions).
-- `grep -n 'extends S.TaggedClass' omp/plugins/*/src/*.workflow.ts omp/packages/*/src/*.workflow.ts packages/*/src/*.workflow.ts` returns only decision/command classes, never error classes. Error classes must use `S.TaggedError`.
+- `grep -n 'Either<.*, never>' packages/**/*.workflow.ts` returns only files where the workflow genuinely has zero failure modes (rare; `Allow | Block` total decisions).
+- `grep -n 'extends S.TaggedClass' packages/**/*.workflow.ts` returns only decision/command classes, never error classes. Error classes must use `S.TaggedError`.
 - Property tests (where they exist) assert the error channel: `Either.isLeft(...)` cases prove the failure variant is reachable, not just theoretically defined.
 
 ## See Also
 
 - The `Workflow` constructor's `Inhabited` / `UninhabitedError` / `UntaggedError` refusals — the enforcement that gives this document its gates
 - The success-channel twin of this document — the tagged-union / shared-TypeId constraint on the decision channel — is enforced by the `SingleVariantDecision`, `UntaggedDecision`, and `UnsharedTypeId` refusals of the same constructor
-- `CONSTITUTION.md` §I.3 (Each Error Its Own Variant) and §III.3 (Mutation Is the Measure)
+- `CONSTITUTION.md` `CONST-D2` (Each Error Its Own Variant) and `CONST-T3` (Mutation Is the Measure)
 - `packages/effect-daemon-spec/src/LeaderLock.schema.ts` — reference usage of `S.TaggedError` in the monorepo

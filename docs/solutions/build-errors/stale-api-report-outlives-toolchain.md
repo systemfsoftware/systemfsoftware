@@ -119,7 +119,6 @@ Detection before failure is impossible in-band by construction: the cache is the
 1. **api-extractor reports** — 29 committed `packages/**/etc/*.api.md` files across 25 packages, each with two cached executions: the standalone `api:check` task and the check embedded in every package's `build` script (`"build": "tsdown && pnpm api:check"`). One member failed; the other 28 share the exposure identically. This is the class's home.
 2. **Stryker incremental report** — each package's gitignored `reports/stryker-incremental.json` is an input to the cached `mutation` task. Adjacent rather than identical: the cache restores a stored mutation verdict across a toolchain drift, and with no committed copy there is nothing to go red, so stale verdicts are reused silently instead of failing loudly. Same mechanism, worse failure mode.
 3. **Absent classes, stated plainly** — no committed Vitest snapshots and no `toMatchSnapshot`/`toMatchInlineSnapshot` calls anywhere under `packages/`. The snapshot-test instance of this class does not exist here.
-4. **Borderline non-instances** — `//#check:exports`, a turbo task whose declared `scripts/guards/check-exports.mjs` no longer exists in the tree, compares regenerated `dist/` against `package.json` exports, but its comparison target is itself a hashed input, so a toolchain change cannot silently flip the verdict. `attw` validates the packed tarball with no committed copy. Neither is in the class.
 
 ### Mechanisable options, with tradeoffs
 

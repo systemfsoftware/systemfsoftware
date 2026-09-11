@@ -56,7 +56,7 @@ currency(ref) := isHead(ref) => ancestor(remoteTrunkTip, ref.sha)
 
 ## Verification Patterns
 
-The live guard is `.husky/pre-push`, a POSIX shell script inlined there. The prototype it replaced, `scripts/guards/check-remote-main.ts`, is deleted — its ref-kind decide and its stdin parsing no longer exist in this tree.
+The live guard is `.husky/pre-push`, a POSIX shell script inlined there.
 
 - Only a push of `main` is in the hook's domain: any other branch is allowed before the remote is read at all.
 - Currency is read from the remote at hook time, `git ls-remote --heads origin main`, never from the local `main` ref; a remote that reports no `main` is allowed.

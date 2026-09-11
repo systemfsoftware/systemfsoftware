@@ -1,17 +1,16 @@
 ---
 title: tsgo LSP linter wired into the lint pipeline — plugin name, extends activation, and the turbo passthrough trap
 module: repo-root
-component: packages/toolchain/tsconfig/effect.json, packages/atom/effect-atom, packages/atom/effect-atom-react, packages/storybook-gherkin, package.json
+component: tooling
+problem_type: tooling_decision
 tags: [lint, tsgo, effect-language-service, diagnostics, turbo, lsp]
-problem_type: tooling-decisions
 track: knowledge
 applies_when:
-  symptoms:
-    - `effect-tsgo diagnostics --project tsconfig.json` reports "Checked 0 files" for a project whose tsconfig lists the Effect plugin
-    - Someone chains `effect-tsgo diagnostics` into a package `lint` script with `&&`
-    - A package wants the Constitution-derived Effect diagnostics policy from `packages/toolchain/tsconfig/effect.json`
-  root_cause: the Effect LSP plugin is matched by the exact name `@effect/language-service`; and turbo appends passthrough args to every task, so a `--format` meant for oxlint reaches tsgo
-  resolution_type: integration-pattern
+  - "`effect-tsgo diagnostics --project tsconfig.json` reports \"Checked 0 files\" for a project whose tsconfig lists the Effect plugin"
+  - "Someone chains `effect-tsgo diagnostics` into a package `lint` script with `&&`"
+  - "A package wants the Constitution-derived Effect diagnostics policy from `packages/toolchain/tsconfig/effect.json`"
+root_cause: "the Effect LSP plugin is matched by the exact name `@effect/language-service`; and turbo appends passthrough args to every task, so a `--format` meant for oxlint reaches tsgo"
+resolution_type: integration-pattern
 ---
 
 # tsgo LSP linter in the lint pipeline
@@ -22,7 +21,7 @@ lint pipeline as a complement to oxlint. Three durable facts make or break that 
 ## 1. The plugin name is exact: `@effect/language-service`
 
 The Go binary matches only `EffectPluginName = "@effect/language-service"` in the tsconfig
-`plugins` array (`/tmp/tsgo-src/etscore/consts.go`). A plugin entry named `@effect/tsgo` is
+`plugins` array. A plugin entry named `@effect/tsgo` is
 silently ignored — the diagnostics CLI then reports `Checked 0 files out of N files` and
 `tsc`-mode emits nothing. There is no error message; the integration is simply dead.
 
@@ -49,15 +48,14 @@ Effect plugin, so they are not counted as checked. That is normal, not a gap.
 
 ## 3. The turbo passthrough trap: tsgo is its own task
 
-The root `lint:ci` script used to run `turbo ... lint -- --format=github`; turbo appends
-passthrough args to the tail of every package script, so chaining `oxlint . && effect-tsgo
-diagnostics ...` into `lint` produced `... diagnostics ... --format=github`, and tsgo
-hard-errors on the value (`Expected: "json" | "pretty" | "text" | "github-actions"`). The
-CI format for tsgo is `github-actions`, not `github`. So the integration is a dedicated
-per-package task `lint:tsgo` (format selected by `TSGO_FORMAT`, defaulting to `text`),
-invoked separately in `gate:tasks` — the list root `check:ci` runs — with formats supplied
-by environment (`TSGO_FORMAT=github-actions`, `OXLINT_FORMAT=github`) rather than
-passthrough args. `lint:ci` itself has since been dropped.
+Turbo appends passthrough args to the tail of every package script, so chaining `oxlint . &&
+effect-tsgo diagnostics ...` into `lint` would deliver a `--format` meant for oxlint to
+tsgo, which hard-errors on a value it does not accept (`Expected: "json" | "pretty" |
+"text" | "github-actions"`); the CI format for tsgo is `github-actions`, not `github`. So
+the integration is a dedicated per-package task `lint:tsgo` (format selected by
+`TSGO_FORMAT`, defaulting to `text`), invoked separately in `gate:tasks` — the list root
+`check:ci` runs — with formats supplied by environment (`TSGO_FORMAT=github-actions`,
+`OXLINT_FORMAT=github`) rather than passthrough args.
 
 A new task must also be declared in `turbo.json`'s `tasks` map — turbo 2.x refuses to
 build the graph for an undeclared task (`Could not find task \`lint:tsgo\` in project`),

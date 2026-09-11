@@ -13,14 +13,13 @@ tags:
   - tsdown
   - publish-config
   - build-system
-  - stryker-js-mutation-run
 ---
 
 # tsdown manages publishConfig.exports during build
 
 ## Context
 
-A forked package's `package.json` can arrive with two `publishConfig` blocks — one with `access: public` and another with `exports: {...}` pointing to `dist/` output files. This looks like an error (duplicate JSON keys) but is intentional: tsdown writes the `exports` variant during build when the config names a development export condition. No package in this repo carries the duplicate today; the first build normalized every one of them, which is exactly the behaviour this note describes.
+A forked package's `package.json` can arrive with two `publishConfig` blocks — one with `access: public` and another with `exports: {...}` pointing to `dist/` output files. This looks like an error (duplicate JSON keys) but is intentional: tsdown writes the `exports` variant during build when the config names a development export condition.
 
 ## Guidance
 
@@ -37,7 +36,7 @@ A forked package's `package.json` can arrive with two `publishConfig` blocks —
   }
   ```
 - Reading the source file with `JSON.parse` before a build would silently drop `access: public` (JSON keeps only the last duplicate key). tsdown reads the file with its own parser that handles duplicates.
-- This pattern shows up in freshly forked packages (`packages/stryker-js/mutation-run` arrived this way) where upstream's `publishConfig` layout wasn't reformatted. First-party packages normally only carry `publishConfig.exports` (set by tsdown) and rely on `pnpm publish --access public` at the CI level.
+- This pattern shows up in freshly forked packages, where upstream's `publishConfig` layout wasn't reformatted. First-party packages normally only carry `publishConfig.exports` (set by tsdown) and rely on `pnpm publish --access public` at the CI level.
 
 ## Why This Matters
 

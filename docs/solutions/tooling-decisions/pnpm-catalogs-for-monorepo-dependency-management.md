@@ -13,7 +13,7 @@ root_cause: inadequate_documentation
 resolution_type: tooling_addition
 related_components:
   - pnpm-workspace.yaml
-  - package.json (12 files)
+  - package.json
   - tsconfig.json
   - effect-daemon-spec
 tags:
@@ -28,8 +28,6 @@ tags:
 # Centralized Dependency Management with pnpm Catalogs
 
 ## Context
-
-The systemfsoftware monorepo comprised 12 packages — eight library packages, three under `packages/stryker-js/`, and a shared `tsconfig` package — all with inline version specs for their shared dependencies.
 
 Inline version specs create two recurring problems: accidental drift and redundant update toil. When `effect` bumps to `^3.22.0`, every `package.json` that pins it must be updated. Miss one, and CI passes while one package still runs against the old version.
 
@@ -170,7 +168,7 @@ pnpm check
 
 ## Why This Matters
 
-**Single source of truth.** Changing `effect` from `^3.21.2` to `^3.22.0` requires editing one line in `pnpm-workspace.yaml`. Every package consuming `catalog:` picks up the new version on its next `pnpm install`. No grep-forget-edit loops across 12 files.
+**Single source of truth.** Changing `effect` from `^3.21.2` to `^3.22.0` requires editing one line in `pnpm-workspace.yaml`. Every package consuming `catalog:` picks up the new version on its next `pnpm install`. No grep-forget-edit loops.
 
 **Consistent runtime behavior.** Every package in the monorepo tests against the same `effect` version. A bug that only manifests on older versions is caught uniformly rather than lurking in packages that haven't been manually updated.
 

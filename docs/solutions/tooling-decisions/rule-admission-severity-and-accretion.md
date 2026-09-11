@@ -35,7 +35,6 @@ Taken this session, not from memory:
 | Category enabled              | `correctness: deny`                                     | same                                                            |
 | Agent-mode lint flags         | `--format=agent` when `AGENT` is set                    | every package's `lint` script                                   |
 | `agent` format semantics      | one line per diagnostic, no source excerpts, no summary | `repos/oxc`, `AgentOutputFormatter`                             |
-| Product gates in `scripts/`   | 8                                                       | prior audit                                                     |
 
 Two of these decide most of what follows. The repo already runs **128 rules with zero
 warn** — 2.5× the rule count often quoted as a ceiling — and it works. And no `lint` script
@@ -78,13 +77,7 @@ Here warn is not just dominated, it is the worst of the three options:
 `error` plus a baseline is what you actually wanted: new code is blocked today, the 400
 existing sites are enumerated as debt with a date, and the list can only get shorter
 because nothing new can enter it. Warn blocks nothing, so the population grows while you
-are "migrating." This repo ran the dominant pattern while `scripts/check-lint-coverage.mjs`
-existed — it carried an exemption map where every entry had to state why, and an entry
-without a reason was treated as a bug — until that script was deleted; `scripts/guards/`
-now holds only `check-changeset.ts`. (Caveat, in fairness: the _reason text_ in that map
-was unverified prose, the same weakness as the provenance manifest. Its saving grace was
-that the entry's _effect_ is checkable — the package either extends the config or it does
-not.)
+are "migrating."
 
 **Goal: "This check is a heuristic. It is genuinely advisory."**
 Then it should not ship as a lint rule. Above roughly 20% false positives a check is
@@ -145,7 +138,6 @@ Read the consequences:
 - **Fourteen rules at the "acceptable" 5% each falsely block more than half of all clean runs.** Each rule passes the published bar; the suite is unusable.
 - Inverting it, to hold a **5% suite-level** false-positive budget the per-rule budget must be `1-(0.95)^(1/N)`: 0.64% at N=8, 0.26% at N=20, 0.10% at N=50, and **0.04% — one bad fire in 2,496 runs — at N=128.**
 - So **the Nth rule tightens the requirement on every existing rule.** This is why 128 preset `correctness` rules are safe and twenty bespoke heuristics are not: preset correctness rules are near-deterministic, with p far below 0.1%. Affordability is governed by `N × p`, never by `N`.
-- Applied locally: the **8 product gates**, if each sat at the nominally acceptable 5%, would together cry wolf on **one clean run in three**. That is the budget those eight gates are spending, and it is the reason a ninth gate is not free.
 
 Honest caveat: independence is an upper bound on the damage. Correlated false positives —
 one rule misfiring repeatedly on one pattern — are cheaper, because a single diagnosis
@@ -223,8 +215,8 @@ Replace one unverifiable property with three checkable ones. The goal — direct
 in `scripts/` — is legitimate; the manifest was the wrong instrument because it checks a
 writer's claim.
 
-1. **Reachability replaces the manifest.** Require every script to be reachable from a named entry point (`package.json`, `turbo.json`, a workflow, a hook config). This is a fact about the repo, not a claim by an author, so a machine genuinely decides it. It is negative in polarity — _do not add an unreachable script_. It would have caught both dead scripts, and it would have correctly passed `rolldown-eager-entry-budget.mjs` (since deleted, like the scripts it inspected), which the manifest got wrong.
-2. **Mandatory known-bad fixture.** Every gate must exit non-zero on a fixture that violates it. The repo already invented this — 5 of 8 gates carry `--selftest` — so the change is to make it universal, not to design anything. A gate that cannot fail on purpose is not known to work.
+1. **Reachability replaces the manifest.** Require every script to be reachable from a named entry point (`package.json`, `turbo.json`, a workflow, a hook config). This is a fact about the repo, not a claim by an author, so a machine genuinely decides it. It is negative in polarity — _do not add an unreachable script_.
+2. **Mandatory known-bad fixture.** Every gate must exit non-zero on a fixture that violates it. The repo already invented this, so the change is to make it universal, not to design anything. A gate that cannot fail on purpose is not known to work.
 3. **Report the enforcement-surface line delta per change.** A number, reported, not a block. It makes accretion visible at review time, which is where the judgement belongs.
 
 The remaining half — "does this concern belong in a published package" — stays with review,
@@ -243,7 +235,6 @@ correctly assigned to a human.
 - `docs/solutions/architecture-patterns/provenance-ritual-gates.md` — the audit this follows from
 - `packages/oxlint-plugin/oxlint-config/src/oxlint-config.base.ts` — 125 deny, 3 allow, zero warn
 - `packages/oxlint-plugin/oxlint-config/package.json` — the `lint` script's `--format=${OXLINT_FORMAT:-${AGENT:+agent}}`, with no `--quiet`
-- `scripts/check-lint-coverage.mjs` — the error-plus-baseline pattern this doc drew on; the script is gone, and `scripts/guards/` now holds only `check-changeset.ts`
 - [Guardrails Beat Guidance, arXiv 2604.11088](https://arxiv.org/abs/2604.11088) — rule polarity: negative constraints help, positive directives harm; pass rates flat 0–50 rules
 - [IFScale, arXiv 2507.11538](https://arxiv.org/abs/2507.11538) — instruction adherence versus instruction count, the result that does _not_ transfer to lint
 - [METR, Recent Frontier Models Are Reward Hacking](https://metr.org/blog/2025-06-05-recent-reward-hacking/) — evaluator editing; 43× more frequent with a visible scoring function

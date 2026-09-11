@@ -31,4 +31,4 @@ The packages are pre-1.0 ALPHA (REPO-R1: API stability is never a design constra
 
 ## Reversing observation
 
-The port originally isolated its v4 pin behind a named catalog while the default catalog stayed on effect 3.x — the isolation existed so the two atom packages could move before the rest of the workspace. That isolation is gone: the full cut-over moved the default catalog itself to effect v4 and deleted the named catalogs, so every package now resolves effect v4 through the default catalog. There is no atom-specific pin left to reverse; undoing v4 now means undoing the workspace-wide migration, which is the intended end state of the staged port.
+Every package resolves effect v4 through the default catalog, so there is no atom-specific pin left to reverse; undoing v4 now means undoing the workspace-wide migration, which is the intended end state of the staged port.

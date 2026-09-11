@@ -70,6 +70,4 @@ probe: boot the built worker entry with `STRYKER_SOCKET` set and connect the
 path; the container lane exercises the full parent round-trip.
 
 Related: `an-escape-hatch-is-an-unfalsified-hypothesis.md` (exemptions are
-hypotheses; this port is what the falsified claim bought instead),
-`../../tooling-decisions/` (dep admission: `import-meta-resolve` was rejected
-under the same fail rule that forced the port).
+hypotheses; this port is what the falsified claim bought instead).

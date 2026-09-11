@@ -52,14 +52,9 @@ is not provenance. What the type layer cannot see, the property tests observe.
 
 Every site migrates up the ladder, never skipping a rung:
 
-- **Brand-add** — a site already has two `S.TaggedClass` variants but no shared brand: add
-  the family brand only, preserve names and fields (the `omp-claude-compat` plugin's
-  `admit.workflow.ts` and `settings.workflow.ts` — gone from this tree, the plugin having been
-  extracted to its own repository).
 - **Re-author** — a plain record or interface is the decision: promote its real outcome
   dimensions into `S.TaggedClass` variants, each carrying only its valid fields per
-  `CONST-D4` (the extracted plugin's `hooks.workflow.ts` — `Block | Allow | Warning`;
-  `packages/stryker-js/stryker-js-typescript-checker/src/check-mutants.workflow.ts` —
+  `CONST-D4` (`packages/stryker-js/stryker-js-typescript-checker/src/check-mutants.workflow.ts` —
   `CheckFinished | RetestRequired`).
 - **Split** — a single aggregate success variant whose consumer branches on a field is a
   hidden state machine: split by the consumer's actual branching
@@ -68,9 +63,8 @@ Every site migrates up the ladder, never skipping a rung:
   `InPlaceInstrument | EphemeralInstrument`, which also killed a
   `backupDirectoryHint: ''` sentinel).
 - **Declassify** — a workflow with genuinely one outcome is not a decision. The logic folds
-  into a plain function inside its owning module with the same logic and signature (the
-  engine's single-outcome helpers and their siblings in the neighbouring packages'
-  owning modules). Never invent a producer-less variant to satisfy the count.
+  into a plain function inside its owning module with the same logic and signature. Never
+  invent a producer-less variant to satisfy the count.
 
 Error channels keep their own rules (`S.TaggedError`, inhabited). A refusal the consumer
 renders is a **decision** — promote it to the success union; a genuinely undecidable input

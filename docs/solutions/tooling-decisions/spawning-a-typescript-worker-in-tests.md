@@ -65,13 +65,12 @@ not assumed: with plain `node`, the worker suite failed with `Timeout waiting fo
 died on its first import.
 
 **`tsx` as a devDependency** (one dependency, dev-only). It handles the `.js` → `.ts` remap and stays out of the
-published package. It was the interim answer, and it is gone: no package under `packages/` declares `tsx`, and the
-lockfile carries it only as an optional peer of build tooling (`tsdown`, `vite`).
+published package.
 
-**A network fetch** (`npx --yes tsx`). The first implementation shelled out to this, which fetches and executes whatever
-the registry serves on every worker start, in the hot path of the subsystem whose whole purpose is to stop depending on
-unmaintained npm packages. It was not free either: removing it took the worker suite, then three cases, from 8.68s to
-2.87s, because each spawn had been resolving packages before the worker could start. A launcher never fetches.
+**A network fetch** (`npx --yes tsx`). It fetches and executes whatever the registry serves on every worker start, in
+the hot path of the subsystem whose whole purpose is to stop depending on unmaintained npm packages. It was not free
+either: removing it took the worker suite, then three cases, from 8.68s to 2.87s, because each spawn had been
+resolving packages before the worker could start. A launcher never fetches.
 
 **Spawn the built entry** (the decision). Exercises the exact runtime and the exact file production uses, and needs no
 loader at all.
