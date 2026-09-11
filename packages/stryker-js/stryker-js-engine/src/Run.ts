@@ -76,9 +76,9 @@ import type { Project } from './Project.js'
 import { readProject } from './Project.js'
 import { FILE_CONCURRENCY, readOriginal, toInstrumenterFile } from './Project.js'
 import { withInstrumentedFiles } from './Project.js'
+import { reportFileName } from './report-assembly.js'
 import { ansi } from './Reporter.ansi.js'
 import { makeMutationReportingService } from './Reporter.js'
-import { normalizeReportFileName } from './Reporter.js'
 import {
   attachReporterFactories,
   currentReporterInit,
@@ -1019,7 +1019,7 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                   }
                   return {
                     status: result.status,
-                    file: normalizeReportFileName(env.basePath, result.fileName, pathService),
+                    file: reportFileName(pathService.relative(env.basePath, result.fileName)),
                     location: toSchemaLocation(result.location),
                   }
                 }

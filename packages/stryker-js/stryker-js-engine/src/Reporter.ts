@@ -32,6 +32,7 @@ import type { TestCoverage } from './Mutants.js'
 import type { ResolvedMode } from './output-mode.js'
 import type { Project } from './Project.js'
 import { FILE_CONCURRENCY, readOriginal } from './Project.js'
+import { determineLanguage, reportFileName } from './report-assembly.js'
 import { assembleFileResults, assembleTestFiles, testIdRemap } from './report-assembly.js'
 import { ansi } from './Reporter.ansi.js'
 import { ClearTextReportCommand } from './Reporter.schema.js'
@@ -40,7 +41,6 @@ import { closeReporterStage, offerTerminalReport, terminalDrainClass } from './R
 import type { RunOutcome } from './Run.js'
 import { strykerVersion } from './stryker-package.js'
 import { buildVerdictEnvelope } from './verdict-envelope.js'
-const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
 type ProvidedStrykerOptions = StrykerOptions
 
 export type ProgressBarState = {
@@ -1016,34 +1016,6 @@ export const makeProgressStreamReporter: ReporterFactory = () => async (events) 
   }
 }
 
-export const determineLanguage = (name: string, pathService: Path.Path): string => {
-  const ext = pathService.extname(name).toLowerCase()
-  switch (ext) {
-    case '.ts':
-    case '.tsx': {
-      return 'typescript'
-    }
-    case '.html':
-    case '.vue': {
-      return 'html'
-    }
-    default: {
-      return 'javascript'
-    }
-  }
-}
-
-export const normalizeReportFileName = (
-  basePath: string,
-  fileName: string | undefined,
-  pathService: Path.Path,
-): string => {
-  if (fileName !== undefined && fileName !== '') {
-    return normalizeFileName(pathService.relative(basePath, fileName))
-  }
-  return ''
-}
-
 const STRYKER_FRAMEWORK: Readonly<Pick<schema.FrameworkInformation, 'branding' | 'name' | 'version'>> = Object.freeze({
   branding: {
     homepageUrl: 'https://stryker-mutator.io',
@@ -1131,12 +1103,11 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
 
   const readMutatedSources = (fileNames: readonly string[]) =>
     Effect.gen(function*() {
-      const pathService = yield* Path.Path
       const entries = yield* Effect.forEach(
         fileNames,
         (fileName) =>
           Effect.gen(function*() {
-            const language = determineLanguage(fileName, pathService)
+            const language = determineLanguage(fileName)
             const file = MutableHashMap.get(input.project.files, fileName)
             if (Option.isNone(file)) {
               yield* Effect.logWarning(
@@ -1186,7 +1157,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       const testSources = yield* readTestSources(testFileNames)
       const reportNames = HashMap.fromIterable(
         [...mutatedFileNames, ...testFileNames].map(
-          (fileName) => [fileName, normalizeReportFileName(input.basePath, fileName, pathService)] as const,
+          (fileName) => [fileName, reportFileName(pathService.relative(input.basePath, fileName))] as const,
         ),
       )
       return {

@@ -4,6 +4,33 @@ import type { TestResult } from '@systemfsoftware/stryker-js/TestRunner'
 import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
 
+const extensionOf = (fileName: string): string => {
+  const base = fileName.slice(fileName.lastIndexOf('/') + 1)
+  const dot = base.lastIndexOf('.')
+  if (dot <= 0) {
+    return ''
+  }
+  return base.slice(dot).toLowerCase()
+}
+
+export const determineLanguage = (fileName: string): string => {
+  const extension = extensionOf(fileName)
+  if (extension === '.ts' || extension === '.tsx') {
+    return 'typescript'
+  }
+  if (extension === '.html' || extension === '.vue') {
+    return 'html'
+  }
+  return 'javascript'
+}
+
+export const reportFileName = (relativePath: string | undefined): string => {
+  if (relativePath === undefined || relativePath === '') {
+    return ''
+  }
+  return relativePath.replaceAll('\\', '/')
+}
+
 export interface TestIdRemap {
   readonly testId: (id: string) => string
   readonly testIds: (ids: readonly string[] | undefined) => readonly string[] | undefined
