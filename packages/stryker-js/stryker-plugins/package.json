@@ -29,22 +29,18 @@
   ],
   "exports": {
     ".": {
-      "@systemfsoftware/source": "./src/mod.ts",
       "types": "./dist/stryker-plugins.d.ts",
       "default": "./dist/index.mjs"
     },
     "./effect-schema-ignorer": {
-      "@systemfsoftware/source": "./src/effect-schema-ignorer/index.ts",
       "types": "./dist/effect-schema-ignorer.d.ts",
       "default": "./dist/effect-schema-ignorer.mjs"
     },
     "./in-source-test-ignorer": {
-      "@systemfsoftware/source": "./src/in-source-test-ignorer/index.ts",
       "types": "./dist/in-source-test-ignorer.d.ts",
       "default": "./dist/in-source-test-ignorer.mjs"
     },
     "./workflow-make-ignorer": {
-      "@systemfsoftware/source": "./src/workflow-make-ignorer/index.ts",
       "types": "./dist/workflow-make-ignorer.d.ts",
       "default": "./dist/workflow-make-ignorer.mjs"
     },

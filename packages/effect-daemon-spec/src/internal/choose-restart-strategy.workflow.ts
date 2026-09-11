@@ -1,3 +1,4 @@
+/// <reference types="vitest/importMeta" />
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'

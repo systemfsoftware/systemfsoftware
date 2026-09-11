@@ -27,7 +27,7 @@ export default defineConfig({
   entry: { index: './src/mod.ts', 'recursion-budget-runtime': './src/recursion-budget-runtime.ts' },
   format: 'esm',
   dts: true,
-  exports: { devExports: '@systemfsoftware/source', customExports: injectTypes },
+  exports: { customExports: injectTypes },
   deps: { onlyBundle: false },
   tsconfig: './tsconfig.build.json',
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),

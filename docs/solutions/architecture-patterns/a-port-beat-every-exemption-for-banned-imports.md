@@ -3,9 +3,9 @@
 Decision: when a lint ban (host builtins) collides with a capability the host
 platform does not expose as a service (resolve a specifier against an
 _arbitrary_ project directory), the fix that survived review was a two-package
-port — `@systemfsoftware/project-modules` holds the Tag, the one adapter
-package holds the host call — plus, for worker IPC, `net` `path` endpoints
-instead of `fork`. Everything that was tried and rejected failed for a
+port — `@systemfsoftware/stryker-js` holds the Tag, exported as its own
+`@systemfsoftware/stryker-js/Module` specifier, and `@systemfsoftware/stryker-js-cli` holds the host call —
+plus, for worker IPC, `net` `path` endpoints instead of `fork`. Everything that was tried and rejected failed for a
 structural reason, not a taste reason.
 
 ## The matrix that converged
@@ -25,8 +25,8 @@ structural reason, not a taste reason.
 
 1. **The tag lives with its consumers**: `Module` (a Context.Service holding
    the host-module subset — `createRequire(filename)` returning a callable
-   require with `.resolve`, plus `isBuiltin`) is declared in the engine
-   package and exported as its own specifier. The Node implementation
+   require with `.resolve`, plus `isBuiltin`) is declared in the
+   `@systemfsoftware/stryker-js` package and exported from its `/Module` specifier. The Node implementation
    (`process.getBuiltinModule('node:module')`) ships as `nodeModuleLayer` in
    the platform package that already owns the socket adapter, and is
    composed at the entry points: the CLI main, the two worker bootstraps,
@@ -63,13 +63,11 @@ structural reason, not a taste reason.
 
 ## Gate
 
-`pnpm check:local` (format + forbidden-lines + turbo lint/typecheck/test/dist
-over every package) is the arbiter for the ban's transitivity — a banned
+`pnpm check:local` (dprint, then turbo lint/typecheck/test/attw/api:check, then the build gate, over
+every package) is the arbiter for the ban's transitivity — a banned
 import anywhere in a workspace package fails it. The worker transport's own
 probe: boot the built worker entry with `STRYKER_SOCKET` set and connect the
 path; the container lane exercises the full parent round-trip.
 
 Related: `an-escape-hatch-is-an-unfalsified-hypothesis.md` (exemptions are
-hypotheses; this port is what the falsified claim bought instead),
-`../../tooling-decisions/` (dep admission: `import-meta-resolve` was rejected
-under the same fail rule that forced the port).
+hypotheses; this port is what the falsified claim bought instead).

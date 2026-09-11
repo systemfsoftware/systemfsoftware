@@ -53,8 +53,7 @@ const tarballEntries = (tarball) => run('tar', ['-tzf', tarball]).split('\n').fi
 /**
  * Every file a consumer's `import` can reach, taken from the published exports
  * map rather than from `main`: `publishConfig.exports` is what npm writes into
- * the tarball's manifest, and it is the only map that omits this repo's
- * `@systemfsoftware/source` development condition.
+ * the tarball's manifest.
  *
  * A package need not export `.`: `tsconfig` and `stryker-js-plugin-api` publish
  * only subpaths, and treating a missing root as "no import surface" reported
@@ -62,11 +61,10 @@ const tarballEntries = (tarball) => run('tar', ['-tzf', tarball]).split('\n').fi
  */
 const publishedEntries = (manifest) => {
   const entries = []
-  // Every string in the exports tree, not just `default` and `types`. A custom
-  // condition is a resolvable target for whoever enables it, so reading only the
-  // two common keys let `effect-memfs` publish a `@systemfsoftware/source`
-  // condition pointing at `./src/index.ts` that the tarball does not contain —
-  // invisible under plain Node, fatal for a consumer whose tsconfig sets it.
+  // Every string in the exports tree, not just `default` and `types`. A condition
+  // key is a resolvable target for whoever enables it, so a path the tarball does
+  // not contain is invisible under plain Node and fatal for the consumer who asks
+  // for it.
   const collect = (value) => {
     if (typeof value === 'string') {
       entries.push(value)

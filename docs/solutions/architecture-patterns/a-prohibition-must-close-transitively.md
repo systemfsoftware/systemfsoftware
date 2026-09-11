@@ -26,16 +26,19 @@ Architectural boundaries are usually written as direct statements: this componen
 ## Guidance
 
 **Compute the transitive closure of the permitted relation before accepting a prohibition as enforced.** When `X` is forbidden to reach `Y`, the obligation is not "no direct edge from `X` to `Y`" but "no permitted chain from `X` reaches `Y`". Writing the direct prohibition and stopping leaves the boundary decorative.
+No instrument in this repository computes that closure — turbo's package-boundary audit asks whether an import is
+declared in a manifest, and `import/no-cycle` reports cycles, neither of which answers whether a permitted chain
+reaches the forbidden pair — so the guidance is carried by review until one is written.
 
 The general result is sharper than a reminder to check paths: **a permissive residual makes every prohibition between the laundering pair unenforceable.** If some third component is reachable from `X` and can itself reach `Y`, then that component _is_ the residual, and no prohibition stated directly between `X` and `Y` can bind — not because the check is buggy, but because the relation the check consults still permits the route. The repair is to the relation, never to the check.
 
-The trap that makes this specifically hard to see: **a deny-list inverts the entry.** Reading "`state` may be imported only by `executor`, `main`, and test-side files" as a restriction feels like reading a prohibition, but it is a _closed permitted set_ — and what matters for laundering is what that set still allows onward. The mind reads the sentence as a wall and the checker reads it as a door with a guest list.
+The trap that makes this specifically hard to see: **a deny-list inverts the entry.** Reading "only these may import X" as a restriction feels like reading a prohibition, but it is a _closed permitted set_ — and what matters for laundering is what that set still allows onward. The mind reads the sentence as a wall and the checker reads it as a door with a guest list.
 
 ## Why This Matters
 
-This failure is invisible to exactly the review that should catch it, because the prohibition and the table that defeats it are both correct in isolation. The defect lives in their composition, and composition is what a reader skims.
+This failure is invisible to exactly the review that should catch it, because the prohibition and the permitted set that defeats it are both correct in isolation. The defect lives in their composition, and composition is what a reader skims.
 
-Its concrete cost here: a prohibition between two cell types was defeated by a third holding the same capability, and **three review rounds and roughly fifteen reviewer agents read the prohibition sitting beside the table that defeated it, and none saw it.** That is the calibration to carry forward — adding reviewers does not find this class, because every reviewer is checking the same local statement and finding it sound. Only computing the closure finds it.
+Its concrete cost here: a prohibition was defeated by a third component holding the same capability, and **three review rounds and roughly fifteen reviewer agents read the prohibition sitting beside the permitted set that defeated it, and none saw it.** That is the calibration to carry forward — adding reviewers does not find this class, because every reviewer is checking the same local statement and finding it sound. Only computing the closure finds it.
 
 It is also the reason a boundary can pass its gate for months. Every direct check passes. There is no failing edge to notice.
 
@@ -47,12 +50,6 @@ Whenever a dependency rule is stated between two components:
 - **Read every restriction as a permitted set.** For each "only these may import X" clause, ask what those permitted importers can themselves reach. That is where the residual hides.
 - **Look for shared capability.** Two components holding the same underlying licence — the same runtime access, the same privileged import — are interchangeable as launderers, whatever their names suggest.
 - **Do not add reviewers to find this.** Add the closure computation. Reviewer count is measurably not the instrument.
-
-## Examples
-
-**The laundering pair.** `middleware` was forbidden `store`, and reached it anyway through `state`, which holds the same `runtime` licence. Nothing in the direct rule was wrong; `state` was simply permitted to `middleware` and permitted onward to `store`, so the forbidden reachability existed through a chain of individually-legal edges. The fix is a closure audit over the whole relation, not a second prohibition bolted beside the first.
-
-**The inversion in practice.** The table entry allowing `state` and `adapter` to be imported _only_ by `executor`, `main`, and test-side files reads as a tight restriction. As a permitted set it is the opposite of tight for this purpose: what it licenses onward is unconstrained by the clause, so the clause cannot participate in enforcing any downstream prohibition.
 
 ## Related
 

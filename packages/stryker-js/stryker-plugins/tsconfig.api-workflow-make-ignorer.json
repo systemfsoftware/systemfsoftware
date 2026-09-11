@@ -1,8 +1,9 @@
 {
   "extends": "./tsconfig.build.json",
   "compilerOptions": {
-    "customConditions": [],
     "resolveJsonModule": false
   },
-  "include": ["dist/workflow-make-ignorer.d.ts"]
+  "include": [
+    "dist/workflow-make-ignorer.d.ts"
+  ]
 }

@@ -16,9 +16,9 @@ root_cause: incomplete_setup
 resolution_type: config_change
 related_components:
   - turbo.json
-  - scripts/patch-tsgo-if-needed.mjs
-  - packages/oxlint-config
-  - packages/tsconfig
+  - scripts/tools/patch-tsgo-if-needed.mjs
+  - packages/oxlint-plugin/oxlint-config
+  - packages/toolchain/tsconfig
 tags:
   - turbo
   - build-cache
@@ -40,7 +40,7 @@ The first candidate fix was `--incremental`. A `.tsbuildinfo` file removes work 
 
 Once a cache can answer for a task, the gate's verdict may come from a stored entry instead of a fresh run. That makes the cache key a correctness surface: the key must move whenever the answer could change. Most of the effort went into proving that, and one attempt at the proof was actively wrong. The first version of the invalidation probe appended the same newline on every round, so the "edited" state had an identical input hash each time and matched a cache entry an earlier round had already written. The probe reported a HIT where a MISS was required, and the conclusion drawn from it was that turbo's invalidation was broken — a non-bug that came within one step of being "fixed". A wrong intermediate hypothesis formed in the same stretch (the turbo daemon plus unreliable fsnotify on this repo's virtiofs mount) and was falsified: the daemon was not running at all, and `--no-daemon` changed nothing.
 
-Two real holes surfaced alongside the probe, both on the input side of the key. First, `scripts/patch-tsgo-if-needed.mjs` decides which compiler binary answers `typecheck`, and nothing hashed it. Second, the `lint` task's command embeds a shell conditional on the `AGENT` environment variable, so flipping `AGENT` changed the command actually executed while the task hash stayed still. Both had to be closed in the same change that turned the cache on.
+Two real holes surfaced alongside the probe, both on the input side of the key. First, `scripts/tools/patch-tsgo-if-needed.mjs` decides which compiler binary answers `typecheck`, and nothing hashed it. Second, the `lint` task's command embeds a shell conditional on the `AGENT` environment variable, so flipping `AGENT` changed the command actually executed while the task hash stayed still. Both had to be closed in the same change that turned the cache on.
 
 ## Guidance
 
@@ -48,17 +48,17 @@ Enabling a cache is a correctness change. Do it in this order.
 
 **Enumerate everything that belongs in the task's key.** A turbo task key is a hash of the task definition (its `inputs`, `env`, `outputs`, `dependsOn`, and command) plus the package's files, the lockfile, the root `package.json`, and the `globalDependencies` entries. The membership rule is one sentence: anything whose change can change the task's verdict. Four classes, each of which produced a real hole here:
 
-1. **Files the task reads.** Source, tsconfigs, config files, and shared config packages. `typecheck` and `lint` both extend presets from `packages/tsconfig`, so both tasks list `"$TURBO_ROOT$/packages/tsconfig/**"` in `inputs` (turbo.json:33, turbo.json:91) — without it, a change to a shared preset would not move the key. `lint` additionally lists `oxlint.config.ts` and `"$TURBO_ROOT$/packages/oxlint-config/**"` (turbo.json:87, turbo.json:90). `$TURBO_DEFAULT$` covers the standard package globs; the explicit entries are for everything else.
+1. **Files the task reads.** Source, tsconfigs, config files, and shared config packages. `typecheck` and `lint` both extend presets from `packages/toolchain/tsconfig`, so both tasks list `"$TURBO_ROOT$/packages/toolchain/tsconfig/**"` in `inputs` (the root `turbo.json`) — without it, a change to a shared preset would not move the key. `lint` additionally lists `oxlint.config.ts` and `"$TURBO_ROOT$/packages/oxlint-plugin/oxlint-config/**"`. `$TURBO_DEFAULT$` covers the standard package globs; the explicit entries are for everything else.
 
-2. **Environment variables that shape the executed command.** The package `lint` scripts read `"lint": "oxlint . ${AGENT:+--format=unix --quiet}"` (e.g. packages/effect-cell-types/package.json:43). The script _string_ is constant — turbo hashes it as written — but the command actually executed differs when `AGENT` is set: the shell expansion is invisible to the hash. Flipping `AGENT` changed what ran while the key stayed still. The fix was to pin the variable into the key: `AGENT` and `GITHUB_ACTIONS` are listed in the `lint` task's `env` (turbo.json:98-102), so the hash moves when either flips. Any environment variable your command's shell expansion reads belongs in `env`.
+2. **Environment variables that shape the executed command.** The package `lint` scripts read `"lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"` (e.g. `packages/effect-cell-types/package.json`). The script _string_ is constant — turbo hashes it as written — but the command actually executed differs when `AGENT` or `OXLINT_FORMAT` is set: the shell expansion is invisible to the hash. Flipping `AGENT` changed what ran while the key stayed still. The fix was to pin the variables into the key: `NODE_ENV`, `GITHUB_ACTIONS`, `OXLINT_FORMAT`, and `AGENT` are the `lint` task's `env` entries, so the hash moves when any of them flips. Any environment variable your command's shell expansion reads belongs in `env`.
 
-3. **Tool binaries selected by scripts.** `scripts/patch-tsgo-if-needed.mjs` is wired into `prepare` (`"prepare": "concurrently \"husky\" \"node scripts/patch-tsgo-if-needed.mjs\""`, package.json:19), so it runs on every install. It resolves the native tsc path the same way the installed `typescript` package's own exe-path helper does, which its header comment states as the reason it tracks the compiler the toolchain actually runs (lines 9-11, 25-31), compares a sha256 of the binary there against the path `tsgo get-exe-path` reports (lines 33-36), and runs `tsgo patch` when they differ (line 39) — and `tsgo patch`, per the script's own header (lines 2-7), renames whatever sits at the native path into the next free `tsc.original.N` slot and copies its own binary in. So this script decides which compiler binary answers `typecheck`. Turbo's global hash already includes the lockfile (verified via `turbo typecheck --dry=json`: `globalCacheInputs.hashOfExternalDependencies` populated, `rootPackageJsonHash` present), so a TypeScript version bump invalidates; a binary swap at the same version did not. The fix is `"globalDependencies": ["scripts/patch-tsgo-if-needed.mjs"]` (turbo.json:3-5), which puts the script's content into every task's global hash. A script that selects a tool is an input to every task that uses that tool.
+3. **Tool binaries selected by scripts.** `scripts/tools/patch-tsgo-if-needed.mjs` reaches every task through `globalDependencies`; root `prepare` runs `effect-tsgo patch --oxlint --no-typescript --skip-missing` directly. It resolves the native tsc path the same way the installed `typescript` package's own exe-path helper does, which its header comment states as the reason it tracks the compiler the toolchain actually runs, compares a sha256 of the binary there against the path `tsgo get-exe-path` reports, and runs `tsgo patch` when they differ — and `tsgo patch`, per the script's own header, renames whatever sits at the native path into the next free `tsc.original.N` slot and copies its own binary in. So this script decided which compiler binary answered `typecheck`. Turbo's global hash already includes the lockfile (verified via `turbo typecheck --dry=json`: `globalCacheInputs.hashOfExternalDependencies` populated, `rootPackageJsonHash` present), so a TypeScript version bump invalidates; a binary swap at the same version did not. The fix is `"globalDependencies": ["scripts/tools/patch-tsgo-if-needed.mjs"]` in the root `turbo.json`, which puts the script's content into every task's global hash. A script that selects a tool is an input to every task that uses that tool.
 
 4. **The task definition itself.** `inputs`, `env`, `outputs`, `dependsOn`, and the command are all hashed; when you edit the definition the key changes. That is the mechanism the fixes above rely on — the task definition is the only place some inputs can be declared.
 
 **Enable the cache and close its holes in the same commit.** The script went into `globalDependencies` in the same commit that set `"cache": true` on `typecheck` (PR #77). Do not land a commit that turns the cache on with a hole you already know about: every hit stored or restored in that window is a verdict produced under an incomplete key, and the whole point of the change is that cached verdicts be trustworthy.
 
-**Keep machine-local artifacts out of the outputs.** `typecheck` declares `"outputs": []` deliberately (turbo.json:35). Turborepo's configuration reference documents that turbo detects git worktrees and redirects the cache to the main worktree's `.turbo/cache`, shared across every linked worktree, disabled only by setting an explicit `cacheDir`. This repo has 22 linked worktrees and no `cacheDir` key, so that sharing is active. Turbo restores cached artifacts by writing the bytes back without rewriting their contents. A `.tsbuildinfo` embeds absolute paths, so declaring it an output would let a build state describing one worktree be restored into another — paths from one machine layout consumed as another's build input. The cache stores the pass/fail verdict and the logs; the buildinfo stays machine-local. Bazel's hermeticity documentation names absolute paths as a canonical source of non-hermeticity — the same rule from the other direction.
+**Keep machine-local artifacts out of the outputs.** `typecheck` declares `"outputs": []` deliberately in the root `turbo.json`. Turborepo's configuration reference documents that turbo detects git worktrees and redirects the cache to the main worktree's `.turbo/cache`, shared across every linked worktree, disabled only by setting an explicit `cacheDir`. This repo has 22 linked worktrees and no `cacheDir` key, so that sharing is active. Turbo restores cached artifacts by writing the bytes back without rewriting their contents. A `.tsbuildinfo` embeds absolute paths, so declaring it an output would let a build state describing one worktree be restored into another — paths from one machine layout consumed as another's build input. The cache stores the pass/fail verdict and the logs; the buildinfo stays machine-local. Bazel's hermeticity documentation names absolute paths as a canonical source of non-hermeticity — the same rule from the other direction.
 
 **Prove completeness with a four-step probe that mutates uniquely every round.**
 
@@ -117,7 +117,7 @@ After PR #77, the cache is on, the shared presets are in the key, and the compil
 
 ```json
 "globalDependencies": [
-  "scripts/patch-tsgo-if-needed.mjs"
+  "scripts/tools/patch-tsgo-if-needed.mjs"
 ],
 "tasks": {
   "typecheck": {
@@ -126,7 +126,7 @@ After PR #77, the cache is on, the shared presets are in the key, and the compil
       "$TURBO_DEFAULT$",
       "tsconfig.json",
       "tsconfig.*.json",
-      "$TURBO_ROOT$/packages/tsconfig/**"
+      "$TURBO_ROOT$/packages/toolchain/tsconfig/**"
     ],
     "outputs": [],
     "dependsOn": [
@@ -137,7 +137,7 @@ After PR #77, the cache is on, the shared presets are in the key, and the compil
 }
 ```
 
-The `lint` task's `env` gained the variables its command's shell expansion reads. Before, only `NODE_ENV` was pinned; after, `AGENT` and `GITHUB_ACTIONS` are in the key, and `oxlint.config.ts` plus the shared tsconfig presets joined `inputs`:
+The `lint` task's `env` gained the variables its command's shell expansion reads. Before, only `NODE_ENV` was pinned; after, `AGENT`, `GITHUB_ACTIONS`, and `OXLINT_FORMAT` are in the key, and `oxlint.config.ts` plus the shared tsconfig presets joined `inputs`:
 
 ```json
 "lint": {
@@ -146,8 +146,8 @@ The `lint` task's `env` gained the variables its command's shell expansion reads
     "oxlint.config.ts",
     "tsconfig.json",
     "tsconfig.*.json",
-    "$TURBO_ROOT$/packages/oxlint-config/**",
-    "$TURBO_ROOT$/packages/tsconfig/**"
+    "$TURBO_ROOT$/packages/oxlint-plugin/oxlint-config/**",
+    "$TURBO_ROOT$/packages/toolchain/tsconfig/**"
   ],
   "outputs": [],
   "dependsOn": [
@@ -156,8 +156,9 @@ The `lint` task's `env` gained the variables its command's shell expansion reads
   ],
   "env": [
     "NODE_ENV",
-    "AGENT",
-    "GITHUB_ACTIONS"
+    "GITHUB_ACTIONS",
+    "OXLINT_FORMAT",
+    "AGENT"
   ],
   "cache": true
 }
@@ -166,7 +167,7 @@ The `lint` task's `env` gained the variables its command's shell expansion reads
 The package command that made the `env` addition necessary — a constant script string whose executed form depends on `AGENT`:
 
 ```json
-"lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+"lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
 ```
 
 And the probe, as a runnable sequence:

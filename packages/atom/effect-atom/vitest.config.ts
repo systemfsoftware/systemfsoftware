@@ -12,7 +12,4 @@ export default defineConfig({
       exclude: ['src/**/*.test.ts'],
     },
   },
-  resolve: {
-    conditions: ['@systemfsoftware/source', 'source', 'import', 'node', 'default'],
-  },
 })

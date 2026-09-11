@@ -4,12 +4,6 @@ Shared domain vocabulary for this project — entities, named processes, and sta
 
 ## Build pipeline
 
-### `@systemfsoftware/source` custom export condition
-
-A package.json `exports` condition added by the shared tsconfig to every package in this monorepo. When TypeScript resolves a workspace dependency (e.g. `@systemfsoftware/hex-schema`), this condition makes it pick `src/mod.ts` over `dist/index.mjs`. It exists so editors and the dev typecheck see live source, not stale build output. It is _not_ a Node.js condition — running apps with `node` (or api-extractor outside the dev tsconfig) fall through to standard resolution (`default` → `.mjs`).
-
-_Aliases:_ `customConditions: ["@systemfsoftware/source"]`
-
 ### tsdown output
 
 The `.d.ts` and `.mjs` files in `packages/<name>/dist/` produced by the `tsdown` build step. For a barrel-re-export package this is `dist/index.d.ts` containing `export * from '@workspace/dep'` — a one-line re-export that depends on the consumer resolving the dep's types. Created fresh on every `pnpm build`; gitignored.
@@ -22,7 +16,7 @@ _Avoid:_ "the dist .d.ts" (ambiguous with tsdown output)
 
 ### internal folder
 
-A source directory whose path contains a segment exactly equal to `internal` (`src/internal`, `src/**/internal`). Exports in those files carry the TSDoc `@internal` tag. The tag is forbidden outside those folders. Workspace typecheck still sees the declarations through `@systemfsoftware/source`; the published `exports.types` artifact omits them.
+A source directory whose path contains a segment exactly equal to `internal` (`src/internal`, `src/**/internal`). Exports in those files carry the TSDoc `@internal` tag. The tag is forbidden outside those folders. The published `exports.types` artifact — the api-extractor public-trimmed rollup — omits them, and an in-repo typecheck that resolves the package by name reads that same artifact, so only a relative import inside the owning package reaches an `@internal` declaration.
 
 _Avoid:_ treating a filename substring as the folder (`internalize.ts` is not an internal folder)
 
@@ -90,7 +84,7 @@ A key can be complete with respect to every input it declares and still return o
 
 ### intent versioning
 
-The pnpm-native release model the repo uses since leaving semantic-release (2026-08-10): the manifest `version` is the source of truth for what a package will publish, not a placeholder a tool overwrites. A change is recorded with `pnpm change`, which writes a `.changeset/` intent; a push to `main` runs `pnpm version -r`, which consumes pending intents and bumps the manifests; the Release PR commits those bumps.
+The pnpm-native release model the repo uses: the manifest `version` is the source of truth for what a package will publish, not a placeholder a tool overwrites. A change is recorded with `pnpm change`, which writes a `.changeset/` intent; a push to `main` runs `pnpm version -r`, which consumes pending intents and bumps the manifests; the Release PR commits those bumps.
 
 Because the manifest version is what npm carries, the first release of a package publishes that string verbatim — there is no "dev" placeholder convention here. Adopting semantic-release's `0.0.0-development` placeholder would ship `0.0.0-development` as a package's literal debut version.
 
@@ -108,10 +102,6 @@ unreadable pending set as failure, never as "nothing stale".
 ### Release PR
 
 The pull request (`changeset-release/main`, opened by the Release workflow on push to `main`) that carries the version bumps produced by consuming `.changeset/` intents. Merging it runs the gate, then the publish job, which publishes via npm OIDC trusted publishing with provenance and tags each released package. It can only open when workflow permissions allow GitHub Actions to create pull requests.
-
-### semantic-release
-
-The npm publish orchestrator the repo used before adopting intent versioning: triggered by push to `main`, it analyzed commits since the last release tag per package, derived the next semver from conventional-commit types, and called `pnpm publish`. Retired 2026-08-10; its conventions (notably the `0.0.0-development` placeholder version) are incompatible with intent versioning and must not be reintroduced.
 
 ## Validation tooling
 
@@ -167,10 +157,6 @@ An index key whose assignment nothing verifies. Where a suffix, tag, or path dec
 
 A drifted key is worse than a missing one. Retrieving nothing leaves the author still looking; retrieving the wrong doctrine leaves the author confident. The same drift un-enrols the file from whatever Verification observer the old key selected. That loss surfaces only if the instrument happens to object to an empty selection, and even then the cheapest repair is to delete the selection — which ends the objection and the observation together, leaving the file with no observer and nothing complaining.
 
-### Constitution watchdog
-
-A `WATCHDOG.md` that `@import`s `CONSTITUTION.md` into the omp advisor's system prompt, making the advisor — a separate model reviewing transcript deltas — police code changes against the 21 `gate: review` rules no command enforces. The 13 rules with lint/type-checker/mutation gates are excluded; the advisor does not re-check what the toolchain already catches. Not a gate: the advisor raises `concern`/`nit`/silent, never pass/fail. The mechanism that gives `gate: review` rules Reach — the constitution was present in neither the window (the primary agent does not read it) nor a gate (no command checks it) until the watchdog put it in the advisor's window.
-
 ## Test execution
 
 ### Run class
@@ -189,7 +175,7 @@ It exists because a class of properties is process-level by category and admits 
 
 ### Cell
 
-Retired 2026-08-16, and with it the thirteen-role suffix taxonomy: no rule keys on a filename, no config enumerates a sanctioned suffix set, and a file's name grants it nothing. What replaced the suffix as the organizing unit is the **sandwich** — read (impure), decide (pure, inside a `Workflow.make` body), write (impure) — with the `make` boundary, not any name, deciding what the gates bind. See **Drifted key**, whose precedence this retirement makes structural: the measurement (label-routed rules silent on the violating file) is now the shipped state rather than a standing objection.
+What a **Description** compiles to: one sandwich — read (impure), decode and decide (pure, inside a `Workflow.make` body), encode (pure), write (impure) — with the `make` boundary, not any name, deciding what the gates bind.
 
 ### Property cell
 
@@ -387,7 +373,7 @@ A mutant killed because the mutation corrupted a schema's derived arbitrary and 
 
 ## Flagged ambiguities
 
-- "observer" named two different things historically: a retired cell-role suffix, and the verification instrument that reads code. The instrument is **Verification observer**; the suffix was deleted with the taxonomy on 2026-08-16, so the bare word now only ever names the instrument.
+- "observer" names one thing: the verification instrument that reads code (**Verification observer**).
 - "window" is not minted as an entry, because it already names the model's token budget. The reading surface a constraint must occupy to bind an author is defined inside **Reach** as one of its two mechanisms; the bare word stays with the token budget.
 - "dependency rejection" is Seemann's phrase and every model reaches for his post first, where the ruling is a slogan with no selection criterion. This repo takes Wlaschin's reading, which supplies the test — manage a dependency only where it is impure or a strategy — and `REPO-A2` carries the precedence. Cite the test, never the slogan.
-- **Cell** and **Drifted key** disagreed about the suffix: the first made it the key that grants a file its powers, the second named an unverified key that a rename silently reassigns. **Drifted key** won, because the disagreement was measured rather than argued — two byte-identical files differing only in filename put the purity rule loud on the first and silent on the second (`docs/solutions/architecture-patterns/label-routed-rules-are-unfalsifiable.md`). Those names are now spelled nowhere in the tree: a name says what a module is of, and the only suffixes left are `.workflow.ts` and `.schema.ts`. A rule keys on the type, the import edge, or the `Workflow.make` boundary — never on a filename.
+- **Cell** and **Drifted key** disagreed about the suffix: the first made it the key that grants a file its powers, the second named an unverified key that a rename silently reassigns. **Drifted key** won, because the disagreement was measured rather than argued — two byte-identical files differing only in filename put the purity rule loud on the first and silent on the second (`docs/solutions/architecture-patterns/label-routed-rules-are-unfalsifiable.md`). The only suffixes left are `.workflow.ts` and `.schema.ts`. A rule keys on the type, the import edge, or the `Workflow.make` boundary — never on a filename.

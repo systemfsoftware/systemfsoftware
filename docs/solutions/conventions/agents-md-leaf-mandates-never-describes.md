@@ -42,4 +42,4 @@ Mechanical sweep after the rewrite, in this order: every backticked path resolve
 
 ## Applicability
 
-Apply on any instruction-tree audit or rewrite. The doctrine source is the harness-creator hierarchy pattern (subtraction first, placement escalation, earn test); the content doctrine (a load-bearing rule names its gate) is agent-docs. Related: `docs/solutions/architecture-patterns/cell-suffix-fleet-deleted-unowned.md` records the same honesty rule for obligations with no mechanical channel.
+Apply on any instruction-tree audit or rewrite. The doctrine source is the harness-creator hierarchy pattern (subtraction first, placement escalation, earn test); the content doctrine (a load-bearing rule names its gate) is agent-docs. Related: `docs/solutions/architecture-patterns/make-boundary-owns-a-decision.md` records the same honesty rule for obligations with no mechanical channel.

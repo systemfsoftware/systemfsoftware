@@ -63,4 +63,4 @@ Applies to every layered-config linter and any inheritance expressed as an objec
 ## Related
 
 - `docs/solutions/build-errors/a-disable-comment-names-the-config-key.md` — the sibling silent-suppression learning; both are lint-configuration that parses, matches nothing, and reports nothing.
-- `docs/solutions/architecture-patterns/cell-suffix-fleet-deleted-unowned.md` — the rule this preset replaced, and the ceiling's current values.
+- `docs/solutions/architecture-patterns/make-boundary-owns-a-decision.md` — the rule this preset replaced, and the ceiling's current values.

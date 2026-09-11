@@ -8,7 +8,7 @@ component: ci-gate
 severity: high
 symptoms:
   - "release gate fails non-deterministically on a fresh (cold-cache) tree; 2 of 3 identical runs failed, 1 passed"
-  - "the CLI contract lane needs a built package: .../arethetypeswrong/cli/dist/main.mjs is missing - run `pnpm build` first"
+  - "the CLI contract lane needs a built package: `dist/main.mjs` is missing - run `pnpm build` first"
   - "a dependent typecheck dies with TS2307: Cannot find module '@systemfsoftware/arethetypeswrong-core' — a dependency's dist vanished seconds after its build task completed"
   - "the package's own build task shows `✔ Build complete` earlier in the same run — the gate failure contradicts the build log"
   - "one `npm pack` in a package dir runs `prepack`, `prepare`, a workspace-wide prepare sweep, and the root prepare — visible as `Scope: all 42 workspace projects` noise from an analyzer task"
@@ -25,7 +25,7 @@ The post-merge release gate failed on a version-bumped tree, skipping `publish` 
 
 ## Mechanism
 
-`npm pack` and `pnpm pack` execute the target package's lifecycle hooks (`prepack`, then `prepare`). Three packages in this workspace carry hooks that invoke `tsdown`, and `tsdown` **cleans its output directory before writing** — `ℹ Cleaning 5 files` is the deletion event. A pack therefore opens a window:
+`npm pack` and `pnpm pack` execute the target package's lifecycle hooks (`prepack`, then `prepare`). Two packages in this workspace carry hooks that build through `tsdown`: `@systemfsoftware/stryker-js-cli` (`prepare`) and `@systemfsoftware/npm-package` (`prepack`). `tsdown` **cleans its output directory before writing** — `ℹ Cleaning 5 files` is the deletion event. A pack therefore opens a window:
 
 ```
 W = (clean_begin, rebuild_end)   // dist contents absent or partial
@@ -34,9 +34,9 @@ W = (clean_begin, rebuild_end)   // dist contents absent or partial
 Any concurrent reader that lands in `W` fails:
 
 - a dependent package's `typecheck` resolving the dependency's `dist/*.d.ts` through its workspace link → TS2307 "Cannot find module", cascading `no-unsafe-*` lint errors;
-- the contract lane's `GlobalSetup.setup` `access(distEntry)` precondition → "needs a built package".
+- the contract lane's `GlobalSetup.setup` `exists(distEntry)` precondition → "needs a built package".
 
-With `k` packs and `r` concurrent readers under `--concurrency=100%`, expected hits scale as `Σ Wₖ · r / T_gate` — small but nonzero, hence 2-of-3. Observed writers during one gate run: the `attw` task's analyzer pack (`PackRunner.pack` spawning `npm pack`), the lane's own tarball packs (`pnpm --filter <pkg> exec pnpm pack`), and — worst — a single pack whose `prepack` invoked `pnpm build`, which pnpm escalated into a workspace-wide `prepare` sweep, rebuilding other packages' `dist` and running the root `prepare` while unrelated tasks were mid-flight.
+With `k` packs and `r` concurrent readers under `--concurrency=100%`, expected hits scale as `Σ Wₖ · r / T_gate` — small but nonzero, hence 2-of-3. Observed writers during one gate run: the `attw` task's analyzer pack (`@systemfsoftware/arethetypeswrong-cli` spawning `npm pack`), the lane's own tarball packs (`pnpm --filter <pkg> exec pnpm pack`), and — worst — a single pack whose `prepack` invoked `pnpm build`, which pnpm escalated into a workspace-wide `prepare` sweep, rebuilding other packages' `dist` and running the root `prepare` while unrelated tasks were mid-flight.
 
 The task graph cannot save you here: turbo ordered everything correctly (`test:contract` waits on own and `^build`; the build completed). The hooks are **writers invisible to the task graph** — no `dependsOn` can order them.
 
@@ -44,8 +44,8 @@ The task graph cannot save you here: turbo ordered everything correctly (`test:c
 
 Context selection: hooks are wanted at **install** (`prepare` builds the bin target between pnpm's two shim-link passes) and at **publish** (`prepack` rebuilds `dist` from a fresh checkout), and are never wanted when packing to **read**. The fix marks exactly the analysis packs read-only:
 
-- `PackRunner.pack` spawns `npm pack --ignore-scripts` — every `attw --pack .` in the workspace goes through this one service, so all analyzer packs are covered.
-- Both contract lanes pass `npm_config_ignore_scripts: 'true'` in the pack child's environment (`execFileAsync` env spread) — `pnpm pack` accepts no `--ignore-scripts` flag; the config env var is the supported form, verified: tarball produced, `dist/` md5-identical, zero hook executions.
+- The analyzer's pack runner — `@systemfsoftware/arethetypeswrong-cli`, consumed from the registry through the `attw` catalog — spawns `npm pack --ignore-scripts`; every `attw --pack .` in the workspace goes through that one service, so all analyzer packs are covered.
+- The contract lane packs with `--config.ignore-scripts=true` on the `pnpm pack` call (the stryker contract lane's `global-setup.ts`) — `pnpm pack` accepts no `--ignore-scripts` flag; the config-flag form is the one that reaches the setting pnpm reads, verified: tarball produced, `dist/` md5-identical, zero hook executions.
 - `prepack`/`prepare` stay in the manifests untouched — leaf doctrine forbids removing them (bin linking; publish from a fresh checkout).
 
 ## Architectural Invariants
@@ -56,8 +56,8 @@ Context selection: hooks are wanted at **install** (`prepare` builds the bin tar
 
 ```text
 gate-time pack:  read-only acquisition      (pnpm pack --config.ignore-scripts=true)
-install pack:    hooks ON  (prepare builds the bin target)
-publish pack:    hooks ON  (prepack rebuilds dist)
+install pack:    hooks ON  (stryker-js-cli prepare: tsdown builds the bin target)
+publish pack:    hooks ON  (npm-package prepack: pnpm build rebuilds dist)
 ```
 
 ## What Didn't Work
@@ -72,10 +72,10 @@ publish pack:    hooks ON  (prepack rebuilds dist)
 ## Prevention
 
 - **Any new gate-time pack consumer must pack with scripts ignored.** `pnpm pack` accepts no `--ignore-scripts` **and silently ignores `npm_config_ignore_scripts`** — measured by inode, a pack in that form replaced the build output it was supposed to only read, so a lane can carry a read-only comment and an env var and still be the mutator. The form that works is `--config.ignore-scripts=true`, which reaches the setting pnpm reads. Swapping in `npm pack --ignore-scripts` does stop the hooks but is not a substitute here: pnpm rewrites `workspace:*` in the packed manifest to the real version and npm leaves the protocol in place, so the tarball no longer installs. Grep-smell: a gate-surface pack with neither the config flag nor `--ignore-scripts`.
-- **A package gaining `prepack`/`prepare` changes the contract for everyone that packs it.** The lanes' pack lists and the analyzer cover new packages automatically through the shared surfaces above; a _new_ pack surface must adopt the read-only form or it reintroduces the race.
+- **A package gaining `prepack`/`prepare` changes the contract for everyone that packs it.** The lane's explicit pack list (`WORKSPACE_PACKAGES`) and the analyzer's own pack are the shared surfaces above; a _new_ pack surface must adopt the read-only form or it reintroduces the race.
 - **Keep hooks minimal.** `prepare` on a bin-shipping package is a ~60 ms transpile-only build by design; a hook that grows into a workspace-wide operation turns one pack into a multi-package mutation.
 - **A package that reaches a workspace tool through its published version never receives that tool's unreleased fix.** Where a package consumes its own sibling from the registry to avoid closing a dependency cycle, the sibling's in-source read-only packing is invisible to it: the analysis task executes the published binary, which packs with hooks enabled and rebuilds the very output its concurrent readers are importing. Diagnose it by identity, not timestamp — a clean-and-rebuild replaces the files, so the inode changes while the byte size does not. Force the read-only form from the caller's environment, which holds for every version of the tool, instead of relying on the tool carrying its own flag.
-- Verification that closed this: cold `attw` for the fixed package exits 0 with `dist/` md5-identical and zero hook executions in the log; `check:local` exits 0; a live graph query confirms both lanes' `test:contract` still wait on own and `^build`; CI runs both lanes in containers against the hookless tarballs.
+- Verification that closed this: `check:local` exits 0; a live graph query confirms the lane's `test:contract` still waits on own and `^build`; CI runs the lane in containers against the hookless tarballs.
 
 ## Related Issues
 

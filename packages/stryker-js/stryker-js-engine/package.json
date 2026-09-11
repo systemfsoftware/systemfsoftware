@@ -62,22 +62,10 @@
     }
   },
   "exports": {
-    ".": {
-      "@systemfsoftware/source": "./src/index.ts",
-      "default": "./dist/index.mjs"
-    },
-    "./builtin-reporters": {
-      "@systemfsoftware/source": "./src/builtin-reporters.ts",
-      "default": "./dist/builtin-reporters.mjs"
-    },
-    "./config/base": {
-      "@systemfsoftware/source": "./src/config/base.ts",
-      "default": "./dist/config/base.mjs"
-    },
-    "./worker": {
-      "@systemfsoftware/source": "./src/worker-wiring.ts",
-      "default": "./dist/worker.mjs"
-    },
+    ".": "./dist/index.mjs",
+    "./builtin-reporters": "./dist/builtin-reporters.mjs",
+    "./config/base": "./dist/config/base.mjs",
+    "./worker": "./dist/worker.mjs",
     "./package.json": "./package.json"
   },
   "inlinedDependencies": {

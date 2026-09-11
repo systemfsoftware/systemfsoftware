@@ -25,7 +25,6 @@
   "type": "module",
   "exports": {
     ".": {
-      "@systemfsoftware/source": "./src/mod.ts",
       "types": "./dist/hex-schema.d.ts",
       "default": "./dist/index.mjs"
     },

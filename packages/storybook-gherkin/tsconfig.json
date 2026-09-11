@@ -5,7 +5,6 @@
     "@systemfsoftware/tsconfig/effect"
   ],
   "compilerOptions": {
-    "customConditions": ["@systemfsoftware/source"],
     "types": []
   },
   "include": ["src", "test/browser"],

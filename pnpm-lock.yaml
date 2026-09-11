@@ -1029,6 +1029,9 @@ importers:
 
   packages/oxlint-plugin/oxlint-config:
     dependencies:
+      '@effect/tsgo':
+        specifier: ^0.36.5
+        version: 0.36.5
       '@systemfsoftware/oxlint-plugin':
         specifier: workspace:^
         version: link:../oxlint-plugin

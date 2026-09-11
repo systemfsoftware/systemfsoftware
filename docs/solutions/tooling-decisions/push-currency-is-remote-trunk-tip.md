@@ -56,9 +56,13 @@ currency(ref) := isHead(ref) => ancestor(remoteTrunkTip, ref.sha)
 
 ## Verification Patterns
 
-- Exhaustive decide over the closed ref-kind set: refuse iff at least one head ref is behind.
-- Real-git sandwich: current feature allows; after trunk advances, same feature refuses; tag-only stdin still allows; rebase then allows.
-- Live refuse on a branch that `rev-list HEAD..origin/main` counts as non-empty; live allow after that set is empty.
+The live guard is `.husky/pre-push`, a POSIX shell script inlined there.
+
+- Only a push of `main` is in the hook's domain: any other branch is allowed before the remote is read at all.
+- Currency is read from the remote at hook time, `git ls-remote --heads origin main`, never from the local `main` ref; a remote that reports no `main` is allowed.
+- Refuse is ancestry: a remote `main` tip that is not an ancestor of `HEAD` refuses with the tip's SHA and a rebase-or-merge instruction. A tip absent locally is fetched first, and a failed fetch refuses.
+- Tag and delete refs never reach the decision — the hook reads no ref list.
+- The hook stays syntax-checkable on its own: `sh -n .husky/pre-push`.
 
 ## Related
 

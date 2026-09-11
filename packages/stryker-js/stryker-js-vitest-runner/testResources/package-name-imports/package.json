@@ -2,9 +2,6 @@
   "name": "@fixture/math",
   "type": "module",
   "exports": {
-    ".": {
-      "@systemfsoftware/source": "./src/math.ts",
-      "default": "./dist/math.js"
-    }
+    ".": "./src/math.ts"
   }
 }

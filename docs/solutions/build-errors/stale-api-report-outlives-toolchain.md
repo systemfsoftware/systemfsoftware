@@ -39,7 +39,7 @@ The general lesson: **a cached pass can outlive the toolchain that earned it.** 
 
 ## Symptoms
 
-The failing task emitted api-extractor's report-mismatch message, which is unconditional on any mismatch (`Extractor.js:202-205` in the installed api-extractor 7.58.9):
+The failing task emitted api-extractor's report-mismatch message, which is unconditional on any mismatch (`Extractor.js` in the installed api-extractor 7.58.9):
 
 ```
 You have changed the API signature for this project. Please copy the file
@@ -61,7 +61,7 @@ Double quotes became single:
 +            mode: 'none';
 ```
 
-The preconditions for invisibility: `build` and `api:check` are both cached by default — neither carries `cache: false` (`turbo.json:7-26`, `turbo.json:131-149`) — and the report's input `dist/index.d.ts` is itself a gitignored build output that the cache restores along with the pass verdict.
+The preconditions for invisibility: `build` and `api:check` are both cached by default — neither carries `cache: false` (`turbo.json`) — and the report's input `dist/index.d.ts` is itself a gitignored build output that the cache restores along with the pass verdict.
 
 ## What Didn't Work
 
@@ -96,15 +96,15 @@ This is a symptom fix. It restores the invariant the gate enforces — committed
 
 ## Why This Works
 
-**The report is a derived artifact of a two-stage toolchain.** tsdown emits `dist/index.d.ts`; api-extractor analyzes that file per `mainEntryPointFilePath` (`api-extractor.json:4`) and compares its output against the committed copy in `etc/`. The report's content is therefore a function of tsdown's d.ts emission _and_ api-extractor's report formatting — two independently versioned tools.
+**The report is a derived artifact of a two-stage toolchain.** tsdown emits `dist/index.d.ts`; api-extractor analyzes that file per `mainEntryPointFilePath` (`api-extractor.json`) and compares its output against the committed copy in `etc/`. The report's content is therefore a function of tsdown's d.ts emission _and_ api-extractor's report formatting — two independently versioned tools.
 
-**The task key hashes inputs, environment, and dependency hashes, but never the binaries.** `build` hashes `src/**`, the tsconfigs, `package.json`, `tsdown.config.*`, `api-extractor.json`, and `etc/*.api.md` (`turbo.json:9-18`). `api:check` hashes `src/**`, the api-extractor configs, the build tsconfig, and `etc/*.api.md` (`turbo.json:133-139`), inheriting the build hash through `dependsOn` (`turbo.json:147`). The only `globalDependency` is `scripts/patch-tsgo-if-needed.mjs` (`turbo.json:3-4`), which guards the compiler-_selecting script_ rather than the resolved toolchain versions. Nothing in any key is the version of tsdown, api-extractor, or its bundled TypeScript.
+**The task key hashes inputs, environment, and dependency hashes, but never the binaries.** `build` hashes `src/**`, the tsconfigs, `package.json`, `tsdown.config.*`, `api-extractor.json`, and `etc/*.api.md`; `api:check` hashes `src/**`, the api-extractor configs, the build tsconfig, and `etc/*.api.md`, inheriting the build hash through `dependsOn` (all in `turbo.json`). The only `globalDependency` is `scripts/tools/patch-tsgo-if-needed.mjs`, which guards the compiler-_selecting script_ rather than the resolved toolchain versions. Nothing in any key is the version of tsdown, api-extractor, or its bundled TypeScript.
 
 **The toolchain did move.** api-extractor held at 7.58.9 throughout, but tsdown moved from 0.22.9 to 0.22.14 in commit subject `build(deps): update tsdown to 0.22.14` — six days after the report was committed and one day before the failure. The d.ts representation the report records changed with the emitting toolchain, not with any source change.
 
 **The cache then did exactly what it is designed to do.** `dist/` and `temp/` are both gitignored. Turbo restored the old `dist/index.d.ts` and the old pass verdicts on every run whose key matched. The key's reckoning was correct — none of its declared inputs had changed. The tool that produced the stored artifacts had moved, and the key had no way to know.
 
-**The trigger was the unrelated manifest edit.** Removing a dead devDependency changed `package.json`, which is a `build` input (`turbo.json:14`), so build's hash moved; `api:check` inherits it through `dependsOn`, so its hash moved too. Both re-ran fresh: tsdown 0.22.14 emitted the new d.ts representation, api-extractor wrote the new report to `temp/`, and the byte comparison against the stale committed copy failed.
+**The trigger was the unrelated manifest edit.** Removing a dead devDependency changed `package.json`, which is a `build` input, so build's hash moved; `api:check` inherits it through `dependsOn`, so its hash moved too. Both re-ran fresh: tsdown 0.22.14 emitted the new d.ts representation, api-extractor wrote the new report to `temp/`, and the byte comparison against the stale committed copy failed.
 
 One nuance is left honestly unresolved. [The input-hash doc](../tooling-decisions/turbo-cache-requires-complete-input-hash.md) asserts the task key includes the lockfile. The lockfile churned substantially between the report's commit and the incident, including the tsdown move, yet the drift did not surface until the manifest edit. Whether turbo does not hash the lockfile for these tasks, or simply no fresh run happened in that window, is not settled here. The lesson is the same either way: nothing in the key distinguished the binary that produced the stored verdict.
 
@@ -116,18 +116,17 @@ Detection before failure is impossible in-band by construction: the cache is the
 
 ### The repo's real instances
 
-1. **api-extractor reports** — 36 committed `packages/*/etc/*.api.md` files across 34 packages, each with two cached executions: the standalone `api:check` task and the check embedded in every package's `build` script (`"build": "tsdown && pnpm api:check"`). One member failed; the other 35 share the exposure identically. This is the class's home.
-2. **Stryker incremental report** — the gitignored `packages/*/reports/stryker-incremental.json` is an input to the cached `mutation` task. Adjacent rather than identical: the cache restores a stored mutation verdict across a toolchain drift, and with no committed copy there is nothing to go red, so stale verdicts are reused silently instead of failing loudly. Same mechanism, worse failure mode.
+1. **api-extractor reports** — 29 committed `packages/**/etc/*.api.md` files across 25 packages, each with two cached executions: the standalone `api:check` task and the check embedded in every package's `build` script (`"build": "tsdown && pnpm api:check"`). One member failed; the other 28 share the exposure identically. This is the class's home.
+2. **Stryker incremental report** — each package's gitignored `reports/stryker-incremental.json` is an input to the cached `mutation` task. Adjacent rather than identical: the cache restores a stored mutation verdict across a toolchain drift, and with no committed copy there is nothing to go red, so stale verdicts are reused silently instead of failing loudly. Same mechanism, worse failure mode.
 3. **Absent classes, stated plainly** — no committed Vitest snapshots and no `toMatchSnapshot`/`toMatchInlineSnapshot` calls anywhere under `packages/`. The snapshot-test instance of this class does not exist here.
-4. **Borderline non-instances** — `//#check:exports` compares regenerated `dist/` against `package.json` exports, but its comparison target is itself a hashed input, so a toolchain change cannot silently flip the verdict. `attw` validates the packed tarball with no committed copy. Neither is in the class.
 
 ### Mechanisable options, with tradeoffs
 
-**Pin the toolchain into the key (recommended).** Add `"$TURBO_ROOT$/pnpm-lock.yaml"` to `api:check`'s `inputs`. The lockfile is the resolved-version manifest, and a lockfile change is exactly the event at which these binaries can move. Tradeoff: every dependency bump anywhere invalidates all 36 comparisons. That cost is semantically correct — a lockfile change _can_ change any report — and each comparison is a short api-extractor pass that turbo parallelizes. Residual gap: the check embedded in each `build` script still rides the cached build task, so either add the lockfile to `build`'s inputs too, or drop the redundant `&& pnpm api:check` since the standalone task already depends on build and is gated in `check:ci`.
+**Pin the toolchain into the key (recommended).** Add `"$TURBO_ROOT$/pnpm-lock.yaml"` to `api:check`'s `inputs`. The lockfile is the resolved-version manifest, and a lockfile change is exactly the event at which these binaries can move. Tradeoff: every dependency bump anywhere invalidates all 29 comparisons. That cost is semantically correct — a lockfile change _can_ change any report — and each comparison is a short api-extractor pass that turbo parallelizes. Residual gap: the check embedded in each `build` script still rides the cached build task, so either add the lockfile to `build`'s inputs too, or drop the redundant `&& pnpm api:check` since the standalone task already depends on build and is gated in `check:ci`.
 
-**Periodic forced regeneration.** A scheduled uncached job running `api:update` across packages, then `git diff --exit-code -- 'packages/*/etc/*.api.md'`. Fails whenever today's toolchain would rewrite a committed report. It must run uncached or it inherits the blindness. Tradeoff: needs scheduled-runner infrastructure, and the staleness window equals the schedule period. A detector, not a fix — a complement rather than a substitute.
+**Periodic forced regeneration.** A scheduled uncached job running `api:update` across packages, then `git diff --exit-code -- 'packages/**/etc/*.api.md'`. Fails whenever today's toolchain would rewrite a committed report. It must run uncached or it inherits the blindness. Tradeoff: needs scheduled-runner infrastructure, and the staleness window equals the schedule period. A detector, not a fix — a complement rather than a substitute.
 
-**Never cache the comparison.** `"cache": false` on `api:check` (precedents exist in this repo: `test:contract`, `//#format:check`, `clean`). Removes the exposure at its source, but re-analyzes every package on every run and still misses the build-embedded check. Costs more than the lockfile pin for the same guarantee.
+**Never cache the comparison.** `"cache": false` on `api:check` (precedents exist in this repo: `test:contract`, `clean`). Removes the exposure at its source, but re-analyzes every package on every run and still misses the build-embedded check. Costs more than the lockfile pin for the same guarantee.
 
 ### Diagnostic guardrail — works today, zero infrastructure
 

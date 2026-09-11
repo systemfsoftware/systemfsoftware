@@ -8,7 +8,4 @@ export default defineConfig({
     passWithNoTests: false,
     testTimeout: 60_000,
   },
-  resolve: {
-    conditions: ['@systemfsoftware/source', 'source', 'import', 'node', 'default'],
-  },
 })
