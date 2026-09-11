@@ -1,6 +1,15 @@
 import { createRuleTester } from './_tester.js'
 
-import { actualWithSuspends, EXPECTED, FIX, NAME } from '../schema-recursive-union-budget.config.js'
+import {
+  actualWithSuspends,
+  EXPECTED,
+  FIX,
+  NAME,
+  UNBUDGETED_ACTUAL,
+  UNBUDGETED_EXPECTED,
+  UNBUDGETED_FIX,
+  UNBUDGETED_NAME,
+} from '../schema-recursive-union-budget.config.js'
 import { schemaRecursiveUnionBudget } from '../schema-recursive-union-budget.js'
 
 const ruleTester = createRuleTester()
@@ -10,6 +19,16 @@ const DOMAIN_FILE = '/repo/pkg/src/domain.schema.ts'
 const budgetError = (count: number) => ({
   messageId: 'recursiveUnionBudget',
   data: { name: NAME, expected: EXPECTED, actual: actualWithSuspends(count), fix: FIX },
+})
+
+const unbudgetedError = () => ({
+  messageId: 'unbudgetedRecursionUnion',
+  data: {
+    name: UNBUDGETED_NAME,
+    expected: UNBUDGETED_EXPECTED,
+    actual: UNBUDGETED_ACTUAL,
+    fix: UNBUDGETED_FIX,
+  },
 })
 
 const cyclicUnion = (count: number): string => {
@@ -150,31 +169,22 @@ export const Branch7: S.Schema<Expr> = S.suspend(() =>
 
 ExprSchema = S.Union([Branch1, Branch2, Branch3, Branch4, Branch5, Branch6, Branch7])`
 
-const TERMINATING_RECURSION_UNION = `import { Schema as S } from 'effect'
-import { terminatingRecursion } from '@systemfsoftware/effect-schema-recursion-budget'
+const recursionPoint = (annotation: string): string =>
+  `import { Schema as S } from 'effect'
 
-export interface Expr {
+export interface AstNode {
   readonly type: string
-  readonly next: Expr
 }
 
-export const Leaf: S.Schema<Expr> = S.Struct({ type: S.Literal('Leaf'), next: S.Unknown })
+export const Identifier: S.Schema<AstNode> = S.Struct({ type: S.Literal('Identifier') })
 
-let ExprSchema: S.Schema<Expr>
+export const AstNode: S.Schema<AstNode> = S.suspend(
+  (): S.Schema<AstNode> => S.Union([Identifier, MemberExpression]),
+)${annotation}
 
-export const Branch1: S.Schema<Expr> = S.suspend(() => S.Struct({ type: S.Literal('b1'), next: ExprSchema }))
-export const Branch2: S.Schema<Expr> = S.suspend(() => S.Struct({ type: S.Literal('b2'), next: ExprSchema }))
-export const Branch3: S.Schema<Expr> = S.suspend(() => S.Struct({ type: S.Literal('b3'), next: ExprSchema }))
-export const Branch4: S.Schema<Expr> = S.suspend(() => S.Struct({ type: S.Literal('b4'), next: ExprSchema }))
-export const Branch5: S.Schema<Expr> = S.suspend(() => S.Struct({ type: S.Literal('b5'), next: ExprSchema }))
-export const Branch6: S.Schema<Expr> = S.suspend(() => S.Struct({ type: S.Literal('b6'), next: ExprSchema }))
-
-ExprSchema = terminatingRecursion({
-  identifier: 'Expr',
-  base: [Leaf],
-  recur: [Branch1, Branch2, Branch3, Branch4, Branch5, Branch6],
-  maxDepth: 6,
-  depthSize: 'medium',
+export const MemberExpression: S.Schema<AstNode> = S.Struct({
+  type: S.Literal('MemberExpression'),
+  object: AstNode,
 })`
 
 const LOCAL_BUILDER_UNION = `import { Schema as S } from 'effect'
@@ -292,8 +302,13 @@ ruleTester.run('schema-recursive-union-budget', schemaRecursiveUnionBudget, {
       filename: DOMAIN_FILE,
     },
     {
-      name: 'Should_StaySilent_When_UnionIsBuiltByTerminatingRecursion',
-      code: TERMINATING_RECURSION_UNION,
+      name: 'Should_StaySilent_When_RecursionPointDeclaresItsBudget',
+      code: recursionPoint(".annotate({ recursionBudget: { maxDepth: 6, depthSize: 'small' } })"),
+      filename: DOMAIN_FILE,
+    },
+    {
+      name: 'Should_StaySilent_When_RecursionPointCarriesItsOwnDerivation',
+      code: recursionPoint('.annotate({ toArbitrary: () => (fc) => fc.constant({}) })'),
       filename: DOMAIN_FILE,
     },
     {
@@ -324,6 +339,18 @@ ruleTester.run('schema-recursive-union-budget', schemaRecursiveUnionBudget, {
       code: cyclicUnion(6),
       filename: DOMAIN_FILE,
       errors: [budgetError(6)],
+    },
+    {
+      name: 'Should_Report_When_RecursionPointDeclaresNoBudget',
+      code: recursionPoint(''),
+      filename: DOMAIN_FILE,
+      errors: [unbudgetedError()],
+    },
+    {
+      name: 'Should_Report_When_RecursionPointAnnotatesOnlyItsIdentifier',
+      code: recursionPoint(".annotate({ identifier: 'AstNode' })"),
+      filename: DOMAIN_FILE,
+      errors: [unbudgetedError()],
     },
     {
       name: 'Should_Report_When_SchemaModuleIsNamespaceImported',

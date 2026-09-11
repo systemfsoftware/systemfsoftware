@@ -3,19 +3,28 @@ import type { Context, ESTree } from '@oxlint/plugins'
 import { originFinalMember, resolveImportOrigin } from '@systemfsoftware/oxlint-import-origin'
 import {
   actualWithSuspends,
+  ANNOTATE_MEMBER,
   ANNOTATION_MEMBER,
+  BUDGET_MEMBER,
   EXPECTED,
   FIX,
   meta,
   NAME,
   SUSPEND_BUDGET_THRESHOLD,
   SUSPEND_MEMBER,
+  UNBUDGETED_ACTUAL,
+  UNBUDGETED_EXPECTED,
+  UNBUDGETED_FIX,
+  UNBUDGETED_NAME,
+  UNION_MEMBER,
 } from './schema-recursive-union-budget.config.js'
 import { isSchemaVocabularyOrigin } from './SchemaVocabulary.js'
 
-export type MessageIds = 'recursiveUnionBudget'
+export type MessageIds = 'recursiveUnionBudget' | 'unbudgetedRecursionUnion'
 
 const MESSAGE_ID: MessageIds = 'recursiveUnionBudget'
+
+const UNBUDGETED_MESSAGE_ID: MessageIds = 'unbudgetedRecursionUnion'
 
 type GetScope = (node: ESTree.Node) => unknown
 
@@ -200,6 +209,54 @@ const budgetReportOf = (name: string, index: CycleIndex): BudgetReport | null =>
   return { node: initializer, count }
 }
 
+const annotateSubjectOf = (
+  initializer: ESTree.Node,
+): { readonly subject: ESTree.Node; readonly options: ESTree.Node | null } | null => {
+  if (initializer.type !== 'CallExpression') return null
+  const callee = initializer.callee
+  if (callee.type !== 'MemberExpression' || callee.computed || callee.property.type !== 'Identifier') return null
+  if (callee.property.name !== ANNOTATE_MEMBER) return { subject: initializer, options: null }
+  const options = initializer.arguments.find((argument) => argument.type === 'ObjectExpression') ?? null
+  return { subject: callee.object, options }
+}
+
+const returnedExpressionOf = (thunk: ESTree.Node | undefined): ESTree.Node | null => {
+  if (thunk === undefined) return null
+  if (thunk.type !== 'ArrowFunctionExpression' && thunk.type !== 'FunctionExpression') return null
+  const body = thunk.body
+  if (body === null) return null
+  if (body.type !== 'BlockStatement') return body
+  for (const statement of body.body) {
+    if (statement.type === 'ReturnStatement' && statement.argument !== null) return statement.argument
+  }
+  return null
+}
+
+const declaresGenerationIntent = (options: ESTree.Node | null): boolean =>
+  options !== null &&
+  hasValueNode(options, (node) => {
+    if (node.type !== 'Property' || node.computed) return false
+    const key = node.key
+    const name = key.type === 'Identifier' ? key.name : key.type === 'Literal' ? key.value : null
+    return name === BUDGET_MEMBER || name === ANNOTATION_MEMBER
+  })
+
+const unbudgetedReportOf = (name: string, index: CycleIndex): BudgetReport | null => {
+  const forward = reachableFrom(index.references, name)
+  if (!forward.has(name)) return null
+  const initializer = index.bindings.get(name) ?? null
+  if (initializer === null) return null
+  const annotation = annotateSubjectOf(initializer)
+  if (annotation === null) return null
+  const { subject, options } = annotation
+  if (vocabularyMemberOf(subject, index.getScope) !== SUSPEND_MEMBER) return null
+  if (declaresGenerationIntent(options)) return null
+  if (subject.type !== 'CallExpression') return null
+  const returned = returnedExpressionOf(subject.arguments[0])
+  if (returned === null || vocabularyMemberOf(returned, index.getScope) !== UNION_MEMBER) return null
+  return { node: initializer, count: 0 }
+}
+
 export const schemaRecursiveUnionBudget = defineRule({
   meta,
   create(context: Context) {
@@ -208,13 +265,31 @@ export const schemaRecursiveUnionBudget = defineRule({
       Program(node: ESTree.Program) {
         const bindings = moduleBindingsOf(node)
         const index: CycleIndex = { bindings, references: referencesOf(bindings), getScope }
+        const reportedCycles = new Set<string>()
         for (const name of index.references.keys()) {
           const report = budgetReportOf(name, index)
           if (report === null) continue
+          reportedCycles.add(name)
           context.report({
             node: report.node,
             messageId: MESSAGE_ID,
             data: { name: NAME, expected: EXPECTED, actual: actualWithSuspends(report.count), fix: FIX },
+          })
+        }
+        for (const name of index.references.keys()) {
+          const report = unbudgetedReportOf(name, index)
+          if (report === null) continue
+          const cycle = cycleMembersOf(reachableFrom(index.references, name), name, index.references)
+          if (cycle.some((member) => reportedCycles.has(member))) continue
+          context.report({
+            node: report.node,
+            messageId: UNBUDGETED_MESSAGE_ID,
+            data: {
+              name: UNBUDGETED_NAME,
+              expected: UNBUDGETED_EXPECTED,
+              actual: UNBUDGETED_ACTUAL,
+              fix: UNBUDGETED_FIX,
+            },
           })
         }
       },
