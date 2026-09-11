@@ -1,5 +1,7 @@
 import { Wire, Workflow } from '@systemfsoftware/effect-cell-types'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import * as HashMap from 'effect/HashMap'
+import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
@@ -18,8 +20,10 @@ export class DiagnosticInUnrelatedFileError extends S.TaggedError<DiagnosticInUn
   },
 ) {}
 
+const SourceFileSchema = Wire.mint(S.NonEmptyString.pipe(S.check(S.isPattern(/\.[^./\\]+$/))))
+
 const DiagnosticSchema = Wire.wire({
-  fileName: Wire.mint(S.optional(Wire.mint(S.String))),
+  fileName: Wire.mint(S.optional(SourceFileSchema)),
   text: Wire.mint(S.String),
 })
 
@@ -31,7 +35,7 @@ interface NodeDecodedShape {
 const TSFileNodeSchema: Wire.Minted<NodeDecodedShape, unknown> = Wire.mint(
   S.suspend(() =>
     Wire.wire({
-      fileName: Wire.mint(S.String),
+      fileName: SourceFileSchema,
       parents: Wire.mint(S.Array(TSFileNodeSchema)),
       children: Wire.mint(S.Array(TSFileNodeSchema)),
     })
@@ -43,7 +47,7 @@ export class CheckMutantsInput extends S.TaggedClass<CheckMutantsInput>()(
   {
     mutants: S.Array(Mutant),
     diagnostics: S.Array(DiagnosticSchema),
-    nodes: Wire.mint(S.Record(Wire.mint(S.String), TSFileNodeSchema)),
+    nodes: Wire.mint(S.Record(SourceFileSchema, TSFileNodeSchema)),
   },
 ) {}
 
@@ -91,63 +95,103 @@ const getMutantsWithReferenceToChildrenOrSelf = (
   return [...relatedMutants, ...childResult]
 }
 
+interface Classification {
+  readonly definitive: HashMap.HashMap<string, readonly DiagnosticDecoded[]>
+  readonly needsRetest: HashMap.HashMap<string, MutantDecoded>
+}
+
+type ClassificationError = DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError
+
+const addAll = <A>(
+  into: HashMap.HashMap<string, A>,
+  entries: readonly A[],
+  keyOf: (entry: A) => string,
+): HashMap.HashMap<string, A> =>
+  entries.reduce((accumulated, entry) => HashMap.set(accumulated, keyOf(entry), entry), into)
+
+const classifyOneDiagnostic = (
+  state: Classification,
+  diagnostic: DiagnosticDecoded,
+  mutants: readonly MutantDecoded[],
+  nodes: Readonly<Record<string, NodeDecoded>>,
+): Result.Result<Classification, ClassificationError> => {
+  const fileName = diagnostic.fileName
+  if (fileName === undefined || fileName === '') {
+    return Result.fail(new DiagnosticWithoutFileError({ text: diagnostic.text }))
+  }
+  if (!Object.hasOwn(nodes, fileName)) {
+    return Result.fail(new DiagnosticInUnrelatedFileError({ text: diagnostic.text, fileName }))
+  }
+  const node = nodes[fileName]
+  if (node === undefined) {
+    return Result.fail(new DiagnosticInUnrelatedFileError({ text: diagnostic.text, fileName }))
+  }
+  const related = getMutantsWithReferenceToChildrenOrSelf(node, [...mutants])
+  if (related.length === 0) {
+    return Result.succeed({
+      definitive: state.definitive,
+      needsRetest: addAll(state.needsRetest, mutants, (m) => m.id),
+    })
+  }
+  if (related.length === 1) {
+    const relatedOnly = related[0]
+    if (relatedOnly === undefined) {
+      return Result.succeed(state)
+    }
+    const existing = HashMap.get(state.definitive, relatedOnly.id)
+    if (Option.isSome(existing)) {
+      return Result.succeed({
+        definitive: HashMap.set(state.definitive, relatedOnly.id, [...existing.value, diagnostic]),
+        needsRetest: state.needsRetest,
+      })
+    }
+    return Result.succeed({
+      definitive: HashMap.set(state.definitive, relatedOnly.id, [diagnostic]),
+      needsRetest: state.needsRetest,
+    })
+  }
+  return Result.succeed({ definitive: state.definitive, needsRetest: addAll(state.needsRetest, related, (m) => m.id) })
+}
+
 const classifyDiagnosticsPure = (
   diagnostics: readonly DiagnosticDecoded[],
   mutants: readonly MutantDecoded[],
   nodes: Readonly<Record<string, NodeDecoded>>,
 ): Result.Result<
   {
-    readonly definitive: Readonly<Record<string, readonly DiagnosticDecoded[]>>
+    readonly definitive: HashMap.HashMap<string, readonly DiagnosticDecoded[]>
     readonly needsRetest: readonly MutantDecoded[]
   },
-  DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError
+  ClassificationError
 > => {
-  const definitive: Record<string, DiagnosticDecoded[]> = {}
-  const needsRetest: Record<string, MutantDecoded> = {}
-  if (diagnostics.length > 0 && mutants.length === 1) {
-    const only = mutants[0]
-    if (only !== undefined) {
-      definitive[only.id] = [...diagnostics]
-      return Result.succeed({ definitive, needsRetest: [] })
-    }
+  const first = mutants[0]
+  if (diagnostics.length > 0 && mutants.length === 1 && first !== undefined) {
+    return Result.succeed({
+      definitive: HashMap.set(HashMap.empty<string, readonly DiagnosticDecoded[]>(), first.id, [...diagnostics]),
+      needsRetest: [],
+    })
   }
-  for (const diagnostic of diagnostics) {
-    const fileName = diagnostic.fileName
-    if (fileName === undefined || fileName === '') {
-      return Result.fail(new DiagnosticWithoutFileError({ text: diagnostic.text }))
-    }
-    const node = nodes[fileName]
-    if (node === undefined) {
-      return Result.fail(new DiagnosticInUnrelatedFileError({ text: diagnostic.text, fileName }))
-    }
-    const related = getMutantsWithReferenceToChildrenOrSelf(node, [...mutants])
-    if (related.length === 0) {
-      for (const m of mutants) {
-        needsRetest[m.id] = m
-      }
-    } else if (related.length === 1) {
-      const only = related[0]
-      if (only !== undefined) {
-        const existing = definitive[only.id]
-        if (existing !== undefined) {
-          existing.push(diagnostic)
-        } else {
-          definitive[only.id] = [diagnostic]
-        }
-      }
-    } else {
-      for (const m of related) {
-        needsRetest[m.id] = m
-      }
-    }
+  const initial: Classification = {
+    definitive: HashMap.empty<string, readonly DiagnosticDecoded[]>(),
+    needsRetest: HashMap.empty<string, MutantDecoded>(),
   }
-  const filteredRetest = Object.values(needsRetest).filter((m) => definitive[m.id] === undefined)
-  return Result.succeed({ definitive, needsRetest: filteredRetest })
+  const folded = diagnostics.reduce<Result.Result<Classification, ClassificationError>>(
+    (accumulated, diagnostic) =>
+      Result.flatMap(accumulated, (state) => classifyOneDiagnostic(state, diagnostic, mutants, nodes)),
+    Result.succeed(initial),
+  )
+  return Result.map(folded, (state) => ({
+    definitive: state.definitive,
+    needsRetest: HashMap.toValues(state.needsRetest).filter((m) => !HashMap.has(state.definitive, m.id)),
+  }))
 }
+
+const passedResults = (mutants: readonly MutantDecoded[]): Array<readonly [string, MutantCheckStatus]> =>
+  mutants.map((m): readonly [string, MutantCheckStatus] => [m.id, { status: 'passed' }])
 
 const buildResult = (
   input: CheckMutantsInput,
-): Result.Result<CheckMutantsDecision, DiagnosticWithoutFileError | DiagnosticInUnrelatedFileError> => {
+): Result.Result<CheckMutantsDecision, ClassificationError> => {
   const mutants = input.mutants
   const diagnostics = input.diagnostics
   const nodes = input.nodes
@@ -155,35 +199,34 @@ const buildResult = (
     return Result.succeed(CheckFinished.make({ results: {} }))
   }
   const first = mutants[0]
-  if (first === undefined || nodes[normalizeFileName(first.fileName)] === undefined) {
-    const results: Record<string, MutantCheckStatus> = {}
-    for (const m of mutants) {
-      results[m.id] = { status: 'passed' }
-    }
-    return Result.succeed(CheckFinished.make({ results }))
+  if (first === undefined || !Object.hasOwn(nodes, normalizeFileName(first.fileName))) {
+    return Result.succeed(CheckFinished.make({ results: Object.fromEntries(passedResults(mutants)) }))
   }
   const classified = classifyDiagnosticsPure(diagnostics, mutants, nodes)
   if (Result.isFailure(classified)) {
     return Result.fail(classified.failure)
   }
   const { definitive, needsRetest } = classified.success
-  const retestIds: Record<string, true> = {}
-  for (const m of needsRetest) {
-    retestIds[m.id] = true
-  }
-  const results: Record<string, MutantCheckStatus> = {}
-  for (const m of mutants) {
-    const diags = definitive[m.id]
-    if (diags !== undefined) {
-      results[m.id] = { status: 'compileError', reason: diags.map((d) => d.text).join('\n') }
-    } else if (retestIds[m.id] !== true) {
-      results[m.id] = { status: 'passed' }
-    }
-  }
+  const retestIds = needsRetest.reduce(
+    (accumulated, m) => HashMap.set(accumulated, m.id, true),
+    HashMap.empty<string, true>(),
+  )
+  const results: Array<readonly [string, MutantCheckStatus]> = mutants.flatMap(
+    (m): Array<readonly [string, MutantCheckStatus]> => {
+      const diags = HashMap.get(definitive, m.id)
+      if (Option.isSome(diags)) {
+        return [[m.id, { status: 'compileError', reason: diags.value.map((d) => d.text).join('\n') }]]
+      }
+      if (HashMap.has(retestIds, m.id)) {
+        return []
+      }
+      return [[m.id, { status: 'passed' }]]
+    },
+  )
   if (needsRetest.length === 0) {
-    return Result.succeed(CheckFinished.make({ results }))
+    return Result.succeed(CheckFinished.make({ results: Object.fromEntries(results) }))
   }
-  return Result.succeed(RetestRequired.make({ results, needsRetest: [...needsRetest] }))
+  return Result.succeed(RetestRequired.make({ results: Object.fromEntries(results), needsRetest: [...needsRetest] }))
 }
 
 export const checkMutants = Workflow.make(CheckMutantsInput, (input: CheckMutantsInput) => buildResult(input))

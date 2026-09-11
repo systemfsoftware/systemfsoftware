@@ -11,9 +11,9 @@ export const LocationSchema = S.Struct({
 })
 
 export class Mutant extends S.TaggedClass<Mutant>()('Mutant', {
-  id: S.String,
-  fileName: S.String,
-  mutatorName: S.String,
+  id: S.NonEmptyString,
+  fileName: S.NonEmptyString,
+  mutatorName: S.NonEmptyString,
   replacement: S.String,
   location: LocationSchema,
   status: S.optional(
