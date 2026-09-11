@@ -7,22 +7,22 @@
 import { OxlintConfig } from 'oxlint';
 import { OxlintOverride } from 'oxlint';
 
-// @public
+// @public (undocumented)
 export const options: {
     readonly typeAware: true;
 };
 
-// @public
+// @public (undocumented)
 export const overrides: OxlintOverride[];
 
-// @public
+// @public (undocumented)
 export const plugins: readonly ['typescript', 'import', 'unicorn', 'vitest'];
 
-// @public
+// @public (undocumented)
 const recommended: OxlintConfig;
 export default recommended;
 
-// @public
+// @public (undocumented)
 export const rules: NonNullable<OxlintConfig['rules']>;
 
 // (No @packageDocumentation comment for this package)
