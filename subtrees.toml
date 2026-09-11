@@ -5,12 +5,6 @@ description = "Shared engineering constitution: pure-core / imperative-shell des
 branch = "main"
 
 [[repos]]
-name = "tsdown"
-url = "https://github.com/rolldown/tsdown"
-description = "TypeScript bundler powered by Rolldown"
-tag_prefix = "v"
-
-[[repos]]
 name = "effect"
 url = "https://github.com/Effect-TS/effect"
 description = "Typed functional effects, Schema, Layer, and Stream for TypeScript"
