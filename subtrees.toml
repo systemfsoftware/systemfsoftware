@@ -35,12 +35,6 @@ description = "Rust JavaScript/TypeScript toolchain: parser, linter, transformer
 branch = "main"
 
 [[repos]]
-name = "clanka"
-url = "https://github.com/Effectful-Tech/clanka"
-description = "Effect coding-agent CLI with MCP, tree-sitter, and sqlite-vec memory"
-tag_prefix = "v"
-
-[[repos]]
 name = "effect-torch"
 url = "https://github.com/mikearnaldi/effect-torch"
 description = "Native tensor runtime and ML system for Effect TypeScript"
