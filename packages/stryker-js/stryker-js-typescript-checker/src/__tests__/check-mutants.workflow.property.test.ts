@@ -8,11 +8,11 @@ import { FastCheck as fc } from 'effect/testing'
 import {
   CheckFinished,
   checkMutants,
-  CheckMutantsInput,
   DiagnosticInUnrelatedFileError,
   DiagnosticWithoutFileError,
   RetestRequired,
 } from '../check-mutants.workflow.js'
+import { CheckMutantsInput } from '../CheckMutants.schema.js'
 
 const CHECK_MUTANTS_FAMILY = Symbol.for('@systemfsoftware/stryker-js-typescript-checker/CheckMutants')
 

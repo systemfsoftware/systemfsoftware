@@ -16,11 +16,11 @@ import type { Diagnostic } from 'typescript/unstable/sync'
 import {
   checkMutants,
   type CheckMutantsDecision,
-  CheckMutantsInput,
   DiagnosticInUnrelatedFileError,
   DiagnosticWithoutFileError,
 } from './check-mutants.workflow.js'
 import { CheckMutantsCommand } from './Checker.schema.js'
+import { CheckMutantsInput } from './CheckMutants.schema.js'
 import type { TSFileNode } from './Compiler.js'
 import { createGroups, TypeScriptCompiler } from './Compiler.js'
 
