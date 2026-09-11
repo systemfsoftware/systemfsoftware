@@ -29,7 +29,7 @@ In `stryker.config.json`:
 Mutants it recognizes are reported as `Ignored`, each carrying the reason it was safe to skip.
 
 > [!NOTE]
-> `@systemfsoftware/stryker-js` is an ordinary dependency, so your package manager installs it with the plugin. `effect` is bundled into the published plugin — nothing has to line up with your Stryker install.
+> The ignorers are written against `@systemfsoftware/stryker-js`, the plugin ABI: it is an ordinary dependency your package manager installs with the plugin, and there is no peer dependency to satisfy. `effect` is compiled into the published plugin — nothing has to line up with your Stryker install.
 
 ## What it ignores
 
