@@ -54,7 +54,6 @@
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
-    "@systemfsoftware/effect-schema-recursion-budget": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:",

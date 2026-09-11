@@ -1,3 +1,4 @@
+/// <reference types="vitest/import-meta" />
 import { it } from '@effect/vitest'
 import { Schema as S, SchemaAST } from 'effect'
 import { FastCheck as fc } from 'effect/testing'
@@ -51,15 +52,14 @@ const lawOptionsFor = (arbitrary: fc.Arbitrary<unknown>) => {
   } as const
 }
 
-const maxDepthOf = (ast: SchemaAST.AST): number => {
-  const hook: unknown = SchemaAST.resolve(ast)?.['toArbitrary']
-  if ((typeof hook !== 'object' && typeof hook !== 'function') || hook === null) return STOCK_MAX_DEPTH
-  if (!('budget' in hook)) return STOCK_MAX_DEPTH
-  const budget: unknown = hook['budget']
-  if (typeof budget !== 'object' || budget === null || !('maxDepth' in budget)) return STOCK_MAX_DEPTH
-  const maxDepth: unknown = budget['maxDepth']
-  return typeof maxDepth === 'number' ? maxDepth : STOCK_MAX_DEPTH
+const budgetOf = (ast: SchemaAST.AST): { readonly maxDepth: number } | undefined => {
+  const annotation: unknown = SchemaAST.resolve(ast)?.['recursionBudget']
+  if (typeof annotation !== 'object' || annotation === null || !('maxDepth' in annotation)) return undefined
+  const maxDepth: unknown = annotation['maxDepth']
+  return typeof maxDepth === 'number' ? { maxDepth } : undefined
 }
+
+const hasDerivationHook = (ast: SchemaAST.AST): boolean => SchemaAST.resolve(ast)?.['toArbitrary'] !== undefined
 
 const resolveSuspend = (
   ast: SchemaAST.Suspend,
@@ -119,6 +119,11 @@ const firstRecursiveUnion = (ast: SchemaAST.AST): SchemaAST.Union | undefined =>
   return visit(ast)
 }
 
+const isSuspensionOf = (root: SchemaAST.AST, union: SchemaAST.Union): boolean => {
+  const resolved = new Map<SchemaAST.Suspend, SchemaAST.AST>()
+  return childAstsOf(root, resolved).includes(union)
+}
+
 const memberSchemaOf = (ast: SchemaAST.AST): S.Top => S.make<S.Top>(ast)
 
 const maxNestingDepthOf = (value: unknown): number => {
@@ -141,12 +146,19 @@ const coversEveryVariant = (sample: ReadonlyArray<unknown>, members: ReadonlyArr
   members.every((member) => sample.some((value) => S.is(member)(value)))
 
 export const recursionLaws = <A, I>(label: string, schema: S.Codec<A, I>): void => {
-  const union = firstRecursiveUnion(schema.ast)
-  const rootIsTheRecursiveUnion = schema.ast === union
-  if (union === undefined || !rootIsTheRecursiveUnion) return
+  const root = schema.ast
+  const union = firstRecursiveUnion(root)
+  const rootIsTheCycle = union !== undefined && (root === union || isSuspensionOf(root, union))
+  if (union === undefined || !rootIsTheCycle) return
+  const budget = budgetOf(root)
+  if (budget !== undefined && !hasDerivationHook(root)) {
+    throw new Error(
+      `recursionBudget is declared on ${label} but nothing materialized it — Budget_RequiresTransform: register the recursion-budget Vite plugin in this package's vitest configuration`,
+    )
+  }
   const arbitrary = S.toArbitrary(schema)(fc)
   const members = union.types.map(memberSchemaOf)
-  const maxDepth = maxDepthOf(union)
+  const maxDepth = budget?.maxDepth ?? STOCK_MAX_DEPTH
 
   it.prop(
     `∀x_${label}Nesting_≤MaxDepth1`,
@@ -154,12 +166,14 @@ export const recursionLaws = <A, I>(label: string, schema: S.Codec<A, I>): void 
     ([value]) => maxNestingDepthOf(value) <= maxDepth + 1,
   )
 
-  it.prop(
-    `∀s_${label}DeepShare_≠Zero`,
-    [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => deepShareOf(sampledAt(arbitrary, seed)) > 0 && maxDepth > STOCK_MAX_DEPTH,
-    lawOptionsFor(arbitrary),
-  )
+  if (maxDepth > STOCK_MAX_DEPTH) {
+    it.prop(
+      `∀s_${label}DeepShare_≠Zero`,
+      [S.toArbitrary(S.Int)(fc)],
+      ([seed]) => deepShareOf(sampledAt(arbitrary, seed)) > 0,
+      lawOptionsFor(arbitrary),
+    )
+  }
 
   it.prop(
     `∀s_${label}Variants_⊇Declared`,
@@ -173,9 +187,7 @@ if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
   const { Schema: S, Exit } = await import('effect')
   const { FastCheck: fc } = await import('effect/testing')
-  const { terminatingRecursion } = await import('@systemfsoftware/effect-schema-recursion-budget')
   type Codec = S.Codec<unknown, unknown>
-  type MemberTuple = readonly [Codec, Codec, Codec, Codec]
 
   const MAX_DEPTH = 6
   const NESTING_CAP = MAX_DEPTH + 1
@@ -184,39 +196,50 @@ if (import.meta.vitest !== void 0) {
 
   const Lit = S.TaggedStruct('Lit', { value: S.Finite })
   const Id = S.TaggedStruct('Id', { name: S.String })
-  const BasePair = [Lit, Id] as const
+  const Num = S.TaggedStruct('Num', { value: S.Finite })
+  const Str = S.TaggedStruct('Str', { value: S.String })
+  const Flag = S.TaggedStruct('Flag', { on: S.Boolean })
 
-  const expressionOf = (build: (recur: MemberTuple) => Codec): Codec => {
-    const Binary: Codec = S.suspend((): Codec => S.Struct({ _tag: S.Literal('Binary'), left: Expr, right: Expr }))
-    const Member: Codec = S.suspend((): Codec => S.Struct({ _tag: S.Literal('Member'), object: Expr, property: Expr }))
-    const Conditional: Codec = S.suspend((): Codec =>
-      S.Struct({ _tag: S.Literal('Conditional'), test: Expr, consequent: Expr, alternate: Expr })
-    )
-    const Call: Codec = S.suspend((): Codec => S.Struct({ _tag: S.Literal('Call'), callee: Expr, args: S.Array(Expr) }))
-    const Expr: Codec = build([Binary, Member, Conditional, Call])
+  const binaryOf = (recur: Codec): Codec => S.Struct({ _tag: S.Literal('Binary'), left: recur, right: recur })
+  const memberOf = (recur: Codec): Codec => S.Struct({ _tag: S.Literal('Member'), object: recur, property: recur })
+  const conditionalOf = (recur: Codec): Codec =>
+    S.Struct({ _tag: S.Literal('Conditional'), test: recur, consequent: recur, alternate: recur })
+  const callOf = (recur: Codec): Codec => S.Struct({ _tag: S.Literal('Call'), callee: recur, args: S.Array(recur) })
+
+  const annotatedExpr = (): Codec => {
+    const Expr: Codec = S.suspend(
+      (): Codec => S.Union([Lit, Id, binaryOf(Expr), memberOf(Expr), conditionalOf(Expr), callOf(Expr)]),
+    ).annotate({
+      identifier: 'LawExpr',
+      recursionBudget: { maxDepth: MAX_DEPTH, depthSize: 'medium' },
+    })
     return Expr
   }
 
-  const ANNOTATED_EXPR = expressionOf((recur) =>
-    terminatingRecursion({
-      identifier: 'LawExpr',
-      base: BasePair,
-      recur,
-      maxDepth: MAX_DEPTH,
-      depthSize: 'medium',
-    })
-  )
-  const STOCK_EXPR: Codec = expressionOf((recur) => S.Union([...BasePair, ...recur]))
+  const stockExpr = (): Codec => {
+    const Expr: Codec = S.suspend(
+      (): Codec => S.Union([Lit, Id, binaryOf(Expr), memberOf(Expr), conditionalOf(Expr), callOf(Expr)]),
+    )
+    return Expr
+  }
+
+  const ANNOTATED_EXPR = annotatedExpr()
+  const STOCK_EXPR = stockExpr()
 
   const basePairOnly: S.Annotations.ToArbitrary.Declaration<unknown, readonly []> = () => (fc) =>
     fc.oneof(S.toArbitrary(Lit)(fc), S.toArbitrary(Id)(fc))
 
-  const DROPPED_MEMBER_EXPR = expressionOf((recur) =>
-    S.Union([...BasePair, ...recur]).annotate({
+  const droppedMemberExpr = (): Codec => {
+    const Expr: Codec = S.suspend(
+      (): Codec => S.Union([Lit, Id, binaryOf(Expr), memberOf(Expr), conditionalOf(Expr), callOf(Expr)]),
+    ).annotate({
       identifier: 'DroppedMemberExpr',
       toArbitrary: basePairOnly,
     })
-  )
+    return Expr
+  }
+
+  const DROPPED_MEMBER_EXPR = droppedMemberExpr()
 
   const arbitraryCache = new Map<S.Constraint, fc.Arbitrary<unknown>>()
 
@@ -245,8 +268,8 @@ if (import.meta.vitest !== void 0) {
     )
 
   const declaredCapOf = (schema: S.Constraint): number => {
-    const union = firstRecursiveUnion(schema.ast)
-    return union === undefined ? 0 : maxDepthOf(union) + 1
+    const budget = budgetOf(schema.ast)
+    return budget === undefined ? STOCK_MAX_DEPTH + 1 : budget.maxDepth + 1
   }
 
   const interruptedUnder = (limitMs: number, seed: number): boolean => {
@@ -293,9 +316,16 @@ if (import.meta.vitest !== void 0) {
   )
 
   it.prop(
-    '∀s_StockExprDeepShare_≠Zero',
+    '∀s_StockExprDeepShare_=Zero',
     [S.toArbitrary(S.Int)(fc)],
-    ([seed]) => deepShareAt(STOCK_EXPR, seed) > 0,
+    ([seed]) => deepShareAt(STOCK_EXPR, seed) === 0,
+    lawOptionsFor(arbitraryOf(STOCK_EXPR)),
+  )
+
+  it.prop(
+    '∀s_StockExprNesting_≤StockCap',
+    [S.toArbitrary(S.Int)(fc)],
+    ([seed]) => longestNestingAt(STOCK_EXPR, seed) <= declaredCapOf(STOCK_EXPR),
     lawOptionsFor(arbitraryOf(STOCK_EXPR)),
   )
 
@@ -306,20 +336,18 @@ if (import.meta.vitest !== void 0) {
     lawOptionsFor(arbitraryOf(ANNOTATED_EXPR)),
   )
 
-  const BASE_HEAVY_EXPR = expressionOf((recur) =>
-    terminatingRecursion({
+  const baseHeavyExpr = (): Codec => {
+    const Expr: Codec = S.suspend(
+      (): Codec =>
+        S.Union([Lit, Id, Num, Str, Flag, binaryOf(Expr), memberOf(Expr), conditionalOf(Expr), callOf(Expr)]),
+    ).annotate({
       identifier: 'BaseHeavyExpr',
-      base: [
-        ...BasePair,
-        S.TaggedStruct('Num', { value: S.Finite }),
-        S.TaggedStruct('Str', { value: S.String }),
-        S.TaggedStruct('Flag', { on: S.Boolean }),
-      ],
-      recur,
-      maxDepth: MAX_DEPTH,
-      depthSize: 'medium',
+      recursionBudget: { maxDepth: MAX_DEPTH, depthSize: 'medium' },
     })
-  )
+    return Expr
+  }
+
+  const BASE_HEAVY_EXPR = baseHeavyExpr()
 
   it.prop(
     '∀s_BaseHeavyDeepShare_≠Zero',

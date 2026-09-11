@@ -834,9 +834,6 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
-      '@systemfsoftware/effect-schema-recursion-budget':
-        specifier: workspace:^
-        version: link:../effect-schema-recursion-budget
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-plugin/oxlint-config
