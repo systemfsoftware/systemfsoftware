@@ -33,6 +33,11 @@
   intents:
     - effect-rc112
     - omp-typescript-discipline-plugin
+"@systemfsoftware/all@2.0.0":
+  dir: packages/oxlint-plugin/all
+  intents:
+    - complexity-ceiling-in-complete-preset
+    - standalone-expect-stays-off
 "@systemfsoftware/arethetypeswrong-cli@2.0.0":
   dir: packages/arethetypeswrong/cli
   intents:
@@ -324,6 +329,11 @@
   intents:
     - effect-rc112
     - schema-filters-gain-constructive-candidates
+"@systemfsoftware/effect-daemon-spec@3.0.7":
+  dir: packages/effect-daemon-spec
+  intents:
+    - neat-rocks-lay
+    - reporter-protocol-dependent-rebuilds
 "@systemfsoftware/effect-gherkin-spec@1.0.0":
   dir: packages/effect-gherkin-spec
   intents:
@@ -462,6 +472,11 @@
   dir: packages/effect-schema-extensions
   intents:
     - effect-rc112
+"@systemfsoftware/effect-schema-extensions@0.9.7":
+  dir: packages/effect-schema-extensions
+  intents:
+    - neat-rocks-lay
+    - reporter-protocol-dependent-rebuilds
 "@systemfsoftware/effect-schema-law@0.7.0":
   dir: packages/effect-schema-law
   intents:
@@ -575,6 +590,11 @@
   dir: packages/hex-schema
   intents:
     - effect-rc112
+"@systemfsoftware/hex-schema@1.8.7":
+  dir: packages/hex-schema
+  intents:
+    - neat-rocks-lay
+    - reporter-protocol-dependent-rebuilds
 "@systemfsoftware/npm-package@0.2.0":
   dir: packages/npm-package
   intents:
@@ -949,6 +969,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-recommended
   intents:
     - debut-releases-gain-oidc
+"@systemfsoftware/oxlint-plugin-recommended@1.2.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-recommended
+  intents:
+    - standalone-expect-stays-off
 "@systemfsoftware/oxlint-plugin-test-hygiene@1.1.3":
   dir: packages/oxlint-plugins/test-hygiene
   intents:
@@ -1072,6 +1096,10 @@
     - effect-rc112
     - make-boundary-regime
     - modern-ends-know
+"@systemfsoftware/oxlint-plugin@4.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin
+  intents:
+    - cyclomatic-complexity-rule-retired
 "@systemfsoftware/rx-effect@0.6.0":
   dir: packages/rx-effect
   intents:
@@ -1236,6 +1264,11 @@
     - verdict-reaches-the-exit-code
     - workflow-brand-forced
     - workflow-constructor-consumers
+"@systemfsoftware/stryker-js-cli@7.0.0":
+  dir: packages/stryker-js/stryker-js-cli
+  intents:
+    - reporters-pull-stream-protocol
+    - true-weeks-jam
 "@systemfsoftware/stryker-js-engine@0.2.0":
   dir: packages/testing/mutation/stryker-js/engine
   intents:
@@ -1297,6 +1330,11 @@
     - verdict-reaches-the-exit-code
     - worker-calls-are-declared-not-guessed
     - worker-calls-no-longer-lose-their-replies
+"@systemfsoftware/stryker-js-engine@2.0.0":
+  dir: packages/stryker-js/stryker-js-engine
+  intents:
+    - neat-rocks-lay
+    - reporters-pull-stream-protocol
 "@systemfsoftware/stryker-js-html-reporter@0.1.0":
   dir: packages/testing/mutation/stryker-js/html-reporter
   intents:
@@ -1333,6 +1371,11 @@
     - package-landing-pages
     - reporters-are-layers
     - tricky-moments-punch
+"@systemfsoftware/stryker-js-html-reporter@3.0.0":
+  dir: packages/stryker-js/stryker-js-html-reporter
+  intents:
+    - neat-rocks-lay
+    - reporters-pull-stream-protocol
 "@systemfsoftware/stryker-js-instrumenter@0.2.0":
   dir: packages/testing/mutation/stryker-js/instrumenter
   intents:
@@ -1377,6 +1420,11 @@
     - shared-helpers-move-to-plugin-api
     - stryker-drop-unimported-deps
     - tricky-moments-punch
+"@systemfsoftware/stryker-js-instrumenter@5.0.1":
+  dir: packages/stryker-js/stryker-js-instrumenter
+  intents:
+    - neat-rocks-lay
+    - reporter-protocol-dependent-rebuilds
 "@systemfsoftware/stryker-js-mutation-report@1.2.6":
   dir: packages/stryker-js/mutation-report
   intents:
@@ -1603,6 +1651,11 @@
     - shared-helpers-move-to-plugin-api
     - stryker-drop-unimported-deps
     - tricky-moments-punch
+"@systemfsoftware/stryker-js-typescript-checker@5.0.1":
+  dir: packages/stryker-js/stryker-js-typescript-checker
+  intents:
+    - neat-rocks-lay
+    - reporter-protocol-dependent-rebuilds
 "@systemfsoftware/stryker-js-util@0.2.0":
   dir: packages/testing/mutation/stryker-js/util
   intents:
@@ -1671,6 +1724,11 @@
     - shared-helpers-move-to-plugin-api
     - stryker-drop-unimported-deps
     - tricky-moments-punch
+"@systemfsoftware/stryker-js-vitest-runner@4.0.1":
+  dir: packages/stryker-js/stryker-js-vitest-runner
+  intents:
+    - neat-rocks-lay
+    - reporter-protocol-dependent-rebuilds
 "@systemfsoftware/stryker-js@0.1.0":
   dir: packages/testing/mutation/stryker-js/stryker-js
   intents:
@@ -1720,6 +1778,11 @@
     - tricky-moments-punch
     - verdict-carries-its-findings
     - worker-calls-are-declared-not-guessed
+"@systemfsoftware/stryker-js@3.0.0":
+  dir: packages/stryker-js/stryker-js
+  intents:
+    - reporters-pull-stream-protocol
+    - true-weeks-jam
 "@systemfsoftware/stryker-plugins@0.12.0":
   dir: packages/stryker-plugins
   intents:
@@ -1776,6 +1839,11 @@
     - debut-releases-gain-oidc
     - effect-rc112
     - modern-ends-know
+"@systemfsoftware/stryker-plugins@3.0.1":
+  dir: packages/stryker-js/stryker-plugins
+  intents:
+    - neat-rocks-lay
+    - reporter-protocol-dependent-rebuilds
 "@systemfsoftware/stryker-test-contribution@0.1.0":
   dir: packages/testing/mutation/plugins/stryker-test-contribution
   intents:
@@ -1814,6 +1882,11 @@
     - concept-modules-platform-node
     - effect-rc112
     - evaluator-answers-with-a-verdict
+"@systemfsoftware/stryker-test-contribution@2.0.1":
+  dir: packages/stryker-js/stryker-test-contribution
+  intents:
+    - neat-rocks-lay
+    - reporter-protocol-dependent-rebuilds
 "@systemfsoftware/tsconfig@1.3.2":
   dir: packages/tsconfig
   intents:
