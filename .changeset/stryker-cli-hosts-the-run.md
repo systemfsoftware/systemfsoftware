@@ -2,7 +2,9 @@
 "@systemfsoftware/stryker-js-cli": major
 ---
 
-The command is now the whole mutation host: running a mutation test no longer requires the engine, instrumenter or html reporter packages to be installed, because they ship inside this one. The `stryker` command, its arguments and its configuration are unchanged, and the package still declares no peer dependency.
+The command is now the whole mutation host: running a mutation test no longer requires the engine, instrumenter or html reporter packages to be installed, because they ship inside this one. The `stryker` command and its arguments are unchanged, and the package still declares no peer dependency.
+
+One configuration change: the base preset moved. A config that set `"extends": "@systemfsoftware/stryker-js-engine/config/base"` must now set `"extends": "@systemfsoftware/stryker-js-cli/config"`.
 
 Two things a consumer can observe:
 
