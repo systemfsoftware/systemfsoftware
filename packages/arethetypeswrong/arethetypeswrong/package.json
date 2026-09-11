@@ -44,11 +44,11 @@
   "dependencies": {
     "@loaderkit/resolve": "^1.0.2",
     "@systemfsoftware/npm-package": "workspace:^",
-    "cjs-module-lexer": "^1.2.3",
+    "cjs-module-lexer": "^2.2.1",
     "effect": "catalog:",
     "semver": "^7.5.4",
     "typescript": "catalog:attw",
-    "validate-npm-package-name": "^5.0.0"
+    "validate-npm-package-name": "^8.0.0"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
