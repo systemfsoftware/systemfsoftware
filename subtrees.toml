@@ -29,12 +29,6 @@ description = "Rust JavaScript/TypeScript toolchain: parser, linter, transformer
 branch = "main"
 
 [[repos]]
-name = "effect-torch"
-url = "https://github.com/mikearnaldi/effect-torch"
-description = "Native tensor runtime and ML system for Effect TypeScript"
-branch = "main"
-
-[[repos]]
 name = "typia"
 url = "https://github.com/samchon/typia"
 description = "TypeScript transformer for runtime validators and serializers from types"

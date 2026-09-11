@@ -1,7 +1,0 @@
-[package]
-name = "effect-torch-runtime"
-version.workspace = true
-edition.workspace = true
-
-[lib]
-path = "src/lib.rs"
