@@ -80,6 +80,16 @@ updates:
           - "typescript"
         update-types: ["minor", "patch"]
 
+      types-node-minor-patch:
+        patterns:
+          - "@types/node"
+        update-types: ["minor", "patch"]
+
+      types-node-major:
+        patterns:
+          - "@types/node"
+        update-types: ["major"]
+
       other-minor-patch:
         patterns: ["*"]
         exclude-patterns:
@@ -88,6 +98,7 @@ updates:
           - "@effect/*"
           - "@commitlint/*"
           - "typescript"
+          - "@types/node"
         update-types: ["minor", "patch"]
 
       major-updates:
@@ -97,6 +108,7 @@ updates:
           - "@oxlint/*"
           - "@commitlint/*"
           - "typescript"
+          - "@types/node"
         update-types: ["major"]
 
   - package-ecosystem: nix
