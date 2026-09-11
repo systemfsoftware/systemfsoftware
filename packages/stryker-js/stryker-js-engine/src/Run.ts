@@ -62,6 +62,7 @@ import { checkGroupedPlans, createCheckerFactory } from './Checker.js'
 import { forkCoreSchema, readConfig, validateOptions, type ValidationSchemaDocument } from './Config.js'
 import { dryRun, DryRunCommand } from './dry-run.workflow.js'
 import { REMEMBERED_REASON, toRelativeNormalizedFileName } from './IncrementalDiff.paths.js'
+import { toSchemaLocation } from './mutant-result-mapping.js'
 import { decidePlans, incrementalDiff } from './Mutants.js'
 import type { TestCoverage } from './Mutants.js'
 import { testCoverageFrom } from './Mutants.js'
@@ -77,7 +78,6 @@ import { FILE_CONCURRENCY, readOriginal, toInstrumenterFile } from './Project.js
 import { withInstrumentedFiles } from './Project.js'
 import { ansi } from './Reporter.ansi.js'
 import { makeMutationReportingService } from './Reporter.js'
-import { toSchemaLocation } from './Reporter.js'
 import { normalizeReportFileName } from './Reporter.js'
 import {
   attachReporterFactories,

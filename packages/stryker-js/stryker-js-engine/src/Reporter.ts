@@ -1,17 +1,10 @@
-import { type CheckResult, type CheckStatus, type PassedCheckResult } from '@systemfsoftware/stryker-js/Checker'
+import { type CheckResult, type PassedCheckResult } from '@systemfsoftware/stryker-js/Checker'
 import { calculateMetrics } from '@systemfsoftware/stryker-js/Metrics'
 import type { MetricsResult } from '@systemfsoftware/stryker-js/Metrics'
-import type {
-  Location,
-  MutantResult,
-  MutantStatus,
-  MutantTestCoverage,
-  Position,
-} from '@systemfsoftware/stryker-js/Mutant'
+import type { MutantResult, MutantTestCoverage, Position } from '@systemfsoftware/stryker-js/Mutant'
 import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
 import type { AnyPluginContribution, PluginKind } from '@systemfsoftware/stryker-js/Plugin'
 import type * as schema from '@systemfsoftware/stryker-js/Report'
-import type { OpenEndLocation } from '@systemfsoftware/stryker-js/Report'
 import type { ReporterFactory, RunTiming } from '@systemfsoftware/stryker-js/Reporter'
 import { ReporterFailed } from '@systemfsoftware/stryker-js/Reporter'
 import { RunEvents, VerdictReached } from '@systemfsoftware/stryker-js/Run'
@@ -34,6 +27,7 @@ import * as S from 'effect/Schema'
 
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import { highestExitClass, verdictExitClass } from '@systemfsoftware/stryker-js/ExitClass'
+import { checkStatusToMutantStatus, mapRunResult, toSchemaLocation } from './mutant-result-mapping.js'
 import type { TestCoverage } from './Mutants.js'
 import type { ResolvedMode } from './output-mode.js'
 import type { Project } from './Project.js'
@@ -1019,144 +1013,6 @@ export const makeProgressBarReporter: ReporterFactory = () => async (events) => 
 export const makeProgressStreamReporter: ReporterFactory = () => async (events) => {
   for await (const drained of events) {
     void drained
-  }
-}
-
-export const toSchemaPosition = (pos: Position): schema.Position => ({
-  column: pos.column + 1,
-  line: pos.line + 1,
-})
-
-export const toSchemaLocation = (location: Location): schema.Location => ({
-  start: toSchemaPosition(location.start),
-  end: toSchemaPosition(location.end),
-})
-
-function reportPositionToStrykerPosition({ line, column }: Position): Position {
-  return { line, column }
-}
-
-export function reportOpenEndLocationToStrykerLocation({ start, end }: OpenEndLocation): OpenEndLocation {
-  if (end === undefined) {
-    return { start: reportPositionToStrykerPosition(start) }
-  }
-  return {
-    start: reportPositionToStrykerPosition(start),
-    end: reportPositionToStrykerPosition(end),
-  }
-}
-
-export function reportLocationToStrykerLocation({ start, end }: Location): Location {
-  return {
-    start: reportPositionToStrykerPosition(start),
-    end: reportPositionToStrykerPosition(end),
-  }
-}
-
-export const checkStatusToMutantStatus = (
-  _status: Exclude<CheckStatus, 'passed'>,
-): MutantStatus => 'CompileError'
-export const mapCheckResult = (
-  mutant: MutantTestCoverage,
-  result: Exclude<CheckResult, PassedCheckResult>,
-): MutantResult => ({
-  _tag: 'Mutant',
-  id: mutant.id,
-  fileName: mutant.fileName,
-  mutatorName: mutant.mutatorName,
-  replacement: mutant.replacement,
-  location: toSchemaLocation(mutant.location),
-  status: checkStatusToMutantStatus(result.status),
-  statusReason: result.reason,
-  coveredBy: mutant.coveredBy,
-  static: mutant.static,
-  testsCompleted: mutant.testsCompleted,
-  description: mutant.description,
-})
-
-export const mapRunResult = (mutant: MutantTestCoverage, result: MutantRunResult): MutantResult => {
-  const location = toSchemaLocation(mutant.location)
-  switch (result.status) {
-    case 'error': {
-      return {
-        _tag: 'Mutant',
-        id: mutant.id,
-        fileName: mutant.fileName,
-        mutatorName: mutant.mutatorName,
-        replacement: mutant.replacement,
-        location,
-        status: 'RuntimeError',
-        statusReason: result.errorMessage,
-        coveredBy: mutant.coveredBy,
-        static: mutant.static,
-        testsCompleted: mutant.testsCompleted,
-        description: mutant.description,
-      }
-    }
-    case 'killed': {
-      return {
-        _tag: 'Mutant',
-        id: mutant.id,
-        fileName: mutant.fileName,
-        mutatorName: mutant.mutatorName,
-        replacement: mutant.replacement,
-        location,
-        status: 'Killed',
-        testsCompleted: result.nrOfTests,
-        killedBy: [...result.killedBy],
-        statusReason: result.failureMessage,
-        coveredBy: mutant.coveredBy,
-        static: mutant.static,
-        description: mutant.description,
-      }
-    }
-    case 'timeout': {
-      const base: MutantResult = {
-        _tag: 'Mutant',
-        id: mutant.id,
-        fileName: mutant.fileName,
-        mutatorName: mutant.mutatorName,
-        replacement: mutant.replacement,
-        location,
-        status: 'Timeout',
-        coveredBy: mutant.coveredBy,
-        static: mutant.static,
-        testsCompleted: mutant.testsCompleted,
-        description: mutant.description,
-      }
-      if (result.reason !== undefined) {
-        return {
-          _tag: 'Mutant',
-          id: base.id,
-          fileName: base.fileName,
-          mutatorName: base.mutatorName,
-          replacement: base.replacement,
-          location: base.location,
-          status: base.status,
-          statusReason: result.reason,
-          coveredBy: base.coveredBy,
-          static: base.static,
-          testsCompleted: base.testsCompleted,
-          description: base.description,
-        }
-      }
-      return base
-    }
-    case 'survived': {
-      return {
-        _tag: 'Mutant',
-        id: mutant.id,
-        fileName: mutant.fileName,
-        mutatorName: mutant.mutatorName,
-        replacement: mutant.replacement,
-        location,
-        status: 'Survived',
-        testsCompleted: result.nrOfTests,
-        coveredBy: mutant.coveredBy,
-        static: mutant.static,
-        description: mutant.description,
-      }
-    }
   }
 }
 
