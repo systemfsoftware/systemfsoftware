@@ -15,11 +15,6 @@ export namespace Policy {
 }
 
 // @public (undocumented)
-export namespace Wire {
-    export { AnyMinted, Fields, Mark, Minted, MintedField, mint, wire };
-}
-
-// @public (undocumented)
 export namespace Workflow {
     export { Inhabited, SingleVariantDecision, UninhabitedDecision, UninhabitedError, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, make };
 }

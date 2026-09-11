@@ -1,4 +1,3 @@
-import { Wire } from '@systemfsoftware/effect-cell-types'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as S from 'effect/Schema'
 
@@ -37,13 +36,13 @@ export const FileSchema = S.Struct({
   mutate: MutateDescriptionSchema,
 })
 
-const IgnorerSchema = Wire.mint(S.Unknown)
-const AstSchema = Wire.mint(S.Unknown)
+const IgnorerSchema = S.Unknown
+const AstSchema = S.Unknown
 
-const InstrumenterOptionsSchema = Wire.wire({
-  excludedMutations: Wire.mint(S.Array(Wire.mint(S.String))),
-  ignorers: Wire.mint(S.Array(IgnorerSchema)),
-  noHeader: Wire.mint(S.optional(Wire.mint(S.Boolean))),
+const InstrumenterOptionsSchema = S.Struct({
+  excludedMutations: S.Array(S.String),
+  ignorers: S.Array(IgnorerSchema),
+  noHeader: S.optional(S.Boolean),
 })
 
 export type InstrumenterOptions = typeof InstrumenterOptionsSchema.Type

@@ -1,4 +1,3 @@
-import { Wire } from '@systemfsoftware/effect-cell-types'
 import * as S from 'effect/Schema'
 
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
@@ -45,7 +44,7 @@ export class ConfigError extends S.TaggedError<ConfigError>()('ConfigError', {
 }
 
 export class ReadConfigCommand extends S.TaggedClass<ReadConfigCommand>()('ReadConfigCommand', {
-  cliOptions: Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown))),
+  cliOptions: S.Record(S.String, S.Unknown),
   basePath: S.String,
 }) {}
 
@@ -95,5 +94,5 @@ export const forkOptionsSchema = S.StructWithRest(
     survivorsPriorReport,
     extends: extendsPropertySchema,
   }),
-  [Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown)))],
+  [S.Record(S.String, S.Unknown)],
 )

@@ -1,4 +1,3 @@
-import { Wire } from '@systemfsoftware/effect-cell-types'
 import * as S from 'effect/Schema'
 
 export const RunPhase = S.Literals(['prepare', 'instrument', 'dry-run', 'mutation-test'])
@@ -22,12 +21,12 @@ export const MutantStatus = S.Literals([
 ])
 export type MutantStatus = typeof MutantStatus.Type
 
-const Position = Wire.wire({
-  line: Wire.mint(S.Finite),
-  column: Wire.mint(S.Finite),
+const Position = S.Struct({
+  line: S.Finite,
+  column: S.Finite,
 })
 
-const Location = Wire.wire({
+const Location = S.Struct({
   start: Position,
   end: Position,
 })
@@ -35,90 +34,90 @@ export type Location = typeof Location.Type
 export type Position = typeof Position.Type
 
 export class RunStarted extends S.TaggedClass<RunStarted>()('stream', {
-  schemaVersion: Wire.mint(S.String),
-  runId: Wire.mint(S.String),
+  schemaVersion: S.String,
+  runId: S.String,
   mode: OutputMode,
   signal: ModeSignal,
 }) {}
 
 export class PhaseEntered extends S.TaggedClass<PhaseEntered>()('phase', {
   phase: RunPhase,
-  elapsedMs: Wire.mint(S.Finite),
+  elapsedMs: S.Finite,
 }) {}
 
 export class PlanKnown extends S.TaggedClass<PlanKnown>()('plan', {
-  total: Wire.mint(S.Finite),
+  total: S.Finite,
 }) {}
 
 export class MutantTested extends S.TaggedClass<MutantTested>()('mutant', {
-  id: Wire.mint(S.String),
+  id: S.String,
   status: MutantStatus,
-  file: Wire.mint(S.String),
+  file: S.String,
   location: Location,
-  mutator: Wire.mint(S.String),
-  replacement: Wire.mint(S.NullOr(Wire.mint(S.String))),
-  completed: Wire.mint(S.Finite),
-  total: Wire.mint(S.Finite),
+  mutator: S.String,
+  replacement: S.NullOr(S.String),
+  completed: S.Finite,
+  total: S.Finite,
 }) {}
 
 export class Heartbeat extends S.TaggedClass<Heartbeat>()('tick', {
-  elapsedMs: Wire.mint(S.Finite),
-  completed: Wire.mint(S.Finite),
-  total: Wire.mint(S.NullOr(Wire.mint(S.Finite))),
+  elapsedMs: S.Finite,
+  completed: S.Finite,
+  total: S.NullOr(S.Finite),
 }) {}
 
-const VerdictThresholds = Wire.wire({
-  high: Wire.mint(S.Finite),
-  low: Wire.mint(S.Finite),
-  break: Wire.mint(S.NullOr(Wire.mint(S.Finite))),
+const VerdictThresholds = S.Struct({
+  high: S.Finite,
+  low: S.Finite,
+  break: S.NullOr(S.Finite),
 })
 export type VerdictThresholds = typeof VerdictThresholds.Type
 
 const VerdictMutant = S.Struct({
-  id: Wire.mint(S.String),
-  file: Wire.mint(S.String),
+  id: S.String,
+  file: S.String,
   location: Location,
-  mutator: Wire.mint(S.String),
-  replacement: Wire.mint(S.NullOr(Wire.mint(S.String))),
+  mutator: S.String,
+  replacement: S.NullOr(S.String),
   status: MutantStatus,
 })
 export type VerdictMutant = typeof VerdictMutant.Type
 
-const VerdictCounts = Wire.wire({
-  killed: Wire.mint(S.Finite),
-  timeout: Wire.mint(S.Finite),
-  survived: Wire.mint(S.Finite),
-  noCoverage: Wire.mint(S.Finite),
-  runtimeErrors: Wire.mint(S.Finite),
-  compileErrors: Wire.mint(S.Finite),
-  ignored: Wire.mint(S.Finite),
-  pending: Wire.mint(S.Finite),
+const VerdictCounts = S.Struct({
+  killed: S.Finite,
+  timeout: S.Finite,
+  survived: S.Finite,
+  noCoverage: S.Finite,
+  runtimeErrors: S.Finite,
+  compileErrors: S.Finite,
+  ignored: S.Finite,
+  pending: S.Finite,
 })
 export type VerdictCounts = typeof VerdictCounts.Type
 
 export class VerdictReached extends S.TaggedClass<VerdictReached>()('verdict', {
-  schemaVersion: Wire.mint(S.String),
-  runId: Wire.mint(S.String),
+  schemaVersion: S.String,
+  runId: S.String,
   mode: OutputMode,
   signal: ModeSignal,
-  score: Wire.mint(S.NullOr(Wire.mint(S.Finite))),
+  score: S.NullOr(S.Finite),
   thresholds: VerdictThresholds,
-  reportFile: Wire.mint(S.NullOr(Wire.mint(S.String))),
+  reportFile: S.NullOr(S.String),
   counts: VerdictCounts,
   mutants: S.Array(VerdictMutant),
 }) {}
 
 export class RunFailed extends S.TaggedClass<RunFailed>()('error', {
-  schemaVersion: Wire.mint(S.String),
-  code: Wire.mint(S.Finite),
-  error: Wire.mint(S.String),
-  remediation: Wire.mint(S.String),
+  schemaVersion: S.String,
+  code: S.Finite,
+  error: S.String,
+  remediation: S.String,
 }) {}
 
 export class HelpRendered extends S.TaggedClass<HelpRendered>()('help', {
-  schemaVersion: Wire.mint(S.String),
-  code: Wire.mint(S.Literals([0])),
-  help: Wire.mint(S.String),
+  schemaVersion: S.String,
+  code: S.Literals([0]),
+  help: S.String,
 }) {}
 
 export const RunEvent = S.Union([
@@ -158,13 +157,13 @@ export class RunWriteError extends S.TaggedError<RunWriteError>()('RunWriteError
 }) {}
 
 export class PlanMutationRunCommand extends S.TaggedClass<PlanMutationRunCommand>()('PlanMutationRunCommand', {
-  configMutatePatterns: Wire.mint(S.Array(Wire.mint(S.String))),
-  configMutatorNames: Wire.mint(S.Array(Wire.mint(S.String))),
-  targetMutatePatterns: Wire.mint(S.Array(Wire.mint(S.String))),
-  availableMutators: Wire.mint(S.Array(Wire.mint(S.String))),
+  configMutatePatterns: S.Array(S.String),
+  configMutatorNames: S.Array(S.String),
+  targetMutatePatterns: S.Array(S.String),
+  availableMutators: S.Array(S.String),
 }) {}
 
 export class MutationRunPlan extends S.TaggedClass<MutationRunPlan>()('MutationRunPlan', {
-  mutatePatterns: Wire.mint(S.Array(Wire.mint(S.String))),
-  mutatorNames: Wire.mint(S.Array(Wire.mint(S.String))),
+  mutatePatterns: S.Array(S.String),
+  mutatorNames: S.Array(S.String),
 }) {}

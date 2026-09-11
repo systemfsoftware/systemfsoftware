@@ -1,4 +1,3 @@
-import { Wire } from '@systemfsoftware/effect-cell-types'
 import { Effect } from 'effect'
 import * as S from 'effect/Schema'
 
@@ -35,12 +34,10 @@ const RENDERED_OPTION_DEFAULTS = {
  */
 
 /** Open object: fixed fields plus an index signature accepting arbitrary plugin keys. */
-const openStruct = <const F extends Wire.Fields>(fields: F) =>
-  Wire.mint(
-    S.StructWithRest(Wire.wire(fields), [
-      Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown))), // plugin's own option section this workspace does not declare
-    ]),
-  )
+const openStruct = <const F extends S.Struct.Fields>(fields: F) =>
+  S.StructWithRest(S.Struct(fields), [
+    S.Record(S.String, S.Unknown),
+  ])
 
 /**
  * Field that decodes to a value but defaults when the key is absent.
@@ -58,7 +55,7 @@ const openStruct = <const F extends Wire.Fields>(fields: F) =>
 const defaulted = <S2 extends S.Top>(schema: S2, defaultValue: S2['Encoded']) => {
   const annotated = schema.annotate({ default: defaultValue })
   const withDefault = S.withDecodingDefaultKey<typeof annotated>(Effect.succeed(defaultValue))(annotated)
-  return Wire.mint(withDefault)
+  return withDefault
 }
 
 // ---------------------------------------------------------------------------
@@ -77,34 +74,34 @@ export type ReportType = typeof ReportType.Type
 export type PackageManager = typeof PackageManager.Type
 
 /** 0–100 percentage used by the mutation-score thresholds. */
-const Percentage = Wire.mint(Wire.mint(S.Finite).pipe(S.check(S.isBetween({ minimum: 0, maximum: 100 }))))
+const Percentage = S.Finite.pipe(S.check(S.isBetween({ minimum: 0, maximum: 100 })))
 
 // ---------------------------------------------------------------------------
 // Nested option objects
 // ---------------------------------------------------------------------------
 
 const CommandRunnerOptionsSchema = openStruct({
-  command: defaulted(Wire.mint(S.String), 'npm test'),
+  command: defaulted(S.String, 'npm test'),
 })
 export type CommandRunnerOptions = S.Schema.Type<typeof CommandRunnerOptionsSchema>
 
 const ClearTextReporterOptions = openStruct({
-  allowColor: defaulted(Wire.mint(S.Boolean), true),
-  allowEmojis: defaulted(Wire.mint(S.Boolean), false),
-  logTests: defaulted(Wire.mint(S.Boolean), true),
-  maxTestsToLog: defaulted(Wire.mint(Wire.mint(S.Finite).pipe(S.check(S.isGreaterThanOrEqualTo(0)))), 3),
-  reportTests: defaulted(Wire.mint(S.Boolean), true),
-  reportMutants: defaulted(Wire.mint(S.Boolean), true),
-  reportScoreTable: defaulted(Wire.mint(S.Boolean), true),
-  skipFull: defaulted(Wire.mint(S.Boolean), false),
+  allowColor: defaulted(S.Boolean, true),
+  allowEmojis: defaulted(S.Boolean, false),
+  logTests: defaulted(S.Boolean, true),
+  maxTestsToLog: defaulted(S.Finite.pipe(S.check(S.isGreaterThanOrEqualTo(0))), 3),
+  reportTests: defaulted(S.Boolean, true),
+  reportMutants: defaulted(S.Boolean, true),
+  reportScoreTable: defaulted(S.Boolean, true),
+  skipFull: defaulted(S.Boolean, false),
 })
 
-const HtmlReporterOptions = Wire.wire({
-  fileName: defaulted(Wire.mint(S.String), 'reports/mutation/mutation.html'),
+const HtmlReporterOptions = S.Struct({
+  fileName: defaulted(S.String, 'reports/mutation/mutation.html'),
 })
 
-const JsonReporterOptions = Wire.wire({
-  fileName: defaulted(Wire.mint(S.String), 'reports/mutation/mutation.json'),
+const JsonReporterOptions = S.Struct({
+  fileName: defaulted(S.String, 'reports/mutation/mutation.json'),
 })
 
 export const MutationScoreThresholdsSchema = S.Struct({
@@ -114,22 +111,18 @@ export const MutationScoreThresholdsSchema = S.Struct({
 })
 export type MutationScoreThresholds = typeof MutationScoreThresholdsSchema.Type
 
-const MutatorDescriptor = Wire.wire({
-  excludedMutations: defaulted(Wire.mint(S.Array(Wire.mint(S.String))), []),
+const MutatorDescriptor = S.Struct({
+  excludedMutations: defaulted(S.Array(S.String), []),
 })
 
 const WarningOptions = openStruct({
-  unknownOptions: defaulted(Wire.mint(S.Boolean), true),
-  preprocessorErrors: defaulted(Wire.mint(S.Boolean), true),
-  unserializableOptions: defaulted(Wire.mint(S.Boolean), true),
-  slow: defaulted(Wire.mint(S.Boolean), true),
+  unknownOptions: defaulted(S.Boolean, true),
+  preprocessorErrors: defaulted(S.Boolean, true),
+  unserializableOptions: defaulted(S.Boolean, true),
+  slow: defaulted(S.Boolean, true),
 })
-const ConcurrencyCount = Wire.mint(
-  Wire.mint(S.Finite).pipe(S.check(S.isGreaterThanOrEqualTo(1))),
-)
-const ConcurrencyPercent = Wire.mint(
-  Wire.mint(S.String).pipe(S.check(S.isPattern(/^(100|[1-9]?[0-9])%$/))),
-)
+const ConcurrencyCount = S.Finite.pipe(S.check(S.isGreaterThanOrEqualTo(1)))
+const ConcurrencyPercent = S.String.pipe(S.check(S.isPattern(/^(100|[1-9]?[0-9])%$/)))
 
 // ---------------------------------------------------------------------------
 // The option set
@@ -137,18 +130,11 @@ const ConcurrencyPercent = Wire.mint(
 
 export const StrykerOptionsSchema = S.StructWithRest(
   S.Struct({
-    allowConsoleColors: defaulted(Wire.mint(S.Boolean), true),
-    buildCommand: S.optional(Wire.mint(S.String)),
-    checkers: defaulted(Wire.mint(S.Array(Wire.mint(S.String))), []),
-    checkerNodeArgs: defaulted(Wire.mint(S.Array(Wire.mint(S.String))), []),
-    concurrency: S.optional(
-      Wire.mint(
-        S.Union([
-          ConcurrencyCount,
-          ConcurrencyPercent,
-        ]),
-      ),
-    ),
+    allowConsoleColors: defaulted(S.Boolean, true),
+    buildCommand: S.optional(S.String),
+    checkers: defaulted(S.Array(S.String), []),
+    checkerNodeArgs: defaulted(S.Array(S.String), []),
+    concurrency: S.optional(S.Union([ConcurrencyCount, ConcurrencyPercent])),
     commandRunner: defaulted(CommandRunnerOptionsSchema, { command: 'npm test' }),
     coverageAnalysis: defaulted(CoverageAnalysisMode, RENDERED_OPTION_DEFAULTS.coverageAnalysis),
     clearTextReporter: defaulted(ClearTextReporterOptions, {
@@ -161,45 +147,45 @@ export const StrykerOptionsSchema = S.StructWithRest(
       reportScoreTable: true,
       skipFull: false,
     }),
-    dryRunOnly: defaulted(Wire.mint(S.Boolean), false),
-    ignorePatterns: defaulted(Wire.mint(S.Array(Wire.mint(S.String))), []),
-    ignoreStatic: defaulted(Wire.mint(S.Boolean), false),
-    incremental: defaulted(Wire.mint(S.Boolean), false),
-    incrementalFile: defaulted(Wire.mint(S.String), 'reports/stryker-incremental.json'),
-    progressStreamFile: defaulted(Wire.mint(S.String), 'reports/mutation-stream.jsonl'),
-    force: defaulted(Wire.mint(S.Boolean), false),
+    dryRunOnly: defaulted(S.Boolean, false),
+    ignorePatterns: defaulted(S.Array(S.String), []),
+    ignoreStatic: defaulted(S.Boolean, false),
+    incremental: defaulted(S.Boolean, false),
+    incrementalFile: defaulted(S.String, 'reports/stryker-incremental.json'),
+    progressStreamFile: defaulted(S.String, 'reports/mutation-stream.jsonl'),
+    force: defaulted(S.Boolean, false),
     fileLogLevel: defaulted(LogLevel, RENDERED_OPTION_DEFAULTS.fileLogLevel),
-    inPlace: defaulted(Wire.mint(S.Boolean), false),
+    inPlace: defaulted(S.Boolean, false),
     logLevel: defaulted(LogLevel, RENDERED_OPTION_DEFAULTS.logLevel),
-    maxConcurrentTestRunners: defaulted(Wire.mint(S.Finite), 9007199254740991),
-    maxTestRunnerReuse: defaulted(Wire.mint(S.Finite), 0),
-    mutate: defaulted(Wire.mint(S.Array(Wire.mint(S.String))), [
+    maxConcurrentTestRunners: defaulted(S.Finite, 9007199254740991),
+    maxTestRunnerReuse: defaulted(S.Finite, 0),
+    mutate: defaulted(S.Array(S.String), [
       '{src,lib}/**/!(*.+(s|S)pec|*.+(t|T)est).+(cjs|mjs|js|ts|mts|cts|jsx|tsx|html|vue|svelte)',
       '!{src,lib}/**/__tests__/**/*.+(cjs|mjs|js|ts|mts|cts|jsx|tsx|html|vue|svelte)',
     ]),
     mutator: defaulted(MutatorDescriptor, { excludedMutations: [] }),
     packageManager: S.optional(PackageManager),
-    plugins: defaulted(Wire.mint(S.Array(Wire.mint(S.String))), ['@systemfsoftware/stryker-js-*']),
-    appendPlugins: defaulted(Wire.mint(S.Array(Wire.mint(S.String))), []),
-    reporters: defaulted(Wire.mint(S.Array(Wire.mint(S.String))), ['clear-text', 'progress', 'html']),
+    plugins: defaulted(S.Array(S.String), ['@systemfsoftware/stryker-js-*']),
+    appendPlugins: defaulted(S.Array(S.String), []),
+    reporters: defaulted(S.Array(S.String), ['clear-text', 'progress', 'html']),
     htmlReporter: defaulted(HtmlReporterOptions, { fileName: 'reports/mutation/mutation.html' }),
     jsonReporter: defaulted(JsonReporterOptions, { fileName: 'reports/mutation/mutation.json' }),
-    disableTypeChecks: defaulted(Wire.mint(S.Union([Wire.mint(S.Boolean), Wire.mint(S.String)])), true),
-    symlinkNodeModules: defaulted(Wire.mint(S.Boolean), true),
-    tempDirName: defaulted(Wire.mint(S.String), RENDERED_OPTION_DEFAULTS.tempDirName),
+    disableTypeChecks: defaulted(S.Union([S.Boolean, S.String]), true),
+    symlinkNodeModules: defaulted(S.Boolean, true),
+    tempDirName: defaulted(S.String, RENDERED_OPTION_DEFAULTS.tempDirName),
     cleanTempDir: defaulted(S.Literals(['always', false, true]), true),
-    testRunner: defaulted(Wire.mint(S.String), 'command'),
-    testRunnerNodeArgs: defaulted(Wire.mint(S.Array(Wire.mint(S.String))), []),
+    testRunner: defaulted(S.String, 'command'),
+    testRunnerNodeArgs: defaulted(S.Array(S.String), []),
     thresholds: defaulted(MutationScoreThresholdsSchema, { high: 80, low: 60, break: null }),
-    timeoutFactor: defaulted(Wire.mint(S.Finite), 1.5),
-    timeoutMS: defaulted(Wire.mint(S.Finite), 5000),
-    dryRunTimeoutMinutes: defaulted(Wire.mint(Wire.mint(S.Finite).pipe(S.check(S.isGreaterThanOrEqualTo(0)))), 5),
-    tsconfigFile: defaulted(Wire.mint(S.String), 'tsconfig.json'),
-    warnings: defaulted(Wire.mint(S.Union([Wire.mint(S.Boolean), WarningOptions])), true),
-    disableBail: defaulted(Wire.mint(S.Boolean), false),
-    allowEmpty: defaulted(Wire.mint(S.Boolean), false),
-    ignorers: defaulted(Wire.mint(S.Array(Wire.mint(S.String))), []),
-    testFiles: defaulted(Wire.mint(S.Array(Wire.mint(S.String))), []),
+    timeoutFactor: defaulted(S.Finite, 1.5),
+    timeoutMS: defaulted(S.Finite, 5000),
+    dryRunTimeoutMinutes: defaulted(S.Finite.pipe(S.check(S.isGreaterThanOrEqualTo(0))), 5),
+    tsconfigFile: defaulted(S.String, 'tsconfig.json'),
+    warnings: defaulted(S.Union([S.Boolean, WarningOptions]), true),
+    disableBail: defaulted(S.Boolean, false),
+    allowEmpty: defaulted(S.Boolean, false),
+    ignorers: defaulted(S.Array(S.String), []),
+    testFiles: defaulted(S.Array(S.String), []),
   }),
   [S.Record(S.String, S.Unknown)],
 )

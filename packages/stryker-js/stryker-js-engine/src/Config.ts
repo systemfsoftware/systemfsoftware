@@ -1,4 +1,3 @@
-import { Wire } from '@systemfsoftware/effect-cell-types'
 import { Module } from '@systemfsoftware/stryker-js/Module'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
@@ -1329,8 +1328,6 @@ export const defaultOptions: Effect.Effect<Immutable<StrykerOptions>, never, nev
   (opts) => deepFreeze(opts),
 )
 
-const cliOptionsRecord = Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown)))
-
 export const CONFIG_SYNTAX_HELP = `
 Example of how a config file should look:
 /**
@@ -1538,7 +1535,7 @@ export function readConfig(
   FileSystem.FileSystem | Module | Path.Path
 > {
   return Effect.gen(function*() {
-    const cliRecord = yield* S.decodeUnknownEffect(cliOptionsRecord)(cliOptions).pipe(Effect.orDie)
+    const cliRecord = yield* S.decodeUnknownEffect(ConfigDocumentSchema)(cliOptions).pipe(Effect.orDie)
     const fileRecord = yield* loadOptionsFromConfigFile(cliRecord, basePath)
     const fileOptions = yield* Result.match(S.decodeUnknownResult(ConfigDocumentSchema)(fileRecord), {
       onFailure: (cause) => Effect.fail(new ConfigFileInvalidError({ file: 'config', cause })),
