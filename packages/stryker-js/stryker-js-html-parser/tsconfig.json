@@ -1,0 +1,11 @@
+{
+  "extends": "@systemfsoftware/tsconfig/tsc/no-dom/library",
+  "compilerOptions": {
+    "customConditions": ["@systemfsoftware/source"],
+    "outDir": "dist",
+    "rootDir": ".",
+    "types": ["node"]
+  },
+  "include": ["src", "tests"],
+  "exclude": ["node_modules", "dist"]
+}

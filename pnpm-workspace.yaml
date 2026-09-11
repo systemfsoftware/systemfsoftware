@@ -129,8 +129,10 @@ packages:
   - packages/stryker-js/stryker-js/
   - packages/stryker-js/stryker-js-cli/
   - packages/stryker-js/stryker-js-engine/
+  - packages/stryker-js/stryker-js-html-parser/
   - packages/stryker-js/stryker-js-html-reporter/
   - packages/stryker-js/stryker-js-instrumenter/
+  - packages/stryker-js/stryker-js-svelte-parser/
   - packages/stryker-js/stryker-js-typescript-checker/
   - packages/stryker-js/stryker-js-vitest-runner/
   - packages/stryker-js/stryker-plugins/
