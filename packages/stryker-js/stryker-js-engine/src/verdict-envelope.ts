@@ -1,4 +1,4 @@
-import { randomBytes } from '@noble/hashes/utils'
+import { randomBytes } from '@noble/hashes/utils.js'
 import { calculateMetrics } from '@systemfsoftware/stryker-js/Metrics'
 import type { MutantStatus } from '@systemfsoftware/stryker-js/Mutant'
 import type * as schema from '@systemfsoftware/stryker-js/Report'

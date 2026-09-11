@@ -1,5 +1,5 @@
-import { sha256 } from '@noble/hashes/sha256'
-import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils'
+import { sha256 } from '@noble/hashes/sha2.js'
+import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
 import { schema } from '@systemfsoftware/stryker-js/Mutant'
 import * as Equivalence from 'effect/Equivalence'

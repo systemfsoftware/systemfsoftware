@@ -30,7 +30,7 @@
   "dependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
-    "@noble/hashes": "1.8.0",
+    "@noble/hashes": "catalog:",
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/stryker-js": "workspace:^",
     "@systemfsoftware/stryker-js-engine": "workspace:^",
@@ -60,7 +60,7 @@
     "vitest": "catalog:"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.19.0"
   },
   "license": "Apache-2.0",
   "publishConfig": {
