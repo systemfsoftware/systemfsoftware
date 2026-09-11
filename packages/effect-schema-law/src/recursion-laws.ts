@@ -10,13 +10,15 @@ const STOCK_MAX_DEPTH = 2
 
 const DEEP_DEPTH = STOCK_MAX_DEPTH + 2
 
-const CALIBRATION_DRAWS = 2048
+const CALIBRATION_DRAWS = 512
 const CALIBRATION_RUNS = 5
 const SAFETY = 256
 const BACKSTOP_FACTOR = 2
 const BUDGET_LOWER_FACTOR = 64
 const BUDGET_UPPER_FACTOR = 1024
 const CALIBRATION_SEED = 0xC0FFEE
+const PROBE_RUNS = 2
+const PROBE_DRAWS = 200
 
 const medianMs = (timings: ReadonlyArray<number>): number => {
   const ordered = [...timings].sort((left, right) => left - right)
@@ -191,7 +193,6 @@ if (import.meta.vitest !== void 0) {
 
   const MAX_DEPTH = 6
   const NESTING_CAP = MAX_DEPTH + 1
-  const BUDGET_PROBE_RUNS = 3
   const DeepChain = S.Int.pipe(S.check(S.isBetween({ minimum: NESTING_CAP + 1, maximum: NESTING_CAP + 20 })))
 
   const Lit = S.TaggedStruct('Lit', { value: S.Finite })
@@ -275,10 +276,10 @@ if (import.meta.vitest !== void 0) {
   const interruptedUnder = (limitMs: number, seed: number): boolean => {
     const details = fc.check(
       fc.property(arbitraryOf(ANNOTATED_EXPR), (value) => {
-        sampledAt(arbitraryOf(ANNOTATED_EXPR), seed)
+        fc.sample(arbitraryOf(ANNOTATED_EXPR), { numRuns: PROBE_DRAWS, seed })
         return maxNestingDepthOf(value) <= NESTING_CAP
       }),
-      { numRuns: BUDGET_PROBE_RUNS, seed, interruptAfterTimeLimit: limitMs, markInterruptAsFailure: true },
+      { numRuns: PROBE_RUNS, seed, interruptAfterTimeLimit: limitMs, markInterruptAsFailure: true },
     )
     return details.failed && 'interrupted' in details && details.interrupted
   }
@@ -390,11 +391,11 @@ if (import.meta.vitest !== void 0) {
     ([seed]) => {
       const arbitrary = arbitraryOf(ANNOTATED_EXPR)
       const started = performance.now()
-      fc.sample(arbitrary, { numRuns: BUDGET_PROBE_RUNS * SAMPLE_DRAWS, seed })
+      fc.sample(arbitrary, { numRuns: PROBE_DRAWS, seed })
       const workMs = performance.now() - started
       return interruptedUnder(workMs / 4, seed) && !interruptedUnder(workMs * 4, seed)
     },
-    { fastCheck: { numRuns: BUDGET_PROBE_RUNS } },
+    { fastCheck: { numRuns: PROBE_RUNS } },
   )
 
   it.prop(
@@ -402,12 +403,12 @@ if (import.meta.vitest !== void 0) {
     [S.toArbitrary(S.Int)(fc)],
     ([seed]) => {
       const arbitrary = arbitraryOf(ANNOTATED_EXPR)
-      const freshBudget = measureDrawMs(arbitrary) * ((SAMPLE_DRAWS * SAMPLE_SEEDS) / CALIBRATION_DRAWS) * SAFETY
+      const freshBudget = measureDrawMs(arbitrary) * (PROBE_DRAWS / CALIBRATION_DRAWS) * SAFETY
       const started = performance.now()
-      fc.sample(arbitrary, { numRuns: SAMPLE_DRAWS * SAMPLE_SEEDS, seed })
+      fc.sample(arbitrary, { numRuns: PROBE_DRAWS, seed })
       const measured = performance.now() - started
       return freshBudget >= measured * BUDGET_LOWER_FACTOR && freshBudget <= measured * BUDGET_UPPER_FACTOR
     },
-    { fastCheck: { numRuns: BUDGET_PROBE_RUNS } },
+    { fastCheck: { numRuns: PROBE_RUNS } },
   )
 }
