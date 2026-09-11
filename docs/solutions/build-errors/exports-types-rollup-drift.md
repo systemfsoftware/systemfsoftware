@@ -42,7 +42,7 @@ Downstream consumers who ran `attw --pack` on the published tarball saw `No type
 
 ## What Didn't Work
 
-- **Adding `customConditions: ["types"]` to the api-extractor tsconfig.** `"types"` is not a Node conditional-exports condition. It happened to work because TypeScript picked up the `.d.ts` for unrelated reasons, but the override was a hack that an unrelated reviewer flagged.
+- **Overriding the resolver's conditions so TypeScript picks a specific `.d.ts`.** `"types"` is not a Node conditional-exports condition; the override merely happened to find the file for unrelated reasons, and an unrelated reviewer flagged it as a hack.
 - **Adding `bundledPackages` to api-extractor config without changing build.** `bundledPackages` controls the _rollup output_ — it inlines dependency types into the rollup `.d.ts` so consumers don't need to install those deps. It does NOT cause the rollup file to be produced; that's still a build-script concern.
 - **Running api-extractor only in `api:check` and trusting CI to catch it.** CI runs `pnpm check` which does include `api:check`, but `api:check`'s side-effect (writing `dist/<name>.d.ts`) doesn't persist across the workflow's two jobs. The `release` job runs `pnpm build` fresh, and that job doesn't invoke api-extractor.
 
@@ -65,7 +65,7 @@ Three coordinated changes:
 
 `api-extractor run --local` writes the rollup to `dist/<name>.d.ts` (per `dtsRollup.untrimmedFilePath`) and updates `etc/<name>.api.md`. The `--local` flag means "update the .api.md in place" rather than failing when it changes.
 
-**2. Make the api-extractor tsconfig extend the base shared tsconfig (`@systemfsoftware/tsconfig/tsc/dom/library-monorepo`) directly**, not the package's `tsconfig.json`. The package tsconfig has `customConditions: ["@systemfsoftware/source"]` which makes TypeScript resolve workspace deps to their source `.ts` files — api-extractor rejects these with `ae-wrong-input-file-type`. Extending the base skips that condition; standard Node resolution finds the `.mjs` `default` export, then auto-locates the sibling `.d.ts` (the api-extractor rollup output).
+**2. Make the api-extractor tsconfig extend the base shared tsconfig (`@systemfsoftware/tsconfig/tsc/dom/library-monorepo`) directly**, not the package's `tsconfig.json`. Extending the package config pulls the workspace's TypeScript sources into the programme, which api-extractor rejects with `ae-wrong-input-file-type`. Extending the base follows standard Node resolution across each package's `exports` map: the `.mjs` `default` export, then the sibling `.d.ts` (the api-extractor rollup output) auto-located beside it.
 
 ```json
 // packages/effect-schema-extensions/tsconfig.api.json
@@ -95,10 +95,8 @@ The "what didn't work" attempts each addressed one part of the chain but missed 
 - **Wire api-extractor into `build`** for any package whose `exports.types` references a path that the api-extractor `dtsRollup.untrimmedFilePath` controls. Check `scripts/check-exports.mjs` — it already enforces this contract (CHECK 3: api-extractor rollup coverage). Make `build` produce every file that `exports.*` claims.
 - **Run `pnpm check:exports` in CI** alongside `pnpm check`. It validates the live `dist/` against `package.json#exports` — drift between the two fails the check. Add it to `.github/workflows/reusable-checks.yml` if it's not already wired in.
 - **Verify with `attw --pack .` against a clean `dist/`** — delete `dist/`, run only the package's `build` script, then `attw --pack .`. If attw reports missing types, the build script isn't producing what `exports.types` claims. This is the single check that catches the bug class.
-- **Don't override `customConditions` with non-standard values** to coerce TypeScript into resolving a specific `.d.ts`. The legitimate solutions are: bundle the dep (`bundledPackages`), drop the offending condition by extending a different base tsconfig, or change the dep's exports so the standard conditions find the types.
+- **Don't coerce TypeScript's resolver with non-standard conditions** to make it pick a specific `.d.ts`. The legitimate solutions are: bundle the dep (`bundledPackages`), extend a base tsconfig whose resolution reaches the built entry, or change the dep's exports so the standard conditions find the types.
 - **Treat `dist/<name>.d.ts` (api-extractor rollup) and `dist/index.d.ts` (tsdown output) as distinct artifacts with different purposes.** The rollup is for `exports.types`. The index is the runtime type companion to the JS barrel. Don't conflate them or merge the configs.
-
-_Update 2026-09-11:_ the `@systemfsoftware/source` condition is gone from the workspace — every tsconfig dropped `customConditions`, including the `customConditions: []` overrides the api-extractor configs carried to clear it. The api tsconfigs extend the base shared tsconfig as described above; that arrangement is now simply the default rather than a workaround.
 
 ## Related Issues
 

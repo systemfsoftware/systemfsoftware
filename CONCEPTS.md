@@ -385,3 +385,9 @@ A mutant killed because the mutation corrupted a schema's derived arbitrary and 
 - "window" is not minted as an entry, because it already names the model's token budget. The reading surface a constraint must occupy to bind an author is defined inside **Reach** as one of its two mechanisms; the bare word stays with the token budget.
 - "dependency rejection" is Seemann's phrase and every model reaches for his post first, where the ruling is a slogan with no selection criterion. This repo takes Wlaschin's reading, which supplies the test — manage a dependency only where it is impure or a strategy — and `REPO-A2` carries the precedence. Cite the test, never the slogan.
 - **Cell** and **Drifted key** disagreed about the suffix: the first made it the key that grants a file its powers, the second named an unverified key that a rename silently reassigns. **Drifted key** won, because the disagreement was measured rather than argued — two byte-identical files differing only in filename put the purity rule loud on the first and silent on the second (`docs/solutions/architecture-patterns/label-routed-rules-are-unfalsifiable.md`). Those names are now spelled nowhere in the tree: a name says what a module is of, and the only suffixes left are `.workflow.ts` and `.schema.ts`. A rule keys on the type, the import edge, or the `Workflow.make` boundary — never on a filename.
+
+## Retired
+
+### `@systemfsoftware/source` export condition
+
+A package `exports` condition whose target was a package's TypeScript sources, resolved only by a tool configured to name it. Every package exported it and every tsconfig declared it as a custom condition, so a workspace typecheck read a sibling's sources instead of its built declarations. Nothing resolves it now: each `exports` map names only its built entry, and every declaration a package publishes is what the typecheck reads.

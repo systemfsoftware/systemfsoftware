@@ -163,8 +163,6 @@ Removing the plugin removes the traversal. The tests were always ~1s; the ~55s o
 
 - **This repo's convention makes the whole plugin class unnecessary.** No tsconfig here declares `paths` or `baseUrl`; cross-package imports resolve through workspace specifiers and each package's `exports` map. Any future alias mechanism should be added deliberately — aliases first, resolver second — never a resolver on spec.
 
-_Update 2026-09-11:_ the `@systemfsoftware/source` condition this section cited is gone — no package declares `customConditions` and none exports a source condition. The conclusion is unchanged; the search commands above still return empty.
-
 ## Related
 
 - [A turbo cache that is never warm has its causes in the key, not the storage](../performance-issues/turbo-cache-never-warm.md) — closest sibling. Same repo, same shape (verification wall time dwarfs the actual work on every run), same measure-before-theorize discipline. Different mechanism: cache-key churn that prevents a hit, against a dependency doing expensive work for zero benefit.
