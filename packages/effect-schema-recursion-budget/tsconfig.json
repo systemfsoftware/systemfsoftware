@@ -4,10 +4,16 @@
   "compilerOptions": {
     "customConditions": [
       "@systemfsoftware/source"
+    ],
+    "types": [
+      "node",
+      "vitest/import-meta"
     ]
   },
   "include": [
-    "src"
+    "src",
+    "tests",
+    "vitest.config.ts"
   ],
   "references": [
     {

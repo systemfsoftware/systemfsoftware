@@ -4,43 +4,23 @@
 
 ```ts
 
-import { FastCheck } from 'effect/testing';
-import { Schema } from 'effect';
-
-// @public (undocumented)
-export const terminatingRecursion: <const Base extends readonly [Schema.Constraint, ...ReadonlyArray<Schema.Constraint>], const Recur extends readonly [Schema.Constraint, ...ReadonlyArray<Schema.Constraint>]>(options: TerminatingRecursionOptions<Base, Recur>) => Schema.Union<readonly [...Base, ...Recur]>;
+// @public
+export const RECURSION_BUDGET_VIRTUAL_ID: 'virtual:effect-schema-recursion-budget';
 
 // @public
-export interface TerminatingRecursionBudget {
+export interface RecursionBudgetPlugin {
     // (undocumented)
-    readonly depthSize: 'small' | 'medium' | 'large';
+    readonly enforce: 'pre';
     // (undocumented)
-    readonly identifier: string;
+    readonly name: string;
     // (undocumented)
-    readonly maxDepth: number;
+    readonly resolveId: (source: string) => string | null;
+    // (undocumented)
+    readonly transform: (code: string, id: string) => string | undefined;
 }
 
 // @public
-export interface TerminatingRecursionHook {
-    // (undocumented)
-    (typeParameters: readonly []): (fc: typeof FastCheck, context: Schema.Annotations.ToArbitrary.Context) => Schema.Annotations.ToArbitrary.Output<unknown>;
-    // (undocumented)
-    readonly budget: TerminatingRecursionBudget;
-}
-
-// @public
-export interface TerminatingRecursionOptions<Base extends readonly [Schema.Constraint, ...ReadonlyArray<Schema.Constraint>] = readonly [Schema.Constraint, ...ReadonlyArray<Schema.Constraint>], Recur extends readonly [Schema.Constraint, ...ReadonlyArray<Schema.Constraint>] = readonly [Schema.Constraint, ...ReadonlyArray<Schema.Constraint>]> {
-    // (undocumented)
-    readonly base: Base;
-    // (undocumented)
-    readonly depthSize: 'small' | 'medium' | 'large';
-    // (undocumented)
-    readonly identifier: string;
-    // (undocumented)
-    readonly maxDepth: number;
-    // (undocumented)
-    readonly recur: Recur;
-}
+export const recursionBudgetTransform: () => RecursionBudgetPlugin;
 
 // (No @packageDocumentation comment for this package)
 

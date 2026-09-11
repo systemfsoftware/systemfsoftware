@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-recursion-budget#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "A declared generation budget for recursive Effect Schema unions — ceiling and shape as required knobs, base members as the terminal branch, one depth identifier per cycle.",
+  "description": "The recursionBudget annotation pipeline for Effect Schema unions: the Vite transform that materializes a declared generation budget into the arbitrary-derivation hook, and the injected runtime that builds it.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -43,13 +43,17 @@
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
   },
+  "dependencies": {
+    "@oxc-project/types": "catalog:",
+    "oxc-parser": "catalog:"
+  },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
-    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",

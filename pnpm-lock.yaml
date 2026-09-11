@@ -869,6 +869,13 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
 
   packages/effect-schema-recursion-budget:
+    dependencies:
+      '@oxc-project/types':
+        specifier: 'catalog:'
+        version: 0.140.0
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.140.0
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -879,15 +886,15 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../effect-gherkin-spec
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-plugin/oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../toolchain/vitest-config
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2

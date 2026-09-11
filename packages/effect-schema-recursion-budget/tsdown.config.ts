@@ -6,6 +6,8 @@ const typesMap: Record<string, string> = {
   '.': './dist/effect-schema-recursion-budget.d.ts',
 }
 
+const UNEXPORTED_ENTRIES: ReadonlyArray<string> = ['./recursion-budget-runtime']
+
 const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
   for (const [subpath, types] of Object.entries(typesMap)) {
     const entry = exports[subpath]
@@ -17,11 +19,12 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
       exports[subpath] = { ...rest, types, ...withDefault }
     }
   }
+  for (const unexported of UNEXPORTED_ENTRIES) delete exports[unexported]
   return exports
 }
 
 export default defineConfig({
-  entry: { index: './src/mod.ts' },
+  entry: { index: './src/mod.ts', 'recursion-budget-runtime': './src/recursion-budget-runtime.ts' },
   format: 'esm',
   dts: true,
   exports: { devExports: '@systemfsoftware/source', customExports: injectTypes },
