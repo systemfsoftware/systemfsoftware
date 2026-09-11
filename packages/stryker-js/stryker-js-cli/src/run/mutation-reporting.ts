@@ -97,9 +97,11 @@ const evaluatorVerdictOf = (
   options: StrykerOptions,
 ): Effect.Effect<EvaluatorVerdict> =>
   Effect.gen(function*() {
-    const evaluate = contribution.make(options, NO_INIT)
     const outcome = yield* Effect.tryPromise({
-      try: () => Promise.resolve(evaluate(report, options)),
+      try: async () => {
+        const evaluate = contribution.make(options, NO_INIT)
+        return evaluate(report, options)
+      },
       catch: (cause) => cause,
     }).pipe(Effect.result)
     return Result.match(outcome, {
