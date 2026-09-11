@@ -19,16 +19,16 @@ tags: [tsdown, bundling, dependencies, devdependencies, workspace, dist, plugin-
 
 ## Problem
 
-A private workspace package (`@systemfsoftware/omp-utils`) listed in `dependencies` of a publishable plugin (`omp-agent-discipline`) was externalized by tsdown at bundle time, producing a dist whose imports only resolve inside the monorepo.
+A private workspace package (`@systemfsoftware/omp-utils`, since deleted) listed in `dependencies` of a publishable plugin (`omp-agent-discipline`, removed from this tree with its private OMP siblings in #366) was externalized by tsdown at bundle time, producing a dist whose imports only resolve inside the monorepo.
 
 ## Symptoms
 
-- `omp/plugins/omp-agent-discipline/dist/index.js` contained a top-level static import:
+- `omp/plugins/omp-agent-discipline/dist/index.js` (the plugin directory is gone from this tree; only an untracked `dist` remnant stays) contained a top-level static import:
   ```js
   import { createTelemetry, loadToml } from '@systemfsoftware/omp-utils'
   ```
 - Inside the monorepo, every `pnpm test`, `pnpm build`, and local smoke load succeeded — pnpm resolves `@systemfsoftware/omp-utils: "workspace:^"` via the workspace link regardless of dependency category.
-- Outside the workspace (published tarball, fresh install, plugin-link from another project), that import is unresolvable: `@systemfsoftware/omp-utils` is `"private": true` and never published, and the plugin tarball ships only its gitignored build output. Found by static analysis during code review — never observed as a runtime crash, because nothing ever loaded the dist from outside the workspace.
+- Outside the workspace (published tarball, fresh install, plugin-link from another project), that import is unresolvable: `@systemfsoftware/omp-utils` was `"private": true` and never published, and the plugin tarball ships only its gitignored build output. Found by static analysis during code review — never observed as a runtime crash, because nothing ever loaded the dist from outside the workspace.
 
 ## What Didn't Work
 
@@ -36,12 +36,12 @@ A private workspace package (`@systemfsoftware/omp-utils`) listed in `dependenci
 | ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Workspace smoke tests                                                           | `pnpm test` and the smoke tool ran inside the monorepo; pnpm's workspace protocol resolves `"workspace:^"` whether the entry sits in `dependencies` or `devDependencies`. Category only matters at bundle time, not at local resolution time. |
 | Post-build `verify-dist` (`omp/scripts/check-dist-builtins.mjs`, since deleted) | Only checked expected Node builtins (`node:fs`, `node:path`) — never scanned for bare workspace-scope imports.                                                                                                                                |
-| `scripts/release.mjs --dry-run`                                                 | Discovers publishable packages and packs them; never imports the packed tarball's dist to verify resolution.                                                                                                                                  |
-| Sibling plugin as reference                                                     | `omp-claude-compat` had the same import in source but was never affected — its `omp-utils` entry was in `devDependencies` all along, so tsdown inlined it. The divergence hid in `package.json`, not in code.                                 |
+| `scripts/release.mjs --dry-run` (removed; tooling in `scripts/tools/`)          | Discovers publishable packages and packs them; never imports the packed tarball's dist to verify resolution.                                                                                                                                  |
+| Sibling plugin as reference                                                     | `omp-claude-compat` (moved out of this tree since) had the same import in source but was never affected — its `omp-utils` entry was in `devDependencies` all along, so tsdown inlined it. The divergence hid in `package.json`, not in code.  |
 
 ## Solution
 
-Commit `0b4bab7ec0` (branch `feat/omp-plugin-practice`, unpushed as of writing) — move `@systemfsoftware/omp-utils` from `dependencies` to `devDependencies` in `omp/plugins/omp-agent-discipline/package.json`, matching `omp-claude-compat`.
+Commit `0b4bab7ec0` (branch `feat/omp-plugin-practice`, unpushed as of writing) — move `@systemfsoftware/omp-utils` from `dependencies` to `devDependencies` in `omp/plugins/omp-agent-discipline/package.json` (removed from this tree since), matching `omp-claude-compat`.
 
 Before (broken — tsdown externalizes `dependencies`, bare import survives in dist):
 
@@ -67,7 +67,7 @@ Verified after rebuild: `grep 'from "@systemfsoftware/omp-utils"' dist/index.js`
 
 ## Why This Works
 
-tsdown follows the conventional bundler rule (both plugins use the same `deps: { onlyBundle: false }` config — don't restrict bundling to a whitelist):
+tsdown follows the conventional bundler rule — `getProductionDeps` collects `dependencies`, `peerDependencies`, `peerDependenciesMeta` and `optionalDependencies` and externalizes those; `devDependencies` alone is bundled (`repos/tsdown/src/features/deps.ts`). Both plugins used the same `deps: { onlyBundle: false }` config, which disables the bundling whitelist rather than restricting bundling:
 
 | Dependency category | Bundle behavior                                                                         |
 | ------------------- | --------------------------------------------------------------------------------------- |
@@ -84,8 +84,8 @@ The dependency _category_ is therefore part of a publishable package's distribut
   ```bash
   ! grep -n 'from "@systemfsoftware/' dist/index.js
   ```
-  (`check-dist-builtins.mjs` has since been deleted. `scripts/check-runtime-deps.mjs` now enforces the adjacent rule — every import in a shipped `dist/` must be declared — but it passes a private workspace helper that _is_ declared in `dependencies`, which is exactly this failure.)
-- **Synthetic-cwd smoke:** load the dist from a directory outside the workspace — `node omp/scripts/smoke-plugin.mjs <dist> --cwd /tmp/plugin-smoke` catches resolution failures that workspace-context tests structurally cannot.
+  (`check-dist-builtins.mjs` has since been deleted, and so has `scripts/check-runtime-deps.mjs` — the adjacent rule it enforced, that every import in a shipped `dist/` must be declared, now has no live gate; `turbo.json` still declares the `//#check:runtime-deps` task that named it. That rule would have passed this failure in any case: a private workspace helper that _is_ declared in `dependencies` is declared.)
+- **Synthetic-cwd smoke:** load the dist from a directory outside the workspace — `node omp/scripts/smoke-plugin.mjs <dist> --cwd /tmp/plugin-smoke` (the script is gone from this tree with the OMP plugins) catches resolution failures that workspace-context tests structurally cannot.
 - **Review-time greps:** `from "@systemfsoftware/` in `dist/index.js` (externalized private import); a `"private": true` package referenced from any publishable package's `dependencies` (root cause at the source).
 
 ## Related Issues

@@ -30,9 +30,12 @@ trap: every pending `.changeset/` intent that still names it aborts
 owns the intent-side law; `docs/solutions/tooling-decisions/changeset-requirement-keys-on-turbo-build-hash.md`
 owns the hash-side gate). The hash-side gate judged only whether a PR's own
 changes demanded an intent. Nothing judged the backlog. The stryker-js split
-deleted `@systemfsoftware/stryker-js-platform-node` without sweeping the 38
-intents that named it; every PR checked green, and the next push to `main`
-failed the Release with `ERR_PNPM_VERSIONING_UNKNOWN_PACKAGE` — the exact
+deleted `@systemfsoftware/stryker-js-platform-node` — since superseded by
+`@systemfsoftware/stryker-js-engine` for the run and
+`@systemfsoftware/stryker-js-cli` for process entries — without sweeping the
+38 pending intents whose frontmatter still named it; every PR checked green,
+and the next push to `main` failed the Release with
+`ERR_PNPM_VERSIONING_UNKNOWN_PACKAGE` — the exact
 "vacuously passing PR, squashed onto main, failing in production" shape this
 gate family exists to prevent.
 

@@ -1,7 +1,7 @@
 ---
 title: tsgo LSP linter wired into the lint pipeline — plugin name, extends activation, and the turbo passthrough trap
 module: repo-root
-component: packages/tsconfig/effect.json, packages/effect-atom/atom, packages/effect-atom/atom-react, packages/storybook-gherkin, package.json
+component: packages/toolchain/tsconfig/effect.json, packages/atom/effect-atom, packages/atom/effect-atom-react, packages/storybook-gherkin, package.json
 tags: [lint, tsgo, effect-language-service, diagnostics, turbo, lsp]
 problem_type: tooling-decisions
 track: knowledge
@@ -9,8 +9,8 @@ applies_when:
   symptoms:
     - `effect-tsgo diagnostics --project tsconfig.json` reports "Checked 0 files" for a project whose tsconfig lists the Effect plugin
     - Someone chains `effect-tsgo diagnostics` into a package `lint` script with `&&`
-    - A package wants the Constitution-derived Effect diagnostics policy from `packages/tsconfig/effect.json`
-  root_cause: the Effect LSP plugin is matched by the exact name `@effect/language-service`; and turbo's `--format=github` passthrough is appended to every task in a lint:ci invocation
+    - A package wants the Constitution-derived Effect diagnostics policy from `packages/toolchain/tsconfig/effect.json`
+  root_cause: the Effect LSP plugin is matched by the exact name `@effect/language-service`; and turbo appends passthrough args to every task, so a `--format` meant for oxlint reaches tsgo
   resolution_type: integration-pattern
 ---
 
@@ -30,7 +30,7 @@ silently ignored — the diagnostics CLI then reports `Checked 0 files out of N 
 
 `ParseFromPlugins` reads the resolved tsconfig, so the plugin inherited through an
 `extends` chain activates (upstream fixed multi-hop inheritance in 1a562ee). The repo's
-policy therefore lives in one place — `packages/tsconfig/effect.json`, which lists every
+policy therefore lives in one place — `packages/toolchain/tsconfig/effect.json`, which lists every
 diagnostic explicitly per A.2 — and packages opt in by extending it:
 
 ```json
@@ -49,13 +49,15 @@ Effect plugin, so they are not counted as checked. That is normal, not a gap.
 
 ## 3. The turbo passthrough trap: tsgo is its own task
 
-`lint:ci` runs `turbo ... lint -- --format=github`. Turbo appends passthrough args to the
-tail of the script — so chaining `oxlint . && effect-tsgo diagnostics ...` into `lint`
-produces `... diagnostics ... --format=github`, and tsgo hard-errors on the value
-(`Expected: "json" | "pretty" | "text" | "github-actions"`). The CI format for tsgo is
-`github-actions`, not `github`. Hence the integration is a dedicated per-package task
-`lint:tsgo` (format selected by `TSGO_FORMAT`, defaulting to `text`), invoked separately
-in `lint:ci` under `TSGO_FORMAT=github-actions` and added to the `check:ci` task list.
+The root `lint:ci` script used to run `turbo ... lint -- --format=github`; turbo appends
+passthrough args to the tail of every package script, so chaining `oxlint . && effect-tsgo
+diagnostics ...` into `lint` produced `... diagnostics ... --format=github`, and tsgo
+hard-errors on the value (`Expected: "json" | "pretty" | "text" | "github-actions"`). The
+CI format for tsgo is `github-actions`, not `github`. So the integration is a dedicated
+per-package task `lint:tsgo` (format selected by `TSGO_FORMAT`, defaulting to `text`),
+invoked separately in `gate:tasks` — the list root `check:ci` runs — with formats supplied
+by environment (`TSGO_FORMAT=github-actions`, `OXLINT_FORMAT=github`) rather than
+passthrough args. `lint:ci` itself has since been dropped.
 
 A new task must also be declared in `turbo.json`'s `tasks` map — turbo 2.x refuses to
 build the graph for an undeclared task (`Could not find task \`lint:tsgo\` in project`),
@@ -73,7 +75,7 @@ packages — the same tolerated signal as the red `lint:tsgo` step.
 
 ## References
 
-- `packages/tsconfig/effect.json` — the explicit diagnostic severity policy
-- `packages/effect-atom/atom/tsconfig.json`, `packages/storybook-gherkin/tsconfig.json` — opt-in via extends
-- `package.json` — `lint:tsgo` in `check:ci` and `lint:ci`
+- `packages/toolchain/tsconfig/effect.json` — the explicit diagnostic severity policy
+- `packages/atom/effect-atom/tsconfig.json`, `packages/storybook-gherkin/tsconfig.json` — opt-in via extends
+- `package.json` — `lint:tsgo` in `gate:tasks`, the list `check:ci` runs; `turbo.json` — the task declaration and its `TSGO_FORMAT` env
 - `docs/solutions/tooling-decisions/rule-admission-severity-and-accretion.md` — severity doctrine behind the policy

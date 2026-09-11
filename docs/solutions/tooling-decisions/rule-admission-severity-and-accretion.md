@@ -1,7 +1,7 @@
 ---
 title: Rule Admission — Why Warn Is Dominated, Why Rule Count Is the Wrong Axis, and What Stops Accretion
 module: repo-root
-component: packages/oxlint-config, scripts/
+component: packages/oxlint-plugin/oxlint-config, scripts/
 tags: [enforcement, lint, oxlint, severity, false-positive-budget, accretion, subtraction, harness]
 problem_type: architecture-pattern
 track: knowledge
@@ -26,21 +26,21 @@ actually stops an agent from adding another worthless script.
 
 Taken this session, not from memory:
 
-| Fact                          | Value                                                     | How                                               |
-| ----------------------------- | --------------------------------------------------------- | ------------------------------------------------- |
-| Rules in the effective config | 128                                                       | `oxlint --print-config`, `packages/oxlint-config` |
-| At `deny` (error)             | 125                                                       | same                                              |
-| At `allow` (off)              | 3                                                         | same                                              |
-| At `warn`                     | **0**                                                     | same                                              |
-| Category enabled              | `correctness: deny`                                       | same                                              |
-| Agent-mode lint flags         | `--format=unix --quiet` when `AGENT` is set               | every package's `lint` script                     |
-| `--quiet` semantics           | "Disable reporting on warnings, only errors are reported" | `oxlint --help`                                   |
-| Product gates in `scripts/`   | 8                                                         | prior audit                                       |
+| Fact                          | Value                                                   | How                                                             |
+| ----------------------------- | ------------------------------------------------------- | --------------------------------------------------------------- |
+| Rules in the effective config | 128                                                     | `oxlint --print-config`, `packages/oxlint-plugin/oxlint-config` |
+| At `deny` (error)             | 125                                                     | same                                                            |
+| At `allow` (off)              | 3                                                       | same                                                            |
+| At `warn`                     | **0**                                                   | same                                                            |
+| Category enabled              | `correctness: deny`                                     | same                                                            |
+| Agent-mode lint flags         | `--format=agent` when `AGENT` is set                    | every package's `lint` script                                   |
+| `agent` format semantics      | one line per diagnostic, no source excerpts, no summary | `repos/oxc`, `AgentOutputFormatter`                             |
+| Product gates in `scripts/`   | 8                                                       | prior audit                                                     |
 
 Two of these decide most of what follows. The repo already runs **128 rules with zero
-warn** — 2.5× the rule count often quoted as a ceiling — and it works. And under `AGENT`,
-oxlint is invoked with `--quiet`, so a warn-severity rule in this repo is not weak
-enforcement. **It produces no output at all when an agent runs lint.**
+warn** — 2.5× the rule count often quoted as a ceiling — and it works. And no `lint` script
+turns a warning into an exit code, so a warn-severity rule in this repo is not weak
+enforcement. **It reports a line, and the run still passes.**
 
 ## Question 1 — Is `warn` useless? Never add warn?
 
@@ -48,13 +48,14 @@ enforcement. **It produces no output at all when an agent runs lint.**
 merely weak. It is _dominated_ — for every goal someone reaches for warn to achieve,
 another mechanism achieves it strictly better.
 
-### Warn is invisible here, not just weak
+### Warn fails nothing here, not just weak
 
 The general claim is that warnings get ignored. The local claim is sharper and
-machine-checked: `--quiet` is passed whenever `AGENT` is set, and `--quiet` disables
-warning reporting entirely. So a rule at warn is not a soft signal to an agent in this
-repo. It is silence. Anyone landing a warn rule here has written a config entry with no
-runtime effect on the primary author of this codebase.
+machine-checked: no `lint` script passes `--deny-warnings` or `--max-warnings`, and under
+`AGENT` they select oxlint's `agent` formatter rather than suppressing anything. So a rule
+at warn is not a soft signal to an agent in this repo — the report prints, and the command
+that prints it still exits 0. Anyone landing a warn rule here has written a config entry
+no command can fail on.
 
 ### The three goals people want from warn, and what beats each
 
@@ -77,11 +78,13 @@ Here warn is not just dominated, it is the worst of the three options:
 `error` plus a baseline is what you actually wanted: new code is blocked today, the 400
 existing sites are enumerated as debt with a date, and the list can only get shorter
 because nothing new can enter it. Warn blocks nothing, so the population grows while you
-are "migrating." This repo already runs the dominant pattern — `check-lint-coverage.mjs`
-carries an exemption map where every entry must state why, and an entry without a reason
-is treated as a bug. (Caveat, in fairness: the _reason text_ in that map is unverified
-prose, the same weakness as the provenance manifest. Its saving grace is that the entry's
-_effect_ is checkable — the package either extends the config or it does not.)
+are "migrating." This repo ran the dominant pattern while `scripts/check-lint-coverage.mjs`
+existed — it carried an exemption map where every entry had to state why, and an entry
+without a reason was treated as a bug — until that script was deleted; `scripts/guards/`
+now holds only `check-changeset.ts`. (Caveat, in fairness: the _reason text_ in that map
+was unverified prose, the same weakness as the provenance manifest. Its saving grace was
+that the entry's _effect_ is checkable — the package either extends the config or it does
+not.)
 
 **Goal: "This check is a heuristic. It is genuinely advisory."**
 Then it should not ship as a lint rule. Above roughly 20% false positives a check is
@@ -94,7 +97,7 @@ committed config CI reads.
 
 ### The rule
 
-- **Never commit `warn` as a resting state.** It has no effect on an agent here.
+- **Never commit `warn` as a resting state.** It never fails a command here.
 - **To measure:** run the rule at deny on the CLI. Do not commit the severity.
 - **To migrate:** `error` plus an explicit, dated baseline. It dominates warn on all three axes.
 - **Genuinely advisory:** not a lint rule. Review, or editor-only.
@@ -220,7 +223,7 @@ Replace one unverifiable property with three checkable ones. The goal — direct
 in `scripts/` — is legitimate; the manifest was the wrong instrument because it checks a
 writer's claim.
 
-1. **Reachability replaces the manifest.** Require every script to be reachable from a named entry point (`package.json`, `turbo.json`, a workflow, a hook config). This is a fact about the repo, not a claim by an author, so a machine genuinely decides it. It is negative in polarity — _do not add an unreachable script_. It would have caught both dead scripts, and it would have correctly passed `rolldown-eager-entry-budget.mjs`, which the manifest got wrong.
+1. **Reachability replaces the manifest.** Require every script to be reachable from a named entry point (`package.json`, `turbo.json`, a workflow, a hook config). This is a fact about the repo, not a claim by an author, so a machine genuinely decides it. It is negative in polarity — _do not add an unreachable script_. It would have caught both dead scripts, and it would have correctly passed `rolldown-eager-entry-budget.mjs` (since deleted, like the scripts it inspected), which the manifest got wrong.
 2. **Mandatory known-bad fixture.** Every gate must exit non-zero on a fixture that violates it. The repo already invented this — 5 of 8 gates carry `--selftest` — so the change is to make it universal, not to design anything. A gate that cannot fail on purpose is not known to work.
 3. **Report the enforcement-surface line delta per change.** A number, reported, not a block. It makes accretion visible at review time, which is where the judgement belongs.
 
@@ -231,16 +234,16 @@ correctly assigned to a human.
 
 ## Where the original framing needed correcting
 
-- **"Warn is useless"** — right, and for a stronger reason than stated: it is dominated by `error`-plus-baseline on every axis, and in this repo `--quiet` makes it literally invisible. The absolute "never add warn" overshoots only on the editor-layer case, which is a human channel and should not live in the committed config anyway.
+- **"Warn is useless"** — right, and for a stronger reason than stated: it is dominated by `error`-plus-baseline on every axis, and in this repo it reports without failing any command. The absolute "never add warn" overshoots only on the editor-layer case, which is a human channel and should not live in the committed config anyway.
 - **"Too many rules if the instruction count is 50"** — the inference does not hold. Lint rules cost no context tokens; 128 run here at deny. The real ceilings are `N × p` and diagnostic volume.
 - **"Cargo-culted advice in the harness doctrine"** — right about the effect, wrong about the cause. The doctrine argues _against_ accretion. What drives accretion is that its earn test excludes gates, its escalation order's first step produces no artifact, and its scoring instrument improves when you add. Fix the instrument, not the prose.
 
 ## References
 
 - `docs/solutions/architecture-patterns/provenance-ritual-gates.md` — the audit this follows from
-- `packages/oxlint-config/src/oxlint-config.base.ts` — 125 deny, 3 allow, zero warn
-- `packages/oxlint-config/package.json:19` — `--quiet` under `AGENT`
-- `scripts/check-lint-coverage.mjs` — the error-plus-baseline pattern already in use
+- `packages/oxlint-plugin/oxlint-config/src/oxlint-config.base.ts` — 125 deny, 3 allow, zero warn
+- `packages/oxlint-plugin/oxlint-config/package.json` — the `lint` script's `--format=${OXLINT_FORMAT:-${AGENT:+agent}}`, with no `--quiet`
+- `scripts/check-lint-coverage.mjs` — the error-plus-baseline pattern this doc drew on; the script is gone, and `scripts/guards/` now holds only `check-changeset.ts`
 - [Guardrails Beat Guidance, arXiv 2604.11088](https://arxiv.org/abs/2604.11088) — rule polarity: negative constraints help, positive directives harm; pass rates flat 0–50 rules
 - [IFScale, arXiv 2507.11538](https://arxiv.org/abs/2507.11538) — instruction adherence versus instruction count, the result that does _not_ transfer to lint
 - [METR, Recent Frontier Models Are Reward Hacking](https://metr.org/blog/2025-06-05-recent-reward-hacking/) — evaluator editing; 43× more frequent with a visible scoring function

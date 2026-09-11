@@ -20,7 +20,7 @@ tags: [changeset, turbo, build-hash, dependents, transitive, arethetypeswrong, c
 
 The repo's changeset gate (`scripts/guards/check-changeset.ts`, REPO-R2) keys the intent requirement on each publishable package's turbo `#build` task hash, compared between the PR's pinned base and its head. A manifest edit that moves one package's hash also moves the `#build` hash of every publishable package that depends on it, because turbo folds dependency build hashes into the dependent's task hash. The gate then demands a changeset naming **every** publishable package whose hash moved — including dependents whose own sources are untouched.
 
-PR #307 (declare `@vitest/snapshot` in the arethetypeswrong analysis package) changed `packages/testing/type-testing/arethetypeswrong/analysis/package.json` and added a changeset naming only `@systemfsoftware/arethetypeswrong`. CI's Changeset Check failed; the local gate run reported the missing intent was `@systemfsoftware/arethetypeswrong-cli` — the CLI's `#build` hash moved transitively because it depends on the analysis package.
+PR #307 (declare `@vitest/snapshot` in the arethetypeswrong analysis package) changed `packages/testing/type-testing/arethetypeswrong/analysis/package.json` and added a changeset naming only `@systemfsoftware/arethetypeswrong`. That path and those package names have since left this tree — the arethetypeswrong packages are no longer workspace members, and consumers resolve the CLI from the registry through the `attw` catalog in `pnpm-workspace.yaml` — so the incident is an illustration of the verdict, not a description of the current layout. CI's Changeset Check failed; the local gate run reported the missing intent was `@systemfsoftware/arethetypeswrong-cli` — the CLI's `#build` hash moved transitively because it depends on the analysis package.
 
 ## Symptoms
 
@@ -42,9 +42,11 @@ Name every publishable package whose `#build` hash moved in the changeset, with 
 ---
 ```
 
-Before pushing, run the gate locally to see exactly which package the verdict is missing:
+Before pushing, run the gate locally to see exactly which package the verdict is missing. The verdict executes the lockfile-installed turbo and checks it against the lockfile pin, so the frozen install comes first; the selftest needs no subprocess and no writes:
 
 ```bash
+pnpm install --frozen-lockfile
+deno run --allow-read scripts/guards/check-changeset.ts --selftest
 deno run --allow-run=git,"$PWD/node_modules/.bin/turbo" --allow-read --allow-write=/tmp \
   scripts/guards/check-changeset.ts <base-sha>
 ```

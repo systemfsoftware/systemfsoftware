@@ -29,8 +29,8 @@ tags:
 
 During the Effect v4 workspace cut-over, three separate verdicts were false at the same time:
 
-1. `TURBO_CONCURRENCY=100% pnpm typecheck` reported a red set of ~30 packages. The real red set was larger: packages whose hashes had not changed replayed **cached pre-migration green** results, so they were never migrated. `vitest-config`, `stryker-js/plugin-api`, `oxlint-plugins/recommended` and `cell-taxonomy` all sat in that blind spot.
-2. Every package's `typecheck` script runs `tsc --noEmit --incremental`. A `tsconfig.tsbuildinfo` written **before** a dependency-graph change keeps reporting clean afterwards, because unchanged files are not re-checked. Deleting the 48 `tsbuildinfo` files turned a "green" workspace red — `vitest-setup.ts` files still importing `FastCheck` from `'effect'` had been invisible for the whole migration.
+1. `TURBO_CONCURRENCY=100% pnpm typecheck` reported a red set of ~30 packages. The real red set was larger: packages whose hashes had not changed replayed **cached pre-migration green** results, so they were never migrated. `toolchain/vitest-config`, `stryker-js/plugin-api` (since folded into `stryker-js`), `oxlint-plugin/oxlint-plugin-recommended` and `oxlint-plugin-cell-vocabulary` (then `cell-taxonomy`) all sat in that blind spot.
+2. Every package's `typecheck` script runs `tsc --noEmit --incremental`, except `stryker-js-html-reporter`'s (a plain `tsc --noEmit`). A `tsconfig.tsbuildinfo` written **before** a dependency-graph change keeps reporting clean afterwards, because unchanged files are not re-checked. Deleting the 48 `tsbuildinfo` files turned a "green" workspace red — `vitest-setup.ts` files still importing `FastCheck` from `'effect'` had been invisible for the whole migration.
 3. Browser tests passed under `pnpm test` and failed under `turbo run test`. Turbo 2 defaults to strict environment mode: a task receives only declared variables plus a system allowlist. `XDG_CACHE_HOME` is not in it, so Playwright fell back to `$HOME/.cache/ms-playwright` and could not find the browser build that exists under the real cache root.
 
 ## Root cause
