@@ -78,7 +78,7 @@ catalogs:
     # The published CLI. Consumers that must not close a workspace cycle resolve
     # through this catalog instead of `workspace:^`; see
     # docs/solutions/tooling-decisions/registry-consumption-of-self-hosted-forks.md
-    "@systemfsoftware/arethetypeswrong-cli": ^1.1.1
+    "@systemfsoftware/arethetypeswrong-cli": ^4.1.0
 minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - "@systemfsoftware/*"
