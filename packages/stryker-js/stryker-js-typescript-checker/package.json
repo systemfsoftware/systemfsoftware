@@ -38,7 +38,7 @@
     "@effect/platform-node-shared": "catalog:",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/all": "workspace:^",
-    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
