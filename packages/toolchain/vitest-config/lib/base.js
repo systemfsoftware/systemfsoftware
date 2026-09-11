@@ -1,3 +1,5 @@
+import { recursionBudgetTransform } from '@systemfsoftware/effect-schema-recursion-budget'
+
 export { defineConfig } from 'vitest/config'
 
 // AGENT outranks CI. This repo's agent shell sets both, so a CI-first reading
@@ -15,6 +17,7 @@ const sharedTestTimeout = isCI ? 30_000 : isAgent ? 15_000 : 8_000
  * @type {import('vitest/config').ViteUserConfig}
  */
 export const sharedConfig = {
+  plugins: [recursionBudgetTransform()],
   test: {
     globals: true,
     environment: 'node',

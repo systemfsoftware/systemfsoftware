@@ -2707,6 +2707,9 @@ importers:
 
   packages/toolchain/vitest-config:
     devDependencies:
+      '@systemfsoftware/effect-schema-recursion-budget':
+        specifier: workspace:^
+        version: link:../../effect-schema-recursion-budget
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../tsconfig
