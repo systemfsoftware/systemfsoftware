@@ -5,10 +5,6 @@ settings:
   excludeLinksFromLockfile: false
 
 catalogs:
-  attw:
-    '@systemfsoftware/arethetypeswrong-cli':
-      specifier: ^4.1.0
-      version: 4.1.0
   default:
     '@effect/platform-node':
       specifier: 4.0.0-rc.112
@@ -34,6 +30,9 @@ catalogs:
     '@storybook/react-vite':
       specifier: ^10.5.0
       version: 10.5.7
+    '@systemfsoftware/arethetypeswrong-cli':
+      specifier: ^4.1.0
+      version: 4.1.0
     '@testing-library/dom':
       specifier: ^10.4.1
       version: 10.4.1
@@ -215,7 +214,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
@@ -264,7 +263,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
@@ -348,7 +347,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:*
@@ -397,7 +396,7 @@ importers:
         specifier: ^7.58.7
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
@@ -469,7 +468,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
@@ -515,7 +514,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
@@ -561,7 +560,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
@@ -601,7 +600,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
@@ -646,7 +645,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-schema-recursion-budget':
         specifier: workspace:^
@@ -698,7 +697,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
@@ -753,7 +752,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
@@ -801,7 +800,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
@@ -868,7 +867,7 @@ importers:
         specifier: 'catalog:'
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
@@ -944,7 +943,7 @@ importers:
         version: link:../oxlint-plugin-test-placement
     devDependencies:
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
@@ -1101,7 +1100,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/oxlint-plugin-effect-native':
         specifier: workspace:^
@@ -1159,7 +1158,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
@@ -1232,7 +1231,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@25.9.5)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
@@ -1263,7 +1262,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
@@ -1382,7 +1381,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/oxlint-import-origin':
         specifier: workspace:^
@@ -1446,7 +1445,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/oxlint-make-boundary':
         specifier: workspace:^
@@ -1510,7 +1509,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
@@ -1564,7 +1563,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@25.9.5)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
@@ -1711,7 +1710,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
@@ -1772,7 +1771,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
@@ -1829,7 +1828,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
@@ -1884,7 +1883,7 @@ importers:
         specifier: 'catalog:'
         version: 10.5.7(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(esbuild@0.28.2)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(rollup@4.62.4)(storybook@10.5.6(@types/react@19.2.18)(prettier@3.9.6)(react@19.2.8))(supports-color@8.1.1)(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
@@ -1957,7 +1956,7 @@ importers:
         specifier: workspace:^
         version: link:../../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
@@ -2024,7 +2023,7 @@ importers:
         specifier: workspace:^
         version: link:../../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
@@ -2115,7 +2114,7 @@ importers:
         specifier: workspace:^
         version: link:../../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
@@ -2170,7 +2169,7 @@ importers:
         specifier: workspace:^
         version: link:../../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
@@ -2234,7 +2233,7 @@ importers:
         specifier: workspace:^
         version: link:../../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
@@ -2301,7 +2300,7 @@ importers:
         specifier: workspace:^
         version: link:../../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
@@ -2356,7 +2355,7 @@ importers:
         specifier: workspace:^
         version: link:../../oxlint-plugin/all
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
@@ -2408,7 +2407,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
@@ -2469,7 +2468,7 @@ importers:
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
@@ -2514,7 +2513,7 @@ importers:
   packages/toolchain/tsconfig:
     devDependencies:
       '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
+        specifier: 'catalog:'
         version: 4.1.0
 
   packages/toolchain/tsdown-config: {}

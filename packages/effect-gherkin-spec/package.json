@@ -45,7 +45,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",

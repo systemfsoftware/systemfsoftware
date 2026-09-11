@@ -49,7 +49,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
-    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-schema-recursion-budget": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",

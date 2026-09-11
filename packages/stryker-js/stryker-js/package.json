@@ -32,7 +32,7 @@
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@systemfsoftware/all": "workspace:^",
-    "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
