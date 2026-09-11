@@ -74,7 +74,6 @@ const resolveLocal = (name: string, node: ESTree.Node, getScope: GetScope): Loca
   return { kind: 'none' }
 }
 
-/** A named local builder, or an imported helper such as `terminatingRecursion`. */
 const isNamedBuilder = (name: string, node: ESTree.Node, getScope: GetScope): boolean => {
   const resolved = resolveLocal(name, node, getScope)
   if (resolved.kind === 'function' || resolved.kind === 'import') return true
@@ -179,12 +178,14 @@ const annotateCallOf = (union: ESTree.CallExpression): ESTree.CallExpression | u
   return call !== null && call.type === 'CallExpression' && call.callee === member ? call : undefined
 }
 
-const declaresDerivation = (annotate: ESTree.CallExpression): boolean => {
+const declaresGenerationIntent = (annotate: ESTree.CallExpression): boolean => {
   const options = annotate.arguments[0]
   if (options === undefined || options.type !== 'ObjectExpression') return false
   return options.properties.some(
     (property) =>
-      property.type === 'Property' && property.key.type === 'Identifier' && property.key.name === 'toArbitrary',
+      property.type === 'Property' &&
+      property.key.type === 'Identifier' &&
+      (property.key.name === 'toArbitrary' || property.key.name === 'recursionBudget'),
   )
 }
 
@@ -237,7 +238,7 @@ export const propFixtureSchemaOrigin = defineRule({
         if (!isTestScope(node, context.filename)) return
         if (!isRecursiveUnion(node, getScope)) return
         const annotate = annotateCallOf(node)
-        if (annotate !== undefined && declaresDerivation(annotate)) return
+        if (annotate !== undefined && declaresGenerationIntent(annotate)) return
         if (isNamedBuilderOrigin(node, getScope)) return
         context.report({
           node,

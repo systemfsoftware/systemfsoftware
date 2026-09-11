@@ -44,13 +44,25 @@ ${GUARD_END}`,
       filename: FILENAME,
     },
     {
-      name: 'Should_StaySilent_When_TheRecursiveUnionEntersThroughThePublishedHelper',
-      code: `import { terminatingRecursion } from '@systemfsoftware/effect-schema-recursion-budget'
+      name: 'Should_StaySilent_When_TheRecursiveUnionEntersThroughAnImportedHelper',
+      code: `import { buildChain } from './chain.builder.js'
 import { Schema as S } from 'effect'
 const Lit = S.TaggedStruct('Lit', { value: S.Finite })
 ${GUARD_BARE}
 const Cons = S.suspend(() => S.Struct({ _tag: S.Literal('Cons'), tail: Chain }))
-const Chain = terminatingRecursion({ identifier: 'Chain', base: [Lit], recur: [Cons], maxDepth: 3, depthSize: 'small' })
+const Chain = buildChain({ base: [Lit], recur: [Cons] })
+${GUARD_END}`,
+      filename: FILENAME,
+    },
+    {
+      name: 'Should_StaySilent_When_TheRecursiveUnionDeclaresItsGenerationIntent',
+      code: `${IMPORTS}
+${GUARD}
+const Cons = S.suspend(() => S.Struct({ _tag: S.Literal('Cons'), tail: Chain }))
+const Chain = S.Union([Lit, Cons]).annotate({
+  identifier: 'Chain',
+  recursionBudget: { maxDepth: 3, depthSize: 'small' },
+})
 ${GUARD_END}`,
       filename: FILENAME,
     },
