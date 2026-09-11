@@ -1939,13 +1939,6 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
 
   packages/stryker-js/stryker-js:
-    dependencies:
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -1971,6 +1964,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.112
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)

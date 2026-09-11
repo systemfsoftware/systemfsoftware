@@ -1,31 +1,24 @@
-import * as Context from 'effect/Context'
-import type * as Effect from 'effect/Effect'
-import type * as HashMap from 'effect/HashMap'
+export { CheckerFailedSchema, CheckResultSchema, CheckStatusSchema } from './Checker.schema.js'
+export type { CheckerFailed, CheckResult, CheckStatus, FailedCheckResult, PassedCheckResult } from './Checker.schema.js'
 
-import type { CheckerFailed } from './Checker.schema.js'
+import type { CheckResult } from './Checker.schema.js'
 import type { Mutant } from './Mutant.js'
+import type { PluginInit, StrykerOptions } from './Options.js'
 
-export { CheckerFailed, CheckResultSchema, CheckStatus } from './Checker.schema.js'
+export type CheckResultMap = Record<string, CheckResult>
 
-export interface FailedCheckResult {
-  readonly reason: string
-  readonly status: 'compileError'
+export type CheckerInit = () => void | Promise<void>
+
+export type CheckerCheck = (mutants: readonly Mutant[]) => CheckResultMap | Promise<CheckResultMap>
+
+export type CheckerGroup = (
+  mutants: readonly Mutant[],
+) => readonly (readonly string[])[] | Promise<readonly (readonly string[])[]>
+
+export interface Checker {
+  readonly init?: CheckerInit | undefined
+  readonly check?: CheckerCheck | undefined
+  readonly group?: CheckerGroup | undefined
 }
 
-export interface PassedCheckResult {
-  readonly status: 'passed'
-}
-
-export type CheckResult = FailedCheckResult | PassedCheckResult
-
-export interface CheckerService {
-  readonly init: Effect.Effect<void, CheckerFailed>
-  readonly check: (
-    mutants: readonly Mutant[],
-  ) => Effect.Effect<HashMap.HashMap<string, CheckResult>, CheckerFailed>
-  readonly group: (
-    mutants: readonly Mutant[],
-  ) => Effect.Effect<readonly (readonly string[])[], CheckerFailed>
-}
-
-export class Checker extends Context.Service<Checker, CheckerService>()('~@systemfsoftware/stryker-js/Checker') {}
+export type CheckerFactory = (options: StrykerOptions, init: PluginInit) => Checker

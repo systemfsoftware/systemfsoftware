@@ -1,30 +1,45 @@
-import * as Arr from 'effect/Array'
-import * as Match from 'effect/Match'
-import * as Option from 'effect/Option'
+export {
+  FileResultSchema,
+  MetricsResultSchema,
+  MetricsSchema,
+  MutantResultSchema,
+  MutationTestResultSchema,
+} from './Report.schema.js'
 
-import type { Metrics, MetricsResult } from './Metrics.schema.js'
+export type {
+  BrandingInformation,
+  Dependencies,
+  FileResult,
+  FileResultDictionary,
+  FrameworkInformation,
+  Metrics,
+  MetricsResult,
+  MutantResult,
+  MutationTestResult,
+  OpenEndLocation,
+  TestDefinition,
+  TestFile,
+  TestFileDefinitionDictionary,
+  Thresholds,
+} from './Report.schema.js'
 
-export { MetricsResultSchema, MetricsSchema } from './Metrics.schema.js'
-export type { Metrics, MetricsResult } from './Metrics.schema.js'
-import type { FileResult, MutantResult } from './Report.schema.js'
+import type { MutantStatus } from './Mutant.schema.js'
+import type { FileResult, Metrics, MetricsResult, MutantResult } from './Report.schema.js'
 
-const countStatus = (mutants: readonly MutantResult[], status: MutantResult['status']): number =>
+const countStatus = (mutants: readonly MutantResult[], status: MutantStatus): number =>
   mutants.filter((mutant) => mutant.status === status).length
 
 const percentage = (numerator: number, denominator: number): number => (numerator / denominator) * 100
 
-/** A percentage whose denominator is zero is not 0%; `emptyDenominator` says what it is instead. */
-const percentOr = (emptyDenominator: number, numerator: number, denominator: number): number =>
-  Match.value(denominator).pipe(
-    Match.when(0, () => emptyDenominator),
-    Match.orElse(() => percentage(numerator, denominator)),
-  )
+const percentOr = (emptyDenominator: number, numerator: number, denominator: number): number => {
+  if (denominator === 0) return emptyDenominator
+  return percentage(numerator, denominator)
+}
 
-const coveredFraction = (totalDetected: number, totalCovered: number, totalValid: number): number =>
-  Match.value(totalValid).pipe(
-    Match.when(0, () => Number.NaN),
-    Match.orElse(() => percentOr(0, totalDetected, totalCovered)),
-  )
+const coveredFraction = (totalDetected: number, totalCovered: number, totalValid: number): number => {
+  if (totalValid === 0) return Number.NaN
+  return percentOr(0, totalDetected, totalCovered)
+}
 
 export const countMutants = (mutants: readonly MutantResult[]): Metrics => {
   const pending = countStatus(mutants, 'Pending')
@@ -62,9 +77,7 @@ export const countMutants = (mutants: readonly MutantResult[]): Metrics => {
 
 const segmentOf = (fileName: string): string => {
   const separator = fileName.indexOf('/')
-  if (separator === -1) {
-    return fileName
-  }
+  if (separator === -1) return fileName
   return fileName.slice(0, separator)
 }
 
@@ -74,8 +87,7 @@ const groupBySegment = (
   Object.entries(files).reduce<Record<string, Record<string, FileResult>>>((groups, [fileName, file]) => {
     const segment = segmentOf(fileName)
     const group = groups[segment] ?? {}
-    group[fileName] = file
-    groups[segment] = group
+    groups[segment] = { ...group, [fileName]: file }
     return groups
   }, {})
 
@@ -93,21 +105,30 @@ const nestedGroupResult = (segment: string, entries: readonly (readonly [string,
   return { name: segment, metrics: metricsOf(nested), childResults: childResultsOf(nested) }
 }
 
+const soleEntry = (entries: readonly (readonly [string, FileResult])[]): readonly [string, FileResult] | null => {
+  if (entries.length !== 1) return null
+  return entries[0]
+}
+
+const namedFileResult = (segment: string, entry: readonly [string, FileResult]): MetricsResult | null => {
+  if (entry[0] === segment) return fileResultOf(entry[0], entry[1])
+  return null
+}
+
 const soleSegmentFileResult = (
   segment: string,
   entries: readonly (readonly [string, FileResult])[],
-): Option.Option<MetricsResult> =>
-  Option.flatMap(
-    Arr.head(entries),
-    ([fileName, file]) =>
-      Match.value(fileName === segment && entries.length === 1).pipe(
-        Match.when(true, () => Option.some(fileResultOf(fileName, file))),
-        Match.orElse(() => Option.none<MetricsResult>()),
-      ),
-  )
+): MetricsResult | null => {
+  const only = soleEntry(entries)
+  if (only === null) return null
+  return namedFileResult(segment, only)
+}
 
-const childResultOf = (segment: string, entries: readonly (readonly [string, FileResult])[]): MetricsResult =>
-  Option.getOrElse(soleSegmentFileResult(segment, entries), () => nestedGroupResult(segment, entries))
+const childResultOf = (segment: string, entries: readonly (readonly [string, FileResult])[]): MetricsResult => {
+  const sole = soleSegmentFileResult(segment, entries)
+  if (sole === null) return nestedGroupResult(segment, entries)
+  return sole
+}
 
 const childResultsOf = (files: Readonly<Record<string, FileResult>>): readonly MetricsResult[] =>
   Object.entries(groupBySegment(files))

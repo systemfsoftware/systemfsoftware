@@ -1,145 +1,69 @@
-import * as Context from 'effect/Context'
-import * as FileSystem from 'effect/FileSystem'
-import * as Layer from 'effect/Layer'
-import * as Match from 'effect/Match'
-import * as MutableHashMap from 'effect/MutableHashMap'
-import * as Option from 'effect/Option'
-import * as Path from 'effect/Path'
+import type { CheckerFactory } from './Checker.js'
+import type { EvaluatorFactory } from './Evaluator.js'
+import type { IgnorerFactory } from './Ignorer.js'
+import type { ParserFactory } from './Parser.js'
+import type { Shadowing } from './Plugin.schema.js'
+import type { PluginKind } from './Plugin.schema.js'
+import type { ReporterFactory } from './Reporter.js'
+import type { TestRunnerFactory } from './TestRunner.js'
 
-import { Checker } from './Checker.js'
-import type { Evaluator } from './Evaluator.js'
-import { Ignorer } from './Ignorer.js'
-import { Module } from './Module.js'
-import {
-  type PluginContribution,
-  PluginKind,
-  PluginLayerContribution,
-  type PluginLayerKind,
-  PluginReporterContribution,
-  Shadowing,
-} from './Plugin.schema.js'
-import type { ReporterFactory } from './ReporterEvent.schema.js'
-import type { StrykerOptions } from './Schema.js'
-import { TestRunner } from './TestRunner.js'
+export { PluginDeclarationSchema, PluginKindSchema, PluginModuleSchema, ShadowingSchema } from './Plugin.schema.js'
+export type { PluginDeclaration, PluginKind, Shadowing, StandardSchemaV1 } from './Plugin.schema.js'
 
-export {
-  type PluginContribution,
-  PluginKind,
-  PluginLayerContribution,
-  type PluginLayerKind,
-  PluginReporterContribution,
-  Shadowing,
-} from './Plugin.schema.js'
+export type PluginFactory<K extends PluginKind> = K extends 'Checker' ? CheckerFactory
+  : K extends 'Evaluator' ? EvaluatorFactory
+  : K extends 'Ignorer' ? IgnorerFactory
+  : K extends 'Parser' ? ParserFactory
+  : K extends 'Reporter' ? ReporterFactory
+  : K extends 'TestRunner' ? TestRunnerFactory
+  : never
 
-export class RunConfiguration extends Context.Service<RunConfiguration, StrykerOptions>()(
-  '~@systemfsoftware/stryker-js/RunConfiguration',
-) {}
-
-export class SandboxDirectory extends Context.Service<SandboxDirectory, string>()(
-  '~@systemfsoftware/stryker-js/SandboxDirectory',
-) {}
-
-export interface PluginInterfaces {
-  Checker: Checker
-  TestRunner: TestRunner
-  Ignore: Ignorer
-  Evaluator: Evaluator
+export interface PluginContribution<K extends PluginKind = PluginKind> {
+  readonly kind: K
+  readonly name: string
+  readonly make: PluginFactory<K>
 }
-export type PluginEnvironment = RunConfiguration | SandboxDirectory | FileSystem.FileSystem | Module | Path.Path
 
-export type AnyPluginContribution = { [K in PluginKind]: PluginContribution<K> }[PluginKind]
+export type AnyPluginContribution = PluginContribution<PluginKind>
 
-export type ContributionOf<K extends PluginKind> = Extract<AnyPluginContribution, { readonly kind: K }>
+export interface PluginModule {
+  readonly strykerPlugins: readonly AnyPluginContribution[]
+}
 
-export function declarePlugin(
-  kind: 'Reporter',
-  name: string,
-  make: ReporterFactory,
-): PluginContribution<'Reporter'>
-export function declarePlugin<K extends PluginLayerKind>(
+export const declarePlugin = <K extends PluginKind>(
   kind: K,
   name: string,
-  layer: Layer.Layer<PluginInterfaces[K], never, PluginEnvironment>,
-): PluginContribution<K>
-export function declarePlugin(kind: PluginKind, name: string, payload: unknown): AnyPluginContribution {
-  if (kind === 'Reporter') {
-    return new PluginReporterContribution({ kind, name, make: payload })
-  }
-  return new PluginLayerContribution({ kind, name, layer: payload })
-}
+  make: PluginFactory<K>,
+): PluginContribution<K> => ({ kind, name, make })
 
-export type MergedPluginServices = Checker & Ignorer & TestRunner
-
-export interface SelectedReporterFactory {
-  readonly name: string
-  readonly make: ReporterFactory
-}
-
-export interface ComposedPlugins {
-  readonly layer: Option.Option<Layer.Layer<MergedPluginServices, never, PluginEnvironment>>
-  readonly reporterFactories: readonly SelectedReporterFactory[]
+export interface FoldedContributions {
+  readonly contributions: readonly AnyPluginContribution[]
   readonly shadowings: readonly Shadowing[]
 }
 
-function foldContributions(
-  contributions: readonly AnyPluginContribution[],
-): {
-  readonly resolved: MutableHashMap.MutableHashMap<string, AnyPluginContribution>
-  readonly shadowings: readonly Shadowing[]
-} {
-  const resolved = MutableHashMap.empty<string, AnyPluginContribution>()
-  const shadowings: Array<Shadowing> = []
-  const lastSeen = MutableHashMap.empty<string, number>()
-
-  for (const [index, contribution] of contributions.entries()) {
-    const key = `${contribution.kind}:${contribution.name}`
-    const previous = MutableHashMap.get(lastSeen, key)
-    shadowings.push(
-      ...Option.match(previous, {
-        onNone: () => [],
-        onSome: (shadowedIndex) => [
-          new Shadowing({
-            kind: String(contribution.kind),
-            name: contribution.name,
-            shadowedIndex,
-            winnerIndex: index,
-          }),
-        ],
-      }),
-    )
-    MutableHashMap.set(resolved, key, contribution)
-    MutableHashMap.set(lastSeen, key, index)
-  }
-
-  return { resolved, shadowings }
+interface PositionedContribution {
+  readonly contribution: AnyPluginContribution
+  readonly index: number
 }
 
-const reporterFactoryOf = (contribution: AnyPluginContribution): readonly SelectedReporterFactory[] =>
-  Match.value(contribution).pipe(
-    Match.discriminator('kind')('Reporter', (reporter): readonly SelectedReporterFactory[] => [
-      { name: reporter.name, make: reporter.make },
-    ]),
-    Match.orElse((): readonly SelectedReporterFactory[] => []),
-  )
+const keyOf = (contribution: AnyPluginContribution): string => `${contribution.kind}:${contribution.name}`
 
-const layerOf = (contribution: AnyPluginContribution): readonly Layer.Layer<never, never, PluginEnvironment>[] =>
-  Match.value(contribution).pipe(
-    Match.discriminator('kind')('Reporter', (): readonly Layer.Layer<never, never, PluginEnvironment>[] => []),
-    Match.orElse((nonReporter) => [nonReporter.layer]),
-  )
+const shadowingOf = (
+  shadowed: PositionedContribution | undefined,
+  contribution: AnyPluginContribution,
+  winnerIndex: number,
+): readonly Shadowing[] => {
+  if (shadowed === undefined) return []
+  return [{ kind: contribution.kind, name: contribution.name, shadowedIndex: shadowed.index, winnerIndex }]
+}
 
-const mergedLayer = (
-  layers: ReadonlyArray<Layer.Layer<never, never, PluginEnvironment>>,
-): Layer.Layer<MergedPluginServices, never, PluginEnvironment> =>
-  layers.reduce((accumulated, next) => Layer.merge(accumulated, next))
-
-export function composePlugins(contributions: readonly AnyPluginContribution[]): ComposedPlugins {
-  const { resolved, shadowings } = foldContributions(contributions)
-  const allResolved = Array.from(MutableHashMap.values(resolved))
-  const layers = allResolved.flatMap(layerOf)
-  return {
-    layer: Option.map(Option.fromUndefinedOr(layers.at(0)), () => mergedLayer(layers)),
-    reporterFactories: allResolved.flatMap(reporterFactoryOf),
-    shadowings,
-  }
+export const foldContributions = (contributions: readonly AnyPluginContribution[]): FoldedContributions => {
+  const winners = new Map<string, PositionedContribution>()
+  const shadowings: Shadowing[] = []
+  contributions.forEach((contribution, index) => {
+    const key = keyOf(contribution)
+    shadowings.push(...shadowingOf(winners.get(key), contribution, index))
+    winners.set(key, { contribution, index })
+  })
+  return { contributions: [...winners.values()].map((entry) => entry.contribution), shadowings }
 }

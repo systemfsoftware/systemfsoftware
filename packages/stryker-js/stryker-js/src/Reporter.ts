@@ -1,22 +1,33 @@
-import { ReporterEventKind } from './ReporterEvent.schema.js'
-export { ReporterFailed } from './Reporter.schema.js'
-
-export { ReporterEventKind }
-export type { Metrics, MetricsResult } from './Metrics.schema.js'
 export {
+  DryRunCompletedSchema,
+  MutantTestedSchema,
+  MutationTestingPlanReadySchema,
+  MutationTestReportReadySchema,
+  ReporterEventKindSchema,
+  ReporterEventSchema,
+  ReporterFailedSchema,
+} from './Reporter.schema.js'
+
+export type {
   DryRunCompleted,
   MutantTested,
   MutationTestingPlanReady,
   MutationTestReportReady,
-  ReporterEventSchema,
-  ReporterEventUnion,
-} from './ReporterEvent.schema.js'
-export type {
   ReporterEvent,
-  ReporterFactory,
-  ReporterInit,
+  ReporterEventKind,
+  ReporterFailed,
   ReporterPlanDescriptor,
   RunTiming,
-} from './ReporterEvent.schema.js'
+} from './Reporter.schema.js'
+
+import type { PluginInit, StrykerOptions } from './Options.js'
+import type { ReporterEvent } from './Reporter.schema.js'
 
 export const REPORTER_SCHEMA_VERSION = '1.0'
+
+export type ReporterInit = PluginInit
+
+export type ReporterFactory = (
+  options: StrykerOptions,
+  init: ReporterInit,
+) => (events: AsyncIterable<ReporterEvent>) => Promise<void>

@@ -1,40 +1,19 @@
 import * as S from 'effect/Schema'
 
-export const PositionSchema = S.Struct({
-  line: S.Finite,
-  column: S.Finite,
+import { LocationCodec, MutantStatusCodec, PositionCodec } from './Mutant.schema.js'
+import type { StandardSchemaV1 } from './Plugin.schema.js'
+
+const OpenEndLocationCodec = S.Struct({
+  start: PositionCodec,
+  end: S.optional(PositionCodec),
 })
-export type Position = typeof PositionSchema.Type
+export type OpenEndLocation = S.Schema.Type<typeof OpenEndLocationCodec>
 
-export const LocationSchema = S.Struct({
-  start: PositionSchema,
-  end: PositionSchema,
-})
-export type Location = typeof LocationSchema.Type
-
-export const OpenEndLocationSchema = S.Struct({
-  start: PositionSchema,
-  end: S.optional(PositionSchema),
-})
-export type OpenEndLocation = typeof OpenEndLocationSchema.Type
-
-export const MutantStatusSchema = S.Literals([
-  'Killed',
-  'Survived',
-  'NoCoverage',
-  'CompileError',
-  'RuntimeError',
-  'Timeout',
-  'Ignored',
-  'Pending',
-])
-export type MutantStatus = typeof MutantStatusSchema.Type
-
-export const MutantResultSchema = S.Struct({
+const MutantResultCodec = S.Struct({
   id: S.String,
   mutatorName: S.String,
-  status: MutantStatusSchema,
-  location: LocationSchema,
+  status: MutantStatusCodec,
+  location: LocationCodec,
   replacement: S.optional(S.String),
   description: S.optional(S.String),
   statusReason: S.optional(S.String),
@@ -44,64 +23,108 @@ export const MutantResultSchema = S.Struct({
   testsCompleted: S.optional(S.Finite),
   duration: S.optional(S.Finite),
 })
-export type MutantResult = typeof MutantResultSchema.Type
+export type MutantResult = S.Schema.Type<typeof MutantResultCodec>
 
-export const FileResultSchema = S.Struct({
+export const MutantResultSchema: StandardSchemaV1<unknown, MutantResult> = S.toStandardSchemaV1(MutantResultCodec)
+
+const FileResultCodec = S.Struct({
   language: S.String,
   source: S.String,
-  mutants: S.Array(MutantResultSchema),
+  mutants: S.Array(MutantResultCodec),
 })
-export type FileResult = typeof FileResultSchema.Type
+export type FileResult = S.Schema.Type<typeof FileResultCodec>
 
-export const FileResultDictionarySchema = S.Record(S.String, FileResultSchema)
-export type FileResultDictionary = typeof FileResultDictionarySchema.Type
+export const FileResultSchema: StandardSchemaV1<unknown, FileResult> = S.toStandardSchemaV1(FileResultCodec)
 
-export const TestDefinitionSchema = S.Struct({
+const FileResultDictionaryCodec = S.Record(S.String, FileResultCodec)
+export type FileResultDictionary = S.Schema.Type<typeof FileResultDictionaryCodec>
+
+const TestDefinitionCodec = S.Struct({
   id: S.String,
   name: S.String,
-  location: S.optional(OpenEndLocationSchema),
+  location: S.optional(OpenEndLocationCodec),
 })
-export type TestDefinition = typeof TestDefinitionSchema.Type
+export type TestDefinition = S.Schema.Type<typeof TestDefinitionCodec>
 
-export const TestFileSchema = S.Struct({
+const TestFileCodec = S.Struct({
   source: S.optional(S.String),
-  tests: S.Array(TestDefinitionSchema),
+  tests: S.Array(TestDefinitionCodec),
 })
-export type TestFile = typeof TestFileSchema.Type
+export type TestFile = S.Schema.Type<typeof TestFileCodec>
 
-export const TestFileDefinitionDictionarySchema = S.Record(S.String, TestFileSchema)
-export type TestFileDefinitionDictionary = typeof TestFileDefinitionDictionarySchema.Type
+const TestFileDefinitionDictionaryCodec = S.Record(S.String, TestFileCodec)
+export type TestFileDefinitionDictionary = S.Schema.Type<typeof TestFileDefinitionDictionaryCodec>
 
-export const ThresholdsSchema = S.Struct({
+const ThresholdsCodec = S.Struct({
   high: S.Finite,
   low: S.Finite,
 })
-export type Thresholds = typeof ThresholdsSchema.Type
+export type Thresholds = S.Schema.Type<typeof ThresholdsCodec>
 
-export const BrandingInformationSchema = S.Struct({
+const BrandingInformationCodec = S.Struct({
   homepageUrl: S.String,
   imageUrl: S.optional(S.String),
 })
-export type BrandingInformation = typeof BrandingInformationSchema.Type
+export type BrandingInformation = S.Schema.Type<typeof BrandingInformationCodec>
 
-export const DependenciesSchema = S.Record(S.String, S.String)
-export type Dependencies = typeof DependenciesSchema.Type
+const DependenciesCodec = S.Record(S.String, S.String)
+export type Dependencies = S.Schema.Type<typeof DependenciesCodec>
 
-export const FrameworkInformationSchema = S.Struct({
+const FrameworkInformationCodec = S.Struct({
   name: S.String,
   version: S.optional(S.String),
-  branding: S.optional(BrandingInformationSchema),
-  dependencies: S.optional(DependenciesSchema),
+  branding: S.optional(BrandingInformationCodec),
+  dependencies: S.optional(DependenciesCodec),
 })
-export type FrameworkInformation = typeof FrameworkInformationSchema.Type
+export type FrameworkInformation = S.Schema.Type<typeof FrameworkInformationCodec>
 
-export const MutationTestResultSchema = S.Struct({
+export const MutationTestResultCodec = S.Struct({
   schemaVersion: S.String,
-  files: FileResultDictionarySchema,
-  thresholds: ThresholdsSchema,
+  files: FileResultDictionaryCodec,
+  thresholds: ThresholdsCodec,
   config: S.optional(S.Record(S.String, S.Unknown)),
-  testFiles: S.optional(TestFileDefinitionDictionarySchema),
+  testFiles: S.optional(TestFileDefinitionDictionaryCodec),
   projectRoot: S.optional(S.String),
-  framework: S.optional(FrameworkInformationSchema),
+  framework: S.optional(FrameworkInformationCodec),
 })
-export type MutationTestResult = typeof MutationTestResultSchema.Type
+export type MutationTestResult = S.Schema.Type<typeof MutationTestResultCodec>
+
+export const MutationTestResultSchema: StandardSchemaV1<unknown, MutationTestResult> = S.toStandardSchemaV1(
+  MutationTestResultCodec,
+)
+
+const MetricsCodec = S.Struct({
+  pending: S.Finite,
+  killed: S.Finite,
+  timeout: S.Finite,
+  survived: S.Finite,
+  noCoverage: S.Finite,
+  runtimeErrors: S.Finite,
+  compileErrors: S.Finite,
+  ignored: S.Finite,
+  totalDetected: S.Finite,
+  totalUndetected: S.Finite,
+  totalInvalid: S.Finite,
+  totalValid: S.Finite,
+  totalMutants: S.Finite,
+  totalCovered: S.Finite,
+  mutationScore: S.Finite,
+  mutationScoreBasedOnCoveredCode: S.Finite,
+})
+export type Metrics = S.Schema.Type<typeof MetricsCodec>
+
+export const MetricsSchema: StandardSchemaV1<unknown, Metrics> = S.toStandardSchemaV1(MetricsCodec)
+
+export interface MetricsResult {
+  readonly name: string
+  readonly metrics: Metrics
+  readonly childResults: readonly MetricsResult[]
+}
+
+export const MetricsResultCodec: S.Codec<MetricsResult> = S.Struct({
+  name: S.String,
+  metrics: MetricsCodec,
+  childResults: S.Array(S.suspend((): S.Codec<MetricsResult> => MetricsResultCodec)),
+}).annotate({ identifier: 'MetricsResult' })
+
+export const MetricsResultSchema: StandardSchemaV1<unknown, MetricsResult> = S.toStandardSchemaV1(MetricsResultCodec)

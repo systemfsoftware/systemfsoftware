@@ -1,17 +1,13 @@
-import * as Context from 'effect/Context'
-import type * as Effect from 'effect/Effect'
-import type * as schema from './Report.schema.js'
+export { EvaluatorFailedSchema, EvaluatorVerdictSchema } from './Evaluator.schema.js'
+export type { EvaluatorFailed, EvaluatorVerdict } from './Evaluator.schema.js'
 
-import { EvaluatorFailed } from './Evaluator.schema.js'
-import type { ExitClass } from './ExitClass.schema.js'
+import type { EvaluatorVerdict } from './Evaluator.schema.js'
+import type { PluginInit, StrykerOptions } from './Options.js'
+import type { MutationTestResult } from './Report.schema.js'
 
-export { EvaluatorFailed } from './Evaluator.schema.js'
-export type { ExitClass } from './ExitClass.schema.js'
+export type Evaluator = (
+  report: MutationTestResult,
+  options: StrykerOptions,
+) => EvaluatorVerdict | Promise<EvaluatorVerdict>
 
-export interface EvaluatorService {
-  readonly evaluate: (report: schema.MutationTestResult) => Effect.Effect<ExitClass | null, EvaluatorFailed>
-}
-
-export class Evaluator
-  extends Context.Service<Evaluator, EvaluatorService>()('~@systemfsoftware/stryker-js/Evaluator')
-{}
+export type EvaluatorFactory = (options: StrykerOptions, init: PluginInit) => Evaluator
