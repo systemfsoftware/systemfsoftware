@@ -277,6 +277,10 @@
   dir: packages/effect-cell-types
   intents:
     - effect-rc112
+"@systemfsoftware/effect-cell-types@7.0.0":
+  dir: packages/effect-cell-types
+  intents:
+    - retire-wire-boundary-marker
 "@systemfsoftware/effect-daemon-spec@1.0.0":
   dir: packages/effect-daemon-spec
   intents:
@@ -510,6 +514,14 @@
   dir: packages/effect-schema-law
   intents:
     - effect-rc112
+"@systemfsoftware/effect-schema-law@2.1.0":
+  dir: packages/effect-schema-law
+  intents:
+    - recursion-generation-laws
+"@systemfsoftware/effect-schema-recursion-budget@0.0.0":
+  dir: packages/effect-schema-recursion-budget
+  intents:
+    - recursion-budget-transform
 "@systemfsoftware/effect-schema-vite@1.5.2":
   dir: packages/effect-schema-vite
   intents:
@@ -548,6 +560,10 @@
   dir: packages/effect-schema-vite
   intents:
     - effect-rc112
+"@systemfsoftware/effect-schema-vite@2.1.0":
+  dir: packages/effect-schema-vite
+  intents:
+    - generated-suites-cover-recursion
 "@systemfsoftware/harness-toml@0.0.0":
   dir: omp/packages/harness-toml
   intents:
@@ -799,6 +815,11 @@
     - debut-releases-gain-oidc
     - effect-rc112
     - in-source-tests-require-schema-derived-properties
+"@systemfsoftware/oxlint-plugin-effect-dmmf@5.4.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-dmmf
+  intents:
+    - effect-dmmf-schema-recursive-union-budget
+    - fixture-schema-origin
 "@systemfsoftware/oxlint-plugin-effect-entrypoint@1.0.3":
   dir: packages/oxlint-plugins/effect-entrypoint
   intents:
@@ -873,6 +894,10 @@
     - debut-releases-gain-oidc
     - effect-rc112
     - modern-ends-know
+"@systemfsoftware/oxlint-plugin-effect-schema@5.3.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
+  intents:
+    - schema-recursion-budget-lint-rule
 "@systemfsoftware/oxlint-plugin-effect-workflow@2.0.0":
   dir: packages/oxlint-plugins/effect-workflow
   intents:
@@ -951,6 +976,10 @@
     - effect-rc112
     - in-source-tests-require-schema-derived-properties
     - modern-ends-know
+"@systemfsoftware/oxlint-plugin-property-testing@1.5.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-property-testing
+  intents:
+    - fixture-schema-origin
 "@systemfsoftware/oxlint-plugin-recommended@1.1.2":
   dir: packages/oxlint-plugins/recommended
   intents:
@@ -973,6 +1002,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-recommended
   intents:
     - standalone-expect-stays-off
+"@systemfsoftware/oxlint-plugin-recommended@1.3.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-recommended
+  intents:
+    - recommended-carries-recursion-budget
 "@systemfsoftware/oxlint-plugin-test-hygiene@1.1.3":
   dir: packages/oxlint-plugins/test-hygiene
   intents:
