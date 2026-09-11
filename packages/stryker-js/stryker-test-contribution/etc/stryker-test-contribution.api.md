@@ -4,19 +4,24 @@
 
 ```ts
 
-import * as Effect from 'effect/Effect';
-import { Evaluator } from '@systemfsoftware/stryker-js/Evaluator';
-import { EvaluatorFailed } from '@systemfsoftware/stryker-js/Evaluator';
-import { ExitClass } from '@systemfsoftware/stryker-js/Evaluator';
-import * as Layer from 'effect/Layer';
-import { PluginLayerContribution } from '@systemfsoftware/stryker-js/Plugin';
-import { RunConfiguration } from '@systemfsoftware/stryker-js/Plugin';
-import { schema } from '@systemfsoftware/stryker-js/Mutant';
+import { EvaluatorVerdict } from '@systemfsoftware/stryker-js/Evaluator';
+import { MutationTestResult } from '@systemfsoftware/stryker-js/Report';
+import { PluginContribution } from '@systemfsoftware/stryker-js/Plugin';
+import * as schema from '@systemfsoftware/stryker-js/Report';
 
 // Warning: (ae-forgotten-export) The symbol "ReportView" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
 export const contributionByTestFile: (report: ReportView) => ReadonlyMap<string, TestFileContribution>;
+
+// @public (undocumented)
+export type ContributionGateEvaluator = (report: MutationTestResult) => EvaluatorVerdict;
+
+// @public (undocumented)
+export interface ContributionGateOptions {
+    // (undocumented)
+    readonly disableBail?: boolean | undefined;
+}
 
 // @public (undocumented)
 export const defaultRequireTestContributionSuffixes: readonly ['.workflow.property.test.ts', '.policy.property.test.ts', '.kernel.property.test.ts'];
@@ -25,17 +30,10 @@ export const defaultRequireTestContributionSuffixes: readonly ['.workflow.proper
 export const judgeTestContribution: (report: ReportView, everyKillerRecorded: boolean, suffixes?: readonly string[]) => TestContributionVerdict;
 
 // @public (undocumented)
-export const makeTestContributionEvaluatorService: (options: {
-    readonly disableBail: boolean;
-}) => {
-    readonly evaluate: (report: schema.MutationTestResult) => Effect.Effect<ExitClass | null, EvaluatorFailed>;
-};
+export const makeContributionGateEvaluator: (options: ContributionGateOptions) => ContributionGateEvaluator;
 
 // @public (undocumented)
-export const strykerPlugins: PluginLayerContribution<"Evaluator">[];
-
-// @public (undocumented)
-export const testContributionEvaluatorLayer: Layer.Layer<Evaluator, never, RunConfiguration>;
+export const strykerPlugins: PluginContribution<"Evaluator">[];
 
 // @public (undocumented)
 export interface TestContributionInput {
