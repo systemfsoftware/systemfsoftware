@@ -54,6 +54,8 @@ import {
   runOutcomeCode,
   unrecognizedArgumentOf,
 } from './Envelope.js'
+import { MergeReportsFailed } from './merge-reports.schema.js'
+import { runMergeReports } from './MergeReports.js'
 import { emitMachineModeOutput, isColorEnabled } from './Output.js'
 import type { OutputModeProbe, RunEventStream, RunEventStreamPort } from './Output.js'
 import { emitNullScoreVerdict } from './Output.js'
@@ -390,6 +392,22 @@ const runConfig = {
   ...runArgs,
 }
 
+const mergeReportsOptions = {
+  parts: Flag.string('parts').pipe(
+    Flag.withDescription('The directory holding the downloaded mutation report parts (any download layout).'),
+  ),
+  out: Flag.string('out').pipe(
+    Flag.withDescription('The directory to write the merged report, its html view, and the summary into.'),
+  ),
+  packages: Flag.string('packages')
+    .pipe(
+      Flag.withDescription(
+        'A JSON array of the package names the run expected, falling back to the PACKAGES environment variable.',
+      ),
+      optional,
+    ),
+} satisfies Record<string, Flag.Flag<unknown>>
+
 function unwrap<A>(value: Option.Option<A> | A | undefined): A | undefined {
   if (Option.isOption(value)) {
     return Option.match(value, { onNone: () => undefined, onSome: (v) => v })
@@ -476,6 +494,21 @@ function makeStrykerCommand(requestRef: Ref.Ref<Option.Option<CliRequest>>) {
     return options
   }
 
+  const mergeReportsCommand = Command.make(
+    'merge-reports',
+    mergeReportsOptions,
+    (config): Effect.Effect<void, CliError.CliError, never> =>
+      Ref.set(
+        requestRef,
+        Option.some({
+          _tag: 'merge-reports',
+          parts: config.parts,
+          out: config.out,
+          packages: Option.getOrUndefined(config.packages) ?? process.env['PACKAGES'],
+        }),
+      ),
+  ).pipe(Command.withDescription('Merge per-package mutation reports into one report'))
+
   const root: Command.Command<
     'stryker',
     {},
@@ -488,7 +521,7 @@ function makeStrykerCommand(requestRef: Ref.Ref<Option.Option<CliRequest>>) {
         return yield* Effect.failSync(() => CliError.ShowHelp.make({ commandPath: ['stryker'], errors: [] }))
       }))
 
-  const strykerCommand = root.pipe(Command.withSubcommands([runCommand]))
+  const strykerCommand = root.pipe(Command.withSubcommands([runCommand, mergeReportsCommand]))
   return strykerCommand
 }
 const terminalLayer = Layer.succeed(
@@ -610,10 +643,20 @@ export const runStrykerCli = (
       request: CliRequest,
     ): Effect.Effect<
       unknown,
-      SchemaError | SurvivorsRejection | ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError,
+      | SchemaError
+      | SurvivorsRejection
+      | ConfigFileNotFoundError
+      | ConfigFileUnreadableError
+      | ConfigFileInvalidError
+      | MergeReportsFailed,
       never
     > =>
       Match.value(request).pipe(
+        Match.tag(
+          'merge-reports',
+          (mergeRequest) =>
+            runMergeReports(mergeRequest).pipe(Effect.provide(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer))),
+        ),
         Match.tag('run', (runRequest) =>
           (() => {
             if (runRequest.survivors) {
@@ -671,6 +714,7 @@ export const runStrykerCli = (
             onNone: () => DEFAULT_PROGRESS_STREAM_FILE,
             onSome: (cliRequest) =>
               Match.value(cliRequest).pipe(
+                Match.tag('merge-reports', () => DEFAULT_PROGRESS_STREAM_FILE),
                 Match.tag('run', (runRequest) => {
                   const fromCli = runRequest.options['progressStreamFile']
                   if (typeof fromCli === 'string' && fromCli.length > 0) {

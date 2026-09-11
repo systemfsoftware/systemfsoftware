@@ -27,4 +27,13 @@ const RunRequestBase = S.TaggedStruct('run', { survivors: S.Boolean })
 export type RunRequest = S.Schema.Type<typeof RunRequestBase> & {
   readonly options: PartialStrykerOptions
 }
-export type CliRequest = RunRequest
+
+const MergeReportsRequestBase = S.TaggedStruct('merge-reports', {
+  parts: S.String,
+  out: S.String,
+  packages: S.optional(S.String),
+})
+
+export type MergeReportsRequest = S.Schema.Type<typeof MergeReportsRequestBase>
+
+export type CliRequest = RunRequest | MergeReportsRequest
