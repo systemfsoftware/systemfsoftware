@@ -4,10 +4,10 @@
 
 ```ts
 
-import { PluginLayerContribution } from '@systemfsoftware/stryker-js/Plugin';
+import { PluginContribution } from '@systemfsoftware/stryker-js/Plugin';
 
 // @public (undocumented)
-export const strykerPlugins: PluginLayerContribution<"Ignore">[];
+export const strykerPlugins: PluginContribution<"Ignorer">[];
 
 // (No @packageDocumentation comment for this package)
 
