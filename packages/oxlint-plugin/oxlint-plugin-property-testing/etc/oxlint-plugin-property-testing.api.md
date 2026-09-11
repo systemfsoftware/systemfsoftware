@@ -20,6 +20,7 @@ const _default: {
         'no-nested-quantification': Rule;
         'prop-generated-law-duplicate': Rule;
         'prop-arbitrary-schema-origin': Rule;
+        'prop-fixture-schema-origin': Rule;
     };
     configs: {
         recommended: {
@@ -32,6 +33,7 @@ const _default: {
                 readonly '@systemfsoftware/oxlint-plugin-property-testing/no-unbounded-fanout': 'error';
                 readonly '@systemfsoftware/oxlint-plugin-property-testing/no-nested-quantification': 'error';
                 readonly '@systemfsoftware/oxlint-plugin-property-testing/prop-arbitrary-schema-origin': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-property-testing/prop-fixture-schema-origin': 'error';
                 readonly '@systemfsoftware/oxlint-plugin-property-testing/prop-generated-law-duplicate': 'error';
             };
         };

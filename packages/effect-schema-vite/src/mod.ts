@@ -1,4 +1,5 @@
 import { findExportedSchemas, type FoundSchema, quote } from '@systemfsoftware/effect-schema-discovery'
+import { recursionBudgetTransform } from '@systemfsoftware/effect-schema-recursion-budget'
 import { dirname, relative, resolve } from 'node:path'
 import type { Plugin, ResolvedConfig } from 'vite'
 
@@ -47,17 +48,21 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string 
     (nameCount.get(s.name) ?? 0) > 1 ? `${s.name} (${specifierOf(s.filePath)})` : s.name
 
   return [
-    `import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
+    `import { recursionLaws, ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
     schemas.map((s, i) => `import { ${s.name} as schema_${i} } from ${quote(specifierOf(s.filePath))}`).join('\n'),
     '',
-    schemas.map((s, i) => `ruleOfSchemas(${quote(labelOf(s))}, schema_${i})`).join('\n'),
+    schemas
+      .map((s, i) =>
+        `ruleOfSchemas(${quote(labelOf(s))}, schema_${i})\nrecursionLaws(${quote(labelOf(s))}, schema_${i})`
+      )
+      .join('\n'),
   ].join('\n')
 }
 
 /**
  * Vite plugin that walks the consumer's `src/` directory, finds every
  * exported Effect `Schema`, and auto-injects `ruleOfSchemas` round-trip
- * property tests for each one.
+ * property tests and `recursionLaws` generation laws for each one.
  *
  * The laws are injected by rewriting the consumer's own
  * `src/schema-laws.test.ts` — the one test filename the placement taxonomy
@@ -78,19 +83,24 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string 
  * ```
  */
 export const inlineSchemaTests = (options?: InlineSchemaTestsOptions): Plugin => {
+  const budgets = recursionBudgetTransform()
   let config: ResolvedConfig
 
   return {
     name: '@systemfsoftware/schema-laws',
     enforce: 'pre',
 
+    resolveId: budgets.resolveId,
+
     configResolved(c) {
       config = c
     },
 
-    transform(_code, id) {
+    transform(code, id) {
       const lawFile = id.split('?')[0]
-      if (lawFile === undefined || !lawFile.endsWith(`/${LAW_FILE_BASENAME}`)) return
+      if (lawFile === undefined || !lawFile.endsWith(`/${LAW_FILE_BASENAME}`)) {
+        return budgets.transform(code, id)
+      }
       return generateSchemaLaws(lawFile, resolve(config.root, options?.dir ?? 'src'))
     },
   }

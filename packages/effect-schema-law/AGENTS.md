@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/effect-schema-law`
 
-Single entry `.` exposing `ruleOfSchemas`: round-trip identity (`decode(encode(x)) === x`) and encode stability (`encode(decode(encoded))` matches the original encoded form). A recursive union whose generation must terminate belongs to `@systemfsoftware/effect-schema-bounded-union`. Usage: `README.md`. Root `AGENTS.md` governs.
+Single entry `.` exposing `ruleOfSchemas` (round-trip identity `decode(encode(x)) === x` and encode stability `encode(decode(encoded))` matches the original encoded form) and `recursionLaws`: termination, deep reachability, and variant coverage for a schema whose root is a recursive union — either the union itself or the `Schema.suspend` that wraps it — declaring `recursionBudget` in its annotation. A declared budget whose derivation hook nothing materialized fails the calling suite by name instead of passing silently. Usage: `README.md`. Root `AGENTS.md` governs.
 
 ## Rules
 

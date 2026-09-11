@@ -20,6 +20,7 @@ const _default: {
         'schema-declaration-location': Rule;
         'schema-filter-constructive-generation': Rule;
         'schema-file-exports-schemas-only': Rule;
+        'schema-recursive-union-budget': Rule;
     };
     configs: {
         recommended: {

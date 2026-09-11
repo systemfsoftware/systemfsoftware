@@ -1,6 +1,6 @@
 # @systemfsoftware/effect-schema-vite
 
-Vite plugin that automatically discovers exported Effect `Schema` declarations and injects round-trip codec law property tests using `@systemfsoftware/effect-schema-law`.
+Vite plugin that automatically discovers exported Effect `Schema` declarations and injects codec law and generation law property tests using `@systemfsoftware/effect-schema-law`.
 
 ## Install
 
@@ -21,7 +21,9 @@ export default defineConfig({
 })
 ```
 
-The plugin scans exported schemas in `src/` (configurable via `dir`) and writes a generated `src/schema-laws.test.ts` suite asserting round-trip identity and encode stability.
+The plugin scans exported schemas in `src/` (configurable via `dir`) and writes a generated `src/schema-laws.test.ts` suite asserting round-trip identity and encode stability, plus the generation laws of every recursive schema: its generated nesting stays inside the ceiling the schema declares, deep values stay reachable, and every member of the cycle stays inhabited.
+
+It also materializes those ceilings: a recursive schema that declares `recursionBudget` in stock Effect vocabulary gets the derivation hook that honors it, so registering this one plugin is enough for the declared laws to hold.
 
 ## API
 

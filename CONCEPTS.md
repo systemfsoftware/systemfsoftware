@@ -293,6 +293,14 @@ A hand-built `fc.*` generator passed to `it.prop` that is disconnected from the 
 
 _Aliases:_ `contrived arbitrary`
 
+### Recursion budget
+
+The declared generation contract for a recursive schema union: a ceiling (`maxDepth`), a shape (`depthSize` leaf-decay toward the terminal branch), and one depth identifier per recursive cycle — stated by the schema through a `toArbitrary` annotation instead of inherited from effect's hidden per-suspend constant. Termination, deep reachability, and variant coverage are the laws that pin it. Decode and encode are untouched, so the budget is generation-only. Distinct from a plain depth cap: ceiling and shape are separate knobs, and raising the ceiling without the decay diverges expected tree size.
+
+### Recursion laws
+
+The generated law set the schema-laws plugin emits beside `ruleOfSchemas` for every schema whose AST carries a recursion cycle: termination (nesting within the declared ceiling), deep reachability (a sample's share of values at depth ≥ 4 clears a floor — the law that fails under effect's stock cap), and variant coverage (every cycle tag sampled). Each law carries a declared draw budget and a runner-level wall-clock cap that fails as an over-budget failure. A red reachability law means the schema never declared a budget.
+
 ## Agent context injection
 
 ### Context file

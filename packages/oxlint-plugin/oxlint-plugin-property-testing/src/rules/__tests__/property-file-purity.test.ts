@@ -17,7 +17,7 @@ const ruleTester = new RuleTester({
 
 const PROPERTY_FILE = 'src/sort.property.test.ts'
 const SCENARIO_FILE = 'src/sort.test.ts'
-const SNAPSHOT_FILE = 'tests/bounded-union.snapshot.test.ts'
+const SNAPSHOT_FILE = 'tests/codec-snapshot.test.ts'
 
 ruleTester.run('property-file-purity', propertyFilePurity, {
   valid: [
@@ -70,7 +70,7 @@ ruleTester.run('property-file-purity', propertyFilePurity, {
       name: 'Should_Pass_When_FastCheckImport_InNonTestFile',
       code:
         `import { type FastCheck, Schema as S } from 'effect'\nconst arb = () => (fc: typeof FastCheck) => fc.string()`,
-      filename: 'src/bounded-union.ts',
+      filename: 'src/codec.ts',
     },
     {
       name: 'Should_Pass_When_ItProp_InNonTestFile',

@@ -6,6 +6,7 @@ import { schemaCheckedElementNamed } from './rules/schema-checked-element-named.
 import { schemaDeclarationLocation } from './rules/schema-declaration-location.js'
 import { schemaFileExportsSchemasOnly } from './rules/schema-file-exports-schemas-only.js'
 import { schemaFilterConstructiveGeneration } from './rules/schema-filter-constructive-generation.js'
+import { schemaRecursiveUnionBudget } from './rules/schema-recursive-union-budget.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-effect-schema'
 
@@ -20,6 +21,7 @@ const recommendedRules = {
   [rule('schema-declaration-location')]: 'error',
   [rule('schema-filter-constructive-generation')]: 'error',
   [rule('schema-file-exports-schemas-only')]: 'error',
+  [rule('schema-recursive-union-budget')]: 'error',
 } as const
 
 export default {
@@ -35,6 +37,7 @@ export default {
     'schema-declaration-location': schemaDeclarationLocation,
     'schema-filter-constructive-generation': schemaFilterConstructiveGeneration,
     'schema-file-exports-schemas-only': schemaFileExportsSchemasOnly,
+    'schema-recursive-union-budget': schemaRecursiveUnionBudget,
   },
   configs: {
     recommended: {

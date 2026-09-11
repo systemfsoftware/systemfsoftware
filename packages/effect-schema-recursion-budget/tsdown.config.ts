@@ -3,8 +3,10 @@ import { defineConfig } from 'tsdown'
 type ExportEntry = string | Record<string, string | undefined>
 
 const typesMap: Record<string, string> = {
-  '.': './dist/effect-schema-bounded-union.d.ts',
+  '.': './dist/effect-schema-recursion-budget.d.ts',
 }
+
+const UNEXPORTED_ENTRIES: ReadonlyArray<string> = ['./recursion-budget-runtime']
 
 const injectTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
   for (const [subpath, types] of Object.entries(typesMap)) {
@@ -17,17 +19,15 @@ const injectTypes = (exports: Record<string, ExportEntry>): Record<string, Expor
       exports[subpath] = { ...rest, types, ...withDefault }
     }
   }
+  for (const unexported of UNEXPORTED_ENTRIES) delete exports[unexported]
   return exports
 }
 
 export default defineConfig({
-  entry: { index: './src/mod.ts' },
+  entry: { index: './src/mod.ts', 'recursion-budget-runtime': './src/recursion-budget-runtime.ts' },
   format: 'esm',
   dts: true,
-  exports: {
-    devExports: '@systemfsoftware/source',
-    customExports: injectTypes,
-  },
+  exports: { devExports: '@systemfsoftware/source', customExports: injectTypes },
   deps: { onlyBundle: false },
   tsconfig: './tsconfig.build.json',
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),

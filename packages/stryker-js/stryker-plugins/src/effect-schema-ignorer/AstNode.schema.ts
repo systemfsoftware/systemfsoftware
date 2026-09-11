@@ -47,49 +47,33 @@ export type AstNode =
   | CallExpression
   | UnknownNode
 
-/**
- * The recursive member schemas reference the shared `AstNode` UNION directly
- * (v4: a reference straight to the schema, not a fresh `S.suspend` wrap). The
- * v4 arbitrary derivation declares a recursion "finite" when every cycle passes
- * through a suspend node that appears in its recursion stack; a field suspend
- * layered in front of the top-level suspend double-wraps the same node and
- * loses that boundary, which made the schema-law encoded-arbitrary fail with
- * "recursive schema without a finite generation path". Keeping the union node
- * shared and letting `MemberExpression`/`CallExpression` suspend at the top is
- * also the v4 Schema document's own recursive-schema shape (fields reference
- * the schema, the cycle breaks at the one suspension).
- */
-let AstNodeSchema: S.Schema<AstNode>
+export const AstNode: S.Schema<AstNode> = S.suspend(
+  (): S.Schema<AstNode> =>
+    S.Union([
+      Identifier,
+      StringLiteral,
+      ObjectExpression,
+      ArrowFunctionExpression,
+      MemberExpression,
+      CallExpression,
+      UnknownNode,
+    ]),
+).annotate({
+  identifier: 'systemfsoftware.stryker-plugins.effect-schema-ignorer.AstNode',
+  recursionBudget: { maxDepth: 6, depthSize: 'small' },
+})
 
-export const MemberExpression: S.Schema<MemberExpression> = S.suspend(
-  (): S.Schema<MemberExpression> =>
-    S.Struct({
-      type: S.Literal('MemberExpression'),
-      object: AstNodeSchema,
-      property: AstNodeSchema,
-    }),
-)
+export const MemberExpression: S.Schema<MemberExpression> = S.Struct({
+  type: S.Literal('MemberExpression'),
+  object: AstNode,
+  property: AstNode,
+})
 
-export const CallExpression: S.Schema<CallExpression> = S.suspend(
-  (): S.Schema<CallExpression> =>
-    S.Struct({
-      type: S.Literal('CallExpression'),
-      callee: AstNodeSchema,
-      arguments: S.Array(AstNodeSchema),
-    }),
-)
-
-AstNodeSchema = S.Union([
-  Identifier,
-  StringLiteral,
-  ObjectExpression,
-  ArrowFunctionExpression,
-  MemberExpression,
-  CallExpression,
-  UnknownNode,
-])
-
-export const AstNode: S.Schema<AstNode> = AstNodeSchema
+export const CallExpression: S.Schema<CallExpression> = S.Struct({
+  type: S.Literal('CallExpression'),
+  callee: AstNode,
+  arguments: S.Array(AstNode),
+})
 
 export const DocumentationKey = S.Literals(['identifier', 'description', 'title', 'documentation', 'examples'])
 

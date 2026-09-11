@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-vite#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Vite plugin that auto-discovers Effect Schema exports and injects round-trip property tests via @systemfsoftware/effect-schema-law.",
+  "description": "Vite plugin that auto-discovers Effect Schema exports and injects codec law and generation law property tests via @systemfsoftware/effect-schema-law.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -47,6 +47,7 @@
   "dependencies": {
     "@oxc-project/types": "catalog:",
     "@systemfsoftware/effect-schema-discovery": "workspace:^",
+    "@systemfsoftware/effect-schema-recursion-budget": "workspace:^",
     "oxc-parser": "catalog:"
   },
   "devDependencies": {

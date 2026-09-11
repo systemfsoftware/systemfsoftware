@@ -20,6 +20,7 @@ const _default: {
         'schema-declaration-location': Rule;
         'schema-filter-constructive-generation': Rule;
         'schema-file-exports-schemas-only': Rule;
+        'schema-recursive-union-budget': Rule;
         'damp-workflow-stem': Rule;
         'make-file-location': Rule;
         'workflow-match-exhaustive': Rule;
@@ -35,6 +36,7 @@ const _default: {
         'no-nested-quantification': Rule;
         'prop-generated-law-duplicate': Rule;
         'prop-arbitrary-schema-origin': Rule;
+        'prop-fixture-schema-origin': Rule;
         'damp-test-naming': Rule;
         'no-behaviourless-assertion': Rule;
         'no-unrun-effect-test': Rule;

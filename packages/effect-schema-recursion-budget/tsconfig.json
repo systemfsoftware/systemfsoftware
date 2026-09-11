@@ -2,9 +2,19 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": ["@systemfsoftware/tsconfig/tsc/dom/library-monorepo", "@systemfsoftware/tsconfig/effect"],
   "compilerOptions": {
-    "customConditions": ["@systemfsoftware/source"]
+    "customConditions": [
+      "@systemfsoftware/source"
+    ],
+    "types": [
+      "node",
+      "vitest/import-meta"
+    ]
   },
-  "include": ["src"],
+  "include": [
+    "src",
+    "tests",
+    "vitest.config.ts"
+  ],
   "references": [
     {
       "path": "./tsconfig.node.json"

@@ -1,58 +1,61 @@
 {
-  "name": "@systemfsoftware/effect-schema-bounded-union",
+  "name": "@systemfsoftware/effect-schema-recursion-budget",
   "license": "Apache-2.0",
-  "version": "0.1.3",
+  "version": "0.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/effect-schema-bounded-union"
+    "directory": "packages/effect-schema-recursion-budget"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-bounded-union#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-recursion-budget#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "A recursive Effect Schema union whose generated values terminate — same decode, encode and equivalence as Schema.Union, with a depth cap on arbitrary generation.",
+  "description": "The recursionBudget annotation pipeline for Effect Schema unions: the Vite transform that materializes a declared generation budget into the arbitrary-derivation hook, and the injected runtime that builds it.",
   "keywords": [
     "effect",
     "effect-ts",
     "schema",
-    "codec",
-    "union",
-    "recursive",
-    "arbitrary",
+    "recursion",
     "fast-check",
     "property-testing",
+    "arbitrary",
     "typescript"
   ],
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "@systemfsoftware/source": "./src/mod.ts",
-      "types": "./dist/effect-schema-bounded-union.d.ts",
+      "types": "./dist/effect-schema-recursion-budget.d.ts",
       "default": "./dist/index.mjs"
     },
     "./package.json": "./package.json"
   },
-  "files": [
-    "dist"
-  ],
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "api:check": "api-extractor run",
-    "api:update": "api-extractor run --local",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "attw": "attw --pack ."
+    "attw": "attw --pack .",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local"
+  },
+  "dependencies": {
+    "@oxc-project/types": "catalog:",
+    "oxc-parser": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
-    "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
     "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
@@ -66,7 +69,7 @@
   "publishConfig": {
     "exports": {
       ".": {
-        "types": "./dist/effect-schema-bounded-union.d.ts",
+        "types": "./dist/effect-schema-recursion-budget.d.ts",
         "default": "./dist/index.mjs"
       },
       "./package.json": "./package.json"
