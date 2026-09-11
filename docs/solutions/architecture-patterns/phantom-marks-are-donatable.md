@@ -25,7 +25,7 @@ tags:
 
 ## Context
 
-A wire declaration restates a foreign payload in primitives the workspace owns. Whether a type may be named inside one is a property of that type's _declaration site_, so neither a filename-keyed rule nor a specifier-keyed rule can decide it — the author who writes the violation names the file, and one workspace-local alias defeats the textual predicate.
+A schema-authoring gate restates a foreign payload in primitives the workspace declares. Whether a type may be named inside one is a property of that type's _declaration site_, so neither a filename-keyed rule nor a specifier-keyed rule can decide it — the author who writes the violation names the file, and one workspace-local alias defeats the textual predicate.
 
 The type looked like the answer. A phantom `Mark` on the schema, a `mint` constructor as the only place a mark originates, and a `wire(fields)` whose parameter admits only marked members. The design claim that followed was: marking a foreign schema deliberately is the one residual, `mint` is the single call site, so the checker that closes it is one predicate over one call.
 
@@ -33,7 +33,7 @@ That claim is false, and the way it fails generalises to any phantom marker in T
 
 ## Guidance
 
-**A phantom obtained from a legitimately marked value can be intersected onto any other type.** TypeScript is structural and has no nominal types, so the marker is not a capability — it is a property that travels. Five routes were measured against the built package; every one compiled, and none needed an `as` cast:
+**A phantom obtained from a legitimately marked value can be intersected onto any other type.** TypeScript is structural and has no nominal types, so the marker is not a capability — it is a property that travels. Five routes were measured against the built package; every one compiled, and none needed an `as` cast. The routes were measured against the `Wire` marker module of `@systemfsoftware/effect-cell-types`, which this workspace has since deleted; they are quoted in that module's vocabulary because they generalise to any phantom marker:
 
 | Route                                                                              | Names something from the module?                            |
 | ---------------------------------------------------------------------------------- | ----------------------------------------------------------- |
@@ -49,7 +49,7 @@ The last row is the one that decides the design. It names no marker, no construc
 
 **Making the mark invariant in its payload closes one route, not the class.** `Mark<in out A>` with a coherence check (`M extends Schema<infer A, any> ? (M extends Mark<A> ? M : never) : never`) was built and measured: it refuses the inferred phantom, and `Object.assign` still passes, because the intersection gives `infer A` a legitimate branch to bind. Half a fix for real added complexity — not shipped.
 
-**So state the guarantee at its true strength.** A phantom marker makes the _accidental_ case a compile error at the authoring site: reaching for the library's primitive instead of the alphabet's, or dropping a vendor schema into a field. That is worth having, and it travels to consumers through the emitted declaration without a lint setup. It is a guardrail, not a boundary, and a design that needs the stronger property must read the member type that arrived and resolve where it was declared — never how it came to be marked.
+**So state the guarantee at its true strength.** A phantom marker makes the _accidental_ case a compile error at the authoring site: reaching for the library's primitive instead of the gate's, or dropping a vendor schema into a field. That is worth having, and it travels to consumers through the emitted declaration without a lint setup. It is a guardrail, not a boundary, and a design that needs the stronger property must read the member type that arrived and resolve where it was declared — never how it came to be marked.
 
 **Corollary, and a trap with its own failure mode: intersect the marker with the permissive arm of a library union, or the diagnostic reports something unrelated.** Effect's `Struct.Field` is `Schema.All | PropertySignature.All`, and the `All` unions contain `never`-parameterised variants. Widening a field constraint to `Struct.Field & Mark` type-checks and refuses exactly the right programs, while the reported error becomes:
 
@@ -75,8 +75,10 @@ This is a property of TypeScript's structural typing, not of Effect or of schema
 
 Two verification habits earned their place here:
 
-- **Pin the forge routes as passing tests.** Each measured route is asserted to compile. They document the true strength of the guarantee and fail loudly if a later change closes one, so the claim is revised deliberately rather than drifting.
+- **Pin the forge routes as passing tests.** The five routes above were pinned as accepted in the marker module's type tests until module and pins were deleted together; the habit is what survives. When you ship a phantom marker, pin its measured forgery routes as passing tests: they document the true strength of the guarantee and fail loudly if a later change closes one, so the claim is revised deliberately rather than drifting.
 - **Assignability to a marker type is a vacuous assertion.** `expect(refined).type.toBeAssignableTo<AnyMinted>()` passes when the value is `any`, which is how a combinator that silently widened its member to `any` shipped green. Name the decoded type — `expect<Schema.Type<typeof refined>>().type.toBe<string>()` — and observe it failing against the broken form before trusting it.
+
+The capability a deleted marker takes with it is easy to miss. `docs/solutions/architecture-patterns/a-schema-type-claim-can-outrun-its-examination.md` records every form of type claim nothing in this workspace refuses, including the vendor-schema-in-a-field case this analysis's own marker used to refuse.
 
 ## Related
 
