@@ -63,14 +63,39 @@ const writeHtmlFile = (fileName: string, html: string) =>
     yield* fs.makeDirectory(path.dirname(fileName), { recursive: true })
     yield* fs.writeFileString(fileName, html)
   })
+
+const bundleLoader = (): () => Promise<string> => {
+  let cached: string | undefined
+  return async () => {
+    cached ??= await Effect.runPromise(Effect.provide(readBundleContent, nodeFsPathLayer))
+    return cached
+  }
+}
+
+const writeReportHtml = async (
+  fileName: string,
+  event: MutationTestReportReady,
+  loadBundle: () => Promise<string>,
+): Promise<void> => {
+  const html = buildHtmlDocument(
+    HtmlReportCommand.make({ report: event.report, scriptContent: await loadBundle() }),
+  ).html
+  await Effect.runPromise(Effect.provide(writeHtmlFile(fileName, html), nodeFsPathLayer))
+}
+
+const writeReportHtmlIfReady = async (
+  fileName: string,
+  event: unknown,
+  loadBundle: () => Promise<string>,
+): Promise<void> => {
+  if (!S.is(MutationTestReportReady)(event)) return
+  await writeReportHtml(fileName, event, loadBundle)
+}
+
 export const makeHtmlReporter: ReporterFactory = (options, _init) => async (events) => {
   const fileName = options.htmlReporter.fileName
-  let bundleContent: string | undefined
+  const loadBundle = bundleLoader()
   for await (const event of events) {
-    if (!S.is(MutationTestReportReady)(event)) continue
-    bundleContent ??= await Effect.runPromise(Effect.provide(readBundleContent, nodeFsPathLayer))
-    const html = buildHtmlDocument(HtmlReportCommand.make({ report: event.report, scriptContent: bundleContent }))
-      .html
-    await Effect.runPromise(Effect.provide(writeHtmlFile(fileName, html), nodeFsPathLayer))
+    await writeReportHtmlIfReady(fileName, event, loadBundle)
   }
 }

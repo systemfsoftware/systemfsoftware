@@ -1,3 +1,6 @@
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
+
 export { ExitClass } from './exit-classification.schema.js'
 import type { ExitClass } from './exit-classification.schema.js'
 
@@ -12,35 +15,46 @@ export function verdictExitClass(
   score: number | null,
   breakingThreshold: number | null,
 ): ExitClass | null {
-  if (breakingThreshold === null || score === null) {
-    return null
-  }
-  if (score < breakingThreshold) {
-    return 'VerdictFail'
-  }
-  return null
+  return Option.match(
+    Option.all([Option.fromNullishOr(score), Option.fromNullishOr(breakingThreshold)]),
+    {
+      onNone: (): ExitClass | null => null,
+      onSome: ([actual, threshold]) =>
+        Match.value(actual < threshold).pipe(
+          Match.when(true, (): ExitClass => 'VerdictFail'),
+          Match.when(false, (): ExitClass | null => null),
+          Match.exhaustive,
+        ),
+    },
+  )
 }
 
 export function resolveExitCode(
   pending: Iterable<ExitClass>,
   signal: number | null,
 ): number {
-  if (signal !== null) {
-    return 128 + signal
-  }
-  const highest = highestExitClass(pending)
-  if (highest === null) {
-    return 0
-  }
-  return EXIT_CODE[highest]
+  return Match.value(signal).pipe(
+    Match.when(null, () =>
+      Option.match(Option.fromNullishOr(highestExitClass(pending)), {
+        onNone: () => 0,
+        onSome: (highest) => EXIT_CODE[highest],
+      })),
+    Match.orElse((present) => 128 + present),
+  )
 }
 
 export function highestExitClass(pending: Iterable<ExitClass>): ExitClass | null {
-  let highest: ExitClass | null = null
-  for (const exitClass of pending) {
-    if (highest === null || EXIT_CODE[exitClass] > EXIT_CODE[highest]) {
-      highest = exitClass
-    }
-  }
-  return highest
+  return [...pending].reduce<ExitClass | null>(
+    (highest, candidate) =>
+      Option.match(Option.fromNullishOr(highest), {
+        onNone: () => candidate,
+        onSome: (current) =>
+          Match.value(EXIT_CODE[candidate] > EXIT_CODE[current]).pipe(
+            Match.when(true, (): ExitClass => candidate),
+            Match.when(false, (): ExitClass => current),
+            Match.exhaustive,
+          ),
+      }),
+    null,
+  )
 }

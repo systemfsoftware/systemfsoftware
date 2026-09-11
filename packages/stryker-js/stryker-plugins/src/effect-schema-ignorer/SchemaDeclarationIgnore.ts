@@ -1,4 +1,5 @@
 import {
+  type CallExpression,
   isArrowFunctionExpression,
   isCallExpression,
   isDocumentationObject,
@@ -7,6 +8,7 @@ import {
   isMemberExpression,
   isObjectExpression,
   isStringLiteral,
+  type MemberExpression,
 } from './AstNode.schema.js'
 
 export const SYMBOL_DESCRIPTION_IGNORED = 'Symbol.for() brand description is identity-only data, not behaviour' as const
@@ -47,17 +49,21 @@ const TAGGED_FACTORIES: readonly string[] = ['TaggedClass', 'TaggedError']
  */
 const CLASS_FACTORY = 'Class'
 
+const isIdentifierNamed = (node: unknown, name: string): boolean => isIdentifier(node) && node.name === name
+
+const isIdentifierIn = (node: unknown, names: readonly string[]): boolean =>
+  isIdentifier(node) && names.includes(node.name)
+
+const isMemberNamed = (member: MemberExpression, object: string, property: string): boolean =>
+  isIdentifierNamed(member.object, object) && isIdentifierNamed(member.property, property)
+
 const isNamedMember = (node: unknown, object: string, property: string): boolean =>
-  isMemberExpression(node) &&
-  isIdentifier(node.object) && node.object.name === object &&
-  isIdentifier(node.property) && node.property.name === property
+  isMemberExpression(node) && isMemberNamed(node, object, property)
 
 const isSymbolForCallee = (callee: unknown): boolean => isNamedMember(callee, 'Symbol', 'for')
 
 const isNamedFactoryReference = (reference: unknown, names: readonly string[]): boolean =>
-  isMemberExpression(reference) &&
-  isIdentifier(reference.property) &&
-  names.includes(reference.property.name)
+  isMemberExpression(reference) && isIdentifierIn(reference.property, names)
 
 const isTaggedFactoryReference = (reference: unknown): boolean => isNamedFactoryReference(reference, TAGGED_FACTORIES)
 
@@ -76,20 +82,24 @@ const isClassFactoryReference = (reference: unknown): boolean => isNamedFactoryR
 
 /** `S.brand('Name')` - the brand name is identity data, like a `Symbol.for` description. */
 const isBrandCallee = (callee: unknown): boolean =>
-  isMemberExpression(callee) && isIdentifier(callee.property) && callee.property.name === 'brand'
+  isMemberExpression(callee) && isIdentifierNamed(callee.property, 'brand')
 
 const isTaggedFactoryCallee = (callee: unknown): boolean =>
   isCallExpression(callee) && isTaggedFactoryReference(callee.callee)
+
+const isArgumentAt = (
+  node: unknown,
+  call: CallExpression,
+  index: number,
+  calleeMatches: (callee: unknown) => boolean,
+): boolean => calleeMatches(call.callee) && call.arguments[index] === node
 
 const isArgumentOf = (
   node: unknown,
   parent: unknown,
   index: number,
   calleeMatches: (callee: unknown) => boolean,
-): boolean =>
-  isCallExpression(parent) &&
-  calleeMatches(parent.callee) &&
-  parent.arguments[index] === node
+): boolean => isCallExpression(parent) && isArgumentAt(node, parent, index, calleeMatches)
 
 interface IgnoreRule {
   readonly matches: (node: unknown, parent: unknown, grandparent: unknown, ancestor: unknown) => boolean
@@ -99,7 +109,7 @@ interface IgnoreRule {
 const isOptionalWithCallee = (callee: unknown): boolean => isNamedMember(callee, 'S', 'optionalWith')
 
 const isAnnotationsCallee = (callee: unknown): boolean =>
-  isMemberExpression(callee) && isIdentifier(callee.property) && callee.property.name === 'annotations'
+  isMemberExpression(callee) && isIdentifierNamed(callee.property, 'annotations')
 
 const argumentRule = (
   is: (node: unknown) => boolean,
@@ -118,11 +128,12 @@ const argumentRule = (
  * change what the schema does. Emptying the whole object could, which is why
  * that rule is the stricter of the two.
  */
+const isDocumentationValue = (node: unknown, parent: unknown): boolean =>
+  isDocumentationProperty(parent) && parent.value === node
+
 const documentationValueRule: IgnoreRule = {
   matches: (node, parent, grandparent, ancestor) =>
-    isDocumentationProperty(parent) &&
-    parent.value === node &&
-    isArgumentOf(grandparent, ancestor, 0, isAnnotationsCallee),
+    isDocumentationValue(node, parent) && isArgumentOf(grandparent, ancestor, 0, isAnnotationsCallee),
   reason: ANNOTATION_TEXT_IGNORED,
 }
 

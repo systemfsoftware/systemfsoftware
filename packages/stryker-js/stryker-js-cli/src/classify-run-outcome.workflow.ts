@@ -1,6 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
@@ -83,50 +84,68 @@ export type RunOutcomeError = RunInterrupted
 
 export type FailedRunOutcome = Exclude<RunOutcomeDecision, RunOk> | RunOutcomeError
 
+type SignaledCommand = RunOutcomeCommand & { readonly signal: number }
+type SucceededCommand = RunOutcomeCommand & { readonly succeeded: true }
+type HelpCommand = RunOutcomeCommand & { readonly helpErrorCount: number }
+type SurvivorsCommand = RunOutcomeCommand & { readonly survivorsReason: 'no-report' | 'mismatch' }
+type ClassedCommand = RunOutcomeCommand & { readonly highestExitClass: ExitClass }
+
+const isSignaled = (command: RunOutcomeCommand): command is SignaledCommand => command.signal !== undefined
+const isSucceeded = (command: RunOutcomeCommand): command is SucceededCommand => command.succeeded
+const isHelpRun = (command: RunOutcomeCommand): command is HelpCommand => command.helpErrorCount !== undefined
+const isSurvivorsRun = (command: RunOutcomeCommand): command is SurvivorsCommand =>
+  command.survivorsReason !== undefined
+const isHighestClassed = (command: RunOutcomeCommand): command is ClassedCommand =>
+  command.highestExitClass !== undefined
+
+const signaledOutcome = (command: SignaledCommand): RunOutcomeError =>
+  RunInterrupted.make({ code: 128 + command.signal })
+
+const succeededOutcome = (command: SucceededCommand): RunOutcomeDecision =>
+  Option.match(Option.fromUndefinedOr(command.successExitClass), {
+    onNone: () => RunOk.make({ help: false }),
+    onSome: (exitClass) => RunFailed.make({ code: classCode(exitClass), diagnostic: command.diagnostic }),
+  })
+
+const helpOutcome = (command: HelpCommand): RunOutcomeDecision =>
+  Match.value(command.helpErrorCount > 0).pipe(
+    Match.when(true, () => RunParseFailed.make({ unrecognized: command.unrecognized })),
+    Match.orElse(() => RunOk.make({ help: true })),
+  )
+
+const parseFailedOutcome = (command: RunOutcomeCommand): RunOutcomeDecision =>
+  RunParseFailed.make({ unrecognized: command.unrecognized })
+
+const survivorsRejectedOutcome = (command: SurvivorsCommand): RunOutcomeDecision =>
+  RunSurvivorsRejected.make({
+    reason: command.survivorsReason,
+    diagnostic: command.survivorsDiagnostic,
+  })
+
+const configFailedOutcome = (command: RunOutcomeCommand): RunOutcomeDecision =>
+  RunConfigFailed.make({ detail: command.configDetail })
+
+const classedOutcome = (command: ClassedCommand): RunOutcomeDecision =>
+  Match.value(command.highestExitClass).pipe(
+    Match.when('ConfigError', () => RunConfigFailed.make({ detail: command.configDetail })),
+    Match.orElse((exitClass) => RunFailed.make({ code: classCode(exitClass), diagnostic: command.diagnostic })),
+  )
+
+const genericFailureOutcome = (command: RunOutcomeCommand): RunOutcomeDecision =>
+  RunFailed.make({ code: 1, diagnostic: command.diagnostic })
+
 function classify(command: RunOutcomeCommand): RunOutcomeDecision | RunOutcomeError {
-  if (command.signal !== undefined) {
-    return RunInterrupted.make({ code: 128 + command.signal })
-  }
-  if (command.succeeded) {
-    if (command.successExitClass !== undefined) {
-      return RunFailed.make({
-        code: classCode(command.successExitClass),
-        diagnostic: command.diagnostic,
-      })
-    }
-    return RunOk.make({ help: false })
-  }
-  if (command.interrupted) {
-    return RunInterrupted.make({ code: 1 })
-  }
-  if (command.helpErrorCount !== undefined) {
-    if (command.helpErrorCount > 0) {
-      return RunParseFailed.make({ unrecognized: command.unrecognized })
-    }
-    return RunOk.make({ help: true })
-  }
-  if (command.cliError) {
-    return RunParseFailed.make({ unrecognized: command.unrecognized })
-  }
-  if (command.survivorsReason !== undefined) {
-    return RunSurvivorsRejected.make({
-      reason: command.survivorsReason,
-      diagnostic: command.survivorsDiagnostic,
-    })
-  }
-  if (command.schemaError) {
-    return RunConfigFailed.make({ detail: command.configDetail })
-  }
-  if (command.highestExitClass !== undefined) {
-    if (command.highestExitClass === 'ConfigError') {
-      return RunConfigFailed.make({ detail: command.configDetail })
-    }
-    return RunFailed.make({
-      code: classCode(command.highestExitClass),
-      diagnostic: command.diagnostic,
-    })
-  }
-  return RunFailed.make({ code: 1, diagnostic: command.diagnostic })
+  return Match.value(command).pipe(
+    Match.when(isSignaled, signaledOutcome),
+    Match.when(isSucceeded, succeededOutcome),
+    Match.when((interrupted): boolean => interrupted.interrupted, () => RunInterrupted.make({ code: 1 })),
+    Match.when(isHelpRun, helpOutcome),
+    Match.when((cliError): boolean => cliError.cliError, parseFailedOutcome),
+    Match.when(isSurvivorsRun, survivorsRejectedOutcome),
+    Match.when((schemaError): boolean => schemaError.schemaError, configFailedOutcome),
+    Match.when(isHighestClassed, classedOutcome),
+    Match.orElse(genericFailureOutcome),
+  )
 }
 
 export const classifyRunOutcome = Workflow.make(

@@ -24,7 +24,6 @@ const _default: {
         'ban-error-string': Rule;
         'internal-export-jsdoc': Rule;
         'no-barrels': Rule;
-        'no-domain-branching-density': Rule;
         'no-inline-destructured-type': Rule;
         'no-internal-jsdoc-outside': Rule;
         'no-io-boundary-tests': Rule;

@@ -19,6 +19,7 @@ import * as Effect from 'effect/Effect'
 import * as Fiber from 'effect/Fiber'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Queue from 'effect/Queue'
 import * as Result from 'effect/Result'
@@ -27,6 +28,7 @@ import * as Stream from 'effect/Stream'
 import * as CliError from 'effect/unstable/cli/CliError'
 import {
   type FailedRunOutcome,
+  type RunOk,
   type RunOutcomeDecision,
   type RunOutcomeError,
 } from './classify-run-outcome.workflow.js'
@@ -142,6 +144,14 @@ export interface RunEventStream {
   readonly setProgressStreamFile?: (fileName: string) => Effect.Effect<void, never, never>
 }
 
+interface RunEventStreamState {
+  mode: ResolvedMode['mode']
+  signal: ResolvedMode['signal']
+  headerWritten: boolean
+  terminalWritten: boolean
+  progress: { completed: number; total: number | null }
+}
+
 export const makeRunEventStream = (
   stdio: Stdio.Stdio,
   resolved: ResolvedMode,
@@ -152,21 +162,12 @@ export const makeRunEventStream = (
     const startedAt = yield* Clock.currentTimeMillis
     const queue = yield* Queue.unbounded<RunEvent, Cause.Done>()
 
-    type Progress = { completed: number; total: number | null }
-    const state: {
-      mode: typeof resolved.mode
-      signal: typeof resolved.signal
-      headerWritten: boolean
-      terminalWritten: boolean
-      progress: Progress
-      findingsPrinted: number
-    } = {
+    const state: RunEventStreamState = {
       mode: resolved.mode,
       signal: resolved.signal,
       headerWritten: false,
       terminalWritten: false,
       progress: { completed: 0, total: null },
-      findingsPrinted: 0,
     }
 
     const queueStream = Stream.fromQueue(queue).pipe(
@@ -201,31 +202,39 @@ export const makeRunEventStream = (
     )
 
     let terminalSeen = false
+
+    const noteTerminal = (event: RunEvent): void => {
+      state.terminalWritten = state.terminalWritten || isTerminalEvent(event)
+    }
+
+    const progressTap = (event: RunEvent): Effect.Effect<void, never, never> => {
+      const line = stderrProgressLine(event, state.terminalWritten)
+      noteTerminal(event)
+      return Option.match(Option.fromUndefinedOr(line), {
+        onNone: () => Effect.void,
+        onSome: (text) => writeStderr(stdio, text),
+      })
+    }
+
+    const framingOpen = (): boolean => state.mode === 'machine' && !terminalSeen
+
+    const markTerminalFramed = (event: RunEvent): void => {
+      terminalSeen = terminalSeen || isTerminalEvent(event)
+    }
+
+    const frameEvent = (event: RunEvent): boolean => {
+      if (!framingOpen()) {
+        return false
+      }
+      markTerminalFramed(event)
+      return true
+    }
+
     const observed = Stream.merge(queueStream, tickStream, { haltStrategy: 'either' }).pipe(
-      Stream.tap((event) => {
-        const line = stderrProgressLine(event, state.terminalWritten)
-        if (isTerminalEvent(event)) {
-          state.terminalWritten = true
-        }
-        if (line === undefined) {
-          return Effect.void
-        }
-        return writeStderr(stdio, line)
-      }),
+      Stream.tap(progressTap),
     )
     const framed = observed.pipe(
-      Stream.filter((event) => {
-        if (state.mode !== 'machine') {
-          return false
-        }
-        if (terminalSeen) {
-          return false
-        }
-        if (isTerminalEvent(event)) {
-          terminalSeen = true
-        }
-        return true
-      }),
+      Stream.filter(frameEvent),
       Stream.map((event) => `${toWireLine(event)}\n`),
     )
 
@@ -233,11 +242,38 @@ export const makeRunEventStream = (
 
     let drainFiber: Fiber.Fiber<void, never> | null = null
 
+    const outputOpen = (): boolean => state.mode === 'machine' && !state.terminalWritten
+
+    const offerStarted = (): Effect.Effect<void, never, never> =>
+      Effect.gen(function*() {
+        if (state.mode !== 'machine') {
+          return
+        }
+        yield* Queue.offer(
+          queue,
+          RunStarted.make({
+            schemaVersion: STREAM_SCHEMA_VERSION,
+            runId,
+            mode: state.mode,
+            signal: state.signal,
+          }),
+        )
+      })
+
+    const openHeader = (): Effect.Effect<void, never, never> =>
+      Effect.gen(function*() {
+        if (state.headerWritten) {
+          return
+        }
+        state.headerWritten = true
+        yield* offerStarted()
+      })
+
     return {
       queue,
       runId,
       startedAt,
-      isOpen: () => state.mode === 'machine' && !state.terminalWritten && drainFiber !== null,
+      isOpen: () => outputOpen() && drainFiber !== null,
       ensureOpen: (openResolved: ResolvedMode): void => {
         if (state.headerWritten) {
           return
@@ -246,23 +282,11 @@ export const makeRunEventStream = (
         state.signal = openResolved.signal
       },
       open: Effect.gen(function*() {
-        if (drainFiber === null) {
-          if (!state.headerWritten) {
-            state.headerWritten = true
-            if (state.mode === 'machine') {
-              yield* Queue.offer(
-                queue,
-                RunStarted.make({
-                  schemaVersion: STREAM_SCHEMA_VERSION,
-                  runId,
-                  mode: state.mode,
-                  signal: state.signal,
-                }),
-              )
-            }
-          }
-          drainFiber = yield* Effect.forkDetach(drain)
+        if (drainFiber !== null) {
+          return
         }
+        yield* openHeader()
+        drainFiber = yield* Effect.forkDetach(drain)
       }),
       closeAndDrain: Effect.gen(function*() {
         state.terminalWritten = true
@@ -312,54 +336,44 @@ const decisionToResolvedMode = (decision: ResolveModeDecision): ResolvedMode =>
     Match.exhaustive,
   )
 
-export function resolveMode(input: ModeInput): Result.Result<ResolvedMode, CliError.CliError> {
-  let commandInput: {
-    readonly stdoutIsTTY: boolean
-    readonly text?: boolean
-    readonly json?: boolean
-    readonly envMode?: string
-    readonly agent?: string
-    readonly toolVars?: Record<string, string>
-  } = {
+/** The raw gathered probe values, before the decision shapes them into a command. */
+interface ProbeInput {
+  readonly stdoutIsTTY: boolean
+  readonly text?: boolean | undefined
+  readonly json?: boolean | undefined
+  readonly envMode?: string | undefined
+  readonly agent?: string | undefined
+  readonly toolVars?: Readonly<Record<string, string | undefined>> | undefined
+}
+
+const definedToolVars = (vars: Readonly<Record<string, string | undefined>> | undefined): Record<string, string> =>
+  Object.fromEntries(
+    Object.entries(vars ?? {}).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  )
+
+const commandFor = (input: ProbeInput): ResolveModeCommand =>
+  ResolveModeCommand.make({
     stdoutIsTTY: input.stdoutIsTTY,
-  }
-  if (input.text !== undefined) {
-    commandInput = { ...commandInput, text: input.text }
-  }
-  if (input.json !== undefined) {
-    commandInput = { ...commandInput, json: input.json }
-  }
-  if (input.envMode !== undefined) {
-    commandInput = { ...commandInput, envMode: input.envMode }
-  }
-  if (input.agent !== undefined) {
-    commandInput = { ...commandInput, agent: input.agent }
-  }
-  if (input.toolVars !== undefined) {
-    const filtered: Record<string, string> = {}
-    for (const [key, value] of Object.entries(input.toolVars)) {
-      if (value !== undefined) {
-        filtered[key] = value
-      }
-    }
-    if (Object.keys(filtered).length > 0) {
-      commandInput = { ...commandInput, toolVars: filtered }
-    }
-  }
-  const command = ResolveModeCommand.make(commandInput)
-  const result = resolveOutputMode(command)
-  if (Result.isFailure(result)) {
-    const conflict = result.failure
-    return Result.fail(
-      CliError.InvalidValue.make({
-        option: conflict.option,
-        value: conflict.value,
-        expected: conflict.expected,
-        kind: 'flag',
-      }),
-    )
-  }
-  return Result.succeed(decisionToResolvedMode(result.success))
+    text: input.text,
+    json: input.json,
+    envMode: input.envMode,
+    agent: input.agent,
+    toolVars: definedToolVars(input.toolVars),
+  })
+
+export function resolveMode(input: ModeInput): Result.Result<ResolvedMode, CliError.CliError> {
+  return Result.match(resolveOutputMode(commandFor(input)), {
+    onFailure: (conflict) =>
+      Result.fail(
+        CliError.InvalidValue.make({
+          option: conflict.option,
+          value: conflict.value,
+          expected: conflict.expected,
+          kind: 'flag',
+        }),
+      ),
+    onSuccess: (decision) => Result.succeed(decisionToResolvedMode(decision)),
+  })
 }
 
 export function isProgressEnabled(resolved: ResolvedMode): boolean {
@@ -367,16 +381,8 @@ export function isProgressEnabled(resolved: ResolvedMode): boolean {
 }
 
 export function isColorEnabled(resolved: ResolvedMode, noColor: string | undefined): boolean {
-  if (resolved.mode !== 'human') {
-    return false
-  }
-  if (noColor === undefined) {
-    return true
-  }
-  if (noColor.length === 0) {
-    return true
-  }
-  return false
+  const requested = Option.exists(Option.fromUndefinedOr(noColor), (value) => value.length > 0)
+  return resolved.mode === 'human' && !requested
 }
 
 export interface OutputModeProbe {
@@ -391,79 +397,25 @@ const OutputModeProbe = OutputModeProbeTag
 
 export { OutputModeProbe }
 
+const envToolVars = (): Record<string, string> =>
+  definedToolVars(
+    Object.fromEntries(
+      TOOL_VARIABLES.map((variable): [string, string | undefined] => [variable, process.env[variable]]),
+    ),
+  )
+
+const probeInput = (command: FormatFlags): ProbeInput => ({
+  stdoutIsTTY: process.stdout.isTTY === true,
+  text: command.text,
+  json: command.json,
+  envMode: process.env['STRYKER_MODE'],
+  agent: process.env['AGENT'],
+  toolVars: envToolVars(),
+})
+
 export const outputModeProbeCell = Cell.layer({
-  read: (command: FormatFlags) =>
-    Effect.succeed(
-      (() => {
-        const toolVarsRecord: Partial<Record<ToolVariable, string>> = {}
-        for (const variable of TOOL_VARIABLES) {
-          const value = process.env[variable]
-          if (value !== undefined) {
-            toolVarsRecord[variable] = value
-          }
-        }
-        const envMode = process.env['STRYKER_MODE']
-        const agent = process.env['AGENT']
-        let result: ModeInput = {
-          stdoutIsTTY: process.stdout.isTTY === true,
-        }
-        if (Object.keys(toolVarsRecord).length > 0) {
-          result = { ...result, toolVars: toolVarsRecord }
-        }
-        if (envMode !== undefined) {
-          result = { ...result, envMode }
-        }
-        if (agent !== undefined) {
-          result = { ...result, agent }
-        }
-        if (command.text !== undefined) {
-          result = { ...result, text: command.text }
-        }
-        if (command.json !== undefined) {
-          result = { ...result, json: command.json }
-        }
-        return result
-      })(),
-    ),
-  decode: (raw) =>
-    Result.succeed(
-      (() => {
-        const filteredToolVars: Record<string, string> = {}
-        if (raw.toolVars !== undefined) {
-          for (const [key, value] of Object.entries(raw.toolVars)) {
-            if (value !== undefined) {
-              filteredToolVars[key] = value
-            }
-          }
-        }
-        let commandInput: {
-          readonly stdoutIsTTY: boolean
-          readonly text?: boolean
-          readonly json?: boolean
-          readonly envMode?: string
-          readonly agent?: string
-          readonly toolVars?: Record<string, string>
-        } = {
-          stdoutIsTTY: raw.stdoutIsTTY,
-        }
-        if (raw.text !== undefined) {
-          commandInput = { ...commandInput, text: raw.text }
-        }
-        if (raw.json !== undefined) {
-          commandInput = { ...commandInput, json: raw.json }
-        }
-        if (raw.envMode !== undefined) {
-          commandInput = { ...commandInput, envMode: raw.envMode }
-        }
-        if (raw.agent !== undefined) {
-          commandInput = { ...commandInput, agent: raw.agent }
-        }
-        if (Object.keys(filteredToolVars).length > 0) {
-          commandInput = { ...commandInput, toolVars: filteredToolVars }
-        }
-        return ResolveModeCommand.make(commandInput)
-      })(),
-    ),
+  read: (command: FormatFlags) => Effect.succeed(probeInput(command)),
+  decode: (raw: ProbeInput) => Result.succeed(commandFor(raw)),
   decide: resolveOutputMode,
   encode: (outcome: Result.Result<ResolveModeDecision, ModeConflictError>) =>
     Result.map(outcome, decisionToResolvedMode),
@@ -544,6 +496,33 @@ function offerFailureEnvelope(
   )
 }
 
+const emitHelpEnvelope = (stream: RunEventStream, help: string): Effect.Effect<void, never, never> =>
+  Queue.offer(
+    stream.queue,
+    HelpRendered.make({
+      schemaVersion: STREAM_SCHEMA_VERSION,
+      code: 0,
+      help,
+    }),
+  )
+
+const helpPayload = (ok: RunOk, captured: string): Option.Option<string> =>
+  Option.filter(Option.some(captured), () => ok.help || captured.length > 0)
+
+const emitNullScoreVerdictWhenOpen = (
+  stream: RunEventStream,
+  mode: ResolvedMode,
+  basePath: string,
+  pathService: Path.Path,
+): Effect.Effect<void, never, never> =>
+  Effect.gen(function*() {
+    if (!stream.isOpen()) {
+      return
+    }
+    const defaults = yield* defaultOptions
+    yield* emitNullScoreVerdict(stream, mode, defaults.thresholds, {}, basePath, pathService)
+  })
+
 export function emitMachineModeOutput(
   stream: RunEventStream,
   mode: ResolvedMode,
@@ -557,33 +536,9 @@ export function emitMachineModeOutput(
       const decision = outcome.success
       return yield* Match.value(decision).pipe(
         Match.tag('RunOk', (ok): Effect.Effect<void, never, never> =>
-          Effect.gen(function*() {
-            if (ok.help) {
-              yield* Queue.offer(
-                stream.queue,
-                HelpRendered.make({
-                  schemaVersion: STREAM_SCHEMA_VERSION,
-                  code: 0,
-                  help: captured,
-                }),
-              )
-              return
-            }
-            if (captured.length > 0) {
-              yield* Queue.offer(
-                stream.queue,
-                HelpRendered.make({
-                  schemaVersion: STREAM_SCHEMA_VERSION,
-                  code: 0,
-                  help: captured,
-                }),
-              )
-              return
-            }
-            if (stream.isOpen()) {
-              const defaults = yield* defaultOptions
-              yield* emitNullScoreVerdict(stream, mode, defaults.thresholds, {}, basePath, pathService)
-            }
+          Option.match(helpPayload(ok, captured), {
+            onSome: (help) => emitHelpEnvelope(stream, help),
+            onNone: () => emitNullScoreVerdictWhenOpen(stream, mode, basePath, pathService),
           })),
         Match.tag('RunParseFailed', (failed) => offerFailureEnvelope(stream, failed, captured)),
         Match.tag('RunSurvivorsRejected', (failed) => offerFailureEnvelope(stream, failed, captured)),

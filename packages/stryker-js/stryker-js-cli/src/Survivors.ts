@@ -17,6 +17,7 @@ import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/str
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
@@ -41,6 +42,8 @@ export const decodePriorReport: (raw: unknown) => Result.Result<PriorReportDocum
   .decodeUnknownResult(PriorReportDocumentSchema)
 
 const { entries: objectEntries, fromEntries: objectFromEntries } = Object
+
+const EMPTY_CONFIG: Record<string, unknown> = {}
 
 export type HashContent = (content: string) => string
 
@@ -109,30 +112,23 @@ export function extractSurvivors(
   priorReport: PriorReportDocument,
   resolveAbsolutePath: ResolveAbsolutePath,
 ): Mutant[] {
-  const survivors: Mutant[] = []
-  for (const [file, fileResult] of objectEntries(priorReport.files)) {
-    for (const mutant of fileResult.mutants) {
-      if (mutant.status === 'Survived') {
-        survivors.push(reportMutantToMutant(file, mutant, resolveAbsolutePath))
-      }
-    }
-  }
-  return survivors
+  return objectEntries(priorReport.files).flatMap(([file, fileResult]) =>
+    fileResult.mutants
+      .filter((mutant) => mutant.status === 'Survived')
+      .map((mutant) => reportMutantToMutant(file, mutant, resolveAbsolutePath))
+  )
 }
 
 export function survivorMutateSpans(survivors: readonly Mutant[], basePath: string): string[] {
-  const spans: string[] = []
-  const seen = new Set<string>()
-  for (const survivor of survivors) {
-    const file = toRelativeNormalizedFileName(survivor.fileName, basePath)
-    const { start, end } = survivor.location
-    const span = `${file}:${start.line + 1}:${start.column}-${end.line + 1}:${end.column}`
-    if (!seen.has(span)) {
-      seen.add(span)
-      spans.push(span)
-    }
-  }
-  return spans
+  return [
+    ...new Set(
+      survivors.map((survivor) =>
+        `${toRelativeNormalizedFileName(survivor.fileName, basePath)}:${
+          survivor.location.start.line + 1
+        }:${survivor.location.start.column}-${survivor.location.end.line + 1}:${survivor.location.end.column}`
+      ),
+    ),
+  ]
 }
 
 export const SURVIVORS_REJECT_EXIT_CLASS: ExitClass = 'ConfigError'
@@ -173,8 +169,13 @@ export const survivorsAdmissionCell = (basePath: string) =>
       return Result.map(decodePriorReport(priorReportRaw), (document) =>
         AdmitSurvivorsRunCommand.make({
           priorReport: PriorReportFacts.make({
-            config: document.config ?? {},
-            frameworkVersion: document.framework?.version,
+            config: Option.getOrElse(Option.fromNullishOr(document.config), () => EMPTY_CONFIG),
+            frameworkVersion: Option.getOrUndefined(
+              Option.flatMap(
+                Option.fromNullishOr(document.framework),
+                (framework) => Option.fromNullishOr(framework.version),
+              ),
+            ),
           }),
           currentConfig: resolvedOptions,
           frameworkVersion: strykerVersion,
@@ -259,11 +260,16 @@ function readPriorReport(
 }
 
 function priorReportFileKeys(raw: unknown): readonly string[] {
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return []
-  if (!('files' in raw)) return []
-  const files = raw.files
-  if (typeof files !== 'object' || files === null || Array.isArray(files)) return []
-  return Object.keys(files)
+  return Option.getOrElse(
+    Option.map(
+      Option.flatMap(
+        Option.liftPredicate(raw, Match.record),
+        (document) => Option.liftPredicate(document['files'], Match.record),
+      ),
+      (files) => Object.keys(files),
+    ),
+    () => [],
+  )
 }
 
 function readSourceFile(file: string): Effect.Effect<string, ConfigFileUnreadableError, FileSystem.FileSystem> {

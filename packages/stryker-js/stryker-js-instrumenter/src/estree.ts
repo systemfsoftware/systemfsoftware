@@ -7,6 +7,7 @@
  * back standard ESTree, so the instrumenter owns the traversal instead of
  * without pulling scope machinery along.
  */
+import * as Predicate from 'effect/Predicate'
 import type {
   BlockStatement,
   Expression,
@@ -108,15 +109,18 @@ export function spanOf(node: Node): { start: number; end: number } | undefined {
  * union (TS and JSX extensions oxc emits).
  */
 export function nodeType(node: unknown): string | undefined {
-  return isAstNode(node) ? node.type : undefined
+  if (!isAstNode(node)) return undefined
+  return node.type
 }
 
 export function isExpressionKind(node: Node | undefined | null): boolean {
-  return node !== undefined && node !== null && EXPRESSION_KINDS.has(node.type)
+  const type = nodeType(node)
+  return type !== undefined && EXPRESSION_KINDS.has(type)
 }
 
 export function isStatementKind(node: Node | undefined | null): boolean {
-  return node !== undefined && node !== null && STATEMENT_KINDS.has(node.type)
+  const type = nodeType(node)
+  return type !== undefined && STATEMENT_KINDS.has(type)
 }
 
 // ---------------------------------------------------------------------------
@@ -150,20 +154,16 @@ export function regExpLiteral(pattern: string, flags: string, loc?: Loc): Expres
 }
 
 export function arrayExpression(elements: ReadonlyArray<Expression | null> = [], loc?: Loc): Expression {
-  const elementList: Expression[] = []
-  for (const element of elements) {
-    if (element !== null) elementList.push(element)
-  }
-  return mark<Expression>({ type: 'ArrayExpression', elements: elementList }, loc)
+  return mark<Expression>({ type: 'ArrayExpression', elements: elements.filter(Predicate.isNotNullish) }, loc)
 }
 
 export function callExpression(
   callee: Expression,
   args: ReadonlyArray<Expression> = [],
-  optional = false,
+  optional?: boolean,
   loc?: Loc,
 ): Expression {
-  return mark<Expression>({ type: 'CallExpression', callee, arguments: [...args], optional }, loc)
+  return mark<Expression>({ type: 'CallExpression', callee, arguments: [...args], optional: optional === true }, loc)
 }
 
 export function newExpression(callee: Expression, args: ReadonlyArray<Expression> = [], loc?: Loc): Expression {
@@ -173,8 +173,8 @@ export function newExpression(callee: Expression, args: ReadonlyArray<Expression
 export function memberExpression(
   object: Expression,
   property: Expression,
-  computed = false,
-  optional = false,
+  computed: boolean,
+  optional: boolean,
   loc?: Loc,
 ): Expression {
   return mark<Expression>({ type: 'MemberExpression', object, property, computed, optional }, loc)
@@ -345,22 +345,53 @@ export function attachComments(
   // never print. Candidates are the statements and expressions under it.
   const nodes = collectNodes(root).filter((entry) => entry.node !== root)
   nodes.sort((a, b) => a.start - b.start)
-  const leading = new Map<Node, AttachedComment[]>()
-  const trailing = new Map<Node, AttachedComment[]>()
-  for (const comment of comments) {
-    const next = nodes.find((entry) => entry.start >= comment.end)
-    if (next !== undefined) {
-      pushComment(leading, next.node, comment)
-    } else {
-      // Same-line trailing comments: host them on the nearest statement so
-      // the statement printer (the only emitter of trailing comments) prints
-      // them; an expression host would never reach the output.
-      const previous = nodes.findLast((entry) => entry.end <= comment.start && isStatementKind(entry.node))
-      if (previous !== undefined) pushComment(trailing, previous.node, comment)
-    }
-  }
-  assignComments(leading, lineTable, 'leadingComments')
-  assignComments(trailing, lineTable, 'trailingComments')
+  const groups = groupComments(nodes, comments)
+  assignComments(groups.leading, lineTable, 'leadingComments')
+  assignComments(groups.trailing, lineTable, 'trailingComments')
+}
+
+interface CommentGroups {
+  readonly leading: Map<Node, AttachedComment[]>
+  readonly trailing: Map<Node, AttachedComment[]>
+}
+
+interface CommentHost {
+  readonly field: keyof CommentGroups
+  readonly node: Node
+}
+
+function groupComments(nodes: ReadonlyArray<NodeEntry>, comments: ReadonlyArray<AttachedComment>): CommentGroups {
+  const groups: CommentGroups = { leading: new Map(), trailing: new Map() }
+  for (const comment of comments) hostComment(nodes, comment, groups)
+  return groups
+}
+
+/**
+ * The map a comment is hosted in. A comment attaches to the node it precedes;
+ * one that precedes nothing — a same-line trailing comment — attaches to the
+ * nearest statement before it, because the statement printer is the only
+ * emitter of trailing comments and an expression host would never reach the
+ * output.
+ */
+function hostComment(nodes: ReadonlyArray<NodeEntry>, comment: AttachedComment, groups: CommentGroups): void {
+  const hosts: ReadonlyArray<{ readonly field: keyof CommentGroups; readonly node: Node | undefined }> = [
+    { field: 'leading', node: followingNode(nodes, comment) },
+    { field: 'trailing', node: precedingStatement(nodes, comment) },
+  ]
+  const host = hosts.find((candidate): candidate is CommentHost => candidate.node !== undefined)
+  if (host !== undefined) pushComment(groups[host.field], host.node, comment)
+}
+
+function followingNode(nodes: ReadonlyArray<NodeEntry>, comment: AttachedComment): Node | undefined {
+  const entry = nodes.find((candidate) => candidate.start >= comment.end)
+  if (entry === undefined) return undefined
+  return entry.node
+}
+
+function precedingStatement(nodes: ReadonlyArray<NodeEntry>, comment: AttachedComment): Node | undefined {
+  const entry = nodes.findLast((candidate) => candidate.end <= comment.start && isStatementKind(candidate.node))
+  if (entry === undefined) return undefined
+  return entry.node
 }
 
 function assignComments(
@@ -386,31 +417,53 @@ function pushComment(map: Map<Node, AttachedComment[]>, node: Node, comment: Att
   else list.push(comment)
 }
 
-function collectNodes(node: unknown): Array<{ node: Node; start: number; end: number }> {
-  const out: Array<{ node: Node; start: number; end: number }> = []
+interface NodeEntry {
+  readonly node: Node
+  readonly start: number
+  readonly end: number
+}
+
+/** oxc emits a node's children as a plain array the walker reads and replaces into. */
+const isNodeList = (value: unknown): value is Array<unknown> => Array.isArray(value)
+
+function collectNodes(node: unknown): NodeEntry[] {
+  const out: NodeEntry[] = []
   collect(node, out)
   return out
 }
 
-function collect(node: unknown, out: Array<{ node: Node; start: number; end: number }>): void {
-  if (Array.isArray(node)) {
-    for (const item of node) collect(item, out)
-    return
-  }
-  if (!isAstNode(node)) return
-  const startOffset = node['start']
-  const endOffset = node['end']
-  if (typeof startOffset === 'number' && typeof endOffset === 'number') {
-    out.push({ node, start: startOffset, end: endOffset })
-  }
-  for (const key of Object.keys(node)) {
-    if (key === 'leadingComments' || key === 'trailingComments') continue
-    collect(node[key], out)
-  }
+function collect(node: unknown, out: NodeEntry[]): void {
+  if (isNodeList(node)) return collectList(node, out)
+  collectAstNode(node, out)
+}
+
+function collectList(items: ReadonlyArray<unknown>, out: NodeEntry[]): void {
+  for (const item of items) collect(item, out)
+}
+
+function collectAstNode(value: unknown, out: NodeEntry[]): void {
+  if (!isAstNode(value)) return
+  appendEntry(value, out)
+  collectChildren(value, out)
+}
+
+function collectChildren(node: Node & Record<string, unknown>, out: NodeEntry[]): void {
+  for (const key of Object.keys(node)) collectChild(node, key, out)
+}
+
+function collectChild(node: Node & Record<string, unknown>, key: string, out: NodeEntry[]): void {
+  if (SKIP_KEYS.has(key)) return
+  collect(node[key], out)
+}
+
+function appendEntry(node: Node & Record<string, unknown>, out: NodeEntry[]): void {
+  const span = spanOf(node)
+  if (span === undefined) return
+  out.push({ node, start: span.start, end: span.end })
 }
 
 export function isAstNode(value: unknown): value is Node & Record<string, unknown> {
-  return typeof value === 'object' && value !== null && 'type' in value && typeof value.type === 'string'
+  return Predicate.isObject(value) && typeof value['type'] === 'string'
 }
 
 // ---------------------------------------------------------------------------
@@ -448,9 +501,11 @@ export interface TraversePath {
 }
 
 export interface TraverseVisitors {
-  enter?: (path: TraversePath) => void
-  exit?: (path: TraversePath) => void
+  enter?: TraverseVisitor
+  exit?: TraverseVisitor
 }
+
+type TraverseVisitor = (path: TraversePath) => void
 
 interface WalkContext {
   readonly skipped: Set<Node>
@@ -481,14 +536,46 @@ function visit(
   context: WalkContext,
 ): void {
   if (context.stopped) return
-  if (!isAstNode(node) || context.skipped.has(node)) return
+  visitAstNode(node, parentPath, key, listKey, visitors, context)
+}
 
+function visitAstNode(
+  node: unknown,
+  parentPath: TraversePath | null,
+  key: string,
+  listKey: string | undefined,
+  visitors: TraverseVisitors,
+  context: WalkContext,
+): void {
+  if (!isVisitable(node, context)) return
   const path = createPath(node, parentPath, key, listKey, context)
-  visitors.enter?.(path)
-  if (context.stopped || context.skipped.has(node)) return
+  notify(visitors.enter, path)
+  visitEnteredNode(node, path, visitors, context)
+}
+
+function isVisitable(node: unknown, context: WalkContext): node is Node & Record<string, unknown> {
+  return isAstNode(node) && !context.skipped.has(node)
+}
+
+function visitEnteredNode(
+  node: Node & Record<string, unknown>,
+  path: TraversePath,
+  visitors: TraverseVisitors,
+  context: WalkContext,
+): void {
+  if (context.skipped.has(node)) return
   visitChildren(node, path, visitors, context)
+  notifyExit(visitors.exit, path, context)
+}
+
+function notifyExit(visitor: TraverseVisitor | undefined, path: TraversePath, context: WalkContext): void {
   if (context.stopped) return
-  visitors.exit?.(path)
+  notify(visitor, path)
+}
+
+function notify(visitor: TraverseVisitor | undefined, path: TraversePath): void {
+  if (visitor === undefined) return
+  visitor(path)
 }
 
 function visitChildren(
@@ -497,28 +584,51 @@ function visitChildren(
   visitors: TraverseVisitors,
   context: WalkContext,
 ): void {
-  for (const childKey of Object.keys(node)) {
-    if (SKIP_KEYS.has(childKey)) continue
-    visitChild(node[childKey], path, childKey, visitors, context)
-    if (context.stopped) return
-  }
+  Object.keys(node).every((key) => keepVisitingKey(node, path, key, visitors, context))
 }
 
-function visitChild(
+function keepVisitingKey(
+  node: Node & Record<string, unknown>,
+  path: TraversePath,
+  key: string,
+  visitors: TraverseVisitors,
+  context: WalkContext,
+): boolean {
+  if (SKIP_KEYS.has(key)) return true
+  return keepVisitingChild(node[key], path, key, visitors, context)
+}
+
+function keepVisitingChild(
   child: unknown,
   path: TraversePath,
   key: string,
   visitors: TraverseVisitors,
   context: WalkContext,
-): void {
-  if (Array.isArray(child)) {
-    for (let i = 0; i < child.length; i++) {
-      visit(child[i], path, key, String(i), visitors, context)
-      if (context.stopped) return
-    }
-    return
-  }
-  if (isAstNode(child)) visit(child, path, key, undefined, visitors, context)
+): boolean {
+  if (isNodeList(child)) return keepVisitingList(child, path, key, visitors, context)
+  return keepVisitingValue(child, path, key, undefined, visitors, context)
+}
+
+function keepVisitingList(
+  items: ReadonlyArray<unknown>,
+  path: TraversePath,
+  key: string,
+  visitors: TraverseVisitors,
+  context: WalkContext,
+): boolean {
+  return items.every((item, index) => keepVisitingValue(item, path, key, String(index), visitors, context))
+}
+
+function keepVisitingValue(
+  value: unknown,
+  path: TraversePath,
+  key: string,
+  listKey: string | undefined,
+  visitors: TraverseVisitors,
+  context: WalkContext,
+): boolean {
+  visit(value, path, key, listKey, visitors, context)
+  return !context.stopped
 }
 
 function createPath(
@@ -543,20 +653,10 @@ function createPath(
     find(predicate) {
       // `path.find` includes the path itself: a node that registered as its
       // own placement anchor wins over any ancestor.
-      let current: TraversePath | null = path
-      while (current !== null) {
-        if (predicate(current)) return current
-        current = current.parentPath
-      }
-      return undefined
+      return nearest(path, predicate)
     },
     getStatementParent() {
-      let current: TraversePath | null = parentPath
-      while (current !== null) {
-        if (isStatementKind(current.node)) return current
-        current = current.parentPath
-      }
-      return undefined
+      return nearest(parentPath, (ancestor) => isStatementKind(ancestor.node))
     },
     replaceWith(replacement) {
       replaceInParent(parentPath, key, listKey, replacement)
@@ -574,6 +674,22 @@ function createPath(
   return path
 }
 
+function nearest(
+  from: TraversePath | null,
+  predicate: (path: TraversePath) => boolean,
+): TraversePath | undefined {
+  if (from === null) return undefined
+  return takeOrAscend(from, predicate)
+}
+
+function takeOrAscend(
+  path: TraversePath,
+  predicate: (path: TraversePath) => boolean,
+): TraversePath | undefined {
+  if (predicate(path)) return path
+  return nearest(path.parentPath, predicate)
+}
+
 function replaceInParent(
   parentPath: TraversePath | null,
   key: string,
@@ -581,16 +697,39 @@ function replaceInParent(
   replacement: Node,
 ): void {
   if (parentPath === null) return
-  const parent = parentPath.node
+  replaceChild(parentPath.node, key, listKey, replacement)
+}
+
+function replaceChild(parent: Node, key: string, listKey: string | undefined, replacement: Node): void {
   if (!isAstNode(parent)) return
+  assignChild(parent, key, listKey, replacement)
+}
+
+function assignChild(
+  parent: Node & Record<string, unknown>,
+  key: string,
+  listKey: string | undefined,
+  replacement: Node,
+): void {
   if (listKey === undefined) {
     parent[key] = replacement
     return
   }
+  assignIndexed(parent, key, listKey, replacement)
+}
+
+function assignIndexed(
+  parent: Record<string, unknown>,
+  key: string,
+  listKey: string,
+  replacement: Node,
+): void {
   // Array descent is inlined in `visitChild`, so a list key is always a single index.
   const index = Number(listKey)
   const container = parent[key]
-  if (Array.isArray(container) && Number.isInteger(index)) {
-    container[index] = replacement
-  }
+  if (isIndexedList(container, index)) container[index] = replacement
+}
+
+function isIndexedList(container: unknown, index: number): container is Array<unknown> {
+  return isNodeList(container) && Number.isInteger(index)
 }

@@ -2,6 +2,9 @@ import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
+import * as Predicate from 'effect/Predicate'
 import * as Ref from 'effect/Ref'
 
 export interface IdGeneratorShape {
@@ -21,32 +24,58 @@ export const makeIdGenerator: Effect.Effect<IdGeneratorShape> = Effect.gen(funct
 
 export const layer = Layer.effect(IdGenerator)(makeIdGenerator)
 
-export const getAvailableParallelism = (): number => {
-  if (typeof globalThis.navigator === 'undefined') return 4
-  const hc = globalThis.navigator.hardwareConcurrency
-  if (typeof hc !== 'number') return 4
-  return hc
+const ASSUMED_PARALLELISM = 4
+
+const reportedParallelism = (): number | undefined => {
+  if (typeof globalThis.navigator === 'undefined') return undefined
+  return globalThis.navigator.hardwareConcurrency
 }
+
+export const getAvailableParallelism = (): number => {
+  const reported = reportedParallelism()
+  if (typeof reported !== 'number') return ASSUMED_PARALLELISM
+  return reported
+}
+
+const PERCENTAGE_OPTION = /^(100|[1-9]?[0-9])%$/
+
+type ConcurrencyDetails = { readonly total: number; readonly isPercentage: boolean }
+
+const percentageOf = (text: string): number | undefined =>
+  Option.fromNullishOr(PERCENTAGE_OPTION.exec(text)?.[1]).pipe(
+    Option.map((digits) => Number.parseInt(digits, 10)),
+    Option.getOrUndefined,
+  )
+
+const defaultedTotal = (availableParallelism: number): number =>
+  Match.value(availableParallelism > 4).pipe(
+    Match.when(true, () => availableParallelism - 1),
+    Match.orElse(() => availableParallelism),
+  )
+
+const unsetDetails = (availableParallelism: number): ConcurrencyDetails => ({
+  total: defaultedTotal(availableParallelism),
+  isPercentage: false,
+})
+
+const percentageDetails = (text: string, availableParallelism: number): ConcurrencyDetails =>
+  Match.value(percentageOf(text)).pipe(
+    Match.when(Predicate.isNumber, (percentage): ConcurrencyDetails => ({
+      total: Math.max(1, Math.round((availableParallelism * percentage) / 100)),
+      isPercentage: true,
+    })),
+    Match.orElse(() => unsetDetails(availableParallelism)),
+  )
 
 export const computeTotalConcurrencyDetails = (
   concurrencyOption: number | string | undefined,
   availableParallelism: number,
-): { readonly total: number; readonly isPercentage: boolean } => {
-  if (typeof concurrencyOption === 'string') {
-    const percentageMatch = concurrencyOption.match(/^(100|[1-9]?[0-9])%$/)
-    if (percentageMatch?.[1] !== undefined) {
-      const percentage = Number.parseInt(percentageMatch[1], 10)
-      return { total: Math.max(1, Math.round((availableParallelism * percentage) / 100)), isPercentage: true }
-    }
-  }
-  if (typeof concurrencyOption === 'number') {
-    return { total: concurrencyOption, isPercentage: false }
-  }
-  if (availableParallelism > 4) {
-    return { total: availableParallelism - 1, isPercentage: false }
-  }
-  return { total: availableParallelism, isPercentage: false }
-}
+): ConcurrencyDetails =>
+  Match.value(concurrencyOption).pipe(
+    Match.when(Predicate.isString, (text) => percentageDetails(text, availableParallelism)),
+    Match.when(Predicate.isNumber, (total): ConcurrencyDetails => ({ total, isPercentage: false })),
+    Match.orElse(() => unsetDetails(availableParallelism)),
+  )
 
 export const computeTotalConcurrency = (
   concurrencyOption: number | string | undefined,
@@ -74,24 +103,44 @@ export const computeConcurrency = (
   return splitConcurrency(total, options.checkers.length)
 }
 
+const announcePercentage = (resolved: {
+  readonly option: number | string | undefined
+  readonly total: number
+  readonly isPercentage: boolean
+  readonly availableParallelism: number
+}): Effect.Effect<void> =>
+  Match.value(resolved.isPercentage).pipe(
+    Match.when(true, () =>
+      Effect.logDebug(
+        `Computed concurrency ${resolved.total} from "${resolved.option}" based on ${resolved.availableParallelism} available parallelism.`,
+      )),
+    Match.orElse(() => Effect.void),
+  )
+
+const announceProcesses = (
+  split: { readonly checkers: number; readonly testRunners: number },
+): Effect.Effect<void> =>
+  Match.value(split.checkers > 0).pipe(
+    Match.when(true, () =>
+      Effect.logInfo(
+        `Creating ${split.checkers} checker process(es) and ${split.testRunners} test runner process(es).`,
+      )),
+    Match.orElse(() => Effect.logInfo(`Creating ${split.testRunners} test runner process(es).`)),
+  )
+
 export const makeConcurrency = (
   options: Pick<StrykerOptions, 'checkers' | 'concurrency'>,
 ): Effect.Effect<{ testRunners: number; checkers: number }> =>
   Effect.gen(function*() {
     const availableParallelism = yield* Effect.sync(getAvailableParallelism)
     const { total, isPercentage } = computeTotalConcurrencyDetails(options.concurrency, availableParallelism)
-    if (isPercentage) {
-      yield* Effect.logDebug(
-        `Computed concurrency ${total} from "${options.concurrency}" based on ${availableParallelism} available parallelism.`,
-      )
-    }
+    yield* announcePercentage({
+      option: options.concurrency,
+      total,
+      isPercentage,
+      availableParallelism,
+    })
     const result = splitConcurrency(total, options.checkers.length)
-    if (options.checkers.length > 0) {
-      yield* Effect.logInfo(
-        `Creating ${result.checkers} checker process(es) and ${result.testRunners} test runner process(es).`,
-      )
-    } else {
-      yield* Effect.logInfo(`Creating ${result.testRunners} test runner process(es).`)
-    }
+    yield* announceProcesses(result)
     return result
   })

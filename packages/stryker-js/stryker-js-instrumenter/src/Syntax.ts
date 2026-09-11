@@ -2,6 +2,7 @@
  * Syntax — the instrumenter's AST shapes, location helpers and syntax utilities.
  */
 import type { Position } from '@systemfsoftware/stryker-js/Mutant'
+import * as Match from 'effect/Match'
 import type { Program } from 'estree'
 import { AstFormat as SchemaAstFormat } from './Syntax.schema.js'
 
@@ -125,13 +126,7 @@ export function locationIncluded(
   haystack: SourceLocationInFile,
   needle: SourceLocationInFile,
 ): boolean {
-  const startIncluded = haystack.start.line < needle.start.line ||
-    (haystack.start.line === needle.start.line &&
-      haystack.start.column <= needle.start.column)
-  const endIncluded = haystack.end.line > needle.end.line ||
-    (haystack.end.line === needle.end.line &&
-      haystack.end.column >= needle.end.column)
-  return startIncluded && endIncluded
+  return comparePositions(haystack.start, needle.start) <= 0 && comparePositions(haystack.end, needle.end) >= 0
 }
 
 /**
@@ -141,11 +136,17 @@ export function locationOverlaps(
   a: SourceLocationInFile,
   b: SourceLocationInFile,
 ): boolean {
-  const startIncluded = a.start.line < b.end.line ||
-    (a.start.line === b.end.line && a.start.column <= b.end.column)
-  const endIncluded = a.end.line > b.start.line ||
-    (a.end.line === b.start.line && a.end.column >= b.start.column)
-  return startIncluded && endIncluded
+  return comparePositions(a.start, b.end) <= 0 && comparePositions(a.end, b.start) >= 0
+}
+
+/**
+ * Source order of two positions: negative when `a` precedes `b`, zero when both
+ * are the same position, positive when `a` follows `b`.
+ */
+function comparePositions(a: Position, b: Position): number {
+  const lineDelta = a.line - b.line
+  if (lineDelta !== 0) return lineDelta
+  return a.column - b.column
 }
 
 export type BinaryOperator =
@@ -174,36 +175,11 @@ export type BinaryOperator =
 
 export type LineStarts = readonly number[]
 
+const LINE_TERMINATOR = /\r\n|[\n\r\u2028\u2029]/g
+
 export function computeLineStarts(text: string): LineStarts {
-  const result: number[] = []
-  let pos = 0
-  let lineStart = 0
-  while (pos < text.length) {
-    const ch = text.charCodeAt(pos)
-    pos++
-    switch (ch) {
-      case CharacterCodes.carriageReturn: {
-        if (text.charCodeAt(pos) === CharacterCodes.lineFeed) {
-          pos++
-        }
-        result.push(lineStart)
-        lineStart = pos
-        break
-      }
-      case CharacterCodes.lineFeed:
-        result.push(lineStart)
-        lineStart = pos
-        break
-      default:
-        if (ch > CharacterCodes.maxAsciiCharacter && isLineBreak(ch)) {
-          result.push(lineStart)
-          lineStart = pos
-        }
-        break
-    }
-  }
-  result.push(lineStart)
-  return result
+  const terminatorEnds = [...text.matchAll(LINE_TERMINATOR)].map((match) => match.index + match[0].length)
+  return [0, ...terminatorEnds]
 }
 
 export function positionFromOffset(
@@ -225,67 +201,36 @@ function computeLineOfPosition(
   lineStarts: LineStarts,
   offset: number,
 ): number {
-  let lineNumber = binarySearch(lineStarts, offset)
-  if (lineNumber < 0) {
-    lineNumber = ~lineNumber - 1
-    if (lineNumber === -1) {
-      throw new Error('position cannot precede the beginning of the file')
-    }
+  const lastLine = lastLineStart(lineStarts, offset, 0, lineStarts.length - 1)
+  if (lastLine === -1) {
+    throw new Error('position cannot precede the beginning of the file')
   }
-  return lineNumber
+  return lastLine
 }
 
-function binarySearch(array: readonly number[], value: number): number {
-  if (!array.length) {
-    return -1
-  }
-
-  let low = 0
-  let high = array.length - 1
-  while (low <= high) {
-    const middle = low + ((high - low) >> 1)
-    const midValue = array[middle]
-    if (midValue === undefined) {
-      throw new Error('Binary search middle value is missing')
-    }
-    const midKey = compare(midValue, value)
-    switch (midKey) {
-      case -1:
-        low = middle + 1
-        break
-      case 0:
-        return middle
-      case 1:
-        high = middle - 1
-        break
-    }
-  }
-
-  return ~low
-}
-
-function compare(a: number, b: number): -1 | 0 | 1 {
-  if (a < b) {
-    return -1
-  }
-  if (a > b) {
-    return 1
-  }
-  return 0
-}
-const CharacterCodes = {
-  lineFeed: 0x0a,
-  carriageReturn: 0x0d,
-  maxAsciiCharacter: 0x7f,
-  lineSeparator: 0x2028,
-  paragraphSeparator: 0x2029,
-} as const
-
-function isLineBreak(ch: number): boolean {
-  return (
-    ch === CharacterCodes.lineFeed ||
-    ch === CharacterCodes.carriageReturn ||
-    ch === CharacterCodes.lineSeparator ||
-    ch === CharacterCodes.paragraphSeparator
+function lastLineStart(
+  array: readonly number[],
+  offset: number,
+  low: number,
+  high: number,
+): number {
+  if (low > high) return low - 1
+  const middle = middleIndex(low, high)
+  const midValue = requireMidpoint(array[middle])
+  return Match.value(midValue).pipe(
+    Match.when(offset, () => middle),
+    Match.when((mid) => mid < offset, () => lastLineStart(array, offset, middle + 1, high)),
+    Match.orElse(() => lastLineStart(array, offset, low, middle - 1)),
   )
+}
+
+function middleIndex(low: number, high: number): number {
+  return low + ((high - low) >> 1)
+}
+
+function requireMidpoint(midValue: number | undefined): number {
+  if (midValue === undefined) {
+    throw new Error('Binary search middle value is missing')
+  }
+  return midValue
 }

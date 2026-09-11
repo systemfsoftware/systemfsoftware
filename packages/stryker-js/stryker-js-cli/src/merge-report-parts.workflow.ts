@@ -7,12 +7,17 @@ import type {
   TestFile,
   Thresholds,
 } from '@systemfsoftware/stryker-js/Report'
+import * as Arr from 'effect/Array'
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
 const MERGED_SCHEMA_VERSION = '1.7'
 const DEFAULT_THRESHOLDS = { high: 80, low: 60 }
 const FAILING_OUTCOME = 'failure'
+const PASSING_OUTCOME = 'success'
+const PERFECT_MUTATION_SCORE = 100
 const SURVIVOR_STATUSES: Record<string, true> = { Survived: true, NoCoverage: true }
 
 const SCORE_INCOMPLETE = 'incomplete'
@@ -24,6 +29,10 @@ const VERDICT_FAIL = '❌'
 const VERDICT_WARN = '⚠️'
 const ABSENT_CELLS: readonly string[] = ['—', '—', '—', '—', '—']
 const ALL_PACKAGES_LABEL = '**all**'
+const SEGMENT_SEPARATORS = /[/\\]/
+const EMPTY_SEGMENTS: readonly string[] = []
+const EMPTY_PACKAGES: readonly string[] = []
+const EMPTY_TEST_FILES: Readonly<Record<string, TestFile>> = {}
 
 export const ReportPart = S.Struct({
   label: S.String,
@@ -90,64 +99,57 @@ interface Score {
   readonly cells: readonly string[]
 }
 
-const thresholdsOf = (part: PartWithReport | undefined): Thresholds => {
-  if (part === undefined) {
-    return DEFAULT_THRESHOLDS
-  }
-  return part.report.thresholds
-}
+/** The value a present option carries, or the fallback a missing one takes. */
+const orDefault = <A>(present: Option.Option<A>, fallback: A): A => Option.getOrElse(present, () => fallback)
 
-const commonProjectRoot = (roots: readonly string[]): string | undefined => {
-  if (roots.length === 0) {
-    return undefined
-  }
-  return commonBasePath(roots)
-}
+const thresholdsOf = (part: PartWithReport | undefined): Thresholds =>
+  orDefault(Option.map(Option.fromUndefinedOr(part), (present) => present.report.thresholds), DEFAULT_THRESHOLDS)
 
-const scoreFor = (part: ReportPartValue | undefined): Score | undefined => {
-  if (part === undefined || part.report === undefined) {
-    return undefined
-  }
-  return scoreOf(part.report.files)
-}
+const hasReport = (part: ReportPartValue): part is PartWithReport => part.report !== undefined
 
-const outcomeOf = (reports: readonly PartWithReport[]): string => {
-  if (reports.some((part) => part.outcome === FAILING_OUTCOME)) {
-    return FAILING_OUTCOME
-  }
-  return 'success'
-}
+const scoreFor = (part: ReportPartValue | undefined): Score | undefined =>
+  Option.getOrUndefined(
+    Option.map(
+      Option.filter(Option.fromUndefinedOr(part), hasReport),
+      (present) => scoreOf(present.report.files),
+    ),
+  )
 
-const normalizeName = (fileName: string): string => fileName.split(/[/\\]/).filter(Boolean).join('/')
+const outcomeOf = (reports: readonly PartWithReport[]): string =>
+  Match.value(reports.some((part) => part.outcome === FAILING_OUTCOME)).pipe(
+    Match.when(true, () => FAILING_OUTCOME),
+    Match.when(false, () => PASSING_OUTCOME),
+    Match.exhaustive,
+  )
+
+const normalizeName = (fileName: string): string => fileName.split(SEGMENT_SEPARATORS).filter(Boolean).join('/')
 
 const commonBasePath = (fileNames: readonly string[]): string => {
-  const directories = fileNames.map((fileName) => fileName.split(/[/\\]/).slice(0, -1))
-  const shared = directories.reduce((previous: readonly string[], current) => {
-    const common: string[] = []
-    for (const [index, segment] of previous.entries()) {
-      if (current[index] !== segment) break
-      common.push(segment)
-    }
-    return common
-  }, directories[0] ?? [])
-  return shared.join('/')
+  const directories: readonly (readonly string[])[] = fileNames.map((fileName) =>
+    fileName.split(SEGMENT_SEPARATORS).slice(0, -1)
+  )
+  return Arr.reduce(
+    directories,
+    orDefault(Arr.head(directories), EMPTY_SEGMENTS),
+    (left, right) => Arr.takeWhile(left, (segment, index) => right[index] === segment),
+  ).join('/')
 }
 
 const normalizedNames = <A>(input: Readonly<Record<string, A>>): Readonly<Record<string, A>> => {
   const base = commonBasePath(Object.keys(input))
   return Object.fromEntries(
-    Object.entries(input).map(([fileName, value]) => [normalizeName(fileName.slice(base.length)), value]),
+    Object.entries(input).map(
+      ([fileName, value]): readonly [string, A] => [normalizeName(fileName.slice(base.length)), value],
+    ),
   )
 }
 
 const uniqueId = (label: string, id: string): string => `${label}_${id}`
 
-const uniqueIds = (label: string, ids: readonly string[] | undefined): readonly string[] | undefined => {
-  if (ids === undefined) {
-    return undefined
-  }
-  return ids.map((id) => uniqueId(label, id))
-}
+const uniqueIds = (label: string, ids: readonly string[] | undefined): readonly string[] | undefined =>
+  Option.getOrUndefined(
+    Option.map(Option.fromUndefinedOr(ids), (present) => present.map((id) => uniqueId(label, id))),
+  )
 
 const rewrittenMutant = (label: string, mutant: MutantResult): MutantResult => ({
   ...mutant,
@@ -156,57 +158,65 @@ const rewrittenMutant = (label: string, mutant: MutantResult): MutantResult => (
   coveredBy: uniqueIds(label, mutant.coveredBy),
 })
 
-const rewrittenFile = (label: string, file: FileResult): FileResult => ({
-  ...file,
-  mutants: file.mutants.map((mutant) => rewrittenMutant(label, mutant)),
-})
+const withProjectRoot = (report: MutationTestResult, projectRoot: string | undefined): MutationTestResult =>
+  Option.match(Option.fromUndefinedOr(projectRoot), {
+    onNone: () => report,
+    onSome: (root) => ({ ...report, projectRoot: root }),
+  })
 
-const withProjectRoot = (report: MutationTestResult, projectRoot: string | undefined): MutationTestResult => {
-  if (projectRoot === undefined) {
-    return report
-  }
-  return { ...report, projectRoot }
-}
+const mergedFiles = (parts: readonly PartWithReport[]): Record<string, FileResult> =>
+  Object.fromEntries(
+    parts.flatMap((part) =>
+      Object.entries(normalizedNames(part.report.files)).map(
+        ([fileName, file]): readonly [string, FileResult] => [
+          `${part.label}/${fileName}`,
+          { ...file, mutants: file.mutants.map((mutant) => rewrittenMutant(part.label, mutant)) },
+        ],
+      )
+    ),
+  )
+
+const mergedTestFiles = (parts: readonly PartWithReport[]): Record<string, TestFile> =>
+  Object.fromEntries(
+    parts.flatMap((part) =>
+      Object.entries(
+        normalizedNames(orDefault(Option.fromUndefinedOr(part.report.testFiles), EMPTY_TEST_FILES)),
+      ).map(
+        ([fileName, testFile]): readonly [string, TestFile] => [
+          `${part.label}/${fileName}`,
+          { ...testFile, tests: testFile.tests.map((test) => ({ ...test, id: uniqueId(part.label, test.id) })) },
+        ],
+      )
+    ),
+  )
+
+const withTestFiles = (report: MutationTestResult, testFiles: Record<string, TestFile>): MutationTestResult =>
+  Match.value(Object.keys(testFiles).length > 0).pipe(
+    Match.when(true, () => ({ ...report, testFiles })),
+    Match.when(false, () => report),
+    Match.exhaustive,
+  )
 
 const mergeParts = (parts: readonly PartWithReport[]): MutationTestResult => {
-  const files: Record<string, FileResult> = {}
-  const testFiles: Record<string, TestFile> = {}
-  const projectRoots: string[] = []
-  for (const part of parts) {
-    for (const [fileName, file] of Object.entries(normalizedNames(part.report.files))) {
-      files[`${part.label}/${fileName}`] = rewrittenFile(part.label, file)
-    }
-    const partTestFiles = part.report.testFiles
-    if (partTestFiles !== undefined) {
-      for (const [fileName, testFile] of Object.entries(normalizedNames(partTestFiles))) {
-        testFiles[`${part.label}/${fileName}`] = {
-          ...testFile,
-          tests: testFile.tests.map((test) => ({ ...test, id: uniqueId(part.label, test.id) })),
-        }
-      }
-    }
-    if (part.report.projectRoot !== undefined) {
-      projectRoots.push(part.report.projectRoot)
-    }
-  }
   const merged: MutationTestResult = {
-    files,
+    files: mergedFiles(parts),
     schemaVersion: MERGED_SCHEMA_VERSION,
     thresholds: thresholdsOf(parts[0]),
     config: {},
   }
-  if (Object.keys(testFiles).length > 0) {
-    return withProjectRoot({ ...merged, testFiles }, commonProjectRoot(projectRoots))
-  }
-  return withProjectRoot(merged, commonProjectRoot(projectRoots))
+  const projectRoots = parts.flatMap((part) => Option.toArray(Option.fromUndefinedOr(part.report.projectRoot)))
+  return withProjectRoot(withTestFiles(merged, mergedTestFiles(parts)), commonProjectRoot(projectRoots))
 }
 
-const mutationScoreOf = (totalDetected: number, totalValid: number): number => {
-  if (totalValid === 0) {
-    return Number.NaN
-  }
-  return (totalDetected / totalValid) * 100
-}
+const commonProjectRoot = (roots: readonly string[]): string | undefined =>
+  Option.getOrUndefined(Option.map(Option.liftPredicate(roots, Arr.isReadonlyArrayNonEmpty), commonBasePath))
+
+const mutationScoreOf = (totalDetected: number, totalValid: number): number =>
+  Match.value(totalValid === 0).pipe(
+    Match.when(true, () => Number.NaN),
+    Match.when(false, () => (totalDetected / totalValid) * 100),
+    Match.exhaustive,
+  )
 
 const scoreOf = (files: Readonly<Record<string, FileResult>>): Score => {
   const mutants = Object.values(files).flatMap((file) => file.mutants)
@@ -221,54 +231,88 @@ const scoreOf = (files: Readonly<Record<string, FileResult>>): Score => {
   return { mutationScore: mutationScoreOf(totalDetected, survived + noCoverage + totalDetected), cells }
 }
 
-const cellsFor = (score: Score | undefined): readonly string[] => {
-  if (score === undefined) {
-    return ABSENT_CELLS
-  }
-  return score.cells
-}
+const cellsFor = (score: Score | undefined): readonly string[] =>
+  orDefault(Option.map(Option.fromUndefinedOr(score), (present) => present.cells), ABSENT_CELLS)
+
+const incompleteVerdict = (outcome: string | undefined): string =>
+  Match.value(outcome === PASSING_OUTCOME).pipe(
+    Match.when(true, () => VERDICT_WARN),
+    Match.when(false, () => VERDICT_FAIL),
+    Match.exhaustive,
+  )
+
+const passingVerdict = (score: Score, outcome: string | undefined): string =>
+  Match.value({ perfect: score.mutationScore === PERFECT_MUTATION_SCORE, passing: outcome === PASSING_OUTCOME }).pipe(
+    Match.when({ perfect: true, passing: true }, () => VERDICT_OK),
+    Match.orElse(() => VERDICT_FAIL),
+  )
+
+const renderedScore = (mutationScore: number): string =>
+  Match.value(mutationScore).pipe(
+    Match.when(PERFECT_MUTATION_SCORE, () => SCORE_PERFECT),
+    Match.orElse(() => mutationScore.toFixed(2)),
+  )
+
+const scoredRow = (label: string, score: Score, outcome: string | undefined): VerdictRow =>
+  Match.value(Number.isNaN(score.mutationScore)).pipe(
+    Match.when(true, () => ({ label, score: SCORE_UNDEFINED, cells: score.cells, verdict: VERDICT_WARN })),
+    Match.when(false, () => ({
+      label,
+      score: renderedScore(score.mutationScore),
+      cells: score.cells,
+      verdict: passingVerdict(score, outcome),
+    })),
+    Match.exhaustive,
+  )
+
+const completeRow = (label: string, score: Score | undefined, outcome: string | undefined): VerdictRow =>
+  Option.match(Option.fromUndefinedOr(score), {
+    onNone: () => ({ label, score: SCORE_ABSENT, cells: ABSENT_CELLS, verdict: VERDICT_WARN }),
+    onSome: (present) => scoredRow(label, present, outcome),
+  })
 
 const verdictOf = (
   label: string,
   score: Score | undefined,
   outcome: string | undefined,
   incomplete: boolean,
-): VerdictRow => {
-  const cells = cellsFor(score)
-  if (incomplete) {
-    if (outcome === 'success') return { label, score: SCORE_INCOMPLETE, cells, verdict: VERDICT_WARN }
-    return { label, score: SCORE_INCOMPLETE, cells, verdict: VERDICT_FAIL }
-  }
-  if (score === undefined) return { label, score: SCORE_ABSENT, cells, verdict: VERDICT_WARN }
-  if (Number.isNaN(score.mutationScore)) {
-    return { label, score: SCORE_UNDEFINED, cells, verdict: VERDICT_WARN }
-  }
-  const rendered = score.mutationScore.toFixed(2)
-  if (outcome !== 'success') return { label, score: rendered, cells, verdict: VERDICT_FAIL }
-  if (score.mutationScore === 100) {
-    return { label, score: SCORE_PERFECT, cells, verdict: VERDICT_OK }
-  }
-  return { label, score: rendered, cells, verdict: VERDICT_FAIL }
-}
+): VerdictRow =>
+  Match.value(incomplete).pipe(
+    Match.when(true, () => ({
+      label,
+      score: SCORE_INCOMPLETE,
+      cells: cellsFor(score),
+      verdict: incompleteVerdict(outcome),
+    })),
+    Match.when(false, () => completeRow(label, score, outcome)),
+    Match.exhaustive,
+  )
 
-const firstDuplicateLabel = (parts: readonly ReportPartValue[]): string => {
-  const duplicate = parts.find((part, index) => parts.slice(0, index).some((earlier) => earlier.label === part.label))
-  if (duplicate === undefined) {
-    return ''
-  }
-  return duplicate.label
-}
+/** The label a second part repeats, and `none` when it repeats none a report can name. */
+const repeatedLabel = (parts: readonly ReportPartValue[]): Option.Option<string> =>
+  Option.filter(
+    Option.map(
+      Option.fromUndefinedOr(
+        parts.find((part, index) => parts.slice(0, index).some((earlier) => earlier.label === part.label)),
+      ),
+      (duplicate) => duplicate.label,
+    ),
+    (label) => label !== '',
+  )
 
 const uniqueParts = (parts: readonly ReportPartValue[]): readonly ReportPartValue[] =>
   parts.filter((part, index) => parts.slice(0, index).every((earlier) => earlier.label !== part.label))
 
 const chooseReports = (parts: readonly ReportPartValue[]): readonly PartWithReport[] =>
-  parts.flatMap((part) => {
-    if (part.report === undefined) {
-      return []
-    }
-    return [{ ...part, report: part.report }]
-  })
+  parts.flatMap((part) =>
+    Option.toArray(Option.map(Option.fromUndefinedOr(part.report), (report) => ({ ...part, report })))
+  )
+
+const byFileThenLine = (left: Survivor, right: Survivor): number =>
+  orDefault(
+    Option.liftPredicate(left.file.localeCompare(right.file), (ordered) => ordered !== 0),
+    left.line - right.line,
+  )
 
 const survivorsOf = (report: MutationTestResult): readonly Survivor[] =>
   Object.entries(report.files)
@@ -281,49 +325,73 @@ const survivorsOf = (report: MutationTestResult): readonly Survivor[] =>
           column: mutant.location.start.column,
           status: mutant.status,
           mutatorName: mutant.mutatorName,
-          replacement: mutant.replacement ?? '',
+          replacement: orDefault(Option.fromNullishOr(mutant.replacement), ''),
         }))
     )
-    .sort((left, right) => left.file.localeCompare(right.file) || left.line - right.line)
+    .sort(byFileThenLine)
+
+const rowOf = (label: string, part: ReportPartValue | undefined): VerdictRow =>
+  Option.match(Option.fromUndefinedOr(part), {
+    onNone: () => verdictOf(label, undefined, undefined, false),
+    onSome: (present) => verdictOf(label, scoreFor(present), present.outcome, present.incomplete),
+  })
 
 const packageRows = (parts: readonly ReportPartValue[], expected: readonly string[]): readonly VerdictRow[] => {
   const absent = expected.filter((name) => !parts.some((part) => part.label === name))
   return [...parts.map((part) => part.label), ...absent]
     .sort()
-    .map((label) => {
-      const part = parts.find((candidate) => candidate.label === label)
-      return verdictOf(label, scoreFor(part), part?.outcome, part?.incomplete === true)
-    })
+    .map((label) => rowOf(label, parts.find((candidate) => candidate.label === label)))
 }
 
 const allPackagesRow = (reports: readonly PartWithReport[], merged: MutationTestResult): VerdictRow =>
   verdictOf(ALL_PACKAGES_LABEL, scoreOf(merged.files), outcomeOf(reports), reports.some((part) => part.incomplete))
 
+const mergedReports = (reports: readonly PartWithReport[], rows: readonly VerdictRow[]): MergedReports => {
+  const report = mergeParts(reports)
+  return MergedReports.make({
+    report,
+    rows: [allPackagesRow(reports, report), ...rows],
+    survivors: survivorsOf(report),
+  })
+}
+
+const mergedOutcome = (
+  reports: readonly PartWithReport[],
+  rows: readonly VerdictRow[],
+): Result.Result<Decision, DecisionError> =>
+  Match.value(reports.length === 0).pipe(
+    Match.when(true, () => Result.succeed(NoMergedReports.make({ rows }))),
+    Match.when(false, () => Result.succeed(mergedReports(reports, rows))),
+    Match.exhaustive,
+  )
+
 const decideMerge = (command: MergeReportPartsCommand): Result.Result<Decision, DecisionError> => {
   const parts = uniqueParts(command.parts)
-  if (parts.length === 0) {
-    return Result.fail(MissingPackages.make({ packages: [...(command.expectedPackages ?? [])] }))
-  }
-  const reports = chooseReports(parts)
-  const rows = packageRows(parts, command.expectedPackages ?? [])
-  if (reports.length === 0) {
-    return Result.succeed(NoMergedReports.make({ rows }))
-  }
-  const report = mergeParts(reports)
-  return Result.succeed(
-    MergedReports.make({
-      report,
-      rows: [allPackagesRow(reports, report), ...rows],
-      survivors: survivorsOf(report),
-    }),
+  const expected = orDefault(Option.fromNullishOr(command.expectedPackages), EMPTY_PACKAGES)
+  const rows = packageRows(parts, expected)
+  return Match.value(parts.length === 0).pipe(
+    Match.when(true, () => Result.fail(MissingPackages.make({ packages: [...expected] }))),
+    Match.when(false, () => mergedOutcome(chooseReports(parts), rows)),
+    Match.exhaustive,
   )
 }
 
-function decide(command: MergeReportPartsCommand): Result.Result<Decision, DecisionError> {
-  if (firstDuplicateLabel(command.parts) !== '') {
-    return Result.fail(DuplicatePackageLabel.make({ label: firstDuplicateLabel(command.parts) }))
-  }
-  return decideMerge(command)
-}
+const DuplicateLabelFound = S.TaggedStruct('DuplicateLabelFound', { label: S.String })
+const LabelsDistinct = S.TaggedStruct('LabelsDistinct', {})
+const LabelCheck = S.Union([DuplicateLabelFound, LabelsDistinct])
+type LabelCheck = S.Schema.Type<typeof LabelCheck>
+
+const labelCheckOf = (parts: readonly ReportPartValue[]): LabelCheck =>
+  Option.match(repeatedLabel(parts), {
+    onNone: () => LabelsDistinct.make({}),
+    onSome: (label): LabelCheck => DuplicateLabelFound.make({ label }),
+  })
+
+const decide = (command: MergeReportPartsCommand): Result.Result<Decision, DecisionError> =>
+  Match.value(labelCheckOf(command.parts)).pipe(
+    Match.tag('DuplicateLabelFound', (found) => Result.fail(DuplicatePackageLabel.make({ label: found.label }))),
+    Match.tag('LabelsDistinct', () => decideMerge(command)),
+    Match.exhaustive,
+  )
 
 export const mergeReportParts = Workflow.make(MergeReportPartsCommand, decide)

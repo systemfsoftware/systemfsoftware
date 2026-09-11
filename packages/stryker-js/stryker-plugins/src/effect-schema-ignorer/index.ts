@@ -2,6 +2,7 @@ import { Ignorer } from '@systemfsoftware/stryker-js/Ignorer'
 import { declarePlugin } from '@systemfsoftware/stryker-js/Plugin'
 import * as Layer from 'effect/Layer'
 import * as Option from 'effect/Option'
+import { ancestorsOf, type IgnorerPath } from '../AncestorPath.js'
 import {
   ANNOTATION_OBJECT_IGNORED,
   ANNOTATION_TEXT_IGNORED,
@@ -15,9 +16,12 @@ import {
   TAGGED_TAG_IGNORED,
 } from './SchemaDeclarationIgnore.js'
 
-interface IgnorerPath {
-  readonly node: unknown
-  readonly parentPath?: IgnorerPath | null
+const decisionAt = (chain: readonly unknown[], position: number): string | undefined =>
+  decideSchemaDeclarationIgnore(chain[position], chain[position + 1], chain[position + 2], chain[position + 3])
+
+const firstIgnoreReason = (path: IgnorerPath): string | undefined => {
+  const chain = [path.node, ...ancestorsOf(path)]
+  return chain.reduce<string | undefined>((found, _, position) => found ?? decisionAt(chain, position), undefined)
 }
 
 export const strykerPlugins = [
@@ -25,22 +29,7 @@ export const strykerPlugins = [
     'Ignore',
     'effect-schema-declarations',
     Layer.succeed(Ignorer, {
-      shouldIgnore: (path: IgnorerPath) => {
-        for (let current: IgnorerPath | null | undefined = path; current; current = current.parentPath) {
-          const parent = current.parentPath
-          const grandparent = parent?.parentPath
-          const reason = decideSchemaDeclarationIgnore(
-            current.node,
-            parent?.node,
-            grandparent?.node,
-            grandparent?.parentPath?.node,
-          )
-          if (reason !== undefined) {
-            return Option.some(reason)
-          }
-        }
-        return Option.none()
-      },
+      shouldIgnore: (path: IgnorerPath) => Option.fromUndefinedOr(firstIgnoreReason(path)),
     }),
   ),
 ]

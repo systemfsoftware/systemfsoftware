@@ -175,21 +175,25 @@ const toRawTestIdRaw = (test: unknown): string => {
   return `${filepath}#${collectTestNameRaw(test)}`
 }
 
+const stripProjectRoot = (file: string, projectRoot: string): string =>
+  Match.value(file.startsWith(projectRoot)).pipe(
+    Match.when(true, (): string => file.slice(projectRoot.length)),
+    Match.when(false, (): string => file),
+    Match.exhaustive,
+  )
+
+const toProjectRelativePath = (file: string): string => file.replace(/^[/\\]+/, '').replaceAll('\\', '/')
+
 const normalizeTestIdRaw = (id: string, projectRoot: string): string => {
   const hash = id.indexOf('#')
-  if (hash === -1) {
-    return id
-  }
-  const file = id.slice(0, hash)
-  const rest = id.slice(hash + 1)
-  const stripped = (() => {
-    if (file.startsWith(projectRoot)) {
-      return file.slice(projectRoot.length)
-    }
-    return file
-  })()
-  const relative = stripped.replace(/^[/\\]+/, '').replaceAll('\\', '/')
-  return `${relative}#${rest}`
+  return Match.value(hash === -1).pipe(
+    Match.when(true, (): string => id),
+    Match.when(false, (): string => {
+      const file = toProjectRelativePath(stripProjectRoot(id.slice(0, hash), projectRoot))
+      return `${file}#${id.slice(hash + 1)}`
+    }),
+    Match.exhaustive,
+  )
 }
 
 const toTestStatus = (taskState: TaskState, mode: string): TestStatus =>
@@ -198,13 +202,8 @@ const toTestStatus = (taskState: TaskState, mode: string): TestStatus =>
     Match.when(false, (): TestStatus =>
       Match.value(taskState).pipe(
         Match.when('pass', (): TestStatus => 'success'),
-        Match.when('fail', (): TestStatus => 'failed'),
         Match.when('skip', (): TestStatus => 'skipped'),
         Match.when('todo', (): TestStatus => 'skipped'),
-        Match.when(undefined, (): TestStatus => 'failed'),
-        Match.when('queued', (): TestStatus => 'failed'),
-        Match.when('run', (): TestStatus => 'failed'),
-        Match.when('only', (): TestStatus => 'failed'),
         Match.orElse((): TestStatus => 'failed'),
       )),
     Match.exhaustive,
@@ -357,10 +356,24 @@ const convertTestRaw = (
   )
 }
 
+/**
+ * A run whose tests all passed yet reported an error outside the test files: the shape a dry
+ * run reports as `Error` rather than `Complete`.
+ */
+const isSilentExternalError = (
+  tests: readonly { readonly status: TestStatus }[],
+  command: VitestDryRunCommand,
+): boolean =>
+  Match.value(tests.some((test) => test.status === 'failed')).pipe(
+    Match.when(true, (): boolean => false),
+    Match.when(false, (): boolean => command.hasExternalError),
+    Match.exhaustive,
+  )
+
 const decideVitestDryRun = (command: VitestDryRunCommand): Result.Result<VitestDryRunOutput, never> =>
   Match.value(command.rawTests.map((t) => convertTestRaw(t, command.projectRoot))).pipe(
     Match.when(
-      (tests) => tests.some((t) => t.status === 'failed') === false && command.hasExternalError === true,
+      (tests) => isSilentExternalError(tests, command),
       (tests): Result.Result<VitestDryRunOutput, never> =>
         Result.succeed(
           VitestDryRunOutput.make({
@@ -381,18 +394,17 @@ const decideVitestDryRun = (command: VitestDryRunCommand): Result.Result<VitestD
     ),
   )
 
-const hitLimitReason = (
-  hitCount: number | undefined,
-  hitLimit: number | undefined,
-): Option.Option<string> => {
-  if (hitCount === undefined || hitLimit === undefined) {
-    return Option.none()
-  }
-  if (hitCount > hitLimit) {
-    return Option.some(`Hit limit reached (${hitCount}/${hitLimit})`)
-  }
-  return Option.none()
-}
+const hitLimitReason = (hitCount: number | undefined, hitLimit: number | undefined): Option.Option<string> =>
+  Option.flatMap(
+    Option.fromNullishOr(hitCount),
+    (count) =>
+      Option.flatMap(Option.fromNullishOr(hitLimit), (limit) =>
+        Match.value(count > limit).pipe(
+          Match.when(true, (): Option.Option<string> => Option.some(`Hit limit reached (${count}/${limit})`)),
+          Match.when(false, (): Option.Option<string> => Option.none()),
+          Match.exhaustive,
+        )),
+  )
 
 const decideVitestMutantRun = (
   command: VitestMutantRunCommand,

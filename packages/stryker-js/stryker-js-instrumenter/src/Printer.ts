@@ -5,8 +5,16 @@
  */
 import * as Predicate from 'effect/Predicate'
 import { spanOf } from './estree.js'
-import { printProgram } from './print/index.js'
-import { type Ast, type HtmlAst, type JSAst, type SvelteAst, type TSAst, type TsxAst } from './Syntax.js'
+import { type Hashbang, printProgram } from './print/index.js'
+import {
+  type Ast,
+  type HtmlAst,
+  type JSAst,
+  type SvelteAst,
+  type TemplateScript,
+  type TSAst,
+  type TsxAst,
+} from './Syntax.js'
 
 export type Printer<T extends Ast> = (file: T, context: PrinterContext) => string
 export interface PrinterContext {
@@ -29,14 +37,20 @@ export function print(file: Ast): string {
 }
 
 // oxc carries the hashbang on the Program; estree's type does not declare it.
-const hashbangOf = (root: Ast['root']): { type: 'Hashbang'; value: string; start: number } | null => {
-  if (!('hashbang' in root)) return null
-  const hashbang: unknown = root['hashbang' as keyof typeof root]
-  if (typeof hashbang !== 'object' || hashbang === null) return null
-  if (!('type' in hashbang && hashbang.type === 'Hashbang')) return null
-  if (!('value' in hashbang && typeof hashbang.value === 'string')) return null
-  if (!('start' in hashbang && typeof hashbang.start === 'number')) return null
-  return { type: 'Hashbang', value: hashbang.value, start: hashbang.start }
+const HASHBANG_FIELDS: Readonly<Record<string, (field: unknown) => boolean>> = {
+  type: (field) => field === 'Hashbang',
+  value: (field) => typeof field === 'string',
+  start: (field) => typeof field === 'number',
+}
+
+function isHashbang(value: unknown): value is Hashbang {
+  return Predicate.isObject(value) && Object.entries(HASHBANG_FIELDS).every(([key, accepts]) => accepts(value[key]))
+}
+
+const hashbangOf = (root: Ast['root']): Hashbang | null => {
+  const hashbang: unknown = Reflect.get(root, 'hashbang')
+  if (!isHashbang(hashbang)) return null
+  return hashbang
 }
 
 const jsPrint: Printer<JSAst> = (file) => {
@@ -80,30 +94,54 @@ const htmlPrint: Printer<HtmlAst> = (ast, context) => {
   return html
 }
 
-const sveltePrint: Printer<SvelteAst> = ({ root, rawContent }, context) => {
-  let currentIndex = 0
-  let outputText = ''
+interface SvelteOutput {
+  readonly text: string
+  readonly cursor: number
+}
 
+const sveltePrint: Printer<SvelteAst> = ({ root, rawContent }, context) => {
   const sortedScripts = [root.moduleScript, ...root.additionalScripts]
     .filter(Predicate.isNotNullish)
     .sort((a, b) => a.range.start - b.range.start)
-  for (const script of sortedScripts) {
-    if (script.isExpression) {
-      const code = context.print(script.ast, context)
-      const codeWithoutSemicolon = code.slice(0, -1)
-      outputText += rawContent.substring(currentIndex, script.range.start) +
-        codeWithoutSemicolon
-      currentIndex = script.range.end
-    } else {
-      outputText += rawContent.substring(currentIndex, script.range.start)
-      outputText += '\n'
-      outputText += context.print(script.ast, context)
-      outputText += '\n'
-      currentIndex = script.range.end
-    }
+  const written = sortedScripts.reduce(
+    (state, script) => appendScript(state, script, rawContent, context),
+    { text: '', cursor: 0 },
+  )
+  return written.text + rawContent.substring(written.cursor)
+}
+
+function appendScript(
+  state: SvelteOutput,
+  script: TemplateScript,
+  rawContent: string,
+  context: PrinterContext,
+): SvelteOutput {
+  if (script.isExpression) return appendExpression(state, script, rawContent, context)
+  return appendStatement(state, script, rawContent, context)
+}
+
+function appendExpression(
+  state: SvelteOutput,
+  script: TemplateScript,
+  rawContent: string,
+  context: PrinterContext,
+): SvelteOutput {
+  const code = context.print(script.ast, context)
+  return {
+    text: `${state.text}${rawContent.substring(state.cursor, script.range.start)}${code.slice(0, -1)}`,
+    cursor: script.range.end,
   }
+}
 
-  outputText += rawContent.substring(currentIndex)
-
-  return outputText
+function appendStatement(
+  state: SvelteOutput,
+  script: TemplateScript,
+  rawContent: string,
+  context: PrinterContext,
+): SvelteOutput {
+  const code = context.print(script.ast, context)
+  return {
+    text: `${state.text}${rawContent.substring(state.cursor, script.range.start)}\n${code}\n`,
+    cursor: script.range.end,
+  }
 }

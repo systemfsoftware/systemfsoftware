@@ -116,6 +116,28 @@ export const ignorePatterns: readonly string[] = [
  *
  * @public
  */
+const testFilePatterns = [
+  '**/*.test.ts',
+  '**/*.spec.ts',
+  '**/__tests__/**',
+  '**/tests/**',
+] as const
+
+const complexityOverrides: NonNullable<OxlintConfig['overrides']> = [
+  {
+    files: ['**/src/**'],
+    rules: { complexity: ['error', { max: 2, variant: 'modified' }] },
+  },
+  {
+    files: ['**/src/**/*.workflow.ts'],
+    rules: { complexity: ['error', { max: 1, variant: 'modified' }] },
+  },
+  {
+    files: [...testFilePatterns],
+    rules: { complexity: 'off' },
+  },
+]
+
 const all: OxlintConfig = {
   plugins: [...plugins],
   jsPlugins: [...jsPlugins],
@@ -124,6 +146,7 @@ const all: OxlintConfig = {
   rules: { ...rules },
   overrides: [
     ...stockOverrides,
+    ...complexityOverrides,
     {
       files: ['**/__fixtures__/**', '**/fixtures/**', '**/testResources/**'],
       rules: { 'no-restricted-imports': 'off' },

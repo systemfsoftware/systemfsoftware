@@ -22,6 +22,8 @@ For each deleted plugin, one representative violation was re-attempted under wor
 
 `no-domain-branching-density` ships at 17 — the lowest measured per-function McCabe complexity the whole tree passes with zero waivers (1441 branchable functions measured; max 17). The plan's provisional "never above 10" clause was superseded by that measurement: a ceiling the tree cannot pass is a gate that gets narrowed until it passes. The fifteen functions at 11-17 are the recorded extraction backlog — new branching has no legal home above the ceiling, and each incumbent is an extraction work item, never a waiver:
 
+**Superseded (2026-09-11).** The rule is retired. The ceiling now runs on oxlint's stock `complexity` rule in its `modified` variant, configured by `@systemfsoftware/all`: `max 1` for `**/src/**/*.workflow.ts` and `max 2` for the rest of `src`, tests exempt. The rule and the table below are the historical record of the 17-ceiling decision, not current enforcement.
+
 | CC | Location                                                                             | Function                |
 | -- | ------------------------------------------------------------------------------------ | ----------------------- |
 | 17 | packages/effect-schema-vite/src/mod.ts:89                                            | findExportedSchemaNames |

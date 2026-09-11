@@ -1,6 +1,7 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { instrument } from '@systemfsoftware/stryker-js-instrumenter'
 import type { File as InstrumenterFile, InstrumentResult } from '@systemfsoftware/stryker-js-instrumenter'
+import type { CheckResult, PassedCheckResult } from '@systemfsoftware/stryker-js/Checker'
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import type { IgnorerService } from '@systemfsoftware/stryker-js/Ignorer'
 import { Ignorer } from '@systemfsoftware/stryker-js/Ignorer'
@@ -27,7 +28,12 @@ import { PlanKnown } from '@systemfsoftware/stryker-js/Run'
 import type { RunEvent } from '@systemfsoftware/stryker-js/Run'
 import { RunEvents } from '@systemfsoftware/stryker-js/Run'
 import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
-import type { CompleteDryRunResult, DryRunResult, TestRunnerCapabilities } from '@systemfsoftware/stryker-js/TestRunner'
+import type {
+  CompleteDryRunResult,
+  DryRunResult,
+  TestResult,
+  TestRunnerCapabilities,
+} from '@systemfsoftware/stryker-js/TestRunner'
 import type * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Console from 'effect/Console'
@@ -66,7 +72,7 @@ import { toSchemaLocation } from './mutant-result-mapping.js'
 import { decidePlans, incrementalDiff } from './Mutants.js'
 import type { TestCoverage } from './Mutants.js'
 import { testCoverageFrom } from './Mutants.js'
-import { makeMutationReportingService } from './mutation-reporting.js'
+import { makeMutationReportingService, type MutationReportingService } from './mutation-reporting.js'
 import { MutationTestCommand } from './MutationTest.schema.js'
 import type { ResolvedMode } from './output-mode.js'
 import { InstrumentCommand, planInstrumentation } from './plan-instrumentation.workflow.js'
@@ -150,36 +156,30 @@ export interface PrepareExecutorArgs {
 }
 
 const isRecord = Predicate.isObject
+
+const asRecord = (value: unknown): Record<string, unknown> =>
+  Match.value(value).pipe(
+    Match.when(isRecord, (record) => Object.fromEntries(Object.entries(record))),
+    Match.orElse((): Record<string, unknown> => ({})),
+  )
+
+const schemaPropertiesOf = (document: unknown): Record<string, unknown> => asRecord(asRecord(document)['properties'])
+
 const buildMergedSchema = (
   core: ValidationSchemaDocument,
   contributions: readonly Record<string, unknown>[],
-): ValidationSchemaDocument => {
-  if (contributions.length === 0) {
-    return core
-  }
-  const merged: Record<string, unknown> = { ...core }
-  const corePropsValue = merged['properties']
-  const corePropsRecord: Record<string, unknown> = {}
-  if (isRecord(corePropsValue)) {
-    for (const [k, v] of Object.entries(corePropsValue)) {
-      corePropsRecord[k] = v
-    }
-  }
-  for (const contrib of contributions) {
-    if (!isRecord(contrib)) {
-      continue
-    }
-    const contribProps = contrib['properties']
-    if (!isRecord(contribProps)) {
-      continue
-    }
-    for (const [k, v] of Object.entries(contribProps)) {
-      corePropsRecord[k] = v
-    }
-  }
-  merged['properties'] = corePropsRecord
-  return merged
-}
+): ValidationSchemaDocument =>
+  Match.value(contributions.length === 0).pipe(
+    Match.when(true, (): ValidationSchemaDocument => core),
+    Match.orElse((): ValidationSchemaDocument => ({
+      ...core,
+      properties: Object.assign(
+        {},
+        schemaPropertiesOf(core),
+        ...contributions.map((contribution) => schemaPropertiesOf(contribution)),
+      ),
+    })),
+  )
 
 function buildDryRunFiles(prev: InstrumentDone): { files: string[]; testFiles: string[] | undefined } {
   const files = [...MutableHashMap.keys(prev.project.filesToMutate)].map((name) => prev.sandbox.sandboxFileFor(name))
@@ -204,56 +204,90 @@ const readCurrentRelativeFiles = (
     return Object.fromEntries(entries)
   })
 
+interface RememberedMutantResult {
+  readonly mutantId: string
+  readonly status: string
+  readonly testsCompleted?: number | undefined
+  readonly coveredBy?: readonly string[] | undefined
+  readonly killedBy?: readonly string[] | undefined
+}
+
+const rememberedCoveredBy = (entry: RememberedMutantResult): { readonly coveredBy?: readonly string[] } =>
+  Option.match(Option.fromNullishOr(entry.coveredBy), {
+    onNone: (): { readonly coveredBy?: readonly string[] } => ({}),
+    onSome: (coveredBy) => ({ coveredBy: [...coveredBy] }),
+  })
+
+const rememberedKilledBy = (entry: RememberedMutantResult): { readonly killedBy?: readonly string[] } =>
+  Option.match(Option.fromNullishOr(entry.killedBy), {
+    onNone: (): { readonly killedBy?: readonly string[] } => ({}),
+    onSome: (killedBy) => ({ killedBy: [...killedBy] }),
+  })
+
+const rememberedCoverage = (entry: RememberedMutantResult): {
+  readonly coveredBy?: readonly string[]
+  readonly killedBy?: readonly string[]
+} => ({
+  ...rememberedCoveredBy(entry),
+  ...rememberedKilledBy(entry),
+})
+
+const rememberedResultOf = (mutant: Mutant, entry: RememberedMutantResult): MutantResult =>
+  Object.assign(
+    {},
+    mutant,
+    {
+      location: toSchemaLocation(mutant.location),
+      status: entry.status,
+      statusReason: REMEMBERED_REASON,
+      testsCompleted: entry.testsCompleted,
+    },
+    rememberedCoverage(entry),
+  )
+
 const rememberedResultsOf = (
   mutants: readonly Mutant[],
-  remembered: readonly {
-    readonly mutantId: string
-    readonly status: string
-    readonly testsCompleted?: number | undefined
-    readonly coveredBy?: readonly string[] | undefined
-    readonly killedBy?: readonly string[] | undefined
-  }[],
+  remembered: readonly RememberedMutantResult[],
 ): MutantResult[] => {
-  const settled: MutantResult[] = []
-  for (const entry of remembered) {
-    const mutant = mutants.find((candidate) => candidate.id === entry.mutantId)
-    if (mutant === undefined) continue
-    const extra: { coveredBy?: string[]; killedBy?: string[] } = {}
-    if (entry.coveredBy !== undefined) {
-      extra.coveredBy = [...entry.coveredBy]
-    }
-    if (entry.killedBy !== undefined) {
-      extra.killedBy = [...entry.killedBy]
-    }
-    settled.push(
-      Object.assign({}, mutant, {
-        location: toSchemaLocation(mutant.location),
-        status: entry.status,
-        statusReason: REMEMBERED_REASON,
-        testsCompleted: entry.testsCompleted,
-      }, extra),
-    )
-  }
-  return settled
+  const byId = new Map(mutants.map((mutant) => [mutant.id, mutant] as const))
+  return remembered.flatMap((entry) =>
+    Option.match(Option.fromNullishOr(byId.get(entry.mutantId)), {
+      onNone: (): MutantResult[] => [],
+      onSome: (mutant) => [rememberedResultOf(mutant, entry)],
+    })
+  )
 }
+
+type EarlyPlan = Exclude<TestPlan, MutantRunPlan>
+
+const isRunPlan = (plan: TestPlan): plan is MutantRunPlan => plan.plan === 'Run'
+
+const earlyResultOf = (plan: EarlyPlan): MutantResult =>
+  Object.assign({}, plan.mutant, {
+    location: toSchemaLocation(plan.mutant.location),
+    status: plan.mutant.status ?? 'Ignored',
+  })
+
+const collectPlan = (
+  plan: TestPlan,
+  coveredPlans: MutantRunPlan[],
+  earlyResults: MutantResult[],
+): void =>
+  Match.value(plan).pipe(
+    Match.when(isRunPlan, (runPlan) => {
+      coveredPlans.push(runPlan)
+    }),
+    Match.orElse((earlyPlan) => {
+      earlyResults.push(earlyResultOf(earlyPlan))
+    }),
+  )
 
 const partitionPlans = (
   plans: readonly TestPlan[],
 ): { coveredPlans: MutantRunPlan[]; earlyResults: MutantResult[] } => {
   const coveredPlans: MutantRunPlan[] = []
   const earlyResults: MutantResult[] = []
-  for (const plan of plans) {
-    if (plan.plan === 'Run') {
-      coveredPlans.push(plan)
-      continue
-    }
-    earlyResults.push(
-      Object.assign({}, plan.mutant, {
-        location: toSchemaLocation(plan.mutant.location),
-        status: plan.mutant.status ?? 'Ignored',
-      }),
-    )
-  }
+  plans.forEach((plan) => collectPlan(plan, coveredPlans, earlyResults))
   return { coveredPlans, earlyResults }
 }
 
@@ -318,6 +352,52 @@ export type EnginePorts =
   | Path.Path
   | WorkerEntries
   | WorkerLauncher
+interface ReporterEntry {
+  readonly name: string
+  readonly factory: ReporterFactory
+}
+
+const stringListOf = (value: unknown): readonly string[] =>
+  Match.value(value).pipe(
+    Match.when(Array.isArray, (entries) => entries.filter(Predicate.isString)),
+    Match.orElse((): readonly string[] => []),
+  )
+
+const announceSummary = (env: RunEnvironmentShape, summary: string): Effect.Effect<void> =>
+  Match.value(env.resolvedMode.mode).pipe(
+    Match.when('human', () => announceHumanSummary(env.allowConsoleColors, summary)),
+    Match.orElse(() => Effect.logInfo(summary)),
+  )
+
+const announceHumanSummary = (allowConsoleColors: boolean, summary: string): Effect.Effect<void> =>
+  Match.value(allowConsoleColors).pipe(
+    Match.when(true, () => Console.log(ansi.green(summary))),
+    Match.orElse(() => Console.log(summary)),
+  )
+
+const selectReporter = (
+  chosen: Map<string, ReporterEntry>,
+  name: string,
+  factoriesByName: HashMap.HashMap<string, ReporterEntry>,
+): void =>
+  Option.match(HashMap.get(factoriesByName, name.toLowerCase()), {
+    onNone: () => undefined,
+    onSome: (entry) => {
+      if (!chosen.has(entry.name)) {
+        chosen.set(entry.name, entry)
+      }
+    },
+  })
+
+const reporterSelectionsOf = (
+  names: readonly string[],
+  factoriesByName: HashMap.HashMap<string, ReporterEntry>,
+): readonly ReporterEntry[] => {
+  const chosen = new Map<string, ReporterEntry>()
+  names.forEach((name) => selectReporter(chosen, name, factoriesByName))
+  return [...chosen.values()]
+}
+
 export const runPrepare = (command: PrepareExecutorArgs) =>
   withPhaseSpan(
     'prepare',
@@ -351,20 +431,8 @@ export const runPrepare = (command: PrepareExecutorArgs) =>
           },
         }
         const optionsRecord: Record<string, unknown> = { ...options }
-        const pluginsValue = optionsRecord['plugins']
-        let pluginsList: string[]
-        if (Array.isArray(pluginsValue)) {
-          pluginsList = pluginsValue.filter((v): v is string => typeof v === 'string')
-        } else {
-          pluginsList = []
-        }
-        const appendPluginsValue = optionsRecord['appendPlugins']
-        let appendPluginsList: string[]
-        if (Array.isArray(appendPluginsValue)) {
-          appendPluginsList = appendPluginsValue.filter((v): v is string => typeof v === 'string')
-        } else {
-          appendPluginsList = []
-        }
+        const pluginsList = stringListOf(optionsRecord['plugins'])
+        const appendPluginsList = stringListOf(optionsRecord['appendPlugins'])
         const descriptors: readonly string[] = [...pluginsList, ...appendPluginsList, ...env.reporterPluginModules]
         const loaded = yield* loadPlugins(descriptors, env.basePath).pipe(
           Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: 'Failed to load plugins', cause })),
@@ -386,15 +454,7 @@ export const runPrepare = (command: PrepareExecutorArgs) =>
         )
         const mutateCount = MutableHashMap.size(project.filesToMutate)
         const summary = `Found ${mutateCount} of ${MutableHashMap.size(project.files)} file(s) to be mutated.`
-        if (env.resolvedMode.mode === 'human') {
-          if (env.allowConsoleColors) {
-            yield* Console.log(ansi.green(summary))
-          } else {
-            yield* Console.log(summary)
-          }
-        } else {
-          yield* Effect.logInfo(summary)
-        }
+        yield* announceSummary(env, summary)
         const selectedIgnorers = HashSet.fromIterable(options.ignorers)
         const contributions = yield* createAll(loaded.pluginsByKind, 'Ignore').pipe(
           Effect.map((all) => all.filter((contribution) => HashSet.has(selectedIgnorers, contribution.name))),
@@ -426,42 +486,24 @@ export const runPrepare = (command: PrepareExecutorArgs) =>
           fileSystem: yield* FileSystem.FileSystem,
           path: yield* Path.Path,
         })
-        const allContributions: readonly AnyPluginContribution[] = (() => {
-          const out: Array<AnyPluginContribution> = []
-          for (const arr of HashMap.values(loaded.pluginsByKind)) {
-            for (const c of arr) {
-              out.push(c)
-            }
-          }
-          return out
-        })()
+        const allContributions: readonly AnyPluginContribution[] = Array.from(
+          HashMap.values(loaded.pluginsByKind),
+        ).flat()
         const plugins = composePlugins(allContributions)
-        let reporterFactoriesByName = HashMap.empty<string, { name: string; factory: ReporterFactory }>()
-        for (const [builtinName, factory] of Object.entries(builtinReporterFactories)) {
-          reporterFactoriesByName = HashMap.set(reporterFactoriesByName, builtinName.toLowerCase(), {
-            name: builtinName,
-            factory,
-          })
-        }
-        for (const candidate of plugins.reporterFactories) {
-          reporterFactoriesByName = HashMap.set(reporterFactoriesByName, candidate.name.toLowerCase(), {
-            name: candidate.name,
-            factory: candidate.make,
-          })
-        }
+        const reporterEntries: readonly (readonly [string, ReporterEntry])[] = [
+          ...Object.entries(builtinReporterFactories).map(([name, factory]) =>
+            [name.toLowerCase(), { name, factory }] as const
+          ),
+          ...plugins.reporterFactories.map((candidate) =>
+            [candidate.name.toLowerCase(), { name: candidate.name, factory: candidate.make }] as const
+          ),
+        ]
+        const reporterFactoriesByName = HashMap.fromIterable(reporterEntries)
         const availableReporterNames = [...HashMap.values(reporterFactoriesByName)].map((entry) => entry.name)
         yield* validateReporterNames(configured.reporters, availableReporterNames).pipe(
           Effect.mapError((cause) => new StageError({ stage: 'prepare', reason: cause.message, cause })),
         )
-        let seen = HashSet.empty<string>()
-        const reporterInputs = options.reporters.flatMap((name) => {
-          const found = HashMap.get(reporterFactoriesByName, name.toLowerCase())
-          if (Option.isNone(found) || HashSet.has(seen, found.value.name)) {
-            return []
-          }
-          seen = HashSet.add(seen, found.value.name)
-          return [{ name: found.value.name, factory: found.value.factory }]
-        })
+        const reporterInputs = reporterSelectionsOf(options.reporters, reporterFactoriesByName)
         const reporterInit = currentReporterInit(span)
         const attachments = yield* attachReporterFactories(reporterInputs, options, reporterInit)
         const now = yield* Clock.currentTimeMillis
@@ -602,6 +644,130 @@ export interface DryRunRaw {
   readonly gross: Duration.Duration
 }
 
+type FailedDryRun = Extract<DryRunResult, { readonly status: 'error' }>
+type TimedOutDryRun = Extract<DryRunResult, { readonly status: 'timeout' }>
+
+const isCompleteDryRun = (result: DryRunResult): result is CompleteDryRunResult => result.status === 'complete'
+
+const isFailedDryRun = (result: DryRunResult): result is FailedDryRun => result.status === 'error'
+
+const decodeCompleteDryRun = (
+  result: CompleteDryRunResult,
+  allowEmpty: boolean,
+): Result.Result<DryRunCommand, StageError> =>
+  Result.succeed(
+    new DryRunCommand({
+      status: 'Complete',
+      testCount: result.tests.length,
+      failedTestCount: result.tests.filter((test) => test.status === 'failed').length,
+      allowEmpty,
+    }),
+  )
+
+const decodeFailedDryRun = (
+  result: FailedDryRun,
+  allowEmpty: boolean,
+): Result.Result<DryRunCommand, StageError> =>
+  Result.succeed(
+    new DryRunCommand({
+      status: 'Error',
+      testCount: 0,
+      failedTestCount: 0,
+      allowEmpty,
+      errorMessage: result.errorMessage,
+    }),
+  )
+
+const decodeTimedOutDryRun = (
+  result: TimedOutDryRun,
+  allowEmpty: boolean,
+): Result.Result<DryRunCommand, StageError> =>
+  Result.succeed(
+    new DryRunCommand({
+      status: 'Timeout',
+      testCount: 0,
+      failedTestCount: 0,
+      allowEmpty,
+      ...(result.reason !== undefined && { reason: result.reason }),
+    }),
+  )
+
+const totalTestTime = (tests: readonly TestResult[]): number =>
+  tests.reduce((total, test) => total + test.timeSpentMs, 0)
+
+const overheadMillisOf = (grossMillis: number, tests: readonly TestResult[]): number =>
+  Math.max(0, grossMillis - totalTestTime(tests))
+
+const withOriginalFileName = (test: TestResult, prev: InstrumentDone): TestResult =>
+  Match.value(test.fileName).pipe(
+    Match.when(Predicate.isString, (fileName) => ({
+      ...test,
+      fileName: prev.sandbox.originalFileFor(fileName),
+    })),
+    Match.orElse(() => test),
+  )
+
+const withOriginalFileNames = (tests: readonly TestResult[], prev: InstrumentDone): readonly TestResult[] =>
+  tests.map((test) => withOriginalFileName(test, prev))
+
+const announceDryRunOutcome = (
+  tests: readonly TestResult[],
+  prev: InstrumentDone,
+  gross: Duration.Duration,
+  overheadMillis: number,
+): Effect.Effect<void> =>
+  Match.value(tests.length).pipe(
+    Match.when(0, () => Effect.logInfo('No tests were found')),
+    Match.orElse(() =>
+      Effect.logInfo(
+        `Initial test run succeeded. Ran ${tests.length} tests in ${Duration.format(gross)} (net ${
+          totalTestTime(tests)
+        } ms, overhead ${overheadMillis} ms).`,
+      ).pipe(
+        Effect.andThen(
+          Effect.when(
+            Effect.logInfo('Note: running the dry-run only. No mutations will be tested.'),
+            Effect.succeed(prev.options.dryRunOnly),
+          ),
+        ),
+      )
+    ),
+  )
+
+const completeDryRunPassed = (raw: DryRunRaw): Effect.Effect<DryRunDone, StageError> =>
+  Effect.gen(function*() {
+    const prevDone = raw.prev
+    const rawResult = raw.rawResult
+
+    if (rawResult.status !== 'complete') {
+      return yield* Effect.fail(
+        new StageError({ stage: 'dryRun', reason: 'Unexpected dry-run status after decision' }),
+      )
+    }
+    const tests = withOriginalFileNames(rawResult.tests, prevDone)
+    const dryRunResult: CompleteDryRunResult = { ...rawResult, tests, status: 'complete' }
+    const overheadMillis = overheadMillisOf(Duration.toMillis(raw.gross), tests)
+
+    yield* offerReporterEvent(
+      prevDone.reporterStage,
+      new DryRunCompleted({
+        timing: { net: totalTestTime(tests), overhead: overheadMillis },
+        capabilities: { reloadEnvironment: raw.capabilities.reloadEnvironment },
+        testCount: tests.length,
+        tests: [...dryRunResult.tests],
+      }),
+    ).pipe(Effect.ignoreCause)
+
+    yield* announceDryRunOutcome(tests, prevDone, raw.gross, overheadMillis)
+
+    return {
+      ...prevDone,
+      dryRunResult,
+      testCoverage: testCoverageFrom(dryRunResult),
+      timeOverhead: Duration.millis(overheadMillis),
+    }
+  })
+
 export const dryRunCell = Cell.layer({
   read: (command: InstrumentDone) =>
     Effect.gen(function*() {
@@ -676,41 +842,12 @@ export const dryRunCell = Cell.layer({
       }
       return raw
     }),
-  decode: (raw: DryRunRaw): Result.Result<DryRunCommand, StageError> => {
-    const rawResult = raw.rawResult
-    const allowEmpty = raw.prev.options.allowEmpty
-    if (rawResult.status === 'complete') {
-      const failedTestCount = rawResult.tests.filter((test) => test.status === 'failed').length
-      return Result.succeed(
-        new DryRunCommand({
-          status: 'Complete',
-          testCount: rawResult.tests.length,
-          failedTestCount,
-          allowEmpty,
-        }),
-      )
-    }
-    if (rawResult.status === 'error') {
-      return Result.succeed(
-        new DryRunCommand({
-          status: 'Error',
-          testCount: 0,
-          failedTestCount: 0,
-          allowEmpty,
-          errorMessage: rawResult.errorMessage,
-        }),
-      )
-    }
-    return Result.succeed(
-      new DryRunCommand({
-        status: 'Timeout',
-        testCount: 0,
-        failedTestCount: 0,
-        allowEmpty,
-        ...(rawResult.reason !== undefined && { reason: rawResult.reason }),
-      }),
-    )
-  },
+  decode: (raw: DryRunRaw): Result.Result<DryRunCommand, StageError> =>
+    Match.value(raw.rawResult).pipe(
+      Match.when(isCompleteDryRun, (complete) => decodeCompleteDryRun(complete, raw.prev.options.allowEmpty)),
+      Match.when(isFailedDryRun, (failed) => decodeFailedDryRun(failed, raw.prev.options.allowEmpty)),
+      Match.orElse((timedOut) => decodeTimedOutDryRun(timedOut, raw.prev.options.allowEmpty)),
+    ),
   decide: dryRun,
   encode: (outcome) => outcome,
   write: (outcome, raw) =>
@@ -738,64 +875,7 @@ export const dryRunCell = Cell.layer({
                   cause: decision,
                 }),
               )),
-            Match.tag('DryRunPassed', () =>
-              Effect.gen(function*() {
-                const prevDone = raw.prev
-                const rawResult = raw.rawResult
-
-                if (rawResult.status !== 'complete') {
-                  return yield* Effect.fail(
-                    new StageError({ stage: 'dryRun', reason: 'Unexpected dry-run status after decision' }),
-                  )
-                }
-                const tests = rawResult.tests.map((test) => {
-                  if (test.fileName !== undefined) {
-                    return { ...test, fileName: prevDone.sandbox.originalFileFor(test.fileName) }
-                  }
-                  return test
-                })
-                const dryRunResult: CompleteDryRunResult = { ...rawResult, tests, status: 'complete' }
-
-                const net = tests.reduce((total, test) => total + test.timeSpentMs, 0)
-                const grossMillis = Duration.toMillis(raw.gross)
-                let overheadMillis = grossMillis - net
-                if (overheadMillis < 0) {
-                  overheadMillis = 0
-                }
-                const overhead = Duration.millis(overheadMillis)
-
-                const testCoverage = testCoverageFrom(dryRunResult)
-
-                yield* offerReporterEvent(
-                  raw.prev.reporterStage,
-                  new DryRunCompleted({
-                    timing: { net, overhead: overheadMillis },
-                    capabilities: { reloadEnvironment: raw.capabilities.reloadEnvironment },
-                    testCount: tests.length,
-                    tests: [...dryRunResult.tests],
-                  }),
-                ).pipe(Effect.ignoreCause)
-
-                if (tests.length === 0) {
-                  yield* Effect.logInfo('No tests were found')
-                } else {
-                  yield* Effect.logInfo(
-                    `Initial test run succeeded. Ran ${tests.length} tests in ${Duration.format(raw.gross)} (net ${
-                      tests.reduce((t, x) => t + x.timeSpentMs, 0)
-                    } ms, overhead ${overheadMillis} ms).`,
-                  )
-                  if (prevDone.options.dryRunOnly) {
-                    yield* Effect.logInfo('Note: running the dry-run only. No mutations will be tested.')
-                  }
-                }
-
-                return {
-                  ...prevDone,
-                  dryRunResult,
-                  testCoverage,
-                  timeOverhead: overhead,
-                }
-              })),
+            Match.tag('DryRunPassed', () => completeDryRunPassed(raw)),
             Match.exhaustive,
           )
         }),
@@ -805,6 +885,70 @@ export const dryRunCell = Cell.layer({
 interface MutationTestRaw {
   readonly prev: DryRunDone
 }
+
+const passedCheck = (result: CheckResult): result is PassedCheckResult => result.status === 'passed'
+
+const reportCheckOutcome = (
+  [plan, result]: readonly [MutantRunPlan, CheckResult],
+  reporting: MutationReportingService,
+): Effect.Effect<void> =>
+  Match.value(result).pipe(
+    Match.when(passedCheck, () => Effect.void),
+    Match.orElse((failed) => reporting.reportCheckFailure(toReportedMutant(plan.mutant), failed).pipe(Effect.asVoid)),
+  )
+
+const checkPlansWithOneChecker = (
+  checkerPool: Pool.Pool<CheckerResourceService, unknown>,
+  checkerName: string,
+  plans: readonly MutantRunPlan[],
+  reporting: MutationReportingService,
+) =>
+  Effect.gen(function*() {
+    const checked = yield* Effect.scoped(
+      Effect.flatMap(
+        Pool.get(checkerPool),
+        (checker) =>
+          checkGroupedPlans(checker, checkerName, plans).pipe(
+            Effect.catchTags({
+              OutOfMemoryError: (error) =>
+                Effect.flatMap(Pool.invalidate(checkerPool, checker), () => Effect.fail(error)),
+              ChildProcessCrashedError: (error) =>
+                Effect.flatMap(Pool.invalidate(checkerPool, checker), () => Effect.fail(error)),
+            }),
+          ),
+      ),
+    )
+    yield* Effect.forEach(checked, (pair) => reportCheckOutcome(pair, reporting), {
+      concurrency: 1,
+      discard: true,
+    })
+    return checked.filter(([, result]) => result.status === 'passed').map(([plan]) => plan)
+  })
+
+const checkPlansWithEachChecker = (
+  prev: DryRunDone,
+  checkerPool: Pool.Pool<CheckerResourceService, unknown>,
+  plans: readonly MutantRunPlan[],
+  reporting: MutationReportingService,
+) =>
+  Effect.gen(function*() {
+    let passed: readonly MutantRunPlan[] = plans
+    for (const checkerName of prev.options.checkers) {
+      passed = yield* checkPlansWithOneChecker(checkerPool, checkerName, passed, reporting)
+    }
+    return passed
+  })
+
+const checkPlansWithConfiguredCheckers = (
+  prev: DryRunDone,
+  checkerPool: Pool.Pool<CheckerResourceService, unknown> | undefined,
+  plans: readonly MutantRunPlan[],
+  reporting: MutationReportingService,
+) =>
+  Option.match(Option.fromNullishOr(checkerPool), {
+    onNone: () => Effect.succeed(plans),
+    onSome: (pool) => checkPlansWithEachChecker(prev, pool, plans, reporting),
+  })
 
 export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, StageServices> = Cell.layer({
   read: (command: DryRunDone): Effect.Effect<MutationTestRaw, never, Scope.Scope> =>
@@ -914,10 +1058,12 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                   sandboxDirectory: prev.sandbox.workingDirectory,
                   basePath: env.basePath,
                 })
-                const sandboxFileByName: Record<string, string> = {}
-                for (const name of MutableHashMap.keys(prev.project.filesToMutate)) {
-                  sandboxFileByName[name] = prev.sandbox.sandboxFileFor(name)
-                }
+                const sandboxFileByName: Record<string, string> = Object.fromEntries(
+                  [...MutableHashMap.keys(prev.project.filesToMutate)].map((name) => [
+                    name,
+                    prev.sandbox.sandboxFileFor(name),
+                  ]),
+                )
                 const currentRelativeFiles = yield* readCurrentRelativeFiles(prev.project, env.basePath)
                 const incremental = incrementalDiff({
                   currentMutants: prev.mutants,
@@ -928,11 +1074,12 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                   force: prev.options.force,
                 })
                 const rememberedResults = rememberedResultsOf(prev.mutants, incremental.remembered)
-                if (rememberedResults.length > 0) {
-                  yield* Effect.logInfo(
+                yield* Effect.when(
+                  Effect.logInfo(
                     `Incremental mode: reusing ${rememberedResults.length} mutant result(s), running ${incremental.mutants.length} mutant(s).`,
-                  )
-                }
+                  ),
+                  Effect.succeed(rememberedResults.length > 0),
+                )
                 const { coveredPlans, earlyResults: noCoverageResults } = partitionPlans(
                   yield* decidePlans(
                     incremental.mutants,
@@ -948,11 +1095,9 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                     sandboxFileByName,
                   ),
                 )
-                const sortedPlans = [...coveredPlans].sort((a, b) => {
-                  if (a.runOptions.reloadEnvironment === b.runOptions.reloadEnvironment) return 0
-                  if (a.runOptions.reloadEnvironment) return 1
-                  return -1
-                })
+                const sortedPlans = [...coveredPlans].sort(
+                  (a, b) => Number(a.runOptions.reloadEnvironment) - Number(b.runOptions.reloadEnvironment),
+                )
                 const allPlansForReporter: readonly MutantRunPlan[] = [...sortedPlans]
                 yield* offerReporterEvent(
                   prev.reporterStage,
@@ -973,34 +1118,7 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                     new PlanKnown({ total: allPlansForReporter.length + noCoverageResults.length }),
                   )
                 }
-                let passedPlans: readonly MutantRunPlan[] = sortedPlans
-                if (checkerPool !== undefined) {
-                  for (const checkerName of prev.options.checkers) {
-                    const checked = yield* Effect.scoped(
-                      Effect.flatMap(
-                        Pool.get(checkerPool),
-                        (checker) =>
-                          checkGroupedPlans(checker, checkerName, passedPlans).pipe(
-                            Effect.catchTags({
-                              OutOfMemoryError: (error) =>
-                                Effect.flatMap(Pool.invalidate(checkerPool, checker), () => Effect.fail(error)),
-                              ChildProcessCrashedError: (error) =>
-                                Effect.flatMap(Pool.invalidate(checkerPool, checker), () => Effect.fail(error)),
-                            }),
-                          ),
-                      ),
-                    )
-                    const kept: MutantRunPlan[] = []
-                    for (const [plan, result] of checked) {
-                      if (result.status === 'passed') {
-                        kept.push(plan)
-                        continue
-                      }
-                      yield* reporting.reportCheckFailure(toReportedMutant(plan.mutant), result)
-                    }
-                    passedPlans = kept
-                  }
-                }
+                const passedPlans = yield* checkPlansWithConfiguredCheckers(prev, checkerPool, sortedPlans, reporting)
                 const testRunnerStream = Stream.fromIterable(passedPlans)
                 const plannedTotal = allPlansForReporter.length + noCoverageResults.length + rememberedResults.length
                 const pathService = yield* Path.Path
@@ -1062,26 +1180,42 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                     )
                     return completed
                   })
-                const offerStreamTested = (
+                const reportStreamTested = (
                   result: MutantResult,
-                  completed: number | undefined,
-                  prepared: PreparedStreamableMutant | undefined,
+                  completed: number,
+                  prepared: PreparedStreamableMutant,
                 ): Effect.Effect<void> =>
                   Effect.gen(function*() {
-                    if (completed === undefined || prepared === undefined) {
-                      return
-                    }
                     yield* offerReporterEvent(prev.reporterStage, toStreamEvent(result, completed, prepared)).pipe(
                       Effect.catchCause((cause) =>
                         Effect.logWarning('Reporter stream failed handling mutantTested', cause)
                       ),
                     )
                   })
-                for (const result of [...rememberedResults, ...noCoverageResults]) {
-                  const prepared = preparedStreamableOf(result)
-                  const completed = yield* offerFinished(result, prepared)
-                  yield* offerStreamTested(result, completed, prepared)
-                }
+
+                const offerStreamTested = (
+                  result: MutantResult,
+                  completed: number | undefined,
+                  prepared: PreparedStreamableMutant | undefined,
+                ): Effect.Effect<void> =>
+                  Option.match(
+                    Option.all([Option.fromNullishOr(completed), Option.fromNullishOr(prepared)] as const),
+                    {
+                      onNone: () => Effect.void,
+                      onSome: ([done, streamable]) => reportStreamTested(result, done, streamable),
+                    },
+                  )
+                const announceSettledMutant = (result: MutantResult): Effect.Effect<void> =>
+                  Effect.gen(function*() {
+                    const prepared = preparedStreamableOf(result)
+                    const completed = yield* offerFinished(result, prepared)
+                    yield* offerStreamTested(result, completed, prepared)
+                  })
+                yield* Effect.forEach(
+                  [...rememberedResults, ...noCoverageResults],
+                  announceSettledMutant,
+                  { concurrency: 1, discard: true },
+                )
                 const completedMutants = yield* Ref.make<MutantResult[]>([...rememberedResults, ...noCoverageResults])
                 const checkpointGate = yield* Semaphore.make(1)
                 yield* reporting.checkpoint(yield* Ref.get(completedMutants)).pipe(

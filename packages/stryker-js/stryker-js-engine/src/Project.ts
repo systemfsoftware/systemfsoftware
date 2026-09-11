@@ -49,82 +49,133 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-function globToRegExp(pattern: string): RegExp {
-  const build = (index: number, acc: string): string => {
-    if (index >= pattern.length) {
-      return acc
-    }
-    const char = pattern[index]
-    if (char === '*') {
-      const next = pattern[index + 1]
-      if (next === '*') {
-        const after = pattern[index + 2]
-        if (after === '/') {
-          return build(index + 3, `${acc}(?:.*\\/)?`)
-        }
-        return build(index + 2, `${acc}.*`)
-      }
-      return build(index + 1, `${acc}[^/]*`)
-    }
-    if (char === '?') {
-      return build(index + 1, `${acc}[^/]`)
-    }
-    if (char === '{') {
-      const close = pattern.indexOf('}', index)
-      if (close !== -1) {
-        const inner = pattern.slice(index + 1, close)
-        const parts = inner.split(',')
-        const escaped = parts.map((part) => escapeRegExp(part))
-        return build(close + 1, `${acc}(${escaped.join('|')})`)
-      }
-      return build(index + 1, `${acc}\\{`)
-    }
-    if (char === '[') {
-      const close = pattern.indexOf(']', index)
-      if (close !== -1) {
-        return build(close + 1, `${acc}${pattern.slice(index, close + 1)}`)
-      }
-      return build(index + 1, `${acc}\\[`)
-    }
-    return build(index + 1, `${acc}${escapeRegExp(char ?? '')}`)
+interface GlobStep {
+  readonly consumed: number
+  readonly output: string
+}
+
+function consumeDoubleStar(pattern: string, index: number): GlobStep {
+  if (pattern[index + 2] === '/') {
+    return { consumed: 3, output: '(?:.*\\/)?' }
   }
-  return new RegExp(`^${build(0, '')}$`)
+  return { consumed: 2, output: '.*' }
+}
+
+function consumeStar(pattern: string, index: number): GlobStep {
+  if (pattern[index + 1] === '*') {
+    return consumeDoubleStar(pattern, index)
+  }
+  return { consumed: 1, output: '[^/]*' }
+}
+
+function consumeBrace(pattern: string, index: number): GlobStep {
+  const close = pattern.indexOf('}', index)
+  if (close === -1) {
+    return { consumed: 1, output: '\\{' }
+  }
+  const escaped = pattern
+    .slice(index + 1, close)
+    .split(',')
+    .map((part) => escapeRegExp(part))
+  return { consumed: close - index + 1, output: `(${escaped.join('|')})` }
+}
+
+function consumeCharClass(pattern: string, index: number): GlobStep {
+  const close = pattern.indexOf(']', index)
+  if (close === -1) {
+    return { consumed: 1, output: '\\[' }
+  }
+  return { consumed: close - index + 1, output: pattern.slice(index, close + 1) }
+}
+
+function consumeGlobChar(pattern: string, index: number): GlobStep {
+  const char = pattern[index]
+  return Match.value(char).pipe(
+    Match.when('*', () => consumeStar(pattern, index)),
+    Match.when('?', () => ({ consumed: 1, output: '[^/]' })),
+    Match.when('{', () => consumeBrace(pattern, index)),
+    Match.when('[', () => consumeCharClass(pattern, index)),
+    Match.orElse(() => ({
+      consumed: 1,
+      output: escapeRegExp(Option.getOrElse(Option.fromUndefinedOr(char), () => '')),
+    })),
+  )
+}
+
+function globToRegExp(pattern: string): RegExp {
+  let index = 0
+  let acc = ''
+  while (index < pattern.length) {
+    const step = consumeGlobChar(pattern, index)
+    acc += step.output
+    index += step.consumed
+  }
+  return new RegExp(`^${acc}$`)
 }
 
 function resolveAgainstBase(basePath: string, pattern: string): string {
   const normalized = normalizeFileName(pattern)
-  if (normalized.startsWith('/')) {
-    return normalized
-  }
   const base = trimTrailingSlashes(normalizeFileName(basePath))
-  if (normalized.startsWith('./')) {
-    return `${base}/${normalized.slice(2)}`
-  }
-  return `${base}/${normalized}`
+  return Match.value(normalized.startsWith('/')).pipe(
+    Match.when(true, () => normalized),
+    Match.orElse(() =>
+      Match.value(normalized.startsWith('./')).pipe(
+        Match.when(true, () => `${base}/${normalized.slice(2)}`),
+        Match.orElse(() => `${base}/${normalized}`),
+      )
+    ),
+  )
 }
 
 function trimTrailingSlashes(value: string): string {
-  if (value.length > 1 && value.endsWith('/')) {
-    return trimTrailingSlashes(value.slice(0, -1))
-  }
-  return value
+  const trimmed = value.replace(/\/+$/, '')
+  return Match.value(trimmed.length === 0).pipe(
+    Match.when(true, () => value.slice(0, 1)),
+    Match.orElse(() => trimmed),
+  )
 }
+
+function globPatternOf(pattern: boolean | string): string | undefined {
+  if (typeof pattern === 'boolean') {
+    return Match.value(pattern).pipe(
+      Match.when(true, () => DEFAULT_GLOB),
+      Match.orElse(() => undefined),
+    )
+  }
+  return normalizeFileName(pattern)
+}
+
+function hasHiddenSegment(fileName: string, base: string): boolean {
+  const relative = Match.value(fileName.startsWith(base)).pipe(
+    Match.when(true, () => fileName.slice(base.length)),
+    Match.orElse(() => fileName),
+  )
+  return relative.split('/').some((segment) => segment.startsWith('.'))
+}
+
+const isExcludedHiddenFile = (
+  normalizedFile: string,
+  base: string,
+  allowHiddenFiles: boolean,
+  patternHasDot: boolean,
+): boolean =>
+  Match.value(allowHiddenFiles).pipe(
+    Match.when(true, () => false),
+    Match.orElse(() =>
+      Match.value(hasHiddenSegment(normalizedFile, base)).pipe(
+        Match.when(false, () => false),
+        Match.orElse(() => !patternHasDot),
+      )
+    ),
+  )
 
 function createPureMatcher(
   pattern: boolean | string,
   allowHiddenFiles: boolean,
   basePath: string,
 ): (fileName: string) => boolean {
-  const relative = (() => {
-    if (typeof pattern === 'string') {
-      return normalizeFileName(pattern)
-    }
-    if (pattern) {
-      return DEFAULT_GLOB
-    }
-    return false
-  })()
-  if (relative === false) {
+  const relative = globPatternOf(pattern)
+  if (relative === undefined) {
     return (): boolean => false
   }
   const regex = globToRegExp(resolveAgainstBase(basePath, relative))
@@ -133,94 +184,131 @@ function createPureMatcher(
   const base = `${trimTrailingSlashes(normalizeFileName(basePath))}/`
   return (fileName: string): boolean => {
     const normalizedFile = normalizeFileName(fileName)
-    if (!allowHiddenFiles) {
-      const inside = (() => {
-        if (normalizedFile.startsWith(base)) {
-          return normalizedFile.slice(base.length)
-        }
-        return normalizedFile
-      })()
-      const hasDotSegment = inside.split('/').some((segment) => segment.startsWith('.'))
-      if (hasDotSegment && !patternHasDot) {
-        return false
-      }
-    }
-    return regex.test(normalizedFile)
+    return Match.value(isExcludedHiddenFile(normalizedFile, base, allowHiddenFiles, patternHasDot)).pipe(
+      Match.when(true, () => false),
+      Match.orElse(() => regex.test(normalizedFile)),
+    )
   }
+}
+
+const rangeListOf = (mutate: FileMutate): Option.Option<readonly Location[]> =>
+  Option.filter(Option.fromUndefinedOr(mutate), Array.isArray)
+
+function unionPair(first: FileDescriptionLike, second: FileDescriptionLike): FileDescriptionLike {
+  const ranges = Option.all([rangeListOf(first.mutate), rangeListOf(second.mutate)])
+  return Option.match(ranges, {
+    onSome: ([firstRanges, secondRanges]) => ({ mutate: [...secondRanges, ...firstRanges] }),
+    onNone: () =>
+      Match.value(second.mutate).pipe(
+        Match.when(true, () => ({ mutate: true })),
+        Match.orElse(() =>
+          Match.value(first.mutate).pipe(
+            Match.when(false, () => ({ mutate: second.mutate })),
+            Match.orElse(() => ({ mutate: first.mutate })),
+          )
+        ),
+      ),
+  })
 }
 
 function unionFileDescriptions(
   first: FileDescriptionLike,
   second?: FileDescriptionLike,
 ): FileDescriptionLike {
-  if (second !== undefined) {
-    if (Array.isArray(first.mutate) && Array.isArray(second.mutate)) {
-      const firstArray: readonly Location[] = first.mutate
-      const secondArray: readonly Location[] = second.mutate
-      const combined: readonly Location[] = [...secondArray, ...firstArray]
-      return { mutate: combined }
-    }
-    if (second.mutate === true) {
-      return { mutate: true }
-    }
-    if (first.mutate === false) {
-      return { mutate: second.mutate }
-    }
-    return { mutate: first.mutate }
-  }
-  return first
+  return Option.match(Option.fromUndefinedOr(second), {
+    onNone: () => first,
+    onSome: (defined) => unionPair(first, defined),
+  })
 }
+
+function overlapOf(firstRange: Location, secondRange: Location): Location | undefined {
+  const startLine = Math.max(firstRange.start.line, secondRange.start.line)
+  const endLine = Math.min(firstRange.end.line, secondRange.end.line)
+  const startColumn = Match.value(firstRange.start.line === startLine).pipe(
+    Match.when(true, () => firstRange.start.column),
+    Match.orElse(() => secondRange.start.column),
+  )
+  const endColumn = Match.value(firstRange.end.line === endLine).pipe(
+    Match.when(true, () => firstRange.end.column),
+    Match.orElse(() => secondRange.end.column),
+  )
+  return Match.value(startLine > endLine).pipe(
+    Match.when(true, () => undefined),
+    Match.orElse(() => ({
+      start: { line: startLine, column: startColumn },
+      end: { line: endLine, column: endColumn },
+    })),
+  )
+}
+
+const isLocation = (value: Location | undefined): value is Location => value !== undefined
+
+function overlapRanges(firstRanges: readonly Location[], secondRanges: readonly Location[]): readonly Location[] {
+  const overlaps = firstRanges.flatMap((firstRange) =>
+    secondRanges.map((secondRange) => overlapOf(firstRange, secondRange))
+  )
+  return overlaps.filter(isLocation)
+}
+
 function intersectFileDescriptions(
   first: FileDescriptionLike,
   second: FileDescriptionLike,
 ): FileDescriptionLike {
-  if (Array.isArray(first.mutate) && Array.isArray(second.mutate)) {
-    const firstArray: readonly Location[] = first.mutate
-    const secondArray: readonly Location[] = second.mutate
-    const intersectedRanges = firstArray.flatMap((firstRange) =>
-      secondArray.map((secondRange) => {
-        const startLine = (() => {
-          if (firstRange.start.line > secondRange.start.line) {
-            return firstRange.start.line
-          }
-          return secondRange.start.line
-        })()
-        const endLine = (() => {
-          if (firstRange.end.line < secondRange.end.line) {
-            return firstRange.end.line
-          }
-          return secondRange.end.line
-        })()
-        if (startLine > endLine) {
-          return undefined
-        }
-        const startColumn = (() => {
-          if (firstRange.start.line === startLine) {
-            return firstRange.start.column
-          }
-          return secondRange.start.column
-        })()
-        const endColumn = (() => {
-          if (firstRange.end.line === endLine) {
-            return firstRange.end.column
-          }
-          return secondRange.end.column
-        })()
-        return {
-          start: { line: startLine, column: startColumn },
-          end: { line: endLine, column: endColumn },
-        }
-      })
-    ).filter((value): value is Location => value !== undefined)
-    return { mutate: intersectedRanges }
+  const ranges = Option.all([rangeListOf(first.mutate), rangeListOf(second.mutate)])
+  return Option.match(ranges, {
+    onSome: ([firstRanges, secondRanges]) => ({ mutate: overlapRanges(firstRanges, secondRanges) }),
+    onNone: () =>
+      Match.value(first.mutate).pipe(
+        Match.when(true, () => second),
+        Match.orElse(() =>
+          Match.value(second.mutate).pipe(
+            Match.when(true, () => first),
+            Match.orElse(() => ({ mutate: false })),
+          )
+        ),
+      ),
+  })
+}
+
+interface MutationRangePattern {
+  readonly pattern: string
+  readonly mutate: FileMutate
+}
+
+const rangeGroup = (match: RegExpExecArray, index: number, fallback: string): string =>
+  Option.getOrElse(Option.fromUndefinedOr(match[index]), () => fallback)
+
+function mutationRangeOf(mutatePattern: string): MutationRangePattern | undefined {
+  const match = MUTATION_RANGE_REGEX.exec(mutatePattern)
+  if (match === null) {
+    return undefined
   }
-  if (first.mutate === true) {
-    return second
+  const startLine = Number(rangeGroup(match, 3, '1'))
+  const startColumn = Number(rangeGroup(match, 4, '0'))
+  const endLine = Number(rangeGroup(match, 5, '1'))
+  const endColumn = Number(rangeGroup(match, 6, String(Number.MAX_SAFE_INTEGER)))
+  return {
+    pattern: rangeGroup(match, 1, mutatePattern),
+    mutate: [
+      {
+        start: { line: startLine - 1, column: startColumn },
+        end: { line: endLine - 1, column: endColumn },
+      },
+    ],
   }
-  if (second.mutate === true) {
-    return first
-  }
-  return { mutate: false }
+}
+
+function describeMatchingFiles(
+  fileNames: Iterable<string>,
+  pattern: string,
+  mutate: FileMutate,
+  basePath: string,
+): HashMap.HashMap<string, FileDescriptionLike> {
+  const matches = createPureMatcher(pattern, false, basePath)
+  const entries: Array<readonly [string, FileDescriptionLike]> = Array.from(fileNames)
+    .filter((fileName) => matches(fileName))
+    .map((fileName): readonly [string, FileDescriptionLike] => [fileName, { mutate }])
+  return HashMap.fromIterable(entries)
 }
 
 function filterMutatePatternPure(
@@ -228,41 +316,10 @@ function filterMutatePatternPure(
   mutatePattern: string,
   basePath: string,
 ): HashMap.HashMap<string, FileDescriptionLike> {
-  const match = MUTATION_RANGE_REGEX.exec(mutatePattern)
-  if (match !== null) {
-    const rawPattern = match[1]
-    const startLineStr = match[3] ?? '1'
-    const startColumnStr = match[4] ?? '0'
-    const endLineStr = match[5] ?? '1'
-    const endColumnStr = match[6] ?? String(Number.MAX_SAFE_INTEGER)
-    const pattern = (() => {
-      if (rawPattern !== undefined) {
-        return rawPattern
-      }
-      return mutatePattern
-    })()
-    const startLine = Number(startLineStr)
-    const startColumn = Number(startColumnStr)
-    const endLine = Number(endLineStr)
-    const endColumn = Number(endColumnStr)
-    const location: Location = {
-      start: { line: startLine - 1, column: startColumn },
-      end: { line: endLine - 1, column: endColumn },
-    }
-    const mutate: FileMutate = [location]
-    const matches = createPureMatcher(pattern, false, basePath)
-    const entries: Array<readonly [string, FileDescriptionLike]> = Array.from(fileNames)
-      .filter((fileName) => matches(fileName))
-      .map((fileName): readonly [string, FileDescriptionLike] => [fileName, { mutate }])
-    return HashMap.fromIterable(entries)
-  }
-  const pattern = mutatePattern
-  const mutate: FileMutate = true
-  const matches = createPureMatcher(pattern, false, basePath)
-  const entries: Array<readonly [string, FileDescriptionLike]> = Array.from(fileNames)
-    .filter((fileName) => matches(fileName))
-    .map((fileName): readonly [string, FileDescriptionLike] => [fileName, { mutate }])
-  return HashMap.fromIterable(entries)
+  const range = Option.fromUndefinedOr(mutationRangeOf(mutatePattern))
+  const pattern = Option.getOrElse(Option.map(range, (found) => found.pattern), () => mutatePattern)
+  const mutate: FileMutate = Option.getOrElse(Option.map(range, (found) => found.mutate), () => true)
+  return describeMatchingFiles(fileNames, pattern, mutate, basePath)
 }
 
 function resolveFileDescriptionsPure(
@@ -299,20 +356,19 @@ function resolveFileDescriptionsPure(
   if (targetMutatePatterns !== undefined) {
     const seen = targetMutatePatterns.reduce((acc, pattern) => {
       const files = filterMutatePatternPure(HashMap.keys(afterMutate), pattern, basePath)
-      const next = HashMap.reduce(files, acc, (inner, description, fileName) => {
-        const currentOpt = HashMap.get(afterMutate, fileName)
-        if (Option.isNone(currentOpt)) {
-          return inner
-        }
-        const current = currentOpt.value
-        const intersected = intersectFileDescriptions(current, description)
-        const prevSeenOpt = HashMap.get(inner, fileName)
-        if (Option.isSome(prevSeenOpt)) {
-          const prevSeen = prevSeenOpt.value
-          return HashMap.set(inner, fileName, unionFileDescriptions(intersected, prevSeen))
-        }
-        return HashMap.set(inner, fileName, unionFileDescriptions(intersected, undefined))
-      })
+      const next = HashMap.reduce(
+        files,
+        acc,
+        (inner, description, fileName) =>
+          Option.match(HashMap.get(afterMutate, fileName), {
+            onNone: () => inner,
+            onSome: (current) => {
+              const intersected = intersectFileDescriptions(current, description)
+              const prevSeen = Option.getOrElse(HashMap.get(inner, fileName), () => undefined)
+              return HashMap.set(inner, fileName, unionFileDescriptions(intersected, prevSeen))
+            },
+          }),
+      )
       return next
     }, HashMap.empty<string, FileDescriptionLike>())
 
@@ -488,16 +544,18 @@ export function toInstrumenterFile(
 export function readContent(
   file: ProjectFile,
 ): Effect.Effect<string, PlatformError, FileSystem.FileSystem> {
-  return Effect.gen(function*() {
-    if (file.content !== undefined) {
-      return file.content
-    }
-    if (file.originalContent !== undefined) {
-      return file.originalContent
-    }
-    const fs = yield* FileSystem.FileSystem
-    const content = yield* fs.readFileString(file.name)
-    return content
+  const inMemory = Option.orElse(
+    Option.fromUndefinedOr(file.content),
+    () => Option.fromUndefinedOr(file.originalContent),
+  )
+  return Option.match(inMemory, {
+    onSome: (content) => Effect.succeed(content),
+    onNone: () =>
+      Effect.gen(function*() {
+        const fs = yield* FileSystem.FileSystem
+        const content = yield* fs.readFileString(file.name)
+        return content
+      }),
   })
 }
 
@@ -512,11 +570,14 @@ export function readOriginal(
 }
 
 export function writeInPlace(file: ProjectFile): Effect.Effect<void, PlatformError, FileSystem.FileSystem> {
-  return Effect.gen(function*() {
-    if (file.content !== undefined && hasChanges(file)) {
-      const fs = yield* FileSystem.FileSystem
-      yield* fs.writeFileString(file.name, file.content)
-    }
+  const content = Option.filter(Option.fromUndefinedOr(file.content), () => hasChanges(file))
+  return Option.match(content, {
+    onNone: () => Effect.void,
+    onSome: (text) =>
+      Effect.gen(function*() {
+        const fs = yield* FileSystem.FileSystem
+        yield* fs.writeFileString(file.name, text)
+      }),
   })
 }
 
@@ -562,6 +623,20 @@ export interface Project {
   readonly filesToMutate: MutableHashMap.MutableHashMap<string, ProjectFile>
 }
 
+function addProjectFile(
+  files: MutableHashMap.MutableHashMap<string, ProjectFile>,
+  filesToMutate: MutableHashMap.MutableHashMap<string, ProjectFile>,
+  name: string,
+  desc: FileDescription,
+): void {
+  const file = makeProjectFile(name, desc.mutate)
+  MutableHashMap.set(files, name, file)
+  Match.value(desc.mutate === false).pipe(
+    Match.when(true, () => undefined),
+    Match.orElse(() => MutableHashMap.set(filesToMutate, name, file)),
+  )
+}
+
 export function makeProject(
   fileDescriptions: FileDescriptions,
   incrementalReport?: MutationTestResult,
@@ -569,13 +644,7 @@ export function makeProject(
 ): Project {
   const files: MutableHashMap.MutableHashMap<string, ProjectFile> = MutableHashMap.empty<string, ProjectFile>()
   const filesToMutate: MutableHashMap.MutableHashMap<string, ProjectFile> = MutableHashMap.empty<string, ProjectFile>()
-  for (const [name, desc] of Object.entries(fileDescriptions)) {
-    const file = makeProjectFile(name, desc.mutate)
-    MutableHashMap.set(files, name, file)
-    if (desc.mutate !== false) {
-      MutableHashMap.set(filesToMutate, name, file)
-    }
-  }
+  Object.entries(fileDescriptions).forEach(([name, desc]) => addProjectFile(files, filesToMutate, name, desc))
   return {
     fileDescriptions,
     incrementalReport,
@@ -607,16 +676,26 @@ export function withInstrumentedFiles(
 ): Project {
   let next = project
   for (const { name, content } of instrumented) {
-    const existingOpt = MutableHashMap.get(next.files, name)
-    if (Option.isNone(existingOpt)) {
-      continue
-    }
-    const existing = existingOpt.value
-    const updated = withContent(existing, content)
-    next = withFile(next, updated)
+    Option.match(MutableHashMap.get(next.files, name), {
+      onNone: () => undefined,
+      onSome: (existing) => {
+        next = withFile(next, withContent(existing, content))
+      },
+    })
   }
   return next
 }
+
+const applyIgnoreRule = (included: boolean, negate: boolean, matches: () => boolean): boolean =>
+  Match.value(negate).pipe(
+    Match.when(included, () => included),
+    Match.orElse(() =>
+      Match.value(matches()).pipe(
+        Match.when(true, () => negate),
+        Match.orElse(() => included),
+      )
+    ),
+  )
 
 function resolveInputFileNames(
   ignoreRules: readonly string[],
@@ -634,37 +713,31 @@ function resolveInputFileNames(
       rule.match(`/${entryPath}`, true) || rule.match(entryPath, true)
 
     const matchesFile = (entryName: string, entryPath: string, rule: Minimatch): boolean =>
-      rule.match(entryName) || rule.match(entryPath) || rule.match(`/${entryPath}`)
+      [entryName, entryPath, `/${entryPath}`].some((candidate) => rule.match(candidate))
+
+    const matchesDirectoryTail = (entryPath: string, rule: Minimatch): boolean =>
+      [rule.match(`/${entryPath}/`), rule.match(`${entryPath}/`)].some((matched) => matched)
+
+    const matchesNegatedDirectory = (entryPath: string, rule: Minimatch): boolean =>
+      rule.negate && matchesDirectoryPartially(entryPath, rule)
 
     const matchesDirectory = (entryName: string, entryPath: string, rule: Minimatch): boolean =>
-      matchesFile(entryName, entryPath, rule) ||
-      rule.match(`/${entryPath}/`) ||
-      rule.match(`${entryPath}/`) ||
-      (rule.negate && matchesDirectoryPartially(entryPath, rule))
+      [
+        matchesFile(entryName, entryPath, rule),
+        matchesDirectoryTail(entryPath, rule),
+        matchesNegatedDirectory(entryPath, rule),
+      ].some((matched) => matched)
 
-    const isIncluded = (name: string, entryPath: string, isDirectory: boolean): boolean => {
-      const decide = (included: boolean, remaining: readonly Minimatch[]): boolean => {
-        const [rule, ...rest] = remaining
-        if (rule === undefined) {
-          return included
-        }
-        if (rule.negate === included) {
-          return decide(included, rest)
-        }
-        const matches = (): boolean => {
-          if (isDirectory) {
-            return matchesDirectory(name, entryPath, rule)
-          }
-          return matchesFile(name, entryPath, rule)
-        }
-        const matched = matches()
-        if (matched) {
-          return decide(rule.negate, rest)
-        }
-        return decide(included, rest)
-      }
-      return decide(true, ignoreMatchers)
-    }
+    const isIncluded = (name: string, entryPath: string, isDirectory: boolean): boolean =>
+      ignoreMatchers.reduce(
+        (included, rule) =>
+          applyIgnoreRule(included, rule.negate, () =>
+            Match.value(isDirectory).pipe(
+              Match.when(true, () => matchesDirectory(name, entryPath, rule)),
+              Match.orElse(() => matchesFile(name, entryPath, rule)),
+            )),
+        true,
+      )
 
     const crawlDir = (
       dir: string,
@@ -714,37 +787,47 @@ function resolveInputFileNames(
   })
 }
 
+function parseIncrementalReport(
+  contents: string | undefined,
+): Effect.Effect<MutationTestResult | undefined, unknown, never> {
+  return Option.match(Option.fromUndefinedOr(contents), {
+    onNone: () => Effect.succeed(undefined),
+    onSome: (text) =>
+      Effect.gen(function*() {
+        const parsed = yield* Effect.try(() => parseJson(text))
+        const rawReport: unknown = yield* Effect.fromResult(decodeIncrementalReport(parsed))
+        const isMutationTestResult = (_value: unknown): _value is MutationTestResult | undefined => true
+        if (!isMutationTestResult(rawReport)) {
+          throw new Error('Invalid incremental report shape')
+        }
+        return rawReport
+      }),
+  })
+}
+
 function readIncrementalReport(
   incremental: boolean,
   incrementalFile: string,
 ): Effect.Effect<MutationTestResult | undefined, unknown, FileSystem.FileSystem | Path.Path> {
-  return Effect.gen(function*() {
-    if (!incremental) {
-      return undefined
-    }
-    const fs = yield* FileSystem.FileSystem
-    const contents: string | undefined = yield* fs.readFileString(incrementalFile).pipe(
-      Effect.catchTag('PlatformError', (error) =>
-        Match.value(error.reason).pipe(
-          Match.tag('NotFound', () =>
-            Effect.logInfo(
-              `No incremental result file found at ${incrementalFile}, a full mutation testing run will be performed.`,
-            ).pipe(Effect.as<string | undefined>(undefined))),
-          Match.orElse(() => Effect.fail(error)),
-        )),
-    )
-    if (contents === undefined) {
-      return undefined
-    }
-    const parsed = yield* Effect.try(() => parseJson(contents))
-    const rawReport: unknown = yield* Effect.fromResult(decodeIncrementalReport(parsed))
-    const isMutationTestResult = (_value: unknown): _value is MutationTestResult | undefined => true
-    if (!isMutationTestResult(rawReport)) {
-      throw new Error('Invalid incremental report shape')
-    }
-    const report: MutationTestResult | undefined = rawReport
-    return report
-  })
+  return Match.value(incremental).pipe(
+    Match.when(false, () => Effect.succeed(undefined)),
+    Match.orElse(() =>
+      Effect.gen(function*() {
+        const fs = yield* FileSystem.FileSystem
+        const contents: string | undefined = yield* fs.readFileString(incrementalFile).pipe(
+          Effect.catchTag('PlatformError', (error) =>
+            Match.value(error.reason).pipe(
+              Match.tag('NotFound', () =>
+                Effect.logInfo(
+                  `No incremental result file found at ${incrementalFile}, a full mutation testing run will be performed.`,
+                ).pipe(Effect.as<string | undefined>(undefined))),
+              Match.orElse(() => Effect.fail(error)),
+            )),
+        )
+        return yield* parseIncrementalReport(contents)
+      })
+    ),
+  )
 }
 
 export function readProject(
@@ -796,12 +879,10 @@ export function readProject(
       yield* Effect.forEach(mutatePatterns, (pattern) =>
         Effect.gen(function*() {
           const excluding = pattern.startsWith(IGNORE_PATTERN_CHARACTER)
-          const inner = ((): string => {
-            if (excluding) {
-              return pattern.substring(1)
-            }
-            return pattern
-          })()
+          const inner = Match.value(excluding).pipe(
+            Match.when(true, () => pattern.substring(1)),
+            Match.orElse(() => pattern),
+          )
           const probe: FileSelectionInput = {
             inputFileNames,
             mutatePatterns: [inner],
@@ -812,11 +893,12 @@ export function readProject(
           if (Object.keys(probed.fileDescriptions).length > 0) {
             return
           }
-          if (excluding) {
-            yield* Effect.logWarning(`Glob pattern "${pattern}" did not exclude any files.`)
-            return
-          }
-          yield* Effect.logWarning(`Glob pattern "${pattern}" did not result in any files.`)
+          yield* Effect.logWarning(
+            Match.value(excluding).pipe(
+              Match.when(true, () => `Glob pattern "${pattern}" did not exclude any files.`),
+              Match.orElse(() => `Glob pattern "${pattern}" did not result in any files.`),
+            ),
+          )
         }))
     }
 

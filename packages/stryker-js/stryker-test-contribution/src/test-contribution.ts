@@ -1,4 +1,5 @@
 import { schema } from '@systemfsoftware/stryker-js/Mutant'
+import * as Match from 'effect/Match'
 
 export const defaultRequireTestContributionSuffixes = [
   '.workflow.property.test.ts',
@@ -39,238 +40,305 @@ export interface TestContributionInput {
   readonly everyKillerRecorded: boolean
 }
 
-type ReportView = Pick<schema.MutationTestResult, 'files' | 'testFiles'>
-
-const KILLING_STATUSES: ReadonlySet<string> = new Set(['Killed', 'Timeout'])
-
-const testFileById = (
-  testFiles: Readonly<Record<string, schema.TestFile>>,
-): ReadonlyMap<string, string> => {
-  const byId = new Map<string, string>()
-  for (const [fileName, testFile] of Object.entries(testFiles)) {
-    for (const test of testFile.tests) {
-      byId.set(test.id, fileName)
-    }
-  }
-  return byId
-}
-
-// A killer we cannot place in a file still counts as a distinct killer for the sole-credit
-// test (a `[real, ghost]` pair never lets the real file claim the mutant alone), and the
-// unplaced key is not a test file, so it never credits or exempts a real file.
-const killersOf = (
-  killedBy: readonly string[],
-  fileById: ReadonlyMap<string, string>,
-): ReadonlySet<string> => new Set(killedBy.map((testId) => fileById.get(testId) ?? testId))
-
-/** The real test files an id list maps to; ids naming no file are dropped as inert. */
-const realFiles = (
-  testIds: readonly string[],
-  fileById: ReadonlyMap<string, string>,
-): ReadonlySet<string> => {
-  const files = new Set<string>()
-  for (const testId of testIds) {
-    const fileName = fileById.get(testId)
-    if (fileName !== undefined) files.add(fileName)
-  }
-  return files
-}
-
-export const contributionByTestFile = (
-  report: ReportView,
-): ReadonlyMap<string, TestFileContribution> => {
-  const testFiles = report.testFiles ?? {}
-  const fileById = testFileById(testFiles)
-  const soleKills = new Map<string, number>()
-  const totalKills = new Map<string, number>()
-  const killableCovered = new Map<string, number>()
-  const unattributed = new Set<string>()
-
-  for (const file of Object.values(report.files)) {
-    for (const mutant of file.mutants) {
-      if (mutant.status !== 'Ignored') {
-        for (const fileName of realFiles(mutant.coveredBy ?? [], fileById)) {
-          killableCovered.set(fileName, (killableCovered.get(fileName) ?? 0) + 1)
-        }
-      }
-      if (!KILLING_STATUSES.has(mutant.status)) continue
-      const killers = killersOf(mutant.killedBy ?? [], fileById)
-      const realKillers = realFiles(mutant.killedBy ?? [], fileById)
-      // A kill no real file is credited with is still a kill, and an id naming no file is
-      // not a test file at all. The coverers may be what causes it, so they cannot be told
-      // deleting them changes nothing. An all-unmapped `killedBy` lands here exactly as an
-      // empty one does; the inert ids are dropped and never spare anyone.
-      if (realKillers.size === 0) {
-        const covered = mutant.coveredBy
-        if (covered !== undefined) {
-          for (const fileName of realFiles(covered, fileById)) unattributed.add(fileName)
-        }
-        continue
-      }
-      const soleKill = killers.size === 1
-      for (const fileName of realKillers) {
-        totalKills.set(fileName, (totalKills.get(fileName) ?? 0) + 1)
-        if (soleKill) soleKills.set(fileName, (soleKills.get(fileName) ?? 0) + 1)
-      }
-    }
-  }
-
-  const byTestFile = new Map<string, TestFileContribution>()
-  for (const fileName of Object.keys(testFiles)) {
-    byTestFile.set(fileName, {
-      soleKills: soleKills.get(fileName) ?? 0,
-      totalKills: totalKills.get(fileName) ?? 0,
-      killableCovered: killableCovered.get(fileName) ?? 0,
-      coversUnattributedKill: unattributed.has(fileName),
-    })
-  }
-  return byTestFile
-}
-
-export const toothlessTestFiles = (
-  contribution: ReadonlyMap<string, TestFileContribution>,
-  { suffixes, everyKillerRecorded }: TestContributionInput,
-): readonly string[] => {
-  const toothless: string[] = []
-  for (const [fileName, { soleKills, totalKills, coversUnattributedKill, killableCovered }] of contribution) {
-    const defends = everyKillerRecorded ? soleKills > 0 : totalKills > 0
-    // Covering a kill credited to nobody makes this file unmeasurable, not toothless: the
-    // accusation is that deleting it changes nothing, and that cannot be shown here. A file
-    // the report gave no killable, covered mutant is unjudged for the same reason — it had
-    // nothing it could kill, so the report cannot say deleting it changes nothing.
-    if (!defends && isInScope(fileName, suffixes) && !coversUnattributedKill && killableCovered > 0) {
-      toothless.push(fileName)
-    }
-  }
-  return toothless.sort()
-}
-
 export interface TestContributionVerdict {
   readonly failed: boolean
   readonly message: string
 }
 
-// Past the bail guard, which returns before any verdict when killers went unrecorded.
+type ReportView = Pick<schema.MutationTestResult, 'files' | 'testFiles'>
+
+type TestFileById = ReadonlyMap<string, string>
+
+type ContributionEntry = readonly [string, TestFileContribution]
+
+const KILLING_STATUSES: Readonly<Record<string, true>> = { Killed: true, Timeout: true }
+
 const PRECISION = 'every killing test was recorded'
 
-/** Past the bail guard, a file defends itself only by a sole kill. */
-const defendsUniquely = (
-  contribution: ReadonlyMap<string, TestFileContribution>,
-  fileName: string,
-): boolean => (contribution.get(fileName)?.soleKills ?? 0) > 0
+const testFilesOf = (report: ReportView): Readonly<Record<string, schema.TestFile>> => report.testFiles ?? {}
 
-/** Whether a file is a gate target — its name carries one of the required suffixes. */
+const isDefined = <T>(value: T | undefined): value is T => value !== undefined
+
+const testFileById = (testFiles: Readonly<Record<string, schema.TestFile>>): TestFileById =>
+  new Map(
+    Object.entries(testFiles).flatMap(([fileName, testFile]) =>
+      testFile.tests.map((test): readonly [string, string] => [test.id, fileName])
+    ),
+  )
+
+const idsOf = (testIds: readonly string[] | undefined): readonly string[] => testIds ?? []
+
+const realFiles = (testIds: readonly string[], fileById: TestFileById): ReadonlySet<string> =>
+  new Set(testIds.map((testId) => fileById.get(testId)).filter(isDefined))
+
+const killersOf = (killedBy: readonly string[], fileById: TestFileById): ReadonlySet<string> =>
+  new Set(killedBy.map((testId) => fileById.get(testId) ?? testId))
+
+const isKillingMutant = (mutant: schema.MutantResult): boolean => KILLING_STATUSES[mutant.status] === true
+
+const isKillableMutant = (mutant: schema.MutantResult): boolean => mutant.status !== 'Ignored'
+
+const realKillersOf = (mutant: schema.MutantResult, fileById: TestFileById): ReadonlySet<string> =>
+  realFiles(idsOf(mutant.killedBy), fileById)
+
+const realCoverersOf = (mutant: schema.MutantResult, fileById: TestFileById): ReadonlySet<string> =>
+  realFiles(idsOf(mutant.coveredBy), fileById)
+
+interface Kill {
+  readonly mutant: schema.MutantResult
+  readonly killers: ReadonlySet<string>
+  readonly claimedAlone: boolean
+}
+
+const killOf = (mutant: schema.MutantResult, fileById: TestFileById): Kill => ({
+  mutant,
+  killers: realKillersOf(mutant, fileById),
+  claimedAlone: killersOf(idsOf(mutant.killedBy), fileById).size === 1,
+})
+
+const mutantsOf = (report: ReportView): readonly schema.MutantResult[] =>
+  Object.values(report.files).flatMap((file) => file.mutants)
+
+const killsOf = (mutants: readonly schema.MutantResult[], fileById: TestFileById): readonly Kill[] =>
+  mutants.filter(isKillingMutant).map((mutant) => killOf(mutant, fileById))
+
+const isUnattributedKill = (kill: Kill): boolean => kill.killers.size === 0
+
+const countOf = (counts: ReadonlyMap<string, number>, fileName: string): number => counts.get(fileName) ?? 0
+
+const incrementCount = (counts: Map<string, number>, fileName: string): Map<string, number> => {
+  counts.set(fileName, countOf(counts, fileName) + 1)
+  return counts
+}
+
+const countBy = (fileNames: Iterable<string>): ReadonlyMap<string, number> =>
+  [...fileNames].reduce(incrementCount, new Map<string, number>())
+
+interface ContributionTally {
+  readonly soleKills: ReadonlyMap<string, number>
+  readonly totalKills: ReadonlyMap<string, number>
+  readonly killableCovered: ReadonlyMap<string, number>
+  readonly unattributed: ReadonlySet<string>
+}
+
+const tallyOf = (mutants: readonly schema.MutantResult[], fileById: TestFileById): ContributionTally => {
+  const kills = killsOf(mutants, fileById)
+  return {
+    soleKills: countBy(kills.filter((kill) => kill.claimedAlone).flatMap((kill) => [...kill.killers])),
+    totalKills: countBy(kills.flatMap((kill) => [...kill.killers])),
+    killableCovered: countBy(
+      mutants.filter(isKillableMutant).flatMap((mutant) => [...realCoverersOf(mutant, fileById)]),
+    ),
+    unattributed: new Set(
+      kills.filter(isUnattributedKill).flatMap((kill) => [...realCoverersOf(kill.mutant, fileById)]),
+    ),
+  }
+}
+
+const fileContributionOf = (fileName: string, tally: ContributionTally): TestFileContribution => ({
+  soleKills: countOf(tally.soleKills, fileName),
+  totalKills: countOf(tally.totalKills, fileName),
+  killableCovered: countOf(tally.killableCovered, fileName),
+  coversUnattributedKill: tally.unattributed.has(fileName),
+})
+
+const contributionTableOf = (
+  mutants: readonly schema.MutantResult[],
+  testFiles: Readonly<Record<string, schema.TestFile>>,
+  fileById: TestFileById,
+): ReadonlyMap<string, TestFileContribution> => {
+  const tally = tallyOf(mutants, fileById)
+  return new Map(
+    Object.keys(testFiles).map((fileName): ContributionEntry => [fileName, fileContributionOf(fileName, tally)]),
+  )
+}
+
+export const contributionByTestFile = (report: ReportView): ReadonlyMap<string, TestFileContribution> => {
+  const testFiles = testFilesOf(report)
+  return contributionTableOf(mutantsOf(report), testFiles, testFileById(testFiles))
+}
+
 const isInScope = (fileName: string, suffixes: readonly string[]): boolean =>
   suffixes.some((suffix) => fileName.endsWith(suffix))
 
-/**
- * Joint subsumption over an accused set: every mutant some accused file kills
- * retains at least one killer outside the accused set. Only then does deleting
- * the whole set leave every mutant just as dead.
- */
-const jointSubsumption = (
-  report: ReportView,
-  accused: readonly string[],
-  fileById: ReadonlyMap<string, string>,
-): boolean => {
+const defends = (entry: TestFileContribution, everyKillerRecorded: boolean): boolean =>
+  Match.value(everyKillerRecorded).pipe(
+    Match.when(true, () => entry.soleKills > 0),
+    Match.when(false, () => entry.totalKills > 0),
+    Match.exhaustive,
+  )
+
+export const toothlessTestFiles = (
+  contribution: ReadonlyMap<string, TestFileContribution>,
+  { suffixes, everyKillerRecorded }: TestContributionInput,
+): readonly string[] =>
+  [...contribution]
+    .filter(([fileName]) => isInScope(fileName, suffixes))
+    .filter(([, entry]) => !defends(entry, everyKillerRecorded))
+    .filter(([, entry]) => entry.killableCovered > 0)
+    .filter(([, entry]) => !entry.coversUnattributedKill)
+    .map(([fileName]) => fileName)
+    .sort()
+
+const jointSubsumption = (report: ReportView, accused: readonly string[], fileById: TestFileById): boolean => {
   const accusedSet = new Set(accused)
-  for (const file of Object.values(report.files)) {
-    for (const mutant of file.mutants) {
-      if (!KILLING_STATUSES.has(mutant.status)) continue
-      const killers = realFiles(mutant.killedBy ?? [], fileById)
-      if (killers.size === 0) continue // unattributed kill — cannot testify against the accused
-      let killsAccused = false
-      let killsOutside = false
-      for (const fileName of killers) {
-        if (accusedSet.has(fileName)) killsAccused = true
-        else killsOutside = true
-      }
-      if (killsAccused && !killsOutside) return false
-    }
+  return killsOf(mutantsOf(report), fileById).every((kill) => isKilledOutside(kill, accusedSet))
+}
+
+const isKilledOutside = (kill: Kill, accusedSet: ReadonlySet<string>): boolean =>
+  isUnattributedKill(kill) || hasKillerOutside(kill.killers, accusedSet)
+
+const hasKillerOutside = (killers: ReadonlySet<string>, accusedSet: ReadonlySet<string>): boolean =>
+  [...killers].some((fileName) => !accusedSet.has(fileName))
+
+interface Judgement {
+  readonly report: ReportView
+  readonly fileById: TestFileById
+  readonly matches: string
+  readonly contribution: ReadonlyMap<string, TestFileContribution>
+  readonly inScope: readonly ContributionEntry[]
+  readonly everyKillerRecorded: boolean
+  readonly toothless: readonly string[]
+}
+
+type JudgingRule = (judgement: Judgement) => TestContributionVerdict | undefined
+
+const isVerdict = (verdict: TestContributionVerdict | undefined): verdict is TestContributionVerdict =>
+  verdict !== undefined
+
+const inScopeEntriesOf = (
+  contribution: ReadonlyMap<string, TestFileContribution>,
+  suffixes: readonly string[],
+): readonly ContributionEntry[] => [...contribution].filter(([fileName]) => isInScope(fileName, suffixes))
+
+const creditedAnyKill = (contribution: ReadonlyMap<string, TestFileContribution>): boolean =>
+  [...contribution.values()].some(({ totalKills }) => totalKills > 0)
+
+const ruleUnless = (
+  holds: boolean,
+  verdict: () => TestContributionVerdict,
+): TestContributionVerdict | undefined =>
+  Match.value(holds).pipe(
+    Match.when(true, () => undefined),
+    Match.when(false, verdict),
+    Match.exhaustive,
+  )
+
+const ruleNoInScopeFile = (judgement: Judgement): TestContributionVerdict | undefined =>
+  ruleUnless(judgement.inScope.length > 0, () => ({
+    failed: false,
+    message: `No test file matching ${judgement.matches} ran, so none was judged.`,
+  }))
+
+const ruleBailHidesKillers = (judgement: Judgement): TestContributionVerdict | undefined =>
+  ruleUnless(judgement.everyKillerRecorded, () => ({
+    failed: true,
+    message:
+      `This run used Stryker's bail mode, which stops each mutant at its first killing test. A test file's contribution therefore cannot be measured on this evidence. Set \`disableBail: true\` to record every killing test, or remove the test-contribution plugin from \`plugins\` to turn the check off for this run.`,
+  }))
+
+const ruleNoKillCredited = (judgement: Judgement): TestContributionVerdict | undefined =>
+  ruleUnless(creditedAnyKill(judgement.contribution), () => ({
+    failed: true,
+    message:
+      `This run credited no kill to any test file, so no test file's contribution to it can be measured. Until that is fixed the ${judgement.inScope.length} file(s) matching ${judgement.matches} are unjudged, not cleared.`,
+  }))
+
+const ruleNoToothlessFile = (judgement: Judgement): TestContributionVerdict | undefined =>
+  ruleUnless(judgement.toothless.length > 0, () => reviewedVerdict(judgement))
+
+const reviewedVerdict = (judgement: Judgement): TestContributionVerdict =>
+  Match.value(judgement.inScope.every(([, entry]) => entry.soleKills > 0)).pipe(
+    Match.when(true, () => ({
+      failed: false,
+      message: `Every test file matching ${judgement.matches} kills a mutant nothing else kills (${PRECISION}).`,
+    })),
+    Match.when(false, () => ({
+      failed: false,
+      message: `Every file matching ${judgement.matches} was reviewed: ${reviewedCounts(judgement).join('; ')}.`,
+    })),
+    Match.exhaustive,
+  )
+
+const reviewedCounts = (judgement: Judgement): readonly string[] => [
+  ...countedPart(judgedFiles(judgement).length, 'judged (kill a mutant nothing else kills)'),
+  ...countedPart(exemptFiles(judgement).length, 'exempted (cover a kill attributed to no test file)'),
+  ...countedPart(unjudgedFiles(judgement).length, 'unjudged (offered no killable, covered mutant)'),
+]
+
+const countedPart = (count: number, label: string): readonly string[] =>
+  Match.value(count > 0).pipe(
+    Match.when(true, (): readonly string[] => [`${count} ${label}`]),
+    Match.when(false, (): readonly string[] => []),
+    Match.exhaustive,
+  )
+
+const judgedFiles = (judgement: Judgement): readonly ContributionEntry[] =>
+  judgement.inScope.filter(([, entry]) => entry.soleKills > 0)
+
+const exemptFiles = (judgement: Judgement): readonly ContributionEntry[] =>
+  judgement.inScope.filter(([, entry]) => isExempt(entry))
+
+const unjudgedFiles = (judgement: Judgement): readonly ContributionEntry[] =>
+  judgement.inScope.filter(([, entry]) => isUnjudged(entry))
+
+const isExempt = (entry: TestFileContribution): boolean => entry.soleKills === 0 && entry.coversUnattributedKill
+
+const isUnjudged = (entry: TestFileContribution): boolean => entry.soleKills === 0 && !entry.coversUnattributedKill
+
+const accusedVerdict = (judgement: Judgement): TestContributionVerdict =>
+  Match.value(jointSubsumption(judgement.report, judgement.toothless, judgement.fileById)).pipe(
+    Match.when(true, () => jointlyDeletableVerdict(judgement)),
+    Match.when(false, () => notJointlyDeletableVerdict(judgement)),
+    Match.exhaustive,
+  )
+
+const jointlyDeletableVerdict = (judgement: Judgement): TestContributionVerdict => ({
+  failed: true,
+  message:
+    `Deleting these ${judgement.toothless.length} test file(s) would leave every mutant just as dead (${PRECISION}):\n${
+      bulletedFiles(judgement.toothless)
+    }`,
+})
+
+const notJointlyDeletableVerdict = (judgement: Judgement): TestContributionVerdict => ({
+  failed: true,
+  message:
+    `Deleting these ${judgement.toothless.length} test file(s) together would not leave every mutant just as dead: some mutant only they kill would be resurrected (${PRECISION}). Each is individually redundant, but the joint claim is not made on this evidence:\n${
+      bulletedFiles(judgement.toothless)
+    }`,
+})
+
+const bulletedFiles = (fileNames: readonly string[]): string =>
+  fileNames.map((fileName) => `  - ${fileName}`).join('\n')
+
+const JUDGING_RULES: readonly JudgingRule[] = [
+  ruleNoInScopeFile,
+  ruleBailHidesKillers,
+  ruleNoKillCredited,
+  ruleNoToothlessFile,
+]
+
+const verdictOf = (judgement: Judgement): TestContributionVerdict =>
+  JUDGING_RULES.map((rule) => rule(judgement)).find(isVerdict) ?? accusedVerdict(judgement)
+
+const judgementOf = (report: ReportView, everyKillerRecorded: boolean, suffixes: readonly string[]): Judgement => {
+  const testFiles = testFilesOf(report)
+  const fileById = testFileById(testFiles)
+  const contribution = contributionTableOf(mutantsOf(report), testFiles, fileById)
+  return {
+    report,
+    fileById,
+    matches: suffixes.join(', '),
+    contribution,
+    inScope: inScopeEntriesOf(contribution, suffixes),
+    everyKillerRecorded,
+    toothless: toothlessTestFiles(contribution, { suffixes, everyKillerRecorded }),
   }
-  return true
 }
 
 export const judgeTestContribution = (
   report: ReportView,
   everyKillerRecorded: boolean,
   suffixes: readonly string[] = defaultRequireTestContributionSuffixes,
-): TestContributionVerdict => {
-  const matches = suffixes.join(', ')
-  const contribution = contributionByTestFile(report)
-  const inScope = [...contribution.keys()].filter((fileName) => isInScope(fileName, suffixes))
-  if (inScope.length === 0) {
-    return { failed: false, message: `No test file matching ${matches} ran, so none was judged.` }
-  }
-  if (!everyKillerRecorded) {
-    // Bail stops each mutant at its first killing test, so a second defender can go
-    // unrecorded and the gate's claim — that deleting a file changes nothing — cannot be
-    // made on this evidence. Refuse to judge rather than accuse, naming `disableBail: true`.
-    return {
-      failed: true,
-      message:
-        `This run used Stryker's bail mode, which stops each mutant at its first killing test. A test file's contribution therefore cannot be measured on this evidence. Set \`disableBail: true\` to record every killing test, or remove the test-contribution plugin from \`plugins\` to turn the check off for this run.`,
-    }
-  }
-  // Zero attribution is the run failing to say who killed what, not every test failing to
-  // defend: with no killer recorded anywhere, every file scores zero and the check would
-  // accuse all of them. Blame the run, which is the thing that can actually be fixed.
-  const creditedAnyKill = [...contribution.values()].some(({ totalKills }) => totalKills > 0)
-  if (!creditedAnyKill) {
-    return {
-      failed: true,
-      message:
-        `This run credited no kill to any test file, so no test file's contribution to it can be measured. Until that is fixed the ${inScope.length} file(s) matching ${matches} are unjudged, not cleared.`,
-    }
-  }
-
-  const toothless = toothlessTestFiles(contribution, { suffixes, everyKillerRecorded })
-
-  if (toothless.length === 0) {
-    const everyDefends = inScope.every((fileName) => defendsUniquely(contribution, fileName))
-    if (everyDefends) {
-      return {
-        failed: false,
-        message: `Every test file matching ${matches} kills a mutant nothing else kills (${PRECISION}).`,
-      }
-    }
-    // Some in-scope file was exempted (covers an unattributed kill) or unjudged (the report
-    // offered it no killable, covered mutant). The unique-kill sentence would be false for
-    // it, so state the honest judged/exempt/unjudged counts instead — never the blanket claim.
-    // A non-defending file where toothless is empty is exempt or unjudged — exactly one
-    // class, so classify it in a single pass rather than a chain of filters.
-    const judged: string[] = []
-    const exempt: string[] = []
-    const unjudged: string[] = []
-    for (const fileName of inScope) {
-      if (defendsUniquely(contribution, fileName)) {
-        judged.push(fileName)
-      } else {
-        const c = contribution.get(fileName)
-        if (c?.coversUnattributedKill === true) exempt.push(fileName)
-        else unjudged.push(fileName)
-      }
-    }
-    const parts: string[] = []
-    if (judged.length > 0) parts.push(`${judged.length} judged (kill a mutant nothing else kills)`)
-    if (exempt.length > 0) parts.push(`${exempt.length} exempted (cover a kill attributed to no test file)`)
-    if (unjudged.length > 0) parts.push(`${unjudged.length} unjudged (offered no killable, covered mutant)`)
-    return { failed: false, message: `Every file matching ${matches} was reviewed: ${parts.join('; ')}.` }
-  }
-
-  const testFiles = report.testFiles ?? {}
-  const fileById = testFileById(testFiles)
-  const listed = toothless.map((fileName) => `  - ${fileName}`).join('\n')
-  if (!jointSubsumption(report, toothless, fileById)) {
-    return {
-      failed: true,
-      message:
-        `Deleting these ${toothless.length} test file(s) together would not leave every mutant just as dead: some mutant only they kill would be resurrected (${PRECISION}). Each is individually redundant, but the joint claim is not made on this evidence:\n${listed}`,
-    }
-  }
-  return {
-    failed: true,
-    message:
-      `Deleting these ${toothless.length} test file(s) would leave every mutant just as dead (${PRECISION}):\n${listed}`,
-  }
-}
+): TestContributionVerdict => verdictOf(judgementOf(report, everyKillerRecorded, suffixes))

@@ -48,6 +48,7 @@ The preset registers and enables four custom plugin suites alongside stock oxlin
 ### Stock Namespaces & Defaults
 
 - **`categories`**: `correctness: 'error'`
+- **Cyclomatic complexity**: `complexity` at `error` — `max 2` for `**/src/**`, `max 1` for `**/src/**/*.workflow.ts`, off for test files. Uses the `modified` variant (one `switch` costs a point, not one per `case`).
 - **Registered namespaces**: `oxc`, `typescript`, `import`, `unicorn`, `vitest`, `jsdoc`, `node`, `promise`
 - **Default ignore patterns**: `dist/**`, `build/**`, `coverage/**`, `**/*.d.ts`, `.turbo/**`, `.stryker-tmp/**`
 

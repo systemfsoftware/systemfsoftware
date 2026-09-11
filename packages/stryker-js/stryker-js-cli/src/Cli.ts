@@ -125,14 +125,14 @@ function createSplitter(separator: string) {
 const splitOnComma = createSplitter(',')
 const splitOnSpace = createSplitter(' ')
 
+const CLEAN_TEMP_DIR_DISABLED = ['false', '0'] as const
+
 function parseCleanDirOption(value: string): 'always' | boolean {
-  const v = value.toLocaleLowerCase()
-  return (() => {
-    if (v === 'always') {
-      return v
-    }
-    return v !== 'false' && v !== '0'
-  })()
+  const normalized = value.toLocaleLowerCase()
+  return Match.value(normalized).pipe(
+    Match.when('always', () => 'always' as const),
+    Match.orElse(() => !CLEAN_TEMP_DIR_DISABLED.some((disabled) => disabled === normalized)),
+  )
 }
 
 function parseConcurrency(value: string): number | string {
@@ -144,12 +144,11 @@ function parseConcurrency(value: string): number | string {
 
 const optional = <A>(option: Flag.Flag<A>) => Flag.optional(option)
 
-const absentWhenFalse = (value: Option.Option<boolean>): boolean | undefined => {
-  if (Option.isSome(value) && value.value) {
-    return true
-  }
-  return undefined
-}
+const absentWhenFalse = (value: Option.Option<boolean>): boolean | undefined =>
+  Option.getOrUndefined(Option.filter(value, (present) => present))
+
+const isUnknownArgument = (argument: string | undefined): argument is string =>
+  Option.exists(Option.fromUndefinedOr(argument), (text) => text.startsWith('-'))
 
 function setLogLevel(
   target: PartialStrykerOptions,
@@ -432,7 +431,7 @@ function makeStrykerCommand(requestRef: Ref.Ref<Option.Option<CliRequest>>) {
     runConfig,
     (config): Effect.Effect<void, CliError.CliError, never> => {
       const configFile = Option.getOrUndefined(config.configFile)
-      if (configFile !== undefined && configFile.startsWith('-')) {
+      if (isUnknownArgument(configFile)) {
         return Console.error(`Received unknown argument: '${configFile}'`).pipe(
           Effect.andThen(Effect.failSync(() => CliError.UnexpectedArgument.make({ arguments: [configFile] }))),
         )
@@ -618,6 +617,29 @@ function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironme
   }
 }
 
+const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.length > 0
+
+const progressStreamFileName = (request: Option.Option<CliRequest>): string =>
+  Option.match(request, {
+    onNone: () => DEFAULT_PROGRESS_STREAM_FILE,
+    onSome: (cliRequest) =>
+      Match.value(cliRequest).pipe(
+        Match.tag('merge-reports', () => DEFAULT_PROGRESS_STREAM_FILE),
+        Match.tag('run', (runRequest) =>
+          Option.getOrElse(
+            Option.filter(Option.fromNullishOr(runRequest.options['progressStreamFile']), isNonEmptyString),
+            () => DEFAULT_PROGRESS_STREAM_FILE,
+          )),
+        Match.exhaustive,
+      ),
+  })
+
+const applyProgressStreamFile = (stream: RunEventStream, fileName: string): Effect.Effect<void, never, never> =>
+  Option.match(Option.fromUndefinedOr(stream.setProgressStreamFile), {
+    onNone: () => Effect.void,
+    onSome: (setFileName) => setFileName(fileName),
+  })
+
 export const runStrykerCli = (
   input: RunStrykerCliInput,
   createRunEventStream: CreateRunEventStreamCapability,
@@ -710,24 +732,7 @@ export const runStrykerCli = (
         Effect.gen(function*() {
           const parsed = yield* Effect.result(input.program)
           const request = yield* Ref.get(input.requestRef)
-          const fileName = Option.match(request, {
-            onNone: () => DEFAULT_PROGRESS_STREAM_FILE,
-            onSome: (cliRequest) =>
-              Match.value(cliRequest).pipe(
-                Match.tag('merge-reports', () => DEFAULT_PROGRESS_STREAM_FILE),
-                Match.tag('run', (runRequest) => {
-                  const fromCli = runRequest.options['progressStreamFile']
-                  if (typeof fromCli === 'string' && fromCli.length > 0) {
-                    return fromCli
-                  }
-                  return DEFAULT_PROGRESS_STREAM_FILE
-                }),
-                Match.exhaustive,
-              ),
-          })
-          if (stream.setProgressStreamFile !== undefined) {
-            yield* stream.setProgressStreamFile(fileName)
-          }
+          yield* applyProgressStreamFile(stream, progressStreamFileName(request))
           yield* stream.open
           if (Result.isFailure(parsed)) {
             return yield* Effect.fail(parsed.failure)

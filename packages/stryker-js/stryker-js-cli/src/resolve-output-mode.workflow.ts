@@ -1,3 +1,5 @@
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
@@ -45,48 +47,64 @@ export type ResolveModeDecision = HumanOutput | MachineOutput
 
 const CONFLICT_EXPECTED = 'the "--format text" and "--json" flags are mutually exclusive — use one or the other'
 
-function r4(command: ResolveModeCommand): Result.Result<ResolveModeDecision, ModeConflictError> {
-  if (command.text === true && command.json === true) {
-    return Result.fail(
-      ModeConflictError.make({
-        option: 'json',
-        value: 'text',
-        expected: CONFLICT_EXPECTED,
-      }),
-    )
-  }
-  if (command.text === true) {
-    return Result.succeed(HumanOutput.make({ signal: 'flag', stdoutIsTTY: command.stdoutIsTTY }))
-  }
-  if (command.json === true) {
-    return Result.succeed(MachineOutput.make({ signal: 'flag', stdoutIsTTY: command.stdoutIsTTY }))
-  }
-  if (command.envMode !== undefined && command.envMode.length > 0) {
-    if (command.envMode === 'machine') {
-      return Result.succeed(MachineOutput.make({ signal: 'env', stdoutIsTTY: command.stdoutIsTTY }))
-    }
-    return Result.succeed(HumanOutput.make({ signal: 'env', stdoutIsTTY: command.stdoutIsTTY }))
-  }
-  if (!command.stdoutIsTTY) {
-    return Result.succeed(MachineOutput.make({ signal: 'tty', stdoutIsTTY: false }))
-  }
-  if (command.agent !== undefined && command.agent.length > 0) {
-    return Result.succeed(MachineOutput.make({ signal: 'agent', stdoutIsTTY: true }))
-  }
-  const toolVars = command.toolVars ?? {}
-  for (const variable of TOOL_VARIABLES) {
-    const value = toolVars[variable]
-    if (typeof value === 'string' && value.length > 0) {
-      return Result.succeed(MachineOutput.make({ signal: 'tool', stdoutIsTTY: true }))
-    }
-  }
-  return Result.succeed(HumanOutput.make({ signal: 'tty', stdoutIsTTY: true }))
-}
+const configured = (value: string | undefined): Option.Option<string> =>
+  Option.filter(Option.fromNullishOr(value), (text) => text.length > 0)
 
-function modeDecision(
-  command: ResolveModeCommand,
-): Result.Result<ResolveModeDecision, ModeConflictError> {
-  return r4(command)
-}
+const modeFromEnv = (envMode: string, stdoutIsTTY: boolean): ResolveModeDecision =>
+  Match.value(envMode).pipe(
+    Match.when('machine', () => MachineOutput.make({ signal: 'env', stdoutIsTTY })),
+    Match.orElse(() => HumanOutput.make({ signal: 'env', stdoutIsTTY })),
+  )
 
-export const resolveOutputMode = Workflow.make(ResolveModeCommand, modeDecision)
+const modeFromAgent = (command: ResolveModeCommand): ResolveModeDecision =>
+  Option.match(configured(command.agent), {
+    onNone: () => modeFromTools(command),
+    onSome: () => MachineOutput.make({ signal: 'agent', stdoutIsTTY: true }),
+  })
+
+const modeFromTools = (command: ResolveModeCommand): ResolveModeDecision =>
+  Match.value(anyToolVariableSet(command.toolVars)).pipe(
+    Match.when(true, () => MachineOutput.make({ signal: 'tool', stdoutIsTTY: true })),
+    Match.orElse(() => HumanOutput.make({ signal: 'tty', stdoutIsTTY: true })),
+  )
+
+const anyToolVariableSet = (toolVars: Readonly<Record<string, string>> | undefined): boolean =>
+  Option.match(Option.fromNullishOr(toolVars), {
+    onNone: () => false,
+    onSome: (named) => TOOL_VARIABLES.some((variable) => Option.isSome(configured(named[variable]))),
+  })
+
+const modeBelowEnv = (command: ResolveModeCommand): ResolveModeDecision =>
+  Match.value(command.stdoutIsTTY).pipe(
+    Match.when(false, () => MachineOutput.make({ signal: 'tty', stdoutIsTTY: false })),
+    Match.orElse(() => modeFromAgent(command)),
+  )
+
+const modeFromEnvironment = (command: ResolveModeCommand): ResolveModeDecision =>
+  Option.match(configured(command.envMode), {
+    onNone: () => modeBelowEnv(command),
+    onSome: (envMode) => modeFromEnv(envMode, command.stdoutIsTTY),
+  })
+
+const decideMode = (command: ResolveModeCommand): Result.Result<ResolveModeDecision, ModeConflictError> =>
+  Match.value(command).pipe(
+    Match.when({ text: true, json: true }, () =>
+      Result.fail(
+        ModeConflictError.make({
+          option: 'json',
+          value: 'text',
+          expected: CONFLICT_EXPECTED,
+        }),
+      )),
+    Match.when(
+      { text: true },
+      (texted) => Result.succeed(HumanOutput.make({ signal: 'flag', stdoutIsTTY: texted.stdoutIsTTY })),
+    ),
+    Match.when(
+      { json: true },
+      (jsoned) => Result.succeed(MachineOutput.make({ signal: 'flag', stdoutIsTTY: jsoned.stdoutIsTTY })),
+    ),
+    Match.orElse((rest) => Result.succeed(modeFromEnvironment(rest))),
+  )
+
+export const resolveOutputMode = Workflow.make(ResolveModeCommand, decideMode)

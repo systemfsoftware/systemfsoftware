@@ -1,4 +1,5 @@
 import { Effect } from 'effect'
+import * as Predicate from 'effect/Predicate'
 import * as S from 'effect/Schema'
 
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
@@ -56,7 +57,7 @@ export type PackageManifest = S.Schema.Type<typeof PackageManifest>
 export type ExportEntry = S.Schema.Type<typeof ExportEntry>
 
 export const VitestNodeModuleSchema = S.declare(
-  (input: unknown): input is typeof VitestNode => input !== null && typeof input === 'object' && !Array.isArray(input),
+  (input: unknown): input is typeof VitestNode => Predicate.isObject(input),
   { description: 'The project-local vitest/node module' },
 )
 

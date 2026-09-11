@@ -2,7 +2,6 @@ import { banClasses } from './rules/ban-classes.js'
 import { banErrorString } from './rules/ban-error-string.js'
 import { internalExportJsdoc } from './rules/internal-export-jsdoc.js'
 import { noBarrels } from './rules/no-barrels.js'
-import { noDomainBranchingDensity } from './rules/no-domain-branching-density.js'
 import { noInlineDestructuredType } from './rules/no-inline-destructured-type.js'
 import { noInternalJsdocOutside } from './rules/no-internal-jsdoc-outside.js'
 import { noIoBoundaryTests } from './rules/no-io-boundary-tests.js'
@@ -21,7 +20,6 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
 const recommendedRules = {
   [rule('ban-error-string')]: 'error',
   [rule('internal-export-jsdoc')]: 'error',
-  [rule('no-domain-branching-density')]: 'error',
   [rule('no-internal-jsdoc-outside')]: 'error',
   [rule('no-io-boundary-tests')]: 'error',
 } as const
@@ -35,7 +33,6 @@ export default {
     'ban-error-string': banErrorString,
     'internal-export-jsdoc': internalExportJsdoc,
     'no-barrels': noBarrels,
-    'no-domain-branching-density': noDomainBranchingDensity,
     'no-inline-destructured-type': noInlineDestructuredType,
     'no-internal-jsdoc-outside': noInternalJsdocOutside,
     'no-io-boundary-tests': noIoBoundaryTests,

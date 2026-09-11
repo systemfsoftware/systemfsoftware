@@ -13,6 +13,7 @@ import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as HashMap from 'effect/HashMap'
+import * as Match from 'effect/Match'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
@@ -110,18 +111,9 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
     return Effect.succeed(mapped)
   }
 
-  const uniqueNames = (names: readonly (string | undefined)[]): readonly string[] => {
-    const seen = new Set<string>()
-    const kept: string[] = []
-    for (const name of names) {
-      if (name === undefined || seen.has(name)) {
-        continue
-      }
-      seen.add(name)
-      kept.push(name)
-    }
-    return kept
-  }
+  const uniqueNames = (
+    names: readonly (string | undefined)[],
+  ): readonly string[] => [...new Set(names.filter((name): name is string => name !== undefined))]
 
   const readMutatedSources = (fileNames: readonly string[]) =>
     Effect.gen(function*() {
@@ -258,13 +250,14 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
           Effect.map(readManifestVersion(fs, pathService, specifier), (version) => [specifier, version] as const),
         { concurrency: FILE_CONCURRENCY },
       )
-      const found: Array<readonly [string, string]> = []
-      for (const [specifier, version] of pairs) {
-        if (Option.isSome(version)) {
-          found.push([specifier, version.value] as const)
-        }
-      }
-      return Object.fromEntries(found)
+      return Object.fromEntries(
+        pairs.flatMap(([specifier, version]) =>
+          Option.match(version, {
+            onNone: (): ReadonlyArray<readonly [string, string]> => [],
+            onSome: (present): ReadonlyArray<readonly [string, string]> => [[specifier, present]],
+          })
+        ),
+      )
     })
 
   const determineExitCode = (
@@ -274,18 +267,21 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       const { mutationScore } = metrics.metrics
       const breaking = input.options.thresholds.break
       const formattedScore = mutationScore.toFixed(2)
-
-      if (typeof breaking !== 'number') {
-        yield* Effect.logDebug(
-          "No breaking threshold configured. Won't fail the build no matter how low your mutation score is. Set `thresholds.break` to change this behavior.",
-        )
-        return null
-      }
-
       const verdict = verdictExitClass(mutationScore, breaking)
+
       if (verdict === null) {
-        yield* Effect.logInfo(
-          `Final mutation score of ${formattedScore} is greater than or equal to break threshold ${String(breaking)}`,
+        yield* Match.value(breaking).pipe(
+          Match.when(null, () =>
+            Effect.logDebug(
+              "No breaking threshold configured. Won't fail the build no matter how low your mutation score is. Set `thresholds.break` to change this behavior.",
+            )),
+          Match.orElse((threshold) =>
+            Effect.logInfo(
+              `Final mutation score of ${formattedScore} is greater than or equal to break threshold ${
+                String(threshold)
+              }`,
+            )
+          ),
         )
         return null
       }

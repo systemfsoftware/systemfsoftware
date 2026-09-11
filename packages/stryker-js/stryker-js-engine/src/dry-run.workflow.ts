@@ -1,5 +1,6 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
@@ -35,29 +36,35 @@ export class DryRunFailed extends S.TaggedClass<DryRunFailed>()('DryRunFailed', 
 
 export type DryRunDecision = DryRunPassed | DryRunFailed
 
-const decideComplete = (command: DryRunCommand): Result.Result<DryRunDecision, DryRunError> => {
-  if (command.testCount === 0 && command.allowEmpty === false) {
-    return Result.fail(
-      new DryRunError({
-        stage: 'dryRunNoTests',
-        reason: 'No tests were executed. Stryker will exit prematurely. Please check your configuration.',
-      }),
-    )
-  }
-  if (command.failedTestCount > 0) {
-    return Result.succeed(
-      new DryRunFailed({
-        testCount: command.testCount,
-        failedTestCount: command.failedTestCount,
-      }),
-    )
-  }
-  return Result.succeed(
-    new DryRunPassed({
-      testCount: command.testCount,
-    }),
+const reasonOrDefault = (reason: string | undefined, fallback: string): string =>
+  Option.getOrElse(() => fallback)(Option.fromUndefinedOr(reason))
+
+const hasFailedTests = (command: DryRunCommand): boolean => command.failedTestCount > 0
+
+const decideComplete = (command: DryRunCommand): Result.Result<DryRunDecision, DryRunError> =>
+  Match.value(command).pipe(
+    Match.when({ testCount: 0, allowEmpty: false }, () =>
+      Result.fail(
+        new DryRunError({
+          stage: 'dryRunNoTests',
+          reason: 'No tests were executed. Stryker will exit prematurely. Please check your configuration.',
+        }),
+      )),
+    Match.when(hasFailedTests, () =>
+      Result.succeed(
+        new DryRunFailed({
+          testCount: command.testCount,
+          failedTestCount: command.failedTestCount,
+        }),
+      )),
+    Match.orElse(() =>
+      Result.succeed(
+        new DryRunPassed({
+          testCount: command.testCount,
+        }),
+      )
+    ),
   )
-}
 
 export const dryRun = Workflow.make(
   DryRunCommand,
@@ -67,14 +74,14 @@ export const dryRun = Workflow.make(
         Result.fail(
           new DryRunError({
             stage: 'dryRun',
-            reason: command.errorMessage ?? 'Dry run error',
+            reason: reasonOrDefault(command.errorMessage, 'Dry run error'),
           }),
         )),
       Match.when('Timeout', () =>
         Result.fail(
           new DryRunError({
             stage: 'dryRun',
-            reason: command.reason ?? 'Initial test run timed out',
+            reason: reasonOrDefault(command.reason, 'Initial test run timed out'),
           }),
         )),
       Match.when('Complete', () => decideComplete(command)),

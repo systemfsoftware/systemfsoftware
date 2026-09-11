@@ -13,23 +13,21 @@ const extensionOf = (fileName: string): string => {
   return base.slice(dot).toLowerCase()
 }
 
-export const determineLanguage = (fileName: string): string => {
-  const extension = extensionOf(fileName)
-  if (extension === '.ts' || extension === '.tsx') {
-    return 'typescript'
-  }
-  if (extension === '.html' || extension === '.vue') {
-    return 'html'
-  }
-  return 'javascript'
+const EXTENSION_LANGUAGES: Readonly<Record<string, string>> = {
+  '.ts': 'typescript',
+  '.tsx': 'typescript',
+  '.html': 'html',
+  '.vue': 'html',
 }
 
-export const reportFileName = (relativePath: string | undefined): string => {
-  if (relativePath === undefined || relativePath === '') {
-    return ''
-  }
-  return relativePath.replaceAll('\\', '/')
-}
+export const determineLanguage = (fileName: string): string =>
+  EXTENSION_LANGUAGES[extensionOf(fileName)] ?? 'javascript'
+
+export const reportFileName = (relativePath: string | undefined): string =>
+  Option.match(Option.fromUndefinedOr(relativePath), {
+    onNone: () => '',
+    onSome: (present) => present.replaceAll('\\', '/'),
+  })
 
 export interface TestIdRemap {
   readonly testId: (id: string) => string
@@ -85,30 +83,33 @@ export interface FileResultsInput {
 }
 
 export const assembleFileResults = (input: FileResultsInput): schema.FileResultDictionary => {
-  const grouped = input.mutants.reduce<HashMap.HashMap<string, MutantGroup>>((accumulator, mutant) => {
-    const reportFileName = HashMap.get(input.reportNames, mutant.fileName)
-    if (Option.isNone(reportFileName)) {
-      return accumulator
-    }
-    const existing = HashMap.get(accumulator, reportFileName.value)
-    const mapped = toReportMutant(mutant, input.remap)
-    if (Option.isNone(existing)) {
-      return HashMap.set(accumulator, reportFileName.value, { sourceFileName: mutant.fileName, mutants: [mapped] })
-    }
-    return HashMap.set(accumulator, reportFileName.value, {
-      sourceFileName: existing.value.sourceFileName,
-      mutants: [...existing.value.mutants, mapped],
-    })
-  }, HashMap.empty<string, MutantGroup>())
+  const grouped = input.mutants.reduce<HashMap.HashMap<string, MutantGroup>>(
+    (accumulator, mutant) =>
+      Option.match(HashMap.get(input.reportNames, mutant.fileName), {
+        onNone: () => accumulator,
+        onSome: (reportName) => {
+          const mapped = toReportMutant(mutant, input.remap)
+          return Option.match(HashMap.get(accumulator, reportName), {
+            onNone: () => HashMap.set(accumulator, reportName, { sourceFileName: mutant.fileName, mutants: [mapped] }),
+            onSome: (existing) =>
+              HashMap.set(accumulator, reportName, {
+                sourceFileName: existing.sourceFileName,
+                mutants: [...existing.mutants, mapped],
+              }),
+          })
+        },
+      }),
+    HashMap.empty<string, MutantGroup>(),
+  )
 
-  const entries: Array<readonly [string, schema.FileResult]> = []
-  for (const [reportFileName, group] of grouped) {
-    const source = HashMap.get(input.sources, group.sourceFileName)
-    if (Option.isNone(source)) {
-      continue
-    }
-    entries.push([reportFileName, { ...source.value, mutants: group.mutants }])
-  }
+  const entries = [...grouped].flatMap(([reportName, group]) =>
+    Option.match(HashMap.get(input.sources, group.sourceFileName), {
+      onNone: (): ReadonlyArray<readonly [string, schema.FileResult]> => [],
+      onSome: (source): ReadonlyArray<readonly [string, schema.FileResult]> => [
+        [reportName, { ...source, mutants: group.mutants }],
+      ],
+    })
+  )
   return Object.fromEntries(entries)
 }
 
@@ -125,32 +126,36 @@ export interface TestFilesInput {
 }
 
 export const assembleTestFiles = (input: TestFilesInput): schema.TestFileDefinitionDictionary => {
-  const grouped = input.tests.reduce<HashMap.HashMap<string, TestGroup>>((accumulator, test) => {
-    if (test.fileName === undefined) {
-      return accumulator
-    }
-    const reportFileName = HashMap.get(input.reportNames, test.fileName)
-    if (Option.isNone(reportFileName)) {
-      return accumulator
-    }
-    const existing = HashMap.get(accumulator, reportFileName.value)
-    const mapped = toReportTest(test, input.remap)
-    if (Option.isNone(existing)) {
-      return HashMap.set(accumulator, reportFileName.value, { sourceFileName: test.fileName, tests: [mapped] })
-    }
-    return HashMap.set(accumulator, reportFileName.value, {
-      sourceFileName: existing.value.sourceFileName,
-      tests: [...existing.value.tests, mapped],
-    })
-  }, HashMap.empty<string, TestGroup>())
+  const grouped = input.tests.reduce<HashMap.HashMap<string, TestGroup>>(
+    (accumulator, test) =>
+      Option.match(Option.fromUndefinedOr(test.fileName), {
+        onNone: () => accumulator,
+        onSome: (testFileName) =>
+          Option.match(HashMap.get(input.reportNames, testFileName), {
+            onNone: () => accumulator,
+            onSome: (reportName) => {
+              const mapped = toReportTest(test, input.remap)
+              return Option.match(HashMap.get(accumulator, reportName), {
+                onNone: () => HashMap.set(accumulator, reportName, { sourceFileName: testFileName, tests: [mapped] }),
+                onSome: (existing) =>
+                  HashMap.set(accumulator, reportName, {
+                    sourceFileName: existing.sourceFileName,
+                    tests: [...existing.tests, mapped],
+                  }),
+              })
+            },
+          }),
+      }),
+    HashMap.empty<string, TestGroup>(),
+  )
 
-  const entries: Array<readonly [string, schema.TestFile]> = []
-  for (const [reportFileName, group] of grouped) {
-    const source = HashMap.get(input.testSources, group.sourceFileName)
-    if (Option.isNone(source)) {
-      continue
-    }
-    entries.push([reportFileName, { ...source.value, tests: group.tests }])
-  }
+  const entries = [...grouped].flatMap(([reportName, group]) =>
+    Option.match(HashMap.get(input.testSources, group.sourceFileName), {
+      onNone: (): ReadonlyArray<readonly [string, schema.TestFile]> => [],
+      onSome: (source): ReadonlyArray<readonly [string, schema.TestFile]> => [
+        [reportName, { ...source, tests: group.tests }],
+      ],
+    })
+  )
   return Object.fromEntries(entries)
 }

@@ -38,12 +38,23 @@ const STEP_SUMMARY_VARIABLE = 'GITHUB_STEP_SUMMARY'
 
 type ReportPartValue = S.Schema.Type<typeof ReportPart>
 type StreamMutantLine = S.Schema.Type<typeof StreamMutantLineSchema>
+type PartMeta = S.Schema.Type<typeof PartMetaSchema>
 
 interface ReadParts {
   readonly parts: readonly ReportPartValue[]
   readonly skipped: readonly string[]
   readonly unreadable: readonly string[]
 }
+
+interface PartRead {
+  readonly dir: string
+  readonly part: Option.Option<ReportPartValue>
+  readonly unreadable: boolean
+}
+
+/** The value when the condition holds, the fallback otherwise. */
+const whenHolds = <A>(condition: boolean, value: A, fallback: A): A =>
+  Option.getOrElse(Option.filter(Option.some(value), () => condition), () => fallback)
 
 const failMerge = (reason: string): Effect.Effect<never, MergeReportsFailed> =>
   Effect.gen(function*() {
@@ -70,92 +81,195 @@ const streamMutant = (line: StreamMutantLine): MutantResult => {
   return { ...mutant, replacement: line.replacement }
 }
 
-const reportFromStream = (text: string): MutationTestResult | undefined => {
-  const files: Record<string, FileResult> = {}
-  for (const raw of text.split('\n')) {
-    const line = raw.trim()
-    if (line.length === 0) {
-      continue
-    }
-    const event = S.decodeUnknownOption(S.fromJsonString(StreamMutantLineSchema))(line)
-    if (Option.isNone(event)) {
-      continue
-    }
-    const value = event.value
-    const existing = files[value.file] ?? { language: 'javascript', source: '', mutants: [] }
-    files[value.file] = { ...existing, mutants: [...existing.mutants, streamMutant(value)] }
-  }
-  if (Object.keys(files).length === 0) {
-    return undefined
-  }
-  return { schemaVersion: '1.0', thresholds: STREAM_REPORT_THRESHOLDS, files }
+const decodeStreamLines = (text: string): readonly StreamMutantLine[] =>
+  text
+    .split('\n')
+    .map((raw) => raw.trim())
+    .filter((line) => line.length > 0)
+    .flatMap((line) => Option.toArray(S.decodeUnknownOption(S.fromJsonString(StreamMutantLineSchema))(line)))
+
+const groupStreamMutant = (
+  groups: Record<string, MutantResult[]>,
+  value: StreamMutantLine,
+): Record<string, MutantResult[]> => {
+  const mutants = Option.getOrElse(Option.fromNullishOr(groups[value.file]), (): MutantResult[] => [])
+  mutants.push(streamMutant(value))
+  groups[value.file] = mutants
+  return groups
 }
+
+const groupedMutants = (text: string): Record<string, MutantResult[]> =>
+  decodeStreamLines(text).reduce<Record<string, MutantResult[]>>(groupStreamMutant, {})
+
+const fileResults = (grouped: Record<string, MutantResult[]>): Record<string, FileResult> =>
+  Object.fromEntries(
+    Object.entries(grouped).map(([file, mutants]): [string, FileResult] => [
+      file,
+      { language: 'javascript', source: '', mutants },
+    ]),
+  )
+
+const streamReport = (text: string): MutationTestResult | undefined =>
+  Option.getOrUndefined(
+    Option.map(
+      Option.filter(Option.some(groupedMutants(text)), (grouped) => Object.keys(grouped).length > 0),
+      (grouped): MutationTestResult => ({
+        schemaVersion: '1.0',
+        thresholds: STREAM_REPORT_THRESHOLDS,
+        files: fileResults(grouped),
+      }),
+    ),
+  )
+
+const listDirectory = (dir: string): Effect.Effect<readonly string[], never, FileSystem.FileSystem> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    return yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed(() => []))
+  })
+
+const isDirectory = (full: string): Effect.Effect<boolean, never, FileSystem.FileSystem> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const info = yield* fs.stat(full).pipe(Effect.orElseSucceed(() => undefined))
+    return Option.match(Option.fromUndefinedOr(info), {
+      onNone: () => false,
+      onSome: (entry) => entry.type === 'Directory',
+    })
+  })
+
+const childPartDirs = (
+  dir: string,
+  name: string,
+): Effect.Effect<readonly string[], never, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const path = yield* Path.Path
+    const full = path.join(dir, name)
+    if (yield* isDirectory(full)) {
+      return yield* findPartDirs(full)
+    }
+    return whenHolds(name === PART_MARKER_FILE, [dir], [])
+  })
 
 const findPartDirs = (dir: string): Effect.Effect<readonly string[], never, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function*() {
-    const fs = yield* FileSystem.FileSystem
+    const names: ReadonlyArray<string> = [...(yield* listDirectory(dir))].sort()
+    const found = yield* Effect.forEach(names, (name) => childPartDirs(dir, name))
+    return found.flat()
+  })
+
+const partBase = (meta: PartMeta): ReportPartValue => ({
+  label: meta.package,
+  outcome: meta.outcome,
+  incomplete: false,
+})
+
+const partFromReportText = (dir: string, base: ReportPartValue, text: string): PartRead => {
+  const report = S.decodeUnknownOption(S.fromJsonString(MutationTestResultSchema))(text)
+  return Option.match(report, {
+    onNone: (): PartRead => ({ dir, part: Option.some(base), unreadable: true }),
+    onSome: (value): PartRead => ({ dir, part: Option.some({ ...base, report: value }), unreadable: false }),
+  })
+}
+
+const readPartStream = (
+  dir: string,
+  base: ReportPartValue,
+): Effect.Effect<PartRead, never, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
     const path = yield* Path.Path
-    const names: ReadonlyArray<string> = yield* fs.readDirectory(dir).pipe(Effect.orElseSucceed(() => []))
-    const found: string[] = []
-    for (const name of [...names].sort()) {
-      const full = path.join(dir, name)
-      const info = yield* fs.stat(full).pipe(Effect.orElseSucceed(() => undefined))
-      if (info !== undefined && info.type === 'Directory') {
-        found.push(...(yield* findPartDirs(full)))
-        continue
-      }
-      if (name === PART_MARKER_FILE) {
-        found.push(dir)
-      }
-    }
-    return found
+    const text = yield* readOptional(path.join(dir, PART_STREAM_FILE))
+    const report = Option.fromNullishOr(text).pipe(
+      Option.flatMap((streamed) => Option.fromNullishOr(streamReport(streamed))),
+    )
+    return Option.match(report, {
+      onNone: (): PartRead => ({ dir, part: Option.some(base), unreadable: false }),
+      onSome: (value): PartRead => ({
+        dir,
+        part: Option.some({ ...base, incomplete: true, report: value }),
+        unreadable: false,
+      }),
+    })
+  })
+
+const readPartReport = (
+  dir: string,
+  base: ReportPartValue,
+): Effect.Effect<PartRead, never, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const path = yield* Path.Path
+    const text = yield* readOptional(path.join(dir, PART_REPORT_FILE))
+    return yield* Option.match(Option.fromUndefinedOr(text), {
+      onNone: () => readPartStream(dir, base),
+      onSome: (present) => Effect.succeed(partFromReportText(dir, base, present)),
+    })
+  })
+
+const readPart = (dir: string): Effect.Effect<PartRead, never, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const path = yield* Path.Path
+    const metaText = yield* readOptional(path.join(dir, PART_MARKER_FILE))
+    const meta = Option.fromNullishOr(metaText).pipe(
+      Option.flatMap((text) => S.decodeUnknownOption(S.fromJsonString(PartMetaSchema))(text)),
+    )
+    return yield* Option.match(meta, {
+      onNone: () => Effect.succeed<PartRead>({ dir, part: Option.none(), unreadable: false }),
+      onSome: (present) => readPartReport(dir, partBase(present)),
+    })
   })
 
 const readParts = (partsDir: string): Effect.Effect<ReadParts, never, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function*() {
-    const path = yield* Path.Path
-    const parts: ReportPartValue[] = []
-    const skipped: string[] = []
-    const unreadable: string[] = []
-    for (const dir of yield* findPartDirs(partsDir)) {
-      const metaText = yield* readOptional(path.join(dir, PART_MARKER_FILE))
-      const meta = S.decodeUnknownOption(S.fromJsonString(PartMetaSchema))(metaText ?? '')
-      if (Option.isNone(meta)) {
-        skipped.push(dir)
-        continue
-      }
-      const base = { label: meta.value.package, outcome: meta.value.outcome, incomplete: false }
-      const reportText = yield* readOptional(path.join(dir, PART_REPORT_FILE))
-      if (reportText !== undefined) {
-        const report = S.decodeUnknownOption(S.fromJsonString(MutationTestResultSchema))(reportText)
-        if (Option.isSome(report)) {
-          parts.push({ ...base, report: report.value })
-          continue
-        }
-        unreadable.push(dir)
-        parts.push(base)
-        continue
-      }
-      const reconstructed = reportFromStream((yield* readOptional(path.join(dir, PART_STREAM_FILE))) ?? '')
-      if (reconstructed === undefined) {
-        parts.push(base)
-        continue
-      }
-      parts.push({ ...base, incomplete: true, report: reconstructed })
+    const dirs = yield* findPartDirs(partsDir)
+    const reads = yield* Effect.forEach(dirs, readPart)
+    return {
+      parts: reads.flatMap((read) => Option.toArray(read.part)),
+      skipped: reads.filter((read) => Option.isNone(read.part)).map((read) => read.dir),
+      unreadable: reads.filter((read) => read.unreadable).map((read) => read.dir),
     }
-    return { parts, skipped, unreadable }
   })
 
-const parsePackages = (raw: string | undefined): Effect.Effect<readonly string[] | undefined, MergeReportsFailed> => {
-  if (raw === undefined || raw.length === 0) {
-    return Effect.succeed(undefined)
-  }
-  const decoded = S.decodeUnknownOption(S.fromJsonString(S.Array(S.String)))(raw)
-  if (Option.isNone(decoded)) {
-    return failMerge(`--packages is not a JSON array: ${raw}`)
-  }
-  return Effect.succeed(decoded.value)
-}
+const decodePackageList = (raw: string): Effect.Effect<readonly string[] | undefined, MergeReportsFailed> =>
+  Option.match(S.decodeUnknownOption(S.fromJsonString(S.Array(S.String)))(raw), {
+    onNone: () => failMerge(`--packages is not a JSON array: ${raw}`),
+    onSome: (packages) => Effect.succeed(packages),
+  })
+
+const parsePackages = (raw: string | undefined): Effect.Effect<readonly string[] | undefined, MergeReportsFailed> =>
+  Option.match(Option.filter(Option.fromNullishOr(raw), (text) => text.length > 0), {
+    onNone: () => Effect.succeed(undefined),
+    onSome: decodePackageList,
+  })
+
+const SUMMARY_TABLE_HEADER: readonly string[] = [
+  '| package | score | killed | survived | no cov | timeout | compile err | verdict |',
+  '| --- | --: | --: | --: | --: | --: | --: | :-: |',
+]
+
+const verdictRow = (row: MergedReports['rows'][number]): string =>
+  `| ${row.label} | ${row.score} | ${row.cells.join(' | ')} | ${row.verdict} |`
+
+const survivorLine = (survivor: MergedReports['survivors'][number]): string =>
+  `- \`${survivor.file}:${survivor.line}:${survivor.column}\` ${survivor.status} \`${survivor.mutatorName}\` → \`${survivor.replacement}\``
+
+const survivorSection = (survivors: MergedReports['survivors']): readonly string[] => [
+  '',
+  '### Survivors',
+  '',
+  ...survivors.slice(0, SURVIVOR_CAP).map(survivorLine),
+  ...whenHolds(survivors.length > SURVIVOR_CAP, [
+    `- … and ${survivors.length - SURVIVOR_CAP} more; see mutation-report.html in the run artifact.`,
+  ], []),
+]
+
+const warningSection = (skipped: readonly string[]): readonly string[] => [
+  '',
+  '### Warnings',
+  '',
+  ...skipped.map((name) => `- \`${name}\`: no readable mutation-part.json`),
+]
+
+const mergedCountLine = (packageRows: MergedReports['rows']): string =>
+  `Merged ${packageRows.filter((row) => row.score !== 'no report').length} of ${packageRows.length} package report(s).`
 
 const summaryMarkdown = (
   rows: MergedReports['rows'],
@@ -167,37 +281,14 @@ const summaryMarkdown = (
   const lines = [
     '## Mutation',
     '',
-    `Merged ${
-      packageRows.filter((row) => row.score !== 'no report').length
-    } of ${packageRows.length} package report(s).`,
+    mergedCountLine(packageRows),
     '',
-    '| package | score | killed | survived | no cov | timeout | compile err | verdict |',
-    '| --- | --: | --: | --: | --: | --: | --: | :-: |',
-    ...rows.map((row) => `| ${row.label} | ${row.score} | ${row.cells.join(' | ')} | ${row.verdict} |`),
+    ...SUMMARY_TABLE_HEADER,
+    ...rows.map(verdictRow),
+    ...whenHolds(survivors.length > 0, survivorSection(survivors), []),
+    ...whenHolds(skipped.length > 0, warningSection(skipped), []),
+    ...whenHolds(unreadableCount > 0, ['', `Report exited non-zero: ${unreadableCount} unreadable part(s).`], []),
   ]
-  if (survivors.length > 0) {
-    lines.push('', '### Survivors', '')
-    lines.push(
-      ...survivors
-        .slice(0, SURVIVOR_CAP)
-        .map(
-          (survivor) =>
-            `- \`${survivor.file}:${survivor.line}:${survivor.column}\` ${survivor.status} \`${survivor.mutatorName}\` → \`${survivor.replacement}\``,
-        ),
-    )
-    if (survivors.length > SURVIVOR_CAP) {
-      lines.push(`- … and ${survivors.length - SURVIVOR_CAP} more; see mutation-report.html in the run artifact.`)
-    }
-  }
-  if (skipped.length > 0) {
-    lines.push('', '### Warnings', '')
-    for (const name of skipped) {
-      lines.push(`- \`${name}\`: no readable mutation-part.json`)
-    }
-  }
-  if (unreadableCount > 0) {
-    lines.push('', `Report exited non-zero: ${unreadableCount} unreadable part(s).`)
-  }
   return `${lines.join('\n')}\n`
 }
 
@@ -257,36 +348,71 @@ const mergedReport = (decision: MergedReports | NoMergedReports): MutationTestRe
   return undefined
 }
 
+const ensurePartsDir = (fs: FileSystem.FileSystem, partsDir: string): Effect.Effect<void, MergeReportsFailed> =>
+  Effect.gen(function*() {
+    if (yield* fs.exists(partsDir).pipe(Effect.orElseSucceed(() => false))) {
+      return
+    }
+    return yield* failMerge(`no such parts directory ${partsDir}`)
+  })
+
+const decideReports = (
+  parts: readonly ReportPartValue[],
+  expectedPackages: readonly string[] | undefined,
+  partsDir: string,
+): Effect.Effect<MergedReports | NoMergedReports, MergeReportsFailed> =>
+  Effect.gen(function*() {
+    const decision = mergeReportParts(MergeReportPartsCommand.make({ parts, expectedPackages }))
+    if (Result.isSuccess(decision)) {
+      return decision.success
+    }
+    return yield* failMerge(failureReason(decision.failure, partsDir))
+  })
+
+const writeReportOutputs = (
+  path: Path.Path,
+  out: string,
+  report: MutationTestResult | undefined,
+): Effect.Effect<void, MergeReportsFailed, FileSystem.FileSystem> =>
+  Effect.forEach(
+    Option.toArray(Option.fromUndefinedOr(report)),
+    (present) =>
+      Effect.gen(function*() {
+        yield* writeFile(path.join(out, MERGED_REPORT_FILE), JSON.stringify(present), false)
+        yield* writeHtmlReport(path.join(out, MERGED_HTML_FILE), present)
+      }),
+    { discard: true },
+  )
+
+const appendStepSummary = (summary: string): Effect.Effect<void, MergeReportsFailed, FileSystem.FileSystem> =>
+  Effect.forEach(
+    Option.toArray(
+      Option.filter(Option.fromNullishOr(process.env[STEP_SUMMARY_VARIABLE]), (file) => file.length > 0),
+    ),
+    (file) => writeFile(file, summary, true),
+    { discard: true },
+  )
+
 export const runMergeReports = (
   request: MergeReportsRequest,
 ): Effect.Effect<void, MergeReportsFailed, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
-    const expectedPackages = yield* parsePackages(request.packages)
-    if (!(yield* fs.exists(request.parts).pipe(Effect.orElseSucceed(() => false)))) {
-      return yield* failMerge(`no such parts directory ${request.parts}`)
-    }
-    const { parts, skipped, unreadable } = yield* readParts(request.parts)
-    const decision = mergeReportParts(MergeReportPartsCommand.make({ parts, expectedPackages }))
-    if (Result.isFailure(decision)) {
-      return yield* failMerge(failureReason(decision.failure, request.parts))
-    }
     const out = request.out
+    const expectedPackages = yield* parsePackages(request.packages)
+    yield* ensurePartsDir(fs, request.parts)
+    const { parts, skipped, unreadable } = yield* readParts(request.parts)
+    const decision = yield* decideReports(parts, expectedPackages, request.parts)
     yield* fs.makeDirectory(out, { recursive: true }).pipe(Effect.catchCause(() => failMerge(`cannot create ${out}`)))
-    const report = mergedReport(decision.success)
-    if (report !== undefined) {
-      yield* writeFile(path.join(out, MERGED_REPORT_FILE), JSON.stringify(report), false)
-      yield* writeHtmlReport(path.join(out, MERGED_HTML_FILE), report)
-    }
-    const summary = summaryMarkdown(decision.success.rows, survivorList(decision.success), skipped, unreadable.length)
+    yield* writeReportOutputs(path, out, mergedReport(decision))
+    const summary = summaryMarkdown(decision.rows, survivorList(decision), skipped, unreadable.length)
     yield* writeFile(path.join(out, MERGED_SUMMARY_FILE), summary, false)
-    const stepSummary = process.env[STEP_SUMMARY_VARIABLE]
-    if (stepSummary !== undefined && stepSummary.length > 0) {
-      yield* writeFile(stepSummary, summary, true)
-    }
+    yield* appendStepSummary(summary)
     yield* Console.log(summary)
-    if (unreadable.length > 0) {
-      return yield* failMerge(`${unreadable.length} unreadable part(s): ${unreadable.join(', ')}`)
-    }
+    yield* Effect.forEach(
+      whenHolds(unreadable.length > 0, [`${unreadable.length} unreadable part(s): ${unreadable.join(', ')}`], []),
+      failMerge,
+      { discard: true },
+    )
   })

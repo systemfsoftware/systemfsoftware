@@ -5,7 +5,16 @@
  * workflow. Decoded at the checker boundary; no I/O.
  */
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import * as Match from 'effect/Match'
 import * as S from 'effect/Schema'
+
+export const TypescriptCheckerOptionsSchema = S.Struct({
+  typescriptChecker: S.optional(
+    S.Struct({
+      prioritizePerformanceOverAccuracy: S.optional(S.Boolean),
+    }),
+  ),
+})
 
 // ── command ────────────────────────────────────────────────────────────────
 
@@ -28,15 +37,18 @@ export class CompilerFailed extends S.TaggedError<CompilerFailed>()('CompilerFai
   subject: S.optional(S.String),
 }) {
   override get message(): string {
-    switch (this.reason) {
-      case 'not-initialized':
-        return 'The TypeScript compiler was used before it was initialized'
-      case 'no-projects':
-        return `No projects were found for ${this.subject ?? 'the tsconfig'}`
-      case 'unknown-file-node':
-        return `The file graph has no node for '${this.subject ?? 'a file'}', which should not happen`
-      case 'file-not-in-project':
-        return `'${this.subject ?? 'a file'}' is part of your TypeScript project but could not be found on disk`
-    }
+    return Match.value(this.reason).pipe(
+      Match.when('not-initialized', () => 'The TypeScript compiler was used before it was initialized'),
+      Match.when('no-projects', () => `No projects were found for ${this.subject ?? 'the tsconfig'}`),
+      Match.when(
+        'unknown-file-node',
+        () => `The file graph has no node for '${this.subject ?? 'a file'}', which should not happen`,
+      ),
+      Match.when(
+        'file-not-in-project',
+        () => `'${this.subject ?? 'a file'}' is part of your TypeScript project but could not be found on disk`,
+      ),
+      Match.exhaustive,
+    )
   }
 }
