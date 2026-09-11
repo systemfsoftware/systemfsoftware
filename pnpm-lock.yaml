@@ -925,6 +925,9 @@ importers:
       '@systemfsoftware/effect-schema-discovery':
         specifier: workspace:^
         version: link:../effect-schema-discovery
+      '@systemfsoftware/effect-schema-recursion-budget':
+        specifier: workspace:^
+        version: link:../effect-schema-recursion-budget
       oxc-parser:
         specifier: 'catalog:'
         version: 0.140.0
@@ -941,9 +944,6 @@ importers:
       '@systemfsoftware/effect-schema-law':
         specifier: workspace:^
         version: link:../effect-schema-law
-      '@systemfsoftware/effect-schema-recursion-budget':
-        specifier: workspace:^
-        version: link:../effect-schema-recursion-budget
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-plugin/oxlint-config

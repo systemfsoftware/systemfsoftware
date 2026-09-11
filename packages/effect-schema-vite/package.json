@@ -47,6 +47,7 @@
   "dependencies": {
     "@oxc-project/types": "catalog:",
     "@systemfsoftware/effect-schema-discovery": "workspace:^",
+    "@systemfsoftware/effect-schema-recursion-budget": "workspace:^",
     "oxc-parser": "catalog:"
   },
   "devDependencies": {
@@ -54,7 +55,6 @@
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
-    "@systemfsoftware/effect-schema-recursion-budget": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",

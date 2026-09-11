@@ -13,9 +13,11 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseSync } from 'oxc-parser'
+import { createServer } from 'vite'
 import { afterAll, expect, TestRunner } from 'vitest'
 
-import { generateSchemaLaws, LAW_FILE_BASENAME } from '@systemfsoftware/effect-schema-vite'
+import { RECURSION_BUDGET_VIRTUAL_ID } from '@systemfsoftware/effect-schema-recursion-budget'
+import { generateSchemaLaws, inlineSchemaTests, LAW_FILE_BASENAME } from '@systemfsoftware/effect-schema-vite'
 
 const LAW_PKG = '@systemfsoftware/effect-schema-law'
 
@@ -86,34 +88,57 @@ const recursionLawsIn = (code: string): ReadonlyMap<string, string> => {
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
+/**
+ * The plugin instance a consumer registers, driven the way Vite drives it: a
+ * real transform over a real module on disk, and a real resolution of the
+ * specifier the materialized hook imports.
+ */
+const drivenByPlugin = async (
+  root: string,
+): Promise<{ readonly code: string; readonly runtime: string | null }> => {
+  const server = await createServer({
+    root,
+    configFile: false,
+    logLevel: 'silent',
+    optimizeDeps: { noDiscovery: true, include: [] },
+    server: { middlewareMode: true },
+    plugins: [inlineSchemaTests()],
+  })
+  try {
+    const transformed = await server.transformRequest('/src/recursive.schema.ts')
+    const resolved = await server.pluginContainer.resolveId(RECURSION_BUDGET_VIRTUAL_ID)
+    return { code: transformed?.code ?? '', runtime: resolved?.id ?? null }
+  } finally {
+    await server.close()
+  }
+}
+
 const RECURSIVE_SCHEMA = `
 import { Schema } from 'effect'
-import type { FastCheck } from 'effect/testing'
-import { terminatingRecursion } from '@systemfsoftware/effect-schema-recursion-budget'
 
 type Codec = Schema.Codec<unknown, unknown>
 
 const Lit = Schema.TaggedStruct('Lit', { value: Schema.Finite })
 const Id = Schema.TaggedStruct('Id', { name: Schema.String })
-const Binary: Codec = Schema.suspend((): Codec =>
-  Schema.Struct({ _tag: Schema.Literal('Binary'), left: RecursiveExpr, right: RecursiveExpr })
-)
-const Member: Codec = Schema.suspend((): Codec =>
-  Schema.Struct({ _tag: Schema.Literal('Member'), object: RecursiveExpr, property: RecursiveExpr })
-)
-const Conditional: Codec = Schema.suspend((): Codec =>
-  Schema.Struct({ _tag: Schema.Literal('Conditional'), test: RecursiveExpr, consequent: RecursiveExpr, alternate: RecursiveExpr })
-)
-const Call: Codec = Schema.suspend((): Codec =>
-  Schema.Struct({ _tag: Schema.Literal('Call'), callee: RecursiveExpr, args: Schema.Array(RecursiveExpr) })
-)
 
-export const RecursiveExpr: Schema.Codec<unknown, unknown> = terminatingRecursion({
+export const RecursiveExpr: Codec = Schema.suspend(
+  (): Codec =>
+    Schema.Union([
+      Lit,
+      Id,
+      Schema.Struct({ _tag: Schema.Literal('Binary'), left: RecursiveExpr, right: RecursiveExpr }),
+      Schema.Struct({ _tag: Schema.Literal('Member'), object: RecursiveExpr, property: RecursiveExpr }),
+      Schema.Struct({
+        _tag: Schema.Literal('Conditional'),
+        test: RecursiveExpr,
+        consequent: RecursiveExpr,
+        alternate: RecursiveExpr
+      }),
+      Schema.Struct({ _tag: Schema.Literal('Call'), callee: RecursiveExpr, args: Schema.Array(RecursiveExpr) })
+    ])
+).annotate({
   identifier: 'RecursiveExpr',
-  base: [Lit, Id],
-  recur: [Binary, Member, Conditional, Call],
-  maxDepth: 6,
-  depthSize: 'medium'
+  recursionBudget: { maxDepth: 6, depthSize: 'medium' }
 })
 `
 
@@ -311,6 +336,32 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
           '∀s_RecursiveExprVariants_⊇Declared',
         ])
         expect(s.laws.flat).toEqual(['∀x_FlatEnc_=x', '∀x_Flat_=x'])
+      }),
+    ),
+  )
+
+  scenario(
+    'Registering the one plugin materializes a declared generation budget, not only the laws',
+    Gherkin.Do.pipe(
+      Given('a package whose recursive schema declares its generation budget')(
+        'pkg',
+        () => Effect.succeed(RECURSIVE_RUNTIME),
+      ),
+      When('that plugin drives the schema module through Vite')(
+        'driven',
+        (s) => Effect.promise(() => drivenByPlugin(s.pkg)),
+      ),
+      Then('the transformed module carries the derivation hook that honors the budget')((s) => {
+        expect(s.driven.code).toContain('toArbitrary')
+      }),
+      Then('the hook is imported from the budget runtime the plugin resolves')((s) => {
+        expect(s.driven.code).toMatch(
+          /import \{ \w+ as \w+ \} from "[^"]*recursion-budget-runtime\.[a-z]+";/,
+        )
+      }),
+      Then('the runtime the hook imports resolves to a module on disk')((s) => {
+        expect(s.driven.runtime).toMatch(/recursion-budget-runtime\.(ts|mjs)$/)
+        expect(s.driven.runtime === null ? false : existsSync(s.driven.runtime)).toBe(true)
       }),
     ),
   )

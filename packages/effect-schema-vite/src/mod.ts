@@ -1,4 +1,5 @@
 import { findExportedSchemas, type FoundSchema, quote } from '@systemfsoftware/effect-schema-discovery'
+import { recursionBudgetTransform } from '@systemfsoftware/effect-schema-recursion-budget'
 import { dirname, relative, resolve } from 'node:path'
 import type { Plugin, ResolvedConfig } from 'vite'
 
@@ -63,6 +64,11 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string 
  * exported Effect `Schema`, and auto-injects `ruleOfSchemas` round-trip
  * property tests and `recursionLaws` generation laws for each one.
  *
+ * The same plugin materializes `recursionBudget` annotations: a recursive
+ * schema that declares its generation budget in stock Effect vocabulary gets
+ * the derivation hook that honors it, so registering this plugin alone is
+ * enough for the declared laws to hold.
+ *
  * The laws are injected by rewriting the consumer's own
  * `src/schema-laws.test.ts` — the one test filename the placement taxonomy
  * whitelists by name. It is deliberately NOT a virtual module: the generated
@@ -82,19 +88,24 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string 
  * ```
  */
 export const inlineSchemaTests = (options?: InlineSchemaTestsOptions): Plugin => {
+  const budgets = recursionBudgetTransform()
   let config: ResolvedConfig
 
   return {
     name: '@systemfsoftware/schema-laws',
     enforce: 'pre',
 
+    resolveId: budgets.resolveId,
+
     configResolved(c) {
       config = c
     },
 
-    transform(_code, id) {
+    transform(code, id) {
       const lawFile = id.split('?')[0]
-      if (lawFile === undefined || !lawFile.endsWith(`/${LAW_FILE_BASENAME}`)) return
+      if (lawFile === undefined || !lawFile.endsWith(`/${LAW_FILE_BASENAME}`)) {
+        return budgets.transform(code, id)
+      }
       return generateSchemaLaws(lawFile, resolve(config.root, options?.dir ?? 'src'))
     },
   }
