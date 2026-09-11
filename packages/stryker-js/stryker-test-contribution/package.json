@@ -44,9 +44,6 @@
   "dependencies": {
     "@systemfsoftware/stryker-js": "workspace:^"
   },
-  "peerDependencies": {
-    "effect": "catalog:peers"
-  },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
@@ -75,5 +72,8 @@
       },
       "./package.json": "./package.json"
     }
+  },
+  "inlinedDependencies": {
+    "effect": "4.0.0-rc.112"
   }
 }

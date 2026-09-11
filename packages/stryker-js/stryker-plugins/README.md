@@ -5,7 +5,7 @@
 
 > Stop Effect `Schema` declarations from dragging your Stryker score below 100%.
 
-A brand description, a `_tag`, a `title` — mutate any of them and the source changes but the behaviour does not, so no test can ever kill the mutant. Those unkillable mutants sit in your report forever, indistinguishable from real coverage gaps. This [Stryker](https://stryker-mutator.io) Ignore plugin removes them, so the score that remains is behaviour.
+A brand description, a `_tag`, a `title` — mutate any of them and the source changes but the behaviour does not, so no test can ever kill the mutant. Those unkillable mutants sit in your report forever, indistinguishable from real coverage gaps. This [Stryker](https://stryker-mutator.io) Ignorer plugin removes them, so the score that remains is behaviour.
 
 ## Install
 
@@ -29,7 +29,7 @@ In `stryker.config.json`:
 Mutants it recognizes are reported as `Ignored`, each carrying the reason it was safe to skip.
 
 > [!NOTE]
-> `@systemfsoftware/stryker-js-plugin-api` is a peer dependency — your Stryker install provides it. `effect` is a direct dependency (the plugin decodes AST nodes with `Schema`).
+> `@systemfsoftware/stryker-js` is an ordinary dependency, so your package manager installs it with the plugin. `effect` is bundled into the published plugin — nothing has to line up with your Stryker install.
 
 ## What it ignores
 

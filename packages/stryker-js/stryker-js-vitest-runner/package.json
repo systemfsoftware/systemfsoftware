@@ -49,7 +49,6 @@
     "@systemfsoftware/stryker-js": "workspace:^"
   },
   "peerDependencies": {
-    "effect": "catalog:peers",
     "vitest": ">=2.0.0"
   },
   "devDependencies": {
@@ -77,5 +76,10 @@
       "./stryker-setup": "./dist/stryker-setup.mjs",
       "./package.json": "./package.json"
     }
+  },
+  "inlinedDependencies": {
+    "@effect/platform-node": "4.0.0-rc.112",
+    "@effect/platform-node-shared": "4.0.0-rc.112",
+    "effect": "4.0.0-rc.112"
   }
 }

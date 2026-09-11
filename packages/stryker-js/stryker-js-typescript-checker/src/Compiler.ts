@@ -7,8 +7,7 @@
  */
 
 import type { Mutant, Position } from '@systemfsoftware/stryker-js/Mutant'
-import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
-import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
+import type { StrykerOptions } from '@systemfsoftware/stryker-js/Options'
 import { Predicate, Result } from 'effect'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
@@ -19,7 +18,6 @@ import * as MutableHashSet from 'effect/MutableHashSet'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Ref from 'effect/Ref'
-import * as S from 'effect/Schema'
 import type { SourceFile } from 'typescript/unstable/ast'
 import { SyntaxKind } from 'typescript/unstable/ast'
 import type { FileSystem as TSFileSystem, FileSystemEntries } from 'typescript/unstable/fs'
@@ -568,15 +566,11 @@ export type ITypescriptCompiler = Pick<TypeScriptCompiler['Service'], 'init' | '
 export type IFileRelationCreator = Pick<TypeScriptCompiler['Service'], 'nodes'>
 
 export function makeTypescriptCompiler(
-  options: unknown,
+  strykerOptions: StrykerOptions,
   fs: HybridFileSystem,
   fsService: FileSystem.FileSystem,
   pathService: Path.Path,
 ): TypeScriptCompiler['Service'] {
-  if (!S.is(StrykerOptionsSchema)(options)) {
-    throw new Error('Invalid StrykerOptions')
-  }
-  const strykerOptions: StrykerOptions = options
   const rawTsconfigFile = normalizeFileName(strykerOptions.tsconfigFile)
   const initialState: CompilerState = {
     api: undefined,
