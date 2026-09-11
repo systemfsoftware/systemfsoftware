@@ -100,6 +100,7 @@ packages:
   - packages/effect-gherkin-spec/
   - packages/storybook-gherkin/
   - packages/effect-schema-discovery/
+  - packages/effect-schema-recursion-budget/
   - packages/effect-schema-extensions/
   - packages/effect-schema-law/
   - packages/effect-schema-vite/

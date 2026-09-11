@@ -89,7 +89,7 @@ const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const RECURSIVE_SCHEMA = `
 import { Schema } from 'effect'
 import type { FastCheck } from 'effect/testing'
-import { terminatingRecursion } from '@systemfsoftware/effect-schema-extensions'
+import { terminatingRecursion } from '@systemfsoftware/effect-schema-recursion-budget'
 
 type Codec = Schema.Codec<unknown, unknown>
 

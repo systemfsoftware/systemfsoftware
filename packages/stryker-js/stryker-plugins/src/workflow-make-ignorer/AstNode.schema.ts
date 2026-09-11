@@ -1,4 +1,4 @@
-import { terminatingRecursion } from '@systemfsoftware/effect-schema-extensions'
+import { terminatingRecursion } from '@systemfsoftware/effect-schema-recursion-budget'
 import { Schema as S } from 'effect'
 
 export const Identifier = S.Struct({

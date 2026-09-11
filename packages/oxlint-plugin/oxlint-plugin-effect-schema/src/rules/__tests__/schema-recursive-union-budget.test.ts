@@ -151,7 +151,7 @@ export const Branch7: S.Schema<Expr> = S.suspend(() =>
 ExprSchema = S.Union([Branch1, Branch2, Branch3, Branch4, Branch5, Branch6, Branch7])`
 
 const TERMINATING_RECURSION_UNION = `import { Schema as S } from 'effect'
-import { terminatingRecursion } from '@systemfsoftware/effect-schema-extensions'
+import { terminatingRecursion } from '@systemfsoftware/effect-schema-recursion-budget'
 
 export interface Expr {
   readonly type: string

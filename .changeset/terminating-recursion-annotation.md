@@ -1,5 +1,6 @@
 ---
-"@systemfsoftware/effect-schema-extensions": minor
+"@systemfsoftware/effect-schema-recursion-budget": minor
+"@systemfsoftware/effect-schema-extensions": none
 "@systemfsoftware/effect-atom": none
 "@systemfsoftware/effect-atom-react": none
 "@systemfsoftware/effect-cell-types": none

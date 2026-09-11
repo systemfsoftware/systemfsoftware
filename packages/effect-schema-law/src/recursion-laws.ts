@@ -138,8 +138,7 @@ if (import.meta.vitest !== void 0) {
   const { it } = await import('@effect/vitest')
   const { Schema: S, Exit } = await import('effect')
   const { FastCheck: fc } = await import('effect/testing')
-  const { terminatingRecursion } = await import('@systemfsoftware/effect-schema-extensions')
-
+  const { terminatingRecursion } = await import('@systemfsoftware/effect-schema-recursion-budget')
   type Codec = S.Codec<unknown, unknown>
   type MemberTuple = readonly [Codec, Codec, Codec, Codec]
 

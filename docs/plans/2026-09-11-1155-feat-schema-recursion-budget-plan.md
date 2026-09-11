@@ -7,7 +7,7 @@ artifact_contract: ce-unified-plan/v1
 artifact_readiness: implementation-ready
 product_contract_source: ce-brainstorm
 execution: code
-supersedes: docs/plans/2026-09-11-0842-feat-schema-recursion-budget-plan.md
+supersedes: docs/plans/2026-09-11-1050-feat-schema-recursion-budget-plan.md
 ---
 
 # Declared Recursion Budget for Schema Unions - Plan
@@ -35,7 +35,7 @@ Effect v4 derives arbitrary values for recursive unions through a per-`Suspend` 
 
 **Generation contract**
 
-- R1. `terminatingRecursion` — an annotation helper in `@systemfsoftware/effect-schema-extensions` accepting `{ identifier, base, recur, maxDepth, depthSize }` with all five parameters required — no signature defaults; the KD3 values (6, `'medium'`) are what callers pass. Returns the union schema annotated so derivation uses one `fc.oneof` carrying `{ depthIdentifier: identifier, maxDepth, depthSize }` with base members first and recur members after. `base` and `recur` are non-empty readonly arrays of member schemas. Member arbitraries derive lazily at derivation time, and the terminal branch past the cap is the base members. Variant coverage counts distinct member shapes — `_tag` for tagged unions, structural shape otherwise.
+- R1. `terminatingRecursion` — an annotation helper in `@systemfsoftware/effect-schema-recursion-budget` accepting `{ identifier, base, recur, maxDepth, depthSize }` with all five parameters required — no signature defaults; the KD3 values (6, `'medium'`) are what callers pass. Returns the union schema annotated so derivation uses one `fc.oneof` carrying `{ depthIdentifier: identifier, maxDepth, depthSize }` with base members first and recur members after. `base` and `recur` are non-empty readonly arrays of member schemas. Member arbitraries derive lazily at derivation time, and the terminal branch past the cap is the base members. Variant coverage counts distinct member shapes — `_tag` for tagged unions, structural shape otherwise.
 - R2. Termination: every generated value's nesting depth is at most `maxDepth + 1`. Decode and encode are unchanged — a value encoded deeper than the cap still decodes.
 - R3. Deep reachability: every sample drawn under the declared budget contains at least one value at nesting depth ≥ `DEEP_DEPTH` (4) — a share stock derivation cannot produce, whose stock ceiling is 3 — and the annotation declares a ceiling strictly above the stock constant. (Design-time on the balanced reference fixture: deep share 0.249 annotated vs 0.000 stock-equivalent.)
 - R4. One identifier per recursive cycle. Two cycles sharing an identifier share one budget.
@@ -65,8 +65,9 @@ Effect v4 derives arbitrary values for recursive unions through a per-`Suspend` 
 - KD5. Ceiling and decay as separate declared knobs, not a flat cap raise. _(user-approved — depth without divergent tree size; the decay biases toward the first branch as depth grows, which is why base goes first.)_ Governs R1, R3.
 - KD6. Lint threshold at 6 suspend members. Design-time measurement: derivation 8 ms at N=4, 222 ms at N=6, 52.6 s at N=8; the tree's two-suspend recursive unions derive in ≤ 4 ms, so a lower threshold would report working schemas. Governs R9.
 - KD7. One detection rule, for the superlinear shape only. Terminal-less recursion (no base case) already throws loudly at derivation upstream, so a write-time rule would duplicate a loud signal. Governs R9.
-- KD8. Runtime helper in `effect-schema-extensions`, laws in `effect-schema-law`. A runtime annotation cannot carry the law package's test-runner peers — the split follows what a consumer installs. Governs R1, R6.
+- KD8. The annotation helper is a dependency-free leaf package: `@systemfsoftware/effect-schema-recursion-budget` (effect peer only, no workspace dependencies). The earlier home inside `effect-schema-extensions` is unbuildable in CI: extensions runtime-re-exports `@systemfsoftware/hex-schema`, whose test stack dev-depends on the law and vite packages — any test-time reference from those packages back to extensions closes a package cycle turbo refuses outright, and `peerDependencies` carry no build order, so a fresh checkout runs the consumer's tests against an unbuilt dist. The leaf keeps the helper installable without the law package's test-runner peers (the KD8 split this decision replaces was reaching the same conclusion). Governs R1, R6.
 - KD9. The reachability floor is structural, not a fixture-measured share: a nonzero count of depth-≥ 4 values per sample, plus a declared ceiling above the stock constant. An absolute share (15 %) measured on the balanced reference fixture does not generalize to base-heavy unions — the corpus's five-base/two-recur AstNode unions cannot reach it under any honest declared budget — and a rebuilt `S.Union` of the members is not a stock comparison, because suspend closures bind the annotated union and the twin generates through the declared hook. Governs R3, R6.
+- KD10. Base-heavy corpus unions migrate with `'small'` decay. The `'medium'` default biases toward the base members as depth grows; on the five-base/two-recur AST unions it starves the deep tail the reachability law requires, so the migration passes the weaker decay explicitly. Governs R1, R3, R11.
 
 ```mermaid
 flowchart TB
@@ -130,7 +131,7 @@ This plan owns the recursion-budget doctrine end to end: the runtime annotation,
 
 - Upstream effect ask — **Depends on** this change landing first, so the ask can point at a shipped declaration contract instead of a proposal.
 
-Product Contract preservation: changed from the 0842 revision — R3's floor is structural (nonzero deep share plus a declared ceiling above stock) after the absolute 15 % share failed on base-heavy corpus unions; R10 records the removal by npm deprecation after the changeset gate's pinned gone-at-head verdict; KD9 added. R1's required-parameter signature, R7's concrete caps, and R8's unconditional-emission wording carry the 0842 review corrections. Scope, the remaining AEs, and KD1–KD8 are unchanged.
+Product Contract preservation: changed from the 1050 revision — R1's helper home is the dependency-free leaf package `@systemfsoftware/effect-schema-recursion-budget` (KD8); R3's floor is structural (KD9); R10 records the removal by npm deprecation (gate-pinned); R11 names the corpus migration's `'small'` decay (KD10). Scope, the remaining AEs, and KD1–KD7 are unchanged.
 
 ---
 
@@ -142,9 +143,9 @@ Product Contract preservation: changed from the 0842 revision — R3's floor is 
 - KTD2. **Self-guarding laws.** `recursionLaws` walks the schema's AST at runtime, and registers only when the schema's root is that recursive union — an export that merely references the cycle (a suspended member, a struct wrapping it) generates member values whose sample can never cover the union's variants, so it registers nothing. The plugin emits the `recursionLaws` call unconditionally beside `ruleOfSchemas`; the guard makes emission safe for every schema. Governs R8.
 - KTD3. **Structural depth measurer.** The termination and reachability laws measure the _generated_ value's structural nesting (deepest object/array chain), schema-agnostic — no per-schema traversal to maintain. Decode-side depth is deliberately unmeasured: AE6's deeper-than-cap decode is a passing case, so no law asserts a bound on decoded depth. Governs R6, R2, R3.
 - KTD4. **Budget mechanism.** Each generated law declares its draw budget and a runner-level cap — `interruptAfterTimeLimit` at 10 000 ms with `markInterruptAsFailure: true` — so an overrun fails as an over-budget failure naming the limit. The shared vitest per-test timeout (`packages/toolchain/vitest-config/lib/base.js:12` — 8 s local, 15 s agent, 30 s CI) fires _before_ that cap locally, so the law package overrides its own per-test timeout above the 10 s cap; the named budget failure must always win the race. The number is revisited against CI contention, never loosened to green. Governs R7, KD2.
-- KTD5. **Root-entry exports.** `terminatingRecursion` exports from `effect-schema-extensions`' root entry; `recursionLaws` from `effect-schema-law`'s root entry. No new subpath entries — entries are chunking devices, and two exports do not earn one. Governs R1, R6, KD8.
+- KTD5. **Root-entry exports.** `terminatingRecursion` exports from the recursion-budget package's root entry; `recursionLaws` from `effect-schema-law`'s root entry. No new subpath entries — entries are chunking devices, and two exports do not earn one. Governs R1, R6, KD8.
 - KTD6. **Fixture provenance.** The rule's known-bad fixtures synthesize the corpus shapes (two-suspend, six-suspend, trusted-builder, annotated); known-good fixtures are live corpus files verbatim. Governs R9, KD6.
-- KTD7. **Cutover mechanics.** `.changeset/ledger.yaml` entries for the deleted package's published versions are consumed history and stay untouched; the pending `.changeset/*.md` intents that name the package drop their package line; no intent names the deleted package itself (A4). `pnpm-workspace.yaml` drops the workspace entry and `pnpm install` regenerates the lockfile. The corpus migration annotates the two two-suspend ignorer unions with `terminatingRecursion` — ceiling 6; decay `'small'`, because the medium decay biases toward the base members as depth grows and the five-base member split starves deep generation under `'medium'` (KD9's measurement). Live prose that names the old helper as an example — the law package's AGENTS.md line and the property-testing plugin's rule documentation — rewords to the successor. Governs R10, R11.
+- KTD7. **Cutover mechanics.** `.changeset/ledger.yaml` entries for the deleted package's published versions are consumed history and stay untouched; the pending `.changeset/*.md` intents that name the package drop their package line; no intent names the deleted package itself (A4). `pnpm-workspace.yaml` drops the workspace entry and `pnpm install` regenerates the lockfile. The corpus migration annotates the two two-suspend ignorer unions with `terminatingRecursion` — ceiling 6; decay `'small'` per KD10. Live prose that names the old helper as an example — the law package's AGENTS.md line and the property-testing plugin's rule documentation — rewords to the successor. Governs R10, R11.
 
 ### Assumptions
 
@@ -158,6 +159,7 @@ Product Contract preservation: changed from the 0842 revision — R3's floor is 
 flowchart LR
   U2[U2 helper] --> U3[U3 recursionLaws]
   U2 --> U5
+  U2 --> U6
   U3 --> U4[U4 plugin emission]
   U4 --> U5
   U6[U6 corpus migration] --> U5
@@ -195,11 +197,11 @@ Sequencing: U1 is the evaluator surface and lands first in its own commit, indep
 
 ### U2. `terminatingRecursion` annotation helper
 
-- **Goal:** The runtime annotation helper in `effect-schema-extensions` implementing the declared budget: ceiling, shape, base-first oneof, cycle-wide identifier, lazy member derivation, base-members terminal. Covers R1, R2, R4, R5, KD3, KD5, KTD5.
+- **Goal:** The runtime annotation helper implementing the declared budget: ceiling, shape, base-first oneof, cycle-wide identifier, lazy member derivation, base-members terminal. Covers R1, R2, R4, R5, KD3, KD5, KD8, KTD5.
 - **Requirements:** R1, R2, R4, R5.
-- **Dependencies:** none (U1 is independent; U3 consumes this).
-- **Files:** `packages/effect-schema-extensions/src/terminating-recursion.ts` (helper + in-source schema-derived property tests), `.../src/mod.ts` (export), api report, `.changeset/` intent (minor).
-- **Approach:** The helper returns the union annotated with a `toArbitrary` hook; member arbitraries derive inside the hook; the terminal branch past the cap is the base members; a shared `depthIdentifier` (the `identifier` argument) scopes the budget to the cycle. Export from the root entry per KTD5.
+- **Dependencies:** none (U1 is independent; U3 and U6 consume this).
+- **Files:** `packages/effect-schema-recursion-budget/src/terminating-recursion.ts` (helper + in-source schema-derived property tests), `.../src/mod.ts` (export), package manifest, tsdown/vitest/tsconfig/api-extractor configs, README, api report, `.changeset/` intent (minor; first release from `0.0.0`).
+- **Approach:** The helper returns the union annotated with a `toArbitrary` hook; member arbitraries derive inside the hook; the terminal branch past the cap is the base members; a shared `depthIdentifier` (the `identifier` argument) scopes the budget to the cycle. Export from the root entry per KTD5. Base member arbitraries derive once per hook call.
 - **Patterns to follow:** The v4 hook shape — lazy derivation inside the hook, `Derivation` with an explicit `terminal` — as documented on the vendored `ToArbitrary` types.
 - **Test scenarios** (in-source, schema-derived, each under the declared budget):
   - Termination: every generated value's nesting ≤ `maxDepth` + 1, quantified over seeds (R2).
@@ -208,7 +210,7 @@ Sequencing: U1 is the evaluator surface and lands first in its own commit, indep
   - Decode-past-cap: an encoded chain deeper than `maxDepth` decodes at full depth (R2, AE6).
   - Identifier sharing: two unions declared with one identifier under-generate — documents R4's hazard.
   - Re-entrancy: deriving a recursive member inside the hook folds to base instead of recursing (R5).
-- **Verification:** `pnpm --filter @systemfsoftware/effect-schema-extensions typecheck && pnpm --filter @systemfsoftware/effect-schema-extensions test && pnpm --filter @systemfsoftware/effect-schema-extensions lint` green; the reachability law measured, not asserted by construction.
+- **Verification:** `pnpm --filter @systemfsoftware/effect-schema-recursion-budget typecheck && pnpm --filter @systemfsoftware/effect-schema-recursion-budget test && pnpm --filter @systemfsoftware/effect-schema-recursion-budget lint` green; the reachability law measured, not asserted by construction.
 
 ### U3. `recursionLaws` in the law package
 
@@ -247,10 +249,10 @@ Sequencing: U1 is the evaluator surface and lands first in its own commit, indep
 
 ### U6. Corpus migration
 
-- **Goal:** The tree's recursive production unions declare their budget, so the emitted law suites are green and property suites exercise deep values by default. Covers R1, R3, R11, KD3, KD5, KD9.
+- **Goal:** The tree's recursive production unions declare their budget, so the emitted law suites are green and property suites exercise deep values by default. Covers R1, R3, R11, KD3, KD5, KD9, KD10.
 - **Requirements:** R1, R3.
 - **Dependencies:** U2.
-- **Files:** `packages/stryker-js/stryker-plugins/src/effect-schema-ignorer/AstNode.schema.ts`, `.../workflow-make-ignorer/AstNode.schema.ts` (each union wrapped in `terminatingRecursion` with `maxDepth: 6, depthSize: 'small'` — the base-heavy five-base/two-recur split starves deep generation under `'medium'` per KD9), `packages/stryker-js/stryker-plugins/package.json` (runtime dependency on `@systemfsoftware/effect-schema-extensions`), `pnpm-lock.yaml`.
+- **Files:** `packages/stryker-js/stryker-plugins/src/effect-schema-ignorer/AstNode.schema.ts`, `.../workflow-make-ignorer/AstNode.schema.ts` (each union wrapped in `terminatingRecursion` with `maxDepth: 6, depthSize: 'small'` per KD10), `packages/stryker-js/stryker-plugins/package.json` (runtime dependency on `@systemfsoftware/effect-schema-recursion-budget` — the bundled ignorer dist imports the helper), `pnpm-lock.yaml`.
 - **Approach:** Wrap each recursive union: base members stay the terminal set, the two suspend members become `recur`, the identifier is the schema's own qualified name. The three single-suspend struct recursions (CheckMutants, Metrics, Resolution) are not unions — the laws do not apply to them and the lint rule stays silent below the threshold.
 - **Test scenarios:** each migrated union's generated law suite is green: termination at the declared ceiling, nonzero deep share, full variant coverage.
 - **Verification:** `pnpm --filter @systemfsoftware/stryker-plugins test` green.
@@ -271,17 +273,17 @@ Sequencing: U1 is the evaluator surface and lands first in its own commit, indep
 
 ## Verification Contract
 
-| Gate               | Command                                                                                                                                                                                                       | Proves                                                   |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
-| Rule suite         | `pnpm --filter @systemfsoftware/oxlint-plugin-effect-schema test`                                                                                                                                             | U1 fixtures; read case counts, not exit codes            |
-| Rule package gates | `pnpm --filter @systemfsoftware/oxlint-plugin-effect-schema build && pnpm --filter @systemfsoftware/oxlint-plugin-effect-schema api:check && pnpm --filter @systemfsoftware/oxlint-plugin-effect-schema lint` | U1 ships clean                                           |
-| Helper             | `pnpm --filter @systemfsoftware/effect-schema-extensions typecheck && pnpm --filter @systemfsoftware/effect-schema-extensions test && pnpm --filter @systemfsoftware/effect-schema-extensions lint`           | U2 laws green inside the declared budget                 |
-| Laws               | `pnpm --filter @systemfsoftware/effect-schema-law typecheck && pnpm --filter @systemfsoftware/effect-schema-law test`                                                                                         | U3 laws plus the red-fixture proof                       |
-| Plugin             | `pnpm --filter @systemfsoftware/effect-schema-vite test`                                                                                                                                                      | U4 emission shape and runtime guard                      |
-| Corpus             | `pnpm --filter @systemfsoftware/stryker-plugins test`                                                                                                                                                         | U6 migrated unions green under their declared budgets    |
-| Enrollment reach   | `pnpm check:lint-coverage`                                                                                                                                                                                    | The new rule reaches the tree — registration is delivery |
-| Cutover honesty    | Workspace grep: no live reference to the deleted package; no `oxlint-disable` added anywhere                                                                                                                  | R10, R11                                                 |
-| Full chain         | `pnpm check:local`                                                                                                                                                                                            | REPO-D1                                                  |
+| Gate               | Command                                                                                                                                                                                                               | Proves                                                   |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Rule suite         | `pnpm --filter @systemfsoftware/oxlint-plugin-effect-schema test`                                                                                                                                                     | U1 fixtures; read case counts, not exit codes            |
+| Rule package gates | `pnpm --filter @systemfsoftware/oxlint-plugin-effect-schema build && pnpm --filter @systemfsoftware/oxlint-plugin-effect-schema api:check && pnpm --filter @systemfsoftware/oxlint-plugin-effect-schema lint`         | U1 ships clean                                           |
+| Helper             | `pnpm --filter @systemfsoftware/effect-schema-recursion-budget typecheck && pnpm --filter @systemfsoftware/effect-schema-recursion-budget test && pnpm --filter @systemfsoftware/effect-schema-recursion-budget lint` | U2 laws green inside the declared budget                 |
+| Laws               | `pnpm --filter @systemfsoftware/effect-schema-law typecheck && pnpm --filter @systemfsoftware/effect-schema-law test`                                                                                                 | U3 laws plus the red-fixture proof                       |
+| Plugin             | `pnpm --filter @systemfsoftware/effect-schema-vite test`                                                                                                                                                              | U4 emission shape and runtime guard                      |
+| Corpus             | `pnpm --filter @systemfsoftware/stryker-plugins test`                                                                                                                                                                 | U6 migrated unions green under their declared budgets    |
+| Enrollment reach   | `pnpm check:lint-coverage`                                                                                                                                                                                            | The new rule reaches the tree — registration is delivery |
+| Cutover honesty    | Workspace grep: no live reference to the deleted package; no `oxlint-disable` added anywhere                                                                                                                          | R10, R11                                                 |
+| Full chain         | `pnpm check:local`                                                                                                                                                                                                    | REPO-D1                                                  |
 
 Mutation runs stay in CI (`REPO-D3`) — never start one locally. The strict budgets ride the laws themselves (KTD4), so a derivation-cost regression surfaces as an over-budget failure in the ordinary test gate.
 

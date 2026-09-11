@@ -1,81 +1,71 @@
 {
-  "name": "@systemfsoftware/effect-schema-vite",
+  "name": "@systemfsoftware/effect-schema-recursion-budget",
   "license": "Apache-2.0",
-  "version": "2.0.3",
+  "version": "0.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
-    "directory": "packages/effect-schema-vite"
+    "directory": "packages/effect-schema-recursion-budget"
   },
-  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-vite#readme",
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-recursion-budget#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Vite plugin that auto-discovers Effect Schema exports and injects codec law and generation law property tests via @systemfsoftware/effect-schema-law.",
+  "description": "A declared generation budget for recursive Effect Schema unions — ceiling and shape as required knobs, base members as the terminal branch, one depth identifier per cycle.",
   "keywords": [
     "effect",
     "effect-ts",
     "schema",
-    "vite",
-    "vitest",
-    "plugin",
+    "recursion",
+    "fast-check",
     "property-testing",
-    "law-testing",
+    "arbitrary",
     "typescript"
   ],
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "@systemfsoftware/source": "./src/mod.ts",
-      "types": "./dist/effect-schema-vite.d.ts",
+      "types": "./dist/effect-schema-recursion-budget.d.ts",
       "default": "./dist/index.mjs"
     },
     "./package.json": "./package.json"
   },
-  "files": [
-    "dist"
-  ],
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
-    "api:check": "api-extractor run",
-    "api:update": "api-extractor run --local",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "attw": "attw --pack ."
-  },
-  "dependencies": {
-    "@oxc-project/types": "catalog:",
-    "@systemfsoftware/effect-schema-discovery": "workspace:^",
-    "oxc-parser": "catalog:"
+    "attw": "attw --pack .",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:attw",
-    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
-    "@systemfsoftware/effect-schema-law": "workspace:^",
-    "@systemfsoftware/effect-schema-recursion-budget": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
+    "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "vite": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@systemfsoftware/effect-schema-law": "workspace:*",
-    "effect": "catalog:peers",
-    "vite": ">5.0.0",
-    "vitest": "*"
+    "effect": "catalog:peers"
   },
   "publishConfig": {
     "exports": {
       ".": {
-        "types": "./dist/effect-schema-vite.d.ts",
+        "types": "./dist/effect-schema-recursion-budget.d.ts",
         "default": "./dist/index.mjs"
       },
       "./package.json": "./package.json"
