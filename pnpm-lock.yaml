@@ -9,9 +9,6 @@ catalogs:
     '@systemfsoftware/arethetypeswrong-cli':
       specifier: ^1.1.1
       version: 1.1.1
-    typescript:
-      specifier: ^6.0.3
-      version: 6.0.3
   default:
     '@effect/platform-node':
       specifier: 4.0.0-rc.112
@@ -67,9 +64,6 @@ catalogs:
     '@vitest/coverage-v8':
       specifier: ^4
       version: 4.1.9
-    '@vitest/snapshot':
-      specifier: ^4
-      version: 4.1.10
     effect:
       specifier: 4.0.0-rc.112
       version: 4.0.0-rc.112
@@ -214,186 +208,6 @@ importers:
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)
-
-  packages/arethetypeswrong/arethetypeswrong:
-    dependencies:
-      '@loaderkit/resolve':
-        specifier: ^1.0.2
-        version: 1.0.6
-      '@systemfsoftware/npm-package':
-        specifier: workspace:^
-        version: link:../../npm-package
-      cjs-module-lexer:
-        specifier: ^1.2.3
-        version: 1.4.3
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112
-      semver:
-        specifier: ^7.5.4
-        version: 7.8.5
-      typescript:
-        specifier: catalog:attw
-        version: 6.0.3
-      validate-npm-package-name:
-        specifier: ^5.0.0
-        version: 5.0.1
-    devDependencies:
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: catalog:attw
-        version: 1.1.1
-      '@systemfsoftware/arethetypeswrong-recipes':
-        specifier: workspace:^
-        version: link:../arethetypeswrong-recipes
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../effect-gherkin-spec
-      '@systemfsoftware/effect-memfs':
-        specifier: workspace:^
-        version: link:../../effect-memfs
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../effect-schema-vite
-      '@systemfsoftware/oxlint-config':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/oxlint-config
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@types/semver':
-        specifier: ^7.5.0
-        version: 7.7.1
-      '@types/validate-npm-package-name':
-        specifier: ^4.0.0
-        version: 4.0.2
-      '@vitest/snapshot':
-        specifier: 'catalog:'
-        version: 4.1.10
-      fast-check:
-        specifier: ^4
-        version: 4.9.0
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@7.0.2001)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@6.0.3)(unrun@0.2.39)
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  packages/arethetypeswrong/arethetypeswrong-cli:
-    dependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
-      '@effect/platform-node-shared':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)
-      '@systemfsoftware/arethetypeswrong':
-        specifier: workspace:*
-        version: link:../arethetypeswrong
-      '@systemfsoftware/npm-package':
-        specifier: workspace:*
-        version: link:../../npm-package
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112
-    devDependencies:
-      '@effect/vitest':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(vitest@4.1.10)
-      '@systemfsoftware/arethetypeswrong-recipes':
-        specifier: workspace:*
-        version: link:../arethetypeswrong-recipes
-      '@systemfsoftware/effect-gherkin-spec':
-        specifier: workspace:^
-        version: link:../../effect-gherkin-spec
-      '@systemfsoftware/effect-schema-law':
-        specifier: workspace:^
-        version: link:../../effect-schema-law
-      '@systemfsoftware/effect-schema-vite':
-        specifier: workspace:^
-        version: link:../../effect-schema-vite
-      '@systemfsoftware/oxlint-config':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/oxlint-config
-      '@systemfsoftware/oxlint-plugin-effect-dmmf':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/oxlint-plugin-effect-dmmf
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      fast-check:
-        specifier: ^4
-        version: 4.9.0
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@7.0.2001)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      testcontainers:
-        specifier: 'catalog:'
-        version: 12.1.0(supports-color@8.1.1)
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      vite-tsconfig-paths:
-        specifier: 'catalog:'
-        version: 6.1.1(supports-color@8.1.1)(typescript@7.0.2)(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  packages/arethetypeswrong/arethetypeswrong-recipes:
-    dependencies:
-      '@systemfsoftware/npm-package':
-        specifier: workspace:^
-        version: link:../../npm-package
-    devDependencies:
-      '@systemfsoftware/oxlint-config':
-        specifier: workspace:^
-        version: link:../../oxlint-plugin/oxlint-config
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@7.0.2001)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
 
   packages/atom/effect-atom:
     devDependencies:
@@ -4828,9 +4642,6 @@ packages:
   '@types/scheduler@0.26.0':
     resolution: {integrity: sha512-WFHp9YUJQ6CKshqoC37iOlHnQSmxNc795UhB26CyBBttrN9svdIrUjl/NjnNmfcwtncN0h/0PPAFWv9ovP8mLA==}
 
-  '@types/semver@7.7.1':
-    resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
-
   '@types/ssh2-streams@0.1.13':
     resolution: {integrity: sha512-faHyY3brO9oLEA0QlcO8N2wT7R0+1sHWZvQ+y3rMLwdY1ZyS1z0W3t65j9PqT4HmQ6ALzNe7RZlNuCNE0wBSWA==}
 
@@ -4842,9 +4653,6 @@ packages:
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
-
-  '@types/validate-npm-package-name@4.0.2':
-    resolution: {integrity: sha512-lrpDziQipxCEeK5kWxvljWYhUvOiB2A9izZd9B2AFarYAkqZshb4lPbRs7zKEic6eGtH8V/2qJW+dPp9OtF6bw==}
 
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
@@ -9093,8 +8901,6 @@ snapshots:
 
   '@types/scheduler@0.26.0': {}
 
-  '@types/semver@7.7.1': {}
-
   '@types/ssh2-streams@0.1.13':
     dependencies:
       '@types/node': 25.9.5
@@ -9109,8 +8915,6 @@ snapshots:
       '@types/node': 18.19.130
 
   '@types/trusted-types@2.0.7': {}
-
-  '@types/validate-npm-package-name@4.0.2': {}
 
   '@types/ws@8.18.1':
     dependencies:
@@ -10711,20 +10515,6 @@ snapshots:
       glob: 13.0.6
       package-json-from-dist: 1.0.1
 
-  rolldown-plugin-dts@0.27.14(oxc-resolver@11.24.2)(rolldown@1.2.3)(typescript@6.0.3):
-    dependencies:
-      dts-resolver: 3.0.0(oxc-resolver@11.24.2)
-      get-tsconfig: 5.0.0-beta.5
-      obug: 2.1.4
-      rolldown: 1.2.3
-      yuku-ast: 0.8.4
-      yuku-codegen: 0.8.4
-      yuku-parser: 0.8.4
-    optionalDependencies:
-      typescript: 6.0.3
-    transitivePeerDependencies:
-      - oxc-resolver
-
   rolldown-plugin-dts@0.27.14(oxc-resolver@11.24.2)(rolldown@1.2.3)(typescript@7.0.2):
     dependencies:
       dts-resolver: 3.0.0(oxc-resolver@11.24.2)
@@ -11163,33 +10953,6 @@ snapshots:
       json5: 2.2.3
       minimist: 1.2.8
       strip-bom: 3.0.0
-
-  tsdown@0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@6.0.3)(unrun@0.2.39):
-    dependencies:
-      ansis: 4.3.1
-      cac: 7.0.0
-      defu: 6.1.7
-      empathic: 2.0.1
-      hookable: 6.1.1
-      import-without-cache: 0.4.0
-      obug: 2.1.4
-      picomatch: 4.0.5
-      rolldown: 1.2.3
-      rolldown-plugin-dts: 0.27.14(oxc-resolver@11.24.2)(rolldown@1.2.3)(typescript@6.0.3)
-      tinyexec: 1.3.0
-      tinyglobby: 0.2.17
-      tree-kill: 1.2.2
-      unconfig-core: 7.5.0
-      verkit: 0.3.2
-    optionalDependencies:
-      tsx: 4.23.12
-      typescript: 6.0.3
-      unrun: 0.2.39
-    transitivePeerDependencies:
-      - '@typescript/native-preview'
-      - '@volar/typescript'
-      - oxc-resolver
-      - vue-tsc
 
   tsdown@0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39):
     dependencies:

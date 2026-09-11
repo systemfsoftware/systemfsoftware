@@ -1,6 +1,4 @@
 ---
-"@systemfsoftware/arethetypeswrong-cli": minor
-"@systemfsoftware/arethetypeswrong": minor
 "@systemfsoftware/effect-cell-types": minor
 "@systemfsoftware/effect-daemon-spec": minor
 "@systemfsoftware/effect-gherkin-spec": minor
