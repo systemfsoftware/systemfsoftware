@@ -29,6 +29,7 @@ catalog:
   tstyche: ^7.1.0
   testcontainers: ^12.1.0
   "@microsoft/api-extractor": ^7.58.7
+  "@noble/hashes": 2.4.0
   oxc-parser: ^0.140.0
   "@oxc-project/types": ^0.140.0
   "@std/jsonc": jsr:^1.0.2
