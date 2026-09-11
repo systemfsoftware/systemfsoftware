@@ -4,20 +4,20 @@ The plugin ABI: one effect-free module per abstraction, no platform, zero depend
 
 ## Modules
 
-| Module            | Abstraction                                                                                 |
-| ----------------- | ------------------------------------------------------------------------------------------- |
-| `./Plugin`        | `declarePlugin`, the six-kind contribution union, the pure fold, `PluginModule`             |
-| `./Plugin.schema` | `StandardSchemaV1`, the kind alphabet, declaration / shadow / module schemas                |
-| `./Mutant`        | Mutant, test-plan, coverage and instrumenter-constant vocabulary                            |
-| `./Checker`       | Checker factory: `init?`, `check?`, `group?`                                                |
-| `./TestRunner`    | TestRunner factory: `init?`, `dispose?`, `capabilities?`, `dryRun?`, `mutantRun?`           |
-| `./Reporter`      | Reporter factory over a `ReporterEvent` async iterable (absorbs `ReporterEvent`)            |
-| `./Ignorer`       | Ignorer factory: `(node, context) => string \| null`                                        |
-| `./Evaluator`     | Evaluator factory: `(report, options) => ExitClass \| null`, async allowed                  |
-| `./Parser`        | Parser factory returning `{ extensions, parse(input, fileName) }` — plain data, synchronous |
-| `./Report`        | Mutation report and metrics vocabulary (absorbs `Metrics`)                                  |
-| `./Options`       | The option set and `PluginInit` (absorbs `output-file`, `provided-options`)                 |
-| `./ExitClass`     | Exit classes, the verdict fold and the classified decision                                  |
+| Module            | Abstraction                                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------------- |
+| `./Plugin`        | `declarePlugin`, the six-kind contribution union, the pure fold, `PluginModule`                               |
+| `./Plugin.schema` | `StandardSchemaV1`, the kind alphabet, declaration / shadow / module schemas                                  |
+| `./Mutant`        | Mutant, test-plan, coverage and instrumenter-constant vocabulary                                              |
+| `./Checker`       | Checker factory: `init?`, `check?`, `group?`                                                                  |
+| `./TestRunner`    | TestRunner factory: `init?`, `dispose?`, `capabilities?`, `dryRun?`, `mutantRun?`                             |
+| `./Reporter`      | Reporter factory over a `ReporterEvent` async iterable (absorbs `ReporterEvent`)                              |
+| `./Ignorer`       | Ignorer factory: `(node, context) => string \| null`                                                          |
+| `./Evaluator`     | Evaluator factory: `(report, options) => EvaluatorVerdict` (`{ exitClass, message? } \| null`), async allowed |
+| `./Parser`        | Parser factory returning `{ extensions, parse(input, fileName) }` — plain data, synchronous                   |
+| `./Report`        | Mutation report and metrics vocabulary (absorbs `Metrics`)                                                    |
+| `./Options`       | The option set and `PluginInit` (absorbs `output-file`, `provided-options`)                                   |
+| `./ExitClass`     | Exit classes, the verdict fold and the classified decision                                                    |
 
 ## Rules
 

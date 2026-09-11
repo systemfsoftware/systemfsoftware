@@ -137,7 +137,7 @@ export const StrykerOptionsCodec = S.StructWithRest(
     ]),
     mutator: defaulted(MutatorDescriptorCodec, { excludedMutations: [] }),
     packageManager: S.optional(PackageManagerCodec),
-    plugins: defaulted(S.Array(S.String), ['@systemfsoftware/stryker-js-*']),
+    plugins: defaulted(S.Array(S.String), []),
     appendPlugins: defaulted(S.Array(S.String), []),
     reporters: defaulted(S.Array(S.String), ['clear-text', 'progress', 'html']),
     htmlReporter: defaulted(HtmlReporterOptionsCodec, { fileName: 'reports/mutation/mutation.html' }),
