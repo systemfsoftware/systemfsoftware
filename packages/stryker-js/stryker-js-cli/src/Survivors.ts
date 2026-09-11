@@ -1,19 +1,9 @@
 import { sha256 } from '@noble/hashes/sha256'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils'
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import {
-  type ConfigFileInvalidError,
-  type ConfigFileNotFoundError,
-  ConfigFileUnreadableError,
-  readConfig,
-  strykerVersion,
-  toRelativeNormalizedFileName,
-} from '@systemfsoftware/stryker-js-engine'
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
-import { Module } from '@systemfsoftware/stryker-js/Module'
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import { schema } from '@systemfsoftware/stryker-js/Mutant'
-import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import type { Location, Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Options'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Match from 'effect/Match'
@@ -22,6 +12,15 @@ import * as Path from 'effect/Path'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 import { PriorReportDocument as PriorReportDocumentSchema } from './admit-survivors-run.workflow.js'
+import {
+  type ConfigFileInvalidError,
+  type ConfigFileNotFoundError,
+  ConfigFileUnreadableError,
+  readConfig,
+  strykerVersion,
+  toRelativeNormalizedFileName,
+} from './run/index.js'
+import { Module } from './run/Module.js'
 export type PriorReportDocument = S.Schema.Type<typeof PriorReportDocumentSchema>
 export type PriorReportMutant = PriorReportDocument['files'][string]['mutants'][number]
 import {
@@ -68,7 +67,7 @@ export type ResolveAbsolutePath = (file: string) => string
 export function survivorIdentifyingKey(
   input: {
     readonly file: string
-    readonly location: schema.Location
+    readonly location: Location
     readonly mutatorName: string
     readonly replacement: string | undefined
   },
@@ -90,7 +89,8 @@ export function reportMutantToMutant(
   mutant: PriorReportMutant,
   resolveAbsolutePath: ResolveAbsolutePath,
 ): Mutant {
-  return Mutant.make({
+  return {
+    _tag: 'Mutant',
     id: mutant.id,
     fileName: resolveAbsolutePath(file),
     mutatorName: mutant.mutatorName,
@@ -105,7 +105,7 @@ export function reportMutantToMutant(
         column: mutant.location.end.column - 1,
       },
     },
-  })
+  }
 }
 
 export function extractSurvivors(

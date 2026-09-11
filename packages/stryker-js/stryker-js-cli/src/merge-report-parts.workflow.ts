@@ -1,5 +1,4 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { MutationTestResultSchema } from '@systemfsoftware/stryker-js/Report'
 import type {
   FileResult,
   MutantResult,
@@ -12,6 +11,8 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
+
+import { MutationTestResultPayload } from './run/abi-payload.schema.js'
 
 const MERGED_SCHEMA_VERSION = '1.7'
 const DEFAULT_THRESHOLDS = { high: 80, low: 60 }
@@ -38,7 +39,7 @@ export const ReportPart = S.Struct({
   label: S.String,
   outcome: S.String,
   incomplete: S.Boolean,
-  report: S.optional(MutationTestResultSchema),
+  report: S.optional(MutationTestResultPayload),
 })
 
 export const MergeVerdictRow = S.Struct({
@@ -66,7 +67,7 @@ const MergeReportPartsTypeId: unique symbol = Symbol.for('@systemfsoftware/stryk
 type MergeReportPartsTypeId = typeof MergeReportPartsTypeId
 
 export class MergedReports extends S.TaggedClass<MergedReports>()('MergedReports', {
-  report: MutationTestResultSchema,
+  report: MutationTestResultPayload,
   rows: S.Array(MergeVerdictRow),
   survivors: S.Array(MergeSurvivor),
 }) {

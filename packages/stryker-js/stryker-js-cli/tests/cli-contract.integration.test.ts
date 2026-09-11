@@ -115,7 +115,7 @@ interface CorePurityProbe {
   readonly cliVersion: CliResult
 }
 
-const CORE_PACKAGE_MANIFEST = `${WORKDIR}/node_modules/@systemfsoftware/stryker-js-engine/package.json`
+const CORE_PACKAGE_MANIFEST = `${WORKDIR}/node_modules/@systemfsoftware/stryker-js/package.json`
 const CLI_PACKAGE_MANIFEST = `${WORKDIR}/node_modules/@systemfsoftware/stryker-js-cli/package.json`
 
 const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never, StrykerCli> =>
@@ -136,7 +136,7 @@ const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never,
     ).filter((entry) => entry !== './package.json')
     const imports: CoreEntryImport[] = []
     for (const entry of entries) {
-      const specifier = `@systemfsoftware/stryker-js-engine${entry.slice(1)}`
+      const specifier = `@systemfsoftware/stryker-js${entry.slice(1)}`
       const probe = yield* cli.sh('node --input-type=module -e "await import(process.env.CORE_ENTRY)"', {
         ...options,
         env: { CORE_ENTRY: specifier },
@@ -667,7 +667,23 @@ Feature('Driving the mutation tester from an agent harness')
         Then('every declared entry is read from the installed manifest rather than a fixed list')((s) => {
           const declared = s.probe.entries.map((entry) => entry.entry)
           checkExpect(declared.length).toBeGreaterThan(0)
-          checkExpect(declared).toEqual(expect.arrayContaining(['.', './config/base']))
+          checkExpect(declared).toEqual(
+            expect.arrayContaining([
+              '.',
+              './Checker',
+              './Evaluator',
+              './ExitClass',
+              './Ignorer',
+              './Mutant',
+              './Options',
+              './Parser',
+              './Plugin',
+              './Plugin.schema',
+              './Report',
+              './Reporter',
+              './TestRunner',
+            ]),
+          )
           checkExpect(declared.filter((entry) => entry.startsWith('./internal/'))).toEqual([])
           checkExpect(declared).not.toContain('./package.json')
         }),

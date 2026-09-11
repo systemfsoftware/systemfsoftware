@@ -1,9 +1,3 @@
-/**
- * The wire schemas the CLI contract lane decodes the packed `stryker` stream
- * against. Extracted from the integration test so module-scope schema
- * declarations live in `*.schema.ts` files; the test imports the schemas and
- * the `StreamLine` type from here.
- */
 import * as S from 'effect/Schema'
 
 export interface StreamLine {

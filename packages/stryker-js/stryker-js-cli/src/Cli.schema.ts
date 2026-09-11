@@ -10,7 +10,7 @@
  * That non-export is load-bearing. The law generator walks every refinement
  * reachable from an *exported* schema, so the previous
  * `export const CliRequest = S.Union([...])` — whose `run` arm declared
- * `options: StrykerOptionsSchema` — pulled the entire option tree into the
+ * `options: StrykerOptionsPayload` — pulled the entire option tree into the
  * generated suite, to prove things about a codec nobody runs.
  *
  * `options` is also PARTIAL, which is the substantive point the old schema got
@@ -19,7 +19,7 @@
  * Declaring the resolved `StrykerOptions` described a value this type never
  * holds, which is why its `Type` had to be discarded and patched by hand.
  */
-import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js/Options'
 import * as S from 'effect/Schema'
 
 const RunRequestBase = S.TaggedStruct('run', { survivors: S.Boolean })

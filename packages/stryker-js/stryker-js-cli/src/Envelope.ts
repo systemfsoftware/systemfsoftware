@@ -1,5 +1,7 @@
-import { ExitClass, highestExitClass } from '@systemfsoftware/stryker-js/ExitClass'
-import { causeText } from '@systemfsoftware/stryker-js/Mutant'
+import { highestExitClass } from '@systemfsoftware/stryker-js/ExitClass'
+import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
+
+import { causeText } from '@systemfsoftware/stryker-js'
 import * as Arr from 'effect/Array'
 import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
@@ -22,6 +24,7 @@ import {
   type RunOutcomeDecision,
   type RunOutcomeError,
 } from './classify-run-outcome.workflow.js'
+import { ExitClassPayload } from './run/abi-payload.schema.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 
 const CONFIG_CODE = 2
@@ -44,7 +47,7 @@ export function runOutcomeCode(result: Result.Result<RunOutcomeDecision, FailedR
 }
 
 export function isExitClass(value: unknown): value is ExitClass {
-  return S.is(ExitClass)(value)
+  return S.is(ExitClassPayload)(value)
 }
 
 const asExitClass = Option.liftPredicate(isExitClass)

@@ -1,6 +1,6 @@
-import type { RunOutcome, StageError } from '@systemfsoftware/stryker-js-engine'
-import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js/Options'
 import type * as Effect from 'effect/Effect'
+import type { RunOutcome, StageError } from './run/index.js'
 
 export type StrykerRun = (
   options: PartialStrykerOptions,

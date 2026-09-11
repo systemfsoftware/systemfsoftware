@@ -1,8 +1,5 @@
 import { NodeFileSystem, NodePath, NodeSocket } from '@effect/platform-node'
 import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChildProcessSpawner'
-import { ChildProcessCrashedError, WorkerEntries, WorkerLauncher } from '@systemfsoftware/stryker-js-engine'
-import type { EnginePorts, SpawnedSocketWorker } from '@systemfsoftware/stryker-js-engine'
-import { Module, type ModuleRequire } from '@systemfsoftware/stryker-js/Module'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
@@ -14,6 +11,9 @@ import * as ChildProcess from 'effect/unstable/process/ChildProcess'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 import * as RpcClient from 'effect/unstable/rpc/RpcClient'
 import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization'
+import { ChildProcessCrashedError, WorkerEntries, WorkerLauncher } from '../run/index.js'
+import type { EnginePorts, SpawnedSocketWorker } from '../run/index.js'
+import { Module, type ModuleRequire } from '../run/Module.js'
 
 interface NodeModule {
   createRequire(filename: string | URL): NodeRequire

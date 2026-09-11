@@ -1,7 +1,8 @@
 import { sha256 } from '@noble/hashes/sha256'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils'
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import { schema } from '@systemfsoftware/stryker-js/Mutant'
+import type { MutantStatus } from '@systemfsoftware/stryker-js/Mutant'
+import type { FileResult, MutantResult, MutationTestResult } from '@systemfsoftware/stryker-js/Report'
 import * as Equivalence from 'effect/Equivalence'
 import * as Exit from 'effect/Exit'
 import * as Result from 'effect/Result'
@@ -31,7 +32,7 @@ const reportPositionArb = fc.record({
 
 const reportLocationArb = fc.record({ start: reportPositionArb, end: reportPositionArb })
 
-const nonSurvivedStatusArb = fc.constantFrom<schema.MutantStatus>(
+const nonSurvivedStatusArb = fc.constantFrom<MutantStatus>(
   'Killed',
   'NoCoverage',
   'Timeout',
@@ -42,8 +43,8 @@ const nonSurvivedStatusArb = fc.constantFrom<schema.MutantStatus>(
 )
 
 const mutantResultArb = (
-  status: fc.Arbitrary<schema.MutantStatus>,
-): fc.Arbitrary<schema.MutantResult> =>
+  status: fc.Arbitrary<MutantStatus>,
+): fc.Arbitrary<MutantResult> =>
   fc.record(
     {
       id: fc.string({ minLength: 1, maxLength: 8 }),
@@ -64,18 +65,18 @@ const cleanConfigArb: fc.Arbitrary<Record<string, unknown>> = fc.dictionary(
 
 const sourceArb = fc.string({ maxLength: 16 })
 
-const survivingFilesArb: fc.Arbitrary<Record<string, schema.FileResult>> = fc
+const survivingFilesArb: fc.Arbitrary<Record<string, FileResult>> = fc
   .tuple(
     fc.string({ minLength: 1, maxLength: 6 }),
     fc.array(mutantResultArb(nonSurvivedStatusArb), { maxLength: 3 }),
-    mutantResultArb(fc.constant<schema.MutantStatus>('Survived')),
+    mutantResultArb(fc.constant<MutantStatus>('Survived')),
     sourceArb,
   )
   .map(([file, others, survivor, source]) => ({
     [file]: { language: 'javascript', source, mutants: [...others, survivor] },
   }))
 
-const nonSurvivingFilesArb: fc.Arbitrary<Record<string, schema.FileResult>> = fc.dictionary(
+const nonSurvivingFilesArb: fc.Arbitrary<Record<string, FileResult>> = fc.dictionary(
   fc.string({ maxLength: 6 }),
   fc.record({
     language: fc.constant('javascript'),
@@ -86,9 +87,9 @@ const nonSurvivingFilesArb: fc.Arbitrary<Record<string, schema.FileResult>> = fc
 )
 
 const reportArb = (
-  files: fc.Arbitrary<Record<string, schema.FileResult>>,
+  files: fc.Arbitrary<Record<string, FileResult>>,
   config: fc.Arbitrary<Record<string, unknown>> = cleanConfigArb,
-): fc.Arbitrary<schema.MutationTestResult> =>
+): fc.Arbitrary<MutationTestResult> =>
   fc.record({
     config,
     schemaVersion: fc.constant('1'),
@@ -103,7 +104,7 @@ const reportArb = (
 const reportWithSurvivorsArb = reportArb(survivingFilesArb)
 const reportWithoutSurvivorsArb = reportArb(nonSurvivingFilesArb)
 
-const frameworklessReportArb: fc.Arbitrary<schema.MutationTestResult> = fc.record({
+const frameworklessReportArb: fc.Arbitrary<MutationTestResult> = fc.record({
   config: cleanConfigArb,
   schemaVersion: fc.constant('1'),
   thresholds: fc.record({ high: fc.integer(), low: fc.integer() }),
@@ -129,7 +130,7 @@ const survivorsProducedReportArb = reportArb(
  * assignable — the suite would keep passing while no longer exercising a command. Spread
  * the data, construct once, and every variant is a real instance.
  */
-const matchingFields = (report: schema.MutationTestResult) => ({
+const matchingFields = (report: MutationTestResult) => ({
   priorReport: PriorReportFacts.make({
     config: report.config ?? {},
     frameworkVersion: report.framework?.version,
@@ -146,18 +147,18 @@ const matchingFields = (report: schema.MutationTestResult) => ({
   priorSurvivors: extractSurvivors(report, absPath),
 })
 
-const matchingCommand = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand =>
+const matchingCommand = (report: MutationTestResult): AdmitSurvivorsRunCommand =>
   AdmitSurvivorsRunCommand.make(matchingFields(report))
 
 /** The same command with the framework version drifted, so the two sides disagree. */
-const driftedCommand = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand =>
+const driftedCommand = (report: MutationTestResult): AdmitSurvivorsRunCommand =>
   AdmitSurvivorsRunCommand.make({
     ...matchingFields(report),
     frameworkVersion: `${report.framework?.version ?? ''}-drifted`,
   })
 
 /** The same command with no prior report, so the admission has nothing to inspect. */
-const commandWithoutPriorReport = (report: schema.MutationTestResult): AdmitSurvivorsRunCommand =>
+const commandWithoutPriorReport = (report: MutationTestResult): AdmitSurvivorsRunCommand =>
   AdmitSurvivorsRunCommand.make({
     ...matchingFields(report),
     priorReport: undefined,
