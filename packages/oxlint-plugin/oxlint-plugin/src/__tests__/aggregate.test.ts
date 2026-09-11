@@ -13,7 +13,6 @@ const EXPECTED_RULES = [
   'no-context-generic-tag',
   'no-date-now-in-effect',
   'no-direct-tag-access',
-  'no-domain-branching-density',
   'no-either-tag-assertions',
   'no-inline-destructured-type',
   'no-internal-jsdoc-outside',
@@ -39,13 +38,13 @@ const EXPECTED_RECOMMENDED = EXPECTED_RULES.filter((name) => !UNRECOMMENDED[name
 )
 
 describe('aggregate registration contract', () => {
-  it('Should_ExposeTheTwentyPreSplitRules_When_TheAggregateSpreadsTheLeaves', () => {
+  it('Should_ExposeTheNineteenPreSplitRules_When_TheAggregateSpreadsTheLeaves', () => {
     const keys = Object.keys(plugin.rules)
     expect(keys.length).toBe(EXPECTED_RULES.length)
     expect(new Set(keys)).toStrictEqual(new Set(EXPECTED_RULES))
   })
 
-  it('Should_RecommendTheSixteenPreSplitIds_When_TheAggregateDerivesRecommended', () => {
+  it('Should_RecommendTheFifteenPreSplitIds_When_TheAggregateDerivesRecommended', () => {
     const keys = Object.keys(plugin.configs.recommended.rules)
     expect(keys.length).toBe(EXPECTED_RECOMMENDED.length)
     expect(new Set(keys)).toStrictEqual(new Set(EXPECTED_RECOMMENDED))

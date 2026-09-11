@@ -29,7 +29,9 @@ import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Duration from 'effect/Duration'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import * as Match from 'effect/Match'
+import * as Predicate from 'effect/Predicate'
 import * as Ref from 'effect/Ref'
 import type * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
@@ -284,6 +286,44 @@ export const withMaxReuse = (
 /** What the test environment currently holds, which is what decides a reload. */
 type EnvironmentState = 'pristine' | 'loaded' | 'loaded-static-mutant'
 
+/** What a mutant run finds, and what the runner is able to do about it. */
+interface EnvironmentRequest {
+  readonly requested: boolean
+  readonly current: EnvironmentState
+  readonly canReload: boolean
+}
+
+/** What a mutant run must do to the environment it finds. */
+interface EnvironmentPlan {
+  readonly reloadEnvironment: boolean
+  readonly retire: boolean
+  readonly nextState: EnvironmentState
+}
+
+const stateNeedsReload = (requested: boolean, current: EnvironmentState): boolean =>
+  Match.value(requested).pipe(
+    Match.when(true, () => current !== 'pristine'),
+    Match.orElse(() => current === 'loaded-static-mutant'),
+  )
+
+const reloadsEnvironment = (request: EnvironmentRequest): boolean =>
+  request.canReload && stateNeedsReload(request.requested, request.current)
+
+const retiresWorker = (request: EnvironmentRequest): boolean =>
+  !request.canReload && request.current === 'loaded-static-mutant'
+
+const stateAfterRun = (requested: boolean): EnvironmentState =>
+  Match.value(requested).pipe(
+    Match.when(true, (): EnvironmentState => 'loaded-static-mutant'),
+    Match.orElse((): EnvironmentState => 'loaded'),
+  )
+
+const environmentPlan = (request: EnvironmentRequest): EnvironmentPlan => ({
+  reloadEnvironment: reloadsEnvironment(request),
+  retire: retiresWorker(request),
+  nextState: stateAfterRun(request.requested),
+})
+
 /**
  * Decide whether the test environment must be reloaded before a mutant runs.
  *
@@ -311,31 +351,20 @@ export const withEnvironmentReload = (
         Effect.gen(function*() {
           const current = yield* Ref.get(state)
           const canReload = (yield* inner.capabilities).reloadEnvironment
+          const plan = environmentPlan({ requested: options.reloadEnvironment, current, canReload })
 
-          let reloadEnvironment: boolean
-          if (options.reloadEnvironment) {
-            reloadEnvironment = current !== 'pristine' && canReload
-          } else {
-            reloadEnvironment = current === 'loaded-static-mutant' && canReload
-          }
-          const decided: MutantRunOptions = { ...options, reloadEnvironment }
-
-          if (current === 'loaded-static-mutant' && !canReload) {
+          if (plan.retire) {
             yield* retire
           }
 
           const policy: Policy.Policy<MutantRunResult, PooledTestRunnerError, never> = (self) =>
             Effect.gen(function*() {
               const result = yield* self
-              let nextState: EnvironmentState = 'loaded'
-              if (options.reloadEnvironment) {
-                nextState = 'loaded-static-mutant'
-              }
-              yield* Ref.set(state, nextState)
+              yield* Ref.set(state, plan.nextState)
               return result
             })
 
-          return yield* policy(inner.mutantRun(decided))
+          return yield* policy(inner.mutantRun({ ...options, reloadEnvironment: plan.reloadEnvironment }))
         }),
     }
     return wrapped
@@ -411,6 +440,30 @@ const resultFromExit = (
   }
 }
 
+const mutantActivation = (
+  activeMutantId: string | undefined,
+): { readonly env: Record<string, string>; readonly extendEnv: true } | undefined =>
+  Match.value(activeMutantId).pipe(
+    Match.when(Predicate.isString, (id) => ({
+      env: { [INSTRUMENTER_CONSTANTS.ACTIVE_MUTANT_ENV_VARIABLE]: id },
+      extendEnv: true as const,
+    })),
+    Match.orElse(() => undefined),
+  )
+
+const spawnResult = (
+  outcome: Exit.Exit<{ readonly output: string; readonly exitCode: number }, unknown>,
+  elapsed: number,
+): DryRunResult =>
+  Match.value(outcome).pipe(
+    Match.tag('Failure', (failed): DryRunResult => ({ status: 'error', errorMessage: String(failed.cause) })),
+    Match.tag(
+      'Success',
+      (exited): DryRunResult => resultFromExit(exited.value.exitCode, exited.value.output, elapsed),
+    ),
+    Match.exhaustive,
+  )
+
 /**
  * Run the configured command once.
  *
@@ -424,18 +477,10 @@ const runCommand = (
   Effect.gen(function*() {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const startedAt = yield* Clock.currentTimeMillis
-
-    let extra: { env: Record<string, string>; extendEnv: true } | undefined
-    if (activeMutantId !== undefined) {
-      extra = {
-        env: { [INSTRUMENTER_CONSTANTS.ACTIVE_MUTANT_ENV_VARIABLE]: activeMutantId },
-        extendEnv: true,
-      }
-    }
     const command = ChildProcess.make(config.options.commandRunner.command, {
       shell: true,
       cwd: config.workingDir,
-      ...extra,
+      ...mutantActivation(activeMutantId),
     })
 
     const outcome = yield* Effect.scoped(
@@ -445,16 +490,11 @@ const runCommand = (
         const exitCode = yield* handle.exitCode
         return { output, exitCode }
       }),
-    ).pipe(
-      Effect.catchCause((cause) => Effect.succeed({ failure: cause })),
-    )
+    ).pipe(Effect.exit)
 
     const elapsed = (yield* Clock.currentTimeMillis) - startedAt
 
-    if ('failure' in outcome) {
-      return { status: 'error', errorMessage: String(outcome.failure) }
-    }
-    return resultFromExit(outcome.exitCode, outcome.output, elapsed)
+    return spawnResult(outcome, elapsed)
   })
 
 /** Run the tests with no mutant active, to establish the baseline. */

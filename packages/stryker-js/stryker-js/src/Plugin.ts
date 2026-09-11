@@ -1,6 +1,7 @@
 import * as Context from 'effect/Context'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
@@ -93,16 +94,19 @@ function foldContributions(
   for (const [index, contribution] of contributions.entries()) {
     const key = `${contribution.kind}:${contribution.name}`
     const previous = MutableHashMap.get(lastSeen, key)
-    if (Option.isSome(previous)) {
-      shadowings.push(
-        new Shadowing({
-          kind: String(contribution.kind),
-          name: contribution.name,
-          shadowedIndex: previous.value,
-          winnerIndex: index,
-        }),
-      )
-    }
+    shadowings.push(
+      ...Option.match(previous, {
+        onNone: () => [],
+        onSome: (shadowedIndex) => [
+          new Shadowing({
+            kind: String(contribution.kind),
+            name: contribution.name,
+            shadowedIndex,
+            winnerIndex: index,
+          }),
+        ],
+      }),
+    )
     MutableHashMap.set(resolved, key, contribution)
     MutableHashMap.set(lastSeen, key, index)
   }
@@ -110,28 +114,32 @@ function foldContributions(
   return { resolved, shadowings }
 }
 
-export function composePlugins(
-  contributions: readonly AnyPluginContribution[],
-): ComposedPlugins {
+const reporterFactoryOf = (contribution: AnyPluginContribution): readonly SelectedReporterFactory[] =>
+  Match.value(contribution).pipe(
+    Match.discriminator('kind')('Reporter', (reporter): readonly SelectedReporterFactory[] => [
+      { name: reporter.name, make: reporter.make },
+    ]),
+    Match.orElse((): readonly SelectedReporterFactory[] => []),
+  )
+
+const layerOf = (contribution: AnyPluginContribution): readonly Layer.Layer<never, never, PluginEnvironment>[] =>
+  Match.value(contribution).pipe(
+    Match.discriminator('kind')('Reporter', (): readonly Layer.Layer<never, never, PluginEnvironment>[] => []),
+    Match.orElse((nonReporter) => [nonReporter.layer]),
+  )
+
+const mergedLayer = (
+  layers: ReadonlyArray<Layer.Layer<never, never, PluginEnvironment>>,
+): Layer.Layer<MergedPluginServices, never, PluginEnvironment> =>
+  layers.reduce((accumulated, next) => Layer.merge(accumulated, next))
+
+export function composePlugins(contributions: readonly AnyPluginContribution[]): ComposedPlugins {
   const { resolved, shadowings } = foldContributions(contributions)
   const allResolved = Array.from(MutableHashMap.values(resolved))
-  const reporterFactories: Array<SelectedReporterFactory> = []
-  const nonReporterLayers: Array<Layer.Layer<never, never, PluginEnvironment>> = []
-  for (const contribution of allResolved) {
-    if (contribution.kind === 'Reporter') {
-      reporterFactories.push({ name: contribution.name, make: contribution.make })
-      continue
-    }
-    nonReporterLayers.push(contribution.layer)
+  const layers = allResolved.flatMap(layerOf)
+  return {
+    layer: Option.map(Option.fromUndefinedOr(layers.at(0)), () => mergedLayer(layers)),
+    reporterFactories: allResolved.flatMap(reporterFactoryOf),
+    shadowings,
   }
-
-  const allLayers: Array<Layer.Layer<never, never, PluginEnvironment>> = [...nonReporterLayers]
-
-  if (allLayers.length === 0) {
-    return { layer: Option.none(), reporterFactories, shadowings }
-  }
-  const merged: Layer.Layer<MergedPluginServices, never, PluginEnvironment> = allLayers.reduce((acc, next) =>
-    Layer.merge(acc, next)
-  )
-  return { layer: Option.some(merged), reporterFactories, shadowings }
 }

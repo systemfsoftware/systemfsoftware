@@ -10,6 +10,7 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Fiber from 'effect/Fiber'
 import * as HashSet from 'effect/HashSet'
+import * as Predicate from 'effect/Predicate'
 import * as Queue from 'effect/Queue'
 import * as Ref from 'effect/Ref'
 import * as S from 'effect/Schema'
@@ -46,6 +47,20 @@ export interface AttachReporterInput {
 
 export const isTerminalReportEvent = (event: ReporterEvent): boolean => S.is(MutationTestReportReady)(event)
 
+const availableReporters = (available: readonly string[]): string => {
+  if (available.length === 0) return '(none)'
+  return available.join(', ')
+}
+
+const unknownReporterMessage = (unknown: readonly string[], available: readonly string[]): string => {
+  const quoted = unknown.map((name) => `"${name}"`).join(', ')
+  const candidates = availableReporters(available)
+  if (unknown.length > 1) {
+    return `Unknown reporters ${quoted}. Available reporters: ${candidates}.`
+  }
+  return `Unknown reporter ${quoted}. Available reporters: ${candidates}.`
+}
+
 export const validateReporterNames = (
   configured: readonly string[],
   available: readonly string[],
@@ -55,16 +70,7 @@ export const validateReporterNames = (
   if (unknown.length === 0) {
     return Effect.void
   }
-  const quoted = unknown.map((name) => `"${name}"`).join(', ')
-  let candidates = '(none)'
-  if (available.length > 0) {
-    candidates = available.join(', ')
-  }
-  let headline = `Unknown reporter ${quoted}.`
-  if (unknown.length > 1) {
-    headline = `Unknown reporters ${quoted}.`
-  }
-  return Effect.fail(new ConfigError({ message: `${headline} Available reporters: ${candidates}.` }))
+  return Effect.fail(new ConfigError({ message: unknownReporterMessage(unknown, available) }))
 }
 
 export const acquireReporterIterator = <A>(
@@ -95,6 +101,21 @@ const pumpEmitter = (ports: EmitterPorts): Effect.Effect<void> =>
     Effect.ensuring(Effect.asVoid(Queue.end(ports.queue))),
   )
 
+const closedIteratorResult: IteratorResult<ReporterEvent> = { done: true, value: undefined }
+
+const declaresTerminalReport = (result: IteratorResult<ReporterEvent>): boolean => {
+  if (result.done !== true) return isTerminalReportEvent(result.value)
+  return false
+}
+
+const closeIterator = async (
+  iterator: AsyncIterator<ReporterEvent>,
+  value: unknown,
+): Promise<IteratorResult<ReporterEvent>> => {
+  if (iterator.return === undefined) return closedIteratorResult
+  return iterator.return(value)
+}
+
 export const attachReporterFactories = (
   inputs: readonly AttachReporterInput[],
   options: StrykerOptions,
@@ -111,17 +132,14 @@ export const attachReporterFactories = (
       const singleUse: AsyncIterable<ReporterEvent> = {
         [Symbol.asyncIterator]: () => {
           const observe = (result: IteratorResult<ReporterEvent>): IteratorResult<ReporterEvent> => {
-            if (result.done !== true && isTerminalReportEvent(result.value)) {
+            if (declaresTerminalReport(result)) {
               Effect.runSync(Ref.set(ports.state, 'terminal'))
             }
             return result
           }
           return {
             next: async () => observe(await iterator.next()),
-            return: async (value) => {
-              const settled = await iterator.return?.(value)
-              return settled ?? { done: true, value: undefined }
-            },
+            return: async (value) => closeIterator(iterator, value),
           }
         },
       }
@@ -139,20 +157,36 @@ export const attachReporterFactories = (
       )
       return attachment
     }))
+
+const warnEventDropped = (attachment: ReporterAttachment): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    if ((yield* Ref.get(attachment.state)) === 'detached') {
+      return
+    }
+    yield* Effect.logWarning(`Reporter "${attachment.name}" stream closed before an event could be delivered.`)
+  })
+
+const offerToInbox = (attachment: ReporterAttachment, event: ReporterEvent): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    const offered = yield* Queue.offer(attachment.inbox, event)
+    if (!offered) {
+      yield* warnEventDropped(attachment)
+    }
+  })
+
+const deliverReporterEvent = (attachment: ReporterAttachment, event: ReporterEvent): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    if ((yield* Ref.get(attachment.state)) === 'detached') {
+      return
+    }
+    yield* offerToInbox(attachment, event)
+  })
+
 export const offerReporterEvent = (
   stage: Pick<ReporterStage, 'attachments'>,
   event: ReporterEvent,
 ): Effect.Effect<void, never> =>
-  Effect.forEach(stage.attachments, (attachment) =>
-    Effect.gen(function*() {
-      if ((yield* Ref.get(attachment.state)) === 'detached') {
-        return
-      }
-      const offered = yield* Queue.offer(attachment.inbox, event)
-      if (!offered && (yield* Ref.get(attachment.state)) !== 'detached') {
-        yield* Effect.logWarning(`Reporter "${attachment.name}" stream closed before an event could be delivered.`)
-      }
-    }), { discard: true })
+  Effect.forEach(stage.attachments, (attachment) => deliverReporterEvent(attachment, event), { discard: true })
 
 export const offerTerminalReport = (
   stage: Pick<ReporterStage, 'attachments'>,
@@ -172,6 +206,25 @@ type ReporterDrainOutcome =
   | { readonly kind: 'detached'; readonly name: string }
   | { readonly kind: 'terminal-failed'; readonly name: string }
 
+const settleFailedAttachment = (
+  attachment: ReporterAttachment,
+  cause: Cause.Cause<never>,
+): Effect.Effect<ReporterDrainOutcome, never, never> =>
+  Effect.gen(function*() {
+    if ((yield* Ref.get(attachment.state)) === 'terminal') {
+      yield* Effect.logError(`Reporter "${attachment.name}" failed while draining the terminal report.`).pipe(
+        Effect.annotateLogs('cause', cause),
+      )
+      const failed: ReporterDrainOutcome = { kind: 'terminal-failed', name: attachment.name }
+      return failed
+    }
+    yield* Effect.logWarning(
+      `Reporter "${attachment.name}" failed before the terminal report and was detached; exit code unchanged.`,
+    ).pipe(Effect.annotateLogs('cause', cause))
+    const detached: ReporterDrainOutcome = { kind: 'detached', name: attachment.name }
+    return detached
+  })
+
 const settleAttachment = (attachment: ReporterAttachment): Effect.Effect<ReporterDrainOutcome, never, never> =>
   Effect.gen(function*() {
     const exit = yield* Effect.exit(Effect.promise(() => attachment.consumer))
@@ -179,19 +232,13 @@ const settleAttachment = (attachment: ReporterAttachment): Effect.Effect<Reporte
       const completed: ReporterDrainOutcome = { kind: 'completed', name: attachment.name }
       return completed
     }
-    if ((yield* Ref.get(attachment.state)) === 'terminal') {
-      yield* Effect.logError(`Reporter "${attachment.name}" failed while draining the terminal report.`).pipe(
-        Effect.annotateLogs('cause', exit.cause),
-      )
-      const failed: ReporterDrainOutcome = { kind: 'terminal-failed', name: attachment.name }
-      return failed
-    }
-    yield* Effect.logWarning(
-      `Reporter "${attachment.name}" failed before the terminal report and was detached; exit code unchanged.`,
-    ).pipe(Effect.annotateLogs('cause', exit.cause))
-    const detached: ReporterDrainOutcome = { kind: 'detached', name: attachment.name }
-    return detached
+    return yield* settleFailedAttachment(attachment, exit.cause)
   })
+
+const failedReporterNames = (outcome: ReporterDrainOutcome): readonly string[] => {
+  if (outcome.kind === 'terminal-failed') return [outcome.name]
+  return []
+}
 
 export const closeReporterStage = (
   stage: Pick<ReporterStage, 'attachments'>,
@@ -202,13 +249,7 @@ export const closeReporterStage = (
       discard: true,
     })
     const outcomes = yield* Effect.forEach(stage.attachments, settleAttachment, { concurrency: 'unbounded' })
-    const terminalFailed: string[] = []
-    for (const outcome of outcomes) {
-      if (outcome.kind === 'terminal-failed') {
-        terminalFailed.push(outcome.name)
-      }
-    }
-    return { terminalFailed }
+    return { terminalFailed: outcomes.flatMap((outcome) => failedReporterNames(outcome)) }
   })
 
 const ENGINE_TRACER_NAME = 'stryker-js-engine'
@@ -216,37 +257,65 @@ const ENGINE_TRACER_NAME = 'stryker-js-engine'
 const formatTraceparent = (context: api.SpanContext): string =>
   `00-${context.traceId}-${context.spanId}-${(context.traceFlags & 0xff).toString(16).padStart(2, '0')}`
 
+const isValidSpanContext = (context: api.SpanContext | undefined): context is api.SpanContext =>
+  context !== undefined && api.trace.isSpanContextValid(context)
+
+const serializedTraceState = (context: api.SpanContext): string | undefined => {
+  if (context.traceState === undefined) return undefined
+  return context.traceState.serialize()
+}
+
+const nonEmptyTraceState = (serialized: string | undefined): string | undefined => {
+  if (serialized === '') return undefined
+  return serialized
+}
+
+const traceparentInit = (traceparent: string | undefined): ReporterInit => {
+  if (traceparent === undefined) return {}
+  return { traceparent }
+}
+
+const tracestateInit = (tracestate: string | undefined): ReporterInit => {
+  if (tracestate === undefined) return {}
+  return { tracestate }
+}
+
+const hasTraceFields = (init: ReporterInit): boolean => {
+  if (init.traceparent !== undefined) return true
+  return init.tracestate !== undefined
+}
+
 const initFromSpanContext = (context: api.SpanContext | undefined): ReporterInit | undefined => {
-  if (context === undefined || !api.trace.isSpanContextValid(context)) {
-    return undefined
+  if (!isValidSpanContext(context)) return undefined
+  return {
+    traceparent: formatTraceparent(context),
+    ...tracestateInit(nonEmptyTraceState(serializedTraceState(context))),
   }
-  const serialized = context.traceState?.serialize()
-  if (serialized === undefined || serialized === '') {
-    return { traceparent: formatTraceparent(context) }
-  }
-  return { traceparent: formatTraceparent(context), tracestate: serialized }
 }
 
 const initFromEnvironment = (): ReporterInit | undefined => {
-  const traceparent = process.env['TRACEPARENT']
-  const tracestate = process.env['TRACESTATE']
-  if (traceparent !== undefined && tracestate !== undefined) {
-    return { traceparent, tracestate }
+  const init = {
+    ...traceparentInit(process.env['TRACEPARENT']),
+    ...tracestateInit(process.env['TRACESTATE']),
   }
-  if (traceparent !== undefined) {
-    return { traceparent }
-  }
-  if (tracestate !== undefined) {
-    return { tracestate }
-  }
-  return undefined
+  if (!hasTraceFields(init)) return undefined
+  return init
+}
+
+const providedSpanContext = (span: api.Span | undefined): api.SpanContext | undefined => {
+  if (span === undefined) return undefined
+  return span.spanContext()
+}
+
+const activeSpanContext = (): api.SpanContext | undefined => {
+  const active = api.trace.getSpan(api.context.active())
+  if (active === undefined) return undefined
+  return active.spanContext()
 }
 
 export const currentReporterInit = (span?: api.Span): ReporterInit =>
-  initFromSpanContext(span?.spanContext()) ??
-    initFromSpanContext(api.trace.getSpan(api.context.active())?.spanContext()) ??
-    initFromEnvironment() ??
-    {}
+  [initFromSpanContext(providedSpanContext(span)), initFromSpanContext(activeSpanContext()), initFromEnvironment()]
+    .find(Predicate.isNotUndefined) ?? {}
 
 export const withPhaseSpan = <A, E, R>(
   spanName: string,

@@ -1,3 +1,5 @@
+import * as Match from 'effect/Match'
+
 const STREAM_REPORTER = 'progress-stream'
 const HUMAN_REPORTER = 'clear-text'
 
@@ -13,13 +15,16 @@ const asHumanReporter = (name: string): string => {
 export const selectReporters = (
   configured: readonly string[],
   mode: 'human' | 'machine',
-): readonly string[] => {
-  if (mode === 'human') {
-    return [...new Set(configured.map(asHumanReporter))]
-  }
-  const permitted = configured.filter((name) => STDOUT_REPORTERS[name] !== true)
-  if (permitted.includes(STREAM_REPORTER)) {
-    return permitted
-  }
-  return [...permitted, STREAM_REPORTER]
-}
+): readonly string[] =>
+  Match.value(mode).pipe(
+    Match.when('human', () => [...new Set(configured.map(asHumanReporter))]),
+    Match.when('machine', () => {
+      const permitted = configured.filter((name) => STDOUT_REPORTERS[name] !== true)
+      return Match.value(permitted.includes(STREAM_REPORTER)).pipe(
+        Match.when(true, () => permitted),
+        Match.when(false, () => [...permitted, STREAM_REPORTER]),
+        Match.exhaustive,
+      )
+    }),
+    Match.exhaustive,
+  )

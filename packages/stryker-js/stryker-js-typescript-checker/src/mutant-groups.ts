@@ -3,14 +3,22 @@ import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import { createGroups, type TSFileNode } from './Compiler.js'
 
-export const groupMutants = (
+const groupsWithStrangers = (
+  inside: readonly Mutant[],
+  outside: readonly Mutant[],
+  nodes: MutableHashMap.MutableHashMap<string, TSFileNode>,
+): ReadonlyArray<ReadonlyArray<string>> => {
+  const groups = createGroups([...inside], nodes)
+  if (outside.length > 0) {
+    return [outside.map((mutant) => mutant.id), ...groups]
+  }
+  return groups
+}
+
+const knownFileGroups = (
   mutants: readonly Mutant[],
   nodes: MutableHashMap.MutableHashMap<string, TSFileNode>,
-  prioritizePerformanceOverAccuracy: boolean,
 ): ReadonlyArray<ReadonlyArray<string>> => {
-  if (!prioritizePerformanceOverAccuracy) {
-    return [mutants.map((mutant) => mutant.id)]
-  }
   const inside = mutants.filter((mutant) =>
     Option.isSome(MutableHashMap.get(nodes, normalizeFileName(mutant.fileName)))
   )
@@ -20,9 +28,16 @@ export const groupMutants = (
   if (inside.length === 0) {
     return mutants.map((mutant) => [mutant.id])
   }
-  const groups = createGroups([...inside], nodes)
-  if (outside.length > 0) {
-    return [outside.map((mutant) => mutant.id), ...groups]
+  return groupsWithStrangers(inside, outside, nodes)
+}
+
+export const groupMutants = (
+  mutants: readonly Mutant[],
+  nodes: MutableHashMap.MutableHashMap<string, TSFileNode>,
+  prioritizePerformanceOverAccuracy: boolean,
+): ReadonlyArray<ReadonlyArray<string>> => {
+  if (prioritizePerformanceOverAccuracy) {
+    return knownFileGroups(mutants, nodes)
   }
-  return groups
+  return [mutants.map((mutant) => mutant.id)]
 }

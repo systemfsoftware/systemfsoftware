@@ -27,27 +27,20 @@ export class MutationTestNoTests extends S.TaggedClass<MutationTestNoTests>()('M
 
 export type MutationTestDecision = MutationTestProceed | MutationTestDryRunOnly | MutationTestNoTests
 
-const toKind = (command: MutationTestCommand): 'DryRunOnly' | 'NoTests' | 'Proceed' => {
-  if (command.dryRunOnly) {
-    return 'DryRunOnly'
-  }
-  if (command.isZero && command.allowEmpty) {
-    return 'NoTests'
-  }
-  return 'Proceed'
-}
+const isInvalidTestCount = (command: MutationTestCommand): boolean => command.testCount < 0
 
 export const admitMutationTest = Workflow.make(
   MutationTestCommand,
-  (command: MutationTestCommand): Result.Result<MutationTestDecision, MutationTestError> => {
-    if (command.testCount < 0) {
-      return Result.fail(new MutationTestError({ stage: 'mutationTest', reason: 'Invalid test count' }))
-    }
-    return Match.value(toKind(command)).pipe(
-      Match.when('DryRunOnly', () => Result.succeed(new MutationTestDryRunOnly({}))),
-      Match.when('NoTests', () => Result.succeed(new MutationTestNoTests({}))),
-      Match.when('Proceed', () => Result.succeed(new MutationTestProceed({}))),
-      Match.exhaustive,
-    )
-  },
+  (command: MutationTestCommand): Result.Result<MutationTestDecision, MutationTestError> =>
+    Match.value(command).pipe(
+      Match.when(isInvalidTestCount, () =>
+        Result.fail(new MutationTestError({ stage: 'mutationTest', reason: 'Invalid test count' }))),
+      Match.when({ dryRunOnly: true }, () =>
+        Result.succeed(new MutationTestDryRunOnly({}))),
+      Match.when(
+        { isZero: true, allowEmpty: true },
+        () => Result.succeed(new MutationTestNoTests({})),
+      ),
+      Match.orElse(() => Result.succeed(new MutationTestProceed({}))),
+    ),
 )

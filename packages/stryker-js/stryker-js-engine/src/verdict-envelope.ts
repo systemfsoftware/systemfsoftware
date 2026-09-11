@@ -2,6 +2,7 @@ import { randomBytes } from '@noble/hashes/utils'
 import { calculateMetrics } from '@systemfsoftware/stryker-js/Metrics'
 import type { MutantStatus } from '@systemfsoftware/stryker-js/Mutant'
 import type * as schema from '@systemfsoftware/stryker-js/Report'
+import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as S from 'effect/Schema'
@@ -58,6 +59,31 @@ export interface VerdictEnvelope {
 
 const CROCKFORD_BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 
+interface Base32Accumulator {
+  readonly value: number
+  readonly bits: number
+  readonly chars: string
+}
+
+const emitQuint = (accumulator: Base32Accumulator): Base32Accumulator => {
+  const bits = accumulator.bits - 5
+  return {
+    value: accumulator.value & ((1 << bits) - 1),
+    bits,
+    chars: accumulator.chars + CROCKFORD_BASE32[(accumulator.value >>> bits) & 0x1f],
+  }
+}
+
+const drainQuints = (accumulator: Base32Accumulator): Base32Accumulator =>
+  Match.value(accumulator.bits >= 5).pipe(
+    Match.when(true, () => drainQuints(emitQuint(accumulator))),
+    Match.when(false, () => accumulator),
+    Match.exhaustive,
+  )
+
+const pushByte = (accumulator: Base32Accumulator, byte: number): Base32Accumulator =>
+  drainQuints({ value: (accumulator.value << 8) | byte, bits: accumulator.bits + 8, chars: accumulator.chars })
+
 export function generateRunId(): string {
   const bytes = new Uint8Array(16)
   const now = new Date().getTime()
@@ -68,22 +94,12 @@ export function generateRunId(): string {
   bytes[4] = (now / 0x100) % 0x100
   bytes[5] = now % 0x100
   bytes.set(randomBytes(10), 6)
-  let chars = ''
-  let value = 0
-  let bits = 0
-  for (const byte of bytes) {
-    value = (value << 8) | byte
-    bits += 8
-    while (bits >= 5) {
-      chars += CROCKFORD_BASE32[(value >>> (bits - 5)) & 0x1f]
-      bits -= 5
-      value &= (1 << bits) - 1
-    }
-  }
-  if (bits > 0) {
-    chars += CROCKFORD_BASE32[(value << (5 - bits)) & 0x1f]
-  }
-  return chars
+  const drained = Array.from(bytes).reduce(pushByte, { value: 0, bits: 0, chars: '' })
+  return Match.value(drained.bits > 0).pipe(
+    Match.when(true, () => drained.chars + CROCKFORD_BASE32[(drained.value << (5 - drained.bits)) & 0x1f]),
+    Match.when(false, () => drained.chars),
+    Match.exhaustive,
+  )
 }
 
 function embeddedConfig(
@@ -101,10 +117,10 @@ function embeddedConfig(
     [S.Record(S.String, S.Unknown)],
   )
   const decoded = S.decodeUnknownOption(EmbeddedConfigSchema)(report.config)
-  if (Option.isNone(decoded)) {
-    return { jsonReporterFileName: undefined }
+  const jsonReporter = Option.flatMap(decoded, (config) => Option.fromUndefinedOr(config.jsonReporter))
+  return {
+    jsonReporterFileName: Option.getOrUndefined(Option.map(jsonReporter, (reporter) => reporter.fileName)),
   }
-  return { jsonReporterFileName: decoded.value.jsonReporter?.fileName }
 }
 
 function breakThreshold(thresholds: schema.Thresholds): number | null {
@@ -115,11 +131,22 @@ function breakThreshold(thresholds: schema.Thresholds): number | null {
     [S.Record(S.String, S.Unknown)],
   )
   const decoded = S.decodeUnknownOption(ThresholdsBreakSchema)(thresholds)
-  if (Option.isNone(decoded)) {
-    return null
-  }
-  return decoded.value.break ?? null
+  return Option.getOrNull(Option.flatMap(decoded, (value) => Option.fromNullishOr(value.break)))
 }
+
+const actionableMutants = (files: schema.MutationTestResult['files']): readonly VerdictMutant[] =>
+  Object.entries(files).flatMap(([file, fileResult]) =>
+    fileResult.mutants
+      .filter((mutant) => isActionableStatus(mutant.status))
+      .map((mutant): VerdictMutant => ({
+        id: mutant.id,
+        file,
+        location: mutant.location,
+        mutator: mutant.mutatorName,
+        replacement: mutant.replacement ?? null,
+        status: mutant.status,
+      }))
+  )
 
 export function buildVerdictEnvelope(
   report: schema.MutationTestResult,
@@ -129,39 +156,16 @@ export function buildVerdictEnvelope(
   basePath: string,
   pathService: Path.Path,
 ): VerdictEnvelope {
-  const { jsonReporterFileName } = embeddedConfig(report)
   const metrics = calculateMetrics(report.files).metrics
-  const hasMutants = metrics.totalMutants > 0
-  let score: number | null = null
-  if (hasMutants && Number.isFinite(metrics.mutationScore)) {
-    score = metrics.mutationScore
-  }
-  let reportFile: string | null = null
-  if (hasMutants && jsonReporterFileName !== undefined) {
-    reportFile = normalizeFileName(pathService.relative(basePath, jsonReporterFileName))
-  }
-  const mutants: VerdictMutant[] = []
-  for (const [file, fileResult] of Object.entries(report.files)) {
-    for (const mutant of fileResult.mutants) {
-      if (!isActionableStatus(mutant.status)) {
-        continue
-      }
-      mutants.push({
-        id: mutant.id,
-        file,
-        location: mutant.location,
-        mutator: mutant.mutatorName,
-        replacement: mutant.replacement ?? null,
-        status: mutant.status,
-      })
-    }
-  }
+  const { jsonReporterFileName } = embeddedConfig(report)
   return {
     schemaVersion: VERDICT_ENVELOPE_SCHEMA_VERSION,
     runId,
     mode,
     signal,
-    score,
+    score: Option.getOrNull(
+      Option.filter(Option.some(metrics.mutationScore), (score) => metrics.totalMutants > 0 && Number.isFinite(score)),
+    ),
     thresholds: {
       high: report.thresholds.high,
       low: report.thresholds.low,
@@ -177,7 +181,12 @@ export function buildVerdictEnvelope(
       ignored: metrics.ignored,
       pending: metrics.pending,
     },
-    reportFile,
-    mutants,
+    reportFile: Option.getOrNull(
+      Option.map(
+        Option.filter(Option.fromUndefinedOr(jsonReporterFileName), () => metrics.totalMutants > 0),
+        (fileName) => normalizeFileName(pathService.relative(basePath, fileName)),
+      ),
+    ),
+    mutants: actionableMutants(report.files),
   }
 }

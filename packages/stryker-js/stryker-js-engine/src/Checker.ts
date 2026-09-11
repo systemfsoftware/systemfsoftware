@@ -16,7 +16,6 @@ import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
-import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as Scope from 'effect/Scope'
@@ -27,7 +26,10 @@ import {
   CheckerAnsweredUnrequested,
   CheckerCommand,
   type CheckerContractBroken,
+  type CheckerDecision,
   CheckerSkippedRequested,
+  type CheckGroupDecision,
+  type CheckResultDecision,
 } from './admit-checker-answer.workflow.js'
 import { encodeWorkerOptions } from './worker-options.js'
 import type { IdGeneratorShape } from './Worker.js'
@@ -91,41 +93,22 @@ export const pairCheckResults = (
   checkerName: string,
   plans: readonly MutantRunPlan[],
   answers: Readonly<Record<string, CheckResult>>,
-): Result.Result<readonly (readonly [MutantRunPlan, CheckResult])[], CheckerContractBroken> => {
-  const byId = new Map(plans.map((plan) => [plan.mutant.id, plan]))
-  const paired: (readonly [MutantRunPlan, CheckResult])[] = []
-  const unrequested: string[] = []
-
-  for (const [id, answer] of Object.entries(answers)) {
-    const plan = byId.get(id)
-    if (plan === undefined) {
-      unrequested.push(id)
-      continue
-    }
-    paired.push([plan, answer] as const)
-  }
-
-  if (unrequested.length > 0) {
-    return Result.fail(
-      new CheckerAnsweredUnrequested({
-        checkerName,
-        phase: 'check',
-        unrequestedIds: unrequested,
-        requestedIds: plans.map((plan) => plan.mutant.id),
-      }),
-    )
-  }
-
-  const answered = new Set(paired.map(([plan]) => plan.mutant.id))
-  const missing = plans.map((plan) => plan.mutant.id).filter((id) => !answered.has(id))
-  if (missing.length > 0) {
-    return Result.fail(
-      new CheckerSkippedRequested({ checkerName, phase: 'check', missingIds: missing }),
-    )
-  }
-
-  return Result.succeed(paired)
-}
+): Result.Result<readonly (readonly [MutantRunPlan, CheckResult])[], CheckerContractBroken> =>
+  Match.value(partitionAnswers(plansById(plans), answers)).pipe(
+    Match.when(
+      (partition: AnswerPartition) => partition.unrequested.length > 0,
+      (partition) =>
+        Result.fail(
+          new CheckerAnsweredUnrequested({
+            checkerName,
+            phase: 'check',
+            unrequestedIds: [...partition.unrequested],
+            requestedIds: plans.map((plan) => plan.mutant.id),
+          }),
+        ),
+    ),
+    Match.orElse((partition) => admitAnsweredPlans(checkerName, plans, partition.paired)),
+  )
 
 /**
  * Resolve a checker's id groups back to run plans.
@@ -139,46 +122,139 @@ export const pairGroups = (
   checkerName: string,
   plans: readonly MutantRunPlan[],
   idGroups: readonly (readonly string[])[],
-): Result.Result<readonly (readonly MutantRunPlan[])[], CheckerContractBroken> => {
-  const byId = new Map(plans.map((plan) => [plan.mutant.id, plan]))
-  const grouped = new Set<string>()
-  const unrequested: string[] = []
-  const groups: (readonly MutantRunPlan[])[] = []
+): Result.Result<readonly (readonly MutantRunPlan[])[], CheckerContractBroken> =>
+  Match.value(partitionGroups(plansById(plans), idGroups)).pipe(
+    Match.when(
+      (partition: GroupPartition) => partition.unrequested.length > 0,
+      (partition) =>
+        Result.fail(
+          new CheckerAnsweredUnrequested({
+            checkerName,
+            phase: 'group',
+            unrequestedIds: [...partition.unrequested],
+            requestedIds: plans.map((plan) => plan.mutant.id),
+          }),
+        ),
+    ),
+    Match.orElse((partition) => admitGroupedPlans(checkerName, plans, partition)),
+  )
 
-  for (const idGroup of idGroups) {
-    const group: MutantRunPlan[] = []
-    for (const id of idGroup) {
-      grouped.add(id)
-      const plan = byId.get(id)
-      if (plan === undefined) {
-        unrequested.push(id)
-        continue
-      }
-      group.push(plan)
-    }
-    groups.push(group)
-  }
-
-  if (unrequested.length > 0) {
-    return Result.fail(
-      new CheckerAnsweredUnrequested({
-        checkerName,
-        phase: 'group',
-        unrequestedIds: unrequested,
-        requestedIds: plans.map((plan) => plan.mutant.id),
-      }),
-    )
-  }
-
-  const missing = plans.map((plan) => plan.mutant.id).filter((id) => !grouped.has(id))
-  if (missing.length > 0) {
-    return Result.fail(
-      new CheckerSkippedRequested({ checkerName, phase: 'group', missingIds: missing }),
-    )
-  }
-
-  return Result.succeed(groups)
+interface AnswerPartition {
+  readonly paired: readonly (readonly [MutantRunPlan, CheckResult])[]
+  readonly unrequested: readonly string[]
 }
+
+interface IdGroupPartition {
+  readonly plans: readonly MutantRunPlan[]
+  readonly grouped: ReadonlySet<string>
+  readonly unrequested: readonly string[]
+}
+
+interface GroupPartition {
+  readonly groups: readonly (readonly MutantRunPlan[])[]
+  readonly grouped: ReadonlySet<string>
+  readonly unrequested: readonly string[]
+}
+
+const plansById = (plans: readonly MutantRunPlan[]): ReadonlyMap<string, MutantRunPlan> =>
+  new Map(plans.map((plan): readonly [string, MutantRunPlan] => [plan.mutant.id, plan]))
+
+const missingPlanIds = (plans: readonly MutantRunPlan[], present: ReadonlySet<string>): readonly string[] =>
+  plans.map((plan) => plan.mutant.id).filter((id) => !present.has(id))
+
+const answeredPlanIds = (
+  paired: readonly (readonly [MutantRunPlan, CheckResult])[],
+): ReadonlySet<string> => new Set(paired.map(([plan]) => plan.mutant.id))
+
+const partitionAnswers = (
+  byId: ReadonlyMap<string, MutantRunPlan>,
+  answers: Readonly<Record<string, CheckResult>>,
+): AnswerPartition =>
+  Object.entries(answers).reduce<AnswerPartition>(
+    (acc, [id, answer]) =>
+      Option.match(Option.fromUndefinedOr(byId.get(id)), {
+        onNone: () => ({ paired: acc.paired, unrequested: [...acc.unrequested, id] }),
+        onSome: (plan) => ({
+          paired: [...acc.paired, [plan, answer] as const],
+          unrequested: acc.unrequested,
+        }),
+      }),
+    { paired: [], unrequested: [] },
+  )
+
+const admitAnsweredPlans = (
+  checkerName: string,
+  plans: readonly MutantRunPlan[],
+  paired: readonly (readonly [MutantRunPlan, CheckResult])[],
+): Result.Result<readonly (readonly [MutantRunPlan, CheckResult])[], CheckerContractBroken> =>
+  Match.value(missingPlanIds(plans, answeredPlanIds(paired))).pipe(
+    Match.when(
+      (missing: readonly string[]) => missing.length > 0,
+      (missing) =>
+        Result.fail(
+          new CheckerSkippedRequested({ checkerName, phase: 'check', missingIds: [...missing] }),
+        ),
+    ),
+    Match.orElse(() => Result.succeed(paired)),
+  )
+
+const withGroupedId = (ids: ReadonlySet<string>, id: string): ReadonlySet<string> => new Set([...ids, id])
+
+const unionIds = (left: ReadonlySet<string>, right: ReadonlySet<string>): ReadonlySet<string> =>
+  new Set([...left, ...right])
+
+const partitionGroupIds = (
+  byId: ReadonlyMap<string, MutantRunPlan>,
+  idGroup: readonly string[],
+): IdGroupPartition =>
+  idGroup.reduce<IdGroupPartition>(
+    (acc, id) =>
+      Option.match(Option.fromUndefinedOr(byId.get(id)), {
+        onNone: () => ({
+          plans: acc.plans,
+          grouped: withGroupedId(acc.grouped, id),
+          unrequested: [...acc.unrequested, id],
+        }),
+        onSome: (plan) => ({
+          plans: [...acc.plans, plan],
+          grouped: withGroupedId(acc.grouped, id),
+          unrequested: acc.unrequested,
+        }),
+      }),
+    { plans: [], grouped: new Set<string>(), unrequested: [] },
+  )
+
+const partitionGroups = (
+  byId: ReadonlyMap<string, MutantRunPlan>,
+  idGroups: readonly (readonly string[])[],
+): GroupPartition =>
+  idGroups.reduce<GroupPartition>(
+    (acc, idGroup) => {
+      const part = partitionGroupIds(byId, idGroup)
+      return {
+        groups: [...acc.groups, part.plans],
+        grouped: unionIds(acc.grouped, part.grouped),
+        unrequested: [...acc.unrequested, ...part.unrequested],
+      }
+    },
+    { groups: [], grouped: new Set<string>(), unrequested: [] },
+  )
+
+const admitGroupedPlans = (
+  checkerName: string,
+  plans: readonly MutantRunPlan[],
+  partition: GroupPartition,
+): Result.Result<readonly (readonly MutantRunPlan[])[], CheckerContractBroken> =>
+  Match.value(missingPlanIds(plans, partition.grouped)).pipe(
+    Match.when(
+      (missing: readonly string[]) => missing.length > 0,
+      (missing) =>
+        Result.fail(
+          new CheckerSkippedRequested({ checkerName, phase: 'group', missingIds: [...missing] }),
+        ),
+    ),
+    Match.orElse(() => Result.succeed(partition.groups)),
+  )
 
 // ---------------------------------------------------------------------------
 // Child-process edge
@@ -254,6 +330,144 @@ export const createCheckerFactory = (
     execArgv: [...options.checkerNodeArgs],
     idGenerator,
   })
+
+// ---------------------------------------------------------------------------
+// Cell write joins (checker decision ↔ run plans)
+// ---------------------------------------------------------------------------
+
+type DecidedAnswer = CheckResultDecision['pairs'][number]
+
+interface AnswerPairing {
+  readonly paired: readonly (readonly [MutantRunPlan, CheckResult])[]
+  readonly missing: readonly string[]
+}
+
+interface GroupPairing {
+  readonly groups: readonly (readonly MutantRunPlan[])[]
+  readonly missing: readonly string[]
+}
+
+const pairDecidedAnswers = (
+  plans: readonly MutantRunPlan[],
+  answers: readonly DecidedAnswer[],
+): AnswerPairing => {
+  const byId = plansById(plans)
+  return answers.reduce<AnswerPairing>(
+    (acc, answer) =>
+      Option.match(Option.fromUndefinedOr(byId.get(answer.id)), {
+        onNone: () => ({ paired: acc.paired, missing: [...acc.missing, answer.id] }),
+        onSome: (plan) => ({
+          paired: [...acc.paired, [plan, answer.result] as const],
+          missing: acc.missing,
+        }),
+      }),
+    { paired: [], missing: [] },
+  )
+}
+
+const writeDecidedAnswers = (
+  plans: readonly MutantRunPlan[],
+  checkerName: string,
+  answers: readonly DecidedAnswer[],
+): Effect.Effect<readonly (readonly [MutantRunPlan, CheckResult])[], CheckerContractBroken> =>
+  Match.value(pairDecidedAnswers(plans, answers)).pipe(
+    Match.when(
+      (pairing: AnswerPairing) => pairing.missing.length > 0,
+      (pairing) =>
+        Effect.fail(
+          new CheckerSkippedRequested({
+            checkerName,
+            phase: 'check',
+            missingIds: pairing.missing.slice(0, 1),
+          }),
+        ),
+    ),
+    Match.orElse((pairing) => Effect.succeed(pairing.paired)),
+  )
+
+const pairDecidedGroups = (
+  plans: readonly MutantRunPlan[],
+  idGroups: readonly (readonly string[])[],
+): GroupPairing => {
+  const byId = plansById(plans)
+  return idGroups.reduce<GroupPairing>(
+    (acc, idGroup) => {
+      const part = partitionGroupIds(byId, idGroup)
+      return {
+        groups: [...acc.groups, part.plans],
+        missing: [...acc.missing, ...part.unrequested],
+      }
+    },
+    { groups: [], missing: [] },
+  )
+}
+
+const writeDecidedGroups = (
+  plans: readonly MutantRunPlan[],
+  checkerName: string,
+  idGroups: readonly (readonly string[])[],
+): Effect.Effect<readonly (readonly MutantRunPlan[])[], CheckerContractBroken> =>
+  Match.value(pairDecidedGroups(plans, idGroups)).pipe(
+    Match.when(
+      (pairing: GroupPairing) => pairing.missing.length > 0,
+      (pairing) =>
+        Effect.fail(
+          new CheckerSkippedRequested({
+            checkerName,
+            phase: 'group',
+            missingIds: pairing.missing.slice(0, 1),
+          }),
+        ),
+    ),
+    Match.orElse((pairing) => Effect.succeed(pairing.groups)),
+  )
+
+const writeCheckerDecision = (
+  plans: readonly MutantRunPlan[],
+  checkerName: string,
+  decision: CheckerDecision,
+): Effect.Effect<readonly (readonly [MutantRunPlan, CheckResult])[], CheckerContractBroken> =>
+  Match.value(decision).pipe(
+    Match.tag('CheckResultDecision', (d: CheckResultDecision) => writeDecidedAnswers(plans, checkerName, d.pairs)),
+    Match.tag(
+      'CheckGroupDecision',
+      () => Effect.fail(new CheckerSkippedRequested({ checkerName, phase: 'check', missingIds: [] })),
+    ),
+    Match.exhaustive,
+  )
+
+const writeCheckerOutcome = (
+  plans: readonly MutantRunPlan[],
+  checkerName: string,
+  outcome: Result.Result<CheckerDecision, CheckerContractBroken>,
+): Effect.Effect<readonly (readonly [MutantRunPlan, CheckResult])[], CheckerContractBroken> =>
+  Result.match(outcome, {
+    onFailure: (error) => Effect.fail(error),
+    onSuccess: (decision) => writeCheckerDecision(plans, checkerName, decision),
+  })
+
+const writeGroupDecision = (
+  plans: readonly MutantRunPlan[],
+  checkerName: string,
+  decision: CheckerDecision,
+): Effect.Effect<readonly (readonly MutantRunPlan[])[], CheckerContractBroken> =>
+  Match.value(decision).pipe(
+    Match.tag('CheckGroupDecision', (d: CheckGroupDecision) => writeDecidedGroups(plans, checkerName, d.groups)),
+    Match.tag('CheckResultDecision', () =>
+      Effect.fail(new CheckerSkippedRequested({ checkerName, phase: 'group', missingIds: [] }))),
+    Match.exhaustive,
+  )
+
+const writeGroupOutcome = (
+  plans: readonly MutantRunPlan[],
+  checkerName: string,
+  outcome: Result.Result<CheckerDecision, CheckerContractBroken>,
+): Effect.Effect<readonly (readonly MutantRunPlan[])[], CheckerContractBroken> =>
+  Result.match(outcome, {
+    onFailure: (error) => Effect.fail(error),
+    onSuccess: (decision) => writeGroupDecision(plans, checkerName, decision),
+  })
+
 // ---------------------------------------------------------------------------
 /**
  * Ask a checker about run plans and get run plans back.
@@ -306,44 +520,7 @@ export const checkPlans = (
       ),
     decide: admitCheckerAnswer,
     encode: (outcome) => outcome,
-    write: (outcome, raw) =>
-      Result.match(outcome, {
-        onFailure: (error) => Effect.fail(error),
-        onSuccess: (decision) =>
-          Match.value(decision).pipe(
-            Match.tag('CheckResultDecision', (d) => {
-              const byId = MutableHashMap.empty<string, MutantRunPlan>()
-              for (const plan of plans) {
-                MutableHashMap.set(byId, plan.mutant.id, plan)
-              }
-              const paired: (readonly [MutantRunPlan, CheckResult])[] = []
-              for (const entry of d.pairs) {
-                const maybe = MutableHashMap.get(byId, entry.id)
-                if (Option.isNone(maybe)) {
-                  return Effect.fail(
-                    new CheckerSkippedRequested({
-                      checkerName: raw.checkerName,
-                      phase: 'check',
-                      missingIds: [entry.id],
-                    }),
-                  )
-                }
-                const pair: readonly [MutantRunPlan, CheckResult] = [maybe.value, entry.result]
-                paired.push(pair)
-              }
-              return Effect.succeed(paired)
-            }),
-            Match.tag('CheckGroupDecision', () =>
-              Effect.fail(
-                new CheckerSkippedRequested({
-                  checkerName: raw.checkerName,
-                  phase: 'check',
-                  missingIds: [],
-                }),
-              )),
-            Match.exhaustive,
-          ),
-      }),
+    write: (outcome, raw) => writeCheckerOutcome(plans, raw.checkerName, outcome),
   })
   return Cell.run(description, { checker, checkerName, plans })
 }
@@ -394,47 +571,7 @@ export const groupPlans = (
       ),
     decide: admitCheckerAnswer,
     encode: (outcome) => outcome,
-    write: (outcome, raw) =>
-      Result.match(outcome, {
-        onFailure: (error) => Effect.fail(error),
-        onSuccess: (decision) =>
-          Match.value(decision).pipe(
-            Match.tag('CheckGroupDecision', (d) => {
-              const byId = MutableHashMap.empty<string, MutantRunPlan>()
-              for (const plan of plans) {
-                MutableHashMap.set(byId, plan.mutant.id, plan)
-              }
-              const groups: (readonly MutantRunPlan[])[] = []
-              for (const idGroup of d.groups) {
-                const group: MutantRunPlan[] = []
-                for (const id of idGroup) {
-                  const maybe = MutableHashMap.get(byId, id)
-                  if (Option.isNone(maybe)) {
-                    return Effect.fail(
-                      new CheckerSkippedRequested({
-                        checkerName: raw.checkerName,
-                        phase: 'group',
-                        missingIds: [id],
-                      }),
-                    )
-                  }
-                  group.push(maybe.value)
-                }
-                groups.push(group)
-              }
-              return Effect.succeed(groups)
-            }),
-            Match.tag('CheckResultDecision', () =>
-              Effect.fail(
-                new CheckerSkippedRequested({
-                  checkerName: raw.checkerName,
-                  phase: 'group',
-                  missingIds: [],
-                }),
-              )),
-            Match.exhaustive,
-          ),
-      }),
+    write: (outcome, raw) => writeGroupOutcome(plans, raw.checkerName, outcome),
   })
   return Cell.run(description, { checker, checkerName, plans })
 }
@@ -449,12 +586,10 @@ export const checkGroupedPlans = (
 > =>
   Effect.gen(function*() {
     const groups = yield* groupPlans(checker, checkerName, plans)
-    const pairs: (readonly [MutantRunPlan, CheckResult])[] = []
-    for (const group of groups) {
-      const checked = yield* checkPlans(checker, checkerName, group)
-      for (const pair of checked) {
-        pairs.push(pair)
-      }
-    }
-    return pairs
+    const checked = yield* Effect.forEach(
+      groups,
+      (group: readonly MutantRunPlan[]) => checkPlans(checker, checkerName, group),
+      { concurrency: 1 },
+    )
+    return checked.flat()
   })

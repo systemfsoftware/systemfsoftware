@@ -36,18 +36,24 @@ import { type SpannedComment } from './Syntax.js'
 
 const commentDirectiveRegEx = /^(\s*)@(ts-[a-z-]+).*$/
 const tsDirectiveLikeRegEx = /@(ts-[a-z-]+)/
-const startingCommentRegex = /(^\s*\/\*.*?\*\/)/gs
+const STARTING_COMMENT = /^\s*\/\*[\s\S]*?\*\//
 
 export async function disableTypeChecks(file: File): Promise<File> {
   const format = getFormat(file.name)
-  if (!format) {
-    return file
-  }
+  if (format === undefined) return file
+  return disableTypeChecksFor(file, format)
+}
+
+async function disableTypeChecksFor(file: File, format: AstFormat): Promise<File> {
   if (isJSFileWithoutTSDirectives(file, format)) {
     return { ...file, content: prefixWithNoCheck(file.content) }
   }
   const parse = createParser()
   const ast = await parse(file.content, file.name)
+  return withDisabledTypeChecking(file, ast)
+}
+
+function withDisabledTypeChecking(file: File, ast: Ast): File {
   switch (ast.format) {
     case 'js':
     case 'ts':
@@ -59,29 +65,34 @@ export async function disableTypeChecks(file: File): Promise<File> {
       return { ...file, content: disableTypeCheckingInSvelte(ast) }
   }
 }
-function isJSFileWithoutTSDirectives(file: File, format: AstFormat) {
-  return (format === 'ts' || format === 'js') && !tsDirectiveLikeRegEx.test(file.content)
+
+const JS_OR_TS_FORMATS: ReadonlySet<AstFormat> = new Set(['js', 'ts'])
+
+function isJSFileWithoutTSDirectives(file: File, format: AstFormat): boolean {
+  return JS_OR_TS_FORMATS.has(format) && !tsDirectiveLikeRegEx.test(file.content)
 }
 function disableTypeCheckingInScript(ast: ScriptAst): string {
   return prefixWithNoCheck(removeTSDirectives(ast.rawContent, ast.comments))
 }
 function prefixWithNoCheck(code: string): string {
-  if (code.startsWith('#')) {
-    const newLineIndex = code.indexOf('\n')
-    if (newLineIndex > 0) {
-      return `${code.substring(0, newLineIndex)}\n// @ts-nocheck\n${code.substring(newLineIndex + 1)}`
-    } else {
-      return code
-    }
-  } else {
-    startingCommentRegex.lastIndex = 0
-    const commentMatch = startingCommentRegex.exec(code)
-    const leadingComment = commentMatch?.[1]
-    if (leadingComment === undefined) {
-      return `// @ts-nocheck\n${code}`
-    }
-    return `${leadingComment.concat('\n')}// @ts-nocheck\n${code.substring(leadingComment.length)}`
-  }
+  if (code.startsWith('#')) return afterHashbang(code)
+  return afterLeadingComment(code)
+}
+
+function afterHashbang(code: string): string {
+  const newLineIndex = code.indexOf('\n')
+  if (newLineIndex <= 0) return code
+  return `${code.substring(0, newLineIndex)}\n// @ts-nocheck\n${code.substring(newLineIndex + 1)}`
+}
+
+function afterLeadingComment(code: string): string {
+  const leadingComment = leadingCommentOf(code)
+  if (leadingComment === undefined) return `// @ts-nocheck\n${code}`
+  return `${leadingComment.concat('\n')}// @ts-nocheck\n${code.substring(leadingComment.length)}`
+}
+
+function leadingCommentOf(code: string): string | undefined {
+  return STARTING_COMMENT.exec(code)?.[0]
 }
 function getScriptStart(script: HtmlAst['root']['scripts'][number]): number {
   const span = spanOf(script.root)
@@ -129,49 +140,48 @@ function disableTypeCheckingInSvelte(ast: SvelteAst): string {
   html += ast.rawContent.substring(currentIndex)
   return html
 }
+interface DirectiveRange {
+  readonly startPos: number
+  readonly endPos: number
+}
+
 function removeTSDirectives(
   text: string,
   comments: readonly SpannedComment[] | null | undefined,
 ): string {
-  if (comments === null || comments === undefined) {
-    return text
-  }
-  const directiveRanges = comments.map(tryParseTSDirective).filter(Predicate.isNotNullish).sort((a, b) =>
-    a.startPos - b.startPos
-  )
-  if (directiveRanges.length === 0) {
-    return text
-  }
-  let currentIndex = 0
-  let pruned = ''
-  for (const directiveRange of directiveRanges) {
-    pruned += text.substring(currentIndex, directiveRange.startPos)
-    currentIndex = directiveRange.endPos
-  }
-  pruned += text.substring(currentIndex)
-  return pruned
+  return removeRanges(text, directiveRanges(comments))
 }
-function tryParseTSDirective(
-  comment: SpannedComment,
-): { startPos: number; endPos: number } | undefined {
+
+function directiveRanges(comments: readonly SpannedComment[] | null | undefined): readonly DirectiveRange[] {
+  return (comments ?? [])
+    .map(tryParseTSDirective)
+    .filter(Predicate.isNotNullish)
+    .sort((a, b) => a.startPos - b.startPos)
+}
+
+function removeRanges(text: string, ranges: readonly DirectiveRange[]): string {
+  const remaining = ranges.reduce(
+    (state, range) => ({
+      pruned: state.pruned + text.substring(state.cursor, range.startPos),
+      cursor: range.endPos,
+    }),
+    { pruned: '', cursor: 0 },
+  )
+  return remaining.pruned + text.substring(remaining.cursor)
+}
+
+function tryParseTSDirective(comment: SpannedComment): DirectiveRange | undefined {
   const match = commentDirectiveRegEx.exec(comment.value)
-  if (match !== null) {
-    const start = comment.start
-    if (start === undefined) {
-      throw new Error('Comment without start')
-    }
-    const directivePrefix = match[1]
-    if (directivePrefix === undefined) {
-      throw new Error('TS directive match without prefix')
-    }
-    const directiveName = match[2]
-    if (directiveName === undefined) {
-      throw new Error('TS directive match without directive name')
-    }
-    const directiveStartPos = start + directivePrefix.length + 2
-    return { startPos: directiveStartPos, endPos: directiveStartPos + directiveName.length + 1 }
-  }
-  return undefined
+  if (match === null) return undefined
+  const directivePrefix = requirePart(match[1], 'TS directive match without prefix')
+  const directiveName = requirePart(match[2], 'TS directive match without directive name')
+  const startPos = comment.start + directivePrefix.length + 2
+  return { startPos, endPos: startPos + directiveName.length + 1 }
+}
+
+function requirePart(part: string | undefined, message: string): string {
+  if (part === undefined) throw new Error(message)
+  return part
 }
 function toOneBasedLineNumber(range: MutateDescription): MutateDescription {
   if (typeof range === 'boolean') {
@@ -184,8 +194,7 @@ function toOneBasedLineNumber(range: MutateDescription): MutateDescription {
 }
 
 function isIgnorerService(value: unknown): value is IgnorerService {
-  return typeof value === 'object' && value !== null && 'shouldIgnore' in value &&
-    typeof value.shouldIgnore === 'function'
+  return Predicate.isObject(value) && typeof value['shouldIgnore'] === 'function'
 }
 
 function toTransformerOptions(options: InstrumenterOptions): TransformerOptions {
@@ -199,84 +208,71 @@ function toTransformerOptions(options: InstrumenterOptions): TransformerOptions 
   return base
 }
 
+const AST_SHAPE = ['format', 'root'] as const
+
 function isAst(value: unknown): value is Ast {
-  return typeof value === 'object' && value !== null && 'format' in value && 'root' in value
+  return Predicate.isObject(value) && AST_SHAPE.every((key) => key in value)
 }
 
 type FileSchemaType = typeof FileSchema.Type
-const readCollected = (
-  command: InstrumentCommand,
-): Effect.Effect<
-  {
-    readonly files: readonly FileSchemaType[]
-    readonly options: InstrumenterOptions
-    readonly asts: readonly Ast[]
-    readonly mutants: readonly ApiMutant[]
-  },
-  InstrumentError
-> =>
+
+interface ParsedFile {
+  readonly file: FileSchemaType
+  readonly ast: Ast
+}
+
+interface Collected {
+  readonly files: readonly FileSchemaType[]
+  readonly options: InstrumenterOptions
+  readonly asts: readonly Ast[]
+  readonly mutants: readonly ApiMutant[]
+}
+
+const readCollected = (command: InstrumentCommand): Effect.Effect<Collected, InstrumentError> =>
   Effect.gen(function*() {
-    const files = command.files
-    const options = command.options
+    const { files, options } = command
     const parse = createParser()
-    const asts: Ast[] = []
-    for (const { name, content } of files) {
-      const ast = yield* Effect.tryPromise({
-        try: () => parse(content, name),
-        catch: (cause) => new InstrumentError({ message: `Failed to parse ${name}`, cause }),
-      })
-      asts.push(ast)
-    }
+    const parsed = yield* Effect.forEach(files, (file) =>
+      Effect.map(
+        Effect.tryPromise({
+          try: () => parse(file.content, file.name),
+          catch: (cause) => new InstrumentError({ message: `Failed to parse ${file.name}`, cause }),
+        }),
+        (ast): ParsedFile => ({ file, ast }),
+      ))
     const collector = createMutantCollector()
-    const workAsts: readonly Ast[] = asts.filter(isAst)
-    for (let i = 0; i < workAsts.length; i++) {
-      const ast = workAsts[i]
-      const file = files[i]
-      if (ast === undefined || file === undefined) {
-        continue
-      }
-      yield* Effect.try({
+    yield* Effect.forEach(parsed, ({ file, ast }) =>
+      Effect.try({
         try: () =>
           transform(ast, collector, {
             options: toTransformerOptions(options),
             mutateDescription: toOneBasedLineNumber(file.mutate),
           }),
         catch: (cause) => new InstrumentError({ message: `Failed to transform ${file.name}`, cause }),
-      })
-    }
+      }))
     const mutants: readonly ApiMutant[] = yield* Effect.try({
       try: () => collector.map(toApiMutant),
       catch: (cause) => new InstrumentError({ message: 'Failed to instrument', cause }),
     })
-    return { files, options, asts, mutants }
+    return { files, options, asts: parsed.map(({ ast }) => ast), mutants }
   })
 
 const printDecision = (
   decision: InstrumentDecision,
 ): Effect.Effect<InstrumentResultSchema, InstrumentError> =>
   Effect.try({
-    try: () => {
-      const files = decision.files
-      const asts: readonly unknown[] = decision.asts
-      const outFiles: FileSchemaType[] = []
-      for (let i = 0; i < asts.length; i++) {
-        const maybeAst: unknown = asts[i]
-        const maybeFile: FileSchemaType | undefined = files[i]
-        if (maybeAst === undefined || maybeFile === undefined) {
-          continue
-        }
-        if (!isAst(maybeAst)) {
-          continue
-        }
-        const ast: Ast = maybeAst
-        const file: FileSchemaType = maybeFile
-        const mutatedContent = print(ast)
-        outFiles.push({ name: file.name, mutate: file.mutate, content: mutatedContent })
-      }
-      return InstrumentResultSchema.make({ files: outFiles, mutants: decision.mutants })
-    },
+    try: () =>
+      InstrumentResultSchema.make({
+        files: decision.files.flatMap((file, index) => printedFile(file, decision.asts[index])),
+        mutants: decision.mutants,
+      }),
     catch: (cause) => new InstrumentError({ message: 'Failed to print', cause }),
   })
+
+function printedFile(file: FileSchemaType, ast: unknown): readonly FileSchemaType[] {
+  if (!isAst(ast)) return []
+  return [{ name: file.name, mutate: file.mutate, content: print(ast) }]
+}
 
 export const decideInstrument = (decoded: InstrumentDecoded): InstrumentDecision =>
   InstrumentDecision.make({

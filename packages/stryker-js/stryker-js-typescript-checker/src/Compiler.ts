@@ -6,7 +6,7 @@
  * only the Effect-typed service surface.
  */
 
-import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import type { Mutant, Position } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import { Predicate, Result } from 'effect'
@@ -28,11 +28,17 @@ import { API, type Diagnostic, DiagnosticCategory, type Program, type Snapshot }
 import { CompilerFailed } from './Checker.schema.js'
 import { HybridFileNotFoundError, UnsupportedTypeScriptVersionError } from './Compiler.schema.js'
 import { determineBuildModeEnabled, overrideOptions, parseTsConfig, retrieveReferencedProjects } from './Tsconfig.js'
-import { TsConfigNotFoundError } from './Tsconfig.schema.js'
+import { type TsConfig, TsConfigNotFoundError, type TsConfigParseError } from './Tsconfig.schema.js'
 
 const normalizeFileName = (fileName: string): string => fileName.replace(/\\/g, '/')
 
 const findSourceMapRegex = /\/\/# sourceMappingURL=(.+)$/m
+
+/** A specifier that resolves relative to the importing file. */
+const relativeSpecifierPattern = /^\.\.?\//
+
+/** A file that never belongs to the dependency graph: declarations and dependencies. */
+const ignoredGraphFileNamePattern = /\.d\.ts$|node_modules/
 
 function getSourceMappingURL(content: string): string | undefined {
   return findSourceMapRegex.exec(content)?.[1]
@@ -42,6 +48,32 @@ function getSourceMappingURL(content: string): string | undefined {
 
 let cachedTSVersion: string | undefined
 
+const isString = (value: unknown): value is string => typeof value === 'string'
+
+const isNonEmptyString = (value: string | undefined): value is string => value !== undefined && value !== ''
+
+const versionFieldOf = (raw: unknown): Option.Option<unknown> => {
+  if (Predicate.hasProperty(raw, 'version')) {
+    return Option.some(raw.version)
+  }
+  return Option.none()
+}
+
+const readTypescriptPackageVersion = (
+  fsService: FileSystem.FileSystem,
+  pathService: Path.Path,
+): Effect.Effect<string, unknown> =>
+  Effect.gen(function*() {
+    const urlString = import.meta.resolve('typescript/package.json')
+    const pkgPath = yield* pathService.fromFileUrl(new URL(urlString))
+    const text = yield* fsService.readFileString(pkgPath)
+    const raw: unknown = JSON.parse(text)
+    return Option.getOrElse(
+      Option.flatMap(versionFieldOf(raw), (version) => Option.liftPredicate(version, isString)),
+      () => '',
+    )
+  })
+
 export const getTSVersion = (
   fsService: FileSystem.FileSystem,
   pathService: Path.Path,
@@ -50,39 +82,53 @@ export const getTSVersion = (
     if (cachedTSVersion !== undefined) {
       return cachedTSVersion
     }
-    const urlString = import.meta.resolve('typescript/package.json')
-    const pkgPath = yield* pathService.fromFileUrl(new URL(urlString))
-    const text = yield* fsService.readFileString(pkgPath)
-    const raw: unknown = JSON.parse(text)
-    let version = ''
-    if (Predicate.hasProperty(raw, 'version') && typeof raw.version === 'string') {
-      version = raw.version
-    }
+    const version = yield* readTypescriptPackageVersion(fsService, pathService)
     cachedTSVersion = version
     return version
   })
+
+interface TypeScriptVersion {
+  readonly major: number
+  readonly minor: number
+  readonly patch: number
+}
+
+const minimumSupportedTypeScriptVersion: TypeScriptVersion = { major: 7, minor: 0, patch: 0 }
+
+const versionComponent = (parts: readonly string[], index: number): number => {
+  const part = parts[index]
+  if (part === undefined) {
+    return 0
+  }
+  return Number.parseInt(part, 10)
+}
+
+/** Drops any pre-release (`-`) or build (`+`) suffix, keeping the numeric base. */
+const parseTypeScriptVersion = (version: string): TypeScriptVersion => {
+  const parts = version.replace(/[-+][\s\S]*$/, '').split('.')
+  return {
+    major: versionComponent(parts, 0),
+    minor: versionComponent(parts, 1),
+    patch: versionComponent(parts, 2),
+  }
+}
+
+const compareVersionNumbers = (left: TypeScriptVersion, right: TypeScriptVersion): number => {
+  const differences = [left.major - right.major, left.minor - right.minor, left.patch - right.patch]
+  return differences.find((difference) => difference !== 0) ?? 0
+}
 
 /**
  * Whether a TypeScript version satisfies `>=7.0.0`. Pre-release suffixes are
  * stripped so `7.0.0-beta` compares as `7.0.0`.
  */
 export function isSupportedTypescriptVersion(version: string): boolean {
-  const dashBase = version.split('-')[0] ?? version
-  const base = dashBase.split('+')[0] ?? dashBase
-  const parts = base.split('.').map((p) => Number.parseInt(p, 10))
-  const major = parts[0] ?? 0
-  const minor = parts[1] ?? 0
-  const patch = parts[2] ?? 0
-  if (Number.isNaN(major) || Number.isNaN(minor) || Number.isNaN(patch)) {
+  const parsed = parseTypeScriptVersion(version)
+  const numeric = [parsed.major, parsed.minor, parsed.patch].every((part) => !Number.isNaN(part))
+  if (!numeric) {
     return false
   }
-  if (major !== 7) {
-    return major > 7
-  }
-  if (minor !== 0) {
-    return minor > 0
-  }
-  return patch >= 0
+  return compareVersionNumbers(parsed, minimumSupportedTypeScriptVersion) >= 0
 }
 
 export const guardTSVersion = (
@@ -124,18 +170,15 @@ export function resetScriptFile(file: ScriptFile): ScriptFile {
   return { ...file, content: file.originalContent, modifiedTime: new Date() }
 }
 
-function getOffset(file: ScriptFile, pos: import('@systemfsoftware/stryker-js/Mutant').Position): number {
+function getOffset(file: ScriptFile, pos: Position): number {
   const lines = file.originalContent.split('\n')
   const lineCount = Math.min(pos.line, lines.length)
-  let offset = 0
-  for (let i = 0; i < lineCount; i++) {
-    const line = lines[i]
-    if (line === undefined) {
-      break
+  let offset = pos.column
+  lines.forEach((line, index) => {
+    if (index < lineCount) {
+      offset += line.length + 1
     }
-    offset += line.length + 1
-  }
-  offset += pos.column
+  })
   return offset
 }
 
@@ -170,49 +213,58 @@ export const makeHybridFileSystem = (fsService: FileSystem.FileSystem): Effect.E
     const filesRef = yield* Ref.make(makeEmptyFilesMap())
     const overridesRef = yield* Ref.make(makeEmptyOverridesMap())
 
-    const fileNameIsBuildInfo = (fileName: string): boolean => fileName.endsWith('.tsbuildinfo')
+    const memoryContent = (file: ScriptFile | undefined): string | null => {
+      if (file === undefined) {
+        return null
+      }
+      return file.content
+    }
+
+    const readFromSources = (
+      files: MutableHashMap.MutableHashMap<string, ScriptFile | undefined>,
+      overrides: MutableHashMap.MutableHashMap<string, string>,
+      fileName: string,
+    ): string | null | undefined => {
+      const override = MutableHashMap.get(overrides, fileName)
+      if (Option.isSome(override)) {
+        return override.value
+      }
+      return Option.match(MutableHashMap.get(files, fileName), {
+        onNone: () => undefined,
+        onSome: memoryContent,
+      })
+    }
+
+    const existsInSources = (
+      files: MutableHashMap.MutableHashMap<string, ScriptFile | undefined>,
+      overrides: MutableHashMap.MutableHashMap<string, string>,
+      fileName: string,
+    ): boolean | undefined => {
+      const override = MutableHashMap.get(overrides, fileName)
+      if (Option.isSome(override)) {
+        return true
+      }
+      return Option.match(MutableHashMap.get(files, fileName), {
+        onNone: () => undefined,
+        onSome: (file) => file !== undefined,
+      })
+    }
 
     const fileSystem: TSFileSystem = {
       readFile: (fileName: string): string | null | undefined => {
         const normalized = normalizeFileName(fileName)
-        if (fileNameIsBuildInfo(normalized)) {
+        if (normalized.endsWith('.tsbuildinfo')) {
           return null
         }
-        const overrideOpt = MutableHashMap.get(overridesRef.ref.current, normalized)
-        if (Option.isSome(overrideOpt)) {
-          return overrideOpt.value
-        }
-        const files = filesRef.ref.current
-        if (MutableHashMap.has(files, normalized)) {
-          const fileOpt = MutableHashMap.get(files, normalized)
-          if (Option.isSome(fileOpt)) {
-            const file = fileOpt.value
-            if (file !== undefined) {
-              return file.content
-            }
-            return null
-          }
-        }
-        return undefined
+        return readFromSources(filesRef.ref.current, overridesRef.ref.current, normalized)
       },
 
       fileExists: (fileName: string): boolean | undefined => {
         const normalized = normalizeFileName(fileName)
-        if (fileNameIsBuildInfo(normalized)) {
+        if (normalized.endsWith('.tsbuildinfo')) {
           return false
         }
-        if (MutableHashMap.has(overridesRef.ref.current, normalized)) {
-          return true
-        }
-        const files = filesRef.ref.current
-        if (MutableHashMap.has(files, normalized)) {
-          const opt = MutableHashMap.get(files, normalized)
-          if (Option.isSome(opt)) {
-            return opt.value !== undefined
-          }
-          return false
-        }
-        return undefined
+        return existsInSources(filesRef.ref.current, overridesRef.ref.current, normalized)
       },
 
       directoryExists: (): boolean | undefined => undefined,
@@ -220,44 +272,42 @@ export const makeHybridFileSystem = (fsService: FileSystem.FileSystem): Effect.E
       realpath: (): string | undefined => undefined,
     }
 
+    const readFileFromDisk = (fileName: string): Effect.Effect<ScriptFile | undefined, never> =>
+      Effect.gen(function*() {
+        const content: string | undefined = yield* fsService
+          .readFileString(fileName)
+          .pipe(Effect.orElseSucceed(() => undefined))
+        const file = Option.getOrUndefined(
+          Option.map(Option.fromUndefinedOr(content), (text) => makeScriptFile(text, fileName)),
+        )
+        yield* Ref.update(filesRef, (m) => setInPlace(m, fileName, file))
+        return file
+      })
+
     const getFile = (fileName: string): Effect.Effect<ScriptFile | undefined, never> =>
       Effect.gen(function*() {
         const normalized = normalizeFileName(fileName)
         const files = yield* Ref.get(filesRef)
-        if (MutableHashMap.has(files, normalized)) {
-          const opt = MutableHashMap.get(files, normalized)
-          if (Option.isSome(opt)) {
-            return opt.value
-          }
+        const cached = MutableHashMap.get(files, normalized)
+        if (Option.isSome(cached)) {
+          return cached.value
         }
-        const content: string | undefined = yield* fsService
-          .readFileString(normalized)
-          .pipe(Effect.orElseSucceed(() => undefined))
-        if (content === undefined) {
-          yield* Ref.update(filesRef, (m) => setInPlace(m, normalized, undefined))
-          return undefined
-        }
-        const file = makeScriptFile(content, normalized)
-        yield* Ref.update(filesRef, (m) => setInPlace(m, normalized, file))
-        return file
+        return yield* readFileFromDisk(normalized)
       })
+
+    const fileForWrite = (existing: ScriptFile | undefined, data: string, fileName: string): ScriptFile => {
+      if (existing === undefined) {
+        return makeScriptFile(data, fileName)
+      }
+      return withContent(existing, data)
+    }
 
     const writeFile = (fileName: string, data: string): Effect.Effect<void> =>
       Effect.gen(function*() {
         const normalized = normalizeFileName(fileName)
         const files = yield* Ref.get(filesRef)
-        const existingOpt = MutableHashMap.get(files, normalized)
-        let existing: ScriptFile | undefined = undefined
-        if (Option.isSome(existingOpt)) {
-          existing = existingOpt.value
-        }
-        if (existing !== undefined) {
-          const next = withContent(existing, data)
-          yield* Ref.update(filesRef, (m) => setInPlace(m, normalized, next))
-        } else {
-          const file = makeScriptFile(data, normalized)
-          yield* Ref.update(filesRef, (m) => setInPlace(m, normalized, file))
-        }
+        const existing = Option.getOrUndefined(MutableHashMap.get(files, normalized))
+        yield* Ref.update(filesRef, (m) => setInPlace(m, normalized, fileForWrite(existing, data, normalized)))
       })
 
     const mutateFile = (
@@ -278,26 +328,17 @@ export const makeHybridFileSystem = (fsService: FileSystem.FileSystem): Effect.E
       Effect.gen(function*() {
         const normalized = normalizeFileName(fileName)
         const files = yield* Ref.get(filesRef)
-        const opt = MutableHashMap.get(files, normalized)
-        let file: ScriptFile | undefined = undefined
-        if (Option.isSome(opt)) {
-          file = opt.value
+        const file = Option.getOrUndefined(MutableHashMap.get(files, normalized))
+        if (file === undefined) {
+          return
         }
-        if (file !== undefined) {
-          const next = resetScriptFile(file)
-          yield* Ref.update(filesRef, (m) => setInPlace(m, normalized, next))
-        }
+        yield* Ref.update(filesRef, (m) => setInPlace(m, normalized, resetScriptFile(file)))
       })
 
     const existsInMemory = (fileName: string): Effect.Effect<boolean> =>
       Effect.gen(function*() {
         const files = yield* Ref.get(filesRef)
-        const opt = MutableHashMap.get(files, normalizeFileName(fileName))
-        let file: ScriptFile | undefined = undefined
-        if (Option.isSome(opt)) {
-          file = opt.value
-        }
-        return file !== undefined
+        return Option.getOrUndefined(MutableHashMap.get(files, normalizeFileName(fileName))) !== undefined
       })
 
     const setTsConfigOverrides = (
@@ -324,12 +365,18 @@ export function getAllParentReferencesIncludingSelf(
   allParentReferences: MutableHashSet.MutableHashSet<TSFileNode> = MutableHashSet.empty<TSFileNode>(),
 ): MutableHashSet.MutableHashSet<TSFileNode> {
   MutableHashSet.add(allParentReferences, node)
-  for (const parent of node.parents) {
-    if (!MutableHashSet.has(allParentReferences, parent)) {
-      getAllParentReferencesIncludingSelf(parent, allParentReferences)
-    }
-  }
+  node.parents.forEach((parent) => collectParentReference(parent, allParentReferences))
   return allParentReferences
+}
+
+function collectParentReference(
+  parent: TSFileNode,
+  allParentReferences: MutableHashSet.MutableHashSet<TSFileNode>,
+): void {
+  if (MutableHashSet.has(allParentReferences, parent)) {
+    return
+  }
+  getAllParentReferencesIncludingSelf(parent, allParentReferences)
 }
 
 export function getAllChildReferencesIncludingSelf(
@@ -337,80 +384,122 @@ export function getAllChildReferencesIncludingSelf(
   allChildReferences: MutableHashSet.MutableHashSet<TSFileNode> = MutableHashSet.empty<TSFileNode>(),
 ): MutableHashSet.MutableHashSet<TSFileNode> {
   MutableHashSet.add(allChildReferences, node)
-  for (const child of node.children) {
-    if (!MutableHashSet.has(allChildReferences, child)) {
-      getAllChildReferencesIncludingSelf(child, allChildReferences)
-    }
-  }
+  node.children.forEach((child) => collectChildReference(child, allChildReferences))
   return allChildReferences
 }
 
+function collectChildReference(
+  child: TSFileNode,
+  allChildReferences: MutableHashSet.MutableHashSet<TSFileNode>,
+): void {
+  if (MutableHashSet.has(allChildReferences, child)) {
+    return
+  }
+  getAllChildReferencesIncludingSelf(child, allChildReferences)
+}
+
+/**
+ * Every mutant of `node` and its descendants, each node visited once.
+ * The defaulted parameter is published API, so the recursion it seeds lives in
+ * `collectRelatedMutants`.
+ */
 export function getMutantsWithReferenceToChildrenOrSelf(
   node: TSFileNode,
   mutants: Mutant[],
   nodesChecked: string[] = [],
 ): Mutant[] {
+  return collectRelatedMutants(node, mutants, nodesChecked)
+}
+
+function collectRelatedMutants(node: TSFileNode, mutants: Mutant[], nodesChecked: string[]): Mutant[] {
   if (nodesChecked.includes(node.fileName)) {
     return []
   }
   nodesChecked.push(node.fileName)
-  const relatedMutants = mutants.filter((m) => normalizeFileName(m.fileName) === node.fileName)
-  const childResult = node.children.flatMap((c) => getMutantsWithReferenceToChildrenOrSelf(c, mutants, nodesChecked))
+  const relatedMutants = mutants.filter((mutant) => normalizeFileName(mutant.fileName) === node.fileName)
+  const childResult = node.children.flatMap((child) => collectRelatedMutants(child, mutants, nodesChecked))
   return [...relatedMutants, ...childResult]
+}
+
+interface MutantGroup {
+  readonly mutantIds: string[]
+  readonly nodes: MutableHashSet.MutableHashSet<TSFileNode>
+  readonly ignoredNodes: MutableHashSet.MutableHashSet<TSFileNode>
+}
+
+function addRangeOfNodesToSet(
+  nodes: MutableHashSet.MutableHashSet<TSFileNode>,
+  nodesToAdd: Iterable<TSFileNode>,
+): void {
+  for (const node of nodesToAdd) {
+    MutableHashSet.add(nodes, node)
+  }
+}
+
+function findNode(fileName: string, nodes: MutableHashMap.MutableHashMap<string, TSFileNode>): TSFileNode {
+  const node = Option.firstSomeOf([
+    MutableHashMap.get(nodes, normalizeFileName(fileName)),
+    MutableHashMap.get(nodes, fileName),
+  ])
+  if (Option.isNone(node)) {
+    throw new Error(`Node not in graph: ${fileName}`)
+  }
+  return node.value
+}
+
+function parentsHaveOverlapWith(
+  currentNode: TSFileNode,
+  groupNodes: MutableHashSet.MutableHashSet<TSFileNode>,
+): boolean {
+  return Array.from(getAllParentReferencesIncludingSelf(currentNode))
+    .some((parentNode) => MutableHashSet.has(groupNodes, parentNode))
+}
+
+function mutantCanJoinGroup(currentNode: TSFileNode, group: MutantGroup): boolean {
+  if (MutableHashSet.has(group.ignoredNodes, currentNode)) {
+    return false
+  }
+  return !parentsHaveOverlapWith(currentNode, group.nodes)
+}
+
+function addMutantToGroup(
+  currentMutant: Mutant,
+  mutantsToGroup: MutableHashSet.MutableHashSet<Mutant>,
+  group: MutantGroup,
+  nodes: MutableHashMap.MutableHashMap<string, TSFileNode>,
+): void {
+  const currentNode = findNode(currentMutant.fileName, nodes)
+  if (!mutantCanJoinGroup(currentNode, group)) {
+    return
+  }
+  group.mutantIds.push(currentMutant.id)
+  MutableHashSet.add(group.nodes, currentNode)
+  MutableHashSet.remove(mutantsToGroup, currentMutant)
+  addRangeOfNodesToSet(group.ignoredNodes, getAllParentReferencesIncludingSelf(currentNode))
+}
+
+function takeGroup(
+  mutantsToGroup: MutableHashSet.MutableHashSet<Mutant>,
+  nodes: MutableHashMap.MutableHashMap<string, TSFileNode>,
+): string[] {
+  const group: MutantGroup = {
+    mutantIds: [],
+    nodes: MutableHashSet.empty<TSFileNode>(),
+    ignoredNodes: MutableHashSet.empty<TSFileNode>(),
+  }
+  for (const currentMutant of mutantsToGroup) {
+    addMutantToGroup(currentMutant, mutantsToGroup, group, nodes)
+  }
+  return group.mutantIds
 }
 
 export function createGroups(mutants: Mutant[], nodes: MutableHashMap.MutableHashMap<string, TSFileNode>): string[][] {
   const groups: string[][] = []
   const mutantsToGroup = MutableHashSet.fromIterable(mutants)
   while (MutableHashSet.size(mutantsToGroup) > 0) {
-    const group: string[] = []
-    const groupNodes = MutableHashSet.empty<TSFileNode>()
-    const nodesToIgnore = MutableHashSet.empty<TSFileNode>()
-    for (const currentMutant of mutantsToGroup) {
-      const currentNode = findNode(currentMutant.fileName, nodes)
-      if (!MutableHashSet.has(nodesToIgnore, currentNode) && !parentsHaveOverlapWith(currentNode, groupNodes)) {
-        group.push(currentMutant.id)
-        MutableHashSet.add(groupNodes, currentNode)
-        MutableHashSet.remove(mutantsToGroup, currentMutant)
-        addRangeOfNodesToSet(nodesToIgnore, getAllParentReferencesIncludingSelf(currentNode))
-      }
-    }
-    groups.push(group)
+    groups.push(takeGroup(mutantsToGroup, nodes))
   }
   return groups
-}
-
-function addRangeOfNodesToSet(
-  nodes: MutableHashSet.MutableHashSet<TSFileNode>,
-  nodesToAdd: Iterable<TSFileNode>,
-) {
-  for (const parent of nodesToAdd) {
-    MutableHashSet.add(nodes, parent)
-  }
-}
-
-function findNode(fileName: string, nodes: MutableHashMap.MutableHashMap<string, TSFileNode>) {
-  const nodeOption = MutableHashMap.get(nodes, normalizeFileName(fileName))
-  if (Option.isSome(nodeOption)) {
-    return nodeOption.value
-  }
-  const fallbackOption = MutableHashMap.get(nodes, fileName)
-  if (Option.isSome(fallbackOption)) {
-    return fallbackOption.value
-  }
-  throw new Error(`Node not in graph: ${fileName}`)
-}
-
-function parentsHaveOverlapWith(
-  currentNode: TSFileNode,
-  groupNodes: MutableHashSet.MutableHashSet<TSFileNode>,
-) {
-  for (const parentNode of getAllParentReferencesIncludingSelf(currentNode)) {
-    if (MutableHashSet.has(groupNodes, parentNode)) {
-      return true
-    }
-  }
-  return false
 }
 // ── TypeScriptCompiler service ───────────────────────────────────────────
 
@@ -501,17 +590,26 @@ export function makeTypescriptCompiler(
   }
   const stateRef = Ref.makeUnsafe(initialState)
 
+  const snapshotOf = (state: CompilerState): Effect.Effect<Snapshot, unknown> => {
+    if (state.snapshot === undefined) {
+      return Effect.fail(new CompilerFailed({ reason: 'not-initialized' }))
+    }
+    return Effect.succeed(state.snapshot)
+  }
+
+  const programsOf = (snapshot: Snapshot, tsconfigFile: string): Effect.Effect<Program[], unknown> => {
+    const projects = snapshot.getProjects()
+    if (projects.length === 0) {
+      return Effect.fail(new CompilerFailed({ reason: 'no-projects', subject: tsconfigFile }))
+    }
+    return Effect.succeed(projects.map((project) => project.program))
+  }
+
   const getProgramsEffect = (): Effect.Effect<Program[], unknown> =>
     Effect.gen(function*() {
-      const s = yield* Ref.get(stateRef)
-      if (!s.snapshot) {
-        return yield* new CompilerFailed({ reason: 'not-initialized' })
-      }
-      const projects = s.snapshot.getProjects()
-      if (projects.length === 0) {
-        return yield* new CompilerFailed({ reason: 'no-projects', subject: s.tsconfigFile })
-      }
-      return projects.map((project) => project.program)
+      const state = yield* Ref.get(stateRef)
+      const snapshot = yield* snapshotOf(state)
+      return yield* programsOf(snapshot, state.tsconfigFile)
     })
 
   const guardTSConfigFileExistsEffect: Effect.Effect<void, unknown> = Effect.gen(function*() {
@@ -521,71 +619,118 @@ export function makeTypescriptCompiler(
     )
   })
 
+  interface TsConfigTraversal {
+    readonly overrides: MutableHashMap.MutableHashMap<string, string>
+    readonly pending: string[]
+    readonly processed: MutableHashSet.MutableHashSet<string>
+    readonly allTsConfigFiles: MutableHashSet.MutableHashSet<string>
+    readonly buildModeEnabled: boolean
+  }
+
+  const isBlankTsConfigPath = (current: string | undefined): current is undefined | '' =>
+    current === undefined || current === ''
+
+  const isUnprocessedTsConfigPath = (
+    current: string | undefined,
+    processed: MutableHashSet.MutableHashSet<string>,
+  ): current is string => !isBlankTsConfigPath(current) && !MutableHashSet.has(processed, current)
+
+  const recordParsedTsConfig = (current: string, config: TsConfig, traversal: TsConfigTraversal): void => {
+    MutableHashMap.set(traversal.overrides, current, overrideOptions(config, traversal.buildModeEnabled))
+    for (const referenced of retrieveReferencedProjects(config, pathService.dirname(current), pathService)) {
+      MutableHashSet.add(traversal.allTsConfigFiles, normalizeFileName(referenced))
+      traversal.pending.push(referenced)
+    }
+  }
+
+  const recordTsConfig = (
+    current: string,
+    content: string,
+    parsed: Result.Result<TsConfig, TsConfigParseError>,
+    traversal: TsConfigTraversal,
+  ): void => {
+    if (Result.isFailure(parsed)) {
+      MutableHashMap.set(traversal.overrides, current, content)
+      return
+    }
+    recordParsedTsConfig(current, parsed.success, traversal)
+  }
+
+  const processNextTsConfig = (traversal: TsConfigTraversal): Effect.Effect<void, unknown> =>
+    Effect.gen(function*() {
+      const current = traversal.pending.pop()
+      if (!isUnprocessedTsConfigPath(current, traversal.processed)) {
+        return
+      }
+      MutableHashSet.add(traversal.processed, current)
+      const content = yield* fsService.readFileString(current)
+      recordTsConfig(current, content, parseTsConfig(current, content), traversal)
+    })
+
   const collectAllTSConfigFiles = (buildModeEnabled: boolean): Effect.Effect<void, unknown> =>
     Effect.gen(function*() {
-      const s = yield* Ref.get(stateRef)
-      const tsConfigOverrides = MutableHashMap.empty<string, string>()
-      const toProcess = [s.tsconfigFile]
-      const processed = MutableHashSet.empty<string>()
-      while (toProcess.length > 0) {
-        const current = toProcess.pop()
-        if (current === undefined || current === '' || MutableHashSet.has(processed, current)) {
-          continue
-        }
-        MutableHashSet.add(processed, current)
-        const content = yield* fsService.readFileString(current)
-        const parsed = parseTsConfig(current, content)
-        if (Result.isFailure(parsed)) {
-          MutableHashMap.set(tsConfigOverrides, current, content)
-          continue
-        }
-        MutableHashMap.set(tsConfigOverrides, current, overrideOptions(parsed.success, buildModeEnabled))
-        for (
-          const referenced of retrieveReferencedProjects(parsed.success, pathService.dirname(current), pathService)
-        ) {
-          const normalized = normalizeFileName(referenced)
-          MutableHashSet.add(s.allTSConfigFiles, normalized)
-          toProcess.push(referenced)
-        }
+      const state = yield* Ref.get(stateRef)
+      const traversal: TsConfigTraversal = {
+        overrides: MutableHashMap.empty<string, string>(),
+        pending: [state.tsconfigFile],
+        processed: MutableHashSet.empty<string>(),
+        allTsConfigFiles: state.allTSConfigFiles,
+        buildModeEnabled,
       }
-      yield* fs.setTsConfigOverrides(tsConfigOverrides)
-      yield* Ref.update(
-        stateRef,
-        (prev) => ({ ...prev, allTSConfigFiles: MutableHashSet.fromIterable(s.allTSConfigFiles) }),
-      )
+      while (traversal.pending.length > 0) {
+        yield* processNextTsConfig(traversal)
+      }
+      yield* fs.setTsConfigOverrides(traversal.overrides)
+      yield* Ref.update(stateRef, (prev) => ({
+        ...prev,
+        allTSConfigFiles: MutableHashSet.fromIterable(traversal.allTsConfigFiles),
+      }))
     })
+
+  type SourceStatement = SourceFile['statements'][number]
+
+  const importDeclarationSpecifierOf = (
+    statement: SourceStatement,
+    sourceFile: SourceFile,
+  ): Option.Option<string> => {
+    if (statement.kind !== SyntaxKind.ImportDeclaration) {
+      return Option.none()
+    }
+    let specifier: SourceFile['imports'][number] | undefined
+    statement.forEachChild((child) => {
+      if (child.kind === SyntaxKind.StringLiteral) {
+        specifier = child
+      }
+    })
+    return Option.map(Option.fromUndefinedOr(specifier), (found) => found.getText(sourceFile))
+  }
+
+  const collectImportEqualsSpecifiers = (statement: SourceStatement, sourceFile: SourceFile, into: string[]): void => {
+    if (statement.kind !== SyntaxKind.ImportEqualsDeclaration) {
+      return
+    }
+    statement.forEachChild((child) => {
+      if (child.kind === SyntaxKind.ExternalModuleReference) {
+        child.forEachChild((refChild) => {
+          if (refChild.kind === SyntaxKind.StringLiteral) {
+            into.push(refChild.getText(sourceFile))
+          }
+        })
+      }
+    })
+  }
 
   const extractImports = (sourceFile: SourceFile): string[] => {
     const result: string[] = []
-    for (const statement of sourceFile.statements) {
-      if (statement.kind === SyntaxKind.ImportDeclaration) {
-        let spec: SourceFile['imports'][number] | undefined
-        statement.forEachChild((child) => {
-          if (child.kind === SyntaxKind.StringLiteral) {
-            spec = child
-          }
-        })
-        if (spec) {
-          result.push(spec.getText(sourceFile))
-        }
-      } else if (statement.kind === SyntaxKind.ImportEqualsDeclaration) {
-        statement.forEachChild((child) => {
-          if (child.kind === SyntaxKind.ExternalModuleReference) {
-            child.forEachChild((refChild) => {
-              if (refChild.kind === SyntaxKind.StringLiteral) {
-                result.push(refChild.getText(sourceFile))
-              }
-            })
-          }
-        })
+    sourceFile.statements.forEach((statement) => {
+      const specifier = importDeclarationSpecifierOf(statement, sourceFile)
+      if (Option.isSome(specifier)) {
+        result.push(specifier.value)
       }
-    }
-    for (const ref of sourceFile.referencedFiles) {
-      result.push(ref.fileName)
-    }
-    for (const ref of sourceFile.typeReferenceDirectives) {
-      result.push(ref.fileName)
-    }
+      collectImportEqualsSpecifiers(statement, sourceFile, result)
+    })
+    sourceFile.referencedFiles.forEach((ref) => result.push(ref.fileName))
+    sourceFile.typeReferenceDirectives.forEach((ref) => result.push(ref.fileName))
     return result
   }
 
@@ -630,162 +775,268 @@ export function makeTypescriptCompiler(
     pathService: Path.Path,
   ): string | undefined => {
     const cleaned = specifier.replace(/^['"]|['"]$/g, '')
-    if (!cleaned.startsWith('./') && !cleaned.startsWith('../')) {
+    if (!relativeSpecifierPattern.test(cleaned)) {
       return undefined
     }
     const baseDir = pathService.dirname(sourceFileName)
     const resolved = normalizeFileName(pathService.resolve(baseDir, cleaned))
-    const candidates = getResolutionCandidates(resolved, pathService)
-    for (const candidate of candidates) {
-      if (MutableHashMap.has(sourceFiles, candidate)) {
-        return candidate
-      }
-    }
-    return undefined
+    return getResolutionCandidates(resolved, pathService)
+      .find((candidate) => MutableHashMap.has(sourceFiles, candidate))
   }
+
+  const readFileText = (fileName: string): Option.Option<string> =>
+    Option.liftPredicate(fs.fileSystem.readFile?.(fileName), isString)
+
+  const sourcesFieldOf = (rawMap: unknown): Option.Option<readonly unknown[]> => {
+    if (!Predicate.hasProperty(rawMap, 'sources')) {
+      return Option.none()
+    }
+    return Option.liftPredicate(rawMap.sources, Array.isArray)
+  }
+
+  const onlySourceOf = (sources: readonly unknown[]): Option.Option<string> => {
+    const names = sources.filter(isString)
+    if (names.length !== 1) {
+      return Option.none()
+    }
+    return Option.fromUndefinedOr(names[0])
+  }
+
+  const sourcePathFromMap = (
+    declarationFileName: string,
+    reference: string,
+    pathService: Path.Path,
+  ): Option.Option<string> => {
+    const sourceMapFileName = normalizeFileName(
+      pathService.resolve(pathService.dirname(declarationFileName), reference),
+    )
+    return Option.flatMap(
+      Option.flatMap(
+        readFileText(sourceMapFileName),
+        (content) => Option.flatMap(sourcesFieldOf(JSON.parse(content)), onlySourceOf),
+      ),
+      (source) => Option.some(normalizeFileName(pathService.resolve(pathService.dirname(sourceMapFileName), source))),
+    )
+  }
+
+  const sourceMappedFileName = (
+    declarationFileName: string,
+    pathService: Path.Path,
+  ): Option.Option<string> =>
+    Option.flatMap(
+      Option.flatMap(readFileText(declarationFileName), (content) =>
+        Option.liftPredicate(getSourceMappingURL(content), isNonEmptyString)),
+      (reference) =>
+        sourcePathFromMap(declarationFileName, reference, pathService),
+    )
 
   const resolveTSInputFile = (dependencyFileName: string, pathService: Path.Path): string => {
     if (!dependencyFileName.endsWith('.d.ts')) {
       return dependencyFileName
     }
-    const content = fs.fileSystem.readFile?.(dependencyFileName)
-    if (typeof content !== 'string') {
-      return dependencyFileName
+    return Option.getOrElse(sourceMappedFileName(dependencyFileName, pathService), () => dependencyFileName)
+  }
+
+  const registerGraphFile = (fileName: string, sourceFiles: SourceFiles): void => {
+    if (ignoredGraphFileNamePattern.test(fileName)) {
+      return
     }
-    const sourceMappingURL = getSourceMappingURL(content)
-    if (sourceMappingURL === undefined || sourceMappingURL === '') {
-      return dependencyFileName
+    const normalized = normalizeFileName(fileName)
+    MutableHashMap.set(sourceFiles, normalized, {
+      fileName: normalized,
+      imports: MutableHashSet.empty<string>(),
+    })
+  }
+
+  const registerSourceFiles = (programs: readonly Program[], sourceFiles: SourceFiles): void => {
+    for (const program of programs) {
+      program.getSourceFileNames().forEach((fileName) => registerGraphFile(fileName, sourceFiles))
     }
-    const sourceMapFileName = normalizeFileName(
-      pathService.resolve(pathService.dirname(dependencyFileName), sourceMappingURL),
-    )
-    const sourceMapContent = fs.fileSystem.readFile?.(sourceMapFileName)
-    if (typeof sourceMapContent !== 'string') {
-      return dependencyFileName
+  }
+
+  const isUsableResolution = (resolved: string | undefined): resolved is string =>
+    resolved !== undefined && resolved !== ''
+
+  const addImportEdge = (fileName: string, importedFileName: string, sourceFiles: SourceFiles): void => {
+    if (!MutableHashMap.has(sourceFiles, importedFileName)) {
+      return
     }
-    const rawMap: unknown = JSON.parse(sourceMapContent)
-    let sources: readonly string[] | undefined
-    if (Predicate.hasProperty(rawMap, 'sources') && Array.isArray(rawMap.sources)) {
-      sources = rawMap.sources.filter((s): s is string => typeof s === 'string')
+    Option.match(MutableHashMap.get(sourceFiles, fileName), {
+      onNone: () => undefined,
+      onSome: (entry) => MutableHashSet.add(entry.imports, importedFileName),
+    })
+  }
+
+  const linkImport = (fileName: string, specifier: string, sourceFiles: SourceFiles): void => {
+    const resolved = resolveModuleSpecifier(fileName, specifier, sourceFiles, pathService)
+    if (!isUsableResolution(resolved)) {
+      return
     }
-    if (sources?.length === 1) {
-      const sourcePath = sources[0]
-      if (sourcePath === undefined) {
-        return dependencyFileName
-      }
-      return normalizeFileName(pathService.resolve(pathService.dirname(sourceMapFileName), sourcePath))
+    addImportEdge(fileName, resolveTSInputFile(resolved, pathService), sourceFiles)
+  }
+
+  const linkFileImports = (fileName: string, programs: readonly Program[], sourceFiles: SourceFiles): void => {
+    const sourceFile = programs
+      .map((program) => program.getSourceFile(fileName))
+      .find((candidate) => candidate != null)
+    if (sourceFile === undefined) {
+      return
     }
-    return dependencyFileName
+    extractImports(sourceFile).forEach((specifier) => linkImport(fileName, specifier, sourceFiles))
   }
 
   const buildDependencyGraph = (programs: Program[]): Effect.Effect<void, unknown> =>
     Effect.gen(function*() {
-      const s = yield* Ref.get(stateRef)
-      for (const program of programs) {
-        for (const fileName of program.getSourceFileNames()) {
-          if (fileName.endsWith('.d.ts') || fileName.includes('node_modules')) {
-            continue
-          }
-          const normalized = normalizeFileName(fileName)
-          MutableHashMap.set(s.sourceFiles, normalized, {
-            fileName: normalized,
-            imports: MutableHashSet.empty<string>(),
-          })
-        }
+      const state = yield* Ref.get(stateRef)
+      registerSourceFiles(programs, state.sourceFiles)
+      for (const [fileName] of state.sourceFiles) {
+        linkFileImports(fileName, programs, state.sourceFiles)
       }
-      for (const [fileName] of s.sourceFiles) {
-        const sourceFile = programs.map((p) => p.getSourceFile(fileName)).find((sf) => sf != null)
-        if (!sourceFile) {
-          continue
-        }
-        const imports = extractImports(sourceFile)
-        for (const specifier of imports) {
-          const resolved = resolveModuleSpecifier(fileName, specifier, s.sourceFiles, pathService)
-          if (resolved !== undefined && resolved !== '') {
-            const sourceFileName = resolveTSInputFile(resolved, pathService)
-            if (MutableHashMap.has(s.sourceFiles, sourceFileName)) {
-              const entryOpt = MutableHashMap.get(s.sourceFiles, fileName)
-              if (Option.isSome(entryOpt)) {
-                MutableHashSet.add(entryOpt.value.imports, sourceFileName)
-              }
-            }
-          }
-        }
+      yield* Ref.update(stateRef, (prev) => ({
+        ...prev,
+        sourceFiles: MutableHashMap.fromIterable(state.sourceFiles),
+      }))
+    })
+
+  const createEmptyNodes = (state: CompilerState): void => {
+    for (const [fileName] of state.sourceFiles) {
+      MutableHashMap.set(state.nodes, fileName, makeTSFileNode(fileName))
+    }
+  }
+
+  const childNodeOf = (
+    state: CompilerState,
+    fileName: string,
+    imports: MutableHashSet.MutableHashSet<string>,
+  ): Effect.Effect<TSFileNode, unknown> =>
+    Effect.gen(function*() {
+      const node = MutableHashMap.get(state.nodes, fileName)
+      if (Option.isNone(node)) {
+        return yield* new CompilerFailed({ reason: 'unknown-file-node', subject: fileName })
       }
-      yield* Ref.update(stateRef, (prev) => ({ ...prev, sourceFiles: MutableHashMap.fromIterable(s.sourceFiles) }))
+      const children = Array.from(imports)
+        .map((importName) => Option.getOrUndefined(MutableHashMap.get(state.nodes, importName)))
+        .filter((child): child is TSFileNode => child !== undefined)
+      return { ...node.value, children, parents: [] }
+    })
+
+  const collectChildNodes = (
+    state: CompilerState,
+    withChildren: MutableHashMap.MutableHashMap<string, TSFileNode>,
+  ): Effect.Effect<void, unknown> =>
+    Effect.gen(function*() {
+      for (const [fileName, file] of state.sourceFiles) {
+        const node = yield* childNodeOf(state, fileName, file.imports)
+        MutableHashMap.set(withChildren, fileName, node)
+      }
+    })
+
+  const replaceMapContents = <K, V>(
+    target: MutableHashMap.MutableHashMap<K, V>,
+    source: MutableHashMap.MutableHashMap<K, V>,
+  ): void => {
+    MutableHashMap.clear(target)
+    for (const [key, value] of source) {
+      MutableHashMap.set(target, key, value)
+    }
+  }
+
+  const parentNodesOf = (
+    node: TSFileNode,
+    nodes: MutableHashMap.MutableHashMap<string, TSFileNode>,
+  ): TSFileNode[] => {
+    const parents: TSFileNode[] = []
+    MutableHashMap.forEach(nodes, (candidate) => {
+      if (candidate.children.includes(node)) {
+        parents.push(candidate)
+      }
+    })
+    return parents
+  }
+
+  const linkParentReferences = (state: CompilerState): void => {
+    const withParents = MutableHashMap.empty<string, TSFileNode>()
+    for (const [fileName, node] of state.nodes) {
+      MutableHashMap.set(withParents, fileName, { ...node, parents: parentNodesOf(node, state.nodes) })
+    }
+    replaceMapContents(state.nodes, withParents)
+  }
+
+  const buildFileNodes = (state: CompilerState): Effect.Effect<void, unknown> =>
+    Effect.gen(function*() {
+      createEmptyNodes(state)
+      const withChildren = MutableHashMap.empty<string, TSFileNode>()
+      yield* collectChildNodes(state, withChildren)
+      replaceMapContents(state.nodes, withChildren)
+      linkParentReferences(state)
+      yield* Ref.update(stateRef, (prev) => ({ ...prev, nodes: MutableHashMap.fromIterable(state.nodes) }))
     })
 
   const getNodesEffect: Effect.Effect<MutableHashMap.MutableHashMap<string, TSFileNode>, unknown> = Effect.gen(
     function*() {
-      const s = yield* Ref.get(stateRef)
-      if (MutableHashMap.size(s.nodes) > 0) {
-        return s.nodes
+      const state = yield* Ref.get(stateRef)
+      if (MutableHashMap.size(state.nodes) > 0) {
+        return state.nodes
       }
-      for (const [fileName] of s.sourceFiles) {
-        const node = makeTSFileNode(fileName)
-        MutableHashMap.set(s.nodes, fileName, node)
-      }
-      const withChildren = MutableHashMap.empty<string, TSFileNode>()
-      for (const [fileName, file] of s.sourceFiles) {
-        const nodeOpt = MutableHashMap.get(s.nodes, fileName)
-        if (Option.isNone(nodeOpt)) {
-          return yield* new CompilerFailed({ reason: 'unknown-file-node', subject: fileName })
-        }
-        const node = nodeOpt.value
-        const children = Array.from(file.imports)
-          .map((importName) => Option.getOrUndefined(MutableHashMap.get(s.nodes, importName)))
-          .filter((n): n is TSFileNode => n !== undefined)
-        MutableHashMap.set(withChildren, fileName, { ...node, children, parents: [] })
-      }
-      MutableHashMap.clear(s.nodes)
-      for (const [k, v] of withChildren) {
-        MutableHashMap.set(s.nodes, k, v)
-      }
-      const withParents = MutableHashMap.empty<string, TSFileNode>()
-      for (const [fileName, node] of s.nodes) {
-        const parents: TSFileNode[] = []
-        for (const [, n] of s.nodes) {
-          if (n.children.includes(node)) {
-            parents.push(n)
-          }
-        }
-        MutableHashMap.set(withParents, fileName, { ...node, parents })
-      }
-      MutableHashMap.clear(s.nodes)
-      for (const [k, v] of withParents) {
-        MutableHashMap.set(s.nodes, k, v)
-      }
-      yield* Ref.update(stateRef, (prev) => ({ ...prev, nodes: MutableHashMap.fromIterable(s.nodes) }))
-      return s.nodes
+      yield* buildFileNodes(state)
+      return state.nodes
     },
   )
+
+  const resetMutatedFiles = (mutants: readonly Mutant[]): Effect.Effect<void, unknown> =>
+    Effect.gen(function*() {
+      for (const mutant of mutants) {
+        yield* fs.resetFile(mutant.fileName)
+      }
+    })
+
+  const applyMutant = (mutant: Mutant): Effect.Effect<void, unknown> =>
+    Effect.gen(function*() {
+      const file = yield* fs.getFile(mutant.fileName)
+      if (file === undefined) {
+        return yield* new CompilerFailed({ reason: 'file-not-in-project', subject: mutant.fileName })
+      }
+      yield* fs.mutateFile(mutant.fileName, mutant)
+    })
+
+  const applyMutants = (mutants: readonly Mutant[]): Effect.Effect<void, unknown> =>
+    Effect.gen(function*() {
+      for (const mutant of mutants) {
+        yield* applyMutant(mutant)
+      }
+    })
+
+  interface InitializedCompilerState extends CompilerState {
+    readonly api: API
+    readonly snapshot: Snapshot
+  }
+
+  const hasOpenSnapshot = (state: CompilerState): state is InitializedCompilerState =>
+    state.api !== undefined && state.snapshot !== undefined
+
+  const updateSnapshot = (state: InitializedCompilerState, changedFiles: string[]): Effect.Effect<void, unknown> =>
+    Effect.gen(function*() {
+      const previous = state.snapshot
+      const next = state.api.updateSnapshot({
+        openProjects: Array.from(state.allTSConfigFiles),
+        fileChanges: { changed: changedFiles },
+      })
+      yield* Effect.sync(() => previous.dispose())
+      yield* Ref.update(stateRef, (prev) => ({ ...prev, snapshot: next }))
+    })
 
   const check: (mutants: readonly Mutant[]) => Effect.Effect<readonly Diagnostic[], unknown> = (mutants) =>
     Effect.gen(function*() {
       const state = yield* Ref.get(stateRef)
-      for (const mutant of state.lastMutants) {
-        yield* fs.resetFile(mutant.fileName)
-      }
-      for (const mutant of mutants) {
-        const file = yield* fs.getFile(mutant.fileName)
-        if (!file) {
-          return yield* new CompilerFailed({ reason: 'file-not-in-project', subject: mutant.fileName })
-        }
-        yield* fs.mutateFile(mutant.fileName, mutant)
-      }
+      yield* resetMutatedFiles(state.lastMutants)
+      yield* applyMutants(mutants)
       const mutatedFileNames = Array.from(
-        MutableHashSet.fromIterable(mutants.map((m) => normalizeFileName(m.fileName))),
+        MutableHashSet.fromIterable(mutants.map((mutant) => normalizeFileName(mutant.fileName))),
       )
       const changedFiles = Array.from(MutableHashSet.fromIterable([...state.lastMutatedFileNames, ...mutatedFileNames]))
       const current = yield* Ref.get(stateRef)
-      if (current.api && current.snapshot) {
-        const oldSnapshot = current.snapshot
-        const nextSnapshot = current.api.updateSnapshot({
-          openProjects: Array.from(current.allTSConfigFiles),
-          fileChanges: { changed: changedFiles },
-        })
-        yield* Effect.sync(() => oldSnapshot.dispose())
-        yield* Ref.update(stateRef, (prev) => ({ ...prev, snapshot: nextSnapshot }))
+      if (hasOpenSnapshot(current)) {
+        yield* updateSnapshot(current, changedFiles)
       }
       yield* Ref.update(
         stateRef,
@@ -795,11 +1046,8 @@ export function makeTypescriptCompiler(
           lastMutatedFileNames: mutatedFileNames,
         }),
       )
-      const programsWithDiagnostics = yield* getProgramsEffect()
-      return programsWithDiagnostics
-        .flatMap((
-          program,
-        ) => [
+      return (yield* getProgramsEffect())
+        .flatMap((program) => [
           ...program.getConfigFileParsingDiagnostics(),
           ...program.getSemanticDiagnostics(),
           ...program.getProgramDiagnostics(),
@@ -843,13 +1091,10 @@ export function makeTypescriptCompiler(
   ): Effect.Effect<{ line: number; character: number } | undefined, unknown> =>
     Effect.gen(function*() {
       const programs = yield* getProgramsEffect()
-      for (const program of programs) {
-        const sourceFile = program.getSourceFile(fileName)
-        if (sourceFile) {
-          return sourceFile.getLineAndCharacterOfPosition(position)
-        }
-      }
-      return undefined
+      return programs
+        .map((program) => program.getSourceFile(fileName))
+        .find((sourceFile) => sourceFile !== undefined)
+        ?.getLineAndCharacterOfPosition(position)
     })
 
   const nodes: Effect.Effect<MutableHashMap.MutableHashMap<string, TSFileNode>, unknown> = getNodesEffect

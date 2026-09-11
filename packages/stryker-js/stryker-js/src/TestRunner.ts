@@ -1,5 +1,7 @@
 import * as Context from 'effect/Context'
 import type * as Effect from 'effect/Effect'
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 
 import type { Mutant } from './Mutant.js'
 import type { TestRunnerFailed } from './TestRunner.schema.js'
@@ -131,41 +133,40 @@ export function toMutantRunResult(
   dryRunResult: DryRunResult,
   reportAllKillers: boolean,
 ): MutantRunResult {
-  switch (dryRunResult.status) {
-    case 'timeout': {
-      if (dryRunResult.reason === undefined) {
-        return { status: 'timeout' }
-      }
-      return { reason: dryRunResult.reason, status: 'timeout' }
-    }
-    case 'error':
-      return { errorMessage: dryRunResult.errorMessage, status: 'error' }
-    case 'complete': {
-      const failed = dryRunResult.tests.filter(
+  return Match.value(dryRunResult).pipe(
+    Match.discriminator('status')('complete', (complete): KilledMutantRunResult | SurvivedMutantRunResult => {
+      const failed = complete.tests.filter(
         (t): t is FailedTestResult => t.status === 'failed',
       )
-      const nrOfTests = dryRunResult.tests.filter((t) => t.status !== 'skipped').length
-      if (failed.length === 0) {
-        return { nrOfTests, status: 'survived' }
-      }
-      const firstFailed = failed.at(0)
-      if (firstFailed === undefined) {
-        return { nrOfTests, status: 'survived' }
-      }
-      let killedBy: readonly string[]
-      if (reportAllKillers) {
-        killedBy = failed.map((t) => t.id)
-      } else {
-        killedBy = [firstFailed.id]
-      }
-      return {
-        failureMessage: firstFailed.failureMessage,
-        killedBy,
-        nrOfTests,
-        status: 'killed',
-      }
-    }
-  }
+      const nrOfTests = complete.tests.filter((t) => t.status !== 'skipped').length
+      return Option.match(Option.fromUndefinedOr(failed.at(0)), {
+        onNone: (): SurvivedMutantRunResult => ({ nrOfTests, status: 'survived' }),
+        onSome: (firstFailed): KilledMutantRunResult => ({
+          failureMessage: firstFailed.failureMessage,
+          killedBy: Match.value(reportAllKillers).pipe(
+            Match.when(true, () => failed.map((t) => t.id)),
+            Match.when(false, () => [firstFailed.id]),
+            Match.exhaustive,
+          ),
+          nrOfTests,
+          status: 'killed',
+        }),
+      })
+    }),
+    Match.discriminator('status')('error', (errored): ErrorMutantRunResult => ({
+      errorMessage: errored.errorMessage,
+      status: 'error',
+    })),
+    Match.discriminator('status')(
+      'timeout',
+      (timedOut): TimeoutMutantRunResult =>
+        Option.match(Option.fromUndefinedOr(timedOut.reason), {
+          onNone: (): TimeoutMutantRunResult => ({ status: 'timeout' }),
+          onSome: (reason): TimeoutMutantRunResult => ({ reason, status: 'timeout' }),
+        }),
+    ),
+    Match.exhaustive,
+  )
 }
 
 export interface TestRunnerService {

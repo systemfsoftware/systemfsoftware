@@ -1,5 +1,6 @@
 import type { MetricsResult } from '@systemfsoftware/stryker-js/Metrics'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import * as Match from 'effect/Match'
 
 import { ansi } from './Reporter.ansi.js'
 
@@ -15,17 +16,15 @@ const KNOWN_EMOJI: Record<string, true> = {
   '💥': true,
 }
 
+const charWidth = (char: string): number =>
+  Match.value(char).pipe(
+    Match.when((candidate) => KNOWN_EMOJI[candidate] === true, () => 2),
+    Match.when((candidate) => (candidate.codePointAt(0) ?? 0) > 0xffff, () => 2),
+    Match.orElse(() => 1),
+  )
+
 function stringWidth(input: string): number {
-  return Array.from(input).reduce((acc, char) => {
-    if (KNOWN_EMOJI[char] === true) {
-      return acc + 2
-    }
-    const cp = char.codePointAt(0) ?? 0
-    if (cp > 0xffff) {
-      return acc + 2
-    }
-    return acc + 1
-  }, 0)
+  return Array.from(input).reduce((width, char) => width + charWidth(char), 0)
 }
 type MutationScoreThresholds = ProvidedStrykerOptions['thresholds']
 
@@ -59,6 +58,13 @@ const maxOf = (values: readonly number[]): number =>
     return acc
   }, Number.NEGATIVE_INFINITY)
 
+const widthOrZero = (width: number): number =>
+  Match.value(width === Number.NEGATIVE_INFINITY).pipe(
+    Match.when(true, () => 0),
+    Match.when(false, () => width),
+    Match.exhaustive,
+  )
+
 const determineContentWidth = (
   row: MetricsResult,
   valueFactory: TableCellValueFactory,
@@ -66,12 +72,7 @@ const determineContentWidth = (
 ): number => {
   const head = valueFactory(row, ancestorCount).length
   const childWidths = row.childResults.map((child) => determineContentWidth(child, valueFactory, ancestorCount + 1))
-  const all = [head, ...childWidths]
-  const max = maxOf(all)
-  if (max === Number.NEGATIVE_INFINITY) {
-    return 0
-  }
-  return max
+  return widthOrZero(maxOf([head, ...childWidths]))
 }
 
 type Column =
@@ -117,36 +118,51 @@ const columnWidth = (column: Column): number => {
   return column.netWidth + 2
 }
 
-const padColumn = (column: Column, input = ''): string => {
-  if (column.kind === 'file') {
-    return `${input}${spaces(columnWidth(column) - stringWidth(input))}`
-  }
-  if (column.isFirstColumn) {
-    return `${spaces(column.netWidth - stringWidth(input))}${input} `
-  }
-  return `${spaces(column.netWidth - stringWidth(input))} ${input} `
-}
+const padColumn = (column: Column, input: string): string =>
+  Match.value(column.kind === 'file').pipe(
+    Match.when(true, () => `${input}${spaces(columnWidth(column) - stringWidth(input))}`),
+    Match.when(false, () =>
+      Match.value(column.isFirstColumn).pipe(
+        Match.when(true, () => `${spaces(column.netWidth - stringWidth(input))}${input} `),
+        Match.when(false, () => `${spaces(column.netWidth - stringWidth(input))} ${input} `),
+        Match.exhaustive,
+      )),
+    Match.exhaustive,
+  )
 
 const drawLine = (column: Column): string => repeat('-', columnWidth(column))
 
 const drawHeader = (column: Column): string => padColumn(column, column.header)
 
-const colorFor = (column: Column, score: MetricsResult): (input: string) => string => {
-  if (column.kind === 'mutationScore') {
-    const scoreToUse = (() => {
-      if (column.scoreType === 'total') {
-        return score.metrics.mutationScore
-      }
-      return score.metrics.mutationScoreBasedOnCoveredCode
-    })()
-    if (!column.allowColor) return (input: string): string => input
-    if (Number.isNaN(scoreToUse)) return ansi.grey
-    if (scoreToUse >= column.thresholds.high) return ansi.green
-    if (scoreToUse >= column.thresholds.low) return ansi.yellow
-    return ansi.red
-  }
-  return (input: string): string => input
-}
+type MutationScoreColumn = Extract<Column, { readonly kind: 'mutationScore' }>
+
+const mutationScoreOf = (scoreType: 'total' | 'covered', metrics: MetricsResult['metrics']): number =>
+  Match.value(scoreType).pipe(
+    Match.when('total', () => metrics.mutationScore),
+    Match.when('covered', () => metrics.mutationScoreBasedOnCoveredCode),
+    Match.exhaustive,
+  )
+
+const thresholdColor = (thresholds: MutationScoreThresholds, value: number): (input: string) => string =>
+  Match.value(value).pipe(
+    Match.when((present: number) => Number.isNaN(present), () => ansi.grey),
+    Match.when((present) => present >= thresholds.high, () => ansi.green),
+    Match.when((present) => present >= thresholds.low, () => ansi.yellow),
+    Match.orElse(() => ansi.red),
+  )
+
+const scoreColor = (column: MutationScoreColumn, score: MetricsResult): (input: string) => string =>
+  Match.value(column.allowColor).pipe(
+    Match.when(true, () => thresholdColor(column.thresholds, mutationScoreOf(column.scoreType, score.metrics))),
+    Match.when(false, () => (input: string): string => input),
+    Match.exhaustive,
+  )
+
+const colorFor = (column: Column, score: MetricsResult): (input: string) => string =>
+  Match.value(column).pipe(
+    Match.discriminator('kind')('mutationScore', (scored) => scoreColor(scored, score)),
+    Match.orElse(() => (input: string): string => input),
+  )
 
 const drawTableCell = (
   column: Column,
@@ -183,19 +199,12 @@ const makeSingleColumn = (
   rows: MetricsResult,
 ): Column => {
   const maxContentSize = determineContentWidth(rows, valueFactory)
-  const headerWidth = stringWidth(header)
-  const netWidth = maxOf([maxContentSize, headerWidth])
-  const finalNetWidth = (() => {
-    if (netWidth === Number.NEGATIVE_INFINITY) {
-      return 0
-    }
-    return netWidth
-  })()
+  const netWidth = maxOf([maxContentSize, stringWidth(header)])
   return {
     kind: 'single',
     header,
     isFirstColumn,
-    netWidth: finalNetWidth,
+    netWidth: widthOrZero(netWidth),
     valueFactory,
     rows,
   }
@@ -208,20 +217,12 @@ const makeFileColumn = (rows: MetricsResult): Column => {
     }
     return spaces(ancestorCount) + row.name
   }
-  const maxContentSize = determineContentWidth(rows, valueFactory)
-  const fileWidth = stringWidth('File')
-  const netWidth = maxOf([maxContentSize, fileWidth])
-  const finalNetWidth = (() => {
-    if (netWidth === Number.NEGATIVE_INFINITY) {
-      return 0
-    }
-    return netWidth
-  })()
+  const netWidth = maxOf([determineContentWidth(rows, valueFactory), stringWidth('File')])
   return {
     kind: 'file',
     header: 'File',
     isFirstColumn: true,
-    netWidth: finalNetWidth,
+    netWidth: widthOrZero(netWidth),
     valueFactory,
     rows,
   }
@@ -233,32 +234,17 @@ const makeMutationScoreColumn = (
   scoreType: 'total' | 'covered',
   allowColor: boolean,
 ): Column => {
-  const valueFactory: TableCellValueFactory = (row) => {
-    const score = (() => {
-      if (scoreType === 'total') {
-        return row.metrics.mutationScore
-      }
-      return row.metrics.mutationScoreBasedOnCoveredCode
-    })()
-    if (Number.isNaN(score)) {
-      return 'n/a'
-    }
-    return score.toFixed(2)
-  }
-  const maxContentSize = determineContentWidth(rows, valueFactory)
-  const headerWidth = stringWidth(scoreType)
-  const netWidth = maxOf([maxContentSize, headerWidth])
-  const finalNetWidth = (() => {
-    if (netWidth === Number.NEGATIVE_INFINITY) {
-      return 0
-    }
-    return netWidth
-  })()
+  const valueFactory: TableCellValueFactory = (row) =>
+    Match.value(mutationScoreOf(scoreType, row.metrics)).pipe(
+      Match.when((present: number) => Number.isNaN(present), () => 'n/a'),
+      Match.orElse((present) => present.toFixed(2)),
+    )
+  const netWidth = maxOf([determineContentWidth(rows, valueFactory), stringWidth(scoreType)])
   return {
     kind: 'mutationScore',
     header: scoreType,
     isFirstColumn: false,
-    netWidth: finalNetWidth,
+    netWidth: widthOrZero(netWidth),
     valueFactory,
     rows,
     thresholds,
@@ -267,40 +253,40 @@ const makeMutationScoreColumn = (
   }
 }
 
+const paddingWidth = (isFirstColumn: boolean): number =>
+  Match.value(isFirstColumn).pipe(
+    Match.when(true, () => 1),
+    Match.when(false, () => 2),
+    Match.exhaustive,
+  )
+
+const widthAdjustedColumns = (
+  columns: readonly Column[],
+  first: Column,
+  columnsWidth: number,
+  netWidth: number,
+): readonly Column[] =>
+  Match.value(netWidth > columnsWidth + 1).pipe(
+    Match.when(true, () => [
+      { ...first, netWidth: first.netWidth + (netWidth - columnsWidth - 1) },
+      ...columns.slice(1),
+    ]),
+    Match.when(false, () => columns),
+    Match.exhaustive,
+  )
+
 const makeGroupColumn = (groupName: string, ...columns: readonly Column[]): Column => {
-  if (columns.length === 0) throw new Error('a group column needs at least one column')
-  const first = columns[0]
+  const [first, ...rest] = columns
   if (first === undefined) throw new Error('a group column needs at least one column')
-  const isFirstColumn = first.isFirstColumn
-  const extra = (() => {
-    if (isFirstColumn) {
-      return 1
-    }
-    return 2
-  })()
-  const columnsWidth = columns.reduce((acc, cur) => acc + columnWidth(cur), 0) - extra
-  const groupNameWidth = stringWidth(groupName)
-  const rawNetWidth = maxOf([groupNameWidth, columnsWidth])
-  const netWidth = (() => {
-    if (rawNetWidth === Number.NEGATIVE_INFINITY) {
-      return 0
-    }
-    return rawNetWidth
-  })()
-  const nextColumns = (() => {
-    if (netWidth > columnsWidth + 1) {
-      const delta = netWidth - columnsWidth - 1
-      const updatedFirst: Column = { ...first, netWidth: first.netWidth + delta }
-      return [updatedFirst, ...columns.slice(1)]
-    }
-    return columns
-  })()
+  const columnsWidth = rest.reduce((acc, cur) => acc + columnWidth(cur), columnWidth(first)) -
+    paddingWidth(first.isFirstColumn)
+  const netWidth = widthOrZero(maxOf([stringWidth(groupName), columnsWidth]))
   return {
     kind: 'group',
     header: groupName,
-    isFirstColumn,
+    isFirstColumn: first.isFirstColumn,
     netWidth,
-    columns: nextColumns,
+    columns: widthAdjustedColumns(columns, first, columnsWidth, netWidth),
   }
 }
 
@@ -380,19 +366,18 @@ const drawColumnHeader = (columns: readonly Column[]): string => drawRow(columns
 
 const drawTableBody = (
   columns: readonly Column[],
-  metricsResult: MetricsResult,
   options: ProvidedStrykerOptions,
-  current: MetricsResult = metricsResult,
-  ancestorCount = 0,
+  current: MetricsResult,
+  ancestorCount: number,
 ): readonly string[] => {
-  const rows: string[] = []
-  if (!options.clearTextReporter.skipFull || current.metrics.mutationScore !== 100) {
-    rows.push(drawRow(columns, (c) => drawTableCell(c, current, ancestorCount)))
-  }
-  for (const child of current.childResults) {
-    rows.push(...drawTableBody(columns, metricsResult, options, child, ancestorCount + 1))
-  }
-  return rows
+  const ownRow = Match.value(options.clearTextReporter.skipFull === false || current.metrics.mutationScore !== 100)
+    .pipe(
+      Match.when(true, () => [drawRow(columns, (column) => drawTableCell(column, current, ancestorCount))]),
+      Match.when(false, (): readonly string[] => []),
+      Match.exhaustive,
+    )
+  const childRows = current.childResults.flatMap((child) => drawTableBody(columns, options, child, ancestorCount + 1))
+  return [...ownRow, ...childRows]
 }
 
 const EOL = '\n'
@@ -407,7 +392,7 @@ export const drawMutationScoreTable = (
     drawGroupHeader(columns),
     drawColumnHeader(columns),
     drawLineRow(columns),
-    drawTableBody(columns, metricsResult, options).join(EOL),
+    drawTableBody(columns, options, metricsResult, 0).join(EOL),
     drawLineRow(columns),
   ].join(EOL)
 }

@@ -1,4 +1,7 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Arr from 'effect/Array'
+import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
@@ -35,30 +38,23 @@ export const PriorReportDocument = S.Struct({
 })
 
 const isArray: (value: unknown) => value is unknown[] = Array.isArray
-const { fromEntries: objectFromEntries, keys: objectKeys } = Object
+const { entries: objectEntries, fromEntries: objectFromEntries, keys: objectKeys } = Object
 const stringify = JSON.stringify
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !isArray(value)
-}
 
 const SURVIVORS_RUN_FIRST_REMEDIATION = 'run a full `stryker run` first, then re-run with --survivors'
 const SURVIVORS_BOOKKEEPING_KEYS = ['survivorsPriorReport'] as const
 
-function stripSurvivorsKeys(config: unknown): Record<string, unknown> {
-  if (!isRecord(config)) {
-    return {}
-  }
-  const rest: Record<string, unknown> = { ...config }
-  for (const key of SURVIVORS_BOOKKEEPING_KEYS) {
-    delete rest[key]
-  }
-  return rest
+function stripSurvivorsKeys(config: Record<string, unknown>): Record<string, unknown> {
+  return objectFromEntries(
+    objectEntries(config).filter(([key]) => !SURVIVORS_BOOKKEEPING_KEYS.some((bookkeeping) => bookkeeping === key)),
+  )
 }
 
 function wasProducedBySurvivorsRun(priorReport: { readonly config: unknown }): boolean {
-  const config = priorReport.config
-  return isRecord(config) && 'survivorsPriorReport' in config
+  return Option.exists(
+    Option.liftPredicate(priorReport.config, Match.record),
+    (config) => SURVIVORS_BOOKKEEPING_KEYS.some((bookkeeping) => bookkeeping in config),
+  )
 }
 
 function serializeSurvivorsHashInput(input: {
@@ -70,17 +66,16 @@ function serializeSurvivorsHashInput(input: {
 }
 
 function sortKeys(value: unknown): unknown {
-  if (isArray(value)) {
-    return value.map(sortKeys)
-  }
-  if (isRecord(value)) {
-    return objectFromEntries(
-      objectKeys(value)
-        .sort()
-        .map((key) => [key, sortKeys(value[key])]),
-    )
-  }
-  return value
+  return Match.value(value).pipe(
+    Match.when(isArray, (many) => many.map((member) => sortKeys(member))),
+    Match.when(Match.record, (named) =>
+      objectFromEntries(
+        objectKeys(named)
+          .sort()
+          .map((key): readonly [string, unknown] => [key, sortKeys(named[key])]),
+      )),
+    Match.orElse((leaf) => leaf),
+  )
 }
 export class PriorReportFacts extends S.Class<PriorReportFacts>('PriorReportFacts')({
   config: S.Record(S.String, S.Unknown),
@@ -150,29 +145,65 @@ function reject(
   )
 }
 
+/**
+ * The closed set of admissions a command can name, before any of them is turned
+ * into a decision. Deriving the variant first keeps the decision itself a total
+ * dispatch over a type rather than a fallback over predicates.
+ */
+const PriorReportAbsentOutcome = S.TaggedStruct('PriorReportAbsent', {})
+const PriorReportIsSurvivorsRunOutcome = S.TaggedStruct('PriorReportIsSurvivorsRun', {})
+const NoSurvivorsFoundOutcome = S.TaggedStruct('NoSurvivorsFound', {})
+const PriorReportDriftedOutcome = S.TaggedStruct('PriorReportDrifted', {})
+const SurvivorsMatchOutcome = S.TaggedStruct('SurvivorsMatch', { survivors: S.Array(MutantShape) })
+
+const AdmissionOutcome = S.Union([
+  PriorReportAbsentOutcome,
+  PriorReportIsSurvivorsRunOutcome,
+  NoSurvivorsFoundOutcome,
+  PriorReportDriftedOutcome,
+  SurvivorsMatchOutcome,
+])
+type AdmissionOutcome = S.Schema.Type<typeof AdmissionOutcome>
+
+const ADMISSION_RULES: readonly {
+  readonly holds: (input: AdmitSurvivorsRunCommand) => boolean
+  readonly outcome: AdmissionOutcome
+}[] = [
+  {
+    holds: (input) => input.priorReport === undefined,
+    outcome: PriorReportAbsentOutcome.make({}),
+  },
+  {
+    holds: (input) => Option.exists(Option.fromUndefinedOr(input.priorReport), wasProducedBySurvivorsRun),
+    outcome: PriorReportIsSurvivorsRunOutcome.make({}),
+  },
+  {
+    holds: (input) => input.priorSurvivors.length === 0,
+    outcome: NoSurvivorsFoundOutcome.make({}),
+  },
+  {
+    holds: (input) => Option.exists(Option.fromUndefinedOr(input.priorReport), (facts) => !hashesMatch(facts, input)),
+    outcome: PriorReportDriftedOutcome.make({}),
+  },
+]
+
+const admissionOutcomeOf = (input: AdmitSurvivorsRunCommand): AdmissionOutcome =>
+  Option.getOrElse(
+    Option.map(Arr.findFirst(ADMISSION_RULES, (rule) => rule.holds(input)), (rule) => rule.outcome),
+    (): AdmissionOutcome => SurvivorsMatchOutcome.make({ survivors: input.priorSurvivors }),
+  )
+
 function decideAdmission(
   input: AdmitSurvivorsRunCommand,
 ): Result.Result<SurvivorsAdmission, SurvivorsRejection> {
-  const priorReport = input.priorReport
-  if (priorReport === undefined) {
-    return reject('no-report', NO_REPORT_DETAIL)
-  }
-  if (wasProducedBySurvivorsRun(priorReport)) {
-    return reject('mismatch', SURVIVORS_RUN_SOURCE_DETAIL)
-  }
-  if (input.priorSurvivors.length === 0) {
-    return Result.succeed(NoSurvivors.make())
-  }
-  if (!hashesMatch(priorReport, input)) {
-    return reject('mismatch', MISMATCH_DETAIL)
-  }
-  return Result.succeed(Admitted.make({ survivors: input.priorSurvivors }))
+  return Match.value(admissionOutcomeOf(input)).pipe(
+    Match.tag('PriorReportAbsent', () => reject('no-report', NO_REPORT_DETAIL)),
+    Match.tag('PriorReportIsSurvivorsRun', () => reject('mismatch', SURVIVORS_RUN_SOURCE_DETAIL)),
+    Match.tag('NoSurvivorsFound', () => Result.succeed(NoSurvivors.make())),
+    Match.tag('PriorReportDrifted', () => reject('mismatch', MISMATCH_DETAIL)),
+    Match.tag('SurvivorsMatch', (matched) => Result.succeed(Admitted.make({ survivors: matched.survivors }))),
+    Match.exhaustive,
+  )
 }
 
-function admissionDecision(
-  command: AdmitSurvivorsRunCommand,
-): Result.Result<SurvivorsAdmission, SurvivorsRejection> {
-  return decideAdmission(command)
-}
-
-export const admitSurvivorsRun = Workflow.make(AdmitSurvivorsRunCommand, admissionDecision)
+export const admitSurvivorsRun = Workflow.make(AdmitSurvivorsRunCommand, decideAdmission)

@@ -5,11 +5,12 @@ import type { CheckResult } from '@systemfsoftware/stryker-js/Checker'
 import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
-import { Predicate, Result } from 'effect'
+import { Result, Schema as S } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as HashMap from 'effect/HashMap'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 import { DiagnosticCategory } from 'typescript/unstable/sync'
 import type { Diagnostic } from 'typescript/unstable/sync'
 import {
@@ -19,7 +20,7 @@ import {
   DiagnosticInUnrelatedFileError,
   DiagnosticWithoutFileError,
 } from './check-mutants.workflow.js'
-import { CheckMutantsCommand } from './Checker.schema.js'
+import { CheckMutantsCommand, TypescriptCheckerOptionsSchema } from './Checker.schema.js'
 import { CheckMutantsInput } from './CheckMutants.schema.js'
 import { TypeScriptCompiler } from './Compiler.js'
 import { groupMutants } from './mutant-groups.js'
@@ -38,21 +39,14 @@ interface CheckerDeps {
 }
 
 function getPrioritize(options: unknown): boolean {
-  if (!Predicate.hasProperty(options, 'typescriptChecker')) {
-    return false
-  }
-  const tc = options['typescriptChecker']
-  if (typeof tc !== 'object' || tc === null) {
-    return false
-  }
-  if (!Predicate.hasProperty(tc, 'prioritizePerformanceOverAccuracy')) {
-    return false
-  }
-  const val = tc['prioritizePerformanceOverAccuracy']
-  if (typeof val === 'boolean') {
-    return val
-  }
-  return false
+  const decoded = S.decodeUnknownOption(TypescriptCheckerOptionsSchema)(options)
+  return Option.getOrElse(
+    Option.flatMap(
+      decoded,
+      (value) => Option.fromUndefinedOr(value.typescriptChecker?.prioritizePerformanceOverAccuracy),
+    ),
+    () => false,
+  )
 }
 
 type RunAnswers = CheckFinished['results']
@@ -106,16 +100,20 @@ const checkCell = Cell.layer({
 export function makeCheckerService({ options, compiler }: CheckerDeps): Checker['Service'] {
   const verify = Cell.provide(checkCell, Layer.succeed(TypeScriptCompiler, compiler))
 
-  const positionOf = (error: Diagnostic): Effect.Effect<string> => {
-    const fileName = error.fileName
-    if (fileName === undefined || fileName === '') {
-      return Effect.succeed('')
-    }
-    return compiler.getLineAndCharacterOfPosition(fileName, error.pos).pipe(
-      Effect.orElseSucceed(() => undefined),
-      Effect.map((at) => `${fileName}(${(at?.line ?? 0) + 1},${(at?.character ?? 0) + 1}): `),
-    )
-  }
+  const positionOf = (error: Diagnostic): Effect.Effect<string> =>
+    Option.match(Option.filter(Option.fromUndefinedOr(error.fileName), (fileName) => fileName !== ''), {
+      onNone: () => Effect.succeed(''),
+      onSome: (fileName) =>
+        compiler.getLineAndCharacterOfPosition(fileName, error.pos).pipe(
+          Effect.orElseSucceed(() => undefined),
+          Effect.map((at) =>
+            Option.match(Option.fromUndefinedOr(at), {
+              onNone: () => `${fileName}(1,1): `,
+              onSome: (position) => `${fileName}(${position.line + 1},${position.character + 1}): `,
+            })
+          ),
+        ),
+    })
 
   const formatDiagnostic = (error: Diagnostic): Effect.Effect<string> =>
     positionOf(error).pipe(

@@ -2,7 +2,7 @@ import all from '@systemfsoftware/all'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
-  ...all,
+  extends: [all],
   ignorePatterns: [...(all.ignorePatterns ?? []), '**/testResources/**'],
   overrides: [
     {

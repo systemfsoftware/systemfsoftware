@@ -1,7 +1,9 @@
+import type { MutantStatus } from '@systemfsoftware/stryker-js/Mutant'
 import type { ReporterFactory } from '@systemfsoftware/stryker-js/Reporter'
 import type { RunTiming } from '@systemfsoftware/stryker-js/Reporter'
 import type { TestRunnerCapabilities } from '@systemfsoftware/stryker-js/TestRunner'
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 
 export type ProgressBarState = {
   readonly format: string
@@ -56,20 +58,16 @@ function formatBar(
   data: Readonly<Record<string, string | number>>,
   options: { readonly width: number; readonly complete: string; readonly incomplete: string },
 ): string {
-  let ratio = 0
-  if (total !== 0) {
-    ratio = Math.min(curr / total, 1)
-  }
+  const ratio = Match.value(total === 0).pipe(
+    Match.when(true, () => 0),
+    Match.when(false, () => Math.min(curr / total, 1)),
+    Match.exhaustive,
+  )
   const filled = Math.floor(ratio * options.width)
   const bar = options.complete.repeat(filled) + options.incomplete.repeat(options.width - filled)
   const percent = `${Math.floor(ratio * 100).toString().padStart(3, ' ')}%`
-  let out = format
-  out = out.replace(':bar', bar)
-  out = out.replace(':percent', percent)
-  for (const [k, v] of Object.entries(data)) {
-    out = out.replaceAll(`:${k}`, String(v))
-  }
-  return out
+  const printed = format.replace(':bar', bar).replace(':percent', percent)
+  return Object.entries(data).reduce((out, [key, value]) => out.replaceAll(`:${key}`, String(value)), printed)
 }
 
 export type ProgressTally = {
@@ -105,35 +103,67 @@ export const getElapsedTime = (tally: ProgressTally, now: number): string => {
 
 export const getEtc = (tally: ProgressTally, now: number): string => {
   const elapsed = Math.floor((now - tally.startedAt) / 1000)
-  const totalSecondsLeft = Math.floor(
-    (elapsed / tally.ticks) * (tally.total - tally.ticks),
+  const remaining = Math.floor((elapsed / tally.ticks) * (tally.total - tally.ticks))
+  return Match.value(Number.isFinite(remaining) && remaining > 0).pipe(
+    Match.when(true, () => formatTime(remaining)),
+    Match.when(false, () => 'n/a'),
+    Match.exhaustive,
   )
-  if (Number.isFinite(totalSecondsLeft) && totalSecondsLeft > 0) {
-    return formatTime(totalSecondsLeft)
-  }
-  return 'n/a'
 }
 
 function formatTime(timeInSeconds: number): string {
   const hours = Math.floor(timeInSeconds / 3600)
   const minutes = Math.floor((timeInSeconds % 3600) / 60)
-  if (hours > 0) {
-    return `~${hours}h ${minutes}m`
-  }
-  if (minutes > 0) {
-    return `~${minutes}m`
-  }
-  return '<1m'
+  return Match.value(hours > 0).pipe(
+    Match.when(true, () => `~${hours}h ${minutes}m`),
+    Match.when(false, () =>
+      Match.value(minutes > 0).pipe(
+        Match.when(true, () => `~${minutes}m`),
+        Match.when(false, () => '<1m'),
+        Match.exhaustive,
+      )),
+    Match.exhaustive,
+  )
 }
 
 const ticksFor = (
   plan: { readonly plan: 'EarlyResult' | 'Run'; readonly netTime: number; readonly reloadEnvironment: boolean },
   tally: ProgressTally,
-): number => {
-  if (tally.capabilities.reloadEnvironment === false && plan.reloadEnvironment) {
-    return plan.netTime + tally.timing.overhead
+): number =>
+  Match.value(tally.capabilities.reloadEnvironment === false && plan.reloadEnvironment).pipe(
+    Match.when(true, () => plan.netTime + tally.timing.overhead),
+    Match.when(false, () => plan.netTime),
+    Match.exhaustive,
+  )
+
+const progressData = (tally: ProgressTally, now: number): Record<string, string | number> => ({
+  survived: tally.survived,
+  timedOut: tally.timedOut,
+  tested: tally.tested,
+  mutants: tally.mutants,
+  total: tally.total,
+  ticks: tally.ticks,
+  et: getElapsedTime(tally, now),
+  etc: getEtc(tally, now),
+})
+
+const tallyAfterTest = (
+  tally: ProgressTally,
+  tested: { readonly status: MutantStatus; readonly completed: number },
+  ticks: number,
+): ProgressTally => {
+  const counted = Match.value(tested.status).pipe(
+    Match.when('Survived', () => ({ survived: 1, timedOut: 0 })),
+    Match.when('Timeout', () => ({ survived: 0, timedOut: 1 })),
+    Match.orElse(() => ({ survived: 0, timedOut: 0 })),
+  )
+  return {
+    ...tally,
+    tested: tested.completed,
+    ticks: tally.ticks + ticks,
+    survived: tally.survived + counted.survived,
+    timedOut: tally.timedOut + counted.timedOut,
   }
-  return plan.netTime
 }
 
 const PROGRESS_BAR_FORMAT =
@@ -146,26 +176,19 @@ export const makeProgressBarReporter: ReporterFactory = () => async (events) => 
     tally: emptyTally(0),
     bar: undefined,
   }
-  const render = (now: number): void => {
-    if (progress.bar === undefined) {
-      return
-    }
-    const data: Record<string, string | number> = {
-      survived: progress.tally.survived,
-      timedOut: progress.tally.timedOut,
-      tested: progress.tally.tested,
-      mutants: progress.tally.mutants,
-      total: progress.tally.total,
-      ticks: progress.tally.ticks,
-      et: getElapsedTime(progress.tally, now),
-      etc: getEtc(progress.tally, now),
-    }
-    const line = renderProgressBar(progress.bar, data)
-    process.stdout.write(`\r${line}`)
-    if (isComplete(progress.bar)) {
-      process.stdout.write('\n')
-    }
-  }
+  const render = (now: number): void =>
+    Option.match(Option.fromUndefinedOr(progress.bar), {
+      onNone: () => undefined,
+      onSome: (bar) => {
+        const line = renderProgressBar(bar, progressData(progress.tally, now))
+        const newline = Match.value(isComplete(bar)).pipe(
+          Match.when(true, () => '\n'),
+          Match.when(false, () => ''),
+          Match.exhaustive,
+        )
+        process.stdout.write(`\r${line}${newline}`)
+      },
+    })
   try {
     for await (const event of events) {
       Match.value(event).pipe(
@@ -196,37 +219,30 @@ export const makeProgressBarReporter: ReporterFactory = () => async (events) => 
           progress.bar = makeProgressBarState(PROGRESS_BAR_FORMAT, { ...PROGRESS_BAR_OPTIONS, total })
         }),
         Match.tag('mutantTested', (tested) => {
-          const ticks = progress.tally.ticksByMutantId[tested.id]
-          if (ticks === undefined) {
-            return
-          }
-          let survived = progress.tally.survived
-          if (tested.status === 'Survived') {
-            survived = progress.tally.survived + 1
-          }
-          let timedOut = progress.tally.timedOut
-          if (tested.status === 'Timeout') {
-            timedOut = progress.tally.timedOut + 1
-          }
-          progress.tally = {
-            ...progress.tally,
-            tested: tested.completed,
-            ticks: progress.tally.ticks + ticks,
-            survived,
-            timedOut,
-          }
-          if (ticks !== 0 && progress.bar !== undefined) {
-            progress.bar = tickProgressBar(progress.bar, ticks)
-          }
-          render(performance.now())
+          Option.match(Option.fromUndefinedOr(progress.tally.ticksByMutantId[tested.id]), {
+            onNone: () => undefined,
+            onSome: (ticks) => {
+              progress.tally = tallyAfterTest(progress.tally, tested, ticks)
+              progress.bar = Option.getOrUndefined(
+                Option.map(Option.fromUndefinedOr(progress.bar), (bar) => tickProgressBar(bar, ticks)),
+              )
+              render(performance.now())
+            },
+          })
         }),
         Match.orElse(() => undefined),
       )
     }
   } finally {
-    if (progress.bar !== undefined && !isComplete(progress.bar)) {
-      process.stdout.write('\n')
-    }
+    Option.match(Option.fromUndefinedOr(progress.bar), {
+      onNone: () => undefined,
+      onSome: (bar) =>
+        Match.value(isComplete(bar)).pipe(
+          Match.when(true, () => undefined),
+          Match.when(false, () => process.stdout.write('\n')),
+          Match.exhaustive,
+        ),
+    })
   }
 }
 

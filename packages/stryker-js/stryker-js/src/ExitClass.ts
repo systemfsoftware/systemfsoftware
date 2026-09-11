@@ -1,4 +1,5 @@
 import * as Match from 'effect/Match'
+import * as Option from 'effect/Option'
 
 import { type ClassifyExitCommand, ClassifyExitDecision, type ExitClass } from './ExitClass.schema.js'
 
@@ -11,87 +12,56 @@ export const EXIT_CODE: Record<ExitClass, number> = {
   InternalError: 4,
 }
 
-export function verdictExitClass(score: number | null, breakingThreshold: number | null): ExitClass | null {
-  if (breakingThreshold === null || score === null) {
-    return null
-  }
-  if (score < breakingThreshold) {
-    return 'VerdictFail'
-  }
-  return null
-}
-
 export function highestExitClass(pending: Iterable<ExitClass>): ExitClass | null {
-  let highest: ExitClass | null = null
-  for (const exitClass of pending) {
-    if (highest === null || EXIT_CODE[exitClass] > EXIT_CODE[highest]) {
-      highest = exitClass
-    }
-  }
-  return highest
+  return Array.from(pending).reduce<ExitClass | null>(
+    (incumbent, challenger) =>
+      Option.match(Option.fromNullishOr(incumbent), {
+        onNone: () => challenger,
+        onSome: (value) =>
+          Match.value(EXIT_CODE[value] < EXIT_CODE[challenger]).pipe(
+            Match.when(true, () => challenger),
+            Match.when(false, () => value),
+            Match.exhaustive,
+          ),
+      }),
+    null,
+  )
 }
 
 export function resolveExitCode(pending: Iterable<ExitClass>, signal: number | null): number {
-  if (signal !== null) {
-    return 128 + signal
-  }
-  const highest = highestExitClass(pending)
-  if (highest === null) {
-    return 0
-  }
-  return EXIT_CODE[highest]
+  return Option.match(Option.fromNullishOr(signal), {
+    onNone: () =>
+      Option.match(Option.fromNullishOr(highestExitClass(pending)), {
+        onNone: () => 0,
+        onSome: (exitClass) => EXIT_CODE[exitClass],
+      }),
+    onSome: (value) => 128 + value,
+  })
 }
 
-const deriveVerdict = (
-  score: number | null,
-  breakingThreshold: number | null,
-): typeof ExitClass.Type | null => {
-  if (score === null || breakingThreshold === null) {
-    return null
-  }
-  if (score < breakingThreshold) {
-    return 'VerdictFail'
-  }
-  return null
-}
-
-const rank = (value: typeof ExitClass.Type): number =>
-  Match.value(value).pipe(
-    Match.when('InternalError', () => 4),
-    Match.when('RuntimeError', () => 3),
-    Match.when('ConfigError', () => 2),
-    Match.when('VerdictFail', () => 1),
-    Match.exhaustive,
+export function verdictExitClass(score: number | null, breakingThreshold: number | null): ExitClass | null {
+  return Option.getOrNull(
+    Option.zipWith(
+      Option.fromNullishOr(score),
+      Option.fromNullishOr(breakingThreshold),
+      (value, threshold): ExitClass | null =>
+        Match.value(value < threshold).pipe(
+          Match.when(true, (): ExitClass => 'VerdictFail'),
+          Match.when(false, () => null),
+          Match.exhaustive,
+        ),
+    ),
   )
-
-const withVerdict = (
-  pending: ReadonlyArray<typeof ExitClass.Type>,
-  verdict: typeof ExitClass.Type | null,
-): ReadonlyArray<typeof ExitClass.Type> => {
-  if (verdict === null) {
-    return pending
-  }
-  if (pending.includes(verdict)) {
-    return pending
-  }
-  return [...pending, verdict]
 }
-
-const highestOf = (values: ReadonlyArray<typeof ExitClass.Type>): typeof ExitClass.Type | null =>
-  values.reduce<typeof ExitClass.Type | null>((acc, cur) => {
-    if (acc === null) {
-      return cur
-    }
-    if (rank(cur) > rank(acc)) {
-      return cur
-    }
-    return acc
-  }, null)
 
 export const classifyExit = (command: ClassifyExitCommand): ClassifyExitDecision => {
-  const verdictClass = deriveVerdict(command.score, command.breakingThreshold)
-  const pendingWithVerdict = withVerdict(command.pending, verdictClass)
-  const highestClass = highestOf(pendingWithVerdict)
+  const verdictClass = verdictExitClass(command.score, command.breakingThreshold)
+  const highestClass = highestExitClass(
+    Option.match(Option.fromNullishOr(verdictClass), {
+      onNone: () => command.pending,
+      onSome: (verdict) => Array.from(new Set([...command.pending, verdict])),
+    }),
+  )
   return ClassifyExitDecision.make({
     highestClass,
     verdictClass,

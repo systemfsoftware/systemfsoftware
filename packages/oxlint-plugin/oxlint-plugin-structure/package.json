@@ -11,7 +11,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugin/oxlint-plugin-structure#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Oxlint rules for module structure and export hygiene: ban classes and string errors, forbid barrels and inline destructured types, require internal JSDoc discipline, and keep I/O boundaries and domain branching honest.",
+  "description": "Oxlint rules for module structure and export hygiene: ban classes and string errors, forbid barrels and inline destructured types, require internal JSDoc discipline, and keep I/O boundaries honest.",
   "keywords": [
     "oxlint",
     "oxlint-plugin",
@@ -51,7 +51,6 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
-    "@systemfsoftware/oxlint-make-boundary": "workspace:^",
     "@systemfsoftware/stryker-js-cli": "catalog:stryker",
     "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
     "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",

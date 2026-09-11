@@ -8,10 +8,12 @@ import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
+import * as Match from 'effect/Match'
 import * as MutableHashMap from 'effect/MutableHashMap'
 import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import type { PlatformError } from 'effect/PlatformError'
+import * as Predicate from 'effect/Predicate'
 import * as Result from 'effect/Result'
 import * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
@@ -93,52 +95,64 @@ const makeDisableTypeChecksPreprocessor =
           return undefined
         })
       }, { concurrency: FILE_CONCURRENCY })
-      for (const updated of updates) {
+      updates.forEach((updated) => {
         if (updated !== undefined) {
-          const key = updated.name
-          MutableHashMap.set(project.files, key, updated)
-          if (Option.isSome(MutableHashMap.get(project.filesToMutate, key))) {
-            MutableHashMap.set(project.filesToMutate, key, updated)
-          }
+          mergeUpdatedFile(project, updated)
         }
-      }
+      })
     })
   }
+
+const mergeUpdatedFile = (project: Project, updated: ProjectFile): void => {
+  const key = updated.name
+  MutableHashMap.set(project.files, key, updated)
+  if (Option.isSome(MutableHashMap.get(project.filesToMutate, key))) {
+    MutableHashMap.set(project.filesToMutate, key, updated)
+  }
+}
+
+const tsConfigParseError = (file: string, reason: string): TsConfigParseError =>
+  new TsConfigParseError({ file, reason, exitClass: 'ConfigError' })
+
+const parseJsonText = (jsonText: string): Result.Result<unknown, string> => {
+  try {
+    return Result.succeed(parse(jsonText.replace(/^\uFEFF/, '')))
+  } catch (error) {
+    return Result.fail(errorToString(error))
+  }
+}
+
+const parseTsConfigShape = (fileName: string, parsed: unknown): Result.Result<TSConfig, TsConfigParseError> =>
+  Match.value(parsed).pipe(
+    Match.when(
+      S.is(TsConfigSchema),
+      (config): Result.Result<TSConfig, TsConfigParseError> => Result.succeed(config),
+    ),
+    Match.orElse(
+      (): Result.Result<TSConfig, TsConfigParseError> =>
+        Result.fail(
+          tsConfigParseError(
+            fileName,
+            `parsed to ${JSON.stringify(parsed)}, which does not match the tsconfig shape this package consumes`,
+          ),
+        ),
+    ),
+  )
 
 export function parseTsConfig(
   fileName: string,
   jsonText: string,
 ): Result.Result<TSConfig, TsConfigParseError> {
-  let parsed: unknown
-  try {
-    parsed = parse(jsonText.replace(/^\uFEFF/, ''))
-  } catch (error) {
-    return Result.fail(
-      new TsConfigParseError({
-        file: fileName,
-        reason: errorToString(error),
-        exitClass: 'ConfigError',
-      }),
-    )
-  }
-  if (S.is(TsConfigSchema)(parsed)) {
-    return Result.succeed(parsed)
-  }
-  return Result.fail(
-    new TsConfigParseError({
-      file: fileName,
-      reason: `parsed to ${JSON.stringify(parsed)}, which does not match the tsconfig shape this package consumes`,
-      exitClass: 'ConfigError',
-    }),
-  )
+  return Result.match(parseJsonText(jsonText), {
+    onFailure: (reason) => Result.fail(tsConfigParseError(fileName, reason)),
+    onSuccess: (parsed) => parseTsConfigShape(fileName, parsed),
+  })
 }
 
 const makeTSConfigPreprocessor = (options: StrykerOptions, basePath: string): FilePreprocessor => (project) => {
   if (options.inPlace) {
     return Effect.void
   }
-  const touched = new Set<string>()
-
   const tryRewriteReference = (
     reference: string,
     originTSConfigFileName: string,
@@ -152,6 +166,25 @@ const makeTSConfigPreprocessor = (options: StrykerOptions, basePath: string): Fi
     return false
   }
 
+  const rewriteReferenceOrKeep = (reference: string, tsconfigFileName: string, pathService: Path.Path): string =>
+    Match.value(tryRewriteReference(reference, tsconfigFileName, pathService)).pipe(
+      Match.when(Predicate.isString, (rewritten) => rewritten),
+      Match.orElse(() => reference),
+    )
+
+  const rewriteEntryAtIndex = (
+    value: unknown[],
+    index: number,
+    tsconfigFileName: string,
+    pathService: Path.Path,
+  ): void => {
+    const entry = value[index]
+    if (typeof entry !== 'string') {
+      return
+    }
+    value[index] = rewriteReferenceOrKeep(entry, tsconfigFileName, pathService)
+  }
+
   const rewriteFileArrayProperty = (
     config: TSConfig,
     tsconfigFileName: string,
@@ -160,15 +193,7 @@ const makeTSConfigPreprocessor = (options: StrykerOptions, basePath: string): Fi
   ): void => {
     const value = config[prop]
     if (Array.isArray(value)) {
-      for (let i = 0; i < value.length; i++) {
-        const entry = value[i]
-        if (typeof entry === 'string') {
-          const rewritten = tryRewriteReference(entry, tsconfigFileName, pathService)
-          if (rewritten !== false) {
-            value[i] = rewritten
-          }
-        }
-      }
+      value.forEach((_entry, index) => rewriteEntryAtIndex(value, index, tsconfigFileName, pathService))
     }
   }
 
@@ -176,9 +201,6 @@ const makeTSConfigPreprocessor = (options: StrykerOptions, basePath: string): Fi
     tsconfigFileName: string,
     pathService: Path.Path,
   ): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> => {
-    if (touched.has(tsconfigFileName)) {
-      return Effect.void
-    }
     const tsconfigFileOpt = MutableHashMap.get(project.files, tsconfigFileName)
     if (Option.isNone(tsconfigFileOpt)) {
       return Effect.void
@@ -231,29 +253,67 @@ const makeTSConfigPreprocessor = (options: StrykerOptions, basePath: string): Fi
     ).pipe(Effect.as(extend))
   }
 
+  const rewriteSingleExtends = (
+    config: TSConfig,
+    extend: string,
+    tsconfigFileName: string,
+    pathService: Path.Path,
+  ): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> =>
+    Effect.flatMap(rewriteExtendsEntry(config, extend, tsconfigFileName, pathService), (rewritten) => {
+      config.extends = rewritten
+      return Effect.void
+    })
+
+  const rewriteExtendsArray = (
+    config: TSConfig,
+    extendEntries: readonly string[],
+    tsconfigFileName: string,
+    pathService: Path.Path,
+  ): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> =>
+    Effect.forEach(extendEntries, (entry) => rewriteExtendsEntry(config, entry, tsconfigFileName, pathService)).pipe(
+      Effect.flatMap((rewritten) => {
+        config.extends = rewritten
+        return Effect.void
+      }),
+    )
+
   const rewriteExtends = (
     config: TSConfig,
     tsconfigFileName: string,
     pathService: Path.Path,
-  ): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> => {
-    const extend = config.extends
-    if (typeof extend === 'string') {
-      return Effect.flatMap(rewriteExtendsEntry(config, extend, tsconfigFileName, pathService), (rewritten) => {
-        config.extends = rewritten
+  ): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> =>
+    Match.value(config.extends).pipe(
+      Match.when(Predicate.isString, (extend) => rewriteSingleExtends(config, extend, tsconfigFileName, pathService)),
+      Match.when(S.is(ExtendsArraySchema), (extendEntries) =>
+        rewriteExtendsArray(config, extendEntries, tsconfigFileName, pathService)),
+      Match.orElse(() =>
+        Effect.void
+      ),
+    )
+
+  const referencedTsConfigPath = (referencePath: string): string =>
+    Match.value(referencePath.endsWith('.json')).pipe(
+      Match.when(true, () => referencePath),
+      Match.orElse(() => `${referencePath}/tsconfig.json`),
+    )
+
+  const rewriteReference = (
+    ref: { path: string },
+    originTSConfigFileName: string,
+    pathService: Path.Path,
+  ): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> =>
+    Match.value(tryRewriteReference(ref.path, originTSConfigFileName, pathService)).pipe(
+      Match.when(Predicate.isString, (rewritten) => {
+        ref.path = rewritten
         return Effect.void
-      })
-    }
-    if (S.is(ExtendsArraySchema)(extend)) {
-      return Effect.forEach(extend, (entry) => rewriteExtendsEntry(config, entry, tsconfigFileName, pathService))
-        .pipe(
-          Effect.flatMap((rewritten) => {
-            config.extends = rewritten
-            return Effect.void
-          }),
+      }),
+      Match.orElse(() =>
+        rewriteTSConfigFile(
+          pathService.resolve(pathService.dirname(originTSConfigFileName), referencedTsConfigPath(ref.path)),
+          pathService,
         )
-    }
-    return Effect.void
-  }
+      ),
+    )
 
   const rewriteProjectReferences = (
     config: TSConfig,
@@ -264,19 +324,8 @@ const makeTSConfigPreprocessor = (options: StrykerOptions, basePath: string): Fi
     if (!references) {
       return Effect.void
     }
-    return Effect.forEach(references, (ref) => {
-      const rewritten = tryRewriteReference(ref.path, originTSConfigFileName, pathService)
-      if (rewritten !== false) {
-        ref.path = rewritten
-        return Effect.void
-      }
-      let refPath = `${ref.path}/tsconfig.json`
-      if (ref.path.endsWith('.json')) {
-        refPath = ref.path
-      }
-      const refFileName = pathService.resolve(pathService.dirname(originTSConfigFileName), refPath)
-      return rewriteTSConfigFile(refFileName, pathService)
-    }).pipe(Effect.asVoid)
+    return Effect.forEach(references, (ref) => rewriteReference(ref, originTSConfigFileName, pathService))
+      .pipe(Effect.asVoid)
   }
 
   return Effect.gen(function*() {
@@ -301,6 +350,33 @@ export interface TemporaryDirectoryShape {
 export class TemporaryDirectory extends Context.Service<TemporaryDirectory, TemporaryDirectoryShape>()(
   '@systemfsoftware/stryker-js-engine/TemporaryDirectory',
 ) {}
+
+const removesTempDir = (exit: Exit.Exit<unknown, unknown>, cleanTempDir: 'always' | boolean): boolean =>
+  Exit.isSuccess(exit) || cleanTempDir === 'always'
+
+const removeEmptyParentDirectory = (
+  parent: string,
+  fs: FileSystem.FileSystem,
+): Effect.Effect<void, PlatformError> =>
+  Effect.gen(function*() {
+    const siblings = yield* fs.readDirectory(parent)
+    if (siblings.length === 0) {
+      yield* fs.remove(parent, { recursive: true, force: true })
+    }
+  })
+
+const removeTempDirectory = (
+  tmp: string,
+  parent: string,
+  fs: FileSystem.FileSystem,
+): Effect.Effect<void, PlatformError> =>
+  Effect.gen(function*() {
+    yield* Effect.logDebug(`Deleting stryker temp directory ${tmp}`)
+    yield* fs.remove(tmp, { recursive: true, force: true })
+    if (yield* fs.exists(parent)) {
+      yield* removeEmptyParentDirectory(parent, fs)
+    }
+  })
 
 export const TemporaryDirectoryLive = (
   options: StrykerOptions,
@@ -327,19 +403,11 @@ export const TemporaryDirectoryLive = (
 
       yield* Effect.addFinalizer((exit) =>
         Effect.gen(function*() {
-          const shouldRemove = Exit.isSuccess(exit) || options.cleanTempDir === 'always'
-          if (!shouldRemove) {
-            yield* Effect.logDebug('Not removing the temp dir because an error occurred')
+          if (removesTempDir(exit, options.cleanTempDir)) {
+            yield* removeTempDirectory(tmp, parent, fs)
             return
           }
-          yield* Effect.logDebug(`Deleting stryker temp directory ${tmp}`)
-          yield* fs.remove(tmp, { recursive: true, force: true })
-          if (yield* fs.exists(parent)) {
-            const siblings = yield* fs.readDirectory(parent)
-            if (siblings.length === 0) {
-              yield* fs.remove(parent, { recursive: true, force: true })
-            }
-          }
+          yield* Effect.logDebug('Not removing the temp dir because an error occurred')
         }).pipe(Effect.orDie)
       )
 
@@ -349,18 +417,41 @@ export const TemporaryDirectoryLive = (
 
 const toFileMap = (entries: readonly (readonly [string, string])[]): Map<string, string> => new Map(entries)
 
-const binDirectoriesFrom = (from: string, pathService: Path.Path): string[] => {
-  const directories: string[] = []
-  let current = pathService.resolve(from)
-  for (;;) {
-    directories.push(pathService.join(current, 'node_modules', '.bin'))
-    const parent = pathService.dirname(current)
-    if (parent === current) {
-      return directories
-    }
-    current = parent
+const directoryChain = (from: string, pathService: Path.Path): readonly string[] => {
+  const parent = pathService.dirname(from)
+  if (parent === from) {
+    return [from]
   }
+  return [from, ...directoryChain(parent, pathService)]
 }
+
+const binDirectoriesFrom = (from: string, pathService: Path.Path): string[] =>
+  directoryChain(pathService.resolve(from), pathService).map((directory) =>
+    pathService.join(directory, 'node_modules', '.bin')
+  )
+
+const inheritedPath = (): string =>
+  Match.value(process.env['PATH']).pipe(
+    Match.when(Predicate.isString, (value) => value),
+    Match.orElse(() => ''),
+  )
+
+const failOnBuildFailure = (
+  command: string,
+  result: { readonly exitCode: number; readonly stderr: string },
+): Effect.Effect<void, StrykerError> =>
+  Match.value(result.exitCode).pipe(
+    Match.when(
+      (exitCode) => exitCode !== 0,
+      (exitCode) =>
+        Effect.fail(
+          new StrykerError({
+            message: `Build command "${command}" failed with exit code ${String(exitCode)}.\n${result.stderr}`,
+          }),
+        ),
+    ),
+    Match.orElse(() => Effect.void),
+  )
 
 const runBuildCommandIn = (
   command: string,
@@ -375,9 +466,9 @@ const runBuildCommandIn = (
       }
       return ':'
     })()
-    const inheritedPath = process.env['PATH'] ?? ''
+    const inherited = inheritedPath()
     const binDirs = binDirectoriesFrom(workingDirectory, pathService)
-    const newPath = [...binDirs, inheritedPath].join(separator)
+    const newPath = [...binDirs, inherited].join(separator)
 
     const childCommand = ChildProcess.make(command, {
       shell: true,
@@ -399,46 +490,85 @@ const runBuildCommandIn = (
       Effect.mapError((cause) => new StrykerError({ message: `Failed to spawn build command "${command}"`, cause })),
     )
 
-    if (result.exitCode !== 0) {
-      return yield* new StrykerError({
-        message: `Build command "${command}" failed with exit code ${String(result.exitCode)}.\n${result.stderr}`,
-      })
+    yield* failOnBuildFailure(command, result)
+  })
+
+type NodeModulesWalk = {
+  readonly basePath: string
+  readonly tempDirName: string | undefined
+  readonly fs: FileSystem.FileSystem
+  readonly path: Path.Path
+  readonly queue: string[]
+  readonly found: string[]
+}
+
+type DirectoryRole = 'skipped' | 'nodeModules' | 'searchable'
+
+const directoryRole = (dir: string, walk: NodeModulesWalk): DirectoryRole =>
+  Match.value(walk.path.basename(dir)).pipe(
+    Match.when((name) => name === walk.tempDirName, (): DirectoryRole => 'skipped'),
+    Match.when((name) => name === 'node_modules', (): DirectoryRole => 'nodeModules'),
+    Match.orElse((): DirectoryRole => 'searchable'),
+  )
+
+const enqueueChildDirectory = (
+  dir: string,
+  entry: string,
+  walk: NodeModulesWalk,
+): Effect.Effect<void, PlatformError> =>
+  Effect.gen(function*() {
+    const child = walk.path.join(dir, entry)
+    const statType = yield* walk.fs.stat(walk.path.join(walk.basePath, child)).pipe(
+      Effect.map((info) => info.type),
+      Effect.orElseSucceed((): string => 'Unknown'),
+    )
+    if (statType === 'Directory') {
+      walk.queue.push(child)
     }
   })
+
+const enqueueChildDirectories = (dir: string, walk: NodeModulesWalk): Effect.Effect<void, PlatformError> =>
+  Effect.gen(function*() {
+    const entries = yield* walk.fs.readDirectory(walk.path.join(walk.basePath, dir)).pipe(
+      Effect.orElseSucceed((): readonly string[] => []),
+    )
+    yield* Effect.forEach(entries, (entry) => enqueueChildDirectory(dir, entry, walk), {
+      concurrency: 1,
+      discard: true,
+    })
+  })
+
+const visitDirectory = (dir: string, walk: NodeModulesWalk): Effect.Effect<void, PlatformError> =>
+  Match.value(directoryRole(dir, walk)).pipe(
+    Match.when('nodeModules', () =>
+      Effect.sync(() => {
+        walk.found.push(dir)
+      })),
+    Match.when('skipped', () => Effect.void),
+    Match.orElse(() => enqueueChildDirectories(dir, walk)),
+  )
 
 const findNodeModulesList = (
   basePath: string,
   tempDirName: string | undefined,
 ): Effect.Effect<string[], PlatformError, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function*() {
-    const fsService = yield* FileSystem.FileSystem
-    const pathService = yield* Path.Path
-    const nodeModulesList: string[] = []
-    const queue: string[] = ['.']
-    let dir: string | undefined
-    while ((dir = queue.pop()) !== undefined) {
-      if (pathService.basename(dir) === tempDirName) {
-        continue
-      }
-      if (pathService.basename(dir) === 'node_modules') {
-        nodeModulesList.push(dir)
-        continue
-      }
-      const entries = yield* fsService
-        .readDirectory(pathService.join(basePath, dir))
-        .pipe(Effect.orElseSucceed((): readonly string[] => []))
-      for (const entry of entries) {
-        const full = pathService.join(dir, entry)
-        const statType = yield* fsService.stat(pathService.join(basePath, full)).pipe(
-          Effect.map((info) => info.type),
-          Effect.orElseSucceed((): string => 'Unknown'),
-        )
-        if (statType === 'Directory') {
-          queue.push(full)
-        }
-      }
+    const fs = yield* FileSystem.FileSystem
+    const path = yield* Path.Path
+    const walk: NodeModulesWalk = {
+      basePath,
+      tempDirName,
+      fs,
+      path,
+      queue: ['.'],
+      found: [],
     }
-    return nodeModulesList
+    let dir = walk.queue.pop()
+    while (dir !== undefined) {
+      yield* visitDirectory(dir, walk)
+      dir = walk.queue.pop()
+    }
+    return walk.found
   })
 
 const symlinkJunction = (
@@ -452,6 +582,22 @@ const symlinkJunction = (
     yield* fsService.symlink(to, from)
   })
 
+const moveEntry = (
+  from: string,
+  to: string,
+): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem
+    const stat = yield* fs.stat(from)
+    if (stat.type === 'Directory') {
+      yield* moveDirectoryRecursive(from, to)
+    } else {
+      yield* fs.rename(from, to).pipe(
+        Effect.catch(() => fs.copyFile(from, to).pipe(Effect.andThen(fs.remove(from)))),
+      )
+    }
+  })
+
 const moveDirectoryRecursive = (
   from: string,
   to: string,
@@ -463,19 +609,29 @@ const moveDirectoryRecursive = (
       return
     }
     yield* fs.makeDirectory(to, { recursive: true })
-    for (const file of yield* fs.readDirectory(from)) {
-      const fromFileName = pathService.join(from, file)
-      const toFileName = pathService.join(to, file)
-      const stat = yield* fs.stat(fromFileName)
-      if (stat.type === 'Directory') {
-        yield* moveDirectoryRecursive(fromFileName, toFileName)
-      } else {
-        yield* fs.rename(fromFileName, toFileName).pipe(
-          Effect.catch(() => fs.copyFile(fromFileName, toFileName).pipe(Effect.andThen(fs.remove(fromFileName)))),
-        )
-      }
-    }
+    const entries = yield* fs.readDirectory(from)
+    yield* Effect.forEach(
+      entries,
+      (entry) => moveEntry(pathService.join(from, entry), pathService.join(to, entry)),
+      { concurrency: 1, discard: true },
+    )
     yield* fs.remove(from, { recursive: true, force: true })
+  })
+
+const inPlaceSandboxFile = (
+  name: string,
+  file: ProjectFile,
+  backupDirectory: string,
+  basePath: string,
+): Effect.Effect<string, PlatformError, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    if (!hasChanges(file)) {
+      return name
+    }
+    yield* backupTo(file, backupDirectory, basePath)
+    yield* Effect.logDebug('Stored backup file')
+    yield* writeInPlace(file)
+    return name
   })
 
 const sandboxFile = (
@@ -485,22 +641,183 @@ const sandboxFile = (
   backupDirectory: string,
   basePath: string,
   options: StrykerOptions,
-): Effect.Effect<string, PlatformError, FileSystem.FileSystem | Path.Path> => {
-  if (options.inPlace) {
-    if (!hasChanges(file)) {
-      return Effect.succeed(name)
-    }
-    return Effect.flatMap(
-      backupTo(file, backupDirectory, basePath),
-      (_backupFileName) =>
-        Effect.flatMap(
-          Effect.logDebug('Stored backup file'),
-          () => Effect.as(writeInPlace(file), name),
-        ),
-    )
-  }
-  return writeToSandbox(file, workingDirectory, basePath)
+): Effect.Effect<string, PlatformError, FileSystem.FileSystem | Path.Path> =>
+  Match.value(options.inPlace).pipe(
+    Match.when(true, () => inPlaceSandboxFile(name, file, backupDirectory, basePath)),
+    Match.orElse(() => writeToSandbox(file, workingDirectory, basePath)),
+  )
+
+const sandboxFileNameOf = (fileMap: Map<string, string>, fileName: string): string =>
+  Match.value(fileMap.get(fileName)).pipe(
+    Match.when(Predicate.isString, (sandboxFileName) => sandboxFileName),
+    Match.orElse((): string => {
+      throw new StrykerError({ message: `Cannot find sandbox file for ${fileName}` })
+    }),
+  )
+
+const withoutLeadingSeparator = (suffix: string): string =>
+  Match.value(suffix.startsWith('/')).pipe(
+    Match.when(true, () => suffix.slice(1)),
+    Match.orElse(() => suffix),
+  )
+
+const relativeToBase = (
+  resolvedSandbox: string,
+  resolvedWorking: string,
+  base: string,
+  pathService: Path.Path,
+): string => {
+  const trimmed = withoutLeadingSeparator(resolvedSandbox.slice(resolvedWorking.length))
+  return Match.value(trimmed.length === 0).pipe(
+    Match.when(true, () => base),
+    Match.orElse(() => pathService.join(base, trimmed)),
+  )
 }
+
+const originalFileNameOf = (
+  sandboxFileName: string,
+  workingDirectory: string,
+  base: string,
+  pathService: Path.Path,
+): string => {
+  const resolvedSandbox = pathService.resolve(sandboxFileName)
+  const resolvedWorking = pathService.resolve(workingDirectory)
+  return Match.value(resolvedSandbox.startsWith(resolvedWorking)).pipe(
+    Match.when(true, () => relativeToBase(resolvedSandbox, resolvedWorking, base, pathService)),
+    Match.orElse(() => resolvedSandbox.replace(resolvedWorking, base)),
+  )
+}
+
+const buildSandboxHandle = (
+  fileMap: Map<string, string>,
+  workingDirectory: string,
+  base: string,
+  pathService: Path.Path,
+): SandboxHandle => ({
+  workingDirectory,
+  sandboxFileFor: (fileName) => sandboxFileNameOf(fileMap, fileName),
+  originalFileFor: (sandboxFileName) => originalFileNameOf(sandboxFileName, workingDirectory, base, pathService),
+})
+
+const announceSandbox = (
+  options: StrykerOptions,
+  workingDirectory: string,
+  backupDirectory: string,
+  basePath: string,
+  pathService: Path.Path,
+): Effect.Effect<void> =>
+  Match.value(options.inPlace).pipe(
+    Match.when(true, () =>
+      Effect.logInfo(
+        `In place mode is enabled, Stryker will be overriding YOUR files. Find your backup at: ${
+          pathService.relative(basePath, backupDirectory)
+        }`,
+      )),
+    Match.orElse(() => Effect.logDebug(`Creating a sandbox for files in ${workingDirectory}`)),
+  )
+
+const hasBackupToRestore = (options: StrykerOptions, backupDirectory: string): boolean =>
+  Match.value(options.inPlace).pipe(
+    Match.when(true, () => backupDirectory !== ''),
+    Match.orElse(() => false),
+  )
+
+const restoreOriginalFiles = (
+  workingDirectory: string,
+  backupDirectory: string,
+  basePath: string,
+): Effect.Effect<void, never, FileSystem.FileSystem | Path.Path | Scope.Scope> =>
+  Effect.addFinalizer(() =>
+    Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem
+      const p = yield* Path.Path
+      if (!(yield* fs.exists(backupDirectory))) {
+        return
+      }
+      yield* Effect.logInfo(`Resetting your original files from ${p.relative(basePath, backupDirectory)}.`)
+      yield* moveDirectoryRecursive(backupDirectory, workingDirectory).pipe(Effect.orDie)
+    }).pipe(Effect.orDie)
+  )
+
+const isNonEmptyString = (value: string | undefined): value is string =>
+  Match.value(value).pipe(
+    Match.when(Predicate.isString, (text) => text !== ''),
+    Match.orElse(() => false),
+  )
+
+const runConfiguredBuild = (
+  options: StrykerOptions,
+  workingDirectory: string,
+): Effect.Effect<void, StrykerError, Path.Path | ChildProcessSpawner.ChildProcessSpawner> =>
+  Match.value(options.buildCommand).pipe(
+    Match.when(
+      isNonEmptyString,
+      (command) =>
+        Effect.logInfo(`Running build command "${command}" in "${workingDirectory}".`).pipe(
+          Effect.andThen(() => runBuildCommandIn(command, workingDirectory)),
+        ),
+    ),
+    Match.orElse(() => Effect.void),
+  )
+
+const linksNodeModules = (options: StrykerOptions): boolean =>
+  Match.value(options.symlinkNodeModules).pipe(
+    Match.when(true, () => !options.inPlace),
+    Match.orElse(() => false),
+  )
+
+const linkNodeModules = (
+  nodeModules: string,
+  workingDirectory: string,
+  basePath: string,
+  pathService: Path.Path,
+): Effect.Effect<void, never, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const resolvedTo = pathService.resolve(pathService.join(basePath, nodeModules))
+    const resolvedFrom = pathService.join(workingDirectory, nodeModules)
+    yield* Effect.logDebug(`Create symlink from ${resolvedTo} to ${resolvedFrom}`)
+    yield* symlinkJunction(resolvedTo, resolvedFrom).pipe(
+      Effect.catch((_error) =>
+        Effect.logWarning(
+          `Unexpected error while trying to symlink "${nodeModules}" in sandbox directory.`,
+        )
+      ),
+    )
+  })
+
+const linkFoundNodeModules = (
+  options: StrykerOptions,
+  workingDirectory: string,
+  basePath: string,
+  pathService: Path.Path,
+): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const nodeModulesList = yield* findNodeModulesList(basePath, options.tempDirName)
+    if (nodeModulesList.length === 0) {
+      yield* Effect.logDebug(
+        `Could not find a node_modules folder to symlink into the sandbox directory. Search "${basePath}" and its parent directories`,
+      )
+      return
+    }
+    yield* Effect.forEach(
+      nodeModulesList,
+      (nodeModules) => linkNodeModules(nodeModules, workingDirectory, basePath, pathService),
+      { concurrency: 1, discard: true },
+    )
+  })
+
+const symlinkNodeModules = (
+  options: StrykerOptions,
+  workingDirectory: string,
+  basePath: string,
+  pathService: Path.Path,
+): Effect.Effect<void, PlatformError, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    yield* Effect.logDebug('Start symlink node_modules')
+    if (linksNodeModules(options)) {
+      yield* linkFoundNodeModules(options, workingDirectory, basePath, pathService)
+    }
+  })
 
 export const makeSandbox = (
   input: MakeSandboxInput,
@@ -510,75 +827,15 @@ export const makeSandbox = (
   FileSystem.FileSystem | Path.Path | ChildProcessSpawner.ChildProcessSpawner | Scope.Scope
 > =>
   Effect.gen(function*() {
-    const buildHandle = (
-      fileMap: Map<string, string>,
-      wd: string,
-      base: string,
-      pathService: Path.Path,
-    ): SandboxHandle => {
-      const sandboxFileFor = (fileName: string): string => {
-        const sandboxFileName = fileMap.get(fileName)
-        if (sandboxFileName === undefined) {
-          throw new StrykerError({ message: `Cannot find sandbox file for ${fileName}` })
-        }
-        return sandboxFileName
-      }
-      const originalFileFor = (sandboxFileName: string): string => {
-        const resolvedSandbox = pathService.resolve(sandboxFileName)
-        const resolvedWorking = pathService.resolve(wd)
-        if (resolvedSandbox.startsWith(resolvedWorking)) {
-          const suffix = resolvedSandbox.slice(resolvedWorking.length)
-          let trimmed: string
-          if (suffix.startsWith('/')) {
-            trimmed = suffix.slice(1)
-          } else {
-            trimmed = suffix
-          }
-          if (trimmed.length === 0) {
-            return base
-          }
-          return pathService.join(base, trimmed)
-        }
-        return resolvedSandbox.replace(resolvedWorking, base)
-      }
-      return { workingDirectory: wd, sandboxFileFor, originalFileFor }
-    }
-
     const { options, project, workingDirectory, backupDirectory, basePath } = input
     yield* Scope.Scope
     const pathService = yield* Path.Path
 
-    if (options.inPlace) {
-      yield* Effect.logInfo(
-        `In place mode is enabled, Stryker will be overriding YOUR files. Find your backup at: ${
-          pathService.relative(basePath, backupDirectory)
-        }`,
-      )
-    } else {
-      yield* Effect.logDebug(`Creating a sandbox for files in ${workingDirectory}`)
-    }
-
-    if (options.inPlace && backupDirectory) {
-      const capturedBackup = backupDirectory
-      const capturedWorking = workingDirectory
-      const capturedBase = basePath
-      yield* Effect.addFinalizer(() =>
-        Effect.gen(function*() {
-          const fs = yield* FileSystem.FileSystem
-          const p = yield* Path.Path
-          if (!(yield* fs.exists(capturedBackup))) {
-            return
-          }
-          yield* Effect.logInfo(
-            `Resetting your original files from ${p.relative(capturedBase, capturedBackup)}.`,
-          )
-          yield* moveDirectoryRecursive(capturedBackup, capturedWorking).pipe(
-            Effect.orDie,
-          )
-        }).pipe(Effect.orDie)
-      )
-    }
-
+    yield* announceSandbox(options, workingDirectory, backupDirectory, basePath, pathService)
+    yield* Effect.when(
+      restoreOriginalFiles(workingDirectory, backupDirectory, basePath),
+      Effect.succeed(hasBackupToRestore(options, backupDirectory)),
+    )
     yield* createPreprocessor(options, basePath)(project).pipe(
       Effect.mapError((cause) => new StrykerError({ message: 'Sandbox preprocessor failed', cause })),
     )
@@ -591,44 +848,11 @@ export const makeSandbox = (
         ),
       { concurrency: FILE_CONCURRENCY, discard: false },
     )
-
     const fileMap = toFileMap(entries)
 
-    if (options.buildCommand !== undefined && options.buildCommand !== '') {
-      const command = options.buildCommand
-      const dir = workingDirectory
-      yield* Effect.logInfo(`Running build command "${command}" in "${dir}".`).pipe(
-        Effect.andThen(() => runBuildCommandIn(command, dir)),
-      )
-    }
-
-    const shouldSymlink = options.symlinkNodeModules && !options.inPlace
-    if (shouldSymlink) {
-      const tempDirName = options.tempDirName
-      yield* Effect.logDebug('Start symlink node_modules')
-      const nodeModulesList = yield* findNodeModulesList(basePath, tempDirName)
-      if (nodeModulesList.length === 0) {
-        yield* Effect.logDebug(
-          `Could not find a node_modules folder to symlink into the sandbox directory. Search "${basePath}" and its parent directories`,
-        )
-      } else {
-        for (const nodeModules of nodeModulesList) {
-          const resolvedTo = pathService.resolve(pathService.join(basePath, nodeModules))
-          const resolvedFrom = pathService.join(workingDirectory, nodeModules)
-          yield* Effect.logDebug(`Create symlink from ${resolvedTo} to ${resolvedFrom}`)
-          yield* symlinkJunction(resolvedTo, resolvedFrom).pipe(
-            Effect.catch((_error) =>
-              Effect.logWarning(
-                `Unexpected error while trying to symlink "${nodeModules}" in sandbox directory.`,
-              )
-            ),
-          )
-        }
-      }
-    } else {
-      yield* Effect.logDebug('Start symlink node_modules')
-    }
-    return buildHandle(fileMap, workingDirectory, basePath, pathService)
+    yield* runConfiguredBuild(options, workingDirectory)
+    yield* symlinkNodeModules(options, workingDirectory, basePath, pathService)
+    return buildSandboxHandle(fileMap, workingDirectory, basePath, pathService)
   })
 
 export { createPreprocessor }

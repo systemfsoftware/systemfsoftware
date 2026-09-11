@@ -2,7 +2,7 @@ import type { MetricsResult } from '@systemfsoftware/stryker-js/Metrics'
 import type { Position } from '@systemfsoftware/stryker-js/Mutant'
 import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
 import type * as schema from '@systemfsoftware/stryker-js/Report'
-import type { ReporterFactory } from '@systemfsoftware/stryker-js/Reporter'
+import type { ReporterEvent, ReporterFactory } from '@systemfsoftware/stryker-js/Reporter'
 import { ReporterFailed } from '@systemfsoftware/stryker-js/Reporter'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Match from 'effect/Match'
@@ -75,27 +75,50 @@ function mutantLabel(status: schema.MutantStatus, allowEmojis: boolean): string 
 
 type ReportMutant = schema.MutantResult & { fileName: string }
 
-function extractReportMutants(
-  report: schema.MutationTestResult,
-): Array<{ fileName: string; mutant: ReportMutant; source: string | undefined }> {
-  const out: Array<{ fileName: string; mutant: ReportMutant; source: string | undefined }> = []
-  if (!Predicate.hasProperty(report, 'files')) return out
-  for (const [fileName, file] of Object.entries(report.files)) {
-    const mutants: readonly schema.MutantResult[] = file.mutants
-    const source: string | undefined = file.source
-    for (const mutant of mutants) {
-      out.push({ fileName, mutant: { ...mutant, fileName }, source })
-    }
-  }
-  return out
+interface ReportMutantEntry {
+  readonly fileName: string
+  readonly mutant: ReportMutant
+  readonly source: string | undefined
+}
+
+type ReportChannel = 'stdout' | 'debug' | 'none'
+
+/**
+ * Where a mutant's block is written: the diagnostics channel for mutants that
+ * failed to run, the report for the ones that inform, and nowhere for the rest.
+ */
+const REPORT_CHANNEL: Record<schema.MutantStatus, ReportChannel> = {
+  Killed: 'debug',
+  Timeout: 'debug',
+  RuntimeError: 'debug',
+  CompileError: 'debug',
+  Survived: 'stdout',
+  NoCoverage: 'stdout',
+  Ignored: 'none',
+  Pending: 'none',
+}
+
+function extractReportMutants(report: schema.MutationTestResult): ReportMutantEntry[] {
+  if (!Predicate.hasProperty(report, 'files')) return []
+  return Object.entries(report.files).flatMap(([fileName, file]) =>
+    file.mutants.map((mutant) => ({ fileName, mutant: { ...mutant, fileName }, source: file.source }))
+  )
+}
+
+function sourceLine(source: string, position: Position): string {
+  const raw = source.split('\n')[position.line - 1]
+  if (raw === undefined) return ''
+  return raw
+}
+
+function tailFromColumn(raw: string, column: number): string[] {
+  if (raw.length === 0) return []
+  return [raw.slice(column)]
 }
 
 function sliceSource(source: string | undefined, position: Position): string[] {
   if (source === undefined) return []
-  const lines = source.split('\n')
-  const raw = lines[position.line - 1] ?? ''
-  if (raw.length === 0) return []
-  return [raw.slice(position.column)]
+  return tailFromColumn(sourceLine(source, position), position.column)
 }
 
 function originalLines(source: string | undefined, position: Position, allowColor: boolean): string[] {
@@ -120,48 +143,67 @@ function replacementLines(replacement: string | undefined, allowColor: boolean):
     })
 }
 
-function statusTail(mutant: ReportMutant, options: ProvidedStrykerOptions): string[] {
-  if (mutant.status === 'Survived') {
-    if (mutant.static === true) {
-      return ['Ran all tests for this mutant.']
-    }
-    if (mutant.coveredBy !== undefined && options.clearTextReporter.logTests) {
-      return formatCoveredTests(mutant.coveredBy, options)
-    }
-    return []
-  }
-  if (mutant.status === 'Killed' && mutant.killedBy !== undefined && mutant.killedBy.length > 0) {
-    const first = mutant.killedBy[0]
-    if (first !== undefined) return [`Killed by: ${first}`]
-  }
-  if (
-    (mutant.status === 'RuntimeError' || mutant.status === 'CompileError') &&
-    mutant.statusReason !== undefined
-  ) {
-    return [`Error message: ${mutant.statusReason}`]
-  }
-  return []
+const logsCoveredTests = (
+  mutant: ReportMutant,
+  options: ProvidedStrykerOptions,
+): mutant is ReportMutant & { readonly coveredBy: readonly string[] } => {
+  if (!options.clearTextReporter.logTests) return false
+  return mutant.coveredBy !== undefined
+}
+
+const coveredTestsTail = (mutant: ReportMutant, options: ProvidedStrykerOptions): readonly string[] => {
+  if (!logsCoveredTests(mutant, options)) return []
+  return formatCoveredTests(mutant.coveredBy, options)
+}
+
+const survivorTail = (mutant: ReportMutant, options: ProvidedStrykerOptions): readonly string[] => {
+  if (mutant.static === true) return ['Ran all tests for this mutant.']
+  return coveredTestsTail(mutant, options)
+}
+
+const killedByLine = (killer: string | undefined): readonly string[] => {
+  if (killer === undefined) return []
+  return [`Killed by: ${killer}`]
+}
+
+const killerTail = (mutant: ReportMutant): readonly string[] => {
+  const killedBy = mutant.killedBy
+  if (killedBy === undefined) return []
+  return killedByLine(killedBy[0])
+}
+
+const statusReasonTail = (mutant: ReportMutant): readonly string[] => {
+  if (mutant.statusReason === undefined) return []
+  return [`Error message: ${mutant.statusReason}`]
+}
+
+/**
+ * The lines below a mutant block: one tail per status, chosen by the status the
+ * mutant settled at.
+ */
+const statusTail = (mutant: ReportMutant, options: ProvidedStrykerOptions): readonly string[] =>
+  Match.value(mutant.status).pipe(
+    Match.when('Survived', () => survivorTail(mutant, options)),
+    Match.when('Killed', () => killerTail(mutant)),
+    Match.whenOr('RuntimeError', 'CompileError', () => statusReasonTail(mutant)),
+    Match.orElse((): readonly string[] => []),
+  )
+
+const overflowNotice = (hidden: number): readonly string[] => {
+  if (hidden <= 0) return []
+  return [`  and ${hidden} more test${plural(hidden)}!`]
 }
 
 function formatCoveredTests(tests: readonly string[], options: ProvidedStrykerOptions): string[] {
   const maxLog = options.clearTextReporter.maxTestsToLog
-  const effectiveCount = (() => {
-    if (maxLog < tests.length) {
-      return maxLog
-    }
-    return tests.length
-  })()
-  if (effectiveCount <= 0) return []
-  const out: string[] = ['Tests ran:']
-  for (const t of tests.slice(0, effectiveCount)) {
-    out.push(`    ${t}`)
-  }
-  const diff = tests.length - maxLog
-  if (diff > 0) {
-    out.push(`  and ${diff} more test${plural(diff)}!`)
-  }
-  out.push('')
-  return out
+  const logged = Math.min(maxLog, tests.length)
+  if (logged <= 0) return []
+  return [
+    'Tests ran:',
+    ...tests.slice(0, logged).map((test) => `    ${test}`),
+    ...overflowNotice(tests.length - maxLog),
+    '',
+  ]
 }
 
 function mutantBlock(
@@ -182,43 +224,78 @@ function mutantBlock(
   return out
 }
 
-function isDebugStatus(status: string): boolean {
-  return (
-    status === 'Killed' || status === 'Timeout' || status === 'RuntimeError' || status === 'CompileError'
-  )
+interface ReportBlocks {
+  readonly stdout: readonly string[]
+  readonly debug: readonly string[]
+  readonly totalTests: number
 }
 
-function isInfoStatus(status: string): boolean {
-  return status === 'Survived' || status === 'NoCoverage'
-}
-
-function collectMutants(
-  report: schema.MutationTestResult,
+const linesForChannel = (
+  entries: readonly ReportMutantEntry[],
+  channel: ReportChannel,
   options: ProvidedStrykerOptions,
-): { stdout: string[]; debug: string[]; totalTests: number } {
-  const stdout: string[] = []
-  const debug: string[] = []
-  const mutants = extractReportMutants(report)
-  const totalTests = mutants.reduce((acc, { mutant }) => acc + (mutant.testsCompleted ?? 0), 0)
-  for (const { fileName, mutant, source } of mutants) {
-    if (isDebugStatus(mutant.status)) {
-      debug.push(...mutantBlock(fileName, mutant, source, options))
-    } else if (isInfoStatus(mutant.status)) {
-      stdout.push(...mutantBlock(fileName, mutant, source, options))
-    }
-  }
-  return { stdout, debug, totalTests }
+): readonly string[] => {
+  const reported = entries.filter((entry) => REPORT_CHANNEL[entry.mutant.status] === channel)
+  return reported.flatMap((entry) => mutantBlock(entry.fileName, entry.mutant, entry.source, options))
 }
 
-function scoreTable(
+function collectMutants(report: schema.MutationTestResult, options: ProvidedStrykerOptions): ReportBlocks {
+  const entries = extractReportMutants(report)
+  return {
+    stdout: linesForChannel(entries, 'stdout', options),
+    debug: linesForChannel(entries, 'debug', options),
+    totalTests: entries.reduce((total, entry) => total + (entry.mutant.testsCompleted ?? 0), 0),
+  }
+}
+
+const partialScoresVisible = (metrics: MetricsResult, options: ProvidedStrykerOptions): boolean => {
+  if (!options.clearTextReporter.skipFull) return true
+  return metrics.childResults.some((child) => child.metrics.mutationScore !== 100)
+}
+
+const drawsScoreTable = (metrics: MetricsResult, options: ProvidedStrykerOptions): boolean => {
+  if (!options.clearTextReporter.reportScoreTable) return false
+  return partialScoresVisible(metrics, options)
+}
+
+function scoreTable(metrics: MetricsResult, options: ProvidedStrykerOptions): string | undefined {
+  if (!drawsScoreTable(metrics, options)) return undefined
+  return drawMutationScoreTable(metrics, options)
+}
+
+interface ReportLines {
+  readonly stdout: readonly string[]
+  readonly debug: readonly string[]
+}
+
+const EMPTY_REPORT_LINES: ReportLines = { stdout: [], debug: [] }
+
+const testsPerMutant = (metrics: MetricsResult, totalTests: number): string => {
+  const total = metrics.metrics.totalMutants
+  if (total === 0) return '0.00'
+  return (totalTests / total).toFixed(2)
+}
+
+const lineIfPresent = (line: string | undefined): readonly string[] => {
+  if (line === undefined) return []
+  return [line]
+}
+
+const mutantReportSection = (
+  report: schema.MutationTestResult,
   metrics: MetricsResult,
   options: ProvidedStrykerOptions,
-): string | undefined {
-  const shouldDraw = options.clearTextReporter.reportScoreTable &&
-    (!options.clearTextReporter.skipFull ||
-      metrics.childResults.some((x) => x.metrics.mutationScore !== 100))
-  if (!shouldDraw) return undefined
-  return drawMutationScoreTable(metrics, options)
+): ReportLines => {
+  if (!options.clearTextReporter.reportMutants) return EMPTY_REPORT_LINES
+  const blocks = collectMutants(report, options)
+  return {
+    stdout: [
+      '',
+      ...blocks.stdout,
+      `Ran ${testsPerMutant(metrics, blocks.totalTests)} tests per mutant on average.`,
+    ],
+    debug: blocks.debug,
+  }
 }
 
 export function renderClearText(
@@ -226,47 +303,44 @@ export function renderClearText(
   metrics: MetricsResult,
   options: ProvidedStrykerOptions,
 ): { stdout: string[]; debug: string[] } {
-  const stdout: string[] = []
-  const debug: string[] = []
-  stdout.push('')
-  if (options.clearTextReporter.reportMutants) {
-    stdout.push('')
-    const { stdout: s, debug: d, totalTests } = collectMutants(report, options)
-    stdout.push(...s)
-    debug.push(...d)
-    const total = metrics.metrics.totalMutants
-    const avg = (() => {
-      if (total !== 0) {
-        return (totalTests / total).toFixed(2)
-      }
-      return '0.00'
-    })()
-    stdout.push(`Ran ${avg} tests per mutant on average.`)
+  const section = mutantReportSection(report, metrics, options)
+  return {
+    stdout: ['', ...section.stdout, ...lineIfPresent(scoreTable(metrics, options))],
+    debug: [...section.debug],
   }
-  const table = scoreTable(metrics, options)
-  if (table !== undefined) stdout.push(table)
-  return { stdout, debug }
 }
 
-export const makeClearTextReporter: ReporterFactory = (options) => async (events) => {
-  const seen: {
-    terminal?: { readonly report: schema.MutationTestResult; readonly metrics: MetricsResult }
-  } = {}
+interface TerminalReport {
+  readonly report: schema.MutationTestResult
+  readonly metrics: MetricsResult
+}
+
+interface WatchedReports {
+  terminal?: TerminalReport
+}
+
+const rememberTerminalReport = (seen: WatchedReports, event: ReporterEvent): void => {
+  Match.value(event).pipe(
+    Match.tag('mutationTestReportReady', (ready) => {
+      seen.terminal = { report: ready.report, metrics: ready.metrics }
+    }),
+    Match.orElse(() => undefined),
+  )
+}
+
+const lastTerminalReport = async (events: AsyncIterable<ReporterEvent>): Promise<TerminalReport | undefined> => {
+  const seen: WatchedReports = {}
   for await (const event of events) {
-    Match.value(event).pipe(
-      Match.tag('mutationTestReportReady', (ready) => {
-        seen.terminal = { report: ready.report, metrics: ready.metrics }
-      }),
-      Match.orElse(() => undefined),
-    )
+    rememberTerminalReport(seen, event)
   }
-  if (seen.terminal === undefined) {
-    return
-  }
+  return seen.terminal
+}
+
+const decodeClearTextReport = (terminal: TerminalReport): ClearTextReportCommand => {
   const decoded = S.decodeUnknownResult(ClearTextReportCommand)({
     _tag: 'ClearTextReportCommand',
-    report: seen.terminal.report,
-    metrics: seen.terminal.metrics,
+    report: terminal.report,
+    metrics: terminal.metrics,
   })
   if (Result.isFailure(decoded)) {
     throw new ReporterFailed({
@@ -275,13 +349,31 @@ export const makeClearTextReporter: ReporterFactory = (options) => async (events
       cause: errorToString(decoded.failure),
     })
   }
-  const rendered = renderClearText(decoded.success.report, decoded.success.metrics, options)
-  for (const line of rendered.stdout) {
-    process.stdout.write(`${line}\n`)
+  return decoded.success
+}
+
+interface LineSink {
+  write(chunk: string): unknown
+}
+
+const writeLines = (sink: LineSink, lines: readonly string[]): void => {
+  for (const line of lines) {
+    sink.write(`${line}\n`)
   }
+}
+
+const writeRenderedReport = (rendered: ReportLines, options: ProvidedStrykerOptions): void => {
+  writeLines(process.stdout, rendered.stdout)
   if (options.logLevel === 'debug') {
-    for (const line of rendered.debug) {
-      process.stderr.write(`${line}\n`)
-    }
+    writeLines(process.stderr, rendered.debug)
   }
+}
+
+export const makeClearTextReporter: ReporterFactory = (options) => async (events) => {
+  const terminal = await lastTerminalReport(events)
+  if (terminal === undefined) {
+    return
+  }
+  const command = decodeClearTextReport(terminal)
+  writeRenderedReport(renderClearText(command.report, command.metrics, options), options)
 }
