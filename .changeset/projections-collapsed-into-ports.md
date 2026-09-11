@@ -1,6 +1,4 @@
 ---
-"@systemfsoftware/arethetypeswrong-cli": major
-"@systemfsoftware/arethetypeswrong": major
 "@systemfsoftware/effect-gherkin-spec": major
 ---
 
