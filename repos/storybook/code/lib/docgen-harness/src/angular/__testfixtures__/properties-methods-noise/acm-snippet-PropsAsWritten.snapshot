@@ -1,4 +1,0 @@
-<sb-properties-methods-noise
-    [title]="'Paged results'"
-    (densityChange)="densityChange($event)">
-</sb-properties-methods-noise>

@@ -1,3 +1,0 @@
-<template>
-  <DefineSlotsWithProps disabled label="Save" />
-</template>

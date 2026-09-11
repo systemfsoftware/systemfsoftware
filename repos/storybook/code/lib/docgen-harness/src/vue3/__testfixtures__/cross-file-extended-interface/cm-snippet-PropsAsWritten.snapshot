@@ -1,3 +1,0 @@
-<template>
-  <ExtendedInterfaceProps extra :id="7" name="Chained" />
-</template>

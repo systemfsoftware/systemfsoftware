@@ -1,3 +1,0 @@
-<template>
-  <TsEnumProps :level="1" severity="warning" />
-</template>

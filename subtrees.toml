@@ -17,12 +17,6 @@ description = "Typed functional effects, Schema, Layer, and Stream for TypeScrip
 tag_prefix = "effect@4."
 
 [[repos]]
-name = "storybook"
-url = "https://github.com/storybookjs/storybook"
-description = "UI component workshop for developing components in isolation"
-tag_prefix = "v"
-
-[[repos]]
 name = "typia"
 url = "https://github.com/samchon/typia"
 description = "TypeScript transformer for runtime validators and serializers from types"
