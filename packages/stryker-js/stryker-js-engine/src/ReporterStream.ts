@@ -1,11 +1,8 @@
 import * as api from '@opentelemetry/api'
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
-import type {
-  MutationTestMetricsResult,
-  ReporterEvent,
-  ReporterFactory,
-  ReporterInit,
-} from '@systemfsoftware/stryker-js/Reporter'
+import type { MetricsResult } from '@systemfsoftware/stryker-js/Metrics'
+import type * as reportApi from '@systemfsoftware/stryker-js/Report'
+import type { ReporterEvent, ReporterFactory, ReporterInit } from '@systemfsoftware/stryker-js/Reporter'
 import { MutationTestReportReady } from '@systemfsoftware/stryker-js/Reporter'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import type * as Cause from 'effect/Cause'
@@ -18,19 +15,8 @@ import * as Ref from 'effect/Ref'
 import * as S from 'effect/Schema'
 import type * as Scope from 'effect/Scope'
 import * as Stream from 'effect/Stream'
-import type * as reportApi from 'mutation-testing-report-schema/api'
 
 import { ConfigError } from './Config.schema.js'
-
-// ---------------------------------------------------------------------------
-// Transport — one bounded queue per selected reporter (state cells are
-// per-consumer, so a shared queue would couple terminal-event state across
-// reporters). Sized so normal json/html write latency cannot fill it. The run
-// loop offers into an unbounded inbox and never blocks; a forked emitter
-// fiber per reporter pumps the inbox into the bounded queue, so a full queue
-// blocks the forked emitter fiber while the run loop continues, and back
-// pressure on a dead consumer resolves through eager detach (see attach).
-// ---------------------------------------------------------------------------
 
 export const REPORTER_STREAM_QUEUE_BOUND = 256
 
@@ -122,11 +108,6 @@ export const attachReporterFactories = (
       const events = Stream.toAsyncIterable(Stream.fromQueue(queue))
       const iterator = yield* acquireReporterIterator(events)
       const ports: EmitterPorts = { inbox, queue, state }
-      // The state cell flips to 'terminal' only when the consumer's pull
-      // OBSERVES the terminal event — never when the emitter merely enqueues
-      // it — so a consumer rejecting on an earlier event while the bounded
-      // queue is still draining classifies as a detach (exit code untouched),
-      // not as a terminal-phase failure.
       const singleUse: AsyncIterable<ReporterEvent> = {
         [Symbol.asyncIterator]: () => {
           const observe = (result: IteratorResult<ReporterEvent>): IteratorResult<ReporterEvent> => {
@@ -152,9 +133,6 @@ export const attachReporterFactories = (
       }
       const emitter = yield* Effect.forkScoped(pumpEmitter(ports))
       const attachment: ReporterAttachment = { name: input.name, inbox, queue, state, emitter, consumer }
-      // Fulfilment also detaches: a consumer that stops pulling early must not
-      // leave its unbounded inbox accumulating every remaining event for the
-      // rest of the run. The 'terminal' guard keeps normal completion a no-op.
       void consumer.then(
         () => markDetached(ports),
         () => markDetached(ports),
@@ -179,7 +157,7 @@ export const offerReporterEvent = (
 export const offerTerminalReport = (
   stage: Pick<ReporterStage, 'attachments'>,
   report: reportApi.MutationTestResult,
-  metrics: MutationTestMetricsResult,
+  metrics: MetricsResult,
 ): Effect.Effect<void, never> => offerReporterEvent(stage, new MutationTestReportReady({ report, metrics }))
 
 export const terminalDrainClass = (summary: ReporterDrainSummary): ExitClass | null => {

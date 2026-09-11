@@ -150,9 +150,6 @@ catalogs:
     mutation-testing-metrics:
       specifier: 3.7.3
       version: 3.7.3
-    mutation-testing-report-schema:
-      specifier: 3.7.3
-      version: 3.7.3
 
 overrides:
   fast-check: ^4
@@ -2131,9 +2128,6 @@ importers:
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
-      mutation-testing-report-schema:
-        specifier: catalog:stryker
-        version: 3.7.3
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -2247,9 +2241,6 @@ importers:
       '@vitest/coverage-v8':
         specifier: 'catalog:'
         version: 4.1.9(vitest@4.1.10)
-      mutation-testing-report-schema:
-        specifier: catalog:stryker
-        version: 3.7.3
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)
@@ -2292,12 +2283,6 @@ importers:
       minimatch:
         specifier: ~10.2.4
         version: 10.2.5
-      mutation-testing-metrics:
-        specifier: catalog:stryker
-        version: 3.7.3
-      mutation-testing-report-schema:
-        specifier: catalog:stryker
-        version: 3.7.3
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -2357,12 +2342,6 @@ importers:
         specifier: workspace:^
         version: link:../stryker-js
       mutation-testing-elements:
-        specifier: catalog:stryker
-        version: 3.7.3
-      mutation-testing-metrics:
-        specifier: catalog:stryker
-        version: 3.7.3
-      mutation-testing-report-schema:
         specifier: catalog:stryker
         version: 3.7.3
     devDependencies:

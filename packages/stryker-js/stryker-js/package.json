@@ -27,8 +27,7 @@
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^",
-    "effect": "catalog:",
-    "mutation-testing-report-schema": "catalog:stryker"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
@@ -55,11 +54,13 @@
       "./Evaluator": "./dist/Evaluator.mjs",
       "./ExitClass": "./dist/ExitClass.mjs",
       "./Ignorer": "./dist/Ignorer.mjs",
+      "./Metrics": "./dist/Metrics.mjs",
       "./Module": "./dist/Module.mjs",
       "./Mutant": "./dist/Mutant.mjs",
       "./output-file": "./dist/output-file.mjs",
       "./Plugin": "./dist/Plugin.mjs",
       "./provided-options": "./dist/provided-options.mjs",
+      "./Report": "./dist/Report.mjs",
       "./Reporter": "./dist/Reporter.mjs",
       "./ReporterEvent": "./dist/ReporterEvent.mjs",
       "./Run": "./dist/Run.mjs",
@@ -89,6 +90,10 @@
       "@systemfsoftware/source": "./src/Ignorer.ts",
       "default": "./dist/Ignorer.mjs"
     },
+    "./Metrics": {
+      "@systemfsoftware/source": "./src/Metrics.ts",
+      "default": "./dist/Metrics.mjs"
+    },
     "./Module": {
       "@systemfsoftware/source": "./src/Module.ts",
       "default": "./dist/Module.mjs"
@@ -108,6 +113,10 @@
     "./provided-options": {
       "@systemfsoftware/source": "./src/provided-options.ts",
       "default": "./dist/provided-options.mjs"
+    },
+    "./Report": {
+      "@systemfsoftware/source": "./src/Report.schema.ts",
+      "default": "./dist/Report.mjs"
     },
     "./Reporter": {
       "@systemfsoftware/source": "./src/Reporter.ts",

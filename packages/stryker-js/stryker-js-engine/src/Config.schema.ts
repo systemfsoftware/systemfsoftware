@@ -1,6 +1,3 @@
-/**
- * Config — schema declarations for the Config capability.
- */
 import { Wire } from '@systemfsoftware/effect-cell-types'
 import * as S from 'effect/Schema'
 
@@ -12,9 +9,6 @@ export const ImportedModuleSchema = S.Struct({
   default: S.optional(S.Unknown),
 })
 
-/**
- * The config file the run was explicitly told to use does not exist.
- */
 export class ConfigFileNotFoundError extends S.TaggedError<ConfigFileNotFoundError>()(
   'ConfigFileNotFoundError',
   {
@@ -24,10 +18,6 @@ export class ConfigFileNotFoundError extends S.TaggedError<ConfigFileNotFoundErr
   readonly exitClass = 'ConfigError' as const
 }
 
-/**
- * The file is present and cannot be read or imported — permissions, a
- * directory where a file was expected, a syntax error in a JavaScript config.
- */
 export class ConfigFileUnreadableError extends S.TaggedError<ConfigFileUnreadableError>()(
   'ConfigFileUnreadableError',
   {
@@ -38,7 +28,6 @@ export class ConfigFileUnreadableError extends S.TaggedError<ConfigFileUnreadabl
   readonly exitClass = 'ConfigError' as const
 }
 
-/** The file was read and its contents are not a valid configuration. */
 export class ConfigFileInvalidError extends S.TaggedError<ConfigFileInvalidError>()(
   'ConfigFileInvalidError',
   {
@@ -56,7 +45,7 @@ export class ConfigError extends S.TaggedError<ConfigError>()('ConfigError', {
 }
 
 export class ReadConfigCommand extends S.TaggedClass<ReadConfigCommand>()('ReadConfigCommand', {
-  cliOptions: Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown))), // plugin sections are foreign by design
+  cliOptions: Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown))),
   basePath: S.String,
 }) {}
 
@@ -86,11 +75,6 @@ export const extendsPropertySchema = S.optionalKey(
   ),
 )
 
-/**
- * Config-file names the rebuild removed, mapped to their remediation.
- * Kept private to this schema module — Config.ts owns the exported copy
- * that the validation layer reads; this copy only filters the schema fields.
- */
 const REMOVED_OPTIONS: Record<string, string> = {
   'dots': 'the "dots" reporter was removed; use "clear-text" instead',
   'event-recorder':
@@ -101,10 +85,6 @@ const REMOVED_OPTIONS: Record<string, string> = {
   'eventReporter': 'the event-recorder reporter was removed; remove this option',
 }
 
-/**
- * The option document schema, composed from the single `StrykerOptionsSchema` the plugin-api declares.
- * Removed options are dropped so their defaults do not leak into resolved options.
- */
 export const forkOptionsSchema = S.StructWithRest(
   S.Struct({
     ...Object.fromEntries(
@@ -115,5 +95,5 @@ export const forkOptionsSchema = S.StructWithRest(
     survivorsPriorReport,
     extends: extendsPropertySchema,
   }),
-  [Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown)))], // plugin sections are foreign by design
+  [Wire.mint(S.Record(Wire.mint(S.String), Wire.mint(S.Unknown)))],
 )

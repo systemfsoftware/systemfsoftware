@@ -1,4 +1,6 @@
 import { type CheckResult, type CheckStatus, type PassedCheckResult } from '@systemfsoftware/stryker-js/Checker'
+import { calculateMetrics } from '@systemfsoftware/stryker-js/Metrics'
+import type { MetricsResult } from '@systemfsoftware/stryker-js/Metrics'
 import type {
   Location,
   MutantResult,
@@ -8,17 +10,13 @@ import type {
 } from '@systemfsoftware/stryker-js/Mutant'
 import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
 import type { AnyPluginContribution, PluginKind } from '@systemfsoftware/stryker-js/Plugin'
-import type {
-  Metrics,
-  MetricsResult,
-  MutationTestMetricsResult,
-  ReporterFactory,
-  RunTiming,
-} from '@systemfsoftware/stryker-js/Reporter'
+import type * as schema from '@systemfsoftware/stryker-js/Report'
+import type { OpenEndLocation } from '@systemfsoftware/stryker-js/Report'
+import type { ReporterFactory, RunTiming } from '@systemfsoftware/stryker-js/Reporter'
 import { ReporterFailed } from '@systemfsoftware/stryker-js/Reporter'
 import { RunEvents, VerdictReached } from '@systemfsoftware/stryker-js/Run'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
-import type { MutantRunResult, TestResult } from '@systemfsoftware/stryker-js/TestRunner'
+import type { MutantRunResult } from '@systemfsoftware/stryker-js/TestRunner'
 import type { TestRunnerCapabilities } from '@systemfsoftware/stryker-js/TestRunner'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
@@ -33,9 +31,6 @@ import * as Predicate from 'effect/Predicate'
 import * as Queue from 'effect/Queue'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
-import { calculateMutationTestMetrics } from 'mutation-testing-metrics'
-import type * as schema from 'mutation-testing-report-schema/api'
-import type { OpenEndLocation } from 'mutation-testing-report-schema/api'
 
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import { highestExitClass, verdictExitClass } from '@systemfsoftware/stryker-js/ExitClass'
@@ -43,6 +38,7 @@ import type { TestCoverage } from './Mutants.js'
 import type { ResolvedMode } from './output-mode.js'
 import type { Project } from './Project.js'
 import { FILE_CONCURRENCY, readOriginal } from './Project.js'
+import { assembleFileResults, assembleTestFiles, testIdRemap } from './report-assembly.js'
 import { ansi } from './Reporter.ansi.js'
 import { ClearTextReportCommand } from './Reporter.schema.js'
 import type { ReporterStage } from './ReporterStream.js'
@@ -251,7 +247,7 @@ type MutationScoreThresholds = ProvidedStrykerOptions['thresholds']
 const FILES_ROOT_NAME = 'All files'
 
 type TableCellValueFactory = (
-  row: MetricsResult<Metrics>,
+  row: MetricsResult,
   ancestorCount: number,
 ) => string
 
@@ -279,7 +275,7 @@ const maxOf = (values: readonly number[]): number =>
   }, Number.NEGATIVE_INFINITY)
 
 const determineContentWidth = (
-  row: MetricsResult<Metrics>,
+  row: MetricsResult,
   valueFactory: TableCellValueFactory,
   ancestorCount = 0,
 ): number => {
@@ -300,7 +296,7 @@ export type Column =
     readonly isFirstColumn: boolean
     readonly netWidth: number
     readonly valueFactory: TableCellValueFactory
-    readonly rows: MetricsResult<Metrics>
+    readonly rows: MetricsResult
   }
   | {
     readonly kind: 'file'
@@ -308,7 +304,7 @@ export type Column =
     readonly isFirstColumn: true
     readonly netWidth: number
     readonly valueFactory: TableCellValueFactory
-    readonly rows: MetricsResult<Metrics>
+    readonly rows: MetricsResult
   }
   | {
     readonly kind: 'mutationScore'
@@ -316,7 +312,7 @@ export type Column =
     readonly isFirstColumn: false
     readonly netWidth: number
     readonly valueFactory: TableCellValueFactory
-    readonly rows: MetricsResult<Metrics>
+    readonly rows: MetricsResult
     readonly thresholds: MutationScoreThresholds
     readonly scoreType: 'total' | 'covered'
     readonly allowColor: boolean
@@ -350,7 +346,7 @@ const drawLine = (column: Column): string => repeat('-', columnWidth(column))
 
 const drawHeader = (column: Column): string => padColumn(column, column.header)
 
-const colorFor = (column: Column, score: MetricsResult<Metrics>): (input: string) => string => {
+const colorFor = (column: Column, score: MetricsResult): (input: string) => string => {
   if (column.kind === 'mutationScore') {
     const scoreToUse = (() => {
       if (column.scoreType === 'total') {
@@ -369,7 +365,7 @@ const colorFor = (column: Column, score: MetricsResult<Metrics>): (input: string
 
 const drawTableCell = (
   column: Column,
-  score: MetricsResult<Metrics>,
+  score: MetricsResult,
   ancestorCount: number,
 ): string => {
   switch (column.kind) {
@@ -399,7 +395,7 @@ const makeSingleColumn = (
   header: string,
   isFirstColumn: boolean,
   valueFactory: TableCellValueFactory,
-  rows: MetricsResult<Metrics>,
+  rows: MetricsResult,
 ): Column => {
   const maxContentSize = determineContentWidth(rows, valueFactory)
   const headerWidth = stringWidth(header)
@@ -420,7 +416,7 @@ const makeSingleColumn = (
   }
 }
 
-const makeFileColumn = (rows: MetricsResult<Metrics>): Column => {
+const makeFileColumn = (rows: MetricsResult): Column => {
   const valueFactory: TableCellValueFactory = (row, ancestorCount) => {
     if (ancestorCount === 0) {
       return spaces(ancestorCount) + FILES_ROOT_NAME
@@ -447,7 +443,7 @@ const makeFileColumn = (rows: MetricsResult<Metrics>): Column => {
 }
 
 const makeMutationScoreColumn = (
-  rows: MetricsResult<Metrics>,
+  rows: MetricsResult,
   thresholds: MutationScoreThresholds,
   scoreType: 'total' | 'covered',
   allowColor: boolean,
@@ -524,7 +520,7 @@ const makeGroupColumn = (groupName: string, ...columns: readonly Column[]): Colu
 }
 
 const createColumns = (
-  metricsResult: MetricsResult<Metrics>,
+  metricsResult: MetricsResult,
   options: ProvidedStrykerOptions,
 ): readonly Column[] => {
   const allowColor = options.clearTextReporter.allowColor
@@ -599,9 +595,9 @@ const drawColumnHeader = (columns: readonly Column[]): string => drawRow(columns
 
 const drawTableBody = (
   columns: readonly Column[],
-  metricsResult: MetricsResult<Metrics>,
+  metricsResult: MetricsResult,
   options: ProvidedStrykerOptions,
-  current: MetricsResult<Metrics> = metricsResult,
+  current: MetricsResult = metricsResult,
   ancestorCount = 0,
 ): readonly string[] => {
   const rows: string[] = []
@@ -617,7 +613,7 @@ const drawTableBody = (
 const EOL = '\n'
 
 const drawClearTextScoreTable = (
-  metricsResult: MetricsResult<Metrics>,
+  metricsResult: MetricsResult,
   options: ProvidedStrykerOptions,
 ): string => {
   const columns = createColumns(metricsResult, options)
@@ -798,19 +794,19 @@ function collectMutants(
 }
 
 function scoreTable(
-  metrics: MutationTestMetricsResult,
+  metrics: MetricsResult,
   options: ProvidedStrykerOptions,
 ): string | undefined {
   const shouldDraw = options.clearTextReporter.reportScoreTable &&
     (!options.clearTextReporter.skipFull ||
-      metrics.systemUnderTestMetrics.childResults.some((x) => x.metrics.mutationScore !== 100))
+      metrics.childResults.some((x) => x.metrics.mutationScore !== 100))
   if (!shouldDraw) return undefined
-  return drawClearTextScoreTable(metrics.systemUnderTestMetrics, options)
+  return drawClearTextScoreTable(metrics, options)
 }
 
 export function renderClearText(
   report: schema.MutationTestResult,
-  metrics: MutationTestMetricsResult,
+  metrics: MetricsResult,
   options: ProvidedStrykerOptions,
 ): { stdout: string[]; debug: string[] } {
   const stdout: string[] = []
@@ -821,7 +817,7 @@ export function renderClearText(
     const { stdout: s, debug: d, totalTests } = collectMutants(report, options)
     stdout.push(...s)
     debug.push(...d)
-    const total = metrics.systemUnderTestMetrics.metrics.totalMutants
+    const total = metrics.metrics.totalMutants
     const avg = (() => {
       if (total !== 0) {
         return (totalTests / total).toFixed(2)
@@ -837,7 +833,7 @@ export function renderClearText(
 
 export const makeClearTextReporter: ReporterFactory = (options) => async (events) => {
   const seen: {
-    terminal?: { readonly report: schema.MutationTestResult; readonly metrics: MutationTestMetricsResult }
+    terminal?: { readonly report: schema.MutationTestResult; readonly metrics: MetricsResult }
   } = {}
   for await (const event of events) {
     Match.value(event).pipe(
@@ -878,9 +874,6 @@ export interface JsonReporterDeps {
   readonly path: Path.Path
 }
 
-// The json built-in closes over the host's FileSystem/Path services bound
-// once at the composition root; the ReporterFactory contract itself carries
-// no services and stays effect-free.
 export const makeJsonReporter = (services: JsonReporterDeps): ReporterFactory => (options) => async (events) => {
   const seen: { report?: schema.MutationTestResult } = {}
   for await (const event of events) {
@@ -1024,8 +1017,6 @@ export const makeProgressBarReporter: ReporterFactory = () => async (events) => 
 }
 
 export const makeProgressStreamReporter: ReporterFactory = () => async (events) => {
-  // The in-process progress stream has no subscribed sink; the machine-mode
-  // progress stream is the CLI RunEvent stream (KTD5). Drain only.
   for await (const drained of events) {
     void drained
   }
@@ -1303,188 +1294,91 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
     return Effect.succeed(mapped)
   }
 
-  const toTestDefinition = (test: TestResult, remapTestId: (id: string) => string): schema.TestDefinition => {
-    const base: schema.TestDefinition = {
-      id: remapTestId(test.id),
-      name: test.name,
-    }
-    if (test.startPosition !== undefined) {
-      return {
-        ...base,
-        location: { start: toSchemaPosition(test.startPosition) },
+  const uniqueNames = (names: readonly (string | undefined)[]): readonly string[] => {
+    const seen = new Set<string>()
+    const kept: string[] = []
+    for (const name of names) {
+      if (name === undefined || seen.has(name)) {
+        continue
       }
+      seen.add(name)
+      kept.push(name)
     }
-    return base
+    return kept
   }
 
-  const toMutantResult = (
-    mutantResult: MutantResult,
-    remapTestIds: (ids: readonly string[] | undefined) => readonly string[] | undefined,
-  ): schema.MutantResult => {
-    const remappedKilledBy = remapTestIds(mutantResult.killedBy)
-    const remappedCoveredBy = remapTestIds(mutantResult.coveredBy)
-    const result: schema.MutantResult = {
-      id: mutantResult.id,
-      mutatorName: mutantResult.mutatorName,
-      replacement: mutantResult.replacement,
-      status: mutantResult.status,
-      location: mutantResult.location,
-    }
-    if (mutantResult.statusReason !== undefined) {
-      result.statusReason = mutantResult.statusReason
-    }
-    if (mutantResult.testsCompleted !== undefined) {
-      result.testsCompleted = mutantResult.testsCompleted
-    }
-    if (mutantResult.description !== undefined) {
-      result.description = mutantResult.description
-    }
-    if (mutantResult.static !== undefined) {
-      result.static = mutantResult.static
-    }
-    if (remappedKilledBy !== undefined) {
-      result.killedBy = [...remappedKilledBy]
-    }
-    if (remappedCoveredBy !== undefined) {
-      result.coveredBy = [...remappedCoveredBy]
-    }
-    return result
-  }
-
-  const toFileResult = (
-    fileName: string,
-  ): Effect.Effect<schema.FileResult, unknown, FileSystem.FileSystem | Path.Path> =>
+  const readMutatedSources = (fileNames: readonly string[]) =>
     Effect.gen(function*() {
       const pathService = yield* Path.Path
-      const fileResult: schema.FileResult = {
-        language: determineLanguage(fileName, pathService),
-        mutants: [],
-        source: '',
-      }
-      const sourceOpt = MutableHashMap.get(input.project.files, fileName)
-      if (Option.isSome(sourceOpt)) {
-        fileResult.source = yield* readOriginal(sourceOpt.value)
-      } else {
-        yield* Effect.logWarning(
-          `File "${fileName}" not found in input files, but did receive mutant result for it. This shouldn't happen`,
-        )
-      }
-      return fileResult
-    })
-
-  const toTestFile = (
-    fileName: string | undefined,
-  ): Effect.Effect<schema.TestFile, unknown, FileSystem.FileSystem> =>
-    Effect.gen(function*() {
-      const testFile: schema.TestFile = { tests: [] }
-      if (fileName !== undefined && fileName !== '') {
-        const fileOpt = MutableHashMap.get(input.project.files, fileName)
-        if (Option.isSome(fileOpt)) {
-          testFile.source = yield* readOriginal(fileOpt.value)
-        } else {
-          yield* Effect.logWarning(
-            `Test file "${fileName}" not found in input files, but did receive test result for it. This shouldn't happen.`,
-          )
-        }
-      }
-      return testFile
-    })
-
-  const toFileResults = (
-    results: readonly MutantResult[],
-    remapTestIds: (ids: readonly string[] | undefined) => readonly string[] | undefined,
-  ): Effect.Effect<schema.FileResultDictionary, unknown, FileSystem.FileSystem | Path.Path> =>
-    Effect.gen(function*() {
-      const pathService = yield* Path.Path
-      const uniqueFileNames = results
-        .map(({ fileName }) => fileName)
-        .filter((value, index, array) => array.indexOf(value) === index)
       const entries = yield* Effect.forEach(
-        uniqueFileNames,
-        (fileName) => toFileResult(fileName).pipe(Effect.map((result) => [fileName, result] as const)),
-        { concurrency: FILE_CONCURRENCY },
-      )
-      const fileResultsByName: Record<string, schema.FileResult> = Object.fromEntries(entries)
-
-      return results.reduce<schema.FileResultDictionary>((acc, mutantResult) => {
-        const reportFileName = normalizeReportFileName(input.basePath, mutantResult.fileName, pathService)
-        let fileResult = acc[reportFileName]
-        if (fileResult === undefined) {
-          const prepared = fileResultsByName[mutantResult.fileName]
-          if (prepared === undefined) {
-            return acc
-          }
-          acc[reportFileName] = prepared
-          fileResult = prepared
-        }
-        fileResult.mutants.push(toMutantResult(mutantResult, remapTestIds))
-        return acc
-      }, {})
-    })
-
-  const toTestFiles = (
-    remapTestId: (id: string) => string,
-  ): Effect.Effect<schema.TestFileDefinitionDictionary, unknown, FileSystem.FileSystem | Path.Path> =>
-    Effect.gen(function*() {
-      const pathService = yield* Path.Path
-      const uniqueTestFileNames = [...MutableHashMap.values(input.testCoverage.testsById)]
-        .map(({ fileName }) => fileName)
-        .filter((value, index, array) => array.indexOf(value) === index)
-        .filter((value): value is string => value !== undefined)
-      const mapped = uniqueTestFileNames.map((fileName) =>
-        normalizeReportFileName(input.basePath, fileName, pathService)
-      )
-      const entries = yield* Effect.forEach(
-        uniqueTestFileNames,
-        (fileName, index) => toTestFile(fileName).pipe(Effect.map((file) => [mapped[index] ?? '', file] as const)),
-        { concurrency: FILE_CONCURRENCY },
-      )
-      const testFilesByName: Record<string, schema.TestFile> = Object.fromEntries(entries)
-
-      return [...MutableHashMap.values(input.testCoverage.testsById)].reduce<schema.TestFileDefinitionDictionary>(
-        (acc, testResult) => {
-          const test = toTestDefinition(testResult, remapTestId)
-          const reportFileName = normalizeReportFileName(input.basePath, testResult.fileName, pathService)
-          let testFile = acc[reportFileName]
-          if (testFile === undefined) {
-            const prepared = testFilesByName[reportFileName]
-            if (prepared === undefined) {
-              return acc
+        fileNames,
+        (fileName) =>
+          Effect.gen(function*() {
+            const language = determineLanguage(fileName, pathService)
+            const file = MutableHashMap.get(input.project.files, fileName)
+            if (Option.isNone(file)) {
+              yield* Effect.logWarning(
+                `File "${fileName}" not found in input files, but did receive mutant result for it. This shouldn't happen`,
+              )
+              const empty: schema.FileResult = { language, mutants: [], source: '' }
+              return [fileName, empty] as const
             }
-            acc[reportFileName] = prepared
-            testFile = prepared
-          }
-          testFile.tests.push(test)
-          return acc
-        },
-        {},
+            const read: schema.FileResult = { language, mutants: [], source: yield* readOriginal(file.value) }
+            return [fileName, read] as const
+          }),
+        { concurrency: FILE_CONCURRENCY },
       )
+      return HashMap.fromIterable(entries)
     })
 
-  const remappers = (() => {
-    const testIdMap: Record<string, string> = Object.fromEntries(
-      [...MutableHashMap.values(input.testCoverage.testsById)].map((test, index) => {
-        const pair: readonly [string, string] = [test.id, index.toString()]
-        return pair
-      }),
-    )
-    const remapTestId = (id: string): string => testIdMap[id] ?? id
-    const remapTestIds = (ids: readonly string[] | undefined): readonly string[] | undefined => {
-      if (ids === undefined) {
-        return undefined
+  const readTestSources = (fileNames: readonly string[]) =>
+    Effect.gen(function*() {
+      const entries = yield* Effect.forEach(
+        fileNames,
+        (fileName) =>
+          Effect.gen(function*() {
+            const file = MutableHashMap.get(input.project.files, fileName)
+            if (Option.isNone(file)) {
+              yield* Effect.logWarning(
+                `Test file "${fileName}" not found in input files, but did receive test result for it. This shouldn't happen.`,
+              )
+              const empty: schema.TestFile = { tests: [] }
+              return [fileName, empty] as const
+            }
+            const read: schema.TestFile = { tests: [], source: yield* readOriginal(file.value) }
+            return [fileName, read] as const
+          }),
+        { concurrency: FILE_CONCURRENCY },
+      )
+      return HashMap.fromIterable(entries)
+    })
+
+  const assembleReport = (results: readonly MutantResult[]) =>
+    Effect.gen(function*() {
+      const pathService = yield* Path.Path
+      const tests = [...MutableHashMap.values(input.testCoverage.testsById)]
+      const remap = testIdRemap(tests.map((test) => test.id))
+      const mutatedFileNames = uniqueNames(results.map((result) => result.fileName))
+      const testFileNames = uniqueNames(tests.map((test) => test.fileName))
+      const sources = yield* readMutatedSources(mutatedFileNames)
+      const testSources = yield* readTestSources(testFileNames)
+      const reportNames = HashMap.fromIterable(
+        [...mutatedFileNames, ...testFileNames].map(
+          (fileName) => [fileName, normalizeReportFileName(input.basePath, fileName, pathService)] as const,
+        ),
+      )
+      return {
+        files: assembleFileResults({ sources, reportNames, mutants: results, remap }),
+        testFiles: assembleTestFiles({ testSources, reportNames, tests, remap }),
       }
-      return ids.map(remapTestId)
-    }
-    return { remapTestId, remapTestIds }
-  })()
+    })
 
   const mutationTestReport = (
     results: readonly MutantResult[],
   ): Effect.Effect<schema.MutationTestResult, unknown, FileSystem.FileSystem | Path.Path> =>
     Effect.gen(function*() {
-      const files = yield* toFileResults(results, remappers.remapTestIds)
-      const testFiles = yield* toTestFiles(remappers.remapTestId)
-
+      const { files, testFiles } = yield* assembleReport(results)
+      const dependencies = yield* discoverDependencies()
       return {
         files,
         schemaVersion: '1.0',
@@ -1492,10 +1386,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
         testFiles,
         projectRoot: input.basePath,
         config: input.options,
-        framework: {
-          ...STRYKER_FRAMEWORK,
-          dependencies: yield* discoverDependencies(),
-        },
+        framework: { ...STRYKER_FRAMEWORK, dependencies },
       }
     })
 
@@ -1552,20 +1443,20 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
           Effect.map(readManifestVersion(fs, pathService, specifier), (version) => [specifier, version] as const),
         { concurrency: FILE_CONCURRENCY },
       )
-      const found: schema.Dependencies = {}
+      const found: Array<readonly [string, string]> = []
       for (const [specifier, version] of pairs) {
         if (Option.isSome(version)) {
-          found[specifier] = version.value
+          found.push([specifier, version.value] as const)
         }
       }
-      return found
+      return Object.fromEntries(found)
     })
 
   const determineExitCode = (
-    metrics: MutationTestMetricsResult,
+    metrics: MetricsResult,
   ): Effect.Effect<ExitClass | null> =>
     Effect.gen(function*() {
-      const { mutationScore } = metrics.systemUnderTestMetrics.metrics
+      const { mutationScore } = metrics.metrics
       const breaking = input.options.thresholds.break
       const formattedScore = mutationScore.toFixed(2)
 
@@ -1628,7 +1519,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
     Effect.gen(function*() {
       const pathService = yield* Path.Path
       const report = yield* mutationTestReport(results)
-      const metrics = calculateMutationTestMetrics(report)
+      const metrics = calculateMetrics(report.files)
       yield* offerTerminalReport(input.reporterStage, report, metrics)
       const terminalDrain = terminalDrainClass(yield* closeReporterStage(input.reporterStage))
       const verdict = yield* determineExitCode(metrics)
@@ -1658,8 +1549,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
 
   const slimIncrementalReport = (results: readonly MutantResult[]) =>
     Effect.gen(function*() {
-      const files = yield* toFileResults(results, remappers.remapTestIds)
-      const testFiles = yield* toTestFiles(remappers.remapTestId)
+      const { files, testFiles } = yield* assembleReport(results)
       return {
         schemaVersion: '1.0',
         thresholds: input.options.thresholds,

@@ -192,7 +192,7 @@ export type MutantEarlyResultPlan = EarlyResultPlan
 
 export type MutantTestPlan = TestPlan
 
-export * as schema from 'mutation-testing-report-schema/api'
+export * as schema from './Report.schema.js'
 
 const stringField = (value: object, key: string): string | undefined => {
   if (!(key in value)) {

@@ -1,11 +1,3 @@
-/**
- * The process exit code contract (R6): the final code is decided once, at
- * teardown, by the precedence `signal > 4 > 3 > 2 > 1 > 0`. Verdict gates
- * record pending classes and teardown resolves them — a terminating signal
- * wins over every pending class and maps to the POSIX `128 + n` convention;
- * otherwise the highest pending class wins; nothing pending and no signal
- * is 0.
- */
 import { expect } from 'vitest'
 
 import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'

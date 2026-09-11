@@ -9,6 +9,8 @@ export default defineConfig({
     TestRunner: './src/TestRunner.ts',
     Reporter: './src/Reporter.ts',
     ReporterEvent: './src/ReporterEvent.schema.ts',
+    Report: './src/Report.schema.ts',
+    Metrics: './src/Metrics.ts',
     Ignorer: './src/Ignorer.ts',
     Schema: './src/Schema.ts',
     Run: './src/Run.ts',

@@ -8,9 +8,12 @@ import type { ReporterFactory } from './ReporterEvent.schema.js'
 export const PluginKind = S.Literals(['Checker', 'TestRunner', 'Reporter', 'Ignore', 'Evaluator'])
 export type PluginKind = typeof PluginKind.Type
 
-export class PluginLayerContribution<K extends Exclude<PluginKind, 'Reporter'> = Exclude<PluginKind, 'Reporter'>>
-  extends S.TaggedClass<PluginLayerContribution<Exclude<PluginKind, 'Reporter'>>>()('PluginContribution', {
-    kind: PluginKind,
+export const PluginLayerKind = S.Literals(['Checker', 'TestRunner', 'Ignore', 'Evaluator'])
+export type PluginLayerKind = typeof PluginLayerKind.Type
+
+export class PluginLayerContribution<K extends PluginLayerKind = PluginLayerKind>
+  extends S.TaggedClass<PluginLayerContribution<PluginLayerKind>>()('PluginContribution', {
+    kind: PluginLayerKind,
     name: S.String,
     layer: S.Unknown,
   })
@@ -31,7 +34,7 @@ export class PluginReporterContribution extends S.TaggedClass<PluginReporterCont
 }
 
 export type PluginContribution<K extends PluginKind = PluginKind> = K extends 'Reporter' ? PluginReporterContribution
-  : PluginLayerContribution<Extract<K, Exclude<PluginKind, 'Reporter'>>>
+  : PluginLayerContribution<Extract<K, PluginLayerKind>>
 
 export class Shadowing extends S.TaggedClass<Shadowing>()('Shadowing', {
   kind: S.String,

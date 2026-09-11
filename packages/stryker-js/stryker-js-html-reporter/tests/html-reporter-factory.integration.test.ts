@@ -1,30 +1,22 @@
-/**
- * Output pin for the html pull-stream reporter (U3).
- *
- * A streamed run's four events drive the factory consumer; the written
- * document must embed the terminal report payload, must be a pure function
- * of that payload (same event -> same bytes), and must carry no
- * host-provided paths. The element bundle must come from this package's own
- * install: a decoy bundle planted next to the output must not leak in.
- */
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { makeHtmlReporter } from '@systemfsoftware/stryker-js-html-reporter'
+import type { MetricsResult } from '@systemfsoftware/stryker-js/Metrics'
+import type * as reportApi from '@systemfsoftware/stryker-js/Report'
 import {
   DryRunCompleted,
   MutantTested,
   MutationTestingPlanReady,
   MutationTestReportReady,
 } from '@systemfsoftware/stryker-js/ReporterEvent'
-import type { MutationTestMetricsResult, ReporterEvent } from '@systemfsoftware/stryker-js/ReporterEvent'
+import type { ReporterEvent } from '@systemfsoftware/stryker-js/ReporterEvent'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
 import * as S from 'effect/Schema'
-import type * as reportApi from 'mutation-testing-report-schema/api'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
@@ -85,8 +77,6 @@ const removeDir = (dir: string): Promise<void> =>
     }),
   )
 
-// Test/fixture exception to no-sync-schema-codecs: throwing IS the assertion
-// for a hand-built options document with schema defaults filled in.
 const optionsWith = (fileName: string) => S.decodeUnknownSync(StrykerOptionsSchema)({ htmlReporter: { fileName } })
 
 const reportFixture = (): reportApi.MutationTestResult => ({
@@ -108,35 +98,32 @@ const reportFixture = (): reportApi.MutationTestResult => ({
   thresholds: { high: 80, low: 60 },
 })
 
-const metricsFixture = (): MutationTestMetricsResult => ({
-  systemUnderTestMetrics: {
-    name: 'root',
-    metrics: {
-      pending: 0,
-      killed: 1,
-      timeout: 0,
-      survived: 0,
-      noCoverage: 0,
-      runtimeErrors: 0,
-      compileErrors: 0,
-      ignored: 0,
-      totalDetected: 1,
-      totalUndetected: 0,
-      totalInvalid: 0,
-      totalValid: 1,
-      totalMutants: 1,
-      totalCovered: 1,
-      mutationScore: 100,
-      mutationScoreBasedOnCoveredCode: 100,
-    },
-    childResults: [],
+const metricsFixture = (): MetricsResult => ({
+  name: 'All files',
+  metrics: {
+    pending: 0,
+    killed: 1,
+    timeout: 0,
+    survived: 0,
+    noCoverage: 0,
+    runtimeErrors: 0,
+    compileErrors: 0,
+    ignored: 0,
+    totalDetected: 1,
+    totalUndetected: 0,
+    totalInvalid: 0,
+    totalValid: 1,
+    totalMutants: 1,
+    totalCovered: 1,
+    mutationScore: 100,
+    mutationScoreBasedOnCoveredCode: 100,
   },
-  testMetrics: undefined,
+  childResults: [],
 })
 
 const runEvents = (
   report: reportApi.MutationTestResult,
-  metrics: MutationTestMetricsResult,
+  metrics: MetricsResult,
 ): readonly ReporterEvent[] => [
   new DryRunCompleted({
     timing: { net: 1, overhead: 0 },
@@ -167,16 +154,16 @@ async function* toStream(events: readonly ReporterEvent[]): AsyncGenerator<Repor
 
 Feature('Writing the html mutation report').body(({ scenario }) => {
   scenario(
-    'A completed run writes the terminal report from the package bundle',
+    'A completed run writes a self-contained report',
     Gherkin.Do.pipe(
-      Given('an output directory with a decoy bundle next to it')('output', () =>
+      Given('an output directory beside an unrelated bundle file')('output', () =>
         Effect.promise(async () => {
           const dir = await makeTempDir('html-factory-pin-')
           const fileName = await joinPath(dir, 'index.html')
           await writeText(await joinPath(dir, 'mutation-test-elements.js'), 'DECOY-BUNDLE')
           return { dir, fileName }
         })),
-      When('the factory consumes a completed run')('html', (s) =>
+      When('the reporter consumes a completed run')('html', (s) =>
         Effect.promise(async () => {
           try {
             const consume = makeHtmlReporter(optionsWith(s.output.fileName), {})
@@ -186,11 +173,11 @@ Feature('Writing the html mutation report').body(({ scenario }) => {
             await removeDir(s.output.dir)
           }
         })),
-      Then('the written document embeds the terminal report')((s) => {
+      Then('the written document embeds the run result')((s) => {
         expect(s.html).toContain(MARKER)
         expect(s.html).toContain('mutation-test-report-app')
       }),
-      Then('the document carries the package bundle, never the decoy or a host path')((s) => {
+      Then('the document carries its own bundle, not the neighbouring file or a host path')((s) => {
         expect(s.html).not.toContain('DECOY-BUNDLE')
         expect(s.html).not.toContain(s.output.dir)
       }),
@@ -198,14 +185,14 @@ Feature('Writing the html mutation report').body(({ scenario }) => {
   )
 
   scenario(
-    'The same terminal payload writes byte-identical documents',
+    'The same run writes the same document twice',
     Gherkin.Do.pipe(
-      Given('a completed run payload')('run', () =>
+      Given('a completed run')('run', () =>
         Effect.succeed({
           report: reportFixture(),
           metrics: metricsFixture(),
         })),
-      When('the factory consumes the payload into two outputs')('documents', (s) =>
+      When('the reporter writes the same run into two directories')('documents', (s) =>
         Effect.promise(async () => {
           const dirA = await makeTempDir('html-purity-a-')
           const dirB = await makeTempDir('html-purity-b-')
@@ -221,10 +208,10 @@ Feature('Writing the html mutation report').body(({ scenario }) => {
             await removeDir(dirB)
           }
         })),
-      Then('the first output exists')((s) => {
+      Then('a report is written')((s) => {
         expect(s.documents.existed).toBe(true)
       }),
-      Then('both documents are byte-identical')((s) => {
+      Then('both documents are identical')((s) => {
         expect(s.documents.a).toBe(s.documents.b)
       }),
     ),

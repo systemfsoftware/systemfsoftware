@@ -13,6 +13,7 @@ import {
   type PluginContribution,
   PluginKind,
   PluginLayerContribution,
+  type PluginLayerKind,
   PluginReporterContribution,
   Shadowing,
 } from './Plugin.schema.js'
@@ -24,6 +25,7 @@ export {
   type PluginContribution,
   PluginKind,
   PluginLayerContribution,
+  type PluginLayerKind,
   PluginReporterContribution,
   Shadowing,
 } from './Plugin.schema.js'
@@ -36,16 +38,9 @@ export class SandboxDirectory extends Context.Service<SandboxDirectory, string>(
   '~@systemfsoftware/stryker-js/SandboxDirectory',
 ) {}
 
-// ---------------------------------------------------------------------------
-// Namespace — required surface: Kind, Environment, ContributionOf
-// ---------------------------------------------------------------------------
-
 export interface PluginInterfaces {
   Checker: Checker
   TestRunner: TestRunner
-  // Reporters carry a pull-stream factory, never a host-service layer; the
-  // key stays so PluginContribution<K> keeps indexing over every PluginKind.
-  Reporter: never
   Ignore: Ignorer
   Evaluator: Evaluator
 }
@@ -55,18 +50,12 @@ export type AnyPluginContribution = { [K in PluginKind]: PluginContribution<K> }
 
 export type ContributionOf<K extends PluginKind> = Extract<AnyPluginContribution, { readonly kind: K }>
 
-// ---------------------------------------------------------------------------
-// Declaration — checker, test-runner, ignorer, and evaluator contributions
-// carry a host-service layer; reporter contributions carry a pull-stream
-// factory and require nothing from the plugin environment.
-// ---------------------------------------------------------------------------
-
 export function declarePlugin(
   kind: 'Reporter',
   name: string,
   make: ReporterFactory,
 ): PluginContribution<'Reporter'>
-export function declarePlugin<K extends Exclude<PluginKind, 'Reporter'>>(
+export function declarePlugin<K extends PluginLayerKind>(
   kind: K,
   name: string,
   layer: Layer.Layer<PluginInterfaces[K], never, PluginEnvironment>,
@@ -90,8 +79,6 @@ export interface ComposedPlugins {
   readonly reporterFactories: readonly SelectedReporterFactory[]
   readonly shadowings: readonly Shadowing[]
 }
-
-// Composition — pure fold, no logger
 
 function foldContributions(
   contributions: readonly AnyPluginContribution[],
@@ -127,8 +114,6 @@ export function composePlugins(
   contributions: readonly AnyPluginContribution[],
 ): ComposedPlugins {
   const { resolved, shadowings } = foldContributions(contributions)
-  // MutableHashMap is the repo's collection type; it is Iterable<[K,V]> and
-  // its values are accessed via the module function, not a method.
   const allResolved = Array.from(MutableHashMap.values(resolved))
   const reporterFactories: Array<SelectedReporterFactory> = []
   const nonReporterLayers: Array<Layer.Layer<never, never, PluginEnvironment>> = []

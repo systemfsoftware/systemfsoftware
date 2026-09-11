@@ -47,14 +47,8 @@ export const buildHtmlDocument = (command: HtmlReportCommand): HtmlDocument =>
 
 const BUNDLE_SPECIFIER = 'mutation-testing-elements/dist/mutation-test-elements.js'
 
-// Live FileSystem+Path exactly the way the CLI composes them
-// (stryker-js-cli/src/platform/node.ts nodeFsPathLayer): merged Node layers,
-// provided inside the factory. The factory face stays effect-free.
 const nodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)
 
-// The element bundle is resolved from this package's own install, never from
-// a host-provided path: import.meta.resolve anchors to this module. The read
-// runs on the Node layer inside the factory; the contract stays effect-free.
 const readBundleContent = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
@@ -70,15 +64,9 @@ const writeHtmlFile = (fileName: string, html: string) =>
     yield* fs.writeFileString(fileName, html)
   })
 export const makeHtmlReporter: ReporterFactory = (options, _init) => async (events) => {
-  // Same nested options surface as before the cutover (options.htmlReporter
-  // .fileName); the host validates the full option set before factory init
-  // (R2), so the default lives in the schema as it always has.
   const fileName = options.htmlReporter.fileName
-  // The bundle text is cached across the pull loop, read lazily on the
-  // first terminal event; a plain local — nothing to release.
   let bundleContent: string | undefined
   for await (const event of events) {
-    // metrics intentionally unused: the html document renders the report only.
     if (!S.is(MutationTestReportReady)(event)) continue
     bundleContent ??= await Effect.runPromise(Effect.provide(readBundleContent, nodeFsPathLayer))
     const html = buildHtmlDocument(HtmlReportCommand.make({ report: event.report, scriptContent: bundleContent }))

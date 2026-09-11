@@ -1,17 +1,13 @@
 import { Wire } from '@systemfsoftware/effect-cell-types'
 import * as S from 'effect/Schema'
 import type { StandardSchemaV1 } from 'effect/StandardSchema'
-import type * as reportApi from 'mutation-testing-report-schema/api'
 
+import { MetricsResultSchema } from './Metrics.schema.js'
 import { LocationSchema } from './Mutant.schema.js'
+import { MutationTestResultSchema } from './Report.schema.js'
 import { MutantStatus } from './Run.schema.js'
 import type { StrykerOptions } from './Schema.js'
 import { TestResultSchema, TestRunnerCapabilitiesSchema } from './TestRunner.schema.js'
-
-// ---------------------------------------------------------------------------
-// Kind union — the closed four-kind vocabulary (R1, KTD5). Reporter.schema.ts
-// pins ReporterFailed's event field to exactly these kinds.
-// ---------------------------------------------------------------------------
 
 export const ReporterEventKind = S.Literals([
   'dryRunCompleted',
@@ -20,51 +16,6 @@ export const ReporterEventKind = S.Literals([
   'mutationTestReportReady',
 ])
 export type ReporterEventKind = typeof ReporterEventKind.Type
-
-// Metrics — the protocol module owns these so there is a single source of
-// truth for the wire shape; Reporter.ts re-exports them unchanged.
-// ---------------------------------------------------------------------------
-
-export interface Metrics {
-  readonly pending: number
-  readonly killed: number
-  readonly timeout: number
-  readonly survived: number
-  readonly noCoverage: number
-  readonly runtimeErrors: number
-  readonly compileErrors: number
-  readonly ignored: number
-  readonly totalDetected: number
-  readonly totalUndetected: number
-  readonly totalInvalid: number
-  readonly totalValid: number
-  readonly totalMutants: number
-  readonly totalCovered: number
-  readonly mutationScore: number
-  readonly mutationScoreBasedOnCoveredCode: number
-}
-
-export interface TestMetrics {
-  readonly total: number
-  readonly killing: number
-  readonly covering: number
-  readonly notCovering: number
-}
-
-export interface MetricsResult<TMetrics> {
-  readonly name: string
-  readonly metrics: TMetrics
-  readonly childResults: readonly MetricsResult<TMetrics>[]
-}
-
-export interface MutationTestMetricsResult {
-  readonly systemUnderTestMetrics: MetricsResult<Metrics>
-  readonly testMetrics: MetricsResult<TestMetrics> | undefined
-}
-
-// ---------------------------------------------------------------------------
-// Shared members
-// ---------------------------------------------------------------------------
 
 const RunTimingSchema = Wire.wire({
   net: Wire.mint(S.Finite),
@@ -81,15 +32,6 @@ const ReporterPlanDescriptorSchema = Wire.wire({
   reloadEnvironment: Wire.mint(S.Boolean),
 })
 export type ReporterPlanDescriptor = typeof ReporterPlanDescriptorSchema.Type
-
-// ---------------------------------------------------------------------------
-// Events — the four kinds as TaggedClass variants with the KTD1 reduced
-// payloads. dryRunCompleted carries timing, capabilities, and test
-// count/metadata without mutantCoverage; mutationTestingPlanReady carries the
-// plan count plus reduced descriptors; mutantTested mirrors the RunEvent
-// MutantTested shape with completed/total counters; mutationTestReportReady
-// carries the full report document plus calculated metrics.
-// ---------------------------------------------------------------------------
 
 export class DryRunCompleted extends S.TaggedClass<DryRunCompleted>()('dryRunCompleted', {
   timing: RunTimingSchema,
@@ -117,22 +59,13 @@ export class MutantTested extends S.TaggedClass<MutantTested>()('mutantTested', 
   total: Wire.mint(S.Finite),
 }) {}
 
-const isMutationTestResult = (_value: unknown): _value is reportApi.MutationTestResult => true
-const MutationTestResultSchema = Wire.mint(S.Unknown.pipe(S.refine(isMutationTestResult)))
-const isMutationTestMetricsResult = (_value: unknown): _value is MutationTestMetricsResult => true
-const MutationTestMetricsResultSchema = Wire.mint(S.Unknown.pipe(S.refine(isMutationTestMetricsResult)))
-
 export class MutationTestReportReady extends S.TaggedClass<MutationTestReportReady>()(
   'mutationTestReportReady',
   {
     report: MutationTestResultSchema,
-    metrics: MutationTestMetricsResultSchema,
+    metrics: MetricsResultSchema,
   },
 ) {}
-
-// ---------------------------------------------------------------------------
-// Union, Standard Schema face, and factory types
-// ---------------------------------------------------------------------------
 
 export const ReporterEventUnion = S.Union([
   DryRunCompleted,

@@ -1,10 +1,3 @@
-/**
- * Survivors — the survivors-admission capability.
- *
- * The prior-report decoding, source hashing, mutant conversion, and admission
- * pipeline for --survivors runs. Pure admission decision lives in
- * admit-survivors-run.workflow.ts.
- */
 import { sha256 } from '@noble/hashes/sha256'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils'
 import { Cell } from '@systemfsoftware/effect-cell-types'
@@ -40,69 +33,21 @@ import {
 
 export const DEFAULT_SURVIVORS_PRIOR_REPORT = 'reports/mutation-report.json'
 
-/**
- * The remediation every rejection carries (R10): name the full run to do
- * first, never the survivors run itself.
- */
 export const SURVIVORS_RUN_FIRST_REMEDIATION = 'run a full `stryker run` first, then re-run with --survivors'
 
-/**
- * The survivors-run bookkeeping keys carried in the resolved options. They
- * are run mechanics, not configuration: a survivors run adds them, so without
- * stripping them the current run's hash would differ from the prior full
- * run's hash for the very same configuration. Their presence in a report's
- * embedded config is also the marker that the report was produced by a
- * survivors run (KTD7).
- */
 export const SURVIVORS_BOOKKEEPING_KEYS = ['survivorsPriorReport'] as const
 
-/**
- * The mutant shape the admission carries, named once because both the decision's
- * `Admitted` payload and the command's precomputed survivor list are the same shape.
- */
-
-/**
- * The prior report as a document, decoded at the boundary. Module-internal: consumers
- * get the decode function, not the schema, so the report's wire shape is not a
- * surface commitment and the codec has exactly one caller.
- *
- * `status` is a bare string rather than the closed status set on purpose: the decide only
- * compares it to `'Survived'`, so a report written by a newer engine that added a status
- * must not be refused for carrying one.
- */
-
-/**
- * Decodes a prior report read from disk. Pure, so it runs in the decode phase, whose
- * `Left` is fatal by construction — it reaches the derived error channel and no write
- * runs. A malformed report therefore never reaches the decider, and nothing here casts
- * a third-party report type.
- */
 export const decodePriorReport: (raw: unknown) => Result.Result<PriorReportDocument, S.SchemaError> = S
   .decodeUnknownResult(PriorReportDocumentSchema)
 
 const { entries: objectEntries, fromEntries: objectFromEntries } = Object
 
-/**
- * The sha256-hex digest capability the admission comparison needs. Supplied by
- * the caller so this kernel stays runtime-module-free; the shell wires
- * `bytesToHex(sha256(utf8ToBytes(content)))`.
- */
 export type HashContent = (content: string) => string
 
-/**
- * Thin by design: the digest is the caller's capability, and naming the call
- * keeps every hashing site in the admission path reading the same way.
- */
 export function sourceContentHash(content: string, hash: HashContent): string {
   return hash(content)
 }
 
-/**
- * The per-file source hashes of the sources a prior report embeds.
- *
- * The current run's side of the comparison is gathered by the shell from disk;
- * this is the recorded side, read back out of the report.
- */
 export function priorSourceHashes(
   priorReport: PriorReportDocument,
   hashContent: HashContent,
@@ -115,20 +60,8 @@ export function priorSourceHashes(
   )
 }
 
-/**
- * The relative-to-absolute path capability the mutant conversion needs.
- * Supplied by the caller so this kernel stays runtime-module-free; the shell
- * wires `path.resolve`.
- */
 export type ResolveAbsolutePath = (file: string) => string
 
-/**
- * The survivor matching key (R10/R11): the same identifying key the
- * incremental differ uses — relative file name, location, mutator name and
- * replacement — so a per-mutant entry taken from the verdict envelope (U4),
- * which carries exactly these fields, is sufficient input to reconstruct a
- * survivor with no access to the report file.
- */
 export function survivorIdentifyingKey(
   input: {
     readonly file: string
@@ -149,14 +82,6 @@ export function survivorIdentifyingKey(
   }@${start.line}:${start.column}-${end.line}:${end.column}\n${mutatorName}: ${replacement}`
 }
 
-/**
- * Converts a report mutant (1-based schema location) into the internal mutant
- * shape a run consumes (0-based positions, absolute file name) — the exact
- * inverse of `objectUtils.toSchemaLocation` and the same shift the
- * incremental report reader applies (`project-reader.ts`). Mutants without a
- * replacement fall back to their mutator name, the same convention the
- * incremental differ uses.
- */
 export function reportMutantToMutant(
   file: string,
   mutant: PriorReportMutant,
@@ -180,11 +105,6 @@ export function reportMutantToMutant(
   })
 }
 
-/**
- * The survivors of the prior report: exactly the mutants whose status is
- * `Survived`, converted to the internal mutant shape so a run can re-test
- * them.
- */
 export function extractSurvivors(
   priorReport: PriorReportDocument,
   resolveAbsolutePath: ResolveAbsolutePath,
@@ -200,11 +120,6 @@ export function extractSurvivors(
   return survivors
 }
 
-/**
- * The survivor spans as `file:startLine:startCol-endLine:endCol` mutate
- * ranges: the report's 1-based lines with the internal 0-based columns,
- * relative file names, deduplicated in first-seen order.
- */
 export function survivorMutateSpans(survivors: readonly Mutant[], basePath: string): string[] {
   const spans: string[] = []
   const seen = new Set<string>()
@@ -220,7 +135,6 @@ export function survivorMutateSpans(survivors: readonly Mutant[], basePath: stri
   return spans
 }
 
-/** The exit class a rejected survivors run exits with (R6: exit 2). */
 export const SURVIVORS_REJECT_EXIT_CLASS: ExitClass = 'ConfigError'
 const hashContent: HashContent = (content) => bytesToHex(sha256(utf8ToBytes(content)))
 
@@ -327,14 +241,9 @@ function readPriorReport(
 ): Effect.Effect<PriorReportRead, ConfigFileUnreadableError, FileSystem.FileSystem> {
   return Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem
-    // A prior report is optional: absent means "no baseline", which is a found:false read
-    // rather than a failure. Any other platform reason is a real unreadable file.
     return yield* fs.readFileString(priorReportPath).pipe(
       Effect.map((text): PriorReportRead => ({
         found: true,
-        // The file is a report document when it parses, and its own raw text when it does
-        // not — the caller's key walk tolerates both, so a malformed baseline degrades to
-        // "no keys" instead of failing the run.
         raw: Result.match(S.decodeResult(S.fromJsonString(S.Unknown))(text), {
           onFailure: () => text,
           onSuccess: (value) => value,

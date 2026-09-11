@@ -84,51 +84,19 @@ export function resolveCliExitCode(exit: Exit.Exit<unknown, unknown>): number {
   return runOutcomeCode(classifyRunOutcome(exit, null, []))
 }
 
-/**
- * The mode probe the CLI resolves its mode with (U3): a single detection of
- * the environment, shared by the reporters. Borrowed from the port service
- * type so the handler never hand-writes a signature the port could drift from.
- */
 export type DetectModeCapability = OutputModeProbe['detectMode']
 
-/**
- * The run-event-stream factory a run executes with: opens a run's NDJSON
- * stream from the resolved mode. Borrowed from the port service type so the
- * executor never hand-writes a signature the port could drift from.
- */
 export type CreateRunEventStreamCapability = RunEventStreamPort['createRunEventStream']
 
-/**
- * The frame the handler hands the executor: the already-run `@effect/cli`
- * program, the parsed request, the resolved mode, the optional run — and the
- * raw argument tokens, which the error envelope names the offending argument
- * from when the framework reports one it does not know.
- */
 export interface RunStrykerCliInput {
   readonly program: Effect.Effect<void, CliError.CliError, never>
   readonly requestRef: Ref.Ref<Option.Option<CliRequest>>
   readonly mode: ResolvedMode
   readonly runMutationTest: StrykerRun | undefined
   readonly argv: readonly string[]
-  /** The terminating signal, observed at the process edge (`signal-observer.ts`). */
   readonly lastSignal: SignalObserver
 }
 
-/**
- * The terminating signal, observed once at the process edge.
- *
- * Two readers need this one fact and they read it at different times. The run
- * needs it while it is still running, to put the classed code in the terminal
- * event it emits on the way out; the teardown needs it after the run's fiber
- * is gone, to hand the shell the status a signal leaves behind. The second
- * reader is why the observation cannot live inside the run: a signal
- * interrupts the run's fiber, and an interrupted fiber's exit is a failure no
- * matter what its finalizer computed, so a code resolved in there reaches the
- * terminal event and never the process. Reported `130` while exiting `1`.
- *
- * One observer, two readers, and the readers agree by construction rather
- * than by two handlers happening to decode the same signal the same way.
- */
 export type SignalObserver = () => number | null
 
 const SIGNAL_NUMBERS: Readonly<Partial<Record<NodeJS.Signals, number>>> = Object.freeze({
@@ -136,14 +104,6 @@ const SIGNAL_NUMBERS: Readonly<Partial<Record<NodeJS.Signals, number>>> = Object
   SIGTERM: 15,
 })
 
-/**
- * Installs the listeners and returns the reader.
- *
- * The listener records and returns: interrupting the run is the runtime's job,
- * and doing it from here would race the run's own finalizer for the stream.
- * `once` per signal, because a second delivery of the same signal cannot
- * change the answer.
- */
 export function observeTerminatingSignal(): SignalObserver {
   let observed: number | null = null
   for (const signal of ['SIGINT', 'SIGTERM'] as const) {
@@ -163,11 +123,6 @@ function createSplitter(separator: string) {
 const splitOnComma = createSplitter(',')
 const splitOnSpace = createSplitter(' ')
 
-/**
- * Commander characterization: `always` stays a string, everything else is a
- * boolean where `false`/`0` (case-insensitively) mean `false` — a tri-state a
- * plain boolean or choice would flatten.
- */
 function parseCleanDirOption(value: string): 'always' | boolean {
   const v = value.toLocaleLowerCase()
   return (() => {
@@ -178,10 +133,6 @@ function parseCleanDirOption(value: string): 'always' | boolean {
   })()
 }
 
-/**
- * Commander characterization: a pure integer is parsed as a number, anything
- * else (e.g. `"50%"`) stays a string.
- */
 function parseConcurrency(value: string): number | string {
   if (/^\d+$/.test(value)) {
     return parseInt(value, 10)
@@ -191,13 +142,6 @@ function parseConcurrency(value: string): number | string {
 
 const optional = <A>(option: Flag.Flag<A>) => Flag.optional(option)
 
-/**
- * Commander left an omitted flag out of the parsed options; `deepMerge` treats
- * `undefined` as absent but an explicit `false` would override a config-file
- * `true`. `Flag.optional` yields `Option.none` when the flag is absent and
- * `Option.some(false)` for an explicit `--no-x`, so both map back to
- * `undefined` and leave the config-file default in force (KTD4).
- */
 const absentWhenFalse = (value: Option.Option<boolean>): boolean | undefined => {
   if (Option.isSome(value) && value.value) {
     return true
@@ -464,27 +408,11 @@ function setIfPresent<K extends keyof StrykerOptions>(
   }
 }
 
-/**
- * Builds the full command tree — root plus the `run` subcommand — from the
- * same option/arg records the parser matches against. Each handler leaves the
- * request the executor runs: the run handler writes the parsed options (and
- * the survivors flag, which the admission consumes and the pipeline must not
- * see), and the bare root writes nothing — `helpRequested` makes the framework
- * render help, which the executor's finalizer turns into the `help` terminal
- * event.
- */
 function makeStrykerCommand(requestRef: Ref.Ref<Option.Option<CliRequest>>) {
   const runCommand = Command.make(
     'run',
     runConfig,
     (config): Effect.Effect<void, CliError.CliError, never> => {
-      // The framework would otherwise swallow any unmatched `--flag` as the
-      // configFile positional, silently accepting removed flags (`--files`,
-      // `--allowConsoleColors`, `--dashboard.*`). Reject dash-prefixed values so
-      // they surface as unknown arguments (exit 2), like commander did. The
-      // message is stryker's own (the machine wire contract), so it is written
-      // through the Console layer and the failure is the framework's leftover-
-      // operand error.
       const configFile = Option.getOrUndefined(config.configFile)
       if (configFile !== undefined && configFile.startsWith('-')) {
         return Console.error(`Received unknown argument: '${configFile}'`).pipe(
@@ -502,9 +430,6 @@ function makeStrykerCommand(requestRef: Ref.Ref<Option.Option<CliRequest>>) {
     },
   ).pipe(Command.withDescription('Run mutation testing'))
 
-  // The parsed-config type mirrors `Command.ParseConfig` (not resolvable under
-  // the TS7 compiler used in this workspace): each option/arg unwraps to its
-  // value type, so optional values are `Option<A>`.
   type ParsedConfigValue<A> = A extends Argument.Argument<infer Value> ? Value
     : A extends Flag.Flag<infer Value> ? Value
     : never
@@ -512,11 +437,6 @@ function makeStrykerCommand(requestRef: Ref.Ref<Option.Option<CliRequest>>) {
     readonly [Key in keyof typeof runConfig]: ParsedConfigValue<(typeof runConfig)[Key]>
   }
 
-  /**
-   * Rebuilds the `PartialStrykerOptions` object commander produced: only options
-   * actually given on the command line become keys (KTD4). `survivors` is
-   * deliberately not forwarded — the survivor re-run logic (U8) consumes it.
-   */
   function readStrykerOptions(config: RunParsedConfig): PartialStrykerOptions {
     const options: PartialStrykerOptions = {}
     setIfPresent(options, 'ignorePatterns', config.ignorePatterns)
@@ -556,8 +476,6 @@ function makeStrykerCommand(requestRef: Ref.Ref<Option.Option<CliRequest>>) {
     return options
   }
 
-  // `root` needs an explicit type: without it, `root` referenced inside its own
-  // handler (via `Command.withSubcommands`) collapses R/E to unknown.
   const root: Command.Command<
     'stryker',
     {},
@@ -592,12 +510,6 @@ const terminalLayer = Layer.succeed(
 )
 
 const cliLayer = Layer.mergeAll(
-  // v4 matches flags by exact name — commander's case-sensitive behaviour —
-  // and exposes no case-normalisation switch; the previous `CliConfig.layer({
-  // isCaseSensitive: true })` pin is therefore the framework default now.
-  // The wire contract's version line is the bare semver (commander's shape);
-  // the framework's built-in renders `stryker v<version>`, so the Version
-  // action is replaced with one that prints the semver alone.
   CliConfig.layer({
     builtIns: [
       GlobalFlag.Help,
@@ -613,10 +525,6 @@ const cliLayer = Layer.mergeAll(
   Path.layer,
   NodeFileSystem.layer,
   terminalLayer,
-  // The v4 framework renders help and version documents through the `Stdio`
-  // service's sinks, so the CLI provides the real process-backed layer —
-  // `Stdio.layerTest` drains those sinks to nowhere, which swallowed every
-  // framework-rendered document and left the process with nothing to show.
   NodeStdio.layer,
   NodeChildProcessSpawner.layer.pipe(
     Layer.provideMerge(Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)),

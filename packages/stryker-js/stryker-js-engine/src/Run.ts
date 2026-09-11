@@ -53,7 +53,7 @@ import * as Semaphore from 'effect/Semaphore'
 import * as Stream from 'effect/Stream'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 
-import type * as reportSchema from 'mutation-testing-report-schema/api'
+import type * as reportSchema from '@systemfsoftware/stryker-js/Report'
 import { admitMutationTest, MutationTestError } from './admit-mutation-test.workflow.js'
 import type { MutationTestDecision } from './admit-mutation-test.workflow.js'
 import { makeBuiltinReporterFactories } from './builtin-reporters.js'
@@ -436,9 +436,6 @@ export const runPrepare = (command: PrepareExecutorArgs) =>
           return out
         })()
         const plugins = composePlugins(allContributions)
-        // Single case-insensitive resolution pass: builtins first, composed
-        // plugin factories last-wins, so a plugin shadowing a builtin resolves
-        // to exactly the plugin (pre-cutover composePlugins contract).
         let reporterFactoriesByName = HashMap.empty<string, { name: string; factory: ReporterFactory }>()
         for (const [builtinName, factory] of Object.entries(builtinReporterFactories)) {
           reporterFactoriesByName = HashMap.set(reporterFactoriesByName, builtinName.toLowerCase(), {

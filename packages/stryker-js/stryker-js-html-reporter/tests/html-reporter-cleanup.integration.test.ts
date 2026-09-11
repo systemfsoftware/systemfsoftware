@@ -1,26 +1,17 @@
-/**
- * Cleanup pin for the html pull-stream reporter (U3, KTD6).
- *
- * The consumer owns its bundle resource across the pull loop with a
- * finally as the only cleanup path. An early stream end (done before the
- * terminal event, the visible shape of a cancelled run) must resolve
- * gracefully without writing; an abrupt stream failure after the terminal
- * event must still surface the original error with the completed write
- * intact; and a run after either must still succeed (no leaked state).
- */
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import { makeHtmlReporter } from '@systemfsoftware/stryker-js-html-reporter'
+import type { MetricsResult } from '@systemfsoftware/stryker-js/Metrics'
+import type * as reportApi from '@systemfsoftware/stryker-js/Report'
 import { DryRunCompleted, MutationTestReportReady } from '@systemfsoftware/stryker-js/ReporterEvent'
-import type { MutationTestMetricsResult, ReporterEvent } from '@systemfsoftware/stryker-js/ReporterEvent'
+import type { ReporterEvent } from '@systemfsoftware/stryker-js/ReporterEvent'
 import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Path from 'effect/Path'
 import * as S from 'effect/Schema'
-import type * as reportApi from 'mutation-testing-report-schema/api'
 import { expect } from 'vitest'
 
 const Feature = makeFeature({ it, layer })
@@ -73,8 +64,6 @@ const removeDir = (dir: string): Promise<void> =>
     }),
   )
 
-// Test/fixture exception to no-sync-schema-codecs: throwing IS the assertion
-// for a hand-built options document with schema defaults filled in.
 const optionsWith = (fileName: string) => S.decodeUnknownSync(StrykerOptionsSchema)({ htmlReporter: { fileName } })
 
 const reportFixture = (): reportApi.MutationTestResult => ({
@@ -96,30 +85,27 @@ const reportFixture = (): reportApi.MutationTestResult => ({
   thresholds: { high: 80, low: 60 },
 })
 
-const metricsFixture = (): MutationTestMetricsResult => ({
-  systemUnderTestMetrics: {
-    name: 'root',
-    metrics: {
-      pending: 0,
-      killed: 1,
-      timeout: 0,
-      survived: 0,
-      noCoverage: 0,
-      runtimeErrors: 0,
-      compileErrors: 0,
-      ignored: 0,
-      totalDetected: 1,
-      totalUndetected: 0,
-      totalInvalid: 0,
-      totalValid: 1,
-      totalMutants: 1,
-      totalCovered: 1,
-      mutationScore: 100,
-      mutationScoreBasedOnCoveredCode: 100,
-    },
-    childResults: [],
+const metricsFixture = (): MetricsResult => ({
+  name: 'All files',
+  metrics: {
+    pending: 0,
+    killed: 1,
+    timeout: 0,
+    survived: 0,
+    noCoverage: 0,
+    runtimeErrors: 0,
+    compileErrors: 0,
+    ignored: 0,
+    totalDetected: 1,
+    totalUndetected: 0,
+    totalInvalid: 0,
+    totalValid: 1,
+    totalMutants: 1,
+    totalCovered: 1,
+    mutationScore: 100,
+    mutationScoreBasedOnCoveredCode: 100,
   },
-  testMetrics: undefined,
+  childResults: [],
 })
 
 const dryRunEvent = (): ReporterEvent =>
@@ -137,16 +123,16 @@ async function* toStream(events: readonly ReporterEvent[]): AsyncGenerator<Repor
   yield* events
 }
 
-Feature('Recovering the html reporter after an interrupted run').body(({ scenario }) => {
+Feature('Keeping the report when a run is interrupted').body(({ scenario }) => {
   scenario(
-    'A stream that ends early writes nothing, and the next run still succeeds',
+    'A run that ends before the report is ready',
     Gherkin.Do.pipe(
       Given('an output directory')('output', () =>
         Effect.promise(async () => {
           const dir = await makeTempDir('html-cleanup-early-')
           return { dir, fileName: await joinPath(dir, 'index.html') }
         })),
-      When('the factory drains an early-ending stream and then a completed run')(
+      When('the interrupted run is followed by a completed run')(
         'outcome',
         (s) =>
           Effect.promise(async () => {
@@ -162,7 +148,7 @@ Feature('Recovering the html reporter after an interrupted run').body(({ scenari
             }
           }),
       ),
-      Then('the early stream writes nothing')((s) => {
+      Then('the interrupted run writes no report')((s) => {
         expect(s.outcome.earlyWritten).toBe(false)
       }),
       Then('the completed run writes the report')((s) => {
@@ -172,14 +158,14 @@ Feature('Recovering the html reporter after an interrupted run').body(({ scenari
   )
 
   scenario(
-    'A stream failure after the terminal event keeps the completed write',
+    'A run that fails after the report is ready',
     Gherkin.Do.pipe(
       Given('an output directory')('output', () =>
         Effect.promise(async () => {
           const dir = await makeTempDir('html-cleanup-abrupt-')
           return { dir, fileName: await joinPath(dir, 'index.html') }
         })),
-      When('the consumer drains a stream that fails after the terminal event')(
+      When('the run fails after the report is ready')(
         'outcome',
         (s) =>
           Effect.promise(async () => {
@@ -207,13 +193,13 @@ Feature('Recovering the html reporter after an interrupted run').body(({ scenari
             }
           }),
       ),
-      Then('the stream error surfaces')((s) => {
+      Then('the failure reaches the caller')((s) => {
         expect(s.outcome.failure).toContain('stream broke')
       }),
-      Then('the completed write stays intact')((s) => {
+      Then('the written report survives the failure')((s) => {
         expect(s.outcome.html).toContain(MARKER)
       }),
-      Then('the next run still succeeds')((s) => {
+      Then('the following run writes its report')((s) => {
         expect(s.outcome.rerun).toContain(MARKER)
       }),
     ),
