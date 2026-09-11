@@ -99,7 +99,6 @@ packages:
   - packages/toolchain/
   - packages/effect-gherkin-spec/
   - packages/storybook-gherkin/
-  - packages/effect-schema-bounded-union/
   - packages/effect-schema-discovery/
   - packages/effect-schema-extensions/
   - packages/effect-schema-law/

@@ -7,7 +7,6 @@
 "@systemfsoftware/effect-daemon-spec": none
 "@systemfsoftware/effect-gherkin-spec": none
 "@systemfsoftware/effect-memfs": none
-"@systemfsoftware/effect-schema-bounded-union": none
 "@systemfsoftware/effect-schema-discovery": none
 "@systemfsoftware/effect-schema-extensions": none
 "@systemfsoftware/effect-schema-law": none

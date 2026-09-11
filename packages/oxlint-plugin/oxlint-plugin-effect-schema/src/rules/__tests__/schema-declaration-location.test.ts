@@ -311,16 +311,13 @@ export const number = mint(S.Finite)`,
       filename: '/repo/pkg/src/Wire.ts',
     },
     {
-      // effect-schema-bounded-union/src/BoundedUnion.ts — `Expr = boundedUnion('Expr', {...})`:
-      // a helper that builds a codec union over base and recursive members. The local
-      // builder's body does not fold; no positive evidence of a declaration here.
       name: 'Should_Pass_When_ALocalCodecBuilderIsInvoked',
-      code: `const boundedUnion = (name: string, _parts: { base: readonly unknown[]; recur: readonly unknown[] }) => {
+      code: `const buildUnion = (name: string, _parts: { base: readonly unknown[]; recur: readonly unknown[] }) => {
   const built = { name }
   return built
 }
-export const Expr = boundedUnion('Expr', { base: [], recur: [] })`,
-      filename: '/repo/pkg/src/BoundedUnion.ts',
+export const Expr = buildUnion('Expr', { base: [], recur: [] })`,
+      filename: '/repo/pkg/src/UnionRecipe.ts',
     },
     {
       // effect-schema-vite/tests/inline-schema-tests.integration.test.ts —

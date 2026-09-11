@@ -8,7 +8,6 @@
 "@systemfsoftware/effect-daemon-spec": patch
 "@systemfsoftware/effect-gherkin-spec": patch
 "@systemfsoftware/effect-memfs": patch
-"@systemfsoftware/effect-schema-bounded-union": patch
 "@systemfsoftware/effect-schema-discovery": patch
 "@systemfsoftware/effect-schema-extensions": patch
 "@systemfsoftware/effect-schema-law": patch

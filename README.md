@@ -13,14 +13,13 @@ A workspace of modular [Effect-TS](https://effect.website) libraries, testing ut
 
 ## Packages
 
-| Package                                                                                | Purpose                                                                               |
-| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| [`@systemfsoftware/effect-gherkin-spec`](packages/effect-gherkin-spec)                 | BDD `feature`/`scenario` specifications composed as typed Effect workflows.           |
-| [`@systemfsoftware/effect-daemon-spec`](packages/effect-daemon-spec)                   | Supervision tree daemon primitives, leader election, and health monitors.             |
-| [`@systemfsoftware/effect-schema-law`](packages/effect-schema-law)                     | The Rule of Schemas as a property test.                                               |
-| [`@systemfsoftware/effect-schema-bounded-union`](packages/effect-schema-bounded-union) | A recursive schema union whose generated values terminate; decoding is unchanged.     |
-| [`@systemfsoftware/rx-effect`](packages/rx-effect)                                     | Bidirectional bridge between RxJS Observables and backpressured Effect Streams.       |
-| [`@systemfsoftware/oxlint-plugin`](packages/oxlint-plugin/oxlint-plugin)               | Fast Oxlint rules enforcing functional purity, schema invariants, and test placement. |
+| Package                                                                  | Purpose                                                                               |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| [`@systemfsoftware/effect-gherkin-spec`](packages/effect-gherkin-spec)   | BDD `feature`/`scenario` specifications composed as typed Effect workflows.           |
+| [`@systemfsoftware/effect-daemon-spec`](packages/effect-daemon-spec)     | Supervision tree daemon primitives, leader election, and health monitors.             |
+| [`@systemfsoftware/effect-schema-law`](packages/effect-schema-law)       | The Rule of Schemas as a property test.                                               |
+| [`@systemfsoftware/rx-effect`](packages/rx-effect)                       | Bidirectional bridge between RxJS Observables and backpressured Effect Streams.       |
+| [`@systemfsoftware/oxlint-plugin`](packages/oxlint-plugin/oxlint-plugin) | Fast Oxlint rules enforcing functional purity, schema invariants, and test placement. |
 
 ## Quick Start
 

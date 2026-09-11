@@ -212,7 +212,7 @@ it.prop('p', [gen])
     {
       name: 'Should_Report_When_SuppressionListOmitsThisFile',
       filename: FILENAME,
-      options: [{ exempt: ['bounded-union.kernel.property.test.ts'] }],
+      options: [{ exempt: ['union-kernel.property.test.ts'] }],
       code: DISCHARGED_BY,
       errors: oneReport,
     },

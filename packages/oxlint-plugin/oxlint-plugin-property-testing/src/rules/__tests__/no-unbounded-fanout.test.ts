@@ -17,7 +17,7 @@ const ruleTester = new RuleTester({
 
 const OBSERVER_SHAPE = `
 import { Schema as S } from 'effect'
-import { boundedUnion } from './bounded-union.kernel.js'
+import { buildUnion } from './union.kernel.js'
 
 const Leaf = S.TaggedStruct('Leaf', { refinements: S.Literal(0, 1) })
 
@@ -25,7 +25,7 @@ const fields = <A>(inner: S.Schema<A, A, never>) => S.Array(inner)
 
 const recurse = S.suspend(() => Recipe)
 
-export const Recipe: S.Schema<Recipe> = boundedUnion('Recipe', {
+export const Recipe: S.Schema<Recipe> = buildUnion('Recipe', {
   base: [Leaf],
   maxDepth: 1,
   recur: [
@@ -33,7 +33,7 @@ export const Recipe: S.Schema<Recipe> = boundedUnion('Recipe', {
   ],
 })
 
-export const Recipe2: S.Schema<Recipe> = boundedUnion('Recipe2', {
+export const Recipe2: S.Schema<Recipe> = buildUnion('Recipe2', {
   base: [Leaf],
   maxDepth: 1,
   recur: [
@@ -60,7 +60,7 @@ ruleTester.run('no-unbounded-fanout', noUnboundedFanout, {
       name: 'Should_StaySilent_When_ArrayHasMaxLength',
       code: `
 import { Schema as S } from 'effect'
-import { boundedUnion } from './bounded-union.kernel.js'
+import { buildUnion } from './union.kernel.js'
 
 const Leaf = S.TaggedStruct('Leaf', { refinements: S.Literal(0, 1) })
 
@@ -68,7 +68,7 @@ const fields = <A>(inner: S.Schema<A, A, never>) => S.Array(inner, { maxLength: 
 
 const recurse = S.suspend(() => Recipe)
 
-export const Recipe: S.Schema<Recipe> = boundedUnion('Recipe', {
+export const Recipe: S.Schema<Recipe> = buildUnion('Recipe', {
   base: [Leaf],
   maxDepth: 1,
   recur: [
@@ -367,7 +367,7 @@ export const Wire = recipe(S.Record({ key: S.String, value: S.Unknown }))
       name: 'Should_Report_When_CalledFunctionDeclarationBuildsArray',
       code: `
 import { Schema as S } from 'effect'
-import { boundedUnion } from './bounded-union.kernel.js'
+import { buildUnion } from './union.kernel.js'
 
 const Leaf = S.TaggedStruct('Leaf', { refinements: S.Literal(0, 1) })
 
@@ -377,7 +377,7 @@ function fields(inner: unknown) {
 
 const recurse = S.suspend(() => Recipe)
 
-export const Recipe: S.Schema<Recipe> = boundedUnion('Recipe', {
+export const Recipe: S.Schema<Recipe> = buildUnion('Recipe', {
   base: [Leaf],
   maxDepth: 1,
   recur: [
