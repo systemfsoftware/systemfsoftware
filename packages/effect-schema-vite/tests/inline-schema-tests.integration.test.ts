@@ -88,11 +88,6 @@ const recursionLawsIn = (code: string): ReadonlyMap<string, string> => {
 
 const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
-/**
- * The plugin instance a consumer registers, driven the way Vite drives it: a
- * real transform over a real module on disk, and a real resolution of the
- * specifier the materialized hook imports.
- */
 const drivenByPlugin = async (
   root: string,
 ): Promise<{ readonly code: string; readonly runtime: string | null }> => {

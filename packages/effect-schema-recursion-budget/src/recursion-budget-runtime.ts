@@ -1,10 +1,5 @@
 import { Schema as S, SchemaAST } from 'effect'
 
-/**
- * The budget a `recursionBudget` annotation states. Ceiling and shape only:
- * the depth identifier is derived per annotated site by the transform, so two
- * cycles can never share one.
- */
 export interface RecursionBudget {
   readonly maxDepth: number
   readonly depthSize: 'small' | 'medium' | 'large'
@@ -40,7 +35,6 @@ const resolveSuspend = (ast: SchemaAST.Suspend, resolved: ResolvedSuspends): Sch
   return thunked
 }
 
-/** The child nodes a reachability walk descends into; every other tag is a leaf. */
 const childAstsOf = (ast: SchemaAST.AST, resolved: ResolvedSuspends): ReadonlyArray<SchemaAST.AST> => {
   if (SchemaAST.isSuspend(ast)) return [resolveSuspend(ast, resolved)]
   if (SchemaAST.isUnion(ast)) return ast.types
@@ -55,7 +49,6 @@ const childAstsOf = (ast: SchemaAST.AST, resolved: ResolvedSuspends): ReadonlyAr
   return []
 }
 
-/** True when `ast` reaches `target`, resolving suspended thunks on the way. */
 const reachesCycle = (
   ast: SchemaAST.AST,
   target: SchemaAST.AST,
@@ -84,11 +77,6 @@ const terminalsFor = (suspendAst: SchemaAST.AST, union: SchemaAST.Union): Readon
 const innerUnionOf = (suspendAst: SchemaAST.AST): SchemaAST.AST =>
   SchemaAST.isSuspend(suspendAst) ? suspendAst.thunk() : suspendAst
 
-/**
- * The derivation plan an annotated recursion point declares, or the message
- * explaining why it declares none — a union whose cycle has no terminal member
- * has no finite generation path at all.
- */
 const planOf = (
   suspendAst: SchemaAST.AST,
 ): { readonly union: SchemaAST.Union; readonly terminals: ReadonlyArray<SchemaAST.AST> } | string => {
@@ -103,12 +91,6 @@ const planOf = (
   return { union, terminals }
 }
 
-/**
- * The derivation hook a `recursionBudget` annotation is materialized into: the
- * terminal branch past the ceiling is every member that cannot reach the cycle,
- * and the recursive branch is the union derived lazily per generated value, the
- * same shape effect's own `Suspend` derivation uses.
- */
 export const budgetToArbitrary = (
   getSelf: () => S.Top,
   budget: unknown,
@@ -162,9 +144,6 @@ const deepestObjectOf = (value: unknown): Record<string, unknown> | undefined =>
 const deepestKindOf = (value: unknown): string => kindOf(deepestObjectOf(value))
 
 if (import.meta.vitest !== void 0) {
-  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
-  // branch is statically dead in the build and the runner never enters the published
-  // module graph. A static import would ship the test runner.
   const { it } = await import('@effect/vitest')
   const { FastCheck: fc } = await import('effect/testing')
   const { Schema: S } = await import('effect')

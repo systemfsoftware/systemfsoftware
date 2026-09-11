@@ -64,11 +64,6 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string 
  * exported Effect `Schema`, and auto-injects `ruleOfSchemas` round-trip
  * property tests and `recursionLaws` generation laws for each one.
  *
- * The same plugin materializes `recursionBudget` annotations: a recursive
- * schema that declares its generation budget in stock Effect vocabulary gets
- * the derivation hook that honors it, so registering this plugin alone is
- * enough for the declared laws to hold.
- *
  * The laws are injected by rewriting the consumer's own
  * `src/schema-laws.test.ts` — the one test filename the placement taxonomy
  * whitelists by name. It is deliberately NOT a virtual module: the generated

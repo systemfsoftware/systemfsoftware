@@ -2,11 +2,6 @@ import { existsSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { parseSync } from 'oxc-parser'
 
-/**
- * The subset of vite's `Plugin` this transform uses. Typed structurally so the
- * package needs no vite dependency; the returned object is assignable to
- * `Plugin` at the composition site.
- */
 export interface RecursionBudgetPlugin {
   readonly name: string
   readonly enforce: 'pre'
@@ -14,11 +9,6 @@ export interface RecursionBudgetPlugin {
   readonly transform: (code: string, id: string) => string | undefined
 }
 
-/**
- * The specifier the transform injects. It resolves to the runtime module's real
- * path, never to a `\0`-prefixed virtual id: a real path keeps sourcemaps and
- * the related-file walks (vitest, Stryker) intact.
- */
 export const RECURSION_BUDGET_VIRTUAL_ID = 'virtual:effect-schema-recursion-budget' as const
 
 const RUNTIME_FILES: ReadonlyArray<string> = [
@@ -59,11 +49,6 @@ const childNodesOf = (node: OxcNode): ReadonlyArray<OxcNode> => {
   return children
 }
 
-/**
- * Every `VariableDeclarator` in the module, at any block depth: canonical
- * schemas also live inside `if (import.meta.vitest)` blocks and local builder
- * functions, and the transform must reach them there too.
- */
 const declaratorsOf = (program: OxcNode): ReadonlyArray<OxcNode> => {
   const found: OxcNode[] = []
   const visit = (node: OxcNode): void => {
@@ -74,7 +59,6 @@ const declaratorsOf = (program: OxcNode): ReadonlyArray<OxcNode> => {
   return found
 }
 
-/** The member name a callee resolves to: `S.suspend` and a bare `suspend` both answer `suspend`. */
 const memberNameOf = (node: OxcNode): string | undefined => {
   if (node.type === 'Identifier') return typeof node['name'] === 'string' ? node['name'] : undefined
   if (node.type !== 'MemberExpression' || node['computed'] === true) return undefined
@@ -112,12 +96,6 @@ interface Injection {
   readonly insertAt: number
 }
 
-/**
- * The one shape the transform materializes: a binding whose initializer is
- * `S.suspend(thunk).annotate({ ..., recursionBudget })`. A hand-written
- * `toArbitrary` in the same literal wins — the transform leaves it alone, which
- * also makes a re-run over already-transformed code a no-op.
- */
 const injectionOf = (declarator: OxcNode): Injection | undefined => {
   const id = declarator['id']
   const init = declarator['init']
@@ -172,13 +150,6 @@ const runtimePath = (): string | null => {
   return found
 }
 
-/**
- * Materializes every `recursionBudget` annotation in a module into the
- * arbitrary-derivation hook that honors it, leaving the schema source in stock
- * Effect vocabulary. The annotation states ceiling and shape; the depth
- * identifier is derived from the module and binding, so two cycles can never
- * share one.
- */
 export const recursionBudgetTransform = (): RecursionBudgetPlugin => ({
   name: '@systemfsoftware/recursion-budget',
   enforce: 'pre',

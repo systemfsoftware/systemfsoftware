@@ -4,10 +4,10 @@
 
 ```ts
 
-// @public
+// @public (undocumented)
 export const RECURSION_BUDGET_VIRTUAL_ID: 'virtual:effect-schema-recursion-budget';
 
-// @public
+// @public (undocumented)
 export interface RecursionBudgetPlugin {
     // (undocumented)
     readonly enforce: 'pre';
@@ -19,7 +19,7 @@ export interface RecursionBudgetPlugin {
     readonly transform: (code: string, id: string) => string | undefined;
 }
 
-// @public
+// @public (undocumented)
 export const recursionBudgetTransform: () => RecursionBudgetPlugin;
 
 // (No @packageDocumentation comment for this package)
