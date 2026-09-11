@@ -1,8 +1,8 @@
 import type { ReporterFactory } from '@systemfsoftware/stryker-js/Reporter'
 
+import { makeClearTextReporter } from './clear-text-report.js'
 import {
   type JsonReporterDeps,
-  makeClearTextReporter,
   makeJsonReporter,
   makeProgressBarReporter,
   makeProgressStreamReporter,
