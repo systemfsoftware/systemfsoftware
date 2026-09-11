@@ -200,6 +200,15 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  omp/plugins/omp-typescript-discipline:
+    devDependencies:
+      '@systemfsoftware/oxlint-config':
+        specifier: workspace:^
+        version: link:../../../packages/oxlint-plugin/oxlint-config
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@7.0.2001)
+
   packages/atom/effect-atom:
     devDependencies:
       '@effect/vitest':
