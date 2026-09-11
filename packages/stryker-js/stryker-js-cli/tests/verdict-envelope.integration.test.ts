@@ -88,7 +88,7 @@ Feature('Building the machine-mode verdict envelope').body(({ scenario }) => {
   scenario(
     'Two run-id generations produce different ids',
     Gherkin.Do.pipe(
-      When('two run ids are generated')('ids', () => Effect.sync(() => [generateRunId(), generateRunId()])),
+      When('the tool generates two run ids')('ids', () => Effect.sync(() => [generateRunId(), generateRunId()])),
       Then('the ids differ')((s: { ids: readonly string[] }) => {
         checkExpect(s.ids[0]).not.toBe(s.ids[1])
       }),

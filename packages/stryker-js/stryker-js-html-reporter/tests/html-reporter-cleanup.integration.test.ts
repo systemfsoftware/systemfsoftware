@@ -125,7 +125,7 @@ async function* toStream(events: readonly ReporterEvent[]): AsyncGenerator<Repor
 
 Feature('Keeping the report when a run is interrupted').body(({ scenario }) => {
   scenario(
-    'A run that ends before the report is ready',
+    'An interrupted run leaves no report behind',
     Gherkin.Do.pipe(
       Given('an output directory')('output', () =>
         Effect.promise(async () => {
@@ -158,7 +158,7 @@ Feature('Keeping the report when a run is interrupted').body(({ scenario }) => {
   )
 
   scenario(
-    'A run that fails after the report is ready',
+    'A run that fails after writing its report leaves the report on disk',
     Gherkin.Do.pipe(
       Given('an output directory')('output', () =>
         Effect.promise(async () => {

@@ -401,7 +401,7 @@ Feature('Driving the mutation tester from an agent harness')
     )
 
     scenarioOutline(
-      'Asking a run to <request> is refused today, even though the tool knows the two output styles',
+      'Asking a run to <request> is refused as something the tool does not recognise',
       [
         {
           request: 'print plain text',
@@ -505,7 +505,7 @@ Feature('Driving the mutation tester from an agent harness')
         Then('not one machine-readable line is written')((s) => {
           checkExpect(s.observed.lines).toEqual([])
         }),
-        Then('the prose still carries colour codes today, with nothing on the far end able to read them')((s) => {
+        Then('the prose carries colour codes that nothing on the far end reads')((s) => {
           const escape = String.fromCharCode(27)
           checkExpect(s.observed.stdout).toContain(`${escape}[`)
         }),
@@ -654,7 +654,7 @@ Feature('Driving the mutation tester from an agent harness')
     )
 
     scenario(
-      'Importing any declared part of the core package stays silent while the tool alone refuses unsupported Node versions',
+      'Importing every declared part of the core package stays silent, and the tool alone refuses unsupported Node versions',
       Gherkin.Do.pipe(
         Given('a container that has the packed core and cli packages installed')(
           'fixture',
