@@ -22,7 +22,6 @@
     "typecheck": "tsc --noEmit --incremental"
   },
   "devDependencies": {
-    "@systemfsoftware/effect-schema-recursion-budget": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
     "vitest": "catalog:"
