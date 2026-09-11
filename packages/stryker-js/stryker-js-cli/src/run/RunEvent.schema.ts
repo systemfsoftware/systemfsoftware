@@ -15,7 +15,7 @@
  */
 import * as S from 'effect/Schema'
 
-import { LocationPayload, MutantStatusPayload } from './abi-payload.schema.js'
+import { ExitClassPayload, LocationPayload, MutantStatusPayload } from './abi-payload.schema.js'
 import type { ModeSignal, OutputMode } from './output-mode.js'
 
 const OutputModeLiterals = ['human', 'machine'] as const satisfies readonly OutputMode[]
@@ -49,6 +49,13 @@ const VerdictMutantCodec = S.Struct({
   replacement: S.NullOr(S.String),
   status: MutantStatusPayload,
 })
+
+const EvaluatorVerdictCodec = S.Struct({
+  exitClass: ExitClassPayload,
+  message: S.optional(S.String),
+})
+
+const VerdictEvaluatorsCodec = S.Record(S.String, EvaluatorVerdictCodec)
 
 export class RunStarted extends S.TaggedClass<RunStarted>()('stream', {
   schemaVersion: S.String,
@@ -93,6 +100,7 @@ export class VerdictReached extends S.TaggedClass<VerdictReached>()('verdict', {
   reportFile: S.NullOr(S.String),
   counts: VerdictCountsCodec,
   mutants: S.Array(VerdictMutantCodec),
+  evaluators: S.optional(VerdictEvaluatorsCodec),
 }) {}
 
 export class RunFailed extends S.TaggedClass<RunFailed>()('error', {

@@ -1,4 +1,5 @@
 import { randomBytes } from '@noble/hashes/utils'
+import type { EvaluatorVerdict } from '@systemfsoftware/stryker-js/Evaluator'
 import type { Location, MutantStatus } from '@systemfsoftware/stryker-js/Mutant'
 import { calculateMetrics } from '@systemfsoftware/stryker-js/Report'
 import type * as schema from '@systemfsoftware/stryker-js/Report'
@@ -11,7 +12,7 @@ import type { ModeSignal, OutputMode } from './output-mode.js'
 
 const normalizeFileName = (fileName: string): string => fileName.replaceAll('\\', '/')
 
-export const VERDICT_ENVELOPE_SCHEMA_VERSION = '1.1'
+export const VERDICT_ENVELOPE_SCHEMA_VERSION = '1.2'
 
 export const ACTIONABLE_STATUSES = ['Survived', 'NoCoverage', 'Timeout', 'RuntimeError'] as const
 
@@ -27,6 +28,15 @@ export interface VerdictMutant {
   readonly replacement: string | null
   readonly status: MutantStatus
 }
+
+export interface EvaluatorRun {
+  readonly name: string
+  readonly verdict: EvaluatorVerdict
+}
+
+export type EvaluatorVerdictEntry = NonNullable<EvaluatorVerdict>
+
+export type VerdictEvaluators = Readonly<Record<string, EvaluatorVerdictEntry>>
 
 export interface VerdictThresholds {
   readonly high: number
@@ -55,6 +65,7 @@ export interface VerdictEnvelope {
   readonly counts: VerdictCounts
   readonly reportFile: string | null
   readonly mutants: readonly VerdictMutant[]
+  readonly evaluators?: VerdictEvaluators
 }
 
 const CROCKFORD_BASE32 = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -148,6 +159,23 @@ const actionableMutants = (files: schema.MutationTestResult['files']): readonly 
       }))
   )
 
+const evaluatorEntryOf = (run: EvaluatorRun): ReadonlyArray<readonly [string, EvaluatorVerdictEntry]> => {
+  if (run.verdict === null) {
+    return []
+  }
+  return [[run.name, run.verdict]]
+}
+
+const addingEvaluators = (
+  envelope: Omit<VerdictEnvelope, 'evaluators'>,
+  evaluators: VerdictEvaluators,
+): VerdictEnvelope => {
+  if (Object.keys(evaluators).length === 0) {
+    return envelope
+  }
+  return { ...envelope, evaluators }
+}
+
 export function buildVerdictEnvelope(
   report: schema.MutationTestResult,
   mode: OutputMode,
@@ -155,10 +183,12 @@ export function buildVerdictEnvelope(
   runId: string,
   basePath: string,
   pathService: Path.Path,
+  evaluators: readonly EvaluatorRun[] = [],
 ): VerdictEnvelope {
   const metrics = calculateMetrics(report.files).metrics
   const { jsonReporterFileName } = embeddedConfig(report)
-  return {
+  const evaluatorVerdicts = Object.fromEntries(evaluators.flatMap(evaluatorEntryOf))
+  const envelope: Omit<VerdictEnvelope, 'evaluators'> = {
     schemaVersion: VERDICT_ENVELOPE_SCHEMA_VERSION,
     runId,
     mode,
@@ -189,4 +219,5 @@ export function buildVerdictEnvelope(
     ),
     mutants: actionableMutants(report.files),
   }
+  return addingEvaluators(envelope, evaluatorVerdicts)
 }

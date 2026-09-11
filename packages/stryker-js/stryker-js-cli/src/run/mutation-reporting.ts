@@ -1,9 +1,11 @@
+import { errorToString } from '@systemfsoftware/stryker-js'
 import { type CheckResult, type PassedCheckResult } from '@systemfsoftware/stryker-js/Checker'
+import type { EvaluatorVerdict } from '@systemfsoftware/stryker-js/Evaluator'
 import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import { highestExitClass, verdictExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import type { MutantResult, MutantTestCoverage } from '@systemfsoftware/stryker-js/Mutant'
-import type { StrykerOptions } from '@systemfsoftware/stryker-js/Options'
-import type { AnyPluginContribution, PluginKind } from '@systemfsoftware/stryker-js/Plugin'
+import type { PluginInit, StrykerOptions } from '@systemfsoftware/stryker-js/Options'
+import type { AnyPluginContribution, PluginContribution, PluginKind } from '@systemfsoftware/stryker-js/Plugin'
 import { calculateMetrics } from '@systemfsoftware/stryker-js/Report'
 import type { MetricsResult } from '@systemfsoftware/stryker-js/Report'
 import type * as schema from '@systemfsoftware/stryker-js/Report'
@@ -26,6 +28,7 @@ import { closeReporterStage, offerTerminalReport, terminalDrainClass } from '../
 import { checkStatusToMutantStatus, mapRunResult, toSchemaLocation } from './mutant-result-mapping.js'
 import type { TestCoverage } from './Mutants.js'
 import type { ResolvedMode } from './output-mode.js'
+import { createAll } from './Plugins.js'
 import type { Project } from './Project.js'
 import { FILE_CONCURRENCY, readOriginal } from './Project.js'
 import {
@@ -37,7 +40,7 @@ import {
 } from './report-assembly.js'
 import type { RunOutcome } from './Run.js'
 import { strykerVersion } from './stryker-package.js'
-import { buildVerdictEnvelope } from './verdict-envelope.js'
+import { buildVerdictEnvelope, type EvaluatorRun } from './verdict-envelope.js'
 
 const STRYKER_FRAMEWORK: Readonly<Pick<schema.FrameworkInformation, 'branding' | 'name' | 'version'>> = Object.freeze({
   branding: {
@@ -80,6 +83,86 @@ export interface MakeMutationReportingInput {
   readonly sandboxDirectory: string
   readonly basePath: string
 }
+
+const NO_INIT: PluginInit = {}
+
+const evaluatorFailure = (name: string, cause: unknown): EvaluatorVerdict => ({
+  exitClass: 'RuntimeError',
+  message: `evaluator ${name} failed: ${errorToString(cause)}`,
+})
+
+const evaluatorVerdictOf = (
+  contribution: PluginContribution<'Evaluator'>,
+  report: schema.MutationTestResult,
+  options: StrykerOptions,
+): Effect.Effect<EvaluatorVerdict> =>
+  Effect.gen(function*() {
+    const evaluate = contribution.make(options, NO_INIT)
+    const outcome = yield* Effect.tryPromise({
+      try: () => Promise.resolve(evaluate(report, options)),
+      catch: (cause) => cause,
+    }).pipe(Effect.result)
+    return Result.match(outcome, {
+      onFailure: (cause) => evaluatorFailure(contribution.name, cause),
+      onSuccess: (verdict) => verdict,
+    })
+  })
+
+export const runLoadedEvaluators = (
+  pluginsByKind: HashMap.HashMap<PluginKind, readonly AnyPluginContribution[]>,
+  report: schema.MutationTestResult,
+  options: StrykerOptions,
+): Effect.Effect<readonly EvaluatorRun[], never> =>
+  Effect.gen(function*() {
+    const contributions = yield* createAll(pluginsByKind, 'Evaluator')
+    return yield* Effect.forEach(contributions, (contribution) =>
+      Effect.map(
+        evaluatorVerdictOf(contribution, report, options),
+        (verdict): EvaluatorRun => ({ name: contribution.name, verdict }),
+      ))
+  })
+
+const evaluatorExitClassOf = (run: EvaluatorRun): readonly ExitClass[] => {
+  if (run.verdict === null) {
+    return []
+  }
+  return [run.verdict.exitClass]
+}
+
+export const finalVerdictOf = (
+  scoreVerdict: ExitClass | null,
+  terminalDrain: ExitClass | null,
+  evaluatorRuns: readonly EvaluatorRun[],
+): ExitClass | null =>
+  highestExitClass(
+    [scoreVerdict, terminalDrain, ...evaluatorRuns.flatMap(evaluatorExitClassOf)]
+      .filter((candidate): candidate is ExitClass => candidate !== null),
+  )
+
+const evaluatorMessageOf = (run: EvaluatorRun): string | undefined => {
+  if (run.verdict === null) {
+    return undefined
+  }
+  return run.verdict.message
+}
+
+export const evaluatorMessageLine = (run: EvaluatorRun): string | null => {
+  const message = evaluatorMessageOf(run)
+  if (message === undefined) {
+    return null
+  }
+  return `evaluator ${run.name}: ${message}`
+}
+
+const renderEvaluatorMessages = (runs: readonly EvaluatorRun[]): Effect.Effect<void> =>
+  Effect.sync(() => {
+    runs.forEach((run) => {
+      const line = evaluatorMessageLine(run)
+      if (line !== null) {
+        process.stderr.write(`${line}\n`)
+      }
+    })
+  })
 
 export const makeMutationReportingService = (input: MakeMutationReportingInput): MutationReportingService => {
   const reportMutantStatus = (
@@ -198,9 +281,6 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
     })
 
   const MANIFEST_SPECIFIERS = [
-    '@systemfsoftware/stryker-js-vitest-runner',
-    '@systemfsoftware/stryker-js-typescript-checker',
-    '@systemfsoftware/stryker-plugins',
     'vitest',
     'karma',
     'karma-chai',
@@ -299,6 +379,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
   const emitVerdict = (
     report: schema.MutationTestResult,
     pathService: Path.Path,
+    evaluators: readonly EvaluatorRun[],
   ): Effect.Effect<void, never, RunEvents> =>
     Effect.gen(function*() {
       const envelope = buildVerdictEnvelope(
@@ -308,22 +389,10 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
         input.runId,
         input.basePath,
         pathService,
+        evaluators,
       )
       const queue = yield* RunEvents
-      yield* Queue.offer(
-        queue,
-        new VerdictReached({
-          schemaVersion: envelope.schemaVersion,
-          runId: envelope.runId,
-          mode: envelope.mode,
-          signal: envelope.signal,
-          score: envelope.score,
-          thresholds: envelope.thresholds,
-          reportFile: envelope.reportFile,
-          counts: envelope.counts,
-          mutants: envelope.mutants,
-        }),
-      )
+      yield* Queue.offer(queue, new VerdictReached(envelope))
     })
 
   const reportAll: MutationReportingService['reportAll'] = (results) =>
@@ -333,11 +402,11 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       const metrics = calculateMetrics(report.files)
       yield* offerTerminalReport(input.reporterStage, report, metrics)
       const terminalDrain = terminalDrainClass(yield* closeReporterStage(input.reporterStage))
+      const evaluatorRuns = yield* runLoadedEvaluators(input.pluginsByKind, report, input.options)
       const verdict = yield* determineExitCode(metrics)
-      const finalVerdict = highestExitClass(
-        [verdict, terminalDrain].filter((candidate): candidate is ExitClass => candidate !== null),
-      )
-      yield* emitVerdict(report, pathService)
+      const finalVerdict = finalVerdictOf(verdict, terminalDrain, evaluatorRuns)
+      yield* renderEvaluatorMessages(evaluatorRuns)
+      yield* emitVerdict(report, pathService, evaluatorRuns)
       if (input.options.incremental) {
         const fs = yield* FileSystem.FileSystem
         const dir = pathService.dirname(input.options.incrementalFile)

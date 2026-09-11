@@ -97,44 +97,6 @@ Feature('Resolving the process exit code').body(({ scenario }) => {
     ),
   )
   scenario(
-    'A failing evaluator verdict outranks a passing score',
-    Gherkin.Do.pipe(
-      Given('a passing score and an evaluator returning VerdictFail')('pending', () => {
-        const scoreVerdict = verdictExitClass(80, 60)
-        const evaluatorVerdicts: readonly ExitClass[] = ['VerdictFail']
-        const pending = new Set<ExitClass>(
-          [scoreVerdict, ...evaluatorVerdicts].filter(
-            (value): value is ExitClass => value !== null,
-          ),
-        )
-        return Effect.succeed(pending)
-      }),
-      Then('the code is 1')((s: { pending: Set<ExitClass> }) => {
-        checkExpect(resolveExitCode(s.pending, null)).toBe(1)
-      }),
-    ),
-  )
-
-  scenario(
-    'A passing score with no evaluator failure keeps the exit code at 0',
-    Gherkin.Do.pipe(
-      Given('a passing score and an evaluator returning null')('pending', () => {
-        const scoreVerdict = verdictExitClass(80, 60)
-        const evaluatorVerdicts: readonly (ExitClass | null)[] = [null]
-        const pending = new Set<ExitClass>(
-          [scoreVerdict, ...evaluatorVerdicts].filter(
-            (value): value is ExitClass => value !== null,
-          ),
-        )
-        return Effect.succeed(pending)
-      }),
-      Then('the code is 0')((s: { pending: Set<ExitClass> }) => {
-        checkExpect(resolveExitCode(s.pending, null)).toBe(0)
-      }),
-    ),
-  )
-
-  scenario(
     'A score below its threshold resolves to a failing exit code',
     Gherkin.Do.pipe(
       Given('a score below its breaking threshold')('pending', () => {

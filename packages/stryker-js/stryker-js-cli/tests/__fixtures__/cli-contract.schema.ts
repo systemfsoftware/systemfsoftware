@@ -22,6 +22,7 @@ export interface StreamLine {
   readonly remediation?: string | undefined
   readonly help?: string | undefined
   readonly mutants?: readonly DecodedMutant[] | undefined
+  readonly evaluators?: Readonly<Record<string, DecodedEvaluatorVerdict>> | undefined
   readonly [field: string]: unknown
 }
 
@@ -40,6 +41,13 @@ export const MutantSchema = S.Struct({
 })
 
 type DecodedMutant = S.Schema.Type<typeof MutantSchema>
+
+export const EvaluatorVerdictSchema = S.Struct({
+  exitClass: S.String,
+  message: S.optional(S.String),
+})
+
+type DecodedEvaluatorVerdict = S.Schema.Type<typeof EvaluatorVerdictSchema>
 
 const StreamLineFields = {
   kind: S.String,
@@ -64,6 +72,7 @@ const StreamLineFields = {
   remediation: S.optional(S.String),
   help: S.optional(S.String),
   mutants: S.optional(S.Array(MutantSchema)),
+  evaluators: S.optional(S.Record(S.String, EvaluatorVerdictSchema)),
 }
 
 export const StreamLineSchema = S.StructWithRest(S.Struct(StreamLineFields), [S.Record(S.String, S.Unknown)])

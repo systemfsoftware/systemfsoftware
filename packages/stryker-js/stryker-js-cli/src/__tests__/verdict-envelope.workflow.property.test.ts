@@ -146,7 +146,7 @@ describe('buildVerdictEnvelope', () => {
   it.prop('∀c_MixedStatuses_≡EveryNamedFieldSurvives', [fc.constant(MIXED_STATUSES)], ([testCase]) => {
     const envelope = envelopeOf(testCase)
     return envelope.schemaVersion === VERDICT_ENVELOPE_SCHEMA_VERSION &&
-      PINNED_SCHEMA_VERSION === '1.1' &&
+      PINNED_SCHEMA_VERSION === '1.2' &&
       envelope.runId === RUN_ID &&
       envelope.mode === 'machine' &&
       envelope.signal === 'tty' &&
@@ -305,4 +305,49 @@ describe('buildVerdictEnvelope', () => {
       Equal.equals(idsOf(envelope), testCase.actionableIds) &&
       countedTotal(envelope.counts) === testCase.total
   })
+
+  it.prop(
+    '∀c_EvaluatorVerdicts_≡OnlyTheReturnedVerdictsAreCarriedByName',
+    [
+      fc.constant({
+        report: reportOf([mutantOf('1', 'Killed', locationOf(0))]),
+        mode: 'machine',
+        signal: 'tty',
+      }),
+    ],
+    ([testCase]) => {
+      const envelope = buildVerdictEnvelope(
+        testCase.report,
+        testCase.mode,
+        testCase.signal,
+        RUN_ID,
+        BASE_PATH,
+        pathService,
+        [
+          { name: 'fixture-gate', verdict: { exitClass: 'VerdictFail', message: 'the gate rejected the report' } },
+          { name: 'fixture-clean', verdict: null },
+        ],
+      )
+      return Equal.equals(envelope.evaluators, {
+        'fixture-gate': { exitClass: 'VerdictFail', message: 'the gate rejected the report' },
+      })
+    },
+  )
+
+  it.prop(
+    '∀c_NoEvaluatorVerdicts_≡TheFieldIsAbsent',
+    [fc.constant({ report: reportOf([mutantOf('1', 'Killed', locationOf(0))]), mode: 'machine', signal: 'tty' })],
+    ([testCase]) => {
+      const envelope = buildVerdictEnvelope(
+        testCase.report,
+        testCase.mode,
+        testCase.signal,
+        RUN_ID,
+        BASE_PATH,
+        pathService,
+        [],
+      )
+      return envelope.evaluators === undefined && !Object.hasOwn(envelope, 'evaluators')
+    },
+  )
 })
