@@ -11,8 +11,9 @@ import { Effect } from 'effect'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { parseSync } from 'oxc-parser'
-import { afterAll, expect } from 'vitest'
+import { afterAll, expect, TestRunner } from 'vitest'
 
 import { generateSchemaLaws, LAW_FILE_BASENAME } from '@systemfsoftware/effect-schema-vite'
 
@@ -68,6 +69,92 @@ const lawsIn = (code: string): ReadonlyMap<string, string> => {
 
 const NESTED = makePackage('schema-laws-', { 'nested/schemas.ts': MIXED_DECLARATIONS })
 
+const recursionLawsIn = (code: string): ReadonlyMap<string, string> => {
+  const moduleOfLocal = new Map(
+    [...code.matchAll(/import \{ \w+ as (\w+) \} from '([^']+)'/g)].map(([, local, module]) => [
+      local ?? '',
+      module ?? '',
+    ]),
+  )
+  return new Map(
+    [...code.matchAll(/recursionLaws\('([^']+)', (\w+)\)/g)].map(([, title, local]) => [
+      title ?? '',
+      moduleOfLocal.get(local ?? '') ?? '',
+    ]),
+  )
+}
+
+const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+const RECURSIVE_SCHEMA = `
+import { Schema } from 'effect'
+import type { FastCheck } from 'effect/testing'
+import { terminatingRecursion } from '@systemfsoftware/effect-schema-extensions'
+
+type Codec = Schema.Codec<unknown, unknown>
+
+const Lit = Schema.TaggedStruct('Lit', { value: Schema.Finite })
+const Id = Schema.TaggedStruct('Id', { name: Schema.String })
+const Binary: Codec = Schema.suspend((): Codec =>
+  Schema.Struct({ _tag: Schema.Literal('Binary'), left: RecursiveExpr, right: RecursiveExpr })
+)
+const Member: Codec = Schema.suspend((): Codec =>
+  Schema.Struct({ _tag: Schema.Literal('Member'), object: RecursiveExpr, property: RecursiveExpr })
+)
+const Conditional: Codec = Schema.suspend((): Codec =>
+  Schema.Struct({ _tag: Schema.Literal('Conditional'), test: RecursiveExpr, consequent: RecursiveExpr, alternate: RecursiveExpr })
+)
+const Call: Codec = Schema.suspend((): Codec =>
+  Schema.Struct({ _tag: Schema.Literal('Call'), callee: RecursiveExpr, args: Schema.Array(RecursiveExpr) })
+)
+
+export const RecursiveExpr: Schema.Codec<unknown, unknown> = terminatingRecursion({
+  identifier: 'RecursiveExpr',
+  base: [Lit, Id],
+  recur: [Binary, Member, Conditional, Call],
+  maxDepth: 6,
+  depthSize: 'medium'
+})
+`
+
+const FLAT_SCHEMA = `
+import { Schema } from 'effect'
+
+export const Flat = Schema.Struct({ name: Schema.String, count: Schema.Int })
+`
+
+const makeRuntimePackage = (files: Record<string, string>): string => {
+  const root = mkdtempSync(join(PACKAGE_ROOT, 'temp', 'law-suite-'))
+  mkdirSync(join(root, 'src'), { recursive: true })
+  for (const [relativePath, contents] of Object.entries(files)) {
+    writeFileSync(join(root, 'src', relativePath), contents)
+  }
+  writeFileSync(join(root, 'src', LAW_FILE_BASENAME), 'export {}\n')
+  return root
+}
+
+/**
+ * The generated body runs as the consumer's vitest run runs it, so the laws it
+ * registers are the laws a consumer's suite would carry.
+ *
+ * Dynamic by necessity: the module path is minted at run time from the fixture
+ * root, so no static specifier can name it.
+ */
+const registeredLawsOf = async (root: string): Promise<ReadonlyArray<string>> => {
+  const lawFile = join(root, 'src', LAW_FILE_BASENAME)
+  writeFileSync(lawFile, lawSuiteFor(root))
+  const installed = TestRunner.getCurrentSuite().tasks.length
+  await import(pathToFileURL(lawFile).href)
+  return TestRunner.getCurrentSuite()
+    .tasks.slice(installed)
+    .map((task) => task.name)
+}
+
+const RECURSIVE_RUNTIME = makeRuntimePackage({ 'recursive.schema.ts': RECURSIVE_SCHEMA })
+const FLAT_RUNTIME = makeRuntimePackage({ 'flat.schema.ts': FLAT_SCHEMA })
+const RECURSIVE_LAWS = await registeredLawsOf(RECURSIVE_RUNTIME)
+const FLAT_LAWS = await registeredLawsOf(FLAT_RUNTIME)
+
 const NAMESAKES = makePackage('schema-laws-namesake-', {
   'first/money.schema.ts': MONEY,
   'second/money.schema.ts': MONEY,
@@ -89,7 +176,7 @@ const SINGLE = makePackage('schema-laws-single-', {
 })
 
 afterAll(() => {
-  for (const root of [NESTED, NAMESAKES, BARE, BARRELLED, QUOTED, SINGLE]) {
+  for (const root of [NESTED, NAMESAKES, BARE, BARRELLED, QUOTED, SINGLE, RECURSIVE_RUNTIME, FLAT_RUNTIME]) {
     rmSync(root, { recursive: true, force: true })
   }
 })
@@ -177,21 +264,53 @@ Feature('Generating codec laws for every schema a package exports').body(({ scen
   )
 
   scenario(
-    'The generated suite contains only round-trip laws',
+    'The generated suite carries a law call for round-trips and one for generation',
     Gherkin.Do.pipe(
       Given('a package with a single schema')('pkg', () => Effect.succeed(SINGLE)),
       When('the plugin generates that package’s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
       Then('the suite contains ruleOfSchemas calls')((s) => {
         expect(s.code).toContain('ruleOfSchemas')
       }),
-      Then('the suite contains only ruleOfSchemas')((s) => {
-        expect(s.code).not.toContain('REFUTED')
+      Then('the suite contains recursionLaws calls')((s) => {
+        expect(s.code).toContain('recursionLaws')
       }),
-      Then('the suite imports ruleOfSchemas from the law package alone')((s) => {
+      Then('both law kinds are imported from the law package')((s) => {
         expect(s.code).toContain(`from '${LAW_PKG}'`)
       }),
       Then('the suite needs no vitest import')((s) => {
         expect(s.code).not.toContain(`from 'vitest'`)
+      }),
+    ),
+  )
+
+  scenario(
+    'Every exported schema earns a generation-law call beside its round-trip pair',
+    Gherkin.Do.pipe(
+      Given('a package whose schemas all live one folder below its source root')('pkg', () => Effect.succeed(NESTED)),
+      When('the plugin generates that package’s law suite')('code', (s) => Effect.sync(() => lawSuiteFor(s.pkg))),
+      Then('each schema is passed to both law calls under one title and one module binding')((s) => {
+        expect(Object.fromEntries(recursionLawsIn(s.code))).toEqual(Object.fromEntries(lawsIn(s.code)))
+      }),
+    ),
+  )
+
+  scenario(
+    'A recursive schema carries its generation laws and a flat schema carries none',
+    Gherkin.Do.pipe(
+      Given('one package whose schema recurses and one whose schema does not')(
+        'packages',
+        () => Effect.succeed({ recursive: RECURSIVE_LAWS, flat: FLAT_LAWS }),
+      ),
+      When('both generated suites have been collected')('laws', (s) => Effect.succeed(s.packages)),
+      Then('the recursive schema runs five laws and the flat schema runs two')((s) => {
+        expect(s.laws.recursive).toEqual([
+          '∀x_RecursiveExprEnc_=x',
+          '∀x_RecursiveExpr_=x',
+          '∀x_RecursiveExprNesting_≤MaxDepth1',
+          '∀s_RecursiveExprDeepShare_≠Zero',
+          '∀s_RecursiveExprVariants_⊇Declared',
+        ])
+        expect(s.laws.flat).toEqual(['∀x_FlatEnc_=x', '∀x_Flat_=x'])
       }),
     ),
   )

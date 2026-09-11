@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/effect-schema-vite#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Vite plugin that auto-discovers Effect Schema exports and injects round-trip property tests via @systemfsoftware/effect-schema-law.",
+  "description": "Vite plugin that auto-discovers Effect Schema exports and injects codec law and generation law property tests via @systemfsoftware/effect-schema-law.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -66,6 +66,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
+    "@systemfsoftware/effect-schema-extensions": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:*",
     "effect": "catalog:peers",
     "vite": ">5.0.0",

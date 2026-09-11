@@ -81,6 +81,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
+    "@systemfsoftware/effect-schema-extensions": "workspace:^",
     "@systemfsoftware/stryker-js": "workspace:^",
     "effect": "catalog:peers",
     "typescript": ">=5.0.0"

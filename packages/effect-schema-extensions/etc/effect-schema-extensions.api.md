@@ -4,6 +4,7 @@
 
 ```ts
 
+import { FastCheck } from 'effect/testing';
 import { Schema } from 'effect';
 
 // @public (undocumented)
@@ -29,6 +30,41 @@ export type PrefixedHex = Schema.Schema.Type<typeof PrefixedHex>;
 
 // @public (undocumented)
 export const StrictHex: Schema.String;
+
+// @public (undocumented)
+export const terminatingRecursion: <const Base extends readonly [Schema.Constraint, ...ReadonlyArray<Schema.Constraint>], const Recur extends readonly [Schema.Constraint, ...ReadonlyArray<Schema.Constraint>]>(options: TerminatingRecursionOptions<Base, Recur>) => Schema.Union<readonly [...Base, ...Recur]>;
+
+// @public
+export interface TerminatingRecursionBudget {
+    // (undocumented)
+    readonly depthSize: 'small' | 'medium' | 'large';
+    // (undocumented)
+    readonly identifier: string;
+    // (undocumented)
+    readonly maxDepth: number;
+}
+
+// @public
+export interface TerminatingRecursionHook {
+    // (undocumented)
+    (typeParameters: readonly []): (fc: typeof FastCheck, context: Schema.Annotations.ToArbitrary.Context) => Schema.Annotations.ToArbitrary.Output<unknown>;
+    // (undocumented)
+    readonly budget: TerminatingRecursionBudget;
+}
+
+// @public
+export interface TerminatingRecursionOptions<Base extends readonly [Schema.Constraint, ...ReadonlyArray<Schema.Constraint>] = readonly [Schema.Constraint, ...ReadonlyArray<Schema.Constraint>], Recur extends readonly [Schema.Constraint, ...ReadonlyArray<Schema.Constraint>] = readonly [Schema.Constraint, ...ReadonlyArray<Schema.Constraint>]> {
+    // (undocumented)
+    readonly base: Base;
+    // (undocumented)
+    readonly depthSize: 'small' | 'medium' | 'large';
+    // (undocumented)
+    readonly identifier: string;
+    // (undocumented)
+    readonly maxDepth: number;
+    // (undocumented)
+    readonly recur: Recur;
+}
 
 // @public (undocumented)
 export const Uint8ArrayFromPrefixedHex: Schema.decodeTo<Schema.Uint8ArrayFromHex, Schema.brand<Schema.decodeTo<Schema.String, Schema.TemplateLiteral<readonly ["0x", Schema.String]>, never, never>, "PrefixedHex">, never, never>;

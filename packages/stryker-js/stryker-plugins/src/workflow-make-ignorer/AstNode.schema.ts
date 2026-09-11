@@ -1,3 +1,4 @@
+import { terminatingRecursion } from '@systemfsoftware/effect-schema-extensions'
 import { Schema as S } from 'effect'
 
 export const Identifier = S.Struct({
@@ -81,15 +82,13 @@ export const CallExpression: S.Schema<CallExpression> = S.suspend(
     }),
 )
 
-AstNodeSchema = S.Union([
-  Identifier,
-  StringLiteral,
-  ArrowFunctionExpression,
-  FunctionExpression,
-  MemberExpression,
-  CallExpression,
-  UnknownNode,
-])
+AstNodeSchema = terminatingRecursion({
+  identifier: 'systemfsoftware.stryker-plugins.workflow-make-ignorer.AstNode',
+  base: [Identifier, StringLiteral, ArrowFunctionExpression, FunctionExpression, UnknownNode],
+  recur: [MemberExpression, CallExpression],
+  maxDepth: 6,
+  depthSize: 'small',
+})
 
 export const AstNode: S.Schema<AstNode> = AstNodeSchema
 

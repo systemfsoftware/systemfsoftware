@@ -6,6 +6,9 @@
 
 import { Schema } from 'effect';
 
+// @public (undocumented)
+export const recursionLaws: <A, I>(label: string, schema: Schema.Codec<A, I>) => void;
+
 // @public
 export const ruleOfSchemas: <A, I>(name: string, schema: Schema.Codec<A, I>) => void;
 

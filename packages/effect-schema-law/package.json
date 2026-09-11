@@ -64,6 +64,7 @@
   },
   "peerDependencies": {
     "@effect/vitest": "catalog:peers",
+    "@systemfsoftware/effect-schema-extensions": "workspace:^",
     "effect": "catalog:peers",
     "vitest": "*"
   },

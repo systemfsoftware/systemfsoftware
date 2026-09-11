@@ -47,17 +47,21 @@ export const generateSchemaLaws = (lawFilePath: string, srcDir: string): string 
     (nameCount.get(s.name) ?? 0) > 1 ? `${s.name} (${specifierOf(s.filePath)})` : s.name
 
   return [
-    `import { ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
+    `import { recursionLaws, ruleOfSchemas } from '@systemfsoftware/effect-schema-law'`,
     schemas.map((s, i) => `import { ${s.name} as schema_${i} } from ${quote(specifierOf(s.filePath))}`).join('\n'),
     '',
-    schemas.map((s, i) => `ruleOfSchemas(${quote(labelOf(s))}, schema_${i})`).join('\n'),
+    schemas
+      .map((s, i) =>
+        `ruleOfSchemas(${quote(labelOf(s))}, schema_${i})\nrecursionLaws(${quote(labelOf(s))}, schema_${i})`
+      )
+      .join('\n'),
   ].join('\n')
 }
 
 /**
  * Vite plugin that walks the consumer's `src/` directory, finds every
  * exported Effect `Schema`, and auto-injects `ruleOfSchemas` round-trip
- * property tests for each one.
+ * property tests and `recursionLaws` generation laws for each one.
  *
  * The laws are injected by rewriting the consumer's own
  * `src/schema-laws.test.ts` — the one test filename the placement taxonomy
