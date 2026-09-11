@@ -3,7 +3,12 @@ import * as S from 'effect/Schema'
 import { ExitClassCodec } from './ExitClass.schema.js'
 import type { StandardSchemaV1 } from './Plugin.schema.js'
 
-const EvaluatorVerdictCodec = S.NullOr(ExitClassCodec)
+const EvaluatorVerdictCodec = S.NullOr(
+  S.Struct({
+    exitClass: ExitClassCodec,
+    message: S.optional(S.String),
+  }),
+)
 export type EvaluatorVerdict = S.Schema.Type<typeof EvaluatorVerdictCodec>
 
 export const EvaluatorVerdictSchema: StandardSchemaV1<unknown, EvaluatorVerdict> = S.toStandardSchemaV1(

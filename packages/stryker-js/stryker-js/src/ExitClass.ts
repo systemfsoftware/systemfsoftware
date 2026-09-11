@@ -50,12 +50,12 @@ const belowThreshold = (score: number, breakingThreshold: number): ExitClass | n
   return null
 }
 
-const presentThresholds = (score: number | null, breakingThreshold: number | null): readonly number[] =>
-  [score, breakingThreshold].filter((value): value is number => value !== null)
+const isThresholdPair = (values: readonly (number | null)[]): values is readonly [number, number] =>
+  values.length === 2 && values.every((value) => value !== null)
 
 export const verdictExitClass = (score: number | null, breakingThreshold: number | null): ExitClass | null => {
-  const present = presentThresholds(score, breakingThreshold)
-  if (present.length < 2) return null
+  const present = [score, breakingThreshold]
+  if (!isThresholdPair(present)) return null
   return belowThreshold(present[0], present[1])
 }
 

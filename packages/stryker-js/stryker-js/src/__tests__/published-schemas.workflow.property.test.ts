@@ -309,7 +309,12 @@ const CASES: readonly SchemaCase[] = [
     refused: { _tag: 'ReporterFailed', cause: 'x', event: 'mutant', reporterName: 'r' },
   },
   { name: 'IgnoreDecisionSchema', schema: IgnoreDecisionSchema, accepted: 'because', refused: 42 },
-  { name: 'EvaluatorVerdictSchema', schema: EvaluatorVerdictSchema, accepted: 'VerdictFail', refused: 'Fail' },
+  {
+    name: 'EvaluatorVerdictSchema',
+    schema: EvaluatorVerdictSchema,
+    accepted: { exitClass: 'RuntimeError', message: 'the report could not be read' },
+    refused: 'RuntimeError',
+  },
   {
     name: 'EvaluatorFailedSchema',
     schema: EvaluatorFailedSchema,

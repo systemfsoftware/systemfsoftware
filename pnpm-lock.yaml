@@ -1994,25 +1994,43 @@ importers:
       '@effect/platform-node-shared':
         specifier: 'catalog:'
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)
+      '@eslint-community/regexpp':
+        specifier: 4.12.2
+        version: 4.12.2
       '@noble/hashes':
         specifier: 1.8.0
         version: 1.8.0
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.1
+      '@oxc-project/types':
+        specifier: 'catalog:'
+        version: 0.140.0
       '@systemfsoftware/effect-cell-types':
         specifier: workspace:^
         version: link:../../effect-cell-types
       '@systemfsoftware/stryker-js':
         specifier: workspace:^
         version: link:../stryker-js
-      '@systemfsoftware/stryker-js-engine':
-        specifier: workspace:^
-        version: link:../stryker-js-engine
-      '@systemfsoftware/stryker-js-html-reporter':
-        specifier: workspace:^
-        version: link:../stryker-js-html-reporter
+      diff-match-patch:
+        specifier: 1.0.5
+        version: 1.0.5
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
+      minimatch:
+        specifier: ~10.2.4
+        version: 10.2.5
+      mutation-testing-elements:
+        specifier: catalog:stryker
+        version: 3.7.3
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.140.0
     devDependencies:
+      '@std/jsonc':
+        specifier: 'catalog:'
+        version: '@jsr/std__jsonc@1.0.2'
       '@systemfsoftware/all':
         specifier: workspace:^
         version: link:../../oxlint-plugin/all
@@ -2049,6 +2067,12 @@ importers:
       '@systemfsoftware/vitest-config':
         specifier: workspace:^
         version: link:../../toolchain/vitest-config
+      '@types/diff-match-patch':
+        specifier: 1.0.36
+        version: 1.0.36
+      '@types/estree':
+        specifier: 1.0.8
+        version: 1.0.8
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
@@ -2134,6 +2158,52 @@ importers:
       oxlint-tsgolint:
         specifier: catalog:oxlint
         version: 7.0.2001
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  packages/stryker-js/stryker-js-html-parser:
+    dependencies:
+      '@systemfsoftware/stryker-js':
+        specifier: workspace:^
+        version: link:../stryker-js
+      angular-html-parser:
+        specifier: ~10.4.0
+        version: 10.4.0
+    devDependencies:
+      '@systemfsoftware/all':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/all
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: catalog:attw
+        version: 1.1.1
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../effect-gherkin-spec
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../toolchain/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../toolchain/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.112
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@7.0.2001)
+      rimraf:
+        specifier: 'catalog:'
+        version: 6.1.3
       tsdown:
         specifier: 'catalog:'
         version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
@@ -2266,24 +2336,58 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
 
-  packages/stryker-js/stryker-js-typescript-checker:
+  packages/stryker-js/stryker-js-svelte-parser:
     dependencies:
-      '@systemfsoftware/effect-cell-types':
-        specifier: workspace:^
-        version: link:../../effect-cell-types
       '@systemfsoftware/stryker-js':
         specifier: workspace:^
         version: link:../stryker-js
+    devDependencies:
+      '@systemfsoftware/all':
+        specifier: workspace:^
+        version: link:../../oxlint-plugin/all
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: catalog:attw
+        version: 1.1.1
+      '@systemfsoftware/effect-gherkin-spec':
+        specifier: workspace:^
+        version: link:../../effect-gherkin-spec
+      '@systemfsoftware/tsconfig':
+        specifier: workspace:^
+        version: link:../../toolchain/tsconfig
+      '@systemfsoftware/vitest-config':
+        specifier: workspace:^
+        version: link:../../toolchain/vitest-config
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
       effect:
         specifier: 'catalog:'
         version: 4.0.0-rc.112
-      typescript:
+      estree-walker:
+        specifier: ^2.0.2
+        version: 2.0.2
+      oxlint:
+        specifier: catalog:oxlint
+        version: 1.77.0(oxlint-tsgolint@7.0.2001)
+      rimraf:
         specifier: 'catalog:'
-        version: 7.0.2
+        version: 6.1.3
+      svelte:
+        specifier: 5.55.1
+        version: 5.55.1
+      tsdown:
+        specifier: 'catalog:'
+        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
+
+  packages/stryker-js/stryker-js-typescript-checker:
+    dependencies:
+      '@systemfsoftware/stryker-js':
+        specifier: workspace:^
+        version: link:../stryker-js
     devDependencies:
-      '@effect/platform-node':
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))
       '@effect/platform-node-shared':
         specifier: 'catalog:'
         version: 4.0.0-rc.112(effect@4.0.0-rc.112)
@@ -2296,6 +2400,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: catalog:attw
         version: 1.1.1
+      '@systemfsoftware/effect-cell-types':
+        specifier: workspace:^
+        version: link:../../effect-cell-types
       '@systemfsoftware/effect-gherkin-spec':
         specifier: workspace:^
         version: link:../../effect-gherkin-spec
@@ -2317,6 +2424,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.0-rc.112
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)
@@ -2326,6 +2436,9 @@ importers:
       tsdown:
         specifier: 'catalog:'
         version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@1.8.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -2390,9 +2503,9 @@ importers:
 
   packages/stryker-js/stryker-plugins:
     dependencies:
-      typescript:
-        specifier: '>=5.0.0'
-        version: 7.0.2
+      '@systemfsoftware/stryker-js':
+        specifier: workspace:^
+        version: link:../stryker-js
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -2415,9 +2528,6 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../../oxlint-plugin/oxlint-config
-      '@systemfsoftware/stryker-js':
-        specifier: workspace:^
-        version: link:../stryker-js
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig

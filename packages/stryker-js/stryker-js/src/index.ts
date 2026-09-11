@@ -10,6 +10,7 @@ export * as Report from './Report.js'
 export * as Reporter from './Reporter.js'
 export * as TestRunner from './TestRunner.js'
 
+export { causeText, errorToString } from './Mutant.js'
 export { declarePlugin, foldContributions } from './Plugin.js'
 
 export type {

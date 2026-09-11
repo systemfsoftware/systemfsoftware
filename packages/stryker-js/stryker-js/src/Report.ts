@@ -26,6 +26,8 @@ export type {
 import type { MutantStatus } from './Mutant.schema.js'
 import type { FileResult, Metrics, MetricsResult, MutantResult } from './Report.schema.js'
 
+type FileEntry = readonly [string, FileResult]
+
 const countStatus = (mutants: readonly MutantResult[], status: MutantStatus): number =>
   mutants.filter((mutant) => mutant.status === status).length
 
@@ -100,31 +102,24 @@ const fileResultOf = (fileName: string, file: FileResult): MetricsResult => ({
   childResults: [],
 })
 
-const nestedGroupResult = (segment: string, entries: readonly (readonly [string, FileResult])[]): MetricsResult => {
+const nestedGroupResult = (segment: string, entries: readonly FileEntry[]): MetricsResult => {
   const nested = Object.fromEntries(entries.map(([fileName, file]) => [fileName.slice(segment.length + 1), file]))
   return { name: segment, metrics: metricsOf(nested), childResults: childResultsOf(nested) }
 }
 
-const soleEntry = (entries: readonly (readonly [string, FileResult])[]): readonly [string, FileResult] | null => {
-  if (entries.length !== 1) return null
-  return entries[0]
-}
+const isSoleEntry = (entries: readonly FileEntry[]): entries is readonly [FileEntry] => entries.length === 1
 
-const namedFileResult = (segment: string, entry: readonly [string, FileResult]): MetricsResult | null => {
+const namedFileResult = (segment: string, entry: FileEntry): MetricsResult | null => {
   if (entry[0] === segment) return fileResultOf(entry[0], entry[1])
   return null
 }
 
-const soleSegmentFileResult = (
-  segment: string,
-  entries: readonly (readonly [string, FileResult])[],
-): MetricsResult | null => {
-  const only = soleEntry(entries)
-  if (only === null) return null
-  return namedFileResult(segment, only)
+const soleSegmentFileResult = (segment: string, entries: readonly FileEntry[]): MetricsResult | null => {
+  if (!isSoleEntry(entries)) return null
+  return namedFileResult(segment, entries[0])
 }
 
-const childResultOf = (segment: string, entries: readonly (readonly [string, FileResult])[]): MetricsResult => {
+const childResultOf = (segment: string, entries: readonly FileEntry[]): MetricsResult => {
   const sole = soleSegmentFileResult(segment, entries)
   if (sole === null) return nestedGroupResult(segment, entries)
   return sole
