@@ -95,7 +95,6 @@ packages:
   - packages/atom/effect-atom-react/
   - packages/oxlint-plugin/
   - packages/stryker-js/
-  - packages/arethetypeswrong/
   - packages/toolchain/
   - packages/effect-gherkin-spec/
   - packages/storybook-gherkin/
@@ -136,9 +135,6 @@ packages:
   - packages/stryker-js/stryker-js-vitest-runner/
   - packages/stryker-js/stryker-plugins/
   - packages/stryker-js/stryker-test-contribution/
-  - packages/arethetypeswrong/arethetypeswrong/
-  - packages/arethetypeswrong/arethetypeswrong-cli/
-  - packages/arethetypeswrong/arethetypeswrong-recipes/
   - packages/toolchain/tsconfig/
   - packages/toolchain/tsdown-config/
   - packages/toolchain/vitest-config/

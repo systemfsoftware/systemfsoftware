@@ -1,6 +1,4 @@
 ---
-'@systemfsoftware/arethetypeswrong-cli': patch
-'@systemfsoftware/arethetypeswrong': patch
 '@systemfsoftware/effect-atom': patch
 '@systemfsoftware/effect-atom-react': patch
 '@systemfsoftware/effect-cell-types': patch
