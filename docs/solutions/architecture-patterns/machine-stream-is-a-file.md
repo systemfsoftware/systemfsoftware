@@ -33,7 +33,7 @@ Two independent defects produced that log:
 
 ## Guidance
 
-Console is not a JSON log. Put the machine stream in a report file next to the HTML and JSON reports. Print at most: phase, a count line, twenty surviving mutants, a verdict. Count every finished mutant.
+Console is not a JSON log. Put the machine stream in a report file next to the HTML and JSON reports. Print at most: phase, a count line, the surviving mutants up to the cap (`SURVIVOR_CAP = 100` in `MergeReports.ts`), a verdict. Count every finished mutant.
 
 Child test runners used as mutation oracles must not print. Direct test runs under `AGENT` stay `passed-only` with bail. Do not attach GitHub Actions annotations to every passing test.
 
