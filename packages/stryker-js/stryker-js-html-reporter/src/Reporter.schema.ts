@@ -1,6 +1,5 @@
-import { Wire } from '@systemfsoftware/effect-cell-types'
 import * as S from 'effect/Schema'
-const MutationTestResultSchema = Wire.mint(S.Unknown)
+const MutationTestResultSchema = S.Unknown
 
 export class HtmlReportCommand extends S.TaggedClass<HtmlReportCommand>()('HtmlReportCommand', {
   report: MutationTestResultSchema,

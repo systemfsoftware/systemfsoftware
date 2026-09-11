@@ -134,8 +134,8 @@ const Result = S.Union(S.String, S.Struct({ name: S.String }).pipe(S.check((v) =
     {
       name: 'Should_Fail_Once_Per_When_UnionArrayMembersCarryChecks',
       code: `import { Schema as S } from 'effect'
-import { Wire } from './wire.js'
-const Result = S.Union([Wire.mint(Wire.mint(S.Finite).pipe(S.check(S.isGreaterThanOrEqualTo(1)))), Wire.mint(Wire.mint(S.String).pipe(S.check(S.isPattern(/^(100|[1-9]?[0-9])%$/))))])`,
+const mint = <T>(field: T): T => field
+const Result = S.Union([mint(mint(S.Finite).pipe(S.check(S.isGreaterThanOrEqualTo(1)))), mint(mint(S.String).pipe(S.check(S.isPattern(/^(100|[1-9]?[0-9])%$/))))])`,
       filename: '/repo/pkg/src/domain.schema.ts',
       errors: [error('Union'), error('Union')],
     },

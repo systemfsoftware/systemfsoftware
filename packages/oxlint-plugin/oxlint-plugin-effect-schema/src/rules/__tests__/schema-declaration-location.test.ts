@@ -295,10 +295,6 @@ void vocabulary`,
       filename: '/repo/pkg/src/Cell.ts',
     },
     {
-      // effect-cell-types/src/Wire.ts — `export const string = mint(S.String)`: the
-      // callee `mint` is a local factory (multi-statement body) that marks a schema
-      // member. A call into a builder is a can't-decide without vocabulary evidence
-      // at the BASE; the S.* argument is a use, and the binding is silent.
       name: 'Should_Pass_When_ALocalMintFactoryWrapsASchemaMember',
       code: `import { Schema as S } from 'effect'
 const assertMinted = (_field: unknown): void => {}
@@ -308,7 +304,7 @@ const mint = (field: unknown) => {
 }
 export const string = mint(S.String)
 export const number = mint(S.Finite)`,
-      filename: '/repo/pkg/src/Wire.ts',
+      filename: '/repo/pkg/src/minted-members.ts',
     },
     {
       name: 'Should_Pass_When_ALocalCodecBuilderIsInvoked',

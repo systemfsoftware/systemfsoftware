@@ -5,7 +5,6 @@
  * the worker is usable, and the two crash discriminants the engine branches on.
  */
 
-import { Wire } from '@systemfsoftware/effect-cell-types'
 import { Schema as S } from 'effect'
 
 // ---------------------------------------------------------------------------
@@ -17,9 +16,9 @@ import { Schema as S } from 'effect'
  * retires a crashed worker but not one whose method rejected.
  */
 export class WorkerMethodError extends S.TaggedError<WorkerMethodError>()('WorkerMethodError', {
-  message: Wire.mint(S.String),
-  name: Wire.mint(S.optional(Wire.mint(S.String))),
-  stack: Wire.mint(S.optional(Wire.mint(S.String))),
+  message: S.String,
+  name: S.optional(S.String),
+  stack: S.optional(S.String),
 }) {}
 
 // ---------------------------------------------------------------------------
@@ -30,17 +29,16 @@ export class WorkerMethodError extends S.TaggedError<WorkerMethodError>()('Worke
  * A process identifier. `S.Int` rather than `S.Number` because the plain number
  * domain admits `NaN` and the infinities, and a pid is none of those.
  */
-const ProcessId = Wire.mint(S.Int)
+const ProcessId = S.Int
 
 /**
  * How a child process ended.
  */
-const ChildExit = Wire.mint(
-  S.Union([
-    Wire.wire({ _tag: Wire.mint(S.Literals(['Code'])), code: Wire.mint(S.Int) }),
-    Wire.wire({ _tag: Wire.mint(S.Literals(['Signal'])), signal: Wire.mint(S.String) }),
-  ]),
-)
+const ChildExit = S.Union([
+  S.Struct({ _tag: S.Literals(['Code']), code: S.Int }),
+  S.Struct({ _tag: S.Literals(['Signal']), signal: S.String }),
+])
+
 export type ChildExit = typeof ChildExit.Type
 
 /**
@@ -51,7 +49,7 @@ export class ChildProcessCrashedError extends S.TaggedError<ChildProcessCrashedE
   {
     pid: ProcessId,
     exit: ChildExit,
-    cause: Wire.mint(S.optional(Wire.mint(S.String))),
+    cause: S.optional(S.String),
   },
 ) {
   readonly exitClass = 'InternalError' as const
@@ -68,15 +66,15 @@ export class ChildProcessCrashedError extends S.TaggedError<ChildProcessCrashedE
 export class WorkerFrameTooLargeError extends S.TaggedError<WorkerFrameTooLargeError>()(
   'WorkerFrameTooLargeError',
   {
-    byteLength: Wire.mint(S.Int),
-    limit: Wire.mint(S.Int),
+    byteLength: S.Int,
+    limit: S.Int,
   },
 ) {
   readonly exitClass = 'InternalError' as const
 }
 export class OutOfMemoryError extends S.TaggedError<OutOfMemoryError>()('OutOfMemoryError', {
   pid: ProcessId,
-  exitCode: Wire.mint(S.Int),
+  exitCode: S.Int,
 }) {
   readonly exitClass = 'RuntimeError' as const
 }

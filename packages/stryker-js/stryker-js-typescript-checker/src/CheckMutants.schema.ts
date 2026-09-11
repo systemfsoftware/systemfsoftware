@@ -1,13 +1,12 @@
-import { Wire } from '@systemfsoftware/effect-cell-types'
 import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as S from 'effect/Schema'
 
 /** A file name the node map can be keyed by: non-empty, and naming an extension. */
-const SourceFileSchema = Wire.mint(S.NonEmptyString.pipe(S.check(S.isPattern(/\.[^./\\]+$/))))
+const SourceFileSchema = S.NonEmptyString.pipe(S.check(S.isPattern(/\.[^./\\]+$/)))
 
-const DiagnosticSchema = Wire.wire({
-  fileName: Wire.mint(S.optional(SourceFileSchema)),
-  text: Wire.mint(S.String),
+const DiagnosticSchema = S.Struct({
+  fileName: S.optional(SourceFileSchema),
+  text: S.String,
 })
 
 export interface NodeDecodedShape {
@@ -16,14 +15,12 @@ export interface NodeDecodedShape {
   readonly children: readonly NodeDecodedShape[]
 }
 
-const TSFileNodeSchema: Wire.Minted<NodeDecodedShape, unknown> = Wire.mint(
-  S.suspend(() =>
-    Wire.wire({
-      fileName: SourceFileSchema,
-      parents: Wire.mint(S.Array(TSFileNodeSchema)),
-      children: Wire.mint(S.Array(TSFileNodeSchema)),
-    })
-  ),
+const TSFileNodeSchema: S.Codec<NodeDecodedShape, unknown> = S.suspend(() =>
+  S.Struct({
+    fileName: SourceFileSchema,
+    parents: S.Array(TSFileNodeSchema),
+    children: S.Array(TSFileNodeSchema),
+  })
 )
 
 export class CheckMutantsInput extends S.TaggedClass<CheckMutantsInput>()(
@@ -31,7 +28,7 @@ export class CheckMutantsInput extends S.TaggedClass<CheckMutantsInput>()(
   {
     mutants: S.Array(Mutant),
     diagnostics: S.Array(DiagnosticSchema),
-    nodes: Wire.mint(S.Record(SourceFileSchema, TSFileNodeSchema)),
+    nodes: S.Record(SourceFileSchema, TSFileNodeSchema),
   },
 ) {}
 
