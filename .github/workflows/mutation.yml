@@ -162,14 +162,15 @@ jobs:
     needs: [discover, mutation]
     if: ${{ !cancelled() && needs.discover.outputs.package_count > 0 }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     permissions:
       contents: read
       actions: write
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/install-deps
-      - run: node scripts/tools/merge-mutation-reports.mjs --selftest
+      - name: Build the report merger
+        run: corepack pnpm turbo build --filter=@systemfsoftware/stryker-js-cli
 
       - uses: actions/download-artifact@v8
         continue-on-error: true
@@ -180,7 +181,7 @@ jobs:
       - name: Merge
         env:
           PACKAGES: ${{ needs.discover.outputs.packages }}
-        run: node scripts/tools/merge-mutation-reports.mjs --parts mutation-parts --out mutation-merged
+        run: node packages/stryker-js/stryker-js-cli/dist/main.mjs merge-reports --parts mutation-parts --out mutation-merged
 
       - uses: actions/upload-artifact@v7
         with:

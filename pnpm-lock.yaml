@@ -147,9 +147,6 @@ catalogs:
     mutation-testing-elements:
       specifier: 3.7.3
       version: 3.7.3
-    mutation-testing-metrics:
-      specifier: 3.7.3
-      version: 3.7.3
 
 overrides:
   fast-check: ^4
@@ -190,12 +187,6 @@ importers:
       lint-staged:
         specifier: ^17.1.0
         version: 17.1.0
-      mutation-testing-elements:
-        specifier: catalog:stryker
-        version: 3.7.3
-      mutation-testing-metrics:
-        specifier: catalog:stryker
-        version: 3.7.3
       oxc-parser:
         specifier: 'catalog:'
         version: 0.140.0
