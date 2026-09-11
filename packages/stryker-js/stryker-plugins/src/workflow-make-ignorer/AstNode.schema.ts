@@ -1,4 +1,3 @@
-import { terminatingRecursion } from '@systemfsoftware/effect-schema-recursion-budget'
 import { Schema as S } from 'effect'
 
 export const Identifier = S.Struct({
@@ -56,41 +55,33 @@ export type AstNode =
   | CallExpression
   | UnknownNode
 
-let AstNodeSchema: S.Schema<AstNode>
-
-/**
- * The recursive member schemas reference the shared `AstNode` UNION directly (v4: a reference
- * straight to the schema, not a fresh `S.suspend` wrap), the same suspension layout the
- * effect-schema-ignorer kernel uses — the cycle breaks at the one union node and the schema-law
- * arbitrary derivation terminates.
- */
-export const MemberExpression: S.Schema<MemberExpression> = S.suspend(
-  (): S.Schema<MemberExpression> =>
-    S.Struct({
-      type: S.Literal('MemberExpression'),
-      object: AstNodeSchema,
-      property: AstNodeSchema,
-    }),
-)
-
-export const CallExpression: S.Schema<CallExpression> = S.suspend(
-  (): S.Schema<CallExpression> =>
-    S.Struct({
-      type: S.Literal('CallExpression'),
-      callee: AstNodeSchema,
-      arguments: S.Array(S.Unknown),
-    }),
-)
-
-AstNodeSchema = terminatingRecursion({
+export const AstNode: S.Schema<AstNode> = S.suspend(
+  (): S.Schema<AstNode> =>
+    S.Union([
+      Identifier,
+      StringLiteral,
+      ArrowFunctionExpression,
+      FunctionExpression,
+      MemberExpression,
+      CallExpression,
+      UnknownNode,
+    ]),
+).annotate({
   identifier: 'systemfsoftware.stryker-plugins.workflow-make-ignorer.AstNode',
-  base: [Identifier, StringLiteral, ArrowFunctionExpression, FunctionExpression, UnknownNode],
-  recur: [MemberExpression, CallExpression],
-  maxDepth: 6,
-  depthSize: 'small',
+  recursionBudget: { maxDepth: 6, depthSize: 'small' },
 })
 
-export const AstNode: S.Schema<AstNode> = AstNodeSchema
+export const MemberExpression: S.Schema<MemberExpression> = S.Struct({
+  type: S.Literal('MemberExpression'),
+  object: AstNode,
+  property: AstNode,
+})
+
+export const CallExpression: S.Schema<CallExpression> = S.Struct({
+  type: S.Literal('CallExpression'),
+  callee: AstNode,
+  arguments: S.Array(S.Unknown),
+})
 
 export const ImportSpecifier = S.Struct({
   type: S.Literal('ImportSpecifier'),

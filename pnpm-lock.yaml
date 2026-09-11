@@ -2577,9 +2577,6 @@ importers:
 
   packages/stryker-js/stryker-plugins:
     dependencies:
-      '@systemfsoftware/effect-schema-recursion-budget':
-        specifier: workspace:^
-        version: link:../../effect-schema-recursion-budget
       typescript:
         specifier: '>=5.0.0'
         version: 7.0.2
