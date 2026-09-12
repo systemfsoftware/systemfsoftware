@@ -49,13 +49,13 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 
 | Rule                            | Reports                                                                                                                                                                                                                                                        |
 | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `make-file-location`            | A `Workflow.make` call in a file that is not a single-segment `<stem>.workflow.ts`, or a second `Workflow.make` call in the same file                                                                                                                          |
+| `make-file-location`            | A workflow construction (`Workflow.make`, `Workflow.total`, `Workflow.andThen`) in a file that is not a single-segment `<stem>.workflow.ts`, or a second construction in the same file. A `.tst.ts` type-test file runs nowhere, so it is out of scope         |
 | `workflow-match-exhaustive`     | `Match.orElse` in a `Match.tag` pipe; `Match.orElse` as the fallback of a predicate or literal dispatch over an open type (close the variant type first); or a `Match.tag` dispatch with no `Match.exhaustive` — all scoped to a `Workflow.make` argument body |
 | `make-body-purity`              | A reference inside a `Workflow.make` argument body that resolves to I/O — an impure import, a module-level mutable, a mutable local, or an ambient global; and control-flow keywords past the one converging first-statement guard                             |
 | `make-command-schema`           | A type assertion, laundering call, or `declare`d binding at the `Workflow.make` command position — the shapes `make`'s own type bound cannot refuse                                                                                                            |
 | `workflow-file-export-topology` | A second non-schema value export from a single-segment `<stem>.workflow.ts`, a missing non-schema value export, or any re-export (`export * from`, `export { x } from`, `export { imported }`)                                                                 |
 | `damp-workflow-stem`            | A `<stem>.workflow.ts` file whose stem is not a 2–5 token lowercase kebab phrase naming the decision, or whose stem is not the camelCase of the file's single non-schema value export                                                                          |
-| `workflow-file-make-presence`   | A `<stem>.workflow.ts` file with no `Workflow.make` construction                                                                                                                                                                                               |
+| `workflow-file-make-presence`   | A `<stem>.workflow.ts` file with no workflow construction (`Workflow.make`, `Workflow.total`, `Workflow.andThen`)                                                                                                                                              |
 
 `workflow-file-export-topology`, `damp-workflow-stem`, and `workflow-file-make-presence` key on the filename and report nothing outside a single-segment `<stem>.workflow.ts`.
 
@@ -65,7 +65,7 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 A: The name was placed in oxlint's `plugins` field, which takes built-in namespaces only. JavaScript plugins load through `jsPlugins`; their rules go in `rules`.
 
 **Q: Installed, but nothing is reported.**
-A: `make-body-purity` and `workflow-match-exhaustive` are boundary-scoped — only `Workflow.make` argument bodies are examined. `make-file-location` keys on the filename: it reports a `Workflow.make` call in a file that is not a single-segment `<stem>.workflow.ts`, or a second call in the same file. `workflow-file-export-topology`, `damp-workflow-stem`, and `workflow-file-make-presence` key on the same filename: outside a single-segment `<stem>.workflow.ts` they report nothing.
+A: `make-body-purity` and `workflow-match-exhaustive` are boundary-scoped — only a recognized constructor's argument body is examined. `make-file-location` keys on the filename: it reports a `Workflow.make`, `Workflow.total`, or `Workflow.andThen` call in a file that is not a single-segment `<stem>.workflow.ts`, or a second call in the same file. `workflow-file-export-topology`, `damp-workflow-stem`, and `workflow-file-make-presence` key on the same filename: outside a single-segment `<stem>.workflow.ts` they report nothing.
 
 ## Requirements
 

@@ -41,6 +41,13 @@ class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
 
 export const decision = Workflow.make(Cmd, (input: Cmd): Result.Result<string, never> => ${body})`
 
+const inTwoArgTotalBody = (body: string): string =>
+  `${MAKE_IMPORTS}import * as S from 'effect/Schema'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+
+export const decision = Workflow.total(Cmd, (input: Cmd): Result.Result<string, never> => ${body})`
+
 const NORELSE_ON_CLOSED = {
   name: 'Match.orElse',
   expected: 'Match.exhaustive',
@@ -292,6 +299,15 @@ const decide = (input: Cmd): Result.Result<string, never> =>
   )
 
 export const decision = Workflow.make(Cmd, decide)`,
+      errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
+    },
+    {
+      name: 'Should_ReportOrElse_When_ATotalDecisionBodyEndsWithOrElse',
+      code: inTwoArgTotalBody(`Match.value(input).pipe(
+        Match.tag('A', () => a),
+        Match.tag('B', () => b),
+        Match.orElse(() => fallback)
+      )`),
       errors: [{ messageId: 'orElseOnClosedUnion', data: NORELSE_ON_CLOSED }],
     },
     {

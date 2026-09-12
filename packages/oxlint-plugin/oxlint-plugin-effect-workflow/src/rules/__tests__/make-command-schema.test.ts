@@ -179,11 +179,29 @@ ruleTester.run('make-command-schema', makeCommandSchema, {
       code: `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.make(Cmd satisfies unknown, (c: Cmd) => c)`,
       filename: '/repo/pkg/src/d.workflow.ts',
     },
+    {
+      name: 'Should_Pass_When_TheTotalCommandIsASchemaClassIdentifier',
+      code: `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.total(Cmd, ${DECIDE})`,
+      filename: '/repo/pkg/src/d.workflow.ts',
+    },
   ],
   invalid: [
     {
       name: 'Should_Report_When_TheCommandIsAnAsAssertion',
       code: `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.make({} as unknown as Cmd, (c: Cmd) => c)`,
+      filename: '/repo/pkg/src/d.workflow.ts',
+      errors: [assertedError('TSAsExpression')],
+    },
+    {
+      name: 'Should_Report_When_TheTotalCommandIsAnAsAssertion',
+      code: `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.total({} as unknown as Cmd, ${DECIDE})`,
+      filename: '/repo/pkg/src/d.workflow.ts',
+      errors: [assertedError('TSAsExpression')],
+    },
+    {
+      name: 'Should_Report_When_TheAndThenCommandIsAnAsAssertion',
+      code:
+        `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.andThen({} as unknown as Cmd, upstream, NextCmd, downstream)`,
       filename: '/repo/pkg/src/d.workflow.ts',
       errors: [assertedError('TSAsExpression')],
     },

@@ -67,6 +67,15 @@ const controlError = (name: string): { readonly messageId: string; readonly data
 ruleTester.run('make-body-purity', makeBodyPurity, {
   valid: [
     {
+      name: 'Should_Pass_When_AWorkflowFileComposesImportedWorkflowsWithAndThen',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { admitDecoded } from './admit-decoded-command.workflow.js'
+import { decideNext } from './decide-next.workflow.js'
+
+export const chained = Workflow.andThen(Cmd, admitDecoded, NextCmd, decideNext)`,
+      filename: '/repo/pkg/src/chain-decisions.workflow.ts',
+    },
+    {
       name: 'Should_Pass_When_BodyReferencesOnlyParamsAndPureImports',
       code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Match from 'effect/Match'
@@ -464,6 +473,19 @@ Workflow.make((path: string) => mystery(path))`,
 import * as fs from 'node:fs'
 
 Workflow.make((path: string) => fs.readFileSync(path, 'utf-8'))`,
+      errors: [
+        referenceError('ioImportReference', 'a reference to fs', IO_ACTUAL, IO_FIX),
+      ],
+    },
+    {
+      name: 'Should_ReportIoImport_When_ATotalDecisionBodyReferencesANodeIoBinding',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as S from 'effect/Schema'
+import * as fs from 'node:fs'
+
+class Cmd extends S.TaggedClass<Cmd>()('Cmd', {}) {}
+
+Workflow.total(Cmd, (command: Cmd) => fs.readFileSync('x', 'utf-8'))`,
       errors: [
         referenceError('ioImportReference', 'a reference to fs', IO_ACTUAL, IO_FIX),
       ],

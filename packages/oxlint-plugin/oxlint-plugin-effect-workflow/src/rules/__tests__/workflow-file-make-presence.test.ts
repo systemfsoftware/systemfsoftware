@@ -35,6 +35,16 @@ ruleTester.run('workflow-file-make-presence', workflowFileMakePresence, {
       code: `${IMPORT}\nexport const decide = Workflow.make((input: number) => input)`,
       filename: '/repo/pkg/src/place.order.workflow.ts',
     },
+    {
+      name: 'Should_Pass_When_AWorkflowFileConstructsWithAndThenOnly',
+      code: `${IMPORT}\nexport const decide = Workflow.andThen(Cmd, upstream, NextCmd, downstream)`,
+      filename: '/repo/pkg/src/admit-order.workflow.ts',
+    },
+    {
+      name: 'Should_Pass_When_AWorkflowFileConstructsWithTotalOnly',
+      code: `${IMPORT}\nexport const decide = Workflow.total(Cmd, (input: number) => input)`,
+      filename: '/repo/pkg/src/admit-order.workflow.ts',
+    },
   ],
   invalid: [
     {
@@ -57,6 +67,38 @@ ruleTester.run('workflow-file-make-presence', workflowFileMakePresence, {
       name: 'Should_Report_When_MakeOriginIsForeign',
       code:
         `const LocalWorkflow = { make: (body: unknown) => body }\nexport const admitOrder = LocalWorkflow.make((input: number) => input)`,
+      filename: '/repo/pkg/src/admit-order.workflow.ts',
+      errors: [
+        {
+          messageId: 'workflowFileWithoutMake',
+          data: {
+            name: 'admit-order.workflow.ts',
+            expected: WITHOUT_MAKE_EXPECTED,
+            actual: WITHOUT_MAKE_ACTUAL,
+            fix: WITHOUT_MAKE_FIX,
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_When_TheOnlyWorkflowMemberCalledIsUnrecognized',
+      code: `${IMPORT}\nexport const admitOrder = Workflow.compose((input: number) => input)`,
+      filename: '/repo/pkg/src/admit-order.workflow.ts',
+      errors: [
+        {
+          messageId: 'workflowFileWithoutMake',
+          data: {
+            name: 'admit-order.workflow.ts',
+            expected: WITHOUT_MAKE_EXPECTED,
+            actual: WITHOUT_MAKE_ACTUAL,
+            fix: WITHOUT_MAKE_FIX,
+          },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_When_WorkflowFileHoldsOnlyATypePositionConstruction',
+      code: `${IMPORT}\ntype Key = { [Workflow.total(Cmd, decide)]: string }`,
       filename: '/repo/pkg/src/admit-order.workflow.ts',
       errors: [
         {
