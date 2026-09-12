@@ -26,7 +26,7 @@ Feature('Mediating the engine verdict into an exit contract').body(({ scenario }
         })())),
       Then('the run exits 1 with one finding line and a summary')(({ tree }: { tree: string }) => {
         const run = runConventions(tree, ['scan', 'good/tsconfig.json', 'bad/tsconfig.json'])
-        checkExpect(run.status).toBe(1)
+        checkExpect(run.status, `engine stderr: ${run.stderr.slice(0, 500)}`).toBe(1)
         checkExpect(run.stdout).toMatch(/bad\/tsconfig\.json:1:1\s+require_tsconfig_node_reference \(error\)/u)
         checkExpect(run.stdout).toContain('checked 2 files, 1 findings across 1 rules')
       }),
@@ -44,7 +44,7 @@ Feature('Mediating the engine verdict into an exit contract').body(({ scenario }
         })())),
       Then('the run exits 0')(({ tree }: { tree: string }) => {
         const run = runConventions(tree, ['scan', 'a/tsconfig.json'])
-        checkExpect(run.status).toBe(0)
+        checkExpect(run.status, `engine stderr: ${run.stderr.slice(0, 500)}`).toBe(0)
         checkExpect(run.stdout).toContain('checked 1 files, 0 findings')
       }),
     ),
@@ -59,7 +59,7 @@ Feature('Mediating the engine verdict into an exit contract').body(({ scenario }
       ),
       Then('the run exits 2 naming the resolution chain')(({ tree }: { tree: string }) => {
         const run = runConventions(tree, ['scan', 'a/tsconfig.json'], { ...process.env, PATH: '/nonexistent' })
-        checkExpect(run.status).toBe(2)
+        checkExpect(run.status, `engine stderr: ${run.stderr.slice(0, 500)}`).toBe(2)
         checkExpect(run.stderr).toContain('no grit engine found')
       }),
     ),
@@ -76,7 +76,7 @@ Feature('Mediating the engine verdict into an exit contract').body(({ scenario }
         })())),
       Then('the run exits 1 with the finding on the comment-bearing file')(({ tree }: { tree: string }) => {
         const run = runConventions(tree, ['scan', 'fork/tsconfig.json'])
-        checkExpect(run.status).toBe(1)
+        checkExpect(run.status, `engine stderr: ${run.stderr.slice(0, 500)}`).toBe(1)
         checkExpect(run.stdout).toContain('require_tsconfig_node_reference')
       }),
     ),
@@ -93,7 +93,7 @@ Feature('Mediating the engine verdict into an exit contract').body(({ scenario }
         })())),
       Then('the run exits 0')(({ tree }: { tree: string }) => {
         const run = runConventions(tree, ['scan', 'pkg/tsconfig.json'])
-        checkExpect(run.status).toBe(0)
+        checkExpect(run.status, `engine stderr: ${run.stderr.slice(0, 500)}`).toBe(0)
       }),
     ),
   )

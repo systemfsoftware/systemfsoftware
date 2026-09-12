@@ -30,7 +30,7 @@ Feature('Composing consumer rules beside the bundled library').body(({ scenario 
           'pkg/tsconfig.json',
           'pkg/package.json',
         ])
-        checkExpect(run.status).toBe(1)
+        checkExpect(run.status, `engine stderr: ${run.stderr.slice(0, 500)}`).toBe(1)
         checkExpect(run.stdout).toContain('checked 2 files, 3 findings across 2 rules')
         checkExpect(run.stdout).toContain('consumer_no_todo_key')
       }),
@@ -57,7 +57,7 @@ Feature('Composing consumer rules beside the bundled library').body(({ scenario 
           'rules/require_tsconfig_node_reference.md',
           'pkg/tsconfig.json',
         ])
-        checkExpect(run.status).toBe(1)
+        checkExpect(run.status, `engine stderr: ${run.stderr.slice(0, 500)}`).toBe(1)
         checkExpect(run.stdout).toContain('require_tsconfig_node_reference (error)')
       }),
     ),

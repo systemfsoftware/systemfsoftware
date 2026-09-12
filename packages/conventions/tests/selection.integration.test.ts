@@ -27,7 +27,7 @@ Feature('Selecting target files under roots').body(({ scenario }) => {
         })())),
       Then('the scan names the first-party finding and exits 1')(({ tree }: { tree: string }) => {
         const run = runConventions(tree, ['scan', 'pkg-a/**/tsconfig.json'])
-        checkExpect(run.status).toBe(1)
+        checkExpect(run.status, `engine stderr: ${run.stderr.slice(0, 500)}`).toBe(1)
         checkExpect(run.stdout).toContain('pkg-a/nested/deep/tsconfig.json')
         checkExpect(run.stdout).not.toContain('node_modules')
         checkExpect(run.stdout).toContain('checked 2 files, 1 findings across 1 rules')
@@ -47,7 +47,7 @@ Feature('Selecting target files under roots').body(({ scenario }) => {
         })())),
       Then('the run exits 0 having checked only the kept file')(({ tree }: { tree: string }) => {
         const run = runConventions(tree, ['scan', 'pkg/**/tsconfig.json', '--ignore', 'pkg/fixtures'])
-        checkExpect(run.status).toBe(0)
+        checkExpect(run.status, `engine stderr: ${run.stderr.slice(0, 500)}`).toBe(0)
         checkExpect(run.stdout).toContain('checked 1 files, 0 findings')
       }),
     ),
@@ -59,7 +59,7 @@ Feature('Selecting target files under roots').body(({ scenario }) => {
       Given('a tree with no tsconfig.json at all')('tree', () => Effect.succeed(makeTree('conventions-empty-'))),
       Then('the run exits 2 saying it scanned 0 files')(({ tree }: { tree: string }) => {
         const run = runConventions(tree, ['scan', 'pkg/**/tsconfig.json'])
-        checkExpect(run.status).toBe(2)
+        checkExpect(run.status, `engine stderr: ${run.stderr.slice(0, 500)}`).toBe(2)
         checkExpect(run.stdout).toContain('scanned 0 files')
       }),
     ),
@@ -74,7 +74,7 @@ Feature('Selecting target files under roots').body(({ scenario }) => {
       ),
       Then('the run exits 0 having checked nothing')(({ tree }: { tree: string }) => {
         const run = runConventions(tree, ['scan'])
-        checkExpect(run.status).toBe(0)
+        checkExpect(run.status, `engine stderr: ${run.stderr.slice(0, 500)}`).toBe(0)
         checkExpect(run.stdout).toContain('scanned 0 files')
       }),
     ),
