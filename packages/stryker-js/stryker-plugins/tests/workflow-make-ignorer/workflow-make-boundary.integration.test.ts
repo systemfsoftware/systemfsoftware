@@ -477,6 +477,33 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
     )
 
     scenario(
+      'A composing andThen operand that resolves to a same-file function joins no population',
+      Gherkin.Do.pipe(
+        Given('a `Workflow.andThen(...)` operand naming a same-file function holding the mutant')(
+          'fixture',
+          () =>
+            Effect.sync(() => {
+              const mutant = stringLiteral('compose')
+              const operandBody = makeBodyOf(mutant)
+              const operand = constBindingOf('upstreamStep', operandBody)
+              const andThenCall = workflowAndThenCallOf([identifier('upstreamStep'), identifier('second')])
+              const program = programOf([workflowNamedImport(), operand, andThenCall])
+              return makeFixture(mutant, [mutant, operandBody, operand, program])
+            }),
+        ),
+        When('the boundary decision runs on that mutant')(
+          'reason',
+          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+        ),
+        Then('it returns NOT_INSIDE_WORKFLOW_MAKE')((s) =>
+          Effect.sync(() => {
+            expect(s.reason).toBe(NOT_INSIDE_WORKFLOW_MAKE)
+          })
+        ),
+      ),
+    )
+
+    scenario(
       'A schema tag outside every make body earns its own distinct reason from each ignorer',
       Gherkin.Do.pipe(
         Given('a `_tag` inside a TaggedClass declaration sitting outside any make body')(

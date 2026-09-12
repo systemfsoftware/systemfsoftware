@@ -75,28 +75,28 @@ interface UnrelatedBrandTwo {
   readonly [UnrelatedBrand]: typeof UnrelatedBrand
 }
 
-declare const ClassBrandShapeTypeId: unique symbol
+declare const NarrowSlotBrandTypeId: unique symbol
 
 /**
- * The class-field brand idiom hand-written as interfaces: the shape an `S.TaggedClass` variant
- * carries, spelled out by declarations. An interface has no field initializer, so the slot can
- * only be annotated (`typeof T`), which narrows it to the unique symbol type — a class field's
- * initializer widens the same declaration to the general `symbol`.
+ * The narrowed twin of the class idiom, hand-written as interfaces: an interface has no field
+ * initializer, so the slot can only be annotated (`typeof T`), which keeps it the unique symbol
+ * type — the slot width a class field's initializer leaves behind when it widens to the general
+ * `symbol`. This is the shape the predicate refuses.
  */
-interface ClassBrandShapeOne {
-  readonly _tag: 'ClassBrandShapeOne'
+interface NarrowSlotBrandOne {
+  readonly _tag: 'NarrowSlotBrandOne'
   readonly value: number
-  readonly [ClassBrandShapeTypeId]: typeof ClassBrandShapeTypeId
+  readonly [NarrowSlotBrandTypeId]: typeof NarrowSlotBrandTypeId
 }
 
-interface ClassBrandShapeTwo {
-  readonly _tag: 'ClassBrandShapeTwo'
+interface NarrowSlotBrandTwo {
+  readonly _tag: 'NarrowSlotBrandTwo'
   readonly reason: string
-  readonly [ClassBrandShapeTypeId]: typeof ClassBrandShapeTypeId
+  readonly [NarrowSlotBrandTypeId]: typeof NarrowSlotBrandTypeId
 }
 
 /**
- * The spoken-loudly twin of {@link ClassBrandShapeOne}: an interface that annotates the slot
+ * The spoken-loudly twin of {@link NarrowSlotBrandOne}: an interface that annotates the slot
  * with the general `symbol` instead. That is the type a class field's initializer infers, so
  * this union is structurally the class instance itself — the check keys on the declared shape
  * (a widened slot), never on whether the declaration is a class or an interface.
@@ -138,9 +138,9 @@ declare const decideUnrelatedKeyStringOverTagged: (
 declare const decideUnrelatedBrandTotalOverTagged: (
   command: TaggedCmd,
 ) => Result<UnrelatedBrandOne | UnrelatedBrandTwo, never>
-declare const decideClassBrandShapeOverTagged: (
+declare const decideNarrowSlotBrandOverTagged: (
   command: TaggedCmd,
-) => Result<ClassBrandShapeOne | ClassBrandShapeTwo, CommandRefused>
+) => Result<NarrowSlotBrandOne | NarrowSlotBrandTwo, CommandRefused>
 declare const decideUnrelatedBrandOverTagged: (
   command: TaggedCmd,
 ) => Result<UnrelatedBrandOne | UnrelatedBrandTwo, CommandRefused>
@@ -306,18 +306,22 @@ describe('T14 the shared-type-id predicate as measured', () => {
     expect<typeof Workflow.make>().type.not.toBeCallableWith(TaggedCmd, decideUnrelatedBrandOverTagged)
   })
 
-  it('Should_RefuseTheMarker_When_AnInterfaceCarriesTheClassBrandShape', () => {
-    expect<Workflow.Inhabited<ClassBrandShapeOne | ClassBrandShapeTwo, CommandRefused>>().type.toBe<
+  it('Should_RefuseTheMarker_When_AnInterfaceCarriesTheNarrowSlotBrand', () => {
+    expect<Workflow.Inhabited<NarrowSlotBrandOne | NarrowSlotBrandTwo, CommandRefused>>().type.toBe<
       Workflow.UnsharedTypeId
     >()
   })
 
-  it('Should_RefuseTheMarker_When_TheClassBrandShapeReachesAMakeConstructor', () => {
-    expect<typeof Workflow.make>().type.not.toBeCallableWith(TaggedCmd, decideClassBrandShapeOverTagged)
+  it('Should_RefuseTheMarker_When_TheNarrowSlotPairReachesAMakeConstructor', () => {
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(TaggedCmd, decideNarrowSlotBrandOverTagged)
   })
 
   it('Should_AcceptTheMarker_When_AnInterfaceCarriesTheClassFieldsWidenedSlot', () => {
     expect<Workflow.Inhabited<WidenedBrandOne | WidenedBrandTwo, CommandRefused>>().type.toBe<unknown>()
+  })
+
+  it('Should_AcceptTheMarker_When_TheGenuineTaggedClassFamilyCarriesTheFieldInitializerBrand', () => {
+    expect<Workflow.Inhabited<Decision, CommandRefused>>().type.toBe<unknown>()
   })
 
   it('Should_RefuseTheMarker_When_TheFamilyBrandCarriesAStringKey', () => {

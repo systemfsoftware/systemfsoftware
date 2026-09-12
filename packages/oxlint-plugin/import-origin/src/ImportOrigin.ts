@@ -304,7 +304,9 @@ const resolveIdentifierOrigin = (
     if (specifier.type === 'ImportSpecifier') {
       const imported = specifier.imported
       if (imported.type === 'Identifier') return { source, importedName: imported.name, path: [] }
-      return imported.type === 'Literal' ? { source, importedName: imported.value, path: [] } : null
+      return imported.type === 'Literal' && typeof imported.value === 'string'
+        ? { source, importedName: imported.value, path: [] }
+        : null
     }
     if (specifier.type === 'ImportDefaultSpecifier') return { source, importedName: 'default', path: [] }
     return { source, importedName: null, path: [] }

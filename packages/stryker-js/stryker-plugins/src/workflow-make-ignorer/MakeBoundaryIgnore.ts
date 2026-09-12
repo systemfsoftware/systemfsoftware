@@ -19,18 +19,19 @@ import {
 } from './AstNode.schema.js'
 
 export const NOT_INSIDE_WORKFLOW_MAKE =
-  'mutant is outside every Workflow.make decision body; only make bodies are the mutation population' as const
+  'mutant is outside every Workflow.make and Workflow.total decision body; only decider bodies are the mutation population' as const
 
-/** The module whose `Workflow` value owns the `make` boundary. */
+/** The module whose `Workflow` value owns the workflow construction boundary. */
 const WORKFLOW_SOURCE = '@systemfsoftware/effect-cell-types' as const
 
 /** The import name a specifier must carry to be the workflow value. */
 const WORKFLOW_IMPORT_NAME = 'Workflow' as const
 
 /**
- * The members of the workflow value, mirroring the oxlint kernel's constructor set:
- * `make` and `total` construct a workflow from a decision, `andThen` composes one
- * workflow's decision output into the next workflow's command.
+ * The members of the workflow value — `make` and `total` construct a workflow from a
+ * decision; `andThen` composes one workflow's decision output into the next workflow's
+ * command. Re-derived in this module's own vocabulary: the kernel's set is single-homed
+ * and not importable (MB1), so nothing here can mirror it by construction.
  */
 const WORKFLOW_CONSTRUCTOR_MEMBERS: Readonly<Record<string, true>> = {
   make: true,
@@ -47,7 +48,7 @@ const WORKFLOW_CONSTRUCTOR_MEMBERS: Readonly<Record<string, true>> = {
 const COMPOSING_MEMBERS: Readonly<Record<string, true>> = { andThen: true }
 
 const NO_WORKFLOW_LOCALS: ReadonlySet<string> = new Set()
-const NO_MAKE_ARGUMENT_BODIES: ReadonlySet<object> = new Set()
+const NO_CONSTRUCTOR_ARGUMENT_BODIES: ReadonlySet<object> = new Set()
 
 // -- unvalidated node shape probes -----------------------------------------------------------
 // Four node kinds this gate reads — a named function declaration, a variable declaration, a
@@ -217,12 +218,12 @@ const importsWorkflowName = (specifier: ImportSpecifier): boolean =>
 
 // -- the boundary call shape -----------------------------------------------------------------
 
-const isWorkflowMakeCallee = (
+const isWorkflowConstructorCallee = (
   callee: unknown,
   localNames: ReadonlySet<string>,
-): callee is MemberExpression => isMemberExpression(callee) && isWorkflowMakeMember(callee, localNames)
+): callee is MemberExpression => isMemberExpression(callee) && isWorkflowBodyBearingMember(callee, localNames)
 
-const isWorkflowMakeMember = (member: MemberExpression, localNames: ReadonlySet<string>): boolean =>
+const isWorkflowBodyBearingMember = (member: MemberExpression, localNames: ReadonlySet<string>): boolean =>
   isWorkflowLocalMember(member, localNames) && isBodyBearingMemberName(member.property)
 
 const isWorkflowLocalMember = (member: MemberExpression, localNames: ReadonlySet<string>): boolean =>
@@ -237,23 +238,22 @@ const isConstructorMemberName = (property: unknown): boolean =>
 const isComposingMemberName = (property: unknown): boolean =>
   isIdentifier(property) && COMPOSING_MEMBERS[property.name] === true
 
-const isWorkflowMakeCall = (node: unknown, localNames: ReadonlySet<string>): node is CallExpression =>
-  isCallExpression(node) && isWorkflowMakeCallee(node.callee, localNames)
+const isWorkflowConstructorCall = (node: unknown, localNames: ReadonlySet<string>): node is CallExpression =>
+  isCallExpression(node) && isWorkflowConstructorCallee(node.callee, localNames)
 
 // -- module-scope function reference resolution ---------------------------------------------
 // A `Workflow.make(decision)` or `Workflow.total(decision)` call whose argument is an
 // identifier resolving to a same-file function keeps that function's body inside the
 // mutation population, mirroring the oxlint kernel's followIdentifier walk (depth-8 cycle
 // bound). This is deliberately a file-level mechanical resolution, not a scope analysis —
-// the boundary
-// is a mechanical gate (see workflowLocalNamesOf), so a same-named local shadowing the
-// module binding shadows the resolution too (no production site does this).
+// the boundary is a mechanical gate (see workflowLocalNamesOf), so a same-named local
+// shadowing the module binding shadows the resolution too (no production site does this).
 
 /** Follow depth bound, mirroring the oxlint kernel's cycle guard. */
 const MAX_FOLLOW_DEPTH = 8
 
 /**
- * The same-file follow walk: a make argument name resolves through module-scope
+ * The same-file follow walk: a constructor-argument name resolves through module-scope
  * `const` bindings (function initializers and identifier aliases) and named
  * function declarations, with the depth bound breaking alias cycles.
  */
@@ -424,48 +424,48 @@ const walkEntries = (
  * Program -> the same-file function bodies a `Workflow.make` or `Workflow.total`
  * identifier argument resolves to.
  */
-const MAKE_ARGUMENT_BODIES_BY_PROGRAM = new WeakMap<object, ReadonlySet<object>>()
+const CONSTRUCTOR_ARGUMENT_BODIES_BY_PROGRAM = new WeakMap<object, ReadonlySet<object>>()
 
 /**
- * The function nodes a make call names by identifier, memoized keyed by the Program:
+ * The function nodes a constructor call names by identifier, memoized keyed by the Program:
  * the probe loop visits every mutant in the file, and the resolution is a pure
  * function of the Program. The bodies are the container objects — a mutant whose
  * ancestor chain includes one stays inside the population.
  */
-const makeArgumentBodiesOf = (program: unknown): ReadonlySet<object> => {
-  if (!isProgram(program)) return NO_MAKE_ARGUMENT_BODIES
-  return memoizedForProgram(MAKE_ARGUMENT_BODIES_BY_PROGRAM, program, argumentBodiesIn)
+const constructorArgumentBodiesOf = (program: unknown): ReadonlySet<object> => {
+  if (!isProgram(program)) return NO_CONSTRUCTOR_ARGUMENT_BODIES
+  return memoizedForProgram(CONSTRUCTOR_ARGUMENT_BODIES_BY_PROGRAM, program, argumentBodiesIn)
 }
 
 const argumentBodiesIn = (program: Program): ReadonlySet<object> => {
   const bodies = new Set<object>()
-  addMakeArgumentBodies(program, bodies)
+  addConstructorArgumentBodies(program, bodies)
   return bodies
 }
 
 /** A file whose `Workflow` binding is not the cell-types value opens no boundary at all. */
-const addMakeArgumentBodies = (program: Program, bodies: Set<object>): void => {
+const addConstructorArgumentBodies = (program: Program, bodies: Set<object>): void => {
   const localNames = workflowLocalNamesOf(program)
   if (localNames.size === 0) return
-  collectMakeArgumentBodies(program, localNames, bodies)
+  collectConstructorArgumentBodies(program, localNames, bodies)
 }
 
-const collectMakeArgumentBodies = (
+const collectConstructorArgumentBodies = (
   program: Program,
   localNames: ReadonlySet<string>,
   bodies: Set<object>,
 ): void => {
   const bindings = moduleBindingsOf(program.body)
-  walkAllNodes(program, (node) => addFirstMakeArgumentBody(node, localNames, bindings, bodies))
+  walkAllNodes(program, (node) => addFirstConstructorArgumentBody(node, localNames, bindings, bodies))
 }
 
-const addFirstMakeArgumentBody = (
+const addFirstConstructorArgumentBody = (
   node: unknown,
   localNames: ReadonlySet<string>,
   bindings: ReadonlyMap<string, unknown>,
   bodies: Set<object>,
 ): void => {
-  if (!isWorkflowMakeCall(node, localNames)) return
+  if (!isWorkflowConstructorCall(node, localNames)) return
   addResolvedBody(firstResolvedBodyIn(node.arguments, bindings), bodies)
 }
 
@@ -481,7 +481,7 @@ const firstResolvedBodyIn = (
   bindings: ReadonlyMap<string, unknown>,
 ): object | undefined => args.map((argument) => resolvedBodyOf(argument, bindings)).find(isDefined)
 
-/** The object one make argument resolves to; a non-identifier argument resolves to nothing. */
+/** The object one constructor argument resolves to; a non-identifier argument resolves to nothing. */
 const resolvedBodyOf = (
   argument: unknown,
   bindings: ReadonlyMap<string, unknown>,
@@ -511,11 +511,11 @@ const addResolvedBody = (body: object | undefined, bodies: Set<object>): void =>
  * the walk is the boundary test. A mutant ON the call (its callee or the call itself) is outside
  * the argument and therefore outside the population, which is the point of the inverted gate.
  */
-const insideMakeBoundary = (node: unknown, ancestors: readonly unknown[]): boolean => {
+const insideConstructorBoundary = (node: unknown, ancestors: readonly unknown[]): boolean => {
   const root = workflowRootOf(ancestors)
   const localNames = workflowLocalNamesOf(root)
   if (localNames.size === 0) return false
-  return insideMakeArgument(node, ancestors, localNames, root)
+  return insideConstructorArgument(node, ancestors, localNames, root)
 }
 
 /** The outermost Program in the chain — the file the mutant was parsed from. */
@@ -527,32 +527,32 @@ const outermostProgramOf = (root: unknown, ancestor: unknown): unknown => {
   return root
 }
 
-/** Direct containment first: an ancestor make call whose argument slot holds the mutant. */
-const insideMakeArgument = (
+/** Direct containment first: an ancestor constructor call whose argument slot holds the mutant. */
+const insideConstructorArgument = (
   node: unknown,
   ancestors: readonly unknown[],
   localNames: ReadonlySet<string>,
   root: unknown,
 ): boolean => {
-  if (ancestorsContainMakeArgument(node, ancestors, localNames)) return true
+  if (ancestorsContainConstructorArgument(node, ancestors, localNames)) return true
   return insideResolvedBody(node, ancestors, root)
 }
 
-const ancestorsContainMakeArgument = (
+const ancestorsContainConstructorArgument = (
   node: unknown,
   ancestors: readonly unknown[],
   localNames: ReadonlySet<string>,
 ): boolean =>
   ancestors.some((ancestor, index) =>
-    isMakeArgumentBoundary(ancestor, chainChildOf(node, ancestors, index), localNames)
+    isConstructorArgumentBoundary(ancestor, chainChildOf(node, ancestors, index), localNames)
   )
 
 /** An ancestor call is the boundary when the node one step below it sits in an argument slot. */
-const isMakeArgumentBoundary = (
+const isConstructorArgumentBoundary = (
   ancestor: unknown,
   child: unknown,
   localNames: ReadonlySet<string>,
-): boolean => isWorkflowMakeCall(ancestor, localNames) && ancestor.arguments.includes(child)
+): boolean => isWorkflowConstructorCall(ancestor, localNames) && ancestor.arguments.includes(child)
 
 /** The node one step below `ancestors[index]`: the mutant itself for its immediate parent. */
 const chainChildOf = (node: unknown, ancestors: readonly unknown[], index: number): unknown => {
@@ -561,7 +561,7 @@ const chainChildOf = (node: unknown, ancestors: readonly unknown[], index: numbe
 }
 
 /**
- * A make argument naming a same-file function keeps that function's body inside the population
+ * A constructor argument naming a same-file function keeps that function's body inside the population
  * even though the call is a sibling statement, not an ancestor: the resolved body's identity in
  * the mutant's ancestor chain is the containment.
  */
@@ -570,7 +570,7 @@ const insideResolvedBody = (
   ancestors: readonly unknown[],
   root: unknown,
 ): boolean => {
-  const resolvedBodies = makeArgumentBodiesOf(root)
+  const resolvedBodies = constructorArgumentBodiesOf(root)
   if (resolvedBodies.size === 0) return false
   return chainContainsResolvedBody(node, ancestors, resolvedBodies)
 }
@@ -596,6 +596,6 @@ export const decideWorkflowMakeBoundaryIgnore = (
   node: unknown,
   ancestors: readonly unknown[],
 ): string | undefined => {
-  if (insideMakeBoundary(node, ancestors)) return undefined
+  if (insideConstructorBoundary(node, ancestors)) return undefined
   return NOT_INSIDE_WORKFLOW_MAKE
 }

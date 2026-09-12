@@ -4,12 +4,9 @@ import { SettleCommand, totalAdmitDecision } from './total-admit-decision.workfl
 
 /**
  * The composite of two total workflows: neither component can fail, so the component error
- * union is `never` and `andThen` publishes the branded total form instead of a `Workflow`
- * alias whose `never` channel refuses the composite.
- *
- * `andThen` takes constructed workflows where a decider would sit, so this file holds no
- * decision body of its own: the one body lives in the file that owns it, and both slots take
- * it — the second rules on the decision the first published.
+ * union is `never`. `andThen` takes constructed workflows where a decider would sit, so this
+ * file holds no decision body of its own: the one body lives in the file that owns it, and
+ * both slots take it — the second rules on the decision the first published.
  */
 export const totalPairAdmitTaggedCommands = (trace: string[]) =>
   Workflow.andThen(
