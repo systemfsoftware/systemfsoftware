@@ -39,22 +39,24 @@ const isEnforcementLevel = (value: string): value is EnforcementLevel =>
 const isEngineReport = (value: unknown): value is EngineReport =>
   typeof value === 'object' && value !== null && 'results' in value && Array.isArray(value.results)
 
-/**
- * Parses the engine's `check --json` report. The engine emits the JSON on
- * **stderr** and exits 0 even when findings exist (both verified against the
- * pinned engine), so this parse — not the engine's exit code — is the verdict
- * source.
- */
 export const parseEngineReport = (engineStderr: string): readonly Finding[] => {
-  let report: EngineReport
-  try {
-    const parsed: unknown = JSON.parse(engineStderr)
-    report = isEngineReport(parsed) ? parsed : { results: [] }
-  } catch {
-    throw new EngineOutputError(`engine did not emit a JSON report on stderr (got: ${engineStderr.slice(0, 200)})`)
-  }
-  const results = Array.isArray(report.results) ? report.results : []
+  const report = firstJsonReportLine(engineStderr)
+  const results = report.results ?? []
   return results.map(toFinding)
+}
+
+const firstJsonReportLine = (engineStderr: string): EngineReport => {
+  for (const line of engineStderr.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed.startsWith('{')) continue
+    try {
+      const parsed: unknown = JSON.parse(trimmed)
+      if (isEngineReport(parsed)) return parsed
+    } catch {
+      // a `{`-opening line that is not the report — keep scanning
+    }
+  }
+  throw new EngineOutputError(`engine did not emit a JSON report on stderr (got: ${engineStderr.slice(0, 200)})`)
 }
 
 /** Findings at or above the level gate the run; lower-severity findings are informational. */
