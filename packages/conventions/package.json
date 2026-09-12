@@ -1,0 +1,58 @@
+{
+  "name": "@systemfsoftware/conventions",
+  "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/conventions"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/conventions#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "A composable, GritQL-first conventions platform — a growing library of structural rules over the pinned grit engine, plus your own .grit rules in the same scan.",
+  "type": "module",
+  "files": [
+    "dist",
+    "rules"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown",
+    "prepack": "pnpm build",
+    "typecheck": "tsc --noEmit --incremental",
+    "attw": "attw --pack .",
+    "test": "vitest run",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "api:check": "echo 'no API report for CLI (dts: false)' && exit 0",
+    "api:update": "echo 'no API report for CLI (dts: false)' && exit 0"
+  },
+  "dependencies": {
+    "@getgrit/cli": "0.1.0-alpha.1743007075"
+  },
+  "devDependencies": {
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "vitest": "catalog:",
+    "@systemfsoftware/effect-gherkin-spec": "workspace:^",
+    "effect": "catalog:"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "license": "Apache-2.0",
+  "publishConfig": {
+    "provenance": true
+  },
+  "bin": {
+    "conventions": "./dist/main.mjs"
+  },
+  "exports": {
+    ".": "./dist/main.mjs",
+    "./package.json": "./package.json"
+  }
+}

@@ -25,15 +25,15 @@ Load docs on-demand when triggers fire; do not perform eager multi-spec reads at
 - Run `pnpm --filter <pkg> <cmd>` from workspace root; never `cd` into packages, never `npx`.
 - Production code must use `@systemfsoftware/effect-cell-types` for workflow and cell contracts.
 - Production code must use `@systemfsoftware/effect-schema-vite` to auto-discover Schema exports and run property tests.
-- Lint via per-package `oxlint.config.ts`; production code must use the `all` preset. Gate: `pnpm check:local`.
+- The JSON conventions gate is `pnpm lint:json` (`@systemfsoftware/conventions`, GritQL rules over the pinned grit engine). Exemptions, each carved by an `--ignore` flag in the script: `packages/stryker-js/stryker-js-typescript-checker/testResources` (test fixtures, incl. deliberately-invalid parses), `packages/oxlint-plugin/oxlint-plugin-recommended` (its `guard-no-behavior.mjs` forbids `tsconfig.node.json`), `packages/toolchain/vitest-config` (zero node-side TS). A missing exemption reason here is a doctrine defect, not a script change.
 
 ## Surface Classes
 
-| Surface       | Examples                                                                                                | Rule                                                                                            |
-| ------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| **Evaluator** | `scripts/guards/check-changeset.ts`, `@systemfsoftware/stryker-test-contribution`, `.github/workflows/` | Its own commit, never shared with the work it judges; gate observed red before and green after. |
-| **Doctrine**  | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`                                  | Editable, but never an input to a gate.                                                         |
-| **Editable**  | `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                                                  | Edit freely; `CONST-E9` governs loosening a constraint.                                         |
+| Surface       | Examples                                                                                                                                                   | Rule                                                                                            |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **Evaluator** | `scripts/guards/check-changeset.ts`, `@systemfsoftware/stryker-test-contribution`, `.github/workflows/`, `pnpm lint:json` (`@systemfsoftware/conventions`) | Its own commit, never shared with the work it judges; gate observed red before and green after. |
+| **Doctrine**  | `CONSTITUTION.md`, `CONCEPTS.md`, every `AGENTS.md`, `docs/solutions/`                                                                                     | Editable, but never an input to a gate.                                                         |
+| **Editable**  | `packages/*/`, `scripts/`, `docs/`, `tsdown.config.ts`                                                                                                     | Edit freely; `CONST-E9` governs loosening a constraint.                                         |
 
 ## Directory Map
 

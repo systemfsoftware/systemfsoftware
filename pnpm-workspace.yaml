@@ -7,6 +7,7 @@ allowBuilds:
   playwright: false
   protobufjs: false
   sharp: false
+  "@getgrit/cli": false
   ssh2: false
   unrs-resolver: false
 catalog:
@@ -85,6 +86,7 @@ packages:
   - packages/atom/
   - packages/atom/effect-atom/
   - packages/atom/effect-atom-react/
+  - packages/conventions/
   - packages/oxlint-plugin/
   - packages/stryker-js/
   - packages/toolchain/
