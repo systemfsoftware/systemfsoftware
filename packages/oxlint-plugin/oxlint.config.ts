@@ -5,8 +5,6 @@ import instrument from '@systemfsoftware/oxlint-preset/instrument'
 export default defineConfig({
   extends: [instrument],
 
-  // Consumer-owned ignores (never lint build output or generated trees; oxlint
-  // honours .gitignore but these are belt-and-braces for untracked artifacts).
   ignorePatterns: [
     '**/node_modules/**',
     '**/dist/**',

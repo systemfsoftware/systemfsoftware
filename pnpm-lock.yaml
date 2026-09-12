@@ -1010,15 +1010,12 @@ importers:
       '@effect/tsgo':
         specifier: ^0.36.5
         version: 0.36.5
-      '@systemfsoftware/oxlint-plugin':
-        specifier: workspace:^
-        version: link:../oxlint-plugin
-      '@systemfsoftware/oxlint-plugin-effect-dmmf':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-dmmf
       '@systemfsoftware/oxlint-plugin-effect-entrypoint':
         specifier: workspace:^
         version: link:../oxlint-plugin-effect-entrypoint
+      '@systemfsoftware/oxlint-plugin-effect-native':
+        specifier: workspace:^
+        version: link:../oxlint-plugin-effect-native
       '@systemfsoftware/oxlint-plugin-effect-schema':
         specifier: workspace:^
         version: link:../oxlint-plugin-effect-schema
@@ -1031,6 +1028,12 @@ importers:
       '@systemfsoftware/oxlint-plugin-recommended':
         specifier: workspace:^
         version: link:../oxlint-plugin-recommended
+      '@systemfsoftware/oxlint-plugin-structure':
+        specifier: workspace:^
+        version: link:../oxlint-plugin-structure
+      '@systemfsoftware/oxlint-plugin-tag-discipline':
+        specifier: workspace:^
+        version: link:../oxlint-plugin-tag-discipline
       '@systemfsoftware/oxlint-plugin-test-hygiene':
         specifier: workspace:^
         version: link:../oxlint-plugin-test-hygiene
@@ -1044,15 +1047,6 @@ importers:
         specifier: catalog:oxlint
         version: 7.0.2001
     devDependencies:
-      '@systemfsoftware/oxlint-plugin-effect-native':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-native
-      '@systemfsoftware/oxlint-plugin-structure':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-structure
-      '@systemfsoftware/oxlint-plugin-tag-discipline':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-tag-discipline
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -1062,61 +1056,6 @@ importers:
       rimraf:
         specifier: 'catalog:'
         version: 6.1.3
-      vitest:
-        specifier: 'catalog:'
-        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  packages/oxlint-plugin/oxlint-plugin:
-    dependencies:
-      '@oxc-project/types':
-        specifier: ^0.140.0
-        version: 0.140.0
-      '@oxlint/plugins':
-        specifier: catalog:oxlint
-        version: 1.77.0
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@24.13.2)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.1.0
-      '@systemfsoftware/oxlint-plugin-effect-native':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-native
-      '@systemfsoftware/oxlint-plugin-structure':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-structure
-      '@systemfsoftware/oxlint-plugin-tag-discipline':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-tag-discipline
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      '@systemfsoftware/vitest-config':
-        specifier: workspace:^
-        version: link:../../toolchain/vitest-config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 24.13.2
-      '@vitest/coverage-v8':
-        specifier: 'catalog:'
-        version: 4.1.9(vitest@4.1.10)
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.0-rc.112
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@7.0.2001)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
@@ -1184,49 +1123,6 @@ importers:
       vitest:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
-
-  packages/oxlint-plugin/oxlint-plugin-effect-dmmf:
-    dependencies:
-      '@oxlint/plugins':
-        specifier: catalog:oxlint
-        version: 1.77.0
-      '@systemfsoftware/oxlint-plugin-effect-schema':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-schema
-      '@systemfsoftware/oxlint-plugin-effect-workflow':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-workflow
-      '@systemfsoftware/oxlint-plugin-property-testing':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-property-testing
-      '@systemfsoftware/oxlint-plugin-test-hygiene':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-test-hygiene
-      '@systemfsoftware/oxlint-plugin-test-placement':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-test-placement
-    devDependencies:
-      '@microsoft/api-extractor':
-        specifier: 'catalog:'
-        version: 7.58.9(@types/node@25.9.5)
-      '@systemfsoftware/arethetypeswrong-cli':
-        specifier: 'catalog:'
-        version: 4.1.0
-      '@systemfsoftware/tsconfig':
-        specifier: workspace:^
-        version: link:../../toolchain/tsconfig
-      oxlint:
-        specifier: catalog:oxlint
-        version: 1.77.0(oxlint-tsgolint@7.0.2001)
-      rimraf:
-        specifier: 'catalog:'
-        version: 6.1.3
-      tsdown:
-        specifier: 'catalog:'
-        version: 0.22.14(oxc-resolver@11.24.2)(tsx@4.23.12)(typescript@7.0.2)(unrun@0.2.39)
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
 
   packages/oxlint-plugin/oxlint-plugin-effect-entrypoint:
     dependencies:
@@ -1301,6 +1197,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: 'catalog:'
+        version: 4.1.0
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
         version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
@@ -1575,6 +1474,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: 'catalog:'
+        version: 4.1.0
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
         version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
@@ -1633,6 +1535,9 @@ importers:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
         version: 7.58.9(@types/node@24.13.2)
+      '@systemfsoftware/arethetypeswrong-cli':
+        specifier: 'catalog:'
+        version: 4.1.0
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
         version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
@@ -1803,21 +1708,39 @@ importers:
 
   packages/oxlint-plugin/oxlint-preset:
     dependencies:
-      '@systemfsoftware/oxlint-plugin':
-        specifier: workspace:^
-        version: link:../oxlint-plugin
       '@systemfsoftware/oxlint-plugin-cell-vocabulary':
         specifier: workspace:^
         version: link:../oxlint-plugin-cell-vocabulary
-      '@systemfsoftware/oxlint-plugin-effect-dmmf':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-dmmf
       '@systemfsoftware/oxlint-plugin-effect-entrypoint':
         specifier: workspace:^
         version: link:../oxlint-plugin-effect-entrypoint
+      '@systemfsoftware/oxlint-plugin-effect-native':
+        specifier: workspace:^
+        version: link:../oxlint-plugin-effect-native
+      '@systemfsoftware/oxlint-plugin-effect-schema':
+        specifier: workspace:^
+        version: link:../oxlint-plugin-effect-schema
+      '@systemfsoftware/oxlint-plugin-effect-workflow':
+        specifier: workspace:^
+        version: link:../oxlint-plugin-effect-workflow
+      '@systemfsoftware/oxlint-plugin-property-testing':
+        specifier: workspace:^
+        version: link:../oxlint-plugin-property-testing
       '@systemfsoftware/oxlint-plugin-recommended':
         specifier: workspace:^
         version: link:../oxlint-plugin-recommended
+      '@systemfsoftware/oxlint-plugin-structure':
+        specifier: workspace:^
+        version: link:../oxlint-plugin-structure
+      '@systemfsoftware/oxlint-plugin-tag-discipline':
+        specifier: workspace:^
+        version: link:../oxlint-plugin-tag-discipline
+      '@systemfsoftware/oxlint-plugin-test-hygiene':
+        specifier: workspace:^
+        version: link:../oxlint-plugin-test-hygiene
+      '@systemfsoftware/oxlint-plugin-test-placement':
+        specifier: workspace:^
+        version: link:../oxlint-plugin-test-placement
     devDependencies:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
@@ -7745,14 +7668,6 @@ snapshots:
     transitivePeerDependencies:
       - '@types/node'
 
-  '@microsoft/api-extractor-model@7.33.8(@types/node@25.9.5)':
-    dependencies:
-      '@microsoft/tsdoc': 0.16.0
-      '@microsoft/tsdoc-config': 0.18.1
-      '@rushstack/node-core-library': 5.23.1(@types/node@25.9.5)
-    transitivePeerDependencies:
-      - '@types/node'
-
   '@microsoft/api-extractor@7.58.9(@types/node@24.13.2)':
     dependencies:
       '@microsoft/api-extractor-model': 7.33.8(@types/node@24.13.2)
@@ -7762,24 +7677,6 @@ snapshots:
       '@rushstack/rig-package': 0.7.3
       '@rushstack/terminal': 0.24.0(@types/node@24.13.2)
       '@rushstack/ts-command-line': 5.3.10(@types/node@24.13.2)
-      diff: 8.0.4
-      minimatch: 10.2.3
-      resolve: 1.22.12
-      semver: 7.7.4
-      source-map: 0.6.1
-      typescript: 5.9.3
-    transitivePeerDependencies:
-      - '@types/node'
-
-  '@microsoft/api-extractor@7.58.9(@types/node@25.9.5)':
-    dependencies:
-      '@microsoft/api-extractor-model': 7.33.8(@types/node@25.9.5)
-      '@microsoft/tsdoc': 0.16.0
-      '@microsoft/tsdoc-config': 0.18.1
-      '@rushstack/node-core-library': 5.23.1(@types/node@25.9.5)
-      '@rushstack/rig-package': 0.7.3
-      '@rushstack/terminal': 0.24.0(@types/node@25.9.5)
-      '@rushstack/ts-command-line': 5.3.10(@types/node@25.9.5)
       diff: 8.0.4
       minimatch: 10.2.3
       resolve: 1.22.12
@@ -8402,26 +8299,9 @@ snapshots:
     optionalDependencies:
       '@types/node': 24.13.2
 
-  '@rushstack/node-core-library@5.23.1(@types/node@25.9.5)':
-    dependencies:
-      ajv: 8.18.0
-      ajv-draft-04: 1.0.0(ajv@8.18.0)
-      ajv-formats: 3.0.1(ajv@8.18.0)
-      fs-extra: 11.3.5
-      import-lazy: 4.0.0
-      jju: 1.4.0
-      resolve: 1.22.12
-      semver: 7.7.4
-    optionalDependencies:
-      '@types/node': 25.9.5
-
   '@rushstack/problem-matcher@0.2.1(@types/node@24.13.2)':
     optionalDependencies:
       '@types/node': 24.13.2
-
-  '@rushstack/problem-matcher@0.2.1(@types/node@25.9.5)':
-    optionalDependencies:
-      '@types/node': 25.9.5
 
   '@rushstack/rig-package@0.7.3':
     dependencies:
@@ -8436,26 +8316,9 @@ snapshots:
     optionalDependencies:
       '@types/node': 24.13.2
 
-  '@rushstack/terminal@0.24.0(@types/node@25.9.5)':
-    dependencies:
-      '@rushstack/node-core-library': 5.23.1(@types/node@25.9.5)
-      '@rushstack/problem-matcher': 0.2.1(@types/node@25.9.5)
-      supports-color: 8.1.1
-    optionalDependencies:
-      '@types/node': 25.9.5
-
   '@rushstack/ts-command-line@5.3.10(@types/node@24.13.2)':
     dependencies:
       '@rushstack/terminal': 0.24.0(@types/node@24.13.2)
-      '@types/argparse': 1.0.38
-      argparse: 1.0.10
-      string-argv: 0.3.2
-    transitivePeerDependencies:
-      - '@types/node'
-
-  '@rushstack/ts-command-line@5.3.10(@types/node@25.9.5)':
-    dependencies:
-      '@rushstack/terminal': 0.24.0(@types/node@25.9.5)
       '@types/argparse': 1.0.38
       argparse: 1.0.10
       string-argv: 0.3.2

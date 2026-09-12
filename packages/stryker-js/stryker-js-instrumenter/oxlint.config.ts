@@ -4,6 +4,6 @@ import { defineConfig } from 'oxlint'
 export default defineConfig({
   extends: [base],
   rules: {
-    '@systemfsoftware/oxlint-plugin/ban-classes': 'error',
+    '@systemfsoftware/oxlint-plugin-structure/ban-classes': 'error',
   },
 })

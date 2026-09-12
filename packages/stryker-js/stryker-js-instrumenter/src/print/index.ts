@@ -5,7 +5,7 @@
  * Synthesized nodes without start/end print correctly.
  */
 
-// oxlint-disable typescript/no-unsafe-type-assertion typescript/no-unnecessary-type-assertion typescript/no-non-null-assertion typescript/switch-exhaustiveness-check @systemfsoftware/ban-classes
+// oxlint-disable typescript/no-unsafe-type-assertion typescript/no-unnecessary-type-assertion typescript/no-non-null-assertion typescript/switch-exhaustiveness-check @systemfsoftware/structure/ban-classes
 
 import type {
   AccessorProperty,

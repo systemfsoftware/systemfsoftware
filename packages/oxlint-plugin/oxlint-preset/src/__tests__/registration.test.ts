@@ -2,17 +2,53 @@ import { existsSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import cellVocabularyPlugin from '@systemfsoftware/oxlint-plugin-cell-vocabulary'
 import cellVocabularyPreset from '@systemfsoftware/oxlint-plugin-cell-vocabulary/preset'
-import effectDmmfPreset from '@systemfsoftware/oxlint-plugin-effect-dmmf/preset'
+import effectEntrypointPlugin from '@systemfsoftware/oxlint-plugin-effect-entrypoint'
 import effectEntrypointPreset from '@systemfsoftware/oxlint-plugin-effect-entrypoint/preset'
+import effectNativePlugin from '@systemfsoftware/oxlint-plugin-effect-native'
+import effectNativePreset from '@systemfsoftware/oxlint-plugin-effect-native/preset'
+import effectSchemaPlugin from '@systemfsoftware/oxlint-plugin-effect-schema'
+import effectSchemaPreset from '@systemfsoftware/oxlint-plugin-effect-schema/preset'
+import effectWorkflowPlugin from '@systemfsoftware/oxlint-plugin-effect-workflow'
+import effectWorkflowPreset from '@systemfsoftware/oxlint-plugin-effect-workflow/preset'
+import propertyTestingPlugin from '@systemfsoftware/oxlint-plugin-property-testing'
+import propertyTestingPreset from '@systemfsoftware/oxlint-plugin-property-testing/preset'
 import recommended from '@systemfsoftware/oxlint-plugin-recommended'
-import housePreset from '@systemfsoftware/oxlint-plugin/preset'
+import structurePlugin from '@systemfsoftware/oxlint-plugin-structure'
+import structurePreset from '@systemfsoftware/oxlint-plugin-structure/preset'
+import tagDisciplinePlugin from '@systemfsoftware/oxlint-plugin-tag-discipline'
+import tagDisciplinePreset from '@systemfsoftware/oxlint-plugin-tag-discipline/preset'
+import testHygienePlugin from '@systemfsoftware/oxlint-plugin-test-hygiene'
+import testHygienePreset from '@systemfsoftware/oxlint-plugin-test-hygiene/preset'
+import testPlacementPlugin from '@systemfsoftware/oxlint-plugin-test-placement'
+import testPlacementPreset from '@systemfsoftware/oxlint-plugin-test-placement/preset'
 import { describe, expect, it } from 'vitest'
 
 import canonical from '../canonical.js'
 import { defaultIgnores } from '../default-ignores.js'
 import instrument from '../instrument.js'
 import { isUnknownArray, parseJson } from './oxlint-probe.js'
+
+const FRAGMENTS = [
+  { plugin: effectNativePlugin, preset: effectNativePreset },
+  { plugin: tagDisciplinePlugin, preset: tagDisciplinePreset },
+  { plugin: structurePlugin, preset: structurePreset },
+  { plugin: effectSchemaPlugin, preset: effectSchemaPreset },
+  { plugin: effectWorkflowPlugin, preset: effectWorkflowPreset },
+  { plugin: propertyTestingPlugin, preset: propertyTestingPreset },
+  { plugin: testHygienePlugin, preset: testHygienePreset },
+  { plugin: testPlacementPlugin, preset: testPlacementPreset },
+  { plugin: cellVocabularyPlugin, preset: cellVocabularyPreset },
+  { plugin: effectEntrypointPlugin, preset: effectEntrypointPreset },
+] as const
+
+const AGGREGATE_NAMESPACES = [
+  '@systemfsoftware/oxlint-plugin/',
+  '@systemfsoftware/oxlint-plugin-effect-dmmf/',
+] as const
+
+const CUSTOM_RULE_PREFIX = '@systemfsoftware/'
 
 const collectConfigTree = (config: unknown): { jsPlugins: unknown[]; ruleKeys: string[] } => {
   const jsPlugins: unknown[] = []
@@ -54,12 +90,18 @@ const namespaceOf = (entry: unknown): string | null => {
 
 describe('canonical root registration contract', () => {
   it('Should_ExtendTheFragmentsInOrder_When_TheCanonicalRootIsComposed', () => {
-    expect(canonical.extends).toHaveLength(5)
+    expect(canonical.extends).toHaveLength(11)
     expect(canonical.extends[0]).toBe(recommended)
-    expect(canonical.extends[1]).toBe(housePreset)
-    expect(canonical.extends[2]).toBe(effectDmmfPreset)
-    expect(canonical.extends[3]).toBe(cellVocabularyPreset)
-    expect(canonical.extends[4]).toBe(effectEntrypointPreset)
+    expect(canonical.extends[1]).toBe(effectNativePreset)
+    expect(canonical.extends[2]).toBe(tagDisciplinePreset)
+    expect(canonical.extends[3]).toBe(structurePreset)
+    expect(canonical.extends[4]).toBe(effectSchemaPreset)
+    expect(canonical.extends[5]).toBe(effectWorkflowPreset)
+    expect(canonical.extends[6]).toBe(propertyTestingPreset)
+    expect(canonical.extends[7]).toBe(testHygienePreset)
+    expect(canonical.extends[8]).toBe(testPlacementPreset)
+    expect(canonical.extends[9]).toBe(cellVocabularyPreset)
+    expect(canonical.extends[10]).toBe(effectEntrypointPreset)
   })
 
   it('Should_DeclareOnlyItsOwnKeys_When_PluginsComeFromTheFragments', () => {
@@ -92,6 +134,28 @@ describe('canonical root registration contract', () => {
     const orphaned = customRuleKeys.filter((key) => !namespaces.some((namespace) => key.startsWith(namespace)))
     expect(customRuleKeys.length).toBeGreaterThan(0)
     expect(orphaned).toStrictEqual([])
+  })
+
+  it('Should_ComposeExactlyTheFragmentRuleUnion_When_TheCanonicalRootIsComposed', () => {
+    const declared = FRAGMENTS.flatMap(({ plugin, preset }) => {
+      const namespaces = collectConfigTree(preset).jsPlugins
+        .map((entry) => namespaceOf(entry))
+        .filter((value): value is string => value !== null)
+      expect(namespaces).toHaveLength(1)
+      const keys = Object.keys(plugin.configs.recommended.rules)
+      expect(keys.length).toBeGreaterThan(0)
+      expect(keys.filter((key) => !namespaces.some((namespace) => key.startsWith(namespace)))).toStrictEqual([])
+      return keys
+    }).sort()
+
+    const composed = collectConfigTree(canonical).ruleKeys
+      .filter((key) => key.startsWith(CUSTOM_RULE_PREFIX))
+      .sort()
+
+    expect(composed).toStrictEqual(declared)
+    expect(
+      composed.filter((key) => AGGREGATE_NAMESPACES.some((namespace) => key.startsWith(namespace))),
+    ).toStrictEqual([])
   })
 })
 

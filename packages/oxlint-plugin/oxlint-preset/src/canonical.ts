@@ -1,13 +1,19 @@
 import { defineConfig } from 'oxlint'
 
 import cellVocabularyPreset from '@systemfsoftware/oxlint-plugin-cell-vocabulary/preset'
-import effectDmmfPreset from '@systemfsoftware/oxlint-plugin-effect-dmmf/preset'
 import effectEntrypointPreset from '@systemfsoftware/oxlint-plugin-effect-entrypoint/preset'
+import effectNativePreset from '@systemfsoftware/oxlint-plugin-effect-native/preset'
+import effectSchemaPreset from '@systemfsoftware/oxlint-plugin-effect-schema/preset'
+import effectWorkflowPreset from '@systemfsoftware/oxlint-plugin-effect-workflow/preset'
+import propertyTestingPreset from '@systemfsoftware/oxlint-plugin-property-testing/preset'
 import recommended, {
   options as recommendedOptions,
   plugins as recommendedPlugins,
 } from '@systemfsoftware/oxlint-plugin-recommended'
-import housePreset from '@systemfsoftware/oxlint-plugin/preset'
+import structurePreset from '@systemfsoftware/oxlint-plugin-structure/preset'
+import tagDisciplinePreset from '@systemfsoftware/oxlint-plugin-tag-discipline/preset'
+import testHygienePreset from '@systemfsoftware/oxlint-plugin-test-hygiene/preset'
+import testPlacementPreset from '@systemfsoftware/oxlint-plugin-test-placement/preset'
 
 const PLUGIN_EXTENSIONS = ['jsdoc', 'node', 'oxc', 'promise'] as const
 
@@ -19,19 +25,31 @@ const testFilePatterns = [
 ] as const
 
 /**
- * The canonical set for product code: the recommended stock tier, the house
- * effect tier, the cell-vocabulary, effect-dmmf and effect-entrypoint plugin
- * fragments each of which registers its own `jsPlugins` and `rules`, the
- * correctness category at `error`, and the three rules that decide the pure
- * core.
+ * The canonical set for product code: the recommended stock tier, the ten
+ * self-registering fragment presets — effect-native, tag-discipline, structure,
+ * effect-schema, effect-workflow, property-testing, test-hygiene,
+ * test-placement, cell-vocabulary, effect-entrypoint — the correctness category
+ * at `error`, and the three rules that decide the pure core.
+ *
+ * Post-cutover (R9) the two re-key aggregates (`@systemfsoftware/oxlint-plugin`
+ * and `@systemfsoftware/oxlint-plugin-effect-dmmf`) are deleted, so the chain
+ * names only leaf packages and every rule id in it is owned by the package that
+ * declares it: the composed custom-rule set is exactly the union of the ten
+ * fragments' recommended rules.
  *
  * @public
  */
 export default defineConfig({
   extends: [
     recommended,
-    housePreset,
-    effectDmmfPreset,
+    effectNativePreset,
+    tagDisciplinePreset,
+    structurePreset,
+    effectSchemaPreset,
+    effectWorkflowPreset,
+    propertyTestingPreset,
+    testHygienePreset,
+    testPlacementPreset,
     cellVocabularyPreset,
     effectEntrypointPreset,
   ],

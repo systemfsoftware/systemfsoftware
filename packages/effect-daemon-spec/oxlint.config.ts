@@ -1,10 +1,11 @@
 import base from '@systemfsoftware/oxlint-config/base'
+import cellVocabularyPreset from '@systemfsoftware/oxlint-plugin-cell-vocabulary/preset'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
-  extends: [base],
+  extends: [base, cellVocabularyPreset],
   rules: {
-    '@systemfsoftware/oxlint-plugin/no-io-boundary-tests': 'error',
+    '@systemfsoftware/oxlint-plugin-structure/no-io-boundary-tests': 'error',
   },
   overrides: [
     {

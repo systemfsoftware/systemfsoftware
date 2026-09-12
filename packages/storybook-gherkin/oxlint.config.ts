@@ -26,6 +26,34 @@ export default defineConfig({
     'typescript/no-unsafe-type-assertion': 'error',
   },
 
+  ignorePatterns: [
+    '**/node_modules/**',
+    '**/dist/**',
+    '**/lib/**',
+    '**/esm/**',
+    '**/cjs/**',
+    '**/build/**',
+    '**/out/**',
+    '**/.tshy/**',
+    '**/.tshy-build/**',
+    '**/.turbo/**',
+    '**/coverage/**',
+    '**/.stryker-tmp/**',
+    '**/__pycache__/**',
+    '**/*.d.ts',
+    '**/*.tsbuildinfo',
+    '**/.claude/**',
+    '**/.opencode/**',
+    '**/.sisyphus/**',
+    '**/.repo/**',
+    '**/.worktrees/**',
+    '**/.issues/**',
+    '**/.papi/**',
+    '**/submodules/**',
+    '**/repos/**',
+    '**/.storybook/**',
+  ],
+
   overrides: [
     {
       // `Canvas` (declared in src/Steps.ts) is inferred from the upstream
