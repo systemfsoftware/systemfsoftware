@@ -227,6 +227,12 @@ Distinct from the machine-stream `RunEvent` alphabet: the reporter protocol is a
 
 One sandwich, authored as a `Cell.layer` spec — read (impure), decode and decide (pure), encode (pure), write (impure) — and compiled into a Cell: a single function from command to response. The assembler chains the phases in that order internally; the author cannot author a different order, and a hand-built record claiming one is not expressible on the published surface. A **phase** is one named step — a read, a decode, a decision, an encode, or a write. One Cell is one sandwich; a site whose real order writes before it can classify is two Cells composed in the calling `Effect.gen` (or through `Cell.andThen`), with the shell owning the binding between them — a later read that needs durable state an earlier write created reads it by re-gathering, and a response that becomes the next command travels as an ordinary generator binding.
 
+### Grain table
+
+The three-way classification of every operation on a Cell or runtime by what it does with requirements: **wiring closure** eliminates `R` by building the service graph (`ManagedRuntime.make`, `Layer.provide`, `Cell.provide`), **interpretation** starts a fiber over that graph (`runtime.runPromise`, `Layer.launch`), and **work** leaves `R` open as arrow application (`cell.run(input)`).
+
+Placement law follows the grain: wiring closure lives at the root module as a lazy memoized bootstrap, interpretation happens at an outside-interaction edge, and work is lawful anywhere inside composition. Static enforcement reaches only the shapes, never the cardinality or the edge — those stay review-gated.
+
 The phases demand services by yielding them, and the Cell's `R` channel carries what the bodies yielded: the composition root provides once, and a missing provide is a compile error at the run site, not a runtime surprise. The error channel is the interpreter's truth — read, decode, and write refusals fail; a decide refusal is the outcome the encode and write receive.
 
 A write phase may promote a decide `Left` into `Effect.fail` when the refusal is operationally fatal to the process — that promotion is the executor's shell policy, declared by the write's own error channel, never a phase convention the seam types name.
