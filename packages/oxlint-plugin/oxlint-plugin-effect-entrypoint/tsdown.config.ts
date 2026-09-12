@@ -4,6 +4,7 @@ type ExportEntry = string | Record<string, string | undefined>
 
 const apiExtractorRollups: Record<string, string> = {
   '.': './dist/oxlint-plugin-effect-entrypoint.d.ts',
+  './preset': './dist/preset.d.ts',
 }
 
 const injectApiExtractorTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
@@ -23,6 +24,7 @@ const injectApiExtractorTypes = (exports: Record<string, ExportEntry>): Record<s
 export default defineConfig({
   entry: {
     index: './src/index.ts',
+    preset: './src/preset.ts',
   },
   format: 'esm',
   dts: true,
