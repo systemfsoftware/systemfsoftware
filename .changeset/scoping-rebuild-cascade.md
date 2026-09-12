@@ -14,7 +14,6 @@
 "@systemfsoftware/npm-package": none
 "@systemfsoftware/omp-typescript-discipline": none
 "@systemfsoftware/oxlint-plugin-cell-vocabulary": none
-"@systemfsoftware/oxlint-plugin-effect-dmmf": none
 "@systemfsoftware/oxlint-plugin-effect-schema": patch
 "@systemfsoftware/oxlint-plugin-effect-workflow": none
 "@systemfsoftware/rx-effect": none
