@@ -16,7 +16,6 @@ const _default: {
         'no-assert-in-property': Rule;
         'property-file-purity': Rule;
         'require-effect-fastcheck': Rule;
-        'no-unbounded-fanout': Rule;
         'no-nested-quantification': Rule;
         'prop-generated-law-duplicate': Rule;
         'prop-arbitrary-schema-origin': Rule;
@@ -24,8 +23,16 @@ const _default: {
     };
     configs: {
         recommended: {
+            plugins: string[];
             rules: {
-                readonly [x: string]: "error";
+                readonly '@systemfsoftware/oxlint-plugin-property-testing/no-silent-return': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-property-testing/no-assert-in-property': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-property-testing/property-file-purity': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-property-testing/require-effect-fastcheck': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-property-testing/no-nested-quantification': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-property-testing/prop-arbitrary-schema-origin': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-property-testing/prop-fixture-schema-origin': 'error';
+                readonly '@systemfsoftware/oxlint-plugin-property-testing/prop-generated-law-duplicate': 'error';
             };
         };
     };

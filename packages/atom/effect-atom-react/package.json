@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/effect-atom-react",
   "license": "Apache-2.0",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -32,14 +32,16 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown && pnpm dts:check",
+    "build": "tsdown && pnpm dts:check && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --config oxlint.config.ts --format=${f:-default}",
     "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.json --format ${TSGO_FORMAT:-text}",
     "attw": "attw --pack .",
-    "dts:check": "tsc --noEmit -p tsconfig.dts.json"
+    "dts:check": "tsc --noEmit -p tsconfig.dts.json",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local"
   },
   "dependencies": {
     "@systemfsoftware/effect-atom": "workspace:^"
@@ -52,6 +54,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",

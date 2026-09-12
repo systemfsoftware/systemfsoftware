@@ -25,7 +25,8 @@
         "dist/**"
       ],
       "dependsOn": [
-        "^build"
+        "^build",
+        "^api:check"
       ]
     },
     "typecheck": {
@@ -42,7 +43,9 @@
       "outputs": [],
       "dependsOn": [
         "^build",
-        "build"
+        "^api:check",
+        "build",
+        "api:check"
       ],
       "cache": true
     },
@@ -62,7 +65,9 @@
       "outputLogs": "errors-only",
       "dependsOn": [
         "^build",
-        "build"
+        "^api:check",
+        "build",
+        "api:check"
       ],
       "outputs": [
         "coverage/**"
@@ -136,7 +141,9 @@
       "outputs": [],
       "dependsOn": [
         "^build",
+        "^api:check",
         "build",
+        "api:check",
         "@systemfsoftware/oxlint-preset#build"
       ],
       "env": [
@@ -192,7 +199,10 @@
         "package.json"
       ],
       "dependsOn": [
-        "build"
+        "^build",
+        "^api:check",
+        "build",
+        "api:check"
       ]
     },
     "test:contract": {

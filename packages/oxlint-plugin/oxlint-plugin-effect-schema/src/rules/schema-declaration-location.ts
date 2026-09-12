@@ -5,6 +5,7 @@ import {
   ACTUAL,
   EXPECTED,
   FIX,
+  isRuntimeCodeFile,
   meta,
   UNRESOLVED_ACTUAL,
   UNRESOLVED_EXPECTED,
@@ -712,6 +713,7 @@ export const schemaDeclarationLocation = defineRule({
   create(context: Context) {
     const basename = basenameOf(context.filename)
     if (basename.endsWith('.schema.ts') || WORKFLOW_FILE_BASENAME.test(basename)) return {}
+    if (!isRuntimeCodeFile(context.filename)) return {}
     const getScope: GetScope = context.sourceCode.getScope
     return {
       Program(node: ESTree.Program) {

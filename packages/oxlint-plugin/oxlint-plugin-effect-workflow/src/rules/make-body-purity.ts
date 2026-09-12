@@ -277,7 +277,7 @@ export const makeBodyPurity = defineRule({
         for (const boundary of boundaries) {
           const body = boundary.resolvedBody
           if (body === null) {
-            reportUnresolvableArgument(boundary)
+            if (boundary.takesDeciderBody) reportUnresolvableArgument(boundary)
             continue
           }
           for (const report of classifyBodyReferences(body, context)) {

@@ -208,17 +208,14 @@ const superviseChild = <R>(
             if (childIntensityBudgetDone) {
               return StopEpoch.make()
             }
-            return yield* Cell.run(
-              restartDescription({
-                strategy: 'one_for_one',
-                failedIndex: idx,
-                totalChildren: ctx.booted.length,
-                ctx,
-                cause: exit.cause,
-                onRestart: () => Effect.void,
-              }),
-              supIntensity,
-            )
+            return yield* restartDescription({
+              strategy: 'one_for_one',
+              failedIndex: idx,
+              totalChildren: ctx.booted.length,
+              ctx,
+              cause: exit.cause,
+              onRestart: () => Effect.void,
+            }).run(supIntensity)
           }
           return StopEpoch.make()
         })
@@ -292,18 +289,15 @@ const runGroup = <R>(
             if (childIntensityBudgetDone) {
               return StopEpoch.make()
             }
-            return yield* Cell.run(
-              restartDescription({
-                strategy,
-                failedIndex: failedIdx,
-                totalChildren: ctx.booted.length,
-                ctx,
-                cause: firstExit.cause,
-                onRestart: (decision) =>
-                  Ref.set(cursor, decision.indices[0]),
-              }),
-              intensity,
-            )
+            return yield* restartDescription({
+              strategy,
+              failedIndex: failedIdx,
+              totalChildren: ctx.booted.length,
+              ctx,
+              cause: firstExit.cause,
+              onRestart: (decision) =>
+                Ref.set(cursor, decision.indices[0]),
+            }).run(intensity)
           }
           return StopEpoch.make()
         })

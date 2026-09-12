@@ -16,6 +16,7 @@ const _default: {
         'entrypoint-no-exports': Rule;
         'entrypoint-not-imported': Rule;
         'entrypoint-no-promise-wrapper': Rule;
+        'runtime-construction-placement': Rule;
     };
     configs: {
         recommended: {

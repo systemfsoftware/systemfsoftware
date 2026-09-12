@@ -236,6 +236,8 @@ const ASYMMETRY_IDS: readonly string[] = [
   '@systemfsoftware/oxlint-plugin-effect-entrypoint/entrypoint-no-exports',
   '@systemfsoftware/oxlint-plugin-effect-entrypoint/entrypoint-no-promise-wrapper',
   '@systemfsoftware/oxlint-plugin-effect-entrypoint/entrypoint-not-imported',
+  '@systemfsoftware/oxlint-plugin-effect-entrypoint/runtime-construction-placement',
+  '@systemfsoftware/oxlint-plugin-effect-workflow/workflow-variant-constructed',
 ]
 
 /** The stock deltas base keeps as its own, verbatim. */
@@ -462,8 +464,8 @@ describe('pre-change pin', () => {
     expect(Object.keys(ID_MAPPING).sort()).toStrictEqual(Object.keys(PRE_CHANGE_RULES).sort())
   })
 
-  it('Should_PinFourAbsentRules_When_TheAsymmetryFixIsTheOnlyIntendedDelta', () => {
-    expect(ASYMMETRY_IDS).toHaveLength(4)
+  it('Should_PinSixAbsentRules_When_TheAsymmetryFixIsTheOnlyIntendedDelta', () => {
+    expect(ASYMMETRY_IDS).toHaveLength(6)
     expect(ASYMMETRY_IDS.filter((id) => Object.hasOwn(PRE_CHANGE_RULES, id))).toStrictEqual([])
     expect(ASYMMETRY_IDS.filter((id) => Object.values(ID_MAPPING).includes(id))).toStrictEqual([])
   })
@@ -477,8 +479,8 @@ describe('base preset parity gate', () => {
     expect(base.jsPlugins).toBeUndefined()
   })
 
-  it('Should_ResolveSixtyEightCustomKeysUnderALeafNamespace_When_TheAggregatesAreGone', () => {
-    expect(baseCustomIds()).toHaveLength(68)
+  it('Should_ResolveSixtyNineCustomKeysUnderALeafNamespace_When_TheAggregatesAreGone', () => {
+    expect(baseCustomIds()).toHaveLength(69)
     expect(orphanedCustomIds(baseCustomIds())).toStrictEqual([])
   })
 
@@ -488,13 +490,15 @@ describe('base preset parity gate', () => {
 
   it('Should_MapEveryPreChangeRuleOntoOneResolvedRule_When_TheLeafFragmentsCarryIt', () => {
     const parity = parityOf(RESOLVED_BASE_RULES, PRE_CHANGE_RULES, ID_MAPPING)
-    expect(parity.mapped).toHaveLength(58)
+    expect(parity.mapped).toHaveLength(57)
     expect(parity.mismatched).toStrictEqual([])
-    expect(parity.dropped).toStrictEqual([])
+    expect(parity.dropped).toStrictEqual([
+      '@systemfsoftware/oxlint-plugin-property-testing/no-unbounded-fanout',
+    ])
     expect(parity.unrekeyed).toStrictEqual([])
   })
 
-  it('Should_AddOnlyTheFourAsymmetryRules_When_TheFragmentsSelfRegister', () => {
+  it('Should_AddOnlyTheSixAsymmetryRules_When_TheFragmentsSelfRegister', () => {
     const parity = parityOf(RESOLVED_BASE_RULES, PRE_CHANGE_RULES, ID_MAPPING)
     expect(parity.added).toStrictEqual([...ASYMMETRY_IDS].sort())
   })

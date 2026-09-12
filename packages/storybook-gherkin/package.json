@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/storybook-gherkin",
   "license": "Apache-2.0",
-  "version": "3.0.2",
+  "version": "3.0.4",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -37,14 +37,16 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown && pnpm dts:check",
+    "build": "tsdown && pnpm dts:check && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --config oxlint.config.ts --format=${f:-default}",
     "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.json --format ${TSGO_FORMAT:-text}",
     "attw": "attw --pack .",
     "dts:check": "node scripts/check-dts.mjs",
     "storybook": "storybook dev -p 6006 --no-open",
-    "test:browser": "pnpm build && vitest run"
+    "test:browser": "pnpm build && vitest run",
+    "api:check": "tsdown && api-extractor run",
+    "api:update": "api-extractor run --local"
   },
   "dependencies": {
     "type-fest": "catalog:"
@@ -54,6 +56,7 @@
     "storybook": ">=10.0.0"
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
     "@storybook/addon-vitest": "catalog:",
     "@storybook/react-vite": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
