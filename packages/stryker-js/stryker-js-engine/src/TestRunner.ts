@@ -10,7 +10,6 @@
 
 import * as Layer from 'effect/Layer'
 
-import type { Policy } from '@systemfsoftware/effect-cell-types'
 import { type FileDescriptions, INSTRUMENTER_CONSTANTS } from '@systemfsoftware/stryker-js'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js'
 import {
