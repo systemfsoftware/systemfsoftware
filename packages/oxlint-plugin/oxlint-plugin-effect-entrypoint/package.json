@@ -55,6 +55,7 @@
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/oxlint-import-origin": "workspace:^",
     "@systemfsoftware/stryker-js-cli": "catalog:stryker",
     "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
     "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
