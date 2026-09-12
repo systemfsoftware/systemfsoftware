@@ -1,10 +1,7 @@
-import { Effect, Schema as S } from 'effect'
+export const isRuntimeCodeFile = (filename: string): boolean =>
+  /(?:^|[\\/])src[\\/]/u.test(filename) || filename.endsWith('.test.ts')
 
-export const Options = S.Struct({
-  edges: S.Array(S.String).pipe(
-    S.withDecodingDefaultType(Effect.succeed([])),
-  ),
-})
+export const isInterpretationEdge = (filename: string): boolean => /(?:^|[\\/])main\.ts$/u.test(filename)
 
 export const EFFECT_MODULE = 'effect' as const
 export const CELL_MODULE = '@systemfsoftware/effect-cell-types' as const
@@ -51,9 +48,9 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      '`ManagedRuntime.make`, `Layer.provide`, or `Cell.provide` inside a function body rebuilds wiring per call; `ManagedRuntime.make` evaluated at module scope constructs the runtime at import time. Lawful and silent: a memoized module-scope closure, module-scope graph composition, `cell.run(input)` at any depth, and a module the `edges` option declares. Shapes, bounds, and examples: the README.',
+      '`ManagedRuntime.make`, `Layer.provide`, or `Cell.provide` inside a function body rebuilds wiring per call; `ManagedRuntime.make` evaluated at module scope constructs the runtime at import time. The rule judges runtime code: files under a `src/` directory segment and `*.test.ts` files; a package-root hook, config, or setup file is outside its subject, `.tst.ts` type-test files run nowhere, and `main.ts` is exempt from the module-scope verdict as the interpretation edge. Lawful and silent in scope: a memoized module-scope closure, module-scope graph composition, `cell.run(input)` at any depth. Shapes, bounds, and examples: the README.',
   },
-  schema: [Options],
+  schema: [],
   messages: {
     wiringPerCall: PLACEMENT_MESSAGE,
     eagerConstruction: PLACEMENT_MESSAGE,

@@ -176,36 +176,36 @@ expect(ManagedRuntime.make(AppLive)).type.toBe<ManagedRuntime.ManagedRuntime<App
       filename: '/repo/pkg/test-types/Cell.tst.ts',
     },
     {
-      name: 'Should_Pass_When_TheRunnerHookEdgeComposesAtModuleScope',
+      name: 'Should_Ignore_When_APackageRootHookComposesAtModuleScope',
       code: `import { ManagedRuntime } from 'effect'
 
 const runtime = ManagedRuntime.make(AppLive)
 
 runtime.runPromise(program)`,
-      filename: 'src/global-setup.ts',
-      options: [{ edges: ['global-setup.ts'] }],
+      filename: 'global-setup.ts',
     },
     {
-      // Kills the mutant that designates only the runner hook: the process entry
-      // is this fleet's other runner-contracted edge.
+      name: 'Should_Ignore_When_APackageRootSetupFileComposesAtModuleScope',
+      code: `import { ManagedRuntime } from 'effect'
+
+const runtime = ManagedRuntime.make(AppLive)`,
+      filename: 'vitest.setup.ts',
+    },
+    {
+      name: 'Should_Ignore_When_APackageRootScriptWiresInsideAFunction',
+      code: `import { ManagedRuntime } from 'effect'
+
+export const boot = () => ManagedRuntime.make(AppLive)`,
+      filename: 'tools/build.ts',
+    },
+    {
       name: 'Should_Pass_When_TheProcessEntryComposesAtModuleScope',
       code: `import { ManagedRuntime } from 'effect'
 
 const runtime = ManagedRuntime.make(AppLive)
 
 runtime.runPromise(program)`,
-      filename: 'src/main.ts',
-      options: [{ edges: ['main.ts'] }],
-    },
-    {
-      // Kills the mutant that reads the basename with the POSIX separator alone:
-      // the path reaching the rule is the host's, and the host may be Windows.
-      name: 'Should_Pass_When_TheEdgePathUsesTheBackslashSeparator',
-      code: `import { ManagedRuntime } from 'effect'
-
-const runtime = ManagedRuntime.make(AppLive)`,
-      filename: 'C:\\repo\\pkg\\global-setup.ts',
-      options: [{ edges: ['global-setup.ts'] }],
+      filename: '/repo/pkg/src/main.ts',
     },
     {
       name: 'Should_Pass_When_TheFactoryHandsTheWiredCellToItsReturnedClosures',
@@ -389,37 +389,30 @@ export class Boot {
       errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
     },
     {
-      // Kills the mutant that exempts the edge module wholesale: the exemption
-      // covers module-scope composition, never wiring built inside a call.
-      name: 'Should_Report_When_TheRunnerHookEdgeBuildsTheRuntimeInsideAHook',
+      name: 'Should_Report_When_ATestFileComposesAtModuleScope',
       code: `import { ManagedRuntime } from 'effect'
 
-export function setup(project) {
+const runtime = ManagedRuntime.make(AppLive)`,
+      filename: 'src/AppRuntime.test.ts',
+      errors: [eagerConstruction],
+    },
+    {
+      name: 'Should_Report_When_TheDynamicImportDestructuringComposesAtModuleScope',
+      code: `const { ManagedRuntime } = await import('effect')
+
+const runtime = ManagedRuntime.make(AppLive)`,
+      filename: 'src/AppRuntime.ts',
+      errors: [eagerConstruction],
+    },
+    {
+      name: 'Should_Report_When_TheDynamicImportDestructuringComposesInsideAFunction',
+      code: `export async function handle(request) {
+  const { ManagedRuntime } = await import('effect')
   const runtime = ManagedRuntime.make(AppLive)
-  project.provide('contract', runtime)
+  return runtime.runPromise(serve(request))
 }`,
-      filename: 'src/global-setup.ts',
-      options: [{ edges: ['global-setup.ts'] }],
+      filename: 'src/Handler.ts',
       errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
-    },
-    {
-      // Kills the mutant that matches the edge name anywhere in the path rather
-      // than the whole basename.
-      name: 'Should_Report_When_TheBasenameOnlyEndsWithAnEdgeName',
-      code: `import { ManagedRuntime } from 'effect'
-
-const runtime = ManagedRuntime.make(AppLive)`,
-      filename: 'src/my-global-setup.ts',
-      options: [{ edges: ['global-setup.ts'] }],
-      errors: [eagerConstruction],
-    },
-    {
-      name: 'Should_Report_When_TheProcessEntryDeclaresNoEdge',
-      code: `import { ManagedRuntime } from 'effect'
-
-const runtime = ManagedRuntime.make(AppLive)`,
-      filename: 'src/main.ts',
-      errors: [eagerConstruction],
     },
     {
       name: 'Should_Report_When_TheDeferredClosureNeverMemoizes',

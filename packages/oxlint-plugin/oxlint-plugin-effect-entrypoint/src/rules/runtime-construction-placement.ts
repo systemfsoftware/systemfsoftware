@@ -1,16 +1,16 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { Option, Schema as S } from 'effect'
 
 import {
   EAGER_CONSTRUCTION_ACTUAL,
   EAGER_CONSTRUCTION_EXPECTED,
   EAGER_CONSTRUCTION_FIX,
+  isInterpretationEdge,
+  isRuntimeCodeFile,
   MANAGED_RUNTIME_NAMESPACE,
   MAX_ALIAS_HOPS,
   MEMOIZING_ASSIGNMENT_OPERATORS,
   meta,
-  Options,
   TRACKED_WIRING_CALLS,
   WIRING_PER_CALL_ACTUAL,
   WIRING_PER_CALL_EXPECTED,
@@ -42,6 +42,49 @@ const staticMemberNameOf = (member: ESTree.MemberExpression): string | null => {
   return member.property.type === 'Identifier' ? member.property.name : null
 }
 
+const dynamicImportSourceOf = (node: ESTree.Node): string | null => {
+  if (node.type !== 'AwaitExpression') return null
+  const argument = node.argument
+  if (argument.type !== 'ImportExpression') return null
+  const source = argument.source
+  return source.type === 'Literal' && typeof source.value === 'string' ? source.value : null
+}
+
+/**
+ * `const { ManagedRuntime } = await import('effect')` binds like the static form: the
+ * destructured name carries its property, and a plain identifier id is the namespace
+ * binding `import * as ns` produces.
+ */
+const dynamicImportBindingsOf = (
+  declarator: ESTree.VariableDeclarator,
+): readonly (readonly [string, ImportedName])[] => {
+  if (declarator.init === null) return []
+  const source = dynamicImportSourceOf(declarator.init)
+  if (source === null) return []
+  const id = declarator.id
+  if (id.type === 'Identifier') return [[id.name, { source, imported: null }]]
+  if (id.type !== 'ObjectPattern') return []
+  return id.properties.flatMap((property) => {
+    if (property.type !== 'Property' || property.value.type !== 'Identifier') return []
+    const key = property.key
+    const imported = key.type === 'Identifier'
+      ? key.name
+      : key.type === 'Literal' && typeof key.value === 'string'
+      ? key.value
+      : null
+    return imported === null ? [] : [[property.value.name, { source, imported }] as const]
+  })
+}
+
+const seedDynamicImportBindings = (
+  bindings: Map<string, ImportedName>,
+  declarator: ESTree.VariableDeclarator,
+): void => {
+  for (const [name, binding] of dynamicImportBindingsOf(declarator)) {
+    if (!bindings.has(name)) bindings.set(name, binding)
+  }
+}
+
 const bindingsOf = (program: ESTree.Program): Map<string, ImportedName> => {
   const bindings = new Map<string, ImportedName>()
   for (const statement of program.body) {
@@ -62,6 +105,12 @@ const bindingsOf = (program: ESTree.Program): Map<string, ImportedName> => {
         source,
         imported: imported.type === 'Identifier' ? imported.name : imported.value,
       })
+    }
+  }
+  for (const statement of program.body) {
+    if (statement.type !== 'VariableDeclaration') continue
+    for (const declarator of statement.declarations) {
+      seedDynamicImportBindings(bindings, declarator)
     }
   }
   for (let hop = 0; hop < MAX_ALIAS_HOPS; hop += 1) {
@@ -212,18 +261,19 @@ export const runtimeConstructionPlacement = defineRule({
   meta,
   create(context: Context) {
     if (context.filename.endsWith('.tst.ts')) return {}
+    if (!isRuntimeCodeFile(context.filename)) return {}
 
-    const edges: readonly string[] = Option.getOrElse(
-      S.decodeUnknownOption(Options)(context.options[0] ?? {}),
-      () => ({ edges: [] }),
-    ).edges
-    const basename = context.filename.split(/[\\/]/u).pop() ?? context.filename
-
-    let bindings: ReadonlyMap<string, ImportedName> = new Map()
+    let bindings: Map<string, ImportedName> = new Map()
 
     return {
       Program(node: ESTree.Program) {
         bindings = bindingsOf(node)
+      },
+
+      VariableDeclaration(node: ESTree.VariableDeclaration) {
+        for (const declarator of node.declarations) {
+          seedDynamicImportBindings(bindings, declarator)
+        }
       },
 
       CallExpression(node: ESTree.CallExpression) {
@@ -255,7 +305,7 @@ export const runtimeConstructionPlacement = defineRule({
 
         if (tracked.namespace !== MANAGED_RUNTIME_NAMESPACE) return
 
-        if (edges.includes(basename)) return
+        if (isInterpretationEdge(context.filename)) return
 
         context.report({
           node: callee,
