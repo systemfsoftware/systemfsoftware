@@ -37,14 +37,16 @@ These four rules close the hole by constraining what `main.ts` may contain rathe
 
 ```ts
 // oxlint.config.ts
-import effectEntrypoint from '@systemfsoftware/oxlint-plugin-effect-entrypoint'
+import effectEntrypointPreset from '@systemfsoftware/oxlint-plugin-effect-entrypoint/preset'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
-  jsPlugins: ['@systemfsoftware/oxlint-plugin-effect-entrypoint'],
-  rules: { ...effectEntrypoint.configs.recommended.rules },
+  extends: [effectEntrypointPreset],
 })
 ```
+
+The fragment registers the plugin itself (`jsPlugins: [import.meta.resolve(...)]`) and
+enables exactly the recommended rules, so the config only extends it.
 
 ```bash
 pnpm oxlint src
