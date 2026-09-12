@@ -48,6 +48,12 @@ void ZzProbeClass`,
       filename: '/repo/pkg/src/zz-byte.ts',
     },
     {
+      name: 'Should_Ignore_When_AModuleScopeSchemaLivesInAPackageRootSetupFile',
+      code: `import { Schema as S } from 'effect'
+export const Hook = S.Struct({ n: S.Number })`,
+      filename: '/repo/pkg/vitest.setup.ts',
+    },
+    {
       name: 'Should_Pass_When_ClassAndConstSchemasLiveInASchemaFile',
       code: `import { Schema } from 'effect'
 export class E extends Schema.TaggedError<E>()('E', { message: Schema.String }) {}
