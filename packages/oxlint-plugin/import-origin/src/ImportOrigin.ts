@@ -21,9 +21,10 @@ import type { ESTree } from '@oxlint/plugins'
  *
  * Resolution semantics:
  *
- * - import specifiers: named (`import { x as y }` → `source`, imported `x`),
- *   default (`import x` → imported `default`), namespace (`import * as x` →
- *   imported name `null` until a member is taken off it).
+ * - import specifiers: named (`import { x as y }` → `source`, imported `x`; the
+ *   string-named `import { 'x' as y }` names the same export, its literal's value
+ *   being the imported name), default (`import x` → imported `default`), namespace
+ *   (`import * as x` → imported name `null` until a member is taken off it).
  * - module-scope aliases and chains of them — `const`, `let` and `var` alike
  *   (`const W = Workflow`, `let W = Workflow`). A reassigned `let`
  *   mis-resolves — an accepted approximation; the resolver never looks past
@@ -301,8 +302,9 @@ const resolveIdentifierOrigin = (
     if (typeof source !== 'string') return null
     const specifier = def.node
     if (specifier.type === 'ImportSpecifier') {
-      if (specifier.imported.type !== 'Identifier') return null
-      return { source, importedName: specifier.imported.name, path: [] }
+      const imported = specifier.imported
+      if (imported.type === 'Identifier') return { source, importedName: imported.name, path: [] }
+      return imported.type === 'Literal' ? { source, importedName: imported.value, path: [] } : null
     }
     if (specifier.type === 'ImportDefaultSpecifier') return { source, importedName: 'default', path: [] }
     return { source, importedName: null, path: [] }
