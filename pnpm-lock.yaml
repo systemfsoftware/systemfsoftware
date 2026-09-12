@@ -1279,6 +1279,9 @@ importers:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.1.0
+      '@systemfsoftware/oxlint-import-origin':
+        specifier: workspace:^
+        version: link:../import-origin
       '@systemfsoftware/stryker-js-cli':
         specifier: catalog:stryker
         version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
