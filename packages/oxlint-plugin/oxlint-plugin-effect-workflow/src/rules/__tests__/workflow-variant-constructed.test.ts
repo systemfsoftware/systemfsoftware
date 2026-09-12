@@ -292,6 +292,46 @@ export const admitSurvivorsRun = Workflow.make(
 )
 `,
     },
+    {
+      // Reclassified from invalid: the annotation names `accepted`, a local bound to a
+      // constructed value — a value written in type position, which the compiler already
+      // rejects (TS2749). A local is not a variant class this file declares, so the split
+      // rule finds no declared class under the annotation's name and falls silent.
+      name: 'Should_TraceTheUnionMemberToTheValueBoundLocal_When_TheLocalIsBoundWithNew',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+
+const accepted = new Admitted({})
+
+export const admitAmount = Workflow.make(
+  AmountCommand,
+  (command: AmountCommand): Result.Result<accepted, never> => Result.succeed(accepted),
+)
+`,
+    },
+    {
+      // Reclassified from invalid, same shape as the fixture above through the
+      // assertion form of a value binding: `const` in type position, TS2749.
+      name: 'Should_TraceTheUnionMemberToTheValueBoundLocal_When_TheLocalIsBoundWithAnAssertion',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+
+const accepted = new Admitted({}) as Admitted
+
+export const admitAmount = Workflow.make(
+  AmountCommand,
+  (command: AmountCommand): Result.Result<accepted, never> => Result.succeed(accepted),
+)
+`,
+    },
   ],
   invalid: [
     {
@@ -520,42 +560,6 @@ export const admitSurvivorsRun = Workflow.make(
 )
 `,
       errors: [variantError('the declared decision variant NoSurvivors')],
-    },
-    {
-      name: 'Should_TraceTheUnionMemberToTheValueBoundLocal_When_TheLocalIsBoundWithNew',
-      filename: '/repo/pkg/src/admit-amount.workflow.ts',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
-
-export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
-
-const accepted = new Admitted({})
-
-export const admitAmount = Workflow.make(
-  AmountCommand,
-  (command: AmountCommand): Result.Result<accepted, never> => Result.succeed(accepted),
-)
-`,
-      errors: [variantError('the declared decision variant accepted')],
-    },
-    {
-      name: 'Should_TraceTheUnionMemberToTheValueBoundLocal_When_TheLocalIsBoundWithAnAssertion',
-      filename: '/repo/pkg/src/admit-amount.workflow.ts',
-      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
-import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
-
-export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
-
-const accepted = new Admitted({}) as Admitted
-
-export const admitAmount = Workflow.make(
-  AmountCommand,
-  (command: AmountCommand): Result.Result<accepted, never> => Result.succeed(accepted),
-)
-`,
-      errors: [variantError('the declared decision variant accepted')],
     },
   ],
 })
