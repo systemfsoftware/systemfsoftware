@@ -1,7 +1,7 @@
-import all from '@systemfsoftware/all'
+import all, { defaultIgnores } from '@systemfsoftware/all'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
-  ...all,
-  ignorePatterns: [...(all.ignorePatterns ?? []), '**/testResources/**'],
+  extends: [all],
+  ignorePatterns: [...defaultIgnores, '**/testResources/**'],
 })

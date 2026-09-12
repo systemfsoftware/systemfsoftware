@@ -4,6 +4,11 @@
     "@systemfsoftware/tsconfig/tsc/dom/library-monorepo",
     "@systemfsoftware/tsconfig/effect"
   ],
+  "compilerOptions": {
+    "types": [
+      "node"
+    ]
+  },
   "include": [
     "src"
   ],
