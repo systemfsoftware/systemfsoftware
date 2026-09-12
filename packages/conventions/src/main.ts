@@ -11,7 +11,7 @@ import {
   parsePatternMarkdown,
   type Rule,
 } from './compose.js'
-import { gatedFindings, parseEngineReport, renderFindings, summarize } from './scan.js'
+import { type Finding, gatedFindings, parseEngineReport, renderFindings, summarize } from './scan.js'
 import { isGlob, selectFiles } from './select.js'
 
 const USAGE = `conventions — a composable, GritQL-first conventions gate
@@ -171,7 +171,17 @@ const main = (): number => {
         }\n`,
       )
     }
-    const findings = parseEngineReport(run.stderr)
+    let findings: readonly Finding[]
+    try {
+      findings = parseEngineReport(run.stderr)
+    } catch (reportError) {
+      process.stderr.write(
+        `conventions: engine report unparseable — engine status ${String(run.status)}, stderr head: ${
+          run.stderr.slice(0, 600)
+        }\n(${String(reportError)})\n`,
+      )
+      return 2
+    }
     const gated = gatedFindings(findings, args.level)
     for (const line of renderFindings(gated)) process.stdout.write(`${line}\n`)
     process.stdout.write(`${summarize(uniqueSelected.length, gated)}\n`)
