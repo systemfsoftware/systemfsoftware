@@ -155,7 +155,8 @@
       "outputs": [],
       "dependsOn": [
         "^build",
-        "build"
+        "build",
+        "@systemfsoftware/oxlint-preset#build"
       ],
       "env": [
         "NODE_ENV",

@@ -125,8 +125,8 @@ const requireInstalled = (installed: RunResult, context: TestContext): void => {
     context.skip(`pnpm cannot reach the registry or store here: ${lastLineOf(installed.output)}`)
     return
   }
-  const unpublished = installed.output.match(/\[ERR_PNPM_FETCH_404\][^\n]*registry\.npmjs\.org[^\n]*Not Found/u) ??
-    installed.output.match(/is not in the npm registry/u)
+  const unpublished = installed.output.match(/ERR_PNPM_FETCH_404[\s\S]*registry\.npmjs\.org[\s\S]*Not Found/u) ??
+    installed.output.match(/is not in the npm\s+registry/u)
   if (unpublished !== null) {
     context.skip(
       `a packed dependency is not on the registry yet (published by this branch's release, not the working tree): ${
