@@ -1,7 +1,7 @@
 import { Context, Effect, Layer } from 'effect'
 import { getContainerRuntimeClient } from 'testcontainers'
 
-import { CLI_BIN, strykerContainerId, WORKDIR } from './stryker-cli-env.js'
+import { CLI_BIN, CORE_CLI_BIN, CORE_WORKDIR, strykerContainerId, WORKDIR } from './stryker-cli-env.js'
 
 export interface CliResult {
   readonly exitCode: number
@@ -16,6 +16,7 @@ export interface ExecOptions {
 
 export class StrykerCli extends Context.Service<StrykerCli, {
   readonly run: (args: readonly string[], options?: ExecOptions) => Effect.Effect<CliResult>
+  readonly runCore: (args: readonly string[], options?: ExecOptions) => Effect.Effect<CliResult>
   readonly sh: (script: string, options?: ExecOptions) => Effect.Effect<CliResult>
 }>()(
   '@systemfsoftware/stryker-js-cli/tests/__fixtures__/StrykerCliAdapter/StrykerCli',
@@ -31,9 +32,9 @@ export const layerStrykerCli: Layer.Layer<StrykerCli> = Layer.effect(
       }))
     ),
     ({ client, container }) => {
-      const exec = (command: readonly string[], options?: ExecOptions) => {
+      const exec = (command: readonly string[], defaultCwd: string, options?: ExecOptions) => {
         const execOptions: { workingDir: string; env?: Record<string, string> } = {
-          workingDir: options?.cwd ?? WORKDIR,
+          workingDir: options?.cwd ?? defaultCwd,
         }
         if (options?.env !== undefined) {
           execOptions.env = options.env
@@ -45,8 +46,10 @@ export const layerStrykerCli: Layer.Layer<StrykerCli> = Layer.effect(
       }
 
       return {
-        run: (args: readonly string[], options?: ExecOptions) => exec([CLI_BIN, ...args], options),
-        sh: (script: string, options?: ExecOptions) => exec(['sh', '-c', script], options),
+        run: (args: readonly string[], options?: ExecOptions) => exec([CLI_BIN, ...args], WORKDIR, options),
+        runCore: (args: readonly string[], options?: ExecOptions) =>
+          exec([CORE_CLI_BIN, ...args], CORE_WORKDIR, options),
+        sh: (script: string, options?: ExecOptions) => exec(['sh', '-c', script], WORKDIR, options),
       }
     },
   ),
