@@ -39,10 +39,12 @@
     "clean": "rimraf dist",
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack ."
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
@@ -52,7 +54,8 @@
     "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
-    "tsdown": "catalog:"
+    "tsdown": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@effect/vitest": "catalog:peers",
