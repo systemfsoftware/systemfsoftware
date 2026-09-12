@@ -7,9 +7,10 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'
 import type { BaseNode, Program } from 'estree'
-import { type OxcError, parseSync } from 'oxc-parser'
+import type { OxcError } from 'oxc-parser'
 import path from 'path'
 import { buildLineTable, positionFromLineTable } from './estree.js'
+import { loadOxc } from './Oxc.js'
 import {
   ParseFailed,
   ParserNotFound,
@@ -113,11 +114,12 @@ function appendIfDefined<T>(values: T[], value: T | undefined): void {
 // Oxc parse — one engine for js, ts and tsx.
 // ---------------------------------------------------------------------------
 
-function parseWithOxc(
+export async function parseWithOxc(
   text: string,
   fileName: string,
   lang: 'js' | 'jsx' | 'ts' | 'tsx',
-): { root: Program; comments: readonly SpannedComment[] } {
+): Promise<{ root: Program; comments: readonly SpannedComment[] }> {
+  const { parseSync } = await loadOxc()
   const result = parseSync(fileName, text, { lang, range: true })
   const failure = oxcParseFailure(result.errors, text, fileName)
   if (failure !== undefined) {
@@ -244,7 +246,7 @@ export function getFormat(
 // ---------------------------------------------------------------------------
 function createJSParser(): (text: string, fileName: string) => Promise<JSAst> {
   return async function parse(text: string, fileName: string): Promise<JSAst> {
-    const { root, comments } = parseWithOxc(text, fileName, 'js')
+    const { root, comments } = await parseWithOxc(text, fileName, 'js')
     return { originFileName: fileName, rawContent: text, format: 'js', root, comments }
   }
 }
@@ -254,7 +256,7 @@ function createJSParser(): (text: string, fileName: string) => Promise<JSAst> {
 // ---------------------------------------------------------------------------
 
 export async function parseTS(text: string, fileName: string): Promise<TSAst> {
-  const { root, comments } = parseWithOxc(text, fileName, 'ts')
+  const { root, comments } = await parseWithOxc(text, fileName, 'ts')
   return { originFileName: fileName, rawContent: text, format: 'ts', root, comments }
 }
 
@@ -262,7 +264,7 @@ export async function parseTsx(
   text: string,
   fileName: string,
 ): Promise<TsxAst> {
-  const { root, comments } = parseWithOxc(text, fileName, 'tsx')
+  const { root, comments } = await parseWithOxc(text, fileName, 'tsx')
   return { root, comments, format: 'tsx', originFileName: fileName, rawContent: text }
 }
 // ---------------------------------------------------------------------------

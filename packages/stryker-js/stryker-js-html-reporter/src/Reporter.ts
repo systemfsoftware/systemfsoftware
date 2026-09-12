@@ -47,9 +47,20 @@ export const buildHtmlDocument = (command: HtmlReportCommand): HtmlDocument =>
 
 const BUNDLE_SPECIFIER = 'mutation-testing-elements/dist/mutation-test-elements.js'
 
+/**
+ * The client bundle, when the build inlined it. A build that ships this
+ * reporter bundled — with no `mutation-testing-elements` on disk to resolve
+ * against — bakes the text here; a build that leaves the package resolvable
+ * reads it at runtime instead.
+ */
+declare const __STRYKER_HTML_REPORTER_CLIENT_BUNDLE__: string | undefined
+
 const nodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)
 
 const readBundleContent = Effect.gen(function*() {
+  if (typeof __STRYKER_HTML_REPORTER_CLIENT_BUNDLE__ === 'string') {
+    return __STRYKER_HTML_REPORTER_CLIENT_BUNDLE__
+  }
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const bundlePath = yield* path.fromFileUrl(new URL(import.meta.resolve(BUNDLE_SPECIFIER)))

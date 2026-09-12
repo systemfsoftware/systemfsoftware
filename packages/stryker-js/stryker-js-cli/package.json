@@ -27,23 +27,21 @@
     "api:check": "echo 'no API report for CLI (dts: false)' && exit 0",
     "api:update": "echo 'no API report for CLI (dts: false)' && exit 0"
   },
-  "dependencies": {
+  "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
     "@noble/hashes": "catalog:",
-    "@systemfsoftware/effect-cell-types": "workspace:^",
-    "@systemfsoftware/stryker-js": "workspace:^",
-    "@systemfsoftware/stryker-js-engine": "workspace:^",
-    "@systemfsoftware/stryker-js-html-reporter": "workspace:^",
-    "effect": "catalog:"
-  },
-  "devDependencies": {
+    "@oxc-parser/binding-wasm32-wasi": "catalog:",
     "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/stryker-js": "workspace:^",
+    "@systemfsoftware/stryker-js-engine": "workspace:^",
+    "@systemfsoftware/stryker-js-html-reporter": "workspace:^",
     "@systemfsoftware/stryker-js-typescript-checker": "workspace:^",
     "@systemfsoftware/stryker-js-vitest-runner": "workspace:^",
     "@systemfsoftware/stryker-plugins": "workspace:^",
@@ -52,6 +50,8 @@
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
+    "mutation-testing-elements": "catalog:stryker",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "testcontainers": "catalog:",

@@ -612,7 +612,7 @@ function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironme
     resolvedMode: mode,
     runStartedAt: stream.startedAt,
     basePath: process.cwd(),
-    reporterPluginModules: [import.meta.resolve('@systemfsoftware/stryker-js-html-reporter')],
+    reporterPluginModules: [new URL('./reporters/html.mjs', import.meta.url).href],
     allowConsoleColors: isColorEnabled(mode, process.env['NO_COLOR']),
   }
 }
