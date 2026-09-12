@@ -161,6 +161,7 @@ export {
 } from './Schema.js'
 export {
   type CommandRunnerOptions,
+  CommandRunnerOptionsSchema,
   type DeepOptional,
   type MutationScoreThresholds,
   MutationScoreThresholdsSchema,

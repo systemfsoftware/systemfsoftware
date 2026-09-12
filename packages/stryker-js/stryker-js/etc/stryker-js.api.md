@@ -100,10 +100,13 @@ export class ClassifyExitCommand extends ClassifyExitCommand_base {}
 // @public (undocumented)
 export class ClassifyExitDecision extends ClassifyExitDecision_base {}
 
-// Warning: (ae-forgotten-export) The symbol "CommandRunnerOptionsSchema" needs to be exported by the entry point index.d.mts
-//
 // @public (undocumented)
 export type CommandRunnerOptions = S.Schema.Type<typeof CommandRunnerOptionsSchema>;
+
+// @public (undocumented)
+export const CommandRunnerOptionsSchema: S.StructWithRest<S.Struct<{
+    readonly command: S.withDecodingDefaultKey<S.String, never>;
+}>, readonly [S.$Record<S.String, S.Unknown>]>;
 
 // @public (undocumented)
 export interface CompleteDryRunResult {

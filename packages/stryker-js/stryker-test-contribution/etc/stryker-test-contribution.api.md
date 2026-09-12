@@ -13,8 +13,6 @@ import { PluginLayerContribution } from '@systemfsoftware/stryker-js';
 import { RunConfiguration } from '@systemfsoftware/stryker-js';
 import * as schema from '@systemfsoftware/stryker-js';
 
-// Warning: (ae-forgotten-export) The symbol "ReportView" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
 export const contributionByTestFile: (report: ReportView) => ReadonlyMap<string, TestFileContribution>;
 
@@ -30,6 +28,9 @@ export const makeTestContributionEvaluatorService: (options: {
 }) => {
     readonly evaluate: (report: schema.MutationTestResult) => Effect.Effect<ExitClass | null, EvaluatorFailed>;
 };
+
+// @public (undocumented)
+export type ReportView = Pick<schema.MutationTestResult, 'files' | 'testFiles'>;
 
 // @public (undocumented)
 export const strykerPlugins: PluginLayerContribution<"Evaluator">[];

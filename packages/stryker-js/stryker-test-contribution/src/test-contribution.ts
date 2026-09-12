@@ -45,7 +45,7 @@ export interface TestContributionVerdict {
   readonly message: string
 }
 
-type ReportView = Pick<schema.MutationTestResult, 'files' | 'testFiles'>
+export type ReportView = Pick<schema.MutationTestResult, 'files' | 'testFiles'>
 
 type TestFileById = ReadonlyMap<string, string>
 
