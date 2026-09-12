@@ -163,15 +163,44 @@ const isBoundByAModuleScopeBinding = (node: ESTree.Node): boolean => {
   return false
 }
 
-/**
- * A deferred closure hands back the same runtime only when the construction's result lands in
- * a cache binding: an assignment inside the closure, or the module-scope binding of the call
- * that consumes the closure as a callback (`import(...).then((m) => make(m.L))`).
- */
+const MAX_WALK_DEPTH = 32
+
+const isNode = (value: unknown): value is ESTree.Node => value !== null && typeof value === 'object' && 'type' in value
+
+const mentionsName = (value: unknown, name: string, depth: number): boolean => {
+  if (depth > MAX_WALK_DEPTH) return false
+  if (Array.isArray(value)) return value.some((item) => mentionsName(item, name, depth + 1))
+  if (!isNode(value)) return false
+  if (value.type === 'Identifier') return value.name === name
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'parent') continue
+    if (mentionsName(child, name, depth + 1)) return true
+  }
+  return false
+}
+
+const isReadInsideANestedFunction = (value: unknown, enclosing: FunctionNode, name: string, depth: number): boolean => {
+  if (depth > MAX_WALK_DEPTH) return false
+  if (Array.isArray(value)) return value.some((item) => isReadInsideANestedFunction(item, enclosing, name, depth + 1))
+  if (!isNode(value)) return false
+  if (value !== enclosing && isFunctionNode(value)) return mentionsName(value, name, depth + 1)
+  for (const [key, child] of Object.entries(value)) {
+    if (key === 'parent') continue
+    if (isReadInsideANestedFunction(child, enclosing, name, depth + 1)) return true
+  }
+  return false
+}
+
+const isCapturedDeclaratorBinding = (declarator: ESTree.VariableDeclarator, enclosing: FunctionNode): boolean => {
+  if (declarator.id.type !== 'Identifier') return false
+  return isReadInsideANestedFunction(enclosing, enclosing, declarator.id.name, 0)
+}
+
 const isMemoizedConstruction = (call: ESTree.CallExpression, enclosing: FunctionNode): boolean => {
   let current: ESTree.Node | null = call.parent
   while (current !== null && current !== enclosing) {
     if (isCacheWrite(current)) return true
+    if (current.type === 'VariableDeclarator' && isCapturedDeclaratorBinding(current, enclosing)) return true
     current = current.parent
   }
   const consumer: ESTree.Node | null = enclosing.parent

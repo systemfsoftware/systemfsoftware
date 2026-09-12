@@ -227,6 +227,17 @@ const runtime = ManagedRuntime.make(AppLive)`,
       filename: 'C:\\repo\\pkg\\global-setup.ts',
       options: [{ edges: ['global-setup.ts'] }],
     },
+    {
+      name: 'Should_Pass_When_TheFactoryHandsTheWiredCellToItsReturnedClosures',
+      code: `import { Cell } from '@systemfsoftware/effect-cell-types'
+import { Layer } from 'effect'
+
+export const makeCheckerService = (deps) => {
+  const verify = Cell.provide(checkCell, Layer.succeed(TypeScriptCompiler, deps.compiler))
+  return { check: (mutants) => verify.run(new CheckMutantsCommand({ mutants })) }
+}`,
+      filename: 'src/Checker.ts',
+    },
   ],
   invalid: [
     {
@@ -436,6 +447,17 @@ const runtime = ManagedRuntime.make(AppLive)`,
 
 export const getRuntime = () => ManagedRuntime.make(AppLive)`,
       filename: 'src/AppRuntime.ts',
+      errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
+    },
+    {
+      name: 'Should_Report_When_TheDeclaratorBindingIsConsumedWithoutNestedCapture',
+      code: `import { ManagedRuntime } from 'effect'
+
+export const handle = (request) => {
+  const runtime = ManagedRuntime.make(AppLive)
+  return runtime.runPromise(serve(request))
+}`,
+      filename: 'src/Handler.ts',
       errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
     },
   ],
