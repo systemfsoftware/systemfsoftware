@@ -1,9 +1,9 @@
-import { type FileDescription, Mutant as ApiMutant } from '@systemfsoftware/stryker-js/Mutant'
+import { type FileDescription, Mutant as ApiMutant } from '@systemfsoftware/stryker-js'
 import * as Effect from 'effect/Effect'
 import * as Predicate from 'effect/Predicate'
 
-import type { IgnorerService } from '@systemfsoftware/stryker-js/Ignorer'
-import type { MutateDescription } from '@systemfsoftware/stryker-js/Mutant'
+import type { IgnorerService } from '@systemfsoftware/stryker-js'
+import type { MutateDescription } from '@systemfsoftware/stryker-js'
 import {
   FileSchema,
   InstrumentCommand,

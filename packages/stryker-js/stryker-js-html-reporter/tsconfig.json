@@ -5,7 +5,8 @@
     "rootDir": ".",
     "skipLibCheck": true,
     "types": [
-      "node"
+      "node",
+      "vitest/globals"
     ],
     "plugins": [
       {

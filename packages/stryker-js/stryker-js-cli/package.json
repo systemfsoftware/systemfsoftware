@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/stryker-js-cli",
-  "version": "7.0.1",
+  "version": "8.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
@@ -19,7 +19,11 @@
     "prepack": "pnpm build",
     "typecheck": "tsc --noEmit --incremental",
     "attw": "attw --pack .",
+    "test": "vitest run",
+    "test:contract": "vitest run --config vitest.contract.config.ts",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "mutation": "node ./dist/main.mjs run",
+    "mutation:full": "node ./dist/main.mjs run --force",
     "api:check": "echo 'no API report for CLI (dts: false)' && exit 0",
     "api:update": "echo 'no API report for CLI (dts: false)' && exit 0"
   },
@@ -53,7 +57,8 @@
     "rimraf": "catalog:",
     "testcontainers": "catalog:",
     "tsdown": "catalog:",
-    "vite-tsconfig-paths": "catalog:"
+    "vite-tsconfig-paths": "catalog:",
+    "vitest": "catalog:"
   },
   "engines": {
     "node": ">=20.19.0"

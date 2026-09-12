@@ -1,10 +1,10 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { Checker } from '@systemfsoftware/stryker-js/Checker'
-import { CheckerFailed } from '@systemfsoftware/stryker-js/Checker'
-import type { CheckResult } from '@systemfsoftware/stryker-js/Checker'
-import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
-import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import { Checker } from '@systemfsoftware/stryker-js'
+import { CheckerFailed } from '@systemfsoftware/stryker-js'
+import type { CheckResult } from '@systemfsoftware/stryker-js'
+import type { Mutant } from '@systemfsoftware/stryker-js'
+import { errorToString } from '@systemfsoftware/stryker-js'
+import type { StrykerOptions } from '@systemfsoftware/stryker-js'
 import { Result, Schema as S } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as HashMap from 'effect/HashMap'
@@ -97,7 +97,7 @@ const checkCell = Cell.layer({
     }),
 })
 
-export function makeCheckerService({ options, compiler }: CheckerDeps): Checker['Service'] {
+export const makeCheckerService = ({ options, compiler }: CheckerDeps): Checker['Service'] => {
   const verify = Cell.provide(checkCell, Layer.succeed(TypeScriptCompiler, compiler))
 
   const positionOf = (error: Diagnostic): Effect.Effect<string> =>
@@ -124,7 +124,7 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
     Effect.map(Effect.forEach(errors, formatDiagnostic), (parts) => parts.join('\n'))
 
   const soloRound = (mutant: Mutant): Effect.Effect<RunAnswers, CheckerFailed> =>
-    Cell.run(verify, new CheckMutantsCommand({ mutants: [mutant] })).pipe(
+    verify.run(new CheckMutantsCommand({ mutants: [mutant] })).pipe(
       Effect.map((decision) => decision.results),
     )
 
@@ -132,7 +132,7 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
     Match.value(decision).pipe(
       Match.tag('CheckFinished', () => Effect.succeed<ReadonlyArray<RunAnswers>>([])),
       Match.tag('RetestRequired', (retest) =>
-        Cell.run(verify, new CheckMutantsCommand({ mutants: [] })).pipe(
+        verify.run(new CheckMutantsCommand({ mutants: [] })).pipe(
           Effect.flatMap(() => Effect.forEach(retest.needsRetest, soloRound)),
         )),
       Match.exhaustive,
@@ -153,7 +153,7 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
     ),
 
     check: (mutants) =>
-      Cell.run(verify, new CheckMutantsCommand({ mutants: [...mutants] })).pipe(
+      verify.run(new CheckMutantsCommand({ mutants: [...mutants] })).pipe(
         Effect.flatMap((first) => Effect.map(soloRounds(first), (rounds) => mergeAnswers([first.results, ...rounds]))),
       ),
 

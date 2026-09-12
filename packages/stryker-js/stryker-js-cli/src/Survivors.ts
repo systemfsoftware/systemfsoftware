@@ -1,6 +1,11 @@
 import { sha256 } from '@noble/hashes/sha2.js'
 import { bytesToHex, utf8ToBytes } from '@noble/hashes/utils.js'
 import { Cell } from '@systemfsoftware/effect-cell-types'
+import type { ExitClass } from '@systemfsoftware/stryker-js'
+import { Module } from '@systemfsoftware/stryker-js'
+import { Mutant } from '@systemfsoftware/stryker-js'
+import * as schema from '@systemfsoftware/stryker-js'
+import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js'
 import {
   type ConfigFileInvalidError,
   type ConfigFileNotFoundError,
@@ -9,11 +14,6 @@ import {
   strykerVersion,
   toRelativeNormalizedFileName,
 } from '@systemfsoftware/stryker-js-engine'
-import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
-import { Module } from '@systemfsoftware/stryker-js/Module'
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import { schema } from '@systemfsoftware/stryker-js/Mutant'
-import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Match from 'effect/Match'
@@ -210,7 +210,7 @@ export function runSurvivorsAdmission(
   S.SchemaError | SurvivorsRejection | ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError,
   FileSystem.FileSystem | Path.Path | Module
 > {
-  return Cell.run(survivorsAdmissionCell(basePath), cliOptions)
+  return survivorsAdmissionCell(basePath).run(cliOptions)
 }
 
 function resolveSurvivorsRunOptions(

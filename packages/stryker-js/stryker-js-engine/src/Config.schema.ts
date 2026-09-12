@@ -1,6 +1,6 @@
 import * as S from 'effect/Schema'
 
-import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
+import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js'
 
 export const ConfigDocumentSchema = S.Record(S.String, S.Unknown)
 

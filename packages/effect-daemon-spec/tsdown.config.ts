@@ -35,4 +35,5 @@ export default defineConfig({
   dts: true,
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   tsconfig: './tsconfig.build.json',
+  define: { 'import.meta.vitest': 'undefined' },
 })

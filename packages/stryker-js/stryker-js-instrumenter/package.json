@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/stryker-js-instrumenter",
-  "version": "5.0.2",
+  "version": "6.0.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
@@ -19,10 +19,13 @@
   },
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown",
+    "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "attw": "attw --pack .",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+    "test": "vitest run",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "api:check": "tsdown && api-extractor run",
+    "api:update": "api-extractor run --local"
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -35,6 +38,8 @@
     "oxc-parser": "catalog:"
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",
@@ -46,7 +51,8 @@
     "rimraf": "catalog:",
     "svelte": "5.55.1",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "engines": {
     "node": ">=20.0.0"

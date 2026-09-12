@@ -1,0 +1,16 @@
+{
+  "packageManager": "npm",
+  "testRunner": "command",
+  "plugins": [],
+  "reporters": [
+    "progress-stream"
+  ],
+  "mutate": [
+    "src/label.js"
+  ],
+  "thresholds": {
+    "high": 100,
+    "low": 80,
+    "break": 0
+  }
+}

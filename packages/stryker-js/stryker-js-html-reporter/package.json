@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/stryker-js-html-reporter",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
@@ -15,10 +15,13 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown",
+    "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit",
     "attw": "attw --pack .",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint --format=${f:-default}"
+    "test": "vitest run",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint --format=${f:-default}",
+    "api:check": "tsdown && api-extractor run",
+    "api:update": "api-extractor run --local"
   },
   "dependencies": {
     "@effect/platform-node-shared": "catalog:",
@@ -27,6 +30,7 @@
     "mutation-testing-elements": "catalog:stryker"
   },
   "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
@@ -38,7 +42,8 @@
     "oxlint-tsgolint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "engines": {
     "node": ">=20.0.0"

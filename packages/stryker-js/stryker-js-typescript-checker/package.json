@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/stryker-js-typescript-checker",
-  "version": "5.0.2",
+  "version": "5.0.3",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
@@ -20,10 +20,13 @@
   },
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown",
+    "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "attw": "attw --pack .",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+    "test": "vitest run",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "api:check": "tsdown && api-extractor run",
+    "api:update": "api-extractor run --local"
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -35,6 +38,7 @@
   "devDependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
@@ -47,7 +51,8 @@
     "@types/node": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
-    "tsdown": "catalog:"
+    "tsdown": "catalog:",
+    "vitest": "catalog:"
   },
   "inlinedDependencies": {
     "@jsr/std__jsonc": "1.0.2"

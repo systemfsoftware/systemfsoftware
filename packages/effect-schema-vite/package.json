@@ -40,7 +40,8 @@
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "attw": "attw --pack ."
+    "attw": "attw --pack .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@oxc-project/types": "catalog:",
@@ -61,7 +62,8 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@systemfsoftware/effect-schema-law": "workspace:*",

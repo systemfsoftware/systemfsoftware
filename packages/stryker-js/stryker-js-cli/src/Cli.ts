@@ -2,6 +2,10 @@ import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChild
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import * as NodeStdio from '@effect/platform-node/NodeStdio'
+import { Mutant } from '@systemfsoftware/stryker-js'
+import { type RunEvent, RunEvents } from '@systemfsoftware/stryker-js'
+import { RENDERED_OPTION_DEFAULTS } from '@systemfsoftware/stryker-js'
+import type { LogLevel, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js'
 import {
   ConfigFileInvalidError,
   ConfigFileNotFoundError,
@@ -12,10 +16,6 @@ import {
   runMutationTest,
   strykerVersion,
 } from '@systemfsoftware/stryker-js-engine'
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import { type RunEvent, RunEvents } from '@systemfsoftware/stryker-js/Run'
-import { RENDERED_OPTION_DEFAULTS } from '@systemfsoftware/stryker-js/Schema'
-import type { LogLevel, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import * as Cause from 'effect/Cause'
 import * as Console from 'effect/Console'
 import * as Effect from 'effect/Effect'
@@ -115,6 +115,8 @@ export function observeTerminatingSignal(): SignalObserver {
   }
   return () => observed
 }
+
+/// <reference types="vitest/import-meta" />
 
 function createSplitter(separator: string) {
   return (value: string) => value.split(separator).filter(Boolean)

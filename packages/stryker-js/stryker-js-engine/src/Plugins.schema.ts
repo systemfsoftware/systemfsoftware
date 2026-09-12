@@ -2,8 +2,8 @@
  * Plugins capability — declarations for plugin module shapes and load failures.
  */
 
-import { PluginKind } from '@systemfsoftware/stryker-js/Plugin'
-import type { PluginContribution } from '@systemfsoftware/stryker-js/Plugin'
+import { PluginKind } from '@systemfsoftware/stryker-js'
+import type { PluginContribution } from '@systemfsoftware/stryker-js'
 import { Schema as S } from 'effect'
 import * as SSchema from 'effect/Schema'
 

@@ -1,8 +1,8 @@
 import rawSchemaJson from '../schema/typescript-checker-options.json' with { type: 'json' }
 
-import { Checker } from '@systemfsoftware/stryker-js/Checker'
-import { declarePlugin } from '@systemfsoftware/stryker-js/Plugin'
-import { RunConfiguration } from '@systemfsoftware/stryker-js/Plugin'
+import { Checker } from '@systemfsoftware/stryker-js'
+import { declarePlugin } from '@systemfsoftware/stryker-js'
+import { RunConfiguration } from '@systemfsoftware/stryker-js'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'

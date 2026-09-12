@@ -1,10 +1,10 @@
 import * as api from '@opentelemetry/api'
-import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
-import type { MetricsResult } from '@systemfsoftware/stryker-js/Metrics'
-import type * as reportApi from '@systemfsoftware/stryker-js/Report'
-import type { ReporterEvent, ReporterFactory, ReporterInit } from '@systemfsoftware/stryker-js/Reporter'
-import { MutationTestReportReady } from '@systemfsoftware/stryker-js/Reporter'
-import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import type { ExitClass } from '@systemfsoftware/stryker-js'
+import type { MetricsResult } from '@systemfsoftware/stryker-js'
+import type * as reportApi from '@systemfsoftware/stryker-js'
+import type { ReporterEvent, ReporterFactory, ReporterInit } from '@systemfsoftware/stryker-js'
+import { MutationTestReportReady } from '@systemfsoftware/stryker-js'
+import type { StrykerOptions } from '@systemfsoftware/stryker-js'
 import type * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
@@ -21,9 +21,9 @@ import { ConfigError } from './Config.schema.js'
 
 export const REPORTER_STREAM_QUEUE_BOUND = 256
 
-export type ReporterStreamState = 'streaming' | 'terminal' | 'detached'
+type ReporterStreamState = 'streaming' | 'terminal' | 'detached'
 
-export interface ReporterAttachment {
+interface ReporterAttachment {
   readonly name: string
   readonly inbox: Queue.Queue<ReporterEvent, Cause.Done>
   readonly queue: Queue.Queue<ReporterEvent, Cause.Done>
@@ -32,8 +32,34 @@ export interface ReporterAttachment {
   readonly consumer: Promise<void>
 }
 
+const ReporterStageTypeId: unique symbol = Symbol.for('@systemfsoftware/stryker-js-engine/ReporterStage')
+
+/**
+ * An attached reporter stage, opaque at the engine boundary: the published
+ * phase types carry this handle so the attachment machinery (queues, fibers,
+ * refs) never reaches an adopter's compiler. Constructed only by
+ * `attachReporterFactories`.
+ */
 export interface ReporterStage {
+  readonly [ReporterStageTypeId]: typeof ReporterStageTypeId
+}
+
+interface ReporterStageAttachments extends ReporterStage {
   readonly attachments: readonly ReporterAttachment[]
+}
+
+const carriesAttachments = (stage: ReporterStage): stage is ReporterStageAttachments => 'attachments' in stage
+
+const makeReporterStage = (attachments: readonly ReporterAttachment[]): ReporterStage => {
+  const stage: ReporterStageAttachments = { [ReporterStageTypeId]: ReporterStageTypeId, attachments }
+  return stage
+}
+
+const stageAttachments = (stage: ReporterStage): readonly ReporterAttachment[] => {
+  if (!carriesAttachments(stage)) {
+    throw new Error('not a reporter stage constructed by attachReporterFactories')
+  }
+  return stage.attachments
 }
 
 export interface ReporterDrainSummary {
@@ -120,7 +146,7 @@ export const attachReporterFactories = (
   inputs: readonly AttachReporterInput[],
   options: StrykerOptions,
   init: ReporterInit,
-): Effect.Effect<readonly ReporterAttachment[], never, Scope.Scope> =>
+): Effect.Effect<ReporterStage, never, Scope.Scope> =>
   Effect.forEach(inputs, (input) =>
     Effect.gen(function*() {
       const inbox = yield* Queue.unbounded<ReporterEvent, Cause.Done>()
@@ -156,7 +182,7 @@ export const attachReporterFactories = (
         () => markDetached(ports),
       )
       return attachment
-    }))
+    })).pipe(Effect.map(makeReporterStage))
 
 const warnEventDropped = (attachment: ReporterAttachment): Effect.Effect<void> =>
   Effect.gen(function*() {
@@ -183,13 +209,13 @@ const deliverReporterEvent = (attachment: ReporterAttachment, event: ReporterEve
   })
 
 export const offerReporterEvent = (
-  stage: Pick<ReporterStage, 'attachments'>,
+  stage: ReporterStage,
   event: ReporterEvent,
 ): Effect.Effect<void, never> =>
-  Effect.forEach(stage.attachments, (attachment) => deliverReporterEvent(attachment, event), { discard: true })
+  Effect.forEach(stageAttachments(stage), (attachment) => deliverReporterEvent(attachment, event), { discard: true })
 
 export const offerTerminalReport = (
-  stage: Pick<ReporterStage, 'attachments'>,
+  stage: ReporterStage,
   report: reportApi.MutationTestResult,
   metrics: MetricsResult,
 ): Effect.Effect<void, never> => offerReporterEvent(stage, new MutationTestReportReady({ report, metrics }))
@@ -241,14 +267,15 @@ const failedReporterNames = (outcome: ReporterDrainOutcome): readonly string[] =
 }
 
 export const closeReporterStage = (
-  stage: Pick<ReporterStage, 'attachments'>,
+  stage: ReporterStage,
 ): Effect.Effect<ReporterDrainSummary, never, never> =>
   Effect.gen(function*() {
-    yield* Effect.forEach(stage.attachments, (attachment) => Queue.end(attachment.inbox), { discard: true })
-    yield* Effect.forEach(stage.attachments, (attachment) => Effect.exit(Fiber.join(attachment.emitter)), {
+    const attachments = stageAttachments(stage)
+    yield* Effect.forEach(attachments, (attachment) => Queue.end(attachment.inbox), { discard: true })
+    yield* Effect.forEach(attachments, (attachment) => Effect.exit(Fiber.join(attachment.emitter)), {
       discard: true,
     })
-    const outcomes = yield* Effect.forEach(stage.attachments, settleAttachment, { concurrency: 'unbounded' })
+    const outcomes = yield* Effect.forEach(attachments, settleAttachment, { concurrency: 'unbounded' })
     return { terminalFailed: outcomes.flatMap((outcome) => failedReporterNames(outcome)) }
   })
 

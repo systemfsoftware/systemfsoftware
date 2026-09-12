@@ -1,0 +1,24 @@
+{
+  "testRunner": "command",
+  "coverageAnalysis": "off",
+  "reporters": [
+    "html",
+    "json"
+  ],
+  "htmlReporter": {
+    "fileName": "reports/mutation-report.html"
+  },
+  "jsonReporter": {
+    "fileName": "reports/mutation-report.json"
+  },
+  "mutate": [
+    "src/**/*.js"
+  ],
+  "tempDirName": ".stryker-tmp",
+  "plugins": [],
+  "thresholds": {
+    "high": 100,
+    "low": 80,
+    "break": 0
+  }
+}

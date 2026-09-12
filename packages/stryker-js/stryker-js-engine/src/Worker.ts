@@ -1,4 +1,4 @@
-import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import type { StrykerOptions } from '@systemfsoftware/stryker-js'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'

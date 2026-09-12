@@ -1,4 +1,4 @@
-import { declarePlugin, RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
+import { declarePlugin, RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 import * as S from 'effect/Schema'

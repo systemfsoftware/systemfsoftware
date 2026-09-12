@@ -36,7 +36,8 @@
     "typecheck": "tsc --noEmit --incremental",
     "attw": "attw --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "prepack": "pnpm build"
+    "prepack": "pnpm build",
+    "test": "vitest run"
   },
   "dependencies": {
     "@andrewbranch/untar.js": "^1.0.3",
@@ -58,7 +59,9 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@effect/vitest": "catalog:",
+    "vitest": "catalog:"
   },
   "publishConfig": {
     "access": "public",

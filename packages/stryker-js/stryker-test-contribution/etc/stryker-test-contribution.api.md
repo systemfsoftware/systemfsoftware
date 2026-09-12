@@ -5,16 +5,14 @@
 ```ts
 
 import * as Effect from 'effect/Effect';
-import { Evaluator } from '@systemfsoftware/stryker-js/Evaluator';
-import { EvaluatorFailed } from '@systemfsoftware/stryker-js/Evaluator';
-import { ExitClass } from '@systemfsoftware/stryker-js/Evaluator';
+import { Evaluator } from '@systemfsoftware/stryker-js';
+import { EvaluatorFailed } from '@systemfsoftware/stryker-js';
+import { ExitClass } from '@systemfsoftware/stryker-js';
 import * as Layer from 'effect/Layer';
-import { PluginLayerContribution } from '@systemfsoftware/stryker-js/Plugin';
-import { RunConfiguration } from '@systemfsoftware/stryker-js/Plugin';
-import { schema } from '@systemfsoftware/stryker-js/Mutant';
+import { PluginLayerContribution } from '@systemfsoftware/stryker-js';
+import { RunConfiguration } from '@systemfsoftware/stryker-js';
+import * as schema from '@systemfsoftware/stryker-js';
 
-// Warning: (ae-forgotten-export) The symbol "ReportView" needs to be exported by the entry point index.d.ts
-//
 // @public (undocumented)
 export const contributionByTestFile: (report: ReportView) => ReadonlyMap<string, TestFileContribution>;
 
@@ -30,6 +28,9 @@ export const makeTestContributionEvaluatorService: (options: {
 }) => {
     readonly evaluate: (report: schema.MutationTestResult) => Effect.Effect<ExitClass | null, EvaluatorFailed>;
 };
+
+// @public (undocumented)
+export type ReportView = Pick<schema.MutationTestResult, 'files' | 'testFiles'>;
 
 // @public (undocumented)
 export const strykerPlugins: PluginLayerContribution<"Evaluator">[];

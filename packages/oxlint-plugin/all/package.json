@@ -31,7 +31,8 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "attw": "attw --pack ."
+    "attw": "attw --pack .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@systemfsoftware/oxlint-preset": "workspace:^"
@@ -56,7 +57,8 @@
     "oxlint-tsgolint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "effect": "catalog:peers",

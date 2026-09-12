@@ -31,4 +31,5 @@ export default defineConfig({
   deps: { onlyBundle: false },
   tsconfig: './tsconfig.build.json',
   clean: false,
+  define: { 'import.meta.vitest': 'undefined' },
 })

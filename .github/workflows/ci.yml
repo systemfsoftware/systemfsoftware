@@ -55,3 +55,7 @@ jobs:
     name: build · lint · typecheck · test
     needs: conflicts
     uses: ./.github/workflows/reusable-checks.yml
+  contract:
+    name: contract · integration tests
+    needs: conflicts
+    uses: ./.github/workflows/reusable-contract.yml

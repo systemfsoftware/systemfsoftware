@@ -1,3 +1,4 @@
+/// <reference types="vitest/importMeta" />
 import { Workflow } from '@systemfsoftware/effect-cell-types'
 import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
@@ -34,6 +35,9 @@ const restartIndicesFor = (
     Match.when('rest_for_one', () => Arr.range(failedIndex, total - 1)),
     Match.exhaustive,
   )
+
+/** The strategies the restart law quantifies over. */
+const RESTART_STRATEGIES = ['one_for_one', 'one_for_all', 'rest_for_one'] as const
 
 const RestartDecisionTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-daemon/RestartDecision')
 type RestartDecisionTypeId = typeof RestartDecisionTypeId
@@ -88,3 +92,59 @@ export const chooseRestartStrategy = Workflow.make(
       ),
     ),
 )
+
+if (import.meta.vitest !== void 0) {
+  // Dynamic by necessity: tsdown defines `import.meta.vitest` as `undefined`, so this
+  // branch is statically dead in the build and never enters the published module graph.
+  const { it } = await import('@effect/vitest')
+  const { FastCheck: fc } = await import('effect/testing')
+
+  /**
+   * A supervision tree with a failed child: a total, and a failed index inside it. The schema's
+   * own filter guarantees `failedIndex < totalChildren`, so the arbitrary draws the same shape
+   * rather than a wider one the decision never sees.
+   */
+  const tree = S.toArbitrary(DecideInput)(fc).map((input) => [input.totalChildren, input.failedIndex] as const)
+
+  const ascendingDistinct = (xs: readonly number[]): boolean => xs.slice(1).every((x, i) => Number(xs[i]) < x)
+
+  const subset = (inner: readonly number[], outer: readonly number[]): boolean => inner.every((x) => outer.includes(x))
+
+  /**
+   * Whatever the strategy, a restart set is a set of real child indices in a stable order: a
+   * mutant that reversed the order, repeated an index, or ran one past the last child breaks it.
+   */
+  it.prop('∀t_RestartSet_⊆Children', [tree], ([[total, failedIndex]]) =>
+    RESTART_STRATEGIES.every((strategy) => {
+      const indices = restartIndicesFor(strategy, failedIndex, total)
+      return [ascendingDistinct(indices), indices.every((x) => 0 <= x), indices.every((x) => x < total)].every(
+        (holds) => holds,
+      )
+    }))
+
+  /**
+   * The three strategies are ordered by blast radius, and the ordering is containment:
+   * one_for_one restarts the failed child, rest_for_one that child and its juniors, one_for_all
+   * every child. An off-by-one in any branch breaks a containment the branch itself cannot see.
+   */
+  it.prop('∀t_BlastRadius_⊆Widening', [tree], ([[total, failedIndex]]) => {
+    const one = restartIndicesFor('one_for_one', failedIndex, total)
+    const rest = restartIndicesFor('rest_for_one', failedIndex, total)
+    const all = restartIndicesFor('one_for_all', failedIndex, total)
+    return [subset(one, rest), subset(rest, all)].every((holds) => holds)
+  })
+
+  /** one_for_all covers the whole tree, and rest_for_one exactly the failed child's suffix. */
+  it.prop(
+    '∀t_Cardinality_=Strategy',
+    [tree],
+    ([[total, failedIndex]]) => {
+      const lengths = [
+        restartIndicesFor('one_for_all', failedIndex, total).length,
+        restartIndicesFor('rest_for_one', failedIndex, total).length,
+      ]
+      const expected = [total, total - failedIndex]
+      return lengths.every((length, i) => length === expected[i])
+    },
+  )
+}

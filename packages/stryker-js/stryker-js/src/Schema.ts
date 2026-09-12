@@ -47,7 +47,7 @@ export type KnownKeys<T> = keyof {
   [P in keyof T as string extends P ? never : number extends P ? never : P]: T[P]
 }
 
-type OnlyObject<T> = Exclude<T, Primitive>
+export type OnlyObject<T> = Exclude<T, Primitive>
 
 export interface PropertyPathOverloads<T> {
   (key: KnownKeys<T>): string
@@ -67,7 +67,7 @@ export interface PropertyPathOverloads<T> {
 
 /**
  * Given a base type, allows type safe access to the name of a property.
- * @param prop The property name
+ * @param prop - The property name
  */
 export function propertyPath<T>(): PropertyPathOverloads<T> {
   const fn: PropertyPathOverloads<T> = (...args: string[]) => args.join('.')
@@ -87,7 +87,7 @@ export function propertyPath<T>(): PropertyPathOverloads<T> {
  * a consumer filed from a Stryker run arrived at a project that does not own
  * this code (`REPO-O1`) and prefilled a template that does not exist here.
  *
- * @param titleSuggestion The title to be prefilled in.
+ * @param titleSuggestion - The title to be prefilled in.
  */
 export function strykerReportBugUrl(titleSuggestion: string): string {
   const title = encodeURIComponent(titleSuggestion)

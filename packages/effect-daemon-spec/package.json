@@ -45,7 +45,8 @@
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
-    "attw": "attw --pack ."
+    "attw": "attw --pack .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@systemfsoftware/effect-cell-types": "workspace:^"
@@ -72,7 +73,9 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@effect/vitest": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "effect": "catalog:peers"

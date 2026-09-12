@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/stryker-js",
-  "version": "3.0.1",
+  "version": "3.0.2",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
@@ -15,10 +15,13 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown",
+    "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
     "attw": "attw --pack .",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "api:check": "tsdown && api-extractor run",
+    "api:update": "api-extractor run --local"
   },
   "license": "Apache-2.0",
   "engines": {
@@ -29,6 +32,8 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-schema-law": "workspace:^",
@@ -40,7 +45,8 @@
     "oxlint-tsgolint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "publishConfig": {
     "access": "public",
@@ -68,22 +74,6 @@
   },
   "exports": {
     ".": "./dist/index.mjs",
-    "./Checker": "./dist/Checker.mjs",
-    "./Evaluator": "./dist/Evaluator.mjs",
-    "./ExitClass": "./dist/ExitClass.mjs",
-    "./Ignorer": "./dist/Ignorer.mjs",
-    "./Metrics": "./dist/Metrics.mjs",
-    "./Module": "./dist/Module.mjs",
-    "./Mutant": "./dist/Mutant.mjs",
-    "./output-file": "./dist/output-file.mjs",
-    "./Plugin": "./dist/Plugin.mjs",
-    "./provided-options": "./dist/provided-options.mjs",
-    "./Report": "./dist/Report.mjs",
-    "./Reporter": "./dist/Reporter.mjs",
-    "./ReporterEvent": "./dist/ReporterEvent.mjs",
-    "./Run": "./dist/Run.mjs",
-    "./Schema": "./dist/Schema.mjs",
-    "./TestRunner": "./dist/TestRunner.mjs",
     "./package.json": "./package.json"
   }
 }

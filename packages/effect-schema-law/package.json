@@ -43,7 +43,8 @@
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "attw": "attw --pack ."
+    "attw": "attw --pack .",
+    "test": "vitest run"
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
@@ -57,7 +58,9 @@
     "fast-check": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
-    "tsdown": "catalog:"
+    "tsdown": "catalog:",
+    "@effect/vitest": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "@effect/vitest": "catalog:peers",

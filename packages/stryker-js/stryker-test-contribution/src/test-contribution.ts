@@ -1,4 +1,4 @@
-import { schema } from '@systemfsoftware/stryker-js/Mutant'
+import type * as schema from '@systemfsoftware/stryker-js'
 import * as Match from 'effect/Match'
 
 export const defaultRequireTestContributionSuffixes = [
@@ -45,7 +45,7 @@ export interface TestContributionVerdict {
   readonly message: string
 }
 
-type ReportView = Pick<schema.MutationTestResult, 'files' | 'testFiles'>
+export type ReportView = Pick<schema.MutationTestResult, 'files' | 'testFiles'>
 
 type TestFileById = ReadonlyMap<string, string>
 

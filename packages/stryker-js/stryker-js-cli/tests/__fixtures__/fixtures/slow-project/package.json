@@ -1,0 +1,9 @@
+{
+  "name": "slow-project",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "scripts": {
+    "test": "sleep 2 && node test.js"
+  }
+}

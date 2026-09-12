@@ -21,7 +21,9 @@
     "publish:unpublished": "./scripts/tools/publish-and-setup-npm-trust.ts",
     "attw": "turbo --concurrency=${TURBO_CONCURRENCY:-50%} attw",
     "pack:all": "node scripts/tools/pack-all.mjs",
-    "prepare": "concurrently \"husky\" \"effect-tsgo patch --oxlint --no-typescript --skip-missing\""
+    "prepare": "concurrently \"husky\" \"effect-tsgo patch --oxlint --no-typescript --skip-missing\"",
+    "gate:contract": "turbo --concurrency=${TURBO_CONCURRENCY:-100%} --continue test:contract",
+    "check:contract": "TURBO_CONCURRENCY=${TURBO_CONCURRENCY:-100%} pnpm gate:contract"
   },
   "devDependencies": {
     "@commitlint/cli": "^21.2.1",

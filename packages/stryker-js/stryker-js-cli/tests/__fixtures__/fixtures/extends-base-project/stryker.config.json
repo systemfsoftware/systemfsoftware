@@ -1,0 +1,16 @@
+{
+  "extends": "./base.json",
+  "testRunner": "command",
+  "coverageAnalysis": "off",
+  "reporters": [
+    "progress-stream"
+  ],
+  "mutate": [
+    "src/**/*.js"
+  ],
+  "tempDirName": ".stryker-tmp",
+  "checkers": [],
+  "plugins": null,
+  "incremental": false,
+  "ignorers": []
+}

@@ -1,0 +1,6 @@
+{
+  "extends": "@systemfsoftware/tsconfig/tsc/no-dom/library",
+  "include": [
+    "dist/stryker-setup.d.mts"
+  ]
+}
