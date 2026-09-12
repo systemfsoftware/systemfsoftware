@@ -7,29 +7,55 @@ import {
 } from '@systemfsoftware/oxlint-import-origin'
 
 /**
- * The module whose `Workflow` value owns the `make` boundary. Mirrors the
- * stryker-plugins workflow-make-ignorer constants; the oxlint package cannot
- * import the stryker package, so the three constants are declared here.
+ * The module whose `Workflow` value owns the constructor boundary — the declared
+ * members `make`, `total`, and `andThen`. Mirrors the stryker-plugins
+ * workflow-make-ignorer constants; the oxlint package cannot import the stryker
+ * package, so the three constants are declared here.
  */
 export const WORKFLOW_SOURCE = '@systemfsoftware/effect-cell-types' as const
 
 /** The import name a specifier must carry to be the workflow value. */
 export const WORKFLOW_IMPORT_NAME = 'Workflow' as const
 
-/** The member of the workflow value the boundary call invokes. */
-export const MAKE_MEMBER_NAME = 'make' as const
+/**
+ * The members of the workflow value that construct a workflow: `make` (the
+ * decision with an error channel), `total` (the decision that cannot fail), and
+ * `andThen` (the composite that wires one workflow's decision output into the
+ * next workflow's command). Declared once, as a set: every make-keyed rule
+ * locates the boundary through this kernel, so a constructor added to the
+ * workflow value is added here and no rule goes dark on it.
+ *
+ * The documented bound: the member is read from the import origin of the call's
+ * callee, resolved in THIS file. A constructor reached through a re-export chain
+ * — a module that re-exports the workflow value and is imported in its place —
+ * has a different source, so it is not a boundary this kernel can see.
+ */
+export const WORKFLOW_CONSTRUCTOR_MEMBERS: Readonly<Record<string, true>> = {
+  make: true,
+  total: true,
+  andThen: true,
+}
+
+/**
+ * The members whose signature takes constructed workflows in place of a decider:
+ * an `andThen` construction holds no decision body in the file that opens it, so
+ * a body-scoped rule demands nothing there. Every other constructor is presumed
+ * to take one — a member added above without this line keeps its body checked.
+ */
+const COMPOSING_MEMBERS: Readonly<Record<string, true>> = { andThen: true }
 
 type FunctionLike = ESTree.Function & { readonly type: 'FunctionDeclaration' | 'FunctionExpression' }
 
 export type MakeBodyKind = ESTree.ArrowFunctionExpression | FunctionLike
 
 /**
- * A located `Workflow.make(...)` decision boundary. `resolvedBody` is the
- * decider body when the decider is a function written inline or a
- * module-scope function reference resolved in the same file; it is `null`
- * when the body cannot be located from this file's AST (an imported
- * decision, a call with no function argument at all). A `null` body is a
- * finding the caller reports, never a silent skip.
+ * A located workflow construction boundary — a `Workflow.make`, `Workflow.total`,
+ * or `Workflow.andThen` call. `resolvedBody` is the decider body when the decider
+ * is a function written inline or a module-scope function reference resolved in the
+ * same file; it is `null` when the body cannot be located from this file's AST (an
+ * imported decision, a call with no function argument at all). A `null` body is a
+ * finding the caller reports when `takesDeciderBody` is true, and nothing to report
+ * when it is false — a composing constructor holds no decision body to find.
  *
  * `commandArgument` is the schema-class position — the first construction
  * argument, after the `call`/`apply` shift. It is a slot rather than a shape
@@ -42,6 +68,7 @@ export interface MakeBoundary {
   readonly makeCall: ESTree.CallExpression
   readonly resolvedBody: MakeBodyKind | null
   readonly commandArgument: ESTree.Node | null
+  readonly takesDeciderBody: boolean
 }
 
 interface ScopeLike {
@@ -92,26 +119,48 @@ const isVariableDeclarator = (node: ESTree.Node): node is ESTree.VariableDeclara
 const isVariableDeclaration = (node: ESTree.Node): node is ESTree.VariableDeclaration =>
   node.type === 'VariableDeclaration'
 
+const TS_NODES_THAT_HOLD_A_VALUE: Readonly<Record<string, true>> = {
+  TSAbstractAccessorProperty: true,
+  TSAbstractMethodDefinition: true,
+  TSAbstractPropertyDefinition: true,
+  TSAsExpression: true,
+  TSEnumDeclaration: true,
+  TSEnumMember: true,
+  TSExportAssignment: true,
+  TSExternalModuleReference: true,
+  TSImportEqualsDeclaration: true,
+  TSInstantiationExpression: true,
+  TSModuleBlock: true,
+  TSModuleDeclaration: true,
+  TSNonNullExpression: true,
+  TSParameterProperty: true,
+  TSSatisfiesExpression: true,
+  TSTypeAssertion: true,
+}
+
 const walk = (
   root: unknown,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
   visit: (n: ESTree.Node) => void,
 ): void => {
-  const node = isNode(root) ? root : null
-  if (node === null) return
-  visit(node)
-  const record = isWalkable(node) ? node : null
-  if (record === null) return
-  for (const key of visitorKeys[node.type] ?? []) {
-    const value = record[key]
-    if (Array.isArray(value)) {
-      for (const entry of value) {
-        if (isNode(entry)) walk(entry, visitorKeys, visit)
+  const step = (value: unknown): void => {
+    const node = isNode(value) ? value : null
+    if (node === null) return
+    const isTypeSyntax = node.type.startsWith('TS') && TS_NODES_THAT_HOLD_A_VALUE[node.type] !== true
+    if (isTypeSyntax) return
+    visit(node)
+    const record = isWalkable(node) ? node : null
+    if (record === null) return
+    for (const key of visitorKeys[node.type] ?? []) {
+      const child = record[key]
+      if (Array.isArray(child)) {
+        for (const entry of child) step(entry)
+      } else {
+        step(child)
       }
-    } else if (isNode(value)) {
-      walk(value, visitorKeys, visit)
     }
   }
+  step(root)
 }
 
 /**
@@ -148,22 +197,16 @@ const RELATIVE_WORKFLOW_MODULE = /(?:^|\/)Workflow\.js$/
 const isWorkflowModuleSpecifier = (source: string): boolean =>
   source === WORKFLOW_SOURCE || (source.startsWith('.') && RELATIVE_WORKFLOW_MODULE.test(source))
 
-/**
- * Whether a callee origin denotes a `Workflow.make` construction: the origin
- * must reach the workflow module and its member sequence must end in `make`.
- * Two seed shapes count — the sequence starts with the `Workflow` binding
- * (`Workflow.make`, `const W = Workflow; W.make(...)`, a computed
- * `Workflow['make']`, a chain of aliases, a member path taken off the value)
- * or the sequence is exactly the `make` member (a namespace import's member,
- * a destructured `const { make } = Workflow`, a `const m = Workflow.make`
- * alias, or a direct `import { make }`). A `make` reached through any other
- * binding of the same module is not the workflow construction.
- */
+const isConstructorMember = (member: string | null): boolean =>
+  member !== null && WORKFLOW_CONSTRUCTOR_MEMBERS[member] === true
+
+const isComposingMember = (member: string | null): boolean => member !== null && COMPOSING_MEMBERS[member] === true
+
 const isMakeBoundaryOrigin = (origin: ImportOrigin): boolean => {
   if (!isWorkflowModuleSpecifier(origin.source)) return false
-  if (originFinalMember(origin) !== MAKE_MEMBER_NAME) return false
+  if (!isConstructorMember(originFinalMember(origin))) return false
   const firstMember = originFirstMember(origin)
-  return firstMember === MAKE_MEMBER_NAME || firstMember === WORKFLOW_IMPORT_NAME
+  return isConstructorMember(firstMember) || firstMember === WORKFLOW_IMPORT_NAME
 }
 
 /**
@@ -195,13 +238,16 @@ const followIdentifier = (
 }
 
 /**
- * Every `Workflow.make(...)` call in the file — shadow-correct: a local
- * rebinding of the name is not the boundary, and an alias that resolves back
- * to the workflow import is. The callee is judged by its import origin, never
- * its spelling, so computed members, aliases, destructuring and
- * bind/apply/call indirections all count. The body is the argument function
- * when it is inline or a same-file reference; otherwise `resolvedBody` is
- * `null`.
+ * Every workflow construction call in the file — any declared constructor member
+ * — shadow-correct: a local rebinding of the name is not the boundary, and an
+ * alias that resolves back to the workflow import is. The callee is judged by its
+ * import origin, never its spelling, so computed members, aliases, destructuring
+ * and bind/apply/call indirections all count. The body is the argument function
+ * when it is inline or a same-file reference; otherwise `resolvedBody` is `null`,
+ * and `takesDeciderBody` carries whether this constructor takes one at all.
+ *
+ * A call in a type position is a probe of a type, erased before anything runs, so
+ * it is not a construction and yields no boundary.
  */
 export const collectMakeBoundaries = (context: Context): readonly MakeBoundary[] => {
   const boundaries: MakeBoundary[] = []
@@ -252,20 +298,17 @@ export const collectMakeBoundaries = (context: Context): readonly MakeBoundary[]
         }
       }
     }
-    boundaries.push({ makeCall: node, resolvedBody, commandArgument: constructionArguments[0] ?? null })
+    boundaries.push({
+      makeCall: node,
+      resolvedBody,
+      commandArgument: constructionArguments[0] ?? null,
+      takesDeciderBody: !isComposingMember(originFinalMember(origin)),
+    })
   })
   return boundaries
 }
 
-export const hasMakeBoundary = (context: Context): boolean => {
-  let found = false
-  walk(context.sourceCode.ast, context.sourceCode.visitorKeys, (node) => {
-    if (found || !isCallExpression(node)) return
-    const origin = resolveImportOrigin(node.callee, context.sourceCode.getScope)
-    if (origin !== null && isMakeBoundaryOrigin(origin)) found = true
-  })
-  return found
-}
+export const hasMakeBoundary = (context: Context): boolean => collectMakeBoundaries(context).length > 0
 
 /** True when `node` descends from (or is) the body — the argument-slot containment test. */
 export const isWithinBody = (node: ESTree.Node, body: MakeBodyKind): boolean =>
