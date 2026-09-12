@@ -1,13 +1,14 @@
 #!/usr/bin/env node
+/// <reference types="node" />
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const packageDir = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-const forbiddenFiles = ['stryker.config.json', 'vitest.config.ts', 'tsconfig.node.json']
-const forbiddenScripts = ['test', 'test:run', 'mutation', 'mutation:full']
-const forbiddenDependencies = [
+const forbiddenFiles: readonly string[] = ['stryker.config.json', 'vitest.config.ts', 'tsconfig.node.json']
+const forbiddenScripts: readonly string[] = ['test', 'test:run', 'mutation', 'mutation:full']
+const forbiddenDependencies: readonly string[] = [
   'vitest',
   '@vitest/coverage-v8',
   '@systemfsoftware/vitest-config',
@@ -16,7 +17,9 @@ const forbiddenDependencies = [
   '@systemfsoftware/stryker-js-typescript-checker',
 ]
 
-const behaviorPatterns = [
+type BehaviorPattern = { readonly pattern: RegExp; readonly name: string }
+
+const behaviorPatterns: readonly BehaviorPattern[] = [
   { pattern: /=>/u, name: 'an arrow function' },
   { pattern: /\bfunction\b/u, name: 'a function declaration' },
   { pattern: /\b(?:if|for|while|switch|try)\b/u, name: 'a control-flow keyword' },
@@ -29,7 +32,7 @@ const behaviorPatterns = [
 // a comment (`don't`). The correct fix is the workspace `oxc-parser`. This
 // package also lists `test` in `forbiddenScripts` by design, so the ordering
 // cannot be verified by a test here.
-const stripLiterals = (source) =>
+const stripLiterals = (source: string): string =>
   source
     .replaceAll(/\/\*[\s\S]*?\*\//gu, ' ')
     .replaceAll(/\/\/[^\n]*/gu, ' ')
@@ -37,7 +40,7 @@ const stripLiterals = (source) =>
     .replaceAll(/'(?:[^'\\\n]|\\.)*'/gu, "''")
     .replaceAll(/"(?:[^"\\\n]|\\.)*"/gu, "''")
 
-const violations = []
+const violations: string[] = []
 
 for (const file of forbiddenFiles) {
   if (existsSync(join(packageDir, file))) violations.push(`${file} exists`)
@@ -55,14 +58,23 @@ if (existsSync(srcDir)) {
   }
 }
 
-const pkg = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8'))
+const manifest: unknown = JSON.parse(readFileSync(join(packageDir, 'package.json'), 'utf8'))
+
+// Outside data (CONST-B5): no cast is permitted, and a narrowed `object` cannot be
+// indexed, so a section is read through its own-property descriptor.
+const declares = (section: string, name: string): boolean => {
+  if (typeof manifest !== 'object' || manifest === null) return false
+  const entries: unknown = Object.getOwnPropertyDescriptor(manifest, section)?.value
+  if (typeof entries !== 'object' || entries === null) return false
+  return name in entries
+}
 
 for (const script of forbiddenScripts) {
-  if (script in (pkg.scripts ?? {})) violations.push(`package.json#scripts.${script} exists`)
+  if (declares('scripts', script)) violations.push(`package.json#scripts.${script} exists`)
 }
 
 for (const dep of forbiddenDependencies) {
-  if (dep in (pkg.dependencies ?? {}) || dep in (pkg.devDependencies ?? {})) {
+  if (declares('dependencies', dep) || declares('devDependencies', dep)) {
     violations.push(`package.json depends on ${dep}`)
   }
 }

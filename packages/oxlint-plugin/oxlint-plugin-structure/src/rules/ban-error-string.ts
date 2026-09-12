@@ -63,7 +63,7 @@ export const banErrorString = defineRule({
 
     const isInsideErrorConstructor = (node: ESTree.CallExpression): boolean => {
       const parent = node.parent
-      if (!parent || parent.type !== 'NewExpression') {
+      if (parent.type !== 'NewExpression') {
         return false
       }
 

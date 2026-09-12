@@ -1,22 +1,12 @@
 import { defineConfig } from 'oxlint'
 
+import instrument from '@systemfsoftware/oxlint-preset/instrument'
+
 export default defineConfig({
-  categories: {
-    correctness: 'error',
-  },
+  extends: [instrument],
 
-  plugins: ['typescript', 'import', 'jsdoc', 'node', 'promise', 'vitest', 'unicorn', 'oxc'],
-
-  rules: {
-    'vitest/no-standalone-expect': 'off',
-    'typescript/ban-ts-comment': 'error',
-    'typescript/consistent-type-assertions': ['error', {
-      assertionStyle: 'never',
-    }],
-    'typescript/no-explicit-any': 'error',
-    'typescript/no-non-null-assertion': 'error',
-  },
-
+  // Consumer-owned ignores (never lint build output or generated trees; oxlint
+  // honours .gitignore but these are belt-and-braces for untracked artifacts).
   ignorePatterns: [
     '**/node_modules/**',
     '**/dist/**',
@@ -24,11 +14,7 @@ export default defineConfig({
     '**/build/**',
     '**/.turbo/**',
     '**/coverage/**',
-    '**/*.d.ts',
     '**/*.tsbuildinfo',
-    '**/.claude/**',
-    '**/.opencode/**',
-    '**/.sisyphus/**',
   ],
 
   overrides: [

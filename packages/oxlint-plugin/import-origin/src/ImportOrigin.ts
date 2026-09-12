@@ -320,7 +320,7 @@ const resolveIdentifierOrigin = (
   // single module can see. The cost — a reassigned `let` resolves to the
   // import it was initialized from — is the approximation already paid for
   // every `const` alias.
-  if (declaration === null || declaration.type !== 'VariableDeclaration') return null
+  if (declaration.type !== 'VariableDeclaration') return null
   const init = declarator.init
   if (init === null) return null
   const base = resolveImportOrigin(init, getScope, depth + 1)

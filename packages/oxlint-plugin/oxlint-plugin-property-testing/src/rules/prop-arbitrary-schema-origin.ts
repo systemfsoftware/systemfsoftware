@@ -286,7 +286,7 @@ const mentionsLocalBinding = (provenance: Provenance, value: unknown): boolean =
 }
 
 const stockArgVerdict = (provenance: Provenance, arg: ESTree.Node | undefined): boolean => {
-  if (arg === undefined || arg === null || !isNode(arg)) return false
+  if (arg === undefined || !isNode(arg)) return false
   if (arg.type === 'MemberExpression') {
     if (arg.object.type !== 'Identifier' || !provenance.isSchemaNamespaceBinding(arg.object.name, arg)) return false
     return true

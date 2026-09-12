@@ -1,15 +1,20 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, type TestContext } from 'vitest'
 
 import {
+  decodeDiagnostics,
   LOCAL_OXLINT,
   PACKAGE_ROOT,
   packageWorkDir,
+  parseJson,
   removeWorkDirs,
   REPO_ROOT,
+  requireObject,
+  requireStringRecord,
   run,
+  type RunResult,
   tailJson,
   tmpWorkDir,
   writeFiles,
@@ -32,19 +37,46 @@ const UNPUBLISHED_PRESET_SUBPATH = /ERR_PACKAGE_PATH_NOT_EXPORTED[\s\S]*'\.\/pre
 
 const PACK_DIR = packageWorkDir('pack')
 
-let tarballPath = ''
-let packedManifest: { dependencies?: Record<string, string> } = {}
+type PackedManifest = { dependencies: Record<string, string> }
+type WorkspaceManifest = { name: string | undefined; private: boolean }
 
-const collectWorkspaceManifests = (dir: string): { name?: unknown; private?: unknown }[] => {
-  const found: { name?: unknown; private?: unknown }[] = []
+let tarballPath = ''
+let packedManifest: PackedManifest = { dependencies: {} }
+
+const decodePackedManifest = (text: string): PackedManifest => {
+  const manifest = requireObject(parseJson(text), 'the packed package.json')
+  const dependencies = 'dependencies' in manifest ? manifest.dependencies : undefined
+  return {
+    dependencies: dependencies === undefined ? {} : requireStringRecord(dependencies, 'the packed dependencies'),
+  }
+}
+
+const decodeWorkspaceManifest = (text: string, source: string): WorkspaceManifest => {
+  const manifest = requireObject(parseJson(text), `the manifest at ${source}`)
+  const name = 'name' in manifest ? manifest.name : undefined
+  const declaredPrivate = 'private' in manifest ? manifest.private : undefined
+  return {
+    name: typeof name === 'string' ? name : undefined,
+    private: declaredPrivate === true,
+  }
+}
+
+const collectWorkspaceManifests = (dir: string): WorkspaceManifest[] => {
+  const found: WorkspaceManifest[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (['node_modules', 'dist', 'temp', '.git'].includes(entry.name)) continue
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) found.push(...collectWorkspaceManifests(full))
-    else if (entry.name === 'package.json') found.push(JSON.parse(readFileSync(full, 'utf8')))
+    else if (entry.name === 'package.json') found.push(decodeWorkspaceManifest(readFileSync(full, 'utf8'), full))
   }
   return found
 }
+
+const privatePackageNames = (dir: string): string[] =>
+  collectWorkspaceManifests(dir)
+    .filter((manifest) => manifest.private)
+    .map((manifest) => manifest.name)
+    .filter((name): name is string => name !== undefined)
 
 beforeAll(() => {
   const distEntry = path.join(PACKAGE_ROOT, 'dist', 'index.mjs')
@@ -54,7 +86,7 @@ beforeAll(() => {
   const tarballs = readdirSync(PACK_DIR).filter((name) => name.endsWith('.tgz'))
   expect(tarballs).toHaveLength(1)
   tarballPath = path.join(PACK_DIR, tarballs[0] ?? '')
-  packedManifest = JSON.parse(run('tar', ['-xzOf', tarballPath, 'package/package.json'], PACK_DIR).output)
+  packedManifest = decodePackedManifest(run('tar', ['-xzOf', tarballPath, 'package/package.json'], PACK_DIR).output)
 })
 
 describe('packed surface', () => {
@@ -71,14 +103,38 @@ describe('packed surface', () => {
   })
 
   it('Should_DeclareOnlyPublishableDependencies_When_ThePackedManifestIsRead', () => {
-    const dependencies = Object.keys(packedManifest.dependencies ?? {})
-    const privateNames = collectWorkspaceManifests(path.join(REPO_ROOT, 'packages'))
-      .filter((manifest) => manifest.private === true && typeof manifest.name === 'string')
-      .map((manifest) => manifest.name)
+    const dependencies = Object.keys(packedManifest.dependencies)
+    const privateNames = privatePackageNames(path.join(REPO_ROOT, 'packages'))
     expect(dependencies.length).toBeGreaterThan(0)
     expect(dependencies.filter((name) => privateNames.includes(name))).toStrictEqual([])
   })
 })
+
+const installPackedPreset = (addArgs: readonly string[], consumer: string): RunResult => {
+  const offline = run('pnpm', [...addArgs, '--offline'], consumer)
+  return offline.code === 0 ? offline : run('pnpm', [...addArgs], consumer)
+}
+
+const lastLineOf = (text: string): string => text.trim().split('\n').at(-1) ?? ''
+
+const firstLineOf = (text: string): string => text.trim().split('\n').at(0) ?? ''
+
+const requireInstalled = (installed: RunResult, context: TestContext): void => {
+  if (installed.code === 0) return
+  if (OFFLINE_LIMITATION.test(installed.output)) {
+    context.skip(`pnpm cannot reach the registry or store here: ${lastLineOf(installed.output)}`)
+    return
+  }
+  throw new Error(`the packed artifact could not be installed: ${installed.output}`)
+}
+
+const requirePublishedPresetSubpath = (load: RunResult, context: TestContext): void => {
+  if (!UNPUBLISHED_PRESET_SUBPATH.test(load.output)) return
+  const unpublishable = load.output.match(/in\s+(\S+package\.json)/u)
+  context.skip(
+    `a published fragment predates its ./preset subpath: ${unpublishable?.[1] ?? firstLineOf(load.output)}`,
+  )
+}
 
 describe('artifact in a consumer', () => {
   it('Should_RunTheFragmentRules_When_ThePackedPresetExtendsIntoOxlint', () => {
@@ -102,8 +158,8 @@ describe('artifact in a consumer', () => {
     expect(clean.code).toBe(0)
 
     const violations = run(LOCAL_OXLINT, ['-c', 'oxlint.config.ts', '-f', 'json', 'main.ts'], consumer)
-    const parsed: { diagnostics: { code: string }[] } = JSON.parse(tailJson(violations.output))
-    expect(parsed.diagnostics.map((diagnostic) => diagnostic.code)).toContain(
+    const diagnostics = decodeDiagnostics(parseJson(tailJson(violations.output)))
+    expect(diagnostics.map((diagnostic) => diagnostic.code)).toContain(
       '@systemfsoftware/effect-entrypoint(entrypoint-no-exports)',
     )
   })
@@ -115,17 +171,7 @@ describe('artifact in a consumer', () => {
     })
     const store = run('pnpm', ['store', 'path'], REPO_ROOT).output.trim()
     const addArgs = ['add', tarballPath, 'oxlint@1.77.0', '--ignore-scripts', '--store-dir', store]
-    const offline = run('pnpm', [...addArgs, '--offline'], consumer)
-    const installed = offline.code === 0 ? offline : run('pnpm', addArgs, consumer)
-    if (installed.code !== 0) {
-      if (OFFLINE_LIMITATION.test(installed.output)) {
-        context.skip(
-          `pnpm cannot reach the registry or store here: ${installed.output.trim().split('\n').at(-1) ?? ''}`,
-        )
-        return
-      }
-      throw new Error(`the packed artifact could not be installed: ${installed.output}`)
-    }
+    requireInstalled(installPackedPreset(addArgs, consumer), context)
 
     writeFiles(consumer, {
       'oxlint.config.ts': [
@@ -139,15 +185,7 @@ describe('artifact in a consumer', () => {
     })
     const installedOxlint = path.join(consumer, 'node_modules', '.bin', 'oxlint')
     const load = run(installedOxlint, ['-c', 'oxlint.config.ts', 'target.ts'], consumer)
-    if (UNPUBLISHED_PRESET_SUBPATH.test(load.output)) {
-      const unpublishable = load.output.match(/in\s+(\S+package\.json)/u)
-      context.skip(
-        `a published fragment predates its ./preset subpath: ${
-          unpublishable?.[1] ?? load.output.trim().split('\n')[0]
-        }`,
-      )
-      return
-    }
+    requirePublishedPresetSubpath(load, context)
     expect(load.output.replaceAll('\n', ' ')).not.toContain('not found')
     expect(load.code).toBe(0)
   })

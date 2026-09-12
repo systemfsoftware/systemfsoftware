@@ -273,7 +273,7 @@ Registers no plugin and defines no rule of its own. It exports `plugins` (stock 
 
 It is not a `jsPlugin` — no `jsPlugins` entry exists for it anywhere in the tree; `all` consumes it
 by spreading exports into its config object. Its own `lint` script runs
-`node scripts/guard-no-behavior.mjs`, which fails if any arrow function, function declaration,
+`node scripts/guard-no-behavior.ts`, which fails if any arrow function, function declaration,
 control-flow keyword, or test surface appears under `src/` after comment and literal stripping —
 the package is declaration data by construction, so a computed glob or rule key cannot be
 introduced silently.

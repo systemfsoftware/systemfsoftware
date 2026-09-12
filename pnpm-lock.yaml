@@ -171,6 +171,9 @@ importers:
       '@std/jsonc':
         specifier: 'catalog:'
         version: '@jsr/std__jsonc@1.0.2'
+      '@systemfsoftware/oxlint-preset':
+        specifier: workspace:^
+        version: link:packages/oxlint-plugin/oxlint-preset
       concurrently:
         specifier: ^9.2.1
         version: 9.2.3
@@ -914,43 +917,13 @@ importers:
 
   packages/oxlint-plugin/all:
     dependencies:
-      '@systemfsoftware/oxlint-plugin':
+      '@systemfsoftware/oxlint-preset':
         specifier: workspace:^
-        version: link:../oxlint-plugin
-      '@systemfsoftware/oxlint-plugin-cell-vocabulary':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-cell-vocabulary
-      '@systemfsoftware/oxlint-plugin-effect-dmmf':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-dmmf
-      '@systemfsoftware/oxlint-plugin-effect-entrypoint':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-entrypoint
-      '@systemfsoftware/oxlint-plugin-effect-schema':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-schema
-      '@systemfsoftware/oxlint-plugin-effect-workflow':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-effect-workflow
-      '@systemfsoftware/oxlint-plugin-property-testing':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-property-testing
-      '@systemfsoftware/oxlint-plugin-recommended':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-recommended
-      '@systemfsoftware/oxlint-plugin-test-hygiene':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-test-hygiene
-      '@systemfsoftware/oxlint-plugin-test-placement':
-        specifier: workspace:^
-        version: link:../oxlint-plugin-test-placement
+        version: link:../oxlint-preset
     devDependencies:
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.1.0
-      '@systemfsoftware/oxlint-config':
-        specifier: workspace:^
-        version: link:../oxlint-config
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
@@ -975,6 +948,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@24.13.2)(@vitest/browser-playwright@4.1.10)(@vitest/coverage-istanbul@4.1.10)(@vitest/coverage-v8@4.1.9)(jsdom@29.1.1(@noble/hashes@2.4.0))(vite@8.2.1(@types/node@24.13.2)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))
 
   packages/oxlint-plugin/import-origin:
     dependencies:
@@ -1564,13 +1540,16 @@ importers:
     devDependencies:
       '@microsoft/api-extractor':
         specifier: 'catalog:'
-        version: 7.58.9(@types/node@25.9.5)
+        version: 7.58.9(@types/node@24.13.2)
       '@systemfsoftware/arethetypeswrong-cli':
         specifier: 'catalog:'
         version: 4.1.0
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../../toolchain/tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)

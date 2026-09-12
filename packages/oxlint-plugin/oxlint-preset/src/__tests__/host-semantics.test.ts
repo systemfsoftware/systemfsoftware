@@ -5,12 +5,17 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
 
 import {
+  decodeDiagnostics,
   LOCAL_OXLINT,
   PACKAGE_ROOT,
   packageWorkDir,
+  parseJson,
   pluginModule,
   removeWorkDirs,
   REPO_ROOT,
+  requireObject,
+  requireStringArray,
+  requireUnknownArray,
   run,
   tailJson,
   writeFiles,
@@ -21,28 +26,37 @@ afterAll(removeWorkDirs)
 const MEASURED_OXLINT_VERSION = '1.77.0'
 
 type ResolvedConfig = {
-  plugins?: string[]
-  ignorePatterns?: string[]
-  jsPlugins?: unknown[]
-  rules?: Record<string, string>
+  plugins: string[] | undefined
+  ignorePatterns: string[] | undefined
+  jsPlugins: unknown[] | undefined
 }
 
 type LintResult = { code: number; codes: string[]; files: string[] }
 
+const decodeResolvedConfig = (value: unknown): ResolvedConfig => {
+  const config = requireObject(value, 'the resolved oxlint config')
+  return {
+    plugins: 'plugins' in config ? requireStringArray(config.plugins, 'plugins') : undefined,
+    ignorePatterns: 'ignorePatterns' in config
+      ? requireStringArray(config.ignorePatterns, 'ignorePatterns')
+      : undefined,
+    jsPlugins: 'jsPlugins' in config ? requireUnknownArray(config.jsPlugins, 'jsPlugins') : undefined,
+  }
+}
+
 const printConfig = (dir: string, config: string): ResolvedConfig => {
   const result = run(LOCAL_OXLINT, ['--print-config', '-c', config], dir)
   if (result.code !== 0) throw new Error(`oxlint could not resolve ${config}: ${result.output}`)
-  const parsed: ResolvedConfig = JSON.parse(tailJson(result.output))
-  return parsed
+  return decodeResolvedConfig(parseJson(tailJson(result.output)))
 }
 
 const lint = (dir: string, config: string, ...paths: string[]): LintResult => {
   const result = run(LOCAL_OXLINT, ['-c', config, '-f', 'json', ...paths], dir)
-  const parsed: { diagnostics: { code: string; filename: string }[] } = JSON.parse(tailJson(result.output))
+  const diagnostics = decodeDiagnostics(parseJson(tailJson(result.output)))
   return {
     code: result.code,
-    codes: parsed.diagnostics.map((diagnostic) => diagnostic.code),
-    files: parsed.diagnostics.map((diagnostic) => diagnostic.filename),
+    codes: diagnostics.map((diagnostic) => diagnostic.code),
+    files: diagnostics.map((diagnostic) => diagnostic.filename),
   }
 }
 
@@ -56,6 +70,19 @@ const collectOxlintConfigs = (dir: string): string[] => {
     const full = path.join(dir, entry.name)
     if (entry.isDirectory()) found.push(...collectOxlintConfigs(full))
     else if (entry.name === 'oxlint.config.ts') found.push(full)
+  }
+  return found
+}
+
+const EXTENDS_DECLARATION = /extends\s*:\s*(\[[^\]]*\]|[^\s,;{}]+)/gu
+
+const collectExtendsForms = (configs: readonly string[]): { config: string; form: string }[] => {
+  const found: { config: string; form: string }[] = []
+  for (const config of configs) {
+    const text = readFileSync(config, 'utf8')
+    for (const match of text.matchAll(EXTENDS_DECLARATION)) {
+      found.push({ config, form: match[1] ?? '' })
+    }
   }
   return found
 }
@@ -284,13 +311,7 @@ describe('table row: a string extends inherits nothing', () => {
 describe('table row: every extends in packages/**/oxlint.config.ts is object-form', () => {
   it('Should_DeclareNoStringLiteral_When_AnyPackageConfigExtendsAnother', () => {
     const configs = collectOxlintConfigs(path.join(REPO_ROOT, 'packages'))
-    const found: { config: string; form: string }[] = []
-    for (const config of configs) {
-      const text = readFileSync(config, 'utf8')
-      for (const match of text.matchAll(/extends\s*:\s*(\[[^\]]*\]|[^\s,;{}]+)/gu)) {
-        found.push({ config, form: match[1] ?? '' })
-      }
-    }
+    const found = collectExtendsForms(configs)
     expect(configs.length).toBeGreaterThan(0)
     expect(found.length).toBeGreaterThan(0)
     const stringLiteralForms = found

@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 import canonical from '../canonical.js'
 import { defaultIgnores } from '../default-ignores.js'
 import instrument from '../instrument.js'
+import { isUnknownArray, parseJson } from './oxlint-probe.js'
 
 const collectConfigTree = (config: unknown): { jsPlugins: unknown[]; ruleKeys: string[] } => {
   const jsPlugins: unknown[] = []
@@ -21,7 +22,7 @@ const collectConfigTree = (config: unknown): { jsPlugins: unknown[]; ruleKeys: s
     if ('extends' in node && Array.isArray(node.extends)) {
       for (const parent of node.extends) visit(parent)
     }
-    if ('jsPlugins' in node && Array.isArray(node.jsPlugins)) jsPlugins.push(...node.jsPlugins)
+    if ('jsPlugins' in node && isUnknownArray(node.jsPlugins)) jsPlugins.push(...node.jsPlugins)
     if ('rules' in node && typeof node.rules === 'object' && node.rules !== null) {
       ruleKeys.push(...Object.keys(node.rules))
     }
@@ -41,8 +42,9 @@ const namespaceOf = (entry: unknown): string | null => {
   for (;;) {
     const manifest = path.join(dir, 'package.json')
     if (existsSync(manifest)) {
-      const raw: { name?: unknown } = JSON.parse(readFileSync(manifest, 'utf8'))
-      if (typeof raw.name === 'string') return `${raw.name}/`
+      const raw: unknown = parseJson(readFileSync(manifest, 'utf8'))
+      const name = raw !== null && typeof raw === 'object' && 'name' in raw ? raw.name : undefined
+      if (typeof name === 'string') return `${name}/`
     }
     const parent = path.dirname(dir)
     if (parent === dir) return null
@@ -53,11 +55,11 @@ const namespaceOf = (entry: unknown): string | null => {
 describe('canonical root registration contract', () => {
   it('Should_ExtendTheFragmentsInOrder_When_TheCanonicalRootIsComposed', () => {
     expect(canonical.extends).toHaveLength(5)
-    expect(canonical.extends?.[0]).toBe(recommended)
-    expect(canonical.extends?.[1]).toBe(housePreset)
-    expect(canonical.extends?.[2]).toBe(effectDmmfPreset)
-    expect(canonical.extends?.[3]).toBe(cellVocabularyPreset)
-    expect(canonical.extends?.[4]).toBe(effectEntrypointPreset)
+    expect(canonical.extends[0]).toBe(recommended)
+    expect(canonical.extends[1]).toBe(housePreset)
+    expect(canonical.extends[2]).toBe(effectDmmfPreset)
+    expect(canonical.extends[3]).toBe(cellVocabularyPreset)
+    expect(canonical.extends[4]).toBe(effectEntrypointPreset)
   })
 
   it('Should_DeclareOnlyItsOwnKeys_When_PluginsComeFromTheFragments', () => {
@@ -74,7 +76,7 @@ describe('canonical root registration contract', () => {
   })
 
   it('Should_DeclareExactlyThreeRules_When_TheRestAreInheritedFromAFragment', () => {
-    expect(Object.keys(canonical.rules ?? {}).sort()).toStrictEqual([
+    expect(Object.keys(canonical.rules).sort()).toStrictEqual([
       'no-restricted-imports',
       'no-ternary',
       'typescript/switch-exhaustiveness-check',
@@ -96,7 +98,7 @@ describe('canonical root registration contract', () => {
 describe('instrument root registration contract', () => {
   it('Should_ExtendTheRecommendedTier_When_TheInstrumentRootIsComposed', () => {
     expect(instrument.extends).toHaveLength(1)
-    expect(instrument.extends?.[0]).toBe(recommended)
+    expect(instrument.extends[0]).toBe(recommended)
   })
 
   it('Should_DeclareNoProductKeys_When_TheSubjectIsTheLinter', () => {

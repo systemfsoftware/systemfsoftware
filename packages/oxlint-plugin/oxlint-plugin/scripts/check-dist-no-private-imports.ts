@@ -1,8 +1,9 @@
 #!/usr/bin/env node
+/// <reference types="node" />
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-const PRIVATE_LEAVES = [
+const PRIVATE_LEAVES: readonly string[] = [
   '@systemfsoftware/oxlint-plugin-effect-native',
   '@systemfsoftware/oxlint-plugin-tag-discipline',
   '@systemfsoftware/oxlint-plugin-structure',
@@ -12,8 +13,8 @@ const SPECIFIER = new RegExp(
   `(from\\s*|require\\(\\s*|import\\(\\s*)['"](${PRIVATE_LEAVES.map((name) => `${name}(?=[/'"])`).join('|')})['"]`,
 )
 
-const offenders = []
-const walk = (dir) => {
+const offenders: string[] = []
+const walk = (dir: string): void => {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name)
     if (entry.isDirectory()) {
