@@ -157,6 +157,10 @@ An index key whose assignment nothing verifies. Where a suffix, tag, or path dec
 
 A drifted key is worse than a missing one. Retrieving nothing leaves the author still looking; retrieving the wrong doctrine leaves the author confident. The same drift un-enrols the file from whatever Verification observer the old key selected. That loss surfaces only if the instrument happens to object to an empty selection, and even then the cheapest repair is to delete the selection — which ends the objection and the observation together, leaving the file with no observer and nothing complaining.
 
+### Costume
+
+An invariant whose shape is present in the code but whose enforcement is review alone — the rule compiles and CI stays green while nothing re-fires it. Distinct from a Ritual gate, which runs but checks a proxy: a costume has no gate at all. The remedy is a mechanism that re-fires (compiler, linter, mutator), never prose the model must recall.
+
 ## Test execution
 
 ### Run class
