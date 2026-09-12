@@ -420,20 +420,20 @@ importers:
         specifier: workspace:^
         version: link:../oxlint-plugin/oxlint-plugin-cell-vocabulary
       '@systemfsoftware/stryker-js-cli':
-        specifier: workspace:^
-        version: link:../stryker-js/stryker-js-cli
+        specifier: catalog:stryker
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../stryker-js/stryker-js-typescript-checker
+        specifier: catalog:stryker
+        version: 3.0.1
       '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../stryker-js/stryker-js-vitest-runner
+        specifier: catalog:stryker
+        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
       '@systemfsoftware/stryker-plugins':
-        specifier: workspace:^
-        version: link:../stryker-js/stryker-plugins
+        specifier: catalog:stryker
+        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
       '@systemfsoftware/stryker-test-contribution':
-        specifier: workspace:^
-        version: link:../stryker-js/stryker-test-contribution
+        specifier: catalog:stryker
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -818,20 +818,20 @@ importers:
         specifier: workspace:^
         version: link:../oxlint-plugin/oxlint-config
       '@systemfsoftware/stryker-js-cli':
-        specifier: workspace:^
-        version: link:../stryker-js/stryker-js-cli
+        specifier: catalog:stryker
+        version: 4.0.1(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/stryker-js-typescript-checker':
-        specifier: workspace:^
-        version: link:../stryker-js/stryker-js-typescript-checker
+        specifier: catalog:stryker
+        version: 3.0.1
       '@systemfsoftware/stryker-js-vitest-runner':
-        specifier: workspace:^
-        version: link:../stryker-js/stryker-js-vitest-runner
+        specifier: catalog:stryker
+        version: 2.0.1(effect@4.0.0-rc.112)(vitest@4.1.10)
       '@systemfsoftware/stryker-plugins':
-        specifier: workspace:^
-        version: link:../stryker-js/stryker-plugins
+        specifier: catalog:stryker
+        version: 1.0.1(@systemfsoftware/stryker-js@0.1.0)(effect@4.0.0-rc.112)(typescript@7.0.2)
       '@systemfsoftware/stryker-test-contribution':
-        specifier: workspace:^
-        version: link:../stryker-js/stryker-test-contribution
+        specifier: catalog:stryker
+        version: 1.0.1(effect@4.0.0-rc.112)(redis@6.2.1(@opentelemetry/api@1.9.1))(supports-color@8.1.1)(svelte@5.55.1)
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig
@@ -2072,6 +2072,9 @@ importers:
       mutation-testing-elements:
         specifier: catalog:stryker
         version: 3.7.3
+      oxc-parser:
+        specifier: 'catalog:'
+        version: 0.140.0
       oxlint:
         specifier: catalog:oxlint
         version: 1.77.0(oxlint-tsgolint@7.0.2001)

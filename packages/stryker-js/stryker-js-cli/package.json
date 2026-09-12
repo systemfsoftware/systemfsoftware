@@ -16,7 +16,7 @@
   "scripts": {
     "clean": "rimraf dist",
     "build": "tsdown",
-    "prepare": "tsdown",
+    "prepack": "pnpm build",
     "typecheck": "tsc --noEmit --incremental",
     "attw": "attw --pack .",
     "test": "vitest run",
@@ -52,6 +52,7 @@
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
     "mutation-testing-elements": "catalog:stryker",
+    "oxc-parser": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "testcontainers": "catalog:",
