@@ -2,8 +2,6 @@ import { Schema as S } from 'effect'
 
 export const Options = S.Struct({})
 
-export const MESSAGE = '{{name}} is unreachable. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
-
 export const UNCONSTRUCTED_EXPECTED =
   'a construction site in this file for every variant the construction declares in its decision and error channels' as const
 export const UNCONSTRUCTED_ACTUAL = 'a declared variant with no new X(…) or X.make(…) anywhere in this file' as const
@@ -18,6 +16,6 @@ export const meta = {
   },
   schema: [Options],
   messages: {
-    unconstructedVariant: MESSAGE,
+    unconstructedVariant: '{{name}} is unreachable. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.',
   },
 } as const

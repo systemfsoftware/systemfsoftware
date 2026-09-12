@@ -395,5 +395,24 @@ export const admitSurvivorsRun = Workflow.make(
 `,
       errors: [variantError('the declared decision variant NoSurvivors')],
     },
+    {
+      name: 'Should_ReportTheUnconstructedVariant_When_TheOnlyConstructionIsInATypePosition',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+export class Rejected extends S.TaggedClass<Rejected>()('Rejected', {}) {}
+
+export type RejectedKeyed = { [new Rejected({})]: string }
+
+export const admitAmount = Workflow.make(
+  AmountCommand,
+  (command: AmountCommand): Result.Result<Admitted | Rejected, never> => Result.succeed(new Admitted({})),
+)
+`,
+      errors: [variantError('the declared decision variant Rejected')],
+    },
   ],
 })

@@ -1,6 +1,6 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
-import { collectMakeBoundaries, type MakeBodyKind } from '@systemfsoftware/oxlint-make-boundary'
+import { collectMakeBoundaries, isNode, type MakeBodyKind, walkNodes } from '@systemfsoftware/oxlint-make-boundary'
 import { isTestFile } from './workflow-match-exhaustive.config.js'
 import {
   meta,
@@ -31,33 +31,7 @@ interface FileFacts {
   readonly constructedNames: ReadonlySet<string>
 }
 
-const isWalkable = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
-
-const isNode = (value: unknown): value is ESTree.Node => isWalkable(value) && typeof value['type'] === 'string'
-
 const isIdentifierNode = (node: ESTree.Node): node is ESTree.IdentifierReference => node.type === 'Identifier'
-
-const walk = (
-  root: unknown,
-  visitorKeys: Readonly<Record<string, readonly string[]>>,
-  visit: (node: ESTree.Node) => void,
-): void => {
-  const step = (value: unknown): void => {
-    if (!isNode(value)) return
-    visit(value)
-    const fields = isWalkable(value) ? value : null
-    if (fields === null) return
-    for (const key of visitorKeys[value.type] ?? []) {
-      const child = fields[key]
-      if (Array.isArray(child)) {
-        for (const entry of child) step(entry)
-      } else {
-        step(child)
-      }
-    }
-  }
-  step(root)
-}
 
 const writtenTypeName = (typeName: ESTree.TSTypeName): string | null => {
   if (typeName.type === 'Identifier') return typeName.name
@@ -103,7 +77,7 @@ const collectFileFacts = (context: Context): FileFacts => {
   const declaredNames = new Set<string>()
   const constructedNames = new Set<string>()
 
-  walk(context.sourceCode.ast, context.sourceCode.visitorKeys, (node) => {
+  walkNodes(context.sourceCode.ast, context.sourceCode.visitorKeys, (node) => {
     switch (node.type) {
       case 'TSTypeAliasDeclaration':
         aliases.set(node.id.name, node.typeAnnotation)

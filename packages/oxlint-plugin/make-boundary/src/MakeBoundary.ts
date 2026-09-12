@@ -94,7 +94,8 @@ type MemberExpressionNode = ESTree.Node & {
   readonly computed: boolean
 }
 
-const isNode = (value: unknown): value is ESTree.Node => typeof value === 'object' && value !== null && 'type' in value
+export const isNode = (value: unknown): value is ESTree.Node =>
+  typeof value === 'object' && value !== null && 'type' in value
 
 const isWalkable = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null
 
@@ -138,7 +139,15 @@ const TS_NODES_THAT_HOLD_A_VALUE: Readonly<Record<string, true>> = {
   TSTypeAssertion: true,
 }
 
-const walk = (
+/**
+ * The house AST walk, shared by every rule that reads a file's nodes: the nodes
+ * that are not inside a type-only subtree. A node whose type starts with `TS` and
+ * which cannot hold a value IS type syntax — the node itself is visited, so a rule
+ * may read the declaration it opens, but its contents are not: a `new X()` or an
+ * `X.make(…)` written in a type position probes a type and is erased before
+ * anything runs, so no rule may read it as a construction.
+ */
+export const walkNodes = (
   root: unknown,
   visitorKeys: Readonly<Record<string, readonly string[]>>,
   visit: (n: ESTree.Node) => void,
@@ -146,9 +155,9 @@ const walk = (
   const step = (value: unknown): void => {
     const node = isNode(value) ? value : null
     if (node === null) return
+    visit(node)
     const isTypeSyntax = node.type.startsWith('TS') && TS_NODES_THAT_HOLD_A_VALUE[node.type] !== true
     if (isTypeSyntax) return
-    visit(node)
     const record = isWalkable(node) ? node : null
     if (record === null) return
     for (const key of visitorKeys[node.type] ?? []) {
@@ -252,7 +261,7 @@ const followIdentifier = (
 export const collectMakeBoundaries = (context: Context): readonly MakeBoundary[] => {
   const boundaries: MakeBoundary[] = []
   const visitorKeys = context.sourceCode.visitorKeys
-  walk(context.sourceCode.ast, visitorKeys, (node) => {
+  walkNodes(context.sourceCode.ast, visitorKeys, (node) => {
     if (!isCallExpression(node)) return
     const origin = resolveImportOrigin(node.callee, context.sourceCode.getScope)
     if (origin === null || !isMakeBoundaryOrigin(origin)) return

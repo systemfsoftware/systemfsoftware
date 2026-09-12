@@ -25,8 +25,6 @@ export const TRACKED_WIRING_CALLS: readonly TrackedWiringCall[] = [
 
 export const MAX_ALIAS_HOPS = 8
 
-export const TYPE_TEST_FILE_PATTERN = /\.tst\.[cm]?tsx?$/u
-
 export const WIRING_PER_CALL_EXPECTED =
   'wiring built once per process and deferred to first use in a module-scope lazy memoized closure' as const
 export const WIRING_PER_CALL_ACTUAL =

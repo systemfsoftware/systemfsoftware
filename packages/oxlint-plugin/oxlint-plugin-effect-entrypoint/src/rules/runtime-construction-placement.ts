@@ -8,7 +8,6 @@ import {
   MAX_ALIAS_HOPS,
   meta,
   TRACKED_WIRING_CALLS,
-  TYPE_TEST_FILE_PATTERN,
   WIRING_PER_CALL_ACTUAL,
   WIRING_PER_CALL_EXPECTED,
   WIRING_PER_CALL_FIX,
@@ -149,22 +148,19 @@ const isDeferredModuleClosure = (fn: FunctionNode): boolean => {
 export const runtimeConstructionPlacement = defineRule({
   meta,
   create(context: Context) {
-    if (TYPE_TEST_FILE_PATTERN.test(context.filename)) return {}
+    if (context.filename.endsWith('.tst.ts')) return {}
 
-    let program: ESTree.Program | null = null
-    let bindings: ReadonlyMap<string, ImportedName> | null = null
+    let bindings: ReadonlyMap<string, ImportedName> = new Map()
 
     return {
       Program(node: ESTree.Program) {
-        program = node
+        bindings = bindingsOf(node)
       },
 
       CallExpression(node: ESTree.CallExpression) {
         const callee = node.callee
         if (callee.type !== 'MemberExpression') return
-        const loaded = bindings ?? (program === null ? new Map<string, ImportedName>() : bindingsOf(program))
-        bindings = loaded
-        const tracked = trackedCallOf(callee, loaded)
+        const tracked = trackedCallOf(callee, bindings)
         if (tracked === null) return
 
         const name = `${tracked.namespace}.${tracked.member}`
