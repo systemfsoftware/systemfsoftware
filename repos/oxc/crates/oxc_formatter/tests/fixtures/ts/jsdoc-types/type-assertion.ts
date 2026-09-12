@@ -1,3 +1,0 @@
-<?>{};
-<?string>x;
-<!string>y;

@@ -1,6 +1,0 @@
-<template>
-  <SlotsWithEvents title="Notice">
-    Body text
-    <template #leading>!</template>
-  </SlotsWithEvents>
-</template>

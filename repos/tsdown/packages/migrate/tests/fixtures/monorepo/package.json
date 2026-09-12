@@ -1,8 +1,0 @@
-{
-  "name": "issue-452",
-  "version": "0.0.0",
-  "private": true,
-  "scripts": {
-    "build": "pnpm --filter \"*\" build"
-  }
-}
