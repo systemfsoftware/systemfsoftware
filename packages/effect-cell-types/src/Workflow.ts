@@ -43,8 +43,16 @@ type AtLeastTwoDistinct<T, U = T> = U extends unknown ? [T] extends [U] ? false 
 type TaggedMembers<D> = D extends unknown ? '_tag' extends keyof D ? [D['_tag']] extends [string] ? true : false : false
   : never
 
+type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+
+type BrandSlotIsTheGeneralSymbol<D, K extends PropertyKey> = D extends unknown
+  ? K extends keyof D ? MutuallyAssignable<D[K], symbol> : false
+  : never
+
 type SharedTypeId<D> = [
-  { [K in keyof D]: [K] extends [symbol] ? ([D[K]] extends [symbol] ? K : never) : never }[keyof D],
+  {
+    [K in keyof D]: [K] extends [symbol] ? ([BrandSlotIsTheGeneralSymbol<D, K>] extends [true] ? K : never) : never
+  }[keyof D],
 ] extends [never] ? UnsharedTypeId : unknown
 
 type DecisionShape<D> = [unknown] extends [D] ? unknown

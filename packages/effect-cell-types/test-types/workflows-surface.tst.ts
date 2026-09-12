@@ -75,6 +75,52 @@ interface UnrelatedBrandTwo {
   readonly [UnrelatedBrand]: typeof UnrelatedBrand
 }
 
+declare const ClassBrandShapeTypeId: unique symbol
+
+/**
+ * The class-field brand idiom hand-written as interfaces: the shape an `S.TaggedClass` variant
+ * carries, spelled out by declarations. An interface has no field initializer, so the slot can
+ * only be annotated (`typeof T`), which narrows it to the unique symbol type — a class field's
+ * initializer widens the same declaration to the general `symbol`.
+ */
+interface ClassBrandShapeOne {
+  readonly _tag: 'ClassBrandShapeOne'
+  readonly value: number
+  readonly [ClassBrandShapeTypeId]: typeof ClassBrandShapeTypeId
+}
+
+interface ClassBrandShapeTwo {
+  readonly _tag: 'ClassBrandShapeTwo'
+  readonly reason: string
+  readonly [ClassBrandShapeTypeId]: typeof ClassBrandShapeTypeId
+}
+
+/**
+ * The spoken-loudly twin of {@link ClassBrandShapeOne}: an interface that annotates the slot
+ * with the general `symbol` instead. That is the type a class field's initializer infers, so
+ * this union is structurally the class instance itself — the check keys on the declared shape
+ * (a widened slot), never on whether the declaration is a class or an interface.
+ */
+interface WidenedBrandOne {
+  readonly _tag: 'WidenedBrandOne'
+  readonly [UnrelatedBrand]: symbol
+}
+
+interface WidenedBrandTwo {
+  readonly _tag: 'WidenedBrandTwo'
+  readonly [UnrelatedBrand]: symbol
+}
+
+interface StringKeyBrandOne {
+  readonly _tag: 'StringKeyBrandOne'
+  readonly familyBrand: symbol
+}
+
+interface StringKeyBrandTwo {
+  readonly _tag: 'StringKeyBrandTwo'
+  readonly familyBrand: symbol
+}
+
 declare const decideOverTagged: (command: TaggedCmd) => Result<Decision, DecisionError>
 declare const decideOverUntagged: (command: UntaggedCmd) => Result<Decision, DecisionError>
 declare const decideWidened: typeof refuseWidenedCommand
@@ -92,6 +138,12 @@ declare const decideUnrelatedKeyStringOverTagged: (
 declare const decideUnrelatedBrandTotalOverTagged: (
   command: TaggedCmd,
 ) => Result<UnrelatedBrandOne | UnrelatedBrandTwo, never>
+declare const decideClassBrandShapeOverTagged: (
+  command: TaggedCmd,
+) => Result<ClassBrandShapeOne | ClassBrandShapeTwo, CommandRefused>
+declare const decideUnrelatedBrandOverTagged: (
+  command: TaggedCmd,
+) => Result<UnrelatedBrandOne | UnrelatedBrandTwo, CommandRefused>
 declare const decidePromiseOverTagged: (command: TaggedCmd) => Promise<Decision>
 declare const decideChainedUnbranded: (command: ChainedTaggedCommand) => Result<FixtureDecision, DecisionError>
 
@@ -236,16 +288,42 @@ describe('T14 the shared-type-id predicate as measured', () => {
     >()
   })
 
-  it('Should_AcceptTheUnion_When_AnUnrelatedSymbolKeyCarriesTheSymbolItself', () => {
-    expect<Workflow.Inhabited<UnrelatedBrandOne | UnrelatedBrandTwo, CommandRefused>>().type.toBe<unknown>()
+  it('Should_RefuseTheMarker_When_AnUnrelatedSymbolKeyCarriesTheSymbolItself', () => {
+    expect<Workflow.Inhabited<UnrelatedBrandOne | UnrelatedBrandTwo, CommandRefused>>().type.toBe<
+      Workflow.UnsharedTypeId
+    >()
   })
 
   it('Should_RefuseTheMarker_When_ConstructorReceivedTheUnrelatedPair', () => {
     expect<typeof Workflow.total>().type.not.toBeCallableWith(TaggedCmd, decideUnrelatedKeyStringOverTagged)
   })
 
-  it('Should_AcceptTheConstructor_When_TheUnrelatedPairCarriesSymbolValues', () => {
-    expect<typeof Workflow.total>().type.toBeCallableWith(TaggedCmd, decideUnrelatedBrandTotalOverTagged)
+  it('Should_RefuseTheMarker_When_TheUnrelatedPairReachesTheTotalConstructor', () => {
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(TaggedCmd, decideUnrelatedBrandTotalOverTagged)
+  })
+
+  it('Should_RefuseTheMarker_When_TheUnrelatedPairReachesAMakeConstructor', () => {
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(TaggedCmd, decideUnrelatedBrandOverTagged)
+  })
+
+  it('Should_RefuseTheMarker_When_AnInterfaceCarriesTheClassBrandShape', () => {
+    expect<Workflow.Inhabited<ClassBrandShapeOne | ClassBrandShapeTwo, CommandRefused>>().type.toBe<
+      Workflow.UnsharedTypeId
+    >()
+  })
+
+  it('Should_RefuseTheMarker_When_TheClassBrandShapeReachesAMakeConstructor', () => {
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(TaggedCmd, decideClassBrandShapeOverTagged)
+  })
+
+  it('Should_AcceptTheMarker_When_AnInterfaceCarriesTheClassFieldsWidenedSlot', () => {
+    expect<Workflow.Inhabited<WidenedBrandOne | WidenedBrandTwo, CommandRefused>>().type.toBe<unknown>()
+  })
+
+  it('Should_RefuseTheMarker_When_TheFamilyBrandCarriesAStringKey', () => {
+    expect<Workflow.Inhabited<StringKeyBrandOne | StringKeyBrandTwo, CommandRefused>>().type.toBe<
+      Workflow.UnsharedTypeId
+    >()
   })
 
   it('Should_RefuseTheMarker_When_TheSplitPairReachesAConstructor', () => {
