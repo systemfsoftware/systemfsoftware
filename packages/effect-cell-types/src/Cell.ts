@@ -2,6 +2,7 @@ import * as Effect from 'effect/Effect'
 import { dual } from 'effect/Function'
 import type { Kind as HKTKind, TypeLambda as HKTTypeLambda } from 'effect/HKT'
 import type { Layer } from 'effect/Layer'
+import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import { DESCRIPTION_MODULE, IO_CELLS, type IoCellClassification, type PhaseName } from './Facts.js'
 import type { Policy } from './Policy.js'
@@ -215,6 +216,83 @@ export const zip: {
     that: Cell<I, B, E2, R2>,
   ): Cell<I, readonly [A, B], E | E2, R | R2> =>
     make((input) => Effect.zipWith(self.run(input), that.run(input), (a, b): readonly [A, B] => [a, b])),
+)
+
+/**
+ * Runs the inner Cell on the value this Cell read, yielding `Option.none` when it read none.
+ * A skip is an absence, never a refusal; the error and service channels union.
+ */
+export const gate: {
+  <Raw, A, E2, R2>(
+    inner: Cell<Raw, A, E2, R2>,
+  ): <I, E, R>(self: Cell<I, Option.Option<Raw>, E, R>) => Cell<I, Option.Option<A>, E | E2, R | R2>
+  <I, Raw, E, R, A, E2, R2>(
+    self: Cell<I, Option.Option<Raw>, E, R>,
+    inner: Cell<Raw, A, E2, R2>,
+  ): Cell<I, Option.Option<A>, E | E2, R | R2>
+} = dual(
+  2,
+  <I, Raw, E, R, A, E2, R2>(
+    self: Cell<I, Option.Option<Raw>, E, R>,
+    inner: Cell<Raw, A, E2, R2>,
+  ): Cell<I, Option.Option<A>, E | E2, R | R2> =>
+    make<I, Option.Option<A>, E | E2, R | R2>((input) =>
+      Effect.flatMap(self.run(input), (read): Effect.Effect<Option.Option<A>, E2, R2> =>
+        Option.match(read, {
+          onNone: () => Effect.succeed(Option.none<A>()),
+          onSome: (raw) => Effect.map(inner.run(raw), Option.some),
+        }))
+    ),
+)
+
+/**
+ * Runs the Cell once per item, in order, and folds the responses into one value. The error
+ * and service channels are unchanged; the first refusal ends the run.
+ */
+export const collect: {
+  <I, A, E, R, B>(
+    fold: (responses: readonly A[]) => B,
+  ): (self: Cell<I, A, E, R>) => Cell<readonly I[], B, E, R>
+  <I, A, E, R, B>(self: Cell<I, A, E, R>, fold: (responses: readonly A[]) => B): Cell<readonly I[], B, E, R>
+} = dual(
+  2,
+  <I, A, E, R, B>(
+    self: Cell<I, A, E, R>,
+    fold: (responses: readonly A[]) => B,
+  ): Cell<readonly I[], B, E, R> =>
+    make<readonly I[], B, E, R>((items) =>
+      Effect.map(
+        Effect.forEach(items, (item) => self.run(item)),
+        (responses) => fold(responses),
+      )
+    ),
+)
+
+/**
+ * Runs the Cell once per item, in order, and folds every outcome — each a `Result.Result` —
+ * into one value. Unlike {@link collect}, no refusal ends the run: every item is attempted
+ * and its failure travels to the fold.
+ */
+export const collectAll: {
+  <I, A, E, R, B>(
+    fold: (results: readonly Result.Result<A, E>[]) => B,
+  ): (self: Cell<I, A, E, R>) => Cell<readonly I[], B, E, R>
+  <I, A, E, R, B>(
+    self: Cell<I, A, E, R>,
+    fold: (results: readonly Result.Result<A, E>[]) => B,
+  ): Cell<readonly I[], B, E, R>
+} = dual(
+  2,
+  <I, A, E, R, B>(
+    self: Cell<I, A, E, R>,
+    fold: (results: readonly Result.Result<A, E>[]) => B,
+  ): Cell<readonly I[], B, E, R> =>
+    make<readonly I[], B, E, R>((items) =>
+      Effect.map(
+        Effect.forEach(items, (item) => Effect.result(self.run(item))),
+        (results) => fold(results),
+      )
+    ),
 )
 
 /**

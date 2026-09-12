@@ -1,19 +1,14 @@
-import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
+import { Cell } from '@systemfsoftware/effect-cell-types'
 import { And, Gherkin, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
 import * as Effect from 'effect/Effect'
 import * as Exit from 'effect/Exit'
 import * as Match from 'effect/Match'
 import * as Result from 'effect/Result'
-import * as S from 'effect/Schema'
 import { expect } from 'vitest'
 
-import {
-  admitDecodedCommand,
-  Admitted,
-  Decoded,
-  Malformed,
-  Rejected,
-} from './__fixtures__/admit-decoded-command.workflow.js'
+import { Admitted, Decoded, Malformed, Rejected } from './__fixtures__/admit-decoded-command.workflow.js'
+import { chainAdmitDecisions } from './__fixtures__/chain-admit-decisions.workflow.js'
+import { SettleCommand, totalAdmitDecision } from './__fixtures__/total-admit-decision.workflow.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -27,32 +22,14 @@ const renderDecision = (decision: Decision): string =>
   )
 
 /**
- * The wrapper command class is declared inside this factory because a schema has a sanctioned
- * module-scope home only in `*.schema.ts` or the owning `<stem>.workflow.ts`, and the trace is a
- * local closure rather than a service on `R`.
+ * Both cells share one trace. The decisions are the workflows the fixtures own, so this file
+ * constructs nothing: `make-file-location` permits a construction only in a `<stem>.workflow.ts`,
+ * and a workflow only a test uses lives in `tests/__fixtures__/<stem>.workflow.ts`.
  */
 const makeChain = (trace: string[]) => {
-  class SettleCommand extends S.TaggedClass<SettleCommand>()('SettleCommand', {
-    decision: S.Union([Admitted, Rejected]),
-  }) {}
-
-  const settle = Workflow.total(
-    SettleCommand,
-    (command: SettleCommand): Result.Result<Decision, never> => {
-      trace.push('settle')
-      return Result.succeed(
-        command.decision._tag === 'Admitted'
-          ? new Admitted({ length: command.decision.length })
-          : new Rejected({ why: command.decision.why }),
-      )
-    },
-  )
-
-  const chain = Workflow.andThen(Decoded, admitDecodedCommand, SettleCommand, settle)
-
   const chainCell = Cell.layer({
     read: (command: Decoded) => Effect.succeed(command),
-    decide: chain,
+    decide: chainAdmitDecisions(trace),
     write: (outcome: Result.Result<Decision, Malformed>) =>
       Effect.sync(() => {
         trace.push(
@@ -67,7 +44,7 @@ const makeChain = (trace: string[]) => {
 
   const totalCell = Cell.layer({
     read: (command: SettleCommand) => Effect.succeed(command),
-    decide: settle,
+    decide: totalAdmitDecision(trace),
     write: (outcome: Result.Result<Decision, never>) =>
       Effect.sync(() => {
         trace.push(

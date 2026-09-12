@@ -3,12 +3,14 @@ import type { Effect } from 'effect/Effect'
 import * as EffectModule from 'effect/Effect'
 import { pipe } from 'effect/Function'
 import type { Layer } from 'effect/Layer'
+import type { Option } from 'effect/Option'
 import type { Result } from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
-import { acceptTaggedCommand, type FixtureDecision } from '../tests/__fixtures__/accept-tagged-command.workflow.js'
+import { chainAdmitTaggedCommands } from '../tests/__fixtures__/chain-admit-tagged-commands.workflow.js'
 import { CommandRefused, TaggedCmd } from '../tests/__fixtures__/Command.schema.js'
 import { type Decision as TotalDecision, DecisionError } from '../tests/__fixtures__/Decision.schema.js'
+import { totalAdmitTaggedCommand } from '../tests/__fixtures__/total-admit-tagged-command.workflow.js'
 
 interface Cmd {
   readonly id: string
@@ -254,6 +256,76 @@ describe('the combinators', () => {
   })
 })
 
+declare const optionReader: Cell.Cell<Cmd, Option<Raw>, ReadErr, Db>
+declare const optionReaderOverLengths: Cell.Cell<Cmd, Option<Decoded>, ReadErr, Db>
+declare const bareReader: Cell.Cell<Cmd, Raw, ReadErr, Db>
+declare const innerOverRaw: Cell.Cell<Raw, Decision, WriteErr, Bus>
+declare const innerOverLengths: Cell.Cell<Decoded, Decision, WriteErr, Bus>
+declare const itemCell: Cell.Cell<Cmd, Decision, ReadErr, Db>
+
+describe('the combinators that run other Cells', () => {
+  it('Should_WrapTheInnerResponse_When_GateAdmitsTheReaderValue', () => {
+    const gated = pipe(optionReader, Cell.gate(innerOverRaw))
+    expect(gated).type.toBe<Cell.Cell<Cmd, Option<Decision>, ReadErr | WriteErr, Db | Bus>>()
+    expect(Cell.run(gated, command)).type.toBe<Effect<Option<Decision>, ReadErr | WriteErr, Db | Bus>>()
+  })
+
+  it('Should_WrapTheInnerResponse_When_GateIsCalledDataFirst', () => {
+    const gated = Cell.gate(optionReader, innerOverRaw)
+    expect(gated).type.toBe<Cell.Cell<Cmd, Option<Decision>, ReadErr | WriteErr, Db | Bus>>()
+  })
+
+  it('Should_RefuseTheInner_When_ItsInputIsNotTheReaderValue', () => {
+    expect<typeof Cell.gate>().type.not.toBeCallableWith(optionReaderOverLengths, innerOverRaw)
+  })
+
+  it('Should_RefuseAReader_When_ItCarriesNoOption', () => {
+    expect<typeof Cell.gate>().type.not.toBeCallableWith(bareReader, innerOverRaw)
+  })
+
+  it('Should_RefuseAnAdapter_When_GateTakesOnlyTwoCells', () => {
+    expect<typeof Cell.gate>().type.not.toBeCallableWith(optionReader, innerOverRaw, (raw: Raw) => raw)
+  })
+
+  it('Should_NameTheCollectionInput_When_CollectingTheCellOverItems', () => {
+    const fold = (responses: readonly Decision[]): number => responses.length
+    const folded = Cell.collect(itemCell, fold)
+    expect(folded).type.toBe<Cell.Cell<readonly Cmd[], number, ReadErr, Db>>()
+    expect(Cell.run(folded, [command])).type.toBe<Effect<number, ReadErr, Db>>()
+  })
+
+  it('Should_BindTheFoldFirst_When_CollectingDataLast', () => {
+    const folded = pipe(itemCell, Cell.collect((responses: readonly Decision[]): number => responses.length))
+    expect(folded).type.toBe<Cell.Cell<readonly Cmd[], number, ReadErr, Db>>()
+  })
+
+  it('Should_RefuseAMutableFold_When_TheFoldReceivesReadonlyResponses', () => {
+    expect<typeof Cell.collect>().type.not.toBeCallableWith(itemCell, (responses: Decision[]) => responses.length)
+  })
+
+  it('Should_HandEveryResultToTheFold_When_Accumulating', () => {
+    const fold = (results: readonly Result<Decision, ReadErr>[]): number => results.length
+    const accumulated = Cell.collectAll(itemCell, fold)
+    expect(accumulated).type.toBe<Cell.Cell<readonly Cmd[], number, ReadErr, Db>>()
+    expect(Cell.run(accumulated, [command])).type.toBe<Effect<number, ReadErr, Db>>()
+  })
+
+  it('Should_RefuseASuccessOnlyFold_When_TheAccumulateFormCarriesRefusals', () => {
+    expect<typeof Cell.collectAll>().type.not.toBeCallableWith(
+      itemCell,
+      (responses: readonly Decision[]) => responses.length,
+    )
+  })
+
+  it('Should_RefuseAnAdapter_When_CollectTakesOnlyACellAndAFold', () => {
+    expect<typeof Cell.collect>().type.not.toBeCallableWith(
+      itemCell,
+      (responses: readonly Decision[]) => responses.length,
+      innerOverLengths,
+    )
+  })
+})
+
 describe('the variance the Cell carries', () => {
   it('Should_AcceptTheWiderCommandCell_When_TheNarrowerIsExpected', () => {
     expect<Cell.Cell<Cmd, void, never, never>>().type.toBeAssignableTo<Cell.Cell<{ id: string }, void, never, never>>()
@@ -312,17 +384,7 @@ describe('the vocabulary table', () => {
   })
 })
 
-/** The wrapper command the composite builds — one field carries the upstream decision. */
-interface ChainedCommand {
-  readonly decision: FixtureDecision
-}
-
-declare const ChainedCommandCtor: { new(props: { readonly decision: FixtureDecision }): ChainedCommand }
 declare const readTagged: (command: Cmd) => Effect<TaggedCmd, never, never>
-declare const decideTotalOverTagged: (command: TaggedCmd) => Result<TotalDecision, never>
-declare const decideChainedCommand:
-  & ((command: ChainedCommand) => Result<TotalDecision, DecisionError>)
-  & Workflow.WorkflowBrand
 declare const decideUnbrandedChain: (command: TaggedCmd) => Result<TotalDecision, CommandRefused | DecisionError>
 declare const writeTotalOutcome: (outcome: Result<TotalDecision, never>, raw: TaggedCmd) => Effect<void, never, never>
 declare const writeChainedOutcome: (
@@ -334,15 +396,14 @@ describe('the constructors the decide slot accepts', () => {
   it('Should_AcceptTheTotalDecider_When_ItsErrorChannelIsNever', () => {
     const cell = Cell.layer({
       read: readTagged,
-      decide: Workflow.total(TaggedCmd, decideTotalOverTagged),
+      decide: totalAdmitTaggedCommand,
       write: writeTotalOutcome,
     })
     expect(cell).type.toBe<Cell.Cell<Cmd, void, never, never>>()
   })
 
   it('Should_AcceptTheComposite_When_ItsErrorChannelIsTheComponentUnion', () => {
-    const composite = Workflow.andThen(TaggedCmd, acceptTaggedCommand, ChainedCommandCtor, decideChainedCommand)
-    const cell = Cell.layer({ read: readTagged, decide: composite, write: writeChainedOutcome })
+    const cell = Cell.layer({ read: readTagged, decide: chainAdmitTaggedCommands, write: writeChainedOutcome })
     expect(cell).type.toBe<Cell.Cell<Cmd, void, never, never>>()
   })
 
