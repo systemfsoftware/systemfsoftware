@@ -6,6 +6,4 @@
 
 `Cell.collect` runs one Cell per item, in order, then folds the responses with a plain function. The first refusal fails the composed Cell with that item's own refusal. `Cell.collectAll` is the accumulate opt-in: an item's refusal travels to the fold as data, so the fold always runs over every result.
 
-`Encode.identity` is the pass-through encode for the long-form spec: a cell whose wire shape is the decision's outcome itself names it in the mandatory `encode` slot instead of fabricating a transformation.
-
 Both combinators are callable in the curried and data-first styles, and neither requires a workflow brand at its call site.

@@ -10,11 +10,6 @@ export namespace Cell {
 }
 
 // @public (undocumented)
-export namespace Encode {
-    export { identity };
-}
-
-// @public (undocumented)
 export namespace Workflow {
     export { Inhabited, SingleVariantDecision, UninhabitedDecision, UninhabitedError, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, andThen$1 as andThen, make, total };
 }
