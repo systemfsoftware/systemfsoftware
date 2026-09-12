@@ -27,8 +27,24 @@ const WORKFLOW_SOURCE = '@systemfsoftware/effect-cell-types' as const
 /** The import name a specifier must carry to be the workflow value. */
 const WORKFLOW_IMPORT_NAME = 'Workflow' as const
 
-/** The member of the workflow value the boundary call invokes. */
-const MAKE_MEMBER_NAME = 'make' as const
+/**
+ * The members of the workflow value, mirroring the oxlint kernel's constructor set:
+ * `make` and `total` construct a workflow from a decision, `andThen` composes one
+ * workflow's decision output into the next workflow's command.
+ */
+const WORKFLOW_CONSTRUCTOR_MEMBERS: Readonly<Record<string, true>> = {
+  make: true,
+  total: true,
+  andThen: true,
+}
+
+/**
+ * The constructor members whose signature takes constructed workflows in place of a
+ * decider: an `andThen` construction holds no decision body in the file that opens it,
+ * so nothing in its argument list joins the mutation population. A member added above
+ * without a line here keeps its decider body — and its mutants — in the population.
+ */
+const COMPOSING_MEMBERS: Readonly<Record<string, true>> = { andThen: true }
 
 const NO_WORKFLOW_LOCALS: ReadonlySet<string> = new Set()
 const NO_MAKE_ARGUMENT_BODIES: ReadonlySet<object> = new Set()
@@ -206,23 +222,30 @@ const isWorkflowMakeCallee = (
   localNames: ReadonlySet<string>,
 ): callee is MemberExpression => isMemberExpression(callee) && isWorkflowMakeMember(callee, localNames)
 
-/** `Workflow.make`, where `Workflow` is one of the file's cell-types locals. */
 const isWorkflowMakeMember = (member: MemberExpression, localNames: ReadonlySet<string>): boolean =>
-  isWorkflowLocalMember(member, localNames) && isMakeMemberName(member.property)
+  isWorkflowLocalMember(member, localNames) && isBodyBearingMemberName(member.property)
 
 const isWorkflowLocalMember = (member: MemberExpression, localNames: ReadonlySet<string>): boolean =>
   isIdentifier(member.object) && localNames.has(member.object.name)
 
-const isMakeMemberName = (property: unknown): boolean => isIdentifier(property) && property.name === MAKE_MEMBER_NAME
+const isBodyBearingMemberName = (property: unknown): boolean =>
+  isConstructorMemberName(property) && !isComposingMemberName(property)
+
+const isConstructorMemberName = (property: unknown): boolean =>
+  isIdentifier(property) && WORKFLOW_CONSTRUCTOR_MEMBERS[property.name] === true
+
+const isComposingMemberName = (property: unknown): boolean =>
+  isIdentifier(property) && COMPOSING_MEMBERS[property.name] === true
 
 const isWorkflowMakeCall = (node: unknown, localNames: ReadonlySet<string>): node is CallExpression =>
   isCallExpression(node) && isWorkflowMakeCallee(node.callee, localNames)
 
 // -- module-scope function reference resolution ---------------------------------------------
-// A `Workflow.make(decision)` call whose argument is an identifier resolving to a
-// same-file function keeps that function's body inside the mutation population,
-// mirroring the oxlint kernel's followIdentifier walk (depth-8 cycle bound). This is
-// deliberately a file-level mechanical resolution, not a scope analysis — the boundary
+// A `Workflow.make(decision)` or `Workflow.total(decision)` call whose argument is an
+// identifier resolving to a same-file function keeps that function's body inside the
+// mutation population, mirroring the oxlint kernel's followIdentifier walk (depth-8 cycle
+// bound). This is deliberately a file-level mechanical resolution, not a scope analysis —
+// the boundary
 // is a mechanical gate (see workflowLocalNamesOf), so a same-named local shadowing the
 // module binding shadows the resolution too (no production site does this).
 
@@ -397,7 +420,10 @@ const walkEntries = (
 
 // -- the resolved decision bodies ------------------------------------------------------------
 
-/** Program -> the same-file function bodies a `Workflow.make` identifier argument resolves to. */
+/**
+ * Program -> the same-file function bodies a `Workflow.make` or `Workflow.total`
+ * identifier argument resolves to.
+ */
 const MAKE_ARGUMENT_BODIES_BY_PROGRAM = new WeakMap<object, ReadonlySet<object>>()
 
 /**
@@ -445,10 +471,10 @@ const addFirstMakeArgumentBody = (
 
 /**
  * The body of the first argument that resolves to one. The decider is found by SHAPE, never by
- * slot index: `make` takes the command schema class first and the decider second, so a resolver
- * pinned to slot 0 resolves a class to nothing and silently drops the referenced decision body
- * out of the mutation population — every mutant in it stops being tested while the score still
- * reports green.
+ * slot index: a constructor that takes a decider takes the command schema class first and the
+ * decider second, so a resolver pinned to slot 0 resolves a class to nothing and silently drops
+ * the referenced decision body out of the mutation population — every mutant in it stops being
+ * tested while the score still reports green.
  */
 const firstResolvedBodyIn = (
   args: readonly unknown[],
@@ -480,10 +506,10 @@ const addResolvedBody = (body: object | undefined, bodies: Set<object>): void =>
 // -- the inverted population selector --------------------------------------------------------
 
 /**
- * True when the mutant descends from an argument slot of a `Workflow.make` call — the parser
- * puts the make body under the call's `arguments` array, so identity containment through the walk
- * is the boundary test. A mutant ON the call (its callee or the call itself) is outside the
- * argument and therefore outside the population, which is the point of the inverted gate.
+ * True when the mutant descends from an argument slot of a body-bearing constructor call — the
+ * parser puts the decider body under the call's `arguments` array, so identity containment through
+ * the walk is the boundary test. A mutant ON the call (its callee or the call itself) is outside
+ * the argument and therefore outside the population, which is the point of the inverted gate.
  */
 const insideMakeBoundary = (node: unknown, ancestors: readonly unknown[]): boolean => {
   const root = workflowRootOf(ancestors)
@@ -563,8 +589,8 @@ const isResolvedBody = (value: unknown, resolvedBodies: ReadonlySet<object>): bo
 
 /**
  * The inverted population selector: every mutant whose ancestor chain contains no
- * `Workflow.make(...)` call argument is excised with the named reason, and every mutant
- * inside any make boundary passes through to the next ignorer.
+ * `Workflow.make(...)` or `Workflow.total(...)` call argument is excised with the named
+ * reason, and every mutant inside any make boundary passes through to the next ignorer.
  */
 export const decideWorkflowMakeBoundaryIgnore = (
   node: unknown,
