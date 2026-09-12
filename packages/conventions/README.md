@@ -52,22 +52,21 @@ language json
 ```
 ````
 
-```
 Consumer rules are namespaced (`consumer_<name>`) so they can never silently shadow a
 bundled rule. Learn the query language at [docs.grit.io/language](https://docs.grit.io/language);
 rewrite-style rules can also use `grit patterns test` for native test cases.
 
 ## CLI
-```
 
+```
 conventions scan [--rules <path>...] [--ignore <glob>...] [--level error|warn|info] [roots-or-files...]
-
 ```
+
 - A positional containing glob characters is a **root**: walked for the rules' target files
   (`node_modules`/`.git` always excluded). Otherwise it is a literal file path (precommit mode;
   empty selection tolerated for files, fails loud for roots).
-- `--ignore` takes path prefixes (`dir`, `dir/**`, `dir/sub`). Exemptions are yours to declare
-  and version in your script.
+- `--ignore` takes cwd-relative path prefixes (`dir`, `dir/**`, `dir/sub`). Exemptions are yours
+  to declare and version in your script.
 
 ## The engine
 
@@ -77,11 +76,15 @@ any global grit), falling back to the dependency's launcher binary.
 
 Notes for locked-down environments:
 
-- The npm launcher's postinstall downloads the engine binary from GitHub releases. Where build
+- pnpm 11 errors on unlisted build scripts: acknowledge the deny
+  (`allowBuilds: { '@getgrit/cli': false }` in your `pnpm-workspace.yaml`) or approve the
+  build — or skip the npm binary entirely and put `grit` on PATH.
+- The launcher's postinstall downloads the engine binary from GitHub releases. Where build
   scripts are denied, put the `grit` binary on PATH instead (this repo ships a pinned
   `nix/grit.nix`; a manual install is `tar -xzf grit-<target>.tar.gz` from the release page).
+- In sandboxes (bubblewrap), point `TMPDIR` at a writable mount — the wrapper composes its
+  config under the OS temp dir.
 - Release binaries are glibc builds; Alpine/musl hosts need the PATH variant.
 - Engine upgrades are package releases: the pin moves through the changeset pipeline, never
   silently. If upstream stops shipping usable binaries or JSON parsing regresses under a
   re-pin, the MIT engine forks — the rule files survive any engine that speaks GritQL.
-```
