@@ -1,5 +1,7 @@
 import * as S from 'effect/Schema'
 
+import { LocationSchema, MutantStatusSchema } from './Report.schema.js'
+
 export const RunPhase = S.Literals(['prepare', 'instrument', 'dry-run', 'mutation-test'])
 export type RunPhase = typeof RunPhase.Type
 
@@ -8,30 +10,6 @@ export type OutputMode = typeof OutputMode.Type
 
 export const ModeSignal = S.Literals(['flag', 'env', 'tty', 'agent', 'tool'])
 export type ModeSignal = typeof ModeSignal.Type
-
-export const MutantStatus = S.Literals([
-  'Killed',
-  'Survived',
-  'NoCoverage',
-  'Timeout',
-  'CompileError',
-  'RuntimeError',
-  'Ignored',
-  'Pending',
-])
-export type MutantStatus = typeof MutantStatus.Type
-
-const Position = S.Struct({
-  line: S.Finite,
-  column: S.Finite,
-})
-
-const Location = S.Struct({
-  start: Position,
-  end: Position,
-})
-export type Location = typeof Location.Type
-export type Position = typeof Position.Type
 
 export class RunStarted extends S.TaggedClass<RunStarted>()('stream', {
   schemaVersion: S.String,
@@ -49,11 +27,11 @@ export class PlanKnown extends S.TaggedClass<PlanKnown>()('plan', {
   total: S.Finite,
 }) {}
 
-export class MutantTested extends S.TaggedClass<MutantTested>()('mutant', {
+export class RunMutantTested extends S.TaggedClass<RunMutantTested>()('mutant', {
   id: S.String,
-  status: MutantStatus,
+  status: MutantStatusSchema,
   file: S.String,
-  location: Location,
+  location: LocationSchema,
   mutator: S.String,
   replacement: S.NullOr(S.String),
   completed: S.Finite,
@@ -76,10 +54,10 @@ export type VerdictThresholds = typeof VerdictThresholds.Type
 const VerdictMutant = S.Struct({
   id: S.String,
   file: S.String,
-  location: Location,
+  location: LocationSchema,
   mutator: S.String,
   replacement: S.NullOr(S.String),
-  status: MutantStatus,
+  status: MutantStatusSchema,
 })
 export type VerdictMutant = typeof VerdictMutant.Type
 
@@ -124,7 +102,7 @@ export const RunEvent = S.Union([
   RunStarted,
   PhaseEntered,
   PlanKnown,
-  MutantTested,
+  RunMutantTested,
   Heartbeat,
   VerdictReached,
   RunFailed,

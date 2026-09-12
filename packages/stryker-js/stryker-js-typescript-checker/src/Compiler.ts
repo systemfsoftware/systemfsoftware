@@ -6,9 +6,9 @@
  * only the Effect-typed service surface.
  */
 
-import type { Mutant, Position } from '@systemfsoftware/stryker-js/Mutant'
-import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
-import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
+import type { Mutant, Position } from '@systemfsoftware/stryker-js'
+import type { StrykerOptions } from '@systemfsoftware/stryker-js'
+import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js'
 import { Predicate, Result } from 'effect'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'

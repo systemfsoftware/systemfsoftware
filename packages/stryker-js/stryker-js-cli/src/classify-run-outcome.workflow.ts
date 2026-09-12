@@ -1,5 +1,5 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
+import { ExitClass } from '@systemfsoftware/stryker-js'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'

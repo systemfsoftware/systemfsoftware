@@ -1,4 +1,4 @@
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import { Mutant } from '@systemfsoftware/stryker-js'
 import * as S from 'effect/Schema'
 
 /** A file name the node map can be keyed by: non-empty, and naming an extension. */

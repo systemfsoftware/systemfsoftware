@@ -6,7 +6,7 @@ import { FastCheck as fc } from 'effect/testing'
 
 import { DryRunCompleted, MutantTested, ReporterEventSchema, ReporterEventUnion } from '../ReporterEvent.schema.js'
 import type { ReporterEvent } from '../ReporterEvent.schema.js'
-import { MutantTested as RunMutantTested } from '../Run.schema.js'
+import { RunMutantTested } from '../Run.schema.js'
 
 type Validation = StandardSchemaV1.Result<ReporterEvent> | 'async'
 

@@ -1,7 +1,7 @@
-import type { MutantStatus } from '@systemfsoftware/stryker-js/Mutant'
-import type { ReporterFactory } from '@systemfsoftware/stryker-js/Reporter'
-import type { RunTiming } from '@systemfsoftware/stryker-js/Reporter'
-import type { TestRunnerCapabilities } from '@systemfsoftware/stryker-js/TestRunner'
+import type { MutantStatus } from '@systemfsoftware/stryker-js'
+import type { ReporterFactory } from '@systemfsoftware/stryker-js'
+import type { RunTiming } from '@systemfsoftware/stryker-js'
+import type { TestRunnerCapabilities } from '@systemfsoftware/stryker-js'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 

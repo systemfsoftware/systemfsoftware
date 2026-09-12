@@ -2,8 +2,8 @@ import { Schema as S } from 'effect'
 import * as Rpc from 'effect/unstable/rpc/Rpc'
 import * as RpcGroup from 'effect/unstable/rpc/RpcGroup'
 
-import { CheckerFailed, CheckResultSchema } from '@systemfsoftware/stryker-js/Checker'
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import { CheckerFailed, CheckResultSchema } from '@systemfsoftware/stryker-js'
+import { Mutant } from '@systemfsoftware/stryker-js'
 import {
   DryRunOptionsSchema,
   DryRunResultSchema,
@@ -11,7 +11,7 @@ import {
   MutantRunResultSchema,
   TestRunnerCapabilitiesSchema,
   TestRunnerFailed,
-} from '@systemfsoftware/stryker-js/TestRunner'
+} from '@systemfsoftware/stryker-js'
 
 export const CheckerRpcs = RpcGroup.make(
   Rpc.make('check', {

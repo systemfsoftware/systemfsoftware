@@ -123,7 +123,7 @@ export type DirectoryJSON = Record<string, string | Uint8Array | null>
 
 /**
  * Project an authored package tree to a memfs {@link DirectoryJSON} that
- * {@link MemoryFileSystem.make} accepts.
+ * `MemoryFileSystem.make` accepts.
  *
  * Keys are kept as `/node_modules/<packageName>/…` (the same prefix
  * `createPackage` uses). Relative keys are prefixed; absolute keys must

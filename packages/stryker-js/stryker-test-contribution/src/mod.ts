@@ -1,4 +1,4 @@
-import { declarePlugin } from '@systemfsoftware/stryker-js/Plugin'
+import { declarePlugin } from '@systemfsoftware/stryker-js'
 
 import { testContributionEvaluatorLayer } from './test-contribution-evaluator.js'
 
@@ -13,4 +13,9 @@ export {
   judgeTestContribution,
   toothlessTestFiles,
 } from './test-contribution.js'
-export type { TestContributionInput, TestContributionVerdict, TestFileContribution } from './test-contribution.js'
+export type {
+  ReportView,
+  TestContributionInput,
+  TestContributionVerdict,
+  TestFileContribution,
+} from './test-contribution.js'

@@ -9,7 +9,6 @@ import * as S from 'effect/Schema'
 import {
   Heartbeat,
   HelpRendered,
-  MutantTested,
   MutationRunPlan,
   PhaseEntered,
   PlanKnown,
@@ -17,6 +16,7 @@ import {
   RunCommand,
   RunEvent,
   RunFailed,
+  RunMutantTested,
   RunOutput,
   RunStarted,
   VerdictReached,
@@ -83,14 +83,15 @@ export const shouldKeepTempDir = (
 export {
   Heartbeat,
   HelpRendered,
-  MutantTested,
   PhaseEntered,
   PlanKnown,
   RunEvent,
   RunFailed,
+  RunMutantTested,
   RunStarted,
   VerdictReached,
 }
 export type { RunEvent as RunEventType }
-export { ModeSignal, MutantStatus, OutputMode, RunPhase } from './Run.schema.js'
-export type { Location, Position, RunTerminalEvent } from './Run.schema.js'
+export type { Location, Position } from './Report.schema.js'
+export { ModeSignal, OutputMode, RunPhase } from './Run.schema.js'
+export type { RunTerminalEvent } from './Run.schema.js'

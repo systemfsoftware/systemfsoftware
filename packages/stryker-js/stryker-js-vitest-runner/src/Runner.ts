@@ -4,14 +4,14 @@ import { createVitest as createVitestOriginal } from 'vitest/node'
 import type { Vitest } from 'vitest/node'
 
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { Module } from '@systemfsoftware/stryker-js/Module'
+import { Module } from '@systemfsoftware/stryker-js'
 import {
   type CoverageData,
   errorToString,
   INSTRUMENTER_CONSTANTS,
   normalizeFileName,
-} from '@systemfsoftware/stryker-js/Mutant'
-import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+} from '@systemfsoftware/stryker-js'
+import type { StrykerOptions } from '@systemfsoftware/stryker-js'
 import {
   type BaseTestResult,
   DryRunResult,
@@ -23,7 +23,7 @@ import {
   TestRunner,
   TestRunnerFailed,
   TestStatus,
-} from '@systemfsoftware/stryker-js/TestRunner'
+} from '@systemfsoftware/stryker-js'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'

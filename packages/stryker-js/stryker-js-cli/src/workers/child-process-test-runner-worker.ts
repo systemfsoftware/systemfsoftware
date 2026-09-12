@@ -1,14 +1,14 @@
 import { NodeFileSystem, NodePath, NodeSocketServer } from '@effect/platform-node'
-import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
-import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
+import { errorToString } from '@systemfsoftware/stryker-js'
+import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js'
 import type {
   CompleteDryRunResult,
   DryRunOptions,
   DryRunResult,
   MutantRunOptions,
   MutantRunResult,
-} from '@systemfsoftware/stryker-js/TestRunner'
-import { TestRunner, TestRunnerFailed } from '@systemfsoftware/stryker-js/TestRunner'
+} from '@systemfsoftware/stryker-js'
+import { TestRunner, TestRunnerFailed } from '@systemfsoftware/stryker-js'
 import { Match, Schema as S } from 'effect'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
@@ -28,6 +28,10 @@ import {
 } from '@systemfsoftware/stryker-js-engine/worker'
 import { nodeModuleLayer } from '../platform/node.js'
 import { launchWorker, workerSocketPath } from './worker-runtime.js'
+
+declare global {
+  var __mutantCoverage__: unknown
+}
 
 const isCompleteDryRun = (result: DryRunResult): result is CompleteDryRunResult => result.status === 'complete'
 
@@ -103,7 +107,13 @@ const TestRunnerHandlers = TestRunnerRpcs.toLayer(
     const underlying = yield* create(loaded.pluginsByKind, 'TestRunner', runnerName).pipe(
       Effect.flatMap((contribution) => TestRunner.pipe(Effect.provide(contribution.layer))),
       Effect.provide(
-        Layer.merge(Layer.succeed(RunConfiguration, options), Layer.succeed(SandboxDirectory, process.cwd())),
+        Layer.mergeAll(
+          Layer.succeed(RunConfiguration, options),
+          Layer.succeed(SandboxDirectory, process.cwd()),
+          NodeFileSystem.layer,
+          NodePath.layer,
+          nodeModuleLayer,
+        ),
       ),
       Effect.catchCause(failed('init')),
     )

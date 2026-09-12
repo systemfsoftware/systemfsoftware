@@ -33,7 +33,6 @@ const _default: {
         'no-assert-in-property': Rule;
         'property-file-purity': Rule;
         'require-effect-fastcheck': Rule;
-        'no-unbounded-fanout': Rule;
         'no-nested-quantification': Rule;
         'prop-generated-law-duplicate': Rule;
         'prop-arbitrary-schema-origin': Rule;

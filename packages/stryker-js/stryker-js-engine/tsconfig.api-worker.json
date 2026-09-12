@@ -1,0 +1,6 @@
+{
+  "extends": "@systemfsoftware/tsconfig/tsc/no-dom/library",
+  "include": [
+    "dist/worker.d.mts"
+  ]
+}

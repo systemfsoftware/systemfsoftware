@@ -1,5 +1,5 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import { Mutant } from '@systemfsoftware/stryker-js'
 import { Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'

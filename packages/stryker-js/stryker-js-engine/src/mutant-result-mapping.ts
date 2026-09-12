@@ -1,13 +1,7 @@
-import type { CheckResult, CheckStatus, PassedCheckResult } from '@systemfsoftware/stryker-js/Checker'
-import type {
-  Location,
-  MutantResult,
-  MutantStatus,
-  MutantTestCoverage,
-  Position,
-} from '@systemfsoftware/stryker-js/Mutant'
-import type * as schema from '@systemfsoftware/stryker-js/Report'
-import type { MutantRunResult } from '@systemfsoftware/stryker-js/TestRunner'
+import type { CheckResult, CheckStatus, PassedCheckResult } from '@systemfsoftware/stryker-js'
+import type { Location, MutantStatus, MutantTestCoverage, Position, RunMutantResult } from '@systemfsoftware/stryker-js'
+import type * as schema from '@systemfsoftware/stryker-js'
+import type { MutantRunResult } from '@systemfsoftware/stryker-js'
 import * as Match from 'effect/Match'
 
 interface MutantOutcome {
@@ -34,7 +28,7 @@ const mutantResult = (
   mutant: MutantTestCoverage,
   status: MutantStatus,
   outcome: MutantOutcome = {},
-): MutantResult => ({
+): RunMutantResult => ({
   _tag: 'Mutant',
   id: mutant.id,
   fileName: mutant.fileName,
@@ -52,9 +46,9 @@ const mutantResult = (
 export const mapCheckResult = (
   mutant: MutantTestCoverage,
   result: Exclude<CheckResult, PassedCheckResult>,
-): MutantResult => mutantResult(mutant, checkStatusToMutantStatus(result.status), { statusReason: result.reason })
+): RunMutantResult => mutantResult(mutant, checkStatusToMutantStatus(result.status), { statusReason: result.reason })
 
-export const mapRunResult = (mutant: MutantTestCoverage, result: MutantRunResult): MutantResult =>
+export const mapRunResult = (mutant: MutantTestCoverage, result: MutantRunResult): RunMutantResult =>
   Match.value(result).pipe(
     Match.discriminator('status')(
       'error',
