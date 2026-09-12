@@ -50,6 +50,12 @@ const loadRulesFromPath = (input: string): readonly Rule[] => {
 const resolveEngine = (): string | undefined => {
   for (const dir of (process.env['PATH'] ?? '').split(path.delimiter)) {
     if (dir === '') continue
+    // node_modules bin dirs hold the launcher's shim, which can race ETXTBSY
+    // under concurrent execution — only a real engine install answers PATH.
+    if (
+      dir.includes(`${path.sep}node_modules${path.sep}`) || dir.endsWith(`${path.sep}.bin`) ||
+      dir.endsWith(`${path.sep}.bin_real`)
+    ) continue
     const candidate = path.join(dir, 'grit')
     try {
       if (fs.statSync(candidate).isFile() && fs.accessSync(candidate, fs.constants.X_OK) === undefined) return candidate
@@ -66,6 +72,16 @@ const resolveEngine = (): string | undefined => {
     // launcher not installed — fall through to the loud failure
   }
   return undefined
+}
+
+const runEngine = (engine: string, args: readonly string[], workspace: string) => {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const run = spawnSync(engine, args, { cwd: workspace, encoding: 'utf8', env: { ...process.env, HOME: workspace } })
+    const spawnCode = run.error === undefined ? undefined : (run.error as NodeJS.ErrnoException).code
+    if ((spawnCode === 'ETXTBSY' || spawnCode === 'EAGAIN') && attempt < 2) continue
+    return run
+  }
+  throw new Error('conventions: engine retry loop exhausted')
 }
 
 interface ParsedArgs {
@@ -155,11 +171,7 @@ const main = (): number => {
       )
       return 2
     }
-    const run = spawnSync(engine, ['check', '--json', '--no-cache', ...uniqueSelected], {
-      cwd: workspace,
-      encoding: 'utf8',
-      env: { ...process.env, HOME: workspace },
-    })
+    const run = runEngine(engine, ['check', '--json', '--no-cache', ...uniqueSelected], workspace)
     if (run.error !== undefined) {
       process.stderr.write(`conventions: engine failed to start (${run.error.message})\n`)
       return 2
