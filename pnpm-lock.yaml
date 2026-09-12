@@ -1,24 +1,3 @@
----
-lockfileVersion: '9.0'
-
-importers:
-
-  .:
-    configDependencies:
-      '@getgrit/cli':
-        specifier: 0.1.0-alpha.1743007075
-        version: 0.1.0-alpha.1743007075
-
-packages:
-
-  '@getgrit/cli@0.1.0-alpha.1743007075':
-    resolution: {integrity: sha512-IvAa0QPrgiEQCjtWPpNucvnLUW7l6uR5P55tBC/NlIl36vZzoffLsEcQSIHR9gJmyURbCFcvb+Oaq33Z8WlOWA==}
-
-snapshots:
-
-  '@getgrit/cli@0.1.0-alpha.1743007075': {}
-
----
 lockfileVersion: '9.0'
 
 settings:
