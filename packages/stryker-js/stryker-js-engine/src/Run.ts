@@ -1308,15 +1308,18 @@ export const makeRunLayer = (
   )
 }
 
+const mutationPipeline = Cell.andThen(
+  instrumentCell,
+  Cell.andThen(dryRunCell, mutationTestCell),
+)
+
 export const runMutationTest = (
   cliOptions: PartialStrykerOptions,
   targetMutatePatterns?: string[],
 ): Effect.Effect<RunOutcome, StageError, StageServices> =>
   Effect.gen(function*() {
     const prepared = yield* runPrepare({ cliOptions, targetMutatePatterns })
-    const instrumented = yield* instrumentCell.run(prepared)
-    const dryDone = yield* dryRunCell.run(instrumented)
-    return yield* mutationTestCell.run(dryDone)
+    return yield* mutationPipeline.run(prepared)
   })
 export const shouldKeepTempDir = (
   exit: Exit.Exit<unknown, unknown>,
