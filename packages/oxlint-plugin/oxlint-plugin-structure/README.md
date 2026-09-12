@@ -49,7 +49,7 @@ The fragment registers the plugin and enables `configs.recommended`; a rule conf
 
 ## Enrollment
 
-Turned on by `@systemfsoftware/oxlint-config/base`, which spreads `configs.recommended.rules` of `@systemfsoftware/oxlint-plugin` — the aggregate re-registers every rule here under its own namespace.
+Turned on where a config extends this package's `./preset` fragment — by the transitional `@systemfsoftware/oxlint-config/base` (the nine leaf fragments) and by the strict root `@systemfsoftware/oxlint-preset` (the ten). The id is owned by this package — `@systemfsoftware/oxlint-plugin-structure/<rule>` — and a `// oxlint-disable` comment names the short display namespace `@systemfsoftware/structure/<rule>`.
 
 ## Testing
 

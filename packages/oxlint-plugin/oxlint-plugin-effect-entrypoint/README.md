@@ -50,8 +50,6 @@ export default defineConfig({
 pnpm oxlint src
 ```
 
-To adopt gradually, drop the spread and name rules individually as `'@systemfsoftware/oxlint-plugin-effect-entrypoint/<rule>': 'warn'`. Entries placed after the spread override it.
-
 ## Rules
 
 | Rule                            | Reports                                                                                                                                                                           |

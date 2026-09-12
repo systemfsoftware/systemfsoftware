@@ -43,8 +43,6 @@ pnpm oxlint src
 
 On a clean codebase: `Found 0 warnings and 0 errors.`
 
-To adopt gradually, drop the spread and name rules individually as `'@systemfsoftware/oxlint-plugin-effect-workflow/<rule>': 'warn'`. Entries placed after the spread override it.
-
 ## Rules
 
 | Rule                            | Reports                                                                                                                                                                                                                                                        |

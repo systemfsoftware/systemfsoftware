@@ -10,7 +10,7 @@ pnpm add @systemfsoftware/oxlint-preset
 
 ## Entry points
 
-- `@systemfsoftware/oxlint-preset` — the canonical set for product code: the recommended stock tier, the house effect rules, the cell-vocabulary, effect-dmmf and effect-entrypoint fragments, the correctness category at `error`, and the three rules that decide complexity in the pure core.
+- `@systemfsoftware/oxlint-preset` — the canonical set for product code: the recommended stock tier, the ten leaf fragments (effect-native, tag-discipline, structure, effect-schema, effect-workflow, property-testing, test-hygiene, test-placement, cell-vocabulary, effect-entrypoint), the correctness category at `error`, and the three rules that decide complexity in the pure core.
 - `@systemfsoftware/oxlint-preset/instrument` — the same recommended tier with no product rules of its own, for a package whose subject is the linter rather than the product.
 
 ## Use

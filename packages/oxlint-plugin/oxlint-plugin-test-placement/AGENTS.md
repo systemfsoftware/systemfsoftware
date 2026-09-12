@@ -1,6 +1,6 @@
 # AGENTS.md — `@systemfsoftware/oxlint-plugin-test-placement`
 
-Shared conventions: `packages/oxlint-plugin/AGENTS.md`. Rules enforcing where tests may live and which test suffixes are sanctioned; delivered through `@systemfsoftware/oxlint-config/base` via the `effect-dmmf` bundle.
+Shared conventions: `packages/oxlint-plugin/AGENTS.md`. Rules enforcing where tests may live and which test suffixes are sanctioned; delivered through this package's own `./preset` fragment, which the transitional `@systemfsoftware/oxlint-config/base` and the strict root `@systemfsoftware/oxlint-preset` extend.
 
 ## Rules
 

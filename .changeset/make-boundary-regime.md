@@ -1,7 +1,6 @@
 ---
-"@systemfsoftware/oxlint-plugin-effect-workflow": major
-"@systemfsoftware/oxlint-plugin": minor
-"@systemfsoftware/oxlint-config": major
+'@systemfsoftware/oxlint-plugin-effect-workflow': major
+'@systemfsoftware/oxlint-config': major
 ---
 
 The core regime keys on the `Workflow.make` boundary; the complement gains a complexity ceiling.

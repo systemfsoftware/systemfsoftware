@@ -24,7 +24,7 @@ Oxlint rules enforcing test placement and sanctioned suffixes, following the `pl
 
 ## Enrollment
 
-The rules are turned on by `@systemfsoftware/oxlint-config/base`, which spreads `@systemfsoftware/oxlint-plugin-effect-dmmf`'s recommended set; that aggregate re-exports all nine under the `@systemfsoftware/effect-dmmf/` namespace, so a package extending only `base` already enforces them. `strict` adds three TypeScript rules and nothing from this plugin. Neither preset registers this plugin standalone in `jsPlugins`, so its own `recommended` config is never the thing being loaded.
+The rules are turned on where a config extends this package's `./preset` fragment — by the transitional `@systemfsoftware/oxlint-config/base` (the nine leaf fragments) and by the strict root `@systemfsoftware/oxlint-preset` (the ten) — so a package extending either already enforces them. The id is owned by this package, `@systemfsoftware/oxlint-plugin-test-placement/<rule>`, and a `// oxlint-disable` comment names the short display namespace `@systemfsoftware/test-placement/<rule>`. `strict` adds three TypeScript rules and nothing from this plugin.
 
 ## Testing
 

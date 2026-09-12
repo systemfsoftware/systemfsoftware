@@ -14,9 +14,7 @@
 "@systemfsoftware/hex-schema": none
 "@systemfsoftware/npm-package": none
 "@systemfsoftware/omp-typescript-discipline": none
-"@systemfsoftware/oxlint-plugin": none
 "@systemfsoftware/oxlint-plugin-cell-vocabulary": none
-"@systemfsoftware/oxlint-plugin-effect-dmmf": none
 "@systemfsoftware/oxlint-plugin-effect-entrypoint": none
 "@systemfsoftware/oxlint-plugin-effect-schema": none
 "@systemfsoftware/oxlint-plugin-effect-workflow": none
