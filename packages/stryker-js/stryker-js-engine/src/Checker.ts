@@ -522,7 +522,7 @@ export const checkPlans = (
     encode: (outcome) => outcome,
     write: (outcome, raw) => writeCheckerOutcome(plans, raw.checkerName, outcome),
   })
-  return Cell.run(description, { checker, checkerName, plans })
+  return description.run({ checker, checkerName, plans })
 }
 
 /**
@@ -573,7 +573,7 @@ export const groupPlans = (
     encode: (outcome) => outcome,
     write: (outcome, raw) => writeGroupOutcome(plans, raw.checkerName, outcome),
   })
-  return Cell.run(description, { checker, checkerName, plans })
+  return description.run({ checker, checkerName, plans })
 }
 
 export const checkGroupedPlans = (

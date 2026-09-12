@@ -1,4 +1,4 @@
-import type { Result } from 'effect/Result'
+import { flatMap, type Result } from 'effect/Result'
 import type * as Schema from 'effect/Schema'
 
 const WorkflowTypeId: unique symbol = Symbol.for('@systemfsoftware/effect-cell-types/Workflow')
@@ -38,18 +38,13 @@ export interface UnsharedTypeId {
     'the decision variants must share one TypeId — a Symbol.for family brand on each variant class'
 }
 
-type UnionToIntersection<U> = (U extends unknown ? (k: U) => void : never) extends (k: infer I) => void ? I
-  : never
-
 type AtLeastTwoDistinct<T, U = T> = U extends unknown ? [T] extends [U] ? false : true : never
 
 type TaggedMembers<D> = D extends unknown ? '_tag' extends keyof D ? [D['_tag']] extends [string] ? true : false : false
   : never
 
-type SharedTypeId<D, I = UnionToIntersection<D>> = [
-  keyof {
-    [K in keyof I as I[K] extends K ? (D extends { readonly [P in K]: K } ? K : never) : never]: 0
-  },
+type SharedTypeId<D> = [
+  { [K in keyof D]: [K] extends [symbol] ? ([D[K]] extends [symbol] ? K : never) : never }[keyof D],
 ] extends [never] ? UnsharedTypeId : unknown
 
 type DecisionShape<D> = [unknown] extends [D] ? unknown
@@ -82,6 +77,59 @@ export const make = <
   return decide
 }
 
+/**
+ * Brands a decision that cannot fail. `make` refuses a `never` error channel outright
+ * (`UninhabitedError`); this is the door for the decider that genuinely decides everything.
+ * The decision must still choose between at least two tagged variants sharing one TypeId, so
+ * `SingleVariantDecision`, `UntaggedDecision`, and `UnsharedTypeId` still fire.
+ *
+ * The command schema class comes first, exactly as in {@link make}, so the command channel
+ * stays pinned to the class rather than an inferred annotation. The decider's return carries
+ * `DecisionShape` written out: the `Workflow` alias is a deferred conditional, and in
+ * parameter position it collapses the whole parameter to `unknown` while the decision
+ * channel is still generic.
+ */
+export const total = <
+  Self,
+  S extends Schema.Constraint & { readonly fields: Schema.Struct.Fields },
+  Inherited,
+  D,
+>(
+  _command: Schema.Class<Self, S, Inherited>,
+  decide: (command: Self) => Result<D, never> & DecisionShape<D>,
+): ((command: Self) => Result<D, never>) & WorkflowBrand => {
+  const plain: (command: Self) => Result<D, never> = decide
+  assertTotal(plain)
+  return plain
+}
+
+export const andThen = <
+  Ctx,
+  SelfA,
+  SA extends Schema.Constraint & { readonly fields: Schema.Struct.Fields },
+  InheritedA,
+  D1,
+  E1,
+  SelfB extends { readonly decision: D1; readonly ctx: Ctx },
+  D2,
+  E2,
+>(
+  commandA: Schema.Class<SelfA, SA, InheritedA>,
+  upstream: ((command: SelfA) => Result<D1, E1>) & WorkflowBrand,
+  commandB: { new(props: { readonly decision: D1; readonly ctx: Ctx }): SelfB },
+  ctx: NoInfer<Ctx>,
+  downstream: ((command: SelfB) => Result<D2, E2>) & WorkflowBrand,
+): Workflow<SelfA, D2, E1 | E2> =>
+  make(
+    commandA,
+    (command: SelfA): Result<D2, E1 | E2> =>
+      flatMap(upstream(command), (decision) => downstream(new commandB({ decision, ctx }))),
+  )
+
 function assertWorkflow<C, D, E>(
   _decide: (command: C) => Result<D, E> & Inhabited<D, E>,
 ): asserts _decide is Workflow<C, D, E> & ((command: C) => Result<D, E>) {}
+
+function assertTotal<Command, D>(
+  _decide: (command: Command) => Result<D, never>,
+): asserts _decide is ((command: Command) => Result<D, never>) & WorkflowBrand {}

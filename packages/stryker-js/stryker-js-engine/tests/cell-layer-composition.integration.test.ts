@@ -54,8 +54,8 @@ const describeOrders = (): OrderPair => {
 
 const runBoth = (orders: OrderPair) =>
   Effect.gen(function*() {
-    const firstResponse = yield* Cell.run(orders.first, new OrderRequest({ id: 'initial-request' }))
-    yield* Cell.run(orders.second, firstResponse)
+    const firstResponse = yield* orders.first.run(new OrderRequest({ id: 'initial-request' }))
+    yield* orders.second.run(firstResponse)
     return { firstResponse, recorded: orders.recorded, trace: orders.trace }
   })
 
@@ -131,7 +131,7 @@ Feature('Chaining two orders through the caller')
         ),
         When("the order runs with id 'ab'")(
           'outcome',
-          (s) => Cell.run(s.order.cell, new OrderRequest({ id: 'ab' })),
+          (s) => s.order.cell.run(new OrderRequest({ id: 'ab' })),
         ),
         Then('the response carries the rejection in the ledger')((s) => {
           expect(s.outcome).toStrictEqual(new OrderRequest({ id: 'after-rejected:too short:ab' }))
@@ -153,7 +153,7 @@ Feature('Chaining two orders through the caller')
         ),
         When('the order runs with an empty id')(
           'exit',
-          (s) => Effect.exit(Cell.run(s.order.cell, new OrderRequest({ id: '' }))),
+          (s) => Effect.exit(s.order.cell.run(new OrderRequest({ id: '' }))),
         ),
         Then('the run fails with the refusal reason')((s) => {
           expect(s.exit).toStrictEqual(Exit.fail(new OrderRefused({ id: '', why: 'empty' })))

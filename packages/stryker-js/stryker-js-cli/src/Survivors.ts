@@ -210,7 +210,7 @@ export function runSurvivorsAdmission(
   S.SchemaError | SurvivorsRejection | ConfigFileNotFoundError | ConfigFileUnreadableError | ConfigFileInvalidError,
   FileSystem.FileSystem | Path.Path | Module
 > {
-  return Cell.run(survivorsAdmissionCell(basePath), cliOptions)
+  return survivorsAdmissionCell(basePath).run(cliOptions)
 }
 
 function resolveSurvivorsRunOptions(
