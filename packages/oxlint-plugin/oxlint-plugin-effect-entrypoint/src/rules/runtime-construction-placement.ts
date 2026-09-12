@@ -4,6 +4,7 @@ import {
   EAGER_CONSTRUCTION_ACTUAL,
   EAGER_CONSTRUCTION_EXPECTED,
   EAGER_CONSTRUCTION_FIX,
+  EDGE_BASENAMES,
   MANAGED_RUNTIME_NAMESPACE,
   MAX_ALIAS_HOPS,
   meta,
@@ -150,6 +151,8 @@ export const runtimeConstructionPlacement = defineRule({
   create(context: Context) {
     if (context.filename.endsWith('.tst.ts')) return {}
 
+    const basename = context.filename.split(/[\\/]/u).pop() ?? context.filename
+
     let bindings: ReadonlyMap<string, ImportedName> = new Map()
 
     return {
@@ -183,6 +186,8 @@ export const runtimeConstructionPlacement = defineRule({
         }
 
         if (tracked.namespace !== MANAGED_RUNTIME_NAMESPACE) return
+
+        if (EDGE_BASENAMES.includes(basename)) return
 
         context.report({
           node: callee,

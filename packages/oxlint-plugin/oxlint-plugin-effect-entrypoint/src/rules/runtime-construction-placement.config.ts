@@ -25,6 +25,8 @@ export const TRACKED_WIRING_CALLS: readonly TrackedWiringCall[] = [
 
 export const MAX_ALIAS_HOPS = 8
 
+export const EDGE_BASENAMES: readonly string[] = ['main.ts', 'global-setup.ts']
+
 export const WIRING_PER_CALL_EXPECTED =
   'wiring built once per process and deferred to first use in a module-scope lazy memoized closure' as const
 export const WIRING_PER_CALL_ACTUAL =
@@ -45,7 +47,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Ban runtime construction outside a module-scope lazy memoized bootstrap closure. Two verdicts, both decided from the call itself: `ManagedRuntime.make`, `Layer.provide`, or `Cell.provide` called inside a function body rebuilds wiring per call, and `ManagedRuntime.make` evaluated at module scope constructs the runtime at import time. Lawful and silent: construction inside a module-scope closure deferred to first use, module-scope `Layer.provide`/`Cell.provide` graph composition, and every `cell.run(input)` arrow application at any depth. Callers resolve through their import specifier (`effect`, `@systemfsoftware/effect-cell-types`), so an aliased import, a namespace import, and a member taken off either one report the same; a module-scope `const` alias of an import is followed, a chain through another module is not. Runtime test files (`.test.ts`, `.spec.ts`) are in scope - vitest executes them, so the shapes are unlawful there - but a `.tst.ts` type-test file runs nowhere, so it is out of scope.',
+      'Ban runtime construction outside a module-scope lazy memoized bootstrap closure. Two verdicts, both decided from the call itself: `ManagedRuntime.make`, `Layer.provide`, or `Cell.provide` called inside a function body rebuilds wiring per call, and `ManagedRuntime.make` evaluated at module scope constructs the runtime at import time. Lawful and silent: construction inside a module-scope closure deferred to first use, module-scope `Layer.provide`/`Cell.provide` graph composition, and every `cell.run(input)` arrow application at any depth. Callers resolve through their import specifier (`effect`, `@systemfsoftware/effect-cell-types`), so an aliased import, a namespace import, and a member taken off either one report the same; a module-scope `const` alias of an import is followed, a chain through another module is not. Runtime test files (`.test.ts`, `.spec.ts`) are in scope - vitest executes them, so the shapes are unlawful there - but a `.tst.ts` type-test file runs nowhere, so it is out of scope. The runner-contracted edges - `main.ts` and `global-setup.ts`, exact basenames in the EP1 designation style, never a role suffix - are exempt from the eager-construction verdict alone: the runner owns the process and imports that module once, so composing the runtime at its module scope is the sanctioned edge; construction inside a function body still reports there.',
   },
   schema: [Options],
   messages: {

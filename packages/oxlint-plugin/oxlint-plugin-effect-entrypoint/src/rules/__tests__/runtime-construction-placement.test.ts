@@ -192,6 +192,37 @@ test('verdicts', () => getRuntime().runPromise(verdict()))`,
 expect(ManagedRuntime.make(AppLive)).type.toBe<ManagedRuntime.ManagedRuntime<AppLive, never>>()`,
       filename: '/repo/pkg/test-types/Cell.tst.ts',
     },
+    {
+      // Kills the mutant that reports the runner-contracted edge: vitest imports
+      // this module once per process, so composition here is once per process.
+      name: 'Should_Pass_When_TheRunnerHookEdgeComposesAtModuleScope',
+      code: `import { ManagedRuntime } from 'effect'
+
+const runtime = ManagedRuntime.make(AppLive)
+
+runtime.runPromise(program)`,
+      filename: 'src/global-setup.ts',
+    },
+    {
+      // Kills the mutant that designates only the runner hook: the process entry
+      // is this fleet's other runner-contracted edge.
+      name: 'Should_Pass_When_TheProcessEntryComposesAtModuleScope',
+      code: `import { ManagedRuntime } from 'effect'
+
+const runtime = ManagedRuntime.make(AppLive)
+
+runtime.runPromise(program)`,
+      filename: 'src/main.ts',
+    },
+    {
+      // Kills the mutant that reads the basename with the POSIX separator alone:
+      // the path reaching the rule is the host's, and the host may be Windows.
+      name: 'Should_Pass_When_TheEdgePathUsesTheBackslashSeparator',
+      code: `import { ManagedRuntime } from 'effect'
+
+const runtime = ManagedRuntime.make(AppLive)`,
+      filename: 'C:\\repo\\pkg\\global-setup.ts',
+    },
   ],
   invalid: [
     {
@@ -361,6 +392,29 @@ export class Boot {
 }`,
       filename: 'src/boot.ts',
       errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
+    },
+    {
+      // Kills the mutant that exempts the edge module wholesale: the exemption
+      // covers module-scope composition, never wiring built inside a call.
+      name: 'Should_Report_When_TheRunnerHookEdgeBuildsTheRuntimeInsideAHook',
+      code: `import { ManagedRuntime } from 'effect'
+
+export function setup(project) {
+  const runtime = ManagedRuntime.make(AppLive)
+  project.provide('contract', runtime)
+}`,
+      filename: 'src/global-setup.ts',
+      errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
+    },
+    {
+      // Kills the mutant that matches the edge name anywhere in the path rather
+      // than the whole basename.
+      name: 'Should_Report_When_TheBasenameOnlyEndsWithAnEdgeName',
+      code: `import { ManagedRuntime } from 'effect'
+
+const runtime = ManagedRuntime.make(AppLive)`,
+      filename: 'src/my-global-setup.ts',
+      errors: [eagerConstruction],
     },
   ],
 })

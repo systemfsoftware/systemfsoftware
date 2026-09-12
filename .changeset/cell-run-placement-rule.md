@@ -14,6 +14,6 @@ let runtime
 export const getRuntime = () => (runtime ??= ManagedRuntime.make(AppLive))
 ```
 
-— module-scope `Layer.provide`/`Cell.provide` layer graphs, and `cell.run(input)` arrow application anywhere, inside an `Effect.gen` body or not. Callers are resolved through their import specifier, so an aliased import (`import { ManagedRuntime as M }`) and a namespace import (`import * as Eff`) report the same. Every file is judged by shape, tests included — except a `.tst.ts` type-test file, which runs nowhere and is out of scope.
+— module-scope `Layer.provide`/`Cell.provide` layer graphs, and `cell.run(input)` arrow application anywhere, inside an `Effect.gen` body or not — as is module-scope composition in a runner-contracted edge, `main.ts` (the process entry) or `global-setup.ts` (a test runner's globalSetup hook module), designated by exact basename. The edge exemption covers module-scope construction alone: wiring built inside a function body still reports there. Callers are resolved through their import specifier, so an aliased import (`import { ManagedRuntime as M }`) and a namespace import (`import * as Eff`) report the same. Every file is judged by shape, tests included — except a `.tst.ts` type-test file, which runs nowhere and is out of scope.
 
 The rule ships in `configs.recommended`, so the standard recommended spread enables it at `error`. The module-scope lazy memoized bootstrap — a runtime constructed once on first use — and every `cell.run(input)` arrow application are lawful, so a clean codebase reports nothing.
