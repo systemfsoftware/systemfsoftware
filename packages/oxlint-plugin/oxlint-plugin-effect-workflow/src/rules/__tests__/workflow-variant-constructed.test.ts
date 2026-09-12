@@ -118,6 +118,7 @@ export const chainAdmitDecisions = Workflow.andThen(
   Decoded,
   admitDecodedCommand,
   SettleCommand,
+  session,
   totalAdmitDecision,
 )
 `,

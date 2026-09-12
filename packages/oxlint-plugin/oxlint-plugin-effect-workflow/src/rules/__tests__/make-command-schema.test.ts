@@ -201,7 +201,7 @@ ruleTester.run('make-command-schema', makeCommandSchema, {
     {
       name: 'Should_Report_When_TheAndThenCommandIsAnAsAssertion',
       code:
-        `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.andThen({} as unknown as Cmd, upstream, NextCmd, downstream)`,
+        `${IMPORT}\n${SCHEMA}\n${CMD}\nexport const d = Workflow.andThen({} as unknown as Cmd, upstream, NextCmd, session, downstream)`,
       filename: '/repo/pkg/src/d.workflow.ts',
       errors: [assertedError('TSAsExpression')],
     },

@@ -37,7 +37,7 @@ ruleTester.run('workflow-file-make-presence', workflowFileMakePresence, {
     },
     {
       name: 'Should_Pass_When_AWorkflowFileConstructsWithAndThenOnly',
-      code: `${IMPORT}\nexport const decide = Workflow.andThen(Cmd, upstream, NextCmd, downstream)`,
+      code: `${IMPORT}\nexport const decide = Workflow.andThen(Cmd, upstream, NextCmd, session, downstream)`,
       filename: '/repo/pkg/src/admit-order.workflow.ts',
     },
     {

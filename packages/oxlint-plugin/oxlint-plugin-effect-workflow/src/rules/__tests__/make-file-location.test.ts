@@ -79,6 +79,11 @@ ruleTester.run('make-file-location', makeFileLocation, {
       filename: '/repo/pkg/src/decide.workflow.ts',
     },
     {
+      name: 'Should_Pass_When_AWorkflowFileConstructsOnceWithAndThen',
+      code: `${IMPORT}\nexport const decide = Workflow.andThen(Cmd, upstream, NextCmd, session, downstream)`,
+      filename: '/repo/pkg/src/admit-order.workflow.ts',
+    },
+    {
       name: 'Should_Ignore_When_AnUnrecognizedWorkflowMemberIsCalled',
       code: `${IMPORT}\nexport const adapter = Workflow.compose((input: number) => input)`,
       filename: '/repo/pkg/src/executor.ts',
@@ -91,7 +96,7 @@ ruleTester.run('make-file-location', makeFileLocation, {
     {
       name: 'Should_Pass_When_AConstructionIsAProbeInATypeTestFile',
       code:
-        `${IMPORT}\nconst probe = Workflow.andThen(Cmd, decideUpstream, NextCmd, decideDownstream)\nexpect(Workflow.total(Cmd, decide)).type.toBe<unknown>()\nexpect(probe).type.toBe<unknown>()`,
+        `${IMPORT}\nconst probe = Workflow.andThen(Cmd, decideUpstream, NextCmd, session, decideDownstream)\nexpect(Workflow.total(Cmd, decide)).type.toBe<unknown>()\nexpect(probe).type.toBe<unknown>()`,
       filename: '/repo/pkg/test-types/Workflow.tst.ts',
     },
   ],
@@ -179,7 +184,7 @@ ruleTester.run('make-file-location', makeFileLocation, {
     {
       name: 'Should_Report_When_AWorkflowFileConstructsWithMakeAndAndThen',
       code:
-        `${IMPORT}\nexport const a = Workflow.make((input: number) => input)\nexport const b = Workflow.andThen(Cmd, a, NextCmd, decideNext)`,
+        `${IMPORT}\nexport const a = Workflow.make((input: number) => input)\nexport const b = Workflow.andThen(Cmd, a, NextCmd, session, decideNext)`,
       filename: '/repo/pkg/src/decide.workflow.ts',
       errors: [secondError('decide.workflow.ts')],
     },

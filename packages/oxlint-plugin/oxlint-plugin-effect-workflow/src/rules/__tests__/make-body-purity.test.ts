@@ -72,7 +72,7 @@ ruleTester.run('make-body-purity', makeBodyPurity, {
 import { admitDecoded } from './admit-decoded-command.workflow.js'
 import { decideNext } from './decide-next.workflow.js'
 
-export const chained = Workflow.andThen(Cmd, admitDecoded, NextCmd, decideNext)`,
+export const chained = Workflow.andThen(Cmd, admitDecoded, NextCmd, session, decideNext)`,
       filename: '/repo/pkg/src/chain-decisions.workflow.ts',
     },
     {
