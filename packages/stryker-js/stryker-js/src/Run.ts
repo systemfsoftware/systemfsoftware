@@ -92,5 +92,6 @@ export {
   VerdictReached,
 }
 export type { RunEvent as RunEventType }
-export { ModeSignal, MutantStatus, OutputMode, RunPhase } from './Run.schema.js'
-export type { Location, Position, RunTerminalEvent } from './Run.schema.js'
+export type { Location, Position } from './Report.schema.js'
+export { ModeSignal, OutputMode, RunPhase } from './Run.schema.js'
+export type { RunTerminalEvent } from './Run.schema.js'

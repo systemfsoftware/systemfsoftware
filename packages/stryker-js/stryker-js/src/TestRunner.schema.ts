@@ -1,6 +1,7 @@
 import * as S from 'effect/Schema'
 
-import { Mutant, PositionSchema } from './Mutant.schema.js'
+import { Mutant } from './Mutant.schema.js'
+import { PositionSchema } from './Report.schema.js'
 
 export const DryRunStatus = S.Literals(['complete', 'error', 'timeout'])
 export type DryRunStatus = typeof DryRunStatus.Type

@@ -2,9 +2,7 @@ import * as S from 'effect/Schema'
 import type { StandardSchemaV1 } from 'effect/StandardSchema'
 
 import { MetricsResultSchema } from './Metrics.schema.js'
-import { LocationSchema } from './Mutant.schema.js'
-import { MutationTestResultSchema } from './Report.schema.js'
-import { MutantStatus } from './Run.schema.js'
+import { LocationSchema, MutantStatusSchema, MutationTestResultSchema } from './Report.schema.js'
 import type { StrykerOptions } from './Schema.js'
 import { TestResultSchema, TestRunnerCapabilitiesSchema } from './TestRunner.schema.js'
 
@@ -16,15 +14,15 @@ export const ReporterEventKind = S.Literals([
 ])
 export type ReporterEventKind = typeof ReporterEventKind.Type
 
-const RunTimingSchema = S.Struct({
+export const RunTimingSchema = S.Struct({
   net: S.Finite,
   overhead: S.Finite,
 })
 export type RunTiming = typeof RunTimingSchema.Type
 
-const ReporterPlanKind = S.Literals(['EarlyResult', 'Run'])
+export const ReporterPlanKind = S.Literals(['EarlyResult', 'Run'])
 
-const ReporterPlanDescriptorSchema = S.Struct({
+export const ReporterPlanDescriptorSchema = S.Struct({
   mutantId: S.String,
   plan: ReporterPlanKind,
   netTime: S.Finite,
@@ -49,7 +47,7 @@ export class MutationTestingPlanReady extends S.TaggedClass<MutationTestingPlanR
 
 export class MutantTested extends S.TaggedClass<MutantTested>()('mutantTested', {
   id: S.String,
-  status: MutantStatus,
+  status: MutantStatusSchema,
   file: S.String,
   location: LocationSchema,
   mutator: S.String,

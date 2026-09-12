@@ -110,7 +110,10 @@ export {
   ReporterFailed,
   type ReporterInit,
   type ReporterPlanDescriptor,
+  ReporterPlanDescriptorSchema,
+  ReporterPlanKind,
   type RunTiming,
+  RunTimingSchema,
 } from './ReporterEvent.schema.js'
 export {
   Heartbeat,
@@ -142,6 +145,7 @@ export {
   type KnownKeys,
   LogLevel,
   type LogLevelType,
+  type OnlyObject,
   PackageManager,
   type PackageManagerType,
   type PartialStrykerOptions,
@@ -157,6 +161,7 @@ export {
 } from './Schema.js'
 export {
   type CommandRunnerOptions,
+  type DeepOptional,
   type MutationScoreThresholds,
   MutationScoreThresholdsSchema,
 } from './Schema.schema.js'

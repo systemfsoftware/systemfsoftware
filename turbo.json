@@ -62,7 +62,8 @@
       "outputLogs": "errors-only",
       "dependsOn": [
         "^build",
-        "build"
+        "build",
+        "api:check"
       ],
       "outputs": [
         "coverage/**"
@@ -210,7 +211,8 @@
         "package.json"
       ],
       "dependsOn": [
-        "build"
+        "build",
+        "api:check"
       ]
     }
   }

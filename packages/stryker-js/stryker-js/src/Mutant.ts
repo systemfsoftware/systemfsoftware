@@ -3,12 +3,14 @@ import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'
 
 import type { MutantRunOptions } from './TestRunner.js'
+import type { MutantCoverage } from './TestRunner.js'
 
 import { Mutant } from './Mutant.schema.js'
-import type { Position } from './Mutant.schema.js'
+import type { MutantStatus, Position } from './Report.schema.js'
 
-export { LocationSchema, Mutant, PositionSchema } from './Mutant.schema.js'
-export type { Location, Position } from './Mutant.schema.js'
+export { Mutant } from './Mutant.schema.js'
+export { LocationSchema, PositionSchema } from './Report.schema.js'
+export type { Location, Position } from './Report.schema.js'
 
 export type CoverageData = Record<string, number>
 
@@ -19,15 +21,7 @@ export interface Coverage {
   readonly perTest: CoveragePerTestId
 }
 
-export type MutantStatus =
-  | 'Killed'
-  | 'Survived'
-  | 'NoCoverage'
-  | 'Timeout'
-  | 'CompileError'
-  | 'RuntimeError'
-  | 'Ignored'
-  | 'Pending'
+export type { MutantStatus } from './Report.schema.js'
 
 export interface EarlyResultPlan {
   readonly plan: 'EarlyResult'
@@ -76,7 +70,7 @@ export interface InstrumenterContext {
   hitLimit?: number
 }
 
-export type MutantCoverage = Coverage
+export type { MutantCoverage } from './TestRunner.js'
 
 export function normalizeFileName(fileName: string): string {
   return fileName.replace(/\\/g, '/')

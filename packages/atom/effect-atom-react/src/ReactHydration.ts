@@ -39,8 +39,8 @@ export interface HydrationBoundaryProps {
  * immediately, while values for existing Atoms are deferred until after commit
  * so transition data does not update the current UI before React accepts it.
  *
- * @see {@link Hydration.dehydrate} for producing dehydrated Atom state
- * @see {@link Hydration.hydrate} for lower-level non-React hydration
+ * @see `Hydration.dehydrate` for producing dehydrated Atom state
+ * @see `Hydration.hydrate` for lower-level non-React hydration
  *
  * @category components
  * @since 4.0.0

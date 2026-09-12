@@ -29,6 +29,10 @@ import {
 import { nodeModuleLayer } from '../platform/node.js'
 import { launchWorker, workerSocketPath } from './worker-runtime.js'
 
+declare global {
+  var __mutantCoverage__: unknown
+}
+
 const isCompleteDryRun = (result: DryRunResult): result is CompleteDryRunResult => result.status === 'complete'
 
 const COVERAGE_SETTLED: readonly ((result: DryRunResult, options: DryRunOptions) => boolean)[] = [
