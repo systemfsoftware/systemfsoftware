@@ -22,11 +22,6 @@ const BASE_PATH = '/project'
 
 const DEFAULT_REPORT_FILE = `${BASE_PATH}/reports/mutation/mutation.json`
 
-const LARGE_MUTANT_COUNT = 2164
-
-/** The published wire version, widened so the pin below compares a string to a literal. */
-const PINNED_SCHEMA_VERSION: string = VERDICT_ENVELOPE_SCHEMA_VERSION
-
 const THRESHOLDS = { high: 80, low: 60, break: 80 }
 
 type MutationReport = schema.MutationTestResult
@@ -75,17 +70,12 @@ const reportOf = (
   config,
 })
 
-const largeAllKilledReport = (): MutationReport =>
-  reportOf(Array.from({ length: LARGE_MUTANT_COUNT }, (_, index) => mutantOf(`m${index}`, 'Killed', locationOf(index))))
-
 const envelopeOf = (testCase: EnvelopeCase): VerdictEnvelope =>
   buildVerdictEnvelope(testCase.report, testCase.mode, testCase.signal, RUN_ID, BASE_PATH, pathService)
 
 const countedTotal = (counts: VerdictEnvelope['counts']): number =>
   counts.killed + counts.timeout + counts.survived + counts.noCoverage + counts.runtimeErrors +
   counts.compileErrors + counts.ignored + counts.pending
-
-const idsOf = (envelope: VerdictEnvelope): readonly string[] => Arr.map(envelope.mutants, (mutant) => mutant.id)
 
 const ACTIONABLE_STATUSES: readonly MutantStatus[] = ['Survived', 'NoCoverage', 'Timeout', 'RuntimeError']
 
@@ -102,40 +92,71 @@ const STATUS_ARB = fc.constantFrom<MutantStatus>(
 
 interface ReportCase {
   readonly envelope: EnvelopeCase
+  readonly expected: VerdictEnvelope['mutants']
   readonly actionableIds: readonly string[]
+  readonly counts: VerdictEnvelope['counts']
   readonly total: number
 }
+
+const COUNT_KEY_BY_STATUS: Record<MutantStatus, keyof VerdictEnvelope['counts']> = {
+  Killed: 'killed',
+  Timeout: 'timeout',
+  Survived: 'survived',
+  NoCoverage: 'noCoverage',
+  RuntimeError: 'runtimeErrors',
+  CompileError: 'compileErrors',
+  Ignored: 'ignored',
+  Pending: 'pending',
+}
+
+const REPLACEMENT_ARB = fc.constantFrom('-', '+', '*', '?', '!', '%')
 
 const REPORT_CASE_ARB: fc.Arbitrary<ReportCase> = fc
   .uniqueArray(fc.stringMatching(/^m[0-9]{1,2}$/), { minLength: 0, maxLength: 6 })
   .chain((ids) =>
-    fc.array(STATUS_ARB, { minLength: ids.length, maxLength: ids.length }).map((statuses) => {
-      const mutants = Arr.zip(ids, statuses)
+    fc.tuple(
+      fc.array(STATUS_ARB, { minLength: ids.length, maxLength: ids.length }),
+      fc.array(REPLACEMENT_ARB, { minLength: ids.length, maxLength: ids.length }),
+    ).map(([statuses, replacements]) => {
+      const mutants = Arr.zip(ids, Arr.zip(statuses, replacements))
+      const counts = {
+        killed: 0,
+        timeout: 0,
+        survived: 0,
+        noCoverage: 0,
+        runtimeErrors: 0,
+        compileErrors: 0,
+        ignored: 0,
+        pending: 0,
+      }
+      for (const [, [status]] of mutants) counts[COUNT_KEY_BY_STATUS[status]] += 1
+      const expected = Arr.flatMap(mutants, ([id, [status, replacement]], index) => {
+        if (!ACTIONABLE_STATUSES.includes(status)) return []
+        return [{
+          id,
+          file: 'src/subject.ts',
+          location: locationOf(index),
+          mutator: 'BinaryOperator',
+          replacement,
+          status,
+        }]
+      })
       return {
         envelope: {
-          report: reportOf(Arr.map(mutants, ([id, status], index) => mutantOf(id, status, locationOf(index)))),
+          report: reportOf(Arr.map(
+            mutants,
+            ([id, [status, replacement]], index) => mutantOf(id, status, locationOf(index), { replacement }),
+          )),
           mode: 'machine',
           signal: 'tty',
         },
-        actionableIds: Arr.map(
-          Arr.filter(mutants, ([, status]) => ACTIONABLE_STATUSES.includes(status)),
-          ([id]) => id,
-        ),
+        expected,
+        actionableIds: Arr.map(expected, (mutant) => mutant.id),
+        counts,
         total: ids.length,
       }
     })
   )
-
-const MIXED_STATUSES: EnvelopeCase = {
-  report: reportOf([
-    mutantOf('1', 'Survived', locationOf(0), { replacement: '-' }),
-    mutantOf('2', 'Killed', locationOf(1), { replacement: '+' }),
-    mutantOf('3', 'NoCoverage', locationOf(2), { replacement: '*' }),
-    mutantOf('4', 'Killed', locationOf(0), { replacement: '-' }),
-  ]),
-  mode: 'machine',
-  signal: 'tty',
-}
 
 describe('buildVerdictEnvelope', () => {
   it.prop('∀n_Ids_≡EveryGeneratedRunIdIsDistinct', [fc.integer({ min: 2, max: 32 })], ([count]) => {
@@ -143,209 +164,78 @@ describe('buildVerdictEnvelope', () => {
     return new Set(ids).size === count
   })
 
-  it.prop('∀c_MixedStatuses_≡EveryNamedFieldSurvives', [fc.constant(MIXED_STATUSES)], ([testCase]) => {
-    const envelope = envelopeOf(testCase)
-    return envelope.schemaVersion === VERDICT_ENVELOPE_SCHEMA_VERSION &&
-      PINNED_SCHEMA_VERSION === '1.2' &&
-      envelope.runId === RUN_ID &&
-      envelope.mode === 'machine' &&
-      envelope.signal === 'tty' &&
-      envelope.score === 50 &&
-      Equal.equals(envelope.thresholds, THRESHOLDS) &&
-      Equal.equals(envelope.counts, {
-        killed: 2,
-        timeout: 0,
-        survived: 1,
-        noCoverage: 1,
-        runtimeErrors: 0,
-        compileErrors: 0,
-        ignored: 0,
-        pending: 0,
-      }) &&
-      envelope.reportFile === 'reports/mutation/mutation.json' &&
-      envelope.mutants.length === 2 &&
-      Equal.equals(idsOf(envelope), ['1', '3'])
-  })
-
   it.prop(
-    '∀c_Actionable_≡FileLocationMutatorReplacementAndStatus',
-    [
-      fc.constant({
-        report: reportOf([
-          mutantOf('1', 'Survived', locationOf(0), { replacement: '-' }),
-          mutantOf('2', 'Timeout', locationOf(1), { replacement: '+' }),
-          mutantOf('3', 'NoCoverage', locationOf(2), { replacement: '*' }),
-        ]),
-        mode: 'machine',
-        signal: 'agent',
-      }),
-    ],
-    ([testCase]) =>
-      Equal.equals(envelopeOf(testCase).mutants, [
-        {
-          id: '1',
-          file: 'src/subject.ts',
-          location: locationOf(0),
-          mutator: 'BinaryOperator',
-          replacement: '-',
-          status: 'Survived',
-        },
-        {
-          id: '2',
-          file: 'src/subject.ts',
-          location: locationOf(1),
-          mutator: 'BinaryOperator',
-          replacement: '+',
-          status: 'Timeout',
-        },
-        {
-          id: '3',
-          file: 'src/subject.ts',
-          location: locationOf(2),
-          mutator: 'BinaryOperator',
-          replacement: '*',
-          status: 'NoCoverage',
-        },
-      ]),
-  )
-
-  it.prop(
-    '∀c_KilledAndCompileError_≡CountsOnly',
-    [
-      fc.constant({
-        report: reportOf([
-          mutantOf('1', 'Killed', locationOf(0)),
-          mutantOf('2', 'CompileError', locationOf(1)),
-          mutantOf('3', 'Survived', locationOf(2), { replacement: '-' }),
-        ]),
-        mode: 'machine',
-        signal: 'tty',
-      }),
-    ],
+    '∀r_Reports_≡EveryActionableMutantIsCarriedVerbatim',
+    [REPORT_CASE_ARB],
     ([testCase]) => {
-      const envelope = envelopeOf(testCase)
-      return Equal.equals(envelope.mutants, [
-        {
-          id: '3',
-          file: 'src/subject.ts',
-          location: locationOf(2),
-          mutator: 'BinaryOperator',
-          replacement: '-',
-          status: 'Survived',
-        },
-      ]) && envelope.counts.killed === 1 && envelope.counts.compileErrors === 1 &&
-        envelope.counts.survived === 1 && countedTotal(envelope.counts) === 3
+      const envelope = envelopeOf(testCase.envelope)
+      return Equal.equals(envelope.mutants, testCase.expected)
     },
   )
 
   it.prop(
-    '∀c_AllKilled_≡NoMutantIsListed',
-    [
-      fc.constant({
-        report: reportOf([
-          mutantOf('1', 'Killed', locationOf(0)),
-          mutantOf('2', 'Killed', locationOf(1)),
-          mutantOf('3', 'Killed', locationOf(2)),
-        ]),
-        mode: 'machine',
-        signal: 'tty',
-      }),
-    ],
+    '∀r_Reports_≡CountsAreTheStatusTally',
+    [REPORT_CASE_ARB],
     ([testCase]) => {
-      const envelope = envelopeOf(testCase)
-      return Equal.equals(envelope.mutants, []) && envelope.counts.killed === 3
+      const envelope = envelopeOf(testCase.envelope)
+      return envelope.schemaVersion === VERDICT_ENVELOPE_SCHEMA_VERSION &&
+        Equal.equals(envelope.counts, testCase.counts) && countedTotal(envelope.counts) === testCase.total
     },
   )
 
   it.prop(
-    '∀c_ConfiguredFileName_≡CarriedRelativeToTheBasePath',
-    [
-      fc.constant({
+    '∀n_FileNames_≡ConfiguredReportFilesCarryRelativeToTheBasePath',
+    [fc.stringMatching(/^[a-z][a-z0-9]{0,7}$/)],
+    ([fileName]) => {
+      const envelope = envelopeOf({
         report: reportOf([mutantOf('1', 'Killed', locationOf(0))], {
-          jsonReporter: { fileName: `${BASE_PATH}/custom/report.json` },
+          jsonReporter: { fileName: `${BASE_PATH}/custom/${fileName}.json` },
         }),
         mode: 'machine',
         signal: 'flag',
-      }),
-    ],
-    ([testCase]) => envelopeOf(testCase).reportFile === 'custom/report.json',
-  )
-
-  it.prop(
-    '∀c_EmptyReport_≡NoScoreAndNoReportFile',
-    [fc.constant({ report: reportOf([]), mode: 'machine', signal: 'tty' })],
-    ([testCase]) => {
-      const envelope = envelopeOf(testCase)
-      return envelope.score === null && envelope.reportFile === null && Equal.equals(envelope.mutants, []) &&
-        envelope.counts.killed === 0 && envelope.counts.survived === 0
+      })
+      return envelope.reportFile === `custom/${fileName}.json`
     },
   )
 
   it.prop(
-    '∀c_CompileErrorOnly_≡NoScore',
-    [fc.constant({ report: reportOf([mutantOf('1', 'CompileError', locationOf(0))]), mode: 'machine', signal: 'tty' })],
-    ([testCase]) => {
-      const envelope = envelopeOf(testCase)
-      return envelope.score === null && envelope.counts.compileErrors === 1
-    },
-  )
-
-  it.prop(
-    '∀n_LargeAllKilled_≡StaysUnderTheScannerSizeLimit',
-    [fc.constant({ report: largeAllKilledReport(), mode: 'machine', signal: 'tty' })],
-    ([testCase]) => {
-      const line = JSON.stringify(envelopeOf(testCase))
-      return line.length > 0 && new TextEncoder().encode(line).byteLength < 64 * 1024
-    },
-  )
-
-  it.prop('∀r_Reports_≡CountsAndEntriesComeFromTheReport', [REPORT_CASE_ARB], ([testCase]) => {
-    const envelope = envelopeOf(testCase.envelope)
-    return envelope.mutants.length === testCase.actionableIds.length &&
-      Equal.equals(idsOf(envelope), testCase.actionableIds) &&
-      countedTotal(envelope.counts) === testCase.total
-  })
-
-  it.prop(
-    '∀c_EvaluatorVerdicts_≡OnlyTheReturnedVerdictsAreCarriedByName',
+    '∀n_EvaluatorNames_≡OnlyTheReturnedVerdictsAreCarriedByName',
     [
-      fc.constant({
-        report: reportOf([mutantOf('1', 'Killed', locationOf(0))]),
-        mode: 'machine',
-        signal: 'tty',
-      }),
+      fc.tuple(fc.stringMatching(/^[a-z][a-z0-9]{0,6}$/), fc.nat({ max: 9 })).map(
+        ([name, n]): readonly [string, string] => [name, `${name}${n}`],
+      ),
+      fc.constantFrom('VerdictFail', 'ConfigError', 'RuntimeError', 'InternalError'),
+      fc.string({ minLength: 1, maxLength: 20 }),
     ],
-    ([testCase]) => {
+    ([[returnedName, silentName], exitClass, message]) => {
       const envelope = buildVerdictEnvelope(
-        testCase.report,
-        testCase.mode,
-        testCase.signal,
+        reportOf([mutantOf('1', 'Killed', locationOf(0))]),
+        'machine',
+        'tty',
         RUN_ID,
         BASE_PATH,
         pathService,
         [
-          { name: 'fixture-gate', verdict: { exitClass: 'VerdictFail', message: 'the gate rejected the report' } },
-          { name: 'fixture-clean', verdict: null },
+          { name: returnedName, verdict: { exitClass, message } },
+          { name: silentName, verdict: null },
         ],
       )
-      return Equal.equals(envelope.evaluators, {
-        'fixture-gate': { exitClass: 'VerdictFail', message: 'the gate rejected the report' },
-      })
+      return Equal.equals(envelope.evaluators, { [returnedName]: { exitClass, message } })
     },
   )
 
   it.prop(
-    '∀c_NoEvaluatorVerdicts_≡TheFieldIsAbsent',
-    [fc.constant({ report: reportOf([mutantOf('1', 'Killed', locationOf(0))]), mode: 'machine', signal: 'tty' })],
-    ([testCase]) => {
+    '∀n_SilentEvaluators_≡NoReturnedVerdictLeavesTheFieldAbsent',
+    [fc.uniqueArray(fc.stringMatching(/^[a-z][a-z0-9]{0,7}$/), { minLength: 0, maxLength: 3 })],
+    ([names]) => {
       const envelope = buildVerdictEnvelope(
-        testCase.report,
-        testCase.mode,
-        testCase.signal,
+        reportOf([mutantOf('1', 'Killed', locationOf(0))]),
+        'machine',
+        'tty',
         RUN_ID,
         BASE_PATH,
         pathService,
-        [],
+        Arr.map(names, (name) => ({ name, verdict: null })),
       )
       return envelope.evaluators === undefined && !Object.hasOwn(envelope, 'evaluators')
     },

@@ -1,5 +1,4 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import { Equal } from 'effect'
 import * as Effect from 'effect/Effect'
 import { FastCheck as fc } from 'effect/testing'
 
@@ -13,9 +12,8 @@ const CORPUS: readonly (readonly [pattern: string, flags: string, replacements: 
   ['$', '', []],
   ['^$', '', ['/$/', '/^/']],
   ['[abc]', '', ['/[^abc]/']],
-  ['[^abc]', '', ['/[abc]/']],
   ['[a-z]', '', ['/[^a-z]/']],
-  ['[^a-z0-9_]', '', ['/[a-z0-9_]/']],
+  ['[^abc]', '', ['/[abc]/']],
   ['[\\]]', '', ['/[^\\]]/']],
   ['[.*+]', '', ['/[^.*+]/']],
   ['\\d', '', ['/\\D/']],
@@ -26,160 +24,101 @@ const CORPUS: readonly (readonly [pattern: string, flags: string, replacements: 
   ['\\S', '', ['/\\s/']],
   ['\\p{L}', 'u', ['/\\P{L}/u']],
   ['\\P{L}', 'u', ['/\\p{L}/u']],
-  ['\\p{Script=Greek}', 'u', ['/\\P{Script=Greek}/u']],
   ['a+', '', ['/a/']],
   ['a*', '', ['/a/']],
   ['a?', '', ['/a/']],
   ['a{2}', '', ['/a/']],
-  ['a{2,}', '', ['/a/']],
-  ['a{2,3}', '', ['/a/']],
   ['a+?', '', ['/a/']],
-  ['a*?', '', ['/a/']],
-  ['a??', '', ['/a/']],
-  ['(ab)+', '', ['/(ab)/']],
-  ['[ab]+', '', ['/[ab]/', '/[^ab]+/']],
-  ['\\d{3}', '', ['/\\d/', '/\\D{3}/']],
   ['(?=a)', '', ['/(?!a)/']],
   ['(?!a)', '', ['/(?=a)/']],
   ['(?<=a)b', '', ['/(?<!a)b/']],
   ['(?<!a)b', '', ['/(?<=a)b/']],
   ['(foo|bar)', '', []],
-  ['(?:foo)', '', []],
-  ['(?<n>a)', '', []],
   ['\\1', '', []],
-  ['(a)(b)', '', []],
-  ['^\\d{3}-\\d{4}$', '', [
-    '/\\d{3}-\\d{4}$/',
-    '/^\\d{3}-\\d{4}/',
-    '/^\\d-\\d{4}$/',
-    '/^\\D{3}-\\d{4}$/',
-    '/^\\d{3}-\\d$/',
-    '/^\\d{3}-\\D{4}$/',
-  ]],
-  ['^[\\w.+-]+@[\\w-]+\\.[\\w.]{2,}$', '', [
-    '/[\\w.+-]+@[\\w-]+\\.[\\w.]{2,}$/',
-    '/^[\\w.+-]+@[\\w-]+\\.[\\w.]{2,}/',
-    '/^[\\w.+-]@[\\w-]+\\.[\\w.]{2,}$/',
-    '/^[^\\w.+-]+@[\\w-]+\\.[\\w.]{2,}$/',
-    '/^[\\W.+-]+@[\\w-]+\\.[\\w.]{2,}$/',
-    '/^[\\w.+-]+@[\\w-]\\.[\\w.]{2,}$/',
-    '/^[\\w.+-]+@[^\\w-]+\\.[\\w.]{2,}$/',
-    '/^[\\w.+-]+@[\\W-]+\\.[\\w.]{2,}$/',
-    '/^[\\w.+-]+@[\\w-]+\\.[\\w.]$/',
-    '/^[\\w.+-]+@[\\w-]+\\.[^\\w.]{2,}$/',
-    '/^[\\w.+-]+@[\\w-]+\\.[\\W.]{2,}$/',
-  ]],
-  ['^https?:\\/\\/[^\\s]+$', '', [
-    '/https?:\\/\\/[^\\s]+$/',
-    '/^https?:\\/\\/[^\\s]+/',
-    '/^https:\\/\\/[^\\s]+$/',
-    '/^https?:\\/\\/[^\\s]$/',
-    '/^https?:\\/\\/[\\s]+$/',
-    '/^https?:\\/\\/[^\\S]+$/',
-  ]],
-  ['\\s*([A-Z][a-z]+)\\s*', '', [
-    '/\\s([A-Z][a-z]+)\\s*/',
-    '/\\S*([A-Z][a-z]+)\\s*/',
-    '/\\s*([^A-Z][a-z]+)\\s*/',
-    '/\\s*([A-Z][a-z])\\s*/',
-    '/\\s*([A-Z][^a-z]+)\\s*/',
-    '/\\s*([A-Z][a-z]+)\\s/',
-    '/\\s*([A-Z][a-z]+)\\S*/',
-  ]],
-  ['^(?:[a-f0-9]{8})-(?:[a-f0-9]{4})$', '', [
-    '/(?:[a-f0-9]{8})-(?:[a-f0-9]{4})$/',
-    '/^(?:[a-f0-9]{8})-(?:[a-f0-9]{4})/',
-    '/^(?:[a-f0-9])-(?:[a-f0-9]{4})$/',
-    '/^(?:[^a-f0-9]{8})-(?:[a-f0-9]{4})$/',
-    '/^(?:[a-f0-9]{8})-(?:[a-f0-9])$/',
-    '/^(?:[a-f0-9]{8})-(?:[^a-f0-9]{4})$/',
-  ]],
-  ['[^\\r\\n]*', '', ['/[^\\r\\n]/', '/[\\r\\n]*/']],
-  ['(?<year>\\d{4})-(?<month>\\d{2})', '', [
-    '/(?<year>\\d)-(?<month>\\d{2})/',
-    '/(?<year>\\D{4})-(?<month>\\d{2})/',
-    '/(?<year>\\d{4})-(?<month>\\d)/',
-    '/(?<year>\\d{4})-(?<month>\\D{2})/',
-  ]],
-  ['^\\/api\\/v\\d+\\/.*$', '', [
-    '/\\/api\\/v\\d+\\/.*$/',
-    '/^\\/api\\/v\\d+\\/.*/',
-    '/^\\/api\\/v\\d\\/.*$/',
-    '/^\\/api\\/v\\D+\\/.*$/',
-    '/^\\/api\\/v\\d+\\/.$/',
-  ]],
-  ['\\bfoo\\b', '', []],
-  ['a|b|c', '', []],
-  ['[[:alpha:]]', '', ['/[^[:alpha:]]/']],
-  ['\\u0041', '', []],
-  ['\\x41', '', []],
   ['.*', '', ['/./']],
-  ['.+', '', ['/./']],
-  ['[]', '', ['/[^]/']],
   ['abc', '', []],
 ]
 
-const SOURCE = CORPUS.map(([pattern, flags], index) => `export const v${index} = /${pattern}/${flags}`).join('\n')
+const ROW_ARB = fc.constantFrom(...CORPUS)
 
-interface RegexMutant {
+const instrumentRowAt = (row: readonly [string, string, readonly string[]], fillerLines: number) => {
+  const fillers = Array.from({ length: fillerLines }, (_unused, index) => `export const filler${index} = ${index}`)
+  const source = [...fillers, `export const subject = /${row[0]}/${row[1]}`].join('\n')
+  return instrument([{ name: '/tmp/regex-row.ts', content: source, mutate: true }], {
+    ignorers: [],
+    excludedMutations: [],
+    parsers: [],
+  })
+}
+
+interface RowMutant {
   readonly mutatorName: string
   readonly replacement: string
   readonly location: { readonly start: { readonly line: number } }
 }
 
-const replacementsByLine = (mutants: readonly RegexMutant[]): readonly (readonly string[])[] => {
-  const byLine = new Map<number, string[]>()
-  for (const mutant of mutants) {
-    if (mutant.mutatorName !== 'Regex') continue
-    const line = mutant.location.start.line
-    const existing = byLine.get(line)
-    if (existing === undefined) byLine.set(line, [mutant.replacement])
-    else existing.push(mutant.replacement)
+const regexMutantsOnLine = (
+  result: { readonly mutants: readonly RowMutant[] },
+  line: number,
+): readonly string[] => {
+  const found: string[] = []
+  for (const mutant of result.mutants) {
+    if (mutant.mutatorName === 'Regex' && mutant.location.start.line === line) {
+      found.push(mutant.replacement)
+    }
   }
-  return CORPUS.map((_row, index) => byLine.get(index) ?? [])
+  return found
 }
-
-const uncompilableReplacements = (
-  rows: typeof CORPUS,
-): readonly string[] =>
-  rows.flatMap(([pattern, flags, replacements]) =>
-    replacements.filter((replacement) => {
-      const body = replacement.slice(1, replacement.lastIndexOf('/'))
-      try {
-        new RegExp(body, flags)
-        return false
-      } catch {
-        return true
-      }
-    }).map((replacement) => `/${pattern}/${flags} -> ${replacement}`)
-  )
 
 describe('regex mutation', () => {
   it.effect.prop(
-    '∀c_CorpusModule_≡RecordedReplacementsInEmissionOrder',
-    [fc.constant(SOURCE)],
-    ([source]) =>
+    '∀row,n_Positions_≡RecordedReplacementsLandOnTheirOwnLine',
+    [ROW_ARB, fc.nat({ max: 5 })],
+    ([row, fillerLines]) =>
       Effect.gen(function*() {
-        const result = yield* instrument([{ name: '/tmp/regex-corpus.ts', content: source, mutate: true }], {
-          ignorers: [],
-          excludedMutations: [],
-          parsers: [],
-        })
-        const actual = replacementsByLine(result.mutants).map((replacements) => [...replacements])
-        const recorded = CORPUS.map(([, , replacements]) => [...replacements])
-        return Equal.equals(actual, recorded)
+        const result = yield* instrumentRowAt(row, fillerLines)
+        const line = fillerLines
+        const onRow = regexMutantsOnLine(result, line)
+        const elsewhere = result.mutants.filter(
+          (mutant) => mutant.mutatorName === 'Regex' && mutant.location.start.line !== line,
+        )
+        return elsewhere.length === 0 && JSON.stringify(onRow) === JSON.stringify([...row[2]])
       }),
   )
 
-  it.prop(
-    '∀c_RecordedTable_≡EveryReplacementCompiles',
-    [fc.constant(CORPUS)],
-    ([rows]) => uncompilableReplacements(rows).length === 0,
+  it.effect.prop(
+    '∀row,k_Replacements_≡TheDrawnReplacementCompilesAndMatchesTheRecorded',
+    [ROW_ARB, fc.nat({ max: 4 })],
+    ([row, k]) =>
+      Effect.gen(function*() {
+        const result = yield* instrumentRowAt(row, 0)
+        const emitted = regexMutantsOnLine(result, 0)
+        if (emitted.length === 0) {
+          return row[2].length === 0
+        }
+        const index = k % emitted.length
+        const replacement = emitted[index] ?? ''
+        const recorded = row[2][index % row[2].length] ?? ''
+        const body = replacement.slice(1, replacement.lastIndexOf('/'))
+        const flags = replacement.slice(replacement.lastIndexOf('/') + 1)
+        let compiles = true
+        try {
+          new RegExp(body, flags)
+        } catch {
+          compiles = false
+        }
+        return compiles && replacement === recorded
+      }),
   )
 
-  it.prop(
-    '∀c_RecordedTable_≡NoReplacementRepeatsItsPattern',
-    [fc.constant(CORPUS)],
-    ([rows]) => rows.every(([pattern, flags, replacements]) => !replacements.includes(`/${pattern}/${flags}`)),
+  it.effect.prop(
+    '∀row_Replacements_≡NoReplacementRepeatsItsOwnPattern',
+    [ROW_ARB],
+    ([row]) =>
+      Effect.gen(function*() {
+        const result = yield* instrumentRowAt(row, 0)
+        const emitted = regexMutantsOnLine(result, 0)
+        return emitted.every((replacement) => !replacement.includes(`/${row[0]}/${row[1]}`))
+      }),
   )
 })

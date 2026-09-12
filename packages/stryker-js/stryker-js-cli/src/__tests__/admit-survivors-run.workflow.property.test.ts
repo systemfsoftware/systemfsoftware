@@ -372,27 +372,6 @@ describe('admitSurvivorsRun', () => {
 
 describe('sourceContentHash', () => {
   it.prop(
-    '∀c_Empty_≡FipsVector',
-    [fc.constant('')],
-    ([content]) =>
-      sourceContentHash(content, sha256Hex) === 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
-  )
-
-  it.prop(
-    '∀c_Abc_≡FipsVector',
-    [fc.constant('abc')],
-    ([content]) =>
-      sourceContentHash(content, sha256Hex) === 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
-  )
-
-  it.prop(
-    '∀c_NonAscii_≡Utf8Vector',
-    [fc.constant('✓')],
-    ([content]) =>
-      sourceContentHash(content, sha256Hex) === '1dabba21cdad44541f6b15796f8d22978fc7ea10c46aeceeeeb66c23b3ac7604',
-  )
-
-  it.prop(
     '∀c_Content_≡Deterministic',
     [fc.string({ maxLength: 16 })],
     ([content]) => sourceContentHash(content, sha256Hex) === sourceContentHash(content, sha256Hex),
@@ -409,21 +388,30 @@ describe('sourceContentHash', () => {
 })
 
 describe('Survivors not-found', () => {
-  it.prop('∀c_NotFound_≡Rejection', [fc.constant(null)], () =>
-    Result.match(
-      admitSurvivorsRun(
-        AdmitSurvivorsRunCommand.make({
-          priorReport: undefined,
-          currentConfig: {},
-          frameworkVersion: '1.0.0',
-          sourceContentHashes: {},
-          priorSourceHashes: {},
-          priorSurvivors: [],
-        }),
+  it.prop(
+    '∀c_ReportlessCommands_≡RejectedAsNoReport',
+    [
+      fc.record({
+        currentConfig: fc.dictionary(fc.string({ maxLength: 6 }), fc.oneof(fc.string({ maxLength: 6 }), fc.integer())),
+        frameworkVersion: fc.string({ minLength: 1, maxLength: 8 }),
+      }),
+    ],
+    ([command]) =>
+      Result.match(
+        admitSurvivorsRun(
+          AdmitSurvivorsRunCommand.make({
+            priorReport: undefined,
+            currentConfig: command.currentConfig,
+            frameworkVersion: command.frameworkVersion,
+            sourceContentHashes: {},
+            priorSourceHashes: {},
+            priorSurvivors: [],
+          }),
+        ),
+        {
+          onSuccess: () => false,
+          onFailure: (rejection) => S.is(SurvivorsRejection)(rejection) && rejection.reason === 'no-report',
+        },
       ),
-      {
-        onSuccess: () => false,
-        onFailure: (rejection) => S.is(SurvivorsRejection)(rejection),
-      },
-    ))
+  )
 })

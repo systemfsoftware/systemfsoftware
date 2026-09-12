@@ -105,11 +105,30 @@ const ASSIGNMENT_ARB = (size: number) =>
 
 const REJECTED_ARB = (size: number) => fc.tuple(...Arr.map(Array.from({ length: size }), () => fc.boolean()))
 
+const IDS_ARB = (minLength: number) => fc.uniqueArray(fc.stringMatching(/^m[0-9]{1,2}$/), { minLength, maxLength: 6 })
+
 const BATCH_CASE_ARB: fc.Arbitrary<BatchCase> = ID_ARB.chain((ids) =>
   fc.tuple(ASSIGNMENT_ARB(ids.length), REJECTED_ARB(ids.length)).map(([assignment, rejected]) =>
     batchCase(ids, assignment, rejected)
   )
 )
+
+const SINGLE_GROUP_ARB: fc.Arbitrary<BatchCase> = IDS_ARB(1).chain((ids) =>
+  fc.constant(batchCase(ids, Arr.map(ids, () => 0), Arr.map(ids, () => false)))
+)
+
+const ONE_REJECTED_ARB: fc.Arbitrary<{ readonly batch: BatchCase; readonly rejectedId: string }> = fc.tuple(
+  IDS_ARB(1),
+  fc.stringMatching(/^r[0-9]{1,2}$/),
+  fc.nat({ max: 5 }),
+).map(([ids, rejectedId, k]) => {
+  const position = k % (ids.length + 1)
+  const all = [...ids.slice(0, position), rejectedId, ...ids.slice(position)]
+  return {
+    batch: batchCase(all, Arr.map(all, () => 0), Arr.map(all, (id) => id === rejectedId)),
+    rejectedId,
+  }
+})
 
 const runBatches = (batch: BatchCase) => {
   const recording = recordingChecker(batch)
@@ -130,31 +149,26 @@ describe('checkGroupedPlans', () => {
   })
 
   it.prop(
-    '∀c_NoMutants_≡NoTypecheckRuns',
-    [fc.constant(batchCase([], [], []))],
+    '∀b_SingleGroupBatches_≡TheWholeBatchIsCheckedOnce',
+    [SINGLE_GROUP_ARB],
     ([batch]) => {
       const { checkIdSets, pairs } = runBatches(batch)
-      return Equal.equals(batchSet(checkIdSets), batchSet([])) && pairs.length === 0
+      return checkIdSets.length === 1 && Equal.equals(batchSet(checkIdSets), batchSet([batch.ids])) &&
+        pairs.length === batch.ids.length &&
+        Arr.every(pairs, ([, result]) => Equal.equals(result, PASSED))
     },
   )
 
   it.prop(
-    '∀c_OneBatch_≡CheckedOnce',
-    [fc.constant(batchCase(['a', 'b', 'c'], [0, 0, 0], [false, false, false]))],
-    ([batch]) => {
-      const { checkIdSets, pairs } = runBatches(batch)
-      return Equal.equals(batchSet(checkIdSets), batchSet([['a', 'b', 'c']])) && checkIdSets.length === 1 &&
-        pairs.length === 3
-    },
-  )
-
-  it.prop(
-    '∀c_RejectedMutant_≡CompileErrorBesideTheAcceptedOne',
-    [fc.constant(batchCase(['a', 'b'], [0, 1], [true, false]))],
-    ([batch]) => {
+    '∀b_BatchesWithOneRejectedMutant_≡OnlyTheRejectedMutantSeesTheCompileError',
+    [ONE_REJECTED_ARB],
+    ([{ batch, rejectedId }]) => {
       const byId = answeredBy(runBatches(batch).pairs)
-      return Equal.equals(HashMap.get(byId, 'a'), Option.some(COMPILE_ERROR)) &&
-        Equal.equals(HashMap.get(byId, 'b'), Option.some(PASSED))
+      return Equal.equals(HashMap.get(byId, rejectedId), Option.some(COMPILE_ERROR)) &&
+        Arr.every(
+          Arr.filter(batch.ids, (id) => id !== rejectedId),
+          (id) => Equal.equals(HashMap.get(byId, id), Option.some(PASSED)),
+        )
     },
   )
 })

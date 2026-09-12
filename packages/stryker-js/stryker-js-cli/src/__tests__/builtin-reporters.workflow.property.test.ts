@@ -1,9 +1,11 @@
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
+import type { MutantStatus } from '@systemfsoftware/stryker-js/Mutant'
 import { calculateMetrics } from '@systemfsoftware/stryker-js/Report'
 import type { MetricsResult, MutantResult, MutationTestResult } from '@systemfsoftware/stryker-js/Report'
 import type { ReporterEvent, ReporterFactory } from '@systemfsoftware/stryker-js/Reporter'
+import { Array as Arr } from 'effect'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
@@ -26,43 +28,97 @@ const reporterFactories = Effect.gen(function*() {
   return makeBuiltinReporterFactories({ fileSystem, path })
 })
 
-const markerMutants = (status: 'Killed' | 'Survived'): readonly MutantResult[] => {
-  const mutant: MutantResult = {
-    id: '0',
-    mutatorName: 'BooleanLiteral',
-    replacement: 'false',
-    status,
-    location: { start: { line: 1, column: 24 }, end: { line: 1, column: 28 } },
-    coveredBy: ['0'],
-  }
-  if (status === 'Killed') {
-    return [{ ...mutant, killedBy: ['0'] }]
-  }
-  return [mutant]
-}
+const STATUS_ARB = fc.constantFrom<MutantStatus>(
+  'Killed',
+  'Survived',
+  'NoCoverage',
+  'CompileError',
+  'RuntimeError',
+  'Timeout',
+  'Ignored',
+  'Pending',
+)
 
-const markerReport = (status: 'Killed' | 'Survived'): MutationTestResult => ({
-  schemaVersion: '1.0',
-  files: {
-    [MARKER_FILE]: {
-      language: 'typescript',
-      source: 'export const marker = true',
-      mutants: markerMutants(status),
+const MUTATOR_ARB = fc.constantFrom(
+  'BooleanLiteral',
+  'StringLiteral',
+  'ArithmeticOperator',
+  'BlockStatement',
+  'ConditionalExpression',
+  'EqualityOperator',
+)
+
+const KILLED: MutantStatus = 'Killed'
+
+type MutantObservation = readonly [id: string, status: MutantStatus, mutator: string]
+
+const observationOf = (
+  numbers: readonly number[],
+  statuses: readonly MutantStatus[],
+  mutators: readonly string[],
+): readonly MutantObservation[] =>
+  Arr.map(
+    Arr.zip(Arr.zip(Arr.map(numbers, String), statuses), mutators),
+    ([[id, status], mutator]) => [id, status, mutator] as const,
+  )
+
+const POPULATION_ARB: fc.Arbitrary<readonly MutantObservation[]> = fc
+  .uniqueArray(fc.nat({ max: 99 }), { minLength: 1, maxLength: 4 })
+  .chain((numbers) =>
+    fc.tuple(
+      fc.array(STATUS_ARB, { minLength: numbers.length, maxLength: numbers.length }),
+      fc.array(MUTATOR_ARB, { minLength: numbers.length, maxLength: numbers.length }),
+    ).map(([statuses, mutators]) => observationOf(numbers, statuses, mutators))
+  )
+
+const ALL_KILLED_ARB: fc.Arbitrary<readonly MutantObservation[]> = fc
+  .uniqueArray(fc.nat({ max: 99 }), { minLength: 1, maxLength: 4 })
+  .chain((numbers) =>
+    fc.array(MUTATOR_ARB, { minLength: numbers.length, maxLength: numbers.length }).map((mutators) =>
+      observationOf(numbers, Arr.map(numbers, () => KILLED), mutators)
+    )
+  )
+
+const reportOf = (population: readonly MutantObservation[]): MutationTestResult => {
+  const mutants: MutantResult[] = Arr.map(
+    population,
+    ([id, status, mutator], index): MutantResult => {
+      const mutant: MutantResult = {
+        id,
+        mutatorName: mutator,
+        status,
+        location: { start: { line: index + 1, column: 0 }, end: { line: index + 1, column: 4 } },
+        coveredBy: ['0'],
+      }
+      if (status === KILLED) {
+        return { ...mutant, killedBy: ['0'] }
+      }
+      return mutant
     },
-  },
-  thresholds: { high: 80, low: 60 },
-  testFiles: {
-    [MARKER_TEST_FILE]: { tests: [{ id: '0', name: 'the marker is true' }] },
-  },
-})
+  )
+  return {
+    schemaVersion: '1.0',
+    files: {
+      [MARKER_FILE]: {
+        language: 'typescript',
+        source: 'export const marker = true',
+        mutants,
+      },
+    },
+    thresholds: { high: 80, low: 60 },
+    testFiles: {
+      [MARKER_TEST_FILE]: { tests: [{ id: '0', name: 'the marker is true' }] },
+    },
+  }
+}
 
 interface CompletedRun {
   readonly report: MutationTestResult
   readonly metrics: MetricsResult
 }
 
-const completedRun = (status: 'Killed' | 'Survived'): CompletedRun => {
-  const report = markerReport(status)
+const completedRun = (population: readonly MutantObservation[]): CompletedRun => {
+  const report = reportOf(population)
   return { report, metrics: calculateMetrics(report.files) }
 }
 
@@ -74,29 +130,34 @@ const dryRunCompleted = (): ReporterEvent => ({
   tests: [],
 })
 
-const mutationTestingPlanReady = (): ReporterEvent => ({
+const mutationTestingPlanReady = (population: readonly MutantObservation[]): ReporterEvent => ({
   _tag: 'mutationTestingPlanReady',
-  total: 1,
-  plans: [{ mutantId: '0', plan: 'Run', netTime: 1, reloadEnvironment: false }],
+  total: population.length,
+  plans: Arr.map(population, ([id], index) => ({
+    mutantId: id,
+    plan: 'Run' as const,
+    netTime: index + 1,
+    reloadEnvironment: false,
+  })),
 })
 
-const mutantTested = (): ReporterEvent => ({
+const mutantTested = (observation: MutantObservation, index: number, total: number): ReporterEvent => ({
   _tag: 'mutantTested',
-  id: '0',
-  status: 'Killed',
+  id: observation[0],
+  status: observation[1],
   file: MARKER_FILE,
-  location: { start: { line: 1, column: 24 }, end: { line: 1, column: 28 } },
-  mutator: 'BooleanLiteral',
+  location: { start: { line: 1, column: 0 }, end: { line: 1, column: 4 } },
+  mutator: observation[2],
   replacement: null,
-  completed: 1,
-  total: 1,
+  completed: index + 1,
+  total,
 })
 
-const runEvents = (run: CompletedRun): readonly ReporterEvent[] => [
+const runEvents = (population: readonly MutantObservation[]): readonly ReporterEvent[] => [
   dryRunCompleted(),
-  mutationTestingPlanReady(),
-  mutantTested(),
-  { _tag: 'mutationTestReportReady', report: run.report, metrics: run.metrics },
+  mutationTestingPlanReady(population),
+  ...Arr.map(population, (observation, index) => mutantTested(observation, index, population.length)),
+  { _tag: 'mutationTestReportReady', ...completedRun(population) },
 ]
 
 async function* toStream(events: readonly ReporterEvent[]): AsyncGenerator<ReporterEvent> {
@@ -131,56 +192,82 @@ const writeReport = (
     }
     return yield* Effect.promise(() => withCapturedStdout(() => factory(OPTIONS, {})(toStream(events))))
   })
-
 describe('builtin reporters', () => {
+  const STDOUT_VISIBLE: Record<MutantStatus, boolean> = {
+    Killed: false,
+    Survived: true,
+    NoCoverage: true,
+    CompileError: false,
+    RuntimeError: false,
+    Timeout: false,
+    Ignored: false,
+    Pending: false,
+  }
+
   it.effect.prop(
-    '∀c_SurvivingRun_≡TheScoreTableAndTheSurvivorReachTheTerminal',
-    [fc.constant(completedRun('Survived'))],
-    ([run]) =>
-      Effect.gen(function*() {
-        const terminal = yield* writeReport('clear-text', runEvents(run))
-        return terminal.includes('All files') &&
-          terminal.includes(MARKER_FILE) &&
-          terminal.includes('[Survived] BooleanLiteral')
-      }),
+    '∀p_Populations_≡EveryMutantObservationReachesTheClearTextTable',
+    [POPULATION_ARB],
+    ([population]) => {
+      const run = completedRun(population)
+      fc.pre(Number.isFinite(run.metrics.metrics.mutationScore))
+      fc.pre(Number.isFinite(run.metrics.metrics.mutationScoreBasedOnCoveredCode))
+      fc.pre(run.metrics.metrics.mutationScore < 100)
+      return Effect.gen(function*() {
+        const terminal = yield* writeReport('clear-text', runEvents(population))
+        return terminal.includes('All files') && terminal.includes(MARKER_FILE) &&
+          population.every(([, status, mutator]) =>
+            terminal.includes(`[${status}] ${mutator}`) === STDOUT_VISIBLE[status]
+          )
+      })
+    },
   )
 
   it.effect.prop(
-    '∀c_AllKilledRun_≡TheScoreTableReportsAPerfectScore',
-    [fc.constant(completedRun('Killed'))],
-    ([run]) =>
+    '∀p_AllKilledPopulations_≡TheScoreTableReportsAPerfectScore',
+    [ALL_KILLED_ARB],
+    ([population]) =>
       Effect.gen(function*() {
-        const terminal = yield* writeReport('clear-text', runEvents(run))
+        const terminal = yield* writeReport('clear-text', runEvents(population))
         return terminal.includes('100.00')
       }),
   )
 
   it.effect.prop(
-    '∀c_EventsWithoutTheReport_≡NothingReachesTheTerminal',
-    [fc.constant(runEvents(completedRun('Killed')).slice(0, 3))],
-    ([events]) =>
+    '∀k_EventPrefixes_≡NothingPrintsBeforeTheReportEvent',
+    [fc.nat({ max: 3 })],
+    ([k]) =>
       Effect.gen(function*() {
-        const terminal = yield* writeReport('clear-text', events)
+        const terminal = yield* writeReport(
+          'clear-text',
+          runEvents([['0', KILLED, 'BooleanLiteral']]).slice(0, k),
+        )
         return terminal === ''
       }),
   )
 
   it.effect.prop(
-    '∀c_FinishedPlan_≡TheProgressBarCountsMutantsAndClosesItsLine',
-    [fc.constant(runEvents(completedRun('Killed')).slice(0, 3))],
-    ([events]) =>
+    '∀k_TestedCounts_≡TheProgressLineClosesItsLine',
+    [fc.nat({ max: 4 })],
+    ([k]) =>
       Effect.gen(function*() {
-        const terminal = yield* writeReport('progress', events)
+        const population: readonly MutantObservation[] = Arr.map(
+          Arr.makeBy(k + 1, (index) => String(index)),
+          (id) => [id, KILLED, 'BooleanLiteral'] as const,
+        )
+        const terminal = yield* writeReport('progress', runEvents(population))
         return terminal.includes('Mutants tested') && terminal.endsWith('\n')
       }),
   )
 
   it.effect.prop(
-    '∀c_FinishedPlan_≡TheMachineProgressReporterLeavesTheTerminalUntouched',
-    [fc.constant(runEvents(completedRun('Killed')))],
-    ([events]) =>
+    '∀e_EventLists_≡TheMachineProgressReporterLeavesTheTerminalUntouched',
+    [fc.nat({ max: 4 })],
+    ([k]) =>
       Effect.gen(function*() {
-        const terminal = yield* writeReport('progress-stream', events)
+        const terminal = yield* writeReport(
+          'progress-stream',
+          runEvents([['0', KILLED, 'BooleanLiteral']]).slice(0, k),
+        )
         return terminal === ''
       }),
   )

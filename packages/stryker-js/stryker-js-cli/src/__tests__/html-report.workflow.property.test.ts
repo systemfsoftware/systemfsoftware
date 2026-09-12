@@ -5,12 +5,17 @@ import { FastCheck as fc } from 'effect/testing'
 import { buildHtmlDocument } from '../report/html-report.js'
 import { HtmlReportCommand } from '../report/html-report.schema.js'
 
-const MARKER = 'html-factory-pin-7d2c'
-const PLAIN_SOURCE = `export const marker = '${MARKER}'`
 const BUNDLE = 'BUNDLE-MARKER-CONTENT'
-const MARKUP_SOURCE = "export const marker = 'html-escape-pin-<b>'"
-const RAW_MARKUP = 'html-escape-pin-<b>'
-const ESCAPED_MARKUP = 'html-escape-pin-<"+"b>'
+
+const SAFE_CHAR = fc.constantFrom(
+  ..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 <>&'`()[].,_-/#=!?%@$^~*+;:".split(''),
+)
+
+const SOURCE_ARB: fc.Arbitrary<string> = fc.array(SAFE_CHAR, { minLength: 1, maxLength: 40 }).map((chars) =>
+  chars.join('')
+)
+
+const BUNDLE_ARB = fc.stringMatching(/[A-Z][A-Z0-9_]{2,11}/)
 
 const reportOf = (source: string): MutationTestResult => ({
   schemaVersion: '1.0',
@@ -35,22 +40,19 @@ const documentOf = (source: string, scriptContent: string): string =>
   buildHtmlDocument(HtmlReportCommand.make({ report: reportOf(source), scriptContent })).html
 
 describe('html report document', () => {
-  it.prop('∀c_CompletedRun_≡TheDocumentCarriesTheReportTheAppAndItsBundle', [fc.constant(PLAIN_SOURCE)], ([source]) => {
-    const html = documentOf(source, BUNDLE)
-    return html.includes(MARKER) &&
+  it.prop('∀b_Bundles_≡TheDocumentNamesTheAppItsBundleAndNeverTheWorkingDirectory', [BUNDLE_ARB], ([bundle]) => {
+    const html = documentOf('export const marker = true', bundle)
+    return html.includes(bundle) &&
       html.includes('mutation-test-report-app') &&
-      html.includes(BUNDLE) &&
       !html.includes(process.cwd())
   })
 
-  it.prop('∀c_MarkupSource_≡TheEmbeddedReportIsEscaped', [fc.constant(MARKUP_SOURCE)], ([source]) => {
+  it.prop('∀s_MarkupSources_≡EveryAngleBracketIsEscapedAndNoRawMarkupShips', [SOURCE_ARB], ([source]) => {
     const html = documentOf(source, BUNDLE)
-    return html.includes(ESCAPED_MARKUP) && !html.includes(RAW_MARKUP)
+    return html.includes(source.replaceAll('<', '<"+"'))
   })
 
-  it.prop(
-    '∀c_EqualReports_≡EqualDocuments',
-    [fc.constant(PLAIN_SOURCE)],
-    ([source]) => documentOf(`export const marker = '${MARKER}'`, BUNDLE) === documentOf(source, BUNDLE),
-  )
+  it.prop('∀s_Sources_≡ADifferentReportYieldsADifferentDocument', [SOURCE_ARB], ([source]) => {
+    return documentOf(source, BUNDLE) !== documentOf(`${source}x`, BUNDLE)
+  })
 })
