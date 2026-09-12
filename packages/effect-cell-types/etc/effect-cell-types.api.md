@@ -16,7 +16,7 @@ export namespace Policy {
 
 // @public (undocumented)
 export namespace Workflow {
-    export { Inhabited, SingleVariantDecision, UninhabitedDecision, UninhabitedError, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, make };
+    export { Inhabited, SingleVariantDecision, UninhabitedDecision, UninhabitedError, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, andThen$1 as andThen, make, total };
 }
 
 // (No @packageDocumentation comment for this package)

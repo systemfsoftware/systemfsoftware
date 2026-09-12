@@ -6,6 +6,10 @@ import type { Layer } from 'effect/Layer'
 import type { Result } from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
+import { acceptTaggedCommand, type FixtureDecision } from '../tests/__fixtures__/accept-tagged-command.workflow.js'
+import { CommandRefused, TaggedCmd } from '../tests/__fixtures__/Command.schema.js'
+import { type Decision as TotalDecision, DecisionError } from '../tests/__fixtures__/Decision.schema.js'
+
 interface Cmd {
   readonly id: string
 }
@@ -305,5 +309,48 @@ describe('the vocabulary table', () => {
     expect<HasDescription>().type.toBe<false>()
     expect<HasLayers>().type.toBe<false>()
     expect<HasPhasesField>().type.toBe<false>()
+  })
+})
+
+/** The wrapper command the composite builds — one field carries the upstream decision. */
+interface ChainedCommand {
+  readonly decision: FixtureDecision
+}
+
+declare const ChainedCommandCtor: { new(props: { readonly decision: FixtureDecision }): ChainedCommand }
+declare const readTagged: (command: Cmd) => Effect<TaggedCmd, never, never>
+declare const decideTotalOverTagged: (command: TaggedCmd) => Result<TotalDecision, never>
+declare const decideChainedCommand:
+  & ((command: ChainedCommand) => Result<TotalDecision, DecisionError>)
+  & Workflow.WorkflowBrand
+declare const decideUnbrandedChain: (command: TaggedCmd) => Result<TotalDecision, CommandRefused | DecisionError>
+declare const writeTotalOutcome: (outcome: Result<TotalDecision, never>, raw: TaggedCmd) => Effect<void, never, never>
+declare const writeChainedOutcome: (
+  outcome: Result<TotalDecision, CommandRefused | DecisionError>,
+  raw: TaggedCmd,
+) => Effect<void, never, never>
+
+describe('the constructors the decide slot accepts', () => {
+  it('Should_AcceptTheTotalDecider_When_ItsErrorChannelIsNever', () => {
+    const cell = Cell.layer({
+      read: readTagged,
+      decide: Workflow.total(TaggedCmd, decideTotalOverTagged),
+      write: writeTotalOutcome,
+    })
+    expect(cell).type.toBe<Cell.Cell<Cmd, void, never, never>>()
+  })
+
+  it('Should_AcceptTheComposite_When_ItsErrorChannelIsTheComponentUnion', () => {
+    const composite = Workflow.andThen(TaggedCmd, acceptTaggedCommand, ChainedCommandCtor, decideChainedCommand)
+    const cell = Cell.layer({ read: readTagged, decide: composite, write: writeChainedOutcome })
+    expect(cell).type.toBe<Cell.Cell<Cmd, void, never, never>>()
+  })
+
+  it('Should_RefuseAHandRolledChain_When_NoConstructorAppliedTheBrand', () => {
+    expect<typeof Cell.layer>().type.not.toBeCallableWith({
+      read: readTagged,
+      decide: decideUnbrandedChain,
+      write: writeChainedOutcome,
+    })
   })
 })

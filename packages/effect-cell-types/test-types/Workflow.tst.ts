@@ -1,4 +1,4 @@
-import { type Workflow } from '@systemfsoftware/effect-cell-types'
+import { Workflow } from '@systemfsoftware/effect-cell-types'
 import type { Result } from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
@@ -226,5 +226,177 @@ describe('the command channel the value constrains', () => {
     expect<typeof decideWidened>().type.toBe<
       ((command: TaggedCmd) => Result<WidenedFixtureDecision, CommandRefused>) & Workflow.WorkflowBrand
     >()
+  })
+})
+
+interface ProbeRefusal {
+  readonly _tag: 'ProbeRefusal'
+}
+
+/** Two tagged members that share no property at all — the marker's one live shape. */
+interface UnbrandedOne {
+  readonly _tag: 'UnbrandedOne'
+  readonly one: number
+}
+
+interface UnbrandedTwo {
+  readonly _tag: 'UnbrandedTwo'
+  readonly two: number
+}
+
+declare const FamilyOne: unique symbol
+declare const FamilyTwo: unique symbol
+
+/** AE10's shape: two tagged members, each branded with its own family TypeId. */
+interface SplitOne {
+  readonly _tag: 'SplitOne'
+  readonly [FamilyOne]: typeof FamilyOne
+  readonly one: number
+}
+
+interface SplitTwo {
+  readonly _tag: 'SplitTwo'
+  readonly [FamilyTwo]: typeof FamilyTwo
+  readonly two: number
+}
+
+/** The wrapper command the composite builds: one declared field carries the upstream decision. */
+interface ChainedCommand {
+  readonly decision: FixtureDecision
+}
+
+/** The same wrapper under a differently named field, for the convention probe. */
+interface ChainedByUpstream {
+  readonly upstream: FixtureDecision
+}
+
+declare const ChainedCommandCtor: { new(props: { readonly decision: FixtureDecision }): ChainedCommand }
+declare const ChainedByUpstreamCtor: { new(props: { readonly upstream: FixtureDecision }): ChainedByUpstream }
+
+declare const decideNeverOverTagged: (command: TaggedCmd) => Result<Decision, never>
+declare const decideLoneOverTagged: (command: TaggedCmd) => Result<LoneDecision, never>
+declare const decideUntaggedOverTagged: (command: TaggedCmd) => Result<DecisionOne | UntaggedMember, never>
+declare const decideUnbrandedOverTagged: (command: TaggedCmd) => Result<UnbrandedOne | UnbrandedTwo, never>
+declare const decideSplitOverTagged: (command: TaggedCmd) => Result<SplitOne | SplitTwo, never>
+
+declare const decideUpstream: Workflow.Workflow<TaggedCmd, FixtureDecision, CommandRefused>
+declare const commandClassUnion: typeof TaggedCmd | typeof UntaggedCmd
+declare const unwrappedTotal: (command: TaggedCmd) => Result<Decision, never>
+declare const decideChainedCommand:
+  & ((command: ChainedCommand) => Result<Decision, DecisionError>)
+  & Workflow.WorkflowBrand
+declare const decideChainedByUpstream:
+  & ((command: ChainedByUpstream) => Result<Decision, DecisionError>)
+  & Workflow.WorkflowBrand
+declare const decideTotalUpstream:
+  & ((command: TaggedCmd) => Result<FixtureDecision, never>)
+  & Workflow.WorkflowBrand
+declare const decideTotalChainedCommand:
+  & ((command: ChainedCommand) => Result<Decision, never>)
+  & Workflow.WorkflowBrand
+
+describe('the total constructor', () => {
+  it('Should_MirrorTheMakeRefusal_When_TheErrorChannelIsNever', () => {
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(TaggedCmd, decideNeverOverTagged)
+    expect(Workflow.total(TaggedCmd, decideNeverOverTagged)).type.toBe<
+      ((command: TaggedCmd) => Result<Decision, never>) & Workflow.WorkflowBrand
+    >()
+  })
+
+  it('Should_RefuseADeciderTheCollapsedParameterWouldAccept_When_TheShippedParameterCarriesTheShape', () => {
+    // A parameter-position conditional collapses to `unknown` while D is generic, so all
+    // three of these compile against an alias-spelled parameter and none compiles here.
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(TaggedCmd, decideValueOverTagged)
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(TaggedCmd, decidePromiseOverTagged)
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(TaggedCmd, decideOverTagged)
+  })
+
+  it('Should_NameTheSingleVariantDecisionMarker_When_TheTotalDecidesOneOutcome', () => {
+    expect<Workflow.Inhabited<LoneDecision, ProbeRefusal>>().type.toBe<Workflow.SingleVariantDecision>()
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(TaggedCmd, decideLoneOverTagged)
+  })
+
+  it('Should_NameTheUntaggedDecisionMarker_When_TheTotalUnionCarriesNoTag', () => {
+    expect<Workflow.Inhabited<DecisionOne | UntaggedMember, ProbeRefusal>>().type.toBe<Workflow.UntaggedDecision>()
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(TaggedCmd, decideUntaggedOverTagged)
+  })
+
+  it('Should_ResolveToTheUnsharedTypeIdMarker_When_NoVariantCarriesAFamilyBrand', () => {
+    expect<Workflow.Inhabited<UnbrandedOne | UnbrandedTwo, ProbeRefusal>>().type.toBe<Workflow.UnsharedTypeId>()
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(TaggedCmd, decideUnbrandedOverTagged)
+  })
+
+  it('Should_ResolveToTheUnsharedTypeIdMarker_When_TwoVariantsCarryDifferentTypeIds', () => {
+    expect<Workflow.Inhabited<SplitOne | SplitTwo, ProbeRefusal>>().type.toBe<Workflow.UnsharedTypeId>()
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(TaggedCmd, decideSplitOverTagged)
+  })
+
+  it('Should_RefuseEveryNonClassValueAtTheCommandPosition_When_TheTotalTakesTheClassValue', () => {
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(StructCmd, decideNeverOverTagged)
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(PlainCmdCtor, decideNeverOverTagged)
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(objectLiteralCmd, decideNeverOverTagged)
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(primitiveCmd, decideNeverOverTagged)
+  })
+
+  it('Should_RefuseAUnionOfCommandValues_When_TheCommandPositionDemandsAClassValue', () => {
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(commandClassUnion, decideOverTagged)
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(commandClassUnion, decideNeverOverTagged)
+  })
+
+  it('Should_DemandTheModuleBrand_When_AnUnbrandedTotalIsWrittenByHand', () => {
+    expect(unwrappedTotal).type.not.toBeAssignableTo<
+      ((command: TaggedCmd) => Result<Decision, never>) & Workflow.WorkflowBrand
+    >()
+    expect(Workflow.total(TaggedCmd, decideNeverOverTagged)).type.toBeAssignableTo<
+      ((command: TaggedCmd) => Result<Decision, never>) & Workflow.WorkflowBrand
+    >()
+  })
+})
+
+describe('the composite constructor', () => {
+  it('Should_InferTheUnionErrorChannel_When_TwoComponentsAreChained', () => {
+    const composite = Workflow.andThen(TaggedCmd, decideUpstream, ChainedCommandCtor, decideChainedCommand)
+    expect(composite).type.toBe<
+      ((command: TaggedCmd) => Result<Decision, CommandRefused | DecisionError>) & Workflow.WorkflowBrand
+    >()
+  })
+
+  it('Should_KeepBothHalvesOfTheErrorChannel_When_OneHalfIsNamedByHand', () => {
+    const composite = Workflow.andThen(TaggedCmd, decideUpstream, ChainedCommandCtor, decideChainedCommand)
+    expect(composite).type.not.toBeAssignableTo<
+      ((command: TaggedCmd) => Result<Decision, DecisionError>) & Workflow.WorkflowBrand
+    >()
+    expect(composite).type.not.toBeAssignableTo<
+      ((command: TaggedCmd) => Result<Decision, CommandRefused>) & Workflow.WorkflowBrand
+    >()
+  })
+
+  it('Should_LetAConsumerDispatchEitherRefusal_When_TheCompositeCannotDecide', () => {
+    const dispatch = (failure: CommandRefused | DecisionError): 'upstream' | 'downstream' =>
+      failure._tag === 'CommandRefused' ? 'upstream' : 'downstream'
+    expect(dispatch).type.toBe<(failure: CommandRefused | DecisionError) => 'upstream' | 'downstream'>()
+  })
+
+  it('Should_RefuseAWrapperWhoseFieldIsNotNamedDecision_When_TheUpstreamDecisionCannotLand', () => {
+    expect<typeof Workflow.andThen>().type.not.toBeCallableWith(
+      TaggedCmd,
+      decideUpstream,
+      ChainedByUpstreamCtor,
+      decideChainedByUpstream,
+    )
+  })
+
+  it('Should_RefuseANonConstructableValueAtTheWrapperPosition_When_TheCompositeBuildsIt', () => {
+    expect<typeof Workflow.andThen>().type.not.toBeCallableWith(
+      TaggedCmd,
+      decideUpstream,
+      StructCmd,
+      decideChainedCommand,
+    )
+  })
+
+  it('Should_ResolveToUninhabitedError_When_BothComponentsCannotFail', () => {
+    const composite = Workflow.andThen(TaggedCmd, decideTotalUpstream, ChainedCommandCtor, decideTotalChainedCommand)
+    expect(composite).type.toBe<Workflow.UninhabitedError>()
   })
 })
