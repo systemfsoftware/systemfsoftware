@@ -4,7 +4,7 @@
 
 ```ts
 
-import { PluginLayerContribution } from '@systemfsoftware/stryker-js/Plugin';
+import { PluginLayerContribution } from '@systemfsoftware/stryker-js';
 
 // @public (undocumented)
 export const ANNOTATION_OBJECT_IGNORED: 'annotations object holding only documentation is a declaration, not behaviour';

@@ -43,6 +43,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/all@2.0.2":
+  dir: packages/oxlint-plugin/all
+  intents:
+    - recommended-set-gains-new-rules
 "@systemfsoftware/arethetypeswrong-cli@2.0.0":
   dir: packages/arethetypeswrong/cli
   intents:
@@ -301,6 +305,12 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/effect-cell-types@8.0.0":
+  dir: packages/effect-cell-types
+  intents:
+    - arrow-application-replaces-cell-run
+    - cell-gate-and-collect
+    - workflow-total-and-composite
 "@systemfsoftware/effect-daemon-spec@1.0.0":
   dir: packages/effect-daemon-spec
   intents:
@@ -693,6 +703,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/npm-package@0.2.4":
+  dir: packages/npm-package
+  intents:
+    - api-extractor-rollout
 "@systemfsoftware/omp-agent-discipline@2.0.0":
   dir: omp/plugins/omp-agent-discipline
   intents:
@@ -797,6 +811,10 @@
   intents:
     - drop-undecidable-state-rules
     - make-boundary-regime
+"@systemfsoftware/oxlint-make-boundary@0.1.0":
+  dir: packages/oxlint-plugin/make-boundary
+  intents:
+    - make-boundary-constructor-set
 "@systemfsoftware/oxlint-plugin-cell-vocabulary@1.1.0":
   dir: packages/oxlint-plugins/cell-vocabulary
   intents:
@@ -902,6 +920,11 @@
   dir: packages/oxlint-plugin/oxlint-plugin-effect-dmmf
   intents:
     - noble-hashes-workspace-release
+"@systemfsoftware/oxlint-plugin-effect-dmmf@6.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-dmmf
+  intents:
+    - fanout-rule-retired
+    - recommended-set-gains-new-rules
 "@systemfsoftware/oxlint-plugin-effect-entrypoint@1.0.3":
   dir: packages/oxlint-plugins/effect-entrypoint
   intents:
@@ -933,6 +956,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-effect-entrypoint
   intents:
     - noble-hashes-workspace-release
+"@systemfsoftware/oxlint-plugin-effect-entrypoint@1.1.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-entrypoint
+  intents:
+    - runtime-construction-placement
 "@systemfsoftware/oxlint-plugin-effect-schema@2.0.0":
   dir: packages/oxlint-plugins/effect-schema
   intents:
@@ -988,6 +1015,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
   intents:
     - noble-hashes-workspace-release
+"@systemfsoftware/oxlint-plugin-effect-schema@5.3.2":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-schema
+  intents:
+    - scoping-rebuild-cascade
 "@systemfsoftware/oxlint-plugin-effect-workflow@2.0.0":
   dir: packages/oxlint-plugins/effect-workflow
   intents:
@@ -1039,6 +1070,11 @@
   dir: packages/oxlint-plugin/oxlint-plugin-effect-workflow
   intents:
     - noble-hashes-workspace-release
+"@systemfsoftware/oxlint-plugin-effect-workflow@5.1.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-workflow
+  intents:
+    - workflow-constructor-recognition
+    - workflow-variant-constructed
 "@systemfsoftware/oxlint-plugin-property-testing@1.2.0":
   dir: packages/oxlint-plugins/property-testing
   intents:
@@ -1078,6 +1114,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-property-testing
   intents:
     - noble-hashes-workspace-release
+"@systemfsoftware/oxlint-plugin-property-testing@2.0.0":
+  dir: packages/oxlint-plugin/oxlint-plugin-property-testing
+  intents:
+    - fanout-rule-retired
 "@systemfsoftware/oxlint-plugin-recommended@1.1.2":
   dir: packages/oxlint-plugins/recommended
   intents:
@@ -1104,6 +1144,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin-recommended
   intents:
     - recommended-carries-recursion-budget
+"@systemfsoftware/oxlint-plugin-recommended@1.3.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-recommended
+  intents:
+    - recommended-set-gains-new-rules
 "@systemfsoftware/oxlint-plugin-test-hygiene@1.1.3":
   dir: packages/oxlint-plugins/test-hygiene
   intents:
@@ -1243,6 +1287,10 @@
   dir: packages/oxlint-plugin/oxlint-plugin
   intents:
     - noble-hashes-workspace-release
+"@systemfsoftware/oxlint-plugin@4.0.2":
+  dir: packages/oxlint-plugin/oxlint-plugin
+  intents:
+    - recommended-set-gains-new-rules
 "@systemfsoftware/rx-effect@0.6.0":
   dir: packages/rx-effect
   intents:
@@ -1315,6 +1363,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/storybook-gherkin@3.0.4":
+  dir: packages/storybook-gherkin
+  intents:
+    - api-extractor-rollout
 "@systemfsoftware/stryker-js-cli@2.0.0":
   dir: packages/stryker-js/cli
   intents:
@@ -1428,6 +1480,10 @@
     - noble-hashes-2-4-0
     - noble-hashes-workspace-release
     - sweet-files-share
+"@systemfsoftware/stryker-js-cli@8.0.1":
+  dir: packages/stryker-js/stryker-js-cli
+  intents:
+    - stryker-family-root-rewire
 "@systemfsoftware/stryker-js-engine@0.2.0":
   dir: packages/testing/mutation/stryker-js/engine
   intents:
@@ -1500,6 +1556,11 @@
     - noble-hashes-2-4-0
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/stryker-js-engine@4.0.0":
+  dir: packages/stryker-js/stryker-js-engine
+  intents:
+    - reporter-stage-opaque
+    - stryker-family-root-rewire
 "@systemfsoftware/stryker-js-html-reporter@0.1.0":
   dir: packages/testing/mutation/stryker-js/html-reporter
   intents:
@@ -1546,6 +1607,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/stryker-js-html-reporter@3.0.3":
+  dir: packages/stryker-js/stryker-js-html-reporter
+  intents:
+    - stryker-family-root-rewire
 "@systemfsoftware/stryker-js-instrumenter@0.2.0":
   dir: packages/testing/mutation/stryker-js/instrumenter
   intents:
@@ -1601,6 +1666,10 @@
     - brave-otters-arrive
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/stryker-js-instrumenter@6.0.1":
+  dir: packages/stryker-js/stryker-js-instrumenter
+  intents:
+    - stryker-family-root-rewire
 "@systemfsoftware/stryker-js-mutation-report@1.2.6":
   dir: packages/stryker-js/mutation-report
   intents:
@@ -1837,6 +1906,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/stryker-js-typescript-checker@5.0.4":
+  dir: packages/stryker-js/stryker-js-typescript-checker
+  intents:
+    - stryker-family-root-rewire
 "@systemfsoftware/stryker-js-util@0.2.0":
   dir: packages/testing/mutation/stryker-js/util
   intents:
@@ -1915,6 +1988,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/stryker-js-vitest-runner@4.0.4":
+  dir: packages/stryker-js/stryker-js-vitest-runner
+  intents:
+    - stryker-family-root-rewire
 "@systemfsoftware/stryker-js@0.1.0":
   dir: packages/testing/mutation/stryker-js/stryker-js
   intents:
@@ -1974,6 +2051,13 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/stryker-js@4.0.0":
+  dir: packages/stryker-js/stryker-js
+  intents:
+    - recommended-set-gains-new-rules
+    - run-mutant-tested-rename
+    - stryker-js-dead-entries
+    - stryker-js-single-root-entry
 "@systemfsoftware/stryker-plugins@0.12.0":
   dir: packages/stryker-plugins
   intents:
@@ -2040,6 +2124,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/stryker-plugins@3.0.3":
+  dir: packages/stryker-js/stryker-plugins
+  intents:
+    - stryker-family-root-rewire
 "@systemfsoftware/stryker-test-contribution@0.1.0":
   dir: packages/testing/mutation/plugins/stryker-test-contribution
   intents:
@@ -2088,6 +2176,10 @@
   intents:
     - noble-hashes-workspace-release
     - retire-source-condition
+"@systemfsoftware/stryker-test-contribution@2.0.3":
+  dir: packages/stryker-js/stryker-test-contribution
+  intents:
+    - stryker-family-root-rewire
 "@systemfsoftware/tsconfig@1.3.2":
   dir: packages/tsconfig
   intents:

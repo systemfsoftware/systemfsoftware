@@ -59,20 +59,23 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "build": "tsdown && pnpm dts:check",
+    "build": "tsdown && pnpm dts:check && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --config oxlint.config.ts --format=${f:-default}",
     "lint:tsgo": "effect-tsgo diagnostics --project tsconfig.json --format ${TSGO_FORMAT:-text}",
     "attw": "attw --pack .",
-    "dts:check": "tsc --noEmit -p tsconfig.dts.json"
+    "dts:check": "tsc --noEmit -p tsconfig.dts.json",
+    "api:check": "concurrently --kill-others-on-fail \"api-extractor run\" \"api-extractor run --config api-extractor.Atom.json\" \"api-extractor run --config api-extractor.AtomRef.json\" \"api-extractor run --config api-extractor.AtomRpc.json\" \"api-extractor run --config api-extractor.AtomHttpApi.json\" \"api-extractor run --config api-extractor.Hydration.json\" \"api-extractor run --config api-extractor.Registry.json\" \"api-extractor run --config api-extractor.Result.json\"",
+    "api:update": "concurrently --kill-others-on-fail \"api-extractor run --local\" \"api-extractor run --local --config api-extractor.Atom.json\" \"api-extractor run --local --config api-extractor.AtomRef.json\" \"api-extractor run --local --config api-extractor.AtomRpc.json\" \"api-extractor run --local --config api-extractor.AtomHttpApi.json\" \"api-extractor run --local --config api-extractor.Hydration.json\" \"api-extractor run --local --config api-extractor.Registry.json\" \"api-extractor run --local --config api-extractor.Result.json\""
   },
   "peerDependencies": {
     "effect": "catalog:peers"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/oxlint-config": "workspace:^",

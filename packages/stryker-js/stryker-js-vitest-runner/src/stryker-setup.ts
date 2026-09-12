@@ -1,4 +1,4 @@
-import type { InstrumenterContext, MutantCoverage } from '@systemfsoftware/stryker-js/Mutant'
+import type { InstrumenterContext, MutantCoverage } from '@systemfsoftware/stryker-js'
 import { afterAll, afterEach, beforeAll, beforeEach, inject, RunnerTestCase, RunnerTestSuite } from 'vitest'
 
 // This file is copied to the sandbox dir, don't import anything local!

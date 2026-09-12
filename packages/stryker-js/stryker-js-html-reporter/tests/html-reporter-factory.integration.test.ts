@@ -1,17 +1,17 @@
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { makeHtmlReporter } from '@systemfsoftware/stryker-js-html-reporter'
-import type { MetricsResult } from '@systemfsoftware/stryker-js/Metrics'
-import type * as reportApi from '@systemfsoftware/stryker-js/Report'
+import type { MetricsResult } from '@systemfsoftware/stryker-js'
+import type * as reportApi from '@systemfsoftware/stryker-js'
 import {
   DryRunCompleted,
   MutantTested,
   MutationTestingPlanReady,
   MutationTestReportReady,
-} from '@systemfsoftware/stryker-js/ReporterEvent'
-import type { ReporterEvent } from '@systemfsoftware/stryker-js/ReporterEvent'
-import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
+} from '@systemfsoftware/stryker-js'
+import type { ReporterEvent } from '@systemfsoftware/stryker-js'
+import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js'
+import { makeHtmlReporter } from '@systemfsoftware/stryker-js-html-reporter'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'

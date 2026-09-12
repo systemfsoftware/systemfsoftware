@@ -28,11 +28,11 @@ const _default: {
         'make-command-schema': Rule;
         'workflow-file-export-topology': Rule;
         'workflow-file-make-presence': Rule;
+        'workflow-variant-constructed': Rule;
         'no-silent-return': Rule;
         'no-assert-in-property': Rule;
         'property-file-purity': Rule;
         'require-effect-fastcheck': Rule;
-        'no-unbounded-fanout': Rule;
         'no-nested-quantification': Rule;
         'prop-generated-law-duplicate': Rule;
         'prop-arbitrary-schema-origin': Rule;

@@ -38,12 +38,12 @@ catalog:
   "@std/path": jsr:^1.0.0
   "@std/fs": jsr:^1.0.6
   "@testing-library/dom": ^10.4.1
-  "@testing-library/jest-dom": ^7.0.0
+  "@testing-library/jest-dom": ^7.0.1
   "@testing-library/react": ^16.3.2
   "@types/react": ^19.2.18
   "@types/react-dom": ^19.2.4
   "@types/scheduler": ^0.26.0
-  jsdom: ^29.1.1
+  jsdom: ^30.0.1
   react: ^19.2.8
   react-dom: ^19.2.8
   react-error-boundary: ^6.1.2
@@ -65,7 +65,7 @@ catalogs:
     "@oxlint/plugins": ^1.77.0
     oxlint-tsgolint: 7.0.2001
   stryker:
-    semver: ^7.7.0
+    semver: ^7.8.5
     "@systemfsoftware/stryker-js-cli": ^4.0.1
     "@systemfsoftware/stryker-js-typescript-checker": ^3.0.1
     "@systemfsoftware/stryker-js-vitest-runner": ^2.0.1

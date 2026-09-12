@@ -1,39 +1,39 @@
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { instrument } from '@systemfsoftware/stryker-js-instrumenter'
-import type { File as InstrumenterFile, InstrumentResult } from '@systemfsoftware/stryker-js-instrumenter'
-import type { CheckResult, PassedCheckResult } from '@systemfsoftware/stryker-js/Checker'
-import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
-import type { IgnorerService } from '@systemfsoftware/stryker-js/Ignorer'
-import { Ignorer } from '@systemfsoftware/stryker-js/Ignorer'
-import { Module } from '@systemfsoftware/stryker-js/Module'
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import type { MutantResult } from '@systemfsoftware/stryker-js/Mutant'
-import type { MutantTestCoverage } from '@systemfsoftware/stryker-js/Mutant'
-import type { RunPlan as MutantRunPlan } from '@systemfsoftware/stryker-js/Mutant'
-import type { TestPlan } from '@systemfsoftware/stryker-js/Mutant'
-import type { ComposedPlugins } from '@systemfsoftware/stryker-js/Plugin'
-import type { AnyPluginContribution } from '@systemfsoftware/stryker-js/Plugin'
-import { RunConfiguration } from '@systemfsoftware/stryker-js/Plugin'
-import { SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
-import { composePlugins } from '@systemfsoftware/stryker-js/Plugin'
+import type { CheckResult, PassedCheckResult } from '@systemfsoftware/stryker-js'
+import type { ExitClass } from '@systemfsoftware/stryker-js'
+import type { IgnorerService } from '@systemfsoftware/stryker-js'
+import { Ignorer } from '@systemfsoftware/stryker-js'
+import { Module } from '@systemfsoftware/stryker-js'
+import { Mutant } from '@systemfsoftware/stryker-js'
+import type { RunMutantResult } from '@systemfsoftware/stryker-js'
+import type { MutantTestCoverage } from '@systemfsoftware/stryker-js'
+import type { RunPlan as MutantRunPlan } from '@systemfsoftware/stryker-js'
+import type { TestPlan } from '@systemfsoftware/stryker-js'
+import type { ComposedPlugins } from '@systemfsoftware/stryker-js'
+import type { AnyPluginContribution } from '@systemfsoftware/stryker-js'
+import { RunConfiguration } from '@systemfsoftware/stryker-js'
+import { SandboxDirectory } from '@systemfsoftware/stryker-js'
+import { composePlugins } from '@systemfsoftware/stryker-js'
 import {
   DryRunCompleted,
-  MutantTested as ReporterMutantTested,
+  MutantTested,
   MutationTestingPlanReady,
   type ReporterFactory,
-} from '@systemfsoftware/stryker-js/Reporter'
-import { PhaseEntered } from '@systemfsoftware/stryker-js/Run'
-import { MutantTested } from '@systemfsoftware/stryker-js/Run'
-import { PlanKnown } from '@systemfsoftware/stryker-js/Run'
-import type { RunEvent } from '@systemfsoftware/stryker-js/Run'
-import { RunEvents } from '@systemfsoftware/stryker-js/Run'
-import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+} from '@systemfsoftware/stryker-js'
+import { PhaseEntered } from '@systemfsoftware/stryker-js'
+import { RunMutantTested } from '@systemfsoftware/stryker-js'
+import { PlanKnown } from '@systemfsoftware/stryker-js'
+import type { RunEvent } from '@systemfsoftware/stryker-js'
+import { RunEvents } from '@systemfsoftware/stryker-js'
+import type { PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js'
 import type {
   CompleteDryRunResult,
   DryRunResult,
   TestResult,
   TestRunnerCapabilities,
-} from '@systemfsoftware/stryker-js/TestRunner'
+} from '@systemfsoftware/stryker-js'
+import { instrument } from '@systemfsoftware/stryker-js-instrumenter'
+import type { File as InstrumenterFile, InstrumentResult } from '@systemfsoftware/stryker-js-instrumenter'
 import type * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Console from 'effect/Console'
@@ -59,7 +59,7 @@ import * as Semaphore from 'effect/Semaphore'
 import * as Stream from 'effect/Stream'
 import * as ChildProcessSpawner from 'effect/unstable/process/ChildProcessSpawner'
 
-import type * as reportSchema from '@systemfsoftware/stryker-js/Report'
+import type * as reportSchema from '@systemfsoftware/stryker-js'
 import { admitMutationTest, MutationTestError } from './admit-mutation-test.workflow.js'
 import type { MutationTestDecision } from './admit-mutation-test.workflow.js'
 import { makeBuiltinReporterFactories } from './builtin-reporters.js'
@@ -146,7 +146,7 @@ export interface DryRunDone extends InstrumentDone {
 }
 
 export interface RunOutcome {
-  readonly results: readonly MutantResult[]
+  readonly results: readonly RunMutantResult[]
   readonly verdict: ExitClass | null
 }
 
@@ -232,7 +232,7 @@ const rememberedCoverage = (entry: RememberedMutantResult): {
   ...rememberedKilledBy(entry),
 })
 
-const rememberedResultOf = (mutant: Mutant, entry: RememberedMutantResult): MutantResult =>
+const rememberedResultOf = (mutant: Mutant, entry: RememberedMutantResult): RunMutantResult =>
   Object.assign(
     {},
     mutant,
@@ -248,11 +248,11 @@ const rememberedResultOf = (mutant: Mutant, entry: RememberedMutantResult): Muta
 const rememberedResultsOf = (
   mutants: readonly Mutant[],
   remembered: readonly RememberedMutantResult[],
-): MutantResult[] => {
+): RunMutantResult[] => {
   const byId = new Map(mutants.map((mutant) => [mutant.id, mutant] as const))
   return remembered.flatMap((entry) =>
     Option.match(Option.fromNullishOr(byId.get(entry.mutantId)), {
-      onNone: (): MutantResult[] => [],
+      onNone: (): RunMutantResult[] => [],
       onSome: (mutant) => [rememberedResultOf(mutant, entry)],
     })
   )
@@ -262,7 +262,7 @@ type EarlyPlan = Exclude<TestPlan, MutantRunPlan>
 
 const isRunPlan = (plan: TestPlan): plan is MutantRunPlan => plan.plan === 'Run'
 
-const earlyResultOf = (plan: EarlyPlan): MutantResult =>
+const earlyResultOf = (plan: EarlyPlan): RunMutantResult =>
   Object.assign({}, plan.mutant, {
     location: toSchemaLocation(plan.mutant.location),
     status: plan.mutant.status ?? 'Ignored',
@@ -271,7 +271,7 @@ const earlyResultOf = (plan: EarlyPlan): MutantResult =>
 const collectPlan = (
   plan: TestPlan,
   coveredPlans: MutantRunPlan[],
-  earlyResults: MutantResult[],
+  earlyResults: RunMutantResult[],
 ): void =>
   Match.value(plan).pipe(
     Match.when(isRunPlan, (runPlan) => {
@@ -284,9 +284,9 @@ const collectPlan = (
 
 const partitionPlans = (
   plans: readonly TestPlan[],
-): { coveredPlans: MutantRunPlan[]; earlyResults: MutantResult[] } => {
+): { coveredPlans: MutantRunPlan[]; earlyResults: RunMutantResult[] } => {
   const coveredPlans: MutantRunPlan[] = []
-  const earlyResults: MutantResult[] = []
+  const earlyResults: RunMutantResult[] = []
   plans.forEach((plan) => collectPlan(plan, coveredPlans, earlyResults))
   return { coveredPlans, earlyResults }
 }
@@ -505,10 +505,9 @@ export const runPrepare = (command: PrepareExecutorArgs) =>
         )
         const reporterInputs = reporterSelectionsOf(options.reporters, reporterFactoriesByName)
         const reporterInit = currentReporterInit(span)
-        const attachments = yield* attachReporterFactories(reporterInputs, options, reporterInit)
+        const reporterStage = yield* attachReporterFactories(reporterInputs, options, reporterInit)
         const now = yield* Clock.currentTimeMillis
         yield* Queue.offer(queue, new PhaseEntered({ phase: 'prepare', elapsedMs: now - env.runStartedAt }))
-        const reporterStage: ReporterStage = { attachments }
         if (MutableHashMap.size(project.files) === 0) {
           return yield* Effect.fail(
             new StageError({
@@ -1130,7 +1129,7 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                   readonly location: reportSchema.Location
                 }
                 const preparedStreamableOf = (
-                  result: MutantResult,
+                  result: RunMutantResult,
                 ): PreparedStreamableMutant | undefined => {
                   if (!isMutantStatus(result.status)) {
                     return undefined
@@ -1142,11 +1141,11 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                   }
                 }
                 const toStreamEvent = (
-                  result: MutantResult,
+                  result: RunMutantResult,
                   completed: number,
                   prepared: PreparedStreamableMutant,
-                ): ReporterMutantTested =>
-                  new ReporterMutantTested({
+                ): MutantTested =>
+                  new MutantTested({
                     id: result.id,
                     status: prepared.status,
                     file: prepared.file,
@@ -1157,7 +1156,7 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                     total: plannedTotal,
                   })
                 const offerFinished = (
-                  result: MutantResult,
+                  result: RunMutantResult,
                   prepared: PreparedStreamableMutant | undefined,
                 ): Effect.Effect<number | undefined> =>
                   Effect.gen(function*() {
@@ -1167,7 +1166,7 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                     const completed = yield* Ref.updateAndGet(completedRef, (n) => n + 1)
                     yield* Queue.offer(
                       progressQueue,
-                      new MutantTested({
+                      new RunMutantTested({
                         id: result.id,
                         status: prepared.status,
                         file: prepared.file,
@@ -1181,7 +1180,7 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                     return completed
                   })
                 const reportStreamTested = (
-                  result: MutantResult,
+                  result: RunMutantResult,
                   completed: number,
                   prepared: PreparedStreamableMutant,
                 ): Effect.Effect<void> =>
@@ -1194,7 +1193,7 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                   })
 
                 const offerStreamTested = (
-                  result: MutantResult,
+                  result: RunMutantResult,
                   completed: number | undefined,
                   prepared: PreparedStreamableMutant | undefined,
                 ): Effect.Effect<void> =>
@@ -1205,7 +1204,7 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                       onSome: ([done, streamable]) => reportStreamTested(result, done, streamable),
                     },
                   )
-                const announceSettledMutant = (result: MutantResult): Effect.Effect<void> =>
+                const announceSettledMutant = (result: RunMutantResult): Effect.Effect<void> =>
                   Effect.gen(function*() {
                     const prepared = preparedStreamableOf(result)
                     const completed = yield* offerFinished(result, prepared)
@@ -1216,12 +1215,15 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                   announceSettledMutant,
                   { concurrency: 1, discard: true },
                 )
-                const completedMutants = yield* Ref.make<MutantResult[]>([...rememberedResults, ...noCoverageResults])
+                const completedMutants = yield* Ref.make<RunMutantResult[]>([
+                  ...rememberedResults,
+                  ...noCoverageResults,
+                ])
                 const checkpointGate = yield* Semaphore.make(1)
                 yield* reporting.checkpoint(yield* Ref.get(completedMutants)).pipe(
                   Effect.catchCause((cause) => Effect.logWarning('Failed to persist the mutation checkpoint', cause)),
                 )
-                const persist = (result: MutantResult) =>
+                const persist = (result: RunMutantResult) =>
                   checkpointGate.withPermits(1)(
                     Effect.gen(function*() {
                       const next = yield* Ref.updateAndGet(completedMutants, (prev) => [...prev, result])
@@ -1232,7 +1234,7 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                       )
                     }),
                   )
-                const runResults: MutantResult[] = yield* withPhaseSpan(
+                const runResults: RunMutantResult[] = yield* withPhaseSpan(
                   'mutationTest.batch',
                   { total: plannedTotal, testRunners: prev.concurrency.testRunners },
                   () =>
@@ -1265,7 +1267,7 @@ export const mutationTestCell: Cell.Cell<DryRunDone, RunOutcome, StageError, Sta
                       { concurrency: Math.max(1, prev.concurrency.testRunners) },
                     ).pipe(Stream.runCollect, Effect.map((chunk) => [...chunk])),
                 )
-                const allResults: MutantResult[] = [...rememberedResults, ...noCoverageResults, ...runResults]
+                const allResults: RunMutantResult[] = [...rememberedResults, ...noCoverageResults, ...runResults]
                 const outcomeResult = yield* reporting.reportAll(allResults)
                 const doneNow = yield* Clock.currentTimeMillis
                 const elapsed = Duration.millis(doneNow - env.runStartedAt)
@@ -1308,15 +1310,18 @@ export const makeRunLayer = (
   )
 }
 
+const mutationPipeline = Cell.andThen(
+  instrumentCell,
+  Cell.andThen(dryRunCell, mutationTestCell),
+)
+
 export const runMutationTest = (
   cliOptions: PartialStrykerOptions,
   targetMutatePatterns?: string[],
 ): Effect.Effect<RunOutcome, StageError, StageServices> =>
   Effect.gen(function*() {
     const prepared = yield* runPrepare({ cliOptions, targetMutatePatterns })
-    const instrumented = yield* Cell.run(instrumentCell, prepared)
-    const dryDone = yield* Cell.run(dryRunCell, instrumented)
-    return yield* Cell.run(mutationTestCell, dryDone)
+    return yield* mutationPipeline.run(prepared)
   })
 export const shouldKeepTempDir = (
   exit: Exit.Exit<unknown, unknown>,

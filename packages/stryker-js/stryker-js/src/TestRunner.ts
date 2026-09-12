@@ -4,6 +4,7 @@ import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 
 import type { Mutant } from './Mutant.js'
+import type { Position } from './Report.schema.js'
 import type { TestRunnerFailed } from './TestRunner.schema.js'
 
 export {
@@ -21,11 +22,6 @@ export {
   TestRunnerFailed,
   TestStatus,
 } from './TestRunner.schema.js'
-
-export interface Position {
-  readonly line: number
-  readonly column: number
-}
 
 export interface BaseTestResult {
   readonly id: string

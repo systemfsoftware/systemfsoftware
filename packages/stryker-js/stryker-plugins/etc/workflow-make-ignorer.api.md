@@ -4,7 +4,7 @@
 
 ```ts
 
-import { PluginLayerContribution } from '@systemfsoftware/stryker-js/Plugin';
+import { PluginLayerContribution } from '@systemfsoftware/stryker-js';
 
 // @public
 export const decideWorkflowMakeBoundaryIgnore: (node: unknown, ancestors: readonly unknown[]) => string | undefined;

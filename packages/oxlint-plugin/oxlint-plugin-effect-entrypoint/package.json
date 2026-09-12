@@ -1,7 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-effect-entrypoint",
   "license": "Apache-2.0",
-  "version": "1.0.9",
+  "version": "1.1.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugin/oxlint-plugin-effect-entrypoint#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Oxlint rules enforcing main.ts as a real interpretation edge - interprets exactly once, exports nothing, is imported by nothing, and never wraps a foreign promise runtime.",
+  "description": "Oxlint rules enforcing main.ts as a real interpretation edge - interprets exactly once, exports nothing, is imported by nothing, never wraps a foreign promise runtime, and builds the process runtime once, lazily, at module scope.",
   "keywords": [
     "oxlint",
     "oxlint-plugin",

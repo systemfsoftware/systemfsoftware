@@ -6,17 +6,12 @@
 
 // @public (undocumented)
 export namespace Cell {
-    export { Cell, CellTypeId, DESCRIPTION_MODULE, IO_CELLS, IoCellClassification, Kind$1 as Kind, PhaseName, Run, TypeLambda$1 as TypeLambda, Vocabulary, andThen, layer, map, mapInput, provide, run, vocabulary, withPolicy, zip };
-}
-
-// @public (undocumented)
-export namespace Policy {
-    export { Policy };
+    export { Cell, CellTypeId, DESCRIPTION_MODULE, IO_CELLS, IoCellClassification, Kind$1 as Kind, PhaseName, Run, TypeLambda$1 as TypeLambda, Vocabulary, andThen, collect, collectAll, gate, layer, map, mapInput, provide, vocabulary, zip };
 }
 
 // @public (undocumented)
 export namespace Workflow {
-    export { Inhabited, SingleVariantDecision, UninhabitedDecision, UninhabitedError, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, make };
+    export { Inhabited, SingleVariantDecision, UninhabitedDecision, UninhabitedError, UnsharedTypeId, UntaggedDecision, UntaggedError, Workflow, WorkflowBrand, andThen$1 as andThen, make, total };
 }
 
 // (No @packageDocumentation comment for this package)

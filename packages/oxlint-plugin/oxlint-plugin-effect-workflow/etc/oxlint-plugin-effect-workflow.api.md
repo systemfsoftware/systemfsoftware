@@ -19,6 +19,7 @@ const _default: {
         'make-command-schema': Rule;
         'workflow-file-export-topology': Rule;
         'workflow-file-make-presence': Rule;
+        'workflow-variant-constructed': Rule;
     };
     configs: {
         recommended: {

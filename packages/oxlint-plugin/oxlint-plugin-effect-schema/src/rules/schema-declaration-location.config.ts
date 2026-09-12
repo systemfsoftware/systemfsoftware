@@ -6,6 +6,9 @@ export const SCHEMA_FILE_SUFFIX = '.schema.ts' as const
 /** A workflow file: one stem segment with no periods, then `.workflow.ts`. */
 export const WORKFLOW_FILE_BASENAME = /^[^.]+\.workflow\.ts$/
 
+export const isRuntimeCodeFile = (filename: string): boolean =>
+  /(?:^|[\\/])src[\\/]/u.test(filename) || filename.endsWith('.test.ts')
+
 export const MESSAGE = '{{name}} is forbidden. Expected: {{expected}}. Actual: {{actual}}. Fix: {{fix}}.' as const
 
 export const EXPECTED =

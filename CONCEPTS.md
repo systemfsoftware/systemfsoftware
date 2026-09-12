@@ -157,6 +157,10 @@ An index key whose assignment nothing verifies. Where a suffix, tag, or path dec
 
 A drifted key is worse than a missing one. Retrieving nothing leaves the author still looking; retrieving the wrong doctrine leaves the author confident. The same drift un-enrols the file from whatever Verification observer the old key selected. That loss surfaces only if the instrument happens to object to an empty selection, and even then the cheapest repair is to delete the selection — which ends the objection and the observation together, leaving the file with no observer and nothing complaining.
 
+### Costume
+
+An invariant whose shape is present in the code but whose enforcement is review alone — the rule compiles and CI stays green while nothing re-fires it. Distinct from a Ritual gate, which runs but checks a proxy: a costume has no gate at all. The remedy is a mechanism that re-fires (compiler, linter, mutator), never prose the model must recall.
+
 ## Test execution
 
 ### Run class
@@ -223,11 +227,17 @@ Distinct from the machine-stream `RunEvent` alphabet: the reporter protocol is a
 
 One sandwich, authored as a `Cell.layer` spec — read (impure), decode and decide (pure), encode (pure), write (impure) — and compiled into a Cell: a single function from command to response. The assembler chains the phases in that order internally; the author cannot author a different order, and a hand-built record claiming one is not expressible on the published surface. A **phase** is one named step — a read, a decode, a decision, an encode, or a write. One Cell is one sandwich; a site whose real order writes before it can classify is two Cells composed in the calling `Effect.gen` (or through `Cell.andThen`), with the shell owning the binding between them — a later read that needs durable state an earlier write created reads it by re-gathering, and a response that becomes the next command travels as an ordinary generator binding.
 
+### Grain table
+
+The three-way classification of every operation on a Cell or runtime by what it does with requirements: **wiring closure** eliminates `R` by building the service graph (`ManagedRuntime.make`, `Layer.provide`, `Cell.provide`), **interpretation** starts a fiber over that graph (`runtime.runPromise`, `Layer.launch`), and **work** leaves `R` open as arrow application (`cell.run(input)`).
+
+Placement law follows the grain: wiring closure lives at the root module as a lazy memoized bootstrap, interpretation happens at an outside-interaction edge, and work is lawful anywhere inside composition. Static enforcement reaches only the shapes, never the cardinality or the edge — those stay review-gated.
+
 The phases demand services by yielding them, and the Cell's `R` channel carries what the bodies yielded: the composition root provides once, and a missing provide is a compile error at the run site, not a runtime surprise. The error channel is the interpreter's truth — read, decode, and write refusals fail; a decide refusal is the outcome the encode and write receive.
 
 A write phase may promote a decide `Left` into `Effect.fail` when the refusal is operationally fatal to the process — that promotion is the executor's shell policy, declared by the write's own error channel, never a phase convention the seam types name.
 
-An impure phase's interior is not type-visible, so no count of I/O operations is claimed or enforced: a read may gather a product across its interior — bumping a counter and returning the resulting rate is one such product — and fan-in is expressed that way rather than by relaxing the chain. A pure phase is one expression and performs no I/O. That last sentence is a design rule, and only part of it is machine-decided: the lint rule on phase bodies reads the call graph reachable from the body through module-level helpers, so an I/O call written in the body or in a helper beside it is caught, while one reached through a closure-captured binding is not. The undecided half stays a rule the author keeps, not a claim the gate has checked.
+An impure phase's interior is not type-visible, so no count of I/O operations is claimed or enforced: a read may gather a product across its interior — bumping a counter and returning the resulting rate is one such product — and fan-in is expressed that way rather than by relaxing the chain. A pure phase is one expression and performs no I/O. That last sentence is a design rule, and only part of it is machine-decided: the `no-io-in-phase-bodies` lint rule reports an I/O call written anywhere inside the body — at any depth within it, invoked or not — or inside a same-file module-level helper the body calls, followed transitively; a binding captured from an enclosing closure and a helper imported from another module are what it does not follow. The undecided half stays a rule the author keeps, not a claim the gate has checked.
 
 ### Vocabulary
 

@@ -22,7 +22,7 @@ const checkExpect = expect
 
 import { NodePath } from '@effect/platform-node'
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import type * as schema from '@systemfsoftware/stryker-js/Report'
+import type * as schema from '@systemfsoftware/stryker-js'
 import { Effect } from 'effect'
 import * as Path from 'effect/Path'
 

@@ -1,6 +1,6 @@
-import type { MutantResult } from '@systemfsoftware/stryker-js/Mutant'
-import type * as schema from '@systemfsoftware/stryker-js/Report'
-import type { TestResult } from '@systemfsoftware/stryker-js/TestRunner'
+import type { RunMutantResult } from '@systemfsoftware/stryker-js'
+import type * as schema from '@systemfsoftware/stryker-js'
+import type { TestResult } from '@systemfsoftware/stryker-js'
 import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
 
@@ -48,7 +48,7 @@ export const testIdRemap = (testIds: readonly string[]): TestIdRemap => {
   return { testId: remapId, testIds: remapIds }
 }
 
-export const toReportMutant = (mutant: MutantResult, remap: TestIdRemap): schema.MutantResult => ({
+export const toReportMutant = (mutant: RunMutantResult, remap: TestIdRemap): schema.MutantResult => ({
   id: mutant.id,
   mutatorName: mutant.mutatorName,
   replacement: mutant.replacement,
@@ -78,7 +78,7 @@ interface MutantGroup {
 export interface FileResultsInput {
   readonly sources: HashMap.HashMap<string, schema.FileResult>
   readonly reportNames: HashMap.HashMap<string, string>
-  readonly mutants: readonly MutantResult[]
+  readonly mutants: readonly RunMutantResult[]
   readonly remap: TestIdRemap
 }
 

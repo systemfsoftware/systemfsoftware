@@ -1,6 +1,6 @@
 {
   "name": "@systemfsoftware/npm-package",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "license": "Apache-2.0",
   "repository": {
@@ -31,13 +31,15 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsdown",
+    "build": "tsdown && pnpm api:check",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
     "attw": "attw --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "test": "vitest run",
-    "prepack": "pnpm build"
+    "prepack": "pnpm build",
+    "api:check": "tsdown && api-extractor run",
+    "api:update": "api-extractor run --local"
   },
   "dependencies": {
     "@andrewbranch/untar.js": "^1.0.3",
@@ -48,6 +50,7 @@
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
+    "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",

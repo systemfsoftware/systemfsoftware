@@ -5,6 +5,7 @@ import { makeFileLocation } from './rules/make-file-location.js'
 import { workflowFileExportTopology } from './rules/workflow-file-export-topology.js'
 import { workflowFileMakePresence } from './rules/workflow-file-make-presence.js'
 import { workflowMatchExhaustive } from './rules/workflow-match-exhaustive.js'
+import { workflowVariantConstructed } from './rules/workflow-variant-constructed.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-effect-workflow'
 
@@ -34,6 +35,10 @@ const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
  * - `workflow-file-make-presence` - a `<stem>.workflow.ts` file constructs
  *   its decision with `Workflow.make`. Enrolled in recommended after
  *   in-tree cutover.
+ * - `workflow-variant-constructed` - a variant the decider's return
+ *   annotation declares in its decision or error channel has no
+ *   construction site in this file. Reads this file's AST alone: a variant
+ *   whose class is imported is out of reach.
  */
 const recommendedRules = {
   [rule('make-file-location')]: 'error',
@@ -43,6 +48,7 @@ const recommendedRules = {
   [rule('workflow-file-export-topology')]: 'error',
   [rule('damp-workflow-stem')]: 'error',
   [rule('workflow-file-make-presence')]: 'error',
+  [rule('workflow-variant-constructed')]: 'error',
 } as const
 
 export default {
@@ -57,6 +63,7 @@ export default {
     'make-command-schema': makeCommandSchema,
     'workflow-file-export-topology': workflowFileExportTopology,
     'workflow-file-make-presence': workflowFileMakePresence,
+    'workflow-variant-constructed': workflowVariantConstructed,
   },
   configs: {
     recommended: {

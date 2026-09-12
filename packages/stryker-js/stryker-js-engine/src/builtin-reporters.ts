@@ -1,4 +1,4 @@
-import type { ReporterFactory } from '@systemfsoftware/stryker-js/Reporter'
+import type { ReporterFactory } from '@systemfsoftware/stryker-js'
 
 import { makeClearTextReporter } from './clear-text-report.js'
 import { type JsonReporterDeps, makeJsonReporter } from './json-reporter.js'

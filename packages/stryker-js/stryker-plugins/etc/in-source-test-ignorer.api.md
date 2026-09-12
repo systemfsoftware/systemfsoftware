@@ -4,7 +4,7 @@
 
 ```ts
 
-import { PluginLayerContribution } from '@systemfsoftware/stryker-js/Plugin';
+import { PluginLayerContribution } from '@systemfsoftware/stryker-js';
 
 // @public (undocumented)
 export const decideInSourceTestIgnore: (ancestors: Iterable<unknown>) => string | undefined;
