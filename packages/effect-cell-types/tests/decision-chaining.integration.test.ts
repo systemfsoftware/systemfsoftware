@@ -8,6 +8,7 @@ import { expect } from 'vitest'
 import { Admitted, Decoded, Malformed, Rejected } from './__fixtures__/admit-decoded-command.workflow.js'
 import { chainAdmitDecisions } from './__fixtures__/chain-admit-decisions.workflow.js'
 import { SettleCommand, totalAdmitDecision } from './__fixtures__/total-admit-decision.workflow.js'
+import { totalPairAdmitTaggedCommands } from './__fixtures__/total-pair-admit-tagged-commands.workflow.js'
 
 const Feature = makeFeature({ it, layer })
 
@@ -35,10 +36,10 @@ const chainCell = (trace: string[]) =>
       }),
   })
 
-const totalCell = (trace: string[]) =>
+const totalCell = (trace: string[], decide = totalAdmitDecision(trace)) =>
   Cell.layer({
     read: (command: SettleCommand) => Effect.succeed(command),
-    decide: totalAdmitDecision(trace),
+    decide,
     write: (outcome: Result.Result<Decision, never>) =>
       Effect.sync(() => {
         const line = Result.match(outcome, { onSuccess: render, onFailure: (): string => 'failed' })
@@ -96,6 +97,27 @@ Feature('Chaining decisions across a cell')
         }),
         And('the second decider ruled')((s) => {
           expect(s.run.trace).toEqual(['settle:total', 'decided:Admitted:3'])
+        }),
+      ),
+    )
+
+    scenario(
+      'Two total decisions compose, and both rule in order',
+      Gherkin.Do.pipe(
+        When('a Cell whose decision is a composite of two totals is run')('run', () => {
+          const trace: string[] = []
+          return Effect.map(
+            totalCell(trace, totalPairAdmitTaggedCommands(trace)).run(
+              new SettleCommand({ decision: new Admitted({ length: 5 }), ctx: 'first' }),
+            ),
+            (response) => ({ response, trace }),
+          )
+        }),
+        Then('the cell outcome is the decision the pair published')((s) => {
+          expect(s.run.response).toBe('decided:Admitted:5')
+        }),
+        And('both total deciders ruled in order')((s) => {
+          expect(s.run.trace).toEqual(['settle:first', 'settle:second', 'decided:Admitted:5'])
         }),
       ),
     )

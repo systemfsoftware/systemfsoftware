@@ -1,14 +1,18 @@
-import { Workflow } from '@systemfsoftware/effect-cell-types'
+import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
+import type { Effect } from 'effect/Effect'
 import type { Result } from 'effect/Result'
 import { describe, expect, it } from 'tstyche'
 
 import { acceptTaggedCommand, type FixtureDecision } from '../tests/__fixtures__/accept-tagged-command.workflow.js'
+import { type Admitted, type Rejected } from '../tests/__fixtures__/admit-decoded-command.workflow.js'
 import { chainAdmitTaggedCommands } from '../tests/__fixtures__/chain-admit-tagged-commands.workflow.js'
 import { ChainedTaggedCommand } from '../tests/__fixtures__/chain-admit-tagged-commands.workflow.js'
 import { CommandRefused, StructCmd, TaggedCmd, UntaggedCmd } from '../tests/__fixtures__/Command.schema.js'
 import { type Decision, DecisionError, LoneDecision } from '../tests/__fixtures__/Decision.schema.js'
 import { refuseWidenedCommand, type WidenedDecision } from '../tests/__fixtures__/refuse-widened-command.workflow.js'
+import { SettleCommand } from '../tests/__fixtures__/total-admit-decision.workflow.js'
 import { totalAdmitTaggedCommand } from '../tests/__fixtures__/total-admit-tagged-command.workflow.js'
+import { totalPairAdmitTaggedCommands } from '../tests/__fixtures__/total-pair-admit-tagged-commands.workflow.js'
 
 interface UntaggedMember {
   readonly value: number
@@ -71,6 +75,52 @@ interface UnrelatedBrandTwo {
   readonly [UnrelatedBrand]: typeof UnrelatedBrand
 }
 
+declare const NarrowSlotBrandTypeId: unique symbol
+
+/**
+ * The narrowed twin of the class idiom, hand-written as interfaces: an interface has no field
+ * initializer, so the slot can only be annotated (`typeof T`), which keeps it the unique symbol
+ * type — the slot width a class field's initializer leaves behind when it widens to the general
+ * `symbol`. This is the shape the predicate refuses.
+ */
+interface NarrowSlotBrandOne {
+  readonly _tag: 'NarrowSlotBrandOne'
+  readonly value: number
+  readonly [NarrowSlotBrandTypeId]: typeof NarrowSlotBrandTypeId
+}
+
+interface NarrowSlotBrandTwo {
+  readonly _tag: 'NarrowSlotBrandTwo'
+  readonly reason: string
+  readonly [NarrowSlotBrandTypeId]: typeof NarrowSlotBrandTypeId
+}
+
+/**
+ * The spoken-loudly twin of {@link NarrowSlotBrandOne}: an interface that annotates the slot
+ * with the general `symbol` instead. That is the type a class field's initializer infers, so
+ * this union is structurally the class instance itself — the check keys on the declared shape
+ * (a widened slot), never on whether the declaration is a class or an interface.
+ */
+interface WidenedBrandOne {
+  readonly _tag: 'WidenedBrandOne'
+  readonly [UnrelatedBrand]: symbol
+}
+
+interface WidenedBrandTwo {
+  readonly _tag: 'WidenedBrandTwo'
+  readonly [UnrelatedBrand]: symbol
+}
+
+interface StringKeyBrandOne {
+  readonly _tag: 'StringKeyBrandOne'
+  readonly familyBrand: symbol
+}
+
+interface StringKeyBrandTwo {
+  readonly _tag: 'StringKeyBrandTwo'
+  readonly familyBrand: symbol
+}
+
 declare const decideOverTagged: (command: TaggedCmd) => Result<Decision, DecisionError>
 declare const decideOverUntagged: (command: UntaggedCmd) => Result<Decision, DecisionError>
 declare const decideWidened: typeof refuseWidenedCommand
@@ -88,8 +138,28 @@ declare const decideUnrelatedKeyStringOverTagged: (
 declare const decideUnrelatedBrandTotalOverTagged: (
   command: TaggedCmd,
 ) => Result<UnrelatedBrandOne | UnrelatedBrandTwo, never>
+declare const decideNarrowSlotBrandOverTagged: (
+  command: TaggedCmd,
+) => Result<NarrowSlotBrandOne | NarrowSlotBrandTwo, CommandRefused>
+declare const decideUnrelatedBrandOverTagged: (
+  command: TaggedCmd,
+) => Result<UnrelatedBrandOne | UnrelatedBrandTwo, CommandRefused>
 declare const decidePromiseOverTagged: (command: TaggedCmd) => Promise<Decision>
 declare const decideChainedUnbranded: (command: ChainedTaggedCommand) => Result<FixtureDecision, DecisionError>
+
+type SettledDecision = Admitted | Rejected
+
+declare const decideTotalOverSettle:
+  & ((command: SettleCommand) => Result<SettledDecision, never>)
+  & Workflow.WorkflowBrand
+declare const decideRefusingOverSettle:
+  & ((command: SettleCommand) => Result<SettledDecision, DecisionError>)
+  & Workflow.WorkflowBrand
+declare const readSettleCommand: (command: SettleCommand) => Effect<SettleCommand, never, never>
+declare const writeTotalSettleOutcome: (
+  outcome: Result<SettledDecision, never>,
+  raw: SettleCommand,
+) => Effect<void, never, never>
 
 describe('T11 the commands and deciders make refuses', () => {
   it('Should_BrandTheWorkflow_When_TheDeciderCarriesTwoTaggedVariants', () => {
@@ -164,14 +234,38 @@ describe('T13 the composite constructor', () => {
     )
   })
 
-  it('Should_RefuseTwoTotalWorkflows_When_TheCompositeErrorChannelIsNever', () => {
-    expect<typeof Workflow.andThen>().type.not.toBeCallableWith(
-      TaggedCmd,
-      totalAdmitTaggedCommand,
-      ChainedTaggedCommand,
-      'ctx',
-      totalAdmitTaggedCommand,
+  it('Should_BrandTheTotalComposite_When_NeitherComponentCanFail', () => {
+    expect(totalPairAdmitTaggedCommands([])).type.toBe<
+      ((command: SettleCommand) => Result<SettledDecision, never>) & Workflow.WorkflowBrand
+    >()
+  })
+
+  it('Should_KeepTheCarriedChannel_When_TheTotalComesFirst', () => {
+    const composite = Workflow.andThen(
+      SettleCommand,
+      decideTotalOverSettle,
+      SettleCommand,
+      'second',
+      decideRefusingOverSettle,
     )
+    expect(composite).type.toBe<Workflow.Workflow<SettleCommand, SettledDecision, DecisionError>>()
+  })
+
+  it('Should_KeepTheCarriedChannel_When_TheTotalComesLast', () => {
+    const composite = Workflow.andThen(
+      SettleCommand,
+      decideRefusingOverSettle,
+      SettleCommand,
+      'second',
+      decideTotalOverSettle,
+    )
+    expect(composite).type.toBe<Workflow.Workflow<SettleCommand, SettledDecision, DecisionError>>()
+  })
+
+  it('Should_RefuseTheUninhabitedAnnotation_When_TheCompositeIsTotal', () => {
+    expect(totalPairAdmitTaggedCommands([])).type.not.toBeAssignableTo<
+      Workflow.Workflow<SettleCommand, SettledDecision, never>
+    >()
   })
 })
 
@@ -194,16 +288,46 @@ describe('T14 the shared-type-id predicate as measured', () => {
     >()
   })
 
-  it('Should_AcceptTheUnion_When_AnUnrelatedSymbolKeyCarriesTheSymbolItself', () => {
-    expect<Workflow.Inhabited<UnrelatedBrandOne | UnrelatedBrandTwo, CommandRefused>>().type.toBe<unknown>()
+  it('Should_RefuseTheMarker_When_AnUnrelatedSymbolKeyCarriesTheSymbolItself', () => {
+    expect<Workflow.Inhabited<UnrelatedBrandOne | UnrelatedBrandTwo, CommandRefused>>().type.toBe<
+      Workflow.UnsharedTypeId
+    >()
   })
 
   it('Should_RefuseTheMarker_When_ConstructorReceivedTheUnrelatedPair', () => {
     expect<typeof Workflow.total>().type.not.toBeCallableWith(TaggedCmd, decideUnrelatedKeyStringOverTagged)
   })
 
-  it('Should_AcceptTheConstructor_When_TheUnrelatedPairCarriesSymbolValues', () => {
-    expect<typeof Workflow.total>().type.toBeCallableWith(TaggedCmd, decideUnrelatedBrandTotalOverTagged)
+  it('Should_RefuseTheMarker_When_TheUnrelatedPairReachesTheTotalConstructor', () => {
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(TaggedCmd, decideUnrelatedBrandTotalOverTagged)
+  })
+
+  it('Should_RefuseTheMarker_When_TheUnrelatedPairReachesAMakeConstructor', () => {
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(TaggedCmd, decideUnrelatedBrandOverTagged)
+  })
+
+  it('Should_RefuseTheMarker_When_AnInterfaceCarriesTheNarrowSlotBrand', () => {
+    expect<Workflow.Inhabited<NarrowSlotBrandOne | NarrowSlotBrandTwo, CommandRefused>>().type.toBe<
+      Workflow.UnsharedTypeId
+    >()
+  })
+
+  it('Should_RefuseTheMarker_When_TheNarrowSlotPairReachesAMakeConstructor', () => {
+    expect<typeof Workflow.make>().type.not.toBeCallableWith(TaggedCmd, decideNarrowSlotBrandOverTagged)
+  })
+
+  it('Should_AcceptTheMarker_When_AnInterfaceCarriesTheClassFieldsWidenedSlot', () => {
+    expect<Workflow.Inhabited<WidenedBrandOne | WidenedBrandTwo, CommandRefused>>().type.toBe<unknown>()
+  })
+
+  it('Should_AcceptTheMarker_When_TheGenuineTaggedClassFamilyCarriesTheFieldInitializerBrand', () => {
+    expect<Workflow.Inhabited<Decision, CommandRefused>>().type.toBe<unknown>()
+  })
+
+  it('Should_RefuseTheMarker_When_TheFamilyBrandCarriesAStringKey', () => {
+    expect<Workflow.Inhabited<StringKeyBrandOne | StringKeyBrandTwo, CommandRefused>>().type.toBe<
+      Workflow.UnsharedTypeId
+    >()
   })
 
   it('Should_RefuseTheMarker_When_TheSplitPairReachesAConstructor', () => {
@@ -212,5 +336,16 @@ describe('T14 the shared-type-id predicate as measured', () => {
 
   it('Should_RefuseTheMarker_When_TheKeyOnlyPairReachesAConstructor', () => {
     expect<typeof Workflow.make>().type.not.toBeCallableWith(TaggedCmd, decideKeyOnlyBrandOverTagged)
+  })
+})
+
+describe('T15 the composite the decide slot accepts', () => {
+  it('Should_AcceptTheTotalComposite_When_TheDecideSlotTakesAWorkflow', () => {
+    const cell = Cell.layer({
+      read: readSettleCommand,
+      decide: totalPairAdmitTaggedCommands([]),
+      write: writeTotalSettleOutcome,
+    })
+    expect(cell).type.toBe<Cell.Cell<SettleCommand, void, never, never>>()
   })
 })

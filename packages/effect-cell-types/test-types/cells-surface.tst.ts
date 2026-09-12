@@ -1,6 +1,7 @@
 import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
 import { pipe } from 'effect'
 import type { Effect } from 'effect/Effect'
+import { map } from 'effect/Effect'
 import type { Layer } from 'effect/Layer'
 import type { Option } from 'effect/Option'
 import type { Result } from 'effect/Result'
@@ -278,8 +279,14 @@ describe('T7 the combinator algebra', () => {
   it('Should_HandEveryResultToTheFold_When_Accumulating', () => {
     const fold = (results: readonly Result<Decision, ReadErr>[]): number => results.length
     const accumulated = Cell.collectAll(itemCell, fold)
-    expect(accumulated).type.toBe<Cell.Cell<readonly Cmd[], number, ReadErr, Db>>()
-    expect(accumulated.run([command])).type.toBe<Effect<number, ReadErr, Db>>()
+    expect(accumulated).type.toBe<Cell.Cell<readonly Cmd[], number, never, Db>>()
+    expect(accumulated.run([command])).type.toBe<Effect<number, never, Db>>()
+  })
+
+  it('Should_NotInheritTheItemErrorChannel_When_TheConsumerEffectWrapsTheCell', () => {
+    const fold = (results: readonly Result<Decision, ReadErr>[]): number => results.length
+    const consumed = map(Cell.collectAll(itemCell, fold).run([command]), (count) => count + 1)
+    expect(consumed).type.toBe<Effect<number, never, Db>>()
   })
 
   it('Should_RefuseASuccessOnlyFold_When_TheAccumulateFormCarriesRefusals', () => {

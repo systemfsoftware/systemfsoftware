@@ -25,10 +25,12 @@ import {
   stringLiteral,
   unrelatedImport,
   workflowAliasedImport,
+  workflowAndThenCallOf,
   workflowMakeCallOf,
   workflowMakeCallOfTwo,
   workflowNamedImport,
   workflowNamespaceImport,
+  workflowTotalCallOf,
 } from '../__fixtures__/WorkflowMakeAst.fixtures.js'
 
 const Feature = makeFeature({ it, layer })
@@ -364,6 +366,138 @@ Feature('Workflow.make boundary — the inverted mutation-population selector')
         Then('it returns undefined')((s) =>
           Effect.sync(() => {
             expect(s.reason).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A mutant inside a Workflow.total body stays live like the make-body equivalent',
+      Gherkin.Do.pipe(
+        Given('a `Workflow.total(...)` decider body holding the mutant')('fixture', () =>
+          Effect.sync(() => {
+            const mutant = stringLiteral('total')
+            const body = makeBodyOf(mutant)
+            const call = workflowTotalCallOf(body)
+            const program = programOf([workflowNamedImport(), call])
+            return makeFixture(mutant, [body, call, program])
+          })),
+        When('the boundary decision runs on that mutant')(
+          'reason',
+          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+        ),
+        Then('it returns undefined — a total body is a decider body exactly as a make body is')((s) =>
+          Effect.sync(() => {
+            expect(s.reason).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A mutant inside a total called through a namespace import stays live',
+      Gherkin.Do.pipe(
+        Given('`import * as Workflow` with the mutant inside the total argument')('fixture', () =>
+          Effect.sync(() => {
+            const mutant = stringLiteral('namespace')
+            const body = makeBodyOf(mutant)
+            const call = workflowTotalCallOf(body)
+            const program = programOf([workflowNamespaceImport('Workflow'), call])
+            return makeFixture(mutant, [body, call, program])
+          })),
+        When('the boundary decision runs on that mutant')(
+          'reason',
+          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+        ),
+        Then('it returns undefined')((s) =>
+          Effect.sync(() => {
+            expect(s.reason).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A mutant inside a total called through an aliased import stays live',
+      Gherkin.Do.pipe(
+        Given('`import { Workflow as W }` with the mutant inside `W.total(...)`')('fixture', () =>
+          Effect.sync(() => {
+            const mutant = stringLiteral('aliased')
+            const body = makeBodyOf(mutant)
+            const call = workflowTotalCallOf(body, 'W')
+            const program = programOf([workflowAliasedImport('W'), call])
+            return makeFixture(mutant, [body, call, program])
+          })),
+        When('the boundary decision runs on that mutant')(
+          'reason',
+          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+        ),
+        Then('it returns undefined')((s) =>
+          Effect.sync(() => {
+            expect(s.reason).toBeUndefined()
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A decider-shaped andThen argument contributes no mutation population',
+      Gherkin.Do.pipe(
+        Given('the same decider-shaped argument under `Workflow.make` and under `Workflow.andThen`')(
+          'fixtures',
+          () =>
+            Effect.sync(() => {
+              const mutant = stringLiteral('step')
+              const body = makeBodyOf(mutant)
+              const makeCall = workflowMakeCallOf(body)
+              const andThenCall = workflowAndThenCallOf([identifier('first'), body])
+              const program = programOf([workflowNamedImport(), makeCall, andThenCall])
+              return {
+                mutant,
+                makeAncestors: [body, makeCall, program],
+                andThenAncestors: [body, andThenCall, program],
+              }
+            }),
+        ),
+        When('the boundary decision runs on the mutant against each ancestor chain')(
+          'verdicts',
+          (s) =>
+            Effect.sync(() => ({
+              make: decideWorkflowMakeBoundaryIgnore(s.fixtures.mutant, s.fixtures.makeAncestors),
+              andThen: decideWorkflowMakeBoundaryIgnore(s.fixtures.mutant, s.fixtures.andThenAncestors),
+            })),
+        ),
+        Then('the make boundary holds the mutant live and the composing boundary is not a decider body')((s) =>
+          Effect.sync(() => {
+            expect(s.verdicts.make).toBeUndefined()
+            expect(s.verdicts.andThen).toBe(NOT_INSIDE_WORKFLOW_MAKE)
+          })
+        ),
+      ),
+    )
+
+    scenario(
+      'A composing andThen operand that resolves to a same-file function joins no population',
+      Gherkin.Do.pipe(
+        Given('a `Workflow.andThen(...)` operand naming a same-file function holding the mutant')(
+          'fixture',
+          () =>
+            Effect.sync(() => {
+              const mutant = stringLiteral('compose')
+              const operandBody = makeBodyOf(mutant)
+              const operand = constBindingOf('upstreamStep', operandBody)
+              const andThenCall = workflowAndThenCallOf([identifier('upstreamStep'), identifier('second')])
+              const program = programOf([workflowNamedImport(), operand, andThenCall])
+              return makeFixture(mutant, [mutant, operandBody, operand, program])
+            }),
+        ),
+        When('the boundary decision runs on that mutant')(
+          'reason',
+          (s) => Effect.sync(() => decideWorkflowMakeBoundaryIgnore(s.fixture.mutant, s.fixture.ancestors)),
+        ),
+        Then('it returns NOT_INSIDE_WORKFLOW_MAKE')((s) =>
+          Effect.sync(() => {
+            expect(s.reason).toBe(NOT_INSIDE_WORKFLOW_MAKE)
           })
         ),
       ),

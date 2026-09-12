@@ -27,7 +27,9 @@ interface DeclaredVariant {
 interface FileFacts {
   readonly aliases: ReadonlyMap<string, ESTree.Node>
   readonly unionMembers: ReadonlyMap<string, readonly ESTree.Node[]>
-  readonly declaredNames: ReadonlySet<string>
+  /** Variant classes this file declares — the only names a channel annotation can declare. */
+  readonly declaredClassNames: ReadonlySet<string>
+  /** Variant values this file constructs — the report path's construction evidence. */
   readonly constructedNames: ReadonlySet<string>
 }
 
@@ -81,7 +83,7 @@ const unionMembersOf = (node: ESTree.Expression): readonly ESTree.Node[] | null 
 const collectFileFacts = (context: Context): FileFacts => {
   const aliases = new Map<string, ESTree.Node>()
   const unionMembers = new Map<string, readonly ESTree.Node[]>()
-  const declaredNames = new Set<string>()
+  const declaredClassNames = new Set<string>()
   const constructedNames = new Set<string>()
 
   walkNodes(context.sourceCode.ast, context.sourceCode.visitorKeys, (node) => {
@@ -91,21 +93,18 @@ const collectFileFacts = (context: Context): FileFacts => {
         return
       case 'ClassDeclaration':
       case 'ClassExpression':
-        if (node.id !== null) declaredNames.add(node.id.name)
+        if (node.id !== null) declaredClassNames.add(node.id.name)
         return
       case 'VariableDeclarator': {
         const init = node.init
         if (init === null || !isIdentifierNode(node.id)) return
+        // Only the union const is a declaration: `const X = S.Union([…])` names X's
+        // members as the declared variants. A local bound to a constructed value
+        // (`const accepted = new Admitted({})`) declares no variant class, so it is
+        // recorded nowhere: an annotation that names such a local declares nothing, and
+        // the report speaks only for the classes this file declares.
         const members = unionMembersOf(init)
-        if (members !== null) {
-          unionMembers.set(node.id.name, members)
-          return
-        }
-        const boundToConstructedValue = init.type === 'CallExpression' ||
-          init.type === 'NewExpression' ||
-          init.type === 'TSAsExpression' ||
-          init.type === 'TSSatisfiesExpression'
-        if (boundToConstructedValue) declaredNames.add(node.id.name)
+        if (members !== null) unionMembers.set(node.id.name, members)
         return
       }
       case 'NewExpression':
@@ -121,7 +120,7 @@ const collectFileFacts = (context: Context): FileFacts => {
     }
   })
 
-  return { aliases, unionMembers, declaredNames, constructedNames }
+  return { aliases, unionMembers, declaredClassNames, constructedNames }
 }
 
 const resolveResultReference = (node: ESTree.Node, facts: FileFacts, hops: number): ESTree.Node => {
@@ -146,7 +145,7 @@ const declaredVariantsOf = (
   }
   const name = referencedName(unwrapped)
   if (name === null) return []
-  if (facts.declaredNames.has(name)) return [{ channel, name, node: unwrapped }]
+  if (facts.declaredClassNames.has(name)) return [{ channel, name, node: unwrapped }]
   if (hops >= MAX_ALIAS_HOPS) return []
   const members = facts.unionMembers.get(name)
   if (members !== undefined) {
@@ -180,7 +179,9 @@ const declaredChannelsOf = (body: MakeBodyKind, facts: FileFacts): readonly Decl
  * channel whose class this file declares must be constructed in this file, by `new X(…)`
  * or `X.make(…)`. Construction is read from constructor call sites anywhere in the file,
  * never from the union declaration, so a variant named only in a comment or a string
- * literal is still unreachable.
+ * literal is still unreachable. The declared set holds the classes this file declares and
+ * nothing else: a local bound to a constructed value declares no variant class, so an
+ * annotation that names such a local declares nothing and stays silent.
  *
  * A composing constructor (`Workflow.andThen`) opens no decision body in the file that
  * names it, and a variant whose class is imported is a name this file's AST cannot

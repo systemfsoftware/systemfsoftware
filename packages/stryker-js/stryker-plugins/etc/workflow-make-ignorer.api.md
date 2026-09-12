@@ -10,7 +10,7 @@ import { PluginLayerContribution } from '@systemfsoftware/stryker-js';
 export const decideWorkflowMakeBoundaryIgnore: (node: unknown, ancestors: readonly unknown[]) => string | undefined;
 
 // @public (undocumented)
-export const NOT_INSIDE_WORKFLOW_MAKE: 'mutant is outside every Workflow.make decision body; only make bodies are the mutation population';
+export const NOT_INSIDE_WORKFLOW_MAKE: 'mutant is outside every Workflow.make and Workflow.total decision body; only decider bodies are the mutation population';
 
 // @public (undocumented)
 export const strykerPlugins: PluginLayerContribution<"Ignore">[];

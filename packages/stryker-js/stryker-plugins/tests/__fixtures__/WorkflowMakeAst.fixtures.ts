@@ -99,6 +99,12 @@ export const workflowMakeCallOfTwo = (
   objectName = 'Workflow',
 ): CallExpression => callOf(memberOf(objectName, 'make'), [command, arg])
 
+export const workflowTotalCallOf = (arg: unknown, objectName = 'Workflow'): CallExpression =>
+  callOf(memberOf(objectName, 'total'), [arg])
+
+export const workflowAndThenCallOf = (args: readonly unknown[], objectName = 'Workflow'): CallExpression =>
+  callOf(memberOf(objectName, 'andThen'), args)
+
 /** `class <name> {}` — a command class in slot 0; never a decision body. */
 export const classDeclarationOf = (name: string) => ({
   type: 'ClassDeclaration' as const,

@@ -17,12 +17,8 @@ export class SettleCommand extends S.TaggedClass<SettleCommand>()('SettleCommand
 
 /**
  * The decision that cannot fail: the settled command already carries the upstream
- * decision, so this decider publishes it as its own.
- *
- * The body hands `command.decision` back instead of rebuilding each variant because a make
- * body may reference only its own parameters, this module's declarations and the sealed
- * `effect` surface — the decision classes, owned by `admit-decoded-command`, are out of its
- * reach. The value published is the same either way.
+ * decision, so this decider publishes it as its own instead of rebuilding each
+ * variant. The value published is the same either way.
  */
 export const totalAdmitDecision = (trace: string[]) =>
   Workflow.total(SettleCommand, (command: SettleCommand): Result.Result<Admitted | Rejected, never> => {

@@ -1,5 +1,7 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
+import { resolveImportOrigin } from '@systemfsoftware/oxlint-import-origin'
+import type { ImportOrigin } from '@systemfsoftware/oxlint-import-origin'
 
 import {
   EAGER_CONSTRUCTION_ACTUAL,
@@ -22,14 +24,8 @@ export type MessageIds = 'wiringPerCall' | 'eagerConstruction'
 
 type FunctionNode = ESTree.Function | ESTree.ArrowFunctionExpression
 
-interface ImportedName {
-  readonly source: string
-  readonly imported: string | null
-}
-
-interface Origin extends ImportedName {
-  readonly path: readonly string[]
-}
+/** The scope-lookup closure (`context.sourceCode.getScope`). */
+type GetScope = (node: ESTree.Node) => unknown
 
 const isFunctionNode = (node: ESTree.Node): node is FunctionNode =>
   node.type === 'FunctionDeclaration' || node.type === 'FunctionExpression' || node.type === 'ArrowFunctionExpression'
@@ -53,31 +49,32 @@ const dynamicImportSourceOf = (node: ESTree.Node): string | null => {
 /**
  * `const { ManagedRuntime } = await import('effect')` binds like the static form: the
  * destructured name carries its property, and a plain identifier id is the namespace
- * binding `import * as ns` produces.
+ * binding `import * as ns` produces. A dynamic import declares no import binding, so the
+ * shared resolver cannot reach it; these are the bindings the rule tracks for itself.
  */
 const dynamicImportBindingsOf = (
   declarator: ESTree.VariableDeclarator,
-): readonly (readonly [string, ImportedName])[] => {
+): readonly (readonly [string, ImportOrigin])[] => {
   if (declarator.init === null) return []
   const source = dynamicImportSourceOf(declarator.init)
   if (source === null) return []
   const id = declarator.id
-  if (id.type === 'Identifier') return [[id.name, { source, imported: null }]]
+  if (id.type === 'Identifier') return [[id.name, { source, importedName: null, path: [] }]]
   if (id.type !== 'ObjectPattern') return []
   return id.properties.flatMap((property) => {
     if (property.type !== 'Property' || property.value.type !== 'Identifier') return []
     const key = property.key
-    const imported = key.type === 'Identifier'
+    const importedName = key.type === 'Identifier'
       ? key.name
       : key.type === 'Literal' && typeof key.value === 'string'
       ? key.value
       : null
-    return imported === null ? [] : [[property.value.name, { source, imported }] as const]
+    return importedName === null ? [] : [[property.value.name, { source, importedName, path: [] }] as const]
   })
 }
 
 const seedDynamicImportBindings = (
-  bindings: Map<string, ImportedName>,
+  bindings: Map<string, ImportOrigin>,
   declarator: ESTree.VariableDeclarator,
 ): void => {
   for (const [name, binding] of dynamicImportBindingsOf(declarator)) {
@@ -85,83 +82,45 @@ const seedDynamicImportBindings = (
   }
 }
 
-const bindingsOf = (program: ESTree.Program): Map<string, ImportedName> => {
-  const bindings = new Map<string, ImportedName>()
-  for (const statement of program.body) {
-    if (statement.type !== 'ImportDeclaration') continue
-    const source = statement.source.value
-    if (typeof source !== 'string') continue
-    for (const specifier of statement.specifiers) {
-      if (specifier.type === 'ImportNamespaceSpecifier') {
-        bindings.set(specifier.local.name, { source, imported: null })
-        continue
-      }
-      if (specifier.type === 'ImportDefaultSpecifier') {
-        bindings.set(specifier.local.name, { source, imported: 'default' })
-        continue
-      }
-      const imported = specifier.imported
-      bindings.set(specifier.local.name, {
-        source,
-        imported: imported.type === 'Identifier' ? imported.name : imported.value,
-      })
-    }
-  }
-  for (const statement of program.body) {
-    if (statement.type !== 'VariableDeclaration') continue
-    for (const declarator of statement.declarations) {
-      seedDynamicImportBindings(bindings, declarator)
-    }
-  }
+const closeOverAliases = (bindings: Map<string, ImportOrigin>, program: ESTree.Program): void => {
   for (let hop = 0; hop < MAX_ALIAS_HOPS; hop += 1) {
     const before = bindings.size
     for (const statement of program.body) {
       if (statement.type !== 'VariableDeclaration') continue
       for (const declarator of statement.declarations) {
         if (declarator.id.type !== 'Identifier' || declarator.init === null) continue
-        if (declarator.init.type !== 'Identifier') continue
-        const base = bindings.get(declarator.init.name)
+        const init = declarator.init
+        if (init.type !== 'Identifier') continue
+        const base = bindings.get(init.name)
         if (base === undefined || bindings.has(declarator.id.name)) continue
         bindings.set(declarator.id.name, base)
       }
     }
     if (bindings.size === before) break
   }
-  return bindings
 }
 
-const originOf = (node: ESTree.Node, bindings: ReadonlyMap<string, ImportedName>): Origin | null => {
-  if (node.type === 'Identifier') {
-    const binding = bindings.get(node.name)
-    return binding === undefined ? null : { ...binding, path: [] }
-  }
+const dynamicOriginOf = (node: ESTree.Node, bindings: ReadonlyMap<string, ImportOrigin>): ImportOrigin | null => {
+  if (node.type === 'Identifier') return bindings.get(node.name) ?? null
   if (node.type !== 'MemberExpression') return null
   const member = staticMemberNameOf(node)
   if (member === null) return null
-  const receiver = originOf(node.object, bindings)
+  const receiver = dynamicOriginOf(node.object, bindings)
   if (receiver === null) return null
-  return receiver.imported === null
-    ? { source: receiver.source, imported: member, path: [] }
-    : { source: receiver.source, imported: receiver.imported, path: [...receiver.path, member] }
+  return receiver.importedName === null
+    ? { ...receiver, importedName: member }
+    : { ...receiver, path: [...receiver.path, member] }
 }
 
-const trackedCallOf = (
-  callee: ESTree.MemberExpression,
-  bindings: ReadonlyMap<string, ImportedName>,
-): TrackedWiringCall | null => {
-  const member = staticMemberNameOf(callee)
-  if (member === null) return null
-  const receiver = originOf(callee.object, bindings)
-  if (receiver === null || receiver.path.length > 0) return null
-  return (
-    TRACKED_WIRING_CALLS.find(
+const trackedWiringCallOf = (origin: ImportOrigin, member: string): TrackedWiringCall | null =>
+  origin.path.length > 0
+    ? null
+    : TRACKED_WIRING_CALLS.find(
       (candidate) =>
-        candidate.source === receiver.source &&
+        candidate.source === origin.source &&
         candidate.member === member &&
-        (candidate.namespace === receiver.imported || receiver.imported === null),
+        (candidate.namespace === origin.importedName || origin.importedName === null),
     ) ?? null
-  )
-}
 
 const enclosingFunctionOf = (node: ESTree.Node): FunctionNode | null => {
   let current: ESTree.Node | null = node.parent
@@ -263,23 +222,34 @@ export const runtimeConstructionPlacement = defineRule({
     if (context.filename.endsWith('.tst.ts')) return {}
     if (!isRuntimeCodeFile(context.filename)) return {}
 
-    let bindings: Map<string, ImportedName> = new Map()
+    const getScope: GetScope = context.sourceCode.getScope
+    let dynamicBindings: Map<string, ImportOrigin> = new Map()
 
     return {
       Program(node: ESTree.Program) {
-        bindings = bindingsOf(node)
+        const bindings = new Map<string, ImportOrigin>()
+        for (const statement of node.body) {
+          if (statement.type !== 'VariableDeclaration') continue
+          for (const declarator of statement.declarations) seedDynamicImportBindings(bindings, declarator)
+        }
+        closeOverAliases(bindings, node)
+        dynamicBindings = bindings
       },
 
       VariableDeclaration(node: ESTree.VariableDeclaration) {
         for (const declarator of node.declarations) {
-          seedDynamicImportBindings(bindings, declarator)
+          seedDynamicImportBindings(dynamicBindings, declarator)
         }
       },
 
       CallExpression(node: ESTree.CallExpression) {
         const callee = node.callee
         if (callee.type !== 'MemberExpression') return
-        const tracked = trackedCallOf(callee, bindings)
+        const member = staticMemberNameOf(callee)
+        if (member === null) return
+        const receiver = resolveImportOrigin(callee.object, getScope) ?? dynamicOriginOf(callee.object, dynamicBindings)
+        if (receiver === null) return
+        const tracked = trackedWiringCallOf(receiver, member)
         if (tracked === null) return
 
         const name = `${tracked.namespace}.${tracked.member}`

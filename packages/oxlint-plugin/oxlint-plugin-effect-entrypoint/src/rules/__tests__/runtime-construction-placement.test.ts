@@ -304,7 +304,8 @@ export function build() {
       errors: [wiringPerCall(CELL_PROVIDE)],
     },
     {
-      // Kills the mutant that drops the string arm of the imported name.
+      // Kills the mutant that drops the string arm of the imported name. The arm now lives
+      // in the shared import-origin resolver, graded through this suite (IO4).
       name: 'Should_Report_When_TheStringNamedImportMakesTheRuntime',
       code: `import { 'ManagedRuntime' as Managed } from 'effect'
 

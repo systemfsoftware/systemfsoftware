@@ -43,8 +43,16 @@ type AtLeastTwoDistinct<T, U = T> = U extends unknown ? [T] extends [U] ? false 
 type TaggedMembers<D> = D extends unknown ? '_tag' extends keyof D ? [D['_tag']] extends [string] ? true : false : false
   : never
 
+type MutuallyAssignable<A, B> = [A] extends [B] ? ([B] extends [A] ? true : false) : false
+
+type BrandSlotIsTheGeneralSymbol<D, K extends PropertyKey> = D extends unknown
+  ? K extends keyof D ? MutuallyAssignable<D[K], symbol> : false
+  : never
+
 type SharedTypeId<D> = [
-  { [K in keyof D]: [K] extends [symbol] ? ([D[K]] extends [symbol] ? K : never) : never }[keyof D],
+  {
+    [K in keyof D]: [K] extends [symbol] ? ([BrandSlotIsTheGeneralSymbol<D, K>] extends [true] ? K : never) : never
+  }[keyof D],
 ] extends [never] ? UnsharedTypeId : unknown
 
 type DecisionShape<D> = [unknown] extends [D] ? unknown
@@ -103,6 +111,12 @@ export const total = <
   return plain
 }
 
+/**
+ * Composes two workflows: what the upstream decides becomes the command the downstream decides
+ * on, and a refusal short-circuits the pair. The return type dispatches on the component error
+ * union — two components that cannot fail publish the total form, because the `Workflow` alias
+ * refuses a `never` channel; a carried error publishes the union as before.
+ */
 export const andThen = <
   Ctx,
   SelfA,
@@ -114,17 +128,20 @@ export const andThen = <
   D2,
   E2,
 >(
-  commandA: Schema.Class<SelfA, SA, InheritedA>,
+  _commandA: Schema.Class<SelfA, SA, InheritedA>,
   upstream: ((command: SelfA) => Result<D1, E1>) & WorkflowBrand,
   commandB: { new(props: { readonly decision: D1; readonly ctx: Ctx }): SelfB },
   ctx: NoInfer<Ctx>,
   downstream: ((command: SelfB) => Result<D2, E2>) & WorkflowBrand,
-): Workflow<SelfA, D2, E1 | E2> =>
-  make(
-    commandA,
-    (command: SelfA): Result<D2, E1 | E2> =>
-      flatMap(upstream(command), (decision) => downstream(new commandB({ decision, ctx }))),
-  )
+): [E1 | E2] extends [never] ? ((command: SelfA) => Result<D2, never>) & WorkflowBrand
+  : Workflow<SelfA, D2, E1 | E2> =>
+{
+  const composed: (command: SelfA) => Result<D2, E1 | E2> = (command) =>
+    flatMap(upstream(command), (decision) => downstream(new commandB({ decision, ctx })))
+
+  assertComposite<SelfA, D2, E1 | E2>(composed)
+  return composed
+}
 
 function assertWorkflow<C, D, E>(
   _decide: (command: C) => Result<D, E> & Inhabited<D, E>,
@@ -133,3 +150,9 @@ function assertWorkflow<C, D, E>(
 function assertTotal<Command, D>(
   _decide: (command: Command) => Result<D, never>,
 ): asserts _decide is ((command: Command) => Result<D, never>) & WorkflowBrand {}
+
+function assertComposite<Command, D, E>(
+  _composed: ((command: Command) => Result<D, E>) | Workflow<Command, D, E>,
+): asserts _composed is [E] extends [never] ? ((command: Command) => Result<D, never>) & WorkflowBrand
+  : Workflow<Command, D, E>
+{}

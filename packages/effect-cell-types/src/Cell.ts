@@ -268,18 +268,18 @@ export const collect: {
 export const collectAll: {
   <I, A, E, R, B>(
     fold: (results: readonly Result.Result<A, E>[]) => B,
-  ): (self: Cell<I, A, E, R>) => Cell<readonly I[], B, E, R>
+  ): (self: Cell<I, A, E, R>) => Cell<readonly I[], B, never, R>
   <I, A, E, R, B>(
     self: Cell<I, A, E, R>,
     fold: (results: readonly Result.Result<A, E>[]) => B,
-  ): Cell<readonly I[], B, E, R>
+  ): Cell<readonly I[], B, never, R>
 } = dual(
   2,
   <I, A, E, R, B>(
     self: Cell<I, A, E, R>,
     fold: (results: readonly Result.Result<A, E>[]) => B,
-  ): Cell<readonly I[], B, E, R> =>
-    make<readonly I[], B, E, R>((items) =>
+  ): Cell<readonly I[], B, never, R> =>
+    make<readonly I[], B, never, R>((items) =>
       Effect.map(
         Effect.forEach(items, (item) => Effect.result(self.run(item))),
         (results) => fold(results),
