@@ -104,24 +104,26 @@ export const total = <
 }
 
 export const andThen = <
+  Ctx,
   SelfA,
   SA extends Schema.Constraint & { readonly fields: Schema.Struct.Fields },
   InheritedA,
   D1,
   E1,
-  SelfB extends { readonly decision: D1 },
+  SelfB extends { readonly decision: D1; readonly ctx: Ctx },
   D2,
   E2,
 >(
   commandA: Schema.Class<SelfA, SA, InheritedA>,
   upstream: ((command: SelfA) => Result<D1, E1>) & WorkflowBrand,
-  commandB: { new(props: { readonly decision: D1 }): SelfB },
+  commandB: { new(props: { readonly decision: D1; readonly ctx: Ctx }): SelfB },
+  ctx: NoInfer<Ctx>,
   downstream: ((command: SelfB) => Result<D2, E2>) & WorkflowBrand,
 ): Workflow<SelfA, D2, E1 | E2> =>
   make(
     commandA,
     (command: SelfA): Result<D2, E1 | E2> =>
-      flatMap(upstream(command), (decision) => downstream(new commandB({ decision }))),
+      flatMap(upstream(command), (decision) => downstream(new commandB({ decision, ctx }))),
   )
 
 function assertWorkflow<C, D, E>(

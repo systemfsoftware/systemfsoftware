@@ -11,7 +11,6 @@
 
 import * as Layer from 'effect/Layer'
 
-import type { Policy } from '@systemfsoftware/effect-cell-types'
 import { type FileDescriptions, INSTRUMENTER_CONSTANTS } from '@systemfsoftware/stryker-js/Mutant'
 import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
 import {
@@ -48,6 +47,8 @@ import { ChildProcessCrashedError, OutOfMemoryError } from './Worker.schema.js'
 import type { WorkerFrameTooLargeError } from './Worker.schema.js'
 import { connectRetry, WorkerEntries, WorkerLauncher } from './WorkerLauncher.js'
 import { TestRunnerRpcs } from './WorkerProtocol.js'
+
+type RunPolicy<A, E> = (self: Effect.Effect<A, E, never>) => Effect.Effect<A, E, never>
 // ---------------------------------------------------------------------------
 // Pooled runner — the child-process port
 // ---------------------------------------------------------------------------
@@ -175,14 +176,14 @@ export type TestRunnerCombinator = (inner: PooledTestRunner) => PooledTestRunner
 export const withTimeout: TestRunnerCombinator = (inner) => ({
   ...inner,
   dryRun: (options) => {
-    const policy: Policy.Policy<DryRunResult, PooledTestRunnerError, never> = Effect.timeoutOrElse({
+    const policy: RunPolicy<DryRunResult, PooledTestRunnerError> = Effect.timeoutOrElse({
       duration: Duration.millis(options.timeout),
       orElse: (): Effect.Effect<DryRunResult> => Effect.succeed({ status: 'timeout' }),
     })
     return inner.dryRun(options).pipe(policy)
   },
   mutantRun: (options) => {
-    const policy: Policy.Policy<MutantRunResult, PooledTestRunnerError, never> = Effect.timeoutOrElse({
+    const policy: RunPolicy<MutantRunResult, PooledTestRunnerError> = Effect.timeoutOrElse({
       duration: Duration.millis(options.timeout),
       orElse: (): Effect.Effect<MutantRunResult> => Effect.succeed({ status: 'timeout' }),
     })
@@ -203,7 +204,6 @@ export const maxRetries = 2
  * not end the whole run. The exhausted message renders the `Cause`, which
  * keeps the chain that led there.
  */
-// NOT a Policy: changes E (PooledTestRunnerError -> never) by catching failure into success
 export const withRetry: TestRunnerCombinator = (inner) => {
   const attempt = <A>(
     run: Effect.Effect<A, unknown>,
@@ -268,7 +268,7 @@ export const withMaxReuse = (
     const wrapped: PooledTestRunner = {
       ...inner,
       mutantRun: (runOptions: MutantRunOptions): Effect.Effect<MutantRunResult, PooledTestRunnerError> => {
-        const policy: Policy.Policy<MutantRunResult, PooledTestRunnerError, never> = (self) =>
+        const policy: RunPolicy<MutantRunResult, PooledTestRunnerError> = (self) =>
           Effect.gen(function*() {
             const count = yield* Ref.updateAndGet(runs, (n) => n + 1)
             if (count > restartAfter) {
@@ -342,7 +342,7 @@ export const withEnvironmentReload = (
       ...inner,
 
       dryRun: (options: DryRunOptions): Effect.Effect<DryRunResult, PooledTestRunnerError> => {
-        const policy: Policy.Policy<DryRunResult, PooledTestRunnerError, never> = (self) =>
+        const policy: RunPolicy<DryRunResult, PooledTestRunnerError> = (self) =>
           Ref.set(state, 'loaded').pipe(Effect.andThen(self))
         return policy(inner.dryRun(options))
       },
@@ -357,7 +357,7 @@ export const withEnvironmentReload = (
             yield* retire
           }
 
-          const policy: Policy.Policy<MutantRunResult, PooledTestRunnerError, never> = (self) =>
+          const policy: RunPolicy<MutantRunResult, PooledTestRunnerError> = (self) =>
             Effect.gen(function*() {
               const result = yield* self
               yield* Ref.set(state, plan.nextState)

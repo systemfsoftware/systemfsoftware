@@ -159,6 +159,7 @@ describe('T13 the composite constructor', () => {
       TaggedCmd,
       acceptTaggedCommand,
       ChainedTaggedCommand,
+      'ctx',
       decideChainedUnbranded,
     )
   })
@@ -168,6 +169,7 @@ describe('T13 the composite constructor', () => {
       TaggedCmd,
       totalAdmitTaggedCommand,
       ChainedTaggedCommand,
+      'ctx',
       totalAdmitTaggedCommand,
     )
   })

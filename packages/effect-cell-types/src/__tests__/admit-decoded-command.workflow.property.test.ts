@@ -220,3 +220,44 @@ describe('chaining and gating cells', () => {
     },
   )
 })
+
+describe('the identity and unit laws of the Cell combinators', () => {
+  it.prop('∀c_MapIdentity_≡Self', [fc.constantFrom(...ADMITTING, ...REFUSING, READ_FAILURE)], ([id]) => {
+    const plainTrace: string[] = []
+    const mappedTrace: string[] = []
+    const plain = Effect.runSync(Effect.result(itemCell(plainTrace).run({ id })))
+    const mapped = Effect.runSync(
+      Effect.result(Cell.map(itemCell(mappedTrace), (response: string): string => response).run({ id })),
+    )
+    return Result.isSuccess(plain) === Result.isSuccess(mapped) &&
+      (Result.isSuccess(plain) && Result.isSuccess(mapped) ? plain.success === mapped.success : true) &&
+      plainTrace.length === mappedTrace.length &&
+      plainTrace.every((line, index) => line === mappedTrace[index])
+  })
+
+  it.prop('∀i_CollectUnit_≡Self', [fc.constantFrom(...ADMITTING, ...REFUSING, READ_FAILURE)], ([id]) => {
+    const plainTrace: string[] = []
+    const unitTrace: string[] = []
+    const plain = Effect.runSync(Effect.result(itemCell(plainTrace).run({ id })))
+    const unit = Effect.runSync(
+      Effect.result(
+        Cell.collect(itemCell(unitTrace), foldTo).run([{ id }]),
+      ),
+    )
+    return Result.isSuccess(plain) === Result.isSuccess(unit) &&
+      (Result.isSuccess(plain) && Result.isSuccess(unit) ? plain.success === unit.success : true) &&
+      plainTrace.length === unitTrace.length &&
+      plainTrace.every((line, index) => line === unitTrace[index])
+  })
+
+  it.prop('∀v_GateUnit_≡SomeInner', [fc.constantFrom(...ADMITTING, ...REFUSING)], ([admitted]) => {
+    const gatedTrace: string[] = []
+    const innerTrace: string[] = []
+    const gated = Effect.runSync(
+      Cell.gate(readerCell(gatedTrace, Option.some<Bytes>({ bytes: admitted })), innerCell(gatedTrace))
+        .run({ id: 'aa' }),
+    )
+    const inner = Effect.runSync(innerCell(innerTrace).run({ bytes: admitted }))
+    return Option.isSome(gated) && gated.value === inner
+  })
+})

@@ -6,12 +6,12 @@
 
 // @public (undocumented)
 export namespace Cell {
-    export { Cell, CellTypeId, DESCRIPTION_MODULE, IO_CELLS, IoCellClassification, Kind$1 as Kind, PhaseName, Run, TypeLambda$1 as TypeLambda, Vocabulary, andThen, collect, collectAll, gate, layer, map, mapInput, provide, vocabulary, withPolicy, zip };
+    export { Cell, CellTypeId, DESCRIPTION_MODULE, IO_CELLS, IoCellClassification, Kind$1 as Kind, PhaseName, Run, TypeLambda$1 as TypeLambda, Vocabulary, andThen, collect, collectAll, gate, layer, map, mapInput, provide, vocabulary, zip };
 }
 
 // @public (undocumented)
-export namespace Policy {
-    export { Policy };
+export namespace Encode {
+    export { identity };
 }
 
 // @public (undocumented)

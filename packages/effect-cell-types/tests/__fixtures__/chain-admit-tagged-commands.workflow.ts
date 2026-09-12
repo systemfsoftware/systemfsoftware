@@ -8,6 +8,7 @@ import { type Decision as TotalDecision, DecisionError } from './Decision.schema
 
 export class ChainedTaggedCommand extends S.TaggedClass<ChainedTaggedCommand>()('ChainedTaggedCommand', {
   decision: S.Union([DecisionOne, DecisionTwo]),
+  ctx: S.String,
 }) {}
 
 declare const decideChainedCommand:
@@ -18,5 +19,6 @@ export const chainAdmitTaggedCommands = Workflow.andThen(
   TaggedCmd,
   acceptTaggedCommand,
   ChainedTaggedCommand,
+  'tagged-chain',
   decideChainedCommand,
 )

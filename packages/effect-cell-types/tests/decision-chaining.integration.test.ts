@@ -76,7 +76,7 @@ Feature('Chaining decisions across a cell')
           expect(s.run.response).toBe('decided:Admitted:4')
         }),
         And('the second decision ruled on the first decision')((s) => {
-          expect(s.run.trace).toEqual(['settle', 'decided:Admitted:4'])
+          expect(s.run.trace).toEqual(['settle:chain', 'decided:Admitted:4'])
         }),
       ),
     )
@@ -87,7 +87,7 @@ Feature('Chaining decisions across a cell')
         When('a Cell whose decision cannot fail is run')('run', () => {
           const trace: string[] = []
           return Effect.map(
-            totalCell(trace).run(new SettleCommand({ decision: new Admitted({ length: 3 }) })),
+            totalCell(trace).run(new SettleCommand({ decision: new Admitted({ length: 3 }), ctx: 'total' })),
             (response) => ({ response, trace }),
           )
         }),
@@ -95,7 +95,7 @@ Feature('Chaining decisions across a cell')
           expect(s.run.response).toBe('decided:Admitted:3')
         }),
         And('the second decider ruled')((s) => {
-          expect(s.run.trace).toEqual(['settle', 'decided:Admitted:3'])
+          expect(s.run.trace).toEqual(['settle:total', 'decided:Admitted:3'])
         }),
       ),
     )

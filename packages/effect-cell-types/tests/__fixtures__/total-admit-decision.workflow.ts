@@ -12,6 +12,7 @@ import { Admitted, Rejected } from './admit-decoded-command.workflow.js'
  */
 export class SettleCommand extends S.TaggedClass<SettleCommand>()('SettleCommand', {
   decision: S.Union([Admitted, Rejected]),
+  ctx: S.String,
 }) {}
 
 /**
@@ -25,6 +26,6 @@ export class SettleCommand extends S.TaggedClass<SettleCommand>()('SettleCommand
  */
 export const totalAdmitDecision = (trace: string[]) =>
   Workflow.total(SettleCommand, (command: SettleCommand): Result.Result<Admitted | Rejected, never> => {
-    trace.push('settle')
+    trace.push(`settle:${command.ctx}`)
     return Result.succeed(command.decision)
   })

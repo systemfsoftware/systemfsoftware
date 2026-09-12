@@ -12,4 +12,4 @@ import { SettleCommand, totalAdmitDecision } from './total-admit-decision.workfl
  * decision body of its own: both bodies live in the file that owns each of them.
  */
 export const chainAdmitDecisions = (trace: string[]) =>
-  Workflow.andThen(Decoded, admitDecodedCommand, SettleCommand, totalAdmitDecision(trace))
+  Workflow.andThen(Decoded, admitDecodedCommand, SettleCommand, 'chain', totalAdmitDecision(trace))

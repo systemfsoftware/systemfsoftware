@@ -1,4 +1,4 @@
-import { Cell, Workflow } from '@systemfsoftware/effect-cell-types'
+import { Cell, Encode, Workflow } from '@systemfsoftware/effect-cell-types'
 import { pipe } from 'effect'
 import type { Effect } from 'effect/Effect'
 import type { Layer } from 'effect/Layer'
@@ -70,6 +70,7 @@ declare const decideOverDecoded: Workflow.Workflow<Decoded, Decision, Refusal>
 declare const decideUnbranded: (decoded: Raw) => Result<Decision, Refusal>
 declare const decideUnbrandedChain: (command: TaggedCmd) => Result<TotalDecision, CommandRefused | DecisionError>
 declare const encode: (outcome: Result<Decision, Refusal>) => Output
+declare const passThroughEncode: (outcome: Result<Decision, Refusal>) => Result<Decision, Refusal>
 declare const writeOutcome: (outcome: Result<Decision, Refusal>, raw: Raw) => Effect<void, never, never>
 declare const writeOutcomeFailing: (outcome: Result<Decision, Refusal>, raw: Raw) => Effect<void, WriteErr, never>
 declare const writeOutcomeUnary: (outcome: Result<Decision, Refusal>) => Effect<void, never, never>
@@ -108,6 +109,25 @@ describe('T1 the sandwich the layer builds', () => {
   it('Should_InferTheCell_When_LongSpecSuppliesAllFivePhases', () => {
     const cell = Cell.layer({ read, decode, decide: decideOverDecoded, encode, write: writeOutput })
     expect(cell).type.toBe<Cell.Cell<Cmd, void, DecodeErr, never>>()
+  })
+
+  it('Should_InferTheSameCell_When_EncodeIsTheIdentity', () => {
+    const withIdentity = Cell.layer({
+      read,
+      decode,
+      decide: decideOverDecoded,
+      encode: Encode.identity,
+      write: writeOutcome,
+    })
+    const withPassThrough = Cell.layer({
+      read,
+      decode,
+      decide: decideOverDecoded,
+      encode: passThroughEncode,
+      write: writeOutcome,
+    })
+    expect(withIdentity).type.toBe<Cell.Cell<Cmd, void, DecodeErr, never>>()
+    expect(withIdentity).type.toBe<typeof withPassThrough>()
   })
 
   it('Should_UnionTheErrorChannel_When_ReadAndWriteCanFail', () => {
@@ -233,12 +253,6 @@ describe('T7 the combinator algebra', () => {
   it('Should_TupleTheResponses_When_Zipping', () => {
     const zipped = pipe(Cell.layer({ read, decide: decideOverRaw, write: writeOutcome }), Cell.zip(twinCell))
     expect(zipped).type.toBe<Cell.Cell<Cmd, readonly [void, boolean], WriteErr, Bus>>()
-  })
-
-  it('Should_PreserveEveryChannel_When_PolicyWraps', () => {
-    const policy = <A, E, R>(self: Effect<A, E, R>): Effect<A, E, R> => self
-    const wrapped = pipe(Cell.layer({ read, decide: decideOverRaw, write: writeOutcome }), Cell.withPolicy(policy))
-    expect(wrapped).type.toBe<Cell.Cell<Cmd, void, never, never>>()
   })
 
   it('Should_WrapTheInnerResponse_When_GateAdmitsTheReaderValue', () => {

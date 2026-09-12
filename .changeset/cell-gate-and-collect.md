@@ -2,20 +2,10 @@
 "@systemfsoftware/effect-cell-types": minor
 ---
 
-Two combinators join the Cell surface.
+`Cell.gate` runs one Cell only when another's response carries a value: the value admits it to the inner Cell and the composed response wraps the inner response, carrying nothing skips the inner Cell entirely, and both Cells' error and service channels union.
 
-`Cell.gate` runs one Cell only when another's response carries a value. A response carrying a value
-admits it to the inner Cell, and the composed response wraps the inner Cell's response; a response
-carrying nothing skips the inner Cell entirely — its phases never run — and the composed response
-carries nothing either. A failure from the outer Cell is the composed failure, never a silent skip,
-and both Cells' error and service channels union.
+`Cell.collect` runs one Cell per item, in order, then folds the responses with a plain function. The first refusal fails the composed Cell with that item's own refusal. `Cell.collectAll` is the accumulate opt-in: an item's refusal travels to the fold as data, so the fold always runs over every result.
 
-`Cell.collect` runs one Cell per item, in iteration order, then folds the responses with a plain
-function. The fold sees every response and runs only when every item succeeded; the first refusal
-from an item fails the composed Cell with that item's own refusal. `Cell.collectAll` is the
-accumulate opt-in: an item's refusal is data handed to the fold rather than a failure, so the fold
-always runs over every per-item result. An empty collection hands the fold an empty list and runs no
-item.
+`Encode.identity` is the pass-through encode for the long-form spec: a cell whose wire shape is the decision's outcome itself names it in the mandatory `encode` slot instead of fabricating a transformation.
 
-Both are callable in the curried and data-first styles of `map`, `andThen`, and `zip`, and neither
-requires a workflow brand at its call site.
+Both combinators are callable in the curried and data-first styles, and neither requires a workflow brand at its call site.

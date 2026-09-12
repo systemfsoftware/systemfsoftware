@@ -5,7 +5,6 @@ import type { Layer } from 'effect/Layer'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import { DESCRIPTION_MODULE, IO_CELLS, type IoCellClassification, type PhaseName } from './Facts.js'
-import type { Policy } from './Policy.js'
 import { type WorkflowBrand } from './Workflow.js'
 
 export { DESCRIPTION_MODULE, IO_CELLS, type IoCellClassification, type PhaseName }
@@ -307,26 +306,6 @@ export const provide: {
     self: Cell<I, A, E, R>,
     layer: Layer<ROut, LE, RIn>,
   ): Cell<I, A, E | LE, RIn | Exclude<R, ROut>> => make((input) => Effect.provide(self.run(input), layer)),
-)
-
-/**
- * Wraps the Cell's run in a `Policy` — retry, timeout, and their kin — preserving every
- * channel.
- */
-export const withPolicy: {
-  <A, E, R>(
-    policy: Policy<A, E, R>,
-  ): <I>(self: Cell<I, A, E, R>) => Cell<I, A, E, R>
-  <I, A, E, R>(
-    self: Cell<I, A, E, R>,
-    policy: Policy<A, E, R>,
-  ): Cell<I, A, E, R>
-} = dual(
-  2,
-  <I, A, E, R>(
-    self: Cell<I, A, E, R>,
-    policy: Policy<A, E, R>,
-  ): Cell<I, A, E, R> => make((input) => policy(self.run(input))),
 )
 
 /**
