@@ -21,11 +21,10 @@ jobs:
         with:
           fetch-depth: 2
       - uses: ./.github/actions/install-deps
-      # dprint is a flake package, not an npm dependency; bin/dprint takes the
-      # first dprint on PATH.
+      # grit is a flake package because the npm launcher's postinstall is denied; the conventions gate resolves it PATH-first.
       - uses: cachix/install-nix-action@v31
-      - name: dprint from the flake
-        run: echo "$(nix build --no-link --print-out-paths .#dprint)/bin" >> "$GITHUB_PATH"
+      - name: dprint and grit from the flake
+        run: nix build --no-link --print-out-paths .#dprint .#grit | sed 's|$|/bin|' >> "$GITHUB_PATH"
       # The runner image ships no Deno, and `pnpm check:ci` runs the Deno guards
       # (`//#check:exported-wiring`) inside gate:tasks, so the runtime must be on PATH.
       # Same reason changeset-check.yml and release.yml already carry this step.

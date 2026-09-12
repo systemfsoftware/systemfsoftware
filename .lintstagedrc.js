@@ -46,6 +46,14 @@ const formatCommands = (filenames) => {
   return [`${DPRINT} fmt --allow-no-files -- ${formattable.join(' ')}`]
 }
 
+const stagedTsconfigs = (filenames) => lintable(filenames).filter((f) => f.endsWith('tsconfig.json'))
+
+const conventionsCommands = (filenames) => {
+  const staged = stagedTsconfigs(filenames)
+  if (staged.length === 0) return []
+  return [`pnpm exec conventions scan ${staged.join(' ')}`]
+}
+
 const lintCommands = (filenames) =>
   [...groupByConfig(lintableSource(filenames))]
     .filter(hasOwningConfig)
@@ -57,5 +65,5 @@ const lintCommands = (filenames) =>
 
 export default {
   '*.{js,jsx,ts,tsx,mjs,cjs}': (filenames) => [...formatCommands(filenames), ...lintCommands(filenames)],
-  '*.{json,jsonc,md,yaml,yml,toml}': (filenames) => formatCommands(filenames),
+  '*.{json,jsonc,md,yaml,yml,toml}': (filenames) => [...formatCommands(filenames), ...conventionsCommands(filenames)],
 }

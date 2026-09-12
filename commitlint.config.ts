@@ -95,7 +95,6 @@ const isTooling = matchesAny(
   /(^|\/)\.editorconfig$/,
   /(^|\/)\.gitignore$/,
   /(^|\/)\.prettierrc(\..+)?$/,
-  /(^|\/)biome\.json$/,
   /(^|\/)oxlint\.config\.[mc]?[jt]s$/,
   /(^|\/)\.dprint\.jsonc?$/,
   /(^|\/)package\.json$/,

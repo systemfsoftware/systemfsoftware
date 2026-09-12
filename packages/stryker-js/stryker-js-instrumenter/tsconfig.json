@@ -19,5 +19,10 @@
     "node_modules",
     "dist",
     "tests/__fixtures__"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
   ]
 }
