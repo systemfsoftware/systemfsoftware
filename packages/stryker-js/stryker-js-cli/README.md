@@ -47,17 +47,17 @@ $ stryker run
 {"kind":"phase","phase":"instrument","elapsedMs":102}
 {"kind":"phase","phase":"dry-run","elapsedMs":6658}
 {"kind":"plan","total":2}
-{"kind":"verdict","schemaVersion":"1.0","score":100,"thresholds":{"high":100,"low":80,"break":0},"counts":{"killed":2,"survived":0,"timeout":0,"noCoverage":0},"reportFile":"reports/mutation/mutation.json"}
+{"kind":"verdict","schemaVersion":"1.2","score":100,"thresholds":{"high":100,"low":80,"break":0},"counts":{"killed":2,"survived":0,"timeout":0,"noCoverage":0},"reportFile":"reports/mutation/mutation.json"}
 ```
 
-| `kind`    | Emitted                 | Carries                                       |
-| --------- | ----------------------- | --------------------------------------------- |
-| `stream`  | First line of every run | `runId`, `mode`, `signal`                     |
-| `phase`   | A stage begins          | `phase`, `elapsedMs`                          |
-| `plan`    | Mutants scheduled       | `total`                                       |
-| `tick`    | Progress heartbeat      | `elapsedMs`, `completed`, `total`             |
-| `verdict` | Run finished            | `score`, `thresholds`, `counts`, `reportFile` |
-| `error`   | Run failed              | the failure and a `remediation`               |
+| `kind`    | Emitted                 | Carries                                                                                   |
+| --------- | ----------------------- | ----------------------------------------------------------------------------------------- |
+| `stream`  | First line of every run | `runId`, `mode`, `signal`                                                                 |
+| `phase`   | A stage begins          | `phase`, `elapsedMs`                                                                      |
+| `plan`    | Mutants scheduled       | `total`                                                                                   |
+| `tick`    | Progress heartbeat      | `elapsedMs`, `completed`, `total`                                                         |
+| `verdict` | Run finished            | `schemaVersion` 1.2, `score`, `thresholds`, `counts`, `reportFile`, optional `evaluators` |
+| `error`   | Run failed              | the failure and a `remediation`                                                           |
 
 The stream drains before the process exits, including on `SIGINT`, so the
 terminal line is never truncated.
@@ -82,10 +82,12 @@ The highest pending class wins; a terminating signal outranks all of them.
 
 ## Related
 
-The mutation engine is [`@systemfsoftware/stryker-js-engine`][engine].
-This package is the terminal-facing half and reaches it through an injected
-run-event sink;
-it ships a command and exposes no importable API.
+The mutation engine, the instrumenter, the builtin and html reporters and the
+worker entries all ship inside this package; the plugin kinds, capability ports
+and schemas a run is built from are the `@systemfsoftware/stryker-js` ABI.
+
+This package ships the `stryker` command and the `./config` preset, and exposes
+no importable runtime API.
 
 ## License
 
@@ -98,5 +100,4 @@ Licensed under [Apache 2.0][license-url].
 [license-badge]: https://img.shields.io/badge/license-Apache_2.0-blue?style=flat-square
 [license-url]: https://github.com/systemfsoftware/systemfsoftware/blob/main/LICENSE
 [repo]: https://github.com/systemfsoftware/systemfsoftware
-[engine]: https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/stryker-js/stryker-js-engine
 [docs]: https://stryker-mutator.io/docs/stryker-js/configuration/

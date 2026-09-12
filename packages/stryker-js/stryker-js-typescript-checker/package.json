@@ -28,17 +28,17 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@systemfsoftware/effect-cell-types": "workspace:^",
-    "@systemfsoftware/stryker-js": "workspace:^",
-    "effect": "catalog:",
+    "@systemfsoftware/stryker-js": "workspace:^"
+  },
+  "peerDependencies": {
     "typescript": "catalog:"
   },
   "devDependencies": {
-    "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-schema-law": "workspace:^",
     "@systemfsoftware/effect-schema-vite": "workspace:^",
@@ -46,13 +46,17 @@
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
     "@types/node": "catalog:",
+    "effect": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
+    "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "inlinedDependencies": {
-    "@jsr/std__jsonc": "1.0.2"
+    "@effect/platform-node-shared": "4.0.0-rc.112",
+    "@jsr/std__jsonc": "1.0.2",
+    "effect": "4.0.0-rc.112"
   },
   "publishConfig": {
     "provenance": true,

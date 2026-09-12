@@ -1,31 +1,33 @@
 import type * as PathType from 'effect/Path'
 import type { RunMode, RunnerTestCase, RunnerTestSuite, TaskState as VitestTaskState } from 'vitest'
-import { createVitest as createVitestOriginal } from 'vitest/node'
+import { createVitest as CreateVitest } from 'vitest/node'
 import type { Vitest } from 'vitest/node'
 
+import * as NodeFileSystem from '@effect/platform-node/NodeFileSystem'
+import * as NodePath from '@effect/platform-node/NodePath'
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { Module } from '@systemfsoftware/stryker-js/Module'
+import { errorToString } from '@systemfsoftware/stryker-js'
+import { type CoverageData, INSTRUMENTER_CONSTANTS, normalizeFileName } from '@systemfsoftware/stryker-js/Mutant'
+import type { StrykerOptions } from '@systemfsoftware/stryker-js/Options'
 import {
-  type CoverageData,
-  errorToString,
-  INSTRUMENTER_CONSTANTS,
-  normalizeFileName,
-} from '@systemfsoftware/stryker-js/Mutant'
-import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
-import {
-  type BaseTestResult,
-  DryRunResult,
+  type DryRunOptions,
+  type DryRunResult,
   type MutantCoverage as DryRunMutantCoverage,
   type MutantRunOptions,
-  MutantRunResult,
+  type MutantRunResult,
+  type SuccessTestResult,
   testFilesProvided,
   type TestResult,
-  TestRunner,
-  TestRunnerFailed,
-  TestStatus,
+  type TestRunnerCapabilities,
+  type TestRunnerFactory,
+  type TestRunnerFailed,
+  type TestStatus,
 } from '@systemfsoftware/stryker-js/TestRunner'
+import { ManagedRuntime } from 'effect'
+import * as Cause from 'effect/Cause'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
+import * as Exit from 'effect/Exit'
 import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
 import * as Match from 'effect/Match'
@@ -62,6 +64,27 @@ export class VitestHarness extends Context.Service<VitestHarness, {
   ) => Effect.Effect<void, TestRunnerFailed>
 }>()('VitestHarness') {}
 
+/**
+ * The runner's members as the engine expresses them: effects over this process's
+ * file system and path services. The ABI is not this shape — `makeTestRunner`
+ * interprets it once at the boundary.
+ */
+export class VitestRunnerService extends Context.Service<VitestRunnerService, {
+  readonly capabilities: TestRunnerCapabilities
+  readonly init: Effect.Effect<void, TestRunnerFailed>
+  readonly dryRun: (options: DryRunOptions) => Effect.Effect<DryRunResult, TestRunnerFailed>
+  readonly mutantRun: (options: MutantRunOptions) => Effect.Effect<MutantRunResult, TestRunnerFailed>
+  readonly dispose: Effect.Effect<void, TestRunnerFailed>
+}>()('VitestRunnerService') {}
+
+/** The plain `TestRunnerFailed` this runner declares; a host decodes it with the ABI's schema. */
+const vitestFailed = (phase: TestRunnerFailed['phase'], cause: string): TestRunnerFailed => ({
+  _tag: 'TestRunnerFailed',
+  cause,
+  phase,
+  runnerName: 'vitest',
+})
+
 export function collectTestName({ name, suite }: { name: string; suite?: RunnerTestSuite }): string {
   const nameParts = [name]
   let currentSuite = suite
@@ -93,6 +116,9 @@ function convertTaskStateToTestStatus(taskState: VitestTaskState | undefined, te
 
 const UNKNOWN_TEST_FAILURE = 'StrykerJS: Unknown test failure'
 const SUITE_EXECUTION_FAILED = 'StrykerJS: Suite execution failed'
+
+/** The fields every `TestResult` variant carries; each variant adds its own status. */
+type BaseTestResult = Omit<SuccessTestResult, 'status'>
 
 const firstErrorMessage = (errors: readonly { readonly message?: string }[] | undefined): Option.Option<string> =>
   Option.flatMap(
@@ -613,12 +639,12 @@ export const sandboxSelfPlugin = (
 })
 
 export interface ResolvedVitest {
-  createVitest: typeof createVitestOriginal
+  createVitest: typeof CreateVitest
   version: string
 }
 export type VitestResolver = (
-  _dir: string,
-) => Effect.Effect<ResolvedVitest, never, Module | FileSystem.FileSystem | Path.Path>
+  directory: string,
+) => Effect.Effect<ResolvedVitest, never, FileSystem.FileSystem | Path.Path>
 
 const isRunnerTestSuite = (value: unknown): value is RunnerTestSuite =>
   Predicate.isObject(value) && Array.isArray(value['tasks'])
@@ -626,35 +652,28 @@ const isRunnerTestSuite = (value: unknown): value is RunnerTestSuite =>
 type StrykerNamespace = '__stryker__' | '__stryker2__'
 const STRYKER_SETUP_URL = new URL('./stryker-setup.mjs', import.meta.url)
 
-export const resolveVitest: VitestResolver = (_dir) =>
+/**
+ * Resolves vitest from the project this run mutates, never from this package's
+ * own install: the runner reports the project's version and drives the project's
+ * `createVitest`. The load goes through `process.getBuiltinModule` so the package
+ * carries no `node:` import of the host module loader.
+ */
+export const resolveVitest: VitestResolver = (directory) =>
   Effect.gen(function*() {
-    const fallback = Effect.gen(function*() {
-      const pathService = yield* Path.Path
-      const fs = yield* FileSystem.FileSystem
-      const urlString: string = import.meta.resolve('vitest/package.json')
-      const packageJsonPath = yield* pathService.fromFileUrl(new URL(urlString))
-      const content = yield* fs.readFileString(packageJsonPath)
-      const parsed: unknown = JSON.parse(content)
-      const decoded = yield* S.decodeUnknownEffect(VitestPackageSchema)(parsed)
-      return { createVitest: createVitestOriginal, version: decoded.version } satisfies ResolvedVitest
-    }).pipe(Effect.orDie)
-    const primary = Effect.gen(function*() {
-      const module = yield* Module
-      const pathService = yield* Path.Path
-      const fs = yield* FileSystem.FileSystem
-      const requireFromProject = module.createRequire(pathService.join(_dir, 'package.json'))
-      const imported: unknown = requireFromProject('vitest/node')
-      const decodedNode = yield* S.decodeUnknownEffect(VitestNodeModuleSchema)(imported)
-      const packageJsonPath = requireFromProject.resolve('vitest/package.json')
-      const content = yield* fs.readFileString(packageJsonPath)
-      const parsed: unknown = JSON.parse(content)
-      const decodedPackage = yield* S.decodeUnknownEffect(VitestPackageSchema)(parsed)
-      return {
-        createVitest: decodedNode.createVitest,
-        version: decodedPackage.version,
-      } satisfies ResolvedVitest
-    })
-    return yield* primary.pipe(Effect.catchCause(() => fallback), Effect.catchDefect(() => fallback))
+    const pathService = yield* Path.Path
+    const fs = yield* FileSystem.FileSystem
+    const nodeModule = process.getBuiltinModule('node:module')
+    const requireFromProject = nodeModule.createRequire(pathService.join(directory, 'package.json'))
+    const imported: unknown = requireFromProject('vitest/node')
+    const decodedNode = yield* S.decodeUnknownEffect(VitestNodeModuleSchema)(imported)
+    const packageJsonPath = requireFromProject.resolve('vitest/package.json')
+    const content = yield* fs.readFileString(packageJsonPath)
+    const parsed: unknown = JSON.parse(content)
+    const decodedPackage = yield* S.decodeUnknownEffect(VitestPackageSchema)(parsed)
+    return {
+      createVitest: decodedNode.createVitest,
+      version: decodedPackage.version,
+    } satisfies ResolvedVitest
   }).pipe(Effect.orDie)
 
 const versionPart = (parts: readonly string[], index: number): number =>
@@ -842,7 +861,7 @@ const applySetupFilesToProjects = (vitest: Vitest, localSetupFile: string): void
   }
 }
 
-export interface VitestRunnerLayerInput {
+export interface VitestRunnerInput {
   readonly options: StrykerOptions
   readonly sandboxDirectory: string
   readonly globalNamespace?: StrykerNamespace
@@ -851,24 +870,24 @@ export interface VitestRunnerLayerInput {
 }
 
 export const makeVitestRunnerLayer = (
-  input: VitestRunnerLayerInput,
-): Layer.Layer<TestRunner, never, Module | FileSystem.FileSystem | Path.Path> =>
+  input: VitestRunnerInput,
+): Layer.Layer<VitestRunnerService, never, FileSystem.FileSystem | Path.Path> =>
   Layer.effect(
-    TestRunner,
+    VitestRunnerService,
     Effect.gen(function*() {
       const stateRef = yield* Ref.make<RunnerState>({ ctx: undefined, localSetupFile: undefined })
       const fsService = yield* FileSystem.FileSystem
       const pathService = yield* Path.Path
-      const moduleService = yield* Module
       const getState = Ref.get(stateRef)
       const requireCtx = Effect.gen(function*() {
         const state = yield* getState
         if (state.ctx === undefined) {
-          return yield* new TestRunnerFailed({
-            runnerName: 'vitest',
-            phase: 'dryRun',
-            cause: errorToString(new Error('Vitest runner is not initialized; call init() before running tests')),
-          })
+          return yield* Effect.fail(
+            vitestFailed(
+              'dryRun',
+              errorToString(new Error('Vitest runner is not initialized; call init() before running tests')),
+            ),
+          )
         }
         return state.ctx
       })
@@ -878,16 +897,14 @@ export const makeVitestRunnerLayer = (
             if (decoded === undefined) return { related: true }
             return decoded
           })())),
-          Effect.mapError((cause) =>
-            new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause: errorToString(cause) })
-          ),
+          Effect.mapError((cause) => vitestFailed('init', errorToString(cause))),
         )
       const rawVitest = Reflect.get(input.options, 'vitest')
       const optionsEffect = decodedOptionsEffect(rawVitest).pipe(
         Effect.map((vitestOptions) => ({ ...input.options, vitest: vitestOptions })),
       )
-      const capabilities: TestRunner['Service']['capabilities'] = Effect.succeed({ reloadEnvironment: true })
-      const init: TestRunner['Service']['init'] = Effect.gen(function*() {
+      const capabilities: VitestRunnerService['Service']['capabilities'] = { reloadEnvironment: true }
+      const init: VitestRunnerService['Service']['init'] = Effect.gen(function*() {
         const options = yield* optionsEffect
         yield* Effect.sync(() => {
           process.env.NODE_ENV = 'test'
@@ -897,24 +914,17 @@ export const makeVitestRunnerLayer = (
         const localSetupFile = pathService.resolve(projectRoot, `stryker-setup-${process.pid}.js`)
         yield* Ref.update(stateRef, (s) => ({ ...s, localSetupFile }))
         const defaultSetupPath = yield* pathService.fromFileUrl(STRYKER_SETUP_URL).pipe(
-          Effect.mapError((cause) =>
-            new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause: errorToString(cause) })
-          ),
+          Effect.mapError((cause) => vitestFailed('init', errorToString(cause))),
         )
         const setupFilePath = Option.getOrElse(Option.fromNullishOr(input.setupFilePath), () => defaultSetupPath)
         yield* fsService.copyFile(setupFilePath, localSetupFile).pipe(
-          Effect.mapError((cause) =>
-            new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause: errorToString(cause) })
-          ),
+          Effect.mapError((cause) => vitestFailed('init', errorToString(cause))),
         )
         const resolver = Option.getOrElse(Option.fromNullishOr(input.resolveVitestFor), () => resolveVitest)
         const { createVitest, version } = yield* resolver(projectRoot).pipe(
-          Effect.provideService(Module, moduleService),
           Effect.provideService(FileSystem.FileSystem, fsService),
           Effect.provideService(Path.Path, pathService),
-          Effect.catchDefect((cause) =>
-            Effect.fail(new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause: errorToString(cause) }))
-          ),
+          Effect.catchDefect((cause) => Effect.fail(vitestFailed('init', errorToString(cause)))),
         )
         const namespace = Option.getOrElse(
           Option.fromNullishOr(input.globalNamespace),
@@ -953,16 +963,13 @@ export const makeVitestRunnerLayer = (
               resolve: { alias: [...aliases], conditions: ['import'] },
               plugins: [plugin],
             }),
-          catch: (cause) => new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause: errorToString(cause) }),
+          catch: (cause) => vitestFailed('init', errorToString(cause)),
         })
         ctx.provide('globalNamespace', namespace)
         ctx.provide('isGreaterThanVitest4Point1', shouldUseSuiteMetaSecondArg(version))
         applySetupFilesToProjects(ctx, localSetupFile)
         yield* Ref.update(stateRef, (s) => ({ ...s, ctx }))
-      }).pipe(Effect.mapError((cause) => ((() => {
-        if (cause instanceof TestRunnerFailed) return cause
-        return new TestRunnerFailed({ runnerName: 'vitest', phase: 'init', cause: errorToString(cause) })
-      })())))
+      }).pipe(Effect.catchDefect((cause) => Effect.fail(vitestFailed('init', errorToString(cause)))))
       const resetContext = Effect.gen(function*() {
         const ctx = yield* requireCtx
         experimentalStateClearFiles(ctx)
@@ -1062,7 +1069,7 @@ export const makeVitestRunnerLayer = (
           const options = yield* optionsEffect
           yield* resetContext.pipe(
             Effect.mapError((cause) =>
-              new TestRunnerFailed({ runnerName: 'vitest', phase: 'dryRun', cause: errorToString(cause) })
+              vitestFailed('dryRun', errorToString(cause))
             ),
           )
           const vitestInRun = Reflect.get(options, 'vitest')
@@ -1070,10 +1077,8 @@ export const makeVitestRunnerLayer = (
           const plan = runFilterPlan(filter, input.sandboxDirectory, pathService)
           applyRunFilterToConfig(ctx, { related, testNamePattern: plan.testNamePattern })
           yield* Effect.tryPromise({
-            try: () =>
-              ctx.start(plan.testFiles),
-            catch: (cause) =>
-              new TestRunnerFailed({ runnerName: 'vitest', phase: 'dryRun', cause: errorToString(cause) }),
+            try: () => ctx.start(plan.testFiles),
+            catch: (cause) => vitestFailed('dryRun', errorToString(cause)),
           }).pipe(
             Effect.catchIf((error: TestRunnerFailed) => isMissingTestFilesCause(error.cause), () => Effect.void),
           )
@@ -1120,9 +1125,7 @@ export const makeVitestRunnerLayer = (
               relatedFiles: [command.sandboxFileName],
             })
             const hitCount = yield* readHitCount.pipe(
-              Effect.mapError((cause) =>
-                new TestRunnerFailed({ runnerName: 'vitest', phase: 'mutantRun', cause: errorToString(cause) })
-              ),
+              Effect.mapError((cause) => vitestFailed('mutantRun', errorToString(cause))),
               Effect.option,
               Effect.map(Option.getOrUndefined),
             )
@@ -1217,7 +1220,7 @@ export const makeVitestRunnerLayer = (
           }),
         write: (output: MutantRunResult, _raw: unknown) => Effect.succeed(output),
       })
-      const dryRunFilter = (options: Parameters<TestRunner['Service']['dryRun']>[0]): RunFilter => {
+      const dryRunFilter = (options: Parameters<VitestRunnerService['Service']['dryRun']>[0]): RunFilter => {
         const relatedFiles = Option.getOrUndefined(
           Option.map(Option.fromNullishOr(options.files), (files) => [...files]),
         )
@@ -1240,9 +1243,7 @@ export const makeVitestRunnerLayer = (
             Match.orElse((): readonly TestResult[] => []),
           )
           const mutantCoverage = yield* readMutantCoverage.pipe(
-            Effect.mapError((cause) =>
-              new TestRunnerFailed({ runnerName: 'vitest', phase: 'dryRun', cause: errorToString(cause) })
-            ),
+            Effect.mapError((cause) => vitestFailed('dryRun', errorToString(cause))),
           )
           return Match.value(mutantCoverage).pipe(
             Match.when(Match.defined, (coverage) => ({ status: 'complete' as const, tests, mutantCoverage: coverage })),
@@ -1250,7 +1251,7 @@ export const makeVitestRunnerLayer = (
           )
         })
 
-      const dryRun: TestRunner['Service']['dryRun'] = (options) =>
+      const dryRun: VitestRunnerService['Service']['dryRun'] = (options) =>
         Effect.gen(function*() {
           const harness = yield* VitestHarness
           yield* harness.setMode('dry-run')
@@ -1275,20 +1276,11 @@ export const makeVitestRunnerLayer = (
             Match.tag('Complete', (complete) => completeDryRun(complete.testsJson)),
             Match.exhaustive,
           )
-        }).pipe(
-          Effect.provideService(VitestHarness, harnessImpl),
-          Effect.mapError((cause) => ((() => {
-            if (cause instanceof TestRunnerFailed) return cause
-            return new TestRunnerFailed({ runnerName: 'vitest', phase: 'dryRun', cause: errorToString(cause) })
-          })())),
-        )
-      const mutantRun: TestRunner['Service']['mutantRun'] = (options) =>
+        }).pipe(Effect.provideService(VitestHarness, harnessImpl))
+      const mutantRun: VitestRunnerService['Service']['mutantRun'] = (options) =>
         Cell.run(mutantRunCell, options).pipe(
           Effect.provideService(VitestHarness, harnessImpl),
-          Effect.mapError((cause) => ((() => {
-            if (cause instanceof TestRunnerFailed) return cause
-            return new TestRunnerFailed({ runnerName: 'vitest', phase: 'mutantRun', cause: errorToString(cause) })
-          })())),
+          Effect.mapError((cause) => vitestFailed('mutantRun', errorToString(cause))),
         )
       const disposeContext = (
         ctx: Vitest,
@@ -1309,21 +1301,51 @@ export const makeVitestRunnerLayer = (
           })
           yield* Effect.tryPromise({
             try: () => ctx.close(),
-            catch: (cause) =>
-              new TestRunnerFailed({ runnerName: 'vitest', phase: 'dispose', cause: errorToString(cause) }),
+            catch: (cause) => vitestFailed('dispose', errorToString(cause)),
           })
         })
 
-      const dispose: TestRunner['Service']['dispose'] = Effect.gen(function*() {
+      const dispose: VitestRunnerService['Service']['dispose'] = Effect.gen(function*() {
         const state = yield* getState
         return yield* Option.match(Option.fromNullishOr(state.ctx), {
           onNone: () => Effect.void,
           onSome: (ctx) => disposeContext(ctx, state.localSetupFile),
         })
       })
-      return TestRunner.of({ capabilities, init, dryRun, mutantRun, dispose })
+      return VitestRunnerService.of({ capabilities, init, dryRun, mutantRun, dispose })
     }),
   )
+
+const nodeFsPathLayer = Layer.mergeAll(NodeFileSystem.layer, NodePath.layer)
+
+/**
+ * The ABI boundary: one interpretation of the engine's effects, built per factory
+ * call. `capabilities` is a value; every other member runs its effect on a runtime
+ * that owns the layer, so the runner's `Ref`-held state survives between calls. A
+ * failure rejects with the plain `TestRunnerFailed` value — the error channel this
+ * surface carried while it was an Effect — which the host decodes per call.
+ */
+export const makeTestRunner: TestRunnerFactory = (options, _init) => {
+  const runtime = ManagedRuntime.make(
+    makeVitestRunnerLayer({ options, sandboxDirectory: process.cwd() }).pipe(Layer.provide(nodeFsPathLayer)),
+  )
+  const runner = runtime.runSync(VitestRunnerService)
+  const settle = async <A>(
+    phase: TestRunnerFailed['phase'],
+    effect: Effect.Effect<A, TestRunnerFailed>,
+  ): Promise<A> => {
+    const exit = await runtime.runPromise(Effect.exit(effect))
+    if (Exit.isSuccess(exit)) return exit.value
+    return Promise.reject(vitestFailed(phase, Cause.pretty(exit.cause)))
+  }
+  return {
+    capabilities: () => runner.capabilities,
+    init: () => settle('init', runner.init),
+    dispose: () => settle('dispose', runner.dispose),
+    dryRun: (dryRunOptions) => settle('dryRun', runner.dryRun(dryRunOptions)),
+    mutantRun: (mutantRunOptions) => settle('mutantRun', runner.mutantRun(mutantRunOptions)),
+  }
+}
 
 function isTestResultLike(value: unknown): value is TestResult {
   return Predicate.isObject(value) && typeof value['id'] === 'string'

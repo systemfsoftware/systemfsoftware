@@ -1,5 +1,8 @@
-import * as Context from 'effect/Context'
-import type * as Option from 'effect/Option'
+export { IgnoreDecisionSchema } from './Ignorer.schema.js'
+export type { IgnoreDecision } from './Ignorer.schema.js'
+
+import type { IgnoreDecision } from './Ignorer.schema.js'
+import type { PluginInit, StrykerOptions } from './Options.js'
 
 export interface NodePath {
   readonly node: unknown
@@ -11,8 +14,11 @@ export interface NodePath {
   isClassAccessorProperty(): boolean
 }
 
-export interface IgnorerService {
-  readonly shouldIgnore: (path: NodePath) => Option.Option<string>
+export interface IgnorerContext {
+  readonly fileName: string
+  readonly options: StrykerOptions
 }
 
-export class Ignorer extends Context.Service<Ignorer, IgnorerService>()('~@systemfsoftware/stryker-js/Ignorer') {}
+export type Ignorer = (node: NodePath, context: IgnorerContext) => IgnoreDecision
+
+export type IgnorerFactory = (options: StrykerOptions, init: PluginInit) => Ignorer

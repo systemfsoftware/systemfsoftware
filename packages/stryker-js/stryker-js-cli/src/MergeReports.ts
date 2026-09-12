@@ -1,10 +1,10 @@
-import { makeHtmlReporter } from '@systemfsoftware/stryker-js-html-reporter'
-import { calculateMetrics } from '@systemfsoftware/stryker-js/Metrics'
-import { MutationTestResultSchema } from '@systemfsoftware/stryker-js/Report'
-import type { FileResult, MutantResult, MutationTestResult } from '@systemfsoftware/stryker-js/Report'
-import { MutationTestReportReady } from '@systemfsoftware/stryker-js/Reporter'
+import {
+  calculateMetrics,
+  type FileResult,
+  type MutantResult,
+  type MutationTestResult,
+} from '@systemfsoftware/stryker-js/Report'
 import type { ReporterEvent } from '@systemfsoftware/stryker-js/Reporter'
-import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
 import * as Console from 'effect/Console'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
@@ -13,6 +13,7 @@ import * as Option from 'effect/Option'
 import * as Path from 'effect/Path'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
+
 import type { MergeReportsRequest } from './Cli.schema.js'
 import {
   DuplicatePackageLabel,
@@ -24,6 +25,8 @@ import {
   type ReportPart,
 } from './merge-report-parts.workflow.js'
 import { MergeReportsFailed, PartMetaSchema, StreamMutantLineSchema } from './merge-reports.schema.js'
+import { makeHtmlReporter } from './report/html-report.js'
+import { MutationTestResultPayload, StrykerOptionsPayload } from './run/abi-payload.schema.js'
 
 const PART_MARKER_FILE = 'mutation-part.json'
 const PART_REPORT_FILE = 'mutation-report.json'
@@ -164,7 +167,7 @@ const partBase = (meta: PartMeta): ReportPartValue => ({
 })
 
 const partFromReportText = (dir: string, base: ReportPartValue, text: string): PartRead => {
-  const report = S.decodeUnknownOption(S.fromJsonString(MutationTestResultSchema))(text)
+  const report = S.decodeUnknownOption(S.fromJsonString(MutationTestResultPayload))(text)
   return Option.match(report, {
     onNone: (): PartRead => ({ dir, part: Option.some(base), unreadable: true }),
     onSome: (value): PartRead => ({ dir, part: Option.some({ ...base, report: value }), unreadable: false }),
@@ -312,13 +315,13 @@ async function* toStream(events: readonly ReporterEvent[]): AsyncGenerator<Repor
 
 const writeHtmlReport = (fileName: string, report: MutationTestResult): Effect.Effect<void, MergeReportsFailed> =>
   Effect.gen(function*() {
-    const decoded = S.decodeUnknownOption(StrykerOptionsSchema)({ htmlReporter: { fileName } })
+    const decoded = S.decodeUnknownOption(StrykerOptionsPayload)({ htmlReporter: { fileName } })
     if (Option.isNone(decoded)) {
       return yield* failMerge(`cannot configure the html report at ${fileName}`)
     }
     const metrics = calculateMetrics(report.files)
     yield* Effect.promise(() =>
-      makeHtmlReporter(decoded.value, {})(toStream([new MutationTestReportReady({ report, metrics })]))
+      makeHtmlReporter(decoded.value, {})(toStream([{ _tag: 'mutationTestReportReady', report, metrics }]))
     )
   })
 

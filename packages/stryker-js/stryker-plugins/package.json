@@ -56,6 +56,9 @@
     "api:check": "concurrently --kill-others-on-fail \"api-extractor run\" \"api-extractor run --config api-extractor.effect-schema-ignorer.json\" \"api-extractor run --config api-extractor.in-source-test-ignorer.json\" \"api-extractor run --config api-extractor.workflow-make-ignorer.json\"",
     "api:update": "concurrently --kill-others-on-fail \"api-extractor run --local\" \"api-extractor run --local --config api-extractor.effect-schema-ignorer.json\" \"api-extractor run --local --config api-extractor.in-source-test-ignorer.json\" \"api-extractor run --local --config api-extractor.workflow-make-ignorer.json\""
   },
+  "dependencies": {
+    "@systemfsoftware/stryker-js": "workspace:^"
+  },
   "devDependencies": {
     "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
@@ -75,11 +78,6 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "vitest": "catalog:"
-  },
-  "peerDependencies": {
-    "@systemfsoftware/stryker-js": "workspace:^",
-    "effect": "catalog:peers",
-    "typescript": ">=5.0.0"
   },
   "publishConfig": {
     "exports": {
@@ -102,5 +100,8 @@
       "./package.json": "./package.json"
     },
     "provenance": true
+  },
+  "inlinedDependencies": {
+    "effect": "4.0.0-rc.112"
   }
 }

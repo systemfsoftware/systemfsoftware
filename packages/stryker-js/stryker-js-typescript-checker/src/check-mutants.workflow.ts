@@ -1,5 +1,4 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as Arr from 'effect/Array'
 import * as HashMap from 'effect/HashMap'
 import * as Option from 'effect/Option'
@@ -11,6 +10,7 @@ import {
   type MutantDecoded,
   type NodeDecoded,
 } from './CheckMutants.schema.js'
+import { MutantCodec } from './Mutant.schema.js'
 
 export class DiagnosticWithoutFileError extends S.TaggedError<DiagnosticWithoutFileError>()(
   'DiagnosticWithoutFileError',
@@ -47,7 +47,7 @@ export class CheckFinished extends S.TaggedClass<CheckFinished>()('CheckFinished
 
 export class RetestRequired extends S.TaggedClass<RetestRequired>()('RetestRequired', {
   results: S.Record(S.String, MutantCheckStatusSchema),
-  needsRetest: S.Array(Mutant),
+  needsRetest: S.Array(MutantCodec),
 }) {
   readonly [CheckMutantsTypeId] = CheckMutantsTypeId
 }

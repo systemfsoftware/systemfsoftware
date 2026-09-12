@@ -1,14 +1,9 @@
-import * as Match from 'effect/Match'
-import * as Option from 'effect/Option'
-import * as Predicate from 'effect/Predicate'
-
 import type { MutantRunOptions } from './TestRunner.js'
 
-import { Mutant } from './Mutant.schema.js'
-import type { Position } from './Mutant.schema.js'
+export { LocationSchema, MutantSchema, MutantStatusSchema, PositionSchema } from './Mutant.schema.js'
+export type { Location, Mutant, MutantStatus, Position } from './Mutant.schema.js'
 
-export { LocationSchema, Mutant, PositionSchema } from './Mutant.schema.js'
-export type { Location, Position } from './Mutant.schema.js'
+import type { Mutant, MutantStatus, Position } from './Mutant.schema.js'
 
 export type CoverageData = Record<string, number>
 
@@ -18,16 +13,6 @@ export interface Coverage {
   readonly static: CoverageData
   readonly perTest: CoveragePerTestId
 }
-
-export type MutantStatus =
-  | 'Killed'
-  | 'Survived'
-  | 'NoCoverage'
-  | 'Timeout'
-  | 'CompileError'
-  | 'RuntimeError'
-  | 'Ignored'
-  | 'Pending'
 
 export interface EarlyResultPlan {
   readonly plan: 'EarlyResult'
@@ -43,8 +28,6 @@ export interface RunPlan {
 
 export type TestPlan = EarlyResultPlan | RunPlan
 
-export const isMutant = (value: unknown): value is Mutant => value instanceof Mutant
-
 export type MutantTestCoverage = Mutant & {
   readonly coveredBy: ReadonlyArray<string> | undefined
   readonly static: boolean | undefined
@@ -58,6 +41,7 @@ export type MutantResult = Mutant & {
   readonly coveredBy?: readonly string[] | undefined
   readonly static?: boolean | undefined
 }
+
 export const INSTRUMENTER_CONSTANTS = Object.freeze({
   NAMESPACE: '__stryker__' as const,
   MUTATION_COVERAGE_OBJECT: 'mutantCoverage' as const,
@@ -82,151 +66,6 @@ export function normalizeFileName(fileName: string): string {
   return fileName.replace(/\\/g, '/')
 }
 
-export interface ErrnoException extends Error {
-  code?: string
-  errno?: number
-  path?: string
-  syscall?: string
-}
-
-const hasText = (value: unknown): value is string => Predicate.isString(value) && value.length > 0
-
-const textIfNonEmpty = (value: unknown): string | undefined =>
-  Option.getOrUndefined(Option.filter(Option.fromUndefinedOr(value), hasText))
-
-const fieldOf = (value: object, key: string): unknown =>
-  Match.value(key in value).pipe(
-    Match.when(true, () => {
-      const field: unknown = Reflect.get(value, key)
-      return field
-    }),
-    Match.orElse(() => undefined),
-  )
-
-const hasStringCode = (error: Error): boolean =>
-  Match.value(fieldOf(error, 'code')).pipe(
-    Match.when(Match.string, () => true),
-    Match.orElse(() => false),
-  )
-
-export function isErrnoException(error: unknown): error is ErrnoException {
-  return Match.value(error).pipe(
-    Match.when(Match.instanceOf(Error), hasStringCode),
-    Match.orElse(() => false),
-  )
-}
-
-const isEmptyNumber = (value: number): boolean =>
-  Match.value(value).pipe(
-    Match.when(0, () => true),
-    Match.orElse(Number.isNaN),
-  )
-
-const isEmptyError = (error: unknown): boolean =>
-  Match.value(error).pipe(
-    Match.when(Match.undefined, () => true),
-    Match.when(Match.null, () => true),
-    Match.when(Match.string, (text) => text.length === 0),
-    Match.when(Match.number, isEmptyNumber),
-    Match.when(Match.boolean, (value) => !value),
-    Match.orElse(() => false),
-  )
-
-const formatErrnoException = (error: ErrnoException): string =>
-  Match.value(error.stack).pipe(
-    Match.when(hasText, (stack) => `${error.name}: ${error.code} (${error.syscall}) ${stack}`),
-    Match.orElse(() => `${error.name}: ${error.code} (${error.syscall})`),
-  )
-
-const formatError = (error: Error): string =>
-  Match.value(error.stack).pipe(
-    Match.when(hasText, (stack) => `${error.name}: ${error.message}\n${stack}`),
-    Match.orElse(() => `${error.name}: ${error.message}`),
-  )
-
-const isJsonPrimitive = (value: unknown): value is number | boolean | bigint =>
-  Match.value(value).pipe(
-    Match.when(Match.number, () => true),
-    Match.when(Match.boolean, () => true),
-    Match.when(Match.bigint, () => true),
-    Match.orElse(() => false),
-  )
-
-const jsonText = (error: unknown): string | undefined => {
-  try {
-    return textIfNonEmpty(JSON.stringify(error))
-  } catch {
-    return undefined
-  }
-}
-
-const isNonPlaceholderText = (text: string): boolean =>
-  Match.value({ hasLength: text.length > 0, isPlaceholder: text === '[object Object]' }).pipe(
-    Match.when({ hasLength: true, isPlaceholder: false }, () => true),
-    Match.orElse(() => false),
-  )
-
-const isUsableText = (value: unknown): value is string =>
-  Match.value(value).pipe(
-    Match.when(Match.string, isNonPlaceholderText),
-    Match.orElse(() => false),
-  )
-
-const usableText = (value: unknown): string =>
-  Match.value(value).pipe(
-    Match.when(isUsableText, (text) => text),
-    Match.orElse(() => ''),
-  )
-
-const objectToStringText = (value: object): string =>
-  Match.value(fieldOf(value, 'toString')).pipe(
-    Match.when(Match.instanceOf(Function), (callable) => {
-      try {
-        return usableText(Reflect.apply(callable, value, []))
-      } catch {
-        return ''
-      }
-    }),
-    Match.orElse(() => ''),
-  )
-
-const isObjectType = (cause: unknown): cause is object => typeof cause === 'object'
-
-const toStringText = (error: unknown): string =>
-  Match.value(error).pipe(
-    Match.when(Match.null, () => ''),
-    Match.when(isObjectType, (value) => objectToStringText(value)),
-    Match.orElse(() => ''),
-  )
-
-const stringifyRest = (error: unknown): string =>
-  Match.value(jsonText(error)).pipe(
-    Match.when(hasText, (json) => json),
-    Match.orElse(() => toStringText(error)),
-  )
-
-const stringifyNonError = (error: unknown): string =>
-  Match.value(error).pipe(
-    Match.when(Match.string, (text) => text),
-    Match.when(isJsonPrimitive, (primitive) => JSON.stringify(primitive)),
-    Match.orElse(() => stringifyRest(error)),
-  )
-
-const errorText = (error: Error): string =>
-  Match.value(error).pipe(
-    Match.when(isErrnoException, formatErrnoException),
-    Match.orElse(() => formatError(error)),
-  )
-
-export function errorToString(error: unknown): string {
-  return Match.value(error).pipe(
-    Match.when(isEmptyError, () => ''),
-    Match.when(Match.instanceOf(Error), errorText),
-    Match.orElse(() => stringifyNonError(error)),
-  )
-}
-
-export const ERROR_CODES = Object.freeze({ NoSuchFileOrDirectory: 'ENOENT' as const })
 export interface MutationRange {
   readonly start: Position
   readonly end: Position
@@ -246,65 +85,183 @@ export type MutantEarlyResultPlan = EarlyResultPlan
 
 export type MutantTestPlan = TestPlan
 
-export * as schema from './Report.schema.js'
+const TAG_OF_MUTANT = 'Mutant'
 
-const errorNameOf = (value: object): string | undefined =>
-  Match.value(value).pipe(
-    Match.when(Match.instanceOf(Error), (error) => textIfNonEmpty(error.name)),
-    Match.orElse(() => undefined),
-  )
+const isObject = (value: unknown): value is object => typeof value === 'object' && value !== null
 
-const tagOf = (value: object): string | undefined =>
-  Match.value(textIfNonEmpty(fieldOf(value, '_tag'))).pipe(
-    Match.when(hasText, (tag) => tag),
-    Match.orElse(() => errorNameOf(value)),
-  )
+const carriesMutantTag = (value: object): boolean => Reflect.get(value, '_tag') === TAG_OF_MUTANT
 
-const textWithNested = (own: string | undefined, nested: string | undefined): string | undefined =>
-  Match.value(own).pipe(
-    Match.when(hasText, (text) => appendNested(text, nested)),
-    Match.orElse(() => nested),
-  )
+export const isMutant = (value: unknown): value is Mutant => isObject(value) && carriesMutantTag(value)
 
-const appendNested = (own: string, nested: string | undefined): string =>
-  Match.value(nested).pipe(
-    Match.when(hasText, (text) => `${own}: ${text}`),
-    Match.orElse(() => own),
-  )
+type Callable = (...args: readonly unknown[]) => unknown
 
-const errorMessage = (error: Error): string | undefined =>
-  Match.value(error.message.length > 0).pipe(
-    Match.when(true, () => error.message),
-    Match.orElse(() => tagOf(error)),
-  )
+interface ErrnoException extends Error {
+  code?: string
+  errno?: number
+  path?: string
+  syscall?: string
+}
 
-const errorMessageOrTag = (value: object): string | undefined =>
-  Match.value(value).pipe(
-    Match.when(Match.instanceOf(Error), errorMessage),
-    Match.orElse(() => tagOf(value)),
-  )
+const hasText = (value: unknown): value is string => typeof value === 'string' && value.length > 0
 
-const messageText = (value: object): string | undefined =>
-  Match.value(textIfNonEmpty(fieldOf(value, 'message'))).pipe(
-    Match.when(hasText, (message) => message),
-    Match.orElse(() => errorMessageOrTag(value)),
-  )
+const textIfNonEmpty = (value: unknown): string | undefined => {
+  if (!hasText(value)) return undefined
+  return value
+}
 
-const ownCauseText = (value: object): string | undefined =>
-  Match.value(textIfNonEmpty(fieldOf(value, 'reason'))).pipe(
-    Match.when(hasText, (reason) => reason),
-    Match.orElse(() => messageText(value)),
-  )
+const fieldOf = (value: object, key: string): unknown => {
+  if (!(key in value)) return undefined
+  const field: unknown = Reflect.get(value, key)
+  return field
+}
 
-export const causeText = (cause: unknown, depth: number): string | undefined =>
-  Match.value(cause).pipe(
-    Match.when(() => depth > 4, () => undefined),
-    Match.when(Match.undefined, () => undefined),
-    Match.when(Match.null, () => undefined),
-    Match.when(Match.string, textIfNonEmpty),
-    Match.when(isObjectType, (value) =>
-      textWithNested(ownCauseText(value), causeText(fieldOf(value, 'cause'), depth + 1))),
-    Match.orElse(() =>
-      undefined
-    ),
-  )
+const isErrnoException = (error: unknown): error is ErrnoException => {
+  if (!(error instanceof Error)) return false
+  return typeof fieldOf(error, 'code') === 'string'
+}
+
+const EMPTY_ERRORS: ReadonlySet<unknown> = new Set([undefined, null, '', 0, Number.NaN, false])
+
+const formatErrnoException = (error: ErrnoException): string => {
+  if (!hasText(error.stack)) return `${error.name}: ${error.code} (${error.syscall})`
+  return `${error.name}: ${error.code} (${error.syscall}) ${error.stack}`
+}
+
+const formatError = (error: Error): string => {
+  if (!hasText(error.stack)) return `${error.name}: ${error.message}`
+  return `${error.name}: ${error.message}\n${error.stack}`
+}
+
+const errorText = (error: Error): string => {
+  if (isErrnoException(error)) return formatErrnoException(error)
+  return formatError(error)
+}
+
+const JSON_PRIMITIVE_TYPES: Readonly<Record<string, true>> = { number: true, boolean: true, bigint: true }
+
+const jsonText = (error: unknown): string | undefined => {
+  try {
+    return textIfNonEmpty(JSON.stringify(error))
+  } catch {
+    return undefined
+  }
+}
+
+const isNonPlaceholderText = (text: string): boolean => text.length > 0 && text !== '[object Object]'
+
+const isUsableText = (value: unknown): value is string => typeof value === 'string' && isNonPlaceholderText(value)
+
+const usableText = (value: unknown): string => {
+  if (!isUsableText(value)) return ''
+  return value
+}
+
+const isCallable = (value: unknown): value is Callable => typeof value === 'function'
+
+const appliedToString = (value: object, callable: Callable): string => {
+  try {
+    const text: unknown = Reflect.apply(callable, value, [])
+    return usableText(text)
+  } catch {
+    return ''
+  }
+}
+
+const objectToStringText = (value: object): string => {
+  const callable = fieldOf(value, 'toString')
+  if (!isCallable(callable)) return ''
+  return appliedToString(value, callable)
+}
+
+const toStringText = (error: unknown): string => {
+  if (!isObject(error)) return ''
+  return objectToStringText(error)
+}
+
+const stringifyRest = (error: unknown): string => {
+  const json = jsonText(error)
+  if (!hasText(json)) return toStringText(error)
+  return json
+}
+
+const primitiveOrRestText = (error: unknown): string => {
+  if (Object.hasOwn(JSON_PRIMITIVE_TYPES, typeof error)) return JSON.stringify(error)
+  return stringifyRest(error)
+}
+
+const stringifyNonError = (error: unknown): string => {
+  if (typeof error === 'string') return error
+  return primitiveOrRestText(error)
+}
+
+const presentErrorText = (error: unknown): string => {
+  if (!(error instanceof Error)) return stringifyNonError(error)
+  return errorText(error)
+}
+
+export function errorToString(error: unknown): string {
+  if (EMPTY_ERRORS.has(error)) return ''
+  return presentErrorText(error)
+}
+
+const errorNameOf = (value: object): string | undefined => {
+  if (!(value instanceof Error)) return undefined
+  return textIfNonEmpty(value.name)
+}
+
+const tagOf = (value: object): string | undefined => {
+  const tag = textIfNonEmpty(fieldOf(value, '_tag'))
+  if (hasText(tag)) return tag
+  return errorNameOf(value)
+}
+
+const appendNested = (own: string, nested: string | undefined): string => {
+  if (!hasText(nested)) return own
+  return `${own}: ${nested}`
+}
+
+const textWithNested = (own: string | undefined, nested: string | undefined): string | undefined => {
+  if (!hasText(own)) return nested
+  return appendNested(own, nested)
+}
+
+const errorMessage = (error: Error): string | undefined => {
+  if (error.message.length === 0) return tagOf(error)
+  return error.message
+}
+
+const errorMessageOrTag = (value: object): string | undefined => {
+  if (!(value instanceof Error)) return tagOf(value)
+  return errorMessage(value)
+}
+
+const messageText = (value: object): string | undefined => {
+  const message = textIfNonEmpty(fieldOf(value, 'message'))
+  if (!hasText(message)) return errorMessageOrTag(value)
+  return message
+}
+
+const ownCauseText = (value: object): string | undefined => {
+  const reason = textIfNonEmpty(fieldOf(value, 'reason'))
+  if (!hasText(reason)) return messageText(value)
+  return reason
+}
+
+const isAbsent = (cause: unknown): boolean => cause === undefined || cause === null
+
+const deepOrAbsent = (cause: unknown, depth: number): boolean => depth > 4 || isAbsent(cause)
+
+const objectCauseText = (cause: unknown, depth: number): string | undefined => {
+  if (!isObject(cause)) return undefined
+  return textWithNested(ownCauseText(cause), causeText(fieldOf(cause, 'cause'), depth + 1))
+}
+
+const presentCauseText = (cause: unknown, depth: number): string | undefined => {
+  if (typeof cause === 'string') return textIfNonEmpty(cause)
+  return objectCauseText(cause, depth)
+}
+
+export function causeText(cause: unknown, depth: number): string | undefined {
+  if (deepOrAbsent(cause, depth)) return undefined
+  return presentCauseText(cause, depth)
+}

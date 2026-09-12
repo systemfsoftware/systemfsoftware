@@ -8,7 +8,7 @@ Vitest test-runner plugin for Stryker
 pnpm add @systemfsoftware/stryker-js-vitest-runner 'vitest@>=2.0.0'
 ```
 
-Those are peer dependencies: this package declares them but does not install them, so one copy is shared with the rest of your project.
+Those are the package and the vitest it drives. `vitest` is a peer dependency: this package declares it but does not install it, so a mutation run drives the copy and the config your project already has.
 
 ## Entry points
 

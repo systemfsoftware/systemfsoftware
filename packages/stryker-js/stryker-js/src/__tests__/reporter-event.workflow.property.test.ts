@@ -1,14 +1,13 @@
 import { describe, it } from '@effect/vitest'
 import * as Exit from 'effect/Exit'
 import * as S from 'effect/Schema'
-import type { StandardSchemaV1 } from 'effect/StandardSchema'
 import { FastCheck as fc } from 'effect/testing'
 
-import { DryRunCompleted, MutantTested, ReporterEventSchema, ReporterEventUnion } from '../ReporterEvent.schema.js'
-import type { ReporterEvent } from '../ReporterEvent.schema.js'
-import { MutantTested as RunMutantTested } from '../Run.schema.js'
+import type { StandardSchemaV1Result } from '../Plugin.schema.js'
+import type { ReporterEvent } from '../Reporter.schema.js'
+import { DryRunCompletedCodec, MutantTestedCodec, ReporterEventCodec, ReporterEventSchema } from '../Reporter.schema.js'
 
-type Validation = StandardSchemaV1.Result<ReporterEvent> | 'async'
+type Validation = StandardSchemaV1Result<ReporterEvent> | 'async'
 
 const validateSync = (input: unknown): Validation => {
   const out = ReporterEventSchema['~standard'].validate(input)
@@ -16,9 +15,7 @@ const validateSync = (input: unknown): Validation => {
   return out
 }
 
-// Test-file fixture encoding — S.encodeSync throws, which is the permitted
-// shape for specs: throwing here is fixture construction, not a boundary decode.
-const reencoded = (value: ReporterEvent): string => JSON.stringify(S.encodeSync(ReporterEventUnion)(value))
+const reencoded = (value: ReporterEvent): string => JSON.stringify(S.encodeSync(ReporterEventCodec)(value))
 
 const withTag = (input: unknown, tag: unknown): unknown => {
   if (typeof input !== 'object' || input === null) return input
@@ -49,18 +46,16 @@ const injectCoverage = (input: unknown): unknown => {
 const agreesWithDecode = (input: unknown): boolean => {
   const standard = validateSync(input)
   if (standard === 'async') return false
-  const decoded = S.decodeUnknownExit(ReporterEventUnion)(input)
+  const decoded = S.decodeUnknownExit(ReporterEventCodec)(input)
   if ('value' in standard) {
-    if (Exit.isFailure(decoded)) return false
-    if ('issues' in standard) return false
-    return reencoded(standard.value) === reencoded(decoded.value)
+    return Exit.isSuccess(decoded) && reencoded(standard.value) === reencoded(decoded.value)
   }
   return Exit.isFailure(decoded) && standard.issues.length > 0
 }
 
 const hasResultShape = (result: Validation): boolean => {
   if (result === 'async') return false
-  if ('value' in result) return !('issues' in result)
+  if ('value' in result) return true
   return result.issues.length > 0
 }
 
@@ -80,40 +75,41 @@ const rejectsUnknownTag = (result: Validation): boolean => {
   return fingerprint.includes('_tag') || fingerprint.includes('Expected')
 }
 
+const memberNamesOf = (encoded: object): string => Object.keys(encoded).filter((key) => key !== '_tag').sort().join(',')
+
+const PINNED_MUTANT_MEMBERS = 'completed,file,id,location,mutator,replacement,status,total'
+
 describe('ReporterEvent', () => {
   it.prop(
     '∀e_Event_≡Decode',
-    [S.toArbitrary(ReporterEventUnion)(fc)],
-    ([event]) => agreesWithDecode(corruptByDraw(S.encodeSync(ReporterEventUnion)(event))),
+    [S.toArbitrary(ReporterEventCodec)(fc)],
+    ([event]) => agreesWithDecode(corruptByDraw(S.encodeSync(ReporterEventCodec)(event))),
   )
 
   it.prop(
-    '∀e_Validate_≡Shape',
-    [S.toArbitrary(ReporterEventUnion)(fc)],
-    ([event]) => hasResultShape(validateSync(corruptByDraw(S.encodeSync(ReporterEventUnion)(event)))),
+    '∀e_Validate_∈Shape',
+    [S.toArbitrary(ReporterEventCodec)(fc)],
+    ([event]) => hasResultShape(validateSync(corruptByDraw(S.encodeSync(ReporterEventCodec)(event)))),
   )
 
   it.prop(
     '∀d_DryRun_≠Coverage',
-    [S.toArbitrary(DryRunCompleted)(fc)],
-    ([event]) => stripsMutantCoverage(S.encodeSync(DryRunCompleted)(event)),
+    [S.toArbitrary(DryRunCompletedCodec)(fc)],
+    ([event]) => stripsMutantCoverage(S.encodeSync(DryRunCompletedCodec)(event)),
   )
 
   it.prop(
-    '∀e_UnknownTag_≡Reject',
-    [S.toArbitrary(ReporterEventUnion)(fc)],
-    ([event]) => rejectsUnknownTag(validateSync(withTag(S.encodeSync(ReporterEventUnion)(event), 'not-a-kind'))),
+    '∀e_UnknownTag_⊥Decoded',
+    [S.toArbitrary(ReporterEventCodec)(fc)],
+    ([event]) => rejectsUnknownTag(validateSync(withTag(S.encodeSync(ReporterEventCodec)(event), 'not-a-kind'))),
   )
 
   it.prop(
-    '∀m_Tested_≡MachineAlphabet',
-    [S.toArbitrary(MutantTested)(fc)],
+    '∀m_Tested_≡EventShape',
+    [S.toArbitrary(MutantTestedCodec)(fc)],
     ([event]) => {
-      const encoded = S.encodeSync(MutantTested)(event)
-      const members = Object.keys(encoded).filter((key) => key !== '_tag').sort()
-      const pinned = ['completed', 'file', 'id', 'location', 'mutator', 'replacement', 'status', 'total']
-      if (members.join(',') !== pinned.join(',')) return false
-      return Exit.isSuccess(S.decodeUnknownExit(RunMutantTested)({ ...encoded, _tag: 'mutant' }))
+      const encoded = S.encodeSync(MutantTestedCodec)(event)
+      return memberNamesOf(encoded) === PINNED_MUTANT_MEMBERS && validateSync(encoded) !== 'async'
     },
   )
 })

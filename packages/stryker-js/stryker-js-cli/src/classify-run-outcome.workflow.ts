@@ -1,9 +1,10 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
+import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
+import { ExitClassPayload } from './run/abi-payload.schema.js'
 
 export class RunOutcomeCommand extends S.TaggedClass<RunOutcomeCommand>()('RunOutcomeCommand', {
   succeeded: S.Boolean,
@@ -15,8 +16,8 @@ export class RunOutcomeCommand extends S.TaggedClass<RunOutcomeCommand>()('RunOu
   survivorsReason: S.optional(S.Literals(['no-report', 'mismatch'])),
   survivorsDiagnostic: S.optional(S.String),
   schemaError: S.Boolean,
-  successExitClass: S.optional(ExitClass),
-  highestExitClass: S.optional(ExitClass),
+  successExitClass: S.optional(ExitClassPayload),
+  highestExitClass: S.optional(ExitClassPayload),
   configDetail: S.optional(S.String),
   diagnostic: S.optional(S.String),
 }) {}

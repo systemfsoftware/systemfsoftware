@@ -1,6 +1,5 @@
 ---
 "@systemfsoftware/effect-schema-vite": minor
-"@systemfsoftware/stryker-js-instrumenter": none
 "@systemfsoftware/stryker-js-typescript-checker": none
 "@systemfsoftware/stryker-js-vitest-runner": none
 "@systemfsoftware/stryker-test-contribution": none

@@ -4,9 +4,10 @@
  * Houses the wire types and error variants shared by the capability and its
  * workflow. Decoded at the checker boundary; no I/O.
  */
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import * as Match from 'effect/Match'
 import * as S from 'effect/Schema'
+
+import { MutantCodec } from './Mutant.schema.js'
 
 export const TypescriptCheckerOptionsSchema = S.Struct({
   typescriptChecker: S.optional(
@@ -21,7 +22,7 @@ export const TypescriptCheckerOptionsSchema = S.Struct({
 export class CheckMutantsCommand extends S.TaggedClass<CheckMutantsCommand>()(
   'CheckMutantsCommand',
   {
-    mutants: S.Array(Mutant),
+    mutants: S.Array(MutantCodec),
   },
 ) {}
 

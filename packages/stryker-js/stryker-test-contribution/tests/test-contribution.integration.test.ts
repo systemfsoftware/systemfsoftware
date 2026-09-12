@@ -1,5 +1,6 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { schema } from '@systemfsoftware/stryker-js/Mutant'
+import type { MutantStatus } from '@systemfsoftware/stryker-js/Mutant'
+import type * as schema from '@systemfsoftware/stryker-js/Report'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 
@@ -16,7 +17,7 @@ const LOCATION = { start: { line: 1, column: 1 }, end: { line: 1, column: 2 } }
 
 const mutantOf = (
   id: string,
-  status: schema.MutantStatus,
+  status: MutantStatus,
   killedBy?: string[],
   coveredBy?: string[],
 ): schema.MutantResult => ({

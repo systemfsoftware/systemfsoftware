@@ -1,16 +1,17 @@
+import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
+import * as NodePath from '@effect/platform-node-shared/NodePath'
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { Checker } from '@systemfsoftware/stryker-js/Checker'
-import { CheckerFailed } from '@systemfsoftware/stryker-js/Checker'
-import type { CheckResult } from '@systemfsoftware/stryker-js/Checker'
+import type { CheckerFactory, CheckerFailed, CheckResult, CheckResultMap } from '@systemfsoftware/stryker-js/Checker'
 import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
-import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
-import { Result, Schema as S } from 'effect'
+import type { StrykerOptions } from '@systemfsoftware/stryker-js/Options'
+import { Predicate, Result, Schema as S } from 'effect'
 import * as Effect from 'effect/Effect'
-import * as HashMap from 'effect/HashMap'
+import * as FileSystem from 'effect/FileSystem'
 import * as Layer from 'effect/Layer'
+import * as ManagedRuntime from 'effect/ManagedRuntime'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
+import * as Path from 'effect/Path'
 import { DiagnosticCategory } from 'typescript/unstable/sync'
 import type { Diagnostic } from 'typescript/unstable/sync'
 import {
@@ -22,7 +23,7 @@ import {
 } from './check-mutants.workflow.js'
 import { CheckMutantsCommand, TypescriptCheckerOptionsSchema } from './Checker.schema.js'
 import { CheckMutantsInput } from './CheckMutants.schema.js'
-import { TypeScriptCompiler } from './Compiler.js'
+import { makeHybridFileSystem, makeTypescriptCompiler, TypeScriptCompiler } from './Compiler.js'
 import { groupMutants } from './mutant-groups.js'
 
 export interface TypescriptCheckerPluginOptions {
@@ -34,7 +35,7 @@ export interface TypescriptCheckerPluginOptions {
 export interface TypescriptCheckerOptionsWithStrykerOptions extends TypescriptCheckerPluginOptions, StrykerOptions {}
 
 interface CheckerDeps {
-  readonly options: unknown
+  readonly options: StrykerOptions
   readonly compiler: TypeScriptCompiler['Service']
 }
 
@@ -51,8 +52,19 @@ function getPrioritize(options: unknown): boolean {
 
 type RunAnswers = CheckFinished['results']
 
-const refuse = (mutantIds: ReadonlyArray<string>, cause: unknown): CheckerFailed =>
-  new CheckerFailed({ checkerName: 'typescript', mutantIds: [...mutantIds], cause: errorToString(cause) })
+const causeText = (cause: unknown): string =>
+  Match.value(cause).pipe(
+    Match.when(Predicate.isError, (thrown) => thrown.message),
+    Match.when(Predicate.isString, (thrown) => thrown),
+    Match.orElse(() => 'a non-Error value was raised'),
+  )
+
+const refuse = (mutantIds: ReadonlyArray<string>, cause: unknown): CheckerFailed => ({
+  _tag: 'CheckerFailed',
+  checkerName: 'typescript',
+  mutantIds: [...mutantIds],
+  cause: causeText(cause),
+})
 
 const severityOf = (category: DiagnosticCategory): string =>
   Match.value(category).pipe(
@@ -69,11 +81,11 @@ const toCheckResult = (answer: RunAnswers[string]): CheckResult => {
   return { status: 'compileError', reason: answer.reason }
 }
 
-const mergeAnswers = (runs: ReadonlyArray<RunAnswers>): HashMap.HashMap<string, CheckResult> =>
-  runs.reduce(
-    (merged, answers) =>
-      Object.entries(answers).reduce((into, [id, answer]) => HashMap.set(into, id, toCheckResult(answer)), merged),
-    HashMap.empty<string, CheckResult>(),
+const mergeAnswers = (runs: ReadonlyArray<RunAnswers>): CheckResultMap =>
+  Object.fromEntries(
+    runs.flatMap((answers): ReadonlyArray<readonly [string, CheckResult]> =>
+      Object.entries(answers).map(([id, answer]): readonly [string, CheckResult] => [id, toCheckResult(answer)])
+    ),
   )
 
 const checkCell = Cell.layer({
@@ -97,7 +109,13 @@ const checkCell = Cell.layer({
     }),
 })
 
-export function makeCheckerService({ options, compiler }: CheckerDeps): Checker['Service'] {
+interface CheckerService {
+  readonly init: Effect.Effect<void, CheckerFailed>
+  readonly check: (mutants: readonly Mutant[]) => Effect.Effect<CheckResultMap, CheckerFailed>
+  readonly group: (mutants: readonly Mutant[]) => Effect.Effect<readonly (readonly string[])[], CheckerFailed>
+}
+
+export function makeCheckerService({ options, compiler }: CheckerDeps): CheckerService {
   const verify = Cell.provide(checkCell, Layer.succeed(TypeScriptCompiler, compiler))
 
   const positionOf = (error: Diagnostic): Effect.Effect<string> =>
@@ -162,5 +180,40 @@ export function makeCheckerService({ options, compiler }: CheckerDeps): Checker[
         Effect.map((nodes) => groupMutants(mutants, nodes, getPrioritize(options))),
         Effect.mapError((cause) => refuse(mutants.map((mutant) => mutant.id), cause)),
       ),
+  }
+}
+
+const nodePlatform: Layer.Layer<FileSystem.FileSystem | Path.Path> = Layer.mergeAll(
+  NodeFileSystem.layer,
+  NodePath.layer,
+)
+
+const checkerProgram = (
+  options: StrykerOptions,
+): Effect.Effect<CheckerService, never, FileSystem.FileSystem | Path.Path> =>
+  Effect.gen(function*() {
+    const fsService = yield* FileSystem.FileSystem
+    const pathService = yield* Path.Path
+    const fs = yield* makeHybridFileSystem(fsService)
+    const compiler = makeTypescriptCompiler(options, fs, fsService, pathService)
+    return makeCheckerService({ options, compiler })
+  })
+
+export const makeChecker: CheckerFactory = (options) => {
+  const runtime = ManagedRuntime.make(nodePlatform)
+  const service = runtime.runPromise(checkerProgram(options))
+  return {
+    init: async () => {
+      const checker = await service
+      await runtime.runPromise(checker.init)
+    },
+    check: async (mutants) => {
+      const checker = await service
+      return runtime.runPromise(checker.check([...mutants]))
+    },
+    group: async (mutants) => {
+      const checker = await service
+      return runtime.runPromise(checker.group([...mutants]))
+    },
   }
 }

@@ -1,17 +1,8 @@
 /// <reference types="vitest/import-meta" />
 
 import { Cell } from '@systemfsoftware/effect-cell-types'
-import { buildVerdictEnvelope, defaultOptions, generateRunId, strykerVersion } from '@systemfsoftware/stryker-js-engine'
-import type { ResolvedMode } from '@systemfsoftware/stryker-js-engine'
-import { schema } from '@systemfsoftware/stryker-js/Mutant'
-import {
-  Heartbeat,
-  HelpRendered,
-  type RunEvent,
-  RunFailed,
-  RunStarted,
-  VerdictReached,
-} from '@systemfsoftware/stryker-js/Run'
+import type { Thresholds } from '@systemfsoftware/stryker-js/Report'
+import type { MutationTestResult } from '@systemfsoftware/stryker-js/Report'
 import type * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Context from 'effect/Context'
@@ -39,6 +30,9 @@ import {
   type ResolveModeDecision,
   resolveOutputMode,
 } from './resolve-output-mode.workflow.js'
+import { buildVerdictEnvelope, defaultOptions, generateRunId, strykerVersion } from './run/index.js'
+import type { ResolvedMode } from './run/index.js'
+import { Heartbeat, HelpRendered, type RunEvent, RunFailed, RunStarted, VerdictReached } from './run/RunEvent.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 
 export { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
@@ -449,12 +443,12 @@ export const OutputModeProbeLive: Layer.Layer<OutputModeProbeTag> = Layer.succee
 export function emitNullScoreVerdict(
   stream: RunEventStream,
   mode: ResolvedMode,
-  thresholds: schema.Thresholds,
+  thresholds: Thresholds,
   config: Readonly<Record<string, unknown>>,
   basePath: string,
   pathService: Path.Path,
 ): Effect.Effect<void, never, never> {
-  const report: schema.MutationTestResult = {
+  const report: MutationTestResult = {
     schemaVersion: '1.0',
     files: {},
     thresholds,

@@ -1,14 +1,17 @@
 import { NodeFileSystem, NodePath, NodeSocketServer } from '@effect/platform-node'
-import { errorToString } from '@systemfsoftware/stryker-js/Mutant'
-import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
+import { errorToString } from '@systemfsoftware/stryker-js'
+import type { PluginInit, StrykerOptions } from '@systemfsoftware/stryker-js/Options'
+import type { PluginContribution } from '@systemfsoftware/stryker-js/Plugin'
 import type {
   CompleteDryRunResult,
   DryRunOptions,
   DryRunResult,
   MutantRunOptions,
   MutantRunResult,
+  TestRunner,
+  TestRunnerCapabilities,
+  TestRunnerFailed,
 } from '@systemfsoftware/stryker-js/TestRunner'
-import { TestRunner, TestRunnerFailed } from '@systemfsoftware/stryker-js/TestRunner'
 import { Match, Schema as S } from 'effect'
 import * as Cause from 'effect/Cause'
 import * as Effect from 'effect/Effect'
@@ -19,15 +22,18 @@ import * as Path from 'effect/Path'
 import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization'
 import * as RpcServer from 'effect/unstable/rpc/RpcServer'
 
+import { nodeModuleLayer } from '../platform/node.js'
 import {
   create,
   decodeWorkerOptions,
   loadPlugins,
-  MutantCoverageSchema,
+  MutantCoveragePayload,
   TestRunnerRpcs,
-} from '@systemfsoftware/stryker-js-engine/worker'
-import { nodeModuleLayer } from '../platform/node.js'
+} from '../run/worker-wiring.js'
 import { launchWorker, workerSocketPath } from './worker-runtime.js'
+
+const NO_INIT: PluginInit = {}
+const NO_CAPABILITIES: TestRunnerCapabilities = { reloadEnvironment: false }
 
 const isCompleteDryRun = (result: DryRunResult): result is CompleteDryRunResult => result.status === 'complete'
 
@@ -50,7 +56,7 @@ const normalizeDryRun = (result: DryRunResult): DryRunResult => {
 
 const decodeCoverageInto = (result: DryRunResult): Effect.Effect<DryRunResult> =>
   Effect.gen(function*() {
-    const decoded = yield* S.decodeUnknownEffect(S.optional(MutantCoverageSchema))(
+    const decoded = yield* S.decodeUnknownEffect(S.optional(MutantCoveragePayload))(
       globalThis.__mutantCoverage__,
     ).pipe(Effect.orElseSucceed(() => undefined))
     return Option.match(Option.liftPredicate(result, isCompleteDryRun), {
@@ -88,6 +94,9 @@ const readWorkerOptions = Effect.gen(function*() {
   return yield* decodeWorkerOptions(raw)
 })
 
+const buildRunner = (contribution: PluginContribution<'TestRunner'>, options: StrykerOptions): TestRunner =>
+  contribution.make(options, NO_INIT)
+
 const TestRunnerHandlers = TestRunnerRpcs.toLayer(
   Effect.gen(function*() {
     const options = yield* readWorkerOptions
@@ -95,32 +104,70 @@ const TestRunnerHandlers = TestRunnerRpcs.toLayer(
     const failed =
       (phase: 'capabilities' | 'dryRun' | 'init' | 'mutantRun') =>
       (cause: Cause.Cause<unknown>): Effect.Effect<never, TestRunnerFailed> =>
-        Effect.fail(new TestRunnerFailed({ cause: Cause.pretty(cause), phase, runnerName }))
+        Effect.fail({
+          _tag: 'TestRunnerFailed',
+          cause: Cause.pretty(cause),
+          phase,
+          runnerName,
+        })
 
     const loaded = yield* loadPlugins(options.plugins, process.cwd()).pipe(
       Effect.catchCause(failed('init')),
     )
-    const underlying = yield* create(loaded.pluginsByKind, 'TestRunner', runnerName).pipe(
-      Effect.flatMap((contribution) => TestRunner.pipe(Effect.provide(contribution.layer))),
-      Effect.provide(
-        Layer.merge(Layer.succeed(RunConfiguration, options), Layer.succeed(SandboxDirectory, process.cwd())),
-      ),
+    const contribution = yield* create(loaded.pluginsByKind, 'TestRunner', runnerName).pipe(
       Effect.catchCause(failed('init')),
     )
-    yield* underlying.init.pipe(Effect.catchCause(failed('init')))
-    yield* Effect.addFinalizer(() => underlying.dispose.pipe(Effect.ignore))
+    const underlying = yield* Effect.try({
+      try: () => buildRunner(contribution, options),
+      catch: (cause) => Cause.fail(cause),
+    }).pipe(Effect.catchCause(failed('init')))
+    yield* Effect.tryPromise({
+      try: async () => underlying.init?.(),
+      catch: (cause) => Cause.fail(cause),
+    }).pipe(Effect.catchCause(failed('init')))
+    yield* Effect.addFinalizer(() =>
+      Effect.tryPromise({
+        try: async () => underlying.dispose?.(),
+        catch: (cause) => Cause.fail(cause),
+      }).pipe(Effect.ignoreCause)
+    )
+
+    const capabilitiesOf = (): Promise<TestRunnerCapabilities> =>
+      Promise.resolve(underlying.capabilities?.()).then((capabilities) => capabilities ?? NO_CAPABILITIES)
 
     return {
-      capabilities: () => underlying.capabilities.pipe(Effect.catchCause(failed('capabilities'))),
+      capabilities: () =>
+        Effect.tryPromise({
+          try: capabilitiesOf,
+          catch: (cause) => Cause.fail(cause),
+        }).pipe(Effect.catchCause(failed('capabilities'))),
 
       dryRun: ({ options: runOptions }: { readonly options: DryRunOptions }) =>
-        underlying.dryRun(runOptions).pipe(
+        Effect.tryPromise({
+          try: async () => {
+            const run = underlying.dryRun
+            if (run === undefined) {
+              throw new Error(`TestRunner ${runnerName} does not expose a dryRun function`)
+            }
+            return await run(runOptions)
+          },
+          catch: (cause) => Cause.fail(cause),
+        }).pipe(
           Effect.flatMap((result) => withCoverage(result, runOptions)),
           Effect.catchCause(failed('dryRun')),
         ),
 
       mutantRun: ({ options: runOptions }: { readonly options: MutantRunOptions }) =>
-        underlying.mutantRun(runOptions).pipe(
+        Effect.tryPromise({
+          try: async () => {
+            const run = underlying.mutantRun
+            if (run === undefined) {
+              throw new Error(`TestRunner ${runnerName} does not expose a mutantRun function`)
+            }
+            return await run(runOptions)
+          },
+          catch: (cause) => Cause.fail(cause),
+        }).pipe(
           Effect.map(normalizeMutantRun),
           Effect.catchCause(failed('mutantRun')),
         ),

@@ -1,7 +1,6 @@
-import { Ignorer } from '@systemfsoftware/stryker-js/Ignorer'
+import type { IgnorerFactory } from '@systemfsoftware/stryker-js/Ignorer'
 import { declarePlugin } from '@systemfsoftware/stryker-js/Plugin'
-import * as Layer from 'effect/Layer'
-import * as Option from 'effect/Option'
+
 import { ancestorsOf, type IgnorerPath } from '../AncestorPath.js'
 import {
   ANNOTATION_OBJECT_IGNORED,
@@ -24,18 +23,13 @@ const firstIgnoreReason = (path: IgnorerPath): string | undefined => {
   return chain.reduce<string | undefined>((found, _, position) => found ?? decisionAt(chain, position), undefined)
 }
 
+const makeIgnorer: IgnorerFactory = () => (path) => firstIgnoreReason(path) ?? null
+
 export const strykerPlugins = [
-  declarePlugin(
-    'Ignore',
-    'effect-schema-declarations',
-    Layer.succeed(Ignorer, {
-      shouldIgnore: (path: IgnorerPath) => Option.fromUndefinedOr(firstIgnoreReason(path)),
-    }),
-  ),
+  declarePlugin('Ignorer', 'effect-schema-declarations', makeIgnorer),
 ]
 
-// Public-surface decision: tests reach the decision function through the
-// barrel rather than deep-importing the .kernel.ts cell.
+// Public-surface decision: tests reach the decision function through the barrel.
 export {
   ANNOTATION_OBJECT_IGNORED,
   ANNOTATION_TEXT_IGNORED,

@@ -1,9 +1,9 @@
 import { NodeFileSystem, NodePath, NodeSocketServer } from '@effect/platform-node'
-import { Checker, CheckerFailed } from '@systemfsoftware/stryker-js/Checker'
+import { errorToString } from '@systemfsoftware/stryker-js'
+import type { Checker, CheckerFailed } from '@systemfsoftware/stryker-js/Checker'
 import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import type { ContributionOf } from '@systemfsoftware/stryker-js/Plugin'
-import { RunConfiguration, SandboxDirectory } from '@systemfsoftware/stryker-js/Plugin'
-import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import type { PluginInit, StrykerOptions } from '@systemfsoftware/stryker-js/Options'
+import type { PluginContribution } from '@systemfsoftware/stryker-js/Plugin'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
 import * as HashMap from 'effect/HashMap'
@@ -13,31 +13,25 @@ import * as Path from 'effect/Path'
 import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization'
 import * as RpcServer from 'effect/unstable/rpc/RpcServer'
 
-import { CheckerRpcs, create, decodeWorkerOptions, loadPlugins } from '@systemfsoftware/stryker-js-engine/worker'
 import { nodeModuleLayer } from '../platform/node.js'
+import { CheckerRpcs, create, decodeWorkerOptions, loadPlugins } from '../run/worker-wiring.js'
 import { launchWorker, workerSocketPath } from './worker-runtime.js'
 
-const buildChecker = (
-  contribution: ContributionOf<'Checker'>,
-  options: StrykerOptions,
-): Effect.Effect<Checker['Service'], never, never> =>
-  Checker.pipe(
-    Effect.provide(
-      contribution.layer.pipe(
-        Layer.provide(
-          Layer.mergeAll(
-            Layer.succeed(RunConfiguration, options),
-            Layer.succeed(SandboxDirectory, process.cwd()),
-            NodeFileSystem.layer,
-            NodePath.layer,
-            nodeModuleLayer,
-          ),
-        ),
-      ),
-    ),
-  )
+const NO_INIT: PluginInit = {}
 
-const mutantIdsOf = (mutants: readonly Mutant[]): ReadonlyArray<string> => mutants.map((mutant) => mutant.id)
+const buildChecker = (contribution: PluginContribution<'Checker'>, options: StrykerOptions): Checker =>
+  contribution.make(options, NO_INIT)
+
+const checkerFailed = (
+  checkerName: string,
+  mutants: readonly Mutant[],
+  cause: string,
+): CheckerFailed => ({
+  _tag: 'CheckerFailed',
+  cause,
+  checkerName,
+  mutantIds: mutants.map((mutant) => mutant.id),
+})
 
 const readWorkerOptions = Effect.gen(function*() {
   const workerDir = process.env['STRYKER_WORKER_DIR'] ?? (yield* Effect.die(new Error('STRYKER_WORKER_DIR is not set')))
@@ -57,8 +51,11 @@ const CheckerHandlers = CheckerRpcs.toLayer(
         (name) =>
           Effect.gen(function*() {
             const contribution = yield* create(loaded.pluginsByKind, 'Checker', name)
-            const checker = yield* buildChecker(contribution, options)
-            yield* checker.init
+            const checker = buildChecker(contribution, options)
+            yield* Effect.tryPromise({
+              try: async () => checker.init?.(),
+              catch: (cause) => checkerFailed(name, [], errorToString(cause)),
+            })
             return [name, checker] as const
           }),
         { concurrency: 'unbounded', discard: false },
@@ -68,29 +65,45 @@ const CheckerHandlers = CheckerRpcs.toLayer(
     const resolve = (
       checkerName: string,
       mutants: readonly Mutant[],
-    ): Effect.Effect<Checker['Service'], CheckerFailed> =>
+    ): Effect.Effect<Checker, CheckerFailed> =>
       Option.match(HashMap.get(checkers, checkerName), {
-        onNone: () =>
-          Effect.fail(
-            new CheckerFailed({
-              cause: `Checker ${checkerName} does not exist`,
-              checkerName,
-              mutantIds: mutantIdsOf(mutants),
-            }),
-          ),
-        onSome: (checker: Checker['Service']) => Effect.succeed(checker),
+        onNone: () => Effect.fail(checkerFailed(checkerName, mutants, `Checker ${checkerName} does not exist`)),
+        onSome: (checker: Checker) => Effect.succeed(checker),
       })
 
     return {
       check: ({ checkerName, mutants }: { readonly checkerName: string; readonly mutants: readonly Mutant[] }) =>
         resolve(checkerName, mutants).pipe(
-          Effect.flatMap((checker) => checker.check([...mutants])),
-          Effect.map((resultMap) => Object.fromEntries(resultMap)),
+          Effect.flatMap((checker) =>
+            Option.match(Option.fromUndefinedOr(checker.check), {
+              onNone: () =>
+                Effect.fail(
+                  checkerFailed(checkerName, mutants, `Checker ${checkerName} does not expose a check function`),
+                ),
+              onSome: (check) =>
+                Effect.tryPromise({
+                  try: async () => await check([...mutants]),
+                  catch: (cause) => checkerFailed(checkerName, mutants, errorToString(cause)),
+                }),
+            })
+          ),
         ),
 
       group: ({ checkerName, mutants }: { readonly checkerName: string; readonly mutants: readonly Mutant[] }) =>
         resolve(checkerName, mutants).pipe(
-          Effect.flatMap((checker) => checker.group([...mutants])),
+          Effect.flatMap((checker) =>
+            Option.match(Option.fromUndefinedOr(checker.group), {
+              onNone: () =>
+                Effect.fail(
+                  checkerFailed(checkerName, mutants, `Checker ${checkerName} does not expose a group function`),
+                ),
+              onSome: (group) =>
+                Effect.tryPromise({
+                  try: async () => await group([...mutants]),
+                  catch: (cause) => checkerFailed(checkerName, mutants, errorToString(cause)),
+                }),
+            })
+          ),
         ),
     }
   }),

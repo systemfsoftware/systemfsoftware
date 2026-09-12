@@ -15,9 +15,6 @@ const NODE_IMAGE = 'node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e
 const WORKSPACE_PACKAGES = [
   '@systemfsoftware/stryker-js-cli',
   '@systemfsoftware/stryker-js',
-  '@systemfsoftware/stryker-js-engine',
-  '@systemfsoftware/stryker-js-html-reporter',
-  '@systemfsoftware/stryker-js-instrumenter',
   '@systemfsoftware/effect-cell-types',
 ] as const
 const WORKDIR = '/work'

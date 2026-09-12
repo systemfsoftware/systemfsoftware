@@ -8,7 +8,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/stryker-js/stryker-js-cli#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "The stryker command-line interface — terminal framing, run-event stream, and exit handling for the @systemfsoftware mutation engine.",
+  "description": "The stryker command-line interface — the whole mutation host: run orchestration, the instrumenter core, the builtin and html reporters, the Node platform binding, and the workers.",
   "type": "module",
   "files": [
     "dist"
@@ -30,14 +30,19 @@
   "dependencies": {
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
+    "@eslint-community/regexpp": "4.12.2",
     "@noble/hashes": "catalog:",
+    "@opentelemetry/api": "^1.9.0",
+    "@oxc-project/types": "catalog:",
     "@systemfsoftware/effect-cell-types": "workspace:^",
     "@systemfsoftware/stryker-js": "workspace:^",
-    "@systemfsoftware/stryker-js-engine": "workspace:^",
-    "@systemfsoftware/stryker-js-html-reporter": "workspace:^",
-    "effect": "catalog:"
+    "diff-match-patch": "1.0.5",
+    "minimatch": "~10.2.4",
+    "mutation-testing-elements": "catalog:stryker",
+    "oxc-parser": "catalog:"
   },
   "devDependencies": {
+    "@std/jsonc": "catalog:",
     "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
@@ -50,9 +55,12 @@
     "@systemfsoftware/stryker-test-contribution": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/diff-match-patch": "1.0.36",
+    "@types/estree": "1.0.8",
     "@types/node": "catalog:",
     "@vitest/coverage-v8": "catalog:",
     "oxlint": "catalog:oxlint",
+    "effect": "catalog:",
     "rimraf": "catalog:",
     "testcontainers": "catalog:",
     "tsdown": "catalog:",
@@ -67,9 +75,18 @@
     "provenance": true
   },
   "exports": {
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./config": "./dist/config.mjs"
   },
   "bin": {
     "stryker": "./dist/main.mjs"
+  },
+  "inlinedDependencies": {
+    "@jsr/std__jsonc": "1.0.2",
+    "detect-libc": "2.1.2",
+    "effect": "4.0.0-rc.112",
+    "msgpackr": "2.0.5",
+    "msgpackr-extract": "3.0.4",
+    "node-gyp-build-optional-packages": "5.2.2"
   }
 }

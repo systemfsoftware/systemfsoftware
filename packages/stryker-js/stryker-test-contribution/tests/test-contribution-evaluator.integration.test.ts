@@ -1,35 +1,9 @@
-/**
- * Evaluator plugin wiring: listing the plugin is enough. A failing
- * contribution verdict returns the `VerdictFail` exit class on the SUCCESS channel;
- * EvaluatorFailed is only for the evaluator itself breaking.
- *
- * Warrant: composition — real gate decision through the Evaluator port's
- * Layer, not a mock; property tests cover the pure decision, this covers the
- * shell wiring (options via RunConfiguration, success value vs error channel).
- * Refusal: not a tautology — removing the system under test (the evaluator's
- * evaluate) would make the Then assertions fail (no VerdictFail where expected,
- * or no EvaluatorFailed where breaking expected).
- */
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { schema } from '@systemfsoftware/stryker-js/Mutant'
-import { type PartialStrykerOptions, StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
-import * as Cause from 'effect/Cause'
-import * as Context from 'effect/Context'
-import * as Effect from 'effect/Effect'
-import * as Exit from 'effect/Exit'
-import * as Layer from 'effect/Layer'
-import * as Option from 'effect/Option'
-import * as Schema from 'effect/Schema'
+import type * as schema from '@systemfsoftware/stryker-js/Report'
+import { Effect } from 'effect'
 import { expect } from 'vitest'
 
-import { Evaluator, type EvaluatorFailed, type ExitClass } from '@systemfsoftware/stryker-js/Evaluator'
-import { RunConfiguration } from '@systemfsoftware/stryker-js/Plugin'
-import {
-  makeTestContributionEvaluatorService,
-  testContributionEvaluatorLayer,
-} from '@systemfsoftware/stryker-test-contribution'
-
-import { strykerPlugins } from '@systemfsoftware/stryker-test-contribution'
+import { makeContributionGateEvaluator, strykerPlugins } from '@systemfsoftware/stryker-test-contribution'
 
 const Feature = makeFeature({ it, layer })
 
@@ -50,11 +24,7 @@ const reportWithToothlessKernelFile = (
   schemaVersion: '2',
   thresholds: { high: 80, low: 60 },
   files: {
-    'src/subject.ts': {
-      language: 'typescript',
-      source: 'export const a = 1\n',
-      mutants,
-    },
+    'src/subject.ts': { language: 'typescript', source: 'export const a = 1\n', mutants },
   },
   testFiles: {
     'earns.kernel.property.test.ts': { tests: [{ id: 't1', name: 'test t1' }] },
@@ -62,158 +32,148 @@ const reportWithToothlessKernelFile = (
   },
 })
 
-// test fixture constructing StrykerOptions via decodeUnknownSync — allowed per no-sync-schema-codecs (test file)
-const evaluatorServiceWith = (options: PartialStrykerOptions) => {
-  const decoded = Schema.decodeUnknownSync(StrykerOptionsSchema)(options)
-  return makeTestContributionEvaluatorService(decoded)
+const reportWhoseFilesThrow = (failure: () => never): schema.MutationTestResult => {
+  const report = reportWithToothlessKernelFile()
+  Object.defineProperty(report, 'files', { get: failure })
+  return report
 }
 
-const evaluatorViaLayerWith = (options: PartialStrykerOptions) => {
-  const decoded = Schema.decodeUnknownSync(StrykerOptionsSchema)(options)
-  return Effect.gen(function*() {
-    const context = yield* Layer.build(
-      testContributionEvaluatorLayer.pipe(Layer.provide(Layer.succeed(RunConfiguration, decoded))),
-    )
-    return Context.get(context, Evaluator)
+const unreadableReport = (): schema.MutationTestResult =>
+  reportWhoseFilesThrow(() => {
+    throw new Error('report files unreadable')
   })
-}
-interface EvaluatorServiceShape {
-  readonly evaluate: (report: schema.MutationTestResult) => Effect.Effect<ExitClass | null, EvaluatorFailed>
-}
 
-const causeStringOf = (cause: unknown): string | null => {
-  if (cause === null || cause === undefined) return null
-  if (typeof cause === 'string') return cause
-  return JSON.stringify(cause)
-}
+const reportThrowingNonError = (): schema.MutationTestResult =>
+  reportWhoseFilesThrow(() => {
+    throw { code: 'EIO' }
+  })
 
-const exitOf = (evaluator: EvaluatorServiceShape, report: schema.MutationTestResult) =>
-  Effect.exit(evaluator.evaluate(report))
+const reportThrowingNothing = (): schema.MutationTestResult =>
+  reportWhoseFilesThrow(() => {
+    throw undefined
+  })
 
-const causeOfExit = (exit: Exit.Exit<ExitClass | null, EvaluatorFailed>): string | null => {
-  if (Exit.isSuccess(exit)) return null
-  const errorOption = Exit.findErrorOption(exit)
-  if (Option.isSome(errorOption)) {
-    const err = errorOption.value
-    return causeStringOf(err.cause)
-  }
-  return Cause.pretty(exit.cause)
-}
-// A VerdictFail on a success exit is the evaluator's non-error failure signal; assert it once here.
-const expectVerdictFail = (exit: Exit.Exit<ExitClass | null, EvaluatorFailed>): void => {
-  expect(Exit.isSuccess(exit)).toBe(true)
-  if (Exit.isSuccess(exit)) {
-    expect(exit.value).toBe('VerdictFail')
-  }
-}
-
-Feature('test-contribution evaluator plugin')
+Feature('The contribution gate as an evaluator plugin')
   .body(({ scenario }) => {
     scenario(
-      'The published plugin list declares one evaluator named test-contribution',
+      'The published plugin list declares one contribution gate',
       Gherkin.Do.pipe(
         Given('the published plugin list')('plugins', () => Effect.succeed(strykerPlugins)),
-        Then('it contains one Evaluator named test-contribution')((s) => {
-          expect(s.plugins).toHaveLength(1)
-          expect(s.plugins[0]?.kind).toBe('Evaluator')
-          expect(s.plugins[0]?.name).toBe('test-contribution')
+        When('the declared contributions are inspected')('contributions', (s) => Effect.sync(() => s.plugins)),
+        Then('it declares a single evaluator wired to the gate factory')((s) => {
+          expect(s.contributions).toHaveLength(1)
+          expect(s.contributions[0]).toMatchObject({ kind: 'Evaluator', name: 'contribution-gate' })
+          expect(s.contributions[0]?.make).toBe(makeContributionGateEvaluator)
         }),
       ),
     )
 
     scenario(
-      'A toothless required file yields a failing verdict',
+      'A redundant required test file fails the run',
       Gherkin.Do.pipe(
-        Given('an evaluator service with disableBail true')(
+        Given('a gate built with bail disabled')(
           'evaluator',
-          () => Effect.sync(() => evaluatorServiceWith({ disableBail: true })),
+          () => Effect.sync(() => makeContributionGateEvaluator({ disableBail: true })),
         ),
-        When('a report with one toothless kernel property file is evaluated')(
-          'exit',
-          (s) => exitOf(s.evaluator, reportWithToothlessKernelFile()),
+        When('a report whose required kernel file kills nothing alone is evaluated')(
+          'verdict',
+          (s) => Effect.sync(() => s.evaluator(reportWithToothlessKernelFile())),
         ),
-        Then('the evaluation succeeds with the VerdictFail exit class')((s) => {
-          expectVerdictFail(s.exit)
+        Then('the run is reported as failing, naming the file that earns nothing alone')((s) => {
+          expect(s.verdict?.exitClass).toBe('VerdictFail')
+          expect(s.verdict?.message).toContain('idle.kernel.property.test.ts')
         }),
       ),
     )
 
     scenario(
-      'Bail stopping killer recording still yields a failing verdict',
+      'A run that stopped at first killers fails rather than clearing the files',
       Gherkin.Do.pipe(
-        Given('an evaluator service with bail active (disableBail unset)')(
+        Given('a gate built with the default options')(
           'evaluator',
-          () => Effect.sync(() => evaluatorServiceWith({})),
+          () => Effect.sync(() => makeContributionGateEvaluator({})),
         ),
-        When('a report with one toothless kernel property file is evaluated')(
-          'exit',
-          (s) => exitOf(s.evaluator, reportWithToothlessKernelFile()),
+        When('a report whose required kernel file kills nothing alone is evaluated')(
+          'verdict',
+          (s) => Effect.sync(() => s.evaluator(reportWithToothlessKernelFile())),
         ),
-        Then('the evaluation succeeds with the VerdictFail exit class for the bail case')((s) => {
-          expectVerdictFail(s.exit)
+        Then('the run is reported as failing, saying the run recorded too little to judge')((s) => {
+          expect(s.verdict?.exitClass).toBe('VerdictFail')
+          expect(s.verdict?.message).toContain('bail')
         }),
       ),
     )
 
     scenario(
-      'Every required file defending a mutant yields no verdict',
+      'A run where every required file defends a mutant stays clean',
       Gherkin.Do.pipe(
-        Given('an evaluator service with disableBail true')(
+        Given('a gate built with bail disabled')(
           'evaluator',
-          () => Effect.sync(() => evaluatorServiceWith({ disableBail: true })),
+          () => Effect.sync(() => makeContributionGateEvaluator({ disableBail: true })),
         ),
-        When('a report where every kernel file kills a distinct mutant is evaluated')(
-          'exit',
+        When('a report where every required kernel file kills a mutant of its own is evaluated')(
+          'verdict',
           (s) =>
-            exitOf(
-              s.evaluator,
-              reportWithToothlessKernelFile([kernelMutant('m1', ['t1']), kernelMutant('m2', ['t2'])]),
+            Effect.sync(() =>
+              s.evaluator(reportWithToothlessKernelFile([kernelMutant('m1', ['t1']), kernelMutant('m2', ['t2'])]))
             ),
         ),
-        Then('the evaluation succeeds with null')((s) => {
-          expect(Exit.isSuccess(s.exit)).toBe(true)
-          if (Exit.isSuccess(s.exit)) {
-            expect(s.exit.value).toBeNull()
-          }
+        Then('the gate reports no verdict')((s) => {
+          expect(s.verdict).toBeNull()
         }),
       ),
     )
 
     scenario(
-      'The layer-provided evaluator fails on a toothless file',
+      'A report the gate cannot read fails the run instead of crashing it',
       Gherkin.Do.pipe(
-        Given('a RunConfiguration with disableBail true')('options', () => Effect.succeed({ disableBail: true })),
-        When('the evaluator layer is built with that configuration')('exit', (s) =>
-          Effect.gen(function*() {
-            const evaluator = yield* evaluatorViaLayerWith(s.options)
-            return yield* exitOf(evaluator, reportWithToothlessKernelFile())
-          })),
-        Then('the layer-provided evaluator also succeeds with the VerdictFail exit class')((s) => {
-          expectVerdictFail(s.exit)
-        }),
-      ),
-    )
-
-    scenario(
-      'An unreadable report fails evaluation with an error',
-      Gherkin.Do.pipe(
-        Given('an evaluator service with disableBail true')(
+        Given('a gate built with bail disabled')(
           'evaluator',
-          () => Effect.sync(() => evaluatorServiceWith({ disableBail: true })),
+          () => Effect.sync(() => makeContributionGateEvaluator({ disableBail: true })),
         ),
-        When('a report missing required fields is evaluated')('exit', (s) => {
-          const brokenReport = reportWithToothlessKernelFile()
-          Object.defineProperty(brokenReport, 'files', {
-            get() {
-              throw new Error('report files unreadable')
-            },
-          })
-          return exitOf(s.evaluator, brokenReport)
+        When('a report whose files cannot be read is evaluated')(
+          'verdict',
+          (s) => Effect.sync(() => s.evaluator(unreadableReport())),
+        ),
+        Then('the run is reported as a runtime fault, saying why the report could not be read')((s) => {
+          expect(s.verdict?.exitClass).toBe('RuntimeError')
+          expect(s.verdict?.message).toBe('report files unreadable')
         }),
-        Then('the evaluation fails with EvaluatorFailed')((s) => {
-          expect(Exit.isFailure(s.exit)).toBe(true)
-          const cause = causeOfExit(s.exit)
-          expect(cause).not.toBeNull()
+      ),
+    )
+
+    scenario(
+      'A failure that is not an error still reports the text it carried',
+      Gherkin.Do.pipe(
+        Given('a gate built with bail disabled')(
+          'evaluator',
+          () => Effect.sync(() => makeContributionGateEvaluator({ disableBail: true })),
+        ),
+        When('a report whose files cannot be read fails with a plain value instead of an error')(
+          'verdict',
+          (s) => Effect.sync(() => s.evaluator(reportThrowingNonError())),
+        ),
+        Then('the run is reported as a runtime fault carrying that value as text')((s) => {
+          expect(s.verdict?.exitClass).toBe('RuntimeError')
+          expect(s.verdict?.message).toBe('{"code":"EIO"}')
+        }),
+      ),
+    )
+
+    scenario(
+      'A failure with nothing to say still names the read that failed',
+      Gherkin.Do.pipe(
+        Given('a gate built with bail disabled')(
+          'evaluator',
+          () => Effect.sync(() => makeContributionGateEvaluator({ disableBail: true })),
+        ),
+        When('a report whose files cannot be read fails with a value carrying no text')(
+          'verdict',
+          (s) => Effect.sync(() => s.evaluator(reportThrowingNothing())),
+        ),
+        Then('the run is reported as a runtime fault saying reading the report failed')((s) => {
+          expect(s.verdict?.exitClass).toBe('RuntimeError')
+          expect(s.verdict?.message).toBe('the report could not be read')
         }),
       ),
     )

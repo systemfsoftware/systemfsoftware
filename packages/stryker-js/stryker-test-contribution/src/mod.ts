@@ -1,12 +1,13 @@
 import { declarePlugin } from '@systemfsoftware/stryker-js/Plugin'
 
-import { testContributionEvaluatorLayer } from './test-contribution-evaluator.js'
+import { makeContributionGateEvaluator } from './test-contribution-evaluator.js'
 
 export const strykerPlugins = [
-  declarePlugin('Evaluator', 'test-contribution', testContributionEvaluatorLayer),
+  declarePlugin('Evaluator', 'contribution-gate', makeContributionGateEvaluator),
 ]
 
-export { makeTestContributionEvaluatorService, testContributionEvaluatorLayer } from './test-contribution-evaluator.js'
+export { makeContributionGateEvaluator } from './test-contribution-evaluator.js'
+export type { ContributionGateEvaluator, ContributionGateOptions } from './test-contribution-evaluator.js'
 export {
   contributionByTestFile,
   defaultRequireTestContributionSuffixes,

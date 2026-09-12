@@ -2,20 +2,9 @@ import * as NodeChildProcessSpawner from '@effect/platform-node-shared/NodeChild
 import * as NodeFileSystem from '@effect/platform-node-shared/NodeFileSystem'
 import * as NodePath from '@effect/platform-node-shared/NodePath'
 import * as NodeStdio from '@effect/platform-node/NodeStdio'
-import {
-  ConfigFileInvalidError,
-  ConfigFileNotFoundError,
-  ConfigFileUnreadableError,
-  makeRunLayer,
-  type ResolvedMode,
-  type RunEnvironmentShape,
-  runMutationTest,
-  strykerVersion,
-} from '@systemfsoftware/stryker-js-engine'
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import { type RunEvent, RunEvents } from '@systemfsoftware/stryker-js/Run'
-import { RENDERED_OPTION_DEFAULTS } from '@systemfsoftware/stryker-js/Schema'
-import type { LogLevel, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import { RENDERED_OPTION_DEFAULTS } from '@systemfsoftware/stryker-js/Options'
+import type { LogLevel, PartialStrykerOptions, StrykerOptions } from '@systemfsoftware/stryker-js/Options'
 import * as Cause from 'effect/Cause'
 import * as Console from 'effect/Console'
 import * as Effect from 'effect/Effect'
@@ -60,6 +49,17 @@ import { emitMachineModeOutput, isColorEnabled } from './Output.js'
 import type { OutputModeProbe, RunEventStream, RunEventStreamPort } from './Output.js'
 import { emitNullScoreVerdict } from './Output.js'
 import { nodePlatformLayer } from './platform/node.js'
+import {
+  ConfigFileInvalidError,
+  ConfigFileNotFoundError,
+  ConfigFileUnreadableError,
+  makeRunLayer,
+  type ResolvedMode,
+  type RunEnvironmentShape,
+  runMutationTest,
+  strykerVersion,
+} from './run/index.js'
+import { type RunEvent, RunEvents } from './run/RunEvent.js'
 import { DEFAULT_PROGRESS_STREAM_FILE } from './StreamFile.js'
 import { STREAM_SCHEMA_VERSION } from './StreamVersion.js'
 import type { StrykerRun } from './StrykerRun.js'
@@ -612,7 +612,7 @@ function hostOptionsOf(mode: ResolvedMode, stream: RunEventStream): RunEnvironme
     resolvedMode: mode,
     runStartedAt: stream.startedAt,
     basePath: process.cwd(),
-    reporterPluginModules: [import.meta.resolve('@systemfsoftware/stryker-js-html-reporter')],
+    reporterPluginModules: [],
     allowConsoleColors: isColorEnabled(mode, process.env['NO_COLOR']),
   }
 }
@@ -698,7 +698,7 @@ export const runStrykerCli = (
                       pathService,
                     )),
                   Match.tag('Admitted', (admitted) => {
-                    const admittedMutants = admitted.survivors.map((s) => Mutant.make(s))
+                    const admittedMutants = admitted.survivors.map((s) => ({ _tag: 'Mutant' as const, ...s }))
                     const restricted: PartialStrykerOptions & {
                       readonly survivors?: readonly Mutant[]
                       readonly survivorsPriorReport?: string

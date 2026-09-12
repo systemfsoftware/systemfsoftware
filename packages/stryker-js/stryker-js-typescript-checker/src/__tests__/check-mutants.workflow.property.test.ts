@@ -1,5 +1,5 @@
 import { describe, it } from '@systemfsoftware/effect-gherkin-spec'
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
+import type { Mutant } from '@systemfsoftware/stryker-js/Mutant'
 import { Match, Schema } from 'effect'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
@@ -32,14 +32,14 @@ const fileArb = fc.integer({ min: 0, max: 100000 }).map((n) => `src/mod-${n}.ts`
 
 const mutantIdArb = fc.integer({ min: 0, max: 1000 }).map((n) => n.toString())
 
-const mutantInFile = (id: string, fileName: string): Mutant =>
-  new Mutant({
-    id,
-    fileName,
-    mutatorName: 'foo-mutator',
-    replacement: 'x',
-    location: { start: { line: 1, column: 1 }, end: { line: 1, column: 2 } },
-  })
+const mutantInFile = (id: string, fileName: string): Mutant => ({
+  _tag: 'Mutant',
+  id,
+  fileName,
+  mutatorName: 'foo-mutator',
+  replacement: 'x',
+  location: { start: { line: 1, column: 1 }, end: { line: 1, column: 2 } },
+})
 
 const nodeFor = (
   fileName: string,
