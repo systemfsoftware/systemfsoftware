@@ -13,8 +13,8 @@ execution: code
 
 ## Goal Capsule
 
-- **Objective:** An author migrating an application onto the cell architecture can express conditional execution, per-item aggregation, total decisions, and chained decisions as typed library forms. Separately: the two invariants previously enforced by review alone (variant reachability, run placement) fail CI instead of compiling as costumes.
-- **Means:** Extend `packages/effect-cell-types` (KTD1, KTD2, KTD3), widen the make-boundary kernel and ship two lint rules (KTD4, KTD5), and resolve every existing mid-tree `Cell.run` call site — migrate or explicitly designate (KTD6).
+- **Objective:** An author migrating an application onto the cell architecture can express conditional execution, per-item aggregation, total decisions, and chained decisions as typed library forms. Separately: the two invariants previously enforced by review alone (variant reachability, runtime-construction placement) fail CI instead of compiling as costumes.
+- **Means:** Extend `packages/effect-cell-types` (KTD1, KTD2, KTD3), widen the make-boundary kernel and ship two lint rules (KTD4, KTD5), and settle the cell operation surface per the grain ruling: the exported `Cell.run` alias is deleted, arrow application (`cell.run(input)`) is the lawful work form everywhere, and runtime construction (wiring closure) is lint-gated (KTD6).
 - **Product authority:** GitHub issues #393, #394, #395 on `systemfsoftware/systemfsoftware` (amended 2026-09-11), as refined by the Key Decisions below.
 - **Open blockers:** none.
 - **Stop conditions:** the `UnsharedTypeId` repair exceeding type-level scope (see Risks).
@@ -27,22 +27,22 @@ Product Contract preservation: Problem Frame reworded to track the amended issue
 
 ### Summary
 
-Complete the cell/workflow type surface and close its two unenforced invariants. `effect-cell-types` gains a total-decision constructor, a composite-workflow constructor, and `gate`/`collect` Cell combinators — all four shapes compile-verified by a spike against the real package source. The oxlint fleet gains variant-reachability and `Cell.run`-placement rules on a widened make-boundary kernel, and every `Cell.run` call site the placement rule fires on is migrated or explicitly designated rather than exempted.
+Complete the cell/workflow type surface and close its unenforced invariants. `effect-cell-types` gains a total-decision constructor, a composite-workflow constructor, and `gate`/`collect` Cell combinators — all four shapes compile-verified by a spike against the real package source — and loses the exported `Cell.run` alias, a one-line rename of `self.run(input)` with no behavior. The oxlint fleet gains variant-reachability and runtime-construction rules on a widened make-boundary kernel; every existing `Cell.run` call site becomes arrow application with its position and semantics untouched.
 
 ### Problem Frame
 
 The trigger is a real migration: moving `omp-claude-compat` onto the cell architecture hit the type surface's edges in two places. Its referenced-file loader hand-writes a dynamic-N read with per-item skips as bare `null` returns in shell Effect code, because no `collect` or `gate` combinator exists. That hand-written form stays typed through Effect's own channel inference, but it is invisible to every rule and audit that keys off the Cell brand — the shape stops being a node any tooling can see. Its hook-verdict workflow carries three genuinely total sub-decisions as plain if/else string-union functions, because `Workflow.make` rejects a `never` error channel unconditionally — so those decisions get no brand, no `Match.tag` dispatch, and no marker discipline, and the chains between them are wired ad hoc inside the decide body where the composite's signature hides inner refusals.
 
-Separately, two architecture invariants are enforced by review alone: a workflow may declare error variants no code path constructs, and `Cell.run` may be called from any file. The run-placement invariant is a new decree, not an existing one — no constitution rule or package doc states it today. Issue #395's purity claim, amended to credit `make-body-purity`, remains contradicted by verified code: `no-io-in-phase-bodies` already covers the `Cell.layer` decode/decide/encode spec bodies, derives its phase set from `Cell.vocabulary` at load time, and is registered at `error` severity. #395 is therefore rescoped to the two invariants that are genuinely unenforced.
+Separately, two architecture invariants are enforced by review alone: a workflow may declare error variants no code path constructs, and runtime construction (wiring closure, launch) may sit anywhere. The construction-placement invariant is a new decree, not an existing one — no constitution rule or package doc states it today, and its statically decidable half is what this arc ships. Issue #395's purity claim, amended to credit `make-body-purity`, remains contradicted by verified code: `no-io-in-phase-bodies` already covers the `Cell.layer` decode/decide/encode spec bodies, derives its phas…
 
 ### Key Decisions
 
-- **#395 rescoped to variant reachability and `Cell.run` placement.** The purity invariant the issue asked to enforce is already enforced by the vocabulary-derived `no-io-in-phase-bodies` rule. (session-settled: user-directed — chosen over extending the purity rule or keeping the issue as written: the existing rule already does what the issue's non-counting outcomes demand, vocabulary-sourced.) Governs R9, R10, R11.
+- **#395 rescoped per the grain ruling: variant reachability ships as lint; placement narrows to what is statically decidable.** The purity invariant the issue asked to enforce is already enforced by the vocabulary-derived `no-io-in-phase-bodies` rule. The original `Cell.run`-keyed placement rule is dead: `Cell.run` is arrow application (R stays open and flows to the enclosing Effect) — composition, not interpretation — and a rule keyed on its identifier bans lawful work while missing launch and wiring. The reductio: `Cell.andThen`'s own implementation calls the inner cell's `run`, so an identifier-keyed rule flags the library that defines the combinators. (session-settled: user-directed, TCR-settled 2026-09-12 — chosen over the interpret alias (two names, one operation: compliance = renaming until grep is clean), over cli-only enrollment (grandfathering), and over broadened roots (root means nothing by redefinition).) Governs R9, R10, R11, R14.
 - **#394 keeps both halves — total constructor and composite constructor.** The composite completes the Workflow type's algebra the way `andThen` completes Cell's, at the decision altitude: `Cell.andThen` composes sandwiches with their own I/O phases, the composite composes pure decisions inside one decide slot, and the two are not substitutes. (session-settled: user-directed — chosen over cutting the composite as speculative: chains of branded total workflows are unobservable precisely because #394a's absence suppresses them, and the migration already wires such chains ad hoc.) Governs R1, R2, R3, R4.
 - **Library and lint only; the omp-claude-compat migration validates downstream.** Acceptance criteria stay package-local as the issues wrote them. (session-settled: user-directed — chosen over migration-shaped acceptance fixtures and a full-arc migration PR: the proving ground lives in the `omp-claude-compat` repo on its own schedule.)
 - **The CONCEPTS.md wording correction rides with this arc.** The `Description` entry's claim that the purity rule reads "the call graph reachable from the body" is corrected to the rule's actual "written inside" reach, in its own commit — CONCEPTS.md is a Doctrine surface. (session-settled: user-directed — chosen over leaving it for a docs pass: the arc already touches the rule the line describes, and doctrine drift compounds.) Governs R13.
-- **The `Cell.run` rule lands with the existing call sites migrated or explicitly designated, never exempted by default.** The verified inventory: `stryker-js-cli/src/Output.ts:430`, `stryker-js-cli/src/Survivors.ts:213`, `stryker-js-engine/src/Checker.ts:525` and `:576`, `stryker-js-engine/src/Run.ts:1317-1319`, `stryker-js-typescript-checker/src/Checker.ts:127`, `:135`, `:156`, `stryker-js-vitest-runner/src/Runner.ts:1286`, and `effect-daemon-spec/src/internal/SupervisorBodyExecutor.ts:211` and `:295`. (session-settled: user-directed — chosen over a dated baseline and over deferred enrollment: the clean end state, and the rule's first-run failure set becomes the resolution list.) Governs R14.
-- **Delivery sequence: #394, then #393, then #395.** The new total constructor changes what the existing make-keyed workflow rules must recognize as lawful, so the lint unit lands last and verifies that recognition. The two library deliveries share a package but ship as separate commits with separate changesets. The two lint rules share no substrate — R9 keys on the workflow-construction boundary, R10 on package entry-point designation — so they may ship as independent deliveries, both as siblings in the existing plugin packages; no new plugin package is created.
+- **Runtime construction is lint-gated exactly where it is statically decidable; the rest is review.** Three shipped mechanisms: `*Live` outside application packages stays on the existing PROD-LIVE1 package-kind lint; `ManagedRuntime.make`/`Layer.provide`/`Cell.provide` inside a function body (make-per-call: wiring per request) fails at error with no baseline; eager module-scope runtime construction (a `ManagedRuntime.make` at top level, not lazy + memoized) fails at error, the same family as `schema-declaration-location`. The provision/closure-outside-declared-root rule does NOT ship until a `compositionRoot` field exists in declared package metadata — an unshipped rule is honest; an advisory rule is a lie with paperwork — and one-closure-per-process plus interpretation-at-edges stay review-gated (the SF2 human tier). Module-level memoized runtime variables and lazy bootstrap closures are the sanctioned shapes. (session-settled: user-directed, TCR-settled 2026-09-12 — chosen over filename-keyed roots, over import-origin edge detection, and over warn/advisory severities: warn-severity-is-dominated; migration is error + dated baseline, undecidable is review, decided-against is off with the rule named.) Governs R10.
+- **Delivery sequence: #394, then #393, then #395.** The new total constructor changes what the existing make-keyed workflow rules must recognize as lawful, so the lint unit lands last and verifies that recognition. The two library deliveries share a package but ship as separate commits with separate changesets. The two shipped lint rules share no substrate — R9 keys on the workflow-construction boundary, R10 on runtime-construction shapes — so they may ship as independent deliveries, both as siblings in the existing plugin packages; no new plugin package is created.
 
 ### Requirements
 
@@ -63,12 +63,12 @@ Separately, two architecture invariants are enforced by review alone: a workflow
 **Lint rules (#395, rescoped)**
 
 - R9. A variant-reachability rule fails lint when a variant declared in a workflow's decision or error union is never constructed in that file, and stays silent when every declared variant is constructed; construction is read from constructor call sites in the file, not from the union declaration. A filename may select which files the rule visits; the construction boundary, widened per KTD4, decides every verdict.
-- R10. A `Cell.run` placement rule fails `Cell.run` calls outside a composition root and passes them inside one; the sole composition root is each package's process entry module (`main.ts`), and the designation mechanism is named in the rule's documentation along with the invariant it establishes.
-- R11. Both rules ship with RuleTester fixtures that prove the rule fails the lint run on the costume shape and stays silent on lawful shapes — including `andThen` composition, pure Schema transforms, test files, and workflows built with the new constructors; all pre-existing plugin rules still pass, and the existing make-keyed workflow rules are verified to accept the constructors of R1 and R3 as lawful workflow construction.
+- R10. Runtime construction is lint-gated where statically decidable: (a) `ManagedRuntime.make`, `Layer.provide`, or `Cell.provide` called inside a function body fails — wiring per request is a runtime per request; (b) eager module-scope runtime construction — a `ManagedRuntime.make` evaluated at import time instead of inside a lazy, memoized bootstrap closure — fails. Both at error, no baseline. `Cell.run` and `cell.run(input)` arrow application are unrestricted: R-open arrow application is the doctrine's sanctioned composition. The lawful lazy-memoized bootstrap shape is documented in the rule. Provision outside a declared composition root is review-gated (SF2 tier) until package metadata declares roots; the rule does not exist until then.
+- R11. Both rules ship with RuleTester fixtures that prove the rule fails the lint run on the costume shape and stays silent on lawful shapes — including `andThen` composition, pure Schema transforms, test files, and workflows built with the new constructors; all pre-existing plugin rules still pass, and the existing make-keyed workflow rules are verified to accept the constructors of R1 and R3 as lawful workflow construction. For R10 the lawful set explicitly includes the lazy-memoized bootstrap closure and every mid-tree arrow application.
 
 **Migration**
 
-- R14. Every existing mid-tree `Cell.run` call site — the nine verified sites in `stryker-js-cli` (`Output.ts:430`, `Survivors.ts:213`), `stryker-js-engine` (`Checker.ts:525`, `:576`, `Run.ts:1317-1319`), `stryker-js-typescript-checker` (`Checker.ts:127`, `:135`, `:156`), `stryker-js-vitest-runner` (`Runner.ts:1286`), and `effect-daemon-spec` (`SupervisorBodyExecutor.ts:211`, `:295`) — migrates so the placement rule of R10 passes with the sole composition root being each package's entry module (`main.ts`), with no baseline and no exemption.
+- R14. The exported `Cell.run` alias is deleted from `effect-cell-types` — it is a one-line rename of `self.run(input)` with no behavior — and every call site in the tree becomes arrow application (`cell.run(input)`) with position and semantics untouched: the eleven verified sites in `stryker-js-cli` (`Output.ts:430`, `Survivors.ts:213`), `stryker-js-engine` (`Checker.ts:525`, `:576`, `Run.ts:1317-1319`), `stryker-js-typescript-checker` (`Checker.ts:127`, `:135`, `:156`), `stryker-js-vitest-runner` (`Runner.ts:1286`), and `effect-daemon-spec` (`SupervisorBodyExecutor.ts:211`, `:295`) are lawful work applications and stay where they are. No hoisting, no renames, no grandfathering. The doctrine row stating `Cell.run` happens once at the composition root with R = never is deleted with the alias — U8's sites falsified it.
 
 **Release and gates**
 
@@ -86,16 +86,14 @@ Separately, two architecture invariants are enforced by review alone: a workflow
 - AE4. **Covers R7.** Given an accumulate collect over N items where item k's cell refuses, when the composed cell runs, then the fold receives all N per-item results including item k's refusal as data.
 - AE5. **Covers R1, R4.** Given a decide function returning two tagged variants sharing a TypeId with error channel `never`, when branded with the total constructor, then it is accepted by `Cell.layer`'s decide slot with no casts.
 - AE6. **Covers R1.** Given a total function returning a single variant, when passed to the total constructor, then compilation fails with the existing `SingleVariantDecision` marker.
-- AE7. **Covers R3.** Given a composite of two workflows where the first component refuses, when the composite runs, then the second component never executes, and a consumer matching on the first component's refusal variant compiles without casts.
-- AE8. **Covers R9.** Given a workflow file declaring an error-union variant no code path constructs, when linted, then the rule fails the run; the same file with the variant constructed passes.
-- AE9. **Covers R10.** Given `Cell.run` called in a package's entry-point module, when linted, then it passes; the same call in a non-root module fails.
+- AE9. **Covers R10.** Given `ManagedRuntime.make` inside a function body, when linted, then the rule fails the run; the lazy-memoized bootstrap closure at module scope passes; `cell.run(input)` in any module passes.
 - AE10. **Covers R1.** Given a total function returning two tagged variants carrying different TypeIds, when passed to the total constructor, then compilation fails with the existing `UnsharedTypeId` marker.
 
 ### How This Work Fits Together
 
 <!-- ce-section: work-relationships -->
 
-This plan owns the library and lint arc across issues #393, #394, and the rescoped #395, plus the call-site migrations that arc's placement rule makes necessary. The broader breakdown below is current understanding, not a committed roadmap.
+This plan owns the library and lint arc across issues #393, #394, and the rescoped #395, plus the alias-deletion sweep that arc's grain ruling makes necessary. The broader breakdown below is current understanding, not a committed roadmap.
 
 - **omp-claude-compat migration to the cell architecture** (separate repo: `systemfsoftware/omp-claude-compat`)
   - Depends on this plan: its untyped loader and unbrandable total sub-decisions are the motivating evidence, and it adopts the new forms once published — its adoption is this arc's downstream validation signal, tracked as a follow-up issue in that repo when this plan lands; the arc's own Definition of Done is not gated on it.
@@ -107,6 +105,8 @@ This plan owns the library and lint arc across issues #393, #394, and the rescop
 
 - Changes to `Workflow.make`'s existing markers — R2 pins them as unchanged.
 - Per-variant fan-out composition (routing different decision variants to different next workflows) — a different algebra nobody has asked for.
+- The provision/closure-outside-declared-root rule — does not ship until package metadata declares composition roots; until then the property is review-gated (KTD5, R10). When the metadata field exists, the rule lands at `error` with an explicit dated baseline enumerating that day's closure sites, shrinking monotonically.
+- Any launch-site or edge-placement rule — interpretation cardinality and edge-ness are runtime properties; they stay on the SF2 review tier.
 
 #### Deferred to Follow-Up Work
 
@@ -124,8 +124,8 @@ This plan owns the library and lint arc across issues #393, #394, and the rescop
 - KTD2. **Composite: wrapper-command chain, spike-verified.** The downstream workflow's command class declares a `decision` field over the upstream decision union; the composite receives both command classes and both workflows as values and constructs the wrapper internally — no adapter lambda exists in the signature. The error channel infers as `E1 | E2` and the first component's refusal short-circuits via `Result.flatMap`. Parameters are spelled as expanded intersections (`((command: C) => Result<D, E>) & WorkflowBrand`) because the `Workflow` alias is a deferred conditional and not callable under generic channels. (session-settled: user-approved — chosen over union-as-command, a dispatch table, and a Match-body: union-as-command is proven impossible (TS2739: a union is not a `Schema.Class` value), and an adapter lambda is an unbranded decide.) Governs R3, R4.
 - KTD3. **Both combinators ship inside `Cell.ts`; gate is two-cell, collect is one-cell-per-item, sequential.** `Cell`'s `make` is module-private, so no consumer-side assembly exists; both combinators follow the shipped `dual(2, …)` overload template of `andThen`/`zip`. `gate(reader, inner)` takes a reader cell producing `Option<Raw>` and an inner cell consuming `Raw`; a skip propagates `Option.none` and an inner refusal propagates as a failure, never as `none`. `collect(cell, fold)` runs one cell per item in iteration order — sequentially, so the interruption question dissolves; the fail-fast form's fold receives `readonly A[]` and runs only when every item succeeded; the accumulate form's fold receives `readonly Result<A, E>[]`; an empty collection hands the fold `[]`. The accumulate form's name is directional: `collectAll`. Governs R5, R6, R7, R8.
 - KTD4. **The make-boundary kernel widens to a declared constructor-member set.** `packages/oxlint-plugin/make-boundary/src/MakeBoundary.ts` hard-codes the member name `make`; it becomes a declared set (`make`, `total`, `andThen`), and every make-keyed rule keeps keying on the boundary — never a filename, which is the retired unfalsifiable key. `workflow-file-make-presence` relaxes to "constructed with a recognized constructor," so a file built purely with the composite is not falsely reported. Governs R9, R11.
-- KTD5. **The composition root is the process entry module, `main.ts`, and nothing else.** The placement rule keys on the entry basename exactly as the entrypoint fleet already does (EP1); there is no `compositionRoots` option and no additional-root designation — a `Cell.run` outside `main.ts` fails, full stop. A per-file basename check reads no disk facts, so OX-TS2 is satisfied without configuration. The rule's documentation states the invariant it establishes: run placement is a new decree, not an existing doctrine entry — the `CELL-L4/L6` rules cited in debate do not exist. The EP1 re-pin adds the new rule to the existing entry-designation count. Governs R10.
-- KTD6. **Landing choreography: rules at `error`, enrollment after migration.** Both new rules land at `error` severity — `warn` fails no command in this repo. A placement-rule enrollment in a package carrying violating sites happens only after U8 migrates those sites, so no lint run ever goes red on grandfathered debt. (session-settled: user-directed — chosen over a dated baseline and over deferred enrollment: grandfathered debt reads as protection while nothing improves.) Governs R10, R14.
+- KTD5. **The grain table governs placement enforcement.** Wiring closure (`ManagedRuntime.make`, `Layer.provide`/`merge` chains, `Cell.provide`) is once per process and lives in the application package's root module, lazily memoized; interpretation (`runtime.runPromise`/`runFork`, `Layer.launch` for daemons) is once per outside interaction at SF2 intercepts, review-gated; work (`cell.run(input)`, `yield*`) is per input and lawful anywhere in composition. Lint enforces only the statically decidable rows: make-per-call, eager construction, and PROD-LIVE1 (existing). Cardinality and edge-ness are runtime properties; a static rule approximating them degenerates into an allowlist, so they are review rows, honestly. Governs R10.
+- KTD6. **Rules land at `error`; the construction rules enroll tree-wide on landing.** Both rules land at `error` severity — `warn` fails no command in this repo and an advisory rung does not exist. The runtime-construction rule's lawful-instance count is zero on today's tree (verified by corpus probe at U7), so enrollment carries no grandfathered debt; if the probe finds an instance, it is fixed or given an explicit dated baseline before landing — never warn, never advisory. Governs R10, R14.
 - KTD7. **Test-layer map.** Type claims are tstyche assertions in `test-types/*.tst.ts`; behavior claims are gherkin composition tests through `Cell.run` in `tests/` using the trace-array pattern (observation is a local closure, never a service); lint rules get RuleTester costume/lawful pairs with per-fixture comments naming the mutant each case kills. Symbol-keyed negatives tstyche cannot assert are pinned by the package's own `tsc` compile sweep. Every proposed test runs in-process through a published surface — no process spawns, no test-born exports. Mutation runs in CI only (REPO-D3).
 
 ### High-Level Technical Design
@@ -150,13 +150,13 @@ flowchart TB
   U1[U1 total constructor] --> U2[U2 composite constructor]
   U2 --> U5[U5 widen make-boundary]
   U5 --> U6[U6 reachability rule]
-  U5 --> U7[U7 Cell.run placement rule]
+  U5 --> U7[U7 runtime-construction rule]
   U9[U9 CONCEPTS.md fix — independent]
-  U7 --> U8[U8 resolve Cell.run sites: migrate or designate]
+  U7 --> U8[U8 alias deletion: sites become arrow applications]
 
 ### Sequencing
 
-Four deliveries, per the settled Key Decision: (1) U1 then U2 — issue #394; (2) U3, U4 — issue #393; (3) U5, then U6 and U7 — issue #395; (4) U8, then enrollment of the placement rule in the five packages that carried violating sites. U9 lands at any point as its own `docs:` commit. Each library or plugin delivery ships its own changeset per R12.
+Four deliveries, per the settled Key Decision: (1) U1 then U2 — issue #394; (2) U3, U4 — issue #393; (3) U5, then U6 and U7 — issue #395; (4) U8, the alias-deletion sweep across the consumer packages, landing with the construction rule enrolled tree-wide. U9 lands at any point as its own `docs:` commit. Each library or plugin delivery ships its own changeset per R12.
 
 ### Alternatives Considered
 
@@ -166,16 +166,17 @@ Four deliveries, per the settled Key Decision: (1) U1 then U2 — issue #394; (2
 - **Caller-side branding (unbranded composer + `make` at each call site)** — rejected: compiles, but `make-body-purity` refuses the composed call, so the constructor must live in the library.
 - **Dispatch table or Match-body for the composite** — rejected in dialogue; the wrapper-command chain needs neither.
 - **Whole-graph guard script for placement** — rejected: placement is per-file decidable given a configured designation, and a lint rule sits where the fleet's other placement invariants live.
-
-- **Dated baseline for the existing `Cell.run` violations** — rejected by the user in favor of migration.
+- **`Cell.run`-keyed placement rule (entry-basename designation)** — shipped, then killed by the grain ruling: `Cell.run` is arrow application — R stays open and flows to the enclosing Effect — so an identifier-keyed rule bans lawful work (the supervisor's per-crash restart cells, the checker's per-round cells) while missing launch and wiring; the reductio is `Cell.andThen` calling the inner cell's `run`.
+- **Interpret alias for mid-tree runs** — rejected: two names for one operation; compliance is renaming until grep is clean — check-gaming institutionalized.
+- **Provision/closure rule keyed on filenames or import-origin** — rejected: root modules, process counts, and edge-ness are runtime or conventional properties; a static rule approximating them degenerates into an allowlist. Error + declared-metadata baseline, or review — nothing between.
 
 
 | Risk | Mitigation |
 |---|---|
 | The `UnsharedTypeId` marker fired no diagnostic in the spike on two variants with different TypeIds — R1's marker reuse may inherit a toothless marker | U1 pins the marker with a compile-sweep test; if the pin shows it dead, repair the marker (produced by the private `SharedTypeId` helper) inside U1 (type-level only) |
-| A migration site proves to be a legitimate composition root | Goal Capsule stop condition: declare it in the rule's configuration and narrow R10 instead of forcing the move |
+| A migration site proves to be a legitimate composition root | Superseded by the grain ruling: arrow application is lawful anywhere; construction placement is governed by KTD5's statically decidable rows |
 | `make-boundary` has no test suite of its own (it is a bundled kernel, not a plugin) | Widening is verified through the consumer rules' fixture suites, green before and after; the widening commit is observed red first (a recognition fixture fails pre-widening) |
-| The entrypoint plugin's EP1 gate counts the configs carrying the entry designation; a fourth changes that gate expression | The EP1 re-pin is its own commit, observed red then green — Evaluator-surface discipline |
+| The entrypoint plugin's EP1 gate counts the configs carrying the entry designation; the shipped `cell-run-placement` rule added a fourth and is now deleted | Deleting the rule restores the three-config gate expression; the EP1 pin is verified unchanged after U7's rewrite |
 | The new rules sit inside `packages/oxlint-plugin`, which the author of a judged workflow can edit | Standing repo discipline (CONST-E9, Evaluator surface class) already governs; no new mechanism in this plan |
 
 ### Sources
@@ -184,7 +185,7 @@ Four deliveries, per the settled Key Decision: (1) U1 then U2 — issue #394; (2
 - Rule-authoring law: `packages/oxlint-plugin/AGENTS.md` (OX-TS1/TS2, OX-RT1, OX-MG1, topology) and `packages/oxlint-plugin/oxlint-plugin-effect-entrypoint/AGENTS.md` (EP1).
 - Pattern sources: `packages/effect-cell-types/src/Cell.ts:172-243` (the `dual(2, …)` template), `packages/effect-cell-types/test-types/Workflow.tst.ts` (tstyche idiom), `packages/effect-cell-types/tests/interpreter.integration.test.ts` (trace-array composition tests), `packages/oxlint-plugin/oxlint-plugin-cell-vocabulary/src/rules/__tests__/no-io-in-phase-bodies.test.ts` (RuleTester convention).
 - Learnings: `docs/solutions/architecture-patterns/constructor-rule-boundary.md` (parameter-position trap; a type retires no rule), `docs/solutions/architecture-patterns/label-routed-rules-are-unfalsifiable.md` (no filename keys), `docs/solutions/architecture-patterns/typed-overloads-need-a-keyless-union.md` (the overload shape), `docs/solutions/architecture-patterns/phantom-marks-are-donatable.md` (marker tests name the resolved type, never assignability), `docs/solutions/tooling-decisions/rule-admission-severity-and-accretion.md` (error, never warn), `docs/solutions/build-errors/composition-root-cannot-self-detect-as-entry.md` (designation canon).
-- Migration sites: `packages/stryker-js/stryker-js-typescript-checker/src/Checker.ts:126-158`, `packages/stryker-js/stryker-js-vitest-runner/src/Runner.ts:1285-1292`, `packages/stryker-js/stryker-js-engine/src/Run.ts:1311-1320`; the root/entry exemplar pair is `packages/stryker-js/stryker-js-cli/src/main.ts` (entry) and `packages/stryker-js/stryker-js-cli/src/Output.ts` (root).
+- Migration sites: `packages/stryker-js/stryker-js-typescript-checker/src/Checker.ts:126-158`, `packages/stryker-js/stryker-js-vitest-runner/src/Runner.ts:1285-1292`, `packages/stryker-js/stryker-js-engine/src/Run.ts:1311-1320` — under R14 these sites change call form only (`Cell.run(x, y)` → `x.run(y)`); the entry exemplar is `packages/stryker-js/stryker-js-cli/src/main.ts`.
 
 ---
 
@@ -279,31 +280,34 @@ Four deliveries, per the settled Key Decision: (1) U1 then U2 — issue #394; (2
   - Lawful: a variant constructed via `X.make(…)` counts as constructed.
 - **Verification:** the plugin's `test`, `typecheck` (both tsconfig passes), and `lint` scripts exit 0; changeset per R12.
 
-### U7. `Cell.run` placement rule
+### U7. Runtime-construction rule (replaces the deleted `cell-run-placement`)
 
-- **Goal:** `Cell.run` outside the process entry module fails lint.
+- **Goal:** Wiring per request and eager runtime construction fail lint; arrow application and lazy-memoized bootstraps stay lawful.
 - **Requirements:** R10, R11; AE9.
 - **Dependencies:** U5.
-- **Files:** `packages/oxlint-plugin/oxlint-plugin-effect-entrypoint/src/rules/cell-run-placement.ts` and `.config.ts` (names directional), `src/rules/__tests__/`, `src/index.ts`, the plugin README, and the plugin `AGENTS.md` EP1 re-pin.
-- **Approach:** Follow KTD5. The rule keys on the entry basename (`main.ts`) exactly as the entrypoint fleet already does; there is no configuration knob — a `Cell.run` outside `main.ts` fails, full stop. Test-file patterns are exempt. The rule's documentation names the designation mechanism and states the invariant it establishes. The EP1 gate expression's re-pin (a fourth config carrying the entry designation) is its own commit, observed red then green.
-- **Test scenarios (RuleTester pairs):**
-  - Covers AE9. `Cell.run` in `main.ts` passes; the same call in any other module — including a layer-construction module like the CLI's `Output.ts` — fails the run.
-  - Lawful: `Cell.run` in a test-file pattern is exempt.
-  - Lawful: `Cell.run` inside a composite-built workflow file (boundary recognition per KTD4 does not misclassify it).
-- **Verification:** the plugin's `test`, `typecheck`, and `lint` scripts exit 0; changeset per R12. Enrollment in each package carrying violating sites waits for U8 (KTD6).
+- **Files:** `packages/oxlint-plugin/oxlint-plugin-effect-entrypoint/src/rules/` — the shipped `cell-run-placement` rule, its config, and its fixtures are deleted (clean cutover, never enrolled); the replacement rule lands in their place with its own `.config.ts` and fixtures; `src/index.ts`, the plugin README's rule table, and the plugin `AGENTS.md` EP1 pin (verified restored to the three-config gate expression).
+- **Approach:** Follow KTD5. One rule, two verdicts, both `error`: (a) `ManagedRuntime.make`, `Layer.provide`, or `Cell.provide` inside a function body — wiring per request; (b) `ManagedRuntime.make` evaluated at module top level instead of inside a lazy, memoized bootstrap closure — eager construction. Callers are resolved through their import specifier (the `effect` and `@systemfsoftware/effect-cell-types` namespace/member idiom), never identifier text; aliased imports resolve the same. The lawful lazy-memoized bootstrap shape is documented in the rule's docs. The corpus probe must report zero findings on tracked files before the rule enters the recommended config (KTD6); a finding is fixed or given an explicit dated baseline — never warn, never advisory.
+- **Test scenarios (RuleTester pairs, each fixture commenting the mutant it kills):**
+  - Covers AE9. Costume: `ManagedRuntime.make` inside a function body fails; `Layer.provide` inside a function body fails; `Cell.provide` inside a function body fails.
+  - Costume: `ManagedRuntime.make` at module top level fails (eager).
+  - Lawful: `ManagedRuntime.make` inside a module-scope lazy memoized bootstrap closure passes.
+  - Lawful: `cell.run(input)` and `Cell.run`-style arrow application in any module, at any depth, pass — including inside `Effect.gen` bodies and library combinator internals.
+  - Lawful: aliased imports (`Effect as Efx`) still resolve — the mutation pin for the resolver.
+- **Verification:** the plugin's `test`, `typecheck`, and `lint` scripts exit 0; changeset per R12; corpus probe zero findings on tracked files; enrollment in the recommended config lands with the rule.
 
-### U8. Migrate the nine `Cell.run` call sites to their entry modules
+### U8. Alias deletion: the eleven sites become arrow applications
 
-- **Goal:** No mid-tree `Cell.run` remains anywhere in the tree; the placement rule enrolls green.
+- **Goal:** The exported `Cell.run` alias is gone; every call site is arrow application with position and semantics untouched; the construction rule is enrolled green.
 - **Requirements:** R14.
-- **Dependencies:** U7.
-- **Files:** `packages/stryker-js/stryker-js-typescript-checker/src/Checker.ts`, `packages/stryker-js/stryker-js-vitest-runner/src/Runner.ts`, `packages/stryker-js/stryker-js-engine/src/Checker.ts`, `packages/stryker-js/stryker-js-engine/src/Run.ts`, `packages/stryker-js/stryker-js-cli/src/Output.ts`, `packages/stryker-js/stryker-js-cli/src/Survivors.ts`, `packages/effect-daemon-spec/src/internal/SupervisorBodyExecutor.ts`, each affected package's entry module, and their existing test suites.
-- **Approach:** One package per commit, smallest first. Every migration moves the cell invocation into the package's entry module (`main.ts`) or restructures so the entry composes the cell's effect — there is no designation escape; the only root is `main.ts`. Behavior is unchanged: the observable decision flow per package is pinned by its existing suite before the move.
-- **Execution note:** Characterization first: run each package's existing suite before touching its call site; the suite's green state is the migration's guard.
+- **Dependencies:** U7 (for the enrolled-rule corpus probe).
+- **Files:** `packages/effect-cell-types/src/Cell.ts` (the `dual(2, …)` alias, its TSDoc, and any mod.ts mention), the package's test files and type tests that call the alias, `README.md`, `etc/effect-cell-types.api.md`, the package `AGENTS.md` if it names `Cell.run`, and the eleven consumer sites: `stryker-js-cli/src/Output.ts:430`, `Survivors.ts:213`, `stryker-js-engine/src/Checker.ts:525` and `:576`, `Run.ts:1317-1319`, `stryker-js-typescript-checker/src/Checker.ts:127`, `:135`, `:156`, `stryker-js-vitest-runner/src/Runner.ts:1286`, `effect-daemon-spec/src/internal/SupervisorBodyExecutor.ts:211` and `:295`, plus the library-name import each site drops if unused.
+- **Approach:** Delete the alias from the library first, rebuild, then sweep the call sites mechanically: `Cell.run(cell, input)` → `cell.run(input)` — no hoisting, no restructuring, no renames; the sites are lawful work applications under the grain table. The doctrine row stating `Cell.run` happens once at the composition root with R = never is deleted wherever it lives (grep `CELL-L4` and "composition root" across doctrine surfaces).
+- **Execution note:** Characterization first: each affected package's existing suite runs green before the sweep; it is the guard that the call-form change is behavior-neutral.
 - **Test scenarios:**
-  - Each package's existing test suite passes unchanged after its migration.
-  - With the placement rule enrolled, each migrated package lints green — and the pre-migration tree would have failed (observed during U8, not committed).
-- **Verification:** the five affected packages' `test` and `typecheck` scripts exit 0; the placement rule enrolled in all five reports no findings.
+  - Each affected package's existing test suite passes unchanged after the sweep.
+  - The enrolled runtime-construction rule reports zero findings on tracked files tree-wide.
+  - `pnpm --filter @systemfsoftware/effect-cell-types test:types` green with the alias absent — the type tests now pin the arrow form.
+- **Verification:** the five consumer packages' `test` and `typecheck` scripts exit 0; repo-wide grep for `Cell.run(` returns only the deleted alias's absence; the construction rule enrolled reports no findings.
 
 ### U9. CONCEPTS.md wording correction
 
@@ -325,7 +329,7 @@ Four deliveries, per the settled Key Decision: (1) U1 then U2 — issue #394; (2
 | Composition tests | `pnpm --filter @systemfsoftware/effect-cell-types test` | U2, U3, U4 (AE1–AE5, AE7) |
 | Package typecheck | `pnpm --filter @systemfsoftware/effect-cell-types typecheck` | U1–U4 (includes the compile sweep pinning `UnsharedTypeId`) |
 | RuleTester suites | `pnpm --filter @systemfsoftware/oxlint-plugin-effect-workflow test` and `pnpm --filter @systemfsoftware/oxlint-plugin-effect-entrypoint test` | U5, U6, U7 (AE8, AE9) |
-| Migration guards | `pnpm --filter <migrated stryker-js package> test` and `typecheck` | U8 |
+| Consumer-package guards | `pnpm --filter <swept stryker-js/daemon package> test` and `typecheck` | U8 |
 | Repo gate chain | `pnpm check:local` | all units, after the last edit |
 | CI | `gh pr checks --watch --fail-fast` exits 0 | the delivery PR |
 | Mutation | CI advisory Mutation workflow only; never local runs (REPO-D3) | U5, U6, U7 |
@@ -351,7 +355,7 @@ Per-unit:
 | U4 | Both collect regimes run N items and fold per their contract, including the empty collection |
 | U5 | All make-keyed rules recognize the new constructors; pre-existing suites unchanged and green |
 | U6 | The reachability rule fails the costume fixture and passes every lawful fixture at `error` severity |
-| U7 | The placement rule passes designated roots and test files, fails non-roots, and names its designation mechanism |
-| U8 | All three call sites migrated or declared under the stop condition; placement rule enrolled green in the three packages |
+| U7 | The construction rule fails make-per-call and eager shapes, passes the lazy-memoized bootstrap and every arrow application, and is enrolled at `error` |
+| U8 | The `Cell.run` alias is absent from the library surface; the eleven sites are arrow applications; every affected suite passes unchanged; tree-wide corpus probe reports zero findings |
 | U9 | The `Description` entry names the rule's actual reach; own `docs:` commit |
 ```
