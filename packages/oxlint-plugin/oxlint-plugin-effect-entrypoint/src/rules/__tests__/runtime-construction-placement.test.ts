@@ -55,7 +55,6 @@ const eagerConstruction = {
 ruleTester.run('runtime-construction-placement', runtimeConstructionPlacement, {
   valid: [
     {
-      // Kills the mutant that reports every construction inside any function.
       name: 'Should_Pass_When_TheBootstrapClosureMakesTheRuntimeLazily',
       code: `import { ManagedRuntime } from 'effect'
 
@@ -64,8 +63,6 @@ export const getRuntime = () => (runtime ??= ManagedRuntime.make(AppLive))`,
       filename: 'src/AppRuntime.ts',
     },
     {
-      // Kills the mutant that stops the module-scope walk at the first closure it
-      // meets, refusing to cross the invoked factory that wraps the memoizer.
       name: 'Should_Pass_When_TheMemoizedThunkIsReturnedFromAnInvokedFactory',
       code: `import { ManagedRuntime } from 'effect'
 
@@ -76,8 +73,6 @@ export const getRuntime = (() => {
       filename: 'src/AppRuntime.ts',
     },
     {
-      // Kills the mutant that exempts only a closure assigned directly to a
-      // module-scope binding, missing the deferred callback inside the initializer.
       name: 'Should_Pass_When_TheDynamicImportBootstrapMakesTheRuntime',
       code: `import { ManagedRuntime } from 'effect'
 
@@ -85,7 +80,6 @@ export const runtime = import('./AppLive.js').then((module) => ManagedRuntime.ma
       filename: 'src/AppRuntime.ts',
     },
     {
-      // Kills the mutant that reports module-scope provision as wiring-per-call.
       name: 'Should_Pass_When_TheModuleScopeGraphProvidesTheLayerAndTheCell',
       code: `import { Layer } from 'effect'
 import { Cell } from '@systemfsoftware/effect-cell-types'
@@ -103,8 +97,6 @@ export const getRuntime = () => (runtime ??= ManagedRuntime.make(Layer.provide(A
       filename: 'src/AppRuntime.ts',
     },
     {
-      // Kills the mutant that keys on the `run` member text and bans cell
-      // application outside the entrypoint.
       name: 'Should_Pass_When_TheComposedCellIsAppliedInsideAFunction',
       code: `import { Cell } from '@systemfsoftware/effect-cell-types'
 
@@ -112,8 +104,6 @@ export const handler = (input) => Cell.andThen(verdictCell, ledgerCell).run(inpu
       filename: 'src/Output.ts',
     },
     {
-      // Kills the mutant that reports the application of a cell inside an Effect
-      // program, or exempts no generator body at all.
       name: 'Should_Pass_When_TheCellIsAppliedInsideAnEffectGen',
       code: `import { Effect } from 'effect'
 
@@ -124,8 +114,6 @@ export const program = Effect.gen(function* () {
       filename: 'src/program.ts',
     },
     {
-      // Kills the mutant that keys on the identifier `Cell` instead of resolving
-      // the import specifier.
       name: 'Should_Pass_When_TheCellNamespaceComesFromAnotherModule',
       code: `import { Cell } from './ledger-cell.js'
 
@@ -144,7 +132,6 @@ export function build(base) {
       filename: 'src/ledger.ts',
     },
     {
-      // Kills the mutant that reports every member of a tracked namespace.
       name: 'Should_Pass_When_TheMemberIsNotATrackedConstructor',
       code: `import { Layer } from 'effect'
 
@@ -154,8 +141,6 @@ export function build(base) {
       filename: 'src/AppLive.ts',
     },
     {
-      // Kills the mutant that guesses the member name from a subscript
-      // identifier: `Cell[provide]` names a member nothing static can read.
       name: 'Should_Pass_When_TheComputedMemberIsAVariable',
       code: `import { Cell } from '@systemfsoftware/effect-cell-types'
 
@@ -165,8 +150,6 @@ export function build(provide) {
       filename: 'src/ledger.ts',
     },
     {
-      // Kills the mutant that matches the member on any receiver rather than on a
-      // receiver that resolves to the package namespace.
       name: 'Should_Pass_When_TheReceiverIsNotANamespaceBinding',
       code: `import { Cell } from '@systemfsoftware/effect-cell-types'
 
@@ -176,7 +159,6 @@ export function build() {
       filename: 'src/ledger.ts',
     },
     {
-      // Test files are in scope, and the deferred shape is lawful inside one.
       name: 'Should_Pass_When_ATestFileDefersItsRuntimeToAModuleScopeThunk',
       code: `import { ManagedRuntime } from 'effect'
 
@@ -194,8 +176,6 @@ expect(ManagedRuntime.make(AppLive)).type.toBe<ManagedRuntime.ManagedRuntime<App
       filename: '/repo/pkg/test-types/Cell.tst.ts',
     },
     {
-      // Kills the mutant that reports the runner-contracted edge: vitest imports
-      // this module once per process, so composition here is once per process.
       name: 'Should_Pass_When_TheRunnerHookEdgeComposesAtModuleScope',
       code: `import { ManagedRuntime } from 'effect'
 
