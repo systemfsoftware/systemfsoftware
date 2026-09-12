@@ -25,7 +25,8 @@
         "dist/**"
       ],
       "dependsOn": [
-        "^build"
+        "^build",
+        "^api:check"
       ]
     },
     "typecheck": {
