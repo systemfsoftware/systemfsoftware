@@ -10,22 +10,16 @@ mutation test lives in `@systemfsoftware/stryker-js-engine`.
 pnpm add @systemfsoftware/stryker-js
 ```
 
-## Entry points
+## Entry point
 
-Each concept module is an enumerated specifier:
+One specifier carries the whole vocabulary. The package entry
+enumerates every published symbol exactly once — concepts (Checker,
+Evaluator, ExitClass, Ignorer, Metrics, Module, Mutant, Plugin, Report,
+ReporterEvent, Run, Schema, TestRunner) are all imported from the root:
 
-- `@systemfsoftware/stryker-js/Checker`
-- `@systemfsoftware/stryker-js/Evaluator`
-- `@systemfsoftware/stryker-js/ExitClass`
-- `@systemfsoftware/stryker-js/Ignorer`
-- `@systemfsoftware/stryker-js/Mutant`
-- `@systemfsoftware/stryker-js/output-file`
-- `@systemfsoftware/stryker-js/Plugin`
-- `@systemfsoftware/stryker-js/provided-options`
-- `@systemfsoftware/stryker-js/Reporter`
-- `@systemfsoftware/stryker-js/Run`
-- `@systemfsoftware/stryker-js/Schema`
-- `@systemfsoftware/stryker-js/TestRunner`
+```ts
+import { Mutant, ReporterEventSchema, StrykerOptionsSchema } from '@systemfsoftware/stryker-js'
+```
 
 ## License
 

@@ -4,7 +4,7 @@ import * as Option from 'effect/Option'
 import * as Result from 'effect/Result'
 import * as S from 'effect/Schema'
 
-import type { TestStatus } from '@systemfsoftware/stryker-js/TestRunner'
+import type { TestStatus } from '@systemfsoftware/stryker-js'
 
 export class VitestMutantRunCommand extends S.TaggedClass<VitestMutantRunCommand>()('VitestMutantRunCommand', {
   rawTests: S.Array(S.Unknown),

@@ -1,7 +1,7 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import type { CheckResult } from '@systemfsoftware/stryker-js/Checker'
-import { Mutant } from '@systemfsoftware/stryker-js/Mutant'
-import type { RunPlan as MutantRunPlan } from '@systemfsoftware/stryker-js/Mutant'
+import type { CheckResult } from '@systemfsoftware/stryker-js'
+import { Mutant } from '@systemfsoftware/stryker-js'
+import type { RunPlan as MutantRunPlan } from '@systemfsoftware/stryker-js'
 import { Array as Arr, Effect, Equal, HashMap, HashSet, Option } from 'effect'
 
 import { type CheckerResourceService, checkGroupedPlans } from '@systemfsoftware/stryker-js-engine'

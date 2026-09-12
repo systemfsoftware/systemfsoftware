@@ -3,7 +3,7 @@ import { expect } from 'vitest'
 import { Gherkin, Given, it, layer, makeFeature, Then } from '@systemfsoftware/effect-gherkin-spec'
 import { Effect } from 'effect'
 
-import { type ExitClass, resolveExitCode, verdictExitClass } from '@systemfsoftware/stryker-js/ExitClass'
+import { type ExitClass, resolveExitCode, verdictExitClass } from '@systemfsoftware/stryker-js'
 
 const checkExpect = expect
 

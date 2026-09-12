@@ -1,5 +1,5 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { schema } from '@systemfsoftware/stryker-js/Mutant'
+import * as schema from '@systemfsoftware/stryker-js'
 import { Effect } from 'effect'
 import { expect } from 'vitest'
 

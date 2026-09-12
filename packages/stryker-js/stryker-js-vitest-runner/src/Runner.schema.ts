@@ -2,7 +2,7 @@ import { Effect } from 'effect'
 import * as Predicate from 'effect/Predicate'
 import * as S from 'effect/Schema'
 
-import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import type { StrykerOptions } from '@systemfsoftware/stryker-js'
 import type * as VitestNode from 'vitest/node'
 
 export const VitestRunnerOptionsSchema = S.Struct({

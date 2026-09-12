@@ -11,8 +11,8 @@
 import * as Layer from 'effect/Layer'
 
 import type { Policy } from '@systemfsoftware/effect-cell-types'
-import { type FileDescriptions, INSTRUMENTER_CONSTANTS } from '@systemfsoftware/stryker-js/Mutant'
-import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import { type FileDescriptions, INSTRUMENTER_CONSTANTS } from '@systemfsoftware/stryker-js'
+import type { StrykerOptions } from '@systemfsoftware/stryker-js'
 import {
   type CompleteDryRunResult,
   type DryRunOptions,
@@ -23,7 +23,7 @@ import {
   type TestRunnerCapabilities,
   TestRunnerFailed,
   toMutantRunResult,
-} from '@systemfsoftware/stryker-js/TestRunner'
+} from '@systemfsoftware/stryker-js'
 import * as Cause from 'effect/Cause'
 import * as Clock from 'effect/Clock'
 import * as Duration from 'effect/Duration'

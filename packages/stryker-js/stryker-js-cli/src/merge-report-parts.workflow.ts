@@ -1,12 +1,6 @@
 import { Workflow } from '@systemfsoftware/effect-cell-types'
-import { MutationTestResultSchema } from '@systemfsoftware/stryker-js/Report'
-import type {
-  FileResult,
-  MutantResult,
-  MutationTestResult,
-  TestFile,
-  Thresholds,
-} from '@systemfsoftware/stryker-js/Report'
+import { MutationTestResultSchema } from '@systemfsoftware/stryker-js'
+import type { FileResult, MutantResult, MutationTestResult, TestFile, Thresholds } from '@systemfsoftware/stryker-js'
 import * as Arr from 'effect/Array'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'

@@ -88,3 +88,9 @@ export type ReporterFactory = (
   options: StrykerOptions,
   init: ReporterInit,
 ) => (events: AsyncIterable<ReporterEvent>) => Promise<void>
+
+export class ReporterFailed extends S.TaggedError<ReporterFailed>()('ReporterFailed', {
+  cause: S.String,
+  event: ReporterEventKind,
+  reporterName: S.String,
+}) {}

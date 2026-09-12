@@ -50,7 +50,7 @@ export type MutantTestCoverage = Mutant & {
   readonly static: boolean | undefined
 }
 
-export type MutantResult = Mutant & {
+export type RunMutantResult = Mutant & {
   readonly status: MutantStatus
   readonly statusReason?: string | undefined
   readonly testsCompleted?: number | undefined
@@ -245,8 +245,6 @@ export type MutantRunPlan = RunPlan
 export type MutantEarlyResultPlan = EarlyResultPlan
 
 export type MutantTestPlan = TestPlan
-
-export * as schema from './Report.schema.js'
 
 const errorNameOf = (value: object): string | undefined =>
   Match.value(value).pipe(

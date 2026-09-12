@@ -9,7 +9,6 @@ import * as S from 'effect/Schema'
 import {
   Heartbeat,
   HelpRendered,
-  MutantTested,
   MutationRunPlan,
   PhaseEntered,
   PlanKnown,
@@ -17,6 +16,7 @@ import {
   RunCommand,
   RunEvent,
   RunFailed,
+  RunMutantTested,
   RunOutput,
   RunStarted,
   VerdictReached,
@@ -83,11 +83,11 @@ export const shouldKeepTempDir = (
 export {
   Heartbeat,
   HelpRendered,
-  MutantTested,
   PhaseEntered,
   PlanKnown,
   RunEvent,
   RunFailed,
+  RunMutantTested,
   RunStarted,
   VerdictReached,
 }

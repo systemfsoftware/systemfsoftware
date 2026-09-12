@@ -1,4 +1,4 @@
-import { schema } from '@systemfsoftware/stryker-js/Mutant'
+import type * as schema from '@systemfsoftware/stryker-js'
 import * as Match from 'effect/Match'
 
 export const defaultRequireTestContributionSuffixes = [

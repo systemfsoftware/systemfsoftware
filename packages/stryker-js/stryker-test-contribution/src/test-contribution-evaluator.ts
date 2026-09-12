@@ -1,12 +1,12 @@
-import { Evaluator, EvaluatorFailed } from '@systemfsoftware/stryker-js/Evaluator'
-import type { ExitClass } from '@systemfsoftware/stryker-js/Evaluator'
-import { RunConfiguration } from '@systemfsoftware/stryker-js/Plugin'
+import { Evaluator, EvaluatorFailed } from '@systemfsoftware/stryker-js'
+import type { ExitClass } from '@systemfsoftware/stryker-js'
+import { RunConfiguration } from '@systemfsoftware/stryker-js'
 import * as Effect from 'effect/Effect'
 import * as Layer from 'effect/Layer'
 
 import { judgeTestContribution } from './test-contribution.js'
 
-import type { schema } from '@systemfsoftware/stryker-js/Mutant'
+import type * as schema from '@systemfsoftware/stryker-js'
 
 export const makeTestContributionEvaluatorService = (options: {
   readonly disableBail: boolean

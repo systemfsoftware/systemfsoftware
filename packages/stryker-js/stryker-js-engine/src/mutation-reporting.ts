@@ -1,14 +1,14 @@
-import { type CheckResult, type PassedCheckResult } from '@systemfsoftware/stryker-js/Checker'
-import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
-import { highestExitClass, verdictExitClass } from '@systemfsoftware/stryker-js/ExitClass'
-import { calculateMetrics } from '@systemfsoftware/stryker-js/Metrics'
-import type { MetricsResult } from '@systemfsoftware/stryker-js/Metrics'
-import type { MutantResult, MutantTestCoverage } from '@systemfsoftware/stryker-js/Mutant'
-import type { AnyPluginContribution, PluginKind } from '@systemfsoftware/stryker-js/Plugin'
-import type * as schema from '@systemfsoftware/stryker-js/Report'
-import { RunEvents, VerdictReached } from '@systemfsoftware/stryker-js/Run'
-import type { StrykerOptions } from '@systemfsoftware/stryker-js/Schema'
-import type { MutantRunResult } from '@systemfsoftware/stryker-js/TestRunner'
+import { type CheckResult, type PassedCheckResult } from '@systemfsoftware/stryker-js'
+import type { ExitClass } from '@systemfsoftware/stryker-js'
+import { highestExitClass, verdictExitClass } from '@systemfsoftware/stryker-js'
+import { calculateMetrics } from '@systemfsoftware/stryker-js'
+import type { MetricsResult } from '@systemfsoftware/stryker-js'
+import type { MutantTestCoverage, RunMutantResult } from '@systemfsoftware/stryker-js'
+import type { AnyPluginContribution, PluginKind } from '@systemfsoftware/stryker-js'
+import type * as schema from '@systemfsoftware/stryker-js'
+import { RunEvents, VerdictReached } from '@systemfsoftware/stryker-js'
+import type { StrykerOptions } from '@systemfsoftware/stryker-js'
+import type { MutantRunResult } from '@systemfsoftware/stryker-js'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
@@ -52,16 +52,16 @@ export interface MutationReportingService {
   readonly reportCheckFailure: (
     mutant: MutantTestCoverage,
     result: Exclude<CheckResult, PassedCheckResult>,
-  ) => Effect.Effect<MutantResult>
+  ) => Effect.Effect<RunMutantResult>
   readonly reportMutantRunResult: (
     mutant: MutantTestCoverage,
     result: MutantRunResult,
-  ) => Effect.Effect<MutantResult>
+  ) => Effect.Effect<RunMutantResult>
   readonly reportAll: (
-    results: readonly MutantResult[],
+    results: readonly RunMutantResult[],
   ) => Effect.Effect<RunOutcome, unknown, FileSystem.FileSystem | Path.Path | RunEvents>
   readonly checkpoint: (
-    results: readonly MutantResult[],
+    results: readonly RunMutantResult[],
   ) => Effect.Effect<void, unknown, FileSystem.FileSystem | Path.Path>
 }
 
@@ -84,8 +84,8 @@ export interface MakeMutationReportingInput {
 export const makeMutationReportingService = (input: MakeMutationReportingInput): MutationReportingService => {
   const reportMutantStatus = (
     mutant: MutantTestCoverage,
-    status: MutantResult['status'],
-  ): Effect.Effect<MutantResult> => {
+    status: RunMutantResult['status'],
+  ): Effect.Effect<RunMutantResult> => {
     const location = toSchemaLocation(mutant.location)
     return Effect.succeed({
       _tag: 'Mutant',
@@ -160,7 +160,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       return HashMap.fromIterable(entries)
     })
 
-  const assembleReport = (results: readonly MutantResult[]) =>
+  const assembleReport = (results: readonly RunMutantResult[]) =>
     Effect.gen(function*() {
       const pathService = yield* Path.Path
       const tests = [...MutableHashMap.values(input.testCoverage.testsById)]
@@ -181,7 +181,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
     })
 
   const mutationTestReport = (
-    results: readonly MutantResult[],
+    results: readonly RunMutantResult[],
   ): Effect.Effect<schema.MutationTestResult, unknown, FileSystem.FileSystem | Path.Path> =>
     Effect.gen(function*() {
       const { files, testFiles } = yield* assembleReport(results)
@@ -358,7 +358,7 @@ export const makeMutationReportingService = (input: MakeMutationReportingInput):
       )
     })
 
-  const slimIncrementalReport = (results: readonly MutantResult[]) =>
+  const slimIncrementalReport = (results: readonly RunMutantResult[]) =>
     Effect.gen(function*() {
       const { files, testFiles } = yield* assembleReport(results)
       return {

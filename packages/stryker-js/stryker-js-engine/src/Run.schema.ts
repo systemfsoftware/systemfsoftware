@@ -1,4 +1,4 @@
-import type { ExitClass } from '@systemfsoftware/stryker-js/ExitClass'
+import type { ExitClass } from '@systemfsoftware/stryker-js'
 import * as Match from 'effect/Match'
 import * as S from 'effect/Schema'
 

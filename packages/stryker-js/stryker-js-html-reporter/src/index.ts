@@ -1,5 +1,5 @@
-import { declarePlugin } from '@systemfsoftware/stryker-js/Plugin'
-import type { ReporterFactory } from '@systemfsoftware/stryker-js/ReporterEvent'
+import { declarePlugin } from '@systemfsoftware/stryker-js'
+import type { ReporterFactory } from '@systemfsoftware/stryker-js'
 
 import { makeHtmlReporter } from './Reporter.js'
 

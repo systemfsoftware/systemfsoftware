@@ -19,7 +19,7 @@
  * Declaring the resolved `StrykerOptions` described a value this type never
  * holds, which is why its `Type` had to be discarded and patched by hand.
  */
-import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js/Schema'
+import type { PartialStrykerOptions } from '@systemfsoftware/stryker-js'
 import * as S from 'effect/Schema'
 
 const RunRequestBase = S.TaggedStruct('run', { survivors: S.Boolean })

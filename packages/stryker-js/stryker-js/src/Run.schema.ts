@@ -49,7 +49,7 @@ export class PlanKnown extends S.TaggedClass<PlanKnown>()('plan', {
   total: S.Finite,
 }) {}
 
-export class MutantTested extends S.TaggedClass<MutantTested>()('mutant', {
+export class RunMutantTested extends S.TaggedClass<RunMutantTested>()('mutant', {
   id: S.String,
   status: MutantStatus,
   file: S.String,
@@ -124,7 +124,7 @@ export const RunEvent = S.Union([
   RunStarted,
   PhaseEntered,
   PlanKnown,
-  MutantTested,
+  RunMutantTested,
   Heartbeat,
   VerdictReached,
   RunFailed,

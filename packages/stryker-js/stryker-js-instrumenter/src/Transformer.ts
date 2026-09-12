@@ -1,9 +1,9 @@
 // oxlint-disable typescript/no-unsafe-type-assertion typescript/no-unnecessary-type-assertion
 
-import { type IgnorerService, type NodePath as IgnorerNodePath } from '@systemfsoftware/stryker-js/Ignorer'
-import { INSTRUMENTER_CONSTANTS as ID } from '@systemfsoftware/stryker-js/Mutant'
-import { type MutateDescription, type Position } from '@systemfsoftware/stryker-js/Mutant'
-import { propertyPath, type StrykerOptions, strykerReportBugUrl } from '@systemfsoftware/stryker-js/Schema'
+import { type IgnorerService, type NodePath as IgnorerNodePath } from '@systemfsoftware/stryker-js'
+import { INSTRUMENTER_CONSTANTS as ID } from '@systemfsoftware/stryker-js'
+import { type MutateDescription, type Position } from '@systemfsoftware/stryker-js'
+import { propertyPath, type StrykerOptions, strykerReportBugUrl } from '@systemfsoftware/stryker-js'
 import * as Match from 'effect/Match'
 import * as Option from 'effect/Option'
 import * as Predicate from 'effect/Predicate'

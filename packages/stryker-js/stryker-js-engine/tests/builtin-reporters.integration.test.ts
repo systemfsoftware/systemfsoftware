@@ -1,17 +1,17 @@
 import { Gherkin, Given, it, layer, makeFeature, Then, When } from '@systemfsoftware/effect-gherkin-spec'
-import { makeBuiltinReporterFactories } from '@systemfsoftware/stryker-js-engine/builtin-reporters'
-import { calculateMetrics } from '@systemfsoftware/stryker-js/Metrics'
-import type { MetricsResult } from '@systemfsoftware/stryker-js/Metrics'
-import type { MutantResult, MutationTestResult } from '@systemfsoftware/stryker-js/Report'
-import type { ReporterFactory } from '@systemfsoftware/stryker-js/Reporter'
+import { calculateMetrics } from '@systemfsoftware/stryker-js'
+import type { MetricsResult } from '@systemfsoftware/stryker-js'
+import type { MutantResult, MutationTestResult } from '@systemfsoftware/stryker-js'
+import type { ReporterFactory } from '@systemfsoftware/stryker-js'
 import {
   DryRunCompleted,
   MutantTested,
   MutationTestingPlanReady,
   MutationTestReportReady,
-} from '@systemfsoftware/stryker-js/ReporterEvent'
-import type { ReporterEvent } from '@systemfsoftware/stryker-js/ReporterEvent'
-import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js/Schema'
+} from '@systemfsoftware/stryker-js'
+import type { ReporterEvent } from '@systemfsoftware/stryker-js'
+import { StrykerOptionsSchema } from '@systemfsoftware/stryker-js'
+import { makeBuiltinReporterFactories } from '@systemfsoftware/stryker-js-engine/builtin-reporters'
 import * as Context from 'effect/Context'
 import * as Effect from 'effect/Effect'
 import * as FileSystem from 'effect/FileSystem'
