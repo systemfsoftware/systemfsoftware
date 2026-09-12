@@ -276,6 +276,38 @@ interface KeyOnlyBrandTwo {
   readonly two: number
 }
 
+/** A symbol no family brands with: the counterexample's key is no TypeId. */
+declare const UnrelatedBrand: unique symbol
+
+/**
+ * Two variants sharing an unrelated symbol key whose value is a string literal: the key is
+ * symbol-typed, the value is not, so nothing shared is a TypeId.
+ */
+interface UnrelatedKeyStringOne {
+  readonly _tag: 'UnrelatedKeyStringOne'
+  readonly [UnrelatedBrand]: 'UnrelatedKeyStringOne'
+  readonly one: number
+}
+
+interface UnrelatedKeyStringTwo {
+  readonly _tag: 'UnrelatedKeyStringTwo'
+  readonly [UnrelatedBrand]: 'UnrelatedKeyStringTwo'
+  readonly two: number
+}
+
+/** Two variants sharing an unrelated symbol key whose value IS the symbol, as a TypeId is. */
+interface UnrelatedBrandOne {
+  readonly _tag: 'UnrelatedBrandOne'
+  readonly [UnrelatedBrand]: typeof UnrelatedBrand
+  readonly one: number
+}
+
+interface UnrelatedBrandTwo {
+  readonly _tag: 'UnrelatedBrandTwo'
+  readonly [UnrelatedBrand]: typeof UnrelatedBrand
+  readonly two: number
+}
+
 /** The wrapper command the composite builds: one declared field carries the upstream decision. */
 interface ChainedCommand {
   readonly decision: FixtureDecision
@@ -295,6 +327,12 @@ declare const decideUntaggedOverTagged: (command: TaggedCmd) => Result<DecisionO
 declare const decideUnbrandedOverTagged: (command: TaggedCmd) => Result<UnbrandedOne | UnbrandedTwo, never>
 declare const decideSplitOverTagged: (command: TaggedCmd) => Result<SplitOne | SplitTwo, never>
 declare const decideKeyOnlyBrandOverTagged: (command: TaggedCmd) => Result<KeyOnlyBrandOne | KeyOnlyBrandTwo, never>
+declare const decideUnrelatedKeyStringOverTagged: (
+  command: TaggedCmd,
+) => Result<UnrelatedKeyStringOne | UnrelatedKeyStringTwo, never>
+declare const decideUnrelatedBrandOverTagged: (
+  command: TaggedCmd,
+) => Result<UnrelatedBrandOne | UnrelatedBrandTwo, never>
 
 declare const decideUpstream: Workflow.Workflow<TaggedCmd, FixtureDecision, CommandRefused>
 declare const commandClassUnion: typeof TaggedCmd | typeof UntaggedCmd
@@ -420,5 +458,18 @@ describe('the composite constructor', () => {
   it('Should_ResolveToUninhabitedError_When_BothComponentsCannotFail', () => {
     const composite = Workflow.andThen(TaggedCmd, decideTotalUpstream, ChainedCommandCtor, decideTotalChainedCommand)
     expect(composite).type.toBe<Workflow.UninhabitedError>()
+  })
+})
+
+describe('the shared-type-id predicate', () => {
+  it('Should_ResolveToTheUnsharedTypeIdMarker_When_TheUnrelatedSymbolKeyHoldsNoSymbolValue', () => {
+    expect<Workflow.Inhabited<UnrelatedKeyStringOne | UnrelatedKeyStringTwo, ProbeRefusal>>().type
+      .toBe<Workflow.UnsharedTypeId>()
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(TaggedCmd, decideUnrelatedKeyStringOverTagged)
+  })
+
+  it('Should_AcceptTheUnion_When_AnUnrelatedSymbolKeyHoldsTheSymbol', () => {
+    expect<Workflow.Inhabited<UnrelatedBrandOne | UnrelatedBrandTwo, ProbeRefusal>>().type.toBe<unknown>()
+    expect<typeof Workflow.total>().type.toBeCallableWith(TaggedCmd, decideUnrelatedBrandOverTagged)
   })
 })
