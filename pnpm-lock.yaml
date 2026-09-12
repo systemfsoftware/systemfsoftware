@@ -1842,6 +1842,9 @@ importers:
       '@systemfsoftware/oxlint-config':
         specifier: workspace:^
         version: link:../oxlint-plugin/oxlint-config
+      '@systemfsoftware/oxlint-preset':
+        specifier: workspace:^
+        version: link:../oxlint-plugin/oxlint-preset
       '@systemfsoftware/tsconfig':
         specifier: workspace:^
         version: link:../toolchain/tsconfig

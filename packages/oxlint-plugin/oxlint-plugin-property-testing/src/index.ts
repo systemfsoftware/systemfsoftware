@@ -9,16 +9,19 @@ import { propertyFilePurity } from './rules/property-file-purity.js'
 import { requireEffectFastcheck } from './rules/require-effect-fastcheck.js'
 
 const PLUGIN_NAME = '@systemfsoftware/oxlint-plugin-property-testing'
+
+const rule = (name: string): string => `${PLUGIN_NAME}/${name}`
+
 const recommendedRules = {
-  '@systemfsoftware/oxlint-plugin-property-testing/no-silent-return': 'error',
-  '@systemfsoftware/oxlint-plugin-property-testing/no-assert-in-property': 'error',
-  '@systemfsoftware/oxlint-plugin-property-testing/property-file-purity': 'error',
-  '@systemfsoftware/oxlint-plugin-property-testing/require-effect-fastcheck': 'error',
-  '@systemfsoftware/oxlint-plugin-property-testing/no-unbounded-fanout': 'error',
-  '@systemfsoftware/oxlint-plugin-property-testing/no-nested-quantification': 'error',
-  '@systemfsoftware/oxlint-plugin-property-testing/prop-arbitrary-schema-origin': 'error',
-  '@systemfsoftware/oxlint-plugin-property-testing/prop-fixture-schema-origin': 'error',
-  '@systemfsoftware/oxlint-plugin-property-testing/prop-generated-law-duplicate': 'error',
+  [rule('no-silent-return')]: 'error',
+  [rule('no-assert-in-property')]: 'error',
+  [rule('property-file-purity')]: 'error',
+  [rule('require-effect-fastcheck')]: 'error',
+  [rule('no-unbounded-fanout')]: 'error',
+  [rule('no-nested-quantification')]: 'error',
+  [rule('prop-arbitrary-schema-origin')]: 'error',
+  [rule('prop-fixture-schema-origin')]: 'error',
+  [rule('prop-generated-law-duplicate')]: 'error',
 } as const
 
 export default {
@@ -38,7 +41,6 @@ export default {
   },
   configs: {
     recommended: {
-      plugins: [PLUGIN_NAME],
       rules: recommendedRules,
     },
   },

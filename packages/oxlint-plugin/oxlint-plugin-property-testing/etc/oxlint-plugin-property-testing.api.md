@@ -24,17 +24,8 @@ const _default: {
     };
     configs: {
         recommended: {
-            plugins: string[];
             rules: {
-                readonly '@systemfsoftware/oxlint-plugin-property-testing/no-silent-return': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-property-testing/no-assert-in-property': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-property-testing/property-file-purity': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-property-testing/require-effect-fastcheck': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-property-testing/no-unbounded-fanout': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-property-testing/no-nested-quantification': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-property-testing/prop-arbitrary-schema-origin': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-property-testing/prop-fixture-schema-origin': 'error';
-                readonly '@systemfsoftware/oxlint-plugin-property-testing/prop-generated-law-duplicate': 'error';
+                readonly [x: string]: "error";
             };
         };
     };

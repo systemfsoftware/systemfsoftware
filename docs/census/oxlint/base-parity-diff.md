@@ -62,8 +62,9 @@ Failed to parse oxlint configuration file.
 | `packages/effect-daemon-spec/oxlint.config.ts:7`                 | `@systemfsoftware/oxlint-plugin/no-io-boundary-tests` | `@systemfsoftware/oxlint-plugin-structure/no-io-boundary-tests` |
 | `packages/stryker-js/stryker-js-instrumenter/oxlint.config.ts:7` | `@systemfsoftware/oxlint-plugin/ban-classes`          | `@systemfsoftware/oxlint-plugin-structure/ban-classes`          |
 
-Neither edit is in this change: `oxlint-config` owns only its own package, and the
-`effect-daemon-spec` consumer-side edits belong to whoever is landing that package's registration.
+Both edits landed in this change: `effect-daemon-spec/oxlint.config.ts` and
+`stryker-js-instrumenter/oxlint.config.ts` are re-keyed in the same commits that re-derived
+`base` — the table above is the record, not a to-do.
 The plugin needs no new dependency in either package — the owning leaf registers through the
 `extends` chain. `effect-daemon-spec` carries a second obligation: registering `cell-vocabulary`
 itself, per "Delivered consumer-side (OX-DL1)".

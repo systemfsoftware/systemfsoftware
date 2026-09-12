@@ -1,4 +1,5 @@
 import base from '@systemfsoftware/oxlint-config/base'
+import { defaultIgnores } from '@systemfsoftware/oxlint-preset'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
@@ -26,33 +27,13 @@ export default defineConfig({
     'typescript/no-unsafe-type-assertion': 'error',
   },
 
-  ignorePatterns: [
-    '**/node_modules/**',
-    '**/dist/**',
-    '**/lib/**',
-    '**/esm/**',
-    '**/cjs/**',
-    '**/build/**',
-    '**/out/**',
-    '**/.tshy/**',
-    '**/.tshy-build/**',
-    '**/.turbo/**',
-    '**/coverage/**',
-    '**/.stryker-tmp/**',
-    '**/__pycache__/**',
-    '**/*.d.ts',
-    '**/*.tsbuildinfo',
-    '**/.claude/**',
-    '**/.opencode/**',
-    '**/.sisyphus/**',
-    '**/.repo/**',
-    '**/.worktrees/**',
-    '**/.issues/**',
-    '**/.papi/**',
-    '**/submodules/**',
-    '**/repos/**',
-    '**/.storybook/**',
-  ],
+  // ignorePatterns replaces (never merges) under extends. Spreading the preset's
+  // `defaultIgnores` plus this package's one extra vendor directory keeps the
+  // list derived instead of a drifting copy. `.storybook` is Storybook's own
+  // configuration surface — its `main.ts` default export is the contract
+  // Storybook's loader imports, not an application entrypoint, and there is no
+  // program here to interpret.
+  ignorePatterns: [...defaultIgnores, '**/.storybook/**'],
 
   overrides: [
     {

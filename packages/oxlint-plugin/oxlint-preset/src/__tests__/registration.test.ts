@@ -125,6 +125,16 @@ describe('canonical root registration contract', () => {
     ])
   })
 
+  it('Should_KeepTheExpressionLawOutOfTheRecommendedTier_When_TheCanonicalRootOwnsIt', () => {
+    // CONST-T9 pin of the published contract: `no-ternary` and
+    // `typescript/switch-exhaustiveness-check` moved from the recommended tier
+    // to this package's canonical root. A re-addition here (even at a different
+    // severity or with different options) silently changes every tier consumer
+    // and must be a conscious edit to this test, not a drift.
+    expect(recommended.rules?.['no-ternary']).toBeUndefined()
+    expect(recommended.rules?.['typescript/switch-exhaustiveness-check']).toBeUndefined()
+  })
+
   it('Should_CoverEveryCustomRuleKey_When_TheFragmentsSelfRegisterTheirPlugins', () => {
     const { jsPlugins, ruleKeys } = collectConfigTree(canonical)
     const namespaces = jsPlugins
