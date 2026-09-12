@@ -115,6 +115,7 @@ packages:
   - packages/oxlint-plugin/oxlint-plugin-tag-discipline/
   - packages/oxlint-plugin/oxlint-plugin-test-hygiene/
   - packages/oxlint-plugin/oxlint-plugin-test-placement/
+  - packages/oxlint-plugin/oxlint-preset/
   - packages/oxlint-plugin/oxlint-config/
   - packages/oxlint-plugin/all/
   - packages/stryker-js/stryker-js/
