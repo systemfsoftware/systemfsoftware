@@ -242,7 +242,7 @@ const readCollected = (command: InstrumentCommand): Effect.Effect<Collected, Ins
       ))
     const collector = createMutantCollector()
     yield* Effect.forEach(parsed, ({ file, ast }) =>
-      Effect.try({
+      Effect.tryPromise({
         try: () =>
           transform(ast, collector, {
             options: toTransformerOptions(options),

@@ -20,7 +20,6 @@ import type {
   Statement,
 } from 'estree'
 import path from 'node:path'
-import { parseSync } from 'oxc-parser'
 
 import {
   arrowFunctionExpression,
@@ -51,6 +50,7 @@ import {
 import { applyMutant, createMutant, type Mutable, type Mutant } from './Mutator.js'
 import { type MutatorContext, type MutatorOptions } from './Mutator.js'
 import { allMutators } from './Mutator.js'
+import { parseWithOxc } from './Parser.js'
 import {
   type Ast,
   type AstByFormat,
@@ -961,9 +961,7 @@ export const strykerPlugins: readonly unknown[] = []
 
 export const frameworkPluginsFileUrl = import.meta.url
 
-const parsedInstrumentationHeader = parseSync(
-  'instrumenter-header.js',
-  `// @ts-nocheck
+const INSTRUMENTATION_HEADER_SOURCE = `// @ts-nocheck
 var ${STRYKER_NAMESPACE_HELPER} = function(){
   var g = typeof globalThis === 'object' && globalThis && globalThis.Math === Math && globalThis || new Function("return this")();
   var ns = g.${ID.NAMESPACE} || (g.${ID.NAMESPACE} = {});
@@ -1007,24 +1005,27 @@ var ${IS_MUTANT_ACTIVE_HELPER} = function(id) {
   }
   ${IS_MUTANT_ACTIVE_HELPER} = isActive;
   return isActive(id);
-}`,
-  { lang: 'js', range: true },
-)
-if (parsedInstrumentationHeader.errors.length > 0) {
-  throw new Error('Instrumentation header failed to parse')
-}
-export const instrumentationHeader: readonly Statement[] = parsedInstrumentationHeader.program
-  .body as unknown as readonly Statement[]
-deepFreeze(instrumentationHeader)
+}`
 
-export function placeHeaderIfNeeded(
+let instrumentationHeaderValue: readonly Statement[] | undefined
+
+const instrumentationHeader = async (): Promise<readonly Statement[]> => {
+  if (instrumentationHeaderValue === undefined) {
+    const parsed = await parseWithOxc(INSTRUMENTATION_HEADER_SOURCE, 'instrumenter-header.js', 'js')
+    instrumentationHeaderValue = parsed.root.body as unknown as readonly Statement[]
+    deepFreeze(instrumentationHeaderValue)
+  }
+  return instrumentationHeaderValue
+}
+
+export async function placeHeaderIfNeeded(
   mutantCollector: MutantCollector,
   originFileName: string,
   options: MutatorOptions,
   root: Program,
-): void {
+): Promise<void> {
   if (shouldPlaceHeader(mutantCollector, originFileName, options)) {
-    placeHeader(root)
+    await placeHeader(root)
   }
 }
 
@@ -1036,18 +1037,19 @@ function shouldPlaceHeader(
   return hasPlacedMutants(mutantCollector, originFileName) && options.noHeader !== true
 }
 
-export function placeHeader(root: Program): void {
-  root.body.unshift(...headerFor(root))
+export async function placeHeader(root: Program): Promise<void> {
+  root.body.unshift(...(await headerFor(root)))
 }
 
 interface CommentBearing {
   leadingComments?: unknown
 }
 
-function headerFor(root: Program): readonly Statement[] {
+async function headerFor(root: Program): Promise<readonly Statement[]> {
+  const header = await instrumentationHeader()
   return Option.match(leadingCommentsOf(root), {
-    onNone: () => instrumentationHeader,
-    onSome: (leadingComments) => [commentedHeader(leadingComments), ...instrumentationHeader.slice(1)],
+    onNone: () => header,
+    onSome: (leadingComments) => [commentedHeader(leadingComments, header), ...header.slice(1)],
   })
 }
 
@@ -1056,9 +1058,9 @@ function leadingCommentsOf(root: Program): Option.Option<readonly unknown[]> {
   return Option.filter(Option.fromNullishOr(firstStatement?.leadingComments), isUnknownArray)
 }
 
-function commentedHeader(leadingComments: readonly unknown[]): Statement {
+function commentedHeader(leadingComments: readonly unknown[], header: readonly Statement[]): Statement {
   const firstHeader = Option.getOrThrowWith(
-    Option.fromNullishOr(instrumentationHeader[0]),
+    Option.fromNullishOr(header[0]),
     () => new Error('Instrumentation header is empty'),
   )
   const cloned = cloneNode(firstHeader) as unknown as CommentBearing
@@ -1109,11 +1111,11 @@ function isSet(value: object): value is Set<unknown> {
   return value instanceof Set
 }
 
-export function transform(
+export async function transform(
   ast: Ast,
   mutantCollector: MutantCollector,
   transformerContext: Omit<TransformerContext, 'transform'>,
-): readonly string[] {
+): Promise<readonly string[]> {
   const context: TransformerContext = {
     ...transformerContext,
     transform,
@@ -1134,7 +1136,7 @@ export type AstTransformer<T extends AstFormat> = (
   ast: AstByFormat[T],
   mutantCollector: MutantCollector,
   context: TransformerContext,
-) => readonly string[]
+) => Promise<readonly string[]>
 
 export interface TransformerContext {
   transform: AstTransformer<AstFormat>
@@ -1142,53 +1144,55 @@ export interface TransformerContext {
   mutateDescription: MutateDescription
 }
 
-export const transformHtml: AstTransformer<'html'> = (
+export const transformHtml: AstTransformer<'html'> = async (
   { root },
   mutantCollector,
   context,
 ) => {
   const warnings: string[] = []
-  root.scripts.forEach((ast) => {
-    warnings.push(...context.transform(ast, mutantCollector, context))
-  })
+  for (const script of root.scripts) {
+    warnings.push(...(await context.transform(script, mutantCollector, context)))
+  }
   return warnings
 }
 
 const moduleScriptStart = '<script context="module">\n'
 const moduleScript = `${moduleScriptStart}\n</script>\n`
 
-export const transformSvelte: AstTransformer<'svelte'> = (
+export const transformSvelte: AstTransformer<'svelte'> = async (
   svelte,
   mutantCollector,
   context,
 ) => {
   const warnings: string[] = []
   const { root } = svelte
-  ;[root.moduleScript, ...root.additionalScripts]
-    .filter(Predicate.isNotNullish)
-    .forEach((script) => {
-      warnings.push(
-        ...context.transform(script.ast, mutantCollector, {
-          ...context,
-          options: {
-            ...context.options,
-            noHeader: true,
-          },
-        }),
-      )
-    })
+  const scripts = [root.moduleScript, ...root.additionalScripts].filter(Predicate.isNotNullish)
+  for (const script of scripts) {
+    warnings.push(
+      ...(await context.transform(script.ast, mutantCollector, {
+        ...context,
+        options: {
+          ...context.options,
+          noHeader: true,
+        },
+      })),
+    )
+  }
 
-  placeModuleHeaderIfNeeded(svelte, mutantCollector)
+  await placeModuleHeaderIfNeeded(svelte, mutantCollector)
   return warnings
 }
 
-function placeModuleHeaderIfNeeded(svelte: AstByFormat['svelte'], mutantCollector: MutantCollector): void {
+async function placeModuleHeaderIfNeeded(
+  svelte: AstByFormat['svelte'],
+  mutantCollector: MutantCollector,
+): Promise<void> {
   if (hasPlacedMutants(mutantCollector, svelte.originFileName)) {
-    placeModuleHeader(svelte)
+    await placeModuleHeader(svelte)
   }
 }
 
-function placeModuleHeader(svelte: AstByFormat['svelte']): void {
+async function placeModuleHeader(svelte: AstByFormat['svelte']): Promise<void> {
   const { root, originFileName } = svelte
   if (!root.moduleScript) {
     root.moduleScript = {
@@ -1211,7 +1215,7 @@ function placeModuleHeader(svelte: AstByFormat['svelte']): void {
       script.range.end += moduleScript.length
     })
   }
-  placeHeader(root.moduleScript.ast.root)
+  await placeHeader(root.moduleScript.ast.root)
 }
 
 function emptyProgram(): Program {
@@ -1229,7 +1233,7 @@ function isMutateRangeList(value: MutateDescription): value is readonly SourceLo
   return Array.isArray(value)
 }
 
-export const transformScript: AstTransformer<ScriptFormat> = (
+export const transformScript: AstTransformer<ScriptFormat> = async (
   { root, originFileName, rawContent, offset, comments },
   mutantCollector,
   { options, mutateDescription },
@@ -1264,7 +1268,7 @@ export const transformScript: AstTransformer<ScriptFormat> = (
     },
   })
 
-  placeHeaderIfNeeded(mutantCollector, originFileName, options, root)
+  await placeHeaderIfNeeded(mutantCollector, originFileName, options, root)
 
   return warnings
 

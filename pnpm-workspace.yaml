@@ -31,6 +31,7 @@ catalog:
   "@microsoft/api-extractor": ^7.58.7
   "@noble/hashes": 2.4.0
   oxc-parser: ^0.140.0
+  "@oxc-parser/binding-wasm32-wasi": ^0.140.0
   "@oxc-project/types": ^0.140.0
   "@std/jsonc": jsr:^1.0.2
   "@std/path": jsr:^1.0.0
