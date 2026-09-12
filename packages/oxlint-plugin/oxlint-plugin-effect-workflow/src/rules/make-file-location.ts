@@ -23,6 +23,7 @@ export type MessageIds = 'makeOutsideWorkflowFile' | 'secondMakeInFile'
 export const makeFileLocation = defineRule({
   meta,
   create(context: Context) {
+    if (context.filename.endsWith('.tst.ts')) return {}
     const basename = basenameOf(context.filename)
     const conforming = WORKFLOW_FILE_BASENAME.test(basename)
     return {

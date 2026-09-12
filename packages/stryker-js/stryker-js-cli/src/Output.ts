@@ -427,7 +427,7 @@ export const outputModeProbeCell = Cell.layer({
 })
 
 export const detectModeWithProbe = (flags: FormatFlags = {}): Effect.Effect<ResolvedMode, CliError.CliError> =>
-  Cell.run(outputModeProbeCell, flags).pipe(
+  outputModeProbeCell.run(flags).pipe(
     Effect.mapError(
       (error) =>
         CliError.InvalidValue.make({
