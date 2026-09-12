@@ -21,6 +21,7 @@ const WORKSPACE_PACKAGES = [
   '@systemfsoftware/effect-cell-types',
 ] as const
 const WORKDIR = '/work'
+const CORE_WORKDIR = `${WORKDIR}/core`
 const TARBALLS_IN_CONTAINER = '/opt/tarballs'
 const WORKSPACE_MANIFEST = JSON.stringify({
   name: 'stryker-contract-workspace',
@@ -104,6 +105,30 @@ const selectContainerRuntime = Effect.gen(function*() {
   }
 })
 
+const installTarballs = (
+  container: StartedTestContainer,
+  workingDir: string,
+  tarballs: readonly string[],
+  flags: readonly string[],
+): Effect.Effect<void> =>
+  Effect.gen(function*() {
+    const installed = yield* Effect.tryPromise({
+      try: () =>
+        container.exec(
+          ['npm', 'install', '--no-audit', '--no-fund', '--loglevel=error', ...flags, ...tarballs],
+          { workingDir },
+        ),
+      catch: (cause) => cause,
+    }).pipe(Effect.orDie)
+    if (installed.exitCode !== 0) {
+      return yield* Effect.die(
+        new Error(
+          `installing ${tarballs.length} tarball(s) into ${workingDir} failed with ${installed.exitCode}:\n${installed.output}`,
+        ),
+      )
+    }
+  })
+
 export function setup(project: TestProject): Promise<void> {
   return runtime.runPromise(
     Effect.gen(function*() {
@@ -169,7 +194,10 @@ export function setup(project: TestProject): Promise<void> {
               packed.map((name) => ({ source: path.join(packDir, name), target: `${TARBALLS_IN_CONTAINER}/${name}` })),
             )
             .withCopyDirectoriesToContainer([{ source: fixturesDir, target: `${WORKDIR}/fixtures` }])
-            .withCopyContentToContainer([{ content: WORKSPACE_MANIFEST, target: `${WORKDIR}/package.json` }])
+            .withCopyContentToContainer([
+              { content: WORKSPACE_MANIFEST, target: `${WORKDIR}/package.json` },
+              { content: WORKSPACE_MANIFEST, target: `${CORE_WORKDIR}/package.json` },
+            ])
             .withWorkingDir(WORKDIR)
             .withCommand(['sleep', 'infinity'])
             .start(),
@@ -180,26 +208,21 @@ export function setup(project: TestProject): Promise<void> {
         { container: startedContainer, tarballDir: state.tarballDir },
       ])
 
-      const installed = yield* Effect.tryPromise({
-        try: () =>
-          startedContainer.exec(
-            [
-              'npm',
-              'install',
-              '--no-audit',
-              '--no-fund',
-              '--loglevel=error',
-              ...packed.map((name) => `${TARBALLS_IN_CONTAINER}/${name}`),
-            ],
-            { workingDir: WORKDIR },
-          ),
-        catch: (cause) => cause,
-      }).pipe(Effect.orDie)
-      if (installed.exitCode !== 0) {
+      const CLI_TARBALL_PREFIX = 'systemfsoftware-stryker-js-cli-'
+      const cliTarball = packed.find((name) => name.startsWith(CLI_TARBALL_PREFIX))
+      if (cliTarball === undefined) {
         return yield* Effect.die(
-          new Error(`installing the packed tarball failed with ${installed.exitCode}:\n${installed.output}`),
+          new Error(`pnpm pack produced no CLI tarball in ${packDir}: ${packed.join(', ')}`),
         )
       }
+
+      yield* installTarballs(startedContainer, WORKDIR, [`${TARBALLS_IN_CONTAINER}/${cliTarball}`], ['--offline'])
+      yield* installTarballs(
+        startedContainer,
+        CORE_WORKDIR,
+        packed.map((name) => `${TARBALLS_IN_CONTAINER}/${name}`),
+        [],
+      )
 
       project.provide('strykerContainerId', startedContainer.getId())
     }),

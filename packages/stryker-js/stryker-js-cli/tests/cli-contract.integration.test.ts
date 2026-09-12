@@ -5,7 +5,7 @@ import * as S from 'effect/Schema'
 import { expect } from 'vitest'
 const checkExpect = expect
 import { type StreamLine, StreamLineSchema } from './__fixtures__/cli-contract.schema.js'
-import { CLI_BIN, fixtureDir, WORKDIR } from './__fixtures__/stryker-cli-env.js'
+import { CLI_BIN, CORE_WORKDIR, fixtureDir, WORKDIR } from './__fixtures__/stryker-cli-env.js'
 import { type CliResult, layerStrykerCli, StrykerCli } from './__fixtures__/StrykerCliAdapter.js'
 
 function isSupportedNodeVersion(version: string, range: string): boolean {
@@ -115,13 +115,13 @@ interface CorePurityProbe {
   readonly cliVersion: CliResult
 }
 
-const CORE_PACKAGE_MANIFEST = `${WORKDIR}/node_modules/@systemfsoftware/stryker-js-engine/package.json`
+const CORE_PACKAGE_MANIFEST = `${CORE_WORKDIR}/node_modules/@systemfsoftware/stryker-js-engine/package.json`
 const CLI_PACKAGE_MANIFEST = `${WORKDIR}/node_modules/@systemfsoftware/stryker-js-cli/package.json`
 
-const corePurityProbe = (fixture: string): Effect.Effect<CorePurityProbe, never, StrykerCli> =>
+const corePurityProbe = (): Effect.Effect<CorePurityProbe, never, StrykerCli> =>
   Effect.gen(function*() {
     const cli = yield* StrykerCli
-    const options = { cwd: fixtureDir(fixture) }
+    const options = { cwd: CORE_WORKDIR }
     const nodeVersionResult = yield* cli.sh('node --version', options)
     const manifestResult = yield* cli.sh(
       `node -e "process.stdout.write(JSON.stringify(Object.keys(require('${CORE_PACKAGE_MANIFEST}').exports)))"`,
@@ -662,7 +662,7 @@ Feature('Driving the mutation tester from an agent harness')
         ),
         When('the lane probes every declared core entry and asks the tool which version it is')(
           'probe',
-          (s) => corePurityProbe(s.fixture),
+          () => corePurityProbe(),
         ),
         Then('every declared entry is read from the installed manifest rather than a fixed list')((s) => {
           const declared = s.probe.entries.map((entry) => entry.entry)
