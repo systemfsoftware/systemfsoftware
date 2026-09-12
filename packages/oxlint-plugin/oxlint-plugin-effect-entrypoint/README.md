@@ -31,7 +31,7 @@ An Effect value is a description; nothing happens until something interprets it.
 
 The name is also the problem. Filename conventions that require a cell suffix (`*.executor.ts`, `*.adapter.ts`) exempt `main.ts`, because an entrypoint genuinely is not a cell. That exemption is a hole: park a supervision engine, a layer registry, and six helpers in `main.ts` and the file passes every architectural rule at once — not because it complies, but because nothing examines it. The tell is always the same: something imports it.
 
-These five rules close the hole by constraining what `main.ts` may contain rather than what it may be called. An entrypoint interprets exactly once, exports nothing, is imported by nothing, does not hand a foreign promise to `runMain` and call that an edge, and is the only place a cell is run — `Cell.run` in any other module makes that module the composition root instead. A file that cannot satisfy those was never an entrypoint, and naming it correctly becomes cheaper than hiding in the exemption.
+These five rules close the hole by constraining what `main.ts` may contain rather than what it may be called. An entrypoint interprets exactly once, exports nothing, is imported by nothing, and does not hand a foreign promise to `runMain` and call that an edge. The fifth rule judges a property that crosses module boundaries: the process runtime is built once, lazily, at module scope, so `ManagedRuntime.make` reached per call and a runtime constructed while the module is imported are both errors. A file that cannot satisfy the entrypoint rules was never an entrypoint, and naming it correctly becomes cheaper than hiding in the exemption.
 
 ## Quick Start
 
@@ -54,24 +54,26 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 
 ## Rules
 
-| Rule                            | Reports                                                                                                                                                                           |
-| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `entrypoint-interprets-once`    | A `main.ts` with no interpretation edge, or with more than one. Edges are `runMain` (under any namespace), `Effect.run*`, `ManagedRuntime.make`, and `Layer.toRuntime`            |
-| `entrypoint-no-exports`         | Any `export` from `main.ts` — named, default, `export *`, re-export, or type-only                                                                                                 |
-| `entrypoint-not-imported`       | Any static import, re-export, or dynamic `import()` of a `main` module, reported **in the importing file** — production, barrel, or test alike                                    |
-| `entrypoint-no-promise-wrapper` | `runMain(Effect.tryPromise(...))` / `runMain(Effect.promise(...))` in `main.ts` — the outer edge only awaits a promise while the real fibers run in a runtime it cannot interrupt |
-| `cell-run-placement`            | `Cell.run` outside `main.ts` — the composition root is the process entry module and nothing else, with no `compositionRoots` option; test files are exempt                        |
+| Rule                             | Reports                                                                                                                                                                                                                                                                                                                                    |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `entrypoint-interprets-once`     | A `main.ts` with no interpretation edge, or with more than one. Edges are `runMain` (under any namespace), `Effect.run*`, `ManagedRuntime.make`, and `Layer.toRuntime`                                                                                                                                                                     |
+| `entrypoint-no-exports`          | Any `export` from `main.ts` — named, default, `export *`, re-export, or type-only                                                                                                                                                                                                                                                          |
+| `entrypoint-not-imported`        | Any static import, re-export, or dynamic `import()` of a `main` module, reported **in the importing file** — production, barrel, or test alike                                                                                                                                                                                             |
+| `entrypoint-no-promise-wrapper`  | `runMain(Effect.tryPromise(...))` / `runMain(Effect.promise(...))` in `main.ts` — the outer edge only awaits a promise while the real fibers run in a runtime it cannot interrupt                                                                                                                                                          |
+| `runtime-construction-placement` | `ManagedRuntime.make`, `Layer.provide`, or `Cell.provide` called inside a function body — wiring rebuilt per call — and `ManagedRuntime.make` evaluated at module scope. The module-scope lazy memoized bootstrap and every `cell.run(input)` arrow application are lawful; a `.tst.ts` type-test file runs nowhere, so it is out of scope |
 
-`cell-run-placement` is not part of the recommended set, so the spread above does not enable it. Name it to turn it on:
-
-```ts
-rules: { '@systemfsoftware/oxlint-plugin-effect-entrypoint/cell-run-placement': 'error' }
-```
+All five rules are in the recommended set, so the spread above enables them at `error`.
 
 ## FAQ
 
 **Q: Installed, but nothing is reported.**
-A: Three of the five rules are filename-gated to the exact basename `main.ts`. `entrypoint-not-imported` runs on every file, because the violation lives in the importer; `cell-run-placement` runs on every file except `main.ts` and the test files, because the violation lives in the module that ran the cell — and it is off until you name it.
+A: Three of the five rules are filename-gated to the exact basename `main.ts`. `entrypoint-not-imported` and `runtime-construction-placement` run on every file — the violation lives in the importer or in the constructing module; `cell.run(input)` at any depth, module-scope layer composition, and a clean file report nothing, so that is the usual answer.
+
+**Q: My app builds its runtime in a module-scope lazy thunk. Does `runtime-construction-placement` report it?**
+A: No — that is the lawful shape: `const getRuntime = () => (runtime ??= ManagedRuntime.make(AppLive))`, or the same construction deferred inside a dynamic import. What fails is a runtime built inside any other function body, and `ManagedRuntime.make` evaluated at import time, where importing the module starts fibers no entrypoint can interrupt.
+
+**Q: Is a test file exempt from `runtime-construction-placement`?**
+A: Not by virtue of being a test. A `.test.ts` file is runtime code — vitest executes it — so a runtime built per test is real wiring that leaks fibers, and the rule reports it. A `.tst.ts` type-test file is exempt: it runs nowhere and only asserts what the types refuse, so it constructs nothing to place.
 
 **Q: `ManagedRuntime.make` plus many `runtime.runPromise` calls — is that two edges?**
 A: No. `ManagedRuntime.make` is the edge; calling `runPromise` on the resulting runtime is using it. Only the construction counts.
