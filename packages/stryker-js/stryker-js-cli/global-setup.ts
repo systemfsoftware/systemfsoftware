@@ -62,7 +62,17 @@ const contractLayer: Layer.Layer<ContractResources> = Layer.effect(
   ),
 ).pipe(Layer.provide(NodeServices.layer))
 
-const runtime = ManagedRuntime.make(Layer.mergeAll(NodeServices.layer, contractLayer))
+/**
+ * The process-scope runtime, constructed on first use and reused. The
+ * construction sits inside this module-scope closure so importing
+ * `global-setup.ts` starts nothing (R10's lazy-memoized bootstrap).
+ */
+type ContractRuntime = ManagedRuntime.ManagedRuntime<NodeServices.NodeServices | ContractResources, never>
+
+let contractRuntime: ContractRuntime | undefined
+
+const contractRuntimeOf =
+  (): ContractRuntime => (contractRuntime ??= ManagedRuntime.make(Layer.mergeAll(NodeServices.layer, contractLayer)))
 const podmanSockets = (path: Path.Path): readonly string[] => {
   const uid = process.getuid?.()
   let runtimeDir: string | undefined = process.env['XDG_RUNTIME_DIR']
@@ -105,7 +115,7 @@ const selectContainerRuntime = Effect.gen(function*() {
 })
 
 export function setup(project: TestProject): Promise<void> {
-  return runtime.runPromise(
+  return contractRuntimeOf().runPromise(
     Effect.gen(function*() {
       const path = yield* Path.Path
       const fs = yield* FileSystem.FileSystem
@@ -210,8 +220,13 @@ export function setup(project: TestProject): Promise<void> {
  * Vitest invokes this once after the run (no arguments) and awaits it.
  * Disposing the runtime closes its root scope, which runs the registered
  * cleanup — container stop and tarball removal — uninterruptibly, with the
- * services of that scope already in context.
+ * services of that scope already in context. A run whose setup never
+ * constructed the runtime has nothing to dispose.
  */
 export function teardown(): Promise<void> {
-  return Effect.runPromise(Effect.ignore(Effect.promise(() => runtime.dispose())))
+  const active = contractRuntime
+  if (active === undefined) {
+    return Promise.resolve()
+  }
+  return Effect.runPromise(Effect.ignore(Effect.promise(() => active.dispose())))
 }

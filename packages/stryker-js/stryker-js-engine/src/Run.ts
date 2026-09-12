@@ -1314,9 +1314,9 @@ export const runMutationTest = (
 ): Effect.Effect<RunOutcome, StageError, StageServices> =>
   Effect.gen(function*() {
     const prepared = yield* runPrepare({ cliOptions, targetMutatePatterns })
-    const instrumented = yield* Cell.run(instrumentCell, prepared)
-    const dryDone = yield* Cell.run(dryRunCell, instrumented)
-    return yield* Cell.run(mutationTestCell, dryDone)
+    const instrumented = yield* instrumentCell.run(prepared)
+    const dryDone = yield* dryRunCell.run(instrumented)
+    return yield* mutationTestCell.run(dryDone)
   })
 export const shouldKeepTempDir = (
   exit: Exit.Exit<unknown, unknown>,
