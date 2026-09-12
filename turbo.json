@@ -42,7 +42,9 @@
       "outputs": [],
       "dependsOn": [
         "^build",
-        "build"
+        "^api:check",
+        "build",
+        "api:check"
       ],
       "cache": true
     },
@@ -62,6 +64,7 @@
       "outputLogs": "errors-only",
       "dependsOn": [
         "^build",
+        "^api:check",
         "build",
         "api:check"
       ],
@@ -156,7 +159,9 @@
       "outputs": [],
       "dependsOn": [
         "^build",
-        "build"
+        "^api:check",
+        "build",
+        "api:check"
       ],
       "env": [
         "NODE_ENV",
@@ -211,6 +216,8 @@
         "package.json"
       ],
       "dependsOn": [
+        "^build",
+        "^api:check",
         "build",
         "api:check"
       ]
