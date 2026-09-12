@@ -12,6 +12,7 @@ const _default: {
         name: string;
     };
     rules: {
+        'cell-run-placement': Rule;
         'entrypoint-interprets-once': Rule;
         'entrypoint-no-exports': Rule;
         'entrypoint-not-imported': Rule;

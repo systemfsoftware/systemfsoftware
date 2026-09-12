@@ -31,7 +31,7 @@ An Effect value is a description; nothing happens until something interprets it.
 
 The name is also the problem. Filename conventions that require a cell suffix (`*.executor.ts`, `*.adapter.ts`) exempt `main.ts`, because an entrypoint genuinely is not a cell. That exemption is a hole: park a supervision engine, a layer registry, and six helpers in `main.ts` and the file passes every architectural rule at once — not because it complies, but because nothing examines it. The tell is always the same: something imports it.
 
-These four rules close the hole by constraining what `main.ts` may contain rather than what it may be called. An entrypoint interprets exactly once, exports nothing, is imported by nothing, and does not hand a foreign promise to `runMain` and call that an edge. A file that cannot satisfy those was never an entrypoint, and naming it correctly becomes cheaper than hiding in the exemption.
+These five rules close the hole by constraining what `main.ts` may contain rather than what it may be called. An entrypoint interprets exactly once, exports nothing, is imported by nothing, does not hand a foreign promise to `runMain` and call that an edge, and is the only place a cell is run — `Cell.run` in any other module makes that module the composition root instead. A file that cannot satisfy those was never an entrypoint, and naming it correctly becomes cheaper than hiding in the exemption.
 
 ## Quick Start
 
@@ -60,11 +60,18 @@ To adopt gradually, drop the spread and name rules individually as `'@systemfsof
 | `entrypoint-no-exports`         | Any `export` from `main.ts` — named, default, `export *`, re-export, or type-only                                                                                                 |
 | `entrypoint-not-imported`       | Any static import, re-export, or dynamic `import()` of a `main` module, reported **in the importing file** — production, barrel, or test alike                                    |
 | `entrypoint-no-promise-wrapper` | `runMain(Effect.tryPromise(...))` / `runMain(Effect.promise(...))` in `main.ts` — the outer edge only awaits a promise while the real fibers run in a runtime it cannot interrupt |
+| `cell-run-placement`            | `Cell.run` outside `main.ts` — the composition root is the process entry module and nothing else, with no `compositionRoots` option; test files are exempt                        |
+
+`cell-run-placement` is not part of the recommended set, so the spread above does not enable it. Name it to turn it on:
+
+```ts
+rules: { '@systemfsoftware/oxlint-plugin-effect-entrypoint/cell-run-placement': 'error' }
+```
 
 ## FAQ
 
 **Q: Installed, but nothing is reported.**
-A: Three of the four rules are filename-gated to the exact basename `main.ts`. `entrypoint-not-imported` is the exception: it runs on every file, because the violation lives in the importer.
+A: Three of the five rules are filename-gated to the exact basename `main.ts`. `entrypoint-not-imported` runs on every file, because the violation lives in the importer; `cell-run-placement` runs on every file except `main.ts` and the test files, because the violation lives in the module that ran the cell — and it is off until you name it.
 
 **Q: `ManagedRuntime.make` plus many `runtime.runPromise` calls — is that two edges?**
 A: No. `ManagedRuntime.make` is the edge; calling `runPromise` on the resulting runtime is using it. Only the construction counts.

@@ -1,3 +1,4 @@
+import { cellRunPlacement } from './rules/cell-run-placement.js'
 import { entrypointInterpretsOnce } from './rules/entrypoint-interprets-once.js'
 import { entrypointNoExports } from './rules/entrypoint-no-exports.js'
 import { entrypointNoPromiseWrapper } from './rules/entrypoint-no-promise-wrapper.js'
@@ -19,6 +20,7 @@ export default {
     name: PLUGIN_NAME,
   },
   rules: {
+    'cell-run-placement': cellRunPlacement,
     'entrypoint-interprets-once': entrypointInterpretsOnce,
     'entrypoint-no-exports': entrypointNoExports,
     'entrypoint-not-imported': entrypointNotImported,
