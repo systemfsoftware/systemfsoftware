@@ -260,6 +260,22 @@ interface SplitTwo {
   readonly two: number
 }
 
+/**
+ * A symbol-KEYED member whose VALUE is a string, on both members of the union: the key is
+ * unique-symbol-typed, the value is not, so the shared key buys the family nothing.
+ */
+interface KeyOnlyBrandOne {
+  readonly _tag: 'KeyOnlyBrandOne'
+  readonly [FamilyOne]: 'KeyOnlyBrandOne'
+  readonly one: number
+}
+
+interface KeyOnlyBrandTwo {
+  readonly _tag: 'KeyOnlyBrandTwo'
+  readonly [FamilyOne]: 'KeyOnlyBrandTwo'
+  readonly two: number
+}
+
 /** The wrapper command the composite builds: one declared field carries the upstream decision. */
 interface ChainedCommand {
   readonly decision: FixtureDecision
@@ -278,6 +294,7 @@ declare const decideLoneOverTagged: (command: TaggedCmd) => Result<LoneDecision,
 declare const decideUntaggedOverTagged: (command: TaggedCmd) => Result<DecisionOne | UntaggedMember, never>
 declare const decideUnbrandedOverTagged: (command: TaggedCmd) => Result<UnbrandedOne | UnbrandedTwo, never>
 declare const decideSplitOverTagged: (command: TaggedCmd) => Result<SplitOne | SplitTwo, never>
+declare const decideKeyOnlyBrandOverTagged: (command: TaggedCmd) => Result<KeyOnlyBrandOne | KeyOnlyBrandTwo, never>
 
 declare const decideUpstream: Workflow.Workflow<TaggedCmd, FixtureDecision, CommandRefused>
 declare const commandClassUnion: typeof TaggedCmd | typeof UntaggedCmd
@@ -329,6 +346,11 @@ describe('the total constructor', () => {
   it('Should_ResolveToTheUnsharedTypeIdMarker_When_TwoVariantsCarryDifferentTypeIds', () => {
     expect<Workflow.Inhabited<SplitOne | SplitTwo, ProbeRefusal>>().type.toBe<Workflow.UnsharedTypeId>()
     expect<typeof Workflow.total>().type.not.toBeCallableWith(TaggedCmd, decideSplitOverTagged)
+  })
+
+  it('Should_ResolveToTheUnsharedTypeIdMarker_When_TheSymbolKeyedMemberHoldsANonSymbolValue', () => {
+    expect<Workflow.Inhabited<KeyOnlyBrandOne | KeyOnlyBrandTwo, ProbeRefusal>>().type.toBe<Workflow.UnsharedTypeId>()
+    expect<typeof Workflow.total>().type.not.toBeCallableWith(TaggedCmd, decideKeyOnlyBrandOverTagged)
   })
 
   it('Should_RefuseEveryNonClassValueAtTheCommandPosition_When_TheTotalTakesTheClassValue', () => {
