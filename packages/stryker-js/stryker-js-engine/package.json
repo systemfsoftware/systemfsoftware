@@ -15,7 +15,6 @@
   ],
   "scripts": {
     "typecheck": "tsc --noEmit --incremental",
-    "test": "vitest run",
     "build": "tsdown",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint --format=${f:-default}",
     "attw": "attw --pack ."
@@ -33,7 +32,6 @@
     "effect": "catalog:peers"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@std/jsonc": "catalog:",
     "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
@@ -46,8 +44,7 @@
     "oxlint": "catalog:oxlint",
     "oxlint-tsgolint": "catalog:oxlint",
     "tsdown": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
+    "typescript": "catalog:"
   },
   "license": "Apache-2.0",
   "publishConfig": {

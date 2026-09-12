@@ -37,7 +37,6 @@
     "clean": "rimraf dist",
     "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
-    "test": "vitest run",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
@@ -62,8 +61,7 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "vite": "catalog:",
-    "vitest": "catalog:"
+    "vite": "catalog:"
   },
   "peerDependencies": {
     "@systemfsoftware/effect-schema-law": "workspace:*",

@@ -17,7 +17,6 @@
     "clean": "rimraf dist",
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
-    "test": "vitest run",
     "attw": "attw --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
@@ -30,7 +29,6 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@systemfsoftware/all": "workspace:^",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-schema-law": "workspace:^",
@@ -42,8 +40,7 @@
     "oxlint-tsgolint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
+    "typescript": "catalog:"
   },
   "publishConfig": {
     "access": "public",

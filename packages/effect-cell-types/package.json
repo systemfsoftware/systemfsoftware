@@ -35,7 +35,6 @@
     "clean": "rimraf dist",
     "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
-    "test": "vitest run --passWithNoTests",
     "test:types": "TSTYCHE_TYPESCRIPT_MODULE=tstyche-typescript tstyche",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local",
@@ -43,7 +42,6 @@
     "attw": "attw --pack ."
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:*",
@@ -55,8 +53,7 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "tstyche": "catalog:",
-    "vitest": "catalog:"
+    "tstyche": "catalog:"
   },
   "peerDependencies": {
     "effect": "catalog:peers"

@@ -23,5 +23,4 @@ export default defineConfig({
   clean: false,
   outExtensions: () => ({ js: '.mjs', dts: '.d.ts' }),
   deps: { onlyBundle: false },
-  define: { 'import.meta.vitest': 'undefined' },
 })

@@ -36,7 +36,6 @@
     "typecheck": "tsc --noEmit --incremental",
     "attw": "attw --pack .",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "test": "vitest run",
     "prepack": "pnpm build"
   },
   "dependencies": {
@@ -47,7 +46,6 @@
     "effect": "catalog:peers"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
     "@systemfsoftware/effect-memfs": "workspace:^",
@@ -60,8 +58,7 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:",
-    "vitest": "catalog:"
+    "typescript": "catalog:"
   },
   "publishConfig": {
     "access": "public",

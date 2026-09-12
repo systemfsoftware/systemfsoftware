@@ -1,5 +1,3 @@
-/// <reference types="vitest/import-meta" />
-
 import { Cell } from '@systemfsoftware/effect-cell-types'
 import { buildVerdictEnvelope, defaultOptions, generateRunId, strykerVersion } from '@systemfsoftware/stryker-js-engine'
 import type { ResolvedMode } from '@systemfsoftware/stryker-js-engine'

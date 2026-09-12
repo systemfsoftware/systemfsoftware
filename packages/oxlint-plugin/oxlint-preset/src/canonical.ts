@@ -92,10 +92,6 @@ export default defineConfig({
       rules: { complexity: ['error', { max: 2, variant: 'modified' }] },
     },
     {
-      files: ['**/src/**/*.workflow.ts'],
-      rules: { complexity: ['error', { max: 1, variant: 'modified' }] },
-    },
-    {
       files: [...testFilePatterns],
       rules: { complexity: 'off' },
     },

@@ -15,9 +15,8 @@
   ],
   "scripts": {
     "clean": "rimraf dist",
-    "typecheck": "tsc --noEmit --incremental && tsc --noEmit -p tsconfig.test.json",
-    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit --incremental",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "dependencies": {
     "@effect/tsgo": "^0.36.5",
@@ -37,8 +36,7 @@
   "devDependencies": {
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
-    "rimraf": "catalog:",
-    "vitest": "catalog:"
+    "rimraf": "catalog:"
   },
   "peerDependencies": {
     "oxlint": "catalog:oxlint"

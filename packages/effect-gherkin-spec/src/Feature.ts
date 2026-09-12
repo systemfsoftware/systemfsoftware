@@ -1,4 +1,3 @@
-/// <reference types="vitest/globals" />
 import type * as EffectVitest from '@effect/vitest'
 import type { Vitest } from '@effect/vitest'
 import * as Layer from 'effect/Layer'

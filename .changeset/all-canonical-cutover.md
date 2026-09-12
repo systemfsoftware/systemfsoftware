@@ -3,7 +3,7 @@
 '@systemfsoftware/oxlint-config': major
 ---
 
-`@systemfsoftware/all` now resolves to the strict canonical preset composed from the plugin fragments, and its `plugins`, `rules`, `overrides`, `options`, `jsPlugins`, and `ignorePatterns` named exports are gone. Extend the default export and spread the new `defaultIgnores` named export instead of reaching into the preset's shape.
+`@systemfsoftware/all` now resolves to the strict canonical preset composed from the plugin fragments, and its `plugins`, `rules`, `overrides`, `options`, `jsPlugins`, and `ignorePatterns` named exports are gone. Extend the default export and spread the new `defaultIgnores` named export instead of reaching into the preset's shape. The whole composition — the ten plugins and the recommended tier — is bundled into the package's `dist` by tsdown, so the extension needs no plugin packages of its own.
 
 Every oxlint rule id in this family is now `<owning package>/<rule>`. The two re-key aggregates (`@systemfsoftware/oxlint-plugin`, `@systemfsoftware/oxlint-plugin-effect-dmmf`) no longer exist; each rule is registered by the package that owns it (for example `@systemfsoftware/oxlint-plugin/ban-error-string` is now `@systemfsoftware/oxlint-plugin-structure/ban-error-string`).
 

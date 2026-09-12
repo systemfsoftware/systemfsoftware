@@ -23,7 +23,6 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
     "attw": "attw --pack .",
-    "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}"
   },
   "license": "Apache-2.0",
@@ -48,8 +47,7 @@
     "@types/node": "catalog:",
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
-    "tsdown": "catalog:",
-    "vitest": "catalog:"
+    "tsdown": "catalog:"
   },
   "inlinedDependencies": {
     "@jsr/std__jsonc": "1.0.2"

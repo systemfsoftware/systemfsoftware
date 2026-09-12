@@ -38,14 +38,12 @@
     "clean": "rimraf dist",
     "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
-    "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/effect-gherkin-spec": "workspace:^",
@@ -59,8 +57,7 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "rxjs": "^7.8.2",
-    "tsdown": "catalog:",
-    "vitest": "catalog:"
+    "tsdown": "catalog:"
   },
   "peerDependencies": {
     "effect": "catalog:peers",

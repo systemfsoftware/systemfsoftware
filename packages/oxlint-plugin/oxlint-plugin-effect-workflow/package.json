@@ -42,7 +42,7 @@
   "scripts": {
     "build": "tsdown && pnpm api:check",
     "clean": "rimraf dist",
-    "typecheck": "tsc --noEmit --incremental && tsc --noEmit -p tsconfig.test.json",
+    "typecheck": "tsc --noEmit --incremental",
     "test": "vitest run",
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",

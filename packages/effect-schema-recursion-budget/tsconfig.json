@@ -3,14 +3,12 @@
   "extends": ["@systemfsoftware/tsconfig/tsc/dom/library-monorepo", "@systemfsoftware/tsconfig/effect"],
   "compilerOptions": {
     "types": [
-      "node",
-      "vitest/import-meta"
+      "node"
     ]
   },
   "include": [
     "src",
-    "tests",
-    "vitest.config.ts"
+    "tests"
   ],
   "references": [
     {

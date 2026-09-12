@@ -1,4 +1,3 @@
-/// <reference types="vitest/import-meta" />
 import type { Expression, MemberExpression, TSType } from '@oxc-project/types'
 import { parseSync } from 'oxc-parser'
 

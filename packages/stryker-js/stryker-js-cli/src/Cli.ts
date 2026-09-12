@@ -116,8 +116,6 @@ export function observeTerminatingSignal(): SignalObserver {
   return () => observed
 }
 
-/// <reference types="vitest/import-meta" />
-
 function createSplitter(separator: string) {
   return (value: string) => value.split(separator).filter(Boolean)
 }
