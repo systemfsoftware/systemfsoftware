@@ -127,7 +127,7 @@ Feature('Gating and collecting Cells')
         When('a gate whose reader admits nothing is run')('run', () => {
           const trace: string[] = []
           const gated = Cell.gate(readerCell(trace, Option.none()), innerCell(trace))
-          return Effect.map(Cell.run(gated, { id: 'abcd' }), (response) => ({ response, trace }))
+          return Effect.map(gated.run({ id: 'abcd' }), (response) => ({ response, trace }))
         }),
         Then('the response is empty')((s) => {
           expect(Option.isNone(s.run.response)).toBe(true)
@@ -147,7 +147,7 @@ Feature('Gating and collecting Cells')
         When('a gate whose reader admits bytes is run')('run', () => {
           const trace: string[] = []
           const gated = Cell.gate(readerCell(trace, Option.some({ bytes: 'abcd' })), innerCell(trace))
-          return Effect.map(Cell.run(gated, { id: 'abcd' }), (response) => ({ response, trace }))
+          return Effect.map(gated.run({ id: 'abcd' }), (response) => ({ response, trace }))
         }),
         Then('the response carries the inner cell response')((s) => {
           expect(s.run.response).toStrictEqual(Option.some('admitted:4'))
@@ -164,7 +164,7 @@ Feature('Gating and collecting Cells')
         When('a gate whose reader fails is run')('run', () => {
           const trace: string[] = []
           const gated = Cell.gate(readerThatFails(trace), innerCell(trace))
-          return Effect.map(Effect.exit(Cell.run(gated, { id: 'abcd' })), (exit) => ({ exit, trace }))
+          return Effect.map(Effect.exit(gated.run({ id: 'abcd' })), (exit) => ({ exit, trace }))
         }),
         Then('the run fails with the reader refusal')((s) => {
           expect(s.run.exit).toStrictEqual(Exit.fail(new Malformed({ length: 4 })))
@@ -181,7 +181,7 @@ Feature('Gating and collecting Cells')
         When('a gate whose inner cell fails is run')('run', () => {
           const trace: string[] = []
           const gated = Cell.gate(readerCell(trace, Option.some({ bytes: 'abcd' })), innerCellThatFails(trace))
-          return Effect.map(Effect.exit(Cell.run(gated, { id: 'abcd' })), (exit) => ({ exit, trace }))
+          return Effect.map(Effect.exit(gated.run({ id: 'abcd' })), (exit) => ({ exit, trace }))
         }),
         Then('the run fails with the inner refusal')((s) => {
           expect(s.run.exit).toStrictEqual(Exit.fail(new Malformed({ length: 4 })))
@@ -202,7 +202,7 @@ Feature('Gating and collecting Cells')
             folded.push(responses)
             return responses.join('|')
           })
-          return Effect.map(Cell.run(collected, items), (response) => ({ response, trace, folded }))
+          return Effect.map(collected.run(items), (response) => ({ response, trace, folded }))
         }),
         Then('the fold received every response in iteration order')((s) => {
           expect(s.run.folded).toEqual([['refused:too short', 'admitted:4', 'refused:too short']])
@@ -231,7 +231,7 @@ Feature('Gating and collecting Cells')
             folded.push(responses)
             return responses.join('|')
           })
-          return Effect.map(Effect.exit(Cell.run(collected, refusingItems)), (exit) => ({ exit, trace, folded }))
+          return Effect.map(Effect.exit(collected.run(refusingItems)), (exit) => ({ exit, trace, folded }))
         }),
         Then('the run fails with the refusing item refusal')((s) => {
           expect(s.run.exit).toStrictEqual(Exit.fail(new Malformed({ length: 3 })))
@@ -261,7 +261,7 @@ Feature('Gating and collecting Cells')
               )
             },
           )
-          return Effect.map(Cell.run(accumulated, refusingItems), (response) => ({ response, trace, gathered }))
+          return Effect.map(accumulated.run(refusingItems), (response) => ({ response, trace, gathered }))
         }),
         Then('the fold received all three results in order, the refusal as data')((s) => {
           expect(s.run.response).toStrictEqual(['ok:refused:too short', 'fail:Malformed', 'ok:refused:too short'])
@@ -292,8 +292,8 @@ Feature('Gating and collecting Cells')
             },
           )
           return Effect.zipWith(
-            Cell.run(collected, []),
-            Cell.run(accumulated, []),
+            collected.run([]),
+            accumulated.run([]),
             (failFast, accumulate) => ({ failFast, accumulate, trace, folded, gathered }),
           )
         }),

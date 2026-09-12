@@ -169,13 +169,12 @@ describe('the refusals the layer keeps', () => {
 describe('the run the Cell publishes', () => {
   it('Should_RunTheCell_When_CalledDataFirst', () => {
     const cell = Cell.layer({ read, decide: decideOverRaw, write: writeOutcome })
-    expect(Cell.run(cell, command)).type.toBe<Effect<void, never, never>>()
+    expect(cell.run(command)).type.toBe<Effect<void, never, never>>()
   })
 
-  it('Should_RunTheCell_When_TheInputIsBoundFirst', () => {
+  it('Should_RunTheCell_When_TheArrowIsApplied', () => {
     const cell = Cell.layer({ read, decide: decideOverRaw, write: writeOutcome })
-    const withInput = Cell.run(command)
-    expect(withInput(cell)).type.toBe<Effect<void, never, never>>()
+    expect(cell.run(command)).type.toBe<Effect<void, never, never>>()
   })
 
   it('Should_HideTheNeverServices_When_TheCellNeedsNone', () => {
@@ -198,7 +197,7 @@ describe('the provide that clears the services', () => {
     const cell = Cell.layer({ read: readNeedingDb, decide: decideOverRaw, write: writeOutcome })
     const provided = pipe(cell, Cell.provide(dbLayer))
     expect(provided).type.toBe<Cell.Cell<Cmd, void, never, never>>()
-    expect(Cell.run(provided, command)).type.toBe<Effect<void, never, never>>()
+    expect(provided.run(command)).type.toBe<Effect<void, never, never>>()
   })
 
   it('Should_UnionTheLayerError_When_TheLayerCanFail', () => {
@@ -223,7 +222,7 @@ describe('the provide that clears the services', () => {
 
   it('Should_DemandTheProvide_When_TheShellRunsTheCell', () => {
     const cell = Cell.layer({ read: readNeedingDb, decide: decideOverRaw, write: writeOutcome })
-    const runInShell = EffectModule.provide(Cell.run(cell, command), dbLayer)
+    const runInShell = EffectModule.provide(cell.run(command), dbLayer)
     expect(runInShell).type.toBe<Effect<void, never, never>>()
   })
 })
@@ -267,7 +266,7 @@ describe('the combinators that run other Cells', () => {
   it('Should_WrapTheInnerResponse_When_GateAdmitsTheReaderValue', () => {
     const gated = pipe(optionReader, Cell.gate(innerOverRaw))
     expect(gated).type.toBe<Cell.Cell<Cmd, Option<Decision>, ReadErr | WriteErr, Db | Bus>>()
-    expect(Cell.run(gated, command)).type.toBe<Effect<Option<Decision>, ReadErr | WriteErr, Db | Bus>>()
+    expect(gated.run(command)).type.toBe<Effect<Option<Decision>, ReadErr | WriteErr, Db | Bus>>()
   })
 
   it('Should_WrapTheInnerResponse_When_GateIsCalledDataFirst', () => {
@@ -291,7 +290,7 @@ describe('the combinators that run other Cells', () => {
     const fold = (responses: readonly Decision[]): number => responses.length
     const folded = Cell.collect(itemCell, fold)
     expect(folded).type.toBe<Cell.Cell<readonly Cmd[], number, ReadErr, Db>>()
-    expect(Cell.run(folded, [command])).type.toBe<Effect<number, ReadErr, Db>>()
+    expect(folded.run([command])).type.toBe<Effect<number, ReadErr, Db>>()
   })
 
   it('Should_BindTheFoldFirst_When_CollectingDataLast', () => {
@@ -307,7 +306,7 @@ describe('the combinators that run other Cells', () => {
     const fold = (results: readonly Result<Decision, ReadErr>[]): number => results.length
     const accumulated = Cell.collectAll(itemCell, fold)
     expect(accumulated).type.toBe<Cell.Cell<readonly Cmd[], number, ReadErr, Db>>()
-    expect(Cell.run(accumulated, [command])).type.toBe<Effect<number, ReadErr, Db>>()
+    expect(accumulated.run([command])).type.toBe<Effect<number, ReadErr, Db>>()
   })
 
   it('Should_RefuseASuccessOnlyFold_When_TheAccumulateFormCarriesRefusals', () => {

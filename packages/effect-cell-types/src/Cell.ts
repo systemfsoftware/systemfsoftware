@@ -145,13 +145,6 @@ export function layer<I, Raw, RE, RR, Dcd, DecE, Dec, DE, Out, Resp, WE, WR>(
 ): Cell<I, Resp, RE | DecE | WE, RR | WR> {
   return make(layerRunner(spec))
 }
-export const run: {
-  <I>(input: I): <A, E, R>(self: Cell<I, A, E, R>) => Effect.Effect<A, E, R>
-  <I, A, E, R>(self: Cell<I, A, E, R>, input: I): Effect.Effect<A, E, R>
-} = dual(
-  2,
-  <I, A, E, R>(self: Cell<I, A, E, R>, input: I): Effect.Effect<A, E, R> => self.run(input),
-)
 
 /**
  * Transforms the Cell's response.

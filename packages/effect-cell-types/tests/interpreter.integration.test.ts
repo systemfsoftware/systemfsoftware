@@ -108,7 +108,7 @@ Feature('Running a Cell')
       Gherkin.Do.pipe(
         When('a Cell is run for a command its decision refuses')(
           'exit',
-          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.run(makeCell(ledger), { id: 'abc' }))),
+          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(makeCell(ledger).run({ id: 'abc' }))),
         ),
         Then('the run succeeds and its response carries the refusal')((s) => {
           expect(s.exit).toStrictEqual(Exit.succeed('refused:too short'))
@@ -127,7 +127,7 @@ Feature('Running a Cell')
       Gherkin.Do.pipe(
         When('a Cell is run for a command its decision admits')(
           'exit',
-          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.run(makeCell(ledger), { id: 'abcd' }))),
+          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(makeCell(ledger).run({ id: 'abcd' }))),
         ),
         Then('the run succeeds and its response carries the decision')((s) => {
           expect(s.exit).toStrictEqual(Exit.succeed('admitted:4'))
@@ -143,7 +143,7 @@ Feature('Running a Cell')
           () =>
             Effect.flatMap(
               Ledger,
-              (ledger) => Effect.exit(Cell.run(makeCellReportingItsRaw(ledger), { id: 'abcd' })),
+              (ledger) => Effect.exit(makeCellReportingItsRaw(ledger).run({ id: 'abcd' })),
             ),
         ),
         Then('the run succeeds with the response the write returned')((s) => {
@@ -163,7 +163,7 @@ Feature('Running a Cell')
       Gherkin.Do.pipe(
         When('a Cell is run for a command its validation rejects')(
           'exit',
-          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(Cell.run(makeCell(ledger), { id: 'bad' }))),
+          () => Effect.flatMap(Ledger, (ledger) => Effect.exit(makeCell(ledger).run({ id: 'bad' }))),
         ),
         Then('the run fails with the malformed report')((s) => {
           expect(s.exit).toStrictEqual(Exit.fail({ kind: 'Malformed', bytes: 'bad' }))
@@ -185,7 +185,7 @@ Feature('Running a Cell')
           () =>
             Effect.flatMap(
               Ledger,
-              (ledger) => Effect.exit(Cell.run(makeCellDecideMalformed(ledger), { id: 'decide-bad' })),
+              (ledger) => Effect.exit(makeCellDecideMalformed(ledger).run({ id: 'decide-bad' })),
             ),
         ),
         Then('the run succeeds and its response carries the decide-phase malformed')((s) => {
@@ -238,7 +238,7 @@ Feature('Running a Cell')
                 return output.line
               }),
           })
-          return Cell.run(traced, { id: 'abc' }).pipe(
+          return traced.run({ id: 'abc' }).pipe(
             Effect.exit,
             Effect.map((exit) => ({ exit, trace })),
           )
@@ -285,7 +285,7 @@ Feature('Running a Cell')
                   return output.line
                 }),
             })
-            return Effect.exit(Cell.run(traced, { id: 'a'.repeat(101) }))
+            return Effect.exit(traced.run({ id: 'a'.repeat(101) }))
           },
         ),
         Then('the run succeeds and its response carries the refusal')((s) => {
@@ -321,7 +321,7 @@ Feature('Running a Cell')
                 },
               })
               const chained = Cell.andThen(first, second)
-              return Effect.map(Cell.run(chained, { id: 'abcd' }), (response) => ({ response }))
+              return Effect.map(chained.run({ id: 'abcd' }), (response) => ({ response }))
             }),
         ),
         Then('the run answers with the second Cell response')((s) => {
@@ -344,7 +344,7 @@ Feature('Running a Cell')
           () =>
             Effect.flatMap(Ledger, (ledger) => {
               const zipped = Cell.zip(makeCell(ledger), makeCell(ledger))
-              return Effect.exit(Cell.run(zipped, { id: 'abcd' }))
+              return Effect.exit(zipped.run({ id: 'abcd' }))
             }),
         ),
         Then('both responses arrive as a tuple')((s) => {

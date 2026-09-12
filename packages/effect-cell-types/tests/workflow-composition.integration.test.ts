@@ -72,7 +72,7 @@ Feature('Chaining two decisions inside one cell')
           const trace: string[] = []
           const { chainCell } = makeChain(trace)
           return Effect.map(
-            Effect.exit(Cell.run(chainCell, new Decoded({ length: -1 }))),
+            Effect.exit(chainCell.run(new Decoded({ length: -1 }))),
             (exit) => ({ exit, trace }),
           )
         }),
@@ -93,7 +93,7 @@ Feature('Chaining two decisions inside one cell')
           const trace: string[] = []
           const { chainCell } = makeChain(trace)
           return Effect.map(
-            Effect.exit(Cell.run(chainCell, new Decoded({ length: 5 }))),
+            Effect.exit(chainCell.run(new Decoded({ length: 5 }))),
             (exit) => ({ exit, trace }),
           )
         }),
@@ -111,7 +111,7 @@ Feature('Chaining two decisions inside one cell')
           const trace: string[] = []
           const { totalCell, settleCommand } = makeChain(trace)
           return Effect.map(
-            Effect.exit(Cell.run(totalCell, settleCommand(new Admitted({ length: 5 })))),
+            Effect.exit(totalCell.run(settleCommand(new Admitted({ length: 5 })))),
             (exit) => ({ exit, trace }),
           )
         }),

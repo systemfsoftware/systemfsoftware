@@ -6,7 +6,7 @@
 
 // @public (undocumented)
 export namespace Cell {
-    export { Cell, CellTypeId, DESCRIPTION_MODULE, IO_CELLS, IoCellClassification, Kind$1 as Kind, PhaseName, Run, TypeLambda$1 as TypeLambda, Vocabulary, andThen, collect, collectAll, gate, layer, map, mapInput, provide, run, vocabulary, withPolicy, zip };
+    export { Cell, CellTypeId, DESCRIPTION_MODULE, IO_CELLS, IoCellClassification, Kind$1 as Kind, PhaseName, Run, TypeLambda$1 as TypeLambda, Vocabulary, andThen, collect, collectAll, gate, layer, map, mapInput, provide, vocabulary, withPolicy, zip };
 }
 
 // @public (undocumented)
