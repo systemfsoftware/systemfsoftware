@@ -1,8 +1,6 @@
 # @systemfsoftware/all
 
-Complete [oxlint](https://oxc.rs/docs/guide/usage/linter.html) preset for Effect-TS and the functional core / imperative shell architecture.
-
-Extends oxlint with custom rule plugins for Effect domain modelling, schema boundaries, test placement, property-based testing, entrypoint termination, and cell vocabulary — pre-configured with type awareness and correctness defaults in a single import.
+Compatibility re-export of the canonical [oxlint](https://oxc.rs/docs/guide/usage/linter.html) preset for Effect-TS and the functional-core / imperative-shell architecture. The composition lives in [`@systemfsoftware/oxlint-preset`](../oxlint-preset/README.md); this package declares nothing of its own.
 
 ## Install
 
@@ -14,8 +12,6 @@ pnpm add -D @systemfsoftware/all effect oxlint oxlint-tsgolint typescript
 
 ## Quick Start
 
-Export the preset from your `oxlint.config.ts`:
-
 ```ts
 // oxlint.config.ts
 import all from '@systemfsoftware/all'
@@ -23,53 +19,32 @@ import all from '@systemfsoftware/all'
 export default all
 ```
 
-Run oxlint against your project:
-
-```sh
-pnpm oxlint
-```
-
 > [!NOTE]
 > Type-aware rules require a `tsconfig.json` covering the files being linted. Without type information, type-dependent rules are skipped.
 
-## What's Included
+## Exports
 
-The preset registers and enables four custom plugin suites alongside stock oxlint correctness rules at `error`:
+| Export           | Value                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `default`        | The canonical root preset, the same object `@systemfsoftware/oxlint-preset` exports as its default                  |
+| `defaultIgnores` | The nine non-source globs (`**/dist/**`, `**/*.d.ts`, `**/*.tsbuildinfo`, …) a config spreads into `ignorePatterns` |
 
-### Custom Rule Plugins
-
-| Plugin                                             | Scope                      | Key Invariants Enforced                                                                                                                                                     |
-| -------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@systemfsoftware/oxlint-plugin`                   | Core Effect & architecture | Ban native `Date.now()`, `Map`, `Set`, `setTimeout`, and `Promise` inside Effect blocks; require structured errors over string errors; forbid boundary tests in unit suites |
-| `@systemfsoftware/oxlint-plugin-cell-vocabulary`   | Cell architecture          | Enforce kernel/executor boundary conventions and domain naming structures by walking cell descriptions                                                                      |
-| `@systemfsoftware/oxlint-plugin-effect-dmmf`       | DMMF aggregate suite       | Bundles schema codec checks, workflow step structure, property-based test isolation, and test hygiene                                                                       |
-| `@systemfsoftware/oxlint-plugin-effect-entrypoint` | Application runtime        | Require explicit top-level runtime entrypoints (`runMain`, `ManagedRuntime`) and forbid leaking intermediate runtimes                                                       |
-
-### Stock Namespaces & Defaults
-
-- **`categories`**: `correctness: 'error'`
-- **Cyclomatic complexity**: `complexity` at `error` — `max 2` for `**/src/**`, `max 1` for `**/src/**/*.workflow.ts`, off for test files. Uses the `modified` variant (one `switch` costs a point, not one per `case`).
-- **Registered namespaces**: `oxc`, `typescript`, `import`, `unicorn`, `vitest`, `jsdoc`, `node`, `promise`
-- **Default ignore patterns**: `dist/**`, `build/**`, `coverage/**`, `**/*.d.ts`, `.turbo/**`, `.stryker-tmp/**`
-
-## Composition & Customization
-
-If you need to override rules or extend existing settings, import individual configuration blocks or spread the preset:
+To compose your own root around the preset, extend it rather than spreading it — a spread replaces the preset's `overrides` instead of merging with them (`docs/solutions/build-errors/oxlint-preset-overrides-are-replaced-by-a-spread.md`):
 
 ```ts
 // oxlint.config.ts
-import all, { ignorePatterns, plugins, rules } from '@systemfsoftware/all'
+import all, { defaultIgnores } from '@systemfsoftware/all'
+import { defineConfig } from 'oxlint'
 
-export default {
-  ...all,
-  ignorePatterns: [...ignorePatterns, 'generated/**'],
-  rules: {
-    ...rules,
-    // downgrade or customize specific rules
-    '@systemfsoftware/oxlint-plugin/no-logging-in-catch': 'warn',
-  },
-}
+export default defineConfig({
+  extends: [all],
+  ignorePatterns: [...defaultIgnores, 'generated/**'],
+})
 ```
+
+## Gate
+
+`pnpm --filter @systemfsoftware/all test` asserts the module source declares no config and resolves no plugin specifier, that the built default and `defaultIgnores` deep-equal the canonical root's, and that the module namespace exposes exactly those two names.
 
 ## Contributing
 

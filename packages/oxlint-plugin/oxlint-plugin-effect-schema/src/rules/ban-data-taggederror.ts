@@ -95,7 +95,7 @@ export const banDataTaggedError = defineRule({
         const parent = node.parent
 
         // Skip if handled by ClassDeclaration (pattern: class X extends Data.TaggedError('N') {})
-        if (parent && parent.type === 'ClassDeclaration') {
+        if (parent.type === 'ClassDeclaration') {
           return
         }
 
@@ -134,11 +134,11 @@ export const banDataTaggedError = defineRule({
 
         const parent = node.parent
 
-        if (parent && parent.type === 'CallExpression' && parent.callee === node) {
+        if (parent.type === 'CallExpression' && parent.callee === node) {
           return
         }
 
-        if (parent && parent.type === 'MemberExpression') {
+        if (parent.type === 'MemberExpression') {
           return
         }
 

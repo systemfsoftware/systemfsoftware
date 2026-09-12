@@ -10,7 +10,7 @@
   },
   "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugin/all#readme",
   "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
-  "description": "Complete oxlint preset for Effect and cell architecture: bundles all custom rule plugins (workflow, schema, entrypoint, cell vocabulary, property testing, test placement, hygiene) with type-aware correctness settings in a single config.",
+  "description": "Compatibility re-export of the canonical oxlint preset for Effect and cell architecture; the composition lives in @systemfsoftware/oxlint-preset.",
   "keywords": [
     "effect",
     "effect-ts",
@@ -31,23 +31,25 @@
     "build": "tsdown",
     "typecheck": "tsc --noEmit --incremental",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "attw": "attw --pack ."
+    "attw": "attw --pack .",
+    "test": "vitest run"
   },
   "dependencies": {
-    "@systemfsoftware/oxlint-plugin": "workspace:^",
+    "@systemfsoftware/oxlint-preset": "workspace:^"
+  },
+  "devDependencies": {
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",
-    "@systemfsoftware/oxlint-plugin-effect-dmmf": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-entrypoint": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-native": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^",
     "@systemfsoftware/oxlint-plugin-effect-workflow": "workspace:^",
     "@systemfsoftware/oxlint-plugin-property-testing": "workspace:^",
     "@systemfsoftware/oxlint-plugin-recommended": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-structure": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-tag-discipline": "workspace:^",
     "@systemfsoftware/oxlint-plugin-test-hygiene": "workspace:^",
-    "@systemfsoftware/oxlint-plugin-test-placement": "workspace:^"
-  },
-  "devDependencies": {
-    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
-    "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-test-placement": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
     "effect": "catalog:",
@@ -55,7 +57,8 @@
     "oxlint-tsgolint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vitest": "catalog:"
   },
   "peerDependencies": {
     "effect": "catalog:peers",
@@ -79,5 +82,10 @@
       "default": "./dist/index.mjs"
     },
     "./package.json": "./package.json"
+  },
+  "inlinedDependencies": {
+    "@oxlint/plugins": "1.77.0",
+    "effect": "4.0.0-rc.112",
+    "oxlint": "1.77.0"
   }
 }

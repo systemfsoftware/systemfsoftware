@@ -112,7 +112,7 @@ Enforces test assertion integrity and structure across `*.test.ts`, `tests/**`, 
 
 `src/index.ts` is declaration data — literal rule bags and glob arrays, no
 functions and no control flow, so there is no decision surface for a test
-suite or mutation gate to earn its keep. `scripts/guard-no-behavior.mjs` is
+suite or mutation gate to earn its keep. `scripts/guard-no-behavior.ts` is
 wired into this package's `lint` script and fails the build if that stops
 being true.
 

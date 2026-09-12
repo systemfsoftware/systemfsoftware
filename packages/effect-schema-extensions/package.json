@@ -41,17 +41,16 @@
     "clean": "rimraf dist",
     "build": "tsdown && pnpm api:check",
     "typecheck": "tsc --noEmit --incremental",
-    "test": "vitest run",
     "api:check": "api-extractor run && api-extractor run --config api-extractor.hex-schema.json",
     "api:update": "api-extractor run --local && api-extractor run --local --config api-extractor.hex-schema.json",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
-    "attw": "attw --pack ."
+    "attw": "attw --pack .",
+    "test": "vitest run"
   },
   "dependencies": {
     "@systemfsoftware/hex-schema": "workspace:^"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config": "workspace:^",
@@ -64,6 +63,7 @@
     "oxlint": "catalog:oxlint",
     "rimraf": "catalog:",
     "tsdown": "catalog:",
+    "@effect/vitest": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

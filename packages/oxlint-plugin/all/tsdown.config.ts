@@ -23,6 +23,6 @@ export default defineConfig({
     customExports: injectTypes,
   },
   deps: {
-    onlyBundle: false,
+    alwaysBundle: [/./],
   },
 })

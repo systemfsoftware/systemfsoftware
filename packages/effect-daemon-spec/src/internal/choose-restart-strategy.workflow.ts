@@ -106,8 +106,7 @@ if (import.meta.vitest !== void 0) {
    */
   const tree = S.toArbitrary(DecideInput)(fc).map((input) => [input.totalChildren, input.failedIndex] as const)
 
-  const ascendingDistinct = (xs: readonly number[]): boolean =>
-    xs.every((x, i) => i === 0 || x > (xs[i - 1] ?? Number.NEGATIVE_INFINITY))
+  const ascendingDistinct = (xs: readonly number[]): boolean => xs.slice(1).every((x, i) => Number(xs[i]) < x)
 
   const subset = (inner: readonly number[], outer: readonly number[]): boolean => inner.every((x) => outer.includes(x))
 
@@ -118,7 +117,9 @@ if (import.meta.vitest !== void 0) {
   it.prop('∀t_RestartSet_⊆Children', [tree], ([[total, failedIndex]]) =>
     RESTART_STRATEGIES.every((strategy) => {
       const indices = restartIndicesFor(strategy, failedIndex, total)
-      return ascendingDistinct(indices) && indices.every((x) => x >= 0 && x < total)
+      return [ascendingDistinct(indices), indices.every((x) => 0 <= x), indices.every((x) => x < total)].every(
+        (holds) => holds,
+      )
     }))
 
   /**
@@ -130,15 +131,20 @@ if (import.meta.vitest !== void 0) {
     const one = restartIndicesFor('one_for_one', failedIndex, total)
     const rest = restartIndicesFor('rest_for_one', failedIndex, total)
     const all = restartIndicesFor('one_for_all', failedIndex, total)
-    return subset(one, rest) && subset(rest, all)
+    return [subset(one, rest), subset(rest, all)].every((holds) => holds)
   })
 
   /** one_for_all covers the whole tree, and rest_for_one exactly the failed child's suffix. */
   it.prop(
     '∀t_Cardinality_=Strategy',
     [tree],
-    ([[total, failedIndex]]) =>
-      restartIndicesFor('one_for_all', failedIndex, total).length === total &&
-      restartIndicesFor('rest_for_one', failedIndex, total).length === total - failedIndex,
+    ([[total, failedIndex]]) => {
+      const lengths = [
+        restartIndicesFor('one_for_all', failedIndex, total).length,
+        restartIndicesFor('rest_for_one', failedIndex, total).length,
+      ]
+      const expected = [total, total - failedIndex]
+      return lengths.every((length, i) => length === expected[i])
+    },
   )
 }

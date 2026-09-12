@@ -38,8 +38,7 @@ const annotationNamesSchema = (annotation: ESTree.Node | null | undefined): bool
     const name = annotation.typeName
     if (name.type === 'Identifier') return name.name === 'Schema' || name.name.includes('Schema')
     if (name.type === 'TSQualifiedName') {
-      return name.right.type === 'Identifier' &&
-        (name.right.name === 'Schema' || name.right.name === 'Codec')
+      return name.right.name === 'Schema' || name.right.name === 'Codec'
     }
   }
   return false
@@ -79,13 +78,7 @@ export const schemaFileExportsSchemasOnly = defineRule({
         for (const statement of node.body) {
           if (statement.type !== 'ImportDeclaration') continue
           for (const specifier of statement.specifiers) {
-            if (specifier.type === 'ImportNamespaceSpecifier') {
-              importedBindings.add(specifier.local.name)
-            } else if (specifier.type === 'ImportSpecifier') {
-              importedBindings.add(specifier.local.name)
-            } else if (specifier.type === 'ImportDefaultSpecifier') {
-              importedBindings.add(specifier.local.name)
-            }
+            importedBindings.add(specifier.local.name)
           }
         }
 
@@ -265,7 +258,7 @@ export const schemaFileExportsSchemasOnly = defineRule({
               }
               // `export { x }` (no source) — the local binding decides the verdict.
               for (const specifier of statement.specifiers) {
-                if (specifier.type !== 'ExportSpecifier' || specifier.local.type !== 'Identifier') continue
+                if (specifier.local.type !== 'Identifier') continue
                 const kind = bindings.get(specifier.local.name)
                 if (kind === 'schema' || kind === 'vocabulary') continue
                 if (importedBindings.has(specifier.local.name)) {

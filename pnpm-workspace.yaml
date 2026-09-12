@@ -103,10 +103,8 @@ packages:
   - packages/rx-effect/
   - packages/oxlint-plugin/import-origin/
   - packages/oxlint-plugin/make-boundary/
-  - packages/oxlint-plugin/oxlint-plugin/
   - packages/oxlint-plugin/oxlint-plugin-recommended/
   - packages/oxlint-plugin/oxlint-plugin-cell-vocabulary/
-  - packages/oxlint-plugin/oxlint-plugin-effect-dmmf/
   - packages/oxlint-plugin/oxlint-plugin-effect-entrypoint/
   - packages/oxlint-plugin/oxlint-plugin-effect-native/
   - packages/oxlint-plugin/oxlint-plugin-effect-schema/
@@ -116,6 +114,7 @@ packages:
   - packages/oxlint-plugin/oxlint-plugin-tag-discipline/
   - packages/oxlint-plugin/oxlint-plugin-test-hygiene/
   - packages/oxlint-plugin/oxlint-plugin-test-placement/
+  - packages/oxlint-plugin/oxlint-preset/
   - packages/oxlint-plugin/oxlint-config/
   - packages/oxlint-plugin/all/
   - packages/stryker-js/stryker-js/

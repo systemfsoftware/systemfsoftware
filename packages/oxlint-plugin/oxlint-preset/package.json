@@ -1,0 +1,82 @@
+{
+  "name": "@systemfsoftware/oxlint-preset",
+  "license": "Apache-2.0",
+  "version": "1.0.0",
+  "author": "Ryan Lee <drdgvhbh@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/systemfsoftware/systemfsoftware.git",
+    "directory": "packages/oxlint-plugin/oxlint-preset"
+  },
+  "homepage": "https://github.com/systemfsoftware/systemfsoftware/tree/main/packages/oxlint-plugin/oxlint-preset#readme",
+  "bugs": "https://github.com/systemfsoftware/systemfsoftware/issues",
+  "description": "Canonical oxlint preset roots: the very strict canonical set for product code and the instrument set for the oxlint-plugin subtree, composed from self-registering plugin fragments.",
+  "keywords": [
+    "oxlint",
+    "oxlint-plugin",
+    "oxc",
+    "lint",
+    "linter",
+    "lint-rules",
+    "effect",
+    "effect-ts",
+    "preset",
+    "config"
+  ],
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/oxlint-preset.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./instrument": {
+      "types": "./dist/instrument.d.ts",
+      "default": "./dist/instrument.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown && pnpm api:check",
+    "clean": "rimraf dist",
+    "typecheck": "tsc --noEmit --incremental",
+    "test": "vitest run",
+    "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack .",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local"
+  },
+  "dependencies": {
+    "@systemfsoftware/oxlint-plugin-cell-vocabulary": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-entrypoint": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-native": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-schema": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-effect-workflow": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-property-testing": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-recommended": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-structure": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-tag-discipline": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-test-hygiene": "workspace:^",
+    "@systemfsoftware/oxlint-plugin-test-placement": "workspace:^"
+  },
+  "devDependencies": {
+    "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
+    "@systemfsoftware/tsconfig": "workspace:^",
+    "@systemfsoftware/vitest-config": "workspace:^",
+    "@types/node": "catalog:",
+    "oxlint": "catalog:oxlint",
+    "rimraf": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "oxlint": "catalog:oxlint"
+  },
+  "publishConfig": {
+    "provenance": true
+  }
+}

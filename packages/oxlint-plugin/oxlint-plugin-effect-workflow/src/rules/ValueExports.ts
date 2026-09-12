@@ -167,7 +167,7 @@ export const walkExportedValues = (
           break
         }
         for (const specifier of statement.specifiers) {
-          if (specifier.type !== 'ExportSpecifier' || specifier.local.type !== 'Identifier') continue
+          if (specifier.local.type !== 'Identifier') continue
           const kind = bindings.get(specifier.local.name)
           if (kind === 'schema' || kind === 'vocabulary') continue
           if (handlers.onReexport !== undefined && importedBindings[specifier.local.name] === true) {

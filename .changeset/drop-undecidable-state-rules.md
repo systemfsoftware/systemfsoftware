@@ -1,5 +1,4 @@
 ---
-'@systemfsoftware/oxlint-plugin': major
 '@systemfsoftware/oxlint-config': major
 ---
 

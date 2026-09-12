@@ -89,7 +89,7 @@ const localInitOf = (identifier: IdentifierNode, getScope: GetScope, node: ESTre
     if (variable === undefined) continue
     for (const def of variable.defs) {
       if (def.type === 'ImportBinding') return null
-      if (def.node.type === 'VariableDeclarator' && def.node.init !== null && def.node.init !== undefined) {
+      if (def.node.type === 'VariableDeclarator' && def.node.init !== null) {
         return def.node.init
       }
     }
@@ -204,7 +204,7 @@ export const schemaFilterConstructiveGeneration = defineRule({
       VariableDeclarator(node: ESTree.VariableDeclarator) {
         if (node.id.type !== 'Identifier' || !exportedNames.has(node.id.name)) return
         const init = node.init
-        if (init === null || init === undefined || init.type !== 'CallExpression') return
+        if (init === null || init.type !== 'CallExpression') return
         const member = vocabularyMemberOf(init.callee, getScope)
         if (member !== 'makeFilter' && member !== 'makeFilterGroup') return
         reportFilter(context, init, EXPORTED_NAME, EXPORTED_FIX)

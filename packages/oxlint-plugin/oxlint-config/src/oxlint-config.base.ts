@@ -1,5 +1,13 @@
 import { correctness as tsgoCorrectness } from '@effect/tsgo/oxlint-presets'
-import effectDmmf from '@systemfsoftware/oxlint-plugin-effect-dmmf'
+import effectEntrypointPreset from '@systemfsoftware/oxlint-plugin-effect-entrypoint/preset'
+import effectNativePreset from '@systemfsoftware/oxlint-plugin-effect-native/preset'
+import effectSchemaPreset from '@systemfsoftware/oxlint-plugin-effect-schema/preset'
+import effectWorkflowPreset from '@systemfsoftware/oxlint-plugin-effect-workflow/preset'
+import propertyTestingPreset from '@systemfsoftware/oxlint-plugin-property-testing/preset'
+import structurePreset from '@systemfsoftware/oxlint-plugin-structure/preset'
+import tagDisciplinePreset from '@systemfsoftware/oxlint-plugin-tag-discipline/preset'
+import testHygienePreset from '@systemfsoftware/oxlint-plugin-test-hygiene/preset'
+import testPlacementPreset from '@systemfsoftware/oxlint-plugin-test-placement/preset'
 import { defineConfig } from 'oxlint'
 
 export const promoteWarnToError = (rules: Record<string, unknown> | undefined): Record<string, 'error' | 'off'> => {
@@ -27,9 +35,16 @@ export default defineConfig({
 
   plugins: ['typescript', 'jsdoc', 'node', 'promise', 'vitest', 'unicorn', 'oxc', 'effecttsgo'],
 
-  jsPlugins: [
-    import.meta.resolve('@systemfsoftware/oxlint-plugin'),
-    import.meta.resolve('@systemfsoftware/oxlint-plugin-effect-dmmf'),
+  extends: [
+    effectNativePreset,
+    tagDisciplinePreset,
+    structurePreset,
+    effectSchemaPreset,
+    effectWorkflowPreset,
+    propertyTestingPreset,
+    testHygienePreset,
+    testPlacementPreset,
+    effectEntrypointPreset,
   ],
 
   rules: {
@@ -55,39 +70,23 @@ export default defineConfig({
     'typescript/no-unsafe-return': 'error',
     'typescript/no-unsafe-type-assertion': 'error',
 
-    '@systemfsoftware/oxlint-plugin/ban-error-string': 'error',
-    '@systemfsoftware/oxlint-plugin/no-context-generic-tag': 'error',
-    '@systemfsoftware/oxlint-plugin/no-date-now-in-effect': 'error',
-    '@systemfsoftware/oxlint-plugin/no-direct-tag-access': 'error',
-    '@systemfsoftware/oxlint-plugin/no-either-tag-assertions': 'error',
-    '@systemfsoftware/oxlint-plugin/no-io-boundary-tests': 'error',
-    '@systemfsoftware/oxlint-plugin/no-logging-in-catch': 'error',
-    '@systemfsoftware/oxlint-plugin/no-new-promise-in-effect': 'error',
-    '@systemfsoftware/oxlint-plugin/no-native-map-in-effect': 'error',
-    '@systemfsoftware/oxlint-plugin/no-native-set-in-effect': 'error',
-    '@systemfsoftware/oxlint-plugin/no-native-setinterval-in-effect': 'error',
-    '@systemfsoftware/oxlint-plugin/no-native-settimeout-in-effect': 'error',
-    '@systemfsoftware/oxlint-plugin/internal-export-jsdoc': 'error',
-    '@systemfsoftware/oxlint-plugin/no-internal-jsdoc-outside': 'error',
-    ...effectDmmf.configs.recommended.rules,
-
     ...promoteWarnToError(tsgoCorrectness.rules),
 
-    '@systemfsoftware/oxlint-plugin/no-new-worker-with-wasm-import': 'error',
-    '@systemfsoftware/oxlint-plugin/no-barrels': 'off',
-    '@systemfsoftware/oxlint-plugin/no-inline-destructured-type': 'off',
+    '@systemfsoftware/oxlint-plugin-effect-native/no-new-worker-with-wasm-import': 'error',
+    '@systemfsoftware/oxlint-plugin-structure/no-barrels': 'off',
+    '@systemfsoftware/oxlint-plugin-structure/no-inline-destructured-type': 'off',
   },
 
   overrides: [
     {
       files: ['**/*.test.ts', '**/*.spec.ts'],
       rules: {
-        '@systemfsoftware/oxlint-plugin/no-native-map-in-effect': 'off',
-        '@systemfsoftware/oxlint-plugin/no-native-set-in-effect': 'off',
-        '@systemfsoftware/oxlint-plugin/no-native-setinterval-in-effect': 'off',
-        '@systemfsoftware/oxlint-plugin/no-native-settimeout-in-effect': 'off',
-        '@systemfsoftware/oxlint-plugin/no-new-promise-in-effect': 'off',
-        '@systemfsoftware/oxlint-plugin/no-direct-tag-access': 'off',
+        '@systemfsoftware/oxlint-plugin-effect-native/no-native-map-in-effect': 'off',
+        '@systemfsoftware/oxlint-plugin-effect-native/no-native-set-in-effect': 'off',
+        '@systemfsoftware/oxlint-plugin-effect-native/no-native-setinterval-in-effect': 'off',
+        '@systemfsoftware/oxlint-plugin-effect-native/no-native-settimeout-in-effect': 'off',
+        '@systemfsoftware/oxlint-plugin-effect-native/no-new-promise-in-effect': 'off',
+        '@systemfsoftware/oxlint-plugin-tag-discipline/no-direct-tag-access': 'off',
         'vitest/expect-expect': 'off',
         'typescript/no-unsafe-type-assertion': 'off',
       },

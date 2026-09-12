@@ -61,6 +61,7 @@
     "@storybook/react-vite": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config": "workspace:^",
+    "@systemfsoftware/oxlint-preset": "workspace:^",
     "@systemfsoftware/tsconfig": "workspace:^",
     "@types/node": "catalog:",
     "@types/react": "catalog:",

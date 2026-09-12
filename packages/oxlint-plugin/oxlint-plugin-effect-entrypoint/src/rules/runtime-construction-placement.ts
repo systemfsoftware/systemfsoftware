@@ -164,36 +164,36 @@ const trackedCallOf = (
 }
 
 const enclosingFunctionOf = (node: ESTree.Node): FunctionNode | null => {
-  let current: ESTree.Node | null = node.parent
+  let current = parentOf(node)
   while (current !== null) {
     if (isFunctionNode(current)) return current
-    current = current.parent
+    current = parentOf(current)
   }
   return null
 }
 
 const isModuleScopeBinding = (declarator: ESTree.VariableDeclarator): boolean => {
-  const declaration = declarator.parent
+  const declaration = parentOf(declarator)
   if (declaration === null || declaration.type !== 'VariableDeclaration') return false
-  const holder = declaration.parent
+  const holder = parentOf(declaration)
   if (holder === null) return false
   if (holder.type === 'Program') return true
-  return holder.type === 'ExportNamedDeclaration' && holder.parent !== null && holder.parent.type === 'Program'
+  const holderParent = parentOf(holder)
+  return holder.type === 'ExportNamedDeclaration' && holderParent?.type === 'Program'
 }
 
 const isDeferredModuleClosure = (fn: FunctionNode): boolean => {
   if (fn.type === 'FunctionDeclaration' || fn.generator === true) return false
-  let current: ESTree.Node | null = fn.parent
+  let current = parentOf(fn)
   while (current !== null) {
     if (isFunctionNode(current)) {
       if (current.type === 'FunctionDeclaration' || current.generator === true) return false
-      current = current.parent
+      current = parentOf(current)
       continue
     }
     if (current.type === 'VariableDeclarator') return isModuleScopeBinding(current)
-    const parent: ESTree.Node | null = current.parent
-    if (parent === null || parent.type === 'Program') return false
-    current = parent
+    current = parentOf(current)
+    if (current === null || current.type === 'Program') return false
   }
   return false
 }
@@ -202,20 +202,25 @@ const isCacheWrite = (node: ESTree.Node): boolean =>
   node.type === 'AssignmentExpression' && MEMOIZING_ASSIGNMENT_OPERATORS.includes(node.operator)
 
 const isBoundByAModuleScopeBinding = (node: ESTree.Node): boolean => {
-  let current: ESTree.Node | null = node
-  while (current !== null) {
+  let current: ESTree.Node = node
+  for (;;) {
     if (isFunctionNode(current) || current.type === 'Program') return false
     if (isCacheWrite(current)) return true
     if (current.type === 'VariableDeclarator') return current.init !== null && isModuleScopeBinding(current)
-    current = current.parent
+    const parent = parentOf(current)
+    if (parent === null) return false
+    current = parent
   }
-  return false
 }
 
 const MAX_WALK_DEPTH = 32
 
 const isNode = (value: unknown): value is ESTree.Node => value !== null && typeof value === 'object' && 'type' in value
 
+const parentOf = (node: ESTree.Node): ESTree.Node | null => {
+  const parent: unknown = node['parent']
+  return isNode(parent) ? parent : null
+}
 const mentionsName = (value: unknown, name: string, depth: number): boolean => {
   if (depth > MAX_WALK_DEPTH) return false
   if (Array.isArray(value)) return value.some((item) => mentionsName(item, name, depth + 1))
@@ -246,13 +251,13 @@ const isCapturedDeclaratorBinding = (declarator: ESTree.VariableDeclarator, encl
 }
 
 const isMemoizedConstruction = (call: ESTree.CallExpression, enclosing: FunctionNode): boolean => {
-  let current: ESTree.Node | null = call.parent
+  let current = parentOf(call)
   while (current !== null && current !== enclosing) {
     if (isCacheWrite(current)) return true
     if (current.type === 'VariableDeclarator' && isCapturedDeclaratorBinding(current, enclosing)) return true
-    current = current.parent
+    current = parentOf(current)
   }
-  const consumer: ESTree.Node | null = enclosing.parent
+  const consumer = parentOf(enclosing)
   if (consumer === null || consumer.type !== 'CallExpression') return false
   return isBoundByAModuleScopeBinding(consumer)
 }

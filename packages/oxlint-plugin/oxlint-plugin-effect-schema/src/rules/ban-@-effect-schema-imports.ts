@@ -51,7 +51,7 @@ export const banEffectSchemaImports = defineRule({
         )
 
         const fix = (): { range: [number, number]; text: string }[] => {
-          if (!schemaSpecifier || !schemaSpecifier.range) {
+          if (!schemaSpecifier) {
             return [{ range: node.source.range, text: `'${CORRECT_SOURCE}'` }]
           }
 

@@ -1,35 +1,14 @@
+import { defaultIgnores } from '@systemfsoftware/oxlint-preset'
 import { defineConfig } from 'oxlint'
 
+import instrument from '@systemfsoftware/oxlint-preset/instrument'
+
 export default defineConfig({
-  categories: {
-    correctness: 'error',
-  },
+  extends: [instrument],
 
-  plugins: ['typescript', 'import', 'jsdoc', 'node', 'promise', 'vitest', 'unicorn', 'oxc'],
-
-  rules: {
-    'vitest/no-standalone-expect': 'off',
-    'typescript/ban-ts-comment': 'error',
-    'typescript/consistent-type-assertions': ['error', {
-      assertionStyle: 'never',
-    }],
-    'typescript/no-explicit-any': 'error',
-    'typescript/no-non-null-assertion': 'error',
-  },
-
-  ignorePatterns: [
-    '**/node_modules/**',
-    '**/dist/**',
-    '**/lib/**',
-    '**/build/**',
-    '**/.turbo/**',
-    '**/coverage/**',
-    '**/*.d.ts',
-    '**/*.tsbuildinfo',
-    '**/.claude/**',
-    '**/.opencode/**',
-    '**/.sisyphus/**',
-  ],
+  // ignorePatterns replaces under extends, so the list is derived from the
+  // preset's canonical exclusion set plus this subtree's built library output.
+  ignorePatterns: [...defaultIgnores, '**/lib/**'],
 
   overrides: [
     {

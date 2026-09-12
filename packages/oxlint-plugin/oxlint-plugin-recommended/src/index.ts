@@ -26,7 +26,6 @@ export const overrides: OxlintOverride[] = [
 /** @public */
 export const rules: NonNullable<OxlintConfig['rules']> = {
   'vitest/no-standalone-expect': 'off',
-  'no-ternary': 'error',
   'typescript/no-explicit-any': 'error',
   'typescript/consistent-type-assertions': ['error', { assertionStyle: 'never' }],
   'typescript/no-unsafe-argument': 'error',
@@ -54,10 +53,6 @@ export const rules: NonNullable<OxlintConfig['rules']> = {
   'typescript/no-unnecessary-condition': 'error',
   'typescript/strict-boolean-expressions': 'error',
   'typescript/no-unnecessary-type-assertion': 'error',
-  'typescript/switch-exhaustiveness-check': [
-    'error',
-    { allowDefaultCaseForExhaustiveSwitch: false, considerDefaultExhaustiveForUnions: false },
-  ],
   'typescript/no-base-to-string': 'error',
   'import/no-cycle': 'error',
   'import/no-mutable-exports': 'error',

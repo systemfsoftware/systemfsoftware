@@ -36,17 +36,16 @@
     "build": "tsdown && pnpm api:check",
     "clean": "rimraf dist",
     "typecheck": "tsc --noEmit --incremental",
-    "test": "vitest run",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
     "attw": "attw --pack .",
     "api:check": "api-extractor run",
-    "api:update": "api-extractor run --local"
+    "api:update": "api-extractor run --local",
+    "test": "vitest run"
   },
   "dependencies": {
     "memfs": "^4.17.2"
   },
   "devDependencies": {
-    "@effect/vitest": "catalog:",
     "@microsoft/api-extractor": "catalog:",
     "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/oxlint-config": "workspace:^",
@@ -58,6 +57,7 @@
     "rimraf": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:",
+    "@effect/vitest": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {

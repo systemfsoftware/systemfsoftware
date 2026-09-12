@@ -28,22 +28,22 @@ These eight rules make that convention executable at the boundary that construct
 
 ```ts
 // oxlint.config.ts
-import effectWorkflow from '@systemfsoftware/oxlint-plugin-effect-workflow'
+import effectWorkflowPreset from '@systemfsoftware/oxlint-plugin-effect-workflow/preset'
 import { defineConfig } from 'oxlint'
 
 export default defineConfig({
-  jsPlugins: ['@systemfsoftware/oxlint-plugin-effect-workflow'],
-  rules: { ...effectWorkflow.configs.recommended.rules },
+  extends: [effectWorkflowPreset],
 })
 ```
+
+The fragment registers the plugin itself (`jsPlugins: [import.meta.resolve(...)]`) and
+enables exactly the recommended rules, so the config only extends it.
 
 ```bash
 pnpm oxlint src
 ```
 
 On a clean codebase: `Found 0 warnings and 0 errors.`
-
-To adopt gradually, drop the spread and name rules individually as `'@systemfsoftware/oxlint-plugin-effect-workflow/<rule>': 'warn'`. Entries placed after the spread override it.
 
 ## Rules
 

@@ -4,6 +4,7 @@ type ExportEntry = string | Record<string, string | undefined>
 
 const apiExtractorRollups: Record<string, string> = {
   '.': './dist/oxlint-plugin-test-hygiene.d.ts',
+  './preset': './dist/preset.d.ts',
 }
 
 const injectApiExtractorTypes = (exports: Record<string, ExportEntry>): Record<string, ExportEntry> => {
@@ -11,7 +12,7 @@ const injectApiExtractorTypes = (exports: Record<string, ExportEntry>): Record<s
     const entry = exports[subpath]
     if (typeof entry === 'string') {
       exports[subpath] = { types, default: entry }
-    } else if (typeof entry === 'object' && entry !== null) {
+    } else if (typeof entry === 'object') {
       const { default: defaultEntry, types: _existingTypes, ...rest } = entry
       const withDefault = typeof defaultEntry === 'string' ? { default: defaultEntry } : {}
       exports[subpath] = { ...rest, types, ...withDefault }
@@ -23,6 +24,7 @@ const injectApiExtractorTypes = (exports: Record<string, ExportEntry>): Record<s
 export default defineConfig({
   entry: {
     index: './src/index.ts',
+    preset: './src/preset.ts',
   },
   format: 'esm',
   dts: true,

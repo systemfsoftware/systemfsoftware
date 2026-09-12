@@ -270,7 +270,7 @@ const singleReturnVerdict = (body: ESTree.BlockStatement, getScope: GetScope, de
  */
 const unfoldableBodyVerdict = (body: ESTree.BlockStatement, getScope: GetScope, depth: number): SchemaVerdict => {
   const returned = body.body.findLast((statement) => statement.type === 'ReturnStatement')
-  if (returned === undefined || returned.type !== 'ReturnStatement' || returned.argument === null) return 'opaque'
+  if (returned === undefined || returned.argument === null) return 'opaque'
   const verdict = classify(returned.argument, getScope, depth + 1)
   return verdict === 'schema' || verdict === 'vocabulary' ? 'unresolved' : 'opaque'
 }
@@ -736,9 +736,7 @@ export const schemaDeclarationLocation = defineRule({
           node.type === 'MemberExpression' &&
           !node.computed &&
           node.object.type === 'MetaProperty' &&
-          node.object.meta.type === 'Identifier' &&
           node.object.meta.name === 'import' &&
-          node.object.property.type === 'Identifier' &&
           node.object.property.name === 'meta' &&
           node.property.type === 'Identifier' &&
           node.property.name === 'vitest'
@@ -768,7 +766,7 @@ export const schemaDeclarationLocation = defineRule({
             verdictReport(declaration.id, declaration.id.name, classify(declaration.superClass, getScope))
           }
           for (const element of declaration.body.body) {
-            if (element.type !== 'PropertyDefinition' || element.value === null || element.value === undefined) continue
+            if (element.type !== 'PropertyDefinition' || element.value === null) continue
             verdictReport(
               element,
               fieldNameOf(element, declaration.id?.name ?? null),

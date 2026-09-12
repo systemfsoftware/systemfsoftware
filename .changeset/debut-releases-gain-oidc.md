@@ -9,9 +9,7 @@
 '@systemfsoftware/effect-schema-law': patch
 '@systemfsoftware/effect-schema-vite': patch
 '@systemfsoftware/hex-schema': patch
-'@systemfsoftware/oxlint-plugin': patch
 '@systemfsoftware/oxlint-plugin-cell-vocabulary': patch
-'@systemfsoftware/oxlint-plugin-effect-dmmf': patch
 '@systemfsoftware/oxlint-plugin-effect-entrypoint': patch
 '@systemfsoftware/oxlint-plugin-effect-schema': patch
 '@systemfsoftware/oxlint-plugin-effect-workflow': patch

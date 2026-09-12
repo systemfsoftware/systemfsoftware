@@ -31,6 +31,10 @@
       "types": "./dist/oxlint-plugin-test-hygiene.d.ts",
       "default": "./dist/index.mjs"
     },
+    "./preset": {
+      "types": "./dist/preset.d.ts",
+      "default": "./dist/preset.mjs"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -74,5 +78,8 @@
   },
   "publishConfig": {
     "provenance": true
+  },
+  "inlinedDependencies": {
+    "oxlint": "1.77.0"
   }
 }

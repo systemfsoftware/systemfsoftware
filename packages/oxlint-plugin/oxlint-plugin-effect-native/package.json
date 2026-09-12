@@ -1,8 +1,7 @@
 {
   "name": "@systemfsoftware/oxlint-plugin-effect-native",
   "license": "Apache-2.0",
-  "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "author": "Ryan Lee <drdgvhbh@gmail.com>",
   "repository": {
     "type": "git",
@@ -24,10 +23,17 @@
     "property-testing"
   ],
   "type": "module",
+  "files": [
+    "dist"
+  ],
   "exports": {
     ".": {
       "types": "./dist/oxlint-plugin-effect-native.d.ts",
       "default": "./dist/index.mjs"
+    },
+    "./preset": {
+      "types": "./dist/preset.d.ts",
+      "default": "./dist/preset.mjs"
     },
     "./package.json": "./package.json"
   },
@@ -39,6 +45,7 @@
     "mutation": "stryker run",
     "mutation:full": "stryker run --force",
     "lint": "f=${OXLINT_FORMAT:-${AGENT:+agent}}; oxlint . --format=${f:-default}",
+    "attw": "attw --pack .",
     "api:check": "api-extractor run",
     "api:update": "api-extractor run --local"
   },
@@ -48,6 +55,7 @@
   },
   "devDependencies": {
     "@microsoft/api-extractor": "catalog:",
+    "@systemfsoftware/arethetypeswrong-cli": "catalog:",
     "@systemfsoftware/stryker-js-cli": "catalog:stryker",
     "@systemfsoftware/stryker-js-typescript-checker": "catalog:stryker",
     "@systemfsoftware/stryker-js-vitest-runner": "catalog:stryker",
@@ -67,5 +75,11 @@
   "peerDependencies": {
     "effect": "catalog:peers",
     "typescript": ">=5.0.0"
+  },
+  "publishConfig": {
+    "provenance": true
+  },
+  "inlinedDependencies": {
+    "oxlint": "1.77.0"
   }
 }

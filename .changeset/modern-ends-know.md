@@ -13,7 +13,6 @@
 "@systemfsoftware/effect-atom": minor
 "@systemfsoftware/effect-atom-react": minor
 "@systemfsoftware/storybook-gherkin": minor
-"@systemfsoftware/oxlint-plugin": minor
 "@systemfsoftware/oxlint-plugin-effect-schema": minor
 "@systemfsoftware/oxlint-plugin-property-testing": minor
 "@systemfsoftware/oxlint-plugin-test-placement": minor

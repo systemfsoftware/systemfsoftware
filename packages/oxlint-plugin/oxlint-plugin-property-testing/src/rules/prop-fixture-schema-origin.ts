@@ -124,9 +124,9 @@ const collectIdentifierNames = (value: unknown, out: string[], depth: number): v
   }
 }
 
-/** The variable the union call is assigned to, when it has a plain-identifier binding. */
-const bindingNameOf = (union: ESTree.CallExpression): string | undefined => {
-  for (let current: ESTree.Node | null = union; current !== null; current = current.parent) {
+/** Walks up from a node to the variable it is assigned to, when the binding is a plain identifier. */
+const bindingNameOf = (node: ESTree.Node): string | undefined => {
+  for (let current: ESTree.Node | null = node; current !== null; current = current.parent) {
     if (current.type === 'VariableDeclarator') return current.id.type === 'Identifier' ? current.id.name : undefined
   }
   return undefined
@@ -171,11 +171,11 @@ const isRecursiveUnion = (union: ESTree.CallExpression, getScope: GetScope): boo
 
 const annotateCallOf = (union: ESTree.CallExpression): ESTree.CallExpression | undefined => {
   const member = union.parent
-  if (member === null || member.type !== 'MemberExpression') return undefined
+  if (member.type !== 'MemberExpression') return undefined
   if (member.object !== union) return undefined
   if (member.property.type !== 'Identifier' || member.property.name !== 'annotate') return undefined
   const call = member.parent
-  return call !== null && call.type === 'CallExpression' && call.callee === member ? call : undefined
+  return call.type === 'CallExpression' && call.callee === member ? call : undefined
 }
 
 const declaresGenerationIntent = (annotate: ESTree.CallExpression): boolean => {
@@ -190,18 +190,27 @@ const declaresGenerationIntent = (annotate: ESTree.CallExpression): boolean => {
 }
 
 /**
+ * The node kinds the origin walk holds: every one carries a parent, and the root — `Program`, the
+ * only parentless node — is unreachable from a call expression through this chain.
+ */
+type BuilderChainNode =
+  | ESTree.CallExpression
+  | ESTree.VariableDeclarator
+  | ESTree.ReturnStatement
+  | ESTree.BlockStatement
+
+/**
  * Sanctioned origins (a) and (b): the union is the body or argument of an inline function passed to a
  * named local builder or an imported helper, optionally through a `.annotate(...)` chain. An IIFE is
  * not sanctioned — its callee is the inline function itself, not a named binding — so it reports.
  */
 const isNamedBuilderOrigin = (union: ESTree.CallExpression, getScope: GetScope): boolean => {
-  let current: ESTree.Node = union
+  let current: BuilderChainNode = union
   for (let depth = 0; depth <= MAX_WALK_DEPTH; depth += 1) {
-    const parent: ESTree.Node | null = current.parent
-    if (parent === null) return false
+    const parent: ESTree.Node = current.parent
     if (parent.type === 'ArrowFunctionExpression' || parent.type === 'FunctionExpression') {
-      const call: ESTree.Node | null = parent.parent
-      if (call === null || call.type !== 'CallExpression') return false
+      const call: ESTree.Node = parent.parent
+      if (call.type !== 'CallExpression') return false
       if (call.callee.type !== 'Identifier') return false
       return isNamedBuilder(call.callee.name, call, getScope)
     }
@@ -211,8 +220,8 @@ const isNamedBuilderOrigin = (union: ESTree.CallExpression, getScope: GetScope):
       return isNamedBuilder(parent.callee.name, parent, getScope)
     }
     if (parent.type === 'MemberExpression' && parent.object === current) {
-      const call: ESTree.Node | null = parent.parent
-      if (call === null || call.type !== 'CallExpression' || call.callee !== parent) return false
+      const call: ESTree.Node = parent.parent
+      if (call.type !== 'CallExpression' || call.callee !== parent) return false
       current = call
       continue
     }

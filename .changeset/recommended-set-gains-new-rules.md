@@ -1,8 +1,6 @@
 ---
 "@systemfsoftware/all": patch
-"@systemfsoftware/oxlint-plugin": patch
 "@systemfsoftware/oxlint-plugin-recommended": patch
-"@systemfsoftware/oxlint-plugin-effect-dmmf": patch
 "@systemfsoftware/stryker-js": patch
 ---
 

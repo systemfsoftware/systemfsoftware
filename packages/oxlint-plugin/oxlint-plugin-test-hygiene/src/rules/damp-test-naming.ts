@@ -186,7 +186,7 @@ export const dampTestNaming = defineRule({
         }
 
         const testName = extractTestName(node)
-        if (!testName) {
+        if (testName === undefined || testName === '') {
           return
         }
 

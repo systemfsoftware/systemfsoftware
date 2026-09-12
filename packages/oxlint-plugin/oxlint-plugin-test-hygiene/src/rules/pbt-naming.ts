@@ -94,7 +94,7 @@ export const pbtNaming = defineRule({
         }
 
         const testName = extractTestName(node)
-        if (!testName) {
+        if (testName === undefined || testName === '') {
           return
         }
 
