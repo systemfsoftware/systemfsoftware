@@ -158,6 +158,7 @@ const main = (): number => {
     const run = spawnSync(engine, ['check', '--json', '--no-cache', ...uniqueSelected], {
       cwd: workspace,
       encoding: 'utf8',
+      env: { ...process.env, HOME: workspace },
     })
     if (run.error !== undefined) {
       process.stderr.write(`conventions: engine failed to start (${run.error.message})\n`)
