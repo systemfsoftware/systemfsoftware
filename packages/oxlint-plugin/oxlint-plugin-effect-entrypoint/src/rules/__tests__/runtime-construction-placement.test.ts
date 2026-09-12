@@ -98,7 +98,8 @@ export const configured = Layer.provide(Cell.provide(verdictCell, ledgerLayer), 
       code: `import { Layer } from 'effect'
 import { ManagedRuntime } from 'effect'
 
-export const getRuntime = () => ManagedRuntime.make(Layer.provide(AppLive, baseLayer))`,
+let runtime
+export const getRuntime = () => (runtime ??= ManagedRuntime.make(Layer.provide(AppLive, baseLayer)))`,
       filename: 'src/AppRuntime.ts',
     },
     {
@@ -202,6 +203,7 @@ const runtime = ManagedRuntime.make(AppLive)
 
 runtime.runPromise(program)`,
       filename: 'src/global-setup.ts',
+      options: [{ edges: ['global-setup.ts'] }],
     },
     {
       // Kills the mutant that designates only the runner hook: the process entry
@@ -213,6 +215,7 @@ const runtime = ManagedRuntime.make(AppLive)
 
 runtime.runPromise(program)`,
       filename: 'src/main.ts',
+      options: [{ edges: ['main.ts'] }],
     },
     {
       // Kills the mutant that reads the basename with the POSIX separator alone:
@@ -222,6 +225,7 @@ runtime.runPromise(program)`,
 
 const runtime = ManagedRuntime.make(AppLive)`,
       filename: 'C:\\repo\\pkg\\global-setup.ts',
+      options: [{ edges: ['global-setup.ts'] }],
     },
   ],
   invalid: [
@@ -404,6 +408,7 @@ export function setup(project) {
   project.provide('contract', runtime)
 }`,
       filename: 'src/global-setup.ts',
+      options: [{ edges: ['global-setup.ts'] }],
       errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
     },
     {
@@ -414,7 +419,24 @@ export function setup(project) {
 
 const runtime = ManagedRuntime.make(AppLive)`,
       filename: 'src/my-global-setup.ts',
+      options: [{ edges: ['global-setup.ts'] }],
       errors: [eagerConstruction],
+    },
+    {
+      name: 'Should_Report_When_TheProcessEntryDeclaresNoEdge',
+      code: `import { ManagedRuntime } from 'effect'
+
+const runtime = ManagedRuntime.make(AppLive)`,
+      filename: 'src/main.ts',
+      errors: [eagerConstruction],
+    },
+    {
+      name: 'Should_Report_When_TheDeferredClosureNeverMemoizes',
+      code: `import { ManagedRuntime } from 'effect'
+
+export const getRuntime = () => ManagedRuntime.make(AppLive)`,
+      filename: 'src/AppRuntime.ts',
+      errors: [wiringPerCall(MANAGED_RUNTIME_MAKE)],
     },
   ],
 })

@@ -1,13 +1,16 @@
 import { defineRule } from '@oxlint/plugins'
 import type { Context, ESTree } from '@oxlint/plugins'
+import { Option, Schema as S } from 'effect'
+
 import {
   EAGER_CONSTRUCTION_ACTUAL,
   EAGER_CONSTRUCTION_EXPECTED,
   EAGER_CONSTRUCTION_FIX,
-  EDGE_BASENAMES,
   MANAGED_RUNTIME_NAMESPACE,
   MAX_ALIAS_HOPS,
+  MEMOIZING_ASSIGNMENT_OPERATORS,
   meta,
+  Options,
   TRACKED_WIRING_CALLS,
   WIRING_PER_CALL_ACTUAL,
   WIRING_PER_CALL_EXPECTED,
@@ -146,11 +149,45 @@ const isDeferredModuleClosure = (fn: FunctionNode): boolean => {
   return false
 }
 
+const isCacheWrite = (node: ESTree.Node): boolean =>
+  node.type === 'AssignmentExpression' && MEMOIZING_ASSIGNMENT_OPERATORS.includes(node.operator)
+
+const isBoundByAModuleScopeBinding = (node: ESTree.Node): boolean => {
+  let current: ESTree.Node | null = node
+  while (current !== null) {
+    if (isFunctionNode(current) || current.type === 'Program') return false
+    if (isCacheWrite(current)) return true
+    if (current.type === 'VariableDeclarator') return current.init !== null && isModuleScopeBinding(current)
+    current = current.parent
+  }
+  return false
+}
+
+/**
+ * A deferred closure hands back the same runtime only when the construction's result lands in
+ * a cache binding: an assignment inside the closure, or the module-scope binding of the call
+ * that consumes the closure as a callback (`import(...).then((m) => make(m.L))`).
+ */
+const isMemoizedConstruction = (call: ESTree.CallExpression, enclosing: FunctionNode): boolean => {
+  let current: ESTree.Node | null = call.parent
+  while (current !== null && current !== enclosing) {
+    if (isCacheWrite(current)) return true
+    current = current.parent
+  }
+  const consumer: ESTree.Node | null = enclosing.parent
+  if (consumer === null || consumer.type !== 'CallExpression') return false
+  return isBoundByAModuleScopeBinding(consumer)
+}
+
 export const runtimeConstructionPlacement = defineRule({
   meta,
   create(context: Context) {
     if (context.filename.endsWith('.tst.ts')) return {}
 
+    const edges: readonly string[] = Option.getOrElse(
+      S.decodeUnknownOption(Options)(context.options[0] ?? {}),
+      () => ({ edges: [] }),
+    ).edges
     const basename = context.filename.split(/[\\/]/u).pop() ?? context.filename
 
     let bindings: ReadonlyMap<string, ImportedName> = new Map()
@@ -169,7 +206,9 @@ export const runtimeConstructionPlacement = defineRule({
         const name = `${tracked.namespace}.${tracked.member}`
         const enclosing = enclosingFunctionOf(node)
 
-        if (enclosing !== null && isDeferredModuleClosure(enclosing)) return
+        if (enclosing !== null && isDeferredModuleClosure(enclosing) && isMemoizedConstruction(node, enclosing)) {
+          return
+        }
 
         if (enclosing !== null) {
           context.report({
@@ -187,7 +226,7 @@ export const runtimeConstructionPlacement = defineRule({
 
         if (tracked.namespace !== MANAGED_RUNTIME_NAMESPACE) return
 
-        if (EDGE_BASENAMES.includes(basename)) return
+        if (edges.includes(basename)) return
 
         context.report({
           node: callee,

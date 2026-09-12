@@ -1,6 +1,10 @@
-import { Schema as S } from 'effect'
+import { Effect, Schema as S } from 'effect'
 
-export const Options = S.Struct({})
+export const Options = S.Struct({
+  edges: S.Array(S.String).pipe(
+    S.withDecodingDefaultType(Effect.succeed([])),
+  ),
+})
 
 export const EFFECT_MODULE = 'effect' as const
 export const CELL_MODULE = '@systemfsoftware/effect-cell-types' as const
@@ -25,7 +29,7 @@ export const TRACKED_WIRING_CALLS: readonly TrackedWiringCall[] = [
 
 export const MAX_ALIAS_HOPS = 8
 
-export const EDGE_BASENAMES: readonly string[] = ['main.ts', 'global-setup.ts']
+export const MEMOIZING_ASSIGNMENT_OPERATORS: readonly string[] = ['=', '||=', '??=']
 
 export const WIRING_PER_CALL_EXPECTED =
   'wiring built once per process and deferred to first use in a module-scope lazy memoized closure' as const
@@ -47,7 +51,7 @@ export const meta = {
   type: 'problem',
   docs: {
     description:
-      'Ban runtime construction outside a module-scope lazy memoized bootstrap closure. Two verdicts, both decided from the call itself: `ManagedRuntime.make`, `Layer.provide`, or `Cell.provide` called inside a function body rebuilds wiring per call, and `ManagedRuntime.make` evaluated at module scope constructs the runtime at import time. Lawful and silent: construction inside a module-scope closure deferred to first use, module-scope `Layer.provide`/`Cell.provide` graph composition, and every `cell.run(input)` arrow application at any depth. Callers resolve through their import specifier (`effect`, `@systemfsoftware/effect-cell-types`), so an aliased import, a namespace import, and a member taken off either one report the same; a module-scope `const` alias of an import is followed, a chain through another module is not. Runtime test files (`.test.ts`, `.spec.ts`) are in scope - vitest executes them, so the shapes are unlawful there - but a `.tst.ts` type-test file runs nowhere, so it is out of scope. The runner-contracted edges - `main.ts` and `global-setup.ts`, exact basenames in the EP1 designation style, never a role suffix - are exempt from the eager-construction verdict alone: the runner owns the process and imports that module once, so composing the runtime at its module scope is the sanctioned edge; construction inside a function body still reports there.',
+      'Ban runtime construction outside a module-scope lazy memoized bootstrap closure. Two verdicts, both decided from the call itself: `ManagedRuntime.make`, `Layer.provide`, or `Cell.provide` called inside a function body rebuilds wiring per call, and `ManagedRuntime.make` evaluated at module scope constructs the runtime at import time. Lawful and silent: construction whose result is written into a cache binding - an assignment, a `||=`, or a `??=` anywhere between the call and the module-scope binding - inside a module-scope closure, so every call reads the runtime built once; module-scope `Layer.provide`/`Cell.provide` graph composition; and every `cell.run(input)` arrow application at any depth. A module-scope closure that merely wraps the call without writing its result into a cache hands back a fresh runtime on every call, so it is wiring built per call and reports. Callers resolve through their import specifier (`effect`, `@systemfsoftware/effect-cell-types`), so an aliased import, a namespace import, and a member taken off either one report the same; a module-scope `const` alias of an import is followed, a chain through another module is not, and a tracked call reached through a re-export chain is not visible - the receiver must resolve to a direct import in the same file. Runtime test files (`.test.ts`, `.spec.ts`) are in scope - vitest executes them, so the shapes are unlawful there - but a `.tst.ts` type-test file runs nowhere, so it is out of scope. The eager-construction verdict is exempted only in a module whose exact basename the `edges` option declares - nothing is built in, so `main.ts` and `global-setup.ts` report like any other module until a consumer names its runner-contracted edge in its own config. The exemption covers module-scope composition alone: construction inside a function body still reports in a declared edge.',
   },
   schema: [Options],
   messages: {
