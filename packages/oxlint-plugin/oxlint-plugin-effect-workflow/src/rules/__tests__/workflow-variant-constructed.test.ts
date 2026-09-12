@@ -239,6 +239,58 @@ export const admitSurvivorsRun = Workflow.make(
 )
 `,
     },
+    {
+      name: 'Should_Pass_When_TheDeclaredUnionIsANestedSchemaUnionConstAndEveryMemberIsConstructed',
+      filename: '/repo/pkg/src/admit-survivors-run.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+export class NoSurvivors extends S.TaggedClass<NoSurvivors>()('NoSurvivors', {}) {}
+export class Withdrawn extends S.TaggedClass<Withdrawn>()('Withdrawn', {}) {}
+export class SurvivorsRejection extends S.TaggedError<SurvivorsRejection>()('SurvivorsRejection', {}) {}
+export const SurvivorsAdmission = S.Union([S.Union([Admitted, NoSurvivors]), Withdrawn])
+export type SurvivorsAdmission = S.Schema.Type<typeof SurvivorsAdmission>
+
+export const admitSurvivorsRun = Workflow.make(
+  AdmitSurvivorsRunCommand,
+  (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, SurvivorsRejection> =>
+    Match.value(command.outcome).pipe(
+      Match.when('admitted', () => Result.succeed(Admitted.make({ survivors: command.priorSurvivors }))),
+      Match.when('none', () => Result.succeed(NoSurvivors.make())),
+      Match.when('withdrawn', () => Result.succeed(Withdrawn.make())),
+      Match.when('rejected', () => Result.fail(SurvivorsRejection.make({ reason: 'no-report' }))),
+      Match.exhaustive,
+    ),
+)
+`,
+    },
+    {
+      name: 'Should_Pass_When_TheSchemaNamespaceIsAliasedAndEveryMemberIsConstructed',
+      filename: '/repo/pkg/src/admit-survivors-run.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
+import * as Sx from 'effect/Schema'
+
+export class Admitted extends Sx.TaggedClass<Admitted>()('Admitted', {}) {}
+export class NoSurvivors extends Sx.TaggedClass<NoSurvivors>()('NoSurvivors', {}) {}
+export const SurvivorsAdmission = Sx.Union([Admitted, NoSurvivors])
+export type SurvivorsAdmission = Sx.Schema.Type<typeof SurvivorsAdmission>
+
+export const admitSurvivorsRun = Workflow.make(
+  AdmitSurvivorsRunCommand,
+  (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, never> =>
+    Match.value(command.priorSurvivors.length > 0).pipe(
+      Match.when(true, () => Result.succeed(Admitted.make({ survivors: command.priorSurvivors }))),
+      Match.when(false, () => Result.succeed(NoSurvivors.make())),
+      Match.exhaustive,
+    ),
+)
+`,
+    },
   ],
   invalid: [
     {
@@ -413,6 +465,96 @@ export const admitAmount = Workflow.make(
 )
 `,
       errors: [variantError('the declared decision variant Rejected')],
+    },
+    {
+      name: 'Should_ReportTheUnconstructedVariant_When_TheDeclaredUnionIsANestedSchemaUnionConst',
+      filename: '/repo/pkg/src/admit-survivors-run.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+export class NoSurvivors extends S.TaggedClass<NoSurvivors>()('NoSurvivors', {}) {}
+export class Withdrawn extends S.TaggedClass<Withdrawn>()('Withdrawn', {}) {}
+export class SurvivorsRejection extends S.TaggedError<SurvivorsRejection>()('SurvivorsRejection', {}) {}
+export const SurvivorsAdmission = S.Union([S.Union([Admitted, NoSurvivors]), Withdrawn])
+export type SurvivorsAdmission = S.Schema.Type<typeof SurvivorsAdmission>
+
+export const admitSurvivorsRun = Workflow.make(
+  AdmitSurvivorsRunCommand,
+  (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, SurvivorsRejection> =>
+    Match.value(command.outcome).pipe(
+      Match.when('admitted', () => Result.succeed(Admitted.make({ survivors: command.priorSurvivors }))),
+      Match.when('none', () => Result.succeed(Admitted.make({ survivors: [] }))),
+      Match.when('withdrawn', () => Result.succeed(Withdrawn.make())),
+      Match.when('rejected', () => Result.fail(SurvivorsRejection.make({ reason: 'no-report' }))),
+      Match.exhaustive,
+    ),
+)
+`,
+      errors: [variantError('the declared decision variant NoSurvivors')],
+    },
+    {
+      name: 'Should_ReportTheUnconstructedVariant_When_TheSchemaNamespaceIsAliasedAndTheUnionIsHalfConstructed',
+      filename: '/repo/pkg/src/admit-survivors-run.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Match from 'effect/Match'
+import * as Result from 'effect/Result'
+import * as Sx from 'effect/Schema'
+
+export class Admitted extends Sx.TaggedClass<Admitted>()('Admitted', {}) {}
+export class NoSurvivors extends Sx.TaggedClass<NoSurvivors>()('NoSurvivors', {}) {}
+export const SurvivorsAdmission = Sx.Union([Admitted, NoSurvivors])
+export type SurvivorsAdmission = Sx.Schema.Type<typeof SurvivorsAdmission>
+
+export const admitSurvivorsRun = Workflow.make(
+  AdmitSurvivorsRunCommand,
+  (command: AdmitSurvivorsRunCommand): Result.Result<SurvivorsAdmission, never> =>
+    Match.value(command.priorSurvivors.length > 0).pipe(
+      Match.when(true, () => Result.succeed(Admitted.make({ survivors: command.priorSurvivors }))),
+      Match.when(false, () => Result.succeed(Admitted.make({ survivors: [] }))),
+      Match.exhaustive,
+    ),
+)
+`,
+      errors: [variantError('the declared decision variant NoSurvivors')],
+    },
+    {
+      name: 'Should_TraceTheUnionMemberToTheValueBoundLocal_When_TheLocalIsBoundWithNew',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+
+const accepted = new Admitted({})
+
+export const admitAmount = Workflow.make(
+  AmountCommand,
+  (command: AmountCommand): Result.Result<accepted, never> => Result.succeed(accepted),
+)
+`,
+      errors: [variantError('the declared decision variant accepted')],
+    },
+    {
+      name: 'Should_TraceTheUnionMemberToTheValueBoundLocal_When_TheLocalIsBoundWithAnAssertion',
+      filename: '/repo/pkg/src/admit-amount.workflow.ts',
+      code: `import { Workflow } from '@systemfsoftware/effect-cell-types'
+import * as Result from 'effect/Result'
+import * as S from 'effect/Schema'
+
+export class Admitted extends S.TaggedClass<Admitted>()('Admitted', {}) {}
+
+const accepted = new Admitted({}) as Admitted
+
+export const admitAmount = Workflow.make(
+  AmountCommand,
+  (command: AmountCommand): Result.Result<accepted, never> => Result.succeed(accepted),
+)
+`,
+      errors: [variantError('the declared decision variant accepted')],
     },
   ],
 })

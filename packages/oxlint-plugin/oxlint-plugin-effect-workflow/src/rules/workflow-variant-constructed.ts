@@ -65,8 +65,15 @@ const unionMembersOf = (node: ESTree.Expression): readonly ESTree.Node[] | null 
     : args
   const members: ESTree.Node[] = []
   for (const candidate of candidates) {
-    if (!isNode(candidate) || !isIdentifierNode(candidate)) return null
-    members.push(candidate)
+    if (!isNode(candidate)) return null
+    if (isIdentifierNode(candidate)) {
+      members.push(candidate)
+      continue
+    }
+    if (candidate.type !== 'CallExpression') return null
+    const nested = unionMembersOf(candidate)
+    if (nested === null) return null
+    members.push(...nested)
   }
   return members.length === 0 ? null : members
 }
