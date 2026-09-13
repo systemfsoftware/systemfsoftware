@@ -311,6 +311,10 @@
     - arrow-application-replaces-cell-run
     - cell-gate-and-collect
     - workflow-total-and-composite
+"@systemfsoftware/effect-cell-types@8.1.0":
+  dir: packages/effect-cell-types
+  intents:
+    - effect-cell-types-minor-honest-channels
 "@systemfsoftware/effect-daemon-spec@1.0.0":
   dir: packages/effect-daemon-spec
   intents:
@@ -1075,6 +1079,10 @@
   intents:
     - workflow-constructor-recognition
     - workflow-variant-constructed
+"@systemfsoftware/oxlint-plugin-effect-workflow@5.1.1":
+  dir: packages/oxlint-plugin/oxlint-plugin-effect-workflow
+  intents:
+    - oxlint-plugin-effect-workflow-patch-variant-name-set-split
 "@systemfsoftware/oxlint-plugin-property-testing@1.2.0":
   dir: packages/oxlint-plugins/property-testing
   intents:
@@ -2128,6 +2136,10 @@
   dir: packages/stryker-js/stryker-plugins
   intents:
     - stryker-family-root-rewire
+"@systemfsoftware/stryker-plugins@3.1.0":
+  dir: packages/stryker-js/stryker-plugins
+  intents:
+    - stryker-plugins-minor-ignorer-constructor-set
 "@systemfsoftware/stryker-test-contribution@0.1.0":
   dir: packages/testing/mutation/plugins/stryker-test-contribution
   intents:
