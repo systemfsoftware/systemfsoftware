@@ -1,6 +1,5 @@
 ---
 "@systemfsoftware/effect-cell-types": major
-"@systemfsoftware/stryker-js-cli": minor
 ---
 
 The Workflow brand: `make` is the only door to a decide slot.

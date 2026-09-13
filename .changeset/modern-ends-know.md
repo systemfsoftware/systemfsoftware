@@ -7,9 +7,6 @@
 "@systemfsoftware/effect-schema-law": minor
 "@systemfsoftware/hex-schema": minor
 "@systemfsoftware/rx-effect": minor
-"@systemfsoftware/stryker-plugins": minor
-"@systemfsoftware/stryker-js-cli": minor
-"@systemfsoftware/stryker-js-typescript-checker": minor
 "@systemfsoftware/effect-atom": minor
 "@systemfsoftware/effect-atom-react": minor
 "@systemfsoftware/storybook-gherkin": minor
