@@ -3,6 +3,9 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # The release manifest (`nix/release-hashes.json`) rides in this input, so
+    # `nix flake update comment-checker` moves the version and every per-target
+    # digest together — no hash pinned in this repo.
     comment-checker = {
       url = "github:systemfsoftware/comment-checker";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -18,9 +21,18 @@
       packages = forEachSystem (pkgs:
         let
           dprint = pkgs.callPackage ./nix/dprint.nix { };
-          cc = comment-checker.packages.${pkgs.system}.comment-checker;
-          comment-checker-bwrap = pkgs.callPackage ./nix/comment-checker-bwrap.nix { comment-checker = cc; };
-        in { inherit dprint comment-checker-bwrap; comment-checker = cc; default = dprint; });
+          unwrapped = pkgs.callPackage ./nix/comment-checker.nix {
+            hashes = "${comment-checker}/nix/release-hashes.json";
+          };
+          sandboxed = pkgs.callPackage ./nix/comment-checker-sandbox.nix {
+            comment-checker = unwrapped;
+          };
+        in {
+          inherit dprint;
+          comment-checker = sandboxed;
+          comment-checker-unwrapped = unwrapped;
+          default = dprint;
+        });
 
       # pnpm is deliberately absent: `packageManager` pins pnpm@11.21.0 and
       # corepack is the one thing allowed to resolve it. A second pnpm on PATH
@@ -29,7 +41,7 @@
         default = pkgs.mkShell {
           packages = [
             self.packages.${pkgs.stdenv.hostPlatform.system}.dprint
-            self.packages.${pkgs.stdenv.hostPlatform.system}.comment-checker-bwrap
+            self.packages.${pkgs.stdenv.hostPlatform.system}.comment-checker
             pkgs.nodejs_24
             pkgs.deno
           ];
