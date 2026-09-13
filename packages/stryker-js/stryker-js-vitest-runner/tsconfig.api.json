@@ -1,6 +1,0 @@
-{
-  "extends": "@systemfsoftware/tsconfig/tsc/no-dom/library",
-  "include": [
-    "dist/index.d.mts"
-  ]
-}

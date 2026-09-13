@@ -1,6 +1,5 @@
 ---
 "@systemfsoftware/effect-daemon-spec": patch
-"@systemfsoftware/stryker-js-cli": patch
 ---
 
 Express each executor's sandwich as a `Cell` description.

@@ -24,14 +24,6 @@
 "@systemfsoftware/oxlint-plugin-test-placement": patch
 "@systemfsoftware/rx-effect": patch
 "@systemfsoftware/storybook-gherkin": patch
-"@systemfsoftware/stryker-js": patch
-"@systemfsoftware/stryker-js-cli": patch
-"@systemfsoftware/stryker-js-html-reporter": patch
-"@systemfsoftware/stryker-js-instrumenter": patch
-"@systemfsoftware/stryker-js-typescript-checker": patch
-"@systemfsoftware/stryker-js-vitest-runner": patch
-"@systemfsoftware/stryker-plugins": patch
-"@systemfsoftware/stryker-test-contribution": patch
 ---
 
 Peer Effect requirement advances to 4.0.0-rc.112. No API changes.

@@ -130,7 +130,6 @@
         "vitest.config.ts",
         "vitest.setup.ts",
         "reports/stryker-incremental.json",
-        "$TURBO_ROOT$/packages/stryker-js/**",
         "!**/*.md"
       ],
       "outputs": [

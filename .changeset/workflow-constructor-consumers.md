@@ -1,6 +1,5 @@
 ---
 "@systemfsoftware/effect-daemon-spec": minor
-"@systemfsoftware/stryker-js-cli": patch
 ---
 
 Produce every workflow through `Workflow.make`.
