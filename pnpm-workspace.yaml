@@ -60,8 +60,8 @@ catalogs:
     effect: 4.0.0-rc.112
     "@effect/vitest": 4.0.0-rc.112
   oxlint:
-    oxlint: ^1.77.0
-    "@oxlint/plugins": ^1.77.0
+    oxlint: ^1.82.0
+    "@oxlint/plugins": ^1.82.0
     oxlint-tsgolint: 7.0.2001
   stryker:
     semver: ^7.8.5
