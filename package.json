@@ -40,7 +40,7 @@
     "oxlint": "catalog:oxlint",
     "oxlint-tsgolint": "catalog:oxlint",
     "tstyche-typescript": "npm:typescript@6.0.3",
-    "turbo": "^2.10.5",
+    "turbo": "^2.10.12",
     "typescript": "catalog:"
   },
   "packageManager": "pnpm@11.21.0"
