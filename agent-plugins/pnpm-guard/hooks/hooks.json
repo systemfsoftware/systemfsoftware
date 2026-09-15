@@ -1,0 +1,27 @@
+{
+  "description": "Blocks edits that weaken the pnpm supply-chain posture (PreToolUse on edit tools) and Bash commands that flip the same switches out-of-band (PreToolUse on Bash). Both hooks run on Deno; the file guard reads, the command guard touches nothing but stdin.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Update|MultiEdit|Create|morph_mcp_edit-file|morph_edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'pnpm-guard: deno not found on PATH - install Deno (https://deno.land) so the file guard can run' >&2; exit 1; }; exec deno run --quiet --config \"${CLAUDE_PLUGIN_ROOT}/deno.jsonc\" --allow-read \"${CLAUDE_PLUGIN_ROOT}/src/guard-files.ts\"",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'pnpm-guard: deno not found on PATH - install Deno (https://deno.land) so the command guard can run' >&2; exit 1; }; exec deno run --quiet --config \"${CLAUDE_PLUGIN_ROOT}/deno.jsonc\" \"${CLAUDE_PLUGIN_ROOT}/src/guard-commands.ts\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
