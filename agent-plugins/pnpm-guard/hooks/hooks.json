@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "command -v deno >/dev/null 2>&1 || { echo 'pnpm-guard: deno not found on PATH - install Deno (https://deno.land) so the command guard can run' >&2; exit 1; }; exec deno run --quiet --config \"${CLAUDE_PLUGIN_ROOT}/deno.jsonc\" \"${CLAUDE_PLUGIN_ROOT}/src/guard-commands.ts\"",
+            "command": "command -v deno >/dev/null 2>&1 || { echo 'pnpm-guard: deno not found on PATH - install Deno (https://deno.land) so the command guard can run' >&2; exit 1; }; exec deno run --quiet --config \"${CLAUDE_PLUGIN_ROOT}/deno.jsonc\" --allow-read \"${CLAUDE_PLUGIN_ROOT}/src/guard-commands.ts\"",
             "timeout": 15
           }
         ]
