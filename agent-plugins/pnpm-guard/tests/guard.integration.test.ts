@@ -10,8 +10,8 @@
 
 import { assert, assertEquals, assertStringIncludes } from '@std/assert'
 import { dirname, join } from '@std/path'
-import { runCommandGuard } from '../src/guard-commands.ts'
-import { runFileGuard } from '../src/guard-files.ts'
+import { runCommandGuard } from '../src/command-guard.ts'
+import { runFileGuard } from '../src/file-guard.ts'
 
 const AGE = 'minimumReleaseAge'
 const EXCLUDE = 'minimumReleaseAgeExclude'
@@ -24,7 +24,7 @@ const SHORT_QUARANTINE = String(0)
 const LONG_QUARANTINE = String(10080)
 const OFF = 'false'
 const TOKEN = 'placeholder-token'
-const GUARD_SRC = 'agent-plugins/pnpm-guard/src/guard-files.ts'
+const GUARD_SRC = 'agent-plugins/pnpm-guard/src/file-guard.ts'
 
 /** A tree pnpm would read: a default workspace, plus whatever the case adds. */
 const DEFAULT_WORKSPACE = `${AGE}: ${QUARANTINE}\n${BLOCK_EXOTIC}: true\npackages:\n  - packages/*\n`

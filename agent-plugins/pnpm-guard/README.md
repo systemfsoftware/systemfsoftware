@@ -160,22 +160,33 @@ Out of scope by design, not omission:
 
 The file guard runs with `--allow-read` only. The command guard also runs with `--allow-read`, and reads only the two posture files (`pnpm-workspace.yaml`, `.npmrc`) so it can judge each change against the project's _current_ posture. Neither guard ever runs with `--allow-net`, `--allow-run`, `--allow-env`, or `--allow-write`: the decision reads files and stdin and writes nothing.
 
+## Layout
+
+Two hooks over one decision core. The registration is the contract as the client sees it, and each entry is named after the hook it runs:
+
+| Path                              | What it is                                                                                                          |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `hooks/hooks.json`                | the registration: two `PreToolUse` entries, one per guard                                                           |
+| `src/file-guard.ts`               | the file guard's entrypoint — stdin payload in, exit code out; the exported run surface is the same module          |
+| `src/command-guard.ts`            | the command guard's entrypoint, same contract                                                                       |
+| `src/policy.ts`                   | the decision core both guards call: the matrix above, pure, no I/O                                                  |
+| `src/payload.ts`                  | the shared stdin and payload-decode surface                                                                         |
+| `src/policy.property.test.ts`     | the core's invariants, proved over generated transitions against an independent model of the matrix                 |
+| `tests/policy-scenarios.test.ts`  | the named scenarios generated laws cannot express: rendered violations, the single-change form, fail-closed parsing |
+| `tests/guard.integration.test.ts` | both guards composed end to end against a real project tree on disk                                                 |
+| `scripts/smoke.ts`                | the process seam: the shipped commands, real payloads, the streams a client sees                                    |
+
 ## Development
 
-From the plugin directory:
-
 ```bash
-deno task check    # type-check + lint, src and tests
-deno task test     # the suites below
+deno task check    # type-check + lint, src, tests, scripts
+deno task test     # the decision and composition suites
+deno task smoke    # the process seam, against a real tree
 ```
 
-Three suites, by altitude:
+The suites split by what they can observe. The decision core is proved over generated input in `src/policy.property.test.ts` and pinned by name in `tests/policy-scenarios.test.ts`; the guards themselves carry no unit tests — their branches are reached through the composed journeys in `tests/guard.integration.test.ts`, where the flag, edit-shape, key, path, and payload matrices are scenario rows.
 
-- `src/policy.test.ts` — the pure decision core: one named scenario pair per matrix row above, plus the two invariants as generated properties (an allow verdict never weakens a guarded effective value; every weakening transition is blocked).
-- `tests/guard.integration.test.ts` — the composed guards driven end to end against a real project tree on disk: payload decode, target classification, real posture reads, the policy core, and the exit contract. The flag, edit-shape, key, path, and payload matrices are scenario rows here rather than one case per internal branch.
-- `tests/hook-process.e2e.test.ts` — four journeys through the process seam, running the commands `hooks.json` declares and asserting the streams a client sees (exit code, empty stdout, named setting on stderr, the stdin cap).
-
-The integration and process suites need filesystem and process access, which `deno task test` grants them; the shipped hooks keep their own narrower permissions (`--allow-read` only, per `hooks.json`).
+The client is the harness: it decides which payload reaches these hooks and what it does with exit 2. `scripts/smoke.ts` reproduces that seam for a human or CI run, and nothing in this repository can stand up the real one.
 
 Formatting is owned by the repository's dprint config (`pnpm exec dprint fmt` from the repo root).
 

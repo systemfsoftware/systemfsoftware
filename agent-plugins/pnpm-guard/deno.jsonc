@@ -8,8 +8,9 @@
     "just-bash": "npm:just-bash@3.2.0",
   },
   "tasks": {
-    "check": "deno check src/ tests/ && deno lint src/ tests/",
-    "test": "deno test --allow-read --allow-write --allow-run --allow-env src/ tests/",
+    "check": "deno check src/ tests/ scripts/ && deno lint src/ tests/ scripts/",
+    "test": "deno test --allow-read --allow-write src/ tests/",
+    "smoke": "deno run --allow-read --allow-write --allow-run --allow-env scripts/smoke.ts",
   },
   "lint": {
     "rules": {
